@@ -32,19 +32,23 @@ def generate_launch_description():
     )
 
     spawn = TimerAction(
-        period=3.0,
+        period=5.0,   # increased delay (important)
         actions=[
             Node(
                 package="ros_gz_sim",
                 executable="create",
                 arguments=[
                     "-name", "turtlebot3",
-                    "-topic", "robot_description"
+                    "-topic", "robot_description",
+                    "-x", "0.0",
+                    "-y", "0.0",
+                    "-z", "0.05"
                 ],
                 output="screen"
             )
         ]
     )
+
     ros_gz_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",

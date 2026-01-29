@@ -13,15 +13,18 @@ def generate_launch_description():
         sim_pkg,
         "gazebo_worlds",
         "worlds",
-        "empty",
-        "world.sdf"
+        "empty.world.sdf"
     ])
 
-    # IMPORTANT: allow Gazebo to find meshes via package://sim/...
     set_gz_resource_path = SetEnvironmentVariable(
         name="GZ_SIM_RESOURCE_PATH",
-        value=[sim_pkg]
+        value=[
+            sim_pkg,
+            PathJoinSubstitution([sim_pkg, "models"]),
+            PathJoinSubstitution([sim_pkg, "gazebo_worlds"]),
+        ]
     )
+
 
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
