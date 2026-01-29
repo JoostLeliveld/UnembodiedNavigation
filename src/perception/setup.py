@@ -24,6 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'gt_to_camera = perception.gt_to_camera:main',
         ],
     },
+
 )

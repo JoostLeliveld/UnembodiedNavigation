@@ -1,0 +1,196 @@
+<?xml version="1.0"?>
+<robot name="turtlebot3_burger" xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <!-- Arguments -->
+  <xacro:arg name="namespace" default=""/>
+  <xacro:property name="ns" value="$(arg namespace)"/>
+
+  <!-- ===================== -->
+  <!-- Materials (REQUIRED) -->
+  <!-- ===================== -->
+  <material name="black"><color rgba="0 0 0 1"/></material>
+  <material name="dark"><color rgba="0.3 0.3 0.3 1"/></material>
+  <material name="light_black"><color rgba="0.4 0.4 0.4 1"/></material>
+
+  <!-- ===================== -->
+  <!-- Base -->
+  <!-- ===================== -->
+  <link name="${ns}base_footprint"/>
+
+  <joint name="${ns}base_joint" type="fixed">
+    <parent link="${ns}base_footprint"/>
+    <child link="${ns}base_link"/>
+    <origin xyz="0 0 0.010"/>
+  </joint>
+
+  <link name="${ns}base_link">
+    <visual>
+      <origin xyz="-0.032 0 0"/>
+      <geometry>
+        <mesh filename="package://robot_description/meshes/turtlebot3_description/meshes/bases/burger_base.stl"
+              scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="light_black"/>
+    </visual>
+
+    <collision>
+      <origin xyz="-0.032 0 0.070"/>
+      <geometry>
+        <box size="0.140 0.140 0.143"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="0.825735"/>
+      <origin xyz="0 0 0"/>
+      <inertia
+        ixx="2.2124416e-03" ixy="-1.2294101e-05" ixz="3.4938785e-05"
+        iyy="2.1193702e-03" iyz="-5.0120904e-06"
+        izz="2.0064271e-03"/>
+    </inertial>
+  </link>
+
+  <!-- ===================== -->
+  <!-- Wheels -->
+  <!-- ===================== -->
+  <joint name="${ns}wheel_left_joint" type="continuous">
+    <parent link="${ns}base_link"/>
+    <child link="${ns}wheel_left_link"/>
+    <origin xyz="0 0.08 0.023" rpy="-1.57 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="${ns}wheel_left_link">
+    <visual>
+      <origin rpy="1.57 0 0"/>
+      <geometry>
+        <mesh filename="package://robot_description/meshes/turtlebot3_description/meshes/wheels/left_tire.stl"
+              scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="dark"/>
+    </visual>
+
+    <collision>
+      <geometry>
+        <cylinder length="0.018" radius="0.033"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="0.02849894"/>
+      <origin xyz="0 0 0"/>
+      <inertia
+        ixx="1.1175580e-05" ixy="0.0" ixz="0.0"
+        iyy="1.1192413e-05" iyz="0.0"
+        izz="2.0712558e-05"/>
+    </inertial>
+  </link>
+
+  <joint name="${ns}wheel_right_joint" type="continuous">
+    <parent link="${ns}base_link"/>
+    <child link="${ns}wheel_right_link"/>
+    <origin xyz="0 -0.08 0.023" rpy="-1.57 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="${ns}wheel_right_link">
+    <visual>
+      <origin rpy="1.57 0 0"/>
+      <geometry>
+        <mesh filename="package://robot_description/meshes/turtlebot3_description/meshes/wheels/right_tire.stl"
+              scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="dark"/>
+    </visual>
+
+    <collision>
+      <geometry>
+        <cylinder length="0.018" radius="0.033"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="0.02849894"/>
+      <origin xyz="0 0 0"/>
+      <inertia
+        ixx="1.1175580e-05" ixy="0.0" ixz="0.0"
+        iyy="1.1192413e-05" iyz="0.0"
+        izz="2.0712558e-05"/>
+    </inertial>
+  </link>
+
+  <!-- ===================== -->
+  <!-- IMU -->
+  <!-- ===================== -->
+  <joint name="${ns}imu_joint" type="fixed">
+    <parent link="${ns}base_link"/>
+    <child link="${ns}imu_link"/>
+    <origin xyz="-0.032 0 0.068"/>
+  </joint>
+  <link name="${ns}imu_link"/>
+
+  <!-- ===================== -->
+  <!-- LiDAR -->
+  <!-- ===================== -->
+  <joint name="${ns}scan_joint" type="fixed">
+    <parent link="${ns}base_link"/>
+    <child link="${ns}base_scan"/>
+    <origin xyz="-0.032 0 0.172"/>
+  </joint>
+
+  <link name="${ns}base_scan">
+    <visual>
+      <geometry>
+        <mesh filename="package://robot_description/meshes/turtlebot3_description/meshes/sensors/lds.stl"
+              scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="dark"/>
+    </visual>
+
+    <collision>
+      <geometry>
+        <cylinder length="0.0315" radius="0.055"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="0.114"/>
+      <origin xyz="0 0 0"/>
+      <inertia
+        ixx="0.001" ixy="0.0" ixz="0.0"
+        iyy="0.001" iyz="0.0"
+        izz="0.001"/>
+    </inertial>
+  </link>
+    <!-- ================= Gazebo Harmonic DiffDrive ================= -->
+    <gazebo>
+    <plugin
+        filename="gz-sim-diff-drive-system"
+        name="gz::sim::systems::DiffDrive">
+
+        <!-- Wheel joints -->
+        <left_joint>wheel_left_joint</left_joint>
+        <right_joint>wheel_right_joint</right_joint>
+
+        <!-- Physical parameters (TB3 Burger approx) -->
+        <wheel_separation>0.287</wheel_separation>
+        <wheel_radius>0.033</wheel_radius>
+
+        <!-- ROS interface -->
+        <topic>cmd_vel</topic>
+        <odom_topic>odom</odom_topic>
+
+        <!-- Frames -->
+        <frame_id>odom</frame_id>
+        <child_frame_id>base_link</child_frame_id>
+
+        <!-- Publishing -->
+        <odom_publish_frequency>50</odom_publish_frequency>
+        <publish_tf>true</publish_tf>
+
+    </plugin>
+    </gazebo>
+    <!-- ============================================================= -->
+
+
+</robot>

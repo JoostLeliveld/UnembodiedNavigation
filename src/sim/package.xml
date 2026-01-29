@@ -1,16 +1,25 @@
 <?xml version="1.0"?>
-<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>sim</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="j.j.p.leliveld@student.tue.nl">joostleliveld</maintainer>
-  <license>TODO: License declaration</license>
+  <version>0.1.0</version>
+  <description>Gazebo Harmonic simulation package providing robot_description, worlds and launch files for TurtleBot3.</description>
+  <maintainer email="you@example.com">maintainer</maintainer>
+  <license>Apache-2.0</license>
 
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!-- Runtime dependencies -->
+  <exec_depend>ros_gz_sim</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <test_depend>pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>
