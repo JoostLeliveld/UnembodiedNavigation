@@ -48,7 +48,8 @@ def generate_launch_description():
                 package='control',
                 executable='control_node',
                 name='control_node',
-                output='screen'
+                output='screen',
+                parameters=[{'test_mode': True}]
             ),
         ]
     )

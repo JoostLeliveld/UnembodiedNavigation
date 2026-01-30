@@ -24,6 +24,19 @@ class ControlNode(Node):
             10
         )
         
+        # Declare parameter for test mode
+        self.declare_parameter('test_mode', False)
+        
+        if self.get_parameter('test_mode').value:
+            self.get_logger().info("Test mode enabled: Robot will drive in a circle")
+            self.timer = self.create_timer(0.5, self.test_drive_callback)
+
+    def test_drive_callback(self):
+        msg = Twist()
+        msg.linear.x = 0.2
+        msg.angular.z = 0.2
+        self.cmd_vel_publisher.publish(msg)
+        
     def plan_callback(self, msg):
         self.get_logger().info(f"Received path with {len(msg.poses)} poses")
         # Placeholder: Stop for now, later implement path following
