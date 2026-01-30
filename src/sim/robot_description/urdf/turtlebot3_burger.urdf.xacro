@@ -199,7 +199,7 @@
         <right_joint>${ns}wheel_right_joint</right_joint>
 
         <!-- Physical parameters -->
-        <wheel_separation>0.287</wheel_separation>
+        <wheel_separation>0.160</wheel_separation>
         <wheel_radius>0.033</wheel_radius>
 
         <!-- ROS interface -->

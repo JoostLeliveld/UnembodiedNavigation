@@ -38,10 +38,18 @@ def generate_launch_description():
         output='screen'
     )
 
+    # 4. Start Control
+    control_node = Node(
+        package='control',
+        executable='control_node',
+        name='control_node',
+        output='screen'
+    )
+
     # Delayed start to ensure Gazebo is ready (optional but good practice)
     nodes_group = TimerAction(
         period=5.0,
-        actions=[occupancy_mapper, costmap_node, astar_planner]
+        actions=[occupancy_mapper, costmap_node, astar_planner, control_node]
     )
 
     return LaunchDescription([
