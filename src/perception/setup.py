@@ -10,6 +10,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/launch', ['launch/tf_static.launch.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -27,6 +28,7 @@ setup(
             'gt_to_camera = perception.gt_to_camera:main',
             "camera_passthrough = perception.camera_passthrough:main",
             'perception_node = perception.perception_node:main',
+            'vision_pose_node = perception.vision_pose_node:main',
         ],
     },
 

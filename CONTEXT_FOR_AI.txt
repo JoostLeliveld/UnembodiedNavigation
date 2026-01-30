@@ -1,0 +1,286 @@
+# CONTEXT FOR AI AGENT
+# Project: Unembodied Navigation (ROS 2 Humble / Gazebo Harmonic)
+# Date: Jan 30, 2026
+
+## 1. PROJECT OBJECTIVE
+The goal is to implement "Learning Remote Mobile Robot Control using an External Security Camera".
+Current Status: MVP Achieved using Onboard Sensors (LiDAR/Odometry).
+- Robot: TurtleBot3 Burger.
+- Sim: Gazebo Harmonic.
+- Navigation Stack: Custom (Scanner -> Mapper -> Plan -> Control).
+- Next Step: Transition from Onboard sensing/control to "External Camera" based sensing/control.
+
+## 2. CURRENT ARCHITECTURE (Working)
+A. Simulation: Gazebo spawns robot. Bridge converts /scan and /odom to ROS 2.
+B. Mapping: `occupancy_mapper` creates a grid from /scan. `costmap_node` inflates it.
+C. Planning: `astar_planner` plans path on /costmap from /initialpose to /goal_pose.
+D. Control: `control_node` follows /plan using Pure Pursuit (PID on heading).
+
+## 3. KEY SOURCE CODE
+
+### A. Mapping Node (src/mapping/mapping/occupancy_mapper.py)
+```python
+#!/usr/bin/env python3
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import LaserScan
+from nav_msgs.msg import OccupancyGrid, Odometry
+import numpy as np
+import math
+from rclpy.qos import QoSProfile, DurabilityPolicy
+
+class OccupancyMapper(Node):
+    def __init__(self):
+        super().__init__('occupancy_mapper')
+        self.resolution = 0.05
+        self.width_m = 20.0
+        self.height_m = 20.0
+        self.origin_x = -10.0
+        self.origin_y = -10.0
+        self.width = int(self.width_m / self.resolution)
+        self.height = int(self.height_m / self.resolution)
+        self.map_data = np.zeros((self.height, self.width), dtype=np.int8)
+        self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
+        self.odom_subscription = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
+        map_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.map_publisher = self.create_publisher(OccupancyGrid, '/map', map_qos)
+        self.current_pose = None
+        self.get_logger().info("Occupancy Mapper started")
+
+    def odom_callback(self, msg):
+        self.current_pose = msg.pose.pose
+
+    def scan_callback(self, msg):
+        if self.current_pose is None: return
+        q = self.current_pose.orientation
+        siny_cosp = 2 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
+        yaw = math.atan2(siny_cosp, cosy_cosp)
+        robot_x = self.current_pose.position.x
+        robot_y = self.current_pose.position.y
+        angle = msg.angle_min
+        for r in msg.ranges:
+            if msg.range_min < r < msg.range_max:
+                hit_x = robot_x + r * math.cos(yaw + angle)
+                hit_y = robot_y + r * math.sin(yaw + angle)
+                grid_x = int((hit_x - self.origin_x) / self.resolution)
+                grid_y = int((hit_y - self.origin_y) / self.resolution)
+                if 0 <= grid_x < self.width and 0 <= grid_y < self.height:
+                    self.map_data[grid_y, grid_x] = 100
+            angle += msg.angle_increment
+        self.publish_map()
+
+    def publish_map(self):
+        grid_msg = OccupancyGrid()
+        grid_msg.header.stamp = self.get_clock().now().to_msg()
+        grid_msg.header.frame_id = 'odom'
+        grid_msg.info.resolution = self.resolution
+        grid_msg.info.width = self.width
+        grid_msg.info.height = self.height
+        grid_msg.info.origin.position.x = self.origin_x
+        grid_msg.info.origin.position.y = self.origin_y
+        grid_msg.info.origin.orientation.w = 1.0
+        grid_msg.data = self.map_data.flatten().tolist()
+        self.map_publisher.publish(grid_msg)
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = OccupancyMapper()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+if __name__ == '__main__': main()
+```
+
+### B. Planning Node (src/planning/planning/astar_planner.py)
+```python
+#!/usr/bin/env python3
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, DurabilityPolicy
+from nav_msgs.msg import OccupancyGrid, Path
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+import numpy as np
+from planning import search_based_path_planning
+
+class AStarPlanner(Node):
+    def __init__(self):
+        super().__init__('astar_planner')
+        self.max_cost = 100.0
+        start_qos = QoSProfile(depth=1, durability=DurabilityPolicy.VOLATILE)
+        self.start_subscriber = self.create_subscription(PoseWithCovarianceStamped, '/initialpose', self.start_callback, qos_profile=start_qos)
+        self.start_msg = None
+        goal_qos = QoSProfile(depth=1, durability=DurabilityPolicy.VOLATILE)
+        self.goal_subscriber = self.create_subscription(PoseStamped, '/goal_pose', self.goal_callback, qos_profile=goal_qos)
+        self.goal_msg = None
+        costmap_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.costmap_subscriber = self.create_subscription(OccupancyGrid, '/costmap', self.costmap_callback, qos_profile=costmap_qos)
+        self.costmap_msg = None
+        path_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.path_publisher = self.create_publisher(Path, '/plan', qos_profile=path_qos)
+        self.get_logger().info('A* Planner Started')
+
+    def start_callback(self, msg):
+        self.start_msg = PoseStamped()
+        self.start_msg.header = msg.header
+        self.start_msg.pose = msg.pose.pose
+        self.get_logger().info('Start pose received')
+        self.publish_path()
+
+    def goal_callback(self, msg):
+        self.goal_msg = msg
+        self.get_logger().info('Goal pose received')
+        self.publish_path()
+
+    def costmap_callback(self, msg):
+        self.costmap_msg = msg
+        self.publish_path()
+
+    def publish_path(self):
+        if (self.start_msg is None) or (self.goal_msg is None) or (self.costmap_msg is None): return
+        self.get_logger().info('Planning path...')
+        start_position = np.asarray([self.start_msg.pose.position.x, self.start_msg.pose.position.y])
+        goal_position = np.asarray([self.goal_msg.pose.position.x, self.goal_msg.pose.position.y])
+        costmap_origin = np.asarray([self.costmap_msg.info.origin.position.x, self.costmap_msg.info.origin.position.y])
+        costmap_resolution = self.costmap_msg.info.resolution 
+        costmap_matrix = np.array(self.costmap_msg.data).reshape(self.costmap_msg.info.height, self.costmap_msg.info.width)
+        costmap_matrix = np.float64(costmap_matrix)
+        costmap_matrix[costmap_matrix>=self.max_cost] = -1
+
+        start_cell = search_based_path_planning.world_to_grid(start_position, origin=costmap_origin, resolution=costmap_resolution)[0]
+        goal_cell = search_based_path_planning.world_to_grid(goal_position, origin=costmap_origin, resolution=costmap_resolution)[0]
+        path_grid = search_based_path_planning.shortest_path_networkx(costmap_matrix, start_cell, goal_cell, diagonal_connectivity=True)
+        path_world = search_based_path_planning.grid_to_world(path_grid, costmap_origin, costmap_resolution)
+
+        path_msg = Path()
+        path_msg.header.frame_id = 'odom'
+        path_msg.header.stamp = self.get_clock().now().to_msg()
+        if path_world.size > 0:
+            path_msg.poses.append(self.start_msg)
+            for waypoint in path_world:
+                pose_msg = PoseStamped()
+                pose_msg.header = path_msg.header
+                pose_msg.pose.position.x = waypoint[0]
+                pose_msg.pose.position.y = waypoint[1]
+                path_msg.poses.append(pose_msg)
+            path_msg.poses.append(self.goal_msg)
+            self.get_logger().info(f'Path found with {len(path_msg.poses)} waypoints.')
+        else:
+            self.get_logger().warn('No path found!')
+        self.path_publisher.publish(path_msg)    
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = AStarPlanner()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+if __name__ == '__main__': main()
+```
+
+### C. Control Node (src/control/control/control_node.py)
+```python
+#!/usr/bin/env python3
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, DurabilityPolicy
+from geometry_msgs.msg import Twist, PoseStamped
+from nav_msgs.msg import Path, Odometry
+from sensor_msgs.msg import LaserScan
+from tf_transformations import euler_from_quaternion
+import numpy as np
+import math
+from control import path_follow_tools
+
+class ControlNode(Node):
+    def __init__(self):
+        super().__init__('control_node')
+        self.lookahead_distance = 0.5
+        self.max_speed = 0.22
+        self.kp_angular = 2.0
+        self.goal_tolerance = 0.1
+        self.pose_x = 0.0
+        self.pose_y = 0.0
+        self.pose_yaw = 0.0
+        self.current_path = None
+        self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
+        path_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.create_subscription(Path, '/plan', self.path_callback, qos_profile=path_qos)
+        self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
+        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.create_timer(0.1, self.control_loop)
+        self.get_logger().info("Control Node Started (Pure Pursuit)")
+
+    def odom_callback(self, msg):
+        self.pose_x = msg.pose.pose.position.x
+        self.pose_y = msg.pose.pose.position.y
+        q = msg.pose.pose.orientation
+        self.pose_yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])[2]
+
+    def path_callback(self, msg):
+        path_points = []
+        for pose in msg.poses:
+            path_points.append([pose.pose.position.x, pose.pose.position.y])
+        if len(path_points) > 0:
+            self.current_path = np.array(path_points)
+            self.get_logger().info(f"Received new path with {len(path_points)} points")
+        else:
+            self.current_path = None
+
+    def scan_callback(self, msg): pass
+
+    def control_loop(self):
+        if self.current_path is None: return
+        robot_pos = np.array([self.pose_x, self.pose_y])
+        dist_to_end = np.linalg.norm(robot_pos - self.current_path[-1])
+        if dist_to_end < self.goal_tolerance:
+            self.stop_robot()
+            self.get_logger().info("Goal Reached")
+            self.current_path = None
+            return
+
+        lookahead_point = path_follow_tools.path_goal_sphere(self.current_path, robot_pos, self.lookahead_distance)
+        if lookahead_point is None:
+            lookahead_point = self.current_path[-1] 
+            
+        timestamp = self.get_clock().now().seconds_nanoseconds()[0]
+        if timestamp % 2 == 0: 
+             self.get_logger().info(f"Pose: ({self.pose_x:.2f}, {self.pose_y:.2f}) | Target: ({lookahead_point[0]:.2f}, {lookahead_point[1]:.2f}) | Dist: {dist_to_end:.2f}")
+
+        target_x, target_y = lookahead_point
+        dx = target_x - self.pose_x
+        dy = target_y - self.pose_y
+        desired_yaw = math.atan2(dy, dx)
+        yaw_error = desired_yaw - self.pose_yaw
+        while yaw_error > math.pi: yaw_error -= 2*math.pi
+        while yaw_error < -math.pi: yaw_error += 2*math.pi
+            
+        angular_vel = self.kp_angular * yaw_error
+        linear_vel = self.max_speed
+        if abs(yaw_error) > 0.5: linear_vel = 0.1
+            
+        cmd = Twist()
+        cmd.linear.x = float(linear_vel)
+        cmd.angular.z = float(angular_vel)
+        self.cmd_vel_pub.publish(cmd)
+
+    def stop_robot(self):
+        cmd = Twist()
+        self.cmd_vel_pub.publish(cmd)
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = ControlNode()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+if __name__ == '__main__': main()
+```
+
+### D. Robot URDF (src/sim/robot_description/urdf/turtlebot3_burger.urdf.xacro)
+*Critical Fixes:*
+1. `wheel_separation` set to `0.160` (Burger) was `0.287`.
+2. Added `gpu_lidar` sensor plugin to `base_scan` link.
+
+### E. Launch File (src/sim/launch/integration_test.launch.py)
+Launches `bringup_sim` (which launches Gazebo + Bridge) and then `occupancy_mapper`, `costmap_node`, `astar_planner`, `control_node`.

@@ -3,6 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid, Odometry
+from geometry_msgs.msg import PoseStamped
 import numpy as np
 import math
 from rclpy.qos import QoSProfile, DurabilityPolicy
@@ -28,7 +29,7 @@ class OccupancyMapper(Node):
         
         # Subscribe
         self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
-        self.odom_subscription = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
+        self.pose_subscription = self.create_subscription(PoseStamped, '/perception/robot_pose_cam', self.pose_callback, 10)
         
         # Publish
         map_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -37,8 +38,8 @@ class OccupancyMapper(Node):
         self.current_pose = None
         self.get_logger().info("Occupancy Mapper started")
 
-    def odom_callback(self, msg):
-        self.current_pose = msg.pose.pose
+    def pose_callback(self, msg):
+        self.current_pose = msg.pose
 
     def scan_callback(self, msg):
         if self.current_pose is None:
@@ -74,7 +75,7 @@ class OccupancyMapper(Node):
     def publish_map(self):
         grid_msg = OccupancyGrid()
         grid_msg.header.stamp = self.get_clock().now().to_msg()
-        grid_msg.header.frame_id = 'odom' # simplified for now, usually 'map'
+        grid_msg.header.frame_id = 'map_cam'
         
         grid_msg.info.resolution = self.resolution
         grid_msg.info.width = self.width

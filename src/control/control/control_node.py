@@ -32,7 +32,7 @@ class ControlNode(Node):
         self.current_path = None # numpy array of shape (N, 2)
         
         # Subscribers
-        self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
+        self.pose_subscription = self.create_subscription(PoseStamped, '/perception/robot_pose_cam', self.pose_callback, 10)
         
         path_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(Path, '/plan', self.path_callback, qos_profile=path_qos)
@@ -47,10 +47,10 @@ class ControlNode(Node):
         
         self.get_logger().info("Control Node Started (Pure Pursuit)")
 
-    def odom_callback(self, msg):
-        self.pose_x = msg.pose.pose.position.x
-        self.pose_y = msg.pose.pose.position.y
-        q = msg.pose.pose.orientation
+    def pose_callback(self, msg):
+        self.pose_x = msg.pose.position.x
+        self.pose_y = msg.pose.position.y
+        q = msg.pose.orientation
         self.pose_yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])[2]
 
     def path_callback(self, msg):
