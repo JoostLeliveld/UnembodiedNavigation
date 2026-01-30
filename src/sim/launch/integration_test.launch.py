@@ -43,8 +43,9 @@ def generate_launch_description():
 
     vision_pose_node = Node(
         package='perception',
-        executable='vision_pose_node',
-        name='vision_pose_node',
+        # executable='vision_pose_node', 
+        executable='homography_sim_node', # Switched to Homography Simulation
+        name='homography_sim_node',
         output='screen'
     )
 
