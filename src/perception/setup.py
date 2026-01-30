@@ -30,6 +30,7 @@ setup(
             'perception_node = perception.perception_node:main',
             'vision_pose_node = perception.vision_pose_node:main',
             'homography_sim_node = perception.homography_sim_node:main',
+            'mission_node = perception.mission_node:main',
         ],
     },
 

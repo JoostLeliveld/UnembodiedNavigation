@@ -79,11 +79,19 @@ def generate_launch_description():
         name='control_node',
         output='screen'
     )
+    
+    # 5. Start Mission (Auto-goal)
+    mission_node = Node(
+        package='perception',
+        executable='mission_node',
+        name='mission_node',
+        output='screen'
+    )
 
     # Delayed start to ensure Gazebo is ready (optional but good practice)
     nodes_group = TimerAction(
         period=5.0,
-        actions=[vision_pose_node, occupancy_mapper, costmap_node, astar_planner, control_node]
+        actions=[vision_pose_node, occupancy_mapper, costmap_node, astar_planner, control_node, mission_node]
     )
 
     return LaunchDescription([
