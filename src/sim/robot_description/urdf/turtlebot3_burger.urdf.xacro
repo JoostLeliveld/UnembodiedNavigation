@@ -162,6 +162,32 @@
         izz="0.001"/>
     </inertial>
   </link>
+    <!-- ============================================================= -->
+    <!-- Gazebo Sensor Plugins -->
+    <gazebo reference="${ns}base_scan">
+      <sensor name="lidar" type="gpu_lidar">
+        <pose>0 0 0 0 0 0</pose>
+        <topic>scan</topic>
+        <update_rate>5</update_rate>
+        <ray>
+          <scan>
+            <horizontal>
+              <samples>360</samples>
+              <resolution>1</resolution>
+              <min_angle>0.0</min_angle>
+              <max_angle>6.28318</max_angle>
+            </horizontal>
+          </scan>
+          <range>
+            <min>0.12</min>
+            <max>3.5</max>
+          </range>
+        </ray>
+        <always_on>true</always_on>
+        <visualize>true</visualize>
+      </sensor>
+    </gazebo>
+
     <!-- ================= Gazebo Harmonic DiffDrive ================= -->
     <gazebo>
     <plugin

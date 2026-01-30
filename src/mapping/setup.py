@@ -24,7 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'mapping_node = mapping.mapping_node:main',
+            'occupancy_mapper = mapping.occupancy_mapper:main',
+            'costmap_node = mapping.costmap_node:main',
         ],
     },
 )
