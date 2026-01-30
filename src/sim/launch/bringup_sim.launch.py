@@ -6,6 +6,7 @@ from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import PathJoinSubstitution
 
 from launch_ros.actions import Node
+from launch.actions import SetEnvironmentVariable
 
 
 
@@ -32,7 +33,7 @@ def generate_launch_description():
     )
 
     spawn = TimerAction(
-        period=5.0,   # increased delay (important)
+        period=5.0,   
         actions=[
             Node(
                 package="ros_gz_sim",
@@ -61,6 +62,11 @@ def generate_launch_description():
         ],
         output="screen",
     )
+
+    sim_pkg = FindPackageShare("sim")
+
+
+
     return LaunchDescription([
         gazebo,
         robot_description,

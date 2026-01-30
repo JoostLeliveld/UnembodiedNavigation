@@ -27,6 +27,13 @@ for root, _, files in os.walk('gazebo_worlds'):
          [os.path.join(root, f) for f in files])
     )
 
+# install models files
+for root, _, files in os.walk('models'):
+    data_files.append(
+        (os.path.join('share', package_name, root),
+         [os.path.join(root, f) for f in files])
+    )
+
 setup(
     name=package_name,
     version='0.0.0',

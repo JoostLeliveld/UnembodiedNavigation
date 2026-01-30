@@ -25,6 +25,8 @@ setup(
     entry_points={
         'console_scripts': [
             'gt_to_camera = perception.gt_to_camera:main',
+            "camera_passthrough = perception.camera_passthrough:main",
+            'perception_node = perception.perception_node:main',
         ],
     },
 

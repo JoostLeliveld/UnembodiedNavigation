@@ -80,37 +80,12 @@
 
       </link>
     </model>
-    <!-- ===================== -->
-  <!-- External security camera -->
-  <!-- ===================== -->
-      <model name="external_camera">
-        <static>true</static>
 
-      <pose>0 0 2.5 0 -1.57 0</pose> <!-- x y z roll pitch yaw -->
 
-      <link name="link">
-        <sensor name="camera" type="camera">
-          <always_on>true</always_on>
-          <update_rate>30</update_rate>
-          <visualize>true</visualize>
+      <include>
+    <uri>model://external_camera</uri>
+      </include>
 
-          <camera>
-            <horizontal_fov>1.047</horizontal_fov>
-            <image>
-              <width>640</width>
-              <height>480</height>
-              <format>R8G8B8</format>
-            </image>
-            <clip>
-              <near>0.1</near>
-              <far>100</far>
-            </clip>
-          </camera>
-
-          <topic>external_camera/image_raw</topic>
-        </sensor>
-      </link>
-    </model>
 
     <!-- ===================== -->
     <!-- Lighting              -->
