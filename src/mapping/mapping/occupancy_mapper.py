@@ -10,7 +10,9 @@ from rclpy.qos import QoSProfile, DurabilityPolicy
 
 class OccupancyMapper(Node):
     def __init__(self):
-        super().__init__('occupancy_mapper')
+        super().__init__('occupancy_mapper',
+                         allow_undeclared_parameters=True, 
+                         automatically_declare_parameters_from_overrides=True)
         
         # Parameters
         self.resolution = 0.05 # m/cell
@@ -75,7 +77,7 @@ class OccupancyMapper(Node):
     def publish_map(self):
         grid_msg = OccupancyGrid()
         grid_msg.header.stamp = self.get_clock().now().to_msg()
-        grid_msg.header.frame_id = 'map_cam'
+        grid_msg.header.frame_id = 'map_bev'
         
         grid_msg.info.resolution = self.resolution
         grid_msg.info.width = self.width

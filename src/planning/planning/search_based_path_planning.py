@@ -68,7 +68,8 @@ def costmap_connectivity(costmap_matrix, connectivity_threshold = 0.0, diagonal_
         else:
             weights = edge_weight_func(start_cost, end_cost)*np.sqrt(2)
 
-        valid_edges = np.logical_and(start_cost>0, end_cost>0)
+        # Treat costs >= 0 as traversable (free or low-cost cells). Obstacles are < 0.
+        valid_edges = np.logical_and(start_cost >= 0, end_cost >= 0)
         new_edges = list(zip(start_flat_indices[valid_edges], end_flat_indices[valid_edges]))
         new_weights = weights[valid_edges]
         
@@ -93,6 +94,9 @@ def shortest_path_networkx(costmap_matrix, source_cell, target_cell, diagonal_co
     graph = costmap_graph_networkx(costmap_matrix, diagonal_connectivity=diagonal_connectivity)
     source_node = np.ravel_multi_index(source_cell, dims=np.shape(costmap_matrix))
     target_node = np.ravel_multi_index(target_cell, dims=np.shape(costmap_matrix))
+
+    if source_node not in graph or target_node not in graph:
+        return np.zeros((0,2))
 
     try:
         path = nx.dijkstra_path(graph, source_node, target_node)

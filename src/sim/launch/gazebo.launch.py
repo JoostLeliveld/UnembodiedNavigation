@@ -19,8 +19,10 @@ def generate_launch_description():
     ])
 
     sim_pkg_share = get_package_share_directory("sim")
+    sim_pkg_share_parent = os.path.dirname(sim_pkg_share)
 
     gz_resource_paths = [
+        sim_pkg_share_parent,
         os.path.join(sim_pkg_share, "models"),
         os.path.join(sim_pkg_share, "gazebo_worlds"),
         os.path.join(sim_pkg_share, "robot_description"),

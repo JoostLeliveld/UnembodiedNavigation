@@ -8,7 +8,6 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     
-    # Arguments
     use_rviz_arg = DeclareLaunchArgument(
         'use_rviz',
         default_value='true',
@@ -16,79 +15,96 @@ def generate_launch_description():
     )
     use_rviz = LaunchConfiguration('use_rviz')
 
-    # 1. Start Simulation (Gazebo + Robot State Publisher + Bridge)
+    use_sim_time_arg = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='true',
+        description='Use simulation (Gazebo) clock if true'
+    )
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    use_lidar_arg = DeclareLaunchArgument(
+        'use_lidar',
+        default_value='true',
+        description='Enable LiDAR sensor plugin in the URDF'
+    )
+    use_lidar = LaunchConfiguration('use_lidar')
+
     sim_pkg = FindPackageShare('sim')
     bringup_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([sim_pkg, 'launch', 'bringup_sim.launch.py'])
-        )
+        ),
+        launch_arguments={
+            'use_sim_time': use_sim_time,
+            'use_lidar': use_lidar,
+        }.items(),
     )
 
-    # 1.2 Start Visualization
+
     viz_pkg = FindPackageShare('visualization')
     viz_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([viz_pkg, 'launch', 'viz.launch.py'])
         ),
-        condition=IfCondition(use_rviz)
+        condition=IfCondition(use_rviz),
+        launch_arguments={'use_sim_time': use_sim_time}.items(),
     )
 
-    # 1.1 Start Perception (Static TF + Vision Pose)
     perception_pkg = FindPackageShare('perception')
     tf_static = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            PathJoinSubstitution([perception_pkg, 'launch', 'tf_static.launch.py'])
-        )
+            PathJoinSubstitution([perception_pkg, 'launch', 'tf_static.launch.py']),
+        ),
+        launch_arguments={'use_sim_time': use_sim_time}.items()
     )
 
     vision_pose_node = Node(
         package='perception',
-        # executable='vision_pose_node', 
-        executable='homography_sim_node', # Switched to Homography Simulation
+        executable='homography_sim_node', 
         name='homography_sim_node',
-        output='screen'
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    # 2. Start Mapping
     occupancy_mapper = Node(
         package='mapping',
         executable='occupancy_mapper',
         name='occupancy_mapper',
-        output='screen'
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
     )
 
     costmap_node = Node(
         package='mapping',
         executable='costmap_node',
         name='costmap_node',
-        output='screen'
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    # 3. Start Planning
     astar_planner = Node(
         package='planning',
         executable='astar_planner',
         name='astar_planner',
-        output='screen'
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    # 4. Start Control
     control_node = Node(
         package='control',
         executable='control_node',
         name='control_node',
-        output='screen'
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
     )
     
-    # 5. Start Mission (Auto-goal)
     mission_node = Node(
         package='perception',
         executable='mission_node',
         name='mission_node',
-        output='screen'
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    # Delayed start to ensure Gazebo is ready (optional but good practice)
     nodes_group = TimerAction(
         period=5.0,
         actions=[vision_pose_node, occupancy_mapper, costmap_node, astar_planner, control_node, mission_node]
@@ -96,6 +112,8 @@ def generate_launch_description():
 
     return LaunchDescription([
         use_rviz_arg,
+        use_sim_time_arg,
+        use_lidar_arg,
         bringup_sim,
         tf_static,
         viz_launch,

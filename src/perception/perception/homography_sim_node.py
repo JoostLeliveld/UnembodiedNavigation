@@ -1,131 +1,267 @@
 #!/usr/bin/env python3
+"""
+Homography Simulation Node for 45° Oblique Camera
+
+This node simulates camera-based perception by:
+1. Taking ground truth pose from /odom
+2. Projecting to image coordinates using the camera model
+3. Publishing a pixel-space pose on /perception/pixel_pose
+
+The camera model accounts for:
+- 45° oblique viewing angle (creates projective nonlinearity)
+- Proper perspective projection
+- Ground plane assumption (Z=0)
+
+This provides the pixel observation source for boundary-only pipelines.
+"""
+
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
 import numpy as np
-import cv2
+
 
 class HomographySimNode(Node):
     def __init__(self):
-        super().__init__('homography_sim_node')
+        super().__init__('homography_sim_node', 
+                         allow_undeclared_parameters=True, 
+                         automatically_declare_parameters_from_overrides=True)
         
-        # Virtual Camera Parameters
-        self.cam_height = 3.0 # meters
+        # ===========================================
+        # Camera Parameters (must match camera.sdf)
+        # ===========================================
+        
+        # Camera position in odom frame
+        self.cam_pos = np.array([-3.0, -3.0, 6.0])
+        
+        # Camera look-at point (midpoint of robot path)
+        self.look_at = np.array([1.5, 1.5, 0.0])
+        
+        # Image parameters
         self.img_width = 1920
         self.img_height = 1080
-        self.fov_deg = 90.0
+        self.fov_h_rad = 1.5708  # 90 degrees horizontal FOV
         
-        # 1. Compute Intrinsics (K)
-        # f = (W/2) / tan(FOV/2)
-        f = (self.img_width / 2.0) / np.tan(np.deg2rad(self.fov_deg / 2.0))
+        # Noise parameters (set to 0 for Pipeline A2 ablation)
+        self.pixel_noise_std = 0.0  # Standard deviation in pixels
+        
+        # ===========================================
+        # Compute Camera Matrices
+        # ===========================================
+        
+        # 1. Intrinsic Matrix K
+        # f = (width/2) / tan(fov/2)
+        f = (self.img_width / 2.0) / np.tan(self.fov_h_rad / 2.0)
         cx = self.img_width / 2.0
         cy = self.img_height / 2.0
         
         self.K = np.array([
-            [f, 0, cx],
-            [0, f, cy],
-            [0, 0, 1]
+            [f,  0, cx],
+            [0,  f, cy],
+            [0,  0,  1]
         ])
         
-        # 2. Compute Extrinsics (RT) World -> Camera
-        # World: X-Forward, Y-Left, Z-Up
-        # Camera: X-Right, Y-Down, Z-Forward
-        # Looking Down: CamZ aligns with World -Z.
-        # Orientation: CamX aligns with World -Y (Right vs Left). CamY aligns with World -X (Down vs Forward).
+        # 2. Rotation Matrix R (world to camera) using look-at formulation
+        self.R = self._compute_lookat_rotation(self.cam_pos, self.look_at)
         
-        # Rotation Matrix (World Basis Vectors expressed in Camera Frame)
-        # World X (1,0,0) -> Cam Y (-1) -> [0, -1, 0]
-        # World Y (0,1,0) -> Cam X (-1) -> [-1, 0, 0]
-        # World Z (0,0,1) -> Cam Z (-1) -> [0, 0, -1] (Wait, -Z world is +Z cam). 
-        # Verified: Cross([0,-1,0], [-1,0,0]) = [0,0,-1]. Correct.
+        # 3. Translation vector t = -R @ C
+        self.t = -self.R @ self.cam_pos
         
-        R = np.array([
-            [0, -1, 0],
-            [-1, 0, 0],
-            [0, 0, -1]
-        ])
-        
-        # Translation
-        # Camera Position in World C = [0, 0, H]
-        # T = -R @ C
-        C = np.array([0, 0, self.cam_height])
-        T = -R @ C
-        
-        self.RT = np.zeros((3, 4))
-        self.RT[:3, :3] = R
-        self.RT[:3, 3] = T
-        
-        # 3. Compute Homography (H)
-        # P_pixel = K @ RT @ P_world
-        # On Ground Plane, Z=0. So we drop the 3rd column of RT (which multiplies Z).
-        # H = K @ RT_planar
-        
-        RT_planar = self.RT[:, [0, 1, 3]] # Columns 0(X), 1(Y), 3(T)
+        # 4. Homography for ground plane (Z=0)
+        # H = K @ [r1, r2, t] where r1, r2 are first two columns of R
+        RT_planar = np.column_stack([self.R[:, 0], self.R[:, 1], self.t])
         self.H = self.K @ RT_planar
+        
+        # 5. Inverse homography (for pixel -> world)
         self.H_inv = np.linalg.inv(self.H)
         
-        # Verify Math on startup
-        self.get_logger().info(f"Homography Matrix:\n{self.H}")
-        test_pt = np.array([0, 0, 1]) # Center of world
-        uv = self.H @ test_pt
-        uv = uv / uv[2]
-        self.get_logger().info(f"World (0,0) -> Pixel {uv[:2]}")
+        # ===========================================
+        # Verify Setup
+        # ===========================================
+        self._verify_camera_setup()
         
-        # Subscribers
+        # ===========================================
+        # ROS Interface
+        # ===========================================
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
-        self.pub = self.create_publisher(PoseStamped, '/perception/robot_pose_cam', 10)
+        self.pub = self.create_publisher(PoseStamped, '/perception/pixel_pose', 10)
         
-        self.logger_timer = 0
-
+        self.log_counter = 0
+        self.get_logger().info("Homography Sim Node started (45° oblique camera)")
+    
+    def _compute_lookat_rotation(self, cam_pos, look_at, up_hint=None):
+        """
+        Compute rotation matrix using look-at formulation.
+        This transforms points from world frame to camera frame.
+        
+        Camera frame convention (OpenCV/standard CV):
+        - X: right in image
+        - Y: down in image  
+        - Z: forward (optical axis)
+        
+        Args:
+            cam_pos: Camera position in world coordinates
+            look_at: Point the camera is looking at
+            up_hint: World up direction (default: [0, 0, 1])
+            
+        Returns:
+            R: 3x3 rotation matrix (world to camera)
+        """
+        if up_hint is None:
+            up_hint = np.array([0.0, 0.0, 1.0])
+        
+        # Camera Z axis = forward direction (toward look_at point)
+        z_cam = look_at - cam_pos
+        z_cam = z_cam / np.linalg.norm(z_cam)
+        
+        # Camera X axis = right direction (perpendicular to forward and up)
+        x_cam = np.cross(z_cam, up_hint)
+        x_cam = x_cam / np.linalg.norm(x_cam)
+        
+        # Camera Y axis = down direction (perpendicular to forward and right)
+        y_cam = np.cross(z_cam, x_cam)
+        y_cam = y_cam / np.linalg.norm(y_cam)
+        
+        # Rotation matrix: rows are camera axes expressed in world coordinates
+        # This transforms world coordinates to camera coordinates
+        R = np.array([x_cam, y_cam, z_cam])
+        
+        return R
+    
+    def _verify_camera_setup(self):
+        """Log camera parameters and verify the setup is correct."""
+        # Compute effective pitch angle
+        direction = self.look_at - self.cam_pos
+        horiz_dist = np.sqrt(direction[0]**2 + direction[1]**2)
+        pitch_deg = np.degrees(np.arctan2(-direction[2], horiz_dist))
+        yaw_deg = np.degrees(np.arctan2(direction[1], direction[0]))
+        
+        self.get_logger().info("=" * 50)
+        self.get_logger().info("Camera Configuration (45° Oblique View):")
+        self.get_logger().info(f"  Position (odom): ({self.cam_pos[0]}, {self.cam_pos[1]}, {self.cam_pos[2]})")
+        self.get_logger().info(f"  Look-at point: ({self.look_at[0]}, {self.look_at[1]}, {self.look_at[2]})")
+        self.get_logger().info(f"  Effective angles: Yaw={yaw_deg:.1f}°, Pitch={pitch_deg:.1f}° down")
+        self.get_logger().info(f"  FOV: {np.degrees(self.fov_h_rad):.1f}° horizontal")
+        self.get_logger().info(f"  Resolution: {self.img_width}x{self.img_height}")
+        
+        # Test projection of key points
+        test_points = [
+            (0.0, 0.0, "Start (0,0)"),
+            (3.0, 3.0, "Goal (3,3)"),
+            (1.5, 1.5, "Midpoint (1.5,1.5)"),
+        ]
+        
+        self.get_logger().info("Ground point projections:")
+        for x, y, name in test_points:
+            u, v, visible = self.world_to_pixel(x, y)
+            status = "IN VIEW" if visible else "OUT OF VIEW"
+            self.get_logger().info(f"  {name} -> pixel ({u:.0f}, {v:.0f}) [{status}]")
+        
+        # Test round-trip accuracy
+        self.get_logger().info("Round-trip accuracy test:")
+        for x, y, name in test_points:
+            u, v, visible = self.world_to_pixel(x, y)
+            if visible:
+                x_est, y_est = self.pixel_to_world(u, v)
+                err = np.sqrt((x - x_est)**2 + (y - y_est)**2)
+                self.get_logger().info(f"  {name}: error = {err:.6f}m")
+        
+        self.get_logger().info("=" * 50)
+    
+    def world_to_pixel(self, x, y, z=0.0):
+        """
+        Project a world point to pixel coordinates.
+        
+        Args:
+            x, y, z: World coordinates (z=0 for ground plane)
+            
+        Returns:
+            u, v: Pixel coordinates
+            visible: Whether the point is in the image
+        """
+        # Homogeneous world point
+        world_pt = np.array([x, y, 1.0])  # Using homography (assumes z=0)
+        
+        # Project using homography
+        pixel_homo = self.H @ world_pt
+        
+        # Dehomogenize
+        if abs(pixel_homo[2]) < 1e-10:
+            return 0, 0, False
+            
+        u = pixel_homo[0] / pixel_homo[2]
+        v = pixel_homo[1] / pixel_homo[2]
+        
+        # Check if in image bounds
+        visible = (0 <= u < self.img_width) and (0 <= v < self.img_height)
+        
+        # Also check if point is in front of camera
+        # Transform world point to camera coordinates
+        world_3d = np.array([x, y, z])
+        cam_pt = self.R @ (world_3d - self.cam_pos)
+        if cam_pt[2] <= 0:  # Behind camera
+            visible = False
+        
+        return u, v, visible
+    
+    def pixel_to_world(self, u, v):
+        """
+        Back-project a pixel to world coordinates (assuming ground plane z=0).
+        
+        Args:
+            u, v: Pixel coordinates
+            
+        Returns:
+            x, y: World coordinates on ground plane
+        """
+        # Homogeneous pixel point
+        pixel_pt = np.array([u, v, 1.0])
+        
+        # Apply inverse homography
+        world_homo = self.H_inv @ pixel_pt
+        
+        # Dehomogenize
+        x = world_homo[0] / world_homo[2]
+        y = world_homo[1] / world_homo[2]
+        
+        return x, y
+    
     def odom_callback(self, msg):
-        # 1. Get True Pose
-        x = msg.pose.pose.position.x
-        y = msg.pose.pose.position.y
+        """Process odometry and publish estimated pose."""
+        # 1. Get ground truth pose
+        x_true = msg.pose.pose.position.x
+        y_true = msg.pose.pose.position.y
         
-        # 2. Simulate Projection (World -> Pixel)
-        # This is what the Camera "Sees"
-        world_pt = np.array([x, y, 1.0])
-        pixel_pt_homo = self.H @ world_pt
-        u = pixel_pt_homo[0] / pixel_pt_homo[2]
-        v = pixel_pt_homo[1] / pixel_pt_homo[2]
+        # 2. Project to pixel coordinates
+        u, v, visible = self.world_to_pixel(x_true, y_true)
         
-        # Check if in view
-        if not (0 <= u < self.img_width and 0 <= v < self.img_height):
-            # Robot out of camera view!
-            # For simplicity, we keep tracking or warn
-            # self.get_logger().warn(f"Robot OOB: ({u:.1f}, {v:.1f})")
-            pass
-
-        # 3. Simulate Estimation (Pixel -> World)
-        # This is what our Algorithms will do
+        if not visible:
+            # Robot out of camera view - could publish last known or skip
+            self.log_counter += 1
+            if self.log_counter % 50 == 0:
+                self.get_logger().warn(f"Robot at ({x_true:.2f}, {y_true:.2f}) is OUT OF CAMERA VIEW")
+            return
         
-        # Add Noise (Optional - clean for now)
-        u_noise = u
-        v_noise = v
-        
-        pixel_pt_est = np.array([u_noise, v_noise, 1.0])
-        world_pt_est_homo = self.H_inv @ pixel_pt_est
-        
-        x_est = world_pt_est_homo[0] / world_pt_est_homo[2]
-        y_est = world_pt_est_homo[1] / world_pt_est_homo[2]
-        
-        # 4. Publish
+        # 3. Publish pixel pose (u,v) with yaw in orientation
         out_msg = PoseStamped()
         out_msg.header.stamp = self.get_clock().now().to_msg()
-        out_msg.header.frame_id = 'map_cam'
-        out_msg.pose.position.x = x_est
-        out_msg.pose.position.y = y_est
+        out_msg.header.frame_id = 'image'
+        out_msg.pose.position.x = float(u)
+        out_msg.pose.position.y = float(v)
         out_msg.pose.position.z = 0.0
-        out_msg.pose.orientation = msg.pose.pose.orientation # Pass-through orientation for now (Homography is XYZ)
+        out_msg.pose.orientation = msg.pose.pose.orientation  # Pass through orientation
         
         self.pub.publish(out_msg)
         
-        # Debug Log
-        self.logger_timer += 1
-        if self.logger_timer % 20 == 0: # 2 Hz
-            err = np.linalg.norm([x - x_est, y - y_est])
-            self.get_logger().info(f"True:({x:.2f},{y:.2f}) -> Pix:({u:.0f},{v:.0f}) -> Est:({x_est:.2f},{y_est:.2f}) | Err: {err:.4f}")
+        # 4. Debug logging (every ~2 seconds at 10Hz odom)
+        self.log_counter += 1
+        if self.log_counter % 20 == 0:
+            self.get_logger().info(
+                f"True:({x_true:.2f},{y_true:.2f}) -> "
+                f"Pix:({u:.0f},{v:.0f})"
+            )
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -133,6 +269,7 @@ def main(args=None):
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

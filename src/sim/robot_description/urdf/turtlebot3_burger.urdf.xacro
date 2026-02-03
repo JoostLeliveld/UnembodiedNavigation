@@ -3,6 +3,7 @@
 
   <!-- Arguments -->
   <xacro:arg name="namespace" default=""/>
+  <xacro:arg name="use_lidar" default="true"/>
   <xacro:property name="ns" value="$(arg namespace)"/>
 
   <!-- ===================== -->
@@ -27,7 +28,7 @@
     <visual>
       <origin xyz="-0.032 0 0"/>
       <geometry>
-        <mesh filename="package://robot_description/meshes/turtlebot3_description/meshes/bases/burger_base.stl"
+        <mesh filename="package://sim/robot_description/meshes/turtlebot3_description/meshes/bases/burger_base.stl"
               scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="light_black"/>
@@ -64,7 +65,7 @@
     <visual>
       <origin rpy="1.57 0 0"/>
       <geometry>
-        <mesh filename="package://robot_description/meshes/turtlebot3_description/meshes/wheels/left_tire.stl"
+        <mesh filename="package://sim/robot_description/meshes/turtlebot3_description/meshes/wheels/left_tire.stl"
               scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="dark"/>
@@ -97,7 +98,7 @@
     <visual>
       <origin rpy="1.57 0 0"/>
       <geometry>
-        <mesh filename="package://robot_description/meshes/turtlebot3_description/meshes/wheels/right_tire.stl"
+        <mesh filename="package://sim/robot_description/meshes/turtlebot3_description/meshes/wheels/right_tire.stl"
               scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="dark"/>
@@ -141,7 +142,7 @@
   <link name="${ns}base_scan">
     <visual>
       <geometry>
-        <mesh filename="package://robot_description/meshes/turtlebot3_description/meshes/sensors/lds.stl"
+        <mesh filename="package://sim/robot_description/meshes/turtlebot3_description/meshes/sensors/lds.stl"
               scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="dark"/>
@@ -164,29 +165,31 @@
   </link>
     <!-- ============================================================= -->
     <!-- Gazebo Sensor Plugins -->
-    <gazebo reference="${ns}base_scan">
-      <sensor name="lidar" type="gpu_lidar">
-        <pose>0 0 0 0 0 0</pose>
-        <topic>scan</topic>
-        <update_rate>5</update_rate>
-        <ray>
-          <scan>
-            <horizontal>
-              <samples>360</samples>
-              <resolution>1</resolution>
-              <min_angle>0.0</min_angle>
-              <max_angle>6.28318</max_angle>
-            </horizontal>
-          </scan>
-          <range>
-            <min>0.12</min>
-            <max>3.5</max>
-          </range>
-        </ray>
-        <always_on>true</always_on>
-        <visualize>true</visualize>
-      </sensor>
-    </gazebo>
+    <xacro:if value="$(arg use_lidar)">
+      <gazebo reference="${ns}base_scan">
+        <sensor name="lidar" type="gpu_lidar">
+          <pose>0 0 0 0 0 0</pose>
+          <topic>scan</topic>
+          <update_rate>5</update_rate>
+          <ray>
+            <scan>
+              <horizontal>
+                <samples>360</samples>
+                <resolution>1</resolution>
+                <min_angle>0.0</min_angle>
+                <max_angle>6.28318</max_angle>
+              </horizontal>
+            </scan>
+            <range>
+              <min>0.12</min>
+              <max>3.5</max>
+            </range>
+          </ray>
+          <always_on>true</always_on>
+          <visualize>true</visualize>
+        </sensor>
+      </gazebo>
+    </xacro:if>
 
     <!-- ================= Gazebo Harmonic DiffDrive ================= -->
     <gazebo>
@@ -203,8 +206,8 @@
         <wheel_radius>0.033</wheel_radius>
 
         <!-- ROS interface -->
-        <topic>cmd_vel</topic>
-        <odom_topic>odom</odom_topic>
+        <topic>/model/turtlebot3/cmd_vel</topic>
+        <odom_topic>/model/turtlebot3/odometry</odom_topic>
 
         <!-- Frames -->
         <frame_id>odom</frame_id>

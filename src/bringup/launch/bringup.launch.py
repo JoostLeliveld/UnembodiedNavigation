@@ -21,21 +21,21 @@ def generate_launch_description():
         period=5.0,
         actions=[
             Node(
-                package='estimation',
-                executable='estimation_node',
-                name='estimation_node',
-                output='screen'
-            ),
-            Node(
                 package='perception',
-                executable='perception_node',
-                name='perception_node',
+                executable='homography_sim_node',
+                name='homography_sim_node',
                 output='screen'
             ),
             Node(
                 package='mapping',
-                executable='mapping_node',
-                name='mapping_node',
+                executable='occupancy_mapper',
+                name='occupancy_mapper',
+                output='screen'
+            ),
+            Node(
+                package='mapping',
+                executable='costmap_node',
+                name='costmap_node',
                 output='screen'
             ),
             Node(
@@ -48,8 +48,7 @@ def generate_launch_description():
                 package='control',
                 executable='control_node',
                 name='control_node',
-                output='screen',
-                parameters=[{'test_mode': True}]
+                output='screen'
             ),
         ]
     )

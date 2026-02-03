@@ -6,7 +6,9 @@ import time
 
 class MissionNode(Node):
     def __init__(self):
-        super().__init__('mission_node')
+        super().__init__('mission_node',
+                         allow_undeclared_parameters=True, 
+                         automatically_declare_parameters_from_overrides=True)
         
         # Mission Parameters
         # Note: Odom frame always starts at (0,0) regardless of Gazebo spawn position
@@ -29,8 +31,8 @@ class MissionNode(Node):
             10
         )
         self.goal_pub = self.create_publisher(
-            PoseStamped, 
-            '/goal_pose', 
+            PoseStamped,
+            '/goal_bev',
             10
         )
         
@@ -49,7 +51,7 @@ class MissionNode(Node):
         # Send Initial Pose
         initial_pose = PoseWithCovarianceStamped()
         initial_pose.header.stamp = self.get_clock().now().to_msg()
-        initial_pose.header.frame_id = 'map_cam'
+        initial_pose.header.frame_id = 'map_bev'
         initial_pose.pose.pose.position.x = self.start_x
         initial_pose.pose.pose.position.y = self.start_y
         initial_pose.pose.pose.orientation.w = 1.0
@@ -63,7 +65,7 @@ class MissionNode(Node):
         # Send Goal
         goal_pose = PoseStamped()
         goal_pose.header.stamp = self.get_clock().now().to_msg()
-        goal_pose.header.frame_id = 'map_cam'
+        goal_pose.header.frame_id = 'map_bev'
         goal_pose.pose.position.x = self.goal_x
         goal_pose.pose.position.y = self.goal_y
         goal_pose.pose.orientation.w = 1.0

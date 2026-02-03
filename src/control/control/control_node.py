@@ -3,9 +3,9 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy
-from geometry_msgs.msg import Twist, PoseStamped
-from nav_msgs.msg import Path, Odometry
-from sensor_msgs.msg import LaserScan
+from rclpy.clock import Clock, ClockType
+from geometry_msgs.msg import Twist, PoseWithCovarianceStamped
+from nav_msgs.msg import Path
 from tf_transformations import euler_from_quaternion
 import numpy as np
 import math
@@ -23,6 +23,9 @@ class ControlNode(Node):
         self.lookahead_distance = 0.5 # meters
         self.max_speed = 0.22 # m/s (Turtlebot3 limit)
         self.kp_angular = 2.0
+        self.max_angular = 1.0 # rad/s cap to avoid tight circles
+        self.turn_in_place_threshold = 0.7 # rad; above this, rotate in place
+        self.slowdown_distance = 0.5 # meters; taper speed near goal
         self.goal_tolerance = 0.1 # meters
         
         # State
@@ -32,25 +35,29 @@ class ControlNode(Node):
         self.current_path = None # numpy array of shape (N, 2)
         
         # Subscribers
-        self.pose_subscription = self.create_subscription(PoseStamped, '/perception/robot_pose_cam', self.pose_callback, 10)
+        self.pose_subscription = self.create_subscription(
+            PoseWithCovarianceStamped,
+            '/state/bev',
+            self.pose_callback,
+            10
+        )
         
         path_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(Path, '/plan', self.path_callback, qos_profile=path_qos)
         
-        self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
-        
         # Publisher
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         
-        # Control Loop
-        self.create_timer(0.1, self.control_loop) # 10 Hz
+        # Control Loop (use steady time so publishing doesn't stall if /clock is late)
+        self.control_clock = Clock(clock_type=ClockType.STEADY_TIME)
+        self.create_timer(0.1, self.control_loop, clock=self.control_clock) # 10 Hz
         
         self.get_logger().info("Control Node Started (Pure Pursuit)")
 
     def pose_callback(self, msg):
-        self.pose_x = msg.pose.position.x
-        self.pose_y = msg.pose.position.y
-        q = msg.pose.orientation
+        self.pose_x = msg.pose.pose.position.x
+        self.pose_y = msg.pose.pose.position.y
+        q = msg.pose.pose.orientation
         self.pose_yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])[2]
 
     def path_callback(self, msg):
@@ -63,11 +70,6 @@ class ControlNode(Node):
             self.get_logger().info(f"Received new path with {len(path_points)} points")
         else:
             self.current_path = None
-
-    def scan_callback(self, msg):
-        # Basic safety check placeholder
-        # In a real "SafePathFollower", we would stop if min(ranges) < threshold
-        pass
 
     def control_loop(self):
         if self.current_path is None:
@@ -113,13 +115,19 @@ class ControlNode(Node):
         while yaw_error > math.pi: yaw_error -= 2*math.pi
         while yaw_error < -math.pi: yaw_error += 2*math.pi
             
-        # P-Control for angular velocity
+        # P-Control for angular velocity (clamped)
         angular_vel = self.kp_angular * yaw_error
-        
-        # Limit speed based on sharpness of turn (simple heuristic)
-        linear_vel = self.max_speed
-        if abs(yaw_error) > 0.5:
-            linear_vel = 0.1 # Slow down for sharp turns
+        angular_vel = max(-self.max_angular, min(self.max_angular, angular_vel))
+
+        # Linear speed: rotate-in-place if heading is far off to avoid circles
+        if abs(yaw_error) > self.turn_in_place_threshold:
+            linear_vel = 0.0
+        else:
+            # Scale speed down for modest heading error and near the goal
+            heading_scale = max(0.1, math.cos(yaw_error))
+            linear_vel = self.max_speed * heading_scale
+            if dist_to_end < self.slowdown_distance:
+                linear_vel *= max(0.1, dist_to_end / self.slowdown_distance)
             
         # Publish
         cmd = Twist()

@@ -12,6 +12,9 @@ __pycache__/
 .idea/
 .DS_Store
 
+# Debug output
+*.gv
+
 core_tue4tm00_humble/
 ICRA2026-WUnEmbodied-main/
 docs/

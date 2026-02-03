@@ -11,7 +11,7 @@ Panels:
         - /Map1
         - /Costmap1
         - /Path1
-        - /VisionPose1
+        - /State1
       Splitter Ratio: 0.5
     Tree Height: 557
   - Class: rviz_common/Selection
@@ -56,13 +56,8 @@ Visualization Manager:
       Tree:
         {}
     - Class: rviz_default_plugins/RobotModel
-      Description Source: Topic
-      Description Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /robot_description
+      Description Source: Parameter
+      Robot Description: /robot_description
       Enabled: true
       Name: RobotModel
       Visual Enabled: true
@@ -130,21 +125,16 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /plan
       Value: true
-    - Class: rviz_default_plugins/Pose
+    - Class: rviz_default_plugins/PoseWithCovariance
       Color: 255; 0; 0
       Enabled: true
-      Head Length: 0.3
-      Head Radius: 0.1
-      Name: VisionPose
-      Shaft Length: 0.5
-      Shaft Radius: 0.05
-      Shape: Arrow
+      Name: State
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /perception/robot_pose_cam
+        Value: /state/bev
       Value: true
     - Class: rviz_default_plugins/LaserScan
       Alpha: 1
@@ -180,10 +170,24 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Camera
+      Normalize Range: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /external_camera/image_raw
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: map_cam
+    Fixed Frame: map_bev
     Frame Rate: 30
   Name: root
   Tools:
@@ -207,7 +211,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /goal_pose
+        Value: /goal_bev
     - Class: rviz_default_plugins/PublishPoint
       Single click: true
       Topic:

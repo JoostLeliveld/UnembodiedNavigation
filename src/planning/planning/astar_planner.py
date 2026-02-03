@@ -19,18 +19,26 @@ class AStarPlanner(Node):
         # Node Parameters
         self.max_cost = 100.0 # Maximum (unsafe) cost
         
-        # Subscribe to Initial Pose (standard RViz topic)
-        # Original used 'start', but standard is /initialpose from RViz
-        start_qos_profile = QoSProfile(depth=1)
-        start_qos_profile.durability = DurabilityPolicy.VOLATILE
-        self.start_subscriber = self.create_subscription(PoseWithCovarianceStamped, '/initialpose', self.start_callback, qos_profile=start_qos_profile)
-        self.start_msg = None
+        # Subscribe to BEV state (authoritative state estimate)
+        state_qos_profile = QoSProfile(depth=1)
+        state_qos_profile.durability = DurabilityPolicy.VOLATILE
+        self.state_subscriber = self.create_subscription(
+            PoseWithCovarianceStamped,
+            '/state/bev',
+            self.state_callback,
+            qos_profile=state_qos_profile
+        )
+        self.state_msg = None
 
-        # Subscribe to Goal Pose (standard RViz topic)
-        # Original used 'goal', standard is /goal_pose
+        # Subscribe to BEV Goal
         goal_qos_profile = QoSProfile(depth=1)
         goal_qos_profile.durability = DurabilityPolicy.VOLATILE
-        self.goal_subscriber = self.create_subscription(PoseStamped, '/goal_pose', self.goal_callback, qos_profile=goal_qos_profile)
+        self.goal_subscriber = self.create_subscription(
+            PoseStamped,
+            '/goal_bev',
+            self.goal_callback,
+            qos_profile=goal_qos_profile
+        )
         self.goal_msg = None
 
         # Subscribe to Costmap
@@ -44,14 +52,13 @@ class AStarPlanner(Node):
         path_qos_profile.durability = DurabilityPolicy.TRANSIENT_LOCAL
         self.path_publisher = self.create_publisher(Path, '/plan', qos_profile=path_qos_profile) # Standard topic /plan
 
-        self.get_logger().info('A* Planner Started. Waiting for /costmap, /initialpose, and /goal_pose...')
+        self.get_logger().info('A* Planner Started. Waiting for /costmap, /state/bev, and /goal_bev...')
 
-    def start_callback(self, msg):
+    def state_callback(self, msg):
         # Convert PoseWithCovarianceStamped to PoseStamped for internal use
-        self.start_msg = PoseStamped()
-        self.start_msg.header = msg.header
-        self.start_msg.pose = msg.pose.pose
-        self.get_logger().info('Start pose received')
+        self.state_msg = PoseStamped()
+        self.state_msg.header = msg.header
+        self.state_msg.pose = msg.pose.pose
         self.publish_path()
 
     def goal_callback(self, msg):
@@ -66,12 +73,12 @@ class AStarPlanner(Node):
 
     def publish_path(self):
 
-        if (self.start_msg is None) or (self.goal_msg is None) or (self.costmap_msg is None):
+        if (self.state_msg is None) or (self.goal_msg is None) or (self.costmap_msg is None):
             return
         
         self.get_logger().info('Planning path...')
 
-        start_position = np.asarray([self.start_msg.pose.position.x, self.start_msg.pose.position.y])
+        start_position = np.asarray([self.state_msg.pose.position.x, self.state_msg.pose.position.y])
         goal_position = np.asarray([self.goal_msg.pose.position.x, self.goal_msg.pose.position.y])
 
         costmap_origin = np.asarray([self.costmap_msg.info.origin.position.x, self.costmap_msg.info.origin.position.y])
@@ -90,14 +97,14 @@ class AStarPlanner(Node):
         path_world = search_based_path_planning.grid_to_world(path_grid, costmap_origin, costmap_resolution)
 
         path_msg = Path()
-        path_msg.header.frame_id = 'odom' # The costmap is in 'odom' frame usually for this simple setup (or map)
+        path_msg.header.frame_id = self.state_msg.header.frame_id or 'map_bev'
         if self.costmap_msg.header.frame_id:
-             path_msg.header.frame_id = self.costmap_msg.header.frame_id
+            path_msg.header.frame_id = self.costmap_msg.header.frame_id
         
         path_msg.header.stamp = self.get_clock().now().to_msg()
 
         if path_world.size > 0:
-            path_msg.poses.append(self.start_msg)
+            path_msg.poses.append(self.state_msg)
             for waypoint in path_world:
                 pose_msg = PoseStamped()
                 pose_msg.header = path_msg.header
