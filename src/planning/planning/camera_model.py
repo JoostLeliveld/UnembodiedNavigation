@@ -1,10 +1,3 @@
-"""
-Shared camera model for BEV <-> pixel projections.
-
-This mirrors the parameters used in homography_sim_node and pixel_to_bev_state_node,
-so MPC/EFE planners can use the same observation model g(s).
-"""
-
 import math
 import numpy as np
 
@@ -71,11 +64,6 @@ class ObliqueCameraModel:
         return float(world_h[0] / world_h[2]), float(world_h[1] / world_h[2])
 
     def g(self, state):
-        """
-        Observation model g(s): BEV state -> pixel observation.
-        state = (x, y, theta) in BEV. Output = (u, v, psi) in pixels.
-        psi is mapped directly from theta (consistent with current sim pipeline).
-        """
         x, y, theta = state
         u, v, _ = self.world_to_pixel(x, y, 0.0)
         return np.array([u, v, theta], dtype=float)

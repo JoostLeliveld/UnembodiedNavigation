@@ -9,8 +9,6 @@ from nav_msgs.msg import Path
 from tf_transformations import euler_from_quaternion
 import numpy as np
 import math
-
-# Local import
 from control import path_follow_tools
 
 class ControlNode(Node):
@@ -37,7 +35,7 @@ class ControlNode(Node):
         self.goal_tolerance = float(self.get_parameter('goal_tolerance').value)
         self.state_timeout_s = float(self.get_parameter('state_timeout_s').value)
         
-        # State
+
         self.pose_x = 0.0
         self.pose_y = 0.0
         self.pose_yaw = 0.0
@@ -45,7 +43,7 @@ class ControlNode(Node):
         self.last_state_time = None
         self.last_stale_warn_time = None
         
-        # Subscribers
+
         self.pose_subscription = self.create_subscription(
             PoseWithCovarianceStamped,
             '/state/bev',
@@ -101,7 +99,7 @@ class ControlNode(Node):
             
         robot_pos = np.array([self.pose_x, self.pose_y])
         
-        # Check if we reached the end
+
         dist_to_end = np.linalg.norm(robot_pos - self.current_path[-1])
         if dist_to_end < self.goal_tolerance:
             self.stop_robot()
@@ -109,51 +107,39 @@ class ControlNode(Node):
             self.current_path = None # Clear path
             return
 
-        # Pure Pursuit: Find lookahead point
-        # path_goal_sphere returns the intersection point further along the path
         lookahead_point = path_follow_tools.path_goal_sphere(self.current_path, robot_pos, self.lookahead_distance)
         
         if lookahead_point is None:
-            # If no intersection (e.g., path is entirely inside radius, or far away), 
-            # target the last point if close, or re-plan/stop.
-            # For robustness, target the closest point or end point.
             lookahead_point = self.current_path[-1] 
             
-        # Log status every 10 iterations (1s)
+
         timestamp = self.get_clock().now().seconds_nanoseconds()[0]
         if timestamp % 2 == 0: 
              self.get_logger().info(f"Pose: ({self.pose_x:.2f}, {self.pose_y:.2f}) | Target: ({lookahead_point[0]:.2f}, {lookahead_point[1]:.2f}) | Dist: {dist_to_end:.2f}")
 
-        # Calculate control commands
         target_x, target_y = lookahead_point
         dx = target_x - self.pose_x
         dy = target_y - self.pose_y
         
-        # Desired heading
+
         desired_yaw = math.atan2(dy, dx)
-        
-        # Heading error
         yaw_error = desired_yaw - self.pose_yaw
         
-        # Normalize error to [-pi, pi]
         while yaw_error > math.pi: yaw_error -= 2*math.pi
         while yaw_error < -math.pi: yaw_error += 2*math.pi
             
-        # P-Control for angular velocity (clamped)
+  
         angular_vel = self.kp_angular * yaw_error
         angular_vel = max(-self.max_angular, min(self.max_angular, angular_vel))
 
-        # Linear speed: rotate-in-place if heading is far off to avoid circles
         if abs(yaw_error) > self.turn_in_place_threshold:
             linear_vel = 0.0
         else:
-            # Scale speed down for modest heading error and near the goal
             heading_scale = max(0.1, math.cos(yaw_error))
             linear_vel = self.max_speed * heading_scale
             if dist_to_end < self.slowdown_distance:
                 linear_vel *= max(0.1, dist_to_end / self.slowdown_distance)
-            
-        # Publish
+
         cmd = Twist()
         cmd.linear.x = float(linear_vel)
         cmd.angular.z = float(angular_vel)
