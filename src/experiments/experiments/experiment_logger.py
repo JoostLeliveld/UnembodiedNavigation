@@ -7,6 +7,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseWithCovarianceStamped, Twist, PoseStamped
 from nav_msgs.msg import Path
+from std_msgs.msg import Float64MultiArray
 
 
 class ExperimentLogger(Node):
@@ -27,11 +28,13 @@ class ExperimentLogger(Node):
         self.cmd_msg = None
         self.goal_msg = None
         self.plan_msg = None
+        self.efe_metrics = None
 
         self.create_subscription(PoseWithCovarianceStamped, '/state/bev', self._state_cb, 10)
         self.create_subscription(Twist, '/cmd_vel', self._cmd_cb, 10)
         self.create_subscription(PoseStamped, '/goal_bev', self._goal_cb, 10)
         self.create_subscription(Path, '/plan', self._plan_cb, 10)
+        self.create_subscription(Float64MultiArray, '/efe/metrics', self._efe_cb, 10)
 
         self.file = open(self.log_path, 'w', newline='')
         self.writer = csv.writer(self.file)
@@ -41,6 +44,7 @@ class ExperimentLogger(Node):
             'cmd_v', 'cmd_w',
             'goal_x', 'goal_y', 'goal_dist',
             'plan_points', 'plan_length',
+            'efe_total', 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_boundary',
             'seed'
         ])
 
@@ -59,6 +63,9 @@ class ExperimentLogger(Node):
 
     def _plan_cb(self, msg: Path):
         self.plan_msg = msg
+
+    def _efe_cb(self, msg: Float64MultiArray):
+        self.efe_metrics = msg
 
     def _log_once(self):
         if self.state_msg is None:
@@ -95,6 +102,18 @@ class ExperimentLogger(Node):
                 plan_length += math.hypot(p1.x - p0.x, p1.y - p0.y)
 
         stamp = self.state_msg.header.stamp.sec + self.state_msg.header.stamp.nanosec * 1e-9
+
+        efe_total = 0.0
+        efe_risk = 0.0
+        efe_ambiguity = 0.0
+        efe_control = 0.0
+        efe_boundary = 0.0
+        if self.efe_metrics and self.efe_metrics.data and len(self.efe_metrics.data) >= 5:
+            efe_total = float(self.efe_metrics.data[0])
+            efe_risk = float(self.efe_metrics.data[1])
+            efe_ambiguity = float(self.efe_metrics.data[2])
+            efe_control = float(self.efe_metrics.data[3])
+            efe_boundary = float(self.efe_metrics.data[4])
         self.writer.writerow([
             stamp,
             self.state_msg.pose.pose.position.x,
@@ -104,6 +123,7 @@ class ExperimentLogger(Node):
             cmd_v, cmd_w,
             goal_x, goal_y, goal_dist,
             plan_points, plan_length,
+            efe_total, efe_risk, efe_ambiguity, efe_control, efe_boundary,
             self.seed
         ])
         self.file.flush()

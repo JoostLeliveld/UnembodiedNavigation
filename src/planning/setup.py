@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'astar_planner = planning.astar_planner:main',
+            'efe_planner = planning.efe_planner:main',
         ],
     },
 )

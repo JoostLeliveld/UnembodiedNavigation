@@ -24,6 +24,11 @@ def generate_launch_description():
         default_value='oracle',
         description='State source: oracle | pixel'
     )
+    planner_arg = DeclareLaunchArgument(
+        'planner',
+        default_value='astar',
+        description='Planner: astar | efe1 | efe2'
+    )
     goal_x_arg = DeclareLaunchArgument('goal_x', default_value='3.0')
     goal_y_arg = DeclareLaunchArgument('goal_y', default_value='3.0')
     seed_arg = DeclareLaunchArgument('seed', default_value='0')
@@ -33,6 +38,7 @@ def generate_launch_description():
     use_rviz = LaunchConfiguration('use_rviz')
     use_sim_time = LaunchConfiguration('use_sim_time')
     state_source = LaunchConfiguration('state_source')
+    planner = LaunchConfiguration('planner')
     goal_x = LaunchConfiguration('goal_x')
     goal_y = LaunchConfiguration('goal_y')
     seed = LaunchConfiguration('seed')
@@ -110,7 +116,32 @@ def generate_launch_description():
         executable='astar_planner',
         name='astar_planner',
         output='screen',
-        parameters=[{'use_sim_time': use_sim_time}]
+        parameters=[{'use_sim_time': use_sim_time}],
+        condition=LaunchConfigurationEquals('planner', 'astar')
+    )
+
+    efe_planner_efe1 = Node(
+        package='planning',
+        executable='efe_planner',
+        name='efe_planner',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'planner_mode': 'efe1',
+        }],
+        condition=LaunchConfigurationEquals('planner', 'efe1')
+    )
+
+    efe_planner_efe2 = Node(
+        package='planning',
+        executable='efe_planner',
+        name='efe_planner',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'planner_mode': 'efe2',
+        }],
+        condition=LaunchConfigurationEquals('planner', 'efe2')
     )
 
     control_node = Node(
@@ -161,6 +192,8 @@ def generate_launch_description():
                 pixel_to_bev,
                 boundary_cost_node,
                 astar_planner,
+                efe_planner_efe1,
+                efe_planner_efe2,
                 control_node,
                 mission_node,
                 logger_node,

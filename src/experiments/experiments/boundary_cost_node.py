@@ -16,6 +16,12 @@ class BoundaryCostNode(Node):
         self.declare_parameter('wall_margin', 0.2)
         self.declare_parameter('resolution', 0.05)
         self.declare_parameter('frame_id', 'map_bev')
+        # Simple static obstacle (defaults place it on the diagonal start->goal path)
+        self.declare_parameter('obstacle_enabled', True)
+        self.declare_parameter('obstacle_center_x', 1.5)
+        self.declare_parameter('obstacle_center_y', 1.5)
+        self.declare_parameter('obstacle_radius', 0.4)
+        self.declare_parameter('obstacle_value', 100)
 
         self.min_x = float(self.get_parameter('min_x').value)
         self.max_x = float(self.get_parameter('max_x').value)
@@ -24,6 +30,11 @@ class BoundaryCostNode(Node):
         self.wall_margin = float(self.get_parameter('wall_margin').value)
         self.resolution = float(self.get_parameter('resolution').value)
         self.frame_id = self.get_parameter('frame_id').value
+        self.obstacle_enabled = bool(self.get_parameter('obstacle_enabled').value)
+        self.obstacle_center_x = float(self.get_parameter('obstacle_center_x').value)
+        self.obstacle_center_y = float(self.get_parameter('obstacle_center_y').value)
+        self.obstacle_radius = float(self.get_parameter('obstacle_radius').value)
+        self.obstacle_value = int(self.get_parameter('obstacle_value').value)
 
         qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.publisher = self.create_publisher(OccupancyGrid, '/costmap', qos)
@@ -49,6 +60,11 @@ class BoundaryCostNode(Node):
                         wy <= self.min_y + self.wall_margin or
                         wy >= self.max_y - self.wall_margin):
                     data[y * width + x] = 100
+                elif self.obstacle_enabled:
+                    dx = wx - self.obstacle_center_x
+                    dy = wy - self.obstacle_center_y
+                    if (dx * dx + dy * dy) <= (self.obstacle_radius * self.obstacle_radius):
+                        data[y * width + x] = self.obstacle_value
 
         grid = OccupancyGrid()
         grid.header.stamp = self.get_clock().now().to_msg()
@@ -63,6 +79,11 @@ class BoundaryCostNode(Node):
         grid.data = data
 
         self.publisher.publish(grid)
+        if self.obstacle_enabled:
+            self.get_logger().info(
+                f"Obstacle enabled at ({self.obstacle_center_x:.2f}, {self.obstacle_center_y:.2f}) "
+                f"r={self.obstacle_radius:.2f}"
+            )
 
 
 def main(args=None):
