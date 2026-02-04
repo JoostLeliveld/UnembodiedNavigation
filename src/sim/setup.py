@@ -10,7 +10,7 @@ data_files = [
 
     # launch files
     (os.path.join('share', package_name, 'launch'),
-        glob('launch/*.py')),
+        glob('launch/*.launch.py')),
 ]
 
 # install robot_description files
