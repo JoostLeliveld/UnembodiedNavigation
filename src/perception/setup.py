@@ -26,7 +26,6 @@ setup(
     entry_points={
         'console_scripts': [
             'homography_sim_node = perception.homography_sim_node:main',
-            'mission_node = perception.mission_node:main',
         ],
     },
 
