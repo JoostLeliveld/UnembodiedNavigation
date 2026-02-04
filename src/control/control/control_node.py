@@ -16,23 +16,34 @@ from control import path_follow_tools
 class ControlNode(Node):
     
     def __init__(self):
-        super().__init__('control_node', allow_undeclared_parameters=True, 
-                         automatically_declare_parameters_from_overrides=True)
+        super().__init__('control_node')
         
         # Parameters
-        self.lookahead_distance = 0.5 # meters
-        self.max_speed = 0.22 # m/s (Turtlebot3 limit)
-        self.kp_angular = 2.0
-        self.max_angular = 1.0 # rad/s cap to avoid tight circles
-        self.turn_in_place_threshold = 0.7 # rad; above this, rotate in place
-        self.slowdown_distance = 0.5 # meters; taper speed near goal
-        self.goal_tolerance = 0.1 # meters
+        self.declare_parameter('lookahead_distance', 0.5) # meters
+        self.declare_parameter('max_speed', 0.22) # m/s (Turtlebot3 limit)
+        self.declare_parameter('kp_angular', 2.0)
+        self.declare_parameter('max_angular', 1.0) # rad/s cap to avoid tight circles
+        self.declare_parameter('turn_in_place_threshold', 0.7) # rad; above this, rotate in place
+        self.declare_parameter('slowdown_distance', 0.5) # meters; taper speed near goal
+        self.declare_parameter('goal_tolerance', 0.1) # meters
+        self.declare_parameter('state_timeout_s', 0.5) # seconds; stale-state watchdog
+
+        self.lookahead_distance = float(self.get_parameter('lookahead_distance').value)
+        self.max_speed = float(self.get_parameter('max_speed').value)
+        self.kp_angular = float(self.get_parameter('kp_angular').value)
+        self.max_angular = float(self.get_parameter('max_angular').value)
+        self.turn_in_place_threshold = float(self.get_parameter('turn_in_place_threshold').value)
+        self.slowdown_distance = float(self.get_parameter('slowdown_distance').value)
+        self.goal_tolerance = float(self.get_parameter('goal_tolerance').value)
+        self.state_timeout_s = float(self.get_parameter('state_timeout_s').value)
         
         # State
         self.pose_x = 0.0
         self.pose_y = 0.0
         self.pose_yaw = 0.0
         self.current_path = None # numpy array of shape (N, 2)
+        self.last_state_time = None
+        self.last_stale_warn_time = None
         
         # Subscribers
         self.pose_subscription = self.create_subscription(
@@ -59,6 +70,7 @@ class ControlNode(Node):
         self.pose_y = msg.pose.pose.position.y
         q = msg.pose.pose.orientation
         self.pose_yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])[2]
+        self.last_state_time = self.control_clock.now()
 
     def path_callback(self, msg):
         path_points = []
@@ -73,6 +85,18 @@ class ControlNode(Node):
 
     def control_loop(self):
         if self.current_path is None:
+            return
+
+        now = self.control_clock.now()
+        if self.last_state_time is None:
+            return
+        if (now - self.last_state_time).nanoseconds > self.state_timeout_s * 1e9:
+            # Stale state: stop and warn at most every 2 seconds
+            if (self.last_stale_warn_time is None or
+                    (now - self.last_stale_warn_time).nanoseconds > 2e9):
+                self.get_logger().warn("State is stale; stopping until /state/bev updates")
+                self.last_stale_warn_time = now
+            self.stop_robot()
             return
             
         robot_pos = np.array([self.pose_x, self.pose_y])

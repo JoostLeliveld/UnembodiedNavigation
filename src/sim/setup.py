@@ -43,4 +43,10 @@ setup(
     zip_safe=True,
     maintainer='joostleliveld',
     maintainer_email='j.j.p.leliveld@student.tue.nl',
+    entry_points={
+        'console_scripts': [
+            'wait_for_clock = sim.wait_for_clock:main',
+            'wait_for_odom = sim.wait_for_odom:main',
+        ],
+    },
 )

@@ -9,16 +9,8 @@ import os
 
 
 def generate_launch_description():
-    sim_pkg = FindPackageShare("sim")
-
-    world = PathJoinSubstitution([
-        sim_pkg,
-        "gazebo_worlds",
-        "worlds",
-        "empty.world.sdf"
-    ])
-
     sim_pkg_share = get_package_share_directory("sim")
+    world_path = os.path.join(sim_pkg_share, "gazebo_worlds", "worlds", "empty.world.sdf")
     sim_pkg_share_parent = os.path.dirname(sim_pkg_share)
 
     gz_resource_paths = [
@@ -44,7 +36,7 @@ def generate_launch_description():
             ])
         ]),
         launch_arguments={
-            "gz_args": ["-r ", world],
+            "gz_args": f"-r {world_path}",
         }.items()
     )
 

@@ -1,10 +1,11 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, RegisterEventHandler
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch.conditions import LaunchConfigurationEquals
 from launch_ros.substitutions import FindPackageShare
+from launch.event_handlers import OnProcessExit
 
 
 def generate_launch_description():
@@ -56,6 +57,17 @@ def generate_launch_description():
             PathJoinSubstitution([perception_pkg, 'launch', 'tf_static.launch.py'])
         ),
         launch_arguments={'use_sim_time': use_sim_time}.items(),
+    )
+
+    wait_for_odom = Node(
+        package='sim',
+        executable='wait_for_odom',
+        name='wait_for_odom',
+        output='screen',
+        parameters=[{
+            'topic': '/odom',
+            'timeout_s': 0.0,
+        }]
     )
 
     homography_sim = Node(
@@ -141,6 +153,22 @@ def generate_launch_description():
         condition=LaunchConfigurationEquals('use_rviz', 'true')
     )
 
+    start_after_odom = RegisterEventHandler(
+        OnProcessExit(
+            target_action=wait_for_odom,
+            on_exit=[
+                homography_sim,
+                pixel_to_bev,
+                boundary_cost_node,
+                astar_planner,
+                control_node,
+                mission_node,
+                logger_node,
+                rviz,
+            ]
+        )
+    )
+
     return LaunchDescription([
         use_rviz_arg,
         use_sim_time_arg,
@@ -152,12 +180,6 @@ def generate_launch_description():
         transform_noise_arg,
         bringup_sim,
         tf_static,
-        homography_sim,
-        pixel_to_bev,
-        boundary_cost_node,
-        astar_planner,
-        control_node,
-        mission_node,
-        logger_node,
-        rviz,
+        wait_for_odom,
+        start_after_odom,
     ])
