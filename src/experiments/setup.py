@@ -30,8 +30,6 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'boundary_planner = experiments.boundary_planner:main',
-            'boundary_controller = experiments.boundary_controller:main',
             'boundary_cost_node = experiments.boundary_cost_node:main',
             'goal_mission_node = experiments.goal_mission_node:main',
             'experiment_logger = experiments.experiment_logger:main',
