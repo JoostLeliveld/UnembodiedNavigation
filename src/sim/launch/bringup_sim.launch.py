@@ -3,7 +3,7 @@ from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, Regi
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-from launch.substitutions import PathJoinSubstitution, LaunchConfiguration
+from launch.substitutions import PathJoinSubstitution, LaunchConfiguration, PythonExpression
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 
@@ -28,6 +28,22 @@ def generate_launch_description():
         description="Bridge /scan between Gazebo and ROS",
     )
     bridge_scan = LaunchConfiguration("bridge_scan")
+    world_arg = DeclareLaunchArgument(
+        "world",
+        default_value="empty.world.sdf",
+        description="World file under sim/gazebo_worlds/worlds",
+    )
+    world = LaunchConfiguration("world")
+    world_name_arg = DeclareLaunchArgument(
+        "world_name",
+        default_value=PythonExpression([
+            "'",
+            LaunchConfiguration("world"),
+            "'.replace('.world.sdf','').replace('.sdf','')"
+        ]),
+        description="World name (used for /world/<name>/clock bridging)",
+    )
+    world_name = LaunchConfiguration("world_name")
 
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -36,7 +52,10 @@ def generate_launch_description():
                 "launch",
                 "gazebo.launch.py"
             ])
-        )
+        ),
+        launch_arguments={
+            "world": world,
+        }.items(),
     )
 
     robot_description = IncludeLaunchDescription(
@@ -86,6 +105,17 @@ def generate_launch_description():
 
 
 
+    clock_arg = PythonExpression([
+        "'/world/' + '",
+        world_name,
+        "' + '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'"
+    ])
+    clock_remap_src = PythonExpression([
+        "'/world/' + '",
+        world_name,
+        "' + '/clock'"
+    ])
+
     ros_gz_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
@@ -96,14 +126,14 @@ def generate_launch_description():
             "/model/turtlebot3/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model",
             "/external_camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
             "/external_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
-            "/world/empty/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
+            clock_arg,
         ],
         remappings=[
             ("/model/turtlebot3/cmd_vel", "/cmd_vel"),
             ("/model/turtlebot3/odometry", "/odom"),
             ("/model/turtlebot3/odometry_tf", "/tf"),
             ("/model/turtlebot3/joint_states", "/joint_states"),
-            ("/world/empty/clock", "/clock"),
+            (clock_remap_src, "/clock"),
         ],
         output="screen",
     )
@@ -121,6 +151,8 @@ def generate_launch_description():
         use_sim_time_arg,
         use_lidar_arg,
         bridge_scan_arg,
+        world_arg,
+        world_name_arg,
         gazebo,
         robot_description,
         wait_for_clock,

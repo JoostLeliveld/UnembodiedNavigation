@@ -29,6 +29,11 @@ def generate_launch_description():
         default_value='astar',
         description='Planner: astar | efe1 | efe2'
     )
+    world_arg = DeclareLaunchArgument(
+        'world',
+        default_value='empty.world.sdf',
+        description='World file under sim/gazebo_worlds/worlds'
+    )
     goal_x_arg = DeclareLaunchArgument('goal_x', default_value='3.0')
     goal_y_arg = DeclareLaunchArgument('goal_y', default_value='3.0')
     seed_arg = DeclareLaunchArgument('seed', default_value='0')
@@ -39,6 +44,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     state_source = LaunchConfiguration('state_source')
     planner = LaunchConfiguration('planner')
+    world = LaunchConfiguration('world')
     goal_x = LaunchConfiguration('goal_x')
     goal_y = LaunchConfiguration('goal_y')
     seed = LaunchConfiguration('seed')
@@ -54,6 +60,7 @@ def generate_launch_description():
             'use_sim_time': use_sim_time,
             'use_lidar': 'false',
             'bridge_scan': 'false',
+            'world': world,
         }.items(),
     )
 
@@ -206,6 +213,7 @@ def generate_launch_description():
         use_rviz_arg,
         use_sim_time_arg,
         state_source_arg,
+        world_arg,
         goal_x_arg,
         goal_y_arg,
         seed_arg,

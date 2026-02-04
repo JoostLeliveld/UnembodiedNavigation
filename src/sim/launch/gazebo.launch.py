@@ -1,8 +1,8 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.substitutions import FindPackageShare
-from launch.substitutions import PathJoinSubstitution
+from launch.substitutions import PathJoinSubstitution, LaunchConfiguration, TextSubstitution
 from launch.actions import SetEnvironmentVariable
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -10,12 +10,23 @@ import os
 
 def generate_launch_description():
     sim_pkg_share = get_package_share_directory("sim")
-    world_path = os.path.join(sim_pkg_share, "gazebo_worlds", "worlds", "empty.world.sdf")
+    world_arg = DeclareLaunchArgument(
+        "world",
+        default_value="empty.world.sdf",
+        description="World file under sim/gazebo_worlds/worlds",
+    )
+    world_path = PathJoinSubstitution([
+        FindPackageShare("sim"),
+        "gazebo_worlds",
+        "worlds",
+        LaunchConfiguration("world"),
+    ])
     sim_pkg_share_parent = os.path.dirname(sim_pkg_share)
 
     gz_resource_paths = [
         sim_pkg_share_parent,
         os.path.join(sim_pkg_share, "models"),
+        os.path.join(sim_pkg_share, "gazebo_worlds", "models"),
         os.path.join(sim_pkg_share, "gazebo_worlds"),
         os.path.join(sim_pkg_share, "robot_description"),
         sim_pkg_share
@@ -36,11 +47,12 @@ def generate_launch_description():
             ])
         ]),
         launch_arguments={
-            "gz_args": f"-r {world_path}",
+            "gz_args": [TextSubstitution(text="-r "), world_path],
         }.items()
     )
 
     return LaunchDescription([
+        world_arg,
         set_gz_resource_path,
         gazebo,
     ])
