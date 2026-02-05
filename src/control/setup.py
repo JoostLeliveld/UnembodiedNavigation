@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'control_node = control.control_node:main',
+            'pure_pursuit_node = control.nodes.pure_pursuit_node:main',
         ],
     },
 )

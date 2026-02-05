@@ -1,0 +1,12 @@
+{
+  "git_sha": "0a1c1f1980ed8ba6122adbbab9a5245293d62d5b",
+  "pixel_noise_sigma": 0.0,
+  "planner": "astar",
+  "run_id": "experiment_20260205_212114",
+  "seed": 0,
+  "state_source": "oracle",
+  "task": "T1_edge_hug",
+  "timestamp": "2026-02-05T21:21:14.711333",
+  "transform_noise_sigma": 0.0,
+  "world": "arena10.world.sdf"
+}

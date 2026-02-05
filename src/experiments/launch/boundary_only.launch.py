@@ -18,13 +18,12 @@ def _require_task_field(task, key):
 
 
 def _launch_setup(context, *args, **kwargs):
-    from experiments.world_profiles import (
+    from experiments.core.world_profiles import (
         load_profile,
-        load_tasks,
-        select_task,
         compute_camera_quaternion_from_rpy,
         compute_look_at_from_pose,
     )
+    from experiments.core.tasks import load_tasks, select_task
 
     use_sim_time_value = LaunchConfiguration('use_sim_time').perform(context)
     use_sim_time = _as_bool(use_sim_time_value)
@@ -234,7 +233,18 @@ def _launch_setup(context, *args, **kwargs):
         executable='experiment_logger',
         name='experiment_logger',
         output='screen',
-        parameters=[{'use_sim_time': use_sim_time, 'seed': seed}],
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'seed': seed,
+            'world': world,
+            'task': task.get('name', task_name or ''),
+            'planner': planner,
+            'state_source': state_source,
+            'pixel_noise_sigma': pixel_noise_sigma,
+            'transform_noise_sigma': transform_noise_sigma,
+            'world_profiles_path': world_profiles_path,
+            'tasks_yaml': tasks_yaml,
+        }],
     )
 
     viz_pkg = FindPackageShare('visualization')
