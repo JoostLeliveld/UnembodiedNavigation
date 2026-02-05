@@ -24,8 +24,17 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'astar_planner = planning.astar_planner:main',
+            'astar_planner = planning.nodes.astar_planner_node:main',
             'efe_planner = planning.efe_planner:main',
+            'efe1_planner = planning.nodes.efe1_planner_node:main',
+            'efe2_planner = planning.nodes.efe2_planner_node:main',
+            'efe_ut_planner = planning.nodes.efe_ut_planner_node:main',
+            'mpc_planner = planning.nodes.mpc_planner_node:main',
+            'pure_efe_planner = planning.pure_efe_planner:main',
+            'pure_efe1_planner = planning.nodes.pure_efe1_planner_node:main',
+            'pure_efe2_planner = planning.nodes.pure_efe2_planner_node:main',
+            'pure_efe_ut_planner = planning.nodes.pure_efe_ut_planner_node:main',
+            'pure_mpc_planner = planning.nodes.pure_mpc_planner_node:main',
         ],
     },
 )

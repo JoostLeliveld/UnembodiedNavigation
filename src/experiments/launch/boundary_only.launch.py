@@ -182,12 +182,11 @@ def _launch_setup(context, *args, **kwargs):
     elif planner == 'efe1':
         planner_node = Node(
             package='planning',
-            executable='efe_planner',
-            name='efe_planner',
+            executable='efe1_planner',
+            name='efe1_planner',
             output='screen',
             parameters=[{
                 'use_sim_time': use_sim_time,
-                'planner_mode': 'efe1',
                 'use_pixel_correction': use_pixel_correction,
                 'pixel_timeout_s': pixel_timeout_s,
                 **camera_params,
@@ -196,12 +195,11 @@ def _launch_setup(context, *args, **kwargs):
     elif planner == 'efe2':
         planner_node = Node(
             package='planning',
-            executable='efe_planner',
-            name='efe_planner',
+            executable='efe2_planner',
+            name='efe2_planner',
             output='screen',
             parameters=[{
                 'use_sim_time': use_sim_time,
-                'planner_mode': 'efe2',
                 'use_pixel_correction': use_pixel_correction,
                 'pixel_timeout_s': pixel_timeout_s,
                 **camera_params,
