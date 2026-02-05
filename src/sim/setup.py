@@ -47,6 +47,7 @@ setup(
         'console_scripts': [
             'wait_for_clock = sim.wait_for_clock:main',
             'wait_for_odom = sim.wait_for_odom:main',
+            'reset_world = sim.reset_world:main',
         ],
     },
 )

@@ -11,14 +11,18 @@ class HomographySimNode(Node):
                          allow_undeclared_parameters=True, 
                          automatically_declare_parameters_from_overrides=True)
         
+        self.declare_parameter('cam_pos', [-3.0, -3.0, 6.0])
+        self.declare_parameter('look_at', [1.5, 1.5, 0.0])
+        self.declare_parameter('img_width', 1920)
+        self.declare_parameter('img_height', 1080)
+        self.declare_parameter('fov_h_rad', 1.5708)
 
-        self.cam_pos = np.array([-3.0, -3.0, 6.0])
-        self.look_at = np.array([1.5, 1.5, 0.0])
-        
-        self.img_width = 1920
-        self.img_height = 1080
-        self.fov_h_rad = 1.5708  
-        self.pixel_noise_std = 0.0  
+        self.cam_pos = np.array(self.get_parameter('cam_pos').value, dtype=float)
+        self.look_at = np.array(self.get_parameter('look_at').value, dtype=float)
+        self.img_width = int(self.get_parameter('img_width').value)
+        self.img_height = int(self.get_parameter('img_height').value)
+        self.fov_h_rad = float(self.get_parameter('fov_h_rad').value)
+        self.pixel_noise_std = 0.0
         f = (self.img_width / 2.0) / np.tan(self.fov_h_rad / 2.0)
         cx = self.img_width / 2.0
         cy = self.img_height / 2.0

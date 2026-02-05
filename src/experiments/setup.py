@@ -17,7 +17,7 @@ setup(
         (os.path.join('share', package_name, 'config'),
          glob('config/*')),
     ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools', 'PyYAML'],
     zip_safe=True,
     maintainer='joostleliveld',
     maintainer_email='j.j.p.leliveld@student.tue.nl',

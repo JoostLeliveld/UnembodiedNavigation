@@ -212,3 +212,8 @@ def risk(mu, Sigma, goal):
     term_trace = np.trace(S_inv @ Sigma)
     term_quad = float(diff.T @ S_inv @ diff)
     return 0.5 * (term_trace + term_quad - d + (logdet_t - logdet_s))
+
+
+def risk_obs(mu, Sigma, goal):
+    """Alias for risk in observation space."""
+    return risk(mu, Sigma, goal)

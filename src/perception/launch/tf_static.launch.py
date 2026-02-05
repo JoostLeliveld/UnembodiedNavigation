@@ -9,9 +9,23 @@ def generate_launch_description():
         default_value='false',
         description='Use simulation (Gazebo) clock if true'
     )
+    cam_x_arg = DeclareLaunchArgument('cam_x', default_value='-3')
+    cam_y_arg = DeclareLaunchArgument('cam_y', default_value='-3')
+    cam_z_arg = DeclareLaunchArgument('cam_z', default_value='6.0')
+    cam_qx_arg = DeclareLaunchArgument('cam_qx', default_value='0.141234')
+    cam_qy_arg = DeclareLaunchArgument('cam_qy', default_value='-0.340969')
+    cam_qz_arg = DeclareLaunchArgument('cam_qz', default_value='0.355669')
+    cam_qw_arg = DeclareLaunchArgument('cam_qw', default_value='0.858658')
 
     return LaunchDescription([
         use_sim_time,
+        cam_x_arg,
+        cam_y_arg,
+        cam_z_arg,
+        cam_qx_arg,
+        cam_qy_arg,
+        cam_qz_arg,
+        cam_qw_arg,
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
@@ -33,8 +47,13 @@ def generate_launch_description():
             # Pitch: -0.756 rad (-43.3°) = looking ~45° down from horizontal
             # Quaternion from roll=0, pitch=-0.756, yaw=0.7854
             arguments=[
-                '--x', '-3', '--y', '-3', '--z', '6.0',
-                '--qx', '0.141234', '--qy', '-0.340969', '--qz', '0.355669', '--qw', '0.858658',
+                '--x', LaunchConfiguration('cam_x'),
+                '--y', LaunchConfiguration('cam_y'),
+                '--z', LaunchConfiguration('cam_z'),
+                '--qx', LaunchConfiguration('cam_qx'),
+                '--qy', LaunchConfiguration('cam_qy'),
+                '--qz', LaunchConfiguration('cam_qz'),
+                '--qw', LaunchConfiguration('cam_qw'),
                 '--frame-id', 'map_bev',
                 '--child-frame-id', 'external_camera/link/camera',
             ],
