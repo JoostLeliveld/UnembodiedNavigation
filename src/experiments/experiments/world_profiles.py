@@ -1,7 +1,7 @@
 import math
 import os
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import yaml
 from ament_index_python.packages import get_package_share_directory
@@ -15,10 +15,48 @@ def load_world_profiles(path: str) -> Dict[str, Any]:
         raise RuntimeError(f"world_profiles not found: {path}")
     with open(path, "r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
+
+    intrinsics = data.get("camera_intrinsics")
+    if not isinstance(intrinsics, dict):
+        raise RuntimeError("world_profiles.yaml must contain 'camera_intrinsics' mapping")
+
     worlds = data.get("worlds")
     if not isinstance(worlds, dict) or not worlds:
         raise RuntimeError("world_profiles.yaml must contain a non-empty 'worlds' mapping")
-    return worlds
+
+    _validate_intrinsics(intrinsics)
+    return {"camera_intrinsics": intrinsics, "worlds": worlds}
+
+
+def load_tasks(path: str) -> Dict[str, Any]:
+    if not os.path.isfile(path):
+        raise RuntimeError(f"tasks.yaml not found: {path}")
+    with open(path, "r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+    tasks = data.get("tasks")
+    if not isinstance(tasks, dict) or not tasks:
+        raise RuntimeError("tasks.yaml must contain a non-empty 'tasks' mapping")
+    return tasks
+
+
+def select_task(tasks_by_world: Dict[str, Any], world_file: str, task_name: str) -> Dict[str, Any]:
+    if world_file not in tasks_by_world:
+        known = ", ".join(sorted(tasks_by_world.keys()))
+        raise RuntimeError(
+            f"No tasks defined for world '{world_file}'. Available: {known or 'none'}"
+        )
+    tasks = tasks_by_world[world_file]
+    if not isinstance(tasks, list) or not tasks:
+        raise RuntimeError(f"Tasks for '{world_file}' must be a non-empty list")
+    if not task_name:
+        return tasks[0]
+    for task in tasks:
+        if task.get("name") == task_name:
+            return task
+    names = ", ".join([t.get("name", "<unnamed>") for t in tasks])
+    raise RuntimeError(
+        f"Task '{task_name}' not found for world '{world_file}'. Available: {names}"
+    )
 
 
 def get_worlds_dir() -> str:
@@ -30,27 +68,32 @@ def resolve_world_path(world_file: str) -> str:
     return os.path.join(get_worlds_dir(), world_file)
 
 
-def _parse_included_models(world_path: str) -> List[str]:
+def _parse_world_info(world_path: str, camera_model: str) -> Tuple[List[str], str, List[float]]:
     try:
         tree = ET.parse(world_path)
     except ET.ParseError as exc:
         raise RuntimeError(f"Failed to parse world file '{world_path}': {exc}")
     root = tree.getroot()
+
     world_name = None
     for node in root.iter():
         if node.tag.endswith("world") and "name" in node.attrib:
             world_name = node.attrib.get("name")
             break
+
     models: List[str] = []
+    camera_pose = None
 
     for include in root.iter():
         if not include.tag.endswith("include"):
             continue
         uri_node = None
+        pose_node = None
         for child in list(include):
             if child.tag.endswith("uri"):
                 uri_node = child
-                break
+            elif child.tag.endswith("pose"):
+                pose_node = child
         if uri_node is None or not uri_node.text:
             continue
         uri = uri_node.text.strip()
@@ -60,8 +103,24 @@ def _parse_included_models(world_path: str) -> List[str]:
         model_name = model_path.split("/")[0]
         if model_name:
             models.append(model_name)
+        if model_name == camera_model:
+            if pose_node is None or not pose_node.text:
+                raise RuntimeError(
+                    f"Camera include for '{camera_model}' in '{world_path}' is missing <pose>"
+                )
+            camera_pose = _parse_pose(pose_node.text)
 
-    return models, world_name
+    return models, world_name, camera_pose
+
+
+def _parse_pose(text: str) -> List[float]:
+    parts = [p for p in text.replace(",", " ").split() if p]
+    if len(parts) != 6:
+        raise RuntimeError("Camera pose must have 6 values: x y z roll pitch yaw")
+    try:
+        return [float(p) for p in parts]
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid camera pose values: {exc}")
 
 
 def _gz_resource_paths() -> List[str]:
@@ -96,7 +155,20 @@ def _ensure_number(value: Any, name: str) -> float:
     raise RuntimeError(f"Expected '{name}' to be a number")
 
 
-def validate_profile(world_file: str, profile: Dict[str, Any], world_path: str) -> None:
+def _validate_intrinsics(intrinsics: Dict[str, Any]) -> None:
+    _ensure_mapping(intrinsics, "camera_intrinsics")
+    for key in ("img_width", "img_height", "fov_h_rad"):
+        if key not in intrinsics:
+            raise RuntimeError(f"camera_intrinsics missing '{key}'")
+        _ensure_number(intrinsics[key], f"camera_intrinsics.{key}")
+
+
+def validate_profile(
+    world_file: str,
+    profile: Dict[str, Any],
+    world_path: str,
+    camera_model: str,
+) -> List[float]:
     _ensure_mapping(profile, world_file)
     if "world_name" not in profile:
         raise RuntimeError(f"Profile for '{world_file}' missing 'world_name'")
@@ -104,8 +176,6 @@ def validate_profile(world_file: str, profile: Dict[str, Any], world_path: str) 
         raise RuntimeError(f"Profile for '{world_file}' missing 'spawn'")
     if "planner_default" not in profile:
         raise RuntimeError(f"Profile for '{world_file}' missing 'planner_default'")
-    if "camera" not in profile:
-        raise RuntimeError(f"Profile for '{world_file}' missing 'camera'")
 
     spawn = _ensure_mapping(profile["spawn"], "spawn")
     for key in ("x", "y", "z", "yaw"):
@@ -118,28 +188,25 @@ def validate_profile(world_file: str, profile: Dict[str, Any], world_path: str) 
             f"Valid: {', '.join(sorted(VALID_PLANNERS))}"
         )
 
-    camera = _ensure_mapping(profile["camera"], "camera")
-    for key in ("cam_pos", "look_at", "img_width", "img_height", "fov_h_rad"):
-        if key not in camera:
-            raise RuntimeError(f"Camera config missing '{key}' in '{world_file}'")
-    if not isinstance(camera["cam_pos"], list) or len(camera["cam_pos"]) != 3:
-        raise RuntimeError("camera.cam_pos must be a list of 3 numbers")
-    if not isinstance(camera["look_at"], list) or len(camera["look_at"]) != 3:
-        raise RuntimeError("camera.look_at must be a list of 3 numbers")
-
     if not os.path.isfile(world_path):
         raise RuntimeError(f"World file not found: {world_path}")
 
-    included_models, parsed_world_name = _parse_included_models(world_path)
+    included_models, parsed_world_name, camera_pose = _parse_world_info(
+        world_path, camera_model
+    )
     missing = [model for model in included_models if not _model_exists(model)]
     if missing:
         raise RuntimeError(
             f"World '{world_file}' references missing models: {', '.join(sorted(missing))}"
         )
 
-    if "external_camera" not in included_models:
+    if camera_model not in included_models:
         raise RuntimeError(
-            f"World '{world_file}' does not include 'external_camera' but camera profile is set"
+            f"World '{world_file}' does not include '{camera_model}' but camera is required"
+        )
+    if camera_pose is None:
+        raise RuntimeError(
+            f"World '{world_file}' must specify <pose> for '{camera_model}' include"
         )
     if parsed_world_name and parsed_world_name != profile["world_name"]:
         raise RuntimeError(
@@ -147,9 +214,14 @@ def validate_profile(world_file: str, profile: Dict[str, Any], world_path: str) 
             f"world_name '{profile['world_name']}'"
         )
 
+    return camera_pose
 
-def load_profile(path: str, world_file: str) -> Dict[str, Any]:
-    profiles = load_world_profiles(path)
+
+def load_profile(path: str, world_file: str, camera_model: str = "external_camera") -> Tuple[Dict[str, Any], Dict[str, Any], str, List[float]]:
+    data = load_world_profiles(path)
+    profiles = data["worlds"]
+    intrinsics = data["camera_intrinsics"]
+
     if world_file not in profiles:
         known = ", ".join(sorted(profiles.keys()))
         raise RuntimeError(
@@ -157,19 +229,39 @@ def load_profile(path: str, world_file: str) -> Dict[str, Any]:
         )
     profile = profiles[world_file]
     world_path = resolve_world_path(world_file)
-    validate_profile(world_file, profile, world_path)
-    return profile
+    camera_pose = validate_profile(world_file, profile, world_path, camera_model)
+    return profile, intrinsics, world_path, camera_pose
 
 
-def compute_camera_quaternion(cam_pos: List[float], look_at: List[float]) -> List[float]:
-    dx = look_at[0] - cam_pos[0]
-    dy = look_at[1] - cam_pos[1]
-    dz = look_at[2] - cam_pos[2]
-    yaw = math.atan2(dy, dx)
-    horiz = math.sqrt(dx * dx + dy * dy)
-    pitch = math.atan2(dz, horiz)
-    roll = 0.0
+def parse_camera_pose_from_world(world_path: str, camera_model: str = "external_camera") -> List[float]:
+    _, _, camera_pose = _parse_world_info(world_path, camera_model)
+    if camera_pose is None:
+        raise RuntimeError(
+            f"World '{world_path}' must specify <pose> for '{camera_model}' include"
+        )
+    return camera_pose
 
+
+def compute_look_at_from_pose(cam_pos: List[float], roll: float, pitch: float, yaw: float) -> List[float]:
+    cp = math.cos(pitch)
+    sp = math.sin(pitch)
+    cy = math.cos(yaw)
+    sy = math.sin(yaw)
+
+    forward = [cp * cy, cp * sy, sp]
+    if abs(forward[2]) < 1e-6:
+        raise RuntimeError("Camera forward vector is parallel to ground plane")
+    if forward[2] >= 0.0:
+        raise RuntimeError("Camera must point downwards (negative z forward)")
+
+    t = -cam_pos[2] / forward[2]
+    if t <= 0.0:
+        raise RuntimeError("Camera forward ray does not intersect ground plane in front")
+
+    return [cam_pos[0] + t * forward[0], cam_pos[1] + t * forward[1], 0.0]
+
+
+def compute_camera_quaternion_from_rpy(roll: float, pitch: float, yaw: float) -> List[float]:
     cy = math.cos(yaw * 0.5)
     sy = math.sin(yaw * 0.5)
     cp = math.cos(pitch * 0.5)

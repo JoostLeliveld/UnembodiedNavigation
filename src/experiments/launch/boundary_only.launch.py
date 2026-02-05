@@ -11,8 +11,20 @@ def _as_bool(value: str) -> bool:
     return str(value).lower() == 'true'
 
 
+def _require_task_field(task, key):
+    if key not in task:
+        raise RuntimeError(f"Task is missing '{key}' field")
+    return task[key]
+
+
 def _launch_setup(context, *args, **kwargs):
-    from experiments.world_profiles import load_profile, compute_camera_quaternion
+    from experiments.world_profiles import (
+        load_profile,
+        load_tasks,
+        select_task,
+        compute_camera_quaternion_from_rpy,
+        compute_look_at_from_pose,
+    )
 
     use_sim_time_value = LaunchConfiguration('use_sim_time').perform(context)
     use_sim_time = _as_bool(use_sim_time_value)
@@ -20,8 +32,8 @@ def _launch_setup(context, *args, **kwargs):
     planner = LaunchConfiguration('planner').perform(context)
     world = LaunchConfiguration('world').perform(context)
     world_profiles_path = LaunchConfiguration('world_profiles').perform(context)
-    goal_x = float(LaunchConfiguration('goal_x').perform(context))
-    goal_y = float(LaunchConfiguration('goal_y').perform(context))
+    tasks_yaml = LaunchConfiguration('tasks_yaml').perform(context)
+    task_name = LaunchConfiguration('task').perform(context).strip()
     seed = int(LaunchConfiguration('seed').perform(context))
     pixel_noise_sigma = float(LaunchConfiguration('pixel_noise_sigma').perform(context))
     transform_noise_sigma = float(LaunchConfiguration('transform_noise_sigma').perform(context))
@@ -32,12 +44,39 @@ def _launch_setup(context, *args, **kwargs):
     if state_source not in ('oracle', 'pixel'):
         raise RuntimeError("state_source must be 'oracle' or 'pixel'")
 
-    profile = load_profile(world_profiles_path, world)
-    spawn = profile['spawn']
-    camera = profile['camera']
+    profile, intrinsics, world_path, camera_pose = load_profile(world_profiles_path, world)
+    tasks_by_world = load_tasks(tasks_yaml)
+    task = select_task(tasks_by_world, world, task_name)
+
+    start = _require_task_field(task, 'start')
+    goal = _require_task_field(task, 'goal')
+    for key in ('x', 'y', 'z', 'yaw'):
+        if key not in start:
+            raise RuntimeError(f"Task start missing '{key}'")
+    for key in ('x', 'y'):
+        if key not in goal:
+            raise RuntimeError(f"Task goal missing '{key}'")
+
+    spawn = {
+        'x': float(start['x']),
+        'y': float(start['y']),
+        'z': float(start['z']),
+        'yaw': float(start['yaw']),
+    }
+    goal_x = float(goal['x'])
+    goal_y = float(goal['y'])
 
     if planner == 'auto':
         planner = profile['planner_default']
+
+    cam_pos = [camera_pose[0], camera_pose[1], camera_pose[2]]
+    roll, pitch, yaw = camera_pose[3], camera_pose[4], camera_pose[5]
+    look_at = compute_look_at_from_pose(cam_pos, roll, pitch, yaw)
+    quat = compute_camera_quaternion_from_rpy(roll, pitch, yaw)
+
+    img_width = int(intrinsics['img_width'])
+    img_height = int(intrinsics['img_height'])
+    fov_h_rad = float(intrinsics['fov_h_rad'])
 
     sim_pkg = FindPackageShare('sim')
     bringup_sim = IncludeLaunchDescription(
@@ -58,14 +97,8 @@ def _launch_setup(context, *args, **kwargs):
     )
 
     perception_pkg = FindPackageShare('perception')
-    tf_args = {'use_sim_time': 'true' if use_sim_time else 'false'}
-    cam_pos = camera['cam_pos']
-    look_at = camera['look_at']
-    img_width = int(camera['img_width'])
-    img_height = int(camera['img_height'])
-    fov_h_rad = float(camera['fov_h_rad'])
-    quat = compute_camera_quaternion(cam_pos, look_at)
-    tf_args.update({
+    tf_args = {
+        'use_sim_time': 'true' if use_sim_time else 'false',
         'cam_x': str(cam_pos[0]),
         'cam_y': str(cam_pos[1]),
         'cam_z': str(cam_pos[2]),
@@ -73,7 +106,7 @@ def _launch_setup(context, *args, **kwargs):
         'cam_qy': str(quat[1]),
         'cam_qz': str(quat[2]),
         'cam_qw': str(quat[3]),
-    })
+    }
     camera_params = {
         'cam_pos': cam_pos,
         'look_at': look_at,
@@ -157,6 +190,7 @@ def _launch_setup(context, *args, **kwargs):
                 'planner_mode': 'efe1',
                 'use_pixel_correction': use_pixel_correction,
                 'pixel_timeout_s': pixel_timeout_s,
+                **camera_params,
             }],
         )
     elif planner == 'efe2':
@@ -170,6 +204,7 @@ def _launch_setup(context, *args, **kwargs):
                 'planner_mode': 'efe2',
                 'use_pixel_correction': use_pixel_correction,
                 'pixel_timeout_s': pixel_timeout_s,
+                **camera_params,
             }],
         )
     else:
@@ -276,8 +311,18 @@ def generate_launch_description():
         ]),
         description='YAML file describing per-world profiles'
     )
-    goal_x_arg = DeclareLaunchArgument('goal_x', default_value='3.0')
-    goal_y_arg = DeclareLaunchArgument('goal_y', default_value='3.0')
+    tasks_yaml_arg = DeclareLaunchArgument(
+        'tasks_yaml',
+        default_value=PathJoinSubstitution([
+            FindPackageShare('experiments'), 'config', 'tasks.yaml'
+        ]),
+        description='YAML file describing per-world tasks'
+    )
+    task_arg = DeclareLaunchArgument(
+        'task',
+        default_value='',
+        description='Task name; defaults to first task in tasks.yaml for the world'
+    )
     seed_arg = DeclareLaunchArgument('seed', default_value='0')
     pixel_noise_arg = DeclareLaunchArgument('pixel_noise_sigma', default_value='0.0')
     transform_noise_arg = DeclareLaunchArgument('transform_noise_sigma', default_value='0.0')
@@ -295,8 +340,8 @@ def generate_launch_description():
         planner_arg,
         world_arg,
         world_profiles_arg,
-        goal_x_arg,
-        goal_y_arg,
+        tasks_yaml_arg,
+        task_arg,
         seed_arg,
         pixel_noise_arg,
         transform_noise_arg,

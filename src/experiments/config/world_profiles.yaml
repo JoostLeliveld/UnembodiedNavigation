@@ -1,21 +1,18 @@
+camera_intrinsics:
+  img_width: 1280
+  img_height: 720
+  fov_h_rad: 1.5708
+
 worlds:
   empty.world.sdf:
     world_name: empty
     spawn: {x: 0.0, y: 0.0, z: 0.05, yaw: 0.0}
-    camera:
-      cam_pos: [-3.0, -3.0, 6.0]
-      look_at: [1.5, 1.5, 0.0]
-      img_width: 1920
-      img_height: 1080
-      fov_h_rad: 1.5708
     planner_default: astar
   stage2.world.sdf:
     world_name: stage2
     spawn: {x: 0.0, y: 0.0, z: 0.05, yaw: 0.0}
-    camera:
-      cam_pos: [-3.0, -3.0, 6.0]
-      look_at: [1.5, 1.5, 0.0]
-      img_width: 1920
-      img_height: 1080
-      fov_h_rad: 1.5708
     planner_default: astar
+  arena10.world.sdf:
+    world_name: arena10
+    spawn: {x: -4.2, y: -3.5, z: 0.05, yaw: 0.0}
+    planner_default: efe2

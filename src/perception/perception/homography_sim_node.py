@@ -13,8 +13,8 @@ class HomographySimNode(Node):
         
         self.declare_parameter('cam_pos', [-3.0, -3.0, 6.0])
         self.declare_parameter('look_at', [1.5, 1.5, 0.0])
-        self.declare_parameter('img_width', 1920)
-        self.declare_parameter('img_height', 1080)
+        self.declare_parameter('img_width', 1280)
+        self.declare_parameter('img_height', 720)
         self.declare_parameter('fov_h_rad', 1.5708)
 
         self.cam_pos = np.array(self.get_parameter('cam_pos').value, dtype=float)

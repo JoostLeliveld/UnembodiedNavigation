@@ -89,8 +89,8 @@ class EFEPlanner(Node):
         # Camera model params (must match sim)
         _declare_if_not('cam_pos', [-3.0, -3.0, 6.0])
         _declare_if_not('look_at', [1.5, 1.5, 0.0])
-        _declare_if_not('img_width', 1920)
-        _declare_if_not('img_height', 1080)
+        _declare_if_not('img_width', 1280)
+        _declare_if_not('img_height', 720)
         _declare_if_not('fov_h_rad', 1.5708)
 
         self.planner_mode = self.get_parameter('planner_mode').value

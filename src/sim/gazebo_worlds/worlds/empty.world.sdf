@@ -82,9 +82,10 @@
     </model>
 
 
-      <include>
-    <uri>model://external_camera</uri>
-      </include>
+    <include>
+      <uri>model://external_camera</uri>
+      <pose>-3 -3 6.0 0 -0.756 0.7854</pose>
+    </include>
 
 
     <!-- ===================== -->
