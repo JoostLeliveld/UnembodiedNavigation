@@ -178,29 +178,18 @@ def _launch_setup(context, *args, **kwargs):
             output='screen',
             parameters=[{'use_sim_time': use_sim_time}],
         )
-    elif planner == 'efe1':
+    elif planner in ('efe1', 'efe2'):
+        approx_method = 'ET1' if planner == 'efe1' else 'ET2'
         planner_node = Node(
             package='planning',
-            executable='efe1_planner',
-            name='efe1_planner',
+            executable='efe_planner',
+            name=f'{planner}_planner',
             output='screen',
             parameters=[{
                 'use_sim_time': use_sim_time,
                 'use_pixel_correction': use_pixel_correction,
                 'pixel_timeout_s': pixel_timeout_s,
-                **camera_params,
-            }],
-        )
-    elif planner == 'efe2':
-        planner_node = Node(
-            package='planning',
-            executable='efe2_planner',
-            name='efe2_planner',
-            output='screen',
-            parameters=[{
-                'use_sim_time': use_sim_time,
-                'use_pixel_correction': use_pixel_correction,
-                'pixel_timeout_s': pixel_timeout_s,
+                'approx_method': approx_method,
                 **camera_params,
             }],
         )

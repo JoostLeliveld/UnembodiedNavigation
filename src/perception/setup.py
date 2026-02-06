@@ -25,7 +25,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'homography_sim_node = perception.homography_sim_node:main',
+            'homography_sim_node = perception.nodes.homography_sim_node:main',
         ],
     },
 

@@ -6,8 +6,8 @@ import numpy as np
 from scipy.optimize import minimize
 
 from planning.core.dynamics import unicycle_step, unicycle_jacobian, unicycle_process_noise
-from planning.core.efe_math import ET1, ET2, UT, ambiguity, risk
-from planning.core.observation_models import ObliqueCameraModel
+from planning.core.efe_utils import ET1, ET2, UT, ambiguity, risk
+from unav_common.camera_model import ObliqueCameraModel
 from planning.core.rollout import rollout_unicycle
 from planning.core import search_based_path_planning
 
@@ -69,6 +69,9 @@ class UnicyclePlannerBase:
         optimizer_maxiter,
         optimizer_gtol,
         optimizer_warm_start,
+        approx_method=None,
+        use_obs_risk=None,
+        use_ambiguity=None,
         seed,
         camera_params,
     ):
@@ -104,6 +107,21 @@ class UnicyclePlannerBase:
         self.ambiguity_weight = float(ambiguity_weight)
         self.add_ambiguity = bool(add_ambiguity)
 
+        if approx_method is None:
+            self.approx_method = self.APPROX_METHOD
+        else:
+            self.approx_method = str(approx_method).upper()
+
+        if use_obs_risk is None:
+            self.use_obs_risk = bool(self.USE_OBS_RISK)
+        else:
+            self.use_obs_risk = bool(use_obs_risk)
+
+        if use_ambiguity is None:
+            self.use_ambiguity = bool(self.USE_AMBIGUITY)
+        else:
+            self.use_ambiguity = bool(use_ambiguity)
+
         self.optimizer_maxiter = int(optimizer_maxiter)
         self.optimizer_gtol = float(optimizer_gtol)
         self.optimizer_warm_start = bool(optimizer_warm_start)
@@ -126,11 +144,11 @@ class UnicyclePlannerBase:
         ])
 
         self._approx_fn = None
-        if self.APPROX_METHOD == 'ET1':
+        if self.approx_method == 'ET1':
             self._approx_fn = ET1
-        elif self.APPROX_METHOD == 'ET2':
+        elif self.approx_method == 'ET2':
             self._approx_fn = ET2
-        elif self.APPROX_METHOD == 'UT':
+        elif self.approx_method == 'UT':
             self._approx_fn = UT
 
         self.prev_controls_flat = None
@@ -198,8 +216,8 @@ class UnicyclePlannerBase:
         total_boundary = 0.0
 
         infeasible_penalty = 1e6
-        use_obs = self.USE_OBS_RISK
-        use_amb = self.USE_AMBIGUITY and self.add_ambiguity
+        use_obs = self.use_obs_risk
+        use_amb = self.use_ambiguity and self.add_ambiguity
 
         for t in range(self.horizon):
             u = controls[t]

@@ -22,7 +22,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'pixel_to_bev_state_node = state.pixel_to_bev_state_node:main',
+            'pixel_to_bev_state_node = state.nodes.pixel_to_bev_state_node:main',
         ],
     },
 )

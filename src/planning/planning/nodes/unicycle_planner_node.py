@@ -13,7 +13,7 @@ from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import OccupancyGrid, Path
 from std_msgs.msg import Float64MultiArray
 
-from planning.core.efe_math import wrap_angle
+from planning.core.efe_utils import wrap_angle
 from planning.planners.base_planner import CostmapData
 
 
@@ -73,6 +73,9 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('risk_weight_obs', 1.0)
         _declare_if_not('ambiguity_weight', 1.0)
         _declare_if_not('add_ambiguity', True)
+        _declare_if_not('approx_method', 'ET2')
+        _declare_if_not('use_obs_risk', True)
+        _declare_if_not('use_ambiguity', True)
 
         # Optimizer params
         _declare_if_not('optimizer_maxiter', 50)
@@ -120,6 +123,9 @@ class UnicyclePlannerNode(Node):
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
         self.ambiguity_weight = float(self.get_parameter('ambiguity_weight').value)
         self.add_ambiguity = _as_bool(self.get_parameter('add_ambiguity').value)
+        self.approx_method = str(self.get_parameter('approx_method').value).upper()
+        self.use_obs_risk = _as_bool(self.get_parameter('use_obs_risk').value)
+        self.use_ambiguity = _as_bool(self.get_parameter('use_ambiguity').value)
 
         self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
         self.optimizer_gtol = float(self.get_parameter('optimizer_gtol').value)
@@ -165,6 +171,9 @@ class UnicyclePlannerNode(Node):
             optimizer_maxiter=self.optimizer_maxiter,
             optimizer_gtol=self.optimizer_gtol,
             optimizer_warm_start=self.optimizer_warm_start,
+            approx_method=self.approx_method,
+            use_obs_risk=self.use_obs_risk,
+            use_ambiguity=self.use_ambiguity,
             seed=self.seed,
             camera_params=camera_params,
         )

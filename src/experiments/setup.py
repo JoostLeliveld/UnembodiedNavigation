@@ -30,9 +30,9 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'boundary_cost_node = experiments.boundary_cost_node:main',
-            'goal_mission_node = experiments.goal_mission_node:main',
-            'experiment_logger = experiments.experiment_logger:main',
+            'boundary_cost_node = experiments.nodes.boundary_cost_node:main',
+            'goal_mission_node = experiments.nodes.goal_mission_node:main',
+            'experiment_logger = experiments.nodes.experiment_logger:main',
         ],
     },
 )

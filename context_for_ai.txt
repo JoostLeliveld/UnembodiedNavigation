@@ -1,0 +1,87 @@
+Boundary-only pipeline connections (as of 2026-02-06)
+
+Launch entry:
+- src/experiments/launch/boundary_only.launch.py
+
+World + camera setup
+- World file under: src/sim/gazebo_worlds/worlds/<world>.world.sdf
+- World profile + intrinsics: src/experiments/config/world_profiles.yaml
+- Tasks: src/experiments/config/tasks.yaml
+- boundary_only.launch.py loads profile + tasks and validates:
+  - world file exists
+  - model://external_camera include exists with <pose>
+  - referenced models exist
+  - world_name matches <world name="...">
+- Camera pose is read from the world SDF <include><pose> of model://external_camera
+- Intrinsics are from world_profiles.yaml (camera_intrinsics)
+- Camera params used by homography + planners:
+  - cam_pos, look_at, img_width, img_height, fov_h_rad
+
+Launch flow (high level)
+1) bringup_sim.launch.py (sim package)
+   - Loads Gazebo world, robot description, bridges, spawns robot
+   - Uses spawn from task start: spawn_x, spawn_y, spawn_z, spawn_yaw
+2) tf_static.launch.py (perception package)
+   - Publishes static TF map_bev -> external_camera/link/camera (from world camera pose)
+3) wait_for_odom (sim package)
+   - Blocks until /odom is live
+4) After /odom:
+   - perception/homography_sim_node (only when state_source:=pixel)
+   - state/pixel_to_bev_state_node
+   - experiments/boundary_cost_node
+   - planning/astar_planner OR planning/efe_planner
+   - control/control_node
+   - experiments/goal_mission_node
+   - experiments/experiment_logger
+   - rviz2 (optional)
+
+Node list + key topics
+- sim/bringup_sim
+  - Gazebo + ros_gz_bridge
+  - /odom (nav_msgs/Odometry)
+  - /clock (rosgraph_msgs/Clock)
+  - /joint_states
+  - /external_camera/image_raw, /external_camera/camera_info
+- perception/homography_sim_node
+  - Input: /odom
+  - Output: /perception/pixel_pose (PoseStamped in pixel space)
+- state/pixel_to_bev_state_node
+  - Input: /odom (oracle) OR /perception/pixel_pose (pixel)
+  - Output: /state/bev (PoseWithCovarianceStamped)
+- experiments/boundary_cost_node
+  - Output: /costmap (nav_msgs/OccupancyGrid)
+- planning/astar_planner
+  - Input: /state/bev, /goal_bev, /costmap
+  - Output: /plan (nav_msgs/Path)
+- planning/efe_planner
+  - Input: /state/bev, /goal_bev, /costmap, /perception/pixel_pose (optional correction)
+  - Output: /plan, /efe/metrics
+  - Params: approx_method = ET1 (efe1) or ET2 (efe2)
+- control/control_node
+  - Input: /state/bev, /plan
+  - Output: /cmd_vel (geometry_msgs/Twist)
+- experiments/goal_mission_node
+  - Output: /goal_bev (PoseStamped)
+- experiments/experiment_logger
+  - Input: /state/bev, /cmd_vel, /goal_bev, /plan, /efe/metrics
+  - Output: logs/experiments/<run_id>/experiment.csv + run_manifest.json
+
+Planner selection logic
+- boundary_only.launch.py arg planner:=astar|efe1|efe2|auto
+- planner:=auto uses world_profiles.yaml planner_default
+- planner:=efe1 or efe2 launches planning/efe_planner and sets:
+  - approx_method := ET1 or ET2
+
+Data flow summary
+/odom -> (optional homography) -> /state/bev -> /plan -> /cmd_vel
+/goal_bev -> planners
+/costmap -> planners
+/efe/metrics -> logger
+
+Key parameters exposed by boundary_only.launch.py
+- world, task, world_profiles, tasks_yaml
+- planner (astar|efe1|efe2|auto)
+- state_source (oracle|pixel)
+- seed, pixel_noise_sigma, transform_noise_sigma
+- use_pixel_correction, pixel_timeout_s
+- use_rviz

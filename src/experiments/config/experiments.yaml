@@ -1,9 +1,0 @@
-experiments:
-  arena10_efe2_T1:
-    world: arena10.world.sdf
-    task: T1_edge_hug
-    planner: efe2
-    state_source: pixel
-    seed: 0
-    pixel_noise_sigma: 2.0
-    transform_noise_sigma: 0.05
