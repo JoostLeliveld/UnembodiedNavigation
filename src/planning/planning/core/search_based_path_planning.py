@@ -1,4 +1,10 @@
 import numpy as np
+
+# Compatibility shim for old NetworkX with NumPy >= 2.0
+# (NetworkX <= 2.x uses deprecated np.int alias)
+if not hasattr(np, 'int'):
+    np.int = int
+
 import networkx as nx
 
 

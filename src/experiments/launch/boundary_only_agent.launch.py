@@ -69,6 +69,9 @@ def _launch_setup(context, *args, **kwargs):
     if planner == 'auto':
         planner = profile['planner_default']
 
+    if planner not in ('efe1', 'efe2'):
+        raise RuntimeError("planner must be 'efe1', 'efe2', or 'auto' for agent launch")
+
     cam_pos = [camera_pose[0], camera_pose[1], camera_pose[2]]
     roll, pitch, yaw = camera_pose[3], camera_pose[4], camera_pose[5]
     look_at = compute_look_at_from_pose(cam_pos, roll, pitch, yaw)
@@ -171,38 +174,19 @@ def _launch_setup(context, *args, **kwargs):
         }]
     )
 
-    if planner == 'astar':
-        planner_node = Node(
-            package='planning',
-            executable='astar_planner',
-            name='astar_planner',
-            output='screen',
-            parameters=[{'use_sim_time': use_sim_time}],
-        )
-    elif planner in ('efe1', 'efe2'):
-        approx_method = 'ET1' if planner == 'efe1' else 'ET2'
-        planner_node = Node(
-            package='planning',
-            executable='efe_planner',
-            name=f'{planner}_planner',
-            output='screen',
-            parameters=[{
-                'use_sim_time': use_sim_time,
-                'use_pixel_correction': use_pixel_correction,
-                'pixel_timeout_s': pixel_timeout_s,
-                'approx_method': approx_method,
-                **camera_params,
-            }],
-        )
-    else:
-        raise RuntimeError("planner must be 'astar', 'efe1', 'efe2', or 'auto'")
-
-    control_node = Node(
-        package='control',
-        executable='control_node',
-        name='control_node',
+    approx_method = 'ET1' if planner == 'efe1' else 'ET2'
+    agent_node = Node(
+        package='planning',
+        executable='efe_agent',
+        name='efe_agent',
         output='screen',
-        parameters=[{'use_sim_time': use_sim_time}],
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'use_pixel_correction': use_pixel_correction,
+            'pixel_timeout_s': pixel_timeout_s,
+            'approx_method': approx_method,
+            **camera_params,
+        }],
     )
 
     mission_node = Node(
@@ -253,8 +237,7 @@ def _launch_setup(context, *args, **kwargs):
     after_odom.extend([
         pixel_to_bev,
         boundary_cost_node,
-        planner_node,
-        control_node,
+        agent_node,
         mission_node,
         logger_node,
     ])
@@ -301,8 +284,8 @@ def generate_launch_description():
     )
     planner_arg = DeclareLaunchArgument(
         'planner',
-        default_value='astar',
-        description='Planner: astar | efe1 | efe2 | auto'
+        default_value='efe2',
+        description='Planner: efe1 | efe2 | auto'
     )
     world_arg = DeclareLaunchArgument(
         'world',
@@ -334,7 +317,7 @@ def generate_launch_description():
     use_pixel_correction_arg = DeclareLaunchArgument(
         'use_pixel_correction',
         default_value='true',
-        description='Apply pixel-space correction in EFE planner'
+        description='Apply pixel-space correction in EFE agent'
     )
     pixel_timeout_arg = DeclareLaunchArgument('pixel_timeout_s', default_value='0.5')
 

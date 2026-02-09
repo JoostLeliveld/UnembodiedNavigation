@@ -6,6 +6,7 @@ log/
 # Python
 __pycache__/
 *.pyc
+.venv/
 
 # Editor / OS junk
 .vscode/
