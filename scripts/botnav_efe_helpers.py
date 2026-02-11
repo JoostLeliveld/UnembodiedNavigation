@@ -73,6 +73,35 @@ class PlanarCamera:
         return np.array([u, v], dtype=float)
 
 
+def wrap_angle(theta):
+    """Wrap angle to [-pi, pi]."""
+    while theta > np.pi:
+        theta -= 2.0 * np.pi
+    while theta < -np.pi:
+        theta += 2.0 * np.pi
+    return theta
+
+
+def unicycle_step(state, control, dt):
+    """Unicycle (differential drive) step. state=[x,y,theta], control=[v,w]."""
+    x, y, theta = state
+    v, w = control
+    x = x + v * dt * np.cos(theta)
+    y = y + v * dt * np.sin(theta)
+    theta = wrap_angle(theta + w * dt)
+    return np.array([x, y, theta], dtype=float)
+
+
+def unicycle_jacobian(state, control, dt):
+    """Jacobian of unicycle dynamics wrt state."""
+    _, _, theta = state
+    v, _ = control
+    F = np.eye(3)
+    F[0, 2] = -v * dt * np.sin(theta)
+    F[1, 2] = v * dt * np.cos(theta)
+    return F
+
+
 def _ensure_psd(S, eps=1e-9):
     vals, vecs = np.linalg.eigh(S)
     vals = np.maximum(vals, eps)
@@ -319,6 +348,44 @@ class EFEAgent:
         self.R = np.diag(sigma ** 2 * np.ones(self.Dy))
 
 
+class UnicycleEFEAgent:
+    """Expected Free Energy Agent for unicycle (differential drive) dynamics."""
+
+    def __init__(self, goal, g, Q, R, eta=1.0, dt=1.0, time_horizon=1):
+        """
+        Construct agent
+
+        Parameters:
+        -----------
+        goal : tuple
+            Tuple of (goal_mean, goal_covariance) in observation space
+        g : callable
+            Measurement function
+        Q : array-like
+            Process noise covariance (3x3)
+        R : array-like
+            Measurement noise covariance (Dy x Dy)
+        eta : float, optional
+            Control cost weight (default: 1.0)
+        dt : float, optional
+            Time step (default: 1.0)
+        time_horizon : int, optional
+            Planning horizon (default: 1)
+        """
+        self.Dx = 3
+        self.Du = 2
+        self.Dy = len(g(np.zeros(self.Dx)))
+        self.dt = dt
+
+        self.g = g
+        self.eta = eta
+        self.goal = goal
+        self.time_horizon = time_horizon
+
+        self.Q = np.asarray(Q, dtype=float)
+        self.R = np.asarray(R, dtype=float)
+
+
 def predict(agent, m_kmin1, S_kmin1, u_kmin1):
     """
     Chapman-Kolmogorov for linear Gaussian state transition using known control u
@@ -345,6 +412,16 @@ def predict(agent, m_kmin1, S_kmin1, u_kmin1):
     m_k_pred = agent.A @ m_kmin1 + agent.B @ u_kmin1
     S_k_pred = agent.A @ S_kmin1 @ agent.A.T + agent.Q
 
+    return m_k_pred, S_k_pred
+
+
+def predict_unicycle(agent, m_kmin1, S_kmin1, u_kmin1):
+    """
+    EKF-style prediction for unicycle dynamics.
+    """
+    m_k_pred = unicycle_step(m_kmin1, u_kmin1, agent.dt)
+    F = unicycle_jacobian(m_k_pred, u_kmin1, agent.dt)
+    S_k_pred = F @ S_kmin1 @ F.T + agent.Q
     return m_k_pred, S_k_pred
 
 
@@ -432,26 +509,13 @@ def condition_yx(m, S, dims=1):
 
 def ambiguity(Sigma, Gamma, S):
     """
-    Conditional entropy term within expected free energy
-
-    Parameters:
-    -----------
-    Sigma : array-like
-        Measurement covariance
-    Gamma : array-like
-        Cross-covariance
-    S : array-like
-        State covariance
-
-    Returns:
-    --------
-    float
-        Ambiguity term
+    Conditional entropy term within expected free energy (Julia parity).
     """
 
     S_inv = inv(S)
     Sigma_cond = Sigma - Gamma.T @ S_inv @ Gamma
-    return 0.5 * (Sigma.shape[0] * np.log(2 * np.pi * np.e) + np.log(np.linalg.det(Sigma_cond)))
+    sign, logdet = np.linalg.slogdet(Sigma_cond)
+    return 0.5 * (Sigma.shape[0] * np.log(2 * np.pi * np.e) + logdet)
 
 
 def risk(mu, Sigma, goal):
@@ -483,6 +547,7 @@ def risk(mu, Sigma, goal):
     M = L1_inv @ L0
     y = L1_inv @ (m_star - mu)
 
+    # Standard Gaussian KL (L2 norm squared)
     return 0.5 * (np.sum(M ** 2) - D + np.linalg.norm(y) ** 2 +
                   2 * np.sum([np.log(L1[i, i] / L0[i, i]) for i in range(D)]))
 
@@ -569,6 +634,7 @@ def EFE(agent, u, state, approx="ET2", add_ambiguity=True):
 
         # Accumulate objective
         # Control cost: squared norm of control vector
+        # Standard quadratic control penalty on the 2-D control at step t
         cEFE += risk(mu, Sigma, agent.goal) + agent.eta * np.sum(u_t ** 2)
         if add_ambiguity:
             cEFE += ambiguity(Sigma, Gamma, S_t)
@@ -641,3 +707,68 @@ def planned_trajectory(agent, policy, current_state, approx="ET2"):
         S_tmin1 = z_S[:, :, t]
 
     return (z_m, z_S), (y_m, y_S)
+
+
+def planned_trajectory_unicycle(agent, policy, current_state, approx="ET2"):
+    """
+    Generate future states and observations for unicycle dynamics.
+    """
+    m_tmin1, S_tmin1 = current_state
+
+    z_m = np.zeros((3, agent.time_horizon))
+    z_S = np.zeros((3, 3, agent.time_horizon))
+    y_m = np.zeros((agent.Dy, agent.time_horizon))
+    y_S = np.zeros((agent.Dy, agent.Dy, agent.time_horizon))
+
+    for t in range(agent.time_horizon):
+        u_t = policy[:, t]
+        z_m[:, t] = unicycle_step(m_tmin1, u_t, agent.dt)
+        F = unicycle_jacobian(z_m[:, t], u_t, agent.dt)
+        z_S[:, :, t] = F @ S_tmin1 @ F.T + agent.Q
+
+        if approx == "ET1":
+            mu, Sigma, _ = ET1(z_m[:, t], z_S[:, :, t], agent.g, addmatrix=agent.R, forceHermitian=True)
+        elif approx == "ET2":
+            mu, Sigma, _ = ET2(z_m[:, t], z_S[:, :, t], agent.g, addmatrix=agent.R, forceHermitian=True)
+        elif approx == "UT":
+            mu, Sigma, _ = UT(z_m[:, t], z_S[:, :, t], agent.g, addmatrix=agent.R, forceHermitian=True)
+        else:
+            raise ValueError("Approximation method unknown.")
+
+        y_m[:, t] = mu
+        y_S[:, :, t] = Sigma
+
+        m_tmin1 = z_m[:, t]
+        S_tmin1 = z_S[:, :, t]
+
+    return (z_m, z_S), (y_m, y_S)
+
+
+def EFE_unicycle(agent, u, state, approx="ET2", add_ambiguity=True):
+    """
+    Expected Free Energy for unicycle dynamics.
+    """
+    m_tmin1, S_tmin1 = state
+    cEFE = 0.0
+
+    for t in range(1, agent.time_horizon + 1):
+        u_t = u[(t - 1) * 2:2 * t]
+        m_t, S_t = predict_unicycle(agent, m_tmin1, S_tmin1, u_t)
+
+        if approx == "ET1":
+            mu, Sigma, Gamma = ET1(m_t, S_t, agent.g, addmatrix=agent.R, forceHermitian=True)
+        elif approx == "ET2":
+            mu, Sigma, Gamma = ET2(m_t, S_t, agent.g, addmatrix=agent.R, forceHermitian=True)
+        elif approx == "UT":
+            mu, Sigma, Gamma = UT(m_t, S_t, agent.g, addmatrix=agent.R, forceHermitian=True)
+        else:
+            raise ValueError("Approximation method unknown.")
+
+        cEFE += risk(mu, Sigma, agent.goal) + agent.eta * np.sum(u_t ** 2)
+        if add_ambiguity:
+            cEFE += ambiguity(Sigma, Gamma, S_t)
+
+        m_tmin1 = m_t
+        S_tmin1 = S_t
+
+    return cEFE
