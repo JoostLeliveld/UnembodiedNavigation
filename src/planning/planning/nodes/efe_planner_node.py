@@ -9,6 +9,13 @@ from planning.planners.base_planner import UnicyclePlannerBase
 class EfePlannerNode(UnicyclePlannerNode):
     NODE_NAME = 'efe_planner'
     PLANNER_CLASS = UnicyclePlannerBase
+    PARAM_DEFAULT_OVERRIDES = {
+        # Canonical EFE defaults; launch files can override for EFE1/ablation runs.
+        'approx_method': 'ET2',
+        'add_ambiguity': True,
+        'use_ambiguity': True,
+        'use_obs_risk': True,
+    }
 
 
 def main(args=None):

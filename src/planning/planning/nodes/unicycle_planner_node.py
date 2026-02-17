@@ -381,14 +381,11 @@ class UnicyclePlannerNode(Node):
             self.get_logger().info("Applied pixel correction in callback")
             self._last_correction_log = now_wall
 
-    def _plan_once(self):
-        if self.goal_msg is None or self.costmap is None:
-            return
-
+    def _resolve_belief_for_planning(self):
         if self.use_pixel_correction:
             if self.belief_m is None or self.belief_S is None:
                 if not self._init_belief_from_state():
-                    return
+                    return None, None
             m0 = self.belief_m.copy()
             S0 = self.belief_S.copy()
             if self.belief_stamp is not None:
@@ -405,7 +402,7 @@ class UnicyclePlannerNode(Node):
                         self._last_stale_log = now_wall
         else:
             if self.state_msg is None:
-                return
+                return None, None
             q = self.state_msg.pose.pose.orientation
             siny_cosp = 2 * (q.w * q.z + q.x * q.y)
             cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
@@ -426,16 +423,9 @@ class UnicyclePlannerNode(Node):
                 for i in range(min(3, S0.shape[0])):
                     if S0[i, i] < self.min_state_cov:
                         S0[i, i] = self.min_state_cov
+        return m0, S0
 
-        goal_xy = (
-            float(self.goal_msg.pose.position.x),
-            float(self.goal_msg.pose.position.y),
-        )
-
-        result = self.planner.plan(m0, S0, goal_xy, self.costmap)
-        if result is None:
-            return
-
+    def _build_path_message(self, result, goal_xy):
         path = Path()
         frame_id = self.costmap.frame_id or (self.state_msg.header.frame_id if self.state_msg else '') or 'map_bev'
         path.header.frame_id = frame_id
@@ -453,15 +443,42 @@ class UnicyclePlannerNode(Node):
         goal_pose.pose.position.x = float(goal_xy[0])
         goal_pose.pose.position.y = float(goal_xy[1])
         path.poses.append(goal_pose)
+        return path
 
+    def _publish_plan_and_metrics(self, result, goal_xy):
+        path = self._build_path_message(result, goal_xy)
         self.path_pub.publish(path)
 
-        msg = Float64MultiArray()
-        msg.data = [
+        metrics_msg = Float64MultiArray()
+        metrics_msg.data = [
             float(result.total_cost),
             float(result.risk_cost),
             float(result.ambiguity_cost),
             float(result.control_cost),
             float(result.boundary_cost),
         ]
-        self.metrics_pub.publish(msg)
+        self.metrics_pub.publish(metrics_msg)
+
+    def _after_plan_result(self, result):
+        """Hook for subclasses (e.g. agent node) to publish extra outputs."""
+        return
+
+    def _plan_once(self):
+        if self.goal_msg is None or self.costmap is None:
+            return
+
+        m0, S0 = self._resolve_belief_for_planning()
+        if m0 is None or S0 is None:
+            return
+
+        goal_xy = (
+            float(self.goal_msg.pose.position.x),
+            float(self.goal_msg.pose.position.y),
+        )
+
+        result = self.planner.plan(m0, S0, goal_xy, self.costmap)
+        if result is None:
+            return
+
+        self._publish_plan_and_metrics(result, goal_xy)
+        self._after_plan_result(result)
