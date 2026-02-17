@@ -26,6 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             'homography_sim_node = perception.nodes.homography_sim_node:main',
+            'aruco_detector_node = perception.nodes.aruco_detector_node:main',
         ],
     },
 

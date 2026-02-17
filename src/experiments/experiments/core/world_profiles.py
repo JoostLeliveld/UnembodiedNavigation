@@ -7,7 +7,7 @@ import yaml
 from ament_index_python.packages import get_package_share_directory
 
 
-VALID_PLANNERS = {"astar", "efe1", "efe2"}
+VALID_PLANNERS = {"astar", "efe1", "efe2", "mpc", "efer"}
 
 
 def load_world_profiles(path: str) -> Dict[str, Any]:
@@ -25,6 +25,11 @@ def load_world_profiles(path: str) -> Dict[str, Any]:
         raise RuntimeError("world_profiles.yaml must contain a non-empty 'worlds' mapping")
 
     _validate_intrinsics(intrinsics)
+    for world_file, profile in worlds.items():
+        _ensure_mapping(profile, f"worlds.{world_file}")
+        local_intrinsics = profile.get("camera_intrinsics")
+        if local_intrinsics is not None:
+            _validate_intrinsics(local_intrinsics)
     return {"camera_intrinsics": intrinsics, "worlds": worlds}
 
 
@@ -190,7 +195,7 @@ def validate_profile(
 def load_profile(path: str, world_file: str, camera_model: str = "external_camera") -> Tuple[Dict[str, Any], Dict[str, Any], str, List[float]]:
     data = load_world_profiles(path)
     profiles = data["worlds"]
-    intrinsics = data["camera_intrinsics"]
+    global_intrinsics = data["camera_intrinsics"]
 
     if world_file not in profiles:
         known = ", ".join(sorted(profiles.keys()))
@@ -198,6 +203,11 @@ def load_profile(path: str, world_file: str, camera_model: str = "external_camer
             f"No profile for world '{world_file}'. Available: {known or 'none'}"
         )
     profile = profiles[world_file]
+    intrinsics = dict(global_intrinsics)
+    local_intrinsics = profile.get("camera_intrinsics")
+    if local_intrinsics is not None:
+        intrinsics.update(local_intrinsics)
+        _validate_intrinsics(intrinsics)
     world_path = resolve_world_path(world_file)
     camera_pose = validate_profile(world_file, profile, world_path, camera_model)
     return profile, intrinsics, world_path, camera_pose
@@ -218,7 +228,9 @@ def compute_look_at_from_pose(cam_pos: List[float], roll: float, pitch: float, y
     cy = math.cos(yaw)
     sy = math.sin(yaw)
 
-    forward = [cp * cy, cp * sy, sp]
+    # Gazebo camera include pose uses a convention where positive pitch points
+    # the optical axis downward in world Z.
+    forward = [cp * cy, cp * sy, -sp]
     if abs(forward[2]) < 1e-6:
         raise RuntimeError("Camera forward vector is parallel to ground plane")
     if forward[2] >= 0.0:

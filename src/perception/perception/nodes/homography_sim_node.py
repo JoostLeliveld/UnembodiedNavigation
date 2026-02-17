@@ -14,11 +14,16 @@ class HomographySimNode(Node):
                          allow_undeclared_parameters=True,
                          automatically_declare_parameters_from_overrides=True)
 
-        self.declare_parameter('cam_pos', [-3.0, -3.0, 6.0])
-        self.declare_parameter('look_at', [1.5, 1.5, 0.0])
-        self.declare_parameter('img_width', 1280)
-        self.declare_parameter('img_height', 720)
-        self.declare_parameter('fov_h_rad', 1.5708)
+        if not self.has_parameter('cam_pos'):
+            self.declare_parameter('cam_pos', [-3.0, -3.0, 6.0])
+        if not self.has_parameter('look_at'):
+            self.declare_parameter('look_at', [1.5, 1.5, 0.0])
+        if not self.has_parameter('img_width'):
+            self.declare_parameter('img_width', 1280)
+        if not self.has_parameter('img_height'):
+            self.declare_parameter('img_height', 720)
+        if not self.has_parameter('fov_h_rad'):
+            self.declare_parameter('fov_h_rad', 1.5708)
 
         self.cam_pos, self.look_at, self.img_width, self.img_height, self.fov_h_rad = load_camera_params(self)
         self.model = HomographyModel(

@@ -1,0 +1,68 @@
+{
+  "input_csv": "/home/joostleliveld/UnembodiedNavigation/logs/calibration/noise_capture_aruco_arena10_T1.csv",
+  "world": "arena10.world.sdf",
+  "obs_mode": "uv",
+  "sample_counts": {
+    "odom_rows": 1797,
+    "pixel_rows": 779,
+    "q_pairs_used": 1796,
+    "r_pairs_used": 779
+  },
+  "timing": {
+    "q_dt_mean": 0.020033407572383075,
+    "q_dt_std": 0.000816722340681876,
+    "q_scale_to_target_dt": 9.983324068927182,
+    "target_dt_s": 0.2,
+    "sync_tol_s": 0.08
+  },
+  "Q_covariance_estimate_raw": [
+    [
+      6.065637620155827e-09,
+      5.478777927906739e-09,
+      -4.81306248284604e-08
+    ],
+    [
+      5.478777927906739e-09,
+      7.093806494783747e-09,
+      -3.8227297218790206e-08
+    ],
+    [
+      -4.81306248284604e-08,
+      -3.8227297218790206e-08,
+      1.4513762547295635e-06
+    ]
+  ],
+  "Q_covariance_estimate_scaled": [
+    [
+      6.055522604669186e-08,
+      5.469641555597834e-08,
+      -4.805036253024729e-07
+    ],
+    [
+      5.469641555597834e-08,
+      7.081976911968654e-08,
+      -3.8163549641438137e-07
+    ],
+    [
+      -4.805036253024729e-07,
+      -3.8163549641438137e-07,
+      1.448955949691104e-05
+    ]
+  ],
+  "R_covariance_estimate": [
+    [
+      16.046801501490474,
+      13.18786278842462
+    ],
+    [
+      13.18786278842462,
+      20.119701235818034
+    ]
+  ],
+  "recommended_params": {
+    "process_noise_xy": 0.00025629572291239897,
+    "process_noise_theta": 0.0038065154008503684,
+    "obs_noise_uv": 4.252440636699618,
+    "obs_noise_yaw": null
+  }
+}

@@ -22,6 +22,7 @@ class UnicyclePlannerNode(Node):
 
     NODE_NAME = 'planner'
     PLANNER_CLASS = None
+    PARAM_DEFAULT_OVERRIDES = {}
 
     def __init__(self):
         super().__init__(self.NODE_NAME, allow_undeclared_parameters=True,
@@ -30,7 +31,11 @@ class UnicyclePlannerNode(Node):
         if self.PLANNER_CLASS is None:
             raise RuntimeError('PLANNER_CLASS is not set.')
 
+        node_defaults = dict(getattr(self, 'PARAM_DEFAULT_OVERRIDES', {}) or {})
+
         def _declare_if_not(name, default_value):
+            if name in node_defaults:
+                default_value = node_defaults[name]
             if not self.has_parameter(name):
                 self.declare_parameter(name, default_value)
 
@@ -76,6 +81,8 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('approx_method', 'ET2')
         _declare_if_not('use_obs_risk', True)
         _declare_if_not('use_ambiguity', True)
+        _declare_if_not('obs_mode', 'uv')
+        _declare_if_not('optimizer_backend', 'auto')
 
         # Optimizer params
         _declare_if_not('optimizer_maxiter', 50)
@@ -126,6 +133,10 @@ class UnicyclePlannerNode(Node):
         self.approx_method = str(self.get_parameter('approx_method').value).upper()
         self.use_obs_risk = _as_bool(self.get_parameter('use_obs_risk').value)
         self.use_ambiguity = _as_bool(self.get_parameter('use_ambiguity').value)
+        self.obs_mode = str(self.get_parameter('obs_mode').value).strip().lower()
+        self.optimizer_backend = str(self.get_parameter('optimizer_backend').value).strip().lower()
+        if self.obs_mode not in ('uv', 'uvt'):
+            raise RuntimeError("obs_mode must be 'uv' or 'uvt'")
 
         self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
         self.optimizer_gtol = float(self.get_parameter('optimizer_gtol').value)
@@ -174,9 +185,13 @@ class UnicyclePlannerNode(Node):
             approx_method=self.approx_method,
             use_obs_risk=self.use_obs_risk,
             use_ambiguity=self.use_ambiguity,
+            obs_mode=self.obs_mode,
+            optimizer_backend=self.optimizer_backend,
             seed=self.seed,
             camera_params=camera_params,
         )
+        # Use the planner-normalized mode as the single source of truth in this node.
+        self.obs_mode = str(self.planner.obs_mode)
 
         # Subscriptions
         state_qos = QoSProfile(depth=1)
@@ -215,6 +230,7 @@ class UnicyclePlannerNode(Node):
         self.pixel_stamp = None
         self._last_correction_log = 0.0
         self._last_stale_log = 0.0
+        self._last_shape_mismatch_log = 0.0
         self.belief_m = None
         self.belief_S = None
         self.belief_stamp = None
@@ -279,7 +295,11 @@ class UnicyclePlannerNode(Node):
         siny_cosp = 2 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
         yaw = math.atan2(siny_cosp, cosy_cosp)
-        self.pixel_meas = np.array([u, v, yaw], dtype=float)
+        # Keep pixel measurement dimensionality consistent with planner obs_mode.
+        if self.obs_mode == 'uv':
+            self.pixel_meas = np.array([u, v], dtype=float)
+        else:
+            self.pixel_meas = np.array([u, v, yaw], dtype=float)
         self.pixel_stamp = msg.header.stamp
 
         if not self.use_pixel_correction:
@@ -316,7 +336,31 @@ class UnicyclePlannerNode(Node):
         )
 
         mu_y, Sigma_y, Gamma = self.planner.approx_observation(m_pred, S_pred)
-        innov = self.pixel_meas - mu_y
+        mu_y = np.asarray(mu_y, dtype=float).reshape(-1)
+        meas = np.asarray(self.pixel_meas, dtype=float).reshape(-1)
+        if meas.size != mu_y.size:
+            now_wall = time.monotonic()
+            if now_wall - self._last_shape_mismatch_log > 2.0:
+                self.get_logger().error(
+                    "Pixel correction shape mismatch: "
+                    f"obs_mode={self.obs_mode}, meas_dim={meas.size}, pred_dim={mu_y.size}. "
+                    "Skipping correction for this message."
+                )
+                self._last_shape_mismatch_log = now_wall
+            return
+        Sigma_y = np.asarray(Sigma_y, dtype=float)
+        Gamma = np.asarray(Gamma, dtype=float)
+        if Sigma_y.shape != (meas.size, meas.size) or Gamma.shape[1] != meas.size:
+            now_wall = time.monotonic()
+            if now_wall - self._last_shape_mismatch_log > 2.0:
+                self.get_logger().error(
+                    "Pixel correction covariance shape mismatch: "
+                    f"Sigma_y={Sigma_y.shape}, Gamma={Gamma.shape}, meas_dim={meas.size}. "
+                    "Skipping correction for this message."
+                )
+                self._last_shape_mismatch_log = now_wall
+            return
+        innov = meas - mu_y
         if innov.size >= 3:
             innov[2] = wrap_angle(innov[2])
         Sigma_y = (Sigma_y + Sigma_y.T) / 2.0

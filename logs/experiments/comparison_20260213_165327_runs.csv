@@ -1,0 +1,2 @@
+planner,task,seed,return_code,run_dir,log_path,samples,duration_s,start_goal_dist,min_goal_dist,final_goal_dist,success,time_to_goal_s,dist_reduction,dist_reduction_frac,final_plan_length,mean_efe_total,mean_efe_risk,mean_efe_ambiguity,mean_cmd_v,mean_abs_cmd_w
+mpc,T1_edge_hug,0,0,,/tmp/compare_batch_logs/01_mpc_T1_edge_hug_s0.log,,,,,,,,,,,,,,,

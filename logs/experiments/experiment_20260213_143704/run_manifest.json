@@ -1,0 +1,12 @@
+{
+  "git_sha": "5eff7e98f51511947f20ab8227702682dd16f617",
+  "pixel_noise_sigma": 0.0,
+  "planner": "efe1",
+  "run_id": "experiment_20260213_143704",
+  "seed": 0,
+  "state_source": "pixel",
+  "task": "T3_corners",
+  "timestamp": "2026-02-13T14:37:04.197348",
+  "transform_noise_sigma": 0.0,
+  "world": "arena10.world.sdf"
+}

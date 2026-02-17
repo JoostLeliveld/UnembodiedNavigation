@@ -1,87 +1,266 @@
-Boundary-only pipeline connections (as of 2026-02-06)
+Boundary-only Navigation Pipeline and Long-term Modular Architecture
+(as of 2026-02-11)
 
-Launch entry:
-- src/experiments/launch/boundary_only.launch.py
+1) Problem statement (what the stack is solving)
+- Navigate a differential-drive robot in simulation using state estimates derived from a fixed external camera.
+- Compare planning methods (A*, EFE variants, direct EFE agent) under projective observation nonlinearity.
+- Keep experiments reproducible across worlds/tasks while allowing controlled changes in camera geometry, noise, and planner internals.
 
-World + camera setup
-- World file under: src/sim/gazebo_worlds/worlds/<world>.world.sdf
-- World profile + intrinsics: src/experiments/config/world_profiles.yaml
-- Tasks: src/experiments/config/tasks.yaml
-- boundary_only.launch.py loads profile + tasks and validates:
-  - world file exists
-  - model://external_camera include exists with <pose>
-  - referenced models exist
-  - world_name matches <world name="...">
-- Camera pose is read from the world SDF <include><pose> of model://external_camera
-- Intrinsics are from world_profiles.yaml (camera_intrinsics)
-- Camera params used by homography + planners:
-  - cam_pos, look_at, img_width, img_height, fov_h_rad
+2) Current runtime pipelines
 
-Launch flow (high level)
-1) bringup_sim.launch.py (sim package)
-   - Loads Gazebo world, robot description, bridges, spawns robot
-   - Uses spawn from task start: spawn_x, spawn_y, spawn_z, spawn_yaw
-2) tf_static.launch.py (perception package)
-   - Publishes static TF map_bev -> external_camera/link/camera (from world camera pose)
-3) wait_for_odom (sim package)
-   - Blocks until /odom is live
-4) After /odom:
-   - perception/homography_sim_node (only when state_source:=pixel)
-   - state/pixel_to_bev_state_node
-   - experiments/boundary_cost_node
-   - planning/astar_planner OR planning/efe_planner
-   - control/control_node
-   - experiments/goal_mission_node
-   - experiments/experiment_logger
-   - rviz2 (optional)
+2.1) `boundary_only.launch.py` (planner + controller pipeline)
+Launch file:
+- `src/experiments/launch/boundary_only.launch.py`
 
-Node list + key topics
-- sim/bringup_sim
-  - Gazebo + ros_gz_bridge
-  - /odom (nav_msgs/Odometry)
-  - /clock (rosgraph_msgs/Clock)
-  - /joint_states
-  - /external_camera/image_raw, /external_camera/camera_info
-- perception/homography_sim_node
-  - Input: /odom
-  - Output: /perception/pixel_pose (PoseStamped in pixel space)
-- state/pixel_to_bev_state_node
-  - Input: /odom (oracle) OR /perception/pixel_pose (pixel)
-  - Output: /state/bev (PoseWithCovarianceStamped)
-- experiments/boundary_cost_node
-  - Output: /costmap (nav_msgs/OccupancyGrid)
-- planning/astar_planner
-  - Input: /state/bev, /goal_bev, /costmap
-  - Output: /plan (nav_msgs/Path)
-- planning/efe_planner
-  - Input: /state/bev, /goal_bev, /costmap, /perception/pixel_pose (optional correction)
-  - Output: /plan, /efe/metrics
-  - Params: approx_method = ET1 (efe1) or ET2 (efe2)
-- control/control_node
-  - Input: /state/bev, /plan
-  - Output: /cmd_vel (geometry_msgs/Twist)
-- experiments/goal_mission_node
-  - Output: /goal_bev (PoseStamped)
-- experiments/experiment_logger
-  - Input: /state/bev, /cmd_vel, /goal_bev, /plan, /efe/metrics
-  - Output: logs/experiments/<run_id>/experiment.csv + run_manifest.json
+Flow:
+1. Load world profile + tasks.
+2. Parse camera pose from world SDF `model://external_camera` include pose.
+3. Start sim bringup (`sim/launch/bringup_sim.launch.py`).
+4. Start static TF (`perception/launch/tf_static.launch.py`).
+5. Wait for `/odom`.
+6. After `/odom`, start pipeline nodes:
+   - `perception/homography_sim_node` only if `state_source:=pixel`
+   - `state/pixel_to_bev_state_node`
+   - `experiments/boundary_cost_node`
+   - planner: `planning/astar_planner` or `planning/efe_planner`
+   - `control/control_node` (pure pursuit)
+   - `experiments/goal_mission_node`
+   - `experiments/experiment_logger`
+   - `rviz2` optional
 
-Planner selection logic
-- boundary_only.launch.py arg planner:=astar|efe1|efe2|auto
-- planner:=auto uses world_profiles.yaml planner_default
-- planner:=efe1 or efe2 launches planning/efe_planner and sets:
-  - approx_method := ET1 or ET2
+Core data path:
+- `/odom` -> (`/perception/pixel_pose` when pixel mode) -> `/state/bev` -> `/plan` -> `/cmd_vel`
+- `/goal_bev` + `/costmap` -> planner
+- `/efe/metrics` -> logger
 
-Data flow summary
-/odom -> (optional homography) -> /state/bev -> /plan -> /cmd_vel
-/goal_bev -> planners
-/costmap -> planners
-/efe/metrics -> logger
+2.2) `boundary_only_agent.launch.py` (direct cmd_vel agent pipeline)
+Launch file:
+- `src/experiments/launch/boundary_only_agent.launch.py`
 
-Key parameters exposed by boundary_only.launch.py
-- world, task, world_profiles, tasks_yaml
-- planner (astar|efe1|efe2|auto)
-- state_source (oracle|pixel)
-- seed, pixel_noise_sigma, transform_noise_sigma
-- use_pixel_correction, pixel_timeout_s
-- use_rviz
+Flow:
+1. Same world/task/camera setup as planner launch.
+2. Same sim + TF + wait-for-odom sequence.
+3. After `/odom`, start:
+   - `perception/homography_sim_node` only if `state_source:=pixel`
+   - `state/pixel_to_bev_state_node`
+   - `experiments/boundary_cost_node`
+   - `planning/efe_agent` (direct command publishing)
+   - `experiments/goal_mission_node`
+   - `experiments/experiment_logger`
+   - `rviz2` optional
+
+Core data path:
+- `/odom` -> (`/perception/pixel_pose` when pixel mode) -> `/state/bev` -> `efe_agent` -> `/cmd_vel`
+- `/goal_bev` + `/costmap` -> `efe_agent`
+- `efe_agent` also publishes `/plan` (for inspection) + `/efe/metrics`
+
+3) Active node/topic contracts (current code)
+
+3.1) Perception
+- Node: `src/perception/perception/nodes/homography_sim_node.py`
+- Input: `/odom` (robot truth)
+- Output: `/perception/pixel_pose` (`PoseStamped`, position fields store pixel u,v)
+- Behavior: no message if robot is outside camera view.
+
+3.2) State
+- Node: `src/state/state/nodes/pixel_to_bev_state_node.py`
+- Inputs:
+  - ORACLE mode: `/odom`
+  - PIXEL mode: `/perception/pixel_pose`
+- Output: `/state/bev` (`PoseWithCovarianceStamped`)
+
+3.3) Planning
+- Planner node: `src/planning/planning/nodes/efe_planner_node.py`
+- Agent node: `src/planning/planning/nodes/efe_agent_node.py`
+- Shared wrapper: `src/planning/planning/nodes/unicycle_planner_node.py`
+- Shared core: `src/planning/planning/planners/base_planner.py`
+- Inputs: `/state/bev`, `/goal_bev`, `/costmap`, optional pixel correction from `/perception/pixel_pose`
+- Outputs:
+  - planner: `/plan`, `/efe/metrics`
+  - agent: `/plan`, `/efe/metrics`, `/cmd_vel`
+
+3.4) Control
+- Node: `src/control/control/nodes/pure_pursuit_node.py`
+- Inputs: `/state/bev`, `/plan`
+- Output: `/cmd_vel`
+
+3.5) Experiment orchestration/logging
+- Nodes:
+  - `experiments/boundary_cost_node`
+  - `experiments/goal_mission_node`
+  - `experiments/experiment_logger`
+- Logger writes run dir with CSV + manifest + config snapshots.
+
+4) New EFE implementation knobs now present
+- `obs_mode`: `uv` or `uvt`
+- `optimizer_backend`: `auto`, `jax`, `scipy`
+- In `auto`, JAX path is attempted when available and compatible.
+- JAX path is currently bypassed when `boundary_weight > 0`.
+
+5) Important operational constraints (double-checked)
+- If `use_pixel_correction:=true` with `state_source:=oracle`, pixel correction will go stale because `/perception/pixel_pose` is not active.
+- For pixel correction, use `state_source:=pixel`.
+- Current RViz camera config can fail if Image plugin is configured as a Panel instead of a Display; use a known-good RViz config when debugging runtime behavior.
+- `reset_world` can time out on some Gazebo runs but launch can still continue; this is a sim reset robustness issue, not planner logic.
+
+6) Long-term modular architecture (recommended target)
+
+6.1) Guiding design rules
+- Keep each package responsible for one layer of the stack.
+- Keep algorithm math in pure Python modules, and keep ROS nodes as thin wrappers.
+- Make interfaces explicit and versioned so new modules can be swapped without launch rewrites.
+- Preserve experiment reproducibility by logging every run configuration and software version.
+
+6.2) Layered architecture
+Layer A: Geometry and sensor modeling
+- Package: `unav_common`
+- Owns camera intrinsics/extrinsics, homography utilities, transforms, and shared numerical helpers.
+- Add multi-camera support here first (camera registry, extrinsic sets, timestamps).
+
+Layer B: Observation adapters (perception)
+- Package: `perception`
+- One adapter per sensor/source:
+  - sim homography adapter (current)
+  - learned vision adapter (future)
+  - detector/tracker adapter (future)
+- Output contract should remain stable (observation messages with covariance and source id).
+
+Layer C: State estimation
+- Package: `state`
+- Owns fusion and filtering, not raw perception.
+- Target contract: estimator consumes one or more observation streams and produces `/state/bev` with covariance.
+- Future: support asynchronous multi-sensor updates and per-sensor latency compensation.
+
+Layer D: Planning
+- Package: `planning`
+- Split concerns into:
+  - objective terms (risk, ambiguity, constraints)
+  - dynamics models (unicycle, linear, etc.)
+  - optimizer backends (scipy, jax, future C++/MPC)
+  - planner wrappers (A*, EFE planner, RL planner bridge)
+- Keep planner outputs standardized (`/plan` optional, command optional, metrics mandatory).
+
+Layer E: Control / agent execution
+- Package: `control` for path-following controllers.
+- Agent-style planners can bypass control and publish `/cmd_vel` directly.
+- Maintain explicit mode separation: "planner+controller" vs "direct agent".
+
+Layer F: Experiment orchestration
+- Package: `experiments`
+- Owns world/task/profile/seed/noise selection, launch composition, and logging.
+- Should remain planner-agnostic and sensor-agnostic.
+
+6.3) Stable interfaces to protect now
+- Keep `/state/bev` as the central state contract.
+- Keep `/goal_bev` and `/costmap` stable so planners are interchangeable.
+- Keep `/efe/metrics` shape stable and versioned if changed.
+- Keep run manifest schema additive and backward compatible.
+
+7) Extension strategy by use case
+
+7.1) Adding new vision modules
+- Add new perception node under `perception/nodes`.
+- Emit standardized observation message(s) + covariance.
+- Reuse state estimator; do not couple planner directly to raw camera streams.
+
+7.2) Adding new planners
+- Add planner core in `planning/planners`.
+- Expose either planner mode (`/plan`) or agent mode (`/cmd_vel`) through thin node wrappers.
+- Register in launch by argument mapping only (no hardcoded topic rewiring).
+
+7.3) Adding reinforcement learning
+- Treat RL policy as another planner/agent backend.
+- Keep same input contract (`/state/bev`, `/goal_bev`, optional map) and output (`/cmd_vel` or `/plan`).
+- Log policy model/version/checkpoint hash in manifest.
+
+7.4) Adding a second camera
+- Add camera definitions in world + profile registry.
+- Publish per-camera observation topics with camera id.
+- Fuse in state package (not in planning).
+- Keep planners unaware of camera count; they only consume fused belief.
+
+8) Concrete repository improvements for long-term maintainability
+- Move optional notebook-aligned JAX code into package-level planning tests/benchmarks to prevent drift.
+- Add contract tests for:
+  - observation dimensionality (`uv` vs `uvt`)
+  - planner output consistency (`/plan`, `/efe/metrics`, `/cmd_vel` when agent)
+  - launch parameter validity combinations (`state_source`, `use_pixel_correction`, backend settings)
+- Add integration smoke tests for both launch modes:
+  - `boundary_only.launch.py`
+  - `boundary_only_agent.launch.py`
+
+9) Recommended defaults for reliable experiments today
+- Planner pipeline baseline:
+  - `state_source:=oracle`
+  - `use_pixel_correction:=false`
+- Pixel-informed EFE runs:
+  - `state_source:=pixel`
+  - `use_pixel_correction:=true`
+- Notebook-parity EFE agent runs:
+  - `obs_mode:=uv`
+  - `optimizer_backend:=auto` (or `jax` if dependency is guaranteed)
+  - `boundary_weight:=0` when pure gradient objective is desired
+
+10) Current packaging note
+- `planning` currently has optional JAX execution path but no declared JAX optional extra in `setup.py`.
+- If JAX is a supported backend in production workflows, add optional dependency docs and environment setup guidance.
+
+11) Perception Implementation Update (2026-02-12)
+
+11.1) New perception backend: ArUco detector
+- Added node:
+  - `src/perception/perception/nodes/aruco_detector_node.py`
+- Added launch routing:
+  - `perception_backend:=homography|aruco`
+  - in `src/experiments/launch/boundary_only.launch.py`
+  - in `src/experiments/launch/boundary_only_agent.launch.py`
+- Added entry point:
+  - `aruco_detector_node = perception.nodes.aruco_detector_node:main`
+  - in `src/perception/setup.py`
+
+11.2) ArUco detector behavior (current)
+- Subscribes to `/external_camera/image_raw`.
+- Publishes `/perception/pixel_pose` (`PoseStamped`) in image pixel coordinates.
+- Supports OpenCV API compatibility for both:
+  - `DetectorParameters()` (newer API)
+  - `DetectorParameters_create()` (older API)
+- Parameters:
+  - `aruco_dict`, `target_marker_id`, `publish_yaw_from_marker`
+  - `enable_multiscale_detection`
+  - `enable_template_fallback`
+  - `marker_template_path`
+  - `template_match_threshold`
+
+11.3) Fallback logic (current)
+- Primary path: ArUco dictionary detection.
+- Secondary path (if enabled): contour + perspective-normalization + binary template matching against marker texture variants.
+- Notes:
+  - fallback is deterministic and practical for simulation bring-up
+  - fallback is not a probabilistic detector model and should be treated as interim engineering logic
+
+11.4) Robot marker integration
+- Added top-mounted marker link in TurtleBot URDF:
+  - `src/sim/robot_description/urdf/turtlebot3_burger.urdf.xacro`
+- Marker asset files:
+  - `src/sim/robot_description/meshes/aruco/aruco_4x4_50_id0.png`
+  - `src/sim/robot_description/meshes/aruco/aruco_4x4_50_id0.dae`
+- Current marker scale in URDF increased for external camera visibility.
+
+11.5) Camera/TF consistency changes already in pipeline
+- `map_bev -> odom` static transform now uses spawn pose from task:
+  - wired through `src/perception/launch/tf_static.launch.py`
+  - passed from both boundary launch files
+- Camera forward-sign handling in world profile math was aligned with rendered camera convention:
+  - `src/experiments/experiments/core/world_profiles.py`
+  - corresponding world camera pitch signs were updated in SDF world files.
+
+11.6) Runtime status and known issues (as of latest runs)
+- Confirmed working:
+  - `/external_camera/image_raw` streaming from Gazebo.
+  - ArUco node launches without import/API errors.
+- Still unstable / under investigation:
+  - pure ArUco dictionary detection is sensitive to rendered marker appearance.
+  - `/perception/pixel_pose` can be intermittent depending on detection confidence.
+  - when `/perception/pixel_pose` is absent, `/state/bev` in pixel mode is absent by design.
+- Unrelated but recurring:
+  - `reset_world` timeout on `/world/<name>/control` remains non-blocking in practice.

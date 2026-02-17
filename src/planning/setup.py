@@ -26,6 +26,8 @@ setup(
         'console_scripts': [
             'astar_planner = planning.nodes.astar_planner_node:main',
             'efe_planner = planning.nodes.efe_planner_node:main',
+            'mpc_planner = planning.nodes.mpc_planner_node:main',
+            'efer_planner = planning.nodes.efer_planner_node:main',
             'efe_agent = planning.nodes.efe_agent_node:main',
         ],
     },

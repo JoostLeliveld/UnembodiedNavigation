@@ -16,6 +16,13 @@ def generate_launch_description():
     cam_qy_arg = DeclareLaunchArgument('cam_qy', default_value='-0.340969')
     cam_qz_arg = DeclareLaunchArgument('cam_qz', default_value='0.355669')
     cam_qw_arg = DeclareLaunchArgument('cam_qw', default_value='0.858658')
+    odom_x_arg = DeclareLaunchArgument('odom_x', default_value='0.0')
+    odom_y_arg = DeclareLaunchArgument('odom_y', default_value='0.0')
+    odom_z_arg = DeclareLaunchArgument('odom_z', default_value='0.0')
+    odom_qx_arg = DeclareLaunchArgument('odom_qx', default_value='0.0')
+    odom_qy_arg = DeclareLaunchArgument('odom_qy', default_value='0.0')
+    odom_qz_arg = DeclareLaunchArgument('odom_qz', default_value='0.0')
+    odom_qw_arg = DeclareLaunchArgument('odom_qw', default_value='1.0')
 
     return LaunchDescription([
         use_sim_time,
@@ -26,13 +33,25 @@ def generate_launch_description():
         cam_qy_arg,
         cam_qz_arg,
         cam_qw_arg,
+        odom_x_arg,
+        odom_y_arg,
+        odom_z_arg,
+        odom_qx_arg,
+        odom_qy_arg,
+        odom_qz_arg,
+        odom_qw_arg,
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
             name='map_bev_to_odom',
             arguments=[
-                '--x', '0', '--y', '0', '--z', '0',
-                '--qx', '0', '--qy', '0', '--qz', '0', '--qw', '1',
+                '--x', LaunchConfiguration('odom_x'),
+                '--y', LaunchConfiguration('odom_y'),
+                '--z', LaunchConfiguration('odom_z'),
+                '--qx', LaunchConfiguration('odom_qx'),
+                '--qy', LaunchConfiguration('odom_qy'),
+                '--qz', LaunchConfiguration('odom_qz'),
+                '--qw', LaunchConfiguration('odom_qw'),
                 '--frame-id', 'map_bev',
                 '--child-frame-id', 'odom',
             ],

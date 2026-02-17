@@ -163,6 +163,43 @@
         izz="0.001"/>
     </inertial>
   </link>
+
+  <!-- ===================== -->
+  <!-- Fiducial Marker       -->
+  <!-- ===================== -->
+  <!--
+    Top-mounted ArUco marker for external camera detection.
+    The plane faces +Z so overhead/oblique external cameras can detect it.
+  -->
+  <joint name="${ns}aruco_marker_joint" type="fixed">
+    <parent link="${ns}base_link"/>
+    <child link="${ns}aruco_marker_link"/>
+    <origin xyz="0.020 0.000 0.215" rpy="0 0 0"/>
+  </joint>
+
+  <link name="${ns}aruco_marker_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://sim/robot_description/meshes/aruco/aruco_4x4_50_id0.dae"
+              scale="0.50 0.50 1.0"/>
+      </geometry>
+    </visual>
+
+    <collision>
+      <geometry>
+        <box size="0.50 0.50 0.001"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="0.001"/>
+      <origin xyz="0 0 0"/>
+      <inertia
+        ixx="1e-7" ixy="0.0" ixz="0.0"
+        iyy="1e-7" iyz="0.0"
+        izz="1e-7"/>
+    </inertial>
+  </link>
     <!-- ============================================================= -->
     <!-- Gazebo Sensor Plugins -->
     <xacro:if value="$(arg use_lidar)">

@@ -65,5 +65,10 @@ class ObliqueCameraModel:
 
     def g(self, state):
         x, y, theta = state
+        uv = self.g_uv(state)
+        return np.array([uv[0], uv[1], theta], dtype=float)
+
+    def g_uv(self, state):
+        x, y = state[0], state[1]
         u, v, _ = self.world_to_pixel(x, y, 0.0)
-        return np.array([u, v, theta], dtype=float)
+        return np.array([u, v], dtype=float)

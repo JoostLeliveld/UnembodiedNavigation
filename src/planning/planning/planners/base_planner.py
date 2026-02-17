@@ -72,6 +72,8 @@ class UnicyclePlannerBase:
         approx_method=None,
         use_obs_risk=None,
         use_ambiguity=None,
+        obs_mode=None,
+        optimizer_backend=None,
         seed,
         camera_params,
     ):
@@ -136,12 +138,25 @@ class UnicyclePlannerBase:
             fov_h_rad=camera_params['fov_h_rad'],
         )
 
-        # Observation noise matrix
-        self.R = np.diag([
-            self.obs_noise_uv ** 2,
-            self.obs_noise_uv ** 2,
-            self.obs_noise_yaw ** 2,
-        ])
+        self.obs_mode = str(obs_mode or 'uvt').lower()
+        if self.obs_mode not in ('uv', 'uvt'):
+            raise ValueError("obs_mode must be 'uv' or 'uvt'")
+        self.optimizer_backend = str(optimizer_backend or 'scipy').lower()
+
+        self.g_obs = self.camera.g_uv if self.obs_mode == 'uv' else self.camera.g
+
+        # Observation noise matrix (dimension depends on obs_mode)
+        if self.obs_mode == 'uv':
+            self.R = np.diag([
+                self.obs_noise_uv ** 2,
+                self.obs_noise_uv ** 2,
+            ])
+        else:
+            self.R = np.diag([
+                self.obs_noise_uv ** 2,
+                self.obs_noise_uv ** 2,
+                self.obs_noise_yaw ** 2,
+            ])
 
         self._approx_fn = None
         if self.approx_method == 'ET1':
@@ -170,7 +185,7 @@ class UnicyclePlannerBase:
     def approx_observation(self, m, S):
         if self._approx_fn is None:
             raise RuntimeError('Observation approximation not configured.')
-        return self._approx_fn(m, S, self.camera.g, addmatrix=self.R, forceHermitian=True)
+        return self._approx_fn(m, S, self.g_obs, addmatrix=self.R, forceHermitian=True)
 
     def _goal_state(self, goal_xy, theta):
         return np.array([goal_xy[0], goal_xy[1], theta], dtype=float)
@@ -183,9 +198,14 @@ class UnicyclePlannerBase:
         ])
 
     def _goal_obs(self, goal_state):
-        return np.asarray(self.camera.g(goal_state), dtype=float)
+        return np.asarray(self.g_obs(goal_state), dtype=float)
 
     def _goal_obs_cov(self):
+        if self.obs_mode == 'uv':
+            return np.diag([
+                self.goal_sigma_uv ** 2,
+                self.goal_sigma_uv ** 2,
+            ]).astype(float)
         return np.diag([
             self.goal_sigma_uv ** 2,
             self.goal_sigma_uv ** 2,
@@ -281,15 +301,94 @@ class UnicyclePlannerBase:
             x0[0::2] = 0.5 * (self.v_min + self.v_max)
 
         best_controls_flat = None
+        backend = self.optimizer_backend
+        if backend not in ('auto', 'jax', 'scipy'):
+            backend = 'scipy'
+
+        use_jax = backend in ('auto', 'jax')
+        if use_jax and self.boundary_weight > 0.0:
+            use_jax = False
+
+        if use_jax and self.approx_method not in ('ET1', 'ET2'):
+            use_jax = False
+
+        if use_jax:
+            try:
+                from planning.core import jax_efe
+                if not jax_efe.jax_available():
+                    if backend == 'jax':
+                        raise RuntimeError("optimizer_backend=jax but JAX is not available")
+                    use_jax = False
+            except Exception:
+                if backend == 'jax':
+                    raise
+                use_jax = False
+
         try:
-            result = minimize(
-                self._evaluate_controls,
-                x0,
-                args=(m0, S0, goal_state, goal_cov, goal_obs, goal_obs_cov, costmap, False),
-                method='L-BFGS-B',
-                bounds=bounds,
-                options={'maxiter': self.optimizer_maxiter, 'gtol': self.optimizer_gtol},
-            )
+            if use_jax:
+                from planning.core import jax_efe
+                import jax.numpy as jnp
+
+                Q = self.process_noise(self.dt)
+                if goal_obs is None:
+                    goal_obs = self._goal_obs(goal_state)
+                if goal_obs_cov is None:
+                    goal_obs_cov = self._goal_obs_cov()
+
+                params_j = jax_efe.JaxUnicycleParams(
+                    Q=jnp.array(Q),
+                    R=jnp.array(self.R),
+                    goal_state=jnp.array(goal_state),
+                    goal_state_cov=jnp.array(goal_cov),
+                    goal_obs=jnp.array(goal_obs),
+                    goal_obs_cov=jnp.array(goal_obs_cov),
+                    control_weight=float(self.control_weight),
+                    risk_weight_state=float(self.risk_weight_state),
+                    risk_weight_obs=float(self.risk_weight_obs),
+                    ambiguity_weight=float(self.ambiguity_weight),
+                    time_horizon=int(self.horizon),
+                    dt=float(self.dt),
+                    Du=2,
+                )
+                g_jax = jax_efe.make_g_from_homography(self.camera.H, self.obs_mode)
+                use_amb = self.use_ambiguity and self.add_ambiguity
+
+                valgrad = jax_efe.make_unicycle_valgrad_fn(
+                    params_j,
+                    g_jax,
+                    approx=self.approx_method,
+                    add_ambiguity=use_amb,
+                    use_obs_risk=self.use_obs_risk,
+                    use_state_risk=True,
+                    mode='rev',
+                    jit=True,
+                )
+
+                def f(u):
+                    val, _ = valgrad(jnp.array(u), jnp.array(m0), jnp.array(S0))
+                    return float(val)
+
+                def grad_u(u):
+                    _, grad = valgrad(jnp.array(u), jnp.array(m0), jnp.array(S0))
+                    return np.array(grad, dtype=float)
+
+                result = minimize(
+                    f,
+                    x0,
+                    jac=grad_u,
+                    method='L-BFGS-B',
+                    bounds=bounds,
+                    options={'maxiter': self.optimizer_maxiter, 'gtol': self.optimizer_gtol},
+                )
+            else:
+                result = minimize(
+                    self._evaluate_controls,
+                    x0,
+                    args=(m0, S0, goal_state, goal_cov, goal_obs, goal_obs_cov, costmap, False),
+                    method='L-BFGS-B',
+                    bounds=bounds,
+                    options={'maxiter': self.optimizer_maxiter, 'gtol': self.optimizer_gtol},
+                )
             if result.success:
                 best_controls_flat = result.x
         except Exception:
