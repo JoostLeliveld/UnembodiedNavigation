@@ -2,9 +2,12 @@
 """Run investigative EFE/MPC agent batches across A/B/C observation regimes.
 
 Regimes:
-- A: near-perfect homography observation (not true oracle state mode)
+- A: true oracle state mode (/odom -> TF -> /state/bev), no pixel correction
 - B: homography observation with injected sensor pixel noise sweep
 - C: end-to-end ArUco observation (uvt) with fixed calibrated model noise
+
+This script is scoped to the paper's no-costmap, agent-mode study and uses the
+JAX optimizer backend only.
 """
 
 from __future__ import annotations
@@ -139,12 +142,12 @@ def _parse_metrics(csv_path: pathlib.Path, success_threshold: float) -> Optional
     }
 
 
-def _planner_flags(planner: str) -> Tuple[str, str, str]:
+def _planner_flags(planner: str) -> Tuple[str, str]:
     planner = planner.strip().lower()
     if planner in ("efe1", "efe2"):
-        return ("true", "true", "true")
+        return ("true", "true")
     if planner in ("efer", "mpc"):
-        return ("false", "false", "true")
+        return ("false", "true")
     raise ValueError(f"Unknown planner '{planner}'. Expected efe1|efe2|efer|mpc.")
 
 
@@ -155,12 +158,12 @@ def _regime_specific_args(
 ) -> Dict[str, str]:
     regime = regime.upper().strip()
     if regime == "A":
-        # "Equivalent perfect observation": exact homography with no sensor pixel noise.
+        # True oracle state mode: /odom is transformed to map_bev and forwarded to /state/bev.
         return {
-            "state_source": "pixel",
+            "state_source": "oracle",
             "perception_backend": "homography",
             "obs_mode": args.obs_mode_oracle,
-            "use_pixel_correction": "true",
+            "use_pixel_correction": "false",
             "pixel_noise_sigma": "0.0",
             "transform_noise_sigma": "0.0",
             "sensor_pixel_noise_sigma": "0.0",
@@ -273,7 +276,6 @@ def main() -> int:
     parser.add_argument("--aruco-min-state-cov", type=float, default=0.0025)
     parser.add_argument("--pixel-timeout-s", type=float, default=0.5)
 
-    parser.add_argument("--optimizer-backend", default="scipy")
     parser.add_argument("--optimizer-maxiter", type=int, default=50)
     parser.add_argument("--optimizer-gtol", type=float, default=1e-4)
     parser.add_argument("--optimizer-warm-start", default="true")
@@ -282,8 +284,6 @@ def main() -> int:
     parser.add_argument("--target-marker-id", type=int, default=0)
     parser.add_argument("--publish-yaw-from-marker", default="true")
 
-    parser.add_argument("--boundary-weight", type=float, default=0.0)
-    parser.add_argument("--publish-static-costmap", default="false")
     parser.add_argument("--use-rviz", default="false")
     parser.add_argument("--ros-log-dir", default="/tmp/ros_log_investigative")
     parser.add_argument("--log-dir", default="logs/experiments")
@@ -309,6 +309,7 @@ def main() -> int:
 
     print(f"Running {len(combos)} runs...")
     records: List[Dict[str, object]] = []
+    study_optimizer_backend = "jax"
 
     for i, combo in enumerate(combos, start=1):
         regime = str(combo["regime"])
@@ -318,7 +319,7 @@ def main() -> int:
         sigma_pix = combo["sigma_pix"]
         sigma_for_regime: Optional[float] = None if sigma_pix == "" else float(sigma_pix)
 
-        add_ambiguity, use_ambiguity, use_obs_risk = _planner_flags(planner)
+        use_ambiguity, use_obs_risk = _planner_flags(planner)
         regime_args = _regime_specific_args(regime, sigma_for_regime, args)
 
         _kill_gazebo()
@@ -342,7 +343,7 @@ def main() -> int:
             f"pixel_noise_sigma:={regime_args['pixel_noise_sigma']} "
             f"transform_noise_sigma:={regime_args['transform_noise_sigma']} "
             f"sensor_pixel_noise_sigma:={regime_args['sensor_pixel_noise_sigma']} "
-            f"add_ambiguity:={add_ambiguity} use_ambiguity:={use_ambiguity} use_obs_risk:={use_obs_risk} "
+            f"use_ambiguity:={use_ambiguity} use_obs_risk:={use_obs_risk} "
             f"plan_rate:={args.plan_rate} horizon:={args.horizon} dt:={args.dt} "
             f"control_weight:={args.control_weight} "
             f"risk_weight_state:={args.risk_weight_state} risk_weight_obs:={args.risk_weight_obs} "
@@ -350,11 +351,10 @@ def main() -> int:
             f"goal_sigma_yaw:={args.goal_sigma_yaw} "
             f"process_noise_xy:={args.process_noise_xy} process_noise_theta:={args.process_noise_theta} "
             f"obs_noise_uv:={regime_args['obs_noise_uv']} obs_noise_yaw:={regime_args['obs_noise_yaw']} "
-            f"optimizer_backend:={args.optimizer_backend} optimizer_maxiter:={args.optimizer_maxiter} "
+            f"optimizer_backend:={study_optimizer_backend} optimizer_maxiter:={args.optimizer_maxiter} "
             f"optimizer_gtol:={args.optimizer_gtol} optimizer_warm_start:={args.optimizer_warm_start} "
             f"min_state_cov:={regime_args['min_state_cov']} "
-            f"boundary_weight:={args.boundary_weight} costmap_wall_margin:=0.0 costmap_obstacle_enabled:=false "
-            f"publish_static_costmap:={args.publish_static_costmap} "
+            "boundary_weight:=0.0 publish_static_costmap:=false "
             f"aruco_dict:={args.aruco_dict} target_marker_id:={args.target_marker_id} "
             f"publish_yaw_from_marker:={args.publish_yaw_from_marker} "
             f"use_rviz:={args.use_rviz}"

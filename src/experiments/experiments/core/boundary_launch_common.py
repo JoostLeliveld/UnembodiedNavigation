@@ -52,7 +52,8 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'odom_wait_yaw_tolerance': float(_launch_value(context, 'odom_wait_yaw_tolerance', '0.5')),
         'use_pixel_correction': _as_bool(LaunchConfiguration('use_pixel_correction').perform(context)),
         'pixel_timeout_s': float(LaunchConfiguration('pixel_timeout_s').perform(context)),
-        'add_ambiguity': _as_bool(LaunchConfiguration('add_ambiguity').perform(context)),
+        'pixel_correction_approx': _launch_value(context, 'pixel_correction_approx', 'AUTO').strip().upper(),
+        'skip_stale_pixel_correction': _as_bool(_launch_value(context, 'skip_stale_pixel_correction', 'true')),
         'use_ambiguity': _as_bool(LaunchConfiguration('use_ambiguity').perform(context)),
         'use_obs_risk': _as_bool(LaunchConfiguration('use_obs_risk').perform(context)),
         'boundary_weight': float(LaunchConfiguration('boundary_weight').perform(context)),
@@ -86,6 +87,10 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'goal_sigma_uv': float(_launch_value(context, 'goal_sigma_uv', '0.0')),
         'goal_sigma_yaw': float(_launch_value(context, 'goal_sigma_yaw', '0.0')),
         'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
+        'debug_runtime': _as_bool(_launch_value(context, 'debug_runtime', 'false')),
+        'debug_log_period_s': float(_launch_value(context, 'debug_log_period_s', '1.0')),
+        'slow_plan_factor': float(_launch_value(context, 'slow_plan_factor', '1.0')),
+        'slow_correction_ms': float(_launch_value(context, 'slow_correction_ms', '20.0')),
         'use_rviz': _as_bool(LaunchConfiguration('use_rviz').perform(context)),
         'rviz_config': LaunchConfiguration('rviz_config').perform(context),
         'aruco_dict': LaunchConfiguration('aruco_dict').perform(context),
@@ -234,6 +239,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     homography_params.update({
         'pixel_noise_sigma': cfg['sensor_pixel_noise_sigma'],
         'seed': cfg['seed'],
+        'world_frame': 'map_bev',
     })
     homography_sim = Node(
         package='perception',
@@ -324,7 +330,8 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'use_pixel_correction': cfg['use_pixel_correction'],
             'boundary_weight': cfg['boundary_weight'],
             'publish_static_costmap': cfg['publish_static_costmap'],
-            'add_ambiguity': cfg['add_ambiguity'],
+            # Keep legacy manifest field for compatibility; it mirrors the single switch.
+            'add_ambiguity': cfg['use_ambiguity'],
             'use_ambiguity': cfg['use_ambiguity'],
             'use_obs_risk': cfg['use_obs_risk'],
             'pixel_noise_sigma': cfg['pixel_noise_sigma'],

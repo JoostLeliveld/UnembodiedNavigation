@@ -19,30 +19,26 @@ def _launch_setup(context, *args, **kwargs):
     planner = cfg['planner']
 
     if planner not in ('efe1', 'efe2', 'mpc', 'efer'):
-        raise RuntimeError("planner must be 'efe1', 'efe2', 'mpc', 'efer', or 'auto' for agent launch")
+        raise RuntimeError("planner must be 'efe1', 'efe2', 'mpc', or 'efer' for agent launch")
 
     planner_params = {
         'efe1': {
             'approx_method': 'ET1',
-            'add_ambiguity': cfg['add_ambiguity'],
             'use_ambiguity': cfg['use_ambiguity'],
             'use_obs_risk': cfg['use_obs_risk'],
         },
         'efe2': {
             'approx_method': 'ET2',
-            'add_ambiguity': cfg['add_ambiguity'],
             'use_ambiguity': cfg['use_ambiguity'],
             'use_obs_risk': cfg['use_obs_risk'],
         },
         'mpc': {
             'approx_method': 'ET1',
-            'add_ambiguity': False,
             'use_ambiguity': False,
             'use_obs_risk': True,
         },
         'efer': {
             'approx_method': 'ET2',
-            'add_ambiguity': False,
             'use_ambiguity': False,
             'use_obs_risk': True,
         },
@@ -60,7 +56,13 @@ def _launch_setup(context, *args, **kwargs):
             'control_weight': cfg['control_weight'],
             'use_pixel_correction': cfg['use_pixel_correction'],
             'pixel_timeout_s': cfg['pixel_timeout_s'],
+            'pixel_correction_approx': cfg['pixel_correction_approx'],
+            'skip_stale_pixel_correction': cfg['skip_stale_pixel_correction'],
             'min_state_cov': cfg['min_state_cov'],
+            'debug_runtime': cfg['debug_runtime'],
+            'debug_log_period_s': cfg['debug_log_period_s'],
+            'slow_plan_factor': cfg['slow_plan_factor'],
+            'slow_correction_ms': cfg['slow_correction_ms'],
             'boundary_weight': cfg['boundary_weight'],
             'obs_mode': cfg['obs_mode'],
             'process_noise_xy': cfg['process_noise_xy'],
@@ -131,7 +133,7 @@ def generate_launch_description():
     planner_arg = DeclareLaunchArgument(
         'planner',
         default_value='efe2',
-        description='Planner: efe1 | efe2 | mpc | efer | auto'
+        description='Planner: efe1 | efe2 | mpc | efer'
     )
     world_arg = DeclareLaunchArgument(
         'world',
@@ -163,12 +165,20 @@ def generate_launch_description():
         description='Perception backend in pixel mode: homography | aruco'
     )
     seed_arg = DeclareLaunchArgument('seed', default_value='0')
-    pixel_noise_arg = DeclareLaunchArgument('pixel_noise_sigma', default_value='0.0')
-    transform_noise_arg = DeclareLaunchArgument('transform_noise_sigma', default_value='0.0')
+    pixel_noise_arg = DeclareLaunchArgument(
+        'pixel_noise_sigma',
+        default_value='0.0',
+        description='Advanced: extra noise in pixel_to_bev_state_node (keep 0.0 for study runs; prefer sensor_pixel_noise_sigma)'
+    )
+    transform_noise_arg = DeclareLaunchArgument(
+        'transform_noise_sigma',
+        default_value='0.0',
+        description='Advanced: extra metric noise after pixel->BEV transform (keep 0.0 for study runs)'
+    )
     sensor_pixel_noise_arg = DeclareLaunchArgument(
         'sensor_pixel_noise_sigma',
         default_value='0.0',
-        description='Pixel noise std injected at homography measurement source (/perception/pixel_pose)'
+        description='Primary study noise knob: pixel noise std injected at homography measurement source (/perception/pixel_pose)'
     )
     odom_wait_timeout_arg = DeclareLaunchArgument(
         'odom_wait_timeout_s',
@@ -201,15 +211,20 @@ def generate_launch_description():
         description='Apply pixel-space correction in EFE agent'
     )
     pixel_timeout_arg = DeclareLaunchArgument('pixel_timeout_s', default_value='0.5')
-    add_ambiguity_arg = DeclareLaunchArgument(
-        'add_ambiguity',
+    pixel_correction_approx_arg = DeclareLaunchArgument(
+        'pixel_correction_approx',
+        default_value='AUTO',
+        description='Pixel correction moment approximation: AUTO | ET1 | ET2 | UT (AUTO matches planner approx)'
+    )
+    skip_stale_pixel_correction_arg = DeclareLaunchArgument(
+        'skip_stale_pixel_correction',
         default_value='true',
-        description='Include ambiguity term in EFE objective'
+        description='Skip correction when pixel measurement age exceeds pixel_timeout_s'
     )
     use_ambiguity_arg = DeclareLaunchArgument(
         'use_ambiguity',
         default_value='true',
-        description='Enable ambiguity computation in EFE agent'
+        description='Enable ambiguity term in the EFE objective'
     )
     use_obs_risk_arg = DeclareLaunchArgument(
         'use_obs_risk',
@@ -331,6 +346,11 @@ def generate_launch_description():
         default_value='1e-6',
         description='Minimum diagonal covariance floor in planner belief'
     )
+    debug_runtime_arg = DeclareLaunchArgument(
+        'debug_runtime',
+        default_value='false',
+        description='Enable periodic runtime and optimizer debug logs'
+    )
     process_noise_xy_arg = DeclareLaunchArgument(
         'process_noise_xy',
         default_value='0.01',
@@ -409,7 +429,8 @@ def generate_launch_description():
         odom_wait_yaw_tolerance_arg,
         use_pixel_correction_arg,
         pixel_timeout_arg,
-        add_ambiguity_arg,
+        pixel_correction_approx_arg,
+        skip_stale_pixel_correction_arg,
         use_ambiguity_arg,
         use_obs_risk_arg,
         boundary_weight_arg,
@@ -435,6 +456,7 @@ def generate_launch_description():
         goal_sigma_uv_arg,
         goal_sigma_yaw_arg,
         min_state_cov_arg,
+        debug_runtime_arg,
         process_noise_xy_arg,
         process_noise_theta_arg,
         obs_noise_uv_arg,

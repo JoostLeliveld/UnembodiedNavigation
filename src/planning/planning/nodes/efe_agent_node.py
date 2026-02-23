@@ -31,6 +31,15 @@ class EfeAgentNode(UnicyclePlannerNode):
         self.cmd_pub.publish(cmd)
         self.last_cmd = np.array([cmd.linear.x, cmd.angular.z], dtype=float)
 
+    def _publish_safe_stop_command(self):
+        if not hasattr(self, 'cmd_pub'):
+            return
+        cmd = Twist()
+        cmd.linear.x = 0.0
+        cmd.angular.z = 0.0
+        self.cmd_pub.publish(cmd)
+        self.last_cmd = np.array([0.0, 0.0], dtype=float)
+
 
 def main(args=None):
     rclpy.init(args=args)

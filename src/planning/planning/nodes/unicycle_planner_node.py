@@ -79,7 +79,6 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('risk_weight_state', 1.0)
         _declare_if_not('risk_weight_obs', 1.0)
         _declare_if_not('ambiguity_weight', 1.0)
-        _declare_if_not('add_ambiguity', True)
         _declare_if_not('approx_method', 'ET2')
         _declare_if_not('use_obs_risk', True)
         _declare_if_not('use_ambiguity', True)
@@ -137,7 +136,6 @@ class UnicyclePlannerNode(Node):
         self.risk_weight_state = float(self.get_parameter('risk_weight_state').value)
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
         self.ambiguity_weight = float(self.get_parameter('ambiguity_weight').value)
-        self.add_ambiguity = _as_bool(self.get_parameter('add_ambiguity').value)
         self.approx_method = str(self.get_parameter('approx_method').value).upper()
         self.use_obs_risk = _as_bool(self.get_parameter('use_obs_risk').value)
         self.use_ambiguity = _as_bool(self.get_parameter('use_ambiguity').value)
@@ -198,7 +196,6 @@ class UnicyclePlannerNode(Node):
             risk_weight_state=self.risk_weight_state,
             risk_weight_obs=self.risk_weight_obs,
             ambiguity_weight=self.ambiguity_weight,
-            add_ambiguity=self.add_ambiguity,
             optimizer_maxiter=self.optimizer_maxiter,
             optimizer_gtol=self.optimizer_gtol,
             optimizer_warm_start=self.optimizer_warm_start,
@@ -264,6 +261,7 @@ class UnicyclePlannerNode(Node):
         self._last_runtime_log = 0.0
         self._last_slow_plan_log = 0.0
         self._last_slow_correction_log = 0.0
+        self._fatal_stop_triggered = False
         self.belief_m = None
         self.belief_S = None
         self.belief_stamp = None
@@ -275,13 +273,42 @@ class UnicyclePlannerNode(Node):
         self.get_logger().info(
             f"{self.NODE_NAME} started "
             f"(approx={self.approx_method}, obs_mode={self.obs_mode}, "
-            f"use_obs_risk={self.use_obs_risk}, use_ambiguity={self.use_ambiguity and self.add_ambiguity}, "
+            f"use_obs_risk={self.use_obs_risk}, use_ambiguity={self.use_ambiguity}, "
             f"boundary_weight={self.boundary_weight:.3f}, "
             f"costmap_required={self._costmap_required}, "
             f"use_pixel_correction={self.use_pixel_correction}, "
             f"pixel_correction_approx={self.pixel_correction_approx}, "
             f"debug_runtime={self.debug_runtime})"
         )
+
+    def _publish_safe_stop_command(self):
+        """Hook for agent mode; planner-only nodes can ignore."""
+        return
+
+    def _fatal_experiment_stop(self, reason: str, exc: Exception | None = None):
+        if self._fatal_stop_triggered:
+            return
+        self._fatal_stop_triggered = True
+
+        try:
+            self._publish_safe_stop_command()
+        except Exception:
+            pass
+
+        detail = reason
+        if exc is not None:
+            detail = f"{reason}: {type(exc).__name__}: {exc}"
+        self.get_logger().error(
+            "Fatal experiment integrity failure. Publishing zero command and terminating node. "
+            f"Reason: {detail}"
+        )
+
+        # Stop this process so runs fail fast instead of continuing with invalid behavior.
+        try:
+            rclpy.shutdown()
+        except Exception:
+            pass
+        raise RuntimeError(detail) from exc
 
     def _state_cb(self, msg: PoseWithCovarianceStamped):
         with self._data_lock:
@@ -442,7 +469,7 @@ class UnicyclePlannerNode(Node):
             self.belief_stamp = msg.header.stamp
 
         now_wall = time.monotonic()
-        if now_wall - self._last_correction_log > 2.0:
+        if self.debug_runtime and (now_wall - self._last_correction_log > 2.0):
             self.get_logger().info(
                 f"Applied pixel correction in callback "
                 f"(method={corr_method}, age={age:.3f}s, dt={dt_s:.3f}s)"
@@ -450,7 +477,11 @@ class UnicyclePlannerNode(Node):
             self._last_correction_log = now_wall
 
         cb_ms = max((time.perf_counter() - cb_start) * 1000.0, 0.0)
-        if cb_ms > self.slow_correction_ms and (now_wall - self._last_slow_correction_log) > 2.0:
+        if (
+            self.debug_runtime
+            and cb_ms > self.slow_correction_ms
+            and (now_wall - self._last_slow_correction_log) > 2.0
+        ):
             self.get_logger().warn(
                 f"Slow pixel correction callback ({cb_ms:.1f} ms) "
                 f"using {corr_method}; this can cause stale-belief behavior."
@@ -575,20 +606,18 @@ class UnicyclePlannerNode(Node):
         costmap_frame = (costmap_ref.frame_id or '').strip() if costmap_ref is not None else ''
         now_wall = time.monotonic()
         if goal_frame and state_frame and goal_frame != state_frame:
-            if now_wall - self._last_frame_mismatch_log > 2.0:
-                self.get_logger().error(
-                    "Frame mismatch: /goal_bev and /state/bev differ "
-                    f"(goal='{goal_frame}', state='{state_frame}'). Skipping plan step."
-                )
-                self._last_frame_mismatch_log = now_wall
+            self._last_frame_mismatch_log = now_wall
+            self._fatal_experiment_stop(
+                "Frame mismatch between /goal_bev and /state/bev "
+                f"(goal='{goal_frame}', state='{state_frame}')"
+            )
             return
         if self._costmap_required and goal_frame and costmap_frame and goal_frame != costmap_frame:
-            if now_wall - self._last_frame_mismatch_log > 2.0:
-                self.get_logger().error(
-                    "Frame mismatch: /goal_bev and /costmap differ "
-                    f"(goal='{goal_frame}', costmap='{costmap_frame}'). Skipping plan step."
-                )
-                self._last_frame_mismatch_log = now_wall
+            self._last_frame_mismatch_log = now_wall
+            self._fatal_experiment_stop(
+                "Frame mismatch between /goal_bev and /costmap "
+                f"(goal='{goal_frame}', costmap='{costmap_frame}')"
+            )
             return
 
         m0, S0 = self._resolve_belief_for_planning()
@@ -601,8 +630,18 @@ class UnicyclePlannerNode(Node):
         )
 
         plan_start = time.perf_counter()
-        result = self.planner.plan(m0, S0, goal_xy, costmap_ref)
+        try:
+            result = self.planner.plan(m0, S0, goal_xy, costmap_ref)
+        except Exception as exc:
+            self._fatal_experiment_stop("Planner.solve raised an exception", exc)
+            return
         if result is None:
+            self._fatal_experiment_stop("Planner returned no result")
+            return
+        if getattr(result, 'used_fallback', False):
+            self._fatal_experiment_stop(
+                "Planner returned fallback controls (disallowed in strict experiment mode)"
+            )
             return
 
         self._publish_plan_and_metrics(result, goal_xy)
@@ -610,7 +649,7 @@ class UnicyclePlannerNode(Node):
 
         plan_elapsed_ms = max((time.perf_counter() - plan_start) * 1000.0, 0.0)
         solve_elapsed_ms = float(getattr(result, 'solve_time_s', 0.0)) * 1000.0
-        if plan_elapsed_ms > (self.slow_plan_factor * self._plan_period_s * 1000.0):
+        if self.debug_runtime and plan_elapsed_ms > (self.slow_plan_factor * self._plan_period_s * 1000.0):
             if now_wall - self._last_slow_plan_log > 2.0:
                 self.get_logger().warn(
                     f"Slow plan cycle ({plan_elapsed_ms:.1f} ms, solver={solve_elapsed_ms:.1f} ms, "

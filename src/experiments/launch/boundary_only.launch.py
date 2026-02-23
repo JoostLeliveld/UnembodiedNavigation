@@ -32,7 +32,6 @@ def _launch_setup(context, *args, **kwargs):
                 'name': 'efe1_planner',
                 'params': {
                     'approx_method': 'ET1',
-                    'add_ambiguity': cfg['add_ambiguity'],
                     'use_ambiguity': cfg['use_ambiguity'],
                     'use_obs_risk': cfg['use_obs_risk'],
                 },
@@ -42,7 +41,6 @@ def _launch_setup(context, *args, **kwargs):
                 'name': 'efe2_planner',
                 'params': {
                     'approx_method': 'ET2',
-                    'add_ambiguity': cfg['add_ambiguity'],
                     'use_ambiguity': cfg['use_ambiguity'],
                     'use_obs_risk': cfg['use_obs_risk'],
                 },
@@ -52,7 +50,6 @@ def _launch_setup(context, *args, **kwargs):
                 'name': 'mpc_planner',
                 'params': {
                     'approx_method': 'ET1',
-                    'add_ambiguity': False,
                     'use_ambiguity': False,
                     'use_obs_risk': True,
                 },
@@ -62,7 +59,6 @@ def _launch_setup(context, *args, **kwargs):
                 'name': 'efer_planner',
                 'params': {
                     'approx_method': 'ET2',
-                    'add_ambiguity': False,
                     'use_ambiguity': False,
                     'use_obs_risk': True,
                 },
@@ -190,8 +186,21 @@ def generate_launch_description():
         description='Perception backend in pixel mode: homography | aruco'
     )
     seed_arg = DeclareLaunchArgument('seed', default_value='0')
-    pixel_noise_arg = DeclareLaunchArgument('pixel_noise_sigma', default_value='0.0')
-    transform_noise_arg = DeclareLaunchArgument('transform_noise_sigma', default_value='0.0')
+    pixel_noise_arg = DeclareLaunchArgument(
+        'pixel_noise_sigma',
+        default_value='0.0',
+        description='Advanced: extra noise in pixel_to_bev_state_node (keep 0.0 for study runs; prefer sensor_pixel_noise_sigma)'
+    )
+    transform_noise_arg = DeclareLaunchArgument(
+        'transform_noise_sigma',
+        default_value='0.0',
+        description='Advanced: extra metric noise after pixel->BEV transform (keep 0.0 for study runs)'
+    )
+    sensor_pixel_noise_arg = DeclareLaunchArgument(
+        'sensor_pixel_noise_sigma',
+        default_value='0.0',
+        description='Primary study noise knob: pixel noise std injected at homography measurement source (/perception/pixel_pose)'
+    )
     odom_wait_timeout_arg = DeclareLaunchArgument(
         'odom_wait_timeout_s',
         default_value='25.0',
@@ -223,15 +232,10 @@ def generate_launch_description():
         description='Apply pixel-space correction in EFE planner'
     )
     pixel_timeout_arg = DeclareLaunchArgument('pixel_timeout_s', default_value='0.5')
-    add_ambiguity_arg = DeclareLaunchArgument(
-        'add_ambiguity',
-        default_value='true',
-        description='Include ambiguity term in EFE objective'
-    )
     use_ambiguity_arg = DeclareLaunchArgument(
         'use_ambiguity',
         default_value='true',
-        description='Enable ambiguity computation in planner'
+        description='Enable ambiguity term in the EFE objective'
     )
     use_obs_risk_arg = DeclareLaunchArgument(
         'use_obs_risk',
@@ -368,6 +372,7 @@ def generate_launch_description():
         seed_arg,
         pixel_noise_arg,
         transform_noise_arg,
+        sensor_pixel_noise_arg,
         odom_wait_timeout_arg,
         odom_wait_min_messages_arg,
         odom_wait_require_pose_match_arg,
@@ -375,7 +380,6 @@ def generate_launch_description():
         odom_wait_yaw_tolerance_arg,
         use_pixel_correction_arg,
         pixel_timeout_arg,
-        add_ambiguity_arg,
         use_ambiguity_arg,
         use_obs_risk_arg,
         boundary_weight_arg,

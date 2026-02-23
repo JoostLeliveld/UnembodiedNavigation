@@ -74,7 +74,6 @@ class UnicyclePlannerBase:
         risk_weight_state,
         risk_weight_obs,
         ambiguity_weight,
-        add_ambiguity,
         optimizer_maxiter,
         optimizer_gtol,
         optimizer_warm_start,
@@ -116,7 +115,6 @@ class UnicyclePlannerBase:
         self.risk_weight_state = float(risk_weight_state)
         self.risk_weight_obs = float(risk_weight_obs)
         self.ambiguity_weight = float(ambiguity_weight)
-        self.add_ambiguity = bool(add_ambiguity)
 
         if approx_method is None:
             self.approx_method = self.APPROX_METHOD
@@ -257,7 +255,7 @@ class UnicyclePlannerBase:
 
         infeasible_penalty = 1e6
         use_obs = self.use_obs_risk
-        use_amb = self.use_ambiguity and self.add_ambiguity
+        use_amb = self.use_ambiguity
         use_state = self.risk_weight_state > 0.0
 
         for t in range(self.horizon):
@@ -312,7 +310,7 @@ class UnicyclePlannerBase:
         goal_cov = self._goal_state_cov()
 
         use_obs = self.use_obs_risk
-        use_amb = self.use_ambiguity and self.add_ambiguity
+        use_amb = self.use_ambiguity
         use_state = self.risk_weight_state > 0.0
 
         goal_obs = None
@@ -343,13 +341,25 @@ class UnicyclePlannerBase:
 
         backend = self.optimizer_backend
         if backend not in ('auto', 'jax', 'scipy'):
-            backend = 'scipy'
+            raise ValueError(
+                f"Unknown optimizer_backend '{self.optimizer_backend}'. Expected auto|jax|scipy."
+            )
 
         use_jax = backend in ('auto', 'jax')
         if use_jax and self.boundary_weight > 0.0:
+            if backend == 'jax':
+                raise RuntimeError(
+                    "optimizer_backend=jax is not supported when boundary_weight > 0.0 "
+                    "(costmap/boundary penalties are not implemented in the JAX objective path)."
+                )
             use_jax = False
 
         if use_jax and self.approx_method not in ('ET1', 'ET2'):
+            if backend == 'jax':
+                raise RuntimeError(
+                    f"optimizer_backend=jax does not support approx_method={self.approx_method} "
+                    "(supported: ET1, ET2)."
+                )
             use_jax = False
 
         if use_jax:
@@ -453,32 +463,24 @@ class UnicyclePlannerBase:
             optimizer_nit = int(getattr(result, 'nit', 0) or 0)
             optimizer_nfev = int(getattr(result, 'nfev', 0) or 0)
             optimizer_message = str(getattr(result, 'message', '') or '')
-            if getattr(result, 'x', None) is not None and np.all(np.isfinite(result.x)):
-                best_controls_flat = result.x
-        except Exception:
-            best_controls_flat = None
-
-        if best_controls_flat is None:
-            used_fallback = True
-            if self.prev_controls_flat is not None:
-                best_controls_flat = self.prev_controls_flat
-            elif self.num_samples > 0:
-                best_cost = float('inf')
-                for _ in range(self.num_samples):
-                    vs = self.rng.uniform(self.v_min, self.v_max, size=self.horizon)
-                    ws = self.rng.uniform(self.w_min, self.w_max, size=self.horizon)
-                    candidate = np.column_stack([vs, ws]).reshape(-1)
-                    cost = self._evaluate_controls(
-                        candidate, m0, S0, goal_state, goal_cov, goal_obs, goal_obs_cov, costmap, False
-                    )
-                    if cost < best_cost:
-                        best_cost = cost
-                        best_controls_flat = candidate
-            else:
-                best_controls_flat = x0
-
-        if best_controls_flat is None:
-            return None
+            if getattr(result, 'x', None) is None:
+                raise RuntimeError(
+                    f"Optimizer returned no solution vector (backend={backend_used}, "
+                    f"status={optimizer_status}, message='{optimizer_message}')"
+                )
+            if not np.all(np.isfinite(result.x)):
+                raise RuntimeError(
+                    f"Optimizer returned non-finite controls (backend={backend_used}, "
+                    f"status={optimizer_status}, message='{optimizer_message}')"
+                )
+            best_controls_flat = np.asarray(result.x, dtype=float)
+        except Exception as exc:
+            raise RuntimeError(
+                "Planner optimization failed "
+                f"(backend_request={backend}, backend_used={'jax' if use_jax else 'scipy'}, "
+                f"approx={self.approx_method}, obs_mode={self.obs_mode}, "
+                f"horizon={self.horizon}, dt={self.dt})"
+            ) from exc
 
         self.prev_controls_flat = np.array(best_controls_flat, dtype=float)
         best_controls = self.prev_controls_flat.reshape(self.horizon, 2)

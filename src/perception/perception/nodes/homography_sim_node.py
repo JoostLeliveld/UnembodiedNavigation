@@ -18,6 +18,11 @@ class HomographySimNode(Node):
                          allow_undeclared_parameters=True,
                          automatically_declare_parameters_from_overrides=True)
 
+        def _as_bool(value):
+            if isinstance(value, bool):
+                return value
+            return str(value).lower() == 'true'
+
         if not self.has_parameter('cam_pos'):
             self.declare_parameter('cam_pos', [-3.0, -3.0, 6.0])
         if not self.has_parameter('look_at'):
@@ -34,6 +39,8 @@ class HomographySimNode(Node):
             self.declare_parameter('seed', 0)
         if not self.has_parameter('world_frame'):
             self.declare_parameter('world_frame', 'map_bev')
+        if not self.has_parameter('log_noisy_pixels'):
+            self.declare_parameter('log_noisy_pixels', False)
 
         self.cam_pos, self.look_at, self.img_width, self.img_height, self.fov_h_rad = load_camera_params(self)
         self.model = HomographyModel(
@@ -47,6 +54,7 @@ class HomographySimNode(Node):
         self.pixel_noise_std = float(self.get_parameter('pixel_noise_sigma').value)
         self.seed = int(self.get_parameter('seed').value)
         self.world_frame = str(self.get_parameter('world_frame').value)
+        self.log_noisy_pixels = _as_bool(self.get_parameter('log_noisy_pixels').value)
         self.rng = np.random.default_rng(self.seed)
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
@@ -59,7 +67,7 @@ class HomographySimNode(Node):
         self.log_counter = 0
         self.get_logger().info(
             f'Homography Sim Node started (pixel_noise_sigma={self.pixel_noise_std:.3f}, '
-            f'world_frame={self.world_frame})'
+            f'world_frame={self.world_frame}, log_noisy_pixels={self.log_noisy_pixels})'
         )
 
     def _verify_camera_setup(self):
@@ -150,10 +158,17 @@ class HomographySimNode(Node):
 
         self.log_counter += 1
         if self.log_counter % 20 == 0:
-            self.get_logger().info(
-                f"True:({x_true:.2f},{y_true:.2f}) -> "
-                f"Pix:({u:.0f},{v:.0f})"
-            )
+            if self.log_noisy_pixels:
+                self.get_logger().info(
+                    f"True:({x_true:.2f},{y_true:.2f}) -> "
+                    f"Pix_nom:({u:.0f},{v:.0f}) Pix_pub:({u_pub:.0f},{v_pub:.0f}) "
+                    f"d=({u_pub - float(u):+.1f},{v_pub - float(v):+.1f})"
+                )
+            else:
+                self.get_logger().info(
+                    f"True:({x_true:.2f},{y_true:.2f}) -> "
+                    f"Pix:({u:.0f},{v:.0f})"
+                )
 
 
 def main(args=None):
