@@ -19,6 +19,11 @@ def _as_bool(value: str) -> bool:
     return str(value).lower() == 'true'
 
 
+def _launch_value(context, name: str, default_value: str) -> str:
+    """Read launch arg with a local default (works even if arg isn't declared)."""
+    return LaunchConfiguration(name, default=default_value).perform(context)
+
+
 def _require_task_field(task, key):
     if key not in task:
         raise RuntimeError(f"Task is missing '{key}' field")
@@ -39,12 +44,19 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'seed': int(LaunchConfiguration('seed').perform(context)),
         'pixel_noise_sigma': float(LaunchConfiguration('pixel_noise_sigma').perform(context)),
         'transform_noise_sigma': float(LaunchConfiguration('transform_noise_sigma').perform(context)),
+        'sensor_pixel_noise_sigma': float(_launch_value(context, 'sensor_pixel_noise_sigma', '0.0')),
+        'odom_wait_timeout_s': float(_launch_value(context, 'odom_wait_timeout_s', '25.0')),
+        'odom_wait_min_messages': max(1, int(float(_launch_value(context, 'odom_wait_min_messages', '1')))),
+        'odom_wait_require_pose_match': _as_bool(_launch_value(context, 'odom_wait_require_pose_match', 'false')),
+        'odom_wait_position_tolerance': float(_launch_value(context, 'odom_wait_position_tolerance', '0.25')),
+        'odom_wait_yaw_tolerance': float(_launch_value(context, 'odom_wait_yaw_tolerance', '0.5')),
         'use_pixel_correction': _as_bool(LaunchConfiguration('use_pixel_correction').perform(context)),
         'pixel_timeout_s': float(LaunchConfiguration('pixel_timeout_s').perform(context)),
         'add_ambiguity': _as_bool(LaunchConfiguration('add_ambiguity').perform(context)),
         'use_ambiguity': _as_bool(LaunchConfiguration('use_ambiguity').perform(context)),
         'use_obs_risk': _as_bool(LaunchConfiguration('use_obs_risk').perform(context)),
         'boundary_weight': float(LaunchConfiguration('boundary_weight').perform(context)),
+        'publish_static_costmap': _as_bool(_launch_value(context, 'publish_static_costmap', 'true')),
         'costmap_min_x': float(LaunchConfiguration('costmap_min_x').perform(context)),
         'costmap_max_x': float(LaunchConfiguration('costmap_max_x').perform(context)),
         'costmap_min_y': float(LaunchConfiguration('costmap_min_y').perform(context)),
@@ -64,6 +76,16 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'optimizer_maxiter': int(LaunchConfiguration('optimizer_maxiter').perform(context)),
         'optimizer_gtol': float(LaunchConfiguration('optimizer_gtol').perform(context)),
         'optimizer_warm_start': _as_bool(LaunchConfiguration('optimizer_warm_start').perform(context)),
+        'plan_rate': float(_launch_value(context, 'plan_rate', '1.0')),
+        'horizon': int(_launch_value(context, 'horizon', '10')),
+        'dt': float(_launch_value(context, 'dt', '0.2')),
+        'control_weight': float(_launch_value(context, 'control_weight', '0.1')),
+        'risk_weight_state': float(_launch_value(context, 'risk_weight_state', '1.0')),
+        'risk_weight_obs': float(_launch_value(context, 'risk_weight_obs', '1.0')),
+        'ambiguity_weight': float(_launch_value(context, 'ambiguity_weight', '1.0')),
+        'goal_sigma_uv': float(_launch_value(context, 'goal_sigma_uv', '0.0')),
+        'goal_sigma_yaw': float(_launch_value(context, 'goal_sigma_yaw', '0.0')),
+        'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
         'use_rviz': _as_bool(LaunchConfiguration('use_rviz').perform(context)),
         'rviz_config': LaunchConfiguration('rviz_config').perform(context),
         'aruco_dict': LaunchConfiguration('aruco_dict').perform(context),
@@ -196,19 +218,23 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         output='screen',
         parameters=[{
             'topic': '/odom',
-            'timeout_s': 0.0,
-            'min_messages': 5,
-            'require_pose_match': True,
+            'timeout_s': cfg['odom_wait_timeout_s'],
+            'min_messages': cfg['odom_wait_min_messages'],
+            'require_pose_match': cfg['odom_wait_require_pose_match'],
             'expected_x': 0.0,
             'expected_y': 0.0,
             'expected_yaw': 0.0,
-            'position_tolerance': 0.25,
-            'yaw_tolerance': 0.5,
+            'position_tolerance': cfg['odom_wait_position_tolerance'],
+            'yaw_tolerance': cfg['odom_wait_yaw_tolerance'],
         }],
     )
 
     homography_params = {'use_sim_time': cfg['use_sim_time']}
     homography_params.update(cfg['camera_params'])
+    homography_params.update({
+        'pixel_noise_sigma': cfg['sensor_pixel_noise_sigma'],
+        'seed': cfg['seed'],
+    })
     homography_sim = Node(
         package='perception',
         executable='homography_sim_node',
@@ -293,6 +319,14 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'task': cfg['task'].get('name', cfg['task_name'] or ''),
             'planner': cfg['planner'],
             'state_source': cfg['state_source'],
+            'perception_backend': cfg['perception_backend'],
+            'obs_mode': cfg['obs_mode'],
+            'use_pixel_correction': cfg['use_pixel_correction'],
+            'boundary_weight': cfg['boundary_weight'],
+            'publish_static_costmap': cfg['publish_static_costmap'],
+            'add_ambiguity': cfg['add_ambiguity'],
+            'use_ambiguity': cfg['use_ambiguity'],
+            'use_obs_risk': cfg['use_obs_risk'],
             'pixel_noise_sigma': cfg['pixel_noise_sigma'],
             'transform_noise_sigma': cfg['transform_noise_sigma'],
             'world_profiles_path': cfg['world_profiles_path'],
@@ -330,4 +364,3 @@ def select_perception_nodes_for_mode(cfg: Dict[str, object], shared: Dict[str, o
     if cfg['perception_backend'] == 'homography':
         return [shared['homography_sim']]
     return [shared['aruco_detector']]
-

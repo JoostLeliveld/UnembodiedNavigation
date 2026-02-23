@@ -1,0 +1,20 @@
+{
+  "add_ambiguity": true,
+  "boundary_weight": 0.0,
+  "git_sha": "188720f7be3165a7f1ce0e2f70e939590497c1ae",
+  "obs_mode": "uv",
+  "perception_backend": "homography",
+  "pixel_noise_sigma": 0.0,
+  "planner": "efe2",
+  "publish_static_costmap": false,
+  "run_id": "experiment_20260219_173730",
+  "seed": 0,
+  "state_source": "oracle",
+  "task": "M1_short_direct",
+  "timestamp": "2026-02-19T17:37:30.714587",
+  "transform_noise_sigma": 0.0,
+  "use_ambiguity": true,
+  "use_obs_risk": true,
+  "use_pixel_correction": false,
+  "world": "empty_notebook.world.sdf"
+}

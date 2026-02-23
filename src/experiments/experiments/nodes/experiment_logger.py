@@ -34,6 +34,14 @@ class ExperimentLogger(Node):
         self.declare_parameter('task', '')
         self.declare_parameter('planner', '')
         self.declare_parameter('state_source', '')
+        self.declare_parameter('perception_backend', '')
+        self.declare_parameter('obs_mode', '')
+        self.declare_parameter('use_pixel_correction', False)
+        self.declare_parameter('boundary_weight', 0.0)
+        self.declare_parameter('publish_static_costmap', True)
+        self.declare_parameter('add_ambiguity', False)
+        self.declare_parameter('use_ambiguity', False)
+        self.declare_parameter('use_obs_risk', True)
         self.declare_parameter('pixel_noise_sigma', 0.0)
         self.declare_parameter('transform_noise_sigma', 0.0)
         self.declare_parameter('world_profiles_path', '')
@@ -45,6 +53,14 @@ class ExperimentLogger(Node):
         self.task = self.get_parameter('task').value
         self.planner = self.get_parameter('planner').value
         self.state_source = self.get_parameter('state_source').value
+        self.perception_backend = self.get_parameter('perception_backend').value
+        self.obs_mode = self.get_parameter('obs_mode').value
+        self.use_pixel_correction = bool(self.get_parameter('use_pixel_correction').value)
+        self.boundary_weight = float(self.get_parameter('boundary_weight').value)
+        self.publish_static_costmap = bool(self.get_parameter('publish_static_costmap').value)
+        self.add_ambiguity = bool(self.get_parameter('add_ambiguity').value)
+        self.use_ambiguity = bool(self.get_parameter('use_ambiguity').value)
+        self.use_obs_risk = bool(self.get_parameter('use_obs_risk').value)
         self.pixel_noise_sigma = float(self.get_parameter('pixel_noise_sigma').value)
         self.transform_noise_sigma = float(self.get_parameter('transform_noise_sigma').value)
         self.world_profiles_path = self.get_parameter('world_profiles_path').value
@@ -64,6 +80,14 @@ class ExperimentLogger(Node):
             'task': self.task,
             'planner': self.planner,
             'state_source': self.state_source,
+            'perception_backend': self.perception_backend,
+            'obs_mode': self.obs_mode,
+            'use_pixel_correction': self.use_pixel_correction,
+            'boundary_weight': self.boundary_weight,
+            'publish_static_costmap': self.publish_static_costmap,
+            'add_ambiguity': self.add_ambiguity,
+            'use_ambiguity': self.use_ambiguity,
+            'use_obs_risk': self.use_obs_risk,
             'seed': self.seed,
             'pixel_noise_sigma': self.pixel_noise_sigma,
             'transform_noise_sigma': self.transform_noise_sigma,

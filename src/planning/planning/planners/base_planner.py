@@ -1,6 +1,7 @@
 """Base planner classes (pure Python, no ROS)."""
 
 from dataclasses import dataclass
+import time
 import numpy as np
 
 from scipy.optimize import minimize
@@ -31,6 +32,14 @@ class PlanResult:
     ambiguity_cost: float
     control_cost: float
     boundary_cost: float
+    backend: str = "unknown"
+    optimizer_success: bool = False
+    optimizer_status: int = 0
+    optimizer_nit: int = 0
+    optimizer_nfev: int = 0
+    optimizer_message: str = ""
+    used_fallback: bool = False
+    solve_time_s: float = 0.0
 
 
 class UnicyclePlannerBase:
@@ -167,6 +176,7 @@ class UnicyclePlannerBase:
             self._approx_fn = UT
 
         self.prev_controls_flat = None
+        self._jax_valgrad_cache = {}
 
     def process_noise(self, dt=None):
         step_dt = self.dt if dt is None else float(dt)
@@ -182,10 +192,20 @@ class UnicyclePlannerBase:
         S_next = F @ S @ F.T + Q
         return m_next, S_next
 
-    def approx_observation(self, m, S):
-        if self._approx_fn is None:
-            raise RuntimeError('Observation approximation not configured.')
-        return self._approx_fn(m, S, self.g_obs, addmatrix=self.R, forceHermitian=True)
+    def _approx_fn_for_method(self, method):
+        m = str(method).upper()
+        if m == 'ET1':
+            return ET1
+        if m == 'ET2':
+            return ET2
+        if m == 'UT':
+            return UT
+        raise RuntimeError(f"Unknown observation approximation method: {method}")
+
+    def approx_observation(self, m, S, method=None):
+        approx_method = self.approx_method if method is None else method
+        fn = self._approx_fn_for_method(approx_method)
+        return fn(m, S, self.g_obs, addmatrix=self.R, forceHermitian=True)
 
     def _goal_state(self, goal_xy, theta):
         return np.array([goal_xy[0], goal_xy[1], theta], dtype=float)
@@ -238,6 +258,7 @@ class UnicyclePlannerBase:
         infeasible_penalty = 1e6
         use_obs = self.use_obs_risk
         use_amb = self.use_ambiguity and self.add_ambiguity
+        use_state = self.risk_weight_state > 0.0
 
         for t in range(self.horizon):
             u = controls[t]
@@ -247,7 +268,9 @@ class UnicyclePlannerBase:
             if use_obs or use_amb:
                 mu_y, Sigma_y, Gamma = self.approx_observation(m, S)
 
-            r_state = risk(m, S, (goal_state, goal_cov))
+            r_state = 0.0
+            if use_state:
+                r_state = risk(m, S, (goal_state, goal_cov))
             r_obs = 0.0
             if use_obs and mu_y is not None:
                 r_obs = risk(mu_y, Sigma_y, (goal_obs, goal_obs_cov))
@@ -280,12 +303,21 @@ class UnicyclePlannerBase:
         return total
 
     def plan(self, m0, S0, goal_xy, costmap):
-        goal_state = self._goal_state(goal_xy, m0[2])
+        t_plan_start = time.perf_counter()
+
+        # If state-risk weight is zero, keep goal theta constant to avoid
+        # unnecessary optimizer/JAX recompilation churn.
+        goal_theta = float(m0[2]) if self.risk_weight_state > 0.0 else 0.0
+        goal_state = self._goal_state(goal_xy, goal_theta)
         goal_cov = self._goal_state_cov()
+
+        use_obs = self.use_obs_risk
+        use_amb = self.use_ambiguity and self.add_ambiguity
+        use_state = self.risk_weight_state > 0.0
 
         goal_obs = None
         goal_obs_cov = None
-        if self.USE_OBS_RISK or self.USE_AMBIGUITY:
+        if use_obs or use_amb:
             goal_obs = self._goal_obs(goal_state)
             goal_obs_cov = self._goal_obs_cov()
 
@@ -301,6 +333,14 @@ class UnicyclePlannerBase:
             x0[0::2] = 0.5 * (self.v_min + self.v_max)
 
         best_controls_flat = None
+        backend_used = 'scipy'
+        optimizer_success = False
+        optimizer_status = 0
+        optimizer_nit = 0
+        optimizer_nfev = 0
+        optimizer_message = ''
+        used_fallback = False
+
         backend = self.optimizer_backend
         if backend not in ('auto', 'jax', 'scipy'):
             backend = 'scipy'
@@ -328,6 +368,7 @@ class UnicyclePlannerBase:
             if use_jax:
                 from planning.core import jax_efe
                 import jax.numpy as jnp
+                backend_used = 'jax'
 
                 Q = self.process_noise(self.dt)
                 if goal_obs is None:
@@ -335,34 +376,52 @@ class UnicyclePlannerBase:
                 if goal_obs_cov is None:
                     goal_obs_cov = self._goal_obs_cov()
 
-                params_j = jax_efe.JaxUnicycleParams(
-                    Q=jnp.array(Q),
-                    R=jnp.array(self.R),
-                    goal_state=jnp.array(goal_state),
-                    goal_state_cov=jnp.array(goal_cov),
-                    goal_obs=jnp.array(goal_obs),
-                    goal_obs_cov=jnp.array(goal_obs_cov),
-                    control_weight=float(self.control_weight),
-                    risk_weight_state=float(self.risk_weight_state),
-                    risk_weight_obs=float(self.risk_weight_obs),
-                    ambiguity_weight=float(self.ambiguity_weight),
-                    time_horizon=int(self.horizon),
-                    dt=float(self.dt),
-                    Du=2,
+                cache_key = (
+                    self.approx_method,
+                    self.obs_mode,
+                    bool(use_amb),
+                    bool(use_obs),
+                    bool(use_state),
+                    float(self.control_weight),
+                    float(self.risk_weight_state),
+                    float(self.risk_weight_obs),
+                    float(self.ambiguity_weight),
+                    int(self.horizon),
+                    float(self.dt),
+                    tuple(np.round(np.asarray(goal_state, dtype=float), 8).tolist()),
+                    tuple(np.round(np.asarray(np.diag(goal_cov), dtype=float), 8).tolist()),
+                    tuple(np.round(np.asarray(goal_obs, dtype=float), 8).tolist()),
+                    tuple(np.round(np.asarray(np.diag(goal_obs_cov), dtype=float), 8).tolist()),
                 )
-                g_jax = jax_efe.make_g_from_homography(self.camera.H, self.obs_mode)
-                use_amb = self.use_ambiguity and self.add_ambiguity
-
-                valgrad = jax_efe.make_unicycle_valgrad_fn(
-                    params_j,
-                    g_jax,
-                    approx=self.approx_method,
-                    add_ambiguity=use_amb,
-                    use_obs_risk=self.use_obs_risk,
-                    use_state_risk=True,
-                    mode='rev',
-                    jit=True,
-                )
+                valgrad = self._jax_valgrad_cache.get(cache_key)
+                if valgrad is None:
+                    params_j = jax_efe.JaxUnicycleParams(
+                        Q=jnp.array(Q),
+                        R=jnp.array(self.R),
+                        goal_state=jnp.array(goal_state),
+                        goal_state_cov=jnp.array(goal_cov),
+                        goal_obs=jnp.array(goal_obs),
+                        goal_obs_cov=jnp.array(goal_obs_cov),
+                        control_weight=float(self.control_weight),
+                        risk_weight_state=float(self.risk_weight_state),
+                        risk_weight_obs=float(self.risk_weight_obs),
+                        ambiguity_weight=float(self.ambiguity_weight),
+                        time_horizon=int(self.horizon),
+                        dt=float(self.dt),
+                        Du=2,
+                    )
+                    g_jax = jax_efe.make_g_from_homography(self.camera.H, self.obs_mode)
+                    valgrad = jax_efe.make_unicycle_valgrad_fn(
+                        params_j,
+                        g_jax,
+                        approx=self.approx_method,
+                        add_ambiguity=use_amb,
+                        use_obs_risk=use_obs,
+                        use_state_risk=use_state,
+                        mode='rev',
+                        jit=True,
+                    )
+                    self._jax_valgrad_cache[cache_key] = valgrad
 
                 def f(u):
                     val, _ = valgrad(jnp.array(u), jnp.array(m0), jnp.array(S0))
@@ -389,12 +448,18 @@ class UnicyclePlannerBase:
                     bounds=bounds,
                     options={'maxiter': self.optimizer_maxiter, 'gtol': self.optimizer_gtol},
                 )
-            if result.success:
+            optimizer_success = bool(getattr(result, 'success', False))
+            optimizer_status = int(getattr(result, 'status', 0) or 0)
+            optimizer_nit = int(getattr(result, 'nit', 0) or 0)
+            optimizer_nfev = int(getattr(result, 'nfev', 0) or 0)
+            optimizer_message = str(getattr(result, 'message', '') or '')
+            if getattr(result, 'x', None) is not None and np.all(np.isfinite(result.x)):
                 best_controls_flat = result.x
         except Exception:
             best_controls_flat = None
 
         if best_controls_flat is None:
+            used_fallback = True
             if self.prev_controls_flat is not None:
                 best_controls_flat = self.prev_controls_flat
             elif self.num_samples > 0:
@@ -422,6 +487,7 @@ class UnicyclePlannerBase:
         )
 
         states = rollout_unicycle(m0, best_controls, self.dt)
+        solve_time_s = float(max(time.perf_counter() - t_plan_start, 0.0))
         return PlanResult(
             controls=best_controls,
             states=states,
@@ -430,4 +496,12 @@ class UnicyclePlannerBase:
             ambiguity_cost=float(metrics[1]),
             control_cost=float(metrics[2]),
             boundary_cost=float(metrics[3]),
+            backend=str(backend_used),
+            optimizer_success=optimizer_success,
+            optimizer_status=optimizer_status,
+            optimizer_nit=optimizer_nit,
+            optimizer_nfev=optimizer_nfev,
+            optimizer_message=optimizer_message,
+            used_fallback=used_fallback,
+            solve_time_s=solve_time_s,
         )

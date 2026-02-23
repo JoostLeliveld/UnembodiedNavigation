@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
+import time
+
 import numpy as np
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from nav_msgs.msg import Odometry
+import tf2_ros
+from tf2_geometry_msgs import do_transform_pose
 
 from state.core.pixel_to_bev import PixelToBevTransformer
 from state.core.noise import build_covariance
@@ -16,16 +20,44 @@ class OracleStateSource:
         self._node = node
         self._publisher = publisher
         self._frame_id = frame_id
+        self._tf_buffer = tf2_ros.Buffer()
+        self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self._node)
+        self._last_tf_warn_wall = 0.0
         self._node.create_subscription(Odometry, '/odom', self._odom_callback, 10)
         self._node.get_logger().info(
-            'Pixel->BEV state node in ORACLE mode (/odom -> /state/bev)'
+            'Pixel->BEV state node in ORACLE mode (/odom -> TF -> /state/bev)'
         )
 
     def _odom_callback(self, msg: Odometry):
+        source_frame = (msg.header.frame_id or 'odom').strip() or 'odom'
+        pose_in = PoseStamped()
+        pose_in.header = msg.header
+        pose_in.header.frame_id = source_frame
+        pose_in.pose = msg.pose.pose
+
+        pose_out = pose_in.pose
+        if source_frame != self._frame_id:
+            try:
+                # Use latest available transform; the map_bev->odom transform is static.
+                tf_msg = self._tf_buffer.lookup_transform(
+                    self._frame_id,
+                    source_frame,
+                    rclpy.time.Time(),
+                )
+                pose_out = do_transform_pose(pose_in.pose, tf_msg)
+            except Exception as exc:
+                now = time.monotonic()
+                if (now - self._last_tf_warn_wall) > 1.0:
+                    self._last_tf_warn_wall = now
+                    self._node.get_logger().warn(
+                        f"Oracle TF transform {source_frame}->{self._frame_id} unavailable: {exc}"
+                    )
+                return
+
         out = PoseWithCovarianceStamped()
         out.header.stamp = msg.header.stamp
         out.header.frame_id = self._frame_id
-        out.pose.pose = msg.pose.pose
+        out.pose.pose = pose_out
         out.pose.covariance = build_covariance(1e-6, 1e-6, 1e-6)
         self._publisher.publish(out)
 

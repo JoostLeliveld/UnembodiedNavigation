@@ -1,8 +1,12 @@
+import time
+
 import numpy as np
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
+import tf2_ros
+from tf2_geometry_msgs import do_transform_pose
 
 from perception.core.homography import HomographyModel
 from perception.core.camera_config import load_camera_params
@@ -24,6 +28,12 @@ class HomographySimNode(Node):
             self.declare_parameter('img_height', 720)
         if not self.has_parameter('fov_h_rad'):
             self.declare_parameter('fov_h_rad', 1.5708)
+        if not self.has_parameter('pixel_noise_sigma'):
+            self.declare_parameter('pixel_noise_sigma', 0.0)
+        if not self.has_parameter('seed'):
+            self.declare_parameter('seed', 0)
+        if not self.has_parameter('world_frame'):
+            self.declare_parameter('world_frame', 'map_bev')
 
         self.cam_pos, self.look_at, self.img_width, self.img_height, self.fov_h_rad = load_camera_params(self)
         self.model = HomographyModel(
@@ -34,14 +44,23 @@ class HomographySimNode(Node):
             fov_h_rad=self.fov_h_rad,
         )
 
-        self.pixel_noise_std = 0.0
+        self.pixel_noise_std = float(self.get_parameter('pixel_noise_sigma').value)
+        self.seed = int(self.get_parameter('seed').value)
+        self.world_frame = str(self.get_parameter('world_frame').value)
+        self.rng = np.random.default_rng(self.seed)
+        self._tf_buffer = tf2_ros.Buffer()
+        self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
+        self._last_tf_warn_wall = 0.0
         self._verify_camera_setup()
 
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.pub = self.create_publisher(PoseStamped, '/perception/pixel_pose', 10)
 
         self.log_counter = 0
-        self.get_logger().info('Homography Sim Node started')
+        self.get_logger().info(
+            f'Homography Sim Node started (pixel_noise_sigma={self.pixel_noise_std:.3f}, '
+            f'world_frame={self.world_frame})'
+        )
 
     def _verify_camera_setup(self):
         direction = self.look_at - self.cam_pos
@@ -51,7 +70,9 @@ class HomographySimNode(Node):
 
         self.get_logger().info('=' * 50)
         self.get_logger().info('Camera Configuration (Oblique View):')
-        self.get_logger().info(f'  Position (odom): ({self.cam_pos[0]}, {self.cam_pos[1]}, {self.cam_pos[2]})')
+        self.get_logger().info(
+            f'  Position ({self.world_frame}): ({self.cam_pos[0]}, {self.cam_pos[1]}, {self.cam_pos[2]})'
+        )
         self.get_logger().info(f'  Look-at point: ({self.look_at[0]}, {self.look_at[1]}, {self.look_at[2]})')
         self.get_logger().info(f'  Effective angles: Yaw={yaw_deg:.1f}°, Pitch={pitch_deg:.1f}° down')
         self.get_logger().info(f'  FOV: {np.degrees(self.fov_h_rad):.1f}° horizontal')
@@ -80,8 +101,27 @@ class HomographySimNode(Node):
         self.get_logger().info('=' * 50)
 
     def odom_callback(self, msg):
-        x_true = msg.pose.pose.position.x
-        y_true = msg.pose.pose.position.y
+        source_frame = (msg.header.frame_id or 'odom').strip() or 'odom'
+        pose_world = msg.pose.pose
+        if source_frame != self.world_frame:
+            try:
+                tf_msg = self._tf_buffer.lookup_transform(
+                    self.world_frame,
+                    source_frame,
+                    rclpy.time.Time(),
+                )
+                pose_world = do_transform_pose(msg.pose.pose, tf_msg)
+            except Exception as exc:
+                now = time.monotonic()
+                if (now - self._last_tf_warn_wall) > 1.0:
+                    self._last_tf_warn_wall = now
+                    self.get_logger().warn(
+                        f"Homography TF transform {source_frame}->{self.world_frame} unavailable: {exc}"
+                    )
+                return
+
+        x_true = pose_world.position.x
+        y_true = pose_world.position.y
 
         u, v, visible = self.model.world_to_pixel(x_true, y_true)
         if not visible:
@@ -92,13 +132,20 @@ class HomographySimNode(Node):
                 )
             return
 
+        u_pub = float(u)
+        v_pub = float(v)
+        if self.pixel_noise_std > 0.0:
+            u_pub += float(self.rng.normal(0.0, self.pixel_noise_std))
+            v_pub += float(self.rng.normal(0.0, self.pixel_noise_std))
+
         out_msg = PoseStamped()
         out_msg.header.stamp = self.get_clock().now().to_msg()
         out_msg.header.frame_id = 'image'
-        out_msg.pose.position.x = float(u)
-        out_msg.pose.position.y = float(v)
+        out_msg.pose.position.x = u_pub
+        out_msg.pose.position.y = v_pub
         out_msg.pose.position.z = 0.0
-        out_msg.pose.orientation = msg.pose.pose.orientation
+        # Preserve orientation in the same world frame used for projection.
+        out_msg.pose.orientation = pose_world.orientation
         self.pub.publish(out_msg)
 
         self.log_counter += 1

@@ -3,6 +3,7 @@
 import numpy as np
 
 import rclpy
+from rclpy.executors import MultiThreadedExecutor
 
 from geometry_msgs.msg import Twist
 
@@ -34,9 +35,14 @@ class EfeAgentNode(UnicyclePlannerNode):
 def main(args=None):
     rclpy.init(args=args)
     node = EfeAgentNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    executor = MultiThreadedExecutor(num_threads=2)
+    executor.add_node(node)
+    try:
+        executor.spin()
+    finally:
+        executor.shutdown()
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':

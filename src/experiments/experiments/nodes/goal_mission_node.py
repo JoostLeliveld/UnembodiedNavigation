@@ -31,7 +31,7 @@ class GoalMissionNode(Node):
         period = 1.0 / max(self.repeat_rate, 0.1)
         self.create_timer(period, self._send_goal, clock=self.wall_clock)
         self.get_logger().info(
-            f"Mission ready. Goal ({self.goal_x}, {self.goal_y}) in {self.delay}s"
+            f"Mission ready. Goal ({self.goal_x}, {self.goal_y}) in frame '{self.frame_id}' in {self.delay}s"
         )
 
     def _send_goal(self):
@@ -48,7 +48,10 @@ class GoalMissionNode(Node):
         goal.pose.orientation.w = 1.0
         self.goal_pub.publish(goal)
         self.sent_count += 1
-        self.get_logger().info(f'Goal published ({self.sent_count}/{self.repeat_count})')
+        self.get_logger().info(
+            f"Goal published ({self.sent_count}/{self.repeat_count}) "
+            f"at ({self.goal_x}, {self.goal_y}) frame='{self.frame_id}'"
+        )
 
 
 def main(args=None):

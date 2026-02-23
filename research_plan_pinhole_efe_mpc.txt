@@ -1,5 +1,5 @@
-Research Execution Plan: Pinhole Camera + EFE1/EFE2/MPC Comparison
-Version: 2026-02-11
+Research Execution Plan: Pinhole Camera + EFE Agent vs MPC Agent Comparison
+Version: 2026-02-18
 Repository: /home/joostleliveld/UnembodiedNavigation
 
 ============================================================
@@ -7,7 +7,7 @@ Repository: /home/joostleliveld/UnembodiedNavigation
 ============================================================
 This plan focuses on finishing the current research stage with high confidence:
 
-1. Scientifically valid comparison between MPC, EFE1, and EFE2 under the same dynamics and task setup.
+1. Scientifically valid comparison between MPC agent and EFE agent under the same dynamics and task setup.
 2. Explicitly verified pinhole camera projection model and its impact on planning terms.
 3. Reproducible experiments and plots with clear provenance.
 4. A repository structure that supports later additions (new vision modules, RL policies, extra cameras) without rewriting core interfaces.
@@ -20,7 +20,7 @@ Primary outcome:
 ============================================================
 These assumptions are required for a fair comparison:
 
-1. Same robot dynamics across MPC/EFE1/EFE2.
+1. Same robot dynamics across MPC agent and EFE agent.
 2. Same world and task initial conditions for each method.
 3. Same state input contract (/state/bev + covariance).
 4. Same control bounds and horizon.
@@ -36,21 +36,40 @@ If any of the above differ, the comparison is not method-only and results become
 ============================================================
 Research question for this stage:
 - Under a fixed pinhole camera geometry and identical control constraints, what behavior differences arise between:
-  a) MPC objective (risk + control only),
-  b) EFE1 (first-order observation transform),
-  c) EFE2 (second-order observation transform)?
+  a) MPC agent (risk + control only),
+  b) EFE agent (risk + control + optional ambiguity), with ET2 as the primary setting.
 
 Desired scientific claim:
-- EFE2 should differ from EFE1/MPC specifically where projection curvature and uncertainty propagation matter, not because of unrelated implementation differences.
+- EFE should differ from MPC specifically where uncertainty propagation through the projective observation model matters, not because of unrelated pipeline or implementation differences.
 
 Method-definition lock (must hold for all reported comparisons):
-1. MPC baseline in this repository is not a separate dynamics/controller stack.
-2. MPC is defined as the same unicycle objective stack with:
-   - add_ambiguity = false
-   - same risk terms
-   - same optimizer path/settings
-3. EFE1 and EFE2 differ only in observation moment approximation (ET1 vs ET2), with all other terms fixed.
-4. This stage evaluates approximation-quality effects (ET1 vs ET2) inside risk+ambiguity; it does not claim explicit mutual-information maximization unless that term is added later.
+1. All reported comparisons use the agent pipeline (no planner+controller stack):
+   - Launch entry point: src/experiments/launch/boundary_only_agent.launch.py
+   - Both methods output /cmd_vel directly (agent mode).
+2. MPC baseline in this repository is not a separate dynamics/controller stack.
+3. MPC agent is defined as the same unicycle planning stack with:
+   - ambiguity disabled (add_ambiguity=false)
+   - identical dynamics, bounds, horizon, dt
+   - identical optimizer backend/hyperparameters during fair comparison
+4. EFE agent uses the same stack with ambiguity optionally enabled.
+5. If ET1 vs ET2 is reported, it is treated as an EFE-only ablation where the *only* change is the observation moment approximation (ET1 vs ET2).
+6. This stage does not claim explicit mutual-information maximization unless an MI term is added and audited later.
+
+============================================================
+2.1) Agent-mode experiment pipeline (used for all reported results)
+============================================================
+All experiments in this paper use the "agent" launch, which runs a direct /cmd_vel agent:
+- src/experiments/launch/boundary_only_agent.launch.py
+
+Core data path (agent mode):
+- /odom -> (/perception/pixel_pose in pixel mode) -> /state/bev -> agent -> /cmd_vel
+
+Method selection:
+- EFE agent: planning/efe_agent (agent objective with optional ambiguity; ET2 is the primary setting)
+- MPC agent: planning/efe_agent with ambiguity disabled (risk + control baseline)
+
+Important note:
+- This paper intentionally does not describe or use the planner+controller pipeline (boundary_only.launch.py).
 
 ============================================================
 3) Critical math alignment tasks (highest priority)
@@ -150,7 +169,7 @@ Add tests:
    - assert mean and max error thresholds.
 2. Visibility boundary behavior:
    - points outside camera frustum should fail cleanly (NaN/out-of-view flag).
-   - points with Zc <= Zc_min are treated as invalid for planner-comparison experiments.
+   - points with Zc <= Zc_min are treated as invalid for agent-comparison experiments.
 3. Jacobian/Hessian sanity:
    - finite values where expected,
    - known growth behavior near geometric singular regions.
@@ -170,7 +189,7 @@ Checks:
 3. One screenshot protocol for every run (camera + BEV view).
 
 ============================================================
-5) Planner comparison experiment design (MPC/EFE1/EFE2)
+5) Agent comparison experiment design (EFE agent vs MPC agent)
 ============================================================
 5.1) Experimental factors
 Fixed factors per batch:
@@ -181,7 +200,10 @@ Fixed factors per batch:
 5. noise parameters
 
 Varied factor:
-- planner method in {mpc, efe1, efe2}
+- agent method in {mpc_agent, efe_agent}
+
+Optional ablation (reported separately, not mixed into the primary comparison):
+- EFE moment transform in {ET1, ET2}
 
 Secondary factors (separate sweeps):
 1. obs_mode in {uv, uvt}
@@ -189,7 +211,7 @@ Secondary factors (separate sweeps):
 3. pixel correction on/off
 4. boundary_weight in {0, default}
 
-Tertiary sweeps (required to expose ET1 vs ET2 differences):
+Tertiary sweeps (required to expose ambiguity-driven differences):
 1. Camera pitch sweep: {steep, medium, grazing} with all else fixed.
 2. Initial belief scale sweep:
    - S0_scaled = alpha * S0_base
@@ -202,7 +224,7 @@ Minimum set:
 3. One diagonal task crossing varied depth/conditioning
 
 Why:
-- If only one easy geometry is used, EFE2 vs EFE1 may collapse and produce weak evidence.
+- If only one easy geometry is used, EFE vs MPC may collapse and produce weak evidence.
 
 5.3) Metrics to report
 Trajectory metrics:
@@ -217,8 +239,8 @@ Estimation/uncertainty metrics:
 3. Mean ambiguity term
 4. Terminal risk term
 5. Approximation-difference isolators:
-   - Delta ambiguity = ambiguity_ET2 - ambiguity_ET1 (evaluated on matched states)
-   - Delta Sigma_y norm = ||Sigma_y_ET2 - Sigma_y_ET1||_F
+   - (optional) Delta ambiguity = ambiguity_ET2 - ambiguity_ET1 (evaluated on matched states)
+   - (optional) Delta Sigma_y norm = ||Sigma_y_ET2 - Sigma_y_ET1||_F
 
 Control metrics:
 1. Mean |v|, |w|
@@ -230,7 +252,7 @@ Camera geometry metrics (for interpretation):
 
 5.4) Plot set (paper-ready)
 For each task:
-1. XY trajectories overlaid (MPC/EFE1/EFE2)
+1. XY trajectories overlaid (MPC agent vs EFE agent)
 2. Ambiguity and risk over time
 3. Camera-space trajectory (u,v)
 4. Side-by-side camera frame + BEV snapshot at key times
@@ -263,9 +285,8 @@ For every run, persist:
 
 6.3) Execution wrappers
 Create standardized scripts:
-1. scripts/run_batch_boundary_only.sh
-2. scripts/run_batch_agent.sh
-3. scripts/export_batch_results.py
+1. scripts/run_batch_agent.sh
+2. scripts/export_batch_results.py
 
 Each script should:
 - validate args,
@@ -285,14 +306,13 @@ A) Observation adapter interface (future vision modules):
 - output: standardized observation with covariance + source_id
 - current homography node is one implementation
 
-B) Planner backend interface:
+B) Agent backend interface:
 - input: belief, goal, costmap, config
-- output: plan + metrics + optional cmd
+- output: cmd_vel + metrics (+ optional plan for inspection/logging)
 - implementations:
-  1. mpc backend
-  2. efe1 backend
-  3. efe2 backend
-  4. future rl backend
+  1. mpc agent backend (risk + control baseline)
+  2. efe agent backend (risk + control + optional ambiguity; ET1/ET2 as config)
+  3. future rl backend
 
 C) Multi-camera support hook:
 - camera registry in unav_common
@@ -309,7 +329,7 @@ C) Multi-camera support hook:
 ============================================================
 8) Critical review checklist (sense-check before claiming results)
 ============================================================
-Before claiming "EFE2 is better/different", verify all:
+Before claiming "EFE is better/different (vs MPC)", verify all:
 
 1. Same initial state and goal for all methods?
 2. Same control bounds/horizon?
@@ -331,7 +351,7 @@ If any answer is "yes", mark run batch as non-comparable.
 Phase 0: Freeze baseline and contracts (1-2 days)
 Deliverables:
 1. Confirm launch defaults for comparison mode.
-2. Lock planner parameter presets for MPC/EFE1/EFE2.
+2. Lock agent parameter presets for MPC agent vs EFE agent.
 3. Save baseline config set in docs/experiments_baseline.md.
 
 Gate:
@@ -411,7 +431,6 @@ Gate:
    - ambiguity PSD behavior
    - risk monotonic sanity checks
 2. Add integration smoke tests for:
-   - boundary_only.launch.py
    - boundary_only_agent.launch.py
 3. Add camera reprojection tests.
 
@@ -463,22 +482,16 @@ Current code defaults to freeze first (from planning/nodes/unicycle_planner_node
 11. risk_weight_state=1.0
 12. risk_weight_obs=1.0
 13. ambiguity_weight=1.0
-14. add_ambiguity=true for EFE1/EFE2, false for MPC baseline
+14. add_ambiguity=true for EFE agent, false for MPC agent baseline
 15. use_obs_risk=true
-16. use_ambiguity=true for EFE1/EFE2, false for MPC baseline
+16. use_ambiguity=true for EFE agent, false for MPC agent baseline
 17. optimizer_backend fixed per comparison batch (recommended start: scipy)
 18. optimizer_maxiter=50
 19. optimizer_gtol=1e-4
 20. optimizer_warm_start=true (keep identical for all methods)
 
 Current launch defaults to freeze first:
-1. boundary_only.launch.py:
-   - state_source=oracle
-   - planner=astar
-   - use_pixel_correction=true
-   - pixel_timeout_s=0.5
-   - world=empty.world.sdf
-2. boundary_only_agent.launch.py:
+1. boundary_only_agent.launch.py:
    - state_source=oracle
    - planner=efe2
    - use_pixel_correction=true
@@ -490,7 +503,7 @@ Current launch defaults to freeze first:
 ============================================================
 12) Risks and mitigation
 ============================================================
-Risk 1: EFE1/EFE2 difference too small in selected geometry.
+Risk 1: EFE vs MPC difference too small in selected geometry.
 Mitigation:
 - Add tasks with stronger conditioning variation (depth and off-axis regions).
 
@@ -517,7 +530,7 @@ This stage is complete only when all are true:
 
 1. Math spec and code mapping are complete and reviewed.
 2. Camera projection validation passes in all study worlds.
-3. MPC/EFE1/EFE2 comparisons are run across predefined seeds/tasks.
+3. MPC agent vs EFE agent comparisons are run across predefined seeds/tasks.
 4. Figures regenerate from scripts with no manual notebook steps.
 5. Claims are supported by logged metrics and confidence intervals.
 6. Repository has clean extension points documented for future:

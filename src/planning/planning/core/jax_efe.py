@@ -78,17 +78,19 @@ def _safe_cholesky(M, eps=1e-9):
     return jnp.linalg.cholesky(M + eps * jnp.eye(d, dtype=M.dtype))
 
 
-def et1_jax(m, S, params: JaxUnicycleParams, g):
-    Jm = jax.jacfwd(g)(m)
+def et1_jax(m, S, params: JaxUnicycleParams, g, dg=None):
+    # Reuse prebuilt Jacobian transform when available.
+    Jm = dg(m) if dg is not None else jax.jacfwd(g)(m)
     mu = g(m)
     Sigma = Jm @ S @ Jm.T + params.R
     Gamma = S @ Jm.T
     return mu, Sigma, Gamma
 
 
-def et2_jax(m, S, params: JaxUnicycleParams, g):
-    Jm = jax.jacfwd(g)(m)
-    H = jax.jacfwd(jax.jacrev(g))(m)
+def et2_jax(m, S, params: JaxUnicycleParams, g, dg=None, d2g=None):
+    # Reuse prebuilt Jacobian/Hessian transforms when available.
+    Jm = dg(m) if dg is not None else jax.jacfwd(g)(m)
+    H = d2g(m) if d2g is not None else jax.jacfwd(jax.jacrev(g))(m)
     aux1 = jnp.array([jnp.trace(H[i] @ S) for i in range(H.shape[0])])
     aux2 = jnp.array([
         [jnp.trace(H[i] @ S @ H[j] @ S) for j in range(H.shape[0])]
@@ -128,6 +130,8 @@ def efe_unicycle_jax(
     add_ambiguity: bool = True,
     use_obs_risk: bool = True,
     use_state_risk: bool = True,
+    dg=None,
+    d2g=None,
 ):
     u = jnp.asarray(u)
     if u.ndim == 1:
@@ -146,9 +150,9 @@ def efe_unicycle_jax(
         mu = Sigma = Gamma = None
         if use_obs_risk or add_ambiguity:
             if approx == "ET1":
-                mu, Sigma, Gamma = et1_jax(m, S, params, g)
+                mu, Sigma, Gamma = et1_jax(m, S, params, g, dg=dg)
             elif approx == "ET2":
-                mu, Sigma, Gamma = et2_jax(m, S, params, g)
+                mu, Sigma, Gamma = et2_jax(m, S, params, g, dg=dg, d2g=d2g)
             else:
                 raise ValueError("Approximation method unknown.")
 
@@ -181,6 +185,8 @@ def make_unicycle_valgrad_fn(
     jit: bool = True,
 ):
     """Return (value, grad) function w.r.t. u for unicycle dynamics."""
+    dg = jax.jacfwd(g)
+    d2g = jax.jacfwd(jax.jacrev(g)) if str(approx).upper() == "ET2" else None
 
     def _valgrad(u, m, S):
         if mode == "fwd":
@@ -190,6 +196,8 @@ def make_unicycle_valgrad_fn(
                 add_ambiguity=add_ambiguity,
                 use_obs_risk=use_obs_risk,
                 use_state_risk=use_state_risk,
+                dg=dg,
+                d2g=d2g,
             )
             grad = jax.jacfwd(
                 lambda uu: efe_unicycle_jax(
@@ -198,6 +206,8 @@ def make_unicycle_valgrad_fn(
                     add_ambiguity=add_ambiguity,
                     use_obs_risk=use_obs_risk,
                     use_state_risk=use_state_risk,
+                    dg=dg,
+                    d2g=d2g,
                 )
             )(u)
             return val, grad
@@ -209,6 +219,8 @@ def make_unicycle_valgrad_fn(
                 add_ambiguity=add_ambiguity,
                 use_obs_risk=use_obs_risk,
                 use_state_risk=use_state_risk,
+                dg=dg,
+                d2g=d2g,
             )
         )(u)
 

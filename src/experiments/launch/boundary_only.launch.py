@@ -192,6 +192,31 @@ def generate_launch_description():
     seed_arg = DeclareLaunchArgument('seed', default_value='0')
     pixel_noise_arg = DeclareLaunchArgument('pixel_noise_sigma', default_value='0.0')
     transform_noise_arg = DeclareLaunchArgument('transform_noise_sigma', default_value='0.0')
+    odom_wait_timeout_arg = DeclareLaunchArgument(
+        'odom_wait_timeout_s',
+        default_value='25.0',
+        description='Timeout for startup /odom gate in seconds (0 disables timeout)'
+    )
+    odom_wait_min_messages_arg = DeclareLaunchArgument(
+        'odom_wait_min_messages',
+        default_value='1',
+        description='Number of /odom messages required to open startup gate'
+    )
+    odom_wait_require_pose_match_arg = DeclareLaunchArgument(
+        'odom_wait_require_pose_match',
+        default_value='false',
+        description='Require startup /odom pose to match expected (usually false for robustness)'
+    )
+    odom_wait_position_tolerance_arg = DeclareLaunchArgument(
+        'odom_wait_position_tolerance',
+        default_value='0.25',
+        description='Position tolerance for startup /odom pose gate (meters)'
+    )
+    odom_wait_yaw_tolerance_arg = DeclareLaunchArgument(
+        'odom_wait_yaw_tolerance',
+        default_value='0.5',
+        description='Yaw tolerance for startup /odom pose gate (radians)'
+    )
     use_pixel_correction_arg = DeclareLaunchArgument(
         'use_pixel_correction',
         default_value='true',
@@ -343,6 +368,11 @@ def generate_launch_description():
         seed_arg,
         pixel_noise_arg,
         transform_noise_arg,
+        odom_wait_timeout_arg,
+        odom_wait_min_messages_arg,
+        odom_wait_require_pose_match_arg,
+        odom_wait_position_tolerance_arg,
+        odom_wait_yaw_tolerance_arg,
         use_pixel_correction_arg,
         pixel_timeout_arg,
         add_ambiguity_arg,

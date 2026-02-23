@@ -54,14 +54,24 @@ def _launch_setup(context, *args, **kwargs):
         output='screen',
         parameters=[{
             'use_sim_time': cfg['use_sim_time'],
+            'plan_rate': cfg['plan_rate'],
+            'horizon': cfg['horizon'],
+            'dt': cfg['dt'],
+            'control_weight': cfg['control_weight'],
             'use_pixel_correction': cfg['use_pixel_correction'],
             'pixel_timeout_s': cfg['pixel_timeout_s'],
+            'min_state_cov': cfg['min_state_cov'],
             'boundary_weight': cfg['boundary_weight'],
             'obs_mode': cfg['obs_mode'],
             'process_noise_xy': cfg['process_noise_xy'],
             'process_noise_theta': cfg['process_noise_theta'],
             'obs_noise_uv': cfg['obs_noise_uv'],
             'obs_noise_yaw': cfg['obs_noise_yaw'],
+            'goal_sigma_uv': cfg['goal_sigma_uv'],
+            'goal_sigma_yaw': cfg['goal_sigma_yaw'],
+            'risk_weight_state': cfg['risk_weight_state'],
+            'risk_weight_obs': cfg['risk_weight_obs'],
+            'ambiguity_weight': cfg['ambiguity_weight'],
             'optimizer_backend': cfg['optimizer_backend'],
             'optimizer_maxiter': cfg['optimizer_maxiter'],
             'optimizer_gtol': cfg['optimizer_gtol'],
@@ -73,13 +83,10 @@ def _launch_setup(context, *args, **kwargs):
 
     after_odom = []
     after_odom.extend(select_perception_nodes_for_mode(cfg, shared_nodes))
-    after_odom.extend([
-        shared_nodes['pixel_to_bev'],
-        shared_nodes['boundary_cost_node'],
-        agent_node,
-        shared_nodes['mission_node'],
-        shared_nodes['logger_node'],
-    ])
+    after_odom.append(shared_nodes['pixel_to_bev'])
+    if cfg['publish_static_costmap']:
+        after_odom.append(shared_nodes['boundary_cost_node'])
+    after_odom.extend([agent_node, shared_nodes['mission_node'], shared_nodes['logger_node']])
     if cfg['use_rviz']:
         after_odom.append(shared_nodes['rviz'])
 
@@ -158,6 +165,36 @@ def generate_launch_description():
     seed_arg = DeclareLaunchArgument('seed', default_value='0')
     pixel_noise_arg = DeclareLaunchArgument('pixel_noise_sigma', default_value='0.0')
     transform_noise_arg = DeclareLaunchArgument('transform_noise_sigma', default_value='0.0')
+    sensor_pixel_noise_arg = DeclareLaunchArgument(
+        'sensor_pixel_noise_sigma',
+        default_value='0.0',
+        description='Pixel noise std injected at homography measurement source (/perception/pixel_pose)'
+    )
+    odom_wait_timeout_arg = DeclareLaunchArgument(
+        'odom_wait_timeout_s',
+        default_value='25.0',
+        description='Timeout for startup /odom gate in seconds (0 disables timeout)'
+    )
+    odom_wait_min_messages_arg = DeclareLaunchArgument(
+        'odom_wait_min_messages',
+        default_value='1',
+        description='Number of /odom messages required to open startup gate'
+    )
+    odom_wait_require_pose_match_arg = DeclareLaunchArgument(
+        'odom_wait_require_pose_match',
+        default_value='false',
+        description='Require startup /odom pose to match expected (usually false for robustness)'
+    )
+    odom_wait_position_tolerance_arg = DeclareLaunchArgument(
+        'odom_wait_position_tolerance',
+        default_value='0.25',
+        description='Position tolerance for startup /odom pose gate (meters)'
+    )
+    odom_wait_yaw_tolerance_arg = DeclareLaunchArgument(
+        'odom_wait_yaw_tolerance',
+        default_value='0.5',
+        description='Yaw tolerance for startup /odom pose gate (radians)'
+    )
     use_pixel_correction_arg = DeclareLaunchArgument(
         'use_pixel_correction',
         default_value='true',
@@ -183,6 +220,11 @@ def generate_launch_description():
         'boundary_weight',
         default_value='1.0',
         description='Boundary/costmap penalty weight for EFE agent'
+    )
+    publish_static_costmap_arg = DeclareLaunchArgument(
+        'publish_static_costmap',
+        default_value='true',
+        description='Publish static /costmap from boundary_cost_node'
     )
     costmap_min_x_arg = DeclareLaunchArgument(
         'costmap_min_x',
@@ -238,6 +280,56 @@ def generate_launch_description():
         'obs_mode',
         default_value='uv',
         description="Observation mode for EFE: 'uv' or 'uvt'"
+    )
+    plan_rate_arg = DeclareLaunchArgument(
+        'plan_rate',
+        default_value='5.0',
+        description='Replanning rate in Hz'
+    )
+    horizon_arg = DeclareLaunchArgument(
+        'horizon',
+        default_value='10',
+        description='Planning horizon length in steps'
+    )
+    dt_arg = DeclareLaunchArgument(
+        'dt',
+        default_value='0.2',
+        description='Planner discretization step in seconds'
+    )
+    control_weight_arg = DeclareLaunchArgument(
+        'control_weight',
+        default_value='0.1',
+        description='Quadratic control penalty weight'
+    )
+    risk_weight_state_arg = DeclareLaunchArgument(
+        'risk_weight_state',
+        default_value='0.0',
+        description='State-space risk weight'
+    )
+    risk_weight_obs_arg = DeclareLaunchArgument(
+        'risk_weight_obs',
+        default_value='1.0',
+        description='Observation-space risk weight'
+    )
+    ambiguity_weight_arg = DeclareLaunchArgument(
+        'ambiguity_weight',
+        default_value='1.0',
+        description='Ambiguity term weight'
+    )
+    goal_sigma_uv_arg = DeclareLaunchArgument(
+        'goal_sigma_uv',
+        default_value='0.0',
+        description='Goal observation std in pixel u/v (0 means use obs_noise_uv)'
+    )
+    goal_sigma_yaw_arg = DeclareLaunchArgument(
+        'goal_sigma_yaw',
+        default_value='100.0',
+        description='Goal observation std for yaw (uvt mode); large values effectively disable yaw goal pressure'
+    )
+    min_state_cov_arg = DeclareLaunchArgument(
+        'min_state_cov',
+        default_value='1e-6',
+        description='Minimum diagonal covariance floor in planner belief'
     )
     process_noise_xy_arg = DeclareLaunchArgument(
         'process_noise_xy',
@@ -309,12 +401,19 @@ def generate_launch_description():
         seed_arg,
         pixel_noise_arg,
         transform_noise_arg,
+        sensor_pixel_noise_arg,
+        odom_wait_timeout_arg,
+        odom_wait_min_messages_arg,
+        odom_wait_require_pose_match_arg,
+        odom_wait_position_tolerance_arg,
+        odom_wait_yaw_tolerance_arg,
         use_pixel_correction_arg,
         pixel_timeout_arg,
         add_ambiguity_arg,
         use_ambiguity_arg,
         use_obs_risk_arg,
         boundary_weight_arg,
+        publish_static_costmap_arg,
         costmap_min_x_arg,
         costmap_max_x_arg,
         costmap_min_y_arg,
@@ -326,6 +425,16 @@ def generate_launch_description():
         costmap_obstacle_radius_arg,
         costmap_obstacle_value_arg,
         obs_mode_arg,
+        plan_rate_arg,
+        horizon_arg,
+        dt_arg,
+        control_weight_arg,
+        risk_weight_state_arg,
+        risk_weight_obs_arg,
+        ambiguity_weight_arg,
+        goal_sigma_uv_arg,
+        goal_sigma_yaw_arg,
+        min_state_cov_arg,
         process_noise_xy_arg,
         process_noise_theta_arg,
         obs_noise_uv_arg,
