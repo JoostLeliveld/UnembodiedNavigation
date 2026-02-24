@@ -6,8 +6,9 @@ Regimes:
 - B: homography observation with injected sensor pixel noise sweep
 - C: end-to-end ArUco observation (uvt) with fixed calibrated model noise
 
-This script is scoped to the paper's no-costmap, agent-mode study and uses the
-JAX optimizer backend only.
+This script is scoped to the paper's no-costmap, agent-mode study. It launches
+the paper wrapper `investigative_agent.launch.py`, which fixes JAX/no-costmap
+assumptions and exposes only study-facing arguments.
 """
 
 from __future__ import annotations
@@ -79,7 +80,7 @@ def _list_runs(log_root: pathlib.Path) -> set[pathlib.Path]:
 def _f(row: Dict[str, str], key: str, default: float = 0.0) -> float:
     try:
         return float(row.get(key, default) or default)
-    except Exception:
+    except (TypeError, ValueError):
         return float(default)
 
 
@@ -164,8 +165,6 @@ def _regime_specific_args(
             "perception_backend": "homography",
             "obs_mode": args.obs_mode_oracle,
             "use_pixel_correction": "false",
-            "pixel_noise_sigma": "0.0",
-            "transform_noise_sigma": "0.0",
             "sensor_pixel_noise_sigma": "0.0",
             "obs_noise_uv": f"{args.obs_noise_uv_model}",
             "obs_noise_yaw": f"{args.obs_noise_yaw_model}",
@@ -179,9 +178,7 @@ def _regime_specific_args(
             "perception_backend": "homography",
             "obs_mode": args.obs_mode_homography,
             "use_pixel_correction": "true",
-            # Keep state-node noise off; inject at measurement source for predict-correct loop.
-            "pixel_noise_sigma": "0.0",
-            "transform_noise_sigma": "0.0",
+            # Paper launch keeps state-node noise off; inject only at measurement source.
             "sensor_pixel_noise_sigma": f"{sigma_pix}",
             # Fixed model-noise assumption across sweep.
             "obs_noise_uv": f"{args.obs_noise_uv_model}",
@@ -194,8 +191,6 @@ def _regime_specific_args(
             "perception_backend": "aruco",
             "obs_mode": args.obs_mode_aruco,
             "use_pixel_correction": "true",
-            "pixel_noise_sigma": "0.0",
-            "transform_noise_sigma": "0.0",
             "sensor_pixel_noise_sigma": "0.0",
             "obs_noise_uv": f"{args.obs_noise_uv_model}",
             "obs_noise_yaw": f"{args.obs_noise_yaw_model}",
@@ -256,8 +251,9 @@ def main() -> int:
     parser.add_argument("--success-threshold", type=float, default=0.35)
 
     parser.add_argument("--dt", type=float, default=0.2)
-    parser.add_argument("--plan-rate", type=float, default=5.0)
-    parser.add_argument("--horizon", type=int, default=10)
+    # Defaults mirror `investigative_agent.launch.py` unless intentionally overridden.
+    parser.add_argument("--plan-rate", type=float, default=2.0)
+    parser.add_argument("--horizon", type=int, default=5)
     parser.add_argument("--control-weight", type=float, default=0.1)
     parser.add_argument("--risk-weight-state", type=float, default=0.0)
     parser.add_argument("--risk-weight-obs", type=float, default=1.0)
@@ -306,11 +302,10 @@ def main() -> int:
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     run_csv = log_root / f"investigative_{stamp}_runs.csv"
     agg_csv = log_root / f"investigative_{stamp}_aggregate.csv"
+    launch_file = "investigative_agent.launch.py"
 
     print(f"Running {len(combos)} runs...")
     records: List[Dict[str, object]] = []
-    study_optimizer_backend = "jax"
-
     for i, combo in enumerate(combos, start=1):
         regime = str(combo["regime"])
         task = str(combo["task"])
@@ -333,15 +328,13 @@ def main() -> int:
             f"mkdir -p {args.ros_log_dir} && "
             f"export ROS_LOG_DIR={args.ros_log_dir} && "
             "source install/setup.bash && "
-            f"timeout {args.timeout_s} ros2 launch experiments boundary_only_agent.launch.py "
+            f"timeout {args.timeout_s} ros2 launch experiments {launch_file} "
             f"world:={args.world} task:={task} planner:={planner} seed:={seed} "
             f"state_source:={regime_args['state_source']} "
             f"perception_backend:={regime_args['perception_backend']} "
             f"obs_mode:={regime_args['obs_mode']} "
             f"use_pixel_correction:={regime_args['use_pixel_correction']} "
             f"pixel_timeout_s:={args.pixel_timeout_s} "
-            f"pixel_noise_sigma:={regime_args['pixel_noise_sigma']} "
-            f"transform_noise_sigma:={regime_args['transform_noise_sigma']} "
             f"sensor_pixel_noise_sigma:={regime_args['sensor_pixel_noise_sigma']} "
             f"use_ambiguity:={use_ambiguity} use_obs_risk:={use_obs_risk} "
             f"plan_rate:={args.plan_rate} horizon:={args.horizon} dt:={args.dt} "
@@ -351,10 +344,9 @@ def main() -> int:
             f"goal_sigma_yaw:={args.goal_sigma_yaw} "
             f"process_noise_xy:={args.process_noise_xy} process_noise_theta:={args.process_noise_theta} "
             f"obs_noise_uv:={regime_args['obs_noise_uv']} obs_noise_yaw:={regime_args['obs_noise_yaw']} "
-            f"optimizer_backend:={study_optimizer_backend} optimizer_maxiter:={args.optimizer_maxiter} "
+            f"optimizer_maxiter:={args.optimizer_maxiter} "
             f"optimizer_gtol:={args.optimizer_gtol} optimizer_warm_start:={args.optimizer_warm_start} "
             f"min_state_cov:={regime_args['min_state_cov']} "
-            "boundary_weight:=0.0 publish_static_costmap:=false "
             f"aruco_dict:={args.aruco_dict} target_marker_id:={args.target_marker_id} "
             f"publish_yaw_from_marker:={args.publish_yaw_from_marker} "
             f"use_rviz:={args.use_rviz}"

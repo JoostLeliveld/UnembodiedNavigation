@@ -15,6 +15,53 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
+# Paper-facing defaults used by `investigative_agent.launch.py`.
+# Node-level defaults remain as development fallbacks; paper experiments should
+# be reproducible from launch arguments and manifests.
+PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
+    'planner': 'efe2',
+    'world': 'empty_notebook.world.sdf',
+    'task': 'M1_short_direct',
+    'state_source': 'oracle',
+    'perception_backend': 'homography',
+    'seed': '0',
+    'sensor_pixel_noise_sigma': '0.0',
+    'pixel_noise_sigma': '0.0',
+    'transform_noise_sigma': '0.0',
+    'odom_wait_timeout_s': '25.0',
+    'odom_wait_min_messages': '1',
+    'odom_wait_require_pose_match': 'false',
+    'use_pixel_correction': 'true',
+    'pixel_timeout_s': '0.5',
+    'pixel_correction_approx': 'AUTO',
+    'skip_stale_pixel_correction': 'true',
+    'min_state_cov': '1e-6',
+    'obs_mode': 'uv',
+    'plan_rate': '2.0',
+    'horizon': '5',
+    'dt': '0.2',
+    'control_weight': '0.1',
+    'risk_weight_state': '0.0',
+    'risk_weight_obs': '1.0',
+    'ambiguity_weight': '1.0',
+    'goal_sigma_uv': '0.0',
+    'goal_sigma_yaw': '100.0',
+    'use_ambiguity': 'true',
+    'use_obs_risk': 'true',
+    'process_noise_xy': '0.01',
+    'process_noise_theta': '0.02',
+    'obs_noise_uv': '2.0',
+    'obs_noise_yaw': '0.05',
+    'optimizer_maxiter': '50',
+    'optimizer_gtol': '1e-4',
+    'optimizer_warm_start': 'true',
+    'debug_runtime': 'false',
+    'aruco_dict': 'DICT_4X4_50',
+    'target_marker_id': '0',
+    'publish_yaw_from_marker': 'true',
+}
+
+
 def _as_bool(value: str) -> bool:
     return str(value).lower() == 'true'
 
@@ -48,8 +95,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'odom_wait_timeout_s': float(_launch_value(context, 'odom_wait_timeout_s', '25.0')),
         'odom_wait_min_messages': max(1, int(float(_launch_value(context, 'odom_wait_min_messages', '1')))),
         'odom_wait_require_pose_match': _as_bool(_launch_value(context, 'odom_wait_require_pose_match', 'false')),
-        'odom_wait_position_tolerance': float(_launch_value(context, 'odom_wait_position_tolerance', '0.25')),
-        'odom_wait_yaw_tolerance': float(_launch_value(context, 'odom_wait_yaw_tolerance', '0.5')),
+        # Keep startup pose-match tolerances fixed to reduce launch-surface clutter.
+        'odom_wait_position_tolerance': 0.25,
+        'odom_wait_yaw_tolerance': 0.5,
         'use_pixel_correction': _as_bool(LaunchConfiguration('use_pixel_correction').perform(context)),
         'pixel_timeout_s': float(LaunchConfiguration('pixel_timeout_s').perform(context)),
         'pixel_correction_approx': _launch_value(context, 'pixel_correction_approx', 'AUTO').strip().upper(),
@@ -88,9 +136,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'goal_sigma_yaw': float(_launch_value(context, 'goal_sigma_yaw', '0.0')),
         'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
         'debug_runtime': _as_bool(_launch_value(context, 'debug_runtime', 'false')),
-        'debug_log_period_s': float(_launch_value(context, 'debug_log_period_s', '1.0')),
-        'slow_plan_factor': float(_launch_value(context, 'slow_plan_factor', '1.0')),
-        'slow_correction_ms': float(_launch_value(context, 'slow_correction_ms', '20.0')),
         'use_rviz': _as_bool(LaunchConfiguration('use_rviz').perform(context)),
         'rviz_config': LaunchConfiguration('rviz_config').perform(context),
         'aruco_dict': LaunchConfiguration('aruco_dict').perform(context),

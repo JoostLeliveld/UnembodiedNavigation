@@ -17,6 +17,8 @@ class HomographySimNode(Node):
         super().__init__('homography_sim_node',
                          allow_undeclared_parameters=True,
                          automatically_declare_parameters_from_overrides=True)
+        # Keep permissive parameter handling for launch-time camera overrides.
+        # Research runs should still go through the experiment launches.
 
         def _as_bool(value):
             if isinstance(value, bool):

@@ -38,7 +38,7 @@ class PlanResult:
     optimizer_nit: int = 0
     optimizer_nfev: int = 0
     optimizer_message: str = ""
-    used_fallback: bool = False
+    used_fallback: bool = False  # legacy field kept for manifest/log compatibility
     solve_time_s: float = 0.0
 
 
@@ -254,35 +254,38 @@ class UnicyclePlannerBase:
         total_boundary = 0.0
 
         infeasible_penalty = 1e6
-        use_obs = self.use_obs_risk
-        use_amb = self.use_ambiguity
-        use_state = self.risk_weight_state > 0.0
+        use_observation_risk = self.use_obs_risk
+        use_ambiguity_term = self.use_ambiguity
+        use_state_risk = self.risk_weight_state > 0.0
 
         for t in range(self.horizon):
             u = controls[t]
             m, S = self.predict(m, S, u)
 
             mu_y = Sigma_y = Gamma = None
-            if use_obs or use_amb:
+            if use_observation_risk or use_ambiguity_term:
                 mu_y, Sigma_y, Gamma = self.approx_observation(m, S)
 
-            r_state = 0.0
-            if use_state:
-                r_state = risk(m, S, (goal_state, goal_cov))
-            r_obs = 0.0
-            if use_obs and mu_y is not None:
-                r_obs = risk(mu_y, Sigma_y, (goal_obs, goal_obs_cov))
+            state_risk = 0.0
+            if use_state_risk:
+                state_risk = risk(m, S, (goal_state, goal_cov))
+            observation_risk = 0.0
+            if use_observation_risk and mu_y is not None:
+                observation_risk = risk(mu_y, Sigma_y, (goal_obs, goal_obs_cov))
 
-            r = self.risk_weight_state * r_state + self.risk_weight_obs * r_obs
-            total_risk += r
+            risk_term = (
+                self.risk_weight_state * state_risk
+                + self.risk_weight_obs * observation_risk
+            )
+            total_risk += risk_term
 
-            a = 0.0
-            if use_amb and Sigma_y is not None:
-                a = self.ambiguity_weight * ambiguity(Sigma_y, Gamma, S)
-                total_amb += a
+            ambiguity_term = 0.0
+            if use_ambiguity_term and Sigma_y is not None:
+                ambiguity_term = self.ambiguity_weight * ambiguity(Sigma_y, Gamma, S)
+                total_amb += ambiguity_term
 
-            c = self.control_weight * float(u[0] ** 2 + u[1] ** 2)
-            total_control += c
+            control_term = self.control_weight * float(u[0] ** 2 + u[1] ** 2)
+            total_control += control_term
 
             if self.boundary_weight > 0.0:
                 cell_cost, in_bounds = self._cost_at_raw(costmap, m[0], m[1])
@@ -292,8 +295,8 @@ class UnicyclePlannerBase:
                     if return_metrics:
                         return total, (total_risk, total_amb, total_control, total_boundary)
                     return total
-                b = self.boundary_weight * (cell_cost / max(self.max_cost, 1.0))
-                total_boundary += b
+                boundary_term = self.boundary_weight * (cell_cost / max(self.max_cost, 1.0))
+                total_boundary += boundary_term
 
         total = total_risk + total_amb + total_control + total_boundary
         if return_metrics:
@@ -309,13 +312,13 @@ class UnicyclePlannerBase:
         goal_state = self._goal_state(goal_xy, goal_theta)
         goal_cov = self._goal_state_cov()
 
-        use_obs = self.use_obs_risk
-        use_amb = self.use_ambiguity
-        use_state = self.risk_weight_state > 0.0
+        use_observation_risk = self.use_obs_risk
+        use_ambiguity_term = self.use_ambiguity
+        use_state_risk = self.risk_weight_state > 0.0
 
         goal_obs = None
         goal_obs_cov = None
-        if use_obs or use_amb:
+        if use_observation_risk or use_ambiguity_term:
             goal_obs = self._goal_obs(goal_state)
             goal_obs_cov = self._goal_obs_cov()
 
@@ -389,9 +392,9 @@ class UnicyclePlannerBase:
                 cache_key = (
                     self.approx_method,
                     self.obs_mode,
-                    bool(use_amb),
-                    bool(use_obs),
-                    bool(use_state),
+                    bool(use_ambiguity_term),
+                    bool(use_observation_risk),
+                    bool(use_state_risk),
                     float(self.control_weight),
                     float(self.risk_weight_state),
                     float(self.risk_weight_obs),
@@ -425,9 +428,9 @@ class UnicyclePlannerBase:
                         params_j,
                         g_jax,
                         approx=self.approx_method,
-                        add_ambiguity=use_amb,
-                        use_obs_risk=use_obs,
-                        use_state_risk=use_state,
+                        add_ambiguity=use_ambiguity_term,
+                        use_obs_risk=use_observation_risk,
+                        use_state_risk=use_state_risk,
                         mode='rev',
                         jit=True,
                     )

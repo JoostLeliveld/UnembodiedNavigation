@@ -39,6 +39,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('use_pixel_correction', False)
         self.declare_parameter('boundary_weight', 0.0)
         self.declare_parameter('publish_static_costmap', True)
+        # Legacy manifest compatibility field (mirrors use_ambiguity in current launches).
         self.declare_parameter('add_ambiguity', False)
         self.declare_parameter('use_ambiguity', False)
         self.declare_parameter('use_obs_risk', True)
@@ -85,6 +86,7 @@ class ExperimentLogger(Node):
             'use_pixel_correction': self.use_pixel_correction,
             'boundary_weight': self.boundary_weight,
             'publish_static_costmap': self.publish_static_costmap,
+            # Keep the legacy field for older analysis scripts.
             'add_ambiguity': self.add_ambiguity,
             'use_ambiguity': self.use_ambiguity,
             'use_obs_risk': self.use_obs_risk,

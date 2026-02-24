@@ -5,7 +5,6 @@ from launch.substitutions import PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch.event_handlers import OnProcessExit
 
-
 def _launch_setup(context, *args, **kwargs):
     from experiments.core.boundary_launch_common import (
         parse_common_launch_config,
@@ -216,16 +215,6 @@ def generate_launch_description():
         default_value='false',
         description='Require startup /odom pose to match expected (usually false for robustness)'
     )
-    odom_wait_position_tolerance_arg = DeclareLaunchArgument(
-        'odom_wait_position_tolerance',
-        default_value='0.25',
-        description='Position tolerance for startup /odom pose gate (meters)'
-    )
-    odom_wait_yaw_tolerance_arg = DeclareLaunchArgument(
-        'odom_wait_yaw_tolerance',
-        default_value='0.5',
-        description='Yaw tolerance for startup /odom pose gate (radians)'
-    )
     use_pixel_correction_arg = DeclareLaunchArgument(
         'use_pixel_correction',
         default_value='true',
@@ -376,8 +365,6 @@ def generate_launch_description():
         odom_wait_timeout_arg,
         odom_wait_min_messages_arg,
         odom_wait_require_pose_match_arg,
-        odom_wait_position_tolerance_arg,
-        odom_wait_yaw_tolerance_arg,
         use_pixel_correction_arg,
         pixel_timeout_arg,
         use_ambiguity_arg,

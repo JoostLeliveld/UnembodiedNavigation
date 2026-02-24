@@ -144,6 +144,7 @@ class PixelToBevStateNode(Node):
         self.declare_parameter('img_height', 720)
         self.declare_parameter('fov_h_rad', 1.5708)
 
+        # This node keeps simple local defaults; paper runs set values in launch.
         self.state_source = self.get_parameter('state_source').value
         self.frame_id = self.get_parameter('frame_id').value
         self.pixel_noise_sigma = float(self.get_parameter('pixel_noise_sigma').value)

@@ -48,6 +48,9 @@ class UnicyclePlannerNode(Node):
                 return value.strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on')
             return bool(value)
 
+        # Development fallback defaults. Paper-study defaults are set in launch.
+        # Keep these generic and safe so the node is still usable standalone.
+
         # Planner params
         _declare_if_not('plan_rate', 1.0)
         _declare_if_not('horizon', 10)
@@ -97,10 +100,10 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('pixel_correction_approx', 'ET1')
         _declare_if_not('skip_stale_pixel_correction', True)
         _declare_if_not('min_state_cov', 1e-6)
-        _declare_if_not('debug_runtime', True)
-        _declare_if_not('debug_log_period_s', 2.0)
-        _declare_if_not('slow_plan_factor', 0.8)
-        _declare_if_not('slow_correction_ms', 10.0)
+        _declare_if_not('debug_runtime', False)
+        _declare_if_not('debug_log_period_s', 1.0)
+        _declare_if_not('slow_plan_factor', 1.0)
+        _declare_if_not('slow_correction_ms', 20.0)
 
         # Camera model params (must match sim)
         _declare_if_not('cam_pos', [-3.0, -3.0, 6.0])
@@ -257,7 +260,6 @@ class UnicyclePlannerNode(Node):
         self._last_stale_log = 0.0
         self._last_shape_mismatch_log = 0.0
         self._last_missing_costmap_log = 0.0
-        self._last_frame_mismatch_log = 0.0
         self._last_runtime_log = 0.0
         self._last_slow_plan_log = 0.0
         self._last_slow_correction_log = 0.0
@@ -606,14 +608,12 @@ class UnicyclePlannerNode(Node):
         costmap_frame = (costmap_ref.frame_id or '').strip() if costmap_ref is not None else ''
         now_wall = time.monotonic()
         if goal_frame and state_frame and goal_frame != state_frame:
-            self._last_frame_mismatch_log = now_wall
             self._fatal_experiment_stop(
                 "Frame mismatch between /goal_bev and /state/bev "
                 f"(goal='{goal_frame}', state='{state_frame}')"
             )
             return
         if self._costmap_required and goal_frame and costmap_frame and goal_frame != costmap_frame:
-            self._last_frame_mismatch_log = now_wall
             self._fatal_experiment_stop(
                 "Frame mismatch between /goal_bev and /costmap "
                 f"(goal='{goal_frame}', costmap='{costmap_frame}')"
