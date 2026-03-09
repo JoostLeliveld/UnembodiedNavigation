@@ -35,6 +35,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('planner', '')
         self.declare_parameter('state_source', '')
         self.declare_parameter('perception_backend', '')
+        self.declare_parameter('obs_model', '')
         self.declare_parameter('obs_mode', '')
         self.declare_parameter('use_pixel_correction', False)
         self.declare_parameter('boundary_weight', 0.0)
@@ -47,6 +48,10 @@ class ExperimentLogger(Node):
         self.declare_parameter('transform_noise_sigma', 0.0)
         self.declare_parameter('world_profiles_path', '')
         self.declare_parameter('tasks_yaml', '')
+        self.declare_parameter('log_plan_samples', True)
+        self.declare_parameter('auto_stop_on_goal', False)
+        self.declare_parameter('goal_success_radius', 0.35)
+        self.declare_parameter('goal_success_hold_s', 2.0)
 
         log_dir = self.get_parameter('log_dir').value
         self.seed = int(self.get_parameter('seed').value)
@@ -55,6 +60,7 @@ class ExperimentLogger(Node):
         self.planner = self.get_parameter('planner').value
         self.state_source = self.get_parameter('state_source').value
         self.perception_backend = self.get_parameter('perception_backend').value
+        self.obs_model = self.get_parameter('obs_model').value
         self.obs_mode = self.get_parameter('obs_mode').value
         self.use_pixel_correction = bool(self.get_parameter('use_pixel_correction').value)
         self.boundary_weight = float(self.get_parameter('boundary_weight').value)
@@ -66,6 +72,10 @@ class ExperimentLogger(Node):
         self.transform_noise_sigma = float(self.get_parameter('transform_noise_sigma').value)
         self.world_profiles_path = self.get_parameter('world_profiles_path').value
         self.tasks_yaml = self.get_parameter('tasks_yaml').value
+        self.log_plan_samples = bool(self.get_parameter('log_plan_samples').value)
+        self.auto_stop_on_goal = bool(self.get_parameter('auto_stop_on_goal').value)
+        self.goal_success_radius = float(self.get_parameter('goal_success_radius').value)
+        self.goal_success_hold_s = float(self.get_parameter('goal_success_hold_s').value)
 
         run_info = create_run_dir(log_dir)
         self.run_id = run_info['run_id']
@@ -82,6 +92,7 @@ class ExperimentLogger(Node):
             'planner': self.planner,
             'state_source': self.state_source,
             'perception_backend': self.perception_backend,
+            'obs_model': self.obs_model,
             'obs_mode': self.obs_mode,
             'use_pixel_correction': self.use_pixel_correction,
             'boundary_weight': self.boundary_weight,
@@ -102,6 +113,8 @@ class ExperimentLogger(Node):
         self.goal_msg = None
         self.plan_msg = None
         self.efe_metrics = None
+        self._goal_in_radius_since = None
+        self._stop_requested = False
 
         self.create_subscription(PoseWithCovarianceStamped, '/state/bev', self._state_cb, 10)
         self.create_subscription(Twist, '/cmd_vel', self._cmd_cb, 10)
@@ -121,9 +134,22 @@ class ExperimentLogger(Node):
             'seed'
         ])
 
+        self.plan_file = None
+        self.plan_writer = None
+        if self.log_plan_samples:
+            self.plan_log_path = os.path.join(self.run_dir, 'plan_samples.csv')
+            self.plan_file = open(self.plan_log_path, 'w', newline='')
+            self.plan_writer = csv.writer(self.plan_file)
+            self.plan_writer.writerow(['plan_stamp', 'point_idx', 'x', 'y'])
+
         rate = float(self.get_parameter('log_rate').value)
         self.create_timer(1.0 / max(rate, 0.1), self._log_once)
         self.get_logger().info(f'Experiment logger writing to {self.log_path}')
+        if self.auto_stop_on_goal:
+            self.get_logger().info(
+                f"Auto-stop enabled: goal radius <= {self.goal_success_radius:.3f} m "
+                f"for {self.goal_success_hold_s:.2f} s"
+            )
 
     def _state_cb(self, msg: PoseWithCovarianceStamped):
         self.state_msg = msg
@@ -136,6 +162,15 @@ class ExperimentLogger(Node):
 
     def _plan_cb(self, msg: Path):
         self.plan_msg = msg
+        if self.plan_writer is None:
+            return
+        if not msg.poses:
+            return
+        plan_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        for i, pose_stamped in enumerate(msg.poses):
+            p = pose_stamped.pose.position
+            self.plan_writer.writerow([plan_stamp, i, p.x, p.y])
+        self.plan_file.flush()
 
     def _efe_cb(self, msg: Float64MultiArray):
         self.efe_metrics = msg
@@ -202,9 +237,29 @@ class ExperimentLogger(Node):
         ])
         self.file.flush()
 
+        if self.auto_stop_on_goal and self.goal_msg and not self._stop_requested:
+            if goal_dist <= self.goal_success_radius:
+                if self._goal_in_radius_since is None:
+                    self._goal_in_radius_since = stamp
+                held_s = float(stamp - self._goal_in_radius_since)
+                if held_s >= self.goal_success_hold_s:
+                    self._stop_requested = True
+                    if self.plan_file is not None:
+                        self.plan_file.flush()
+                    self.get_logger().info(
+                        f"Goal reached (dist={goal_dist:.3f} m <= {self.goal_success_radius:.3f} m) "
+                        f"and held for {held_s:.2f} s. Ending run."
+                    )
+                    rclpy.shutdown()
+                    return
+            else:
+                self._goal_in_radius_since = None
+
     def destroy_node(self):
         try:
             self.file.close()
+            if self.plan_file is not None:
+                self.plan_file.close()
         finally:
             super().destroy_node()
 

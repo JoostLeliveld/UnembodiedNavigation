@@ -253,38 +253,6 @@ def ET2(m, S, g, addmatrix=None, forceHermitian=False, eps=1e-4):
     return mE, SE, CE
 
 
-def ambiguity(Sigma, Gamma, S):
-    S_inv = np.linalg.inv(S)
-    Sigma_cond = Sigma - Gamma.T @ S_inv @ Gamma
-    Sigma_cond = _ensure_psd(Sigma_cond)
-    sign, logdet = np.linalg.slogdet(Sigma_cond)
-    if sign <= 0:
-        logdet = np.log(np.maximum(np.linalg.det(Sigma_cond), 1e-12))
-    d = Sigma_cond.shape[0]
-    return 0.5 * (d * np.log(2 * np.pi * np.e) + logdet)
-
-
-def risk(mu, Sigma, goal):
-    m_star, S_star = goal
-    mu = np.asarray(mu, dtype=float)
-    Sigma = np.asarray(Sigma, dtype=float)
-    m_star = np.asarray(m_star, dtype=float)
-    S_star = np.asarray(S_star, dtype=float)
-
-    d = mu.size
-    S_inv = np.linalg.inv(S_star)
-    diff = (m_star - mu).reshape(-1, 1)
-
-    sign_s, logdet_s = np.linalg.slogdet(Sigma)
-    sign_t, logdet_t = np.linalg.slogdet(S_star)
-    if sign_s <= 0:
-        logdet_s = np.log(np.maximum(np.linalg.det(Sigma), 1e-12))
-    if sign_t <= 0:
-        logdet_t = np.log(np.maximum(np.linalg.det(S_star), 1e-12))
-
-    term_trace = np.trace(S_inv @ Sigma)
-    term_quad = float(diff.T @ S_inv @ diff)
-    return 0.5 * (term_trace + term_quad - d + (logdet_t - logdet_s))
 
 
 class EFEAgent:

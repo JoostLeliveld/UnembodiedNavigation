@@ -1,0 +1,1 @@
+stamp,x,y,yaw,cov_x,cov_y,cov_yaw,cmd_v,cmd_w,goal_x,goal_y,goal_dist,plan_points,plan_length,efe_total,efe_risk,efe_ambiguity,efe_control,efe_boundary,seed

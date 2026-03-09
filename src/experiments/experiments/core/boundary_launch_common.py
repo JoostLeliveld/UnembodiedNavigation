@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -59,6 +59,9 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'aruco_dict': 'DICT_4X4_50',
     'target_marker_id': '0',
     'publish_yaw_from_marker': 'true',
+    'auto_stop_on_goal': 'true',
+    'goal_success_radius': '0.35',
+    'goal_success_hold_s': '2.0',
 }
 
 
@@ -106,6 +109,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'use_obs_risk': _as_bool(LaunchConfiguration('use_obs_risk').perform(context)),
         'boundary_weight': float(LaunchConfiguration('boundary_weight').perform(context)),
         'publish_static_costmap': _as_bool(_launch_value(context, 'publish_static_costmap', 'true')),
+        'auto_stop_on_goal': _as_bool(_launch_value(context, 'auto_stop_on_goal', 'false')),
+        'goal_success_radius': float(_launch_value(context, 'goal_success_radius', '0.35')),
+        'goal_success_hold_s': float(_launch_value(context, 'goal_success_hold_s', '2.0')),
         'costmap_min_x': float(LaunchConfiguration('costmap_min_x').perform(context)),
         'costmap_max_x': float(LaunchConfiguration('costmap_max_x').perform(context)),
         'costmap_min_y': float(LaunchConfiguration('costmap_min_y').perform(context)),
@@ -147,6 +153,8 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         raise RuntimeError("state_source must be 'oracle' or 'pixel'")
     if cfg['perception_backend'] not in ('homography', 'aruco'):
         raise RuntimeError("perception_backend must be 'homography' or 'aruco'")
+    if cfg['state_source'] == 'pixel' and cfg['perception_backend'] not in ('homography', 'aruco'):
+        raise RuntimeError("state_source='pixel' requires perception_backend 'homography' or 'aruco'")
     return cfg
 
 
@@ -363,6 +371,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         executable='experiment_logger',
         name='experiment_logger',
         output='screen',
+        on_exit=[Shutdown(reason='experiment_logger exited')],
         parameters=[{
             'use_sim_time': cfg['use_sim_time'],
             'seed': cfg['seed'],
@@ -371,6 +380,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'planner': cfg['planner'],
             'state_source': cfg['state_source'],
             'perception_backend': cfg['perception_backend'],
+            'obs_model': 'camera',
             'obs_mode': cfg['obs_mode'],
             'use_pixel_correction': cfg['use_pixel_correction'],
             'boundary_weight': cfg['boundary_weight'],
@@ -383,6 +393,9 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'transform_noise_sigma': cfg['transform_noise_sigma'],
             'world_profiles_path': cfg['world_profiles_path'],
             'tasks_yaml': cfg['tasks_yaml'],
+            'auto_stop_on_goal': cfg['auto_stop_on_goal'],
+            'goal_success_radius': cfg['goal_success_radius'],
+            'goal_success_hold_s': cfg['goal_success_hold_s'],
         }],
     )
 
@@ -411,8 +424,8 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
 
 def select_perception_nodes_for_mode(cfg: Dict[str, object], shared: Dict[str, object]) -> List[object]:
     """Return the perception nodes needed before the core pipeline starts."""
-    if cfg['state_source'] != 'pixel':
-        return []
-    if cfg['perception_backend'] == 'homography':
-        return [shared['homography_sim']]
-    return [shared['aruco_detector']]
+    if cfg['state_source'] == 'pixel':
+        if cfg['perception_backend'] == 'homography':
+            return [shared['homography_sim']]
+        return [shared['aruco_detector']]
+    return []

@@ -67,7 +67,7 @@ def generate_launch_description():
     perception_backend_arg = DeclareLaunchArgument(
         'perception_backend',
         default_value=defaults['perception_backend'],
-        description='Perception backend in pixel mode: homography | aruco'
+        description='Perception backend: homography | aruco'
     )
     seed_arg = DeclareLaunchArgument('seed', default_value=defaults['seed'])
 
@@ -130,6 +130,21 @@ def generate_launch_description():
         default_value=defaults['debug_runtime'],
         description='Enable runtime debug logs from planner node'
     )
+    auto_stop_on_goal_arg = DeclareLaunchArgument(
+        'auto_stop_on_goal',
+        default_value=defaults['auto_stop_on_goal'],
+        description='End the run automatically when goal distance stays below threshold'
+    )
+    goal_success_radius_arg = DeclareLaunchArgument(
+        'goal_success_radius',
+        default_value=defaults['goal_success_radius'],
+        description='Goal distance threshold [m] for automatic run stop'
+    )
+    goal_success_hold_s_arg = DeclareLaunchArgument(
+        'goal_success_hold_s',
+        default_value=defaults['goal_success_hold_s'],
+        description='Required hold time [s] inside goal radius before stopping'
+    )
 
     aruco_dict_arg = DeclareLaunchArgument('aruco_dict', default_value=defaults['aruco_dict'])
     target_marker_id_arg = DeclareLaunchArgument('target_marker_id', default_value=defaults['target_marker_id'])
@@ -178,6 +193,9 @@ def generate_launch_description():
         'optimizer_gtol': LaunchConfiguration('optimizer_gtol'),
         'optimizer_warm_start': LaunchConfiguration('optimizer_warm_start'),
         'debug_runtime': LaunchConfiguration('debug_runtime'),
+        'auto_stop_on_goal': LaunchConfiguration('auto_stop_on_goal'),
+        'goal_success_radius': LaunchConfiguration('goal_success_radius'),
+        'goal_success_hold_s': LaunchConfiguration('goal_success_hold_s'),
         'aruco_dict': LaunchConfiguration('aruco_dict'),
         'target_marker_id': LaunchConfiguration('target_marker_id'),
         'publish_yaw_from_marker': LaunchConfiguration('publish_yaw_from_marker'),
@@ -232,6 +250,9 @@ def generate_launch_description():
         optimizer_gtol_arg,
         optimizer_warm_start_arg,
         debug_runtime_arg,
+        auto_stop_on_goal_arg,
+        goal_success_radius_arg,
+        goal_success_hold_s_arg,
         aruco_dict_arg,
         target_marker_id_arg,
         publish_yaw_from_marker_arg,

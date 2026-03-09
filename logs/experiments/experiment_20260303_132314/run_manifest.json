@@ -1,0 +1,21 @@
+{
+  "add_ambiguity": true,
+  "boundary_weight": 0.0,
+  "git_sha": "ab009bc1cb93cd9d0e3b2bf3da098510c64b530c",
+  "obs_mode": "uv",
+  "obs_model": "ir_range_bearing",
+  "perception_backend": "ir_beacon",
+  "pixel_noise_sigma": 0.0,
+  "planner": "efe1",
+  "publish_static_costmap": false,
+  "run_id": "experiment_20260303_132314",
+  "seed": 0,
+  "state_source": "ir",
+  "task": "M1_short_direct",
+  "timestamp": "2026-03-03T13:23:14.642655",
+  "transform_noise_sigma": 0.0,
+  "use_ambiguity": true,
+  "use_obs_risk": true,
+  "use_pixel_correction": false,
+  "world": "empty_notebook.world.sdf"
+}

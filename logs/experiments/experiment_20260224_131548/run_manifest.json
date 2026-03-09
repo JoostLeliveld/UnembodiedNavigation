@@ -1,0 +1,20 @@
+{
+  "add_ambiguity": true,
+  "boundary_weight": 0.0,
+  "git_sha": "f25022baa85b2afb69f3f4ec597ed836af232d1a",
+  "obs_mode": "uv",
+  "perception_backend": "homography",
+  "pixel_noise_sigma": 0.0,
+  "planner": "efe2",
+  "publish_static_costmap": false,
+  "run_id": "experiment_20260224_131548",
+  "seed": 0,
+  "state_source": "pixel",
+  "task": "M3_projective_stress",
+  "timestamp": "2026-02-24T13:15:48.362399",
+  "transform_noise_sigma": 0.0,
+  "use_ambiguity": true,
+  "use_obs_risk": true,
+  "use_pixel_correction": true,
+  "world": "empty_notebook.world.sdf"
+}
