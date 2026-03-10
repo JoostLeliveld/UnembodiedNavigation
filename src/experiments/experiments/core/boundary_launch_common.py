@@ -74,6 +74,10 @@ def _launch_value(context, name: str, default_value: str) -> str:
     return LaunchConfiguration(name, default=default_value).perform(context)
 
 
+def _is_occlusion_world(world_file: str) -> bool:
+    return str(world_file).startswith('arena10_occ_')
+
+
 def _require_task_field(task, key):
     if key not in task:
         raise RuntimeError(f"Task is missing '{key}' field")
@@ -155,6 +159,14 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         raise RuntimeError("perception_backend must be 'homography' or 'aruco'")
     if cfg['state_source'] == 'pixel' and cfg['perception_backend'] not in ('homography', 'aruco'):
         raise RuntimeError("state_source='pixel' requires perception_backend 'homography' or 'aruco'")
+
+    # Occlusion benchmark worlds are visual-only stress tests; force-disable
+    # obstacle-costmap behavior so agents don't treat this as obstacle avoidance.
+    if _is_occlusion_world(str(cfg['world'])):
+        cfg['boundary_weight'] = 0.0
+        cfg['publish_static_costmap'] = False
+        cfg['costmap_obstacle_enabled'] = False
+
     return cfg
 
 

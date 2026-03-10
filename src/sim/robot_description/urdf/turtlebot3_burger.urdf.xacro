@@ -12,6 +12,8 @@
   <material name="black"><color rgba="0 0 0 1"/></material>
   <material name="dark"><color rgba="0.3 0.3 0.3 1"/></material>
   <material name="light_black"><color rgba="0.4 0.4 0.4 1"/></material>
+  <material name="front_red"><color rgba="0.98 0.08 0.08 1.0"/></material>
+  <material name="rear_blue"><color rgba="0.05 0.20 0.98 1.0"/></material>
 
   <!-- ===================== -->
   <!-- Base -->
@@ -32,6 +34,22 @@
               scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="light_black"/>
+    </visual>
+
+    <!-- High-contrast orientation panels for external camera tracking -->
+    <visual>
+      <origin xyz="0.075 0.000 0.162"/>
+      <geometry>
+        <box size="0.120 0.110 0.018"/>
+      </geometry>
+      <material name="front_red"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.085 0.000 0.162"/>
+      <geometry>
+        <box size="0.100 0.110 0.018"/>
+      </geometry>
+      <material name="rear_blue"/>
     </visual>
 
     <collision>
@@ -164,42 +182,6 @@
     </inertial>
   </link>
 
-  <!-- ===================== -->
-  <!-- Fiducial Marker       -->
-  <!-- ===================== -->
-  <!--
-    Top-mounted ArUco marker for external camera detection.
-    The plane faces +Z so overhead/oblique external cameras can detect it.
-  -->
-  <joint name="${ns}aruco_marker_joint" type="fixed">
-    <parent link="${ns}base_link"/>
-    <child link="${ns}aruco_marker_link"/>
-    <origin xyz="0.020 0.000 0.215" rpy="0 0 0"/>
-  </joint>
-
-  <link name="${ns}aruco_marker_link">
-    <visual>
-      <geometry>
-        <mesh filename="package://sim/robot_description/meshes/aruco/aruco_4x4_50_id0.dae"
-              scale="0.50 0.50 1.0"/>
-      </geometry>
-    </visual>
-
-    <collision>
-      <geometry>
-        <box size="0.50 0.50 0.001"/>
-      </geometry>
-    </collision>
-
-    <inertial>
-      <mass value="0.001"/>
-      <origin xyz="0 0 0"/>
-      <inertia
-        ixx="1e-7" ixy="0.0" ixz="0.0"
-        iyy="1e-7" iyz="0.0"
-        izz="1e-7"/>
-    </inertial>
-  </link>
     <!-- ============================================================= -->
     <!-- Gazebo Sensor Plugins -->
     <xacro:if value="$(arg use_lidar)">

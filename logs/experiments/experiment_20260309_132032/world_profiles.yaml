@@ -40,15 +40,3 @@ worlds:
     world_name: arena10
     spawn: {x: -4.2, y: -3.5, z: 0.05, yaw: 0.0}
     planner_default: efe2
-  arena10_occ_light.world.sdf:
-    world_name: arena10_occ_light
-    spawn: {x: -4.2, y: -3.5, z: 0.05, yaw: 0.0}
-    planner_default: efe2
-  arena10_occ_medium.world.sdf:
-    world_name: arena10_occ_medium
-    spawn: {x: -4.2, y: -3.5, z: 0.05, yaw: 0.0}
-    planner_default: efe2
-  arena10_occ_heavy.world.sdf:
-    world_name: arena10_occ_heavy
-    spawn: {x: -4.2, y: -3.5, z: 0.05, yaw: 0.0}
-    planner_default: efe2

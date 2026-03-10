@@ -1,0 +1,21 @@
+{
+  "add_ambiguity": true,
+  "boundary_weight": 0.0,
+  "git_sha": "9736d1279d4fc70948438fa2eaa26e12fd08560e",
+  "obs_mode": "uv",
+  "obs_model": "camera",
+  "perception_backend": "color",
+  "pixel_noise_sigma": 0.0,
+  "planner": "mpc",
+  "publish_static_costmap": false,
+  "run_id": "experiment_20260309_131920",
+  "seed": 0,
+  "state_source": "pixel",
+  "task": "M1_short_direct",
+  "timestamp": "2026-03-09T13:19:20.098155",
+  "transform_noise_sigma": 0.0,
+  "use_ambiguity": true,
+  "use_obs_risk": true,
+  "use_pixel_correction": true,
+  "world": "empty_notebook.world.sdf"
+}

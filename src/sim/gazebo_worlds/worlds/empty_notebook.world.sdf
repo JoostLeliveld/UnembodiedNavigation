@@ -84,7 +84,7 @@
     <!-- Notebook-style oblique camera setup -->
     <include>
       <uri>model://external_camera</uri>
-      <pose>-3 -3 3.0 0 0.2596 0.7854</pose>
+      <pose>-3 -3 3.0 0 0.596 0.7854</pose>
     </include>
 
     <!-- ===================== -->
