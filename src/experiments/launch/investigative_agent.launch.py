@@ -103,6 +103,23 @@ def generate_launch_description():
     risk_weight_state_arg = DeclareLaunchArgument('risk_weight_state', default_value=defaults['risk_weight_state'])
     risk_weight_obs_arg = DeclareLaunchArgument('risk_weight_obs', default_value=defaults['risk_weight_obs'])
     ambiguity_weight_arg = DeclareLaunchArgument('ambiguity_weight', default_value=defaults['ambiguity_weight'])
+    use_visibility_model_arg = DeclareLaunchArgument(
+        'use_visibility_model',
+        default_value='true',
+        description='Enable fixed GP visibility model in planner objective/correction'
+    )
+    visibility_weight_arg = DeclareLaunchArgument(
+        'visibility_weight',
+        default_value='4.0',
+        description='Visibility penalty weight w_vis*(1-p_vis)'
+    )
+    visibility_occ_center_x_arg = DeclareLaunchArgument('visibility_occ_center_x', default_value='-1.2')
+    visibility_occ_center_y_arg = DeclareLaunchArgument('visibility_occ_center_y', default_value='-1.8')
+    visibility_occ_radius_arg = DeclareLaunchArgument('visibility_occ_radius', default_value='0.9')
+    visibility_occ_tau_arg = DeclareLaunchArgument('visibility_occ_tau', default_value='0.15')
+    visibility_gp_length_scale_arg = DeclareLaunchArgument('visibility_gp_length_scale', default_value='1.4')
+    visibility_gp_noise_var_arg = DeclareLaunchArgument('visibility_gp_noise_var', default_value='0.15')
+    visibility_gp_seed_arg = DeclareLaunchArgument('visibility_gp_seed', default_value=defaults['seed'])
     goal_sigma_uv_arg = DeclareLaunchArgument('goal_sigma_uv', default_value=defaults['goal_sigma_uv'])
     goal_sigma_yaw_arg = DeclareLaunchArgument('goal_sigma_yaw', default_value=defaults['goal_sigma_yaw'])
     use_ambiguity_arg = DeclareLaunchArgument(
@@ -181,6 +198,15 @@ def generate_launch_description():
         'risk_weight_state': LaunchConfiguration('risk_weight_state'),
         'risk_weight_obs': LaunchConfiguration('risk_weight_obs'),
         'ambiguity_weight': LaunchConfiguration('ambiguity_weight'),
+        'use_visibility_model': LaunchConfiguration('use_visibility_model'),
+        'visibility_weight': LaunchConfiguration('visibility_weight'),
+        'visibility_occ_center_x': LaunchConfiguration('visibility_occ_center_x'),
+        'visibility_occ_center_y': LaunchConfiguration('visibility_occ_center_y'),
+        'visibility_occ_radius': LaunchConfiguration('visibility_occ_radius'),
+        'visibility_occ_tau': LaunchConfiguration('visibility_occ_tau'),
+        'visibility_gp_length_scale': LaunchConfiguration('visibility_gp_length_scale'),
+        'visibility_gp_noise_var': LaunchConfiguration('visibility_gp_noise_var'),
+        'visibility_gp_seed': LaunchConfiguration('visibility_gp_seed'),
         'goal_sigma_uv': LaunchConfiguration('goal_sigma_uv'),
         'goal_sigma_yaw': LaunchConfiguration('goal_sigma_yaw'),
         'use_ambiguity': LaunchConfiguration('use_ambiguity'),
@@ -238,6 +264,15 @@ def generate_launch_description():
         risk_weight_state_arg,
         risk_weight_obs_arg,
         ambiguity_weight_arg,
+        use_visibility_model_arg,
+        visibility_weight_arg,
+        visibility_occ_center_x_arg,
+        visibility_occ_center_y_arg,
+        visibility_occ_radius_arg,
+        visibility_occ_tau_arg,
+        visibility_gp_length_scale_arg,
+        visibility_gp_noise_var_arg,
+        visibility_gp_seed_arg,
         goal_sigma_uv_arg,
         goal_sigma_yaw_arg,
         use_ambiguity_arg,

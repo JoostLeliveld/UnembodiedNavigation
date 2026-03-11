@@ -1,0 +1,54 @@
+camera_intrinsics:
+  img_width: 1280
+  img_height: 720
+  fov_h_rad: 1.5708
+
+worlds:
+  empty.world.sdf:
+    world_name: empty
+    spawn: {x: 0.0, y: 0.0, z: 0.05, yaw: 0.0}
+    planner_default: astar
+  empty_notebook.world.sdf:
+    world_name: empty_notebook
+    spawn: {x: 0.0, y: 0.0, z: 0.05, yaw: 0.0}
+    planner_default: astar
+    camera_intrinsics:
+      img_width: 1920
+      img_height: 1080
+      fov_h_rad: 2.09439510239
+  empty_notebook_steep.world.sdf:
+    world_name: empty_notebook_steep
+    spawn: {x: 0.0, y: 0.0, z: 0.05, yaw: 0.0}
+    planner_default: astar
+    camera_intrinsics:
+      img_width: 1920
+      img_height: 1080
+      fov_h_rad: 2.09439510239
+  empty_notebook_grazing.world.sdf:
+    world_name: empty_notebook_grazing
+    spawn: {x: 0.0, y: 0.0, z: 0.05, yaw: 0.0}
+    planner_default: astar
+    camera_intrinsics:
+      img_width: 1920
+      img_height: 1080
+      fov_h_rad: 2.09439510239
+  stage2.world.sdf:
+    world_name: stage2
+    spawn: {x: 0.0, y: 0.0, z: 0.05, yaw: 0.0}
+    planner_default: astar
+  arena10.world.sdf:
+    world_name: arena10
+    spawn: {x: -4.2, y: -3.5, z: 0.05, yaw: 0.0}
+    planner_default: efe2
+  arena10_occ_light.world.sdf:
+    world_name: arena10_occ_light
+    spawn: {x: -4.2, y: -3.5, z: 0.05, yaw: 0.0}
+    planner_default: efe2
+  arena10_occ_medium.world.sdf:
+    world_name: arena10_occ_medium
+    spawn: {x: -4.2, y: -3.5, z: 0.05, yaw: 0.0}
+    planner_default: efe2
+  arena10_occ_heavy.world.sdf:
+    world_name: arena10_occ_heavy
+    spawn: {x: -4.2, y: -3.5, z: 0.05, yaw: 0.0}
+    planner_default: efe2

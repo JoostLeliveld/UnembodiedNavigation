@@ -30,6 +30,9 @@ def load_world_profiles(path: str) -> Dict[str, Any]:
         local_intrinsics = profile.get("camera_intrinsics")
         if local_intrinsics is not None:
             _validate_intrinsics(local_intrinsics)
+        visibility_defaults = profile.get("visibility_defaults")
+        if visibility_defaults is not None:
+            _validate_visibility_defaults(visibility_defaults)
     return {"camera_intrinsics": intrinsics, "worlds": worlds}
 
 
@@ -136,6 +139,28 @@ def _validate_intrinsics(intrinsics: Dict[str, Any]) -> None:
         if key not in intrinsics:
             raise RuntimeError(f"camera_intrinsics missing '{key}'")
         _ensure_number(intrinsics[key], f"camera_intrinsics.{key}")
+
+
+def _validate_visibility_defaults(visibility_defaults: Dict[str, Any]) -> None:
+    _ensure_mapping(visibility_defaults, "visibility_defaults")
+    numeric_keys = (
+        "visibility_weight",
+        "visibility_map_min_x",
+        "visibility_map_max_x",
+        "visibility_map_min_y",
+        "visibility_map_max_y",
+        "visibility_map_nx",
+        "visibility_map_ny",
+        "visibility_occ_center_x",
+        "visibility_occ_center_y",
+        "visibility_occ_radius",
+        "visibility_occ_tau",
+        "visibility_gp_length_scale",
+        "visibility_gp_noise_var",
+    )
+    for key in numeric_keys:
+        if key in visibility_defaults:
+            _ensure_number(visibility_defaults[key], f"visibility_defaults.{key}")
 
 
 def validate_profile(

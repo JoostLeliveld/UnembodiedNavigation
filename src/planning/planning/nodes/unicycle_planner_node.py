@@ -87,6 +87,26 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('use_ambiguity', True)
         _declare_if_not('obs_mode', 'uv')
         _declare_if_not('optimizer_backend', 'auto')
+        _declare_if_not('use_visibility_model', False)
+        _declare_if_not('visibility_model', 'fixed_gp')
+        _declare_if_not('visibility_weight', 0.0)
+        _declare_if_not('visibility_map_min_x', -5.0)
+        _declare_if_not('visibility_map_max_x', 5.0)
+        _declare_if_not('visibility_map_min_y', -5.0)
+        _declare_if_not('visibility_map_max_y', 5.0)
+        _declare_if_not('visibility_map_nx', 140)
+        _declare_if_not('visibility_map_ny', 120)
+        _declare_if_not('visibility_occ_center_x', -1.2)
+        _declare_if_not('visibility_occ_center_y', -1.8)
+        _declare_if_not('visibility_occ_radius', 0.9)
+        _declare_if_not('visibility_occ_tau', 0.15)
+        _declare_if_not('visibility_gp_length_scale', 1.4)
+        _declare_if_not('visibility_gp_noise_var', 0.15)
+        _declare_if_not('visibility_gp_seed', 0)
+        _declare_if_not('visibility_r_bad_uv', 28.0)
+        _declare_if_not('visibility_r_bad_yaw', 1.2)
+        _declare_if_not('visibility_cov_pos_scale', 2.0)
+        _declare_if_not('visibility_cov_theta_scale', 0.8)
 
         # Optimizer params
         _declare_if_not('optimizer_maxiter', 50)
@@ -144,6 +164,26 @@ class UnicyclePlannerNode(Node):
         self.use_ambiguity = _as_bool(self.get_parameter('use_ambiguity').value)
         self.obs_mode = str(self.get_parameter('obs_mode').value).strip().lower()
         self.optimizer_backend = str(self.get_parameter('optimizer_backend').value).strip().lower()
+        self.use_visibility_model = _as_bool(self.get_parameter('use_visibility_model').value)
+        self.visibility_model = str(self.get_parameter('visibility_model').value).strip().lower()
+        self.visibility_weight = float(self.get_parameter('visibility_weight').value)
+        self.visibility_map_min_x = float(self.get_parameter('visibility_map_min_x').value)
+        self.visibility_map_max_x = float(self.get_parameter('visibility_map_max_x').value)
+        self.visibility_map_min_y = float(self.get_parameter('visibility_map_min_y').value)
+        self.visibility_map_max_y = float(self.get_parameter('visibility_map_max_y').value)
+        self.visibility_map_nx = int(self.get_parameter('visibility_map_nx').value)
+        self.visibility_map_ny = int(self.get_parameter('visibility_map_ny').value)
+        self.visibility_occ_center_x = float(self.get_parameter('visibility_occ_center_x').value)
+        self.visibility_occ_center_y = float(self.get_parameter('visibility_occ_center_y').value)
+        self.visibility_occ_radius = float(self.get_parameter('visibility_occ_radius').value)
+        self.visibility_occ_tau = float(self.get_parameter('visibility_occ_tau').value)
+        self.visibility_gp_length_scale = float(self.get_parameter('visibility_gp_length_scale').value)
+        self.visibility_gp_noise_var = float(self.get_parameter('visibility_gp_noise_var').value)
+        self.visibility_gp_seed = int(self.get_parameter('visibility_gp_seed').value)
+        self.visibility_r_bad_uv = float(self.get_parameter('visibility_r_bad_uv').value)
+        self.visibility_r_bad_yaw = float(self.get_parameter('visibility_r_bad_yaw').value)
+        self.visibility_cov_pos_scale = float(self.get_parameter('visibility_cov_pos_scale').value)
+        self.visibility_cov_theta_scale = float(self.get_parameter('visibility_cov_theta_scale').value)
         if self.obs_mode not in ('uv', 'uvt'):
             raise RuntimeError("obs_mode must be 'uv' or 'uvt'")
 
@@ -209,6 +249,26 @@ class UnicyclePlannerNode(Node):
             optimizer_backend=self.optimizer_backend,
             seed=self.seed,
             camera_params=camera_params,
+            use_visibility_model=self.use_visibility_model,
+            visibility_model=self.visibility_model,
+            visibility_weight=self.visibility_weight,
+            visibility_map_min_x=self.visibility_map_min_x,
+            visibility_map_max_x=self.visibility_map_max_x,
+            visibility_map_min_y=self.visibility_map_min_y,
+            visibility_map_max_y=self.visibility_map_max_y,
+            visibility_map_nx=self.visibility_map_nx,
+            visibility_map_ny=self.visibility_map_ny,
+            visibility_occ_center_x=self.visibility_occ_center_x,
+            visibility_occ_center_y=self.visibility_occ_center_y,
+            visibility_occ_radius=self.visibility_occ_radius,
+            visibility_occ_tau=self.visibility_occ_tau,
+            visibility_gp_length_scale=self.visibility_gp_length_scale,
+            visibility_gp_noise_var=self.visibility_gp_noise_var,
+            visibility_gp_seed=self.visibility_gp_seed,
+            visibility_r_bad_uv=self.visibility_r_bad_uv,
+            visibility_r_bad_yaw=self.visibility_r_bad_yaw,
+            visibility_cov_pos_scale=self.visibility_cov_pos_scale,
+            visibility_cov_theta_scale=self.visibility_cov_theta_scale,
         )
         # Use the planner-normalized mode as the single source of truth in this node.
         self.obs_mode = str(self.planner.obs_mode)
@@ -276,6 +336,7 @@ class UnicyclePlannerNode(Node):
             f"{self.NODE_NAME} started "
             f"(approx={self.approx_method}, obs_mode={self.obs_mode}, "
             f"use_obs_risk={self.use_obs_risk}, use_ambiguity={self.use_ambiguity}, "
+            f"use_visibility_model={self.use_visibility_model}, visibility_weight={self.visibility_weight:.3f}, "
             f"boundary_weight={self.boundary_weight:.3f}, "
             f"costmap_required={self._costmap_required}, "
             f"use_pixel_correction={self.use_pixel_correction}, "
@@ -424,9 +485,12 @@ class UnicyclePlannerNode(Node):
         m_pred, S_pred = self.planner.predict(
             belief_m, belief_S, np.array([v_cmd, w_cmd], dtype=float), dt=dt_s
         )
+        p_vis, R_eff, S_eff, gain_scale = self.planner.observation_model_with_visibility(m_pred, S_pred)
 
         corr_method = self.approx_method if self.pixel_correction_approx == 'AUTO' else self.pixel_correction_approx
-        mu_y, Sigma_y, Gamma = self.planner.approx_observation(m_pred, S_pred, method=corr_method)
+        mu_y, Sigma_y, Gamma = self.planner.approx_observation(
+            m_pred, S_eff, method=corr_method, R_override=R_eff
+        )
         mu_y = np.asarray(mu_y, dtype=float).reshape(-1)
         meas = np.asarray(meas, dtype=float).reshape(-1)
         if meas.size != mu_y.size:
@@ -457,9 +521,9 @@ class UnicyclePlannerNode(Node):
         Sigma_y = (Sigma_y + Sigma_y.T) / 2.0
         Sigma_inv = np.linalg.pinv(Sigma_y)
         K = Gamma @ Sigma_inv
-        next_m = m_pred + K @ innov
+        next_m = m_pred + gain_scale * (K @ innov)
         next_m[2] = wrap_angle(next_m[2])
-        next_S = S_pred - K @ Sigma_y @ K.T
+        next_S = S_eff - gain_scale * (Gamma @ Sigma_inv @ Gamma.T)
         next_S = (next_S + next_S.T) / 2.0
         if self.min_state_cov > 0.0:
             for i in range(min(3, next_S.shape[0])):
@@ -472,11 +536,11 @@ class UnicyclePlannerNode(Node):
 
         now_wall = time.monotonic()
         if self.debug_runtime and (now_wall - self._last_correction_log > 2.0):
-            self.get_logger().info(
-                f"Applied pixel correction in callback "
-                f"(method={corr_method}, age={age:.3f}s, dt={dt_s:.3f}s)"
-            )
-            self._last_correction_log = now_wall
+                self.get_logger().info(
+                    f"Applied pixel correction in callback "
+                    f"(method={corr_method}, age={age:.3f}s, dt={dt_s:.3f}s, p_vis={p_vis:.3f})"
+                )
+                self._last_correction_log = now_wall
 
         cb_ms = max((time.perf_counter() - cb_start) * 1000.0, 0.0)
         if (
@@ -578,6 +642,7 @@ class UnicyclePlannerNode(Node):
             float(result.ambiguity_cost),
             float(result.control_cost),
             float(result.boundary_cost),
+            float(result.visibility_cost),
         ]
         self.metrics_pub.publish(metrics_msg)
 

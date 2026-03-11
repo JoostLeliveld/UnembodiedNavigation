@@ -3,6 +3,8 @@ import os
 from glob import glob
 
 package_name = 'sim'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(BASE_DIR)
 data_files = [
     ('share/ament_index/resource_index/packages',
         ['resource/' + package_name]),

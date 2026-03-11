@@ -130,7 +130,7 @@ class ExperimentLogger(Node):
             'cmd_v', 'cmd_w',
             'goal_x', 'goal_y', 'goal_dist',
             'plan_points', 'plan_length',
-            'efe_total', 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_boundary',
+            'efe_total', 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_boundary', 'efe_visibility',
             'seed'
         ])
 
@@ -216,12 +216,15 @@ class ExperimentLogger(Node):
         efe_ambiguity = 0.0
         efe_control = 0.0
         efe_boundary = 0.0
+        efe_visibility = 0.0
         if self.efe_metrics and self.efe_metrics.data and len(self.efe_metrics.data) >= 5:
             efe_total = float(self.efe_metrics.data[0])
             efe_risk = float(self.efe_metrics.data[1])
             efe_ambiguity = float(self.efe_metrics.data[2])
             efe_control = float(self.efe_metrics.data[3])
             efe_boundary = float(self.efe_metrics.data[4])
+            if len(self.efe_metrics.data) >= 6:
+                efe_visibility = float(self.efe_metrics.data[5])
 
         self.writer.writerow([
             stamp,
@@ -232,7 +235,7 @@ class ExperimentLogger(Node):
             cmd_v, cmd_w,
             goal_x, goal_y, goal_dist,
             plan_points, plan_length,
-            efe_total, efe_risk, efe_ambiguity, efe_control, efe_boundary,
+            efe_total, efe_risk, efe_ambiguity, efe_control, efe_boundary, efe_visibility,
             self.seed,
         ])
         self.file.flush()

@@ -20,10 +20,10 @@ from launch_ros.substitutions import FindPackageShare
 # be reproducible from launch arguments and manifests.
 PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'planner': 'efe2',
-    'world': 'empty_notebook.world.sdf',
-    'task': 'M1_short_direct',
-    'state_source': 'oracle',
-    'perception_backend': 'homography',
+    'world': 'warehouse_occ_light.world.sdf',
+    'task': 'T2_diag_far',
+    'state_source': 'pixel',
+    'perception_backend': 'color',
     'seed': '0',
     'sensor_pixel_noise_sigma': '0.0',
     'pixel_noise_sigma': '0.0',
@@ -64,6 +64,22 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'goal_success_hold_s': '2.0',
 }
 
+VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
+    'visibility_weight': 4.0,
+    'visibility_map_min_x': -5.0,
+    'visibility_map_max_x': 5.0,
+    'visibility_map_min_y': -5.0,
+    'visibility_map_max_y': 5.0,
+    'visibility_map_nx': 140,
+    'visibility_map_ny': 120,
+    'visibility_occ_center_x': -1.2,
+    'visibility_occ_center_y': -1.8,
+    'visibility_occ_radius': 0.9,
+    'visibility_occ_tau': 0.15,
+    'visibility_gp_length_scale': 1.4,
+    'visibility_gp_noise_var': 0.15,
+}
+
 
 def _as_bool(value: str) -> bool:
     return str(value).lower() == 'true'
@@ -75,7 +91,30 @@ def _launch_value(context, name: str, default_value: str) -> str:
 
 
 def _is_occlusion_world(world_file: str) -> bool:
-    return str(world_file).startswith('arena10_occ_')
+    return '_occ_' in str(world_file)
+
+
+def _matches_default(current_value: object, default_value: object) -> bool:
+    if isinstance(default_value, bool):
+        return bool(current_value) == default_value
+    if isinstance(default_value, int):
+        return int(current_value) == default_value
+    return abs(float(current_value) - float(default_value)) < 1e-9
+
+
+def _apply_visibility_profile_defaults(cfg: Dict[str, object], profile: Dict[str, object]) -> None:
+    visibility_defaults = profile.get('visibility_defaults')
+    if not isinstance(visibility_defaults, dict):
+        return
+    for key, fallback_value in VISIBILITY_FALLBACK_DEFAULTS.items():
+        if key not in visibility_defaults:
+            continue
+        if key not in cfg or not _matches_default(cfg[key], fallback_value):
+            continue
+        if isinstance(fallback_value, int):
+            cfg[key] = int(visibility_defaults[key])
+        else:
+            cfg[key] = float(visibility_defaults[key])
 
 
 def _require_task_field(task, key):
@@ -86,6 +125,7 @@ def _require_task_field(task, key):
 
 def parse_common_launch_config(context) -> Dict[str, object]:
     """Parse and validate common launch arguments used by both pipelines."""
+    seed_value = int(LaunchConfiguration('seed').perform(context))
     cfg: Dict[str, object] = {
         'use_sim_time': _as_bool(LaunchConfiguration('use_sim_time').perform(context)),
         'state_source': LaunchConfiguration('state_source').perform(context),
@@ -95,7 +135,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'tasks_yaml': LaunchConfiguration('tasks_yaml').perform(context),
         'task_name': LaunchConfiguration('task').perform(context).strip(),
         'perception_backend': LaunchConfiguration('perception_backend').perform(context).strip().lower(),
-        'seed': int(LaunchConfiguration('seed').perform(context)),
+        'seed': seed_value,
         'pixel_noise_sigma': float(LaunchConfiguration('pixel_noise_sigma').perform(context)),
         'transform_noise_sigma': float(LaunchConfiguration('transform_noise_sigma').perform(context)),
         'sensor_pixel_noise_sigma': float(_launch_value(context, 'sensor_pixel_noise_sigma', '0.0')),
@@ -142,6 +182,26 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'risk_weight_state': float(_launch_value(context, 'risk_weight_state', '1.0')),
         'risk_weight_obs': float(_launch_value(context, 'risk_weight_obs', '1.0')),
         'ambiguity_weight': float(_launch_value(context, 'ambiguity_weight', '1.0')),
+        'use_visibility_model': _as_bool(_launch_value(context, 'use_visibility_model', 'false')),
+        'visibility_model': _launch_value(context, 'visibility_model', 'fixed_gp').strip().lower(),
+        'visibility_weight': float(_launch_value(context, 'visibility_weight', '4.0')),
+        'visibility_map_min_x': float(_launch_value(context, 'visibility_map_min_x', '-5.0')),
+        'visibility_map_max_x': float(_launch_value(context, 'visibility_map_max_x', '5.0')),
+        'visibility_map_min_y': float(_launch_value(context, 'visibility_map_min_y', '-5.0')),
+        'visibility_map_max_y': float(_launch_value(context, 'visibility_map_max_y', '5.0')),
+        'visibility_map_nx': int(_launch_value(context, 'visibility_map_nx', '140')),
+        'visibility_map_ny': int(_launch_value(context, 'visibility_map_ny', '120')),
+        'visibility_occ_center_x': float(_launch_value(context, 'visibility_occ_center_x', '-1.2')),
+        'visibility_occ_center_y': float(_launch_value(context, 'visibility_occ_center_y', '-1.8')),
+        'visibility_occ_radius': float(_launch_value(context, 'visibility_occ_radius', '0.9')),
+        'visibility_occ_tau': float(_launch_value(context, 'visibility_occ_tau', '0.15')),
+        'visibility_gp_length_scale': float(_launch_value(context, 'visibility_gp_length_scale', '1.4')),
+        'visibility_gp_noise_var': float(_launch_value(context, 'visibility_gp_noise_var', '0.15')),
+        'visibility_gp_seed': int(float(_launch_value(context, 'visibility_gp_seed', str(seed_value)))),
+        'visibility_r_bad_uv': float(_launch_value(context, 'visibility_r_bad_uv', '28.0')),
+        'visibility_r_bad_yaw': float(_launch_value(context, 'visibility_r_bad_yaw', '1.2')),
+        'visibility_cov_pos_scale': float(_launch_value(context, 'visibility_cov_pos_scale', '2.0')),
+        'visibility_cov_theta_scale': float(_launch_value(context, 'visibility_cov_theta_scale', '0.8')),
         'goal_sigma_uv': float(_launch_value(context, 'goal_sigma_uv', '0.0')),
         'goal_sigma_yaw': float(_launch_value(context, 'goal_sigma_yaw', '0.0')),
         'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
@@ -182,6 +242,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     profile, _intrinsics, _world_path, camera_pose = load_profile(
         cfg['world_profiles_path'], cfg['world']
     )
+    _apply_visibility_profile_defaults(cfg, profile)
     tasks_by_world = load_tasks(cfg['tasks_yaml'])
     task = select_task(tasks_by_world, cfg['world'], cfg['task_name'])
 

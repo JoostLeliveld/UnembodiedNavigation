@@ -29,6 +29,10 @@ class JaxUnicycleParams:
     time_horizon: int
     dt: float
     Du: int
+    R_bad: object = None
+    visibility_weight: float = 0.0
+    vis_cov_pos_scale: float = 2.0
+    vis_cov_theta_scale: float = 0.8
 
 
 def make_g_from_homography(H, obs_mode: str = "uvt"):
@@ -78,16 +82,16 @@ def _safe_cholesky(M, eps=1e-9):
     return jnp.linalg.cholesky(M + eps * jnp.eye(d, dtype=M.dtype))
 
 
-def et1_jax(m, S, params: JaxUnicycleParams, g, dg=None):
+def et1_jax(m, S, R_eff, g, dg=None):
     # Reuse prebuilt Jacobian transform when available.
     Jm = dg(m) if dg is not None else jax.jacfwd(g)(m)
     mu = g(m)
-    Sigma = Jm @ S @ Jm.T + params.R
+    Sigma = Jm @ S @ Jm.T + R_eff
     Gamma = S @ Jm.T
     return mu, Sigma, Gamma
 
 
-def et2_jax(m, S, params: JaxUnicycleParams, g, dg=None, d2g=None):
+def et2_jax(m, S, R_eff, g, dg=None, d2g=None):
     # Reuse prebuilt Jacobian/Hessian transforms when available.
     Jm = dg(m) if dg is not None else jax.jacfwd(g)(m)
     H = d2g(m) if d2g is not None else jax.jacfwd(jax.jacrev(g))(m)
@@ -97,7 +101,7 @@ def et2_jax(m, S, params: JaxUnicycleParams, g, dg=None, d2g=None):
         for i in range(H.shape[0])
     ])
     mu = g(m) + 0.5 * aux1
-    Sigma = Jm @ S @ Jm.T + 0.5 * aux2 + params.R
+    Sigma = Jm @ S @ Jm.T + 0.5 * aux2 + R_eff
     Gamma = S @ Jm.T
     return mu, Sigma, Gamma
 
@@ -130,6 +134,7 @@ def efe_unicycle_jax(
     add_ambiguity: bool = True,
     use_obs_risk: bool = True,
     use_state_risk: bool = True,
+    p_vis=None,
     dg=None,
     d2g=None,
 ):
@@ -141,18 +146,35 @@ def efe_unicycle_jax(
     total_risk = 0.0
     total_amb = 0.0
     total_control = 0.0
+    total_vis = 0.0
 
     for t in range(params.time_horizon):
         m = unicycle_step_jax(m, u[t], params.dt)
         F = unicycle_jacobian_jax(m, u[t], params.dt)
         S = F @ S @ F.T + params.Q
 
+        p = jnp.array(1.0, dtype=m.dtype)
+        q = jnp.array(0.0, dtype=m.dtype)
+        R_eff = params.R
+        S_eff = S
+        if p_vis is not None:
+            p = jnp.clip(p_vis(m), 1e-4, 1.0 - 1e-4)
+            q = 1.0 - p
+            R_bad = params.R if params.R_bad is None else params.R_bad
+            R_eff = p * params.R + q * R_bad
+            sxy = 1.0 + params.vis_cov_pos_scale * q
+            sth = 1.0 + params.vis_cov_theta_scale * q
+            S_eff = S
+            S_eff = S_eff.at[0, 0].set(S[0, 0] * sxy)
+            S_eff = S_eff.at[1, 1].set(S[1, 1] * sxy)
+            S_eff = S_eff.at[2, 2].set(S[2, 2] * sth)
+
         mu = Sigma = Gamma = None
         if use_obs_risk or add_ambiguity:
             if approx == "ET1":
-                mu, Sigma, Gamma = et1_jax(m, S, params, g, dg=dg)
+                mu, Sigma, Gamma = et1_jax(m, S_eff, R_eff, g, dg=dg)
             elif approx == "ET2":
-                mu, Sigma, Gamma = et2_jax(m, S, params, g, dg=dg, d2g=d2g)
+                mu, Sigma, Gamma = et2_jax(m, S_eff, R_eff, g, dg=dg, d2g=d2g)
             else:
                 raise ValueError("Approximation method unknown.")
 
@@ -167,11 +189,16 @@ def efe_unicycle_jax(
         total_risk += params.risk_weight_state * r_state + params.risk_weight_obs * r_obs
 
         if add_ambiguity and Sigma is not None:
-            total_amb += params.ambiguity_weight * ambiguity_jax(Sigma, Gamma, S)
+            amb = ambiguity_jax(Sigma, Gamma, S_eff)
+            if p_vis is not None:
+                amb = p * amb
+            total_amb += params.ambiguity_weight * amb
 
         total_control += params.control_weight * jnp.sum(u[t] ** 2)
+        if p_vis is not None and params.visibility_weight > 0.0:
+            total_vis += params.visibility_weight * q
 
-    return total_risk + total_amb + total_control
+    return total_risk + total_amb + total_control + total_vis
 
 
 def make_unicycle_valgrad_fn(
@@ -181,6 +208,7 @@ def make_unicycle_valgrad_fn(
     add_ambiguity: bool = True,
     use_obs_risk: bool = True,
     use_state_risk: bool = True,
+    p_vis=None,
     mode: str = "rev",
     jit: bool = True,
 ):
@@ -196,6 +224,7 @@ def make_unicycle_valgrad_fn(
                 add_ambiguity=add_ambiguity,
                 use_obs_risk=use_obs_risk,
                 use_state_risk=use_state_risk,
+                p_vis=p_vis,
                 dg=dg,
                 d2g=d2g,
             )
@@ -206,6 +235,7 @@ def make_unicycle_valgrad_fn(
                     add_ambiguity=add_ambiguity,
                     use_obs_risk=use_obs_risk,
                     use_state_risk=use_state_risk,
+                    p_vis=p_vis,
                     dg=dg,
                     d2g=d2g,
                 )
@@ -219,6 +249,7 @@ def make_unicycle_valgrad_fn(
                 add_ambiguity=add_ambiguity,
                 use_obs_risk=use_obs_risk,
                 use_state_risk=use_state_risk,
+                p_vis=p_vis,
                 dg=dg,
                 d2g=d2g,
             )

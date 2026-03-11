@@ -8,6 +8,7 @@ from scipy.optimize import minimize
 
 from planning.core.dynamics import unicycle_step, unicycle_jacobian, unicycle_process_noise
 from planning.core.efe_utils import ET1, ET2, UT, ambiguity, risk
+from planning.core.visibility_gp import FixedGPVisibilityConfig, FixedGPVisibilityModel
 from unav_common.camera_model import ObliqueCameraModel
 from planning.core.rollout import rollout_unicycle
 from planning.core import search_based_path_planning
@@ -32,6 +33,7 @@ class PlanResult:
     ambiguity_cost: float
     control_cost: float
     boundary_cost: float
+    visibility_cost: float = 0.0
     backend: str = "unknown"
     optimizer_success: bool = False
     optimizer_status: int = 0
@@ -84,6 +86,26 @@ class UnicyclePlannerBase:
         optimizer_backend=None,
         seed,
         camera_params,
+        use_visibility_model=False,
+        visibility_model='fixed_gp',
+        visibility_weight=0.0,
+        visibility_map_min_x=-5.0,
+        visibility_map_max_x=5.0,
+        visibility_map_min_y=-5.0,
+        visibility_map_max_y=5.0,
+        visibility_map_nx=140,
+        visibility_map_ny=120,
+        visibility_occ_center_x=-1.2,
+        visibility_occ_center_y=-1.8,
+        visibility_occ_radius=0.9,
+        visibility_occ_tau=0.15,
+        visibility_gp_length_scale=1.4,
+        visibility_gp_noise_var=0.15,
+        visibility_gp_seed=0,
+        visibility_r_bad_uv=28.0,
+        visibility_r_bad_yaw=1.2,
+        visibility_cov_pos_scale=2.0,
+        visibility_cov_theta_scale=0.8,
     ):
         self.horizon = int(horizon)
         self.dt = float(dt)
@@ -149,6 +171,13 @@ class UnicyclePlannerBase:
         if self.obs_mode not in ('uv', 'uvt'):
             raise ValueError("obs_mode must be 'uv' or 'uvt'")
         self.optimizer_backend = str(optimizer_backend or 'scipy').lower()
+        self.use_visibility_model = bool(use_visibility_model)
+        self.visibility_model_name = str(visibility_model or 'none').strip().lower()
+        self.visibility_weight = float(visibility_weight)
+        self.visibility_cov_pos_scale = float(max(visibility_cov_pos_scale, 0.0))
+        self.visibility_cov_theta_scale = float(max(visibility_cov_theta_scale, 0.0))
+        self._visibility_min_prob = 1e-4
+        self.visibility_model = None
 
         self.g_obs = self.camera.g_uv if self.obs_mode == 'uv' else self.camera.g
 
@@ -164,6 +193,38 @@ class UnicyclePlannerBase:
                 self.obs_noise_uv ** 2,
                 self.obs_noise_yaw ** 2,
             ])
+        if self.obs_mode == 'uv':
+            self.R_bad = np.diag([
+                float(visibility_r_bad_uv) ** 2,
+                float(visibility_r_bad_uv) ** 2,
+            ])
+        else:
+            self.R_bad = np.diag([
+                float(visibility_r_bad_uv) ** 2,
+                float(visibility_r_bad_uv) ** 2,
+                float(visibility_r_bad_yaw) ** 2,
+            ])
+
+        if self.use_visibility_model and self.visibility_model_name not in ('fixed_gp', 'gp'):
+            raise ValueError("visibility_model must be 'fixed_gp' (or 'gp') when enabled")
+        if self.use_visibility_model and self.visibility_model_name in ('fixed_gp', 'gp'):
+            vis_cfg = FixedGPVisibilityConfig(
+                map_xmin=float(visibility_map_min_x),
+                map_xmax=float(visibility_map_max_x),
+                map_ymin=float(visibility_map_min_y),
+                map_ymax=float(visibility_map_max_y),
+                map_nx=int(visibility_map_nx),
+                map_ny=int(visibility_map_ny),
+                occ_center_x=float(visibility_occ_center_x),
+                occ_center_y=float(visibility_occ_center_y),
+                occ_radius=float(visibility_occ_radius),
+                occ_tau=float(visibility_occ_tau),
+                gp_length_scale=float(visibility_gp_length_scale),
+                gp_noise_var=float(visibility_gp_noise_var),
+                seed=int(visibility_gp_seed),
+                min_prob=self._visibility_min_prob,
+            )
+            self.visibility_model = FixedGPVisibilityModel(vis_cfg)
 
         self._approx_fn = None
         if self.approx_method == 'ET1':
@@ -200,10 +261,43 @@ class UnicyclePlannerBase:
             return UT
         raise RuntimeError(f"Unknown observation approximation method: {method}")
 
-    def approx_observation(self, m, S, method=None):
+    def approx_observation(self, m, S, method=None, R_override=None):
         approx_method = self.approx_method if method is None else method
         fn = self._approx_fn_for_method(approx_method)
-        return fn(m, S, self.g_obs, addmatrix=self.R, forceHermitian=True)
+        R_use = self.R if R_override is None else np.asarray(R_override, dtype=float)
+        return fn(m, S, self.g_obs, addmatrix=R_use, forceHermitian=True)
+
+    def visibility_probability(self, m):
+        if (not self.use_visibility_model) or (self.visibility_model is None):
+            return 1.0
+        p = float(self.visibility_model.prob_state_np(m))
+        return float(np.clip(p, self._visibility_min_prob, 1.0 - self._visibility_min_prob))
+
+    def observation_model_with_visibility(self, m_pred, S_pred):
+        """Visibility-aware measurement shaping used by objective and correction."""
+        S_pred = np.asarray(S_pred, dtype=float)
+        if (not self.use_visibility_model) or (self.visibility_model is None):
+            R_eff = np.asarray(self.R, dtype=float)
+            S_eff = S_pred.copy()
+            return 1.0, R_eff, S_eff, 1.0
+
+        p = self.visibility_probability(m_pred)
+        q = 1.0 - p
+
+        R_eff = p * self.R + q * self.R_bad
+        S_eff = S_pred.copy()
+        if S_eff.shape[0] >= 2:
+            scale_xy = 1.0 + self.visibility_cov_pos_scale * q
+            S_eff[0, 0] *= scale_xy
+            S_eff[1, 1] *= scale_xy
+        if S_eff.shape[0] >= 3:
+            scale_th = 1.0 + self.visibility_cov_theta_scale * q
+            S_eff[2, 2] *= scale_th
+        gain_scale = p
+
+        R_eff = 0.5 * (R_eff + R_eff.T) + 1e-9 * np.eye(R_eff.shape[0])
+        S_eff = 0.5 * (S_eff + S_eff.T) + 1e-9 * np.eye(S_eff.shape[0])
+        return p, R_eff, S_eff, gain_scale
 
     def _goal_state(self, goal_xy, theta):
         return np.array([goal_xy[0], goal_xy[1], theta], dtype=float)
@@ -252,6 +346,7 @@ class UnicyclePlannerBase:
         total_amb = 0.0
         total_control = 0.0
         total_boundary = 0.0
+        total_visibility = 0.0
 
         infeasible_penalty = 1e6
         use_observation_risk = self.use_obs_risk
@@ -261,10 +356,11 @@ class UnicyclePlannerBase:
         for t in range(self.horizon):
             u = controls[t]
             m, S = self.predict(m, S, u)
+            p_vis, R_eff, S_eff, _ = self.observation_model_with_visibility(m, S)
 
             mu_y = Sigma_y = Gamma = None
             if use_observation_risk or use_ambiguity_term:
-                mu_y, Sigma_y, Gamma = self.approx_observation(m, S)
+                mu_y, Sigma_y, Gamma = self.approx_observation(m, S_eff, R_override=R_eff)
 
             state_risk = 0.0
             if use_state_risk:
@@ -281,8 +377,14 @@ class UnicyclePlannerBase:
 
             ambiguity_term = 0.0
             if use_ambiguity_term and Sigma_y is not None:
-                ambiguity_term = self.ambiguity_weight * ambiguity(Sigma_y, Gamma, S)
+                ambiguity_core = ambiguity(Sigma_y, Gamma, S_eff)
+                if self.use_visibility_model:
+                    ambiguity_core = p_vis * ambiguity_core
+                ambiguity_term = self.ambiguity_weight * ambiguity_core
                 total_amb += ambiguity_term
+
+            if self.use_visibility_model and self.visibility_weight > 0.0:
+                total_visibility += self.visibility_weight * (1.0 - p_vis)
 
             control_term = self.control_weight * float(u[0] ** 2 + u[1] ** 2)
             total_control += control_term
@@ -291,16 +393,16 @@ class UnicyclePlannerBase:
                 cell_cost, in_bounds = self._cost_at_raw(costmap, m[0], m[1])
                 if (not in_bounds) or (cell_cost < 0.0) or (cell_cost >= self.lethal_cost_threshold):
                     total_boundary += self.boundary_weight
-                    total = total_risk + total_amb + total_control + total_boundary + infeasible_penalty
+                    total = total_risk + total_amb + total_control + total_boundary + total_visibility + infeasible_penalty
                     if return_metrics:
-                        return total, (total_risk, total_amb, total_control, total_boundary)
+                        return total, (total_risk, total_amb, total_control, total_boundary, total_visibility)
                     return total
                 boundary_term = self.boundary_weight * (cell_cost / max(self.max_cost, 1.0))
                 total_boundary += boundary_term
 
-        total = total_risk + total_amb + total_control + total_boundary
+        total = total_risk + total_amb + total_control + total_boundary + total_visibility
         if return_metrics:
-            return total, (total_risk, total_amb, total_control, total_boundary)
+            return total, (total_risk, total_amb, total_control, total_boundary, total_visibility)
         return total
 
     def plan(self, m0, S0, goal_xy, costmap):
@@ -395,22 +497,34 @@ class UnicyclePlannerBase:
                     bool(use_ambiguity_term),
                     bool(use_observation_risk),
                     bool(use_state_risk),
+                    bool(self.use_visibility_model),
                     float(self.control_weight),
                     float(self.risk_weight_state),
                     float(self.risk_weight_obs),
                     float(self.ambiguity_weight),
+                    float(self.visibility_weight),
+                    float(self.visibility_cov_pos_scale),
+                    float(self.visibility_cov_theta_scale),
                     int(self.horizon),
                     float(self.dt),
                     tuple(np.round(np.asarray(goal_state, dtype=float), 8).tolist()),
                     tuple(np.round(np.asarray(np.diag(goal_cov), dtype=float), 8).tolist()),
                     tuple(np.round(np.asarray(goal_obs, dtype=float), 8).tolist()),
                     tuple(np.round(np.asarray(np.diag(goal_obs_cov), dtype=float), 8).tolist()),
+                    tuple(np.round(np.asarray(np.diag(self.R_bad), dtype=float), 8).tolist()),
+                    tuple(self.visibility_model.signature) if self.visibility_model is not None else (),
                 )
                 valgrad = self._jax_valgrad_cache.get(cache_key)
                 if valgrad is None:
+                    p_vis_jax = (
+                        self.visibility_model.make_prob_state_jax()
+                        if self.use_visibility_model and self.visibility_model is not None
+                        else None
+                    )
                     params_j = jax_efe.JaxUnicycleParams(
                         Q=jnp.array(Q),
                         R=jnp.array(self.R),
+                        R_bad=jnp.array(self.R_bad),
                         goal_state=jnp.array(goal_state),
                         goal_state_cov=jnp.array(goal_cov),
                         goal_obs=jnp.array(goal_obs),
@@ -419,6 +533,9 @@ class UnicyclePlannerBase:
                         risk_weight_state=float(self.risk_weight_state),
                         risk_weight_obs=float(self.risk_weight_obs),
                         ambiguity_weight=float(self.ambiguity_weight),
+                        visibility_weight=float(self.visibility_weight),
+                        vis_cov_pos_scale=float(self.visibility_cov_pos_scale),
+                        vis_cov_theta_scale=float(self.visibility_cov_theta_scale),
                         time_horizon=int(self.horizon),
                         dt=float(self.dt),
                         Du=2,
@@ -431,6 +548,7 @@ class UnicyclePlannerBase:
                         add_ambiguity=use_ambiguity_term,
                         use_obs_risk=use_observation_risk,
                         use_state_risk=use_state_risk,
+                        p_vis=p_vis_jax,
                         mode='rev',
                         jit=True,
                     )
@@ -501,6 +619,7 @@ class UnicyclePlannerBase:
             ambiguity_cost=float(metrics[1]),
             control_cost=float(metrics[2]),
             boundary_cost=float(metrics[3]),
+            visibility_cost=float(metrics[4]) if len(metrics) > 4 else 0.0,
             backend=str(backend_used),
             optimizer_success=optimizer_success,
             optimizer_status=optimizer_status,

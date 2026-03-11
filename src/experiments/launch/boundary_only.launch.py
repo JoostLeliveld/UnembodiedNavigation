@@ -74,6 +74,26 @@ def _launch_setup(context, *args, **kwargs):
             'process_noise_theta': cfg['process_noise_theta'],
             'obs_noise_uv': cfg['obs_noise_uv'],
             'obs_noise_yaw': cfg['obs_noise_yaw'],
+            'use_visibility_model': cfg['use_visibility_model'],
+            'visibility_model': cfg['visibility_model'],
+            'visibility_weight': cfg['visibility_weight'],
+            'visibility_map_min_x': cfg['visibility_map_min_x'],
+            'visibility_map_max_x': cfg['visibility_map_max_x'],
+            'visibility_map_min_y': cfg['visibility_map_min_y'],
+            'visibility_map_max_y': cfg['visibility_map_max_y'],
+            'visibility_map_nx': cfg['visibility_map_nx'],
+            'visibility_map_ny': cfg['visibility_map_ny'],
+            'visibility_occ_center_x': cfg['visibility_occ_center_x'],
+            'visibility_occ_center_y': cfg['visibility_occ_center_y'],
+            'visibility_occ_radius': cfg['visibility_occ_radius'],
+            'visibility_occ_tau': cfg['visibility_occ_tau'],
+            'visibility_gp_length_scale': cfg['visibility_gp_length_scale'],
+            'visibility_gp_noise_var': cfg['visibility_gp_noise_var'],
+            'visibility_gp_seed': cfg['visibility_gp_seed'],
+            'visibility_r_bad_uv': cfg['visibility_r_bad_uv'],
+            'visibility_r_bad_yaw': cfg['visibility_r_bad_yaw'],
+            'visibility_cov_pos_scale': cfg['visibility_cov_pos_scale'],
+            'visibility_cov_theta_scale': cfg['visibility_cov_theta_scale'],
             'optimizer_backend': cfg['optimizer_backend'],
             'optimizer_maxiter': cfg['optimizer_maxiter'],
             'optimizer_gtol': cfg['optimizer_gtol'],
@@ -231,6 +251,23 @@ def generate_launch_description():
         default_value='true',
         description='Enable observation-space risk term'
     )
+    use_visibility_model_arg = DeclareLaunchArgument(
+        'use_visibility_model',
+        default_value='false',
+        description='Enable fixed GP visibility model in planner objective/correction'
+    )
+    visibility_weight_arg = DeclareLaunchArgument(
+        'visibility_weight',
+        default_value='4.0',
+        description='Visibility penalty weight w_vis*(1-p_vis)'
+    )
+    visibility_occ_center_x_arg = DeclareLaunchArgument('visibility_occ_center_x', default_value='-1.2')
+    visibility_occ_center_y_arg = DeclareLaunchArgument('visibility_occ_center_y', default_value='-1.8')
+    visibility_occ_radius_arg = DeclareLaunchArgument('visibility_occ_radius', default_value='0.9')
+    visibility_occ_tau_arg = DeclareLaunchArgument('visibility_occ_tau', default_value='0.15')
+    visibility_gp_length_scale_arg = DeclareLaunchArgument('visibility_gp_length_scale', default_value='1.4')
+    visibility_gp_noise_var_arg = DeclareLaunchArgument('visibility_gp_noise_var', default_value='0.15')
+    visibility_gp_seed_arg = DeclareLaunchArgument('visibility_gp_seed', default_value='0')
     boundary_weight_arg = DeclareLaunchArgument(
         'boundary_weight',
         default_value='1.0',
@@ -369,6 +406,15 @@ def generate_launch_description():
         pixel_timeout_arg,
         use_ambiguity_arg,
         use_obs_risk_arg,
+        use_visibility_model_arg,
+        visibility_weight_arg,
+        visibility_occ_center_x_arg,
+        visibility_occ_center_y_arg,
+        visibility_occ_radius_arg,
+        visibility_occ_tau_arg,
+        visibility_gp_length_scale_arg,
+        visibility_gp_noise_var_arg,
+        visibility_gp_seed_arg,
         boundary_weight_arg,
         costmap_min_x_arg,
         costmap_max_x_arg,
