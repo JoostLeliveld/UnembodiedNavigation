@@ -67,7 +67,7 @@ def generate_launch_description():
     perception_backend_arg = DeclareLaunchArgument(
         'perception_backend',
         default_value=defaults['perception_backend'],
-        description='Perception backend: homography | aruco'
+        description='Perception backend: homography | aruco | color'
     )
     seed_arg = DeclareLaunchArgument('seed', default_value=defaults['seed'])
 

@@ -3,6 +3,7 @@ from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import Node
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.substitutions import FindPackageShare
+from launch_ros.parameter_descriptions import ParameterValue
 from launch.substitutions import PathJoinSubstitution
 
 
@@ -39,7 +40,10 @@ def generate_launch_description():
         package="robot_state_publisher",
         executable="robot_state_publisher",
         name="robot_state_publisher",
-        parameters=[{"robot_description": robot_description, "use_sim_time": use_sim_time}],
+        parameters=[{
+            "robot_description": ParameterValue(robot_description, value_type=str),
+            "use_sim_time": use_sim_time
+        }],
         output="screen"
     )
 

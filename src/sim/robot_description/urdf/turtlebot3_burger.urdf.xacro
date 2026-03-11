@@ -33,23 +33,7 @@
         <mesh filename="package://sim/robot_description/meshes/turtlebot3_description/meshes/bases/burger_base.stl"
               scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="light_black"/>
-    </visual>
-
-    <!-- High-contrast orientation panels for external camera tracking -->
-    <visual>
-      <origin xyz="0.075 0.000 0.162"/>
-      <geometry>
-        <box size="0.120 0.110 0.018"/>
-      </geometry>
       <material name="front_red"/>
-    </visual>
-    <visual>
-      <origin xyz="-0.085 0.000 0.162"/>
-      <geometry>
-        <box size="0.100 0.110 0.018"/>
-      </geometry>
-      <material name="rear_blue"/>
     </visual>
 
     <collision>
@@ -159,11 +143,12 @@
 
   <link name="${ns}base_scan">
     <visual>
+      <origin xyz="-0.045 0 0"/>
       <geometry>
         <mesh filename="package://sim/robot_description/meshes/turtlebot3_description/meshes/sensors/lds.stl"
               scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="dark"/>
+      <material name="rear_blue"/>
     </visual>
 
     <collision>

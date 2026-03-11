@@ -163,7 +163,7 @@ def generate_launch_description():
     perception_backend_arg = DeclareLaunchArgument(
         'perception_backend',
         default_value='homography',
-        description='Perception backend in pixel mode: homography | aruco'
+        description='Perception backend in pixel mode: homography | aruco | color'
     )
     seed_arg = DeclareLaunchArgument('seed', default_value='0')
     pixel_noise_arg = DeclareLaunchArgument(

@@ -155,10 +155,10 @@ def parse_common_launch_config(context) -> Dict[str, object]:
 
     if cfg['state_source'] not in ('oracle', 'pixel'):
         raise RuntimeError("state_source must be 'oracle' or 'pixel'")
-    if cfg['perception_backend'] not in ('homography', 'aruco'):
-        raise RuntimeError("perception_backend must be 'homography' or 'aruco'")
-    if cfg['state_source'] == 'pixel' and cfg['perception_backend'] not in ('homography', 'aruco'):
-        raise RuntimeError("state_source='pixel' requires perception_backend 'homography' or 'aruco'")
+    if cfg['perception_backend'] not in ('homography', 'aruco', 'color'):
+        raise RuntimeError("perception_backend must be 'homography', 'aruco', or 'color'")
+    if cfg['state_source'] == 'pixel' and cfg['perception_backend'] not in ('homography', 'aruco', 'color'):
+        raise RuntimeError("state_source='pixel' requires perception_backend 'homography', 'aruco', or 'color'")
 
     # Occlusion benchmark worlds are visual-only stress tests; force-disable
     # obstacle-costmap behavior so agents don't treat this as obstacle avoidance.
@@ -326,6 +326,16 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             **cfg['camera_params'],
         }],
     )
+    color_pose_detector = Node(
+        package='perception',
+        executable='color_pose_detector_node',
+        name='color_pose_detector_node',
+        output='screen',
+        parameters=[{
+            'use_sim_time': cfg['use_sim_time'],
+            **cfg['camera_params'],
+        }],
+    )
 
     pixel_params = {
         'use_sim_time': cfg['use_sim_time'],
@@ -426,6 +436,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'wait_for_odom': wait_for_odom,
         'homography_sim': homography_sim,
         'aruco_detector': aruco_detector,
+        'color_pose_detector': color_pose_detector,
         'pixel_to_bev': pixel_to_bev,
         'boundary_cost_node': boundary_cost_node,
         'mission_node': mission_node,
@@ -439,5 +450,7 @@ def select_perception_nodes_for_mode(cfg: Dict[str, object], shared: Dict[str, o
     if cfg['state_source'] == 'pixel':
         if cfg['perception_backend'] == 'homography':
             return [shared['homography_sim']]
+        if cfg['perception_backend'] == 'color':
+            return [shared['color_pose_detector']]
         return [shared['aruco_detector']]
     return []
