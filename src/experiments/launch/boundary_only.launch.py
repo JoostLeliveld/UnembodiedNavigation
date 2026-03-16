@@ -127,6 +127,7 @@ def _launch_setup(context, *args, **kwargs):
         planner_node,
         control_node,
         shared_nodes['mission_node'],
+        shared_nodes['goal_marker_node'],
         shared_nodes['logger_node'],
     ])
     if cfg['use_rviz']:

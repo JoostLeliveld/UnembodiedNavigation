@@ -23,7 +23,7 @@ def generate_launch_description():
         'boundary_only_agent.launch.py',
     ])
 
-    # Study-facing arguments only (trimmed interface).
+
     use_rviz_arg = DeclareLaunchArgument(
         'use_rviz',
         default_value='false',
@@ -67,7 +67,7 @@ def generate_launch_description():
     perception_backend_arg = DeclareLaunchArgument(
         'perception_backend',
         default_value=defaults['perception_backend'],
-        description='Perception backend: homography | aruco | color'
+        description='Perception backend in pixel mode: homography | aruco'
     )
     seed_arg = DeclareLaunchArgument('seed', default_value=defaults['seed'])
 
@@ -103,23 +103,6 @@ def generate_launch_description():
     risk_weight_state_arg = DeclareLaunchArgument('risk_weight_state', default_value=defaults['risk_weight_state'])
     risk_weight_obs_arg = DeclareLaunchArgument('risk_weight_obs', default_value=defaults['risk_weight_obs'])
     ambiguity_weight_arg = DeclareLaunchArgument('ambiguity_weight', default_value=defaults['ambiguity_weight'])
-    use_visibility_model_arg = DeclareLaunchArgument(
-        'use_visibility_model',
-        default_value='true',
-        description='Enable fixed GP visibility model in planner objective/correction'
-    )
-    visibility_weight_arg = DeclareLaunchArgument(
-        'visibility_weight',
-        default_value='4.0',
-        description='Visibility penalty weight w_vis*(1-p_vis)'
-    )
-    visibility_occ_center_x_arg = DeclareLaunchArgument('visibility_occ_center_x', default_value='-1.2')
-    visibility_occ_center_y_arg = DeclareLaunchArgument('visibility_occ_center_y', default_value='-1.8')
-    visibility_occ_radius_arg = DeclareLaunchArgument('visibility_occ_radius', default_value='0.9')
-    visibility_occ_tau_arg = DeclareLaunchArgument('visibility_occ_tau', default_value='0.15')
-    visibility_gp_length_scale_arg = DeclareLaunchArgument('visibility_gp_length_scale', default_value='1.4')
-    visibility_gp_noise_var_arg = DeclareLaunchArgument('visibility_gp_noise_var', default_value='0.15')
-    visibility_gp_seed_arg = DeclareLaunchArgument('visibility_gp_seed', default_value=defaults['seed'])
     goal_sigma_uv_arg = DeclareLaunchArgument('goal_sigma_uv', default_value=defaults['goal_sigma_uv'])
     goal_sigma_yaw_arg = DeclareLaunchArgument('goal_sigma_yaw', default_value=defaults['goal_sigma_yaw'])
     use_ambiguity_arg = DeclareLaunchArgument(
@@ -146,21 +129,6 @@ def generate_launch_description():
         'debug_runtime',
         default_value=defaults['debug_runtime'],
         description='Enable runtime debug logs from planner node'
-    )
-    auto_stop_on_goal_arg = DeclareLaunchArgument(
-        'auto_stop_on_goal',
-        default_value=defaults['auto_stop_on_goal'],
-        description='End the run automatically when goal distance stays below threshold'
-    )
-    goal_success_radius_arg = DeclareLaunchArgument(
-        'goal_success_radius',
-        default_value=defaults['goal_success_radius'],
-        description='Goal distance threshold [m] for automatic run stop'
-    )
-    goal_success_hold_s_arg = DeclareLaunchArgument(
-        'goal_success_hold_s',
-        default_value=defaults['goal_success_hold_s'],
-        description='Required hold time [s] inside goal radius before stopping'
     )
 
     aruco_dict_arg = DeclareLaunchArgument('aruco_dict', default_value=defaults['aruco_dict'])
@@ -198,15 +166,6 @@ def generate_launch_description():
         'risk_weight_state': LaunchConfiguration('risk_weight_state'),
         'risk_weight_obs': LaunchConfiguration('risk_weight_obs'),
         'ambiguity_weight': LaunchConfiguration('ambiguity_weight'),
-        'use_visibility_model': LaunchConfiguration('use_visibility_model'),
-        'visibility_weight': LaunchConfiguration('visibility_weight'),
-        'visibility_occ_center_x': LaunchConfiguration('visibility_occ_center_x'),
-        'visibility_occ_center_y': LaunchConfiguration('visibility_occ_center_y'),
-        'visibility_occ_radius': LaunchConfiguration('visibility_occ_radius'),
-        'visibility_occ_tau': LaunchConfiguration('visibility_occ_tau'),
-        'visibility_gp_length_scale': LaunchConfiguration('visibility_gp_length_scale'),
-        'visibility_gp_noise_var': LaunchConfiguration('visibility_gp_noise_var'),
-        'visibility_gp_seed': LaunchConfiguration('visibility_gp_seed'),
         'goal_sigma_uv': LaunchConfiguration('goal_sigma_uv'),
         'goal_sigma_yaw': LaunchConfiguration('goal_sigma_yaw'),
         'use_ambiguity': LaunchConfiguration('use_ambiguity'),
@@ -219,9 +178,6 @@ def generate_launch_description():
         'optimizer_gtol': LaunchConfiguration('optimizer_gtol'),
         'optimizer_warm_start': LaunchConfiguration('optimizer_warm_start'),
         'debug_runtime': LaunchConfiguration('debug_runtime'),
-        'auto_stop_on_goal': LaunchConfiguration('auto_stop_on_goal'),
-        'goal_success_radius': LaunchConfiguration('goal_success_radius'),
-        'goal_success_hold_s': LaunchConfiguration('goal_success_hold_s'),
         'aruco_dict': LaunchConfiguration('aruco_dict'),
         'target_marker_id': LaunchConfiguration('target_marker_id'),
         'publish_yaw_from_marker': LaunchConfiguration('publish_yaw_from_marker'),
@@ -264,15 +220,6 @@ def generate_launch_description():
         risk_weight_state_arg,
         risk_weight_obs_arg,
         ambiguity_weight_arg,
-        use_visibility_model_arg,
-        visibility_weight_arg,
-        visibility_occ_center_x_arg,
-        visibility_occ_center_y_arg,
-        visibility_occ_radius_arg,
-        visibility_occ_tau_arg,
-        visibility_gp_length_scale_arg,
-        visibility_gp_noise_var_arg,
-        visibility_gp_seed_arg,
         goal_sigma_uv_arg,
         goal_sigma_yaw_arg,
         use_ambiguity_arg,
@@ -285,9 +232,6 @@ def generate_launch_description():
         optimizer_gtol_arg,
         optimizer_warm_start_arg,
         debug_runtime_arg,
-        auto_stop_on_goal_arg,
-        goal_success_radius_arg,
-        goal_success_hold_s_arg,
         aruco_dict_arg,
         target_marker_id_arg,
         publish_yaw_from_marker_arg,

@@ -18,7 +18,7 @@ worlds:
     planner_default: efe2
   warehouse_occ_light.world.sdf:
     world_name: warehouse_occ_light
-    spawn: {x: -5.0, y: -1.9, z: 0.05, yaw: 0.0}
+    spawn: {x: -4.4, y: -3.4, z: 0.05, yaw: 0.69}
     planner_default: efe2
     visibility_defaults:
       visibility_map_min_x: -6.0
@@ -35,7 +35,7 @@ worlds:
       visibility_gp_noise_var: 0.10
   warehouse_occ_medium.world.sdf:
     world_name: warehouse_occ_medium
-    spawn: {x: -5.0, y: -1.9, z: 0.05, yaw: 0.0}
+    spawn: {x: -4.4, y: -3.4, z: 0.05, yaw: 0.69}
     planner_default: efe2
     visibility_defaults:
       visibility_map_min_x: -6.0
@@ -52,7 +52,7 @@ worlds:
       visibility_gp_noise_var: 0.10
   warehouse_occ_heavy.world.sdf:
     world_name: warehouse_occ_heavy
-    spawn: {x: -5.0, y: -1.9, z: 0.05, yaw: 0.0}
+    spawn: {x: -4.4, y: -3.4, z: 0.05, yaw: 0.69}
     planner_default: efe2
     visibility_defaults:
       visibility_map_min_x: -6.0

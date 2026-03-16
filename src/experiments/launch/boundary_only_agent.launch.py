@@ -109,7 +109,12 @@ def _launch_setup(context, *args, **kwargs):
     after_odom.append(shared_nodes['pixel_to_bev'])
     if cfg['publish_static_costmap']:
         after_odom.append(shared_nodes['boundary_cost_node'])
-    after_odom.extend([agent_node, shared_nodes['mission_node'], shared_nodes['logger_node']])
+    after_odom.extend([
+        agent_node,
+        shared_nodes['mission_node'],
+        shared_nodes['goal_marker_node'],
+        shared_nodes['logger_node'],
+    ])
     if cfg['use_rviz']:
         after_odom.append(shared_nodes['rviz'])
 

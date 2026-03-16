@@ -107,6 +107,8 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('visibility_r_bad_yaw', 1.2)
         _declare_if_not('visibility_cov_pos_scale', 2.0)
         _declare_if_not('visibility_cov_theta_scale', 0.8)
+        _declare_if_not('publish_visibility_map', True)
+        _declare_if_not('visibility_map_topic', '/visibility_map')
 
         # Optimizer params
         _declare_if_not('optimizer_maxiter', 50)
@@ -184,6 +186,8 @@ class UnicyclePlannerNode(Node):
         self.visibility_r_bad_yaw = float(self.get_parameter('visibility_r_bad_yaw').value)
         self.visibility_cov_pos_scale = float(self.get_parameter('visibility_cov_pos_scale').value)
         self.visibility_cov_theta_scale = float(self.get_parameter('visibility_cov_theta_scale').value)
+        self.publish_visibility_map = _as_bool(self.get_parameter('publish_visibility_map').value)
+        self.visibility_map_topic = str(self.get_parameter('visibility_map_topic').value).strip() or '/visibility_map'
         if self.obs_mode not in ('uv', 'uvt'):
             raise RuntimeError("obs_mode must be 'uv' or 'uvt'")
 
@@ -308,7 +312,14 @@ class UnicyclePlannerNode(Node):
         path_qos = QoSProfile(depth=1)
         path_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
         self.path_pub = self.create_publisher(Path, '/plan', qos_profile=path_qos)
+        self.plan_preview_pub = self.create_publisher(Path, '/plan_preview', qos_profile=path_qos)
+        self.planner_belief_pub = self.create_publisher(
+            PoseWithCovarianceStamped, '/planner_belief', qos_profile=path_qos
+        )
         self.metrics_pub = self.create_publisher(Float64MultiArray, '/efe/metrics', 10)
+        self.visibility_map_pub = self.create_publisher(
+            OccupancyGrid, self.visibility_map_topic, qos_profile=path_qos
+        )
 
         # State
         self.state_msg = None
@@ -332,6 +343,7 @@ class UnicyclePlannerNode(Node):
 
         self._plan_period_s = 1.0 / max(self.plan_rate, 0.1)
         self.create_timer(self._plan_period_s, self._plan_once, callback_group=self._plan_group)
+        self._publish_visibility_map_once()
         self.get_logger().info(
             f"{self.NODE_NAME} started "
             f"(approx={self.approx_method}, obs_mode={self.obs_mode}, "
@@ -342,6 +354,51 @@ class UnicyclePlannerNode(Node):
             f"use_pixel_correction={self.use_pixel_correction}, "
             f"pixel_correction_approx={self.pixel_correction_approx}, "
             f"debug_runtime={self.debug_runtime})"
+        )
+
+    def _publish_visibility_map_once(self):
+        if not self.publish_visibility_map:
+            return
+        visibility_model = getattr(self.planner, 'visibility_model', None)
+        if visibility_model is None:
+            return
+
+        cfg = visibility_model.cfg
+        span_x = float(cfg.map_xmax) - float(cfg.map_xmin)
+        span_y = float(cfg.map_ymax) - float(cfg.map_ymin)
+        nx = int(max(cfg.map_nx, 2))
+        ny = int(max(cfg.map_ny, 2))
+        res_x = span_x / max(nx - 1, 1)
+        res_y = span_y / max(ny - 1, 1)
+        resolution = float(max(min(res_x, res_y), 1e-3))
+        width = int(max(round(span_x / resolution), 1)) + 1
+        height = int(max(round(span_y / resolution), 1)) + 1
+
+        data = []
+        for iy in range(height):
+            y = float(cfg.map_ymin) + iy * resolution
+            for ix in range(width):
+                x = float(cfg.map_xmin) + ix * resolution
+                p_vis = float(visibility_model.prob_state_np(np.array([x, y, 0.0], dtype=float)))
+                occ_value = int(np.clip(round((1.0 - p_vis) * 100.0), 0, 100))
+                data.append(occ_value)
+
+        grid = OccupancyGrid()
+        grid.header.stamp = self.get_clock().now().to_msg()
+        grid.header.frame_id = 'map_bev'
+        grid.info.resolution = resolution
+        grid.info.width = width
+        grid.info.height = height
+        grid.info.origin.position.x = float(cfg.map_xmin) - 0.5 * resolution
+        grid.info.origin.position.y = float(cfg.map_ymin) - 0.5 * resolution
+        grid.info.origin.position.z = 0.0
+        grid.info.origin.orientation.w = 1.0
+        grid.data = data
+        self.visibility_map_pub.publish(grid)
+
+        self.get_logger().info(
+            f"Published visibility map on {self.visibility_map_topic} "
+            f"({width}x{height}, res={resolution:.3f} m/cell)"
         )
 
     def _publish_safe_stop_command(self):
@@ -604,36 +661,77 @@ class UnicyclePlannerNode(Node):
                         S0[i, i] = self.min_state_cov
         return m0, S0
 
-    def _build_path_message(self, result, goal_xy):
-        path = Path()
+    def _resolve_plan_frame_id(self):
         with self._data_lock:
             costmap_ref = self.costmap
             state_ref = self.state_msg
-        frame_id = (
+        return (
             (costmap_ref.frame_id if costmap_ref is not None else '')
             or (state_ref.header.frame_id if state_ref else '')
             or 'map_bev'
         )
-        path.header.frame_id = frame_id
-        path.header.stamp = self.get_clock().now().to_msg()
+
+    @staticmethod
+    def _pose_covariance_from_state_covariance(S):
+        pose_cov = [0.0] * 36
+        if S is None:
+            return pose_cov
+        S = np.asarray(S, dtype=float)
+        if S.shape[0] < 3 or S.shape[1] < 3:
+            return pose_cov
+        idx = (0, 1, 5)
+        for i_src, i_dst in enumerate(idx):
+            for j_src, j_dst in enumerate(idx):
+                pose_cov[i_dst * 6 + j_dst] = float(S[i_src, j_src])
+        return pose_cov
+
+    def _build_path_message(self, result, goal_xy, *, append_goal=True, frame_id=None, stamp=None):
+        path = Path()
+        path.header.frame_id = frame_id or self._resolve_plan_frame_id()
+        path.header.stamp = stamp if stamp is not None else self.get_clock().now().to_msg()
 
         for state in result.states:
             p = PoseStamped()
             p.header = path.header
             p.pose.position.x = float(state[0])
             p.pose.position.y = float(state[1])
+            p.pose.orientation.z = math.sin(0.5 * float(state[2]))
+            p.pose.orientation.w = math.cos(0.5 * float(state[2]))
             path.poses.append(p)
 
-        goal_pose = PoseStamped()
-        goal_pose.header = path.header
-        goal_pose.pose.position.x = float(goal_xy[0])
-        goal_pose.pose.position.y = float(goal_xy[1])
-        path.poses.append(goal_pose)
+        if append_goal:
+            goal_pose = PoseStamped()
+            goal_pose.header = path.header
+            goal_pose.pose.position.x = float(goal_xy[0])
+            goal_pose.pose.position.y = float(goal_xy[1])
+            goal_pose.pose.orientation.w = 1.0
+            path.poses.append(goal_pose)
         return path
 
-    def _publish_plan_and_metrics(self, result, goal_xy):
-        path = self._build_path_message(result, goal_xy)
+    def _build_belief_message(self, m0, S0, *, frame_id=None, stamp=None):
+        belief = PoseWithCovarianceStamped()
+        belief.header.frame_id = frame_id or self._resolve_plan_frame_id()
+        belief.header.stamp = stamp if stamp is not None else self.get_clock().now().to_msg()
+        belief.pose.pose.position.x = float(m0[0])
+        belief.pose.pose.position.y = float(m0[1])
+        belief.pose.pose.orientation.z = math.sin(0.5 * float(m0[2]))
+        belief.pose.pose.orientation.w = math.cos(0.5 * float(m0[2]))
+        belief.pose.covariance = self._pose_covariance_from_state_covariance(S0)
+        return belief
+
+    def _publish_plan_and_metrics(self, result, goal_xy, m0, S0):
+        frame_id = self._resolve_plan_frame_id()
+        stamp = self.get_clock().now().to_msg()
+        path = self._build_path_message(
+            result, goal_xy, append_goal=True, frame_id=frame_id, stamp=stamp
+        )
+        preview_path = self._build_path_message(
+            result, goal_xy, append_goal=False, frame_id=frame_id, stamp=stamp
+        )
+        belief_msg = self._build_belief_message(m0, S0, frame_id=frame_id, stamp=stamp)
         self.path_pub.publish(path)
+        self.plan_preview_pub.publish(preview_path)
+        self.planner_belief_pub.publish(belief_msg)
 
         metrics_msg = Float64MultiArray()
         metrics_msg.data = [
@@ -709,7 +807,7 @@ class UnicyclePlannerNode(Node):
             )
             return
 
-        self._publish_plan_and_metrics(result, goal_xy)
+        self._publish_plan_and_metrics(result, goal_xy, m0, S0)
         self._after_plan_result(result)
 
         plan_elapsed_ms = max((time.perf_counter() - plan_start) * 1000.0, 0.0)

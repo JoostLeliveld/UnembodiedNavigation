@@ -32,6 +32,7 @@ setup(
         'console_scripts': [
             'boundary_cost_node = experiments.nodes.boundary_cost_node:main',
             'goal_mission_node = experiments.nodes.goal_mission_node:main',
+            'goal_marker_node = experiments.nodes.goal_marker_node:main',
             'experiment_logger = experiments.nodes.experiment_logger:main',
         ],
     },

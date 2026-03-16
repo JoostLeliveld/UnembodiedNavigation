@@ -449,6 +449,24 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         }],
     )
 
+    goal_marker_node = Node(
+        package='experiments',
+        executable='goal_marker_node',
+        name='goal_marker_node',
+        output='screen',
+        parameters=[{
+            'use_sim_time': cfg['use_sim_time'],
+            'marker_topic': '/goal_marker',
+            'marker_ns': 'goal',
+            'scale': 0.35,
+            'z': 0.08,
+            'color_r': 0.0,
+            'color_g': 0.35,
+            'color_b': 1.0,
+            'color_a': 1.0,
+        }],
+    )
+
     logger_node = Node(
         package='experiments',
         executable='experiment_logger',
@@ -501,6 +519,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'pixel_to_bev': pixel_to_bev,
         'boundary_cost_node': boundary_cost_node,
         'mission_node': mission_node,
+        'goal_marker_node': goal_marker_node,
         'logger_node': logger_node,
         'rviz': rviz,
     }
