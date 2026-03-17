@@ -7,9 +7,14 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
 import tf2_ros
 from tf2_geometry_msgs import do_transform_pose
+from std_msgs.msg import Float64MultiArray
 
 from perception.core.homography import HomographyModel
 from perception.core.camera_config import load_camera_params
+from perception.core.detection_diagnostics import (
+    DETECTION_DIAGNOSTICS_TOPIC,
+    diagnostics_message,
+)
 
 
 class HomographySimNode(Node):
@@ -64,6 +69,11 @@ class HomographySimNode(Node):
 
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.pub = self.create_publisher(PoseStamped, '/perception/pixel_pose', 10)
+        self.diag_pub = self.create_publisher(
+            Float64MultiArray,
+            DETECTION_DIAGNOSTICS_TOPIC,
+            10,
+        )
 
         self.log_counter = 0
         self.get_logger().info(
@@ -134,6 +144,23 @@ class HomographySimNode(Node):
 
         u, v, visible = self.model.world_to_pixel(x_true, y_true)
         if not visible:
+            self.diag_pub.publish(
+                diagnostics_message(
+                    stamp=msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9,
+                    detected=False,
+                    u_mid=np.nan,
+                    v_mid=np.nan,
+                    yaw_est=np.nan,
+                    u_red=np.nan,
+                    v_red=np.nan,
+                    red_area_px=np.nan,
+                    u_blue=np.nan,
+                    v_blue=np.nan,
+                    blue_area_px=np.nan,
+                    separation_px=np.nan,
+                    border_margin_px=np.nan,
+                )
+            )
             self.log_counter += 1
             if self.log_counter % 50 == 0:
                 self.get_logger().warn(
@@ -147,6 +174,19 @@ class HomographySimNode(Node):
             u_pub += float(self.rng.normal(0.0, self.pixel_noise_std))
             v_pub += float(self.rng.normal(0.0, self.pixel_noise_std))
 
+        q = pose_world.orientation
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        yaw = float(np.arctan2(siny_cosp, cosy_cosp))
+        border_margin_px = float(
+            min(
+                u_pub,
+                v_pub,
+                self.img_width - 1.0 - u_pub,
+                self.img_height - 1.0 - v_pub,
+            )
+        )
+
         out_msg = PoseStamped()
         out_msg.header.stamp = self.get_clock().now().to_msg()
         out_msg.header.frame_id = 'image'
@@ -156,6 +196,23 @@ class HomographySimNode(Node):
         # Preserve orientation in the same world frame used for projection.
         out_msg.pose.orientation = pose_world.orientation
         self.pub.publish(out_msg)
+        self.diag_pub.publish(
+            diagnostics_message(
+                stamp=msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9,
+                detected=True,
+                u_mid=u_pub,
+                v_mid=v_pub,
+                yaw_est=yaw,
+                u_red=np.nan,
+                v_red=np.nan,
+                red_area_px=np.nan,
+                u_blue=np.nan,
+                v_blue=np.nan,
+                blue_area_px=np.nan,
+                separation_px=np.nan,
+                border_margin_px=border_margin_px,
+            )
+        )
 
         self.log_counter += 1
         if self.log_counter % 20 == 0:
@@ -175,9 +232,14 @@ class HomographySimNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = HomographySimNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

@@ -9,8 +9,13 @@ from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
+from std_msgs.msg import Float64MultiArray
 
 from perception.core.camera_config import load_camera_params
+from perception.core.detection_diagnostics import (
+    DETECTION_DIAGNOSTICS_TOPIC,
+    diagnostics_message,
+)
 from perception.core.homography import HomographyModel
 
 
@@ -80,6 +85,11 @@ class ColorPoseDetectorNode(Node):
 
         self.bridge = CvBridge()
         self.pub = self.create_publisher(PoseStamped, '/perception/pixel_pose', 10)
+        self.diag_pub = self.create_publisher(
+            Float64MultiArray,
+            DETECTION_DIAGNOSTICS_TOPIC,
+            10,
+        )
         self.create_subscription(
             Image,
             self.image_topic,
@@ -167,24 +177,100 @@ class ColorPoseDetectorNode(Node):
         if rgb is None:
             return
 
+        stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         self._frame_counter += 1
         red_mask, blue_mask = self._build_masks(rgb)
         red = self._mask_centroid(red_mask, self.red_min_pixels)
         blue = self._mask_centroid(blue_mask, self.blue_min_pixels)
+        red_px = int(np.count_nonzero(red_mask))
+        blue_px = int(np.count_nonzero(blue_mask))
+
+        u_red = math.nan
+        v_red = math.nan
+        u_blue = math.nan
+        v_blue = math.nan
+        area_red = red_px
+        area_blue = blue_px
+        u_mid = math.nan
+        v_mid = math.nan
+        separation_px = math.nan
+        border_margin_px = math.nan
+        yaw = math.nan
+        detected = False
 
         if red is None or blue is None:
             self._miss_counter += 1
+            if red is not None:
+                u_red, v_red, area_red = red
+            if blue is not None:
+                u_blue, v_blue, area_blue = blue
+            if red is not None and blue is not None:
+                u_mid = float(0.5 * (u_red + u_blue))
+                v_mid = float(0.5 * (v_red + v_blue))
+                separation_px = float(math.hypot(u_red - u_blue, v_red - v_blue))
+                border_margin_px = float(
+                    min(
+                        u_mid,
+                        v_mid,
+                        self.img_width - 1.0 - u_mid,
+                        self.img_height - 1.0 - v_mid,
+                    )
+                )
+            self.diag_pub.publish(
+                diagnostics_message(
+                    stamp=stamp,
+                    detected=False,
+                    u_mid=u_mid,
+                    v_mid=v_mid,
+                    yaw_est=yaw,
+                    u_red=u_red,
+                    v_red=v_red,
+                    red_area_px=area_red,
+                    u_blue=u_blue,
+                    v_blue=v_blue,
+                    blue_area_px=area_blue,
+                    separation_px=separation_px,
+                    border_margin_px=border_margin_px,
+                )
+            )
             if self._frame_counter % self.log_every_n == 0:
                 self.get_logger().info(
                     f'Color miss ({self._miss_counter}/{self._frame_counter}); '
-                    f"red_px={int(np.count_nonzero(red_mask))} "
-                    f"blue_px={int(np.count_nonzero(blue_mask))}"
+                    f"red_px={red_px} blue_px={blue_px}"
                 )
             return
 
         u_red, v_red, area_red = red
         u_blue, v_blue, area_blue = blue
-        if math.hypot(u_red - u_blue, v_red - v_blue) < self.min_marker_separation_px:
+        u_mid = float(0.5 * (u_red + u_blue))
+        v_mid = float(0.5 * (v_red + v_blue))
+        separation_px = float(math.hypot(u_red - u_blue, v_red - v_blue))
+        border_margin_px = float(
+            min(
+                u_mid,
+                v_mid,
+                self.img_width - 1.0 - u_mid,
+                self.img_height - 1.0 - v_mid,
+            )
+        )
+        if separation_px < self.min_marker_separation_px:
+            self.diag_pub.publish(
+                diagnostics_message(
+                    stamp=stamp,
+                    detected=False,
+                    u_mid=u_mid,
+                    v_mid=v_mid,
+                    yaw_est=yaw,
+                    u_red=u_red,
+                    v_red=v_red,
+                    red_area_px=area_red,
+                    u_blue=u_blue,
+                    v_blue=v_blue,
+                    blue_area_px=area_blue,
+                    separation_px=separation_px,
+                    border_margin_px=border_margin_px,
+                )
+            )
             return
 
         world_red = self.model.pixel_to_world(u_red, v_red)
@@ -197,18 +283,36 @@ class ColorPoseDetectorNode(Node):
             self._last_yaw = yaw
         else:
             yaw = self._last_yaw
+        detected = True
 
         out = PoseStamped()
         out.header.stamp = msg.header.stamp
         out.header.frame_id = 'image'
-        out.pose.position.x = float(0.5 * (u_red + u_blue))
-        out.pose.position.y = float(0.5 * (v_red + v_blue))
+        out.pose.position.x = u_mid
+        out.pose.position.y = v_mid
         out.pose.position.z = 0.0
         out.pose.orientation.x = 0.0
         out.pose.orientation.y = 0.0
         out.pose.orientation.z = math.sin(0.5 * yaw)
         out.pose.orientation.w = math.cos(0.5 * yaw)
         self.pub.publish(out)
+        self.diag_pub.publish(
+            diagnostics_message(
+                stamp=stamp,
+                detected=detected,
+                u_mid=u_mid,
+                v_mid=v_mid,
+                yaw_est=yaw,
+                u_red=u_red,
+                v_red=v_red,
+                red_area_px=area_red,
+                u_blue=u_blue,
+                v_blue=v_blue,
+                blue_area_px=area_blue,
+                separation_px=separation_px,
+                border_margin_px=border_margin_px,
+            )
+        )
 
         self._pub_counter += 1
         if self._pub_counter % self.log_every_n == 0:
@@ -223,9 +327,14 @@ class ColorPoseDetectorNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = ColorPoseDetectorNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

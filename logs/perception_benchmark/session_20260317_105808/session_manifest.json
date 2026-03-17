@@ -1,0 +1,22 @@
+{
+  "created_at": "2026-03-17T10:58:08.662573",
+  "argv": [
+    "scripts/run_perception_benchmark_batch.py",
+    "--dry-run",
+    "--scenario",
+    "empty_fov",
+    "--backends",
+    "color",
+    "--empty-grid-nx",
+    "2",
+    "--empty-grid-ny",
+    "2"
+  ],
+  "n_runs": 16,
+  "scenario": "empty_fov",
+  "backends": [
+    "color"
+  ],
+  "hold_duration_s": 3.0,
+  "warmup_s": 0.0
+}
