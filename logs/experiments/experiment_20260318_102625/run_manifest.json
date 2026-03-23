@@ -1,0 +1,21 @@
+{
+  "add_ambiguity": true,
+  "boundary_weight": 0.0,
+  "git_sha": "6859a0064cc9c9173f86d6b8fa5115115cca9a59",
+  "obs_mode": "uv",
+  "obs_model": "camera",
+  "perception_backend": "color",
+  "pixel_noise_sigma": 0.0,
+  "planner": "efe2",
+  "publish_static_costmap": false,
+  "run_id": "experiment_20260318_102625",
+  "seed": 0,
+  "state_source": "pixel",
+  "task": "T2_diag_far",
+  "timestamp": "2026-03-18T10:26:25.409259",
+  "transform_noise_sigma": 0.0,
+  "use_ambiguity": true,
+  "use_obs_risk": true,
+  "use_pixel_correction": true,
+  "world": "warehouse_occ_light.world.sdf"
+}
