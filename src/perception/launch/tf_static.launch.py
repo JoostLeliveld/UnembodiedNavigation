@@ -61,10 +61,6 @@ def generate_launch_description():
             package='tf2_ros',
             executable='static_transform_publisher',
             name='map_bev_to_camera',
-            # Camera at (-3, -3, 6) in map_bev/odom frame, looking at (1.5, 1.5, 0)
-            # Yaw: 0.7854 rad (45°) = looking toward +X+Y diagonal
-            # Pitch: -0.756 rad (-43.3°) = looking ~45° down from horizontal
-            # Quaternion from roll=0, pitch=-0.756, yaw=0.7854
             arguments=[
                 '--x', LaunchConfiguration('cam_x'),
                 '--y', LaunchConfiguration('cam_y'),

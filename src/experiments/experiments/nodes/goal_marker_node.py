@@ -11,15 +11,24 @@ class GoalMarkerNode(Node):
     def __init__(self):
         super().__init__('goal_marker_node')
 
-        self.declare_parameter('use_sim_time', True)
-        self.declare_parameter('marker_topic', '/goal_marker')
-        self.declare_parameter('marker_ns', 'goal')
-        self.declare_parameter('scale', 0.25)
-        self.declare_parameter('z', 0.08)
-        self.declare_parameter('color_r', 0.0)
-        self.declare_parameter('color_g', 0.35)
-        self.declare_parameter('color_b', 1.0)
-        self.declare_parameter('color_a', 1.0)
+        if not self.has_parameter('use_sim_time'):
+            self.declare_parameter('use_sim_time', True)
+        if not self.has_parameter('marker_topic'):
+            self.declare_parameter('marker_topic', '/goal_marker')
+        if not self.has_parameter('marker_ns'):
+            self.declare_parameter('marker_ns', 'goal')
+        if not self.has_parameter('scale'):
+            self.declare_parameter('scale', 0.25)
+        if not self.has_parameter('z'):
+            self.declare_parameter('z', 0.08)
+        if not self.has_parameter('color_r'):
+            self.declare_parameter('color_r', 0.0)
+        if not self.has_parameter('color_g'):
+            self.declare_parameter('color_g', 0.35)
+        if not self.has_parameter('color_b'):
+            self.declare_parameter('color_b', 1.0)
+        if not self.has_parameter('color_a'):
+            self.declare_parameter('color_a', 1.0)
 
         marker_topic = str(self.get_parameter('marker_topic').value).strip() or '/goal_marker'
         self.marker_ns = str(self.get_parameter('marker_ns').value).strip() or 'goal'
@@ -30,7 +39,7 @@ class GoalMarkerNode(Node):
         self.color_b = float(self.get_parameter('color_b').value)
         self.color_a = float(self.get_parameter('color_a').value)
 
-        sub_qos = QoSProfile(depth=10)
+        sub_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         pub_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.goal_sub = self.create_subscription(
             PoseStamped, '/goal_bev', self._goal_cb, qos_profile=sub_qos

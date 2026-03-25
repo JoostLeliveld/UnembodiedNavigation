@@ -15,6 +15,7 @@ from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
     diagnostics_message,
 )
+from unav_common.occlusion_geometry import scene_from_json, segment_occluded
 
 
 class HomographySimNode(Node):
@@ -47,6 +48,16 @@ class HomographySimNode(Node):
             self.declare_parameter('world_frame', 'map_bev')
         if not self.has_parameter('log_noisy_pixels'):
             self.declare_parameter('log_noisy_pixels', False)
+        if not self.has_parameter('use_visibility_model'):
+            self.declare_parameter('use_visibility_model', False)
+        if not self.has_parameter('visibility_model'):
+            self.declare_parameter('visibility_model', 'fixed_gp')
+        if not self.has_parameter('visibility_geometry_json'):
+            self.declare_parameter('visibility_geometry_json', '')
+        if not self.has_parameter('visibility_target_height_m'):
+            self.declare_parameter('visibility_target_height_m', 0.0)
+        if not self.has_parameter('log_camera_diagnostics'):
+            self.declare_parameter('log_camera_diagnostics', False)
 
         self.cam_pos, self.look_at, self.img_width, self.img_height, self.fov_h_rad = load_camera_params(self)
         self.model = HomographyModel(
@@ -61,11 +72,22 @@ class HomographySimNode(Node):
         self.seed = int(self.get_parameter('seed').value)
         self.world_frame = str(self.get_parameter('world_frame').value)
         self.log_noisy_pixels = _as_bool(self.get_parameter('log_noisy_pixels').value)
+        self.use_visibility_model = _as_bool(self.get_parameter('use_visibility_model').value)
+        self.visibility_model_name = str(self.get_parameter('visibility_model').value).strip().lower()
+        self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
+        self.log_camera_diagnostics = _as_bool(self.get_parameter('log_camera_diagnostics').value)
+        self.occlusion_scene = scene_from_json(str(self.get_parameter('visibility_geometry_json').value))
+        self.use_geometry_occlusion = (
+            self.use_visibility_model
+            and self.visibility_model_name in ('raycast_25d', 'raycast25d', 'raycast')
+            and bool(self.occlusion_scene.prisms)
+        )
         self.rng = np.random.default_rng(self.seed)
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
         self._last_tf_warn_wall = 0.0
-        self._verify_camera_setup()
+        if self.log_camera_diagnostics:
+            self._verify_camera_setup()
 
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.pub = self.create_publisher(PoseStamped, '/perception/pixel_pose', 10)
@@ -78,7 +100,10 @@ class HomographySimNode(Node):
         self.log_counter = 0
         self.get_logger().info(
             f'Homography Sim Node started (pixel_noise_sigma={self.pixel_noise_std:.3f}, '
-            f'world_frame={self.world_frame}, log_noisy_pixels={self.log_noisy_pixels})'
+            f'world_frame={self.world_frame}, log_noisy_pixels={self.log_noisy_pixels}, '
+            f'use_geometry_occlusion={self.use_geometry_occlusion}, '
+            f'log_camera_diagnostics={self.log_camera_diagnostics}, '
+            f'occluders={len(self.occlusion_scene.prisms)})'
         )
 
     def _verify_camera_setup(self):
@@ -118,6 +143,12 @@ class HomographySimNode(Node):
                 self.get_logger().info(f'  {name}: error = {err:.6f}m')
 
         self.get_logger().info('=' * 50)
+
+    def _is_occluded(self, x_world: float, y_world: float) -> bool:
+        if not self.use_geometry_occlusion:
+            return False
+        target = np.array([float(x_world), float(y_world), float(self.visibility_target_height_m)], dtype=float)
+        return bool(segment_occluded(self.occlusion_scene.prisms, np.asarray(self.cam_pos, dtype=float), target))
 
     def odom_callback(self, msg):
         source_frame = (msg.header.frame_id or 'odom').strip() or 'odom'
@@ -165,6 +196,31 @@ class HomographySimNode(Node):
             if self.log_counter % 50 == 0:
                 self.get_logger().warn(
                     f'Robot at ({x_true:.2f}, {y_true:.2f}) is OUT OF CAMERA VIEW'
+                )
+            return
+
+        if self._is_occluded(x_true, y_true):
+            self.diag_pub.publish(
+                diagnostics_message(
+                    stamp=msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9,
+                    detected=False,
+                    u_mid=np.nan,
+                    v_mid=np.nan,
+                    yaw_est=np.nan,
+                    u_red=np.nan,
+                    v_red=np.nan,
+                    red_area_px=np.nan,
+                    u_blue=np.nan,
+                    v_blue=np.nan,
+                    blue_area_px=np.nan,
+                    separation_px=np.nan,
+                    border_margin_px=np.nan,
+                )
+            )
+            self.log_counter += 1
+            if self.log_counter % 50 == 0:
+                self.get_logger().warn(
+                    f'Robot at ({x_true:.2f}, {y_true:.2f}) is OCCLUDED FROM CAMERA VIEW'
                 )
             return
 

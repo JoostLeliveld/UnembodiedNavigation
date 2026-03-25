@@ -2,7 +2,7 @@
 <package format="3">
   <name>state</name>
   <version>0.0.0</version>
-  <description>State adapter providing /state/bev for boundary-only experiments.</description>
+  <description>State adapter providing /state/bev for external-observer experiments.</description>
   <maintainer email="j.j.p.leliveld@student.tue.nl">Joost Leliveld</maintainer>
   <license>Apache-2.0</license>
 

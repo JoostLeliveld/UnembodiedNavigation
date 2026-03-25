@@ -35,12 +35,11 @@ class JaxUnicycleParams:
     vis_cov_theta_scale: float = 0.8
 
 
-def make_g_from_homography(H, obs_mode: str = "uvt"):
+def make_g_from_homography(H):
     """Return a JAX-friendly planar homography observation function."""
     if not jax_available():
         raise RuntimeError("JAX is not available")
     H_j = jnp.array(H)
-    obs_mode = str(obs_mode).lower()
 
     def g(x):
         x = jnp.asarray(x)
@@ -48,9 +47,7 @@ def make_g_from_homography(H, obs_mode: str = "uvt"):
         pix = H_j @ pt
         u = pix[0] / pix[2]
         v = pix[1] / pix[2]
-        if obs_mode == "uv":
-            return jnp.stack([u, v])
-        return jnp.stack([u, v, x[2]])
+        return jnp.stack([u, v])
 
     return g
 
@@ -158,7 +155,7 @@ def efe_unicycle_jax(
         R_eff = params.R
         S_eff = S
         if p_vis is not None:
-            p = jnp.clip(p_vis(m), 1e-4, 1.0 - 1e-4)
+            p = jnp.clip(p_vis(m, S), 1e-4, 1.0 - 1e-4)
             q = 1.0 - p
             R_bad = params.R if params.R_bad is None else params.R_bad
             R_eff = p * params.R + q * R_bad

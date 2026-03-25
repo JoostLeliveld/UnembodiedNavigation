@@ -15,7 +15,7 @@ setup(
     zip_safe=True,
     maintainer='joostleliveld',
     maintainer_email='j.j.p.leliveld@student.tue.nl',
-    description='State adapter providing /state/bev for boundary-only experiments.',
+    description='State adapter providing /state/bev for external-observer experiments.',
     license='Apache-2.0',
     extras_require={
         'test': ['pytest'],

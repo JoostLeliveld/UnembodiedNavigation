@@ -15,8 +15,8 @@ setup(
     zip_safe=True,
     maintainer='joostleliveld',
     maintainer_email='j.j.p.leliveld@student.tue.nl',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='Visibility-aware active planning and runtime nodes for UnembodiedNavigation',
+    license='MIT',
     extras_require={
         'test': [
             'pytest',
@@ -24,7 +24,6 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'astar_planner = planning.nodes.astar_planner_node:main',
             'efe_planner = planning.nodes.efe_planner_node:main',
             'mpc_planner = planning.nodes.mpc_planner_node:main',
             'efer_planner = planning.nodes.efer_planner_node:main',

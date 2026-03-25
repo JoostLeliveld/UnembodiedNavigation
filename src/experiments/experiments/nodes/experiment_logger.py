@@ -10,7 +10,8 @@ import tf2_ros
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry, Path
 from rclpy.node import Node
-from std_msgs.msg import Float64MultiArray
+from rclpy.qos import QoSProfile, DurabilityPolicy
+from std_msgs.msg import Float64MultiArray, String
 from tf2_geometry_msgs import do_transform_pose
 
 from experiments.core.manifest import create_run_dir, snapshot_configs, write_manifest
@@ -41,18 +42,9 @@ class ExperimentLogger(Node):
         self.declare_parameter('world', '')
         self.declare_parameter('task', '')
         self.declare_parameter('planner', '')
-        self.declare_parameter('state_source', '')
-        self.declare_parameter('perception_backend', '')
-        self.declare_parameter('obs_model', '')
-        self.declare_parameter('obs_mode', '')
         self.declare_parameter('use_pixel_correction', False)
-        self.declare_parameter('boundary_weight', 0.0)
-        self.declare_parameter('publish_static_costmap', True)
-        self.declare_parameter('add_ambiguity', False)
         self.declare_parameter('use_ambiguity', False)
         self.declare_parameter('use_obs_risk', True)
-        self.declare_parameter('pixel_noise_sigma', 0.0)
-        self.declare_parameter('transform_noise_sigma', 0.0)
         self.declare_parameter('world_profiles_path', '')
         self.declare_parameter('tasks_yaml', '')
         self.declare_parameter('log_plan_samples', True)
@@ -61,24 +53,19 @@ class ExperimentLogger(Node):
         self.declare_parameter('goal_success_radius', 0.35)
         self.declare_parameter('goal_success_hold_s', 2.0)
         self.declare_parameter('frame_id', 'map_bev')
+        self.declare_parameter('use_visibility_model', False)
+        self.declare_parameter('visibility_model', 'fixed_gp')
+        self.declare_parameter('visibility_target_height_m', 0.0)
+        self.declare_parameter('run_dir_topic', '/experiment/run_dir')
 
         log_dir = self.get_parameter('log_dir').value
         self.seed = int(self.get_parameter('seed').value)
         self.world = self.get_parameter('world').value
         self.task = self.get_parameter('task').value
         self.planner = self.get_parameter('planner').value
-        self.state_source = self.get_parameter('state_source').value
-        self.perception_backend = self.get_parameter('perception_backend').value
-        self.obs_model = self.get_parameter('obs_model').value
-        self.obs_mode = self.get_parameter('obs_mode').value
         self.use_pixel_correction = bool(self.get_parameter('use_pixel_correction').value)
-        self.boundary_weight = float(self.get_parameter('boundary_weight').value)
-        self.publish_static_costmap = bool(self.get_parameter('publish_static_costmap').value)
-        self.add_ambiguity = bool(self.get_parameter('add_ambiguity').value)
         self.use_ambiguity = bool(self.get_parameter('use_ambiguity').value)
         self.use_obs_risk = bool(self.get_parameter('use_obs_risk').value)
-        self.pixel_noise_sigma = float(self.get_parameter('pixel_noise_sigma').value)
-        self.transform_noise_sigma = float(self.get_parameter('transform_noise_sigma').value)
         self.world_profiles_path = self.get_parameter('world_profiles_path').value
         self.tasks_yaml = self.get_parameter('tasks_yaml').value
         self.log_plan_samples = bool(self.get_parameter('log_plan_samples').value)
@@ -87,6 +74,10 @@ class ExperimentLogger(Node):
         self.goal_success_radius = float(self.get_parameter('goal_success_radius').value)
         self.goal_success_hold_s = float(self.get_parameter('goal_success_hold_s').value)
         self.frame_id = str(self.get_parameter('frame_id').value)
+        self.use_visibility_model = bool(self.get_parameter('use_visibility_model').value)
+        self.visibility_model = str(self.get_parameter('visibility_model').value)
+        self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
+        self.run_dir_topic = str(self.get_parameter('run_dir_topic').value).strip() or '/experiment/run_dir'
 
         run_info = create_run_dir(log_dir)
         self.run_id = run_info['run_id']
@@ -101,19 +92,15 @@ class ExperimentLogger(Node):
             'world': self.world,
             'task': self.task,
             'planner': self.planner,
-            'state_source': self.state_source,
-            'perception_backend': self.perception_backend,
-            'obs_model': self.obs_model,
-            'obs_mode': self.obs_mode,
             'use_pixel_correction': self.use_pixel_correction,
-            'boundary_weight': self.boundary_weight,
-            'publish_static_costmap': self.publish_static_costmap,
-            'add_ambiguity': self.add_ambiguity,
             'use_ambiguity': self.use_ambiguity,
             'use_obs_risk': self.use_obs_risk,
+            'use_visibility_model': self.use_visibility_model,
+            'visibility_model': self.visibility_model,
+            'visibility_target_height_m': self.visibility_target_height_m,
             'seed': self.seed,
-            'pixel_noise_sigma': self.pixel_noise_sigma,
-            'transform_noise_sigma': self.transform_noise_sigma,
+            'state_pipeline': 'homography_to_bev',
+            'observation_model': 'uv',
         }
         write_manifest(self.run_dir, manifest_data, repo_root)
         snapshot_configs(self.run_dir, [self.world_profiles_path, self.tasks_yaml])
@@ -132,6 +119,13 @@ class ExperimentLogger(Node):
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
 
+        run_dir_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.run_dir_pub = self.create_publisher(String, self.run_dir_topic, qos_profile=run_dir_qos)
+        run_dir_msg = String()
+        run_dir_msg.data = self.run_dir
+        self.run_dir_pub.publish(run_dir_msg)
+
+        goal_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
         self.create_subscription(PoseWithCovarianceStamped, '/state/bev', self._state_cb, 10)
         self.create_subscription(PoseStamped, '/perception/pixel_pose', self._obs_cb, 10)
@@ -142,7 +136,7 @@ class ExperimentLogger(Node):
             10,
         )
         self.create_subscription(Twist, '/cmd_vel', self._cmd_cb, 10)
-        self.create_subscription(PoseStamped, '/goal_bev', self._goal_cb, 10)
+        self.create_subscription(PoseStamped, '/goal_bev', self._goal_cb, qos_profile=goal_qos)
         self.create_subscription(Path, '/plan', self._plan_cb, 10)
         self.create_subscription(Float64MultiArray, '/efe/metrics', self._efe_cb, 10)
 
@@ -154,7 +148,7 @@ class ExperimentLogger(Node):
             'cmd_v', 'cmd_w',
             'goal_x', 'goal_y', 'goal_dist',
             'plan_points', 'plan_length',
-            'efe_total', 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_boundary', 'efe_visibility',
+            'efe_total', 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_visibility',
             'seed'
         ])
 
@@ -204,7 +198,6 @@ class ExperimentLogger(Node):
                 'blue_area_px',
                 'separation_px',
                 'border_margin_px',
-                'perception_backend',
                 'seed',
             ])
 
@@ -374,7 +367,6 @@ class ExperimentLogger(Node):
             diag['blue_area_px'],
             diag['separation_px'],
             diag['border_margin_px'],
-            self.perception_backend,
             self.seed,
         ])
         self.perception_file.flush()
@@ -416,16 +408,13 @@ class ExperimentLogger(Node):
         efe_risk = 0.0
         efe_ambiguity = 0.0
         efe_control = 0.0
-        efe_boundary = 0.0
         efe_visibility = 0.0
         if self.efe_metrics and self.efe_metrics.data and len(self.efe_metrics.data) >= 5:
             efe_total = float(self.efe_metrics.data[0])
             efe_risk = float(self.efe_metrics.data[1])
             efe_ambiguity = float(self.efe_metrics.data[2])
             efe_control = float(self.efe_metrics.data[3])
-            efe_boundary = float(self.efe_metrics.data[4])
-            if len(self.efe_metrics.data) >= 6:
-                efe_visibility = float(self.efe_metrics.data[5])
+            efe_visibility = float(self.efe_metrics.data[4])
 
         self.writer.writerow([
             stamp,
@@ -436,7 +425,7 @@ class ExperimentLogger(Node):
             cmd_v, cmd_w,
             goal_x, goal_y, goal_dist,
             plan_points, plan_length,
-            efe_total, efe_risk, efe_ambiguity, efe_control, efe_boundary, efe_visibility,
+            efe_total, efe_risk, efe_ambiguity, efe_control, efe_visibility,
             self.seed,
         ])
         self.file.flush()

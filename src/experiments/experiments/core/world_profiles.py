@@ -5,9 +5,10 @@ from typing import Any, Dict, List, Tuple
 
 import yaml
 from ament_index_python.packages import get_package_share_directory
+from unav_common.occlusion_geometry import parse_occlusion_scene_from_world, scene_to_json
 
 
-VALID_PLANNERS = {"astar", "efe1", "efe2", "mpc", "efer"}
+VALID_PLANNERS = {"efe1", "efe2", "mpc", "efer"}
 
 
 def load_world_profiles(path: str) -> Dict[str, Any]:
@@ -157,6 +158,12 @@ def _validate_visibility_defaults(visibility_defaults: Dict[str, Any]) -> None:
         "visibility_occ_tau",
         "visibility_gp_length_scale",
         "visibility_gp_noise_var",
+        "visibility_prior_occ",
+        "visibility_beta",
+        "visibility_height_tau",
+        "visibility_ray_samples",
+        "visibility_sigma_kappa",
+        "visibility_target_height_m",
     )
     for key in numeric_keys:
         if key in visibility_defaults:
@@ -247,6 +254,14 @@ def parse_camera_pose_from_world(world_path: str, camera_model: str = "external_
     return camera_pose
 
 
+def serialize_occlusion_geometry_from_world(
+    world_path: str,
+    model_name: str = "warehouse_rack_occluders",
+) -> str:
+    scene = parse_occlusion_scene_from_world(world_path, model_name=model_name)
+    return scene_to_json(scene)
+
+
 def compute_look_at_from_pose(cam_pos: List[float], roll: float, pitch: float, yaw: float) -> List[float]:
     cp = math.cos(pitch)
     sp = math.sin(pitch)
@@ -280,5 +295,4 @@ def compute_camera_quaternion_from_rpy(roll: float, pitch: float, yaw: float) ->
     qx = sr * cp * cy - cr * sp * sy
     qy = cr * sp * cy + sr * cp * sy
     qz = cr * cp * sy - sr * sp * cy
-
     return [qx, qy, qz, qw]

@@ -44,10 +44,17 @@ class SimpleRBFGP:
         self.alpha = np.linalg.solve(self.L.T, np.linalg.solve(self.L, y0))
         return self
 
-    def predict(self, X):
+    def predict_mean_std(self, X):
         X = np.asarray(X, dtype=float)
         Ks = self._kernel(X, self.X_train)
-        return self.y_mean + Ks @ self.alpha
+        mean = self.y_mean + Ks @ self.alpha
+        v = np.linalg.solve(self.L, Ks.T)
+        var = np.maximum(self.signal_var - np.sum(v * v, axis=0), 1e-12)
+        return mean, np.sqrt(var)
+
+    def predict(self, X):
+        mean, _ = self.predict_mean_std(X)
+        return mean
 
 
 @dataclass

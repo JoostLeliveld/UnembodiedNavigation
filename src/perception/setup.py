@@ -16,8 +16,8 @@ setup(
     zip_safe=True,
     maintainer='joostleliveld',
     maintainer_email='j.j.p.leliveld@student.tue.nl',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='External-camera perception simulation and homography utilities for UnembodiedNavigation',
+    license='MIT',
     extras_require={
         'test': [
             'pytest',
@@ -26,8 +26,6 @@ setup(
     entry_points={
         'console_scripts': [
             'homography_sim_node = perception.nodes.homography_sim_node:main',
-            'aruco_detector_node = perception.nodes.aruco_detector_node:main',
-            'color_pose_detector_node = perception.nodes.color_pose_detector_node:main',
         ],
     },
 
