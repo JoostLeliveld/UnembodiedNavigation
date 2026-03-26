@@ -81,7 +81,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('use_ambiguity', True)
         _declare_if_not('optimizer_backend', 'auto')
         _declare_if_not('use_visibility_model', False)
-        _declare_if_not('visibility_model', 'fixed_gp')
+        _declare_if_not('visibility_model', 'raycast_25d')
         _declare_if_not('visibility_weight', 0.0)
         _declare_if_not('visibility_map_min_x', -5.0)
         _declare_if_not('visibility_map_max_x', 5.0)
@@ -89,10 +89,6 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('visibility_map_max_y', 5.0)
         _declare_if_not('visibility_map_nx', 140)
         _declare_if_not('visibility_map_ny', 120)
-        _declare_if_not('visibility_occ_center_x', -1.2)
-        _declare_if_not('visibility_occ_center_y', -1.8)
-        _declare_if_not('visibility_occ_radius', 0.9)
-        _declare_if_not('visibility_occ_tau', 0.15)
         _declare_if_not('visibility_gp_length_scale', 1.4)
         _declare_if_not('visibility_gp_noise_var', 0.15)
         _declare_if_not('visibility_prior_occ', 0.005)
@@ -108,9 +104,9 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('visibility_cov_theta_scale', 0.8)
         _declare_if_not('publish_visibility_map', True)
         _declare_if_not('visibility_map_topic', '/visibility_map')
-        _declare_if_not('publish_gp_debug_maps', True)
-        _declare_if_not('visibility_gp_mean_map_topic', '/visibility_gp_mean_map')
-        _declare_if_not('visibility_gp_conservative_map_topic', '/visibility_gp_conservative_map')
+        _declare_if_not('publish_opacity_debug_maps', True)
+        _declare_if_not('visibility_opacity_mean_map_topic', '/visibility_opacity_mean_map')
+        _declare_if_not('visibility_opacity_conservative_map_topic', '/visibility_opacity_conservative_map')
         _declare_if_not('publish_visibility_logic_markers', True)
         _declare_if_not('visibility_logic_marker_topic', '/visibility_logic_markers')
         _declare_if_not('experiment_run_dir_topic', '/experiment/run_dir')
@@ -181,10 +177,6 @@ class UnicyclePlannerNode(Node):
         self.visibility_map_max_y = float(self.get_parameter('visibility_map_max_y').value)
         self.visibility_map_nx = int(self.get_parameter('visibility_map_nx').value)
         self.visibility_map_ny = int(self.get_parameter('visibility_map_ny').value)
-        self.visibility_occ_center_x = float(self.get_parameter('visibility_occ_center_x').value)
-        self.visibility_occ_center_y = float(self.get_parameter('visibility_occ_center_y').value)
-        self.visibility_occ_radius = float(self.get_parameter('visibility_occ_radius').value)
-        self.visibility_occ_tau = float(self.get_parameter('visibility_occ_tau').value)
         self.visibility_gp_length_scale = float(self.get_parameter('visibility_gp_length_scale').value)
         self.visibility_gp_noise_var = float(self.get_parameter('visibility_gp_noise_var').value)
         self.visibility_prior_occ = float(self.get_parameter('visibility_prior_occ').value)
@@ -200,13 +192,14 @@ class UnicyclePlannerNode(Node):
         self.visibility_cov_theta_scale = float(self.get_parameter('visibility_cov_theta_scale').value)
         self.publish_visibility_map = _as_bool(self.get_parameter('publish_visibility_map').value)
         self.visibility_map_topic = str(self.get_parameter('visibility_map_topic').value).strip() or '/visibility_map'
-        self.publish_gp_debug_maps = _as_bool(self.get_parameter('publish_gp_debug_maps').value)
-        self.visibility_gp_mean_map_topic = (
-            str(self.get_parameter('visibility_gp_mean_map_topic').value).strip() or '/visibility_gp_mean_map'
+        self.publish_opacity_debug_maps = _as_bool(self.get_parameter('publish_opacity_debug_maps').value)
+        self.visibility_opacity_mean_map_topic = (
+            str(self.get_parameter('visibility_opacity_mean_map_topic').value).strip()
+            or '/visibility_opacity_mean_map'
         )
-        self.visibility_gp_conservative_map_topic = (
-            str(self.get_parameter('visibility_gp_conservative_map_topic').value).strip()
-            or '/visibility_gp_conservative_map'
+        self.visibility_opacity_conservative_map_topic = (
+            str(self.get_parameter('visibility_opacity_conservative_map_topic').value).strip()
+            or '/visibility_opacity_conservative_map'
         )
         self.publish_visibility_logic_markers = _as_bool(
             self.get_parameter('publish_visibility_logic_markers').value
@@ -298,10 +291,6 @@ class UnicyclePlannerNode(Node):
             visibility_map_max_y=self.visibility_map_max_y,
             visibility_map_nx=self.visibility_map_nx,
             visibility_map_ny=self.visibility_map_ny,
-            visibility_occ_center_x=self.visibility_occ_center_x,
-            visibility_occ_center_y=self.visibility_occ_center_y,
-            visibility_occ_radius=self.visibility_occ_radius,
-            visibility_occ_tau=self.visibility_occ_tau,
             visibility_gp_length_scale=self.visibility_gp_length_scale,
             visibility_gp_noise_var=self.visibility_gp_noise_var,
             visibility_prior_occ=self.visibility_prior_occ,
@@ -359,11 +348,11 @@ class UnicyclePlannerNode(Node):
         self.visibility_map_pub = self.create_publisher(
             OccupancyGrid, self.visibility_map_topic, qos_profile=path_qos
         )
-        self.visibility_gp_mean_map_pub = self.create_publisher(
-            OccupancyGrid, self.visibility_gp_mean_map_topic, qos_profile=path_qos
+        self.visibility_opacity_mean_map_pub = self.create_publisher(
+            OccupancyGrid, self.visibility_opacity_mean_map_topic, qos_profile=path_qos
         )
-        self.visibility_gp_conservative_map_pub = self.create_publisher(
-            OccupancyGrid, self.visibility_gp_conservative_map_topic, qos_profile=path_qos
+        self.visibility_opacity_conservative_map_pub = self.create_publisher(
+            OccupancyGrid, self.visibility_opacity_conservative_map_topic, qos_profile=path_qos
         )
         self.visibility_logic_pub = self.create_publisher(
             MarkerArray, self.visibility_logic_marker_topic, qos_profile=path_qos
@@ -554,13 +543,13 @@ class UnicyclePlannerNode(Node):
                 invert=True,
             )
 
-        if self.publish_gp_debug_maps:
+        if self.publish_opacity_debug_maps:
             rho_mean = getattr(visibility_model, 'rho_mean_map', None)
             rho_cons = getattr(visibility_model, 'rho_conservative_map', None)
             if rho_mean is not None:
                 self._publish_visibility_grid(
-                    self.visibility_gp_mean_map_pub,
-                    self.visibility_gp_mean_map_topic,
+                    self.visibility_opacity_mean_map_pub,
+                    self.visibility_opacity_mean_map_topic,
                     cfg,
                     rho_mean,
                     xs=xs,
@@ -569,8 +558,8 @@ class UnicyclePlannerNode(Node):
                 )
             if rho_cons is not None:
                 self._publish_visibility_grid(
-                    self.visibility_gp_conservative_map_pub,
-                    self.visibility_gp_conservative_map_topic,
+                    self.visibility_opacity_conservative_map_pub,
+                    self.visibility_opacity_conservative_map_topic,
                     cfg,
                     rho_cons,
                     xs=xs,

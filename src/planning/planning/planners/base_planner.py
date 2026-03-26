@@ -8,7 +8,6 @@ from scipy.optimize import minimize
 
 from planning.core.dynamics import unicycle_step, unicycle_jacobian, unicycle_process_noise
 from planning.core.efe_utils import ET1, ET2, UT, ambiguity, risk
-from planning.core.visibility_gp import FixedGPVisibilityConfig, FixedGPVisibilityModel
 from planning.core.visibility_raycast_25d import Raycast25DVisibilityConfig, Raycast25DVisibilityModel
 from unav_common.camera_model import ObliqueCameraModel
 from planning.core.rollout import rollout_unicycle
@@ -68,7 +67,7 @@ class UnicyclePlannerBase:
         seed,
         camera_params,
         use_visibility_model=False,
-        visibility_model='fixed_gp',
+        visibility_model='raycast_25d',
         visibility_weight=0.0,
         visibility_map_min_x=-5.0,
         visibility_map_max_x=5.0,
@@ -76,10 +75,6 @@ class UnicyclePlannerBase:
         visibility_map_max_y=5.0,
         visibility_map_nx=140,
         visibility_map_ny=120,
-        visibility_occ_center_x=-1.2,
-        visibility_occ_center_y=-1.8,
-        visibility_occ_radius=0.9,
-        visibility_occ_tau=0.15,
         visibility_gp_length_scale=1.4,
         visibility_gp_noise_var=0.15,
         visibility_prior_occ=0.005,
@@ -169,29 +164,11 @@ class UnicyclePlannerBase:
             float(visibility_r_bad_uv) ** 2,
         ])
 
-        valid_visibility_models = ('fixed_gp', 'gp', 'raycast_25d', 'raycast25d', 'raycast')
+        valid_visibility_models = ('raycast_25d', 'raycast25d', 'raycast')
         if self.use_visibility_model and self.visibility_model_name not in valid_visibility_models:
             raise ValueError(
-                "visibility_model must be one of: fixed_gp, gp, raycast_25d"
+                "visibility_model must be one of: raycast_25d, raycast25d, raycast"
             )
-        if self.use_visibility_model and self.visibility_model_name in ('fixed_gp', 'gp'):
-            vis_cfg = FixedGPVisibilityConfig(
-                map_xmin=float(visibility_map_min_x),
-                map_xmax=float(visibility_map_max_x),
-                map_ymin=float(visibility_map_min_y),
-                map_ymax=float(visibility_map_max_y),
-                map_nx=int(visibility_map_nx),
-                map_ny=int(visibility_map_ny),
-                occ_center_x=float(visibility_occ_center_x),
-                occ_center_y=float(visibility_occ_center_y),
-                occ_radius=float(visibility_occ_radius),
-                occ_tau=float(visibility_occ_tau),
-                gp_length_scale=float(visibility_gp_length_scale),
-                gp_noise_var=float(visibility_gp_noise_var),
-                seed=int(visibility_gp_seed),
-                min_prob=self._visibility_min_prob,
-            )
-            self.visibility_model = FixedGPVisibilityModel(vis_cfg)
         if self.use_visibility_model and self.visibility_model_name in ('raycast_25d', 'raycast25d', 'raycast'):
             vis_cfg = Raycast25DVisibilityConfig(
                 map_xmin=float(visibility_map_min_x),

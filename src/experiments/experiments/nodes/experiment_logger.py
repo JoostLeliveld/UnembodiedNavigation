@@ -54,7 +54,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('goal_success_hold_s', 2.0)
         self.declare_parameter('frame_id', 'map_bev')
         self.declare_parameter('use_visibility_model', False)
-        self.declare_parameter('visibility_model', 'fixed_gp')
+        self.declare_parameter('visibility_model', 'raycast_25d')
         self.declare_parameter('visibility_target_height_m', 0.0)
         self.declare_parameter('run_dir_topic', '/experiment/run_dir')
 

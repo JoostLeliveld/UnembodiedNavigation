@@ -1,0 +1,17 @@
+{
+  "git_sha": "bf6e298ff5ea6a52e7cf6bf89e4625287b56cf45",
+  "observation_model": "uv",
+  "planner": "efe1",
+  "run_id": "experiment_20260326_092937",
+  "seed": 0,
+  "state_pipeline": "homography_to_bev",
+  "task": "T2_diag_demo",
+  "timestamp": "2026-03-26T09:29:37.540173",
+  "use_ambiguity": true,
+  "use_obs_risk": true,
+  "use_pixel_correction": true,
+  "use_visibility_model": true,
+  "visibility_model": "raycast_25d",
+  "visibility_target_height_m": 0.0,
+  "world": "warehouse_occ_light.world.sdf"
+}

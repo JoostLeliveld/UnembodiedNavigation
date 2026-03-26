@@ -10,8 +10,53 @@ from pathlib import Path
 
 import numpy as np
 
-from planning.core.visibility_gp import SimpleRBFGP, _clip_prob
 from unav_common.occlusion_geometry import scene_from_json, signed_distance_to_union_xy, top_heights_for_xy
+
+
+def _clip_prob(p: np.ndarray | float, eps: float) -> np.ndarray | float:
+    return np.clip(p, eps, 1.0 - eps)
+
+
+class SimpleRBFGP:
+    """Lightweight RBF GP regressor used for latent opacity fitting."""
+
+    def __init__(self, *, length_scale=1.5, signal_var=1.0, noise_var=5e-2, jitter=1e-8):
+        self.length_scale = float(length_scale)
+        self.signal_var = float(signal_var)
+        self.noise_var = float(noise_var)
+        self.jitter = float(jitter)
+        self.X_train = None
+        self.y_mean = None
+        self.L = None
+        self.alpha = None
+
+    def _kernel(self, Xa, Xb):
+        Xa = np.asarray(Xa, dtype=float)
+        Xb = np.asarray(Xb, dtype=float)
+        d2 = np.sum((Xa[:, None, :] - Xb[None, :, :]) ** 2, axis=2)
+        ls2 = max(self.length_scale ** 2, 1e-12)
+        return self.signal_var * np.exp(-0.5 * d2 / ls2)
+
+    def fit(self, X, y):
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y, dtype=float).reshape(-1)
+        self.X_train = X
+        self.y_mean = float(y.mean())
+        y0 = y - self.y_mean
+
+        K = self._kernel(X, X)
+        K = K + (self.noise_var + self.jitter) * np.eye(X.shape[0])
+        self.L = np.linalg.cholesky(K)
+        self.alpha = np.linalg.solve(self.L.T, np.linalg.solve(self.L, y0))
+        return self
+
+    def predict_mean_std(self, X):
+        X = np.asarray(X, dtype=float)
+        Ks = self._kernel(X, self.X_train)
+        mean = self.y_mean + Ks @ self.alpha
+        v = np.linalg.solve(self.L, Ks.T)
+        var = np.maximum(self.signal_var - np.sum(v * v, axis=0), 1e-12)
+        return mean, np.sqrt(var)
 
 
 def _sigmoid(x):

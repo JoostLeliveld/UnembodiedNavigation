@@ -1,9 +1,0 @@
-<?xml version="1.0"?>
-<sdf version="1.6" xmlns:xacro="http://www.ros.org/wiki/xacro">
-
-  <model name='empty_world'>
-    <static>1</static>
-    <pose>0 0 0 0 0 0</pose>
-
-  </model>
-</sdf>

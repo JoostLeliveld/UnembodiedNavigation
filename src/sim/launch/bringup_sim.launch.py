@@ -30,7 +30,7 @@ def generate_launch_description():
     bridge_scan = LaunchConfiguration("bridge_scan")
     world_arg = DeclareLaunchArgument(
         "world",
-        default_value="empty.world.sdf",
+        default_value="warehouse_occ_light.world.sdf",
         description="World file under sim/gazebo_worlds/worlds",
     )
     world = LaunchConfiguration("world")

@@ -51,7 +51,7 @@ class HomographySimNode(Node):
         if not self.has_parameter('use_visibility_model'):
             self.declare_parameter('use_visibility_model', False)
         if not self.has_parameter('visibility_model'):
-            self.declare_parameter('visibility_model', 'fixed_gp')
+            self.declare_parameter('visibility_model', 'raycast_25d')
         if not self.has_parameter('visibility_geometry_json'):
             self.declare_parameter('visibility_geometry_json', '')
         if not self.has_parameter('visibility_target_height_m'):

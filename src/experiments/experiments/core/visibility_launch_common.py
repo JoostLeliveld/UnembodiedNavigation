@@ -58,10 +58,6 @@ VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
     'visibility_map_max_y': 5.0,
     'visibility_map_nx': 140,
     'visibility_map_ny': 120,
-    'visibility_occ_center_x': -1.2,
-    'visibility_occ_center_y': -1.8,
-    'visibility_occ_radius': 0.9,
-    'visibility_occ_tau': 0.15,
     'visibility_gp_length_scale': 1.4,
     'visibility_gp_noise_var': 0.15,
     'visibility_prior_occ': 0.005,
@@ -82,11 +78,6 @@ def _as_bool(value: str) -> bool:
 
 def _launch_value(context, name: str, default_value: str) -> str:
     return LaunchConfiguration(name, default=default_value).perform(context)
-
-
-def _is_occlusion_world(world_file: str) -> bool:
-    return '_occ_' in str(world_file)
-
 
 def _matches_default(current_value: object, default_value: object) -> bool:
     if isinstance(default_value, bool):
@@ -121,8 +112,8 @@ def parse_common_launch_config(context) -> Dict[str, object]:
     """Parse the generic visibility-aware agent launch arguments."""
     seed_value = int(LaunchConfiguration('seed').perform(context))
     world_value = LaunchConfiguration('world').perform(context)
-    visibility_enabled_default = 'true' if _is_occlusion_world(str(world_value)) else 'false'
-    visibility_model_default = 'raycast_25d' if _is_occlusion_world(str(world_value)) else 'fixed_gp'
+    visibility_enabled_default = 'true'
+    visibility_model_default = 'raycast_25d'
     use_visibility_raw = _launch_value(context, 'use_visibility_model', visibility_enabled_default).strip().lower()
     visibility_model_raw = _launch_value(context, 'visibility_model', visibility_model_default).strip().lower()
 
@@ -175,10 +166,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'visibility_map_max_y': float(_launch_value(context, 'visibility_map_max_y', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_max_y']))),
         'visibility_map_nx': int(_launch_value(context, 'visibility_map_nx', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_nx']))),
         'visibility_map_ny': int(_launch_value(context, 'visibility_map_ny', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_ny']))),
-        'visibility_occ_center_x': float(_launch_value(context, 'visibility_occ_center_x', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_occ_center_x']))),
-        'visibility_occ_center_y': float(_launch_value(context, 'visibility_occ_center_y', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_occ_center_y']))),
-        'visibility_occ_radius': float(_launch_value(context, 'visibility_occ_radius', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_occ_radius']))),
-        'visibility_occ_tau': float(_launch_value(context, 'visibility_occ_tau', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_occ_tau']))),
         'visibility_gp_length_scale': float(_launch_value(context, 'visibility_gp_length_scale', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_gp_length_scale']))),
         'visibility_gp_noise_var': float(_launch_value(context, 'visibility_gp_noise_var', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_gp_noise_var']))),
         'visibility_prior_occ': float(_launch_value(context, 'visibility_prior_occ', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_prior_occ']))),
@@ -521,10 +508,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'visibility_map_max_y': cfg['visibility_map_max_y'],
             'visibility_map_nx': cfg['visibility_map_nx'],
             'visibility_map_ny': cfg['visibility_map_ny'],
-            'visibility_occ_center_x': cfg['visibility_occ_center_x'],
-            'visibility_occ_center_y': cfg['visibility_occ_center_y'],
-            'visibility_occ_radius': cfg['visibility_occ_radius'],
-            'visibility_occ_tau': cfg['visibility_occ_tau'],
             'visibility_gp_length_scale': cfg['visibility_gp_length_scale'],
             'visibility_gp_noise_var': cfg['visibility_gp_noise_var'],
             'visibility_prior_occ': cfg['visibility_prior_occ'],

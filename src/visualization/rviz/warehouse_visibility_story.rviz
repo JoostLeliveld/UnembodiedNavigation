@@ -5,8 +5,8 @@ Panels:
       Expanded:
         - /Global Options1
         - /Visibility Map1
-        - /GP Conservative Map1
-        - /GP Mean Map1
+        - /Opacity Conservative Map1
+        - /Opacity Mean Map1
         - /Plan Preview1
         - /Planner Belief1
         - /Measured State1
@@ -68,13 +68,13 @@ Visualization Manager:
       Color Scheme: costmap
       Draw Behind: true
       Enabled: false
-      Name: GP Conservative Map
+      Name: Opacity Conservative Map
       Topic:
         Depth: 5
         Durability Policy: Transient Local
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /visibility_gp_conservative_map
+        Value: /visibility_opacity_conservative_map
       Update Topic: false
       Use Timestamp: false
       Value: false
@@ -83,13 +83,13 @@ Visualization Manager:
       Color Scheme: costmap
       Draw Behind: true
       Enabled: false
-      Name: GP Mean Map
+      Name: Opacity Mean Map
       Topic:
         Depth: 5
         Durability Policy: Transient Local
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /visibility_gp_mean_map
+        Value: /visibility_opacity_mean_map
       Update Topic: false
       Use Timestamp: false
       Value: false

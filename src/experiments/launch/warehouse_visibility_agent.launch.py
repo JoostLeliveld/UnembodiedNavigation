@@ -21,12 +21,13 @@ def _launch_setup(context, *args, **kwargs):
 
 
 def generate_launch_description():
-    """Paper-focused agent launch with optional lower-compile autodiff defaults.
+    """Warehouse visibility thesis launch with optional lower-compile autodiff defaults.
 
-    This is the thesis-facing launch surface for the visibility-aware agent.
+    This is the thesis-facing launch surface for the warehouse visibility-aware agent.
     It hides generic development controls and fixes a few study assumptions:
     - fixed thesis-facing state/perception path: pixel state from homography
     - fixed UV observation model
+    - a single canonical warehouse world/task baseline
     - a paper profile that keeps the JAX backend by default
     - a fast profile that keeps autodiff but prefers lower compile cost for iteration
     """
