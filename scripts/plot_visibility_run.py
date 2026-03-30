@@ -62,6 +62,17 @@ def _load_artifact(path: Path) -> dict[str, np.ndarray | str]:
     return artifact
 
 
+def _load_manifest(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        return {}
+    try:
+        with path.open(encoding='utf-8') as f:
+            payload = json.load(f)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
 def _parse_prisms(geometry_json: str) -> list[dict[str, float]]:
     payload = str(geometry_json or '').strip()
     if not payload:
@@ -139,34 +150,79 @@ def _maybe_get(cols: dict[str, np.ndarray], name: str) -> np.ndarray:
     return np.asarray(cols.get(name, np.array([], dtype=float)), dtype=float)
 
 
-def _plot_field_panels(output_dir: Path, artifact: dict[str, np.ndarray | str], run_cols: dict[str, np.ndarray], plan_groups: list[np.ndarray], perception_cols: dict[str, np.ndarray]) -> Path:
-    xs = np.asarray(artifact['xs'], dtype=float)
-    ys = np.asarray(artifact['ys'], dtype=float)
-    rho_mean = np.asarray(artifact['rho_mean_map'], dtype=float)
-    rho_cons = np.asarray(artifact['rho_conservative_map'], dtype=float)
-    p_map = np.asarray(artifact['P_map'], dtype=float)
-    geometry_json = str(artifact.get('geometry_json', ''))
+def _plot_field_panels(output_dir: Path, artifact: dict[str, np.ndarray | str] | None, manifest: dict[str, object], run_cols: dict[str, np.ndarray], plan_groups: list[np.ndarray], perception_cols: dict[str, np.ndarray]) -> Path:
+    if artifact is not None:
+        xs = np.asarray(artifact['xs'], dtype=float)
+        ys = np.asarray(artifact['ys'], dtype=float)
+        p_map = np.asarray(artifact['P_map'], dtype=float)
+        geometry_json = str(artifact.get('geometry_json', ''))
+        artifact_model = str(artifact.get('visibility_model', '')).strip().lower()
+        visibility_enabled_arr = np.asarray(artifact.get('use_visibility_model', np.array([1.0])), dtype=float).reshape(-1)
+        visibility_enabled = bool(visibility_enabled_arr.size and visibility_enabled_arr[0] >= 0.5)
+    else:
+        traj_x = _maybe_get(run_cols, 'x')
+        traj_y = _maybe_get(run_cols, 'y')
+        if traj_x.size and traj_y.size:
+            xmin = float(np.nanmin(traj_x)) - 1.0
+            xmax = float(np.nanmax(traj_x)) + 1.0
+            ymin = float(np.nanmin(traj_y)) - 1.0
+            ymax = float(np.nanmax(traj_y)) + 1.0
+        else:
+            xmin, xmax, ymin, ymax = -6.0, 6.0, -6.0, 6.0
+        xs = np.linspace(xmin, xmax, 120)
+        ys = np.linspace(ymin, ymax, 120)
+        p_map = np.full((ys.size, xs.size), np.nan, dtype=float)
+        geometry_json = ''
+        artifact_model = str(manifest.get('visibility_model', '')).strip().lower()
+        visibility_enabled = bool(manifest.get('use_visibility_model', False))
+
+    rho_mean = None if artifact is None else artifact.get('rho_mean_map')
+    rho_cons = None if artifact is None else artifact.get('rho_conservative_map')
+    p_mean = None if artifact is None else artifact.get('P_mean_map')
+    p_cons = None if artifact is None else artifact.get('P_conservative_map')
+    if rho_mean is not None:
+        rho_mean = np.asarray(rho_mean, dtype=float)
+    if rho_cons is not None:
+        rho_cons = np.asarray(rho_cons, dtype=float)
+    if p_mean is not None:
+        p_mean = np.asarray(p_mean, dtype=float)
+    if p_cons is not None:
+        p_cons = np.asarray(p_cons, dtype=float)
+
     prisms = _parse_prisms(geometry_json)
-    camera_pos = np.asarray(artifact.get('camera_pos', np.array([np.nan, np.nan, np.nan])), dtype=float).reshape(-1)
+    camera_pos = (
+        np.asarray(artifact.get('camera_pos', np.array([np.nan, np.nan, np.nan])), dtype=float).reshape(-1)
+        if artifact is not None else np.array([np.nan, np.nan, np.nan], dtype=float)
+    )
 
     traj_x = _maybe_get(run_cols, 'x')
     traj_y = _maybe_get(run_cols, 'y')
     goal_x = _maybe_get(run_cols, 'goal_x')
     goal_y = _maybe_get(run_cols, 'goal_y')
     goal_xy = None
-    if goal_x.size and goal_y.size and np.isfinite(goal_x[0]) and np.isfinite(goal_y[0]):
-        goal_xy = (float(goal_x[0]), float(goal_y[0]))
+    if goal_x.size and goal_y.size:
+        valid_goal = np.isfinite(goal_x) & np.isfinite(goal_y)
+        if np.any(valid_goal):
+            last_idx = np.flatnonzero(valid_goal)[-1]
+            goal_xy = (float(goal_x[last_idx]), float(goal_y[last_idx]))
 
     miss_mask = (_maybe_get(perception_cols, 'detected') < 0.5) & (_maybe_get(perception_cols, 'true_available') > 0.5)
     miss_x = _maybe_get(perception_cols, 'true_x')[miss_mask]
     miss_y = _maybe_get(perception_cols, 'true_y')[miss_mask]
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 6.2), constrained_layout=True, sharex=True, sharey=True)
-    panels = [
-        ('GP Opacity Mean', rho_mean, 'viridis'),
-        ('GP Opacity Conservative', rho_cons, 'magma'),
-        ('Visibility Prior', p_map, 'viridis'),
-    ]
+    if artifact_model in ('gp_visibility', 'gpvis'):
+        panels = [
+            ('GP Visibility Mean', p_mean if p_mean is not None else p_map, 'viridis'),
+            ('GP Visibility Conservative', p_cons if p_cons is not None else p_map, 'magma'),
+            ('Visibility Prior', p_map, 'viridis'),
+        ]
+    else:
+        panels = [
+            ('GP Occlusion Mean', rho_mean if rho_mean is not None else p_map, 'viridis'),
+            ('GP Occlusion Conservative', rho_cons if rho_cons is not None else p_map, 'magma'),
+            ('Visibility Prior', p_map, 'viridis'),
+        ]
     extent = _grid_extent(xs, ys)
 
     for ax, (title, grid, cmap) in zip(axes, panels):
@@ -190,47 +246,89 @@ def _plot_field_panels(output_dir: Path, artifact: dict[str, np.ndarray | str], 
         ax.set_ylabel('y [m]')
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03)
 
+    study_variant = str(manifest.get('study_variant', '')).strip() or 'unknown_variant'
+    planner = str(manifest.get('planner', '')).strip() or 'unknown_planner'
+    optimizer_backend = str(manifest.get('optimizer_backend', '')).strip() or 'unknown_backend'
+    enabled_note = 'uses visibility' if visibility_enabled else 'planner ignores visibility'
+    fig.suptitle(
+        f"{study_variant} | {planner} | backend={optimizer_backend} | model={artifact_model or 'none'} | {enabled_note}",
+        fontsize=12,
+    )
+
     out_path = output_dir / 'field_story.png'
     fig.savefig(out_path, dpi=180)
     plt.close(fig)
     return out_path
 
 
-def _plot_timeseries(output_dir: Path, artifact: dict[str, np.ndarray | str], run_cols: dict[str, np.ndarray], perception_cols: dict[str, np.ndarray]) -> Path:
-    xs = np.asarray(artifact['xs'], dtype=float)
-    ys = np.asarray(artifact['ys'], dtype=float)
-    p_map = np.asarray(artifact['P_map'], dtype=float)
+def _plot_timeseries(output_dir: Path, artifact: dict[str, np.ndarray | str] | None, manifest: dict[str, object], run_cols: dict[str, np.ndarray], perception_cols: dict[str, np.ndarray]) -> Path:
+    if artifact is not None:
+        xs = np.asarray(artifact['xs'], dtype=float)
+        ys = np.asarray(artifact['ys'], dtype=float)
+        p_map = np.asarray(artifact['P_map'], dtype=float)
+    else:
+        xs = ys = np.array([], dtype=float)
+        p_map = np.array([], dtype=float)
 
     stamp = _maybe_get(run_cols, 'stamp')
     if not stamp.size:
         raise RuntimeError('experiment.csv is empty or missing stamp column')
-    t = stamp - float(stamp[0])
+    diag_stamp = _maybe_get(perception_cols, 'diag_stamp')
+    first_stamps = [float(v) for v in (stamp[0], diag_stamp[0] if diag_stamp.size else np.nan) if np.isfinite(v)]
+    t0 = min(first_stamps)
+    t = stamp - t0
     traj_x = _maybe_get(run_cols, 'x')
     traj_y = _maybe_get(run_cols, 'y')
-    traj_p_vis = _bilinear_sample(xs, ys, p_map, traj_x, traj_y)
+    traj_p_vis = (
+        _bilinear_sample(xs, ys, p_map, traj_x, traj_y)
+        if artifact is not None and p_map.size
+        else np.full_like(traj_x, np.nan, dtype=float)
+    )
 
     goal_dist = _maybe_get(run_cols, 'goal_dist')
     plan_length = _maybe_get(run_cols, 'plan_length')
-    cov_x = _maybe_get(run_cols, 'cov_x')
-    cov_y = _maybe_get(run_cols, 'cov_y')
-    cov_yaw = _maybe_get(run_cols, 'cov_yaw')
+    optimizer_success = _maybe_get(run_cols, 'optimizer_success')
+    optimizer_status = _maybe_get(run_cols, 'optimizer_status')
+    optimizer_nit = _maybe_get(run_cols, 'optimizer_nit')
+    optimizer_nfev = _maybe_get(run_cols, 'optimizer_nfev')
+    measurement_available = _maybe_get(run_cols, 'measurement_available')
+    belief_age_s = _maybe_get(run_cols, 'belief_age_s')
+    p_vis_plan = _maybe_get(run_cols, 'p_vis_plan')
+    p_vis_plan_eff = _maybe_get(run_cols, 'p_vis_plan_eff')
+    r_plan_u_std = _maybe_get(run_cols, 'r_plan_u_std')
+    r_plan_v_std = _maybe_get(run_cols, 'r_plan_v_std')
+    plan_time_ms = _maybe_get(run_cols, 'plan_time_ms')
+    solve_time_ms = _maybe_get(run_cols, 'solve_time_ms')
+    cov_x = _maybe_get(run_cols, 'planner_cov_x')
+    cov_y = _maybe_get(run_cols, 'planner_cov_y')
+    cov_yaw = _maybe_get(run_cols, 'planner_cov_yaw')
+    if (not cov_x.size) or (not np.any(np.isfinite(cov_x))):
+        cov_x = _maybe_get(run_cols, 'cov_x')
+    if (not cov_y.size) or (not np.any(np.isfinite(cov_y))):
+        cov_y = _maybe_get(run_cols, 'cov_y')
+    if (not cov_yaw.size) or (not np.any(np.isfinite(cov_yaw))):
+        cov_yaw = _maybe_get(run_cols, 'cov_yaw')
     efe_risk = _maybe_get(run_cols, 'efe_risk')
     efe_ambiguity = _maybe_get(run_cols, 'efe_ambiguity')
     efe_control = _maybe_get(run_cols, 'efe_control')
     efe_visibility = _maybe_get(run_cols, 'efe_visibility')
+    efe_obstacle = _maybe_get(run_cols, 'efe_obstacle')
 
-    diag_stamp = _maybe_get(perception_cols, 'diag_stamp')
     detected = _maybe_get(perception_cols, 'detected')
     state_err = _maybe_get(perception_cols, 'state_pos_error')
     if diag_stamp.size:
-        diag_t = diag_stamp - float(stamp[0])
+        diag_t = diag_stamp - t0
     else:
         diag_t = np.array([], dtype=float)
 
-    fig, axes = plt.subplots(2, 2, figsize=(15.5, 9.0), constrained_layout=True)
+    fig, axes = plt.subplots(2, 3, figsize=(18.5, 9.2), constrained_layout=True)
 
     ax = axes[0, 0]
-    ax.plot(t, traj_p_vis, color='tab:green', linewidth=2.2, label='visibility along executed trajectory')
+    ax.plot(t, traj_p_vis, color='tab:green', linewidth=2.2, label='p_vis exec')
+    if p_vis_plan.size:
+        ax.plot(t, p_vis_plan, color='tab:blue', linewidth=1.8, label='p_vis plan')
+    if p_vis_plan_eff.size:
+        ax.plot(t, p_vis_plan_eff, color='tab:orange', linewidth=1.8, label='p_vis plan eff')
     if diag_t.size and detected.size:
         ax.step(diag_t, detected, where='post', color='black', linewidth=1.4, alpha=0.7, label='detected')
     ax.set_title('Visibility And Detection')
@@ -247,6 +345,17 @@ def _plot_timeseries(output_dir: Path, artifact: dict[str, np.ndarray | str], ru
     ax.set_xlabel('time [s]')
     ax.legend(loc='best')
 
+    ax = axes[0, 2]
+    if plan_time_ms.size:
+        ax.plot(t, plan_time_ms, linewidth=2.0, label='plan time [ms]')
+    if solve_time_ms.size:
+        ax.plot(t, solve_time_ms, linewidth=2.0, label='solver time [ms]')
+    ax.set_title('Planner Timing')
+    ax.set_xlabel('time [s]')
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(handles, labels, loc='best')
+
     ax = axes[1, 0]
     if cov_x.size:
         ax.plot(t, cov_x, linewidth=2.0, label='cov_x')
@@ -254,9 +363,11 @@ def _plot_timeseries(output_dir: Path, artifact: dict[str, np.ndarray | str], ru
         ax.plot(t, cov_y, linewidth=2.0, label='cov_y')
     if cov_yaw.size:
         ax.plot(t, cov_yaw, linewidth=2.0, label='cov_yaw')
+    if belief_age_s.size:
+        ax.plot(t, belief_age_s, linewidth=1.8, linestyle='--', label='belief age [s]')
     if diag_t.size and state_err.size:
         ax.plot(diag_t, state_err, color='black', linewidth=1.6, alpha=0.8, label='state position error')
-    ax.set_title('Belief And State Error')
+    ax.set_title('Planner Belief And State Error')
     ax.set_xlabel('time [s]')
     ax.legend(loc='best')
 
@@ -269,9 +380,57 @@ def _plot_timeseries(output_dir: Path, artifact: dict[str, np.ndarray | str], ru
         ax.plot(t, efe_control, linewidth=2.0, label='control')
     if efe_visibility.size:
         ax.plot(t, efe_visibility, linewidth=2.0, label='visibility')
+    if efe_obstacle.size:
+        ax.plot(t, efe_obstacle, linewidth=2.0, label='obstacle')
     ax.set_title('EFE Components')
     ax.set_xlabel('time [s]')
     ax.legend(loc='best')
+
+    ax = axes[1, 2]
+    handles = []
+    labels = []
+    if optimizer_success.size:
+        line = ax.step(t, optimizer_success, where='post', linewidth=1.8, label='success')[0]
+        handles.append(line)
+        labels.append('success')
+    if measurement_available.size:
+        line = ax.step(t, measurement_available, where='post', linewidth=1.6, label='meas avail')[0]
+        handles.append(line)
+        labels.append('meas avail')
+    if optimizer_status.size:
+        line = ax.plot(t, optimizer_status, linewidth=1.8, label='status')[0]
+        handles.append(line)
+        labels.append('status')
+    ax.set_title('Optimizer Diagnostics')
+    ax.set_xlabel('time [s]')
+    ax.set_ylim(-0.1, max(1.1, float(np.nanmax(optimizer_status)) + 0.5) if optimizer_status.size else 1.1)
+    ax2 = ax.twinx()
+    if optimizer_nit.size:
+        line = ax2.plot(t, optimizer_nit, linewidth=1.8, linestyle='--', label='nit')[0]
+        handles.append(line)
+        labels.append('nit')
+    if optimizer_nfev.size:
+        line = ax2.plot(t, optimizer_nfev, linewidth=1.8, linestyle=':', label='nfev')[0]
+        handles.append(line)
+        labels.append('nfev')
+    if r_plan_u_std.size:
+        line = ax2.plot(t, r_plan_u_std, linewidth=1.5, linestyle='-.', label='R_u std')[0]
+        handles.append(line)
+        labels.append('R_u std')
+    if r_plan_v_std.size:
+        line = ax2.plot(t, r_plan_v_std, linewidth=1.5, linestyle='-', alpha=0.6, label='R_v std')[0]
+        handles.append(line)
+        labels.append('R_v std')
+    if handles:
+        ax.legend(handles, labels, loc='best')
+
+    study_variant = str(manifest.get('study_variant', '')).strip() or 'unknown_variant'
+    planner = str(manifest.get('planner', '')).strip() or 'unknown_planner'
+    optimizer_backend = str(manifest.get('optimizer_backend', '')).strip() or 'unknown_backend'
+    fig.suptitle(
+        f"{study_variant} | {planner} | backend={optimizer_backend}",
+        fontsize=12,
+    )
 
     out_path = output_dir / 'run_timeseries.png'
     fig.savefig(out_path, dpi=180)
@@ -292,20 +451,18 @@ def main() -> None:
     output_dir = (args.output_dir.expanduser().resolve() if args.output_dir else run_dir / 'figures')
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if not artifact_path.is_file():
-        raise SystemExit(f'Missing visibility artifact: {artifact_path}')
-
     experiment_csv = run_dir / 'experiment.csv'
     if not experiment_csv.is_file():
         raise SystemExit(f'Missing experiment log: {experiment_csv}')
 
-    artifact = _load_artifact(artifact_path)
+    artifact = _load_artifact(artifact_path) if artifact_path.is_file() else None
+    manifest = _load_manifest(run_dir / 'run_manifest.json')
     run_cols = _load_csv_columns(experiment_csv)
     perception_cols = _load_csv_columns(run_dir / 'perception.csv') if (run_dir / 'perception.csv').is_file() else {}
     plan_groups = _load_plan_groups(run_dir / 'plan_samples.csv')
 
-    field_path = _plot_field_panels(output_dir, artifact, run_cols, plan_groups, perception_cols)
-    ts_path = _plot_timeseries(output_dir, artifact, run_cols, perception_cols)
+    field_path = _plot_field_panels(output_dir, artifact, manifest, run_cols, plan_groups, perception_cols)
+    ts_path = _plot_timeseries(output_dir, artifact, manifest, run_cols, perception_cols)
 
     print(f'Wrote {field_path}')
     print(f'Wrote {ts_path}')

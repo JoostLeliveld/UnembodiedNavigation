@@ -158,8 +158,13 @@ def _validate_visibility_defaults(visibility_defaults: Dict[str, Any]) -> None:
         "visibility_beta",
         "visibility_height_tau",
         "visibility_ray_samples",
-        "visibility_sigma_kappa",
         "visibility_target_height_m",
+        "nogo_weight",
+        "nogo_safe_distance",
+        "nogo_gaussian_sigma",
+        "nogo_softplus_scale",
+        "nogo_logbarrier_scale",
+        "nogo_logbarrier_eps",
     )
     for key in numeric_keys:
         if key in visibility_defaults:

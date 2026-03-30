@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 import os
 from glob import glob
 
@@ -7,7 +7,7 @@ package_name = 'visualization'
 setup(
     name=package_name,
     version='0.0.0',
-    packages=[],
+    packages=find_packages(),
     data_files=[
         # Package index
         ('share/ament_index/resource_index/packages',
@@ -27,4 +27,9 @@ setup(
     maintainer_email='j.j.p.leliveld@student.tue.nl',
     description='Centralized RViz configuration for thesis workspace',
     license='MIT',
+    entry_points={
+        'console_scripts': [
+            'live_visibility_dashboard = visualization.live_visibility_dashboard:main',
+        ],
+    },
 )

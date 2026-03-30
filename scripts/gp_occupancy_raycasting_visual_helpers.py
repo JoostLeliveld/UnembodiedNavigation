@@ -8,7 +8,7 @@ one file. It covers:
 - shared 2D opacity GP and 2.5D ray-opacity prior
 - one online correction rule in opacity space
 - one compact closed-loop planner comparison
-- presentation-oriented plots and summary tables
+- presentation-oriented plots
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import math
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Callable, Dict, List, Mapping, Sequence, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -31,7 +31,7 @@ from scipy.stats import multivariate_normal
 from tqdm.auto import tqdm
 
 
-def _ensure_repo_paths() -> Path:
+def _ensure_repo_paths() -> None:
     repo_root = Path.cwd()
     if not (repo_root / "scripts").exists():
         repo_root = repo_root.parent
@@ -43,10 +43,9 @@ def _ensure_repo_paths() -> Path:
         path_str = str(path)
         if path_str not in sys.path:
             sys.path.append(path_str)
-    return repo_root
 
 
-REPO_ROOT = _ensure_repo_paths()
+_ensure_repo_paths()
 jax.config.update("jax_enable_x64", True)
 
 from scripts.botnav_efe_helpers import (
@@ -217,11 +216,11 @@ class PlanningConfig:
 
 @dataclass(frozen=True)
 class SharedGPConfig:
-    ell_x: float = 0.18
-    ell_y: float = 0.18
+    ell_x: float = 0.32
+    ell_y: float = 0.32
     signal_var: float = 1.0
-    bias_var: float = 0.10
-    noise_var: float = 0.01
+    bias_var: float = 0.04
+    noise_var: float = 0.02
     prior_occ: float = 0.005
     beta: float = 1.0
     ray_samples: int = 120
@@ -648,7 +647,7 @@ def build_soft_opacity_dataset(
     n_rays_focus=260,
     n_corridor=180,
     n_boundary=240,
-    max_clear=420,
+    max_clear=560,
     max_transition=260,
     max_occ=220,
 ):
@@ -739,6 +738,19 @@ def build_soft_opacity_dataset(
             y = rng.uniform(y0, y1)
         add_sample(transition_points, np.array([x, y], dtype=float))
 
+    # Add a coarse free-space support lattice so the latent GP has labeled
+    # evidence away from the rack instead of reverting to high uncertainty over
+    # most of the map.
+    support_spacing = 0.95
+    obstacle_margin = 0.35
+    for x in np.arange(grid.xs[4], grid.xs[-4], support_spacing):
+        for y in np.arange(grid.ys[4], grid.ys[-4], support_spacing):
+            if sample_occ(grid, x, y) >= 0.20:
+                continue
+            if (x0 - obstacle_margin) <= x <= (x1 + obstacle_margin) and (y0 - obstacle_margin) <= y <= (y1 + obstacle_margin):
+                continue
+            add_sample(clear_points, np.array([x, y], dtype=float))
+
     for _ in range(int(max_occ)):
         x = rng.uniform(x0 + 0.08, x1 - 0.08)
         y = rng.uniform(y0 + 0.08, y1 - 0.08)
@@ -761,7 +773,7 @@ def build_soft_opacity_dataset(
     y_soft = np.concatenate([
         np.full(clear_points_arr.shape[0], 0.005, dtype=float),
         np.full(transition_points_arr.shape[0], 0.15, dtype=float),
-        np.full(occ_points_arr.shape[0], 1.0, dtype=float),
+        np.full(occ_points_arr.shape[0], 0.995, dtype=float),
     ])
     if transition_points_arr.shape[0]:
         boundary_labels = np.full(transition_points_arr.shape[0], 0.15, dtype=float)
@@ -1394,58 +1406,6 @@ def _update_opacity_correction(
     correction_state["A_map"] = A_map
     correction_state["O_map"] = O_map
 
-def build_route_states(polyline_xy: np.ndarray, n_points=220):
-    polyline_xy = np.asarray(polyline_xy, dtype=float)
-    segs = np.diff(polyline_xy, axis=0)
-    seg_lens = np.linalg.norm(segs, axis=1)
-    cum = np.concatenate([[0.0], np.cumsum(seg_lens)])
-    total = cum[-1]
-    s_query = np.linspace(0.0, total, int(n_points))
-    pts = []
-    yaws = []
-    idx = 0
-    for s in s_query:
-        while idx < len(seg_lens) - 1 and s > cum[idx + 1]:
-            idx += 1
-        ds = max(seg_lens[idx], 1e-9)
-        alpha = (s - cum[idx]) / ds
-        p = (1.0 - alpha) * polyline_xy[idx] + alpha * polyline_xy[idx + 1]
-        pts.append(p)
-        tangent = segs[idx] / max(seg_lens[idx], 1e-9)
-        yaws.append(math.atan2(tangent[1], tangent[0]))
-    pts = np.asarray(pts, dtype=float)
-    yaws = np.asarray(yaws, dtype=float)
-    states = np.column_stack([pts, yaws])
-    return s_query / max(total, 1e-9), states
-
-
-def build_reference_routes(scene: Mapping[str, object]):
-    start_xy = np.asarray(scene["start_state"][:2], dtype=float)
-    goal_xy = np.asarray(scene["goal_state"][:2], dtype=float)
-    direct = np.array([
-        start_xy,
-        [-3.80, -0.55],
-        [-3.20, -0.85],
-        [-2.20, -1.10],
-        [-1.35, -1.90],
-        goal_xy,
-    ], dtype=float)
-    detour = np.array([
-        start_xy,
-        [-4.15, -0.95],
-        [-3.85, -2.10],
-        [-3.00, -3.25],
-        [-1.85, -3.35],
-        goal_xy,
-    ], dtype=float)
-    return {
-        "direct": build_route_states(direct, n_points=220),
-        "detour": build_route_states(detour, n_points=220),
-        "direct_polyline": direct,
-        "detour_polyline": detour,
-    }
-
-
 def _run_story_experiment(
     variant_ctx: Mapping[str, object],
     label: str,
@@ -1486,7 +1446,6 @@ def _run_story_experiment(
     p_vis_interp = RegularGridInterpolator((scene["ys"], scene["xs"]), current_planner_map, bounds_error=False, fill_value=1e-4)
 
     correction_state = None
-    correction_snapshots = {}
     if correction:
         if base_A_map is None:
             raise ValueError("base_A_map is required when correction=True")
@@ -1515,8 +1474,6 @@ def _run_story_experiment(
     m_kmin1 = mean0.copy()
     S_kmin1 = cov0.copy()
     policy = np.zeros((2, cfg.horizon))
-
-    snapshot_steps = {max(5, len_trial // 5), len_trial // 2, len_trial - 1}
 
     for k in range(1, len_trial):
         z_sim[:, k] = unicycle_step(z_sim[:, k - 1], u_sim[:, k - 1], cfg.dt)
@@ -1558,12 +1515,6 @@ def _run_story_experiment(
                         bounds_error=False,
                         fill_value=1e-4,
                     )
-                if k in snapshot_steps:
-                    correction_snapshots[k] = {
-                        "delta_A_map": correction_state["delta_A_map"].copy(),
-                        "A_map": correction_state["A_map"].copy(),
-                        "O_map": correction_state["O_map"].copy(),
-                    }
 
         p_vis_plan = expected_visibility_np(p_vis_interp, m_k, S_k)
         p_vis_plan_eff = float(np.clip(p_vis_plan ** cfg.visibility_power, 1e-4, 1.0 - 1e-4))
@@ -1625,7 +1576,6 @@ def _run_story_experiment(
         "ambiguity_runtime": ambiguity_runtime,
         "log_evidence_runtime": F_runtime,
         "optimizer_values": optimizer_values,
-        "correction_snapshots": correction_snapshots,
         "correction_final_map": None if correction_state is None else correction_state["O_map"],
         "correction_delta_A_map": None if correction_state is None else correction_state["delta_A_map"],
         "correction_A_map": None if correction_state is None else correction_state["A_map"],
@@ -1645,6 +1595,7 @@ def build_context(seed=12, run_mode="full"):
     old_gp = build_old_gp_prior(ref_scene, seed=seed)
 
     variants = {}
+    probe_frames = []
     for name, scene in scenes.items():
         g_np, g_jax = make_observation_fns(scene)
         oracle_map = evaluate_state_fn_on_grid(scene, lambda s: _oracle_p_vis(scene, s))
@@ -1674,23 +1625,22 @@ def build_context(seed=12, run_mode="full"):
                 }
             )
 
+        probe_df = pd.DataFrame(rows)
+        probe_frames.append(probe_df)
         variants[name] = {
             "scene": scene,
-            "g_np": g_np,
-            "g_jax": g_jax,
             "oracle_map": oracle_map,
             "oracle_p_vis": lambda state, _scene=scene: _oracle_p_vis(_scene, state),
             "prior_mean_only": prior_mean,
             "prior_uncertainty": prior_unc,
             "planning": planning,
-            "probe_df": pd.DataFrame(rows),
         }
 
     return {
         "shared_gp": shared_gp,
         "old_gp": old_gp,
         "variants": variants,
-        "probe_summary_df": pd.concat([variants[name]["probe_df"] for name in _variant_specs()], ignore_index=True),
+        "probe_summary_df": pd.concat(probe_frames, ignore_index=True),
     }
 
 
@@ -1718,11 +1668,9 @@ def run_story_experiments(ctx: Mapping[str, object], base_seed=20260323):
             approx="ET2",
             noise_pack=noise_eval,
         )
-        corrected_eval["correction_snapshots"] = calibration_res["correction_snapshots"]
         corrected_eval["correction_final_map"] = calibration_res["correction_final_map"]
         corrected_eval["correction_delta_A_map"] = calibration_res["correction_delta_A_map"]
         corrected_eval["correction_A_map"] = calibration_res["correction_A_map"]
-        corrected_eval["calibration_run"] = calibration_res
         out[name] = {
             "old 2D GP": _run_story_experiment(
                 variant,
@@ -1767,102 +1715,6 @@ def summarize_story_results(ctx: Mapping[str, object], story_results: Mapping[st
                 }
             )
     return pd.DataFrame(rows).sort_values(["scene", "method"]).reset_index(drop=True)
-
-
-def run_clean_parameter_sweep(
-    ctx: Mapping[str, object],
-    *,
-    scene_name="Tall box",
-    base_seed=20260399,
-):
-    variant = ctx["variants"][scene_name]
-    prior = variant["prior_uncertainty"]
-    base_cfg = variant["planning"]["cfg"]
-    if int(base_cfg.n_steps) <= 40:
-        sweep_defs = {
-            "visibility_power": [2.4, float(base_cfg.visibility_power)],
-            "r_miss_uv": [320.0, float(base_cfg.r_miss_uv)],
-            "horizon": [10, int(base_cfg.horizon)],
-            "goal_tightening_power": [0.60, float(base_cfg.goal_tightening_power)],
-        }
-        sweep_n_steps = min(int(base_cfg.n_steps), 24)
-        sweep_maxiter = min(int(base_cfg.optimizer_maxiter), 35)
-        sweep_maxfun = min(int(base_cfg.optimizer_maxfun), 160)
-    else:
-        sweep_defs = {
-            "visibility_power": [1.8, 2.4, float(base_cfg.visibility_power)],
-            "r_miss_uv": [220.0, 320.0, float(base_cfg.r_miss_uv)],
-            "horizon": [12, 15, int(base_cfg.horizon)],
-            "goal_tightening_power": [0.80, 0.60, float(base_cfg.goal_tightening_power)],
-        }
-        sweep_n_steps = int(base_cfg.n_steps)
-        sweep_maxiter = int(base_cfg.optimizer_maxiter)
-        sweep_maxfun = int(base_cfg.optimizer_maxfun)
-
-    def run_cfg(cfg, noise_pack):
-        planning = _make_planning_context(variant["scene"], variant["g_np"], variant["g_jax"], cfg)
-        sweep_variant = dict(variant)
-        sweep_variant["planning"] = planning
-        return _run_story_experiment(
-            sweep_variant,
-            f"{scene_name} | sweep",
-            prior["O0_map"],
-            correction=False,
-            approx="ET2",
-            noise_pack=noise_pack,
-        )
-
-    baseline_noise = make_noise_pack(base_seed, variant["planning"])
-    baseline_cfg = replace(
-        base_cfg,
-        n_steps=sweep_n_steps,
-        optimizer_maxiter=sweep_maxiter,
-        optimizer_maxfun=sweep_maxfun,
-    )
-    baseline_res = run_cfg(baseline_cfg, baseline_noise)
-    goal_xy = np.asarray(variant["scene"]["goal_state"][:2], dtype=float)
-
-    def append_row(rows, param_name, value, res):
-        rows.append(
-            {
-                "scene": scene_name,
-                "parameter": param_name,
-                "value": float(value),
-                "baseline_value": float(getattr(base_cfg, param_name)),
-                "final_goal_dist": float(np.linalg.norm(res["true_states"][-1, :2] - goal_xy)),
-                "mean_p_vis_plan": float(np.mean(res["p_vis_plan_effective_runtime"][1:])),
-                "cum_risk": float(np.sum(res["risk_runtime"])),
-                "cum_ambiguity": float(np.sum(res["ambiguity_runtime"])),
-                "final_trace": float(covariance_trace_series(res["covs"])[-1]),
-            }
-        )
-
-    rows = []
-    for group_idx, (param_name, values) in enumerate(sweep_defs.items()):
-        append_row(rows, param_name, getattr(base_cfg, param_name), baseline_res)
-        noise_pack = make_noise_pack(base_seed + 10 * group_idx + 1, variant["planning"])
-        for value in values:
-            if float(value) == float(getattr(base_cfg, param_name)):
-                continue
-            overrides = {
-                "horizon": base_cfg.horizon,
-                "n_steps": sweep_n_steps,
-                "optimizer_maxiter": sweep_maxiter,
-                "optimizer_maxfun": sweep_maxfun,
-            }
-            if param_name == "horizon":
-                overrides["horizon"] = int(value)
-            elif param_name == "r_miss_uv":
-                overrides["r_miss_uv"] = float(value)
-            elif param_name == "visibility_power":
-                overrides["visibility_power"] = float(value)
-            elif param_name == "goal_tightening_power":
-                overrides["goal_tightening_power"] = float(value)
-
-            cfg = replace(base_cfg, **overrides)
-            res = run_cfg(cfg, noise_pack)
-            append_row(rows, param_name, value, res)
-    return pd.DataFrame(rows)
 
 
 # -----------------------------------------------------------------------------
@@ -1919,9 +1771,9 @@ def plot_shared_gp_field(ctx: Mapping[str, object]):
     ax.legend(loc="lower left", fontsize=7)
 
     panels = [
-        (gp["mu_f_map"], "Latent GP mean $\mu_f$", "coolwarm"),
-        (gp["sigma_f_map"], "Latent GP std $\sigma_f$", "cividis"),
-        (gp["rho_mean_map"], "Opacity density mean $\rho$", "viridis"),
+        (gp["mu_f_map"], r"Latent GP mean $\mu_f$", "coolwarm"),
+        (gp["sigma_f_map"], r"Latent GP std $\sigma_f$", "cividis"),
+        (gp["rho_mean_map"], r"Opacity density mean $\rho$", "viridis"),
         (gp["rho_conservative_map"], r"Conservative opacity $\rho_{cons}$", "magma"),
         (ctx["old_gp"]["P_vis_old_map"], "Old 2D GP visibility", "viridis"),
     ]
@@ -1971,33 +1823,6 @@ def plot_raycasting_probe(ctx: Mapping[str, object], probe_name="shadow"):
         ax.set_ylabel("z [m]")
         ax.legend(fontsize=8, loc="upper right")
     return fig
-
-
-def plot_height_gate_family(ctx: Mapping[str, object], probe_name="shadow"):
-    names = list(ctx["variants"].keys())
-    fig, axes = plt.subplots(1, len(names), figsize=(14, 4.8), constrained_layout=True, sharey=True)
-    if len(names) == 1:
-        axes = [axes]
-    taus = [0.04, 0.08, 0.16]
-    colors = ["tab:green", "tab:orange", "tab:purple"]
-    for ax, name in zip(axes, names):
-        scene = ctx["variants"][name]["scene"]
-        details = ctx["variants"][name]["prior_uncertainty"]["ray_details_for_state"](_probe_state(scene, probe_name))
-        horiz = details["horiz"]
-        cam_xyz = np.asarray(scene["camera_3d"].cam_pos, dtype=float)
-        ax.plot(horiz, details["pts_xyz"][:, 2], color="tab:red", linewidth=2.0, label="ray")
-        ax.axhline(scene["box_max"][2], color="tab:blue", linewidth=2.0, linestyle=":", label="box top")
-        ax.plot(horiz, scene["box_max"][2] * details["gate_hard"], color="black", linewidth=1.8, linestyle="--", label="hard gate")
-        for tau, color in zip(taus, colors):
-            gate = _height_gate(details["pts_xyz"][:, 2], scene["box_max"][2], tau)
-            ax.plot(horiz, scene["box_max"][2] * gate, color=color, linewidth=2.0, label=fr"soft gate $\tau_z={tau:.2f}$")
-        ax.scatter([0.0], [cam_xyz[2]], marker="^", s=80, color="black")
-        ax.set_title(f"{name}: hard vs soft height gate")
-        ax.set_xlabel("horizontal distance from camera [m]")
-        ax.set_ylabel("z [m]")
-    axes[0].legend(loc="lower left", fontsize=8)
-    return fig
-
 
 
 def plot_ray_decomposition(ctx: Mapping[str, object], variant_name="Tall box", probe_name="shadow"):
@@ -2366,191 +2191,3 @@ def plot_story_correction_maps(ctx: Mapping[str, object], story_results: Mapping
             ax.set_ylabel("y [m]")
             plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     return fig
-
-
-def plot_story_correction_snapshots(ctx: Mapping[str, object], story_results: Mapping[str, Mapping[str, Mapping[str, object]]]):
-    scenes = list(ctx["variants"].keys())
-    fig, axes = plt.subplots(len(scenes), 3, figsize=(15, 5 * len(scenes)), constrained_layout=True, sharex=True, sharey=True)
-    if len(scenes) == 1:
-        axes = np.asarray(axes).reshape(1, 3)
-    for row, scene_name in enumerate(scenes):
-        scene = ctx["variants"][scene_name]["scene"]
-        snapshots = story_results[scene_name]["corrected prior"]["correction_snapshots"]
-        keys = sorted(snapshots.keys())
-        if not keys:
-            for ax in axes[row]:
-                ax.axis("off")
-            continue
-        chosen = [keys[0], keys[len(keys) // 2], keys[-1]] if len(keys) >= 3 else keys
-        while len(chosen) < 3:
-            chosen.append(chosen[-1])
-        vis_extent = [scene["xs"].min(), scene["xs"].max(), scene["ys"].min(), scene["ys"].max()]
-        for col, k in enumerate(chosen[:3]):
-            snap = snapshots[k]
-            ax = axes[row, col]
-            im = ax.imshow(snap["O_map"], extent=vis_extent, origin="lower", cmap="viridis", aspect="equal", vmin=0.0, vmax=1.0)
-            ax.contour(scene["true_grid"].xs, scene["true_grid"].ys, scene["true_grid"].occupancy, levels=[0.5], colors="white", linewidths=1.2)
-            ax.set_title(f"{scene_name}: corrected map at step {k}")
-            ax.set_xlabel("x [m]")
-            ax.set_ylabel("y [m]")
-            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    return fig
-
-
-def plot_clean_parameter_sweep(sweep_df: pd.DataFrame):
-    param_order = ["visibility_power", "r_miss_uv", "horizon", "goal_tightening_power"]
-    pretty = {
-        "visibility_power": "visibility power",
-        "r_miss_uv": r"$R_{miss}$ pixel std",
-        "horizon": "planning horizon",
-        "goal_tightening_power": "goal tightening power",
-    }
-    fig, axes = plt.subplots(2, 2, figsize=(14, 9), constrained_layout=True)
-    for ax, param in zip(axes.flat, param_order):
-        sub = sweep_df[sweep_df["parameter"] == param].sort_values("value")
-        if sub.empty:
-            ax.axis("off")
-            continue
-        ax.plot(sub["value"], sub["final_goal_dist"], marker="o", linewidth=2.0, color="tab:blue", label="final goal dist")
-        ax.plot(sub["value"], sub["cum_risk"] / np.maximum(sub["cum_risk"].max(), 1e-9), marker="s", linewidth=1.8, color="tab:red", label="normalized cum risk")
-        baseline = float(sub["baseline_value"].iloc[0])
-        ax.axvline(baseline, color="black", linestyle="--", linewidth=1.0, alpha=0.6)
-        ax.set_title(pretty[param])
-        ax.set_xlabel("value")
-        ax.set_ylabel("metric")
-        ax.legend(fontsize=7)
-    return fig
-
-
-# -----------------------------------------------------------------------------
-# Discussion tables
-# -----------------------------------------------------------------------------
-
-
-
-def build_design_choices_table():
-    return pd.DataFrame(
-        [
-            {
-                "Choice": "Shared 2D GP field for both box heights",
-                "Why": "Separates map learning from 3D ray geometry so height is the only changing factor.",
-                "Benefit": "Makes the 3D effect easy to defend visually.",
-                "Limitation": "The GP itself still does not encode height.",
-            },
-            {
-                "Choice": "Single observed target point on the robot",
-                "Why": "Keeps the raycasting story focused on one line-of-sight question.",
-                "Benefit": "Cleaner derivation and plots.",
-                "Limitation": "Does not capture multi-feature perception effects.",
-            },
-            {
-                "Choice": "Distance-weighted ray opacity sum",
-                "Why": "Treats visibility as accumulated transmittance instead of mean occupancy.",
-                "Benefit": "Longer or more blocked rays reduce visibility more naturally.",
-                "Limitation": "Still a discretized approximation, not a full physical renderer.",
-            },
-            {
-                "Choice": "Soft height gate instead of hard cutoff",
-                "Why": "Avoids brittle on/off changes when the ray grazes the box top.",
-                "Benefit": "Smoother maps and more planner-friendly gradients.",
-                "Limitation": "Introduces a tunable parameter $\tau_z$ that needs interpretation.",
-            },
-            {
-                "Choice": "Latent-space conservative opacity summary",
-                "Why": "The GP posterior is Gaussian in latent logit space, so conservatism is defined before the sigmoid.",
-                "Benefit": "Keeps the uncertainty-aware prior bounded and easier to explain.",
-                "Limitation": "Still compresses GP uncertainty into a fixed offline summary.",
-            },
-            {
-                "Choice": "Belief-averaged planner visibility",
-                "Why": "The planner should react when the belief spans both visible and occluded regions.",
-                "Benefit": "State uncertainty now changes expected visibility directly.",
-                "Limitation": "Uses a sigma-point approximation instead of exact integration.",
-            },
-            {
-                "Choice": "Count-based calibration in opacity space",
-                "Why": "Detection counts are converted into empirical visibility and blended back in opacity space.",
-                "Benefit": "Supports a clean two-pass calibration story without GP retraining.",
-                "Limitation": "Calibration still does not relearn the GP kernel or a full 3D map.",
-            },
-        ]
-    )
-
-
-def build_implementation_options_table():
-    return pd.DataFrame(
-        [
-            {
-                "Method": "Hard 3D oracle raycast",
-                "Formula": "segment-AABB intersection",
-                "Height aware": "Yes",
-                "Uses GP std": "No",
-                "Online correction": "No",
-                "Best use": "ground-truth reference",
-            },
-            {
-                "Method": "Old 2D GP mean-occupancy",
-                "Formula": r"$\exp(-\tau \, \mathrm{mean}(p_{occ}))$",
-                "Height aware": "No",
-                "Uses GP std": "No",
-                "Online correction": "No",
-                "Best use": "historical baseline",
-            },
-            {
-                "Method": "2.5D mean-only opacity prior",
-                "Formula": r"$O_0(x)=\exp(-\sum \Delta s_i g(z_i)\operatorname{sigmoid}(\mu_{f,i}))$",
-                "Height aware": "Yes",
-                "Uses GP std": "No",
-                "Online correction": "No",
-                "Best use": "clean geometry-first prior",
-            },
-            {
-                "Method": "2.5D uncertainty-aware opacity prior",
-                "Formula": r"$O_0(x)=\exp(-\sum \Delta s_i g(z_i)\operatorname{sigmoid}(\mu_{f,i}+\beta\sigma_{f,i}))$",
-                "Height aware": "Yes",
-                "Uses GP std": "Yes",
-                "Online correction": "No",
-                "Best use": "defensive offline planner prior",
-            },
-            {
-                "Method": "Opacity-calibrated prior",
-                "Formula": r"$p_{emp}=\frac{N_d+a}{N_s+a+b},\; A_{corr}=(1-w)A_0+wA_{emp},\; O_{corr}=\exp(-A_{corr})$",
-                "Height aware": "Yes",
-                "Uses GP std": "Offline only",
-                "Online correction": "Yes",
-                "Best use": "second-pass calibration without GP retraining",
-            },
-        ]
-    )
-
-
-def build_limitations_table():
-    return pd.DataFrame(
-        [
-            {
-                "Limitation": "Map is still fundamentally 2D",
-                "Why it matters": "Height enters through ray geometry and box height, not through a full 3D GP field.",
-                "Consequence": "Good for controlled Gazebo transfer, not full 3D occupancy reasoning.",
-            },
-            {
-                "Limitation": "Soft height gate is modeled, not measured",
-                "Why it matters": "The gate slope is a design choice.",
-                "Consequence": "The transition around the box top is interpretable but not physically exact.",
-            },
-            {
-                "Limitation": "Correction is calibration-only",
-                "Why it matters": "The runtime learner adjusts opacity from counts but does not rebuild the GP.",
-                "Consequence": "Fast and practical, but limited if the offline prior is badly wrong everywhere.",
-            },
-            {
-                "Limitation": "Single target point",
-                "Why it matters": "Real heading estimation often depends on multiple visible features.",
-                "Consequence": "Good for explaining raycasting; simplified for full perception realism.",
-            },
-            {
-                "Limitation": "State uncertainty enters visibility approximately",
-                "Why it matters": "Planner visibility is averaged over sigma points, but GP/map uncertainty is still frozen offline.",
-                "Consequence": "Better than mean-state lookup, but still short of full joint map-state inference.",
-            },
-        ]
-    )

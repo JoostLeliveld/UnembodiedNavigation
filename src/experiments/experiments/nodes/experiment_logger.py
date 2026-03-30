@@ -42,6 +42,9 @@ class ExperimentLogger(Node):
         self.declare_parameter('world', '')
         self.declare_parameter('task', '')
         self.declare_parameter('planner', '')
+        self.declare_parameter('study_variant', '')
+        self.declare_parameter('math_mode', 'legacy')
+        self.declare_parameter('optimizer_backend', '')
         self.declare_parameter('use_pixel_correction', False)
         self.declare_parameter('use_ambiguity', False)
         self.declare_parameter('use_obs_risk', True)
@@ -55,7 +58,32 @@ class ExperimentLogger(Node):
         self.declare_parameter('frame_id', 'map_bev')
         self.declare_parameter('use_visibility_model', False)
         self.declare_parameter('visibility_model', 'raycast_25d')
+        self.declare_parameter('risk_weight_state', 0.0)
+        self.declare_parameter('risk_weight_obs', 1.0)
+        self.declare_parameter('goal_sigma_uv', 2.0)
+        self.declare_parameter('r_visible_uv', 2.5)
+        self.declare_parameter('r_miss_uv', 420.0)
+        self.declare_parameter('visibility_power', 3.0)
+        self.declare_parameter('visibility_sigma_kappa', 1.0)
+        self.declare_parameter('goal_prior_u_std_start', 80.0)
+        self.declare_parameter('goal_prior_v_std_start', 80.0)
+        self.declare_parameter('goal_prior_u_std_final', 18.0)
+        self.declare_parameter('goal_prior_v_std_final', 18.0)
+        self.declare_parameter('goal_tightening_power', 0.45)
+        self.declare_parameter('goal_progress_n_steps', 90)
+        self.declare_parameter('notebook_risk_scale', 1.25)
+        self.declare_parameter('notebook_ambiguity_scale', 0.20)
+        self.declare_parameter('visibility_weight', 0.0)
         self.declare_parameter('visibility_target_height_m', 0.0)
+        self.declare_parameter('perception_use_geometry_occlusion', True)
+        self.declare_parameter('use_nogo_cost', False)
+        self.declare_parameter('nogo_penalty_type', 'softplus')
+        self.declare_parameter('nogo_weight', 0.0)
+        self.declare_parameter('nogo_safe_distance', 0.35)
+        self.declare_parameter('nogo_gaussian_sigma', 0.25)
+        self.declare_parameter('nogo_softplus_scale', 0.08)
+        self.declare_parameter('nogo_logbarrier_scale', 0.25)
+        self.declare_parameter('nogo_logbarrier_eps', 1e-3)
         self.declare_parameter('run_dir_topic', '/experiment/run_dir')
 
         log_dir = self.get_parameter('log_dir').value
@@ -63,6 +91,9 @@ class ExperimentLogger(Node):
         self.world = self.get_parameter('world').value
         self.task = self.get_parameter('task').value
         self.planner = self.get_parameter('planner').value
+        self.study_variant = str(self.get_parameter('study_variant').value)
+        self.math_mode = str(self.get_parameter('math_mode').value)
+        self.optimizer_backend = str(self.get_parameter('optimizer_backend').value)
         self.use_pixel_correction = bool(self.get_parameter('use_pixel_correction').value)
         self.use_ambiguity = bool(self.get_parameter('use_ambiguity').value)
         self.use_obs_risk = bool(self.get_parameter('use_obs_risk').value)
@@ -76,7 +107,34 @@ class ExperimentLogger(Node):
         self.frame_id = str(self.get_parameter('frame_id').value)
         self.use_visibility_model = bool(self.get_parameter('use_visibility_model').value)
         self.visibility_model = str(self.get_parameter('visibility_model').value)
+        self.risk_weight_state = float(self.get_parameter('risk_weight_state').value)
+        self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
+        self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
+        self.r_visible_uv = float(self.get_parameter('r_visible_uv').value)
+        self.r_miss_uv = float(self.get_parameter('r_miss_uv').value)
+        self.visibility_power = float(self.get_parameter('visibility_power').value)
+        self.visibility_sigma_kappa = float(self.get_parameter('visibility_sigma_kappa').value)
+        self.goal_prior_u_std_start = float(self.get_parameter('goal_prior_u_std_start').value)
+        self.goal_prior_v_std_start = float(self.get_parameter('goal_prior_v_std_start').value)
+        self.goal_prior_u_std_final = float(self.get_parameter('goal_prior_u_std_final').value)
+        self.goal_prior_v_std_final = float(self.get_parameter('goal_prior_v_std_final').value)
+        self.goal_tightening_power = float(self.get_parameter('goal_tightening_power').value)
+        self.goal_progress_n_steps = int(self.get_parameter('goal_progress_n_steps').value)
+        self.notebook_risk_scale = float(self.get_parameter('notebook_risk_scale').value)
+        self.notebook_ambiguity_scale = float(self.get_parameter('notebook_ambiguity_scale').value)
+        self.visibility_weight = float(self.get_parameter('visibility_weight').value)
         self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
+        self.perception_use_geometry_occlusion = bool(
+            self.get_parameter('perception_use_geometry_occlusion').value
+        )
+        self.use_nogo_cost = bool(self.get_parameter('use_nogo_cost').value)
+        self.nogo_penalty_type = str(self.get_parameter('nogo_penalty_type').value)
+        self.nogo_weight = float(self.get_parameter('nogo_weight').value)
+        self.nogo_safe_distance = float(self.get_parameter('nogo_safe_distance').value)
+        self.nogo_gaussian_sigma = float(self.get_parameter('nogo_gaussian_sigma').value)
+        self.nogo_softplus_scale = float(self.get_parameter('nogo_softplus_scale').value)
+        self.nogo_logbarrier_scale = float(self.get_parameter('nogo_logbarrier_scale').value)
+        self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
         self.run_dir_topic = str(self.get_parameter('run_dir_topic').value).strip() or '/experiment/run_dir'
 
         run_info = create_run_dir(log_dir)
@@ -92,12 +150,40 @@ class ExperimentLogger(Node):
             'world': self.world,
             'task': self.task,
             'planner': self.planner,
+            'study_variant': self.study_variant,
+            'math_mode': self.math_mode,
+            'optimizer_backend': self.optimizer_backend,
             'use_pixel_correction': self.use_pixel_correction,
             'use_ambiguity': self.use_ambiguity,
             'use_obs_risk': self.use_obs_risk,
             'use_visibility_model': self.use_visibility_model,
             'visibility_model': self.visibility_model,
+            'risk_weight_state': self.risk_weight_state,
+            'risk_weight_obs': self.risk_weight_obs,
+            'goal_sigma_uv': self.goal_sigma_uv,
+            'r_visible_uv': self.r_visible_uv,
+            'r_miss_uv': self.r_miss_uv,
+            'visibility_power': self.visibility_power,
+            'visibility_sigma_kappa': self.visibility_sigma_kappa,
+            'goal_prior_u_std_start': self.goal_prior_u_std_start,
+            'goal_prior_v_std_start': self.goal_prior_v_std_start,
+            'goal_prior_u_std_final': self.goal_prior_u_std_final,
+            'goal_prior_v_std_final': self.goal_prior_v_std_final,
+            'goal_tightening_power': self.goal_tightening_power,
+            'goal_progress_n_steps': self.goal_progress_n_steps,
+            'notebook_risk_scale': self.notebook_risk_scale,
+            'notebook_ambiguity_scale': self.notebook_ambiguity_scale,
+            'visibility_weight': self.visibility_weight,
             'visibility_target_height_m': self.visibility_target_height_m,
+            'perception_use_geometry_occlusion': self.perception_use_geometry_occlusion,
+            'use_nogo_cost': self.use_nogo_cost,
+            'nogo_penalty_type': self.nogo_penalty_type,
+            'nogo_weight': self.nogo_weight,
+            'nogo_safe_distance': self.nogo_safe_distance,
+            'nogo_gaussian_sigma': self.nogo_gaussian_sigma,
+            'nogo_softplus_scale': self.nogo_softplus_scale,
+            'nogo_logbarrier_scale': self.nogo_logbarrier_scale,
+            'nogo_logbarrier_eps': self.nogo_logbarrier_eps,
             'seed': self.seed,
             'state_pipeline': 'homography_to_bev',
             'observation_model': 'uv',
@@ -106,12 +192,15 @@ class ExperimentLogger(Node):
         snapshot_configs(self.run_dir, [self.world_profiles_path, self.tasks_yaml])
 
         self.state_msg = None
+        self.planner_belief_msg = None
         self.odom_msg = None
         self.obs_msg = None
         self.perception_diag = None
         self.cmd_msg = None
         self.goal_msg = None
         self.plan_msg = None
+        self.planner_diag = None
+        self.planner_diag_text = ''
         self.efe_metrics = None
         self._goal_in_radius_since = None
         self._stop_requested = False
@@ -128,6 +217,7 @@ class ExperimentLogger(Node):
         goal_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
         self.create_subscription(PoseWithCovarianceStamped, '/state/bev', self._state_cb, 10)
+        self.create_subscription(PoseWithCovarianceStamped, '/planner_belief', self._planner_belief_cb, 10)
         self.create_subscription(PoseStamped, '/perception/pixel_pose', self._obs_cb, 10)
         self.create_subscription(
             Float64MultiArray,
@@ -137,7 +227,9 @@ class ExperimentLogger(Node):
         )
         self.create_subscription(Twist, '/cmd_vel', self._cmd_cb, 10)
         self.create_subscription(PoseStamped, '/goal_bev', self._goal_cb, qos_profile=goal_qos)
-        self.create_subscription(Path, '/plan', self._plan_cb, 10)
+        self.create_subscription(Path, '/plan_preview', self._plan_cb, 10)
+        self.create_subscription(Float64MultiArray, '/planner/diagnostics', self._planner_diag_cb, 10)
+        self.create_subscription(String, '/planner/diagnostics_text', self._planner_diag_text_cb, 10)
         self.create_subscription(Float64MultiArray, '/efe/metrics', self._efe_cb, 10)
 
         self.file = open(self.log_path, 'w', newline='')
@@ -145,10 +237,17 @@ class ExperimentLogger(Node):
         self.writer.writerow([
             'stamp', 'x', 'y', 'yaw',
             'cov_x', 'cov_y', 'cov_yaw',
+            'planner_belief_x', 'planner_belief_y', 'planner_belief_yaw',
+            'planner_cov_x', 'planner_cov_y', 'planner_cov_yaw',
             'cmd_v', 'cmd_w',
             'goal_x', 'goal_y', 'goal_dist',
             'plan_points', 'plan_length',
-            'efe_total', 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_visibility',
+            'optimizer_success', 'optimizer_status', 'optimizer_nit', 'optimizer_nfev', 'optimizer_message',
+            'plan_time_ms', 'solve_time_ms',
+            'measurement_available', 'belief_age_s',
+            'p_vis_plan', 'p_vis_plan_eff',
+            'r_plan_u_std', 'r_plan_v_std',
+            'efe_total', 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_visibility', 'efe_obstacle',
             'seed'
         ])
 
@@ -232,6 +331,9 @@ class ExperimentLogger(Node):
     def _state_cb(self, msg: PoseWithCovarianceStamped):
         self.state_msg = msg
 
+    def _planner_belief_cb(self, msg: PoseWithCovarianceStamped):
+        self.planner_belief_msg = msg
+
     def _obs_cb(self, msg: PoseStamped):
         self.obs_msg = msg
 
@@ -255,6 +357,12 @@ class ExperimentLogger(Node):
 
     def _efe_cb(self, msg: Float64MultiArray):
         self.efe_metrics = msg
+
+    def _planner_diag_cb(self, msg: Float64MultiArray):
+        self.planner_diag = msg
+
+    def _planner_diag_text_cb(self, msg: String):
+        self.planner_diag_text = str(msg.data or '')
 
     def _diag_cb(self, msg: Float64MultiArray):
         self.perception_diag = diagnostics_from_message(msg)
@@ -301,6 +409,21 @@ class ExperimentLogger(Node):
             self._yaw_from_quaternion(pose.orientation),
         )
 
+    def _latest_planner_belief_pose(self):
+        if self.planner_belief_msg is None:
+            return False, math.nan, math.nan, math.nan, math.nan, math.nan, math.nan
+        pose = self.planner_belief_msg.pose.pose
+        cov = list(self.planner_belief_msg.pose.covariance)
+        return (
+            True,
+            float(pose.position.x),
+            float(pose.position.y),
+            self._yaw_from_quaternion(pose.orientation),
+            float(cov[0]) if len(cov) > 0 else math.nan,
+            float(cov[7]) if len(cov) > 7 else math.nan,
+            float(cov[35]) if len(cov) > 35 else math.nan,
+        )
+
     def _latest_pixel_pose(self):
         if self.obs_msg is None:
             return False, math.nan, math.nan, math.nan, math.nan
@@ -331,13 +454,14 @@ class ExperimentLogger(Node):
         if true_ok and diag['detected'] and math.isfinite(diag['yaw_est']):
             obs_yaw_error_deg = math.degrees(self._wrap_angle(diag['yaw_est'] - true_yaw))
 
+        log_stamp = float(self.get_clock().now().nanoseconds) * 1e-9
         pixel_pose_age_s = math.nan
-        if obs_ok and math.isfinite(diag['stamp']):
-            pixel_pose_age_s = float(diag['stamp'] - pixel_pose_stamp)
+        if obs_ok and math.isfinite(pixel_pose_stamp):
+            pixel_pose_age_s = max(log_stamp - pixel_pose_stamp, 0.0)
 
         self.perception_writer.writerow([
             diag['stamp'],
-            float(self.get_clock().now().nanoseconds) * 1e-9,
+            log_stamp,
             int(diag['detected']),
             int(true_ok),
             true_x,
@@ -381,14 +505,28 @@ class ExperimentLogger(Node):
         cov_x = cov[0] if len(cov) > 0 else 0.0
         cov_y = cov[7] if len(cov) > 7 else 0.0
         cov_yaw = cov[35] if len(cov) > 35 else 0.0
+        (
+            planner_belief_ok,
+            planner_belief_x,
+            planner_belief_y,
+            planner_belief_yaw,
+            planner_cov_x,
+            planner_cov_y,
+            planner_cov_yaw,
+        ) = self._latest_planner_belief_pose()
+        if not planner_belief_ok:
+            planner_belief_x = planner_belief_y = planner_belief_yaw = math.nan
+            planner_cov_x = planner_cov_y = planner_cov_yaw = math.nan
 
         cmd_v = self.cmd_msg.linear.x if self.cmd_msg else 0.0
         cmd_w = self.cmd_msg.angular.z if self.cmd_msg else 0.0
 
-        goal_x = self.goal_msg.pose.position.x if self.goal_msg else 0.0
-        goal_y = self.goal_msg.pose.position.y if self.goal_msg else 0.0
-        goal_dist = 0.0
+        goal_x = math.nan
+        goal_y = math.nan
+        goal_dist = math.nan
         if self.goal_msg:
+            goal_x = float(self.goal_msg.pose.position.x)
+            goal_y = float(self.goal_msg.pose.position.y)
             dx = goal_x - self.state_msg.pose.pose.position.x
             dy = goal_y - self.state_msg.pose.pose.position.y
             goal_dist = math.hypot(dx, dy)
@@ -409,12 +547,42 @@ class ExperimentLogger(Node):
         efe_ambiguity = 0.0
         efe_control = 0.0
         efe_visibility = 0.0
-        if self.efe_metrics and self.efe_metrics.data and len(self.efe_metrics.data) >= 5:
+        efe_obstacle = 0.0
+        optimizer_success = 0.0
+        optimizer_status = 0.0
+        optimizer_nit = 0.0
+        optimizer_nfev = 0.0
+        optimizer_message = self.planner_diag_text
+        plan_time_ms = 0.0
+        solve_time_ms = 0.0
+        measurement_available = math.nan
+        belief_age_s = math.nan
+        p_vis_plan = math.nan
+        p_vis_plan_eff = math.nan
+        r_plan_u_std = math.nan
+        r_plan_v_std = math.nan
+        if self.planner_diag and self.planner_diag.data and len(self.planner_diag.data) >= 6:
+            optimizer_success = float(self.planner_diag.data[0])
+            optimizer_status = float(self.planner_diag.data[1])
+            optimizer_nit = float(self.planner_diag.data[2])
+            optimizer_nfev = float(self.planner_diag.data[3])
+            plan_time_ms = float(self.planner_diag.data[4])
+            solve_time_ms = float(self.planner_diag.data[5])
+            if len(self.planner_diag.data) >= 12:
+                p_vis_plan = float(self.planner_diag.data[6])
+                p_vis_plan_eff = float(self.planner_diag.data[7])
+                r_plan_u_std = float(self.planner_diag.data[8])
+                r_plan_v_std = float(self.planner_diag.data[9])
+                measurement_available = float(self.planner_diag.data[10])
+                belief_age_s = float(self.planner_diag.data[11])
+        if self.efe_metrics and self.efe_metrics.data and len(self.efe_metrics.data) >= 6:
             efe_total = float(self.efe_metrics.data[0])
             efe_risk = float(self.efe_metrics.data[1])
             efe_ambiguity = float(self.efe_metrics.data[2])
             efe_control = float(self.efe_metrics.data[3])
             efe_visibility = float(self.efe_metrics.data[4])
+            if len(self.efe_metrics.data) >= 6:
+                efe_obstacle = float(self.efe_metrics.data[5])
 
         self.writer.writerow([
             stamp,
@@ -422,10 +590,17 @@ class ExperimentLogger(Node):
             self.state_msg.pose.pose.position.y,
             yaw,
             cov_x, cov_y, cov_yaw,
+            planner_belief_x, planner_belief_y, planner_belief_yaw,
+            planner_cov_x, planner_cov_y, planner_cov_yaw,
             cmd_v, cmd_w,
             goal_x, goal_y, goal_dist,
             plan_points, plan_length,
-            efe_total, efe_risk, efe_ambiguity, efe_control, efe_visibility,
+            optimizer_success, optimizer_status, optimizer_nit, optimizer_nfev, optimizer_message,
+            plan_time_ms, solve_time_ms,
+            measurement_available, belief_age_s,
+            p_vis_plan, p_vis_plan_eff,
+            r_plan_u_std, r_plan_v_std,
+            efe_total, efe_risk, efe_ambiguity, efe_control, efe_visibility, efe_obstacle,
             self.seed,
         ])
         self.file.flush()

@@ -56,6 +56,8 @@ class HomographySimNode(Node):
             self.declare_parameter('visibility_geometry_json', '')
         if not self.has_parameter('visibility_target_height_m'):
             self.declare_parameter('visibility_target_height_m', 0.0)
+        if not self.has_parameter('use_geometry_occlusion'):
+            self.declare_parameter('use_geometry_occlusion', True)
         if not self.has_parameter('log_camera_diagnostics'):
             self.declare_parameter('log_camera_diagnostics', False)
 
@@ -77,11 +79,7 @@ class HomographySimNode(Node):
         self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
         self.log_camera_diagnostics = _as_bool(self.get_parameter('log_camera_diagnostics').value)
         self.occlusion_scene = scene_from_json(str(self.get_parameter('visibility_geometry_json').value))
-        self.use_geometry_occlusion = (
-            self.use_visibility_model
-            and self.visibility_model_name in ('raycast_25d', 'raycast25d', 'raycast')
-            and bool(self.occlusion_scene.prisms)
-        )
+        self.use_geometry_occlusion = _as_bool(self.get_parameter('use_geometry_occlusion').value)
         self.rng = np.random.default_rng(self.seed)
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
@@ -102,6 +100,7 @@ class HomographySimNode(Node):
             f'Homography Sim Node started (pixel_noise_sigma={self.pixel_noise_std:.3f}, '
             f'world_frame={self.world_frame}, log_noisy_pixels={self.log_noisy_pixels}, '
             f'use_geometry_occlusion={self.use_geometry_occlusion}, '
+            f'visibility_model={self.visibility_model_name}, '
             f'log_camera_diagnostics={self.log_camera_diagnostics}, '
             f'occluders={len(self.occlusion_scene.prisms)})'
         )

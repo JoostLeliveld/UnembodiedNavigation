@@ -70,18 +70,19 @@ class UnicyclePlannerNode(Node):
         # Goal covariance
         _declare_if_not('goal_sigma_xy', 0.25)
         _declare_if_not('goal_sigma_theta', 0.5)
-        _declare_if_not('goal_sigma_uv', 0.0)
+        _declare_if_not('goal_sigma_uv', 2.0)
 
         # EFE weights
         _declare_if_not('risk_weight_state', 1.0)
         _declare_if_not('risk_weight_obs', 1.0)
         _declare_if_not('ambiguity_weight', 1.0)
-        _declare_if_not('approx_method', 'ET2')
+        _declare_if_not('math_mode', 'notebook_simple')
+        _declare_if_not('approx_method', 'ET1')
         _declare_if_not('use_obs_risk', True)
         _declare_if_not('use_ambiguity', True)
-        _declare_if_not('optimizer_backend', 'auto')
+        _declare_if_not('optimizer_backend', 'scipy')
         _declare_if_not('use_visibility_model', False)
-        _declare_if_not('visibility_model', 'raycast_25d')
+        _declare_if_not('visibility_model', 'gp_visibility')
         _declare_if_not('visibility_weight', 0.0)
         _declare_if_not('visibility_map_min_x', -5.0)
         _declare_if_not('visibility_map_max_x', 5.0)
@@ -95,13 +96,32 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('visibility_beta', 1.0)
         _declare_if_not('visibility_height_tau', 0.08)
         _declare_if_not('visibility_ray_samples', 120)
-        _declare_if_not('visibility_sigma_kappa', 1.0)
         _declare_if_not('visibility_target_height_m', 0.0)
         _declare_if_not('visibility_geometry_json', '')
         _declare_if_not('visibility_gp_seed', 0)
         _declare_if_not('visibility_r_bad_uv', 28.0)
         _declare_if_not('visibility_cov_pos_scale', 2.0)
         _declare_if_not('visibility_cov_theta_scale', 0.8)
+        _declare_if_not('r_visible_uv', 2.5)
+        _declare_if_not('r_miss_uv', 420.0)
+        _declare_if_not('visibility_power', 3.0)
+        _declare_if_not('visibility_sigma_kappa', 1.0)
+        _declare_if_not('goal_prior_u_std_start', 80.0)
+        _declare_if_not('goal_prior_v_std_start', 80.0)
+        _declare_if_not('goal_prior_u_std_final', 18.0)
+        _declare_if_not('goal_prior_v_std_final', 18.0)
+        _declare_if_not('goal_tightening_power', 0.45)
+        _declare_if_not('goal_progress_n_steps', 90)
+        _declare_if_not('notebook_risk_scale', 1.25)
+        _declare_if_not('notebook_ambiguity_scale', 0.20)
+        _declare_if_not('use_nogo_cost', False)
+        _declare_if_not('nogo_penalty_type', 'softplus')
+        _declare_if_not('nogo_weight', 0.0)
+        _declare_if_not('nogo_safe_distance', 0.35)
+        _declare_if_not('nogo_gaussian_sigma', 0.25)
+        _declare_if_not('nogo_softplus_scale', 0.08)
+        _declare_if_not('nogo_logbarrier_scale', 0.25)
+        _declare_if_not('nogo_logbarrier_eps', 1e-3)
         _declare_if_not('publish_visibility_map', True)
         _declare_if_not('visibility_map_topic', '/visibility_map')
         _declare_if_not('publish_opacity_debug_maps', True)
@@ -114,6 +134,8 @@ class UnicyclePlannerNode(Node):
 
         # Optimizer params
         _declare_if_not('optimizer_maxiter', 50)
+        _declare_if_not('optimizer_maxfun', 500)
+        _declare_if_not('optimizer_ftol', 1e-6)
         _declare_if_not('optimizer_gtol', 1e-4)
         _declare_if_not('optimizer_warm_start', True)
 
@@ -135,6 +157,13 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('jax_warmup_goal_x', 0.0)
         _declare_if_not('jax_warmup_goal_y', 0.0)
         _declare_if_not('jax_warmup_goal_frame_id', 'map_bev')
+        _declare_if_not('jax_warmup_use_state_hint', False)
+        _declare_if_not('jax_warmup_state_x', 0.0)
+        _declare_if_not('jax_warmup_state_y', 0.0)
+        _declare_if_not('jax_warmup_state_yaw', 0.0)
+        _declare_if_not('jax_warmup_state_cov_x', 1e-6)
+        _declare_if_not('jax_warmup_state_cov_y', 1e-6)
+        _declare_if_not('jax_warmup_state_cov_yaw', 1e-6)
 
         # Camera model params (must match sim)
         _declare_if_not('cam_pos', [-3.0, -3.0, 6.0])
@@ -161,6 +190,7 @@ class UnicyclePlannerNode(Node):
         self.goal_sigma_theta = float(self.get_parameter('goal_sigma_theta').value)
         self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
 
+        self.math_mode = str(self.get_parameter('math_mode').value).strip().lower()
         self.risk_weight_state = float(self.get_parameter('risk_weight_state').value)
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
         self.ambiguity_weight = float(self.get_parameter('ambiguity_weight').value)
@@ -183,13 +213,32 @@ class UnicyclePlannerNode(Node):
         self.visibility_beta = float(self.get_parameter('visibility_beta').value)
         self.visibility_height_tau = float(self.get_parameter('visibility_height_tau').value)
         self.visibility_ray_samples = int(self.get_parameter('visibility_ray_samples').value)
-        self.visibility_sigma_kappa = float(self.get_parameter('visibility_sigma_kappa').value)
         self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
         self.visibility_geometry_json = str(self.get_parameter('visibility_geometry_json').value)
         self.visibility_gp_seed = int(self.get_parameter('visibility_gp_seed').value)
         self.visibility_r_bad_uv = float(self.get_parameter('visibility_r_bad_uv').value)
         self.visibility_cov_pos_scale = float(self.get_parameter('visibility_cov_pos_scale').value)
         self.visibility_cov_theta_scale = float(self.get_parameter('visibility_cov_theta_scale').value)
+        self.r_visible_uv = float(self.get_parameter('r_visible_uv').value)
+        self.r_miss_uv = float(self.get_parameter('r_miss_uv').value)
+        self.visibility_power = float(self.get_parameter('visibility_power').value)
+        self.visibility_sigma_kappa = float(self.get_parameter('visibility_sigma_kappa').value)
+        self.goal_prior_u_std_start = float(self.get_parameter('goal_prior_u_std_start').value)
+        self.goal_prior_v_std_start = float(self.get_parameter('goal_prior_v_std_start').value)
+        self.goal_prior_u_std_final = float(self.get_parameter('goal_prior_u_std_final').value)
+        self.goal_prior_v_std_final = float(self.get_parameter('goal_prior_v_std_final').value)
+        self.goal_tightening_power = float(self.get_parameter('goal_tightening_power').value)
+        self.goal_progress_n_steps = int(self.get_parameter('goal_progress_n_steps').value)
+        self.notebook_risk_scale = float(self.get_parameter('notebook_risk_scale').value)
+        self.notebook_ambiguity_scale = float(self.get_parameter('notebook_ambiguity_scale').value)
+        self.use_nogo_cost = _as_bool(self.get_parameter('use_nogo_cost').value)
+        self.nogo_penalty_type = str(self.get_parameter('nogo_penalty_type').value).strip().lower()
+        self.nogo_weight = float(self.get_parameter('nogo_weight').value)
+        self.nogo_safe_distance = float(self.get_parameter('nogo_safe_distance').value)
+        self.nogo_gaussian_sigma = float(self.get_parameter('nogo_gaussian_sigma').value)
+        self.nogo_softplus_scale = float(self.get_parameter('nogo_softplus_scale').value)
+        self.nogo_logbarrier_scale = float(self.get_parameter('nogo_logbarrier_scale').value)
+        self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
         self.publish_visibility_map = _as_bool(self.get_parameter('publish_visibility_map').value)
         self.visibility_map_topic = str(self.get_parameter('visibility_map_topic').value).strip() or '/visibility_map'
         self.publish_opacity_debug_maps = _as_bool(self.get_parameter('publish_opacity_debug_maps').value)
@@ -217,6 +266,8 @@ class UnicyclePlannerNode(Node):
         )
 
         self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
+        self.optimizer_maxfun = int(self.get_parameter('optimizer_maxfun').value)
+        self.optimizer_ftol = float(self.get_parameter('optimizer_ftol').value)
         self.optimizer_gtol = float(self.get_parameter('optimizer_gtol').value)
         self.optimizer_warm_start = _as_bool(self.get_parameter('optimizer_warm_start').value)
 
@@ -239,7 +290,10 @@ class UnicyclePlannerNode(Node):
         self.debug_log_period_s = max(0.2, float(self.get_parameter('debug_log_period_s').value))
         self.slow_plan_factor = max(0.1, float(self.get_parameter('slow_plan_factor').value))
         self.slow_correction_ms = max(0.1, float(self.get_parameter('slow_correction_ms').value))
-        self.jax_warmup_enabled = _as_bool(self.get_parameter('jax_warmup_enabled').value) and self.optimizer_backend in ('jax', 'auto')
+        self.jax_warmup_enabled = (
+            _as_bool(self.get_parameter('jax_warmup_enabled').value)
+            and self.optimizer_backend in ('jax', 'auto', 'scipy')
+        )
         self.jax_warmup_poll_s = max(0.1, float(self.get_parameter('jax_warmup_poll_s').value))
         self.jax_warmup_use_goal_hint = _as_bool(self.get_parameter('jax_warmup_use_goal_hint').value)
         self.jax_warmup_goal_hint = (
@@ -247,6 +301,17 @@ class UnicyclePlannerNode(Node):
             float(self.get_parameter('jax_warmup_goal_y').value),
         )
         self.jax_warmup_goal_frame_id = str(self.get_parameter('jax_warmup_goal_frame_id').value).strip() or 'map_bev'
+        self.jax_warmup_use_state_hint = _as_bool(self.get_parameter('jax_warmup_use_state_hint').value)
+        self.jax_warmup_state_hint = (
+            float(self.get_parameter('jax_warmup_state_x').value),
+            float(self.get_parameter('jax_warmup_state_y').value),
+            float(self.get_parameter('jax_warmup_state_yaw').value),
+        )
+        self.jax_warmup_state_cov_hint = (
+            float(self.get_parameter('jax_warmup_state_cov_x').value),
+            float(self.get_parameter('jax_warmup_state_cov_y').value),
+            float(self.get_parameter('jax_warmup_state_cov_yaw').value),
+        )
 
         camera_params = {
             'cam_pos': self.get_parameter('cam_pos').value,
@@ -255,6 +320,10 @@ class UnicyclePlannerNode(Node):
             'img_height': int(self.get_parameter('img_height').value),
             'fov_h_rad': float(self.get_parameter('fov_h_rad').value),
         }
+        warm_start_shift_steps = max(
+            1,
+            int(round((1.0 / max(self.plan_rate, 0.1)) / max(self.dt, 1e-3))),
+        )
 
         self.planner = self.PLANNER_CLASS(
             horizon=self.horizon,
@@ -273,9 +342,13 @@ class UnicyclePlannerNode(Node):
             risk_weight_state=self.risk_weight_state,
             risk_weight_obs=self.risk_weight_obs,
             ambiguity_weight=self.ambiguity_weight,
+            math_mode=self.math_mode,
             optimizer_maxiter=self.optimizer_maxiter,
+            optimizer_maxfun=self.optimizer_maxfun,
+            optimizer_ftol=self.optimizer_ftol,
             optimizer_gtol=self.optimizer_gtol,
             optimizer_warm_start=self.optimizer_warm_start,
+            optimizer_warm_start_shift_steps=warm_start_shift_steps,
             approx_method=self.approx_method,
             use_obs_risk=self.use_obs_risk,
             use_ambiguity=self.use_ambiguity,
@@ -297,13 +370,32 @@ class UnicyclePlannerNode(Node):
             visibility_beta=self.visibility_beta,
             visibility_height_tau=self.visibility_height_tau,
             visibility_ray_samples=self.visibility_ray_samples,
-            visibility_sigma_kappa=self.visibility_sigma_kappa,
             visibility_target_height_m=self.visibility_target_height_m,
             visibility_geometry_json=self.visibility_geometry_json,
             visibility_gp_seed=self.visibility_gp_seed,
             visibility_r_bad_uv=self.visibility_r_bad_uv,
             visibility_cov_pos_scale=self.visibility_cov_pos_scale,
             visibility_cov_theta_scale=self.visibility_cov_theta_scale,
+            r_visible_uv=self.r_visible_uv,
+            r_miss_uv=self.r_miss_uv,
+            visibility_power=self.visibility_power,
+            visibility_sigma_kappa=self.visibility_sigma_kappa,
+            goal_prior_u_std_start=self.goal_prior_u_std_start,
+            goal_prior_v_std_start=self.goal_prior_v_std_start,
+            goal_prior_u_std_final=self.goal_prior_u_std_final,
+            goal_prior_v_std_final=self.goal_prior_v_std_final,
+            goal_tightening_power=self.goal_tightening_power,
+            goal_progress_n_steps=self.goal_progress_n_steps,
+            notebook_risk_scale=self.notebook_risk_scale,
+            notebook_ambiguity_scale=self.notebook_ambiguity_scale,
+            use_nogo_cost=self.use_nogo_cost,
+            nogo_penalty_type=self.nogo_penalty_type,
+            nogo_weight=self.nogo_weight,
+            nogo_safe_distance=self.nogo_safe_distance,
+            nogo_gaussian_sigma=self.nogo_gaussian_sigma,
+            nogo_softplus_scale=self.nogo_softplus_scale,
+            nogo_logbarrier_scale=self.nogo_logbarrier_scale,
+            nogo_logbarrier_eps=self.nogo_logbarrier_eps,
             runtime_debug=self.debug_runtime,
         )
         self._io_group = ReentrantCallbackGroup()
@@ -345,6 +437,8 @@ class UnicyclePlannerNode(Node):
             PoseWithCovarianceStamped, '/planner_belief', qos_profile=path_qos
         )
         self.metrics_pub = self.create_publisher(Float64MultiArray, '/efe/metrics', 10)
+        self.planner_diag_pub = self.create_publisher(Float64MultiArray, '/planner/diagnostics', 10)
+        self.planner_diag_text_pub = self.create_publisher(String, '/planner/diagnostics_text', 10)
         self.visibility_map_pub = self.create_publisher(
             OccupancyGrid, self.visibility_map_topic, qos_profile=path_qos
         )
@@ -378,12 +472,16 @@ class UnicyclePlannerNode(Node):
         self._jax_warmup_started = False
         self._jax_warmup_timer = None
         self._fatal_stop_triggered = False
+        self._goal_signature = None
+        self._goal_progress_start_s = None
         self.belief_m = None
         self.belief_S = None
         self.belief_stamp = None
         self._experiment_run_dir = ''
         self._visibility_artifact_written = False
         self.last_cmd = np.array([0.0, 0.0], dtype=float)
+        self._latest_measurement_available = False
+        self._latest_belief_age_s = math.nan
 
         self._plan_period_s = 1.0 / max(self.plan_rate, 0.1)
         self.create_timer(self._plan_period_s, self._plan_once, callback_group=self._plan_group)
@@ -400,9 +498,12 @@ class UnicyclePlannerNode(Node):
         self._publish_visibility_map_once()
         self.get_logger().info(
             f"{self.NODE_NAME} started "
-            f"(approx={self.approx_method}, "
+            f"(math_mode={self.math_mode}, approx={self.approx_method}, "
             f"use_obs_risk={self.use_obs_risk}, use_ambiguity={self.use_ambiguity}, "
-            f"use_visibility_model={self.use_visibility_model}, visibility_weight={self.visibility_weight:.3f}, "
+            f"goal_progress_n_steps={self.goal_progress_n_steps}, "
+            f"use_visibility_model={self.use_visibility_model}, visibility_model={self.visibility_model}, "
+            f"visibility_weight={self.visibility_weight:.3f}, "
+            f"use_nogo_cost={self.use_nogo_cost}, nogo_penalty_type={self.nogo_penalty_type}, "
             f"use_pixel_correction={self.use_pixel_correction}, "
             f"pixel_correction_approx={self.pixel_correction_approx}, "
             f"jax_warmup_enabled={self.jax_warmup_enabled}, "
@@ -496,10 +597,16 @@ class UnicyclePlannerNode(Node):
         artifact_path = os.path.join(self._experiment_run_dir, self.visibility_artifact_filename)
         cfg = getattr(visibility_model, 'cfg', None)
         geometry_json = '' if cfg is None else str(getattr(cfg, 'geometry_json', '') or '')
-        rho_mean = getattr(visibility_model, 'rho_mean_map', np.zeros_like(np.asarray(p_map, dtype=float)))
-        rho_cons = getattr(visibility_model, 'rho_conservative_map', np.zeros_like(np.asarray(p_map, dtype=float)))
+        rho_mean = getattr(visibility_model, 'rho_mean_map', None)
+        if rho_mean is None:
+            rho_mean = getattr(visibility_model, 'P_mean_map', np.zeros_like(np.asarray(p_map, dtype=float)))
+        rho_cons = getattr(visibility_model, 'rho_conservative_map', None)
+        if rho_cons is None:
+            rho_cons = getattr(visibility_model, 'P_conservative_map', np.asarray(p_map, dtype=float))
         camera_pos = getattr(visibility_model, 'camera_pos', np.asarray([0.0, 0.0, 0.0], dtype=float))
         target_height = float(getattr(visibility_model, 'target_height', self.visibility_target_height_m))
+        p_mean = getattr(visibility_model, 'P_mean_map', np.asarray(p_map, dtype=float))
+        p_cons = getattr(visibility_model, 'P_conservative_map', np.asarray(p_map, dtype=float))
 
         try:
             os.makedirs(self._experiment_run_dir, exist_ok=True)
@@ -509,11 +616,14 @@ class UnicyclePlannerNode(Node):
                 ys=np.asarray(ys, dtype=float),
                 rho_mean_map=np.asarray(rho_mean, dtype=float),
                 rho_conservative_map=np.asarray(rho_cons, dtype=float),
+                P_mean_map=np.asarray(p_mean, dtype=float),
+                P_conservative_map=np.asarray(p_cons, dtype=float),
                 P_map=np.asarray(p_map, dtype=float),
                 camera_pos=np.asarray(camera_pos, dtype=float).reshape(-1),
                 target_height=np.asarray([target_height], dtype=float),
                 geometry_json=np.asarray(str(geometry_json)),
                 visibility_model=np.asarray(str(self.visibility_model)),
+                use_visibility_model=np.asarray([1.0 if self.use_visibility_model else 0.0], dtype=float),
             )
             self._visibility_artifact_written = True
             self.get_logger().info(f"Wrote visibility artifact to {artifact_path}")
@@ -545,7 +655,11 @@ class UnicyclePlannerNode(Node):
 
         if self.publish_opacity_debug_maps:
             rho_mean = getattr(visibility_model, 'rho_mean_map', None)
+            if rho_mean is None:
+                rho_mean = getattr(visibility_model, 'P_mean_map', None)
             rho_cons = getattr(visibility_model, 'rho_conservative_map', None)
+            if rho_cons is None:
+                rho_cons = getattr(visibility_model, 'P_conservative_map', None)
             if rho_mean is not None:
                 self._publish_visibility_grid(
                     self.visibility_opacity_mean_map_pub,
@@ -570,22 +684,12 @@ class UnicyclePlannerNode(Node):
         self._write_visibility_artifacts_if_ready()
 
     def _visibility_debug_support_points(self, m0, S0, target_height):
+        del S0
         mean = np.asarray(m0, dtype=float).reshape(-1)
         if mean.size < 2:
             return np.zeros((0, 3), dtype=float)
 
         points = [[float(mean[0]), float(mean[1]), float(target_height)]]
-        S = None if S0 is None else np.asarray(S0, dtype=float)
-        kappa = max(float(self.visibility_sigma_kappa), 0.0)
-        if S is None or S.ndim != 2 or S.shape[0] < 2 or S.shape[1] < 2 or kappa <= 0.0:
-            return np.asarray(points, dtype=float)
-
-        sx = math.sqrt(max(float(S[0, 0]), 0.0)) * kappa
-        sy = math.sqrt(max(float(S[1, 1]), 0.0)) * kappa
-        for dx, dy in ((sx, 0.0), (-sx, 0.0), (0.0, sy), (0.0, -sy)):
-            if abs(dx) + abs(dy) <= 1e-9:
-                continue
-            points.append([float(mean[0] + dx), float(mean[1] + dy), float(target_height)])
         return np.asarray(points, dtype=float)
 
     def _publish_visibility_logic_markers(self, m0, S0):
@@ -760,12 +864,39 @@ class UnicyclePlannerNode(Node):
         with self._data_lock:
             self.state_msg = msg
 
+    def _update_goal_progress_origin(self, msg: PoseStamped):
+        signature = (
+            (msg.header.frame_id or '').strip() or 'map_bev',
+            float(msg.pose.position.x),
+            float(msg.pose.position.y),
+        )
+        with self._data_lock:
+            previous = self._goal_signature
+            changed = (
+                previous is None
+                or signature[0] != previous[0]
+                or abs(signature[1] - previous[1]) > 1e-9
+                or abs(signature[2] - previous[2]) > 1e-9
+            )
+            if changed:
+                self._goal_signature = signature
+                self._goal_progress_start_s = float(self.get_clock().now().nanoseconds) * 1e-9
+
+    def _current_goal_progress_index(self) -> float:
+        with self._data_lock:
+            start_s = self._goal_progress_start_s
+        if start_s is None:
+            return 0.0
+        now_s = float(self.get_clock().now().nanoseconds) * 1e-9
+        return max((now_s - start_s) / max(self.dt, 1e-6), 0.0)
+
     def _goal_cb(self, msg: PoseStamped):
         with self._data_lock:
             self.goal_msg = msg
             first_goal = not self._goal_received_logged
             if first_goal:
                 self._goal_received_logged = True
+        self._update_goal_progress_origin(msg)
         if first_goal:
             self.get_logger().info(
                 f"Received goal ({msg.pose.position.x:.2f}, {msg.pose.position.y:.2f}) "
@@ -963,33 +1094,56 @@ class UnicyclePlannerNode(Node):
             self._last_slow_correction_log = now_wall
 
     def _resolve_belief_for_planning(self):
+        now_msg = self.get_clock().now().to_msg()
         if self.use_pixel_correction:
             with self._data_lock:
                 has_belief = self.belief_m is not None and self.belief_S is not None
             if not has_belief:
                 if not self._init_belief_from_state():
-                    return None, None
+                    return None, None, {}
+            belief_age_s = 0.0
+            measurement_available = False
             with self._data_lock:
                 m0 = self.belief_m.copy()
                 S0 = self.belief_S.copy()
                 stamp_ref = self.belief_stamp
+                pixel_stamp_ref = self.pixel_stamp
+                last_cmd = self.last_cmd.copy()
             if stamp_ref is not None:
                 try:
-                    now = self.get_clock().now()
-                    stamp = Time.from_msg(stamp_ref)
-                    age = (now - stamp).nanoseconds * 1e-9
+                    belief_age_s = max(
+                        (Time.from_msg(now_msg) - Time.from_msg(stamp_ref)).nanoseconds * 1e-9,
+                        0.0,
+                    )
                 except Exception:
-                    age = 0.0
-                if age > self.pixel_timeout_s:
-                    now_wall = time.monotonic()
-                    if now_wall - self._last_stale_log > 2.0:
-                        self.get_logger().warn(f"Pixel belief stale (age {age:.2f}s)")
-                        self._last_stale_log = now_wall
+                    belief_age_s = 0.0
+            if pixel_stamp_ref is not None:
+                try:
+                    measurement_age = max(
+                        (Time.from_msg(now_msg) - Time.from_msg(pixel_stamp_ref)).nanoseconds * 1e-9,
+                        0.0,
+                    )
+                except Exception:
+                    measurement_age = math.inf
+                measurement_available = measurement_age <= self.pixel_timeout_s
+            if belief_age_s > 0.0:
+                m0, S0 = self.planner.predict(
+                    m0, S0, np.asarray(last_cmd, dtype=float), dt=belief_age_s
+                )
+                with self._data_lock:
+                    self.belief_m = m0.copy()
+                    self.belief_S = S0.copy()
+                    self.belief_stamp = now_msg
+            if belief_age_s > self.pixel_timeout_s:
+                now_wall = time.monotonic()
+                if now_wall - self._last_stale_log > 2.0:
+                    self.get_logger().warn(f"Pixel belief stale (age {belief_age_s:.2f}s); planning on prediction-only belief")
+                    self._last_stale_log = now_wall
         else:
             with self._data_lock:
                 state_ref = self.state_msg
             if state_ref is None:
-                return None, None
+                return None, None, {}
             q = state_ref.pose.pose.orientation
             siny_cosp = 2 * (q.w * q.z + q.x * q.y)
             cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
@@ -1010,7 +1164,34 @@ class UnicyclePlannerNode(Node):
                 for i in range(min(3, S0.shape[0])):
                     if S0[i, i] < self.min_state_cov:
                         S0[i, i] = self.min_state_cov
-        return m0, S0
+            belief_age_s = 0.0
+            measurement_available = False
+        self._latest_measurement_available = bool(measurement_available)
+        self._latest_belief_age_s = float(belief_age_s)
+        return m0, S0, {
+            'measurement_available': bool(measurement_available),
+            'belief_age_s': float(belief_age_s),
+        }
+
+    def _resolve_jax_warmup_belief(self):
+        m0, S0, _ = self._resolve_belief_for_planning()
+        if m0 is not None and S0 is not None:
+            return m0, S0, 'live belief'
+        if not self.jax_warmup_use_state_hint:
+            return None, None, None
+
+        m0 = np.array(self.jax_warmup_state_hint, dtype=float)
+        cov_x, cov_y, cov_yaw = self.jax_warmup_state_cov_hint
+        S0 = np.diag([
+            cov_x,
+            cov_y,
+            cov_yaw,
+        ]).astype(float)
+        if self.min_state_cov > 0.0:
+            for i in range(min(3, S0.shape[0])):
+                if S0[i, i] < self.min_state_cov:
+                    S0[i, i] = self.min_state_cov
+        return m0, S0, 'state hint'
 
     def _cancel_jax_warmup_timer(self):
         if self._jax_warmup_timer is None:
@@ -1043,13 +1224,15 @@ class UnicyclePlannerNode(Node):
         if goal_xy is None:
             return
 
-        m0, S0 = self._resolve_belief_for_planning()
+        m0, S0, belief_source = self._resolve_jax_warmup_belief()
         if m0 is None or S0 is None:
             return
 
         self._jax_warmup_started = True
         self.get_logger().info(
-            f"Starting JAX warm-up using {goal_source} for goal=({goal_xy[0]:.2f},{goal_xy[1]:.2f}) frame='{goal_frame}'"
+            "Starting JAX warm-up using "
+            f"{goal_source} and {belief_source} for goal=({goal_xy[0]:.2f},{goal_xy[1]:.2f}) "
+            f"frame='{goal_frame}'"
         )
         warm_start = time.perf_counter()
         try:
@@ -1128,7 +1311,7 @@ class UnicyclePlannerNode(Node):
         belief.pose.covariance = self._pose_covariance_from_state_covariance(S0)
         return belief
 
-    def _publish_plan_and_metrics(self, result, goal_xy, m0, S0):
+    def _publish_plan_and_metrics(self, result, goal_xy, m0, S0, *, belief_meta=None):
         frame_id = self._resolve_plan_frame_id()
         stamp = self.get_clock().now().to_msg()
         path = self._build_path_message(
@@ -1149,6 +1332,13 @@ class UnicyclePlannerNode(Node):
             float(result.ambiguity_cost),
             float(result.control_cost),
             float(result.visibility_cost),
+            float(result.obstacle_cost),
+            float(getattr(result, 'p_vis_plan', 1.0)),
+            float(getattr(result, 'p_vis_plan_eff', 1.0)),
+            float(getattr(result, 'r_plan_u_std', np.nan)),
+            float(getattr(result, 'r_plan_v_std', np.nan)),
+            1.0 if (belief_meta or {}).get('measurement_available', False) else 0.0,
+            float((belief_meta or {}).get('belief_age_s', math.nan)),
         ]
         self.metrics_pub.publish(metrics_msg)
         self._publish_visibility_logic_markers(m0, S0)
@@ -1156,6 +1346,27 @@ class UnicyclePlannerNode(Node):
     def _after_plan_result(self, result):
         """Hook for subclasses (e.g. agent node) to publish extra outputs."""
         return
+
+    def _publish_planner_diagnostics(self, result, plan_elapsed_ms, *, belief_meta=None):
+        diag = Float64MultiArray()
+        diag.data = [
+            1.0 if getattr(result, 'optimizer_success', False) else 0.0,
+            float(getattr(result, 'optimizer_status', 0)),
+            float(getattr(result, 'optimizer_nit', 0)),
+            float(getattr(result, 'optimizer_nfev', 0)),
+            float(plan_elapsed_ms),
+            float(getattr(result, 'solve_time_s', 0.0)) * 1000.0,
+            float(getattr(result, 'p_vis_plan', 1.0)),
+            float(getattr(result, 'p_vis_plan_eff', 1.0)),
+            float(getattr(result, 'r_plan_u_std', np.nan)),
+            float(getattr(result, 'r_plan_v_std', np.nan)),
+            1.0 if (belief_meta or {}).get('measurement_available', False) else 0.0,
+            float((belief_meta or {}).get('belief_age_s', math.nan)),
+        ]
+        self.planner_diag_pub.publish(diag)
+        diag_text = String()
+        diag_text.data = str(getattr(result, 'optimizer_message', '') or '')
+        self.planner_diag_text_pub.publish(diag_text)
 
     def _plan_once(self):
         with self._data_lock:
@@ -1182,7 +1393,7 @@ class UnicyclePlannerNode(Node):
             )
             return
 
-        m0, S0 = self._resolve_belief_for_planning()
+        m0, S0, belief_meta = self._resolve_belief_for_planning()
         if m0 is None or S0 is None:
             return
 
@@ -1190,6 +1401,7 @@ class UnicyclePlannerNode(Node):
             float(goal_ref.pose.position.x),
             float(goal_ref.pose.position.y),
         )
+        progress_index = self._current_goal_progress_index()
 
         plan_start = time.perf_counter()
         if self.debug_runtime and (now_wall - self._last_plan_entry_log) > self.debug_log_period_s:
@@ -1201,7 +1413,7 @@ class UnicyclePlannerNode(Node):
             )
             self._last_plan_entry_log = now_wall
         try:
-            result = self.planner.plan(m0, S0, goal_xy)
+            result = self.planner.plan(m0, S0, goal_xy, progress_index=progress_index)
         except Exception as exc:
             self._fatal_experiment_stop("Planner.solve raised an exception", exc)
             return
@@ -1219,11 +1431,12 @@ class UnicyclePlannerNode(Node):
             self._fatal_experiment_stop("Planner returned no result")
             return
 
-        self._publish_plan_and_metrics(result, goal_xy, m0, S0)
+        self._publish_plan_and_metrics(result, goal_xy, m0, S0, belief_meta=belief_meta)
         self._after_plan_result(result)
 
         plan_elapsed_ms = max((time.perf_counter() - plan_start) * 1000.0, 0.0)
         solve_elapsed_ms = float(getattr(result, 'solve_time_s', 0.0)) * 1000.0
+        self._publish_planner_diagnostics(result, plan_elapsed_ms, belief_meta=belief_meta)
         if self.debug_runtime and plan_elapsed_ms > (self.slow_plan_factor * self._plan_period_s * 1000.0):
             if now_wall - self._last_slow_plan_log > 2.0:
                 self.get_logger().warn(
@@ -1235,7 +1448,7 @@ class UnicyclePlannerNode(Node):
             self.get_logger().warn(
                 f"Optimizer reported non-success status={getattr(result, 'optimizer_status', 0)} "
                 f"message='{getattr(result, 'optimizer_message', '')}'. "
-                "Using best available controls from solver."
+                "Executing the selected solver-returned control sequence."
             )
             self._last_slow_plan_log = now_wall
 

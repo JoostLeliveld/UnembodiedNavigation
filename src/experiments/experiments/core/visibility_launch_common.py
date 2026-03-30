@@ -13,9 +13,9 @@ from launch_ros.substitutions import FindPackageShare
 
 
 PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
-    'planner': 'efe2',
+    'planner': 'efe1',
     'world': 'warehouse_occ_light.world.sdf',
-    'task': 'T2_diag_demo',
+    'task': 'T1_shadow_cross',
     'seed': '0',
     'sensor_pixel_noise_sigma': '0.0',
     'odom_wait_timeout_s': '25.0',
@@ -28,19 +28,34 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'skip_stale_pixel_correction': 'true',
     'min_state_cov': '1e-6',
     'plan_rate': '2.0',
-    'horizon': '5',
+    'horizon': '18',
     'dt': '0.2',
-    'control_weight': '0.1',
+    'control_weight': '0.0',
+    'math_mode': 'notebook_simple',
     'risk_weight_state': '0.0',
     'risk_weight_obs': '1.0',
     'ambiguity_weight': '1.0',
-    'goal_sigma_uv': '0.0',
+    'goal_sigma_uv': '2.0',
     'use_ambiguity': 'true',
     'use_obs_risk': 'true',
+    'r_visible_uv': '2.5',
+    'r_miss_uv': '140.0',
+    'visibility_power': '3.0',
+    'visibility_sigma_kappa': '1.0',
+    'goal_prior_u_std_start': '80.0',
+    'goal_prior_v_std_start': '80.0',
+    'goal_prior_u_std_final': '18.0',
+    'goal_prior_v_std_final': '18.0',
+    'goal_tightening_power': '0.45',
+    'goal_progress_n_steps': '90',
+    'notebook_risk_scale': '1.25',
+    'notebook_ambiguity_scale': '0.20',
     'process_noise_xy': '0.01',
     'process_noise_theta': '0.02',
     'obs_noise_uv': '2.0',
-    'optimizer_maxiter': '50',
+    'optimizer_maxiter': '80',
+    'optimizer_maxfun': '500',
+    'optimizer_ftol': '1e-6',
     'optimizer_gtol': '1e-4',
     'optimizer_warm_start': 'true',
     'debug_runtime': 'false',
@@ -64,11 +79,18 @@ VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
     'visibility_beta': 1.0,
     'visibility_height_tau': 0.08,
     'visibility_ray_samples': 120,
-    'visibility_sigma_kappa': 1.0,
     'visibility_target_height_m': 0.0,
     'visibility_r_bad_uv': 28.0,
     'visibility_cov_pos_scale': 2.0,
     'visibility_cov_theta_scale': 0.8,
+    'use_nogo_cost': 'true',
+    'nogo_penalty_type': 'softplus',
+    'nogo_weight': 40.0,
+    'nogo_safe_distance': 0.35,
+    'nogo_gaussian_sigma': 0.25,
+    'nogo_softplus_scale': 0.08,
+    'nogo_logbarrier_scale': 0.25,
+    'nogo_logbarrier_eps': 1e-3,
 }
 
 
@@ -84,6 +106,8 @@ def _matches_default(current_value: object, default_value: object) -> bool:
         return bool(current_value) == default_value
     if isinstance(default_value, int):
         return int(current_value) == default_value
+    if isinstance(default_value, str):
+        return str(current_value).strip().lower() == default_value.strip().lower()
     return abs(float(current_value) - float(default_value)) < 1e-9
 
 
@@ -98,6 +122,8 @@ def _apply_visibility_profile_defaults(cfg: Dict[str, object], profile: Dict[str
             continue
         if isinstance(fallback_value, int):
             cfg[key] = int(visibility_defaults[key])
+        elif isinstance(fallback_value, str):
+            cfg[key] = str(visibility_defaults[key])
         else:
             cfg[key] = float(visibility_defaults[key])
 
@@ -113,12 +139,13 @@ def parse_common_launch_config(context) -> Dict[str, object]:
     seed_value = int(LaunchConfiguration('seed').perform(context))
     world_value = LaunchConfiguration('world').perform(context)
     visibility_enabled_default = 'true'
-    visibility_model_default = 'raycast_25d'
+    visibility_model_default = 'gp_visibility'
     use_visibility_raw = _launch_value(context, 'use_visibility_model', visibility_enabled_default).strip().lower()
     visibility_model_raw = _launch_value(context, 'visibility_model', visibility_model_default).strip().lower()
 
     cfg: Dict[str, object] = {
         'use_sim_time': _as_bool(LaunchConfiguration('use_sim_time').perform(context)),
+        'study_variant': _launch_value(context, 'study_variant', 'gp_visibility').strip().lower(),
         'planner': LaunchConfiguration('planner').perform(context),
         'world': world_value,
         'world_profiles_path': LaunchConfiguration('world_profiles').perform(context),
@@ -146,19 +173,38 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'obs_noise_uv': float(LaunchConfiguration('obs_noise_uv').perform(context)),
         'optimizer_backend': str(LaunchConfiguration('optimizer_backend').perform(context)).strip().lower(),
         'optimizer_maxiter': int(LaunchConfiguration('optimizer_maxiter').perform(context)),
+        'optimizer_maxfun': int(_launch_value(context, 'optimizer_maxfun', PAPER_LAUNCH_DEFAULTS['optimizer_maxfun'])),
+        'optimizer_ftol': float(_launch_value(context, 'optimizer_ftol', PAPER_LAUNCH_DEFAULTS['optimizer_ftol'])),
         'optimizer_gtol': float(LaunchConfiguration('optimizer_gtol').perform(context)),
         'optimizer_warm_start': _as_bool(LaunchConfiguration('optimizer_warm_start').perform(context)),
-        'plan_rate': float(_launch_value(context, 'plan_rate', '1.0')),
-        'horizon': int(_launch_value(context, 'horizon', '10')),
+        'jax_warmup_enabled': _as_bool(_launch_value(context, 'jax_warmup_enabled', 'true')),
+        'plan_rate': float(_launch_value(context, 'plan_rate', PAPER_LAUNCH_DEFAULTS['plan_rate'])),
+        'horizon': int(_launch_value(context, 'horizon', PAPER_LAUNCH_DEFAULTS['horizon'])),
         'dt': float(_launch_value(context, 'dt', '0.2')),
-        'control_weight': float(_launch_value(context, 'control_weight', '0.1')),
+        'control_weight': float(_launch_value(context, 'control_weight', PAPER_LAUNCH_DEFAULTS['control_weight'])),
+        'math_mode': _launch_value(context, 'math_mode', PAPER_LAUNCH_DEFAULTS['math_mode']).strip().lower(),
         'risk_weight_state': float(_launch_value(context, 'risk_weight_state', '1.0')),
         'risk_weight_obs': float(_launch_value(context, 'risk_weight_obs', '1.0')),
         'ambiguity_weight': float(_launch_value(context, 'ambiguity_weight', '1.0')),
+        'r_visible_uv': float(_launch_value(context, 'r_visible_uv', PAPER_LAUNCH_DEFAULTS['r_visible_uv'])),
+        'r_miss_uv': float(_launch_value(context, 'r_miss_uv', PAPER_LAUNCH_DEFAULTS['r_miss_uv'])),
+        'visibility_power': float(_launch_value(context, 'visibility_power', PAPER_LAUNCH_DEFAULTS['visibility_power'])),
+        'visibility_sigma_kappa': float(_launch_value(context, 'visibility_sigma_kappa', PAPER_LAUNCH_DEFAULTS['visibility_sigma_kappa'])),
+        'goal_prior_u_std_start': float(_launch_value(context, 'goal_prior_u_std_start', PAPER_LAUNCH_DEFAULTS['goal_prior_u_std_start'])),
+        'goal_prior_v_std_start': float(_launch_value(context, 'goal_prior_v_std_start', PAPER_LAUNCH_DEFAULTS['goal_prior_v_std_start'])),
+        'goal_prior_u_std_final': float(_launch_value(context, 'goal_prior_u_std_final', PAPER_LAUNCH_DEFAULTS['goal_prior_u_std_final'])),
+        'goal_prior_v_std_final': float(_launch_value(context, 'goal_prior_v_std_final', PAPER_LAUNCH_DEFAULTS['goal_prior_v_std_final'])),
+        'goal_tightening_power': float(_launch_value(context, 'goal_tightening_power', PAPER_LAUNCH_DEFAULTS['goal_tightening_power'])),
+        'goal_progress_n_steps': int(_launch_value(context, 'goal_progress_n_steps', PAPER_LAUNCH_DEFAULTS['goal_progress_n_steps'])),
+        'notebook_risk_scale': float(_launch_value(context, 'notebook_risk_scale', PAPER_LAUNCH_DEFAULTS['notebook_risk_scale'])),
+        'notebook_ambiguity_scale': float(_launch_value(context, 'notebook_ambiguity_scale', PAPER_LAUNCH_DEFAULTS['notebook_ambiguity_scale'])),
         'use_visibility_model': _as_bool(
             visibility_enabled_default if use_visibility_raw in ('', 'auto', 'default') else use_visibility_raw
         ),
         'visibility_model': visibility_model_default if visibility_model_raw in ('', 'auto', 'default') else visibility_model_raw,
+        'perception_use_geometry_occlusion': _as_bool(
+            _launch_value(context, 'perception_use_geometry_occlusion', 'true')
+        ),
         'visibility_weight': float(_launch_value(context, 'visibility_weight', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_weight']))),
         'visibility_map_min_x': float(_launch_value(context, 'visibility_map_min_x', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_min_x']))),
         'visibility_map_max_x': float(_launch_value(context, 'visibility_map_max_x', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_max_x']))),
@@ -172,24 +218,57 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'visibility_beta': float(_launch_value(context, 'visibility_beta', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_beta']))),
         'visibility_height_tau': float(_launch_value(context, 'visibility_height_tau', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_height_tau']))),
         'visibility_ray_samples': int(float(_launch_value(context, 'visibility_ray_samples', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_ray_samples'])))),
-        'visibility_sigma_kappa': float(_launch_value(context, 'visibility_sigma_kappa', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_sigma_kappa']))),
         'visibility_target_height_m': float(_launch_value(context, 'visibility_target_height_m', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_target_height_m']))),
         'visibility_geometry_json': _launch_value(context, 'visibility_geometry_json', ''),
         'visibility_gp_seed': int(float(_launch_value(context, 'visibility_gp_seed', str(seed_value)))),
         'visibility_r_bad_uv': float(_launch_value(context, 'visibility_r_bad_uv', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_r_bad_uv']))),
         'visibility_cov_pos_scale': float(_launch_value(context, 'visibility_cov_pos_scale', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_cov_pos_scale']))),
         'visibility_cov_theta_scale': float(_launch_value(context, 'visibility_cov_theta_scale', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_cov_theta_scale']))),
-        'goal_sigma_uv': float(_launch_value(context, 'goal_sigma_uv', '0.0')),
+        'use_nogo_cost': _launch_value(context, 'use_nogo_cost', str(VISIBILITY_FALLBACK_DEFAULTS['use_nogo_cost'])).strip().lower(),
+        'nogo_penalty_type': _launch_value(context, 'nogo_penalty_type', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_penalty_type'])).strip().lower(),
+        'nogo_weight': float(_launch_value(context, 'nogo_weight', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_weight']))),
+        'nogo_safe_distance': float(_launch_value(context, 'nogo_safe_distance', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_safe_distance']))),
+        'nogo_gaussian_sigma': float(_launch_value(context, 'nogo_gaussian_sigma', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_gaussian_sigma']))),
+        'nogo_softplus_scale': float(_launch_value(context, 'nogo_softplus_scale', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_softplus_scale']))),
+        'nogo_logbarrier_scale': float(_launch_value(context, 'nogo_logbarrier_scale', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_logbarrier_scale']))),
+        'nogo_logbarrier_eps': float(_launch_value(context, 'nogo_logbarrier_eps', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_logbarrier_eps']))),
+        'goal_sigma_uv': float(_launch_value(context, 'goal_sigma_uv', PAPER_LAUNCH_DEFAULTS['goal_sigma_uv'])),
         'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
         'debug_runtime': _as_bool(_launch_value(context, 'debug_runtime', 'false')),
         'use_rviz': _as_bool(LaunchConfiguration('use_rviz').perform(context)),
+        'use_live_dashboard': _as_bool(_launch_value(context, 'use_live_dashboard', 'false')),
+        'dashboard_history_s': float(_launch_value(context, 'dashboard_history_s', '60.0')),
+        'dashboard_redraw_hz': float(_launch_value(context, 'dashboard_redraw_hz', '4.0')),
         'rviz_config': LaunchConfiguration('rviz_config').perform(context),
     }
 
-    if cfg['optimizer_backend'] not in ('auto', 'jax'):
-        raise RuntimeError("optimizer_backend must be 'auto' or 'jax'")
+    if cfg['optimizer_backend'] not in ('auto', 'jax', 'scipy'):
+        raise RuntimeError("optimizer_backend must be 'auto', 'jax', or 'scipy'")
 
     return cfg
+
+
+def apply_study_variant(cfg: Dict[str, object]) -> Dict[str, object]:
+    variant = str(cfg.get('study_variant', 'raycast_25d')).strip().lower()
+    if variant in ('projection_only', 'projection', 'baseline'):
+        cfg['study_variant'] = 'projection_only'
+        cfg['use_visibility_model'] = False
+        if str(cfg.get('visibility_model', '')).strip().lower() in ('', 'none'):
+            cfg['visibility_model'] = 'raycast_25d'
+        return cfg
+    if variant in ('raycast_25d', 'raycast25d', 'raycast', 'structured'):
+        cfg['study_variant'] = 'raycast_25d'
+        cfg['use_visibility_model'] = True
+        cfg['visibility_model'] = 'raycast_25d'
+        return cfg
+    if variant in ('gp_visibility', 'gpvis', 'direct_gp'):
+        cfg['study_variant'] = 'gp_visibility'
+        cfg['use_visibility_model'] = True
+        cfg['visibility_model'] = 'gp_visibility'
+        return cfg
+    raise RuntimeError(
+        "study_variant must be one of: projection_only, raycast_25d, gp_visibility"
+    )
 
 
 def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
@@ -264,7 +343,20 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     }
 
     visibility_geometry_json = str(cfg.get('visibility_geometry_json', '') or '')
-    if (not visibility_geometry_json) and str(cfg.get('visibility_model', '')).lower() == 'raycast_25d':
+    visibility_model_name = str(cfg.get('visibility_model', '')).strip().lower()
+    geometry_backends = {
+        'raycast_25d',
+        'raycast25d',
+        'raycast',
+        'gp_visibility',
+        'gpvis',
+    }
+    raw_use_nogo_cost = str(cfg.get('use_nogo_cost', 'auto')).strip().lower()
+    nogo_geometry_needed = (
+        raw_use_nogo_cost in ('1', 'true', 't', 'yes', 'y', 'on')
+        or (raw_use_nogo_cost in ('', 'auto', 'default') and str(cfg.get('planner', '')).strip().lower() == 'mpc')
+    )
+    if (not visibility_geometry_json) and (visibility_model_name in geometry_backends or nogo_geometry_needed):
         visibility_geometry_json = serialize_occlusion_geometry_from_world(world_path)
 
     cfg = dict(cfg)
@@ -337,6 +429,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'world_frame': 'map_bev',
         'use_visibility_model': cfg['use_visibility_model'],
         'visibility_model': cfg['visibility_model'],
+        'use_geometry_occlusion': cfg['perception_use_geometry_occlusion'],
         'visibility_geometry_json': cfg['visibility_geometry_json'],
         'visibility_target_height_m': cfg['visibility_target_height_m'],
     })
@@ -407,12 +500,40 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'world': cfg['world'],
             'task': cfg['task'].get('name', cfg['task_name'] or ''),
             'planner': cfg['planner'],
+            'study_variant': cfg['study_variant'],
+            'math_mode': cfg['math_mode'],
+            'optimizer_backend': cfg['optimizer_backend'],
             'use_pixel_correction': cfg['use_pixel_correction'],
             'use_ambiguity': cfg['use_ambiguity'],
             'use_obs_risk': cfg['use_obs_risk'],
             'use_visibility_model': cfg['use_visibility_model'],
             'visibility_model': cfg['visibility_model'],
+            'risk_weight_state': cfg['risk_weight_state'],
+            'risk_weight_obs': cfg['risk_weight_obs'],
+            'goal_sigma_uv': cfg['goal_sigma_uv'],
+            'r_visible_uv': cfg['r_visible_uv'],
+            'r_miss_uv': cfg['r_miss_uv'],
+            'visibility_power': cfg['visibility_power'],
+            'visibility_sigma_kappa': cfg['visibility_sigma_kappa'],
+            'goal_prior_u_std_start': cfg['goal_prior_u_std_start'],
+            'goal_prior_v_std_start': cfg['goal_prior_v_std_start'],
+            'goal_prior_u_std_final': cfg['goal_prior_u_std_final'],
+            'goal_prior_v_std_final': cfg['goal_prior_v_std_final'],
+            'goal_tightening_power': cfg['goal_tightening_power'],
+            'goal_progress_n_steps': cfg['goal_progress_n_steps'],
+            'notebook_risk_scale': cfg['notebook_risk_scale'],
+            'notebook_ambiguity_scale': cfg['notebook_ambiguity_scale'],
+            'visibility_weight': cfg['visibility_weight'],
             'visibility_target_height_m': cfg['visibility_target_height_m'],
+            'perception_use_geometry_occlusion': cfg['perception_use_geometry_occlusion'],
+            'use_nogo_cost': cfg.get('resolved_use_nogo_cost', False),
+            'nogo_penalty_type': cfg['nogo_penalty_type'],
+            'nogo_weight': cfg['nogo_weight'],
+            'nogo_safe_distance': cfg['nogo_safe_distance'],
+            'nogo_gaussian_sigma': cfg['nogo_gaussian_sigma'],
+            'nogo_softplus_scale': cfg['nogo_softplus_scale'],
+            'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
+            'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
             'world_profiles_path': cfg['world_profiles_path'],
             'tasks_yaml': cfg['tasks_yaml'],
             'auto_stop_on_goal': cfg['auto_stop_on_goal'],
@@ -430,6 +551,28 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         parameters=[{'use_sim_time': cfg['use_sim_time']}],
     )
 
+    live_dashboard = Node(
+        package='visualization',
+        executable='live_visibility_dashboard',
+        name='live_visibility_dashboard',
+        output='screen',
+        additional_env={'MPLCONFIGDIR': '/tmp/unav_matplotlib'},
+        parameters=[{
+            'use_sim_time': cfg['use_sim_time'],
+            'history_s': cfg['dashboard_history_s'],
+            'redraw_hz': cfg['dashboard_redraw_hz'],
+            'frame_id': 'map_bev',
+            'visibility_map_topic': '/visibility_map',
+            'visibility_opacity_mean_map_topic': '/visibility_opacity_mean_map',
+            'visibility_opacity_conservative_map_topic': '/visibility_opacity_conservative_map',
+            'plan_topic': '/plan_preview',
+            'planner_diag_topic': '/planner/diagnostics',
+            'planner_belief_topic': '/planner_belief',
+            'efe_metrics_topic': '/efe/metrics',
+            'pixel_topic': '/perception/pixel_pose',
+        }],
+    )
+
     return {
         'bringup_sim': bringup_sim,
         'tf_static': tf_static,
@@ -440,11 +583,20 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'goal_marker_node': goal_marker_node,
         'logger_node': logger_node,
         'rviz': rviz,
+        'live_dashboard': live_dashboard,
     }
 
 
 def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     """Create runtime actions for the visibility-aware agent launch."""
+    raw_use_nogo_cost = cfg.get('use_nogo_cost', 'auto')
+    if isinstance(raw_use_nogo_cost, str) and raw_use_nogo_cost in ('', 'auto', 'default'):
+        resolved_use_nogo_cost = cfg['planner'] == 'mpc'
+    else:
+        resolved_use_nogo_cost = _as_bool(raw_use_nogo_cost)
+
+    cfg = dict(cfg)
+    cfg['resolved_use_nogo_cost'] = resolved_use_nogo_cost
     shared_nodes = build_shared_nodes(cfg)
     planner = cfg['planner']
 
@@ -453,12 +605,12 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
 
     planner_params = {
         'efe1': {
-            'approx_method': 'ET1',
+            'approx_method': 'ET1' if cfg['math_mode'] == 'notebook_simple' else 'ET1',
             'use_ambiguity': cfg['use_ambiguity'],
             'use_obs_risk': cfg['use_obs_risk'],
         },
         'efe2': {
-            'approx_method': 'ET2',
+            'approx_method': 'ET1' if cfg['math_mode'] == 'notebook_simple' else 'ET2',
             'use_ambiguity': cfg['use_ambiguity'],
             'use_obs_risk': cfg['use_obs_risk'],
         },
@@ -468,7 +620,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'use_obs_risk': True,
         },
         'efer': {
-            'approx_method': 'ET2',
+            'approx_method': 'ET1' if cfg['math_mode'] == 'notebook_simple' else 'ET2',
             'use_ambiguity': False,
             'use_obs_risk': True,
         },
@@ -485,6 +637,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'horizon': cfg['horizon'],
             'dt': cfg['dt'],
             'control_weight': cfg['control_weight'],
+            'math_mode': cfg['math_mode'],
             'use_pixel_correction': cfg['use_pixel_correction'],
             'pixel_timeout_s': cfg['pixel_timeout_s'],
             'pixel_correction_min_interval_s': cfg['pixel_correction_min_interval_s'],
@@ -499,6 +652,18 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'risk_weight_state': cfg['risk_weight_state'],
             'risk_weight_obs': cfg['risk_weight_obs'],
             'ambiguity_weight': cfg['ambiguity_weight'],
+            'r_visible_uv': cfg['r_visible_uv'],
+            'r_miss_uv': cfg['r_miss_uv'],
+            'visibility_power': cfg['visibility_power'],
+            'visibility_sigma_kappa': cfg['visibility_sigma_kappa'],
+            'goal_prior_u_std_start': cfg['goal_prior_u_std_start'],
+            'goal_prior_v_std_start': cfg['goal_prior_v_std_start'],
+            'goal_prior_u_std_final': cfg['goal_prior_u_std_final'],
+            'goal_prior_v_std_final': cfg['goal_prior_v_std_final'],
+            'goal_tightening_power': cfg['goal_tightening_power'],
+            'goal_progress_n_steps': cfg['goal_progress_n_steps'],
+            'notebook_risk_scale': cfg['notebook_risk_scale'],
+            'notebook_ambiguity_scale': cfg['notebook_ambiguity_scale'],
             'use_visibility_model': cfg['use_visibility_model'],
             'visibility_model': cfg['visibility_model'],
             'visibility_weight': cfg['visibility_weight'],
@@ -514,21 +679,38 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'visibility_beta': cfg['visibility_beta'],
             'visibility_height_tau': cfg['visibility_height_tau'],
             'visibility_ray_samples': cfg['visibility_ray_samples'],
-            'visibility_sigma_kappa': cfg['visibility_sigma_kappa'],
             'visibility_target_height_m': cfg['visibility_target_height_m'],
             'visibility_geometry_json': cfg['visibility_geometry_json'],
             'visibility_gp_seed': cfg['visibility_gp_seed'],
             'visibility_r_bad_uv': cfg['visibility_r_bad_uv'],
             'visibility_cov_pos_scale': cfg['visibility_cov_pos_scale'],
             'visibility_cov_theta_scale': cfg['visibility_cov_theta_scale'],
+            'use_nogo_cost': cfg['resolved_use_nogo_cost'],
+            'nogo_penalty_type': cfg['nogo_penalty_type'],
+            'nogo_weight': cfg['nogo_weight'],
+            'nogo_safe_distance': cfg['nogo_safe_distance'],
+            'nogo_gaussian_sigma': cfg['nogo_gaussian_sigma'],
+            'nogo_softplus_scale': cfg['nogo_softplus_scale'],
+            'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
+            'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
             'optimizer_backend': cfg['optimizer_backend'],
             'optimizer_maxiter': cfg['optimizer_maxiter'],
+            'optimizer_maxfun': cfg['optimizer_maxfun'],
+            'optimizer_ftol': cfg['optimizer_ftol'],
             'optimizer_gtol': cfg['optimizer_gtol'],
             'optimizer_warm_start': cfg['optimizer_warm_start'],
+            'jax_warmup_enabled': cfg['jax_warmup_enabled'],
             'jax_warmup_use_goal_hint': True,
             'jax_warmup_goal_x': cfg['goal_x'],
             'jax_warmup_goal_y': cfg['goal_y'],
             'jax_warmup_goal_frame_id': 'map_bev',
+            'jax_warmup_use_state_hint': True,
+            'jax_warmup_state_x': cfg['spawn']['x'],
+            'jax_warmup_state_y': cfg['spawn']['y'],
+            'jax_warmup_state_yaw': cfg['spawn']['yaw'],
+            'jax_warmup_state_cov_x': cfg['min_state_cov'],
+            'jax_warmup_state_cov_y': cfg['min_state_cov'],
+            'jax_warmup_state_cov_yaw': cfg['min_state_cov'],
             **cfg['camera_params'],
             **planner_params[planner],
         }],
@@ -537,13 +719,14 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     after_odom = [
         shared_nodes['homography_sim'],
         shared_nodes['pixel_to_bev'],
-        agent_node,
         shared_nodes['mission_node'],
         shared_nodes['goal_marker_node'],
         shared_nodes['logger_node'],
     ]
     if cfg['use_rviz']:
         after_odom.append(shared_nodes['rviz'])
+    if cfg.get('use_live_dashboard', False):
+        after_odom.append(shared_nodes['live_dashboard'])
 
     start_after_odom = RegisterEventHandler(
         OnProcessExit(
@@ -555,6 +738,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     return [
         shared_nodes['bringup_sim'],
         shared_nodes['tf_static'],
+        agent_node,
         shared_nodes['wait_for_odom'],
         start_after_odom,
     ]
