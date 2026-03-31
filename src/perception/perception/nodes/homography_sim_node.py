@@ -60,6 +60,10 @@ class HomographySimNode(Node):
             self.declare_parameter('use_geometry_occlusion', True)
         if not self.has_parameter('log_camera_diagnostics'):
             self.declare_parameter('log_camera_diagnostics', False)
+        if not self.has_parameter('heading_marker_separation_m'):
+            self.declare_parameter('heading_marker_separation_m', 0.12)
+        if not self.has_parameter('heading_marker_area_px'):
+            self.declare_parameter('heading_marker_area_px', 36.0)
 
         self.cam_pos, self.look_at, self.img_width, self.img_height, self.fov_h_rad = load_camera_params(self)
         self.model = HomographyModel(
@@ -78,6 +82,8 @@ class HomographySimNode(Node):
         self.visibility_model_name = str(self.get_parameter('visibility_model').value).strip().lower()
         self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
         self.log_camera_diagnostics = _as_bool(self.get_parameter('log_camera_diagnostics').value)
+        self.heading_marker_separation_m = float(self.get_parameter('heading_marker_separation_m').value)
+        self.heading_marker_area_px = float(self.get_parameter('heading_marker_area_px').value)
         self.occlusion_scene = scene_from_json(str(self.get_parameter('visibility_geometry_json').value))
         self.use_geometry_occlusion = _as_bool(self.get_parameter('use_geometry_occlusion').value)
         self.rng = np.random.default_rng(self.seed)
@@ -102,8 +108,46 @@ class HomographySimNode(Node):
             f'use_geometry_occlusion={self.use_geometry_occlusion}, '
             f'visibility_model={self.visibility_model_name}, '
             f'log_camera_diagnostics={self.log_camera_diagnostics}, '
+            f'heading_marker_separation_m={self.heading_marker_separation_m:.3f}, '
             f'occluders={len(self.occlusion_scene.prisms)})'
         )
+
+    @staticmethod
+    def _yaw_to_quaternion(yaw: float):
+        half = 0.5 * float(yaw)
+        return 0.0, 0.0, float(np.sin(half)), float(np.cos(half))
+
+    def _publish_detection_failure(self, stamp_msg, *, reason: str, x_true: float, y_true: float):
+        self.diag_pub.publish(
+            diagnostics_message(
+                stamp=stamp_msg.sec + stamp_msg.nanosec * 1e-9,
+                detected=False,
+                u_mid=np.nan,
+                v_mid=np.nan,
+                yaw_est=np.nan,
+                u_red=np.nan,
+                v_red=np.nan,
+                red_area_px=np.nan,
+                u_blue=np.nan,
+                v_blue=np.nan,
+                blue_area_px=np.nan,
+                separation_px=np.nan,
+                border_margin_px=np.nan,
+            )
+        )
+        self.log_counter += 1
+        if self.log_counter % 50 == 0:
+            self.get_logger().warn(
+                f'Robot at ({x_true:.2f}, {y_true:.2f}) is {reason}'
+            )
+
+    def _marker_world_positions(self, x_world: float, y_world: float, yaw: float):
+        half_sep = 0.5 * max(self.heading_marker_separation_m, 1e-3)
+        dx = half_sep * float(np.cos(yaw))
+        dy = half_sep * float(np.sin(yaw))
+        red = np.array([x_world + dx, y_world + dy], dtype=float)
+        blue = np.array([x_world - dx, y_world - dy], dtype=float)
+        return red, blue
 
     def _verify_camera_setup(self):
         direction = self.look_at - self.cam_pos
@@ -171,116 +215,130 @@ class HomographySimNode(Node):
 
         x_true = pose_world.position.x
         y_true = pose_world.position.y
-
-        u, v, visible = self.model.world_to_pixel(x_true, y_true)
-        if not visible:
-            self.diag_pub.publish(
-                diagnostics_message(
-                    stamp=msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9,
-                    detected=False,
-                    u_mid=np.nan,
-                    v_mid=np.nan,
-                    yaw_est=np.nan,
-                    u_red=np.nan,
-                    v_red=np.nan,
-                    red_area_px=np.nan,
-                    u_blue=np.nan,
-                    v_blue=np.nan,
-                    blue_area_px=np.nan,
-                    separation_px=np.nan,
-                    border_margin_px=np.nan,
-                )
-            )
-            self.log_counter += 1
-            if self.log_counter % 50 == 0:
-                self.get_logger().warn(
-                    f'Robot at ({x_true:.2f}, {y_true:.2f}) is OUT OF CAMERA VIEW'
-                )
-            return
-
-        if self._is_occluded(x_true, y_true):
-            self.diag_pub.publish(
-                diagnostics_message(
-                    stamp=msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9,
-                    detected=False,
-                    u_mid=np.nan,
-                    v_mid=np.nan,
-                    yaw_est=np.nan,
-                    u_red=np.nan,
-                    v_red=np.nan,
-                    red_area_px=np.nan,
-                    u_blue=np.nan,
-                    v_blue=np.nan,
-                    blue_area_px=np.nan,
-                    separation_px=np.nan,
-                    border_margin_px=np.nan,
-                )
-            )
-            self.log_counter += 1
-            if self.log_counter % 50 == 0:
-                self.get_logger().warn(
-                    f'Robot at ({x_true:.2f}, {y_true:.2f}) is OCCLUDED FROM CAMERA VIEW'
-                )
-            return
-
-        u_pub = float(u)
-        v_pub = float(v)
-        if self.pixel_noise_std > 0.0:
-            u_pub += float(self.rng.normal(0.0, self.pixel_noise_std))
-            v_pub += float(self.rng.normal(0.0, self.pixel_noise_std))
-
         q = pose_world.orientation
         siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
-        yaw = float(np.arctan2(siny_cosp, cosy_cosp))
+        yaw_true = float(np.arctan2(siny_cosp, cosy_cosp))
+        red_world, blue_world = self._marker_world_positions(x_true, y_true, yaw_true)
+
+        u_red, v_red, red_visible = self.model.world_to_pixel(float(red_world[0]), float(red_world[1]))
+        u_blue, v_blue, blue_visible = self.model.world_to_pixel(float(blue_world[0]), float(blue_world[1]))
+        if (not red_visible) or (not blue_visible):
+            self._publish_detection_failure(
+                msg.header.stamp,
+                reason='OUT OF CAMERA VIEW',
+                x_true=x_true,
+                y_true=y_true,
+            )
+            return
+        if self._is_occluded(float(red_world[0]), float(red_world[1])) or self._is_occluded(float(blue_world[0]), float(blue_world[1])):
+            self._publish_detection_failure(
+                msg.header.stamp,
+                reason='OCCLUDED FROM CAMERA VIEW',
+                x_true=x_true,
+                y_true=y_true,
+            )
+            return
+
+        u_red_pub = float(u_red)
+        v_red_pub = float(v_red)
+        u_blue_pub = float(u_blue)
+        v_blue_pub = float(v_blue)
+        if self.pixel_noise_std > 0.0:
+            u_red_pub += float(self.rng.normal(0.0, self.pixel_noise_std))
+            v_red_pub += float(self.rng.normal(0.0, self.pixel_noise_std))
+            u_blue_pub += float(self.rng.normal(0.0, self.pixel_noise_std))
+            v_blue_pub += float(self.rng.normal(0.0, self.pixel_noise_std))
+
+        red_world_est = self.model.pixel_to_world(u_red_pub, v_red_pub)
+        blue_world_est = self.model.pixel_to_world(u_blue_pub, v_blue_pub)
+        if red_world_est is None or blue_world_est is None:
+            self._publish_detection_failure(
+                msg.header.stamp,
+                reason='OUT OF HOMOGRAPHY FOOTPRINT',
+                x_true=x_true,
+                y_true=y_true,
+            )
+            return
+
+        red_world_est = np.asarray(red_world_est, dtype=float).reshape(2)
+        blue_world_est = np.asarray(blue_world_est, dtype=float).reshape(2)
+        delta_world = red_world_est - blue_world_est
+        if float(np.hypot(delta_world[0], delta_world[1])) <= 1e-6:
+            self._publish_detection_failure(
+                msg.header.stamp,
+                reason='HEADING MARKERS COLLAPSED',
+                x_true=x_true,
+                y_true=y_true,
+            )
+            return
+
+        yaw_est = float(np.arctan2(delta_world[1], delta_world[0]))
+        u_pub = 0.5 * (u_red_pub + u_blue_pub)
+        v_pub = 0.5 * (v_red_pub + v_blue_pub)
+        separation_px = float(np.hypot(u_red_pub - u_blue_pub, v_red_pub - v_blue_pub))
         border_margin_px = float(
             min(
                 u_pub,
                 v_pub,
                 self.img_width - 1.0 - u_pub,
                 self.img_height - 1.0 - v_pub,
+                u_red_pub,
+                v_red_pub,
+                self.img_width - 1.0 - u_red_pub,
+                self.img_height - 1.0 - v_red_pub,
+                u_blue_pub,
+                v_blue_pub,
+                self.img_width - 1.0 - u_blue_pub,
+                self.img_height - 1.0 - v_blue_pub,
             )
         )
 
-        out_msg = PoseStamped()
-        out_msg.header.stamp = self.get_clock().now().to_msg()
-        out_msg.header.frame_id = 'image'
-        out_msg.pose.position.x = u_pub
-        out_msg.pose.position.y = v_pub
-        out_msg.pose.position.z = 0.0
-        # Preserve orientation in the same world frame used for projection.
-        out_msg.pose.orientation = pose_world.orientation
-        self.pub.publish(out_msg)
         self.diag_pub.publish(
             diagnostics_message(
                 stamp=msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9,
                 detected=True,
                 u_mid=u_pub,
                 v_mid=v_pub,
-                yaw_est=yaw,
-                u_red=np.nan,
-                v_red=np.nan,
-                red_area_px=np.nan,
-                u_blue=np.nan,
-                v_blue=np.nan,
-                blue_area_px=np.nan,
-                separation_px=np.nan,
+                yaw_est=yaw_est,
+                u_red=u_red_pub,
+                v_red=v_red_pub,
+                red_area_px=self.heading_marker_area_px,
+                u_blue=u_blue_pub,
+                v_blue=v_blue_pub,
+                blue_area_px=self.heading_marker_area_px,
+                separation_px=separation_px,
                 border_margin_px=border_margin_px,
             )
         )
+        out_msg = PoseStamped()
+        out_msg.header.stamp = msg.header.stamp
+        out_msg.header.frame_id = 'image'
+        out_msg.pose.position.x = u_pub
+        out_msg.pose.position.y = v_pub
+        out_msg.pose.position.z = 0.0
+        qx, qy, qz, qw = self._yaw_to_quaternion(yaw_est)
+        out_msg.pose.orientation.x = qx
+        out_msg.pose.orientation.y = qy
+        out_msg.pose.orientation.z = qz
+        out_msg.pose.orientation.w = qw
+        self.pub.publish(out_msg)
 
         self.log_counter += 1
         if self.log_counter % 20 == 0:
             if self.log_noisy_pixels:
                 self.get_logger().info(
                     f"True:({x_true:.2f},{y_true:.2f}) -> "
-                    f"Pix_nom:({u:.0f},{v:.0f}) Pix_pub:({u_pub:.0f},{v_pub:.0f}) "
-                    f"d=({u_pub - float(u):+.1f},{v_pub - float(v):+.1f})"
+                    f"Pix_mid:({u_pub:.0f},{v_pub:.0f}) "
+                    f"red=({u_red_pub:.0f},{v_red_pub:.0f}) "
+                    f"blue=({u_blue_pub:.0f},{v_blue_pub:.0f}) "
+                    f"yaw_est={np.degrees(yaw_est):.1f}deg"
                 )
             else:
                 self.get_logger().info(
                     f"True:({x_true:.2f},{y_true:.2f}) -> "
-                    f"Pix:({u:.0f},{v:.0f})"
+                    f"Pix_mid:({u_pub:.0f},{v_pub:.0f}) "
+                    f"yaw_est={np.degrees(yaw_est):.1f}deg"
                 )
 
 

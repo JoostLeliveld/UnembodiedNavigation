@@ -299,3 +299,31 @@ class GPVisibilityMapModel:
             return jnp.clip(z, eps, 1.0 - eps)
 
         return p_vis_j
+
+    def make_prob_state_casadi(self):
+        try:
+            import casadi as ca
+        except Exception as exc:  # pragma: no cover - optional dependency
+            raise RuntimeError('CasADi is not available for visibility model') from exc
+
+        cached = getattr(self, '_prob_state_casadi', None)
+        if cached is not None:
+            return cached
+
+        signature_json = json.dumps(self.signature, separators=(',', ':'), ensure_ascii=True)
+        suffix = hashlib.sha256(signature_json.encode('utf-8')).hexdigest()[:10]
+        values = np.asarray(self.P_map.T, dtype=float).ravel(order='F')
+        interp = ca.interpolant(
+            f'gp_visibility_prob_{suffix}',
+            'linear',
+            [self.xs.tolist(), self.ys.tolist()],
+            values,
+        )
+        eps = float(self.min_prob)
+
+        def p_vis_ca(m):
+            z = interp(ca.vertcat(m[0], m[1]))
+            return ca.fmin(ca.fmax(z, eps), 1.0 - eps)
+
+        self._prob_state_casadi = p_vis_ca
+        return p_vis_ca

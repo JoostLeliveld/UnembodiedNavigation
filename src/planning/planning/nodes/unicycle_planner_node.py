@@ -4,6 +4,7 @@ import math
 import os
 import time
 import threading
+import traceback
 import numpy as np
 
 import rclpy
@@ -17,6 +18,10 @@ from nav_msgs.msg import OccupancyGrid, Path
 from std_msgs.msg import Float64MultiArray, String
 from visualization_msgs.msg import Marker, MarkerArray
 
+from perception.core.detection_diagnostics import (
+    DETECTION_DIAGNOSTICS_TOPIC,
+    diagnostics_from_message,
+)
 from planning.core.efe_utils import wrap_angle
 
 
@@ -113,7 +118,9 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('goal_tightening_power', 0.45)
         _declare_if_not('goal_progress_n_steps', 90)
         _declare_if_not('notebook_risk_scale', 1.25)
-        _declare_if_not('notebook_ambiguity_scale', 0.20)
+        _declare_if_not('notebook_ambiguity_scale', 1.00)
+        _declare_if_not('visibility_barrier_threshold', 0.0)
+        _declare_if_not('visibility_barrier_scale', 10.0)
         _declare_if_not('use_nogo_cost', False)
         _declare_if_not('nogo_penalty_type', 'softplus')
         _declare_if_not('nogo_weight', 0.0)
@@ -146,6 +153,9 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('pixel_correction_min_interval_s', 0.0)
         _declare_if_not('pixel_correction_approx', 'ET1')
         _declare_if_not('skip_stale_pixel_correction', True)
+        _declare_if_not('use_pixel_heading_correction', True)
+        _declare_if_not('heading_pixel_noise_sigma', 0.0)
+        _declare_if_not('pixel_heading_noise_floor_rad', 0.01)
         _declare_if_not('min_state_cov', 1e-6)
         _declare_if_not('debug_runtime', False)
         _declare_if_not('debug_log_period_s', 1.0)
@@ -231,6 +241,8 @@ class UnicyclePlannerNode(Node):
         self.goal_progress_n_steps = int(self.get_parameter('goal_progress_n_steps').value)
         self.notebook_risk_scale = float(self.get_parameter('notebook_risk_scale').value)
         self.notebook_ambiguity_scale = float(self.get_parameter('notebook_ambiguity_scale').value)
+        self.visibility_barrier_threshold = float(self.get_parameter('visibility_barrier_threshold').value)
+        self.visibility_barrier_scale = float(self.get_parameter('visibility_barrier_scale').value)
         self.use_nogo_cost = _as_bool(self.get_parameter('use_nogo_cost').value)
         self.nogo_penalty_type = str(self.get_parameter('nogo_penalty_type').value).strip().lower()
         self.nogo_weight = float(self.get_parameter('nogo_weight').value)
@@ -284,6 +296,15 @@ class UnicyclePlannerNode(Node):
             raise RuntimeError("pixel_correction_approx must be one of: AUTO, ET1, ET2, UT")
         self.skip_stale_pixel_correction = _as_bool(
             self.get_parameter('skip_stale_pixel_correction').value
+        )
+        self.use_pixel_heading_correction = _as_bool(
+            self.get_parameter('use_pixel_heading_correction').value
+        )
+        self.heading_pixel_noise_sigma = float(
+            self.get_parameter('heading_pixel_noise_sigma').value
+        )
+        self.pixel_heading_noise_floor_rad = float(
+            self.get_parameter('pixel_heading_noise_floor_rad').value
         )
         self.min_state_cov = float(self.get_parameter('min_state_cov').value)
         self.debug_runtime = _as_bool(self.get_parameter('debug_runtime').value)
@@ -388,6 +409,8 @@ class UnicyclePlannerNode(Node):
             goal_progress_n_steps=self.goal_progress_n_steps,
             notebook_risk_scale=self.notebook_risk_scale,
             notebook_ambiguity_scale=self.notebook_ambiguity_scale,
+            visibility_barrier_threshold=self.visibility_barrier_threshold,
+            visibility_barrier_scale=self.visibility_barrier_scale,
             use_nogo_cost=self.use_nogo_cost,
             nogo_penalty_type=self.nogo_penalty_type,
             nogo_weight=self.nogo_weight,
@@ -417,6 +440,10 @@ class UnicyclePlannerNode(Node):
         )
         self.pixel_sub = self.create_subscription(
             PoseStamped, self.pixel_topic, self._pixel_cb, qos_profile=state_qos,
+            callback_group=self._io_group
+        )
+        self.detection_diag_sub = self.create_subscription(
+            Float64MultiArray, DETECTION_DIAGNOSTICS_TOPIC, self._detection_diag_cb, qos_profile=state_qos,
             callback_group=self._io_group
         )
         self.cmd_sub = self.create_subscription(
@@ -458,6 +485,9 @@ class UnicyclePlannerNode(Node):
         self._goal_received_logged = False
         self.pixel_meas = None
         self.pixel_stamp = None
+        self.pixel_yaw_meas = None
+        self.pixel_heading_sigma = math.nan
+        self._latest_detection_diag = None
         self._last_correction_log = 0.0
         self._last_correction_stamp = None
         self._last_stale_log = 0.0
@@ -473,7 +503,7 @@ class UnicyclePlannerNode(Node):
         self._jax_warmup_timer = None
         self._fatal_stop_triggered = False
         self._goal_signature = None
-        self._goal_progress_start_s = None
+        self._goal_progress_start_dist_m = None
         self.belief_m = None
         self.belief_S = None
         self.belief_stamp = None
@@ -506,6 +536,7 @@ class UnicyclePlannerNode(Node):
             f"use_nogo_cost={self.use_nogo_cost}, nogo_penalty_type={self.nogo_penalty_type}, "
             f"use_pixel_correction={self.use_pixel_correction}, "
             f"pixel_correction_approx={self.pixel_correction_approx}, "
+            f"use_pixel_heading_correction={self.use_pixel_heading_correction}, "
             f"jax_warmup_enabled={self.jax_warmup_enabled}, "
             f"jax_warmup_use_goal_hint={self.jax_warmup_use_goal_hint}, "
             f"debug_runtime={self.debug_runtime})"
@@ -852,6 +883,12 @@ class UnicyclePlannerNode(Node):
             "Fatal experiment integrity failure. Publishing zero command and terminating node. "
             f"Reason: {detail}"
         )
+        if exc is not None:
+            try:
+                tb = ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+                self.get_logger().error(tb.rstrip())
+            except Exception:
+                pass
 
         # Stop this process so runs fail fast instead of continuing with invalid behavior.
         try:
@@ -880,15 +917,19 @@ class UnicyclePlannerNode(Node):
             )
             if changed:
                 self._goal_signature = signature
-                self._goal_progress_start_s = float(self.get_clock().now().nanoseconds) * 1e-9
+                self._goal_progress_start_dist_m = None
 
-    def _current_goal_progress_index(self) -> float:
+    def _current_goal_progress_index(self, m0, goal_xy) -> float:
+        current_dist = float(math.hypot(float(m0[0]) - float(goal_xy[0]), float(m0[1]) - float(goal_xy[1])))
         with self._data_lock:
-            start_s = self._goal_progress_start_s
-        if start_s is None:
+            start_dist = self._goal_progress_start_dist_m
+            if start_dist is None or (not math.isfinite(start_dist)) or start_dist <= 0.0:
+                self._goal_progress_start_dist_m = current_dist
+                start_dist = current_dist
+        if (not math.isfinite(start_dist)) or start_dist <= 1e-9:
             return 0.0
-        now_s = float(self.get_clock().now().nanoseconds) * 1e-9
-        return max((now_s - start_s) / max(self.dt, 1e-6), 0.0)
+        progress_fraction = max(min((start_dist - current_dist) / start_dist, 1.0), 0.0)
+        return progress_fraction * float(max(self.goal_progress_n_steps, 1))
 
     def _goal_cb(self, msg: PoseStamped):
         with self._data_lock:
@@ -913,6 +954,31 @@ class UnicyclePlannerNode(Node):
             return
         self._experiment_run_dir = run_dir
         self._write_visibility_artifacts_if_ready()
+
+    def _heading_sigma_from_diag(self, diag) -> float:
+        sigma_floor = float(max(self.pixel_heading_noise_floor_rad, 1e-6))
+        if not diag:
+            return sigma_floor
+        diag_stamp = float(diag.get('stamp', math.nan))
+        if not math.isfinite(diag_stamp):
+            return sigma_floor
+        sep = float(diag.get('separation_px', math.nan))
+        if not math.isfinite(sep) or sep <= 1e-6:
+            return sigma_floor
+        sigma_sep = math.sqrt(2.0) * max(float(self.heading_pixel_noise_sigma), 1e-6) / max(sep, 1.0)
+        return float(max(sigma_floor, sigma_sep))
+
+    @staticmethod
+    def _stamp_to_float(stamp) -> float:
+        return float(stamp.sec) + float(stamp.nanosec) * 1e-9
+
+    def _detection_diag_cb(self, msg: Float64MultiArray):
+        try:
+            diag = diagnostics_from_message(msg)
+        except Exception:
+            return
+        with self._data_lock:
+            self._latest_detection_diag = diag
 
     def _init_belief_from_state(self):
         with self._data_lock:
@@ -946,10 +1012,26 @@ class UnicyclePlannerNode(Node):
         q = msg.pose.orientation
         siny_cosp = 2 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
-        _ = math.atan2(siny_cosp, cosy_cosp)
+        yaw_meas = math.atan2(siny_cosp, cosy_cosp)
         with self._data_lock:
+            diag_ref = None if self._latest_detection_diag is None else dict(self._latest_detection_diag)
             self.pixel_meas = np.array([u, v], dtype=float)
             self.pixel_stamp = msg.header.stamp
+            if diag_ref is not None:
+                stamp_s = self._stamp_to_float(msg.header.stamp)
+                diag_stamp = float(diag_ref.get('stamp', math.nan))
+                if (not math.isfinite(diag_stamp)) or abs(diag_stamp - stamp_s) > 1e-3:
+                    diag_ref = None
+            if (
+                diag_ref is not None
+                and bool(diag_ref.get('detected', False))
+                and math.isfinite(float(diag_ref.get('yaw_est', math.nan)))
+            ):
+                self.pixel_yaw_meas = float(yaw_meas)
+                self.pixel_heading_sigma = self._heading_sigma_from_diag(diag_ref)
+            else:
+                self.pixel_yaw_meas = None
+                self.pixel_heading_sigma = math.nan
 
         if not self.use_pixel_correction:
             return
@@ -1017,6 +1099,8 @@ class UnicyclePlannerNode(Node):
             belief_S = None if self.belief_S is None else self.belief_S.copy()
             v_cmd, w_cmd = float(self.last_cmd[0]), float(self.last_cmd[1])
             meas = None if self.pixel_meas is None else self.pixel_meas.copy()
+            yaw_meas = self.pixel_yaw_meas
+            yaw_sigma = float(self.pixel_heading_sigma)
         if belief_m is None or belief_S is None or meas is None:
             return
 
@@ -1063,6 +1147,23 @@ class UnicyclePlannerNode(Node):
         next_m[2] = wrap_angle(next_m[2])
         next_S = S_eff - gain_scale * (Gamma @ Sigma_inv @ Gamma.T)
         next_S = (next_S + next_S.T) / 2.0
+        if (
+            self.use_pixel_heading_correction
+            and yaw_meas is not None
+            and math.isfinite(float(yaw_meas))
+            and math.isfinite(yaw_sigma)
+            and yaw_sigma > 0.0
+            and next_S.shape[0] >= 3
+        ):
+            P_theta = next_S[:, 2].copy()
+            innov_theta = wrap_angle(float(yaw_meas) - float(next_m[2]))
+            S_theta = float(next_S[2, 2] + yaw_sigma ** 2)
+            if S_theta > 1e-12:
+                K_theta = P_theta / S_theta
+                next_m = next_m + K_theta * innov_theta
+                next_m[2] = wrap_angle(next_m[2])
+                next_S = next_S - np.outer(P_theta, P_theta) / S_theta
+                next_S = (next_S + next_S.T) / 2.0
         if self.min_state_cov > 0.0:
             for i in range(min(3, next_S.shape[0])):
                 if next_S[i, i] < self.min_state_cov:
@@ -1401,7 +1502,7 @@ class UnicyclePlannerNode(Node):
             float(goal_ref.pose.position.x),
             float(goal_ref.pose.position.y),
         )
-        progress_index = self._current_goal_progress_index()
+        progress_index = self._current_goal_progress_index(m0, goal_xy)
 
         plan_start = time.perf_counter()
         if self.debug_runtime and (now_wall - self._last_plan_entry_log) > self.debug_log_period_s:

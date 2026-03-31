@@ -158,3 +158,56 @@ class NogoZoneCostModel:
             return weight * base
 
         return penalty_state_jax
+
+    def make_penalty_state_casadi(self):
+        try:
+            import casadi as ca
+        except Exception as exc:  # pragma: no cover - optional dependency
+            raise RuntimeError('CasADi is not available for no-go-zone cost') from exc
+
+        if (not self.prisms) or self.weight <= 0.0:
+            def zero_penalty(_m):
+                return 0.0
+            return zero_penalty
+
+        xmins = ca.DM(self._xmins)
+        xmaxs = ca.DM(self._xmaxs)
+        ymins = ca.DM(self._ymins)
+        ymaxs = ca.DM(self._ymaxs)
+        weight = float(self.weight)
+        safe_distance = float(self.safe_distance)
+        gaussian_sigma = float(self.gaussian_sigma)
+        softplus_scale = float(self.softplus_scale)
+        logbarrier_scale = float(self.logbarrier_scale)
+        logbarrier_eps = float(self.logbarrier_eps)
+        penalty_type = self.penalty_type
+
+        def signed_distance_xy(x, y):
+            dx = ca.fmax(ca.fmax(xmins - x, 0.0), x - xmaxs)
+            dy = ca.fmax(ca.fmax(ymins - y, 0.0), y - ymaxs)
+            outside = ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
+
+            inside_x = ca.fmin(x - xmins, xmaxs - x)
+            inside_y = ca.fmin(y - ymins, ymaxs - y)
+            inside_depth = ca.fmin(inside_x, inside_y)
+            inside = ca.logic_and(dx <= 0.0, dy <= 0.0)
+            signed = ca.if_else(inside, -inside_depth, outside)
+            return ca.mmin(signed)
+
+        def penalty_state_casadi(m):
+            signed_d = signed_distance_xy(m[0], m[1])
+            clearance = signed_d - safe_distance
+
+            if penalty_type == 'gaussian':
+                outside = ca.exp(-0.5 * ca.power(ca.fmax(clearance, 0.0) / gaussian_sigma, 2))
+                inside_extra = ca.fmax(-clearance, 0.0) / gaussian_sigma
+                base = outside + inside_extra
+            elif penalty_type == 'softplus':
+                z = ca.fmin(ca.fmax(-clearance / softplus_scale, -60.0), 60.0)
+                base = ca.log(1.0 + ca.exp(z))
+            else:
+                denom = ca.fmax(clearance, logbarrier_eps)
+                base = ca.log(1.0 + logbarrier_scale / denom)
+            return weight * base
+
+        return penalty_state_casadi

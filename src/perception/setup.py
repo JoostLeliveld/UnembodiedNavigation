@@ -26,6 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             'homography_sim_node = perception.nodes.homography_sim_node:main',
+            'image_marker_detector_node = perception.nodes.image_marker_detector_node:main',
         ],
     },
 

@@ -17,7 +17,8 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'world': 'warehouse_occ_light.world.sdf',
     'task': 'T1_shadow_cross',
     'seed': '0',
-    'sensor_pixel_noise_sigma': '0.0',
+    'perception_backend': 'image_markers',
+    'sensor_pixel_noise_sigma': '1.0',
     'odom_wait_timeout_s': '25.0',
     'odom_wait_min_messages': '1',
     'odom_wait_require_pose_match': 'false',
@@ -28,7 +29,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'skip_stale_pixel_correction': 'true',
     'min_state_cov': '1e-6',
     'plan_rate': '2.0',
-    'horizon': '18',
+    'horizon': '24',
     'dt': '0.2',
     'control_weight': '0.0',
     'math_mode': 'notebook_simple',
@@ -49,7 +50,10 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'goal_tightening_power': '0.45',
     'goal_progress_n_steps': '90',
     'notebook_risk_scale': '1.25',
-    'notebook_ambiguity_scale': '0.20',
+    'notebook_ambiguity_scale': '1.00',
+    'visibility_weight': '12.0',
+    'visibility_barrier_threshold': '0.90',
+    'visibility_barrier_scale': '25.0',
     'process_noise_xy': '0.01',
     'process_noise_theta': '0.02',
     'obs_noise_uv': '2.0',
@@ -67,6 +71,8 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
 
 VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
     'visibility_weight': 4.0,
+    'visibility_barrier_threshold': 0.0,
+    'visibility_barrier_scale': 10.0,
     'visibility_map_min_x': -5.0,
     'visibility_map_max_x': 5.0,
     'visibility_map_min_y': -5.0,
@@ -152,6 +158,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'tasks_yaml': LaunchConfiguration('tasks_yaml').perform(context),
         'task_name': LaunchConfiguration('task').perform(context).strip(),
         'seed': seed_value,
+        'perception_backend': _launch_value(context, 'perception_backend', PAPER_LAUNCH_DEFAULTS['perception_backend']).strip().lower(),
         'sensor_pixel_noise_sigma': float(_launch_value(context, 'sensor_pixel_noise_sigma', '0.0')),
         'odom_wait_timeout_s': float(_launch_value(context, 'odom_wait_timeout_s', '25.0')),
         'odom_wait_min_messages': max(1, int(float(_launch_value(context, 'odom_wait_min_messages', '1')))),
@@ -198,6 +205,26 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'goal_progress_n_steps': int(_launch_value(context, 'goal_progress_n_steps', PAPER_LAUNCH_DEFAULTS['goal_progress_n_steps'])),
         'notebook_risk_scale': float(_launch_value(context, 'notebook_risk_scale', PAPER_LAUNCH_DEFAULTS['notebook_risk_scale'])),
         'notebook_ambiguity_scale': float(_launch_value(context, 'notebook_ambiguity_scale', PAPER_LAUNCH_DEFAULTS['notebook_ambiguity_scale'])),
+        'visibility_barrier_threshold': float(
+            _launch_value(
+                context,
+                'visibility_barrier_threshold',
+                PAPER_LAUNCH_DEFAULTS.get(
+                    'visibility_barrier_threshold',
+                    str(VISIBILITY_FALLBACK_DEFAULTS['visibility_barrier_threshold']),
+                ),
+            )
+        ),
+        'visibility_barrier_scale': float(
+            _launch_value(
+                context,
+                'visibility_barrier_scale',
+                PAPER_LAUNCH_DEFAULTS.get(
+                    'visibility_barrier_scale',
+                    str(VISIBILITY_FALLBACK_DEFAULTS['visibility_barrier_scale']),
+                ),
+            )
+        ),
         'use_visibility_model': _as_bool(
             visibility_enabled_default if use_visibility_raw in ('', 'auto', 'default') else use_visibility_raw
         ),
@@ -205,7 +232,13 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'perception_use_geometry_occlusion': _as_bool(
             _launch_value(context, 'perception_use_geometry_occlusion', 'true')
         ),
-        'visibility_weight': float(_launch_value(context, 'visibility_weight', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_weight']))),
+        'visibility_weight': float(
+            _launch_value(
+                context,
+                'visibility_weight',
+                PAPER_LAUNCH_DEFAULTS.get('visibility_weight', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_weight'])),
+            )
+        ),
         'visibility_map_min_x': float(_launch_value(context, 'visibility_map_min_x', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_min_x']))),
         'visibility_map_max_x': float(_launch_value(context, 'visibility_map_max_x', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_max_x']))),
         'visibility_map_min_y': float(_launch_value(context, 'visibility_map_min_y', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_min_y']))),
@@ -242,8 +275,10 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'rviz_config': LaunchConfiguration('rviz_config').perform(context),
     }
 
-    if cfg['optimizer_backend'] not in ('auto', 'jax', 'scipy'):
-        raise RuntimeError("optimizer_backend must be 'auto', 'jax', or 'scipy'")
+    if cfg['optimizer_backend'] not in ('auto', 'jax', 'scipy', 'casadi'):
+        raise RuntimeError("optimizer_backend must be 'auto', 'jax', 'scipy', or 'casadi'")
+    if cfg['perception_backend'] not in ('homography', 'image_markers'):
+        raise RuntimeError("perception_backend must be 'homography' or 'image_markers'")
 
     return cfg
 
@@ -433,19 +468,33 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'visibility_geometry_json': cfg['visibility_geometry_json'],
         'visibility_target_height_m': cfg['visibility_target_height_m'],
     })
-    homography_sim = Node(
-        package='perception',
-        executable='homography_sim_node',
-        name='homography_sim_node',
-        output='screen',
-        parameters=[homography_params],
-    )
+    if cfg['perception_backend'] == 'image_markers':
+        perception_node = Node(
+            package='perception',
+            executable='image_marker_detector_node',
+            name='image_marker_detector_node',
+            output='screen',
+            parameters=[homography_params],
+        )
+    else:
+        perception_node = Node(
+            package='perception',
+            executable='homography_sim_node',
+            name='homography_sim_node',
+            output='screen',
+            parameters=[homography_params],
+        )
 
     pixel_params = {
         'use_sim_time': cfg['use_sim_time'],
         'frame_id': 'map_bev',
         'pixel_noise_sigma': 0.0,
+        'heading_pixel_noise_sigma': cfg['sensor_pixel_noise_sigma'],
         'transform_noise_sigma': 0.0,
+        'use_odom_heading_fallback': True,
+        'odom_heading_timeout_s': 0.5,
+        'odom_heading_sigma_rad': 0.08,
+        'infer_yaw_from_motion': False,
         'seed': cfg['seed'],
         **cfg['camera_params'],
     }
@@ -524,6 +573,8 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'notebook_risk_scale': cfg['notebook_risk_scale'],
             'notebook_ambiguity_scale': cfg['notebook_ambiguity_scale'],
             'visibility_weight': cfg['visibility_weight'],
+            'visibility_barrier_threshold': cfg['visibility_barrier_threshold'],
+            'visibility_barrier_scale': cfg['visibility_barrier_scale'],
             'visibility_target_height_m': cfg['visibility_target_height_m'],
             'perception_use_geometry_occlusion': cfg['perception_use_geometry_occlusion'],
             'use_nogo_cost': cfg.get('resolved_use_nogo_cost', False),
@@ -577,7 +628,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'bringup_sim': bringup_sim,
         'tf_static': tf_static,
         'wait_for_odom': wait_for_odom,
-        'homography_sim': homography_sim,
+        'homography_sim': perception_node,
         'pixel_to_bev': pixel_to_bev,
         'mission_node': mission_node,
         'goal_marker_node': goal_marker_node,
@@ -643,6 +694,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'pixel_correction_min_interval_s': cfg['pixel_correction_min_interval_s'],
             'pixel_correction_approx': cfg['pixel_correction_approx'],
             'skip_stale_pixel_correction': cfg['skip_stale_pixel_correction'],
+            'heading_pixel_noise_sigma': cfg['sensor_pixel_noise_sigma'],
             'min_state_cov': cfg['min_state_cov'],
             'debug_runtime': cfg['debug_runtime'],
             'process_noise_xy': cfg['process_noise_xy'],
@@ -667,6 +719,8 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'use_visibility_model': cfg['use_visibility_model'],
             'visibility_model': cfg['visibility_model'],
             'visibility_weight': cfg['visibility_weight'],
+            'visibility_barrier_threshold': cfg['visibility_barrier_threshold'],
+            'visibility_barrier_scale': cfg['visibility_barrier_scale'],
             'visibility_map_min_x': cfg['visibility_map_min_x'],
             'visibility_map_max_x': cfg['visibility_map_max_x'],
             'visibility_map_min_y': cfg['visibility_map_min_y'],

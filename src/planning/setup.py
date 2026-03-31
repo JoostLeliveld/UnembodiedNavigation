@@ -18,6 +18,9 @@ setup(
     description='Visibility-aware active planning and runtime nodes for UnembodiedNavigation',
     license='MIT',
     extras_require={
+        'casadi': [
+            'casadi',
+        ],
         'test': [
             'pytest',
         ],

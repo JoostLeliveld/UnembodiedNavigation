@@ -1,0 +1,324 @@
+"""CasADi utilities for notebook-simple EFE planning."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import math
+
+import numpy as np
+
+try:
+    import casadi as ca
+except Exception:  # pragma: no cover - optional dependency
+    ca = None
+
+
+def casadi_available() -> bool:
+    return ca is not None
+
+
+@dataclass
+class CasadiNotebookSimpleParams:
+    Q: object
+    R_visible: object
+    R_miss: object
+    control_weight: float
+    risk_scale: float
+    ambiguity_scale: float
+    visibility_weight: float
+    visibility_barrier_threshold: float
+    visibility_barrier_scale: float
+    discount_gamma: float
+    visibility_power: float
+    visibility_sigma_kappa: float
+    goal_prior_u_std_start: float
+    goal_prior_v_std_start: float
+    goal_prior_u_std_final: float
+    goal_prior_v_std_final: float
+    goal_tightening_power: float
+    goal_progress_n_steps: int
+    time_horizon: int
+    dt: float
+    Du: int
+
+
+def _require_casadi():
+    if not casadi_available():
+        raise RuntimeError("CasADi is not available")
+
+
+def _clip_expr(x, lo, hi):
+    return ca.fmin(ca.fmax(x, lo), hi)
+
+
+def _softplus_expr(x):
+    return ca.log(1.0 + ca.exp(x))
+
+
+def make_g_from_homography(H):
+    """Return a CasADi-friendly planar homography observation function."""
+    _require_casadi()
+    H_ca = ca.DM(np.asarray(H, dtype=float))
+    state = ca.MX.sym('state', 3)
+    pt = ca.vertcat(state[0], state[1], 1.0)
+    pix = ca.mtimes(H_ca, pt)
+    uv = ca.vertcat(pix[0] / pix[2], pix[1] / pix[2])
+    return ca.Function('homography_uv', [state], [uv], ['state'], ['uv'])
+
+
+def wrap_angle_ca(theta):
+    return ca.atan2(ca.sin(theta), ca.cos(theta))
+
+
+def unicycle_step_ca(state, control, dt):
+    x = state[0] + control[0] * dt * ca.cos(state[2])
+    y = state[1] + control[0] * dt * ca.sin(state[2])
+    theta = wrap_angle_ca(state[2] + control[1] * dt)
+    return ca.vertcat(x, y, theta)
+
+
+def unicycle_jacobian_ca(state, control, dt):
+    theta = state[2]
+    v = control[0]
+    return ca.vertcat(
+        ca.horzcat(1.0, 0.0, -v * dt * ca.sin(theta)),
+        ca.horzcat(0.0, 1.0, v * dt * ca.cos(theta)),
+        ca.horzcat(0.0, 0.0, 1.0),
+    )
+
+
+def _ensure_symmetric_pd(M, eps=1e-9):
+    _require_casadi()
+    dim = int(M.size1())
+    return 0.5 * (M + M.T) + float(eps) * ca.DM.eye(dim)
+
+
+def _det_2x2(M):
+    return M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]
+
+
+def _det_3x3(M):
+    return (
+        M[0, 0] * (M[1, 1] * M[2, 2] - M[1, 2] * M[2, 1])
+        - M[0, 1] * (M[1, 0] * M[2, 2] - M[1, 2] * M[2, 0])
+        + M[0, 2] * (M[1, 0] * M[2, 1] - M[1, 1] * M[2, 0])
+    )
+
+
+def _logdet_small_pd(M):
+    dim = int(M.size1())
+    if dim == 2 and int(M.size2()) == 2:
+        det_val = _det_2x2(M)
+    elif dim == 3 and int(M.size2()) == 3:
+        det_val = _det_3x3(M)
+    else:
+        raise RuntimeError(f"Unsupported matrix size for CasADi logdet surrogate: {dim}x{int(M.size2())}")
+    return ca.log(ca.fmax(det_val, 1e-12))
+
+
+def _chol_2x2(M, eps=1e-9):
+    M = 0.5 * (M + M.T)
+    a = ca.fmax(M[0, 0], eps)
+    l11 = ca.sqrt(a)
+    l21 = M[1, 0] / l11
+    diag22 = ca.fmax(M[1, 1] - l21 * l21, eps)
+    l22 = ca.sqrt(diag22)
+    return ca.vertcat(
+        ca.horzcat(l11, 0.0),
+        ca.horzcat(l21, l22),
+    )
+
+
+def _xy_visibility_sigma_points_ca(mean_xy, cov_xy, kappa=1.0):
+    mean_xy = ca.reshape(mean_xy, 2, 1)
+    cov_xy = 0.5 * (cov_xy + cov_xy.T)
+    kappa = max(float(kappa), 1e-6)
+    scale = math.sqrt(2.0 + kappa)
+    chol = _chol_2x2(cov_xy + 1e-9 * ca.DM.eye(2))
+    spread = scale * chol
+    sigma_points = (
+        mean_xy,
+        mean_xy + spread[:, 0],
+        mean_xy - spread[:, 0],
+        mean_xy + spread[:, 1],
+        mean_xy - spread[:, 1],
+    )
+    weights = (
+        kappa / (2.0 + kappa),
+        1.0 / (2.0 * (2.0 + kappa)),
+        1.0 / (2.0 * (2.0 + kappa)),
+        1.0 / (2.0 * (2.0 + kappa)),
+        1.0 / (2.0 * (2.0 + kappa)),
+    )
+    return sigma_points, weights
+
+
+def expected_visibility_ca(mean, cov, prob_state, *, kappa=1.0, lo=1e-4, hi=1.0 - 1e-4):
+    sigma_points_xy, weights = _xy_visibility_sigma_points_ca(mean[:2], cov[:2, :2], kappa=kappa)
+    total = 0
+    for sigma_xy, weight in zip(sigma_points_xy, weights):
+        state = ca.vertcat(sigma_xy[0], sigma_xy[1], mean[2])
+        total += float(weight) * _clip_expr(prob_state(state), lo, hi)
+    return _clip_expr(total, lo, hi)
+
+
+def _smoothstep_ca(x):
+    x = _clip_expr(x, 0.0, 1.0)
+    return x * x * (3.0 - 2.0 * x)
+
+
+def goal_obs_cov_ca_for_progress(params: CasadiNotebookSimpleParams, progress):
+    progress_fast = ca.power(_clip_expr(progress, 0.0, 1.0), params.goal_tightening_power)
+    a = _smoothstep_ca(progress_fast)
+    sigma_u = (1.0 - a) * params.goal_prior_u_std_start + a * params.goal_prior_u_std_final
+    sigma_v = (1.0 - a) * params.goal_prior_v_std_start + a * params.goal_prior_v_std_final
+    return ca.diag(ca.vertcat(ca.power(sigma_u, 2), ca.power(sigma_v, 2)))
+
+
+def visibility_penalty_ca(p_vis, p_vis_eff, params: CasadiNotebookSimpleParams):
+    penalty = 1.0 - p_vis
+    if params.visibility_barrier_threshold > 0.0:
+        penalty += _softplus_expr(
+            params.visibility_barrier_scale * (params.visibility_barrier_threshold - p_vis_eff)
+        )
+    return penalty
+
+
+def et1_ca(m, S, R_eff, g, dg):
+    Jm = dg(m)
+    mu = g(m)
+    Sigma = ca.mtimes([Jm, S, Jm.T]) + R_eff
+    Gamma = ca.mtimes(S, Jm.T)
+    return mu, Sigma, Gamma
+
+
+def risk_ca(mu, Sigma, goal_mu, goal_S):
+    Sigma_pd = _ensure_symmetric_pd(Sigma)
+    goal_S_pd = _ensure_symmetric_pd(goal_S)
+    diff = goal_mu - mu
+    trace_term = ca.trace(ca.solve(goal_S_pd, Sigma_pd))
+    quad_term = ca.mtimes([diff.T, ca.solve(goal_S_pd, diff)])
+    dim = int(goal_mu.size1())
+    logdet_goal = _logdet_small_pd(goal_S_pd)
+    logdet_sigma = _logdet_small_pd(Sigma_pd)
+    return 0.5 * (trace_term - dim + quad_term[0, 0] + logdet_goal - logdet_sigma)
+
+
+def ambiguity_ca(Sigma, Gamma, S):
+    S_pd = _ensure_symmetric_pd(S)
+    Sigma_cond = Sigma - ca.mtimes([Gamma.T, ca.solve(S_pd, Gamma)])
+    Sigma_cond = _ensure_symmetric_pd(Sigma_cond)
+    dim = int(Sigma_cond.size1())
+    logdet = _logdet_small_pd(Sigma_cond)
+    return 0.5 * (dim * math.log(2.0 * math.pi * math.e) + logdet)
+
+
+def notebook_simple_unicycle_ca(
+    u_flat,
+    m0,
+    S0,
+    goal_obs,
+    progress_index0,
+    params: CasadiNotebookSimpleParams,
+    g,
+    dg,
+    p_vis_state=None,
+    nogo_cost=None,
+):
+    m = m0
+    S = S0
+    total_risk = 0
+    total_amb = 0
+    total_control = 0
+    total_vis = 0
+    total_nogo = 0
+    denom = float(max(params.goal_progress_n_steps, 1))
+
+    for t in range(params.time_horizon):
+        u_t = ca.vertcat(u_flat[2 * t], u_flat[2 * t + 1])
+        m = unicycle_step_ca(m, u_t, params.dt)
+        F = unicycle_jacobian_ca(m, u_t, params.dt)
+        S = ca.mtimes([F, S, F.T]) + params.Q
+
+        p_vis = 1.0
+        if p_vis_state is not None:
+            p_vis = expected_visibility_ca(
+                m,
+                S,
+                p_vis_state,
+                kappa=params.visibility_sigma_kappa,
+            )
+        p_vis_eff = _clip_expr(ca.power(p_vis, params.visibility_power), 1e-4, 1.0 - 1e-4)
+        R_plan = p_vis_eff * params.R_visible + (1.0 - p_vis_eff) * params.R_miss
+        mu, Sigma, Gamma = et1_ca(m, S, R_plan, g, dg)
+
+        progress = (progress_index0 + float(t)) / denom
+        goal_cov_t = goal_obs_cov_ca_for_progress(params, progress)
+        weight_t = params.discount_gamma ** t
+        total_risk += weight_t * params.risk_scale * risk_ca(mu, Sigma, goal_obs, goal_cov_t)
+        total_amb += weight_t * params.ambiguity_scale * ambiguity_ca(Sigma, Gamma, S)
+        total_control += weight_t * params.control_weight * ca.sumsqr(u_t)
+        if p_vis_state is not None and params.visibility_weight > 0.0:
+            total_vis += weight_t * params.visibility_weight * visibility_penalty_ca(p_vis, p_vis_eff, params)
+        if nogo_cost is not None:
+            total_nogo += weight_t * nogo_cost(m)
+
+    return total_risk + total_amb + total_control + total_vis + total_nogo
+
+
+def make_notebook_simple_valgrad_fn(
+    params: CasadiNotebookSimpleParams,
+    H,
+    p_vis_state=None,
+    nogo_cost=None,
+):
+    _require_casadi()
+    g = make_g_from_homography(H)
+
+    state_sym = ca.MX.sym('state_for_jac', 3)
+    dg = ca.Function(
+        'homography_uv_jac',
+        [state_sym],
+        [ca.jacobian(g(state_sym), state_sym)],
+        ['state'],
+        ['J'],
+    )
+
+    u_flat = ca.MX.sym('u_flat', params.time_horizon * params.Du)
+    m0 = ca.MX.sym('m0', 3)
+    S0 = ca.MX.sym('S0', 3, 3)
+    goal_obs = ca.MX.sym('goal_obs', 2)
+    progress_index0 = ca.MX.sym('progress_index0')
+
+    objective = notebook_simple_unicycle_ca(
+        u_flat,
+        m0,
+        S0,
+        goal_obs,
+        progress_index0,
+        params,
+        g,
+        dg,
+        p_vis_state=p_vis_state,
+        nogo_cost=nogo_cost,
+    )
+    gradient = ca.gradient(objective, u_flat)
+    valgrad = ca.Function(
+        'notebook_simple_valgrad',
+        [u_flat, m0, S0, goal_obs, progress_index0],
+        [objective, gradient],
+        ['u_flat', 'm0', 'S0', 'goal_obs', 'progress_index0'],
+        ['objective', 'gradient'],
+    )
+
+    def _wrapper(u_val, m_val, S_val, goal_obs_val, progress_index0_val):
+        val, grad = valgrad(
+            np.asarray(u_val, dtype=float).reshape((-1, 1)),
+            np.asarray(m_val, dtype=float).reshape((3, 1)),
+            np.asarray(S_val, dtype=float).reshape((3, 3)),
+            np.asarray(goal_obs_val, dtype=float).reshape((2, 1)),
+            np.asarray(float(progress_index0_val), dtype=float),
+        )
+        return float(np.asarray(val, dtype=float).reshape(-1)[0]), np.asarray(grad, dtype=float).reshape(-1)
+
+    return _wrapper

@@ -65,6 +65,9 @@ class JaxNotebookSimpleParams:
     control_weight: float
     risk_scale: float
     ambiguity_scale: float
+    visibility_weight: float
+    visibility_barrier_threshold: float
+    visibility_barrier_scale: float
     discount_gamma: float
     visibility_power: float
     visibility_sigma_kappa: float
@@ -166,6 +169,15 @@ def goal_obs_cov_jax_for_progress(params: JaxNotebookSimpleParams, progress):
     sigma_u = (1.0 - a) * params.goal_prior_u_std_start + a * params.goal_prior_u_std_final
     sigma_v = (1.0 - a) * params.goal_prior_v_std_start + a * params.goal_prior_v_std_final
     return jnp.diag(jnp.array([sigma_u ** 2, sigma_v ** 2], dtype=jnp.float64))
+
+
+def visibility_penalty_jax(p_vis, p_vis_eff, params: JaxNotebookSimpleParams):
+    penalty = 1.0 - p_vis
+    if params.visibility_barrier_threshold > 0.0:
+        penalty += jax.nn.softplus(
+            params.visibility_barrier_scale * (params.visibility_barrier_threshold - p_vis_eff)
+        )
+    return penalty
 
 
 def et1_jax(m, S, R_eff, g, dg=None):
@@ -392,6 +404,7 @@ def notebook_simple_unicycle_jax(
     total_risk = 0.0
     total_amb = 0.0
     total_control = 0.0
+    total_vis = 0.0
     total_nogo = 0.0
     denom = jnp.asarray(max(params.goal_progress_n_steps, 1), dtype=m.dtype)
     progress_index0 = jnp.asarray(progress_index0, dtype=m.dtype)
@@ -417,10 +430,12 @@ def notebook_simple_unicycle_jax(
         total_risk += weight_t * params.risk_scale * risk_jax(mu, Sigma, goal_obs, goal_cov_t)
         total_amb += weight_t * params.ambiguity_scale * ambiguity_jax(Sigma, Gamma, S)
         total_control += weight_t * params.control_weight * jnp.sum(u[t] ** 2)
+        if p_vis_state is not None and params.visibility_weight > 0.0:
+            total_vis += weight_t * params.visibility_weight * visibility_penalty_jax(p_vis, p_vis_eff, params)
         if nogo_cost is not None:
             total_nogo += weight_t * nogo_cost(m)
 
-    return total_risk + total_amb + total_control + total_nogo
+    return total_risk + total_amb + total_control + total_vis + total_nogo
 
 
 def make_notebook_simple_valgrad_fn(

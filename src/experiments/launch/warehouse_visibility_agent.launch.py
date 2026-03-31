@@ -27,7 +27,7 @@ def generate_launch_description():
 
     This is the thesis-facing launch surface for the warehouse visibility-aware agent.
     It hides generic development controls and fixes a few study assumptions:
-    - fixed thesis-facing state/perception path: pixel state from homography
+    - thesis-facing state path from a selectable external-camera perception backend
     - fixed UV observation model
     - a single canonical warehouse world/task baseline
     - a paper profile that uses the notebook-style SciPy backend by default
@@ -115,6 +115,11 @@ def generate_launch_description():
     task_arg = DeclareLaunchArgument('task', default_value=defaults['task'])
 
     seed_arg = DeclareLaunchArgument('seed', default_value=defaults['seed'])
+    perception_backend_arg = DeclareLaunchArgument(
+        'perception_backend',
+        default_value=defaults['perception_backend'],
+        description="Perception backend: 'image_markers' or 'homography'"
+    )
 
     sensor_pixel_noise_arg = DeclareLaunchArgument(
         'sensor_pixel_noise_sigma',
@@ -212,7 +217,21 @@ def generate_launch_description():
     notebook_ambiguity_scale_arg = DeclareLaunchArgument('notebook_ambiguity_scale', default_value=defaults['notebook_ambiguity_scale'])
     visibility_weight_arg = DeclareLaunchArgument(
         'visibility_weight',
-        default_value=str(VISIBILITY_FALLBACK_DEFAULTS['visibility_weight'])
+        default_value=defaults.get('visibility_weight', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_weight']))
+    )
+    visibility_barrier_threshold_arg = DeclareLaunchArgument(
+        'visibility_barrier_threshold',
+        default_value=defaults.get(
+            'visibility_barrier_threshold',
+            str(VISIBILITY_FALLBACK_DEFAULTS['visibility_barrier_threshold']),
+        ),
+    )
+    visibility_barrier_scale_arg = DeclareLaunchArgument(
+        'visibility_barrier_scale',
+        default_value=defaults.get(
+            'visibility_barrier_scale',
+            str(VISIBILITY_FALLBACK_DEFAULTS['visibility_barrier_scale']),
+        ),
     )
     use_ambiguity_arg = DeclareLaunchArgument(
         'use_ambiguity',
@@ -232,7 +251,7 @@ def generate_launch_description():
     optimizer_backend_arg = DeclareLaunchArgument(
         'optimizer_backend',
         default_value=optimizer_backend_default,
-        description="Optimizer backend: 'scipy', 'jax', or 'auto'"
+        description="Optimizer backend: 'scipy', 'jax', 'casadi', or 'auto'"
     )
     optimizer_maxiter_arg = DeclareLaunchArgument('optimizer_maxiter', default_value=optimizer_maxiter_default)
     optimizer_maxfun_arg = DeclareLaunchArgument('optimizer_maxfun', default_value=defaults['optimizer_maxfun'])
@@ -266,6 +285,7 @@ def generate_launch_description():
         tasks_yaml_arg,
         task_arg,
         seed_arg,
+        perception_backend_arg,
         sensor_pixel_noise_arg,
         perception_use_geometry_occlusion_arg,
         use_nogo_cost_arg,
@@ -307,6 +327,8 @@ def generate_launch_description():
         notebook_risk_scale_arg,
         notebook_ambiguity_scale_arg,
         visibility_weight_arg,
+        visibility_barrier_threshold_arg,
+        visibility_barrier_scale_arg,
         use_ambiguity_arg,
         use_obs_risk_arg,
         process_noise_xy_arg,

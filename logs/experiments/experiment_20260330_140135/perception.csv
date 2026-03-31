@@ -1,0 +1,1 @@
+diag_stamp,log_stamp,detected,true_available,true_x,true_y,true_yaw,state_available,state_x,state_y,state_yaw,state_pos_error,state_yaw_error_deg,obs_u,obs_v,obs_yaw,obs_yaw_error_deg,pixel_pose_available,pixel_pose_stamp,pixel_pose_u,pixel_pose_v,pixel_pose_yaw,pixel_pose_age_s,u_red,v_red,red_area_px,u_blue,v_blue,blue_area_px,separation_px,border_margin_px,seed
