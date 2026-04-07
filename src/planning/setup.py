@@ -15,22 +15,13 @@ setup(
     zip_safe=True,
     maintainer='joostleliveld',
     maintainer_email='j.j.p.leliveld@student.tue.nl',
-    description='Visibility-aware active planning and runtime nodes for UnembodiedNavigation',
+    description='Planner nodes for the thesis comparison between GP-aware EFE and retained baselines',
     license='MIT',
-    extras_require={
-        'casadi': [
-            'casadi',
-        ],
-        'test': [
-            'pytest',
-        ],
-    },
+    extras_require={'test': ['pytest']},
     entry_points={
         'console_scripts': [
-            'efe_planner = planning.nodes.efe_planner_node:main',
-            'mpc_planner = planning.nodes.mpc_planner_node:main',
-            'efer_planner = planning.nodes.efer_planner_node:main',
             'efe_agent = planning.nodes.efe_agent_node:main',
+            'planner_node = planning.nodes.unicycle_planner_node:main',
         ],
     },
 )

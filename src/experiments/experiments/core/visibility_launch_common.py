@@ -32,7 +32,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'horizon': '24',
     'dt': '0.2',
     'control_weight': '0.0',
-    'math_mode': 'notebook_simple',
     'risk_weight_state': '0.0',
     'risk_weight_obs': '1.0',
     'ambiguity_weight': '1.0',
@@ -151,12 +150,11 @@ def parse_common_launch_config(context) -> Dict[str, object]:
 
     cfg: Dict[str, object] = {
         'use_sim_time': _as_bool(LaunchConfiguration('use_sim_time').perform(context)),
-        'study_variant': _launch_value(context, 'study_variant', 'gp_visibility').strip().lower(),
-        'planner': LaunchConfiguration('planner').perform(context),
+        'planner': _launch_value(context, 'planner', PAPER_LAUNCH_DEFAULTS['planner']).strip(),
         'world': world_value,
         'world_profiles_path': LaunchConfiguration('world_profiles').perform(context),
         'tasks_yaml': LaunchConfiguration('tasks_yaml').perform(context),
-        'task_name': LaunchConfiguration('task').perform(context).strip(),
+        'task_name': _launch_value(context, 'task', PAPER_LAUNCH_DEFAULTS['task']).strip(),
         'seed': seed_value,
         'perception_backend': _launch_value(context, 'perception_backend', PAPER_LAUNCH_DEFAULTS['perception_backend']).strip().lower(),
         'sensor_pixel_noise_sigma': float(_launch_value(context, 'sensor_pixel_noise_sigma', '0.0')),
@@ -165,31 +163,28 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'odom_wait_require_pose_match': _as_bool(_launch_value(context, 'odom_wait_require_pose_match', 'false')),
         'odom_wait_position_tolerance': 0.25,
         'odom_wait_yaw_tolerance': 0.5,
-        'use_pixel_correction': _as_bool(LaunchConfiguration('use_pixel_correction').perform(context)),
-        'pixel_timeout_s': float(LaunchConfiguration('pixel_timeout_s').perform(context)),
+        'use_pixel_correction': _as_bool(_launch_value(context, 'use_pixel_correction', PAPER_LAUNCH_DEFAULTS['use_pixel_correction'])),
+        'pixel_timeout_s': float(_launch_value(context, 'pixel_timeout_s', PAPER_LAUNCH_DEFAULTS['pixel_timeout_s'])),
         'pixel_correction_min_interval_s': float(_launch_value(context, 'pixel_correction_min_interval_s', '0.0')),
         'pixel_correction_approx': _launch_value(context, 'pixel_correction_approx', 'AUTO').strip().upper(),
         'skip_stale_pixel_correction': _as_bool(_launch_value(context, 'skip_stale_pixel_correction', 'true')),
-        'use_ambiguity': _as_bool(LaunchConfiguration('use_ambiguity').perform(context)),
-        'use_obs_risk': _as_bool(LaunchConfiguration('use_obs_risk').perform(context)),
+        'use_ambiguity': _as_bool(_launch_value(context, 'use_ambiguity', PAPER_LAUNCH_DEFAULTS['use_ambiguity'])),
+        'use_obs_risk': _as_bool(_launch_value(context, 'use_obs_risk', PAPER_LAUNCH_DEFAULTS['use_obs_risk'])),
         'auto_stop_on_goal': _as_bool(_launch_value(context, 'auto_stop_on_goal', 'false')),
         'goal_success_radius': float(_launch_value(context, 'goal_success_radius', '0.35')),
         'goal_success_hold_s': float(_launch_value(context, 'goal_success_hold_s', '2.0')),
-        'process_noise_xy': float(LaunchConfiguration('process_noise_xy').perform(context)),
-        'process_noise_theta': float(LaunchConfiguration('process_noise_theta').perform(context)),
-        'obs_noise_uv': float(LaunchConfiguration('obs_noise_uv').perform(context)),
-        'optimizer_backend': str(LaunchConfiguration('optimizer_backend').perform(context)).strip().lower(),
-        'optimizer_maxiter': int(LaunchConfiguration('optimizer_maxiter').perform(context)),
+        'process_noise_xy': float(_launch_value(context, 'process_noise_xy', PAPER_LAUNCH_DEFAULTS['process_noise_xy'])),
+        'process_noise_theta': float(_launch_value(context, 'process_noise_theta', PAPER_LAUNCH_DEFAULTS['process_noise_theta'])),
+        'obs_noise_uv': float(_launch_value(context, 'obs_noise_uv', PAPER_LAUNCH_DEFAULTS['obs_noise_uv'])),
+        'optimizer_maxiter': int(_launch_value(context, 'optimizer_maxiter', PAPER_LAUNCH_DEFAULTS['optimizer_maxiter'])),
         'optimizer_maxfun': int(_launch_value(context, 'optimizer_maxfun', PAPER_LAUNCH_DEFAULTS['optimizer_maxfun'])),
         'optimizer_ftol': float(_launch_value(context, 'optimizer_ftol', PAPER_LAUNCH_DEFAULTS['optimizer_ftol'])),
-        'optimizer_gtol': float(LaunchConfiguration('optimizer_gtol').perform(context)),
-        'optimizer_warm_start': _as_bool(LaunchConfiguration('optimizer_warm_start').perform(context)),
-        'jax_warmup_enabled': _as_bool(_launch_value(context, 'jax_warmup_enabled', 'true')),
+        'optimizer_gtol': float(_launch_value(context, 'optimizer_gtol', PAPER_LAUNCH_DEFAULTS['optimizer_gtol'])),
+        'optimizer_warm_start': _as_bool(_launch_value(context, 'optimizer_warm_start', PAPER_LAUNCH_DEFAULTS['optimizer_warm_start'])),
         'plan_rate': float(_launch_value(context, 'plan_rate', PAPER_LAUNCH_DEFAULTS['plan_rate'])),
         'horizon': int(_launch_value(context, 'horizon', PAPER_LAUNCH_DEFAULTS['horizon'])),
         'dt': float(_launch_value(context, 'dt', '0.2')),
         'control_weight': float(_launch_value(context, 'control_weight', PAPER_LAUNCH_DEFAULTS['control_weight'])),
-        'math_mode': _launch_value(context, 'math_mode', PAPER_LAUNCH_DEFAULTS['math_mode']).strip().lower(),
         'risk_weight_state': float(_launch_value(context, 'risk_weight_state', '1.0')),
         'risk_weight_obs': float(_launch_value(context, 'risk_weight_obs', '1.0')),
         'ambiguity_weight': float(_launch_value(context, 'ambiguity_weight', '1.0')),
@@ -253,6 +248,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'visibility_ray_samples': int(float(_launch_value(context, 'visibility_ray_samples', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_ray_samples'])))),
         'visibility_target_height_m': float(_launch_value(context, 'visibility_target_height_m', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_target_height_m']))),
         'visibility_geometry_json': _launch_value(context, 'visibility_geometry_json', ''),
+        'visibility_artifact_path': _launch_value(context, 'visibility_artifact_path', ''),
         'visibility_gp_seed': int(float(_launch_value(context, 'visibility_gp_seed', str(seed_value)))),
         'visibility_r_bad_uv': float(_launch_value(context, 'visibility_r_bad_uv', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_r_bad_uv']))),
         'visibility_cov_pos_scale': float(_launch_value(context, 'visibility_cov_pos_scale', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_cov_pos_scale']))),
@@ -268,42 +264,17 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'goal_sigma_uv': float(_launch_value(context, 'goal_sigma_uv', PAPER_LAUNCH_DEFAULTS['goal_sigma_uv'])),
         'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
         'debug_runtime': _as_bool(_launch_value(context, 'debug_runtime', 'false')),
-        'use_rviz': _as_bool(LaunchConfiguration('use_rviz').perform(context)),
+        'use_rviz': _as_bool(_launch_value(context, 'use_rviz', 'false')),
         'use_live_dashboard': _as_bool(_launch_value(context, 'use_live_dashboard', 'false')),
         'dashboard_history_s': float(_launch_value(context, 'dashboard_history_s', '60.0')),
         'dashboard_redraw_hz': float(_launch_value(context, 'dashboard_redraw_hz', '4.0')),
-        'rviz_config': LaunchConfiguration('rviz_config').perform(context),
+        'rviz_config': _launch_value(context, 'rviz_config', ''),
     }
 
-    if cfg['optimizer_backend'] not in ('auto', 'jax', 'scipy', 'casadi'):
-        raise RuntimeError("optimizer_backend must be 'auto', 'jax', 'scipy', or 'casadi'")
     if cfg['perception_backend'] not in ('homography', 'image_markers'):
         raise RuntimeError("perception_backend must be 'homography' or 'image_markers'")
 
     return cfg
-
-
-def apply_study_variant(cfg: Dict[str, object]) -> Dict[str, object]:
-    variant = str(cfg.get('study_variant', 'raycast_25d')).strip().lower()
-    if variant in ('projection_only', 'projection', 'baseline'):
-        cfg['study_variant'] = 'projection_only'
-        cfg['use_visibility_model'] = False
-        if str(cfg.get('visibility_model', '')).strip().lower() in ('', 'none'):
-            cfg['visibility_model'] = 'raycast_25d'
-        return cfg
-    if variant in ('raycast_25d', 'raycast25d', 'raycast', 'structured'):
-        cfg['study_variant'] = 'raycast_25d'
-        cfg['use_visibility_model'] = True
-        cfg['visibility_model'] = 'raycast_25d'
-        return cfg
-    if variant in ('gp_visibility', 'gpvis', 'direct_gp'):
-        cfg['study_variant'] = 'gp_visibility'
-        cfg['use_visibility_model'] = True
-        cfg['visibility_model'] = 'gp_visibility'
-        return cfg
-    raise RuntimeError(
-        "study_variant must be one of: projection_only, raycast_25d, gp_visibility"
-    )
 
 
 def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
@@ -312,6 +283,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         load_profile,
         compute_camera_quaternion_from_rpy,
         compute_look_at_from_pose,
+        resolve_profile_asset_path,
         serialize_occlusion_geometry_from_world,
     )
     from experiments.core.tasks import load_tasks, select_task
@@ -344,6 +316,19 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     planner = str(cfg['planner'])
     if planner == 'auto':
         planner = profile['planner_default']
+    if planner == 'geometric_baseline':
+        cfg['use_visibility_model'] = False
+        cfg['use_ambiguity'] = False
+        cfg['use_obs_risk'] = True
+
+    profile_visibility_artifact = resolve_profile_asset_path(
+        cfg['world_profiles_path'],
+        str(profile.get('visibility_artifact', '') or ''),
+    )
+    visibility_artifact_path = resolve_profile_asset_path(
+        cfg['world_profiles_path'],
+        str(cfg.get('visibility_artifact_path', '') or ''),
+    ) or profile_visibility_artifact
 
     cam_pos = [camera_pose[0], camera_pose[1], camera_pose[2]]
     roll, pitch, yaw = camera_pose[3], camera_pose[4], camera_pose[5]
@@ -379,6 +364,10 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
 
     visibility_geometry_json = str(cfg.get('visibility_geometry_json', '') or '')
     visibility_model_name = str(cfg.get('visibility_model', '')).strip().lower()
+    if cfg.get('use_visibility_model', False) and visibility_model_name in {'gp_visibility', 'gpvis'} and not visibility_artifact_path:
+        raise RuntimeError(
+            f"World '{cfg['world']}' requires a visibility_artifact path for GP visibility planning."
+        )
     geometry_backends = {
         'raycast_25d',
         'raycast25d',
@@ -406,6 +395,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         'tf_args': tf_args,
         'world_path': world_path,
         'visibility_geometry_json': visibility_geometry_json,
+        'visibility_artifact_path': visibility_artifact_path,
     })
     return cfg
 
@@ -546,17 +536,16 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         parameters=[{
             'use_sim_time': cfg['use_sim_time'],
             'seed': cfg['seed'],
+            'method': cfg['planner'],
             'world': cfg['world'],
             'task': cfg['task'].get('name', cfg['task_name'] or ''),
             'planner': cfg['planner'],
-            'study_variant': cfg['study_variant'],
-            'math_mode': cfg['math_mode'],
-            'optimizer_backend': cfg['optimizer_backend'],
             'use_pixel_correction': cfg['use_pixel_correction'],
             'use_ambiguity': cfg['use_ambiguity'],
             'use_obs_risk': cfg['use_obs_risk'],
             'use_visibility_model': cfg['use_visibility_model'],
             'visibility_model': cfg['visibility_model'],
+            'visibility_artifact_path': cfg['visibility_artifact_path'],
             'risk_weight_state': cfg['risk_weight_state'],
             'risk_weight_obs': cfg['risk_weight_obs'],
             'goal_sigma_uv': cfg['goal_sigma_uv'],
@@ -602,27 +591,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         parameters=[{'use_sim_time': cfg['use_sim_time']}],
     )
 
-    live_dashboard = Node(
-        package='visualization',
-        executable='live_visibility_dashboard',
-        name='live_visibility_dashboard',
-        output='screen',
-        additional_env={'MPLCONFIGDIR': '/tmp/unav_matplotlib'},
-        parameters=[{
-            'use_sim_time': cfg['use_sim_time'],
-            'history_s': cfg['dashboard_history_s'],
-            'redraw_hz': cfg['dashboard_redraw_hz'],
-            'frame_id': 'map_bev',
-            'visibility_map_topic': '/visibility_map',
-            'visibility_opacity_mean_map_topic': '/visibility_opacity_mean_map',
-            'visibility_opacity_conservative_map_topic': '/visibility_opacity_conservative_map',
-            'plan_topic': '/plan_preview',
-            'planner_diag_topic': '/planner/diagnostics',
-            'planner_belief_topic': '/planner_belief',
-            'efe_metrics_topic': '/efe/metrics',
-            'pixel_topic': '/perception/pixel_pose',
-        }],
-    )
+    live_dashboard = None
 
     return {
         'bringup_sim': bringup_sim,
@@ -651,17 +620,17 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     shared_nodes = build_shared_nodes(cfg)
     planner = cfg['planner']
 
-    if planner not in ('efe1', 'efe2', 'mpc', 'efer'):
-        raise RuntimeError("planner must be 'efe1', 'efe2', 'mpc', or 'efer' for agent launch")
+    if planner not in ('efe1', 'efe2', 'mpc', 'efer', 'geometric_baseline'):
+        raise RuntimeError("planner must be 'efe1', 'efe2', 'efer', 'mpc', or 'geometric_baseline' for agent launch")
 
     planner_params = {
         'efe1': {
-            'approx_method': 'ET1' if cfg['math_mode'] == 'notebook_simple' else 'ET1',
+            'approx_method': 'ET1',
             'use_ambiguity': cfg['use_ambiguity'],
             'use_obs_risk': cfg['use_obs_risk'],
         },
         'efe2': {
-            'approx_method': 'ET1' if cfg['math_mode'] == 'notebook_simple' else 'ET2',
+            'approx_method': 'ET2',
             'use_ambiguity': cfg['use_ambiguity'],
             'use_obs_risk': cfg['use_obs_risk'],
         },
@@ -671,11 +640,17 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'use_obs_risk': True,
         },
         'efer': {
-            'approx_method': 'ET1' if cfg['math_mode'] == 'notebook_simple' else 'ET2',
+            'approx_method': 'ET2',
+            'use_ambiguity': False,
+            'use_obs_risk': True,
+        },
+        'geometric_baseline': {
+            'approx_method': 'ET1',
             'use_ambiguity': False,
             'use_obs_risk': True,
         },
     }
+    planner_uses_visibility = bool(cfg['use_visibility_model']) and planner != 'geometric_baseline'
     agent_node = Node(
         package='planning',
         executable='efe_agent',
@@ -688,7 +663,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'horizon': cfg['horizon'],
             'dt': cfg['dt'],
             'control_weight': cfg['control_weight'],
-            'math_mode': cfg['math_mode'],
             'use_pixel_correction': cfg['use_pixel_correction'],
             'pixel_timeout_s': cfg['pixel_timeout_s'],
             'pixel_correction_min_interval_s': cfg['pixel_correction_min_interval_s'],
@@ -716,7 +690,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'goal_progress_n_steps': cfg['goal_progress_n_steps'],
             'notebook_risk_scale': cfg['notebook_risk_scale'],
             'notebook_ambiguity_scale': cfg['notebook_ambiguity_scale'],
-            'use_visibility_model': cfg['use_visibility_model'],
+            'use_visibility_model': planner_uses_visibility,
             'visibility_model': cfg['visibility_model'],
             'visibility_weight': cfg['visibility_weight'],
             'visibility_barrier_threshold': cfg['visibility_barrier_threshold'],
@@ -735,6 +709,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'visibility_ray_samples': cfg['visibility_ray_samples'],
             'visibility_target_height_m': cfg['visibility_target_height_m'],
             'visibility_geometry_json': cfg['visibility_geometry_json'],
+            'visibility_artifact_path': cfg['visibility_artifact_path'],
             'visibility_gp_seed': cfg['visibility_gp_seed'],
             'visibility_r_bad_uv': cfg['visibility_r_bad_uv'],
             'visibility_cov_pos_scale': cfg['visibility_cov_pos_scale'],
@@ -747,24 +722,11 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'nogo_softplus_scale': cfg['nogo_softplus_scale'],
             'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
             'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
-            'optimizer_backend': cfg['optimizer_backend'],
             'optimizer_maxiter': cfg['optimizer_maxiter'],
             'optimizer_maxfun': cfg['optimizer_maxfun'],
             'optimizer_ftol': cfg['optimizer_ftol'],
             'optimizer_gtol': cfg['optimizer_gtol'],
             'optimizer_warm_start': cfg['optimizer_warm_start'],
-            'jax_warmup_enabled': cfg['jax_warmup_enabled'],
-            'jax_warmup_use_goal_hint': True,
-            'jax_warmup_goal_x': cfg['goal_x'],
-            'jax_warmup_goal_y': cfg['goal_y'],
-            'jax_warmup_goal_frame_id': 'map_bev',
-            'jax_warmup_use_state_hint': True,
-            'jax_warmup_state_x': cfg['spawn']['x'],
-            'jax_warmup_state_y': cfg['spawn']['y'],
-            'jax_warmup_state_yaw': cfg['spawn']['yaw'],
-            'jax_warmup_state_cov_x': cfg['min_state_cov'],
-            'jax_warmup_state_cov_y': cfg['min_state_cov'],
-            'jax_warmup_state_cov_yaw': cfg['min_state_cov'],
             **cfg['camera_params'],
             **planner_params[planner],
         }],
@@ -779,7 +741,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     ]
     if cfg['use_rviz']:
         after_odom.append(shared_nodes['rviz'])
-    if cfg.get('use_live_dashboard', False):
+    if cfg.get('use_live_dashboard', False) and shared_nodes.get('live_dashboard') is not None:
         after_odom.append(shared_nodes['live_dashboard'])
 
     start_after_odom = RegisterEventHandler(

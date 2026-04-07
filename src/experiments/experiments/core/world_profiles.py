@@ -1,6 +1,7 @@
 import math
 import os
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import yaml
@@ -8,7 +9,7 @@ from ament_index_python.packages import get_package_share_directory
 from unav_common.occlusion_geometry import parse_occlusion_scene_from_world, scene_to_json
 
 
-VALID_PLANNERS = {"efe1", "efe2", "mpc", "efer"}
+VALID_PLANNERS = {"efe1", "efe2", "efer", "mpc", "geometric_baseline"}
 
 
 def load_world_profiles(path: str) -> Dict[str, Any]:
@@ -34,6 +35,11 @@ def load_world_profiles(path: str) -> Dict[str, Any]:
         visibility_defaults = profile.get("visibility_defaults")
         if visibility_defaults is not None:
             _validate_visibility_defaults(visibility_defaults)
+        visibility_artifact = profile.get("visibility_artifact")
+        if visibility_artifact is not None and not isinstance(visibility_artifact, str):
+            raise RuntimeError(
+                f"Expected 'worlds.{world_file}.visibility_artifact' to be a string path"
+            )
     return {"camera_intrinsics": intrinsics, "worlds": worlds}
 
 
@@ -244,6 +250,18 @@ def load_profile(path: str, world_file: str, camera_model: str = "external_camer
     world_path = resolve_world_path(world_file)
     camera_pose = validate_profile(world_file, profile, world_path, camera_model)
     return profile, intrinsics, world_path, camera_pose
+
+
+def resolve_profile_asset_path(world_profiles_path: str, asset_path: str) -> str:
+    raw_asset = str(asset_path or "").strip()
+    if not raw_asset:
+        return ""
+    asset = Path(raw_asset)
+    if asset.is_absolute():
+        return str(asset)
+    world_profiles_file = Path(world_profiles_path).expanduser().resolve()
+    share_root = world_profiles_file.parent.parent if world_profiles_file.parent.name == "config" else world_profiles_file.parent
+    return str((share_root / asset).resolve())
 
 
 def parse_camera_pose_from_world(world_path: str, camera_model: str = "external_camera") -> List[float]:

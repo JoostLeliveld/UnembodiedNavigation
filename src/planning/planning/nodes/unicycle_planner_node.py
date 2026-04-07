@@ -81,11 +81,9 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('risk_weight_state', 1.0)
         _declare_if_not('risk_weight_obs', 1.0)
         _declare_if_not('ambiguity_weight', 1.0)
-        _declare_if_not('math_mode', 'notebook_simple')
         _declare_if_not('approx_method', 'ET1')
         _declare_if_not('use_obs_risk', True)
         _declare_if_not('use_ambiguity', True)
-        _declare_if_not('optimizer_backend', 'scipy')
         _declare_if_not('use_visibility_model', False)
         _declare_if_not('visibility_model', 'gp_visibility')
         _declare_if_not('visibility_weight', 0.0)
@@ -137,6 +135,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('publish_visibility_logic_markers', True)
         _declare_if_not('visibility_logic_marker_topic', '/visibility_logic_markers')
         _declare_if_not('experiment_run_dir_topic', '/experiment/run_dir')
+        _declare_if_not('visibility_artifact_path', '')
         _declare_if_not('visibility_artifact_filename', 'visibility_artifacts.npz')
 
         # Optimizer params
@@ -161,19 +160,6 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('debug_log_period_s', 1.0)
         _declare_if_not('slow_plan_factor', 1.0)
         _declare_if_not('slow_correction_ms', 20.0)
-        _declare_if_not('jax_warmup_enabled', True)
-        _declare_if_not('jax_warmup_poll_s', 0.5)
-        _declare_if_not('jax_warmup_use_goal_hint', False)
-        _declare_if_not('jax_warmup_goal_x', 0.0)
-        _declare_if_not('jax_warmup_goal_y', 0.0)
-        _declare_if_not('jax_warmup_goal_frame_id', 'map_bev')
-        _declare_if_not('jax_warmup_use_state_hint', False)
-        _declare_if_not('jax_warmup_state_x', 0.0)
-        _declare_if_not('jax_warmup_state_y', 0.0)
-        _declare_if_not('jax_warmup_state_yaw', 0.0)
-        _declare_if_not('jax_warmup_state_cov_x', 1e-6)
-        _declare_if_not('jax_warmup_state_cov_y', 1e-6)
-        _declare_if_not('jax_warmup_state_cov_yaw', 1e-6)
 
         # Camera model params (must match sim)
         _declare_if_not('cam_pos', [-3.0, -3.0, 6.0])
@@ -200,14 +186,14 @@ class UnicyclePlannerNode(Node):
         self.goal_sigma_theta = float(self.get_parameter('goal_sigma_theta').value)
         self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
 
-        self.math_mode = str(self.get_parameter('math_mode').value).strip().lower()
         self.risk_weight_state = float(self.get_parameter('risk_weight_state').value)
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
         self.ambiguity_weight = float(self.get_parameter('ambiguity_weight').value)
         self.approx_method = str(self.get_parameter('approx_method').value).upper()
+        self.math_mode = 'notebook_simple' if self.approx_method == 'ET1' else 'legacy'
+        self.optimizer_backend = 'casadi' if self.approx_method == 'ET1' else 'jax'
         self.use_obs_risk = _as_bool(self.get_parameter('use_obs_risk').value)
         self.use_ambiguity = _as_bool(self.get_parameter('use_ambiguity').value)
-        self.optimizer_backend = str(self.get_parameter('optimizer_backend').value).strip().lower()
         self.use_visibility_model = _as_bool(self.get_parameter('use_visibility_model').value)
         self.visibility_model = str(self.get_parameter('visibility_model').value).strip().lower()
         self.visibility_weight = float(self.get_parameter('visibility_weight').value)
@@ -272,6 +258,7 @@ class UnicyclePlannerNode(Node):
         self.experiment_run_dir_topic = (
             str(self.get_parameter('experiment_run_dir_topic').value).strip() or '/experiment/run_dir'
         )
+        self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value).strip()
         self.visibility_artifact_filename = (
             str(self.get_parameter('visibility_artifact_filename').value).strip()
             or 'visibility_artifacts.npz'
@@ -311,28 +298,6 @@ class UnicyclePlannerNode(Node):
         self.debug_log_period_s = max(0.2, float(self.get_parameter('debug_log_period_s').value))
         self.slow_plan_factor = max(0.1, float(self.get_parameter('slow_plan_factor').value))
         self.slow_correction_ms = max(0.1, float(self.get_parameter('slow_correction_ms').value))
-        self.jax_warmup_enabled = (
-            _as_bool(self.get_parameter('jax_warmup_enabled').value)
-            and self.optimizer_backend in ('jax', 'auto', 'scipy')
-        )
-        self.jax_warmup_poll_s = max(0.1, float(self.get_parameter('jax_warmup_poll_s').value))
-        self.jax_warmup_use_goal_hint = _as_bool(self.get_parameter('jax_warmup_use_goal_hint').value)
-        self.jax_warmup_goal_hint = (
-            float(self.get_parameter('jax_warmup_goal_x').value),
-            float(self.get_parameter('jax_warmup_goal_y').value),
-        )
-        self.jax_warmup_goal_frame_id = str(self.get_parameter('jax_warmup_goal_frame_id').value).strip() or 'map_bev'
-        self.jax_warmup_use_state_hint = _as_bool(self.get_parameter('jax_warmup_use_state_hint').value)
-        self.jax_warmup_state_hint = (
-            float(self.get_parameter('jax_warmup_state_x').value),
-            float(self.get_parameter('jax_warmup_state_y').value),
-            float(self.get_parameter('jax_warmup_state_yaw').value),
-        )
-        self.jax_warmup_state_cov_hint = (
-            float(self.get_parameter('jax_warmup_state_cov_x').value),
-            float(self.get_parameter('jax_warmup_state_cov_y').value),
-            float(self.get_parameter('jax_warmup_state_cov_yaw').value),
-        )
 
         camera_params = {
             'cam_pos': self.get_parameter('cam_pos').value,
@@ -393,6 +358,7 @@ class UnicyclePlannerNode(Node):
             visibility_ray_samples=self.visibility_ray_samples,
             visibility_target_height_m=self.visibility_target_height_m,
             visibility_geometry_json=self.visibility_geometry_json,
+            visibility_artifact_path=self.visibility_artifact_path,
             visibility_gp_seed=self.visibility_gp_seed,
             visibility_r_bad_uv=self.visibility_r_bad_uv,
             visibility_cov_pos_scale=self.visibility_cov_pos_scale,
@@ -497,10 +463,6 @@ class UnicyclePlannerNode(Node):
         self._last_plan_return_log = 0.0
         self._last_slow_plan_log = 0.0
         self._last_slow_correction_log = 0.0
-        self._last_jax_warmup_log = 0.0
-        self._jax_warmup_done = not self.jax_warmup_enabled
-        self._jax_warmup_started = False
-        self._jax_warmup_timer = None
         self._fatal_stop_triggered = False
         self._goal_signature = None
         self._goal_progress_start_dist_m = None
@@ -515,10 +477,6 @@ class UnicyclePlannerNode(Node):
 
         self._plan_period_s = 1.0 / max(self.plan_rate, 0.1)
         self.create_timer(self._plan_period_s, self._plan_once, callback_group=self._plan_group)
-        if self.jax_warmup_enabled:
-            self._jax_warmup_timer = self.create_timer(
-                self.jax_warmup_poll_s, self._jax_warmup_timer_cb, callback_group=self._plan_group
-            )
         self._pixel_correction_timer = None
         if self.use_pixel_correction and self.pixel_correction_min_interval_s > 0.0:
             correction_period = max(self.pixel_correction_min_interval_s, 0.02)
@@ -528,7 +486,7 @@ class UnicyclePlannerNode(Node):
         self._publish_visibility_map_once()
         self.get_logger().info(
             f"{self.NODE_NAME} started "
-            f"(math_mode={self.math_mode}, approx={self.approx_method}, "
+            f"(solver={self.optimizer_backend}, approx={self.approx_method}, "
             f"use_obs_risk={self.use_obs_risk}, use_ambiguity={self.use_ambiguity}, "
             f"goal_progress_n_steps={self.goal_progress_n_steps}, "
             f"use_visibility_model={self.use_visibility_model}, visibility_model={self.visibility_model}, "
@@ -537,8 +495,6 @@ class UnicyclePlannerNode(Node):
             f"use_pixel_correction={self.use_pixel_correction}, "
             f"pixel_correction_approx={self.pixel_correction_approx}, "
             f"use_pixel_heading_correction={self.use_pixel_heading_correction}, "
-            f"jax_warmup_enabled={self.jax_warmup_enabled}, "
-            f"jax_warmup_use_goal_hint={self.jax_warmup_use_goal_hint}, "
             f"debug_runtime={self.debug_runtime})"
         )
 
@@ -1274,88 +1230,6 @@ class UnicyclePlannerNode(Node):
             'belief_age_s': float(belief_age_s),
         }
 
-    def _resolve_jax_warmup_belief(self):
-        m0, S0, _ = self._resolve_belief_for_planning()
-        if m0 is not None and S0 is not None:
-            return m0, S0, 'live belief'
-        if not self.jax_warmup_use_state_hint:
-            return None, None, None
-
-        m0 = np.array(self.jax_warmup_state_hint, dtype=float)
-        cov_x, cov_y, cov_yaw = self.jax_warmup_state_cov_hint
-        S0 = np.diag([
-            cov_x,
-            cov_y,
-            cov_yaw,
-        ]).astype(float)
-        if self.min_state_cov > 0.0:
-            for i in range(min(3, S0.shape[0])):
-                if S0[i, i] < self.min_state_cov:
-                    S0[i, i] = self.min_state_cov
-        return m0, S0, 'state hint'
-
-    def _cancel_jax_warmup_timer(self):
-        if self._jax_warmup_timer is None:
-            return
-        try:
-            self._jax_warmup_timer.cancel()
-        except Exception:
-            pass
-        self._jax_warmup_timer = None
-
-    def _jax_warmup_timer_cb(self):
-        if self._jax_warmup_done:
-            self._cancel_jax_warmup_timer()
-            return
-
-        with self._data_lock:
-            goal_ref = self.goal_msg
-        goal_xy = None
-        goal_source = 'goal topic'
-        if self.jax_warmup_use_goal_hint:
-            goal_xy = self.jax_warmup_goal_hint
-            goal_frame = self.jax_warmup_goal_frame_id
-            goal_source = 'goal hint'
-        elif goal_ref is not None:
-            goal_xy = (
-                float(goal_ref.pose.position.x),
-                float(goal_ref.pose.position.y),
-            )
-            goal_frame = (goal_ref.header.frame_id or '').strip() or 'map_bev'
-        if goal_xy is None:
-            return
-
-        m0, S0, belief_source = self._resolve_jax_warmup_belief()
-        if m0 is None or S0 is None:
-            return
-
-        self._jax_warmup_started = True
-        self.get_logger().info(
-            "Starting JAX warm-up using "
-            f"{goal_source} and {belief_source} for goal=({goal_xy[0]:.2f},{goal_xy[1]:.2f}) "
-            f"frame='{goal_frame}'"
-        )
-        warm_start = time.perf_counter()
-        try:
-            warmed = bool(self.planner.warmup_jax(m0, S0, goal_xy))
-        except Exception as exc:
-            self._jax_warmup_done = True
-            self._cancel_jax_warmup_timer()
-            self.get_logger().warn(
-                f"JAX warm-up failed; continuing without warm-up gate: {exc}"
-            )
-            return
-
-        self._jax_warmup_done = True
-        self._cancel_jax_warmup_timer()
-        warm_ms = max((time.perf_counter() - warm_start) * 1000.0, 0.0)
-        if warmed:
-            self.get_logger().info(f"JAX warm-up completed in {warm_ms:.1f} ms")
-        else:
-            self.get_logger().info(
-                "JAX warm-up skipped because the optimizer resolved away from the JAX path."
-            )
-
     def _resolve_plan_frame_id(self):
         with self._data_lock:
             state_ref = self.state_msg
@@ -1480,13 +1354,6 @@ class UnicyclePlannerNode(Node):
         goal_frame = (goal_ref.header.frame_id or '').strip()
         state_frame = (state_ref.header.frame_id or '').strip() if state_ref is not None else ''
         now_wall = time.monotonic()
-        if self.jax_warmup_enabled and not self._jax_warmup_done:
-            if now_wall - self._last_jax_warmup_log > 2.0:
-                self.get_logger().info(
-                    "Waiting for JAX warm-up before planning."
-                )
-                self._last_jax_warmup_log = now_wall
-            return
         if goal_frame and state_frame and goal_frame != state_frame:
             self._fatal_experiment_stop(
                 "Frame mismatch between /goal_bev and /state/bev "

@@ -246,12 +246,11 @@ def _plot_field_panels(output_dir: Path, artifact: dict[str, np.ndarray | str] |
         ax.set_ylabel('y [m]')
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03)
 
-    study_variant = str(manifest.get('study_variant', '')).strip() or 'unknown_variant'
-    planner = str(manifest.get('planner', '')).strip() or 'unknown_planner'
-    optimizer_backend = str(manifest.get('optimizer_backend', '')).strip() or 'unknown_backend'
+    method = str(manifest.get('method', '')).strip() or str(manifest.get('planner', '')).strip() or 'unknown_method'
+    planner = str(manifest.get('planner', '')).strip() or method
     enabled_note = 'uses visibility' if visibility_enabled else 'planner ignores visibility'
     fig.suptitle(
-        f"{study_variant} | {planner} | backend={optimizer_backend} | model={artifact_model or 'none'} | {enabled_note}",
+        f"{method} | planner={planner} | model={artifact_model or 'none'} | {enabled_note}",
         fontsize=12,
     )
 
@@ -424,11 +423,10 @@ def _plot_timeseries(output_dir: Path, artifact: dict[str, np.ndarray | str] | N
     if handles:
         ax.legend(handles, labels, loc='best')
 
-    study_variant = str(manifest.get('study_variant', '')).strip() or 'unknown_variant'
-    planner = str(manifest.get('planner', '')).strip() or 'unknown_planner'
-    optimizer_backend = str(manifest.get('optimizer_backend', '')).strip() or 'unknown_backend'
+    method = str(manifest.get('method', '')).strip() or str(manifest.get('planner', '')).strip() or 'unknown_method'
+    planner = str(manifest.get('planner', '')).strip() or method
     fig.suptitle(
-        f"{study_variant} | {planner} | backend={optimizer_backend}",
+        f"{method} | planner={planner}",
         fontsize=12,
     )
 

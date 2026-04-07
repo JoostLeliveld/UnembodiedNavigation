@@ -2,6 +2,13 @@
 build/
 install/
 log/
+logs/experiments/
+logs/visibility_capture/
+logs/visibility_capture_test/
+logs/ros/
+logs/perception_benchmark/
+logs/calibration/
+artifacts/visibility_prior/
 
 # Python
 __pycache__/

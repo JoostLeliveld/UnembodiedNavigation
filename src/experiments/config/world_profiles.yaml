@@ -9,7 +9,8 @@ worlds:
     investigation_focus: Single-rack warehouse scene for observability trade-off, shadow-crossing, and clearance-probe experiments.
     recommended_task: T1_shadow_cross
     spawn: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
-    planner_default: efe2
+    planner_default: efe1
+    visibility_artifact: data/visibility_gp/warehouse_occ_light_empirical_visibility_gp.npz
     visibility_defaults:
       visibility_map_min_x: -6.0
       visibility_map_max_x: 6.0
@@ -18,6 +19,28 @@ worlds:
       visibility_map_nx: 160
       visibility_map_ny: 160
       visibility_gp_length_scale: 1.05
+      visibility_gp_noise_var: 0.10
+      visibility_prior_occ: 0.005
+      visibility_beta: 1.0
+      visibility_height_tau: 0.08
+      visibility_ray_samples: 120
+      visibility_target_height_m: 0.0
+
+  warehouse_open_shelves.world.sdf:
+    world_name: warehouse_open_shelves
+    investigation_focus: Secondary exploratory world with segmented open shelving for gap-selection, partial-occlusion, and visibility-reacquisition studies under the same fixed external camera.
+    recommended_task: OS1_lower_gap_commit
+    spawn: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
+    planner_default: efe1
+    visibility_artifact: data/visibility_gp/warehouse_open_shelves_empirical_visibility_gp.npz
+    visibility_defaults:
+      visibility_map_min_x: -6.0
+      visibility_map_max_x: 6.0
+      visibility_map_min_y: -6.0
+      visibility_map_max_y: 6.0
+      visibility_map_nx: 160
+      visibility_map_ny: 160
+      visibility_gp_length_scale: 0.95
       visibility_gp_noise_var: 0.10
       visibility_prior_occ: 0.005
       visibility_beta: 1.0

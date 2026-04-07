@@ -9,12 +9,11 @@ import tf2_ros
 from tf2_geometry_msgs import do_transform_pose
 from std_msgs.msg import Float64MultiArray
 
-from perception.core.homography import HomographyModel
-from perception.core.camera_config import load_camera_params
 from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
     diagnostics_message,
 )
+from unav_common.camera_model import ObliqueCameraModel
 from unav_common.occlusion_geometry import scene_from_json, segment_occluded
 
 
@@ -65,8 +64,12 @@ class HomographySimNode(Node):
         if not self.has_parameter('heading_marker_area_px'):
             self.declare_parameter('heading_marker_area_px', 36.0)
 
-        self.cam_pos, self.look_at, self.img_width, self.img_height, self.fov_h_rad = load_camera_params(self)
-        self.model = HomographyModel(
+        self.cam_pos = np.array(self.get_parameter('cam_pos').value, dtype=float)
+        self.look_at = np.array(self.get_parameter('look_at').value, dtype=float)
+        self.img_width = int(self.get_parameter('img_width').value)
+        self.img_height = int(self.get_parameter('img_height').value)
+        self.fov_h_rad = float(self.get_parameter('fov_h_rad').value)
+        self.model = ObliqueCameraModel(
             cam_pos=self.cam_pos,
             look_at=self.look_at,
             img_width=self.img_width,

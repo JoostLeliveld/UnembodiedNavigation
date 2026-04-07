@@ -7,12 +7,11 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float64MultiArray
 
-from perception.core.camera_config import load_camera_params
 from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
     diagnostics_message,
 )
-from perception.core.homography import HomographyModel
+from unav_common.camera_model import ObliqueCameraModel
 
 
 class ImageMarkerDetectorNode(Node):
@@ -46,8 +45,12 @@ class ImageMarkerDetectorNode(Node):
         _declare_if_missing('red_s_min', 70)
         _declare_if_missing('red_v_min', 50)
 
-        self.cam_pos, self.look_at, self.img_width, self.img_height, self.fov_h_rad = load_camera_params(self)
-        self.model = HomographyModel(
+        self.cam_pos = np.array(self.get_parameter('cam_pos').value, dtype=float)
+        self.look_at = np.array(self.get_parameter('look_at').value, dtype=float)
+        self.img_width = int(self.get_parameter('img_width').value)
+        self.img_height = int(self.get_parameter('img_height').value)
+        self.fov_h_rad = float(self.get_parameter('fov_h_rad').value)
+        self.model = ObliqueCameraModel(
             cam_pos=self.cam_pos,
             look_at=self.look_at,
             img_width=self.img_width,

@@ -39,12 +39,10 @@ class ExperimentLogger(Node):
         self.declare_parameter('log_dir', 'logs/experiments')
         self.declare_parameter('log_rate', 10.0)
         self.declare_parameter('seed', 0)
+        self.declare_parameter('method', '')
         self.declare_parameter('world', '')
         self.declare_parameter('task', '')
         self.declare_parameter('planner', '')
-        self.declare_parameter('study_variant', '')
-        self.declare_parameter('math_mode', 'legacy')
-        self.declare_parameter('optimizer_backend', '')
         self.declare_parameter('use_pixel_correction', False)
         self.declare_parameter('use_ambiguity', False)
         self.declare_parameter('use_obs_risk', True)
@@ -58,6 +56,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('frame_id', 'map_bev')
         self.declare_parameter('use_visibility_model', False)
         self.declare_parameter('visibility_model', 'raycast_25d')
+        self.declare_parameter('visibility_artifact_path', '')
         self.declare_parameter('risk_weight_state', 0.0)
         self.declare_parameter('risk_weight_obs', 1.0)
         self.declare_parameter('goal_sigma_uv', 2.0)
@@ -90,12 +89,10 @@ class ExperimentLogger(Node):
 
         log_dir = self.get_parameter('log_dir').value
         self.seed = int(self.get_parameter('seed').value)
+        self.method = str(self.get_parameter('method').value)
         self.world = self.get_parameter('world').value
         self.task = self.get_parameter('task').value
         self.planner = self.get_parameter('planner').value
-        self.study_variant = str(self.get_parameter('study_variant').value)
-        self.math_mode = str(self.get_parameter('math_mode').value)
-        self.optimizer_backend = str(self.get_parameter('optimizer_backend').value)
         self.use_pixel_correction = bool(self.get_parameter('use_pixel_correction').value)
         self.use_ambiguity = bool(self.get_parameter('use_ambiguity').value)
         self.use_obs_risk = bool(self.get_parameter('use_obs_risk').value)
@@ -109,6 +106,7 @@ class ExperimentLogger(Node):
         self.frame_id = str(self.get_parameter('frame_id').value)
         self.use_visibility_model = bool(self.get_parameter('use_visibility_model').value)
         self.visibility_model = str(self.get_parameter('visibility_model').value)
+        self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value)
         self.risk_weight_state = float(self.get_parameter('risk_weight_state').value)
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
         self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
@@ -149,17 +147,16 @@ class ExperimentLogger(Node):
         manifest_data = {
             'run_id': self.run_id,
             'timestamp': datetime.now().isoformat(),
+            'method': self.method or self.planner,
             'world': self.world,
             'task': self.task,
             'planner': self.planner,
-            'study_variant': self.study_variant,
-            'math_mode': self.math_mode,
-            'optimizer_backend': self.optimizer_backend,
             'use_pixel_correction': self.use_pixel_correction,
             'use_ambiguity': self.use_ambiguity,
             'use_obs_risk': self.use_obs_risk,
             'use_visibility_model': self.use_visibility_model,
             'visibility_model': self.visibility_model,
+            'visibility_artifact_path': self.visibility_artifact_path,
             'risk_weight_state': self.risk_weight_state,
             'risk_weight_obs': self.risk_weight_obs,
             'goal_sigma_uv': self.goal_sigma_uv,
