@@ -32,7 +32,6 @@ class PlanResult:
     optimizer_nfev: int = 0
     optimizer_message: str = ""
     solve_time_s: float = 0.0
-    used_fallback: bool = False
     selected_source: str = ""
     p_vis_plan: float = 1.0
     p_vis_plan_eff: float = 1.0
@@ -87,8 +86,8 @@ class UnicyclePlannerBase:
         goal_prior_v_std_final=18.0,
         goal_tightening_power=0.45,
         goal_progress_n_steps=90,
-        notebook_risk_scale=1.25,
-        notebook_ambiguity_scale=1.00,
+        observation_risk_scale=1.25,
+        ambiguity_term_scale=1.00,
         visibility_barrier_threshold=0.0,
         visibility_barrier_scale=10.0,
         discount_gamma=0.98,
@@ -132,8 +131,8 @@ class UnicyclePlannerBase:
         self.goal_prior_v_std_final = float(goal_prior_v_std_final)
         self.goal_tightening_power = float(max(goal_tightening_power, 1e-6))
         self.goal_progress_n_steps = int(max(goal_progress_n_steps, 1))
-        self.notebook_risk_scale = float(notebook_risk_scale)
-        self.notebook_ambiguity_scale = float(notebook_ambiguity_scale)
+        self.observation_risk_scale = float(observation_risk_scale)
+        self.ambiguity_term_scale = float(ambiguity_term_scale)
         self.visibility_barrier_threshold = float(max(visibility_barrier_threshold, 0.0))
         self.visibility_barrier_scale = float(max(visibility_barrier_scale, 1e-6))
         self.discount_gamma = float(discount_gamma)
@@ -331,7 +330,7 @@ class UnicyclePlannerBase:
         sigma_v = (1.0 - a) * self.goal_prior_v_std_start + a * self.goal_prior_v_std_final
         return np.diag([sigma_u ** 2, sigma_v ** 2]).astype(float)
 
-    def notebook_visibility_diagnostics(self, m, S):
+    def planning_visibility_diagnostics(self, m, S):
         p_vis = self.visibility_probability_belief(m, S)
         p_vis_eff = float(np.clip(p_vis ** self.visibility_power, self._visibility_min_prob, 1.0 - self._visibility_min_prob))
         if (not self.use_visibility_model) or (self.visibility_model is None):
@@ -468,8 +467,8 @@ class UnicyclePlannerBase:
             float(self.goal_prior_v_std_final),
             float(self.goal_tightening_power),
             int(self.goal_progress_n_steps),
-            float(self.notebook_risk_scale),
-            float(self.notebook_ambiguity_scale),
+            float(self.observation_risk_scale),
+            float(self.ambiguity_term_scale),
             float(self.visibility_barrier_threshold),
             float(self.visibility_barrier_scale),
             float(self.discount_gamma),
@@ -518,13 +517,13 @@ class UnicyclePlannerBase:
             nogo_cost_ca = None
             if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
                 nogo_cost_ca = self.nogo_cost_model.make_penalty_state_casadi()
-            params_ca = casadi_efe.CasadiNotebookSimpleParams(
+            params_ca = casadi_efe.CasadiEfeParams(
                 Q=np.array(self.process_noise(self.dt), dtype=float),
                 R_visible=np.array(self.R_visible, dtype=float),
                 R_miss=np.array(self.R_miss, dtype=float),
                 control_weight=float(self.control_weight),
-                risk_scale=float(self.risk_weight_obs * self.notebook_risk_scale if use_observation_risk else 0.0),
-                ambiguity_scale=float(self.ambiguity_weight * self.notebook_ambiguity_scale if use_ambiguity_term else 0.0),
+                risk_scale=float(self.risk_weight_obs * self.observation_risk_scale if use_observation_risk else 0.0),
+                ambiguity_scale=float(self.ambiguity_weight * self.ambiguity_term_scale if use_ambiguity_term else 0.0),
                 visibility_weight=float(self.visibility_weight if self.use_visibility_model else 0.0),
                 visibility_barrier_threshold=float(self.visibility_barrier_threshold),
                 visibility_barrier_scale=float(self.visibility_barrier_scale),
@@ -541,7 +540,7 @@ class UnicyclePlannerBase:
                 dt=float(self.dt),
                 Du=2,
             )
-            valgrad = casadi_efe.make_notebook_simple_valgrad_fn(
+            valgrad = casadi_efe.make_efe_valgrad_fn(
                 params_ca,
                 self.camera.H,
                 approx=self.approx_method,
@@ -564,7 +563,7 @@ class UnicyclePlannerBase:
             S_eff = S_pred.copy()
             return 1.0, R_eff, S_eff, 1.0
 
-        diag = self.notebook_visibility_diagnostics(m_pred, S_pred)
+        diag = self.planning_visibility_diagnostics(m_pred, S_pred)
         R_eff = np.asarray(diag['R_plan'], dtype=float)
         S_eff = S_pred.copy()
         return float(diag['p_vis']), R_eff, S_eff, 1.0
@@ -609,7 +608,7 @@ class UnicyclePlannerBase:
         for t in range(self.horizon):
             u = controls[t]
             m, S = self.predict(m, S, u)
-            vis_diag = self.notebook_visibility_diagnostics(m, S)
+            vis_diag = self.planning_visibility_diagnostics(m, S)
             p_vis = vis_diag['p_vis']
             R_plan = vis_diag['R_plan']
             mu_y = Sigma_y = Gamma = None
@@ -626,13 +625,13 @@ class UnicyclePlannerBase:
                 goal_cov_t = self.goal_obs_cov_for_progress(
                     (float(progress_index) + float(t)) / max(self.goal_progress_n_steps, 1)
                 )
-                observation_risk = self.risk_weight_obs * self.notebook_risk_scale * risk(
+                observation_risk = self.risk_weight_obs * self.observation_risk_scale * risk(
                     mu_y, Sigma_y, (goal_obs, goal_cov_t)
                 )
             total_risk += weight_t * observation_risk
             if use_ambiguity_term and Sigma_y is not None:
                 total_amb += weight_t * (
-                    self.ambiguity_weight * self.notebook_ambiguity_scale * ambiguity(Sigma_y, Gamma, S)
+                    self.ambiguity_weight * self.ambiguity_term_scale * ambiguity(Sigma_y, Gamma, S)
                 )
             if self.use_visibility_model and self.visibility_weight > 0.0:
                 total_visibility += weight_t * self.visibility_weight * self._visibility_penalty_value(
@@ -784,7 +783,7 @@ class UnicyclePlannerBase:
         best_controls = self.prev_controls_flat.reshape(self.horizon, 2)
         total_cost = float(best_candidate['total_cost'])
         metrics = tuple(best_candidate['metrics'])
-        vis_diag = self.notebook_visibility_diagnostics(m0, S0)
+        vis_diag = self.planning_visibility_diagnostics(m0, S0)
 
         states = rollout_unicycle(m0, best_controls, self.dt)
         solve_time_s = float(max(time.perf_counter() - t_plan_start, 0.0))
@@ -804,7 +803,6 @@ class UnicyclePlannerBase:
             optimizer_nfev=optimizer_nfev,
             optimizer_message=optimizer_message,
             solve_time_s=solve_time_s,
-            used_fallback=False,
             selected_source=str(best_candidate.get('source', '')),
             p_vis_plan=float(vis_diag['p_vis']),
             p_vis_plan_eff=float(vis_diag['p_vis_eff']),

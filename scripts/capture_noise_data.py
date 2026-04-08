@@ -116,7 +116,7 @@ class NoiseCaptureNode(Node):
         try:
             self.file.flush()
             self.file.close()
-        except Exception:
+        except OSError:
             pass
 
 

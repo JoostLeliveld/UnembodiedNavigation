@@ -73,8 +73,8 @@ class ExperimentLogger(Node):
         self.declare_parameter('goal_prior_v_std_final', 18.0)
         self.declare_parameter('goal_tightening_power', 0.45)
         self.declare_parameter('goal_progress_n_steps', 90)
-        self.declare_parameter('notebook_risk_scale', 1.25)
-        self.declare_parameter('notebook_ambiguity_scale', 1.00)
+        self.declare_parameter('observation_risk_scale', 1.25)
+        self.declare_parameter('ambiguity_term_scale', 1.00)
         self.declare_parameter('visibility_weight', 0.0)
         self.declare_parameter('visibility_barrier_threshold', 0.0)
         self.declare_parameter('visibility_barrier_scale', 10.0)
@@ -126,8 +126,8 @@ class ExperimentLogger(Node):
         self.goal_prior_v_std_final = float(self.get_parameter('goal_prior_v_std_final').value)
         self.goal_tightening_power = float(self.get_parameter('goal_tightening_power').value)
         self.goal_progress_n_steps = int(self.get_parameter('goal_progress_n_steps').value)
-        self.notebook_risk_scale = float(self.get_parameter('notebook_risk_scale').value)
-        self.notebook_ambiguity_scale = float(self.get_parameter('notebook_ambiguity_scale').value)
+        self.observation_risk_scale = float(self.get_parameter('observation_risk_scale').value)
+        self.ambiguity_term_scale = float(self.get_parameter('ambiguity_term_scale').value)
         self.visibility_weight = float(self.get_parameter('visibility_weight').value)
         self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
         self.perception_use_geometry_occlusion = bool(
@@ -179,8 +179,8 @@ class ExperimentLogger(Node):
             'goal_prior_v_std_final': self.goal_prior_v_std_final,
             'goal_tightening_power': self.goal_tightening_power,
             'goal_progress_n_steps': self.goal_progress_n_steps,
-            'notebook_risk_scale': self.notebook_risk_scale,
-            'notebook_ambiguity_scale': self.notebook_ambiguity_scale,
+            'observation_risk_scale': self.observation_risk_scale,
+            'ambiguity_term_scale': self.ambiguity_term_scale,
             'visibility_weight': self.visibility_weight,
             'visibility_target_height_m': self.visibility_target_height_m,
             'perception_use_geometry_occlusion': self.perception_use_geometry_occlusion,

@@ -96,7 +96,7 @@ Caption: the primary thesis comparison is a planner-side observation-model chang
 - The baseline is **not** true dead reckoning.
 - The GP is an empirical detection-success field, not a general geometric occlusion theory.
 - ET1 is the primary validated planner implementation for the thesis-facing comparison.
-- `efe2` and `efer` now reuse the same cleaned notebook/CasADi-style planner path with `ET2`.
+- `efe2` and `efer` now reuse the same cleaned symbolic CasADi planner path with `ET2`.
 - The optimized planner path is symbolic CasADi objective construction plus SciPy `L-BFGS-B`, not finite-difference optimization.
 - `mpc` remains runnable as a retained secondary mode.
 - `base_planner.py` is still monolithic. The method is present, but the implementation is not yet as decomposed as a final polished research codebase.

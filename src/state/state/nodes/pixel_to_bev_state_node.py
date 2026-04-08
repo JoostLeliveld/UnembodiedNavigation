@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import math
+import time
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -77,6 +78,8 @@ class PixelToBevStateNode(Node):
         self._latest_odom_stamp = None
         self._last_xy = None
         self._last_yaw = 0.0
+        self._last_diag_parse_warn_wall = 0.0
+        self._last_heading_source = None
 
         theta_sources = ['pixel heading']
         if self.use_odom_heading_fallback:
@@ -96,8 +99,21 @@ class PixelToBevStateNode(Node):
     def _diag_callback(self, msg: Float64MultiArray):
         try:
             self._latest_diag = diagnostics_from_message(msg)
-        except Exception:
+        except (TypeError, ValueError, KeyError) as exc:
+            now = time.monotonic()
+            if (now - self._last_diag_parse_warn_wall) > 2.0:
+                self._last_diag_parse_warn_wall = now
+                self.get_logger().warn(
+                    f"Rejected malformed detection diagnostics message: {type(exc).__name__}: {exc}"
+                )
             return
+
+    def _set_heading_source(self, source: str) -> None:
+        source = str(source or '').strip() or 'unknown'
+        if source == self._last_heading_source:
+            return
+        self._last_heading_source = source
+        self.get_logger().info(f"State heading source switched to {source}")
 
     def _odom_callback(self, msg: Odometry):
         q = msg.pose.pose.orientation
@@ -173,13 +189,17 @@ class PixelToBevStateNode(Node):
         diag = self._matching_diag(msg.header.stamp)
 
         yaw_out = self._last_yaw
-        sigma_yaw = float(max(self.motion_yaw_sigma_rad, self.yaw_noise_floor_rad))
+        sigma_yaw = float(
+            max(self.motion_yaw_sigma_rad, self.odom_heading_sigma_rad, self.yaw_noise_floor_rad)
+        )
+        heading_source = 'held_previous_heading'
         if diag and bool(diag.get('detected', False)) and math.isfinite(float(diag.get('yaw_est', math.nan))):
             q = msg.pose.orientation
             siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
             cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
             yaw_out = math.atan2(siny_cosp, cosy_cosp)
             sigma_yaw = self._heading_sigma_from_diag(diag)
+            heading_source = 'pixel_heading'
         else:
             odom_applied = False
             if self.use_odom_heading_fallback:
@@ -188,12 +208,16 @@ class PixelToBevStateNode(Node):
                     yaw_out = odom_yaw
                     sigma_yaw = float(max(self.odom_heading_sigma_rad, self.yaw_noise_floor_rad))
                     odom_applied = True
+                    heading_source = 'odom_heading_fallback'
             if (not odom_applied) and self.infer_yaw_from_motion and self._last_xy is not None:
                 dx = float(x - self._last_xy[0])
                 dy = float(y - self._last_xy[1])
                 disp = math.hypot(dx, dy)
                 if disp >= self.motion_yaw_min_displacement_m:
                     yaw_out = math.atan2(dy, dx)
+                    sigma_yaw = float(max(self.motion_yaw_sigma_rad, self.yaw_noise_floor_rad))
+                    heading_source = 'motion_heading_fallback'
+        self._set_heading_source(heading_source)
         qx, qy, qz, qw = self._yaw_to_quaternion(yaw_out)
         self._last_xy = np.array([x, y], dtype=float)
         self._last_yaw = float(yaw_out)

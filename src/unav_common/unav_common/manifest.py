@@ -25,7 +25,7 @@ def git_hash(repo_root: str) -> Optional[str]:
             text=True,
         )
         return result.stdout.strip()
-    except Exception:
+    except (FileNotFoundError, PermissionError, OSError, subprocess.CalledProcessError):
         return None
 
 

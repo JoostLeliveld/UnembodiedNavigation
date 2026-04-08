@@ -1,4 +1,4 @@
-"""CasADi utilities for notebook-style EFE planning."""
+"""CasADi utilities for symbolic visibility-aware EFE planning."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def casadi_available() -> bool:
 
 
 @dataclass
-class CasadiNotebookSimpleParams:
+class CasadiEfeParams:
     Q: object
     R_visible: object
     R_miss: object
@@ -167,7 +167,7 @@ def _smoothstep_ca(x):
     return x * x * (3.0 - 2.0 * x)
 
 
-def goal_obs_cov_ca_for_progress(params: CasadiNotebookSimpleParams, progress):
+def goal_obs_cov_ca_for_progress(params: CasadiEfeParams, progress):
     progress_fast = ca.power(_clip_expr(progress, 0.0, 1.0), params.goal_tightening_power)
     a = _smoothstep_ca(progress_fast)
     sigma_u = (1.0 - a) * params.goal_prior_u_std_start + a * params.goal_prior_u_std_final
@@ -175,7 +175,7 @@ def goal_obs_cov_ca_for_progress(params: CasadiNotebookSimpleParams, progress):
     return ca.diag(ca.vertcat(ca.power(sigma_u, 2), ca.power(sigma_v, 2)))
 
 
-def visibility_penalty_ca(p_vis, p_vis_eff, params: CasadiNotebookSimpleParams):
+def visibility_penalty_ca(p_vis, p_vis_eff, params: CasadiEfeParams):
     penalty = 1.0 - p_vis
     if params.visibility_barrier_threshold > 0.0:
         penalty += _softplus_expr(
@@ -235,13 +235,13 @@ def ambiguity_ca(Sigma, Gamma, S):
     return 0.5 * (dim * math.log(2.0 * math.pi * math.e) + logdet)
 
 
-def notebook_simple_unicycle_ca(
+def visibility_aware_unicycle_efe_ca(
     u_flat,
     m0,
     S0,
     goal_obs,
     progress_index0,
-    params: CasadiNotebookSimpleParams,
+    params: CasadiEfeParams,
     g,
     dg,
     *,
@@ -280,7 +280,7 @@ def notebook_simple_unicycle_ca(
         elif approx == 'ET2':
             mu, Sigma, Gamma = et2_ca(m, S, R_plan, g, dg, d2g or [])
         else:
-            raise RuntimeError(f"Unsupported CasADi notebook approximation: {approx}")
+            raise RuntimeError(f"Unsupported CasADi approximation: {approx}")
 
         progress = (progress_index0 + float(t)) / denom
         goal_cov_t = goal_obs_cov_ca_for_progress(params, progress)
@@ -296,8 +296,8 @@ def notebook_simple_unicycle_ca(
     return total_risk + total_amb + total_control + total_vis + total_nogo
 
 
-def make_notebook_simple_valgrad_fn(
-    params: CasadiNotebookSimpleParams,
+def make_efe_valgrad_fn(
+    params: CasadiEfeParams,
     H,
     *,
     approx='ET1',
@@ -307,7 +307,7 @@ def make_notebook_simple_valgrad_fn(
     _require_casadi()
     approx = str(approx or 'ET1').upper()
     if approx not in ('ET1', 'ET2'):
-        raise RuntimeError("CasADi notebook-simple path supports only ET1 or ET2")
+        raise RuntimeError("CasADi EFE path supports only ET1 or ET2")
     g = make_g_from_homography(H)
 
     state_sym = ca.MX.sym('state_for_jac', 3)
@@ -340,7 +340,7 @@ def make_notebook_simple_valgrad_fn(
     goal_obs = ca.MX.sym('goal_obs', 2)
     progress_index0 = ca.MX.sym('progress_index0')
 
-    objective = notebook_simple_unicycle_ca(
+    objective = visibility_aware_unicycle_efe_ca(
         u_flat,
         m0,
         S0,
@@ -356,7 +356,7 @@ def make_notebook_simple_valgrad_fn(
     )
     gradient = ca.gradient(objective, u_flat)
     valgrad = ca.Function(
-        'notebook_simple_valgrad',
+        'visibility_aware_efe_valgrad',
         [u_flat, m0, S0, goal_obs, progress_index0],
         [objective, gradient],
         ['u_flat', 'm0', 'S0', 'goal_obs', 'progress_index0'],

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate notebook-style visibility summary plots from a logged run."""
+"""Generate visibility summary plots from a logged run."""
 
 from __future__ import annotations
 

@@ -92,8 +92,8 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('goal_prior_v_std_final', 18.0)
         _declare_if_not('goal_tightening_power', 0.45)
         _declare_if_not('goal_progress_n_steps', 90)
-        _declare_if_not('notebook_risk_scale', 1.25)
-        _declare_if_not('notebook_ambiguity_scale', 1.00)
+        _declare_if_not('observation_risk_scale', 1.25)
+        _declare_if_not('ambiguity_term_scale', 1.00)
         _declare_if_not('visibility_barrier_threshold', 0.0)
         _declare_if_not('visibility_barrier_scale', 10.0)
         _declare_if_not('use_nogo_cost', False)
@@ -158,7 +158,7 @@ class UnicyclePlannerNode(Node):
         if self.approx_method not in ('ET1', 'ET2'):
             raise RuntimeError("approx_method must be one of: ET1, ET2")
         self.planner_path_summary = (
-            f'approx_method={self.approx_method}, solver=casadi_notebook_simple'
+            f'approx_method={self.approx_method}, solver=casadi_symbolic_efe'
         )
         self.use_obs_risk = _as_bool(self.get_parameter('use_obs_risk').value)
         self.use_ambiguity = _as_bool(self.get_parameter('use_ambiguity').value)
@@ -176,8 +176,8 @@ class UnicyclePlannerNode(Node):
         self.goal_prior_v_std_final = float(self.get_parameter('goal_prior_v_std_final').value)
         self.goal_tightening_power = float(self.get_parameter('goal_tightening_power').value)
         self.goal_progress_n_steps = int(self.get_parameter('goal_progress_n_steps').value)
-        self.notebook_risk_scale = float(self.get_parameter('notebook_risk_scale').value)
-        self.notebook_ambiguity_scale = float(self.get_parameter('notebook_ambiguity_scale').value)
+        self.observation_risk_scale = float(self.get_parameter('observation_risk_scale').value)
+        self.ambiguity_term_scale = float(self.get_parameter('ambiguity_term_scale').value)
         self.visibility_barrier_threshold = float(self.get_parameter('visibility_barrier_threshold').value)
         self.visibility_barrier_scale = float(self.get_parameter('visibility_barrier_scale').value)
         self.use_nogo_cost = _as_bool(self.get_parameter('use_nogo_cost').value)
@@ -277,8 +277,8 @@ class UnicyclePlannerNode(Node):
             goal_prior_v_std_final=self.goal_prior_v_std_final,
             goal_tightening_power=self.goal_tightening_power,
             goal_progress_n_steps=self.goal_progress_n_steps,
-            notebook_risk_scale=self.notebook_risk_scale,
-            notebook_ambiguity_scale=self.notebook_ambiguity_scale,
+            observation_risk_scale=self.observation_risk_scale,
+            ambiguity_term_scale=self.ambiguity_term_scale,
             visibility_barrier_threshold=self.visibility_barrier_threshold,
             visibility_barrier_scale=self.visibility_barrier_scale,
             use_nogo_cost=self.use_nogo_cost,

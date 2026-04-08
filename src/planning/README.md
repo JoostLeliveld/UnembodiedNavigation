@@ -35,7 +35,7 @@ This package answers the main research question: how does planning change when f
 
 | File | Role |
 | --- | --- |
-| `planning/core/casadi_efe.py` | CasADi support for the cleaned ET1/ET2 notebook-style planner path |
+| `planning/core/casadi_efe.py` | CasADi support for the cleaned symbolic ET1/ET2 planner path |
 | `planning/core/gp_visibility_helpers.py` | shared lightweight GP math used by the empirical visibility fit/load path |
 | `planning/core/nogo_cost.py` | obstacle/no-go support cost |
 
