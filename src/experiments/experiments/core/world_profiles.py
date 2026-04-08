@@ -9,7 +9,7 @@ from ament_index_python.packages import get_package_share_directory
 from unav_common.occlusion_geometry import parse_occlusion_scene_from_world, scene_to_json
 
 
-VALID_PLANNERS = {"efe1", "efe2", "efer", "mpc", "geometric_baseline"}
+VALID_PLANNERS = {"efe1", "efe2", "efer", "mpc", "visibility_unaware_baseline"}
 
 
 def load_world_profiles(path: str) -> Dict[str, Any]:
@@ -162,8 +162,6 @@ def _validate_visibility_defaults(visibility_defaults: Dict[str, Any]) -> None:
         "visibility_gp_noise_var",
         "visibility_prior_occ",
         "visibility_beta",
-        "visibility_height_tau",
-        "visibility_ray_samples",
         "visibility_target_height_m",
         "nogo_weight",
         "nogo_safe_distance",

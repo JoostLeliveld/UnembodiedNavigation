@@ -1,0 +1,29 @@
+tasks:
+  warehouse_occ_light.world.sdf:
+    # Legacy aliases retained only so old notes and historical run manifests can
+    # still be interpreted. The main launches and thesis-facing docs use the E*
+    # benchmark names from tasks.yaml instead.
+    - name: T0_front_approach
+      maps_to: E0_visible_sanity
+      claim: nominal_stability
+      focus: visible_sanity
+    - name: T0b_front_commit
+      maps_to: E2_front_threshold_post
+      claim: local_commitment
+      focus: visible_commit_threshold
+    - name: T1_shadow_cross
+      maps_to: E5_shadow_tradeoff
+      claim: shadow_tradeoff
+      focus: visibility_tradeoff
+    - name: T2_front_visibility_arc
+      maps_to: E4_front_arc_full
+      claim: route_preference
+      focus: visible_reference
+    - name: T3_shadow_reacquire
+      maps_to: E6_shadow_reacquire
+      claim: reacquisition_debug
+      focus: detection_reacquisition
+    - name: T4_clearance_probe
+      maps_to: E7_clearance_probe
+      claim: clearance_debug
+      focus: obstacle_clearance

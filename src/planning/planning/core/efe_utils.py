@@ -2,7 +2,7 @@
 EFE/MPC math utilities (numpy-only).
 
 Ported from ICRA2026-WUnEmbodied-main/util.py and free_energy_agents.py,
-with JAX/Scipy replaced by finite-difference and numpy equivalents.
+with autodiff-specific pieces replaced by finite-difference and NumPy equivalents.
 """
 
 import numpy as np

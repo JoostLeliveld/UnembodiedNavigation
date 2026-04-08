@@ -112,7 +112,9 @@ def main() -> int:
     output_dir = args.output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    requested_methods = {name.strip() for name in (args.methods or ["efe1", "geometric_baseline"]) if name.strip()}
+    requested_methods = {
+        name.strip() for name in (args.methods or ["efe1", "visibility_unaware_baseline"]) if name.strip()
+    }
     run_dirs = sorted(path for path in run_root.glob("experiment_*") if path.is_dir())
     run_rows = []
     for run_dir in run_dirs:

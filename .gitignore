@@ -23,7 +23,10 @@ __pycache__/
 # Debug output
 *.gv
 
+# Local notes and scratch artifacts not part of the active thesis repo story
+src/docs/
+scripts/artifacts/
+
 core_tue4tm00_humble/
 ICRA2026-WUnEmbodied-main/
-docs/
 SPAICE2026-RxRover-main/

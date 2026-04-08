@@ -40,9 +40,14 @@ class ExperimentLogger(Node):
         self.declare_parameter('log_rate', 10.0)
         self.declare_parameter('seed', 0)
         self.declare_parameter('method', '')
+        self.declare_parameter('perception_backend', '')
         self.declare_parameter('world', '')
         self.declare_parameter('task', '')
         self.declare_parameter('planner', '')
+        self.declare_parameter('state_source_x', 'unknown')
+        self.declare_parameter('state_source_y', 'unknown')
+        self.declare_parameter('state_source_theta', 'unknown')
+        self.declare_parameter('state_estimator_mode', 'unknown')
         self.declare_parameter('use_pixel_correction', False)
         self.declare_parameter('use_ambiguity', False)
         self.declare_parameter('use_obs_risk', True)
@@ -55,9 +60,8 @@ class ExperimentLogger(Node):
         self.declare_parameter('goal_success_hold_s', 2.0)
         self.declare_parameter('frame_id', 'map_bev')
         self.declare_parameter('use_visibility_model', False)
-        self.declare_parameter('visibility_model', 'raycast_25d')
+        self.declare_parameter('visibility_model', 'gp_visibility')
         self.declare_parameter('visibility_artifact_path', '')
-        self.declare_parameter('risk_weight_state', 0.0)
         self.declare_parameter('risk_weight_obs', 1.0)
         self.declare_parameter('goal_sigma_uv', 2.0)
         self.declare_parameter('r_visible_uv', 2.5)
@@ -90,9 +94,14 @@ class ExperimentLogger(Node):
         log_dir = self.get_parameter('log_dir').value
         self.seed = int(self.get_parameter('seed').value)
         self.method = str(self.get_parameter('method').value)
+        self.perception_backend = str(self.get_parameter('perception_backend').value)
         self.world = self.get_parameter('world').value
         self.task = self.get_parameter('task').value
         self.planner = self.get_parameter('planner').value
+        self.state_source_x = str(self.get_parameter('state_source_x').value)
+        self.state_source_y = str(self.get_parameter('state_source_y').value)
+        self.state_source_theta = str(self.get_parameter('state_source_theta').value)
+        self.state_estimator_mode = str(self.get_parameter('state_estimator_mode').value)
         self.use_pixel_correction = bool(self.get_parameter('use_pixel_correction').value)
         self.use_ambiguity = bool(self.get_parameter('use_ambiguity').value)
         self.use_obs_risk = bool(self.get_parameter('use_obs_risk').value)
@@ -107,7 +116,6 @@ class ExperimentLogger(Node):
         self.use_visibility_model = bool(self.get_parameter('use_visibility_model').value)
         self.visibility_model = str(self.get_parameter('visibility_model').value)
         self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value)
-        self.risk_weight_state = float(self.get_parameter('risk_weight_state').value)
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
         self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
         self.r_visible_uv = float(self.get_parameter('r_visible_uv').value)
@@ -148,16 +156,20 @@ class ExperimentLogger(Node):
             'run_id': self.run_id,
             'timestamp': datetime.now().isoformat(),
             'method': self.method or self.planner,
+            'perception_backend': self.perception_backend,
             'world': self.world,
             'task': self.task,
             'planner': self.planner,
+            'state_source_x': self.state_source_x,
+            'state_source_y': self.state_source_y,
+            'state_source_theta': self.state_source_theta,
+            'state_estimator_mode': self.state_estimator_mode,
             'use_pixel_correction': self.use_pixel_correction,
             'use_ambiguity': self.use_ambiguity,
             'use_obs_risk': self.use_obs_risk,
             'use_visibility_model': self.use_visibility_model,
             'visibility_model': self.visibility_model,
             'visibility_artifact_path': self.visibility_artifact_path,
-            'risk_weight_state': self.risk_weight_state,
             'risk_weight_obs': self.risk_weight_obs,
             'goal_sigma_uv': self.goal_sigma_uv,
             'r_visible_uv': self.r_visible_uv,
@@ -301,7 +313,15 @@ class ExperimentLogger(Node):
 
         rate = float(self.get_parameter('log_rate').value)
         self.create_timer(1.0 / max(rate, 0.1), self._log_once)
-        self.get_logger().info(f'Experiment logger writing to {self.log_path}')
+        self.get_logger().info(
+            f'Experiment logger writing to {self.log_path} '
+            f'(method={self.method or self.planner}, world={self.world}, task={self.task})'
+        )
+        self.get_logger().info(
+            'State-estimator provenance: '
+            f'mode={self.state_estimator_mode}, '
+            f'x={self.state_source_x}, y={self.state_source_y}, theta={self.state_source_theta}'
+        )
         if self.perception_file is not None:
             self.get_logger().info(f'Perception samples writing to {self.perception_log_path}')
         if self.auto_stop_on_goal:

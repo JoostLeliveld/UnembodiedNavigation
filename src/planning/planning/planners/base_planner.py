@@ -5,13 +5,12 @@ import math
 import time
 import numpy as np
 
-from scipy.optimize import fmin_l_bfgs_b, minimize
+from scipy.optimize import minimize
 
 from planning.core.dynamics import unicycle_step, unicycle_jacobian, unicycle_process_noise
 from planning.core.efe_utils import ET1, ET2, UT, ambiguity, risk
 from planning.core.nogo_cost import NogoCostConfig, NogoZoneCostModel
 from planning.core.visibility_gp_map import GPVisibilityMapConfig, GPVisibilityMapModel
-from planning.core.visibility_raycast_25d import Raycast25DVisibilityConfig, Raycast25DVisibilityModel
 from unav_common.camera_model import ObliqueCameraModel
 from planning.core.rollout import rollout_unicycle
 
@@ -44,7 +43,7 @@ class PlanResult:
 class UnicyclePlannerBase:
     """Shared unicycle planner logic. Subclasses define objective specifics."""
 
-    APPROX_METHOD = 'ET2'  # ET1 | ET2 | UT | None
+    APPROX_METHOD = 'ET1'
     USE_OBS_RISK = True
     USE_AMBIGUITY = True
 
@@ -61,10 +60,7 @@ class UnicyclePlannerBase:
         process_noise_xy,
         process_noise_theta,
         obs_noise_uv,
-        goal_sigma_xy,
-        goal_sigma_theta,
         goal_sigma_uv,
-        risk_weight_state,
         risk_weight_obs,
         ambiguity_weight,
         optimizer_maxiter,
@@ -74,12 +70,10 @@ class UnicyclePlannerBase:
         approx_method=None,
         use_obs_risk=None,
         use_ambiguity=None,
-        math_mode='legacy',
-        optimizer_backend=None,
         seed,
         camera_params,
         use_visibility_model=False,
-        visibility_model='raycast_25d',
+        visibility_model='gp_visibility',
         visibility_weight=0.0,
         visibility_map_min_x=-5.0,
         visibility_map_max_x=5.0,
@@ -91,15 +85,10 @@ class UnicyclePlannerBase:
         visibility_gp_noise_var=0.15,
         visibility_prior_occ=0.005,
         visibility_beta=1.0,
-        visibility_height_tau=0.08,
-        visibility_ray_samples=120,
         visibility_target_height_m=0.0,
         visibility_geometry_json='',
         visibility_artifact_path='',
         visibility_gp_seed=0,
-        visibility_r_bad_uv=28.0,
-        visibility_cov_pos_scale=2.0,
-        visibility_cov_theta_scale=0.8,
         r_visible_uv=2.5,
         r_miss_uv=420.0,
         visibility_power=3.0,
@@ -139,16 +128,10 @@ class UnicyclePlannerBase:
         self.process_noise_theta = float(process_noise_theta)
         self.obs_noise_uv = float(obs_noise_uv)
 
-        self.goal_sigma_xy = float(goal_sigma_xy)
-        self.goal_sigma_theta = float(goal_sigma_theta)
         self.goal_sigma_uv = float(goal_sigma_uv)
         if self.goal_sigma_uv <= 0.0:
             raise ValueError("goal_sigma_uv must be > 0.0; do not use 0.0 as a sentinel")
 
-        self.math_mode = str(math_mode or 'legacy').strip().lower()
-        if self.math_mode not in ('legacy', 'notebook_simple'):
-            raise ValueError("math_mode must be 'legacy' or 'notebook_simple'")
-        self.risk_weight_state = float(risk_weight_state)
         self.risk_weight_obs = float(risk_weight_obs)
         self.ambiguity_weight = float(ambiguity_weight)
         self.r_visible_uv = float(r_visible_uv)
@@ -171,8 +154,8 @@ class UnicyclePlannerBase:
             self.approx_method = self.APPROX_METHOD
         else:
             self.approx_method = str(approx_method).upper()
-        if self.math_mode == 'notebook_simple' and self.approx_method != 'ET1':
-            raise ValueError("math_mode=notebook_simple requires approx_method='ET1'")
+        if self.approx_method not in ('ET1', 'ET2'):
+            raise ValueError("approx_method must be 'ET1' or 'ET2'")
 
         if use_obs_risk is None:
             self.use_obs_risk = bool(self.USE_OBS_RISK)
@@ -201,13 +184,10 @@ class UnicyclePlannerBase:
             fov_h_rad=camera_params['fov_h_rad'],
         )
 
-        self.optimizer_backend = str(optimizer_backend or 'auto').lower()
         self.runtime_debug = bool(runtime_debug)
         self.use_visibility_model = bool(use_visibility_model)
         self.visibility_model_name = str(visibility_model or 'none').strip().lower()
         self.visibility_weight = float(visibility_weight)
-        self.visibility_cov_pos_scale = float(max(visibility_cov_pos_scale, 0.0))
-        self.visibility_cov_theta_scale = float(max(visibility_cov_theta_scale, 0.0))
         self._visibility_min_prob = 1e-4
         self.visibility_model = None
         self.use_nogo_cost = bool(use_nogo_cost)
@@ -230,48 +210,15 @@ class UnicyclePlannerBase:
             self.r_miss_uv ** 2,
             self.r_miss_uv ** 2,
         ])
-        if self.math_mode == 'notebook_simple':
-            self.R = self.R_visible.copy()
-            self.R_bad = self.R_miss.copy()
-        else:
-            self.R = np.diag([
-                self.obs_noise_uv ** 2,
-                self.obs_noise_uv ** 2,
-            ])
-            self.R_bad = np.diag([
-                float(visibility_r_bad_uv) ** 2,
-                float(visibility_r_bad_uv) ** 2,
-            ])
+        self.R = self.R_visible.copy()
 
-        raycast_aliases = ('raycast_25d', 'raycast25d', 'raycast')
         gp_visibility_aliases = ('gp_visibility', 'gpvis')
-        valid_visibility_models = raycast_aliases + gp_visibility_aliases + ('', 'none')
+        valid_visibility_models = gp_visibility_aliases + ('', 'none')
         if self.visibility_model_name not in valid_visibility_models:
             raise ValueError(
-                "visibility_model must be one of: raycast_25d, raycast25d, raycast, gp_visibility, gpvis"
+                "visibility_model must be one of: gp_visibility, gpvis, none"
             )
-        if self.visibility_model_name in raycast_aliases:
-            vis_cfg = Raycast25DVisibilityConfig(
-                map_xmin=float(visibility_map_min_x),
-                map_xmax=float(visibility_map_max_x),
-                map_ymin=float(visibility_map_min_y),
-                map_ymax=float(visibility_map_max_y),
-                map_nx=int(visibility_map_nx),
-                map_ny=int(visibility_map_ny),
-                gp_length_scale=float(visibility_gp_length_scale),
-                gp_noise_var=float(visibility_gp_noise_var),
-                prior_occ=float(visibility_prior_occ),
-                beta=float(visibility_beta),
-                height_tau=float(visibility_height_tau),
-                ray_samples=int(visibility_ray_samples),
-                target_height_m=float(visibility_target_height_m),
-                geometry_json=str(visibility_geometry_json or ''),
-                camera_pos=tuple(np.asarray(camera_params['cam_pos'], dtype=float).tolist()),
-                seed=int(visibility_gp_seed),
-                min_prob=self._visibility_min_prob,
-            )
-            self.visibility_model = Raycast25DVisibilityModel(vis_cfg)
-        elif self.visibility_model_name in gp_visibility_aliases:
+        if self.visibility_model_name in gp_visibility_aliases:
             vis_cfg = GPVisibilityMapConfig(
                 map_xmin=float(visibility_map_min_x),
                 map_xmax=float(visibility_map_max_x),
@@ -305,16 +252,7 @@ class UnicyclePlannerBase:
             )
             self.nogo_cost_model = NogoZoneCostModel(nogo_cfg)
 
-        self._approx_fn = None
-        if self.approx_method == 'ET1':
-            self._approx_fn = ET1
-        elif self.approx_method == 'ET2':
-            self._approx_fn = ET2
-        elif self.approx_method == 'UT':
-            self._approx_fn = UT
-
         self.prev_controls_flat = None
-        self._jax_valgrad_cache = {}
         self._casadi_valgrad_cache = {}
 
     def _runtime_debug_print(self, message):
@@ -323,7 +261,7 @@ class UnicyclePlannerBase:
         try:
             print(message, flush=True)
         except (BrokenPipeError, OSError):
-            # Launch wrappers can close stdout while a long JAX compile is still running.
+            # Launch wrappers can close stdout while planner work is still running.
             pass
 
     def process_noise(self, dt=None):
@@ -365,9 +303,6 @@ class UnicyclePlannerBase:
     def visibility_probability_belief(self, m, S):
         if (not self.use_visibility_model) or (self.visibility_model is None):
             return 1.0
-        if self.math_mode != 'notebook_simple':
-            del S
-            return self.visibility_probability(m)
         mean_xy = np.asarray(m[:2], dtype=float).reshape(2)
         cov_xy = np.asarray(S[:2, :2], dtype=float).reshape(2, 2)
         cov_xy = 0.5 * (cov_xy + cov_xy.T)
@@ -393,48 +328,6 @@ class UnicyclePlannerBase:
             1.0 - self._visibility_min_prob,
         )
         return float(np.clip(np.sum(weights * probs), self._visibility_min_prob, 1.0 - self._visibility_min_prob))
-
-    def _make_visibility_belief_prob_jax(self, prob_state_jax):
-        import jax.numpy as jnp
-
-        eps = float(self._visibility_min_prob)
-        def p_vis_belief(m, S):
-            if self.math_mode != 'notebook_simple':
-                del S
-                return jnp.clip(prob_state_jax(m), eps, 1.0 - eps)
-            kappa = max(float(self.visibility_sigma_kappa), 1e-6)
-            mean_xy = jnp.asarray(m[:2], dtype=jnp.float64).reshape((2,))
-            cov_xy = jnp.asarray(S[:2, :2], dtype=jnp.float64).reshape((2, 2))
-            cov_xy = 0.5 * (cov_xy + cov_xy.T)
-            scale = jnp.sqrt(jnp.asarray(2.0 + kappa, dtype=jnp.float64))
-            chol = jnp.linalg.cholesky(cov_xy + 1e-9 * jnp.eye(2, dtype=jnp.float64))
-            spread = scale * chol
-            sigma_points = jnp.vstack(
-                [
-                    mean_xy,
-                    mean_xy + spread[:, 0],
-                    mean_xy - spread[:, 0],
-                    mean_xy + spread[:, 1],
-                    mean_xy - spread[:, 1],
-                ]
-            )
-            weights = jnp.asarray(
-                [kappa / (2.0 + kappa)] + [1.0 / (2.0 * (2.0 + kappa))] * 4,
-                dtype=jnp.float64,
-            )
-            vals = jnp.clip(
-                jnp.asarray(
-                    [
-                        prob_state_jax(jnp.array([sigma_points[i, 0], sigma_points[i, 1], m[2]], dtype=m.dtype))
-                        for i in range(5)
-                    ]
-                ),
-                eps,
-                1.0 - eps,
-            )
-            return jnp.clip(jnp.sum(weights * vals), eps, 1.0 - eps)
-
-        return p_vis_belief
 
     @staticmethod
     def _smoothstep(x):
@@ -463,8 +356,6 @@ class UnicyclePlannerBase:
         return penalty
 
     def goal_obs_cov_for_progress(self, progress):
-        if self.math_mode != 'notebook_simple':
-            return self._goal_obs_cov()
         progress_fast = float(np.clip(progress, 0.0, 1.0)) ** self.goal_tightening_power
         a = self._smoothstep(progress_fast)
         sigma_u = (1.0 - a) * self.goal_prior_u_std_start + a * self.goal_prior_u_std_final
@@ -492,13 +383,11 @@ class UnicyclePlannerBase:
         return float(self.nogo_cost_model.penalty_state_np(m))
 
     def _resolve_plan_problem(self, m0, goal_xy):
-        goal_theta = float(m0[2]) if (self.risk_weight_state > 0.0 and self.math_mode != 'notebook_simple') else 0.0
+        goal_theta = 0.0
         goal_state = self._goal_state(goal_xy, goal_theta)
-        goal_cov = self._goal_state_cov()
 
         use_observation_risk = self.use_obs_risk
         use_ambiguity_term = self.use_ambiguity
-        use_state_risk = self.risk_weight_state > 0.0 and self.math_mode != 'notebook_simple'
 
         goal_obs = None
         goal_obs_cov = None
@@ -508,20 +397,14 @@ class UnicyclePlannerBase:
 
         return (
             goal_state,
-            goal_cov,
             goal_obs,
             goal_obs_cov,
             use_observation_risk,
             use_ambiguity_term,
-            use_state_risk,
         )
 
     def _nominal_controls_flat(self):
-        if self.math_mode == 'notebook_simple':
-            return np.zeros(self.horizon * 2, dtype=float)
-        x0 = np.zeros(self.horizon * 2, dtype=float)
-        x0[0::2] = 0.5 * (self.v_min + self.v_max)
-        return x0
+        return np.zeros(self.horizon * 2, dtype=float)
 
     def _shift_controls_flat(self, controls_flat, shift_steps=None):
         controls = np.asarray(controls_flat, dtype=float).reshape(self.horizon, 2)
@@ -542,15 +425,9 @@ class UnicyclePlannerBase:
             return self._shift_controls_flat(self.prev_controls_flat)
         return self._nominal_controls_flat()
 
-    def _objective_scales(self, controls_flat, m0, S0, goal_state, goal_cov, goal_obs, goal_obs_cov):
-        if self.math_mode == 'notebook_simple':
-            return 1.0, 1.0
-        _, metrics = self._evaluate_controls(
-            controls_flat, m0, S0, goal_state, goal_cov, goal_obs, goal_obs_cov, True
-        )
-        risk_scale = float(max(abs(metrics[0]), 1.0))
-        ambiguity_scale = float(max(abs(metrics[1]), 1.0))
-        return risk_scale, ambiguity_scale
+    def _objective_scales(self, controls_flat, m0, S0, goal_state, goal_obs, goal_obs_cov):
+        del controls_flat, m0, S0, goal_state, goal_obs, goal_obs_cov
+        return 1.0, 1.0
 
     @staticmethod
     def _scaled_objective_from_metrics(metrics, objective_scales):
@@ -570,7 +447,6 @@ class UnicyclePlannerBase:
         m0,
         S0,
         goal_state,
-        goal_cov,
         goal_obs,
         goal_obs_cov,
         objective_scales,
@@ -584,7 +460,6 @@ class UnicyclePlannerBase:
             m0,
             S0,
             goal_state,
-            goal_cov,
             goal_obs,
             goal_obs_cov,
             True,
@@ -598,70 +473,20 @@ class UnicyclePlannerBase:
             'scaled_total': float(scaled_total),
         }
 
-    def _resolve_use_jax_backend(self, backend):
-        allowed = ('auto', 'jax', 'casadi') if self.math_mode != 'notebook_simple' else ('auto', 'jax', 'scipy', 'casadi')
-        if backend not in allowed:
-            raise ValueError(
-                f"Unknown optimizer_backend '{self.optimizer_backend}'. Expected {'|'.join(allowed)}."
-            )
-
-        if backend == 'casadi':
-            return False
-
-        if self.approx_method not in ('ET1', 'ET2'):
-            raise RuntimeError(
-                f"optimizer_backend={backend} does not support approx_method={self.approx_method} "
-                "(supported: ET1, ET2)."
-            )
-
-        try:
-            from planning.core import jax_efe
-            if not jax_efe.jax_available():
-                raise RuntimeError(f"optimizer_backend={backend} but JAX is not available")
-        except Exception:
-            raise
-        return True
-
-    def _resolve_use_casadi_backend(self, backend):
-        allowed = ('auto', 'jax', 'casadi') if self.math_mode != 'notebook_simple' else ('auto', 'jax', 'scipy', 'casadi')
-        if backend not in allowed:
-            raise ValueError(
-                f"Unknown optimizer_backend '{self.optimizer_backend}'. Expected {'|'.join(allowed)}."
-            )
-
-        if backend != 'casadi':
-            return False
-
-        if self.math_mode != 'notebook_simple':
-            raise RuntimeError("optimizer_backend=casadi currently supports only math_mode=notebook_simple")
-        if self.approx_method != 'ET1':
-            raise RuntimeError("optimizer_backend=casadi currently supports only approx_method=ET1")
-
-        try:
-            from planning.core import casadi_efe
-            if not casadi_efe.casadi_available():
-                raise RuntimeError("optimizer_backend=casadi but CasADi is not available")
-        except Exception:
-            raise
-        return True
-
     def _autodiff_cache_key(
         self,
         goal_state,
         goal_obs,
         use_observation_risk,
         use_ambiguity_term,
-        use_state_risk,
     ):
+        del goal_state
         return (
-            self.math_mode,
             self.approx_method,
             bool(use_ambiguity_term),
             bool(use_observation_risk),
-            bool(use_state_risk),
             bool(self.use_visibility_model),
             float(self.control_weight),
-            float(self.risk_weight_state),
             float(self.risk_weight_obs),
             float(self.ambiguity_weight),
             float(self.r_visible_uv),
@@ -680,164 +505,35 @@ class UnicyclePlannerBase:
             float(self.visibility_barrier_scale),
             float(self.discount_gamma),
             float(self.visibility_weight),
-            float(self.visibility_cov_pos_scale),
-            float(self.visibility_cov_theta_scale),
             bool(self.use_nogo_cost),
             tuple(self.nogo_cost_model.signature) if self.nogo_cost_model is not None else (),
             int(self.horizon),
             float(self.dt),
-            int(np.asarray(goal_state, dtype=float).shape[0]),
             int(np.asarray(goal_obs, dtype=float).shape[0]),
-            tuple(np.round(np.asarray(np.diag(self.R_bad), dtype=float), 8).tolist()),
             tuple(self.visibility_model.signature) if self.visibility_model is not None else (),
         )
-
-    def _get_jax_valgrad(
-        self,
-        goal_state,
-        goal_cov,
-        goal_obs,
-        goal_obs_cov,
-        *,
-        use_observation_risk,
-        use_ambiguity_term,
-        use_state_risk,
-    ):
-        from planning.core import jax_efe
-        import jax.numpy as jnp
-
-        Q = self.process_noise(self.dt)
-        if goal_obs is None:
-            goal_obs = self._goal_obs(goal_state)
-        if goal_obs_cov is None:
-            goal_obs_cov = self._goal_obs_cov()
-
-        cache_dir = jax_efe.configure_persistent_cache()
-        if cache_dir:
-            self._runtime_debug_print(
-                f"[planner_debug] JAX persistent cache enabled at {cache_dir}"
-            )
-
-        cache_key = self._autodiff_cache_key(
-            goal_state,
-            goal_obs,
-            use_observation_risk,
-            use_ambiguity_term,
-            use_state_risk,
-        )
-        valgrad = self._jax_valgrad_cache.get(cache_key)
-        self._runtime_debug_print(
-            "[planner_debug] JAX valgrad cache "
-            f"{'hit' if valgrad is not None else 'miss'} "
-            f"(horizon={self.horizon}, approx={self.approx_method})"
-        )
-        if valgrad is None:
-            build_start = time.perf_counter()
-            p_vis_jax = None
-            prob_state_jax = None
-            if self.use_visibility_model and self.visibility_model is not None:
-                prob_state_jax = self.visibility_model.make_prob_state_jax()
-                p_vis_jax = self._make_visibility_belief_prob_jax(prob_state_jax)
-            nogo_cost_jax = None
-            if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
-                nogo_cost_jax = self.nogo_cost_model.make_penalty_state_jax()
-            g_jax = jax_efe.make_g_from_homography(self.camera.H)
-            if self.math_mode == 'notebook_simple':
-                params_j = jax_efe.JaxNotebookSimpleParams(
-                    Q=jnp.array(Q),
-                    R_visible=jnp.array(self.R_visible),
-                    R_miss=jnp.array(self.R_miss),
-                    control_weight=float(self.control_weight),
-                    risk_scale=float(self.risk_weight_obs * self.notebook_risk_scale if use_observation_risk else 0.0),
-                    ambiguity_scale=float(self.ambiguity_weight * self.notebook_ambiguity_scale if use_ambiguity_term else 0.0),
-                    visibility_weight=float(self.visibility_weight if self.use_visibility_model else 0.0),
-                    visibility_barrier_threshold=float(self.visibility_barrier_threshold),
-                    visibility_barrier_scale=float(self.visibility_barrier_scale),
-                    discount_gamma=float(self.discount_gamma),
-                    visibility_power=float(self.visibility_power),
-                    visibility_sigma_kappa=float(self.visibility_sigma_kappa),
-                    goal_prior_u_std_start=float(self.goal_prior_u_std_start),
-                    goal_prior_v_std_start=float(self.goal_prior_v_std_start),
-                    goal_prior_u_std_final=float(self.goal_prior_u_std_final),
-                    goal_prior_v_std_final=float(self.goal_prior_v_std_final),
-                    goal_tightening_power=float(self.goal_tightening_power),
-                    goal_progress_n_steps=int(self.goal_progress_n_steps),
-                    time_horizon=int(self.horizon),
-                    dt=float(self.dt),
-                    Du=2,
-                )
-                valgrad = jax_efe.make_notebook_simple_valgrad_fn(
-                    params_j,
-                    g_jax,
-                    p_vis_state=prob_state_jax,
-                    nogo_cost=nogo_cost_jax,
-                    jit=True,
-                )
-            else:
-                params_j = jax_efe.JaxUnicycleParams(
-                    Q=jnp.array(Q),
-                    R=jnp.array(self.R),
-                    R_bad=jnp.array(self.R_bad),
-                    control_weight=float(self.control_weight),
-                    risk_weight_state=float(self.risk_weight_state),
-                    risk_weight_obs=float(self.risk_weight_obs),
-                    ambiguity_weight=float(self.ambiguity_weight),
-                    visibility_weight=float(self.visibility_weight),
-                    vis_cov_pos_scale=float(self.visibility_cov_pos_scale),
-                    vis_cov_theta_scale=float(self.visibility_cov_theta_scale),
-                    time_horizon=int(self.horizon),
-                    dt=float(self.dt),
-                    Du=2,
-                )
-                valgrad = jax_efe.make_unicycle_valgrad_fn(
-                    params_j,
-                    g_jax,
-                    approx=self.approx_method,
-                    add_ambiguity=use_ambiguity_term,
-                    use_obs_risk=use_observation_risk,
-                    use_state_risk=use_state_risk,
-                    p_vis=p_vis_jax,
-                    nogo_cost=nogo_cost_jax,
-                    mode='rev',
-                    jit=True,
-                )
-            self._jax_valgrad_cache[cache_key] = valgrad
-            self._runtime_debug_print(
-                "[planner_debug] JAX valgrad function prepared in "
-                f"{(time.perf_counter() - build_start) * 1000.0:.1f} ms"
-            )
-
-        return valgrad, jnp
 
     def _get_casadi_valgrad(
         self,
         goal_state,
-        goal_cov,
         goal_obs,
-        goal_obs_cov,
         *,
         use_observation_risk,
         use_ambiguity_term,
-        use_state_risk,
     ):
         from planning.core import casadi_efe
 
-        if self.math_mode != 'notebook_simple':
-            raise RuntimeError("optimizer_backend=casadi currently supports only math_mode=notebook_simple")
-        if self.approx_method != 'ET1':
-            raise RuntimeError("optimizer_backend=casadi currently supports only approx_method=ET1")
+        if not casadi_efe.casadi_available():
+            raise RuntimeError("CasADi is not available")
 
         if goal_obs is None:
             goal_obs = self._goal_obs(goal_state)
-        if goal_obs_cov is None:
-            goal_obs_cov = self._goal_obs_cov()
 
         cache_key = self._autodiff_cache_key(
             goal_state,
             goal_obs,
             use_observation_risk,
             use_ambiguity_term,
-            use_state_risk,
         )
         valgrad = self._casadi_valgrad_cache.get(cache_key)
         self._runtime_debug_print(
@@ -879,6 +575,7 @@ class UnicyclePlannerBase:
             valgrad = casadi_efe.make_notebook_simple_valgrad_fn(
                 params_ca,
                 self.camera.H,
+                approx=self.approx_method,
                 p_vis_state=p_vis_ca,
                 nogo_cost=nogo_cost_ca,
             )
@@ -890,119 +587,27 @@ class UnicyclePlannerBase:
 
         return valgrad
 
-    def warmup_jax(self, m0, S0, goal_xy):
-        backend = self.optimizer_backend
-        if backend == 'casadi':
-            return False
-        use_jax = self._resolve_use_jax_backend(backend)
-        if not use_jax:
-            return False
-
-        (
-            goal_state,
-            goal_cov,
-            goal_obs,
-            goal_obs_cov,
-            use_observation_risk,
-            use_ambiguity_term,
-            use_state_risk,
-        ) = self._resolve_plan_problem(m0, goal_xy)
-        valgrad, jnp = self._get_jax_valgrad(
-            goal_state,
-            goal_cov,
-            goal_obs,
-            goal_obs_cov,
-            use_observation_risk=use_observation_risk,
-            use_ambiguity_term=use_ambiguity_term,
-            use_state_risk=use_state_risk,
-        )
-
-        x0 = self._initial_controls_flat()
-        warm_start = time.perf_counter()
-        if self.math_mode == 'notebook_simple':
-            val, grad = valgrad(
-                jnp.array(x0),
-                jnp.array(m0),
-                jnp.array(S0),
-                jnp.array(goal_obs if goal_obs is not None else self._goal_obs(goal_state)),
-                jnp.asarray(0.0, dtype=jnp.float64),
-            )
-        else:
-            objective_scales = self._objective_scales(
-                x0, m0, S0, goal_state, goal_cov, goal_obs, goal_obs_cov
-            )
-            val, grad = valgrad(
-                jnp.array(x0),
-                jnp.array(m0),
-                jnp.array(S0),
-                jnp.array(goal_state),
-                jnp.array(goal_cov),
-                jnp.array(goal_obs if goal_obs is not None else self._goal_obs(goal_state)),
-                jnp.array(goal_obs_cov if goal_obs_cov is not None else self._goal_obs_cov()),
-                jnp.array(objective_scales[0], dtype=jnp.float64),
-                jnp.array(objective_scales[1], dtype=jnp.float64),
-            )
-        val_out = float(val)
-        grad_out = np.array(grad, dtype=float)
-        self._runtime_debug_print(
-            "[planner_debug] JAX warm-up completed in "
-            f"{(time.perf_counter() - warm_start) * 1000.0:.1f} ms "
-            f"with J={val_out:.3f}, grad_norm={np.linalg.norm(grad_out):.3f}"
-        )
-        return True
-
     def observation_model_with_visibility(self, m_pred, S_pred):
         """Visibility-aware measurement shaping used by objective and correction."""
         S_pred = np.asarray(S_pred, dtype=float)
         if (not self.use_visibility_model) or (self.visibility_model is None):
-            R_eff = np.asarray(self.R_visible if self.math_mode == 'notebook_simple' else self.R, dtype=float)
+            R_eff = np.asarray(self.R_visible, dtype=float)
             S_eff = S_pred.copy()
             return 1.0, R_eff, S_eff, 1.0
 
-        if self.math_mode == 'notebook_simple':
-            diag = self.notebook_visibility_diagnostics(m_pred, S_pred)
-            R_eff = np.asarray(diag['R_plan'], dtype=float)
-            S_eff = S_pred.copy()
-            return float(diag['p_vis']), R_eff, S_eff, 1.0
-
-        p = self.visibility_probability_belief(m_pred, S_pred)
-        q = 1.0 - p
-
-        R_eff = p * self.R + q * self.R_bad
+        diag = self.notebook_visibility_diagnostics(m_pred, S_pred)
+        R_eff = np.asarray(diag['R_plan'], dtype=float)
         S_eff = S_pred.copy()
-        if S_eff.shape[0] >= 2:
-            scale_xy = 1.0 + self.visibility_cov_pos_scale * q
-            S_eff[0, 0] *= scale_xy
-            S_eff[1, 1] *= scale_xy
-        if S_eff.shape[0] >= 3:
-            scale_th = 1.0 + self.visibility_cov_theta_scale * q
-            S_eff[2, 2] *= scale_th
-        gain_scale = p
-
-        R_eff = 0.5 * (R_eff + R_eff.T) + 1e-9 * np.eye(R_eff.shape[0])
-        S_eff = 0.5 * (S_eff + S_eff.T) + 1e-9 * np.eye(S_eff.shape[0])
-        return p, R_eff, S_eff, gain_scale
+        return float(diag['p_vis']), R_eff, S_eff, 1.0
 
     def _goal_state(self, goal_xy, theta):
         return np.array([goal_xy[0], goal_xy[1], theta], dtype=float)
-
-    def _goal_state_cov(self):
-        return np.diag([
-            self.goal_sigma_xy ** 2,
-            self.goal_sigma_xy ** 2,
-            self.goal_sigma_theta ** 2,
-        ])
 
     def _goal_obs(self, goal_state):
         return np.asarray(self.g_obs(goal_state), dtype=float)
 
     def _goal_obs_cov(self):
-        if self.math_mode == 'notebook_simple':
-            return self.goal_obs_cov_for_progress(0.0)
-        return np.diag([
-            self.goal_sigma_uv ** 2,
-            self.goal_sigma_uv ** 2,
-        ]).astype(float)
+        return self.goal_obs_cov_for_progress(0.0)
 
     def _evaluate_controls(
         self,
@@ -1010,13 +615,13 @@ class UnicyclePlannerBase:
         m0,
         S0,
         goal_state,
-        goal_cov,
         goal_obs,
         goal_obs_cov,
         return_metrics=False,
         *,
         progress_index=0.0,
     ):
+        del goal_state, goal_obs_cov
         controls_flat = np.asarray(controls_flat, dtype=float)
         if controls_flat.size != self.horizon * 2:
             controls_flat = controls_flat[:self.horizon * 2]
@@ -1031,73 +636,41 @@ class UnicyclePlannerBase:
         total_obstacle = 0.0
         use_observation_risk = self.use_obs_risk
         use_ambiguity_term = self.use_ambiguity
-        use_state_risk = self.risk_weight_state > 0.0 and self.math_mode != 'notebook_simple'
 
         for t in range(self.horizon):
             u = controls[t]
             m, S = self.predict(m, S, u)
-            if self.math_mode == 'notebook_simple':
-                vis_diag = self.notebook_visibility_diagnostics(m, S)
-                p_vis = vis_diag['p_vis']
-                R_plan = vis_diag['R_plan']
-                mu_y = Sigma_y = Gamma = None
-                if use_observation_risk or use_ambiguity_term:
-                    mu_y, Sigma_y, Gamma = self.approx_observation(m, S, method='ET1', R_override=R_plan)
-                weight_t = self.discount_gamma ** t
-                observation_risk = 0.0
-                if use_observation_risk and mu_y is not None:
-                    goal_cov_t = self.goal_obs_cov_for_progress(
-                        (float(progress_index) + float(t)) / max(self.goal_progress_n_steps, 1)
-                    )
-                    observation_risk = self.risk_weight_obs * self.notebook_risk_scale * risk(
-                        mu_y, Sigma_y, (goal_obs, goal_cov_t)
-                    )
-                total_risk += weight_t * observation_risk
-                if use_ambiguity_term and Sigma_y is not None:
-                    total_amb += weight_t * (
-                        self.ambiguity_weight * self.notebook_ambiguity_scale * ambiguity(Sigma_y, Gamma, S)
-                    )
-                if self.use_visibility_model and self.visibility_weight > 0.0:
-                    total_visibility += weight_t * self.visibility_weight * self._visibility_penalty_value(
-                        p_vis, vis_diag.get('p_vis_eff', p_vis)
-                    )
-                total_obstacle += weight_t * self.obstacle_penalty(m)
-                total_control += weight_t * self.control_weight * float(u[0] ** 2 + u[1] ** 2)
-            else:
-                p_vis, R_eff, S_eff, _ = self.observation_model_with_visibility(m, S)
-
-                mu_y = Sigma_y = Gamma = None
-                if use_observation_risk or use_ambiguity_term:
-                    mu_y, Sigma_y, Gamma = self.approx_observation(m, S_eff, R_override=R_eff)
-
-                state_risk = 0.0
-                if use_state_risk:
-                    state_risk = risk(m, S, (goal_state, goal_cov))
-                observation_risk = 0.0
-                if use_observation_risk and mu_y is not None:
-                    observation_risk = risk(mu_y, Sigma_y, (goal_obs, goal_obs_cov))
-
-                risk_term = (
-                    self.risk_weight_state * state_risk
-                    + self.risk_weight_obs * observation_risk
+            vis_diag = self.notebook_visibility_diagnostics(m, S)
+            p_vis = vis_diag['p_vis']
+            R_plan = vis_diag['R_plan']
+            mu_y = Sigma_y = Gamma = None
+            if use_observation_risk or use_ambiguity_term:
+                mu_y, Sigma_y, Gamma = self.approx_observation(
+                    m,
+                    S,
+                    method=self.approx_method,
+                    R_override=R_plan,
                 )
-                total_risk += risk_term
-
-                ambiguity_term = 0.0
-                if use_ambiguity_term and Sigma_y is not None:
-                    ambiguity_core = ambiguity(Sigma_y, Gamma, S_eff)
-                    if self.use_visibility_model:
-                        ambiguity_core = p_vis * ambiguity_core
-                    ambiguity_term = self.ambiguity_weight * ambiguity_core
-                    total_amb += ambiguity_term
-
-                if self.use_visibility_model and self.visibility_weight > 0.0:
-                    total_visibility += self.visibility_weight * self._visibility_penalty_value(p_vis)
-
-                total_obstacle += self.obstacle_penalty(m)
-
-                control_term = self.control_weight * float(u[0] ** 2 + u[1] ** 2)
-                total_control += control_term
+            weight_t = self.discount_gamma ** t
+            observation_risk = 0.0
+            if use_observation_risk and mu_y is not None:
+                goal_cov_t = self.goal_obs_cov_for_progress(
+                    (float(progress_index) + float(t)) / max(self.goal_progress_n_steps, 1)
+                )
+                observation_risk = self.risk_weight_obs * self.notebook_risk_scale * risk(
+                    mu_y, Sigma_y, (goal_obs, goal_cov_t)
+                )
+            total_risk += weight_t * observation_risk
+            if use_ambiguity_term and Sigma_y is not None:
+                total_amb += weight_t * (
+                    self.ambiguity_weight * self.notebook_ambiguity_scale * ambiguity(Sigma_y, Gamma, S)
+                )
+            if self.use_visibility_model and self.visibility_weight > 0.0:
+                total_visibility += weight_t * self.visibility_weight * self._visibility_penalty_value(
+                    p_vis, vis_diag.get('p_vis_eff', p_vis)
+                )
+            total_obstacle += weight_t * self.obstacle_penalty(m)
+            total_control += weight_t * self.control_weight * float(u[0] ** 2 + u[1] ** 2)
 
         total = total_risk + total_amb + total_control + total_visibility + total_obstacle
         if return_metrics:
@@ -1110,12 +683,10 @@ class UnicyclePlannerBase:
 
         (
             goal_state,
-            goal_cov,
             goal_obs,
             goal_obs_cov,
             use_observation_risk,
             use_ambiguity_term,
-            use_state_risk,
         ) = self._resolve_plan_problem(m0, goal_xy)
 
         bounds = []
@@ -1125,11 +696,10 @@ class UnicyclePlannerBase:
 
         x0 = self._initial_controls_flat()
         objective_scales = self._objective_scales(
-            x0, m0, S0, goal_state, goal_cov, goal_obs, goal_obs_cov
+            x0, m0, S0, goal_state, goal_obs, goal_obs_cov
         )
         best_candidate = None
-        backend = self.optimizer_backend
-        backend_used = 'casadi' if backend == 'casadi' else ('scipy' if self.math_mode == 'notebook_simple' else 'jax')
+        backend_used = 'casadi'
         optimizer_success = False
         optimizer_status = 0
         optimizer_nit = 0
@@ -1137,247 +707,103 @@ class UnicyclePlannerBase:
         optimizer_message = ''
 
         try:
-            use_casadi = self._resolve_use_casadi_backend(backend)
+            fg_calls = {'count': 0}
+            goal_obs_eval = np.asarray(goal_obs if goal_obs is not None else self._goal_obs(goal_state), dtype=float)
+            valgrad = self._get_casadi_valgrad(
+                goal_state,
+                goal_obs,
+                use_observation_risk=use_observation_risk,
+                use_ambiguity_term=use_ambiguity_term,
+            )
 
-            if self.math_mode == 'notebook_simple':
-                fg_calls = {'count': 0}
-                goal_obs_eval = np.asarray(goal_obs if goal_obs is not None else self._goal_obs(goal_state), dtype=float)
-                if use_casadi:
-                    backend_used = 'casadi'
-                    valgrad = self._get_casadi_valgrad(
-                        goal_state,
-                        goal_cov,
-                        goal_obs,
-                        goal_obs_cov,
-                        use_observation_risk=use_observation_risk,
-                        use_ambiguity_term=use_ambiguity_term,
-                        use_state_risk=use_state_risk,
-                    )
+            shared_eval = {
+                'u': None,
+                'val': None,
+                'grad': None,
+            }
 
-                    def eval_notebook_valgrad(u_arr):
-                        return valgrad(
-                            u_arr,
-                            m0,
-                            S0,
-                            goal_obs_eval,
-                            progress_index,
-                        )
-                else:
-                    import jax.numpy as jnp
+            def eval_valgrad_shared(u):
+                u_arr = np.asarray(u, dtype=float)
+                cached_u = shared_eval['u']
+                if cached_u is not None and cached_u.shape == u_arr.shape and np.array_equal(cached_u, u_arr):
+                    return shared_eval['val'], shared_eval['grad']
 
-                    use_jax = self._resolve_use_jax_backend(backend)
-                    if not use_jax:
-                        raise RuntimeError("JAX objective is unavailable")
-
-                    valgrad, jnp = self._get_jax_valgrad(
-                        goal_state,
-                        goal_cov,
-                        goal_obs,
-                        goal_obs_cov,
-                        use_observation_risk=use_observation_risk,
-                        use_ambiguity_term=use_ambiguity_term,
-                        use_state_risk=use_state_risk,
-                    )
-                    m0_j = jnp.array(m0)
-                    S0_j = jnp.array(S0)
-                    goal_obs_j = jnp.array(goal_obs_eval)
-                    progress0_j = jnp.asarray(progress_index, dtype=goal_obs_j.dtype)
-
-                    def eval_notebook_valgrad(u_arr):
-                        val, grad = valgrad(
-                            jnp.array(u_arr),
-                            m0_j,
-                            S0_j,
-                            goal_obs_j,
-                            progress0_j,
-                        )
-                        return float(val), np.asarray(grad, dtype=float)
-
-                shared_eval = {
-                    'u': None,
-                    'val': None,
-                    'grad': None,
-                }
-
-                def eval_valgrad_shared(u):
-                    u_arr = np.asarray(u, dtype=float)
-                    cached_u = shared_eval['u']
-                    if cached_u is not None and cached_u.shape == u_arr.shape and np.array_equal(cached_u, u_arr):
-                        return shared_eval['val'], shared_eval['grad']
-
-                    start = time.perf_counter()
-                    val_out, grad_out = eval_notebook_valgrad(u_arr)
-                    if fg_calls['count'] == 0:
-                        self._runtime_debug_print(
-                            f"[planner_debug] First {'CasADi' if use_casadi else 'notebook'} objective/gradient eval returned in "
-                            f"{(time.perf_counter() - start) * 1000.0:.1f} ms "
-                            f"with J={val_out:.3f}, grad_norm={np.linalg.norm(grad_out):.3f}"
-                        )
-                    fg_calls['count'] += 1
-                    shared_eval['u'] = u_arr.copy()
-                    shared_eval['val'] = val_out
-                    shared_eval['grad'] = grad_out
-                    return val_out, grad_out
-
-                def func(u):
-                    val_out, _ = eval_valgrad_shared(u)
-                    return val_out
-
-                def jac(u):
-                    _, grad_out = eval_valgrad_shared(u)
-                    return grad_out
-
-                minimize_start = time.perf_counter()
-                self._runtime_debug_print(
-                    f"[planner_debug] Starting {'CasADi-backed' if use_casadi else 'notebook-style'} scipy.optimize.minimize "
-                    f"(maxiter={self.optimizer_maxiter}, maxfun={self.optimizer_maxfun}, ftol={self.optimizer_ftol})"
-                )
-                result = minimize(
-                    func,
-                    np.asarray(x0, dtype=float),
-                    jac=jac,
-                    method='L-BFGS-B',
-                    bounds=bounds,
-                    options={
-                        'maxiter': self.optimizer_maxiter,
-                        'maxfun': self.optimizer_maxfun,
-                        'ftol': self.optimizer_ftol,
-                        'gtol': self.optimizer_gtol,
-                    },
-                )
-                self._runtime_debug_print(
-                    f"[planner_debug] {'CasADi-backed' if use_casadi else 'notebook'} minimize finished in "
-                    f"{(time.perf_counter() - minimize_start) * 1000.0:.1f} ms "
-                    f"(success={bool(result.success)}, status={int(result.status)}, "
-                    f"nit={int(getattr(result, 'nit', 0) or 0)}, nfev={int(getattr(result, 'nfev', 0) or 0)}, "
-                    f"shared_fg_evals={fg_calls['count']})"
-                )
-                if result.x is None or not np.all(np.isfinite(np.asarray(result.x, dtype=float))):
-                    raise RuntimeError("Notebook optimizer returned no finite solution")
-                best_candidate = self._evaluate_candidate_controls(
-                    np.asarray(result.x, dtype=float),
+                start = time.perf_counter()
+                val_out, grad_out = valgrad(
+                    u_arr,
                     m0,
                     S0,
-                    goal_state,
-                    goal_cov,
-                    goal_obs,
-                    goal_obs_cov,
-                    objective_scales,
-                    progress_index=progress_index,
+                    goal_obs_eval,
+                    progress_index,
                 )
-                best_candidate.update({'source': 'solver:shifted_warm_start' if self.prev_controls_flat is not None else 'solver:zero_seed'})
-                optimizer_success = bool(result.success)
-                optimizer_status = int(result.status)
-                optimizer_nit = int(getattr(result, 'nit', 0) or 0)
-                optimizer_nfev = int(getattr(result, 'nfev', 0) or 0)
-                optimizer_message = str(result.message or '')
-            else:
-                import jax.numpy as jnp
-
-                use_jax = self._resolve_use_jax_backend(backend)
-                if not use_jax:
-                    raise RuntimeError("JAX objective is unavailable")
-
-                valgrad, jnp = self._get_jax_valgrad(
-                    goal_state,
-                    goal_cov,
-                    goal_obs,
-                    goal_obs_cov,
-                    use_observation_risk=use_observation_risk,
-                    use_ambiguity_term=use_ambiguity_term,
-                    use_state_risk=use_state_risk,
-                )
-
-                fg_calls = {'count': 0}
-                m0_j = jnp.array(m0)
-                S0_j = jnp.array(S0)
-                goal_state_j = jnp.array(goal_state)
-                goal_cov_j = jnp.array(goal_cov)
-                goal_obs_j = jnp.array(goal_obs if goal_obs is not None else self._goal_obs(goal_state))
-                goal_obs_cov_j = jnp.array(goal_obs_cov if goal_obs_cov is not None else self._goal_obs_cov())
-                risk_scale_j = jnp.asarray(objective_scales[0], dtype=goal_cov_j.dtype)
-                ambiguity_scale_j = jnp.asarray(objective_scales[1], dtype=goal_cov_j.dtype)
-
-                backend_used = 'jax'
-
-                def func_and_grad(u):
-                    start = time.perf_counter()
-                    val, grad = valgrad(
-                        jnp.array(u),
-                        m0_j,
-                        S0_j,
-                        goal_state_j,
-                        goal_cov_j,
-                        goal_obs_j,
-                        goal_obs_cov_j,
-                        risk_scale_j,
-                        ambiguity_scale_j,
+                if fg_calls['count'] == 0:
+                    self._runtime_debug_print(
+                        "[planner_debug] First CasADi objective/gradient eval returned in "
+                        f"{(time.perf_counter() - start) * 1000.0:.1f} ms "
+                        f"with J={val_out:.3f}, grad_norm={np.linalg.norm(grad_out):.3f}"
                     )
-                    val_out = float(val)
-                    grad_out = np.array(grad, dtype=float)
-                    if fg_calls['count'] == 0:
-                        self._runtime_debug_print(
-                            "[planner_debug] First JAX objective/gradient eval returned in "
-                            f"{(time.perf_counter() - start) * 1000.0:.1f} ms "
-                            f"with J={val_out:.3f}, grad_norm={np.linalg.norm(grad_out):.3f}"
-                        )
-                    fg_calls['count'] += 1
-                    return val_out, grad_out
+                fg_calls['count'] += 1
+                shared_eval['u'] = u_arr.copy()
+                shared_eval['val'] = val_out
+                shared_eval['grad'] = grad_out
+                return val_out, grad_out
 
-                minimize_start = time.perf_counter()
-                self._runtime_debug_print(
-                    "[planner_debug] Starting fmin_l_bfgs_b over legacy objective "
-                    f"(maxiter={self.optimizer_maxiter}, gtol={self.optimizer_gtol}, "
-                    f"risk_scale={objective_scales[0]:.3f}, ambiguity_scale={objective_scales[1]:.3f})"
-                )
-                x_opt, _, info = fmin_l_bfgs_b(
-                    func_and_grad,
-                    np.asarray(x0, dtype=float),
-                    bounds=bounds,
-                    maxiter=self.optimizer_maxiter,
-                    pgtol=self.optimizer_gtol,
-                    maxls=40,
-                )
-                warnflag_raw = info.get('warnflag', 2)
-                warnflag = 2 if warnflag_raw is None else int(warnflag_raw)
-                task = str(info.get('task', '') or '')
-                nit_raw = info.get('nit', 0)
-                nit = 0 if nit_raw is None else int(nit_raw)
-                funcalls_raw = info.get('funcalls', 0)
-                funcalls = 0 if funcalls_raw is None else int(funcalls_raw)
-                self._runtime_debug_print(
-                    "[planner_debug] fmin_l_bfgs_b finished in "
-                    f"{(time.perf_counter() - minimize_start) * 1000.0:.1f} ms "
-                    f"(warnflag={warnflag}, nit={nit}, funcalls={funcalls}, task='{task}')"
-                )
-                if x_opt is None:
-                    raise RuntimeError("Legacy optimizer produced no solution")
-                x_opt = np.asarray(x_opt, dtype=float)
-                if not np.all(np.isfinite(x_opt)):
-                    raise RuntimeError("Legacy optimizer produced a non-finite solution")
-                best_candidate = self._evaluate_candidate_controls(
-                    x_opt,
-                    m0,
-                    S0,
-                    goal_state,
-                    goal_cov,
-                    goal_obs,
-                    goal_obs_cov,
-                    objective_scales,
-                    progress_index=progress_index,
-                )
-                best_candidate.update({'source': 'solver:shifted_warm_start' if self.prev_controls_flat is not None else 'solver:nominal_seed'})
-                optimizer_success = warnflag == 0
-                optimizer_status = warnflag
-                optimizer_nit = nit
-                optimizer_nfev = funcalls
-                optimizer_message = task
+            def func(u):
+                val_out, _ = eval_valgrad_shared(u)
+                return val_out
+
+            def jac(u):
+                _, grad_out = eval_valgrad_shared(u)
+                return grad_out
+
+            minimize_start = time.perf_counter()
+            self._runtime_debug_print(
+                "[planner_debug] Starting CasADi-backed scipy.optimize.minimize "
+                f"(maxiter={self.optimizer_maxiter}, maxfun={self.optimizer_maxfun}, ftol={self.optimizer_ftol})"
+            )
+            result = minimize(
+                func,
+                np.asarray(x0, dtype=float),
+                jac=jac,
+                method='L-BFGS-B',
+                bounds=bounds,
+                options={
+                    'maxiter': self.optimizer_maxiter,
+                    'maxfun': self.optimizer_maxfun,
+                    'ftol': self.optimizer_ftol,
+                    'gtol': self.optimizer_gtol,
+                },
+            )
+            self._runtime_debug_print(
+                "[planner_debug] CasADi-backed minimize finished in "
+                f"{(time.perf_counter() - minimize_start) * 1000.0:.1f} ms "
+                f"(success={bool(result.success)}, status={int(result.status)}, "
+                f"nit={int(getattr(result, 'nit', 0) or 0)}, nfev={int(getattr(result, 'nfev', 0) or 0)}, "
+                f"shared_fg_evals={fg_calls['count']})"
+            )
+            if result.x is None or not np.all(np.isfinite(np.asarray(result.x, dtype=float))):
+                raise RuntimeError("Planner optimizer returned no finite solution")
+            best_candidate = self._evaluate_candidate_controls(
+                np.asarray(result.x, dtype=float),
+                m0,
+                S0,
+                goal_state,
+                goal_obs,
+                goal_obs_cov,
+                objective_scales,
+                progress_index=progress_index,
+            )
+            best_candidate.update({'source': 'solver:shifted_warm_start' if self.prev_controls_flat is not None else 'solver:zero_seed'})
+            optimizer_success = bool(result.success)
+            optimizer_status = int(result.status)
+            optimizer_nit = int(getattr(result, 'nit', 0) or 0)
+            optimizer_nfev = int(getattr(result, 'nfev', 0) or 0)
+            optimizer_message = str(result.message or '')
         except Exception as exc:
             raise RuntimeError(
                 "Planner optimization failed "
-                f"(backend_request={backend}, backend_used={backend_used}, "
-                f"approx={self.approx_method}, "
-                f"horizon={self.horizon}, dt={self.dt}, math_mode={self.math_mode}): "
+                f"(backend={backend_used}, approx={self.approx_method}, "
+                f"horizon={self.horizon}, dt={self.dt}): "
                 f"{type(exc).__name__}: {exc}"
             ) from exc
 
@@ -1389,12 +815,7 @@ class UnicyclePlannerBase:
         best_controls = self.prev_controls_flat.reshape(self.horizon, 2)
         total_cost = float(best_candidate['total_cost'])
         metrics = tuple(best_candidate['metrics'])
-        vis_diag = self.notebook_visibility_diagnostics(m0, S0) if self.math_mode == 'notebook_simple' else {
-            'p_vis': self.visibility_probability_belief(m0, S0),
-            'p_vis_eff': self.visibility_probability_belief(m0, S0),
-            'r_plan_u_std': float(np.sqrt(max(self.R[0, 0], 0.0))),
-            'r_plan_v_std': float(np.sqrt(max(self.R[1, 1], 0.0))),
-        }
+        vis_diag = self.notebook_visibility_diagnostics(m0, S0)
 
         states = rollout_unicycle(m0, best_controls, self.dt)
         solve_time_s = float(max(time.perf_counter() - t_plan_start, 0.0))

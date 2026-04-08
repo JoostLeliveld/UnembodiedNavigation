@@ -106,59 +106,6 @@ class NogoZoneCostModel:
         clearance = self._clearance_np(xy)
         return self._penalty_from_clearance_np(clearance)
 
-    def make_penalty_state_jax(self):
-        try:
-            import jax.numpy as jnp
-        except Exception as exc:  # pragma: no cover - optional dependency
-            raise RuntimeError('JAX is not available for no-go-zone cost') from exc
-
-        if (not self.prisms) or self.weight <= 0.0:
-            def zero_penalty(_m):
-                return jnp.array(0.0)
-            return zero_penalty
-
-        xmins = jnp.asarray(self._xmins)
-        xmaxs = jnp.asarray(self._xmaxs)
-        ymins = jnp.asarray(self._ymins)
-        ymaxs = jnp.asarray(self._ymaxs)
-        weight = float(self.weight)
-        safe_distance = float(self.safe_distance)
-        gaussian_sigma = float(self.gaussian_sigma)
-        softplus_scale = float(self.softplus_scale)
-        logbarrier_scale = float(self.logbarrier_scale)
-        logbarrier_eps = float(self.logbarrier_eps)
-        penalty_type = self.penalty_type
-
-        def signed_distance_xy(x, y):
-            dx = jnp.maximum(jnp.maximum(xmins - x, 0.0), x - xmaxs)
-            dy = jnp.maximum(jnp.maximum(ymins - y, 0.0), y - ymaxs)
-            outside = jnp.sqrt(dx * dx + dy * dy)
-
-            inside_x = jnp.minimum(x - xmins, xmaxs - x)
-            inside_y = jnp.minimum(y - ymins, ymaxs - y)
-            inside_depth = jnp.minimum(inside_x, inside_y)
-            inside = (dx <= 0.0) & (dy <= 0.0)
-            signed = jnp.where(inside, -inside_depth, outside)
-            return jnp.min(signed)
-
-        def penalty_state_jax(m):
-            signed_d = signed_distance_xy(m[0], m[1])
-            clearance = signed_d - safe_distance
-
-            if penalty_type == 'gaussian':
-                outside = jnp.exp(-0.5 * (jnp.maximum(clearance, 0.0) / gaussian_sigma) ** 2)
-                inside_extra = jnp.maximum(-clearance, 0.0) / gaussian_sigma
-                base = outside + inside_extra
-            elif penalty_type == 'softplus':
-                z = jnp.clip(-clearance / softplus_scale, -60.0, 60.0)
-                base = jnp.log1p(jnp.exp(z))
-            else:
-                denom = jnp.maximum(clearance, logbarrier_eps)
-                base = jnp.log1p(logbarrier_scale / denom)
-            return weight * base
-
-        return penalty_state_jax
-
     def make_penalty_state_casadi(self):
         try:
             import casadi as ca

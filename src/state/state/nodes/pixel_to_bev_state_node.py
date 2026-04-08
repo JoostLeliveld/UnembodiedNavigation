@@ -78,8 +78,15 @@ class PixelToBevStateNode(Node):
         self._last_xy = None
         self._last_yaw = 0.0
 
+        theta_sources = ['pixel heading']
+        if self.use_odom_heading_fallback:
+            theta_sources.append('odom fallback')
+        if self.infer_yaw_from_motion:
+            theta_sources.append('motion fallback')
         self.get_logger().info(
-            'Pixel->BEV state node started (/perception/pixel_pose -> /state/bev)'
+            'Pixel->BEV state node started '
+            '(/perception/pixel_pose -> /state/bev; '
+            f'state sources: x,y=camera homography, theta={" -> ".join(theta_sources)})'
         )
 
     @staticmethod

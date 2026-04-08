@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from planning.core.visibility_raycast_25d import _clip_prob
+from planning.core.gp_visibility_helpers import clip_prob as _clip_prob
 
 
 @dataclass
@@ -161,41 +161,6 @@ class GPVisibilityMapModel:
         xy = np.array([float(m[0]), float(m[1])], dtype=float)
         p = self._bilinear_map_np(self.P_map, xy)[0]
         return float(_clip_prob(p, self.min_prob))
-
-    def make_prob_state_jax(self):
-        try:
-            import jax.numpy as jnp
-        except Exception as exc:  # pragma: no cover - optional dependency
-            raise RuntimeError("JAX is not available for visibility model") from exc
-
-        xs_j = jnp.asarray(self.xs)
-        ys_j = jnp.asarray(self.ys)
-        p_j = jnp.asarray(self.P_map)
-        eps = float(self.min_prob)
-
-        def p_vis_j(m):
-            x = m[0]
-            y = m[1]
-            ix = jnp.clip(jnp.searchsorted(xs_j, x, side="right") - 1, 0, xs_j.shape[0] - 2)
-            iy = jnp.clip(jnp.searchsorted(ys_j, y, side="right") - 1, 0, ys_j.shape[0] - 2)
-            x0 = xs_j[ix]
-            x1 = xs_j[ix + 1]
-            y0 = ys_j[iy]
-            y1 = ys_j[iy + 1]
-            tx = jnp.where(x1 == x0, 0.0, (x - x0) / (x1 - x0))
-            ty = jnp.where(y1 == y0, 0.0, (y - y0) / (y1 - y0))
-            tx = jnp.clip(tx, 0.0, 1.0)
-            ty = jnp.clip(ty, 0.0, 1.0)
-            z00 = p_j[iy, ix]
-            z10 = p_j[iy, ix + 1]
-            z01 = p_j[iy + 1, ix]
-            z11 = p_j[iy + 1, ix + 1]
-            z0 = (1.0 - tx) * z00 + tx * z10
-            z1 = (1.0 - tx) * z01 + tx * z11
-            z = (1.0 - ty) * z0 + ty * z1
-            return jnp.clip(z, eps, 1.0 - eps)
-
-        return p_vis_j
 
     def make_prob_state_casadi(self):
         try:

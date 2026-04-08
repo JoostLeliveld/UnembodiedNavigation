@@ -30,7 +30,12 @@ from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
     diagnostics_from_message,
 )
-from planning.core.visibility_raycast_25d import SimpleRBFGP, _clip_prob, _logit, _sigmoid
+from planning.core.gp_visibility_helpers import (
+    SimpleRBFGP,
+    clip_prob as _clip_prob,
+    logit as _logit,
+    sigmoid as _sigmoid,
+)
 from unav_common.occlusion_geometry import parse_occlusion_scene_from_world, signed_distance_to_union_xy
 
 

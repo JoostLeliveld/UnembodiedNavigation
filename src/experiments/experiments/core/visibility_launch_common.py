@@ -15,7 +15,7 @@ from launch_ros.substitutions import FindPackageShare
 PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'planner': 'efe1',
     'world': 'warehouse_occ_light.world.sdf',
-    'task': 'T1_shadow_cross',
+    'task': '',
     'seed': '0',
     'perception_backend': 'image_markers',
     'sensor_pixel_noise_sigma': '1.0',
@@ -32,7 +32,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'horizon': '24',
     'dt': '0.2',
     'control_weight': '0.0',
-    'risk_weight_state': '0.0',
     'risk_weight_obs': '1.0',
     'ambiguity_weight': '1.0',
     'goal_sigma_uv': '2.0',
@@ -82,12 +81,7 @@ VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
     'visibility_gp_noise_var': 0.15,
     'visibility_prior_occ': 0.005,
     'visibility_beta': 1.0,
-    'visibility_height_tau': 0.08,
-    'visibility_ray_samples': 120,
     'visibility_target_height_m': 0.0,
-    'visibility_r_bad_uv': 28.0,
-    'visibility_cov_pos_scale': 2.0,
-    'visibility_cov_theta_scale': 0.8,
     'use_nogo_cost': 'true',
     'nogo_penalty_type': 'softplus',
     'nogo_weight': 40.0,
@@ -139,6 +133,22 @@ def _require_task_field(task, key):
     return task[key]
 
 
+def _state_estimator_metadata(perception_backend: str) -> Dict[str, str]:
+    if str(perception_backend).strip().lower() == 'homography':
+        return {
+            'state_source_x': 'camera_homography',
+            'state_source_y': 'camera_homography',
+            'state_source_theta': 'visual_heading_else_odom',
+            'state_estimator_mode': 'camera_xytheta_with_odom_fallback',
+        }
+    return {
+        'state_source_x': 'camera_homography',
+        'state_source_y': 'camera_homography',
+        'state_source_theta': 'odometry_heading',
+        'state_estimator_mode': 'camera_xy_odom_theta',
+    }
+
+
 def parse_common_launch_config(context) -> Dict[str, object]:
     """Parse the generic visibility-aware agent launch arguments."""
     seed_value = int(LaunchConfiguration('seed').perform(context))
@@ -166,7 +176,11 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'use_pixel_correction': _as_bool(_launch_value(context, 'use_pixel_correction', PAPER_LAUNCH_DEFAULTS['use_pixel_correction'])),
         'pixel_timeout_s': float(_launch_value(context, 'pixel_timeout_s', PAPER_LAUNCH_DEFAULTS['pixel_timeout_s'])),
         'pixel_correction_min_interval_s': float(_launch_value(context, 'pixel_correction_min_interval_s', '0.0')),
-        'pixel_correction_approx': _launch_value(context, 'pixel_correction_approx', 'AUTO').strip().upper(),
+        'pixel_correction_approx': _launch_value(
+            context,
+            'pixel_correction_approx',
+            PAPER_LAUNCH_DEFAULTS['pixel_correction_approx'],
+        ).strip().upper(),
         'skip_stale_pixel_correction': _as_bool(_launch_value(context, 'skip_stale_pixel_correction', 'true')),
         'use_ambiguity': _as_bool(_launch_value(context, 'use_ambiguity', PAPER_LAUNCH_DEFAULTS['use_ambiguity'])),
         'use_obs_risk': _as_bool(_launch_value(context, 'use_obs_risk', PAPER_LAUNCH_DEFAULTS['use_obs_risk'])),
@@ -185,7 +199,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'horizon': int(_launch_value(context, 'horizon', PAPER_LAUNCH_DEFAULTS['horizon'])),
         'dt': float(_launch_value(context, 'dt', '0.2')),
         'control_weight': float(_launch_value(context, 'control_weight', PAPER_LAUNCH_DEFAULTS['control_weight'])),
-        'risk_weight_state': float(_launch_value(context, 'risk_weight_state', '1.0')),
         'risk_weight_obs': float(_launch_value(context, 'risk_weight_obs', '1.0')),
         'ambiguity_weight': float(_launch_value(context, 'ambiguity_weight', '1.0')),
         'r_visible_uv': float(_launch_value(context, 'r_visible_uv', PAPER_LAUNCH_DEFAULTS['r_visible_uv'])),
@@ -244,15 +257,10 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'visibility_gp_noise_var': float(_launch_value(context, 'visibility_gp_noise_var', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_gp_noise_var']))),
         'visibility_prior_occ': float(_launch_value(context, 'visibility_prior_occ', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_prior_occ']))),
         'visibility_beta': float(_launch_value(context, 'visibility_beta', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_beta']))),
-        'visibility_height_tau': float(_launch_value(context, 'visibility_height_tau', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_height_tau']))),
-        'visibility_ray_samples': int(float(_launch_value(context, 'visibility_ray_samples', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_ray_samples'])))),
         'visibility_target_height_m': float(_launch_value(context, 'visibility_target_height_m', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_target_height_m']))),
         'visibility_geometry_json': _launch_value(context, 'visibility_geometry_json', ''),
         'visibility_artifact_path': _launch_value(context, 'visibility_artifact_path', ''),
         'visibility_gp_seed': int(float(_launch_value(context, 'visibility_gp_seed', str(seed_value)))),
-        'visibility_r_bad_uv': float(_launch_value(context, 'visibility_r_bad_uv', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_r_bad_uv']))),
-        'visibility_cov_pos_scale': float(_launch_value(context, 'visibility_cov_pos_scale', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_cov_pos_scale']))),
-        'visibility_cov_theta_scale': float(_launch_value(context, 'visibility_cov_theta_scale', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_cov_theta_scale']))),
         'use_nogo_cost': _launch_value(context, 'use_nogo_cost', str(VISIBILITY_FALLBACK_DEFAULTS['use_nogo_cost'])).strip().lower(),
         'nogo_penalty_type': _launch_value(context, 'nogo_penalty_type', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_penalty_type'])).strip().lower(),
         'nogo_weight': float(_launch_value(context, 'nogo_weight', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_weight']))),
@@ -264,6 +272,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'goal_sigma_uv': float(_launch_value(context, 'goal_sigma_uv', PAPER_LAUNCH_DEFAULTS['goal_sigma_uv'])),
         'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
         'debug_runtime': _as_bool(_launch_value(context, 'debug_runtime', 'false')),
+        'enable_logging': _as_bool(_launch_value(context, 'enable_logging', 'true')),
         'use_rviz': _as_bool(_launch_value(context, 'use_rviz', 'false')),
         'use_live_dashboard': _as_bool(_launch_value(context, 'use_live_dashboard', 'false')),
         'dashboard_history_s': float(_launch_value(context, 'dashboard_history_s', '60.0')),
@@ -293,7 +302,10 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     )
     _apply_visibility_profile_defaults(cfg, profile)
     tasks_by_world = load_tasks(cfg['tasks_yaml'])
-    task = select_task(tasks_by_world, cfg['world'], cfg['task_name'])
+    task_name = str(cfg.get('task_name', '') or '').strip()
+    if not task_name:
+        task_name = str(profile.get('recommended_task', '') or '').strip()
+    task = select_task(tasks_by_world, cfg['world'], task_name)
 
     start = _require_task_field(task, 'start')
     goal = _require_task_field(task, 'goal')
@@ -316,7 +328,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     planner = str(cfg['planner'])
     if planner == 'auto':
         planner = profile['planner_default']
-    if planner == 'geometric_baseline':
+    if planner == 'visibility_unaware_baseline':
         cfg['use_visibility_model'] = False
         cfg['use_ambiguity'] = False
         cfg['use_obs_risk'] = True
@@ -368,25 +380,20 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         raise RuntimeError(
             f"World '{cfg['world']}' requires a visibility_artifact path for GP visibility planning."
         )
-    geometry_backends = {
-        'raycast_25d',
-        'raycast25d',
-        'raycast',
-        'gp_visibility',
-        'gpvis',
-    }
     raw_use_nogo_cost = str(cfg.get('use_nogo_cost', 'auto')).strip().lower()
     nogo_geometry_needed = (
         raw_use_nogo_cost in ('1', 'true', 't', 'yes', 'y', 'on')
         or (raw_use_nogo_cost in ('', 'auto', 'default') and str(cfg.get('planner', '')).strip().lower() == 'mpc')
     )
-    if (not visibility_geometry_json) and (visibility_model_name in geometry_backends or nogo_geometry_needed):
+    geometry_needed = bool(cfg.get('perception_use_geometry_occlusion', False)) or nogo_geometry_needed
+    if (not visibility_geometry_json) and geometry_needed:
         visibility_geometry_json = serialize_occlusion_geometry_from_world(world_path)
 
     cfg = dict(cfg)
     cfg.update({
         'profile': profile,
         'task': task,
+        'task_name': str(task.get('name', task_name)),
         'planner': planner,
         'spawn': spawn,
         'goal_x': goal_x,
@@ -402,6 +409,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
 
 def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     """Create shared nodes/components for the thesis pipeline."""
+    state_sources = _state_estimator_metadata(str(cfg['perception_backend']))
     sim_pkg = FindPackageShare('sim')
     bringup_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -527,60 +535,66 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         }],
     )
 
-    logger_node = Node(
-        package='experiments',
-        executable='experiment_logger',
-        name='experiment_logger',
-        output='screen',
-        on_exit=[Shutdown(reason='experiment_logger exited')],
-        parameters=[{
-            'use_sim_time': cfg['use_sim_time'],
-            'seed': cfg['seed'],
-            'method': cfg['planner'],
-            'world': cfg['world'],
-            'task': cfg['task'].get('name', cfg['task_name'] or ''),
-            'planner': cfg['planner'],
-            'use_pixel_correction': cfg['use_pixel_correction'],
-            'use_ambiguity': cfg['use_ambiguity'],
-            'use_obs_risk': cfg['use_obs_risk'],
-            'use_visibility_model': cfg['use_visibility_model'],
-            'visibility_model': cfg['visibility_model'],
-            'visibility_artifact_path': cfg['visibility_artifact_path'],
-            'risk_weight_state': cfg['risk_weight_state'],
-            'risk_weight_obs': cfg['risk_weight_obs'],
-            'goal_sigma_uv': cfg['goal_sigma_uv'],
-            'r_visible_uv': cfg['r_visible_uv'],
-            'r_miss_uv': cfg['r_miss_uv'],
-            'visibility_power': cfg['visibility_power'],
-            'visibility_sigma_kappa': cfg['visibility_sigma_kappa'],
-            'goal_prior_u_std_start': cfg['goal_prior_u_std_start'],
-            'goal_prior_v_std_start': cfg['goal_prior_v_std_start'],
-            'goal_prior_u_std_final': cfg['goal_prior_u_std_final'],
-            'goal_prior_v_std_final': cfg['goal_prior_v_std_final'],
-            'goal_tightening_power': cfg['goal_tightening_power'],
-            'goal_progress_n_steps': cfg['goal_progress_n_steps'],
-            'notebook_risk_scale': cfg['notebook_risk_scale'],
-            'notebook_ambiguity_scale': cfg['notebook_ambiguity_scale'],
-            'visibility_weight': cfg['visibility_weight'],
-            'visibility_barrier_threshold': cfg['visibility_barrier_threshold'],
-            'visibility_barrier_scale': cfg['visibility_barrier_scale'],
-            'visibility_target_height_m': cfg['visibility_target_height_m'],
-            'perception_use_geometry_occlusion': cfg['perception_use_geometry_occlusion'],
-            'use_nogo_cost': cfg.get('resolved_use_nogo_cost', False),
-            'nogo_penalty_type': cfg['nogo_penalty_type'],
-            'nogo_weight': cfg['nogo_weight'],
-            'nogo_safe_distance': cfg['nogo_safe_distance'],
-            'nogo_gaussian_sigma': cfg['nogo_gaussian_sigma'],
-            'nogo_softplus_scale': cfg['nogo_softplus_scale'],
-            'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
-            'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
-            'world_profiles_path': cfg['world_profiles_path'],
-            'tasks_yaml': cfg['tasks_yaml'],
-            'auto_stop_on_goal': cfg['auto_stop_on_goal'],
-            'goal_success_radius': cfg['goal_success_radius'],
-            'goal_success_hold_s': cfg['goal_success_hold_s'],
-        }],
-    )
+    logger_node = None
+    if cfg.get('enable_logging', True):
+        logger_node = Node(
+            package='experiments',
+            executable='experiment_logger',
+            name='experiment_logger',
+            output='screen',
+            on_exit=[Shutdown(reason='experiment_logger exited')],
+            parameters=[{
+                'use_sim_time': cfg['use_sim_time'],
+                'seed': cfg['seed'],
+                'method': cfg['planner'],
+                'perception_backend': cfg['perception_backend'],
+                'world': cfg['world'],
+                'task': cfg['task'].get('name', cfg['task_name'] or ''),
+                'planner': cfg['planner'],
+                'state_source_x': state_sources['state_source_x'],
+                'state_source_y': state_sources['state_source_y'],
+                'state_source_theta': state_sources['state_source_theta'],
+                'state_estimator_mode': state_sources['state_estimator_mode'],
+                'use_pixel_correction': cfg['use_pixel_correction'],
+                'use_ambiguity': cfg['use_ambiguity'],
+                'use_obs_risk': cfg['use_obs_risk'],
+                'use_visibility_model': cfg['use_visibility_model'],
+                'visibility_model': cfg['visibility_model'],
+                'visibility_artifact_path': cfg['visibility_artifact_path'],
+                'risk_weight_obs': cfg['risk_weight_obs'],
+                'goal_sigma_uv': cfg['goal_sigma_uv'],
+                'r_visible_uv': cfg['r_visible_uv'],
+                'r_miss_uv': cfg['r_miss_uv'],
+                'visibility_power': cfg['visibility_power'],
+                'visibility_sigma_kappa': cfg['visibility_sigma_kappa'],
+                'goal_prior_u_std_start': cfg['goal_prior_u_std_start'],
+                'goal_prior_v_std_start': cfg['goal_prior_v_std_start'],
+                'goal_prior_u_std_final': cfg['goal_prior_u_std_final'],
+                'goal_prior_v_std_final': cfg['goal_prior_v_std_final'],
+                'goal_tightening_power': cfg['goal_tightening_power'],
+                'goal_progress_n_steps': cfg['goal_progress_n_steps'],
+                'notebook_risk_scale': cfg['notebook_risk_scale'],
+                'notebook_ambiguity_scale': cfg['notebook_ambiguity_scale'],
+                'visibility_weight': cfg['visibility_weight'],
+                'visibility_barrier_threshold': cfg['visibility_barrier_threshold'],
+                'visibility_barrier_scale': cfg['visibility_barrier_scale'],
+                'visibility_target_height_m': cfg['visibility_target_height_m'],
+                'perception_use_geometry_occlusion': cfg['perception_use_geometry_occlusion'],
+                'use_nogo_cost': cfg.get('resolved_use_nogo_cost', False),
+                'nogo_penalty_type': cfg['nogo_penalty_type'],
+                'nogo_weight': cfg['nogo_weight'],
+                'nogo_safe_distance': cfg['nogo_safe_distance'],
+                'nogo_gaussian_sigma': cfg['nogo_gaussian_sigma'],
+                'nogo_softplus_scale': cfg['nogo_softplus_scale'],
+                'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
+                'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
+                'world_profiles_path': cfg['world_profiles_path'],
+                'tasks_yaml': cfg['tasks_yaml'],
+                'auto_stop_on_goal': cfg['auto_stop_on_goal'],
+                'goal_success_radius': cfg['goal_success_radius'],
+                'goal_success_hold_s': cfg['goal_success_hold_s'],
+            }],
+        )
 
     rviz = Node(
         package='rviz2',
@@ -620,8 +634,10 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     shared_nodes = build_shared_nodes(cfg)
     planner = cfg['planner']
 
-    if planner not in ('efe1', 'efe2', 'mpc', 'efer', 'geometric_baseline'):
-        raise RuntimeError("planner must be 'efe1', 'efe2', 'efer', 'mpc', or 'geometric_baseline' for agent launch")
+    if planner not in ('efe1', 'efe2', 'efer', 'mpc', 'visibility_unaware_baseline'):
+        raise RuntimeError(
+            "planner must be 'efe1', 'efe2', 'efer', 'mpc', or 'visibility_unaware_baseline' for agent launch"
+        )
 
     planner_params = {
         'efe1': {
@@ -634,29 +650,28 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'use_ambiguity': cfg['use_ambiguity'],
             'use_obs_risk': cfg['use_obs_risk'],
         },
-        'mpc': {
-            'approx_method': 'ET1',
-            'use_ambiguity': False,
-            'use_obs_risk': True,
-        },
         'efer': {
             'approx_method': 'ET2',
             'use_ambiguity': False,
             'use_obs_risk': True,
         },
-        'geometric_baseline': {
+        'mpc': {
+            'approx_method': 'ET1',
+            'use_ambiguity': False,
+            'use_obs_risk': True,
+        },
+        'visibility_unaware_baseline': {
             'approx_method': 'ET1',
             'use_ambiguity': False,
             'use_obs_risk': True,
         },
     }
-    planner_uses_visibility = bool(cfg['use_visibility_model']) and planner != 'geometric_baseline'
+    planner_uses_visibility = bool(cfg['use_visibility_model']) and planner != 'visibility_unaware_baseline'
     agent_node = Node(
         package='planning',
         executable='efe_agent',
         name=f'{planner}_agent',
         output='screen',
-        additional_env={'XLA_PYTHON_CLIENT_PREALLOCATE': 'false'},
         parameters=[{
             'use_sim_time': cfg['use_sim_time'],
             'plan_rate': cfg['plan_rate'],
@@ -675,7 +690,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'process_noise_theta': cfg['process_noise_theta'],
             'obs_noise_uv': cfg['obs_noise_uv'],
             'goal_sigma_uv': cfg['goal_sigma_uv'],
-            'risk_weight_state': cfg['risk_weight_state'],
             'risk_weight_obs': cfg['risk_weight_obs'],
             'ambiguity_weight': cfg['ambiguity_weight'],
             'r_visible_uv': cfg['r_visible_uv'],
@@ -705,15 +719,10 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'visibility_gp_noise_var': cfg['visibility_gp_noise_var'],
             'visibility_prior_occ': cfg['visibility_prior_occ'],
             'visibility_beta': cfg['visibility_beta'],
-            'visibility_height_tau': cfg['visibility_height_tau'],
-            'visibility_ray_samples': cfg['visibility_ray_samples'],
             'visibility_target_height_m': cfg['visibility_target_height_m'],
             'visibility_geometry_json': cfg['visibility_geometry_json'],
             'visibility_artifact_path': cfg['visibility_artifact_path'],
             'visibility_gp_seed': cfg['visibility_gp_seed'],
-            'visibility_r_bad_uv': cfg['visibility_r_bad_uv'],
-            'visibility_cov_pos_scale': cfg['visibility_cov_pos_scale'],
-            'visibility_cov_theta_scale': cfg['visibility_cov_theta_scale'],
             'use_nogo_cost': cfg['resolved_use_nogo_cost'],
             'nogo_penalty_type': cfg['nogo_penalty_type'],
             'nogo_weight': cfg['nogo_weight'],
@@ -737,8 +746,9 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
         shared_nodes['pixel_to_bev'],
         shared_nodes['mission_node'],
         shared_nodes['goal_marker_node'],
-        shared_nodes['logger_node'],
     ]
+    if shared_nodes['logger_node'] is not None:
+        after_odom.append(shared_nodes['logger_node'])
     if cfg['use_rviz']:
         after_odom.append(shared_nodes['rviz'])
     if cfg.get('use_live_dashboard', False) and shared_nodes.get('live_dashboard') is not None:

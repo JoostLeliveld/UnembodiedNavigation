@@ -1,4 +1,4 @@
-"""CasADi utilities for notebook-simple EFE planning."""
+"""CasADi utilities for notebook-style EFE planning."""
 
 from __future__ import annotations
 
@@ -192,6 +192,28 @@ def et1_ca(m, S, R_eff, g, dg):
     return mu, Sigma, Gamma
 
 
+def et2_ca(m, S, R_eff, g, dg, d2g):
+    """Second-order extended transform using CasADi Jacobians and Hessians."""
+    Jm = dg(m)
+    mu0 = g(m)
+    dim_y = int(mu0.size1())
+    hessians = [h_fn(m) for h_fn in d2g]
+
+    aux1 = []
+    for H_i in hessians:
+        aux1.append(ca.trace(ca.mtimes(H_i, S)))
+
+    aux2 = ca.MX.zeros(dim_y, dim_y)
+    for i, H_i in enumerate(hessians):
+        for j, H_j in enumerate(hessians):
+            aux2[i, j] = ca.trace(ca.mtimes([H_i, S, H_j, S]))
+
+    mu = mu0 + 0.5 * ca.vertcat(*aux1)
+    Sigma = ca.mtimes([Jm, S, Jm.T]) + 0.5 * aux2 + R_eff
+    Gamma = ca.mtimes(S, Jm.T)
+    return mu, Sigma, Gamma
+
+
 def risk_ca(mu, Sigma, goal_mu, goal_S):
     Sigma_pd = _ensure_symmetric_pd(Sigma)
     goal_S_pd = _ensure_symmetric_pd(goal_S)
@@ -222,6 +244,9 @@ def notebook_simple_unicycle_ca(
     params: CasadiNotebookSimpleParams,
     g,
     dg,
+    *,
+    approx='ET1',
+    d2g=None,
     p_vis_state=None,
     nogo_cost=None,
 ):
@@ -250,7 +275,12 @@ def notebook_simple_unicycle_ca(
             )
         p_vis_eff = _clip_expr(ca.power(p_vis, params.visibility_power), 1e-4, 1.0 - 1e-4)
         R_plan = p_vis_eff * params.R_visible + (1.0 - p_vis_eff) * params.R_miss
-        mu, Sigma, Gamma = et1_ca(m, S, R_plan, g, dg)
+        if approx == 'ET1':
+            mu, Sigma, Gamma = et1_ca(m, S, R_plan, g, dg)
+        elif approx == 'ET2':
+            mu, Sigma, Gamma = et2_ca(m, S, R_plan, g, dg, d2g or [])
+        else:
+            raise RuntimeError(f"Unsupported CasADi notebook approximation: {approx}")
 
         progress = (progress_index0 + float(t)) / denom
         goal_cov_t = goal_obs_cov_ca_for_progress(params, progress)
@@ -269,20 +299,40 @@ def notebook_simple_unicycle_ca(
 def make_notebook_simple_valgrad_fn(
     params: CasadiNotebookSimpleParams,
     H,
+    *,
+    approx='ET1',
     p_vis_state=None,
     nogo_cost=None,
 ):
     _require_casadi()
+    approx = str(approx or 'ET1').upper()
+    if approx not in ('ET1', 'ET2'):
+        raise RuntimeError("CasADi notebook-simple path supports only ET1 or ET2")
     g = make_g_from_homography(H)
 
     state_sym = ca.MX.sym('state_for_jac', 3)
+    g_expr = g(state_sym)
     dg = ca.Function(
         'homography_uv_jac',
         [state_sym],
-        [ca.jacobian(g(state_sym), state_sym)],
+        [ca.jacobian(g_expr, state_sym)],
         ['state'],
         ['J'],
     )
+    d2g = None
+    if approx == 'ET2':
+        d2g = []
+        for i in range(int(g_expr.size1())):
+            H_i, _ = ca.hessian(g_expr[i], state_sym)
+            d2g.append(
+                ca.Function(
+                    f'homography_uv_hess_{i}',
+                    [state_sym],
+                    [H_i],
+                    ['state'],
+                    ['H'],
+                )
+            )
 
     u_flat = ca.MX.sym('u_flat', params.time_horizon * params.Du)
     m0 = ca.MX.sym('m0', 3)
@@ -299,6 +349,8 @@ def make_notebook_simple_valgrad_fn(
         params,
         g,
         dg,
+        approx=approx,
+        d2g=d2g,
         p_vis_state=p_vis_state,
         nogo_cost=nogo_cost,
     )

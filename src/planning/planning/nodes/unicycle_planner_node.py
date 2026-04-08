@@ -33,8 +33,7 @@ class UnicyclePlannerNode(Node):
     PARAM_DEFAULT_OVERRIDES = {}
 
     def __init__(self):
-        super().__init__(self.NODE_NAME, allow_undeclared_parameters=True,
-                         automatically_declare_parameters_from_overrides=True)
+        super().__init__(self.NODE_NAME)
 
         if self.PLANNER_CLASS is None:
             raise RuntimeError('PLANNER_CLASS is not set.')
@@ -72,13 +71,10 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('process_noise_theta', 0.02)
         _declare_if_not('obs_noise_uv', 2.0)
 
-        # Goal covariance
-        _declare_if_not('goal_sigma_xy', 0.25)
-        _declare_if_not('goal_sigma_theta', 0.5)
+        # Goal observation covariance
         _declare_if_not('goal_sigma_uv', 2.0)
 
         # EFE weights
-        _declare_if_not('risk_weight_state', 1.0)
         _declare_if_not('risk_weight_obs', 1.0)
         _declare_if_not('ambiguity_weight', 1.0)
         _declare_if_not('approx_method', 'ET1')
@@ -97,14 +93,9 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('visibility_gp_noise_var', 0.15)
         _declare_if_not('visibility_prior_occ', 0.005)
         _declare_if_not('visibility_beta', 1.0)
-        _declare_if_not('visibility_height_tau', 0.08)
-        _declare_if_not('visibility_ray_samples', 120)
         _declare_if_not('visibility_target_height_m', 0.0)
         _declare_if_not('visibility_geometry_json', '')
         _declare_if_not('visibility_gp_seed', 0)
-        _declare_if_not('visibility_r_bad_uv', 28.0)
-        _declare_if_not('visibility_cov_pos_scale', 2.0)
-        _declare_if_not('visibility_cov_theta_scale', 0.8)
         _declare_if_not('r_visible_uv', 2.5)
         _declare_if_not('r_miss_uv', 420.0)
         _declare_if_not('visibility_power', 3.0)
@@ -150,7 +141,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('pixel_topic', '/perception/pixel_pose')
         _declare_if_not('pixel_timeout_s', 0.5)
         _declare_if_not('pixel_correction_min_interval_s', 0.0)
-        _declare_if_not('pixel_correction_approx', 'ET1')
+        _declare_if_not('pixel_correction_approx', 'AUTO')
         _declare_if_not('skip_stale_pixel_correction', True)
         _declare_if_not('use_pixel_heading_correction', True)
         _declare_if_not('heading_pixel_noise_sigma', 0.0)
@@ -182,16 +173,16 @@ class UnicyclePlannerNode(Node):
         self.process_noise_theta = float(self.get_parameter('process_noise_theta').value)
         self.obs_noise_uv = float(self.get_parameter('obs_noise_uv').value)
 
-        self.goal_sigma_xy = float(self.get_parameter('goal_sigma_xy').value)
-        self.goal_sigma_theta = float(self.get_parameter('goal_sigma_theta').value)
         self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
 
-        self.risk_weight_state = float(self.get_parameter('risk_weight_state').value)
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
         self.ambiguity_weight = float(self.get_parameter('ambiguity_weight').value)
         self.approx_method = str(self.get_parameter('approx_method').value).upper()
-        self.math_mode = 'notebook_simple' if self.approx_method == 'ET1' else 'legacy'
-        self.optimizer_backend = 'casadi' if self.approx_method == 'ET1' else 'jax'
+        if self.approx_method not in ('ET1', 'ET2'):
+            raise RuntimeError("approx_method must be one of: ET1, ET2")
+        self.planner_path_summary = (
+            f'approx_method={self.approx_method}, solver=casadi_notebook_simple'
+        )
         self.use_obs_risk = _as_bool(self.get_parameter('use_obs_risk').value)
         self.use_ambiguity = _as_bool(self.get_parameter('use_ambiguity').value)
         self.use_visibility_model = _as_bool(self.get_parameter('use_visibility_model').value)
@@ -207,14 +198,9 @@ class UnicyclePlannerNode(Node):
         self.visibility_gp_noise_var = float(self.get_parameter('visibility_gp_noise_var').value)
         self.visibility_prior_occ = float(self.get_parameter('visibility_prior_occ').value)
         self.visibility_beta = float(self.get_parameter('visibility_beta').value)
-        self.visibility_height_tau = float(self.get_parameter('visibility_height_tau').value)
-        self.visibility_ray_samples = int(self.get_parameter('visibility_ray_samples').value)
         self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
         self.visibility_geometry_json = str(self.get_parameter('visibility_geometry_json').value)
         self.visibility_gp_seed = int(self.get_parameter('visibility_gp_seed').value)
-        self.visibility_r_bad_uv = float(self.get_parameter('visibility_r_bad_uv').value)
-        self.visibility_cov_pos_scale = float(self.get_parameter('visibility_cov_pos_scale').value)
-        self.visibility_cov_theta_scale = float(self.get_parameter('visibility_cov_theta_scale').value)
         self.r_visible_uv = float(self.get_parameter('r_visible_uv').value)
         self.r_miss_uv = float(self.get_parameter('r_miss_uv').value)
         self.visibility_power = float(self.get_parameter('visibility_power').value)
@@ -322,13 +308,9 @@ class UnicyclePlannerNode(Node):
             process_noise_xy=self.process_noise_xy,
             process_noise_theta=self.process_noise_theta,
             obs_noise_uv=self.obs_noise_uv,
-            goal_sigma_xy=self.goal_sigma_xy,
-            goal_sigma_theta=self.goal_sigma_theta,
             goal_sigma_uv=self.goal_sigma_uv,
-            risk_weight_state=self.risk_weight_state,
             risk_weight_obs=self.risk_weight_obs,
             ambiguity_weight=self.ambiguity_weight,
-            math_mode=self.math_mode,
             optimizer_maxiter=self.optimizer_maxiter,
             optimizer_maxfun=self.optimizer_maxfun,
             optimizer_ftol=self.optimizer_ftol,
@@ -338,7 +320,6 @@ class UnicyclePlannerNode(Node):
             approx_method=self.approx_method,
             use_obs_risk=self.use_obs_risk,
             use_ambiguity=self.use_ambiguity,
-            optimizer_backend=self.optimizer_backend,
             seed=self.seed,
             camera_params=camera_params,
             use_visibility_model=self.use_visibility_model,
@@ -354,15 +335,10 @@ class UnicyclePlannerNode(Node):
             visibility_gp_noise_var=self.visibility_gp_noise_var,
             visibility_prior_occ=self.visibility_prior_occ,
             visibility_beta=self.visibility_beta,
-            visibility_height_tau=self.visibility_height_tau,
-            visibility_ray_samples=self.visibility_ray_samples,
             visibility_target_height_m=self.visibility_target_height_m,
             visibility_geometry_json=self.visibility_geometry_json,
             visibility_artifact_path=self.visibility_artifact_path,
             visibility_gp_seed=self.visibility_gp_seed,
-            visibility_r_bad_uv=self.visibility_r_bad_uv,
-            visibility_cov_pos_scale=self.visibility_cov_pos_scale,
-            visibility_cov_theta_scale=self.visibility_cov_theta_scale,
             r_visible_uv=self.r_visible_uv,
             r_miss_uv=self.r_miss_uv,
             visibility_power=self.visibility_power,
@@ -484,9 +460,10 @@ class UnicyclePlannerNode(Node):
                 correction_period, self._pixel_correction_timer_cb, callback_group=self._io_group
             )
         self._publish_visibility_map_once()
+        self.get_logger().info(f'Active planner path: {self.planner_path_summary}')
         self.get_logger().info(
             f"{self.NODE_NAME} started "
-            f"(solver={self.optimizer_backend}, approx={self.approx_method}, "
+            f"({self.planner_path_summary}, "
             f"use_obs_risk={self.use_obs_risk}, use_ambiguity={self.use_ambiguity}, "
             f"goal_progress_n_steps={self.goal_progress_n_steps}, "
             f"use_visibility_model={self.use_visibility_model}, visibility_model={self.visibility_model}, "
@@ -1065,6 +1042,7 @@ class UnicyclePlannerNode(Node):
         )
         p_vis, R_eff, S_eff, gain_scale = self.planner.observation_model_with_visibility(m_pred, S_pred)
 
+        corr_method = 'ET1'
         corr_method = self.approx_method if self.pixel_correction_approx == 'AUTO' else self.pixel_correction_approx
         mu_y, Sigma_y, Gamma = self.planner.approx_observation(
             m_pred, S_eff, method=corr_method, R_override=R_eff
@@ -1375,7 +1353,6 @@ class UnicyclePlannerNode(Node):
         if self.debug_runtime and (now_wall - self._last_plan_entry_log) > self.debug_log_period_s:
             self.get_logger().info(
                 "Entering planner.plan: "
-                f"backend={self.optimizer_backend}, "
                 f"x0=({m0[0]:.2f},{m0[1]:.2f},{m0[2]:.2f}), "
                 f"goal=({goal_xy[0]:.2f},{goal_xy[1]:.2f})"
             )
@@ -1390,7 +1367,7 @@ class UnicyclePlannerNode(Node):
             elapsed_ms = max((time.perf_counter() - plan_start) * 1000.0, 0.0)
             self.get_logger().info(
                 "Returned from planner.plan: "
-                f"backend={getattr(result, 'backend', self.optimizer_backend) if result is not None else self.optimizer_backend}, "
+                f"backend={getattr(result, 'backend', 'casadi') if result is not None else 'casadi'}, "
                 f"elapsed_ms={elapsed_ms:.1f}, "
                 f"success={getattr(result, 'optimizer_success', False) if result is not None else False}"
             )

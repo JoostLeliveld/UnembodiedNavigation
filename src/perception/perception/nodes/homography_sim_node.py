@@ -19,9 +19,7 @@ from unav_common.occlusion_geometry import scene_from_json, segment_occluded
 
 class HomographySimNode(Node):
     def __init__(self):
-        super().__init__('homography_sim_node',
-                         allow_undeclared_parameters=True,
-                         automatically_declare_parameters_from_overrides=True)
+        super().__init__('homography_sim_node')
 
 
         def _as_bool(value):
@@ -50,7 +48,7 @@ class HomographySimNode(Node):
         if not self.has_parameter('use_visibility_model'):
             self.declare_parameter('use_visibility_model', False)
         if not self.has_parameter('visibility_model'):
-            self.declare_parameter('visibility_model', 'raycast_25d')
+            self.declare_parameter('visibility_model', 'gp_visibility')
         if not self.has_parameter('visibility_geometry_json'):
             self.declare_parameter('visibility_geometry_json', '')
         if not self.has_parameter('visibility_target_height_m'):

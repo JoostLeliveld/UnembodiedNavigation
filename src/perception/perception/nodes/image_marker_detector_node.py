@@ -18,16 +18,14 @@ class ImageMarkerDetectorNode(Node):
     """Detect a ground-contact proxy from the red robot body in the rendered image."""
 
     def __init__(self):
-        super().__init__(
-            'image_marker_detector_node',
-            allow_undeclared_parameters=True,
-            automatically_declare_parameters_from_overrides=True,
-        )
+        super().__init__('image_marker_detector_node')
 
         def _declare_if_missing(name, default):
             if not self.has_parameter(name):
                 self.declare_parameter(name, default)
 
+        # Shared launch parameters are declared explicitly so typos fail fast even
+        # though this detector only uses the camera/image subset directly.
         _declare_if_missing('cam_pos', [-3.0, -3.0, 6.0])
         _declare_if_missing('look_at', [1.5, 1.5, 0.0])
         _declare_if_missing('img_width', 1280)
@@ -35,6 +33,12 @@ class ImageMarkerDetectorNode(Node):
         _declare_if_missing('fov_h_rad', 1.5708)
         _declare_if_missing('pixel_noise_sigma', 0.0)
         _declare_if_missing('seed', 0)
+        _declare_if_missing('world_frame', 'map_bev')
+        _declare_if_missing('use_visibility_model', False)
+        _declare_if_missing('visibility_model', 'gp_visibility')
+        _declare_if_missing('use_geometry_occlusion', True)
+        _declare_if_missing('visibility_geometry_json', '')
+        _declare_if_missing('visibility_target_height_m', 0.0)
         _declare_if_missing('log_noisy_pixels', False)
         _declare_if_missing('min_blob_area_px', 8.0)
         _declare_if_missing('morph_kernel_px', 3)
@@ -79,7 +83,8 @@ class ImageMarkerDetectorNode(Node):
         self.create_subscription(Image, '/external_camera/image_raw', self._image_cb, 10)
 
         self.get_logger().info(
-            f'Image marker detector started (position-only, pixel_noise_sigma={self.pixel_noise_std:.3f}, '
+            f'Image marker detector started (camera xy only; no visual heading, '
+            f'pixel_noise_sigma={self.pixel_noise_std:.3f}, '
             f'min_blob_area_px={self.min_blob_area_px:.1f}, morph_kernel_px={self.morph_kernel_px})'
         )
 
