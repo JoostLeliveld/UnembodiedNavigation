@@ -22,17 +22,14 @@ def _launch_setup(context, *args, **kwargs):
         raise RuntimeError(f"planner must be one of: {', '.join(ALLOWED_PLANNERS)}")
 
     cfg['planner'] = planner
-    cfg['use_live_dashboard'] = False
     cfg['use_rviz'] = bool(cfg.get('use_rviz', False))
 
     if planner == 'visibility_unaware_baseline':
         cfg['use_visibility_model'] = False
         cfg['use_ambiguity'] = False
         cfg['use_obs_risk'] = True
-        cfg['visibility_model'] = 'gp_visibility'
     else:
         cfg['use_visibility_model'] = True
-        cfg['visibility_model'] = 'gp_visibility'
 
     cfg = resolve_world_setup(cfg)
     return build_agent_runtime_actions(cfg)

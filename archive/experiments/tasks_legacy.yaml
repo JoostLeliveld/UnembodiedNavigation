@@ -2,7 +2,7 @@ tasks:
   warehouse_occ_light.world.sdf:
     # Legacy aliases retained only so old notes and historical run manifests can
     # still be interpreted. The main launches and thesis-facing docs use the E*
-    # benchmark names from tasks.yaml instead.
+    # benchmark names from src/experiments/config/tasks.yaml instead.
     - name: T0_front_approach
       maps_to: E0_visible_sanity
       claim: nominal_stability

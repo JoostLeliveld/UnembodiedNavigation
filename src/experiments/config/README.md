@@ -17,7 +17,7 @@ The current milestone is a controlled comparison. These files fix:
 | --- | --- |
 | [`world_profiles.yaml`](world_profiles.yaml) | supported worlds, camera intrinsics, default planner, visibility artifact path |
 | [`tasks.yaml`](tasks.yaml) | benchmark and exploratory tasks for each world |
-| [`tasks_legacy.yaml`](tasks_legacy.yaml) | archived alias map for older `T*` task names; not used by the main launches |
+| `../../archive/experiments/tasks_legacy.yaml` | archived alias map for older `T*` task names; not part of the active launch surface |
 
 ## What To Read First
 

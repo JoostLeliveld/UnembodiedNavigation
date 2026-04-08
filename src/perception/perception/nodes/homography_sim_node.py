@@ -45,10 +45,6 @@ class HomographySimNode(Node):
             self.declare_parameter('world_frame', 'map_bev')
         if not self.has_parameter('log_noisy_pixels'):
             self.declare_parameter('log_noisy_pixels', False)
-        if not self.has_parameter('use_visibility_model'):
-            self.declare_parameter('use_visibility_model', False)
-        if not self.has_parameter('visibility_model'):
-            self.declare_parameter('visibility_model', 'gp_visibility')
         if not self.has_parameter('visibility_geometry_json'):
             self.declare_parameter('visibility_geometry_json', '')
         if not self.has_parameter('visibility_target_height_m'):
@@ -79,8 +75,6 @@ class HomographySimNode(Node):
         self.seed = int(self.get_parameter('seed').value)
         self.world_frame = str(self.get_parameter('world_frame').value)
         self.log_noisy_pixels = _as_bool(self.get_parameter('log_noisy_pixels').value)
-        self.use_visibility_model = _as_bool(self.get_parameter('use_visibility_model').value)
-        self.visibility_model_name = str(self.get_parameter('visibility_model').value).strip().lower()
         self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
         self.log_camera_diagnostics = _as_bool(self.get_parameter('log_camera_diagnostics').value)
         self.heading_marker_separation_m = float(self.get_parameter('heading_marker_separation_m').value)
@@ -107,7 +101,6 @@ class HomographySimNode(Node):
             f'Homography Sim Node started (pixel_noise_sigma={self.pixel_noise_std:.3f}, '
             f'world_frame={self.world_frame}, log_noisy_pixels={self.log_noisy_pixels}, '
             f'use_geometry_occlusion={self.use_geometry_occlusion}, '
-            f'visibility_model={self.visibility_model_name}, '
             f'log_camera_diagnostics={self.log_camera_diagnostics}, '
             f'heading_marker_separation_m={self.heading_marker_separation_m:.3f}, '
             f'occluders={len(self.occlusion_scene.prisms)})'
@@ -205,7 +198,7 @@ class HomographySimNode(Node):
                     rclpy.time.Time(),
                 )
                 pose_world = do_transform_pose(msg.pose.pose, tf_msg)
-            except Exception as exc:
+            except tf2_ros.TransformException as exc:
                 now = time.monotonic()
                 if (now - self._last_tf_warn_wall) > 1.0:
                     self._last_tf_warn_wall = now

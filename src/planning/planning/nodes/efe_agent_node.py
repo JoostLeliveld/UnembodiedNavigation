@@ -84,7 +84,7 @@ def main(args=None):
         try:
             if rclpy.ok():
                 rclpy.shutdown()
-        except Exception:
+        except RuntimeError:
             pass
 
 

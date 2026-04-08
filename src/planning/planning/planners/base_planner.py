@@ -73,22 +73,10 @@ class UnicyclePlannerBase:
         seed,
         camera_params,
         use_visibility_model=False,
-        visibility_model='gp_visibility',
         visibility_weight=0.0,
-        visibility_map_min_x=-5.0,
-        visibility_map_max_x=5.0,
-        visibility_map_min_y=-5.0,
-        visibility_map_max_y=5.0,
-        visibility_map_nx=140,
-        visibility_map_ny=120,
-        visibility_gp_length_scale=1.4,
-        visibility_gp_noise_var=0.15,
-        visibility_prior_occ=0.005,
-        visibility_beta=1.0,
         visibility_target_height_m=0.0,
         visibility_geometry_json='',
         visibility_artifact_path='',
-        visibility_gp_seed=0,
         r_visible_uv=2.5,
         r_miss_uv=420.0,
         visibility_power=3.0,
@@ -186,7 +174,6 @@ class UnicyclePlannerBase:
 
         self.runtime_debug = bool(runtime_debug)
         self.use_visibility_model = bool(use_visibility_model)
-        self.visibility_model_name = str(visibility_model or 'none').strip().lower()
         self.visibility_weight = float(visibility_weight)
         self._visibility_min_prob = 1e-4
         self.visibility_model = None
@@ -212,29 +199,11 @@ class UnicyclePlannerBase:
         ])
         self.R = self.R_visible.copy()
 
-        gp_visibility_aliases = ('gp_visibility', 'gpvis')
-        valid_visibility_models = gp_visibility_aliases + ('', 'none')
-        if self.visibility_model_name not in valid_visibility_models:
-            raise ValueError(
-                "visibility_model must be one of: gp_visibility, gpvis, none"
-            )
-        if self.visibility_model_name in gp_visibility_aliases:
+        if self.use_visibility_model:
             vis_cfg = GPVisibilityMapConfig(
-                map_xmin=float(visibility_map_min_x),
-                map_xmax=float(visibility_map_max_x),
-                map_ymin=float(visibility_map_min_y),
-                map_ymax=float(visibility_map_max_y),
-                map_nx=int(visibility_map_nx),
-                map_ny=int(visibility_map_ny),
-                gp_length_scale=float(visibility_gp_length_scale),
-                gp_noise_var=float(visibility_gp_noise_var),
-                prior_occ=float(visibility_prior_occ),
-                beta=float(visibility_beta),
                 artifact_path=str(visibility_artifact_path or ''),
-                geometry_json=str(visibility_geometry_json or ''),
                 camera_pos=tuple(np.asarray(camera_params['cam_pos'], dtype=float).tolist()),
                 target_height_m=float(visibility_target_height_m),
-                seed=int(visibility_gp_seed),
                 min_prob=self._visibility_min_prob,
             )
             self.visibility_model = GPVisibilityMapModel(vis_cfg)

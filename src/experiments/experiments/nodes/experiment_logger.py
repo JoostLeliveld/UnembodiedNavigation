@@ -60,7 +60,6 @@ class ExperimentLogger(Node):
         self.declare_parameter('goal_success_hold_s', 2.0)
         self.declare_parameter('frame_id', 'map_bev')
         self.declare_parameter('use_visibility_model', False)
-        self.declare_parameter('visibility_model', 'gp_visibility')
         self.declare_parameter('visibility_artifact_path', '')
         self.declare_parameter('risk_weight_obs', 1.0)
         self.declare_parameter('goal_sigma_uv', 2.0)
@@ -114,7 +113,6 @@ class ExperimentLogger(Node):
         self.goal_success_hold_s = float(self.get_parameter('goal_success_hold_s').value)
         self.frame_id = str(self.get_parameter('frame_id').value)
         self.use_visibility_model = bool(self.get_parameter('use_visibility_model').value)
-        self.visibility_model = str(self.get_parameter('visibility_model').value)
         self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value)
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
         self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
@@ -168,7 +166,6 @@ class ExperimentLogger(Node):
             'use_ambiguity': self.use_ambiguity,
             'use_obs_risk': self.use_obs_risk,
             'use_visibility_model': self.use_visibility_model,
-            'visibility_model': self.visibility_model,
             'visibility_artifact_path': self.visibility_artifact_path,
             'risk_weight_obs': self.risk_weight_obs,
             'goal_sigma_uv': self.goal_sigma_uv,
@@ -401,7 +398,7 @@ class ExperimentLogger(Node):
                     rclpy.time.Time(),
                 )
                 pose_world = do_transform_pose(self.odom_msg.pose.pose, tf_msg)
-            except Exception as exc:
+            except tf2_ros.TransformException as exc:
                 now = time.monotonic()
                 if (now - self._last_tf_warn_wall) > 1.0:
                     self._last_tf_warn_wall = now

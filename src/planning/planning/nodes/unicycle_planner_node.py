@@ -1,7 +1,6 @@
 """Thin ROS 2 wrapper around unicycle planners."""
 
 import math
-import os
 import time
 import threading
 import traceback
@@ -13,10 +12,9 @@ from rclpy.qos import QoSProfile, DurabilityPolicy
 from rclpy.time import Time
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 
-from geometry_msgs.msg import Point, PoseStamped, PoseWithCovarianceStamped, Twist
-from nav_msgs.msg import OccupancyGrid, Path
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
+from nav_msgs.msg import Path
 from std_msgs.msg import Float64MultiArray, String
-from visualization_msgs.msg import Marker, MarkerArray
 
 from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
@@ -81,21 +79,9 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('use_obs_risk', True)
         _declare_if_not('use_ambiguity', True)
         _declare_if_not('use_visibility_model', False)
-        _declare_if_not('visibility_model', 'gp_visibility')
         _declare_if_not('visibility_weight', 0.0)
-        _declare_if_not('visibility_map_min_x', -5.0)
-        _declare_if_not('visibility_map_max_x', 5.0)
-        _declare_if_not('visibility_map_min_y', -5.0)
-        _declare_if_not('visibility_map_max_y', 5.0)
-        _declare_if_not('visibility_map_nx', 140)
-        _declare_if_not('visibility_map_ny', 120)
-        _declare_if_not('visibility_gp_length_scale', 1.4)
-        _declare_if_not('visibility_gp_noise_var', 0.15)
-        _declare_if_not('visibility_prior_occ', 0.005)
-        _declare_if_not('visibility_beta', 1.0)
         _declare_if_not('visibility_target_height_m', 0.0)
         _declare_if_not('visibility_geometry_json', '')
-        _declare_if_not('visibility_gp_seed', 0)
         _declare_if_not('r_visible_uv', 2.5)
         _declare_if_not('r_miss_uv', 420.0)
         _declare_if_not('visibility_power', 3.0)
@@ -118,16 +104,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('nogo_softplus_scale', 0.08)
         _declare_if_not('nogo_logbarrier_scale', 0.25)
         _declare_if_not('nogo_logbarrier_eps', 1e-3)
-        _declare_if_not('publish_visibility_map', True)
-        _declare_if_not('visibility_map_topic', '/visibility_map')
-        _declare_if_not('publish_opacity_debug_maps', True)
-        _declare_if_not('visibility_opacity_mean_map_topic', '/visibility_opacity_mean_map')
-        _declare_if_not('visibility_opacity_conservative_map_topic', '/visibility_opacity_conservative_map')
-        _declare_if_not('publish_visibility_logic_markers', True)
-        _declare_if_not('visibility_logic_marker_topic', '/visibility_logic_markers')
-        _declare_if_not('experiment_run_dir_topic', '/experiment/run_dir')
         _declare_if_not('visibility_artifact_path', '')
-        _declare_if_not('visibility_artifact_filename', 'visibility_artifacts.npz')
 
         # Optimizer params
         _declare_if_not('optimizer_maxiter', 50)
@@ -186,21 +163,9 @@ class UnicyclePlannerNode(Node):
         self.use_obs_risk = _as_bool(self.get_parameter('use_obs_risk').value)
         self.use_ambiguity = _as_bool(self.get_parameter('use_ambiguity').value)
         self.use_visibility_model = _as_bool(self.get_parameter('use_visibility_model').value)
-        self.visibility_model = str(self.get_parameter('visibility_model').value).strip().lower()
         self.visibility_weight = float(self.get_parameter('visibility_weight').value)
-        self.visibility_map_min_x = float(self.get_parameter('visibility_map_min_x').value)
-        self.visibility_map_max_x = float(self.get_parameter('visibility_map_max_x').value)
-        self.visibility_map_min_y = float(self.get_parameter('visibility_map_min_y').value)
-        self.visibility_map_max_y = float(self.get_parameter('visibility_map_max_y').value)
-        self.visibility_map_nx = int(self.get_parameter('visibility_map_nx').value)
-        self.visibility_map_ny = int(self.get_parameter('visibility_map_ny').value)
-        self.visibility_gp_length_scale = float(self.get_parameter('visibility_gp_length_scale').value)
-        self.visibility_gp_noise_var = float(self.get_parameter('visibility_gp_noise_var').value)
-        self.visibility_prior_occ = float(self.get_parameter('visibility_prior_occ').value)
-        self.visibility_beta = float(self.get_parameter('visibility_beta').value)
         self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
         self.visibility_geometry_json = str(self.get_parameter('visibility_geometry_json').value)
-        self.visibility_gp_seed = int(self.get_parameter('visibility_gp_seed').value)
         self.r_visible_uv = float(self.get_parameter('r_visible_uv').value)
         self.r_miss_uv = float(self.get_parameter('r_miss_uv').value)
         self.visibility_power = float(self.get_parameter('visibility_power').value)
@@ -223,32 +188,7 @@ class UnicyclePlannerNode(Node):
         self.nogo_softplus_scale = float(self.get_parameter('nogo_softplus_scale').value)
         self.nogo_logbarrier_scale = float(self.get_parameter('nogo_logbarrier_scale').value)
         self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
-        self.publish_visibility_map = _as_bool(self.get_parameter('publish_visibility_map').value)
-        self.visibility_map_topic = str(self.get_parameter('visibility_map_topic').value).strip() or '/visibility_map'
-        self.publish_opacity_debug_maps = _as_bool(self.get_parameter('publish_opacity_debug_maps').value)
-        self.visibility_opacity_mean_map_topic = (
-            str(self.get_parameter('visibility_opacity_mean_map_topic').value).strip()
-            or '/visibility_opacity_mean_map'
-        )
-        self.visibility_opacity_conservative_map_topic = (
-            str(self.get_parameter('visibility_opacity_conservative_map_topic').value).strip()
-            or '/visibility_opacity_conservative_map'
-        )
-        self.publish_visibility_logic_markers = _as_bool(
-            self.get_parameter('publish_visibility_logic_markers').value
-        )
-        self.visibility_logic_marker_topic = (
-            str(self.get_parameter('visibility_logic_marker_topic').value).strip()
-            or '/visibility_logic_markers'
-        )
-        self.experiment_run_dir_topic = (
-            str(self.get_parameter('experiment_run_dir_topic').value).strip() or '/experiment/run_dir'
-        )
         self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value).strip()
-        self.visibility_artifact_filename = (
-            str(self.get_parameter('visibility_artifact_filename').value).strip()
-            or 'visibility_artifacts.npz'
-        )
 
         self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
         self.optimizer_maxfun = int(self.get_parameter('optimizer_maxfun').value)
@@ -323,22 +263,10 @@ class UnicyclePlannerNode(Node):
             seed=self.seed,
             camera_params=camera_params,
             use_visibility_model=self.use_visibility_model,
-            visibility_model=self.visibility_model,
             visibility_weight=self.visibility_weight,
-            visibility_map_min_x=self.visibility_map_min_x,
-            visibility_map_max_x=self.visibility_map_max_x,
-            visibility_map_min_y=self.visibility_map_min_y,
-            visibility_map_max_y=self.visibility_map_max_y,
-            visibility_map_nx=self.visibility_map_nx,
-            visibility_map_ny=self.visibility_map_ny,
-            visibility_gp_length_scale=self.visibility_gp_length_scale,
-            visibility_gp_noise_var=self.visibility_gp_noise_var,
-            visibility_prior_occ=self.visibility_prior_occ,
-            visibility_beta=self.visibility_beta,
             visibility_target_height_m=self.visibility_target_height_m,
             visibility_geometry_json=self.visibility_geometry_json,
             visibility_artifact_path=self.visibility_artifact_path,
-            visibility_gp_seed=self.visibility_gp_seed,
             r_visible_uv=self.r_visible_uv,
             r_miss_uv=self.r_miss_uv,
             visibility_power=self.visibility_power,
@@ -392,10 +320,6 @@ class UnicyclePlannerNode(Node):
             Twist, '/cmd_vel', self._cmd_cb, qos_profile=state_qos,
             callback_group=self._io_group
         )
-        self.run_dir_sub = self.create_subscription(
-            String, self.experiment_run_dir_topic, self._experiment_run_dir_cb,
-            qos_profile=goal_qos, callback_group=self._io_group
-        )
 
         # Publishers
         path_qos = QoSProfile(depth=1)
@@ -408,18 +332,6 @@ class UnicyclePlannerNode(Node):
         self.metrics_pub = self.create_publisher(Float64MultiArray, '/efe/metrics', 10)
         self.planner_diag_pub = self.create_publisher(Float64MultiArray, '/planner/diagnostics', 10)
         self.planner_diag_text_pub = self.create_publisher(String, '/planner/diagnostics_text', 10)
-        self.visibility_map_pub = self.create_publisher(
-            OccupancyGrid, self.visibility_map_topic, qos_profile=path_qos
-        )
-        self.visibility_opacity_mean_map_pub = self.create_publisher(
-            OccupancyGrid, self.visibility_opacity_mean_map_topic, qos_profile=path_qos
-        )
-        self.visibility_opacity_conservative_map_pub = self.create_publisher(
-            OccupancyGrid, self.visibility_opacity_conservative_map_topic, qos_profile=path_qos
-        )
-        self.visibility_logic_pub = self.create_publisher(
-            MarkerArray, self.visibility_logic_marker_topic, qos_profile=path_qos
-        )
 
         # State
         self.state_msg = None
@@ -445,8 +357,6 @@ class UnicyclePlannerNode(Node):
         self.belief_m = None
         self.belief_S = None
         self.belief_stamp = None
-        self._experiment_run_dir = ''
-        self._visibility_artifact_written = False
         self.last_cmd = np.array([0.0, 0.0], dtype=float)
         self._latest_measurement_available = False
         self._latest_belief_age_s = math.nan
@@ -459,14 +369,13 @@ class UnicyclePlannerNode(Node):
             self._pixel_correction_timer = self.create_timer(
                 correction_period, self._pixel_correction_timer_cb, callback_group=self._io_group
             )
-        self._publish_visibility_map_once()
         self.get_logger().info(f'Active planner path: {self.planner_path_summary}')
         self.get_logger().info(
             f"{self.NODE_NAME} started "
             f"({self.planner_path_summary}, "
             f"use_obs_risk={self.use_obs_risk}, use_ambiguity={self.use_ambiguity}, "
             f"goal_progress_n_steps={self.goal_progress_n_steps}, "
-            f"use_visibility_model={self.use_visibility_model}, visibility_model={self.visibility_model}, "
+            f"use_visibility_model={self.use_visibility_model}, "
             f"visibility_weight={self.visibility_weight:.3f}, "
             f"use_nogo_cost={self.use_nogo_cost}, nogo_penalty_type={self.nogo_penalty_type}, "
             f"use_pixel_correction={self.use_pixel_correction}, "
@@ -474,326 +383,6 @@ class UnicyclePlannerNode(Node):
             f"use_pixel_heading_correction={self.use_pixel_heading_correction}, "
             f"debug_runtime={self.debug_runtime})"
         )
-
-    def _build_grid_message_from_array(self, cfg, map_array, *, xs=None, ys=None, invert=False):
-        arr = np.asarray(map_array, dtype=float)
-        if arr.ndim != 2 or arr.size == 0:
-            return None
-
-        xs_arr = None if xs is None else np.asarray(xs, dtype=float).reshape(-1)
-        ys_arr = None if ys is None else np.asarray(ys, dtype=float).reshape(-1)
-        if (
-            xs_arr is not None
-            and ys_arr is not None
-            and xs_arr.size == arr.shape[1]
-            and ys_arr.size == arr.shape[0]
-            and xs_arr.size > 1
-            and ys_arr.size > 1
-        ):
-            res_x = float(xs_arr[1] - xs_arr[0])
-            res_y = float(ys_arr[1] - ys_arr[0])
-            resolution = float(max(min(abs(res_x), abs(res_y)), 1e-3))
-            width = int(xs_arr.size)
-            height = int(ys_arr.size)
-            origin_x = float(xs_arr[0]) - 0.5 * resolution
-            origin_y = float(ys_arr[0]) - 0.5 * resolution
-        else:
-            width = int(arr.shape[1])
-            height = int(arr.shape[0])
-            span_x = float(cfg.map_xmax) - float(cfg.map_xmin)
-            span_y = float(cfg.map_ymax) - float(cfg.map_ymin)
-            res_x = span_x / max(width - 1, 1)
-            res_y = span_y / max(height - 1, 1)
-            resolution = float(max(min(res_x, res_y), 1e-3))
-            origin_x = float(cfg.map_xmin) - 0.5 * resolution
-            origin_y = float(cfg.map_ymin) - 0.5 * resolution
-
-        values = 1.0 - arr if invert else arr
-        data = np.clip(np.rint(values * 100.0), 0, 100).astype(np.int8).ravel().tolist()
-
-        grid = OccupancyGrid()
-        grid.header.stamp = self.get_clock().now().to_msg()
-        grid.header.frame_id = 'map_bev'
-        grid.info.resolution = resolution
-        grid.info.width = width
-        grid.info.height = height
-        grid.info.origin.position.x = origin_x
-        grid.info.origin.position.y = origin_y
-        grid.info.origin.position.z = 0.0
-        grid.info.origin.orientation.w = 1.0
-        grid.data = data
-        return grid
-
-    def _sample_visibility_map_array(self, visibility_model):
-        cfg = visibility_model.cfg
-        xs = np.linspace(float(cfg.map_xmin), float(cfg.map_xmax), int(max(cfg.map_nx, 4)))
-        ys = np.linspace(float(cfg.map_ymin), float(cfg.map_ymax), int(max(cfg.map_ny, 4)))
-        arr = np.zeros((ys.size, xs.size), dtype=float)
-        for iy, y in enumerate(ys):
-            for ix, x in enumerate(xs):
-                arr[iy, ix] = float(visibility_model.prob_state_np(np.array([x, y, 0.0], dtype=float)))
-        return xs, ys, arr
-
-    def _publish_visibility_grid(self, publisher, topic_name, cfg, map_array, *, xs=None, ys=None, invert=False):
-        grid = self._build_grid_message_from_array(cfg, map_array, xs=xs, ys=ys, invert=invert)
-        if grid is None:
-            return False
-        publisher.publish(grid)
-        self.get_logger().info(
-            f"Published {topic_name} ({grid.info.width}x{grid.info.height}, "
-            f"res={grid.info.resolution:.3f} m/cell)"
-        )
-        return True
-
-    def _write_visibility_artifacts_if_ready(self):
-        if self._visibility_artifact_written or (not self._experiment_run_dir):
-            return
-        visibility_model = getattr(self.planner, 'visibility_model', None)
-        if visibility_model is None:
-            return
-
-        p_map = getattr(visibility_model, 'P_map', None)
-        xs = getattr(visibility_model, 'xs', None)
-        ys = getattr(visibility_model, 'ys', None)
-        if p_map is None or xs is None or ys is None:
-            return
-
-        artifact_path = os.path.join(self._experiment_run_dir, self.visibility_artifact_filename)
-        cfg = getattr(visibility_model, 'cfg', None)
-        geometry_json = '' if cfg is None else str(getattr(cfg, 'geometry_json', '') or '')
-        rho_mean = getattr(visibility_model, 'rho_mean_map', None)
-        if rho_mean is None:
-            rho_mean = getattr(visibility_model, 'P_mean_map', np.zeros_like(np.asarray(p_map, dtype=float)))
-        rho_cons = getattr(visibility_model, 'rho_conservative_map', None)
-        if rho_cons is None:
-            rho_cons = getattr(visibility_model, 'P_conservative_map', np.asarray(p_map, dtype=float))
-        camera_pos = getattr(visibility_model, 'camera_pos', np.asarray([0.0, 0.0, 0.0], dtype=float))
-        target_height = float(getattr(visibility_model, 'target_height', self.visibility_target_height_m))
-        p_mean = getattr(visibility_model, 'P_mean_map', np.asarray(p_map, dtype=float))
-        p_cons = getattr(visibility_model, 'P_conservative_map', np.asarray(p_map, dtype=float))
-
-        try:
-            os.makedirs(self._experiment_run_dir, exist_ok=True)
-            np.savez_compressed(
-                artifact_path,
-                xs=np.asarray(xs, dtype=float),
-                ys=np.asarray(ys, dtype=float),
-                rho_mean_map=np.asarray(rho_mean, dtype=float),
-                rho_conservative_map=np.asarray(rho_cons, dtype=float),
-                P_mean_map=np.asarray(p_mean, dtype=float),
-                P_conservative_map=np.asarray(p_cons, dtype=float),
-                P_map=np.asarray(p_map, dtype=float),
-                camera_pos=np.asarray(camera_pos, dtype=float).reshape(-1),
-                target_height=np.asarray([target_height], dtype=float),
-                geometry_json=np.asarray(str(geometry_json)),
-                visibility_model=np.asarray(str(self.visibility_model)),
-                use_visibility_model=np.asarray([1.0 if self.use_visibility_model else 0.0], dtype=float),
-            )
-            self._visibility_artifact_written = True
-            self.get_logger().info(f"Wrote visibility artifact to {artifact_path}")
-        except Exception as exc:
-            self.get_logger().warn(f"Failed to write visibility artifact to {artifact_path}: {exc}")
-
-    def _publish_visibility_map_once(self):
-        visibility_model = getattr(self.planner, 'visibility_model', None)
-        if visibility_model is None:
-            return
-
-        cfg = visibility_model.cfg
-        xs = getattr(visibility_model, 'xs', None)
-        ys = getattr(visibility_model, 'ys', None)
-        p_map = getattr(visibility_model, 'P_map', None)
-        if p_map is None:
-            xs, ys, p_map = self._sample_visibility_map_array(visibility_model)
-
-        if self.publish_visibility_map:
-            self._publish_visibility_grid(
-                self.visibility_map_pub,
-                self.visibility_map_topic,
-                cfg,
-                p_map,
-                xs=xs,
-                ys=ys,
-                invert=True,
-            )
-
-        if self.publish_opacity_debug_maps:
-            rho_mean = getattr(visibility_model, 'rho_mean_map', None)
-            if rho_mean is None:
-                rho_mean = getattr(visibility_model, 'P_mean_map', None)
-            rho_cons = getattr(visibility_model, 'rho_conservative_map', None)
-            if rho_cons is None:
-                rho_cons = getattr(visibility_model, 'P_conservative_map', None)
-            if rho_mean is not None:
-                self._publish_visibility_grid(
-                    self.visibility_opacity_mean_map_pub,
-                    self.visibility_opacity_mean_map_topic,
-                    cfg,
-                    rho_mean,
-                    xs=xs,
-                    ys=ys,
-                    invert=False,
-                )
-            if rho_cons is not None:
-                self._publish_visibility_grid(
-                    self.visibility_opacity_conservative_map_pub,
-                    self.visibility_opacity_conservative_map_topic,
-                    cfg,
-                    rho_cons,
-                    xs=xs,
-                    ys=ys,
-                    invert=False,
-                )
-
-        self._write_visibility_artifacts_if_ready()
-
-    def _visibility_debug_support_points(self, m0, S0, target_height):
-        del S0
-        mean = np.asarray(m0, dtype=float).reshape(-1)
-        if mean.size < 2:
-            return np.zeros((0, 3), dtype=float)
-
-        points = [[float(mean[0]), float(mean[1]), float(target_height)]]
-        return np.asarray(points, dtype=float)
-
-    def _publish_visibility_logic_markers(self, m0, S0):
-        if not self.publish_visibility_logic_markers:
-            return
-
-        markers = MarkerArray()
-        delete_all = Marker()
-        delete_all.action = Marker.DELETEALL
-        markers.markers.append(delete_all)
-
-        visibility_model = getattr(self.planner, 'visibility_model', None)
-        if visibility_model is None:
-            self.visibility_logic_pub.publish(markers)
-            return
-
-        mean = np.asarray(m0, dtype=float).reshape(-1)
-        if mean.size < 2:
-            self.visibility_logic_pub.publish(markers)
-            return
-
-        frame_id = 'map_bev'
-        stamp = self.get_clock().now().to_msg()
-        camera_pos = np.asarray(
-            getattr(visibility_model, 'camera_pos', np.asarray([0.0, 0.0, 0.0], dtype=float)),
-            dtype=float,
-        ).reshape(-1)
-        if camera_pos.size < 3:
-            camera_pos = np.array([0.0, 0.0, 0.0], dtype=float)
-        target_height = float(getattr(visibility_model, 'target_height', self.visibility_target_height_m))
-        support_points = self._visibility_debug_support_points(m0, S0, target_height)
-
-        p_vis = 1.0
-        try:
-            if self.use_visibility_model:
-                p_vis = float(self.planner.visibility_probability_belief(m0, S0))
-        except Exception:
-            try:
-                p_vis = float(visibility_model.prob_state_np(np.array([mean[0], mean[1], 0.0], dtype=float)))
-            except Exception:
-                p_vis = 1.0
-        p_vis = float(np.clip(p_vis, 0.0, 1.0))
-        ray_r = float(1.0 - p_vis)
-        ray_g = float(p_vis)
-
-        camera_marker = Marker()
-        camera_marker.header.frame_id = frame_id
-        camera_marker.header.stamp = stamp
-        camera_marker.ns = 'visibility_logic'
-        camera_marker.id = 0
-        camera_marker.type = Marker.SPHERE
-        camera_marker.action = Marker.ADD
-        camera_marker.pose.position.x = float(camera_pos[0])
-        camera_marker.pose.position.y = float(camera_pos[1])
-        camera_marker.pose.position.z = float(camera_pos[2])
-        camera_marker.pose.orientation.w = 1.0
-        camera_marker.scale.x = 0.24
-        camera_marker.scale.y = 0.24
-        camera_marker.scale.z = 0.24
-        camera_marker.color.r = 0.15
-        camera_marker.color.g = 0.65
-        camera_marker.color.b = 1.0
-        camera_marker.color.a = 0.95
-        markers.markers.append(camera_marker)
-
-        target_marker = Marker()
-        target_marker.header.frame_id = frame_id
-        target_marker.header.stamp = stamp
-        target_marker.ns = 'visibility_logic'
-        target_marker.id = 1
-        target_marker.type = Marker.SPHERE
-        target_marker.action = Marker.ADD
-        target_marker.pose.position.x = float(mean[0])
-        target_marker.pose.position.y = float(mean[1])
-        target_marker.pose.position.z = target_height
-        target_marker.pose.orientation.w = 1.0
-        target_marker.scale.x = 0.18
-        target_marker.scale.y = 0.18
-        target_marker.scale.z = 0.18
-        target_marker.color.r = ray_r
-        target_marker.color.g = ray_g
-        target_marker.color.b = 0.1
-        target_marker.color.a = 0.95
-        markers.markers.append(target_marker)
-
-        ray_marker = Marker()
-        ray_marker.header.frame_id = frame_id
-        ray_marker.header.stamp = stamp
-        ray_marker.ns = 'visibility_logic'
-        ray_marker.id = 2
-        ray_marker.type = Marker.LINE_STRIP
-        ray_marker.action = Marker.ADD
-        ray_marker.scale.x = 0.05
-        ray_marker.color.r = ray_r
-        ray_marker.color.g = ray_g
-        ray_marker.color.b = 0.15
-        ray_marker.color.a = 0.9
-        ray_start = Point(x=float(camera_pos[0]), y=float(camera_pos[1]), z=float(camera_pos[2]))
-        ray_end = Point(x=float(mean[0]), y=float(mean[1]), z=target_height)
-        ray_marker.points = [ray_start, ray_end]
-        markers.markers.append(ray_marker)
-
-        support_marker = Marker()
-        support_marker.header.frame_id = frame_id
-        support_marker.header.stamp = stamp
-        support_marker.ns = 'visibility_logic'
-        support_marker.id = 3
-        support_marker.type = Marker.SPHERE_LIST
-        support_marker.action = Marker.ADD
-        support_marker.scale.x = 0.10
-        support_marker.scale.y = 0.10
-        support_marker.scale.z = 0.10
-        support_marker.color.r = 1.0
-        support_marker.color.g = 0.85
-        support_marker.color.b = 0.15
-        support_marker.color.a = 0.9
-        for pt in support_points:
-            support_marker.points.append(Point(x=float(pt[0]), y=float(pt[1]), z=float(pt[2])))
-        markers.markers.append(support_marker)
-
-        text_marker = Marker()
-        text_marker.header.frame_id = frame_id
-        text_marker.header.stamp = stamp
-        text_marker.ns = 'visibility_logic'
-        text_marker.id = 4
-        text_marker.type = Marker.TEXT_VIEW_FACING
-        text_marker.action = Marker.ADD
-        text_marker.pose.position.x = float(mean[0])
-        text_marker.pose.position.y = float(mean[1])
-        text_marker.pose.position.z = target_height + 0.45
-        text_marker.pose.orientation.w = 1.0
-        text_marker.scale.z = 0.30
-        text_marker.color.r = 1.0
-        text_marker.color.g = 1.0
-        text_marker.color.b = 1.0
-        text_marker.color.a = 0.95
-        text_marker.text = f"p_vis={p_vis:.2f}"
-        markers.markers.append(text_marker)
-
-        self.visibility_logic_pub.publish(markers)
 
     def _publish_safe_stop_command(self):
         """Hook for agent mode; planner-only nodes can ignore."""
@@ -806,7 +395,7 @@ class UnicyclePlannerNode(Node):
 
         try:
             self._publish_safe_stop_command()
-        except Exception:
+        except RuntimeError:
             pass
 
         detail = reason
@@ -820,13 +409,13 @@ class UnicyclePlannerNode(Node):
             try:
                 tb = ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))
                 self.get_logger().error(tb.rstrip())
-            except Exception:
+            except (TypeError, ValueError):
                 pass
 
         # Stop this process so runs fail fast instead of continuing with invalid behavior.
         try:
             rclpy.shutdown()
-        except Exception:
+        except RuntimeError:
             pass
         raise RuntimeError(detail) from exc
 
@@ -881,13 +470,6 @@ class UnicyclePlannerNode(Node):
         with self._data_lock:
             self.last_cmd = np.array([msg.linear.x, msg.angular.z], dtype=float)
 
-    def _experiment_run_dir_cb(self, msg: String):
-        run_dir = str(msg.data).strip()
-        if not run_dir:
-            return
-        self._experiment_run_dir = run_dir
-        self._write_visibility_artifacts_if_ready()
-
     def _heading_sigma_from_diag(self, diag) -> float:
         sigma_floor = float(max(self.pixel_heading_noise_floor_rad, 1e-6))
         if not diag:
@@ -908,7 +490,7 @@ class UnicyclePlannerNode(Node):
     def _detection_diag_cb(self, msg: Float64MultiArray):
         try:
             diag = diagnostics_from_message(msg)
-        except Exception:
+        except (KeyError, TypeError, ValueError):
             return
         with self._data_lock:
             self._latest_detection_diag = diag
@@ -986,7 +568,7 @@ class UnicyclePlannerNode(Node):
         try:
             now = self.get_clock().now()
             age = (now - Time.from_msg(stamp_msg)).nanoseconds * 1e-9
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
             age = 0.0
         if self.skip_stale_pixel_correction and age > self.pixel_timeout_s:
             now_wall = time.monotonic()
@@ -1003,7 +585,7 @@ class UnicyclePlannerNode(Node):
                     dt_since_correction = (
                         Time.from_msg(stamp_msg) - Time.from_msg(last_correction_stamp)
                     ).nanoseconds * 1e-9
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     dt_since_correction = None
                 if (
                     dt_since_correction is not None
@@ -1024,7 +606,7 @@ class UnicyclePlannerNode(Node):
             dt_s = (now - last).nanoseconds * 1e-9 if last is not None else self.dt
             if dt_s <= 0.0:
                 dt_s = self.dt
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
             dt_s = self.dt
 
         with self._data_lock:
@@ -1150,7 +732,7 @@ class UnicyclePlannerNode(Node):
                         (Time.from_msg(now_msg) - Time.from_msg(stamp_ref)).nanoseconds * 1e-9,
                         0.0,
                     )
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     belief_age_s = 0.0
             if pixel_stamp_ref is not None:
                 try:
@@ -1158,7 +740,7 @@ class UnicyclePlannerNode(Node):
                         (Time.from_msg(now_msg) - Time.from_msg(pixel_stamp_ref)).nanoseconds * 1e-9,
                         0.0,
                     )
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     measurement_age = math.inf
                 measurement_available = measurement_age <= self.pixel_timeout_s
             if belief_age_s > 0.0:
@@ -1294,7 +876,6 @@ class UnicyclePlannerNode(Node):
             float((belief_meta or {}).get('belief_age_s', math.nan)),
         ]
         self.metrics_pub.publish(metrics_msg)
-        self._publish_visibility_logic_markers(m0, S0)
 
     def _after_plan_result(self, result):
         """Hook for subclasses (e.g. agent node) to publish extra outputs."""
@@ -1358,6 +939,8 @@ class UnicyclePlannerNode(Node):
             )
             self._last_plan_entry_log = now_wall
         try:
+            # Deliberately broad: any unexpected planner failure should abort the
+            # run immediately instead of allowing an invalid experiment to continue.
             result = self.planner.plan(m0, S0, goal_xy, progress_index=progress_index)
         except Exception as exc:
             self._fatal_experiment_stop("Planner.solve raised an exception", exc)
@@ -1402,7 +985,7 @@ class UnicyclePlannerNode(Node):
             if pixel_stamp_ref is not None:
                 try:
                     pixel_age = (self.get_clock().now() - Time.from_msg(pixel_stamp_ref)).nanoseconds * 1e-9
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     pixel_age = None
             self.get_logger().info(
                 "Plan debug: "

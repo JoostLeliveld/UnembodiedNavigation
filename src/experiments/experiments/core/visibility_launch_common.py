@@ -71,16 +71,6 @@ VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
     'visibility_weight': 4.0,
     'visibility_barrier_threshold': 0.0,
     'visibility_barrier_scale': 10.0,
-    'visibility_map_min_x': -5.0,
-    'visibility_map_max_x': 5.0,
-    'visibility_map_min_y': -5.0,
-    'visibility_map_max_y': 5.0,
-    'visibility_map_nx': 140,
-    'visibility_map_ny': 120,
-    'visibility_gp_length_scale': 1.4,
-    'visibility_gp_noise_var': 0.15,
-    'visibility_prior_occ': 0.005,
-    'visibility_beta': 1.0,
     'visibility_target_height_m': 0.0,
     'use_nogo_cost': 'true',
     'nogo_penalty_type': 'softplus',
@@ -154,9 +144,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
     seed_value = int(LaunchConfiguration('seed').perform(context))
     world_value = LaunchConfiguration('world').perform(context)
     visibility_enabled_default = 'true'
-    visibility_model_default = 'gp_visibility'
     use_visibility_raw = _launch_value(context, 'use_visibility_model', visibility_enabled_default).strip().lower()
-    visibility_model_raw = _launch_value(context, 'visibility_model', visibility_model_default).strip().lower()
 
     cfg: Dict[str, object] = {
         'use_sim_time': _as_bool(LaunchConfiguration('use_sim_time').perform(context)),
@@ -236,7 +224,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'use_visibility_model': _as_bool(
             visibility_enabled_default if use_visibility_raw in ('', 'auto', 'default') else use_visibility_raw
         ),
-        'visibility_model': visibility_model_default if visibility_model_raw in ('', 'auto', 'default') else visibility_model_raw,
         'perception_use_geometry_occlusion': _as_bool(
             _launch_value(context, 'perception_use_geometry_occlusion', 'true')
         ),
@@ -247,20 +234,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
                 PAPER_LAUNCH_DEFAULTS.get('visibility_weight', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_weight'])),
             )
         ),
-        'visibility_map_min_x': float(_launch_value(context, 'visibility_map_min_x', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_min_x']))),
-        'visibility_map_max_x': float(_launch_value(context, 'visibility_map_max_x', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_max_x']))),
-        'visibility_map_min_y': float(_launch_value(context, 'visibility_map_min_y', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_min_y']))),
-        'visibility_map_max_y': float(_launch_value(context, 'visibility_map_max_y', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_max_y']))),
-        'visibility_map_nx': int(_launch_value(context, 'visibility_map_nx', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_nx']))),
-        'visibility_map_ny': int(_launch_value(context, 'visibility_map_ny', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_map_ny']))),
-        'visibility_gp_length_scale': float(_launch_value(context, 'visibility_gp_length_scale', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_gp_length_scale']))),
-        'visibility_gp_noise_var': float(_launch_value(context, 'visibility_gp_noise_var', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_gp_noise_var']))),
-        'visibility_prior_occ': float(_launch_value(context, 'visibility_prior_occ', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_prior_occ']))),
-        'visibility_beta': float(_launch_value(context, 'visibility_beta', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_beta']))),
         'visibility_target_height_m': float(_launch_value(context, 'visibility_target_height_m', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_target_height_m']))),
         'visibility_geometry_json': _launch_value(context, 'visibility_geometry_json', ''),
         'visibility_artifact_path': _launch_value(context, 'visibility_artifact_path', ''),
-        'visibility_gp_seed': int(float(_launch_value(context, 'visibility_gp_seed', str(seed_value)))),
         'use_nogo_cost': _launch_value(context, 'use_nogo_cost', str(VISIBILITY_FALLBACK_DEFAULTS['use_nogo_cost'])).strip().lower(),
         'nogo_penalty_type': _launch_value(context, 'nogo_penalty_type', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_penalty_type'])).strip().lower(),
         'nogo_weight': float(_launch_value(context, 'nogo_weight', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_weight']))),
@@ -274,9 +250,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'debug_runtime': _as_bool(_launch_value(context, 'debug_runtime', 'false')),
         'enable_logging': _as_bool(_launch_value(context, 'enable_logging', 'true')),
         'use_rviz': _as_bool(_launch_value(context, 'use_rviz', 'false')),
-        'use_live_dashboard': _as_bool(_launch_value(context, 'use_live_dashboard', 'false')),
-        'dashboard_history_s': float(_launch_value(context, 'dashboard_history_s', '60.0')),
-        'dashboard_redraw_hz': float(_launch_value(context, 'dashboard_redraw_hz', '4.0')),
         'rviz_config': _launch_value(context, 'rviz_config', ''),
     }
 
@@ -375,8 +348,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     }
 
     visibility_geometry_json = str(cfg.get('visibility_geometry_json', '') or '')
-    visibility_model_name = str(cfg.get('visibility_model', '')).strip().lower()
-    if cfg.get('use_visibility_model', False) and visibility_model_name in {'gp_visibility', 'gpvis'} and not visibility_artifact_path:
+    if cfg.get('use_visibility_model', False) and not visibility_artifact_path:
         raise RuntimeError(
             f"World '{cfg['world']}' requires a visibility_artifact path for GP visibility planning."
         )
@@ -460,8 +432,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'pixel_noise_sigma': cfg['sensor_pixel_noise_sigma'],
         'seed': cfg['seed'],
         'world_frame': 'map_bev',
-        'use_visibility_model': cfg['use_visibility_model'],
-        'visibility_model': cfg['visibility_model'],
         'use_geometry_occlusion': cfg['perception_use_geometry_occlusion'],
         'visibility_geometry_json': cfg['visibility_geometry_json'],
         'visibility_target_height_m': cfg['visibility_target_height_m'],
@@ -559,7 +529,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'use_ambiguity': cfg['use_ambiguity'],
                 'use_obs_risk': cfg['use_obs_risk'],
                 'use_visibility_model': cfg['use_visibility_model'],
-                'visibility_model': cfg['visibility_model'],
                 'visibility_artifact_path': cfg['visibility_artifact_path'],
                 'risk_weight_obs': cfg['risk_weight_obs'],
                 'goal_sigma_uv': cfg['goal_sigma_uv'],
@@ -605,8 +574,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         parameters=[{'use_sim_time': cfg['use_sim_time']}],
     )
 
-    live_dashboard = None
-
     return {
         'bringup_sim': bringup_sim,
         'tf_static': tf_static,
@@ -617,7 +584,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'goal_marker_node': goal_marker_node,
         'logger_node': logger_node,
         'rviz': rviz,
-        'live_dashboard': live_dashboard,
     }
 
 
@@ -705,24 +671,12 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'notebook_risk_scale': cfg['notebook_risk_scale'],
             'notebook_ambiguity_scale': cfg['notebook_ambiguity_scale'],
             'use_visibility_model': planner_uses_visibility,
-            'visibility_model': cfg['visibility_model'],
             'visibility_weight': cfg['visibility_weight'],
             'visibility_barrier_threshold': cfg['visibility_barrier_threshold'],
             'visibility_barrier_scale': cfg['visibility_barrier_scale'],
-            'visibility_map_min_x': cfg['visibility_map_min_x'],
-            'visibility_map_max_x': cfg['visibility_map_max_x'],
-            'visibility_map_min_y': cfg['visibility_map_min_y'],
-            'visibility_map_max_y': cfg['visibility_map_max_y'],
-            'visibility_map_nx': cfg['visibility_map_nx'],
-            'visibility_map_ny': cfg['visibility_map_ny'],
-            'visibility_gp_length_scale': cfg['visibility_gp_length_scale'],
-            'visibility_gp_noise_var': cfg['visibility_gp_noise_var'],
-            'visibility_prior_occ': cfg['visibility_prior_occ'],
-            'visibility_beta': cfg['visibility_beta'],
             'visibility_target_height_m': cfg['visibility_target_height_m'],
             'visibility_geometry_json': cfg['visibility_geometry_json'],
             'visibility_artifact_path': cfg['visibility_artifact_path'],
-            'visibility_gp_seed': cfg['visibility_gp_seed'],
             'use_nogo_cost': cfg['resolved_use_nogo_cost'],
             'nogo_penalty_type': cfg['nogo_penalty_type'],
             'nogo_weight': cfg['nogo_weight'],
@@ -751,8 +705,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
         after_odom.append(shared_nodes['logger_node'])
     if cfg['use_rviz']:
         after_odom.append(shared_nodes['rviz'])
-    if cfg.get('use_live_dashboard', False) and shared_nodes.get('live_dashboard') is not None:
-        after_odom.append(shared_nodes['live_dashboard'])
 
     start_after_odom = RegisterEventHandler(
         OnProcessExit(

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+from json import JSONDecodeError
 from pathlib import Path
 
 import matplotlib
@@ -26,7 +27,7 @@ def _load_csv_columns(path: Path) -> dict[str, np.ndarray]:
             raw = (row.get(name) or '').strip()
             try:
                 cols[name].append(float(raw))
-            except Exception:
+            except ValueError:
                 cols[name].append(np.nan)
     return {name: np.asarray(values, dtype=float) for name, values in cols.items()}
 
@@ -42,7 +43,7 @@ def _load_plan_groups(path: Path, *, max_groups: int = 32) -> list[np.ndarray]:
                 stamp = float(row['plan_stamp'])
                 x = float(row['x'])
                 y = float(row['y'])
-            except Exception:
+            except (KeyError, TypeError, ValueError):
                 continue
             groups.setdefault(stamp, []).append((x, y))
     stamps = sorted(groups.keys())
@@ -56,7 +57,7 @@ def _load_plan_groups(path: Path, *, max_groups: int = 32) -> list[np.ndarray]:
 def _load_artifact(path: Path) -> dict[str, np.ndarray | str]:
     with np.load(path, allow_pickle=False) as data:
         artifact: dict[str, np.ndarray | str] = {key: np.asarray(data[key]) for key in data.files}
-    for key in ('geometry_json', 'visibility_model'):
+    for key in ('geometry_json',):
         if key in artifact:
             artifact[key] = str(np.asarray(artifact[key]).reshape(-1)[0])
     return artifact
@@ -69,7 +70,7 @@ def _load_manifest(path: Path) -> dict[str, object]:
         with path.open(encoding='utf-8') as f:
             payload = json.load(f)
         return payload if isinstance(payload, dict) else {}
-    except Exception:
+    except (OSError, JSONDecodeError, TypeError, ValueError):
         return {}
 
 
@@ -79,7 +80,7 @@ def _parse_prisms(geometry_json: str) -> list[dict[str, float]]:
         return []
     try:
         data = json.loads(payload)
-    except Exception:
+    except JSONDecodeError:
         return []
     prisms = data.get('prisms', []) if isinstance(data, dict) else []
     clean = []
@@ -93,7 +94,7 @@ def _parse_prisms(geometry_json: str) -> list[dict[str, float]]:
                 'zmin': float(prism.get('zmin', 0.0)),
                 'zmax': float(prism.get('zmax', 0.0)),
             })
-        except Exception:
+        except (KeyError, TypeError, ValueError):
             continue
     return clean
 
@@ -156,7 +157,6 @@ def _plot_field_panels(output_dir: Path, artifact: dict[str, np.ndarray | str] |
         ys = np.asarray(artifact['ys'], dtype=float)
         p_map = np.asarray(artifact['P_map'], dtype=float)
         geometry_json = str(artifact.get('geometry_json', ''))
-        artifact_model = str(artifact.get('visibility_model', '')).strip().lower()
         visibility_enabled_arr = np.asarray(artifact.get('use_visibility_model', np.array([1.0])), dtype=float).reshape(-1)
         visibility_enabled = bool(visibility_enabled_arr.size and visibility_enabled_arr[0] >= 0.5)
     else:
@@ -173,7 +173,6 @@ def _plot_field_panels(output_dir: Path, artifact: dict[str, np.ndarray | str] |
         ys = np.linspace(ymin, ymax, 120)
         p_map = np.full((ys.size, xs.size), np.nan, dtype=float)
         geometry_json = ''
-        artifact_model = str(manifest.get('visibility_model', '')).strip().lower()
         visibility_enabled = bool(manifest.get('use_visibility_model', False))
 
     rho_mean = None if artifact is None else artifact.get('rho_mean_map')
@@ -211,7 +210,8 @@ def _plot_field_panels(output_dir: Path, artifact: dict[str, np.ndarray | str] |
     miss_y = _maybe_get(perception_cols, 'true_y')[miss_mask]
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 6.2), constrained_layout=True, sharex=True, sharey=True)
-    if artifact_model in ('gp_visibility', 'gpvis'):
+    has_gp_field = visibility_enabled and artifact is not None
+    if has_gp_field:
         panels = [
             ('GP Visibility Mean', p_mean if p_mean is not None else p_map, 'viridis'),
             ('GP Visibility Conservative', p_cons if p_cons is not None else p_map, 'magma'),

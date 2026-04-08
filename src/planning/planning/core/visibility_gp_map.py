@@ -14,25 +14,9 @@ from planning.core.gp_visibility_helpers import clip_prob as _clip_prob
 @dataclass
 class GPVisibilityMapConfig:
     artifact_path: str = ""
-    map_xmin: float = -5.0
-    map_xmax: float = 5.0
-    map_ymin: float = -5.0
-    map_ymax: float = 5.0
-    map_nx: int = 140
-    map_ny: int = 120
-    gp_length_scale: float = 1.2
-    gp_noise_var: float = 0.1
-    prior_occ: float = 0.005
-    beta: float = 1.0
-    geometry_json: str = ""
     camera_pos: tuple[float, float, float] = (-3.0, -3.0, 6.0)
     target_height_m: float = 0.0
-    n_train_total: int = 0
-    n_train_boundary: int = 0
-    seed: int = 0
     min_prob: float = 1e-4
-    cache_enabled: bool = False
-    cache_dir: str = ""
 
 
 class GPVisibilityMapModel:
@@ -102,13 +86,6 @@ class GPVisibilityMapModel:
         self.P_map = _clip_prob(p_map, self.min_prob).astype(float)
         self.camera_pos = np.asarray(camera_pos, dtype=float).reshape(3)
         self.target_height = float(target_height)
-
-        self.cfg.map_xmin = float(xs[0])
-        self.cfg.map_xmax = float(xs[-1])
-        self.cfg.map_ymin = float(ys[0])
-        self.cfg.map_ymax = float(ys[-1])
-        self.cfg.map_nx = int(xs.size)
-        self.cfg.map_ny = int(ys.size)
 
     @property
     def signature(self) -> tuple:

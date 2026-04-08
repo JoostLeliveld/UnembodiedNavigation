@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import rclpy
-from cv_bridge import CvBridge
+from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from sensor_msgs.msg import Image
@@ -34,8 +34,6 @@ class ImageMarkerDetectorNode(Node):
         _declare_if_missing('pixel_noise_sigma', 0.0)
         _declare_if_missing('seed', 0)
         _declare_if_missing('world_frame', 'map_bev')
-        _declare_if_missing('use_visibility_model', False)
-        _declare_if_missing('visibility_model', 'gp_visibility')
         _declare_if_missing('use_geometry_occlusion', True)
         _declare_if_missing('visibility_geometry_json', '')
         _declare_if_missing('visibility_target_height_m', 0.0)
@@ -178,7 +176,7 @@ class ImageMarkerDetectorNode(Node):
     def _image_cb(self, msg: Image):
         try:
             image_bgr = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        except Exception as exc:
+        except CvBridgeError as exc:
             self.get_logger().warn(f'Failed to convert image: {exc}')
             return
 
