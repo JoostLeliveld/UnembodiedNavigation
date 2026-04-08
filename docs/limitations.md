@@ -2,6 +2,8 @@
 
 This document states the caveats that should appear in slides, reports, and papers based on the current repository.
 
+![Current state-estimation composition](figures/state_pipeline_tutorial.png)
+
 ## Main Caveats
 
 ### 1. The baseline is not true dead reckoning

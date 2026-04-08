@@ -174,6 +174,7 @@ def _plot_field_panels(output_dir: Path, artifact: dict[str, np.ndarray | str] |
         p_map = np.full((ys.size, xs.size), np.nan, dtype=float)
         geometry_json = ''
         visibility_enabled = bool(manifest.get('use_visibility_model', False))
+    artifact_model = 'empirical_gp_visibility' if artifact is not None else None
 
     rho_mean = None if artifact is None else artifact.get('rho_mean_map')
     rho_cons = None if artifact is None else artifact.get('rho_conservative_map')

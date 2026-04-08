@@ -2,6 +2,8 @@
 
 This folder stores the fixed empirical GP visibility artifacts used by the planner.
 
+![Example empirical visibility artifact](../../../../docs/figures/visibility_capture_tutorial.png)
+
 ## Why This Folder Exists
 
 The GP-aware planner needs a world-specific visibility prior at runtime. These `.npz` files are that prior.
@@ -15,10 +17,10 @@ The GP-aware planner needs a world-specific visibility prior at runtime. These `
 
 ## How They Are Used
 
-- generated offline by [`../../../../scripts/fit_empirical_visibility_gp.py`](../../../../scripts/fit_empirical_visibility_gp.py)
+- generated offline by [`../../../../scripts/fit_empirical_visibility_gp.py`](../../../../scripts/fit_empirical_visibility_gp.py) from a scripted sweep that logs `/state/bev` x-y and detector usability
 - resolved by [`../../experiments/core/world_profiles.py`](../../experiments/core/world_profiles.py)
 - loaded by [`../../../planning/planning/core/visibility_gp_map.py`](../../../planning/planning/core/visibility_gp_map.py)
 
 ## Important Caveat
 
-These files represent a learned visibility / detection-success prior for the current simulated camera-detector stack. They should not be presented as a general occlusion model.
+These files represent a learned visibility / detection-success prior for the current simulated camera-detector stack. In v1 the fitted target is binary usable detection, while blob area is logged only as an auxiliary diagnostic. These files should not be presented as a general occlusion model.

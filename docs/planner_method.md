@@ -2,6 +2,24 @@
 
 This document explains where the main comparison actually enters the code.
 
+![Observation model tutorial](figures/observation_model_tutorial.png)
+
+The core mathematical story is:
+
+\[
+\hat s_t = [\hat x_t,\hat y_t]^\top \mapsto p_{\mathrm{vis}}(\hat x_t,\hat y_t),
+\]
+
+then
+
+\[
+p_{\mathrm{vis,eff}} = \mathrm{clip}(p_{\mathrm{vis}}^\gamma,\varepsilon,1-\varepsilon),
+\qquad
+R_{\mathrm{plan}} = p_{\mathrm{vis,eff}}R_{\mathrm{visible}} + (1-p_{\mathrm{vis,eff}})R_{\mathrm{miss}}.
+\]
+
+That is the main thesis-facing mechanism: visibility changes planned observation quality, which changes risk and ambiguity in the EFE objective.
+
 ## The Controlled Comparison
 
 The current milestone changes one thing in the planner:
@@ -93,8 +111,12 @@ Caption: the primary thesis comparison is a planner-side observation-model chang
 
 ## Honest Caveats
 
+![Example planner diagnostics over one run](figures/planner_run_timeseries.png)
+
 - The baseline is **not** true dead reckoning.
 - The GP is an empirical detection-success field, not a general geometric occlusion theory.
+- The v1 GP artifact is trained on `/state/bev` x-y only and uses binary usable detection as its target.
+- Blob area is logged during capture, but it is not the fitted target in v1.
 - ET1 is the primary validated planner implementation for the thesis-facing comparison.
 - `efe2` and `efer` now reuse the same cleaned symbolic CasADi planner path with `ET2`.
 - The optimized planner path is symbolic CasADi objective construction plus SciPy `L-BFGS-B`, not finite-difference optimization.

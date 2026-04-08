@@ -2,6 +2,10 @@
 
 This folder contains the offline and post-run scripts that support the current thesis milestone.
 
+![Offline visibility artifact tutorial](../docs/figures/visibility_capture_tutorial.png)
+
+![Planner timeseries tutorial](../docs/figures/planner_run_timeseries.png)
+
 ## Why This Folder Exists
 
 The runtime ROS graph does not do everything. This folder covers:
@@ -15,9 +19,10 @@ The runtime ROS graph does not do everything. This folder covers:
 
 | Script | Classification | When to use it | Main inputs | Main outputs |
 | --- | --- | --- | --- | --- |
-| [`fit_empirical_visibility_gp.py`](fit_empirical_visibility_gp.py) | core | build the per-world empirical visibility artifact | selected world, captured detections, world profile | `empirical_visibility_gp.npz`, capture CSVs, fit plot |
+| [`fit_empirical_visibility_gp.py`](fit_empirical_visibility_gp.py) | core | collect a driving-based capture dataset and fit the per-world empirical visibility artifact | live `/state/bev`, detection diagnostics, world profile | `empirical_visibility_gp.npz`, raw/aggregated capture CSVs, fit plot |
 | [`evaluate_occlusion_comparison.py`](evaluate_occlusion_comparison.py) | core | summarize logged runs for the main comparison | `logs/experiments/*` | run/group summary CSV and JSON |
 | [`plot_visibility_run.py`](plot_visibility_run.py) | core | generate qualitative figures for one run | run log directory + visibility artifact | trajectory/visibility plots |
+| [`generate_docs_figures.py`](generate_docs_figures.py) | core | regenerate the tutorial figures embedded in README/docs | latest capture artifact + latest logged run | `docs/figures/*.png` |
 | [`capture_noise_data.py`](capture_noise_data.py) | calibration | collect streams for Q/R calibration | live ROS topics | capture CSV |
 | [`estimate_noise_from_capture.py`](estimate_noise_from_capture.py) | calibration | estimate process/observation noise from a capture CSV | capture CSV, world profile, world SDF | JSON summary or console estimates |
 
@@ -44,6 +49,7 @@ The runtime ROS graph does not do everything. This folder covers:
 ## Important Caveats
 
 - The GP-fitting script generates a learned visibility prior for the current simulated camera-detector stack.
+- In v1, the GP input is `/state/bev` x-y and the fitted target is binary usable detection.
 - The evaluator is useful for milestone summaries, but not yet a complete thesis-final analysis suite.
 - Calibration scripts are secondary to the main comparison and should not dominate the repository story.
 

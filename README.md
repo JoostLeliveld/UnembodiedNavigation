@@ -32,10 +32,45 @@ The current milestone is a controlled comparison, not the full thesis scope.
 - **Changed between methods**
   - whether the planner uses the learned GP visibility field inside the observation model
 
+## Tutorial In One Page
+
+The repository is easiest to understand through three figures:
+
+![Empirical visibility artifact tutorial](docs/figures/visibility_capture_tutorial.png)
+
+The learned artifact is a scalar field over the planner-facing state estimate. In version 1, the fitted target is a binary usable-detection label, while blob area is logged only as auxiliary detector information.
+
+![Observation model tutorial](docs/figures/observation_model_tutorial.png)
+
+Planner-side visibility enters through the observation model, not by modifying the robot dynamics. The current implementation uses
+
+\[
+\hat s_t = [\hat x_t,\hat y_t]^\top,\qquad
+y_t = \mathbf 1[\text{detected} \land A_t \ge A_{\min}],
+\]
+
+to learn a scalar field
+
+\[
+p_{\mathrm{vis}}(\hat x,\hat y).
+\]
+
+Inside the planner, this becomes an effective planned observation covariance:
+
+\[
+p_{\mathrm{vis,eff}} = \mathrm{clip}(p_{\mathrm{vis}}^\gamma,\varepsilon,1-\varepsilon),
+\qquad
+R_{\mathrm{plan}} = p_{\mathrm{vis,eff}}R_{\mathrm{visible}} + (1-p_{\mathrm{vis,eff}})R_{\mathrm{miss}}.
+\]
+
+![Planner field story](docs/figures/planner_field_story.png)
+
+This is the key method story: the GP does not command a path directly. It changes the expected quality of future observations, which changes risk and ambiguity, which changes route choice.
+
 ## What This Repository Does
 
 - defines worlds, camera setup, and benchmark tasks
-- fits and stores one empirical GP visibility artifact per supported world
+- fits and stores one empirical GP visibility artifact per supported world from driving-based capture data
 - launches the simulator, detector, state estimator, planner, goal node, and optional logger
 - compares `efe1` and `visibility_unaware_baseline` under matched settings
 - logs runs and generates milestone-grade summaries and qualitative plots
@@ -68,23 +103,35 @@ Generated directories such as `build/`, `install/`, `log/`, and `logs/` are not 
 ```mermaid
 flowchart LR
     A[world_profiles.yaml + tasks.yaml] --> B[warehouse_primary_comparison.launch.py]
-    C[fit_empirical_visibility_gp.py] --> D[empirical_visibility_gp.npz]
-    D --> E[planner core]
-    B --> F[Gazebo + robot + external camera]
-    F --> G[image_marker_detector_node]
-    G --> H[pixel_to_bev_state_node]
-    H --> E
-    I[goal_mission_node] --> E
-    E --> J[/cmd_vel]
-    J --> F
-    E --> K[experiment_logger]
-    H --> K
-    G --> K
-    K --> L[evaluate_occlusion_comparison.py]
-    K --> M[plot_visibility_run.py]
+    C[warehouse_visibility_capture.launch.py] --> D[fit_empirical_visibility_gp.py]
+    D --> E[empirical_visibility_gp.npz]
+    E --> F[planner core]
+    B --> G[Gazebo + robot + external camera]
+    G --> H[image_marker_detector_node]
+    H --> I[pixel_to_bev_state_node]
+    I --> F
+    J[goal_mission_node] --> F
+    F --> K[/cmd_vel]
+    K --> G
+    F --> L[experiment_logger]
+    I --> L
+    H --> L
+    L --> M[evaluate_occlusion_comparison.py]
+    L --> N[plot_visibility_run.py]
 ```
 
-Caption: the offline GP fitting stage is separate from the ROS runtime. Online, the planner receives a fixed visibility artifact rather than learning during execution.
+Caption: the offline GP fitting stage is separate from the planning runtime. The visibility artifact is learned from a scripted sweep that logs `/state/bev` x-y and detector usability, then loaded as a fixed artifact during planning.
+
+## State Estimator Reality Check
+
+![State pipeline tutorial](docs/figures/state_pipeline_tutorial.png)
+
+The current estimator used in the thesis-facing runtime is hybrid:
+
+- `x,y` come from the external camera through the detector and homography
+- `theta` comes from odometry fallback in the main image-detector path
+
+That is good enough for the current milestone, but it should be stated honestly in every presentation.
 
 ## Quick Start
 
@@ -104,6 +151,33 @@ mkdir -p "$ROS_LOG_DIR"
 ```
 
 ## Example Launches
+
+### Offline GP capture and fitting
+
+Launch the scripted sweep capture runtime:
+
+```bash
+ros2 launch experiments warehouse_visibility_capture.launch.py \
+  world:=warehouse_occ_light.world.sdf
+```
+
+In a second terminal, collect the driving-based dataset and fit the GP:
+
+```bash
+source install/setup.bash
+python3 scripts/fit_empirical_visibility_gp.py \
+  --world warehouse_occ_light.world.sdf \
+  --publish-artifact src/experiments/data/visibility_gp/warehouse_occ_light_empirical_visibility_gp.npz
+```
+
+The v1 GP input is `/state/bev` x-y only, and the fitted target is binary usable detection. Blob area is logged for later upgrades but is not the fitted target in v1.
+
+Generate the tutorial figures used across the docs:
+
+```bash
+source install/setup.bash
+python3 scripts/generate_docs_figures.py
+```
 
 ### Primary thesis comparison
 
@@ -236,3 +310,4 @@ ros2 run rqt_graph rqt_graph
 - [`docs/planner_method.md`](docs/planner_method.md): planner-internal method and comparison logic
 - [`docs/evaluation_and_plots.md`](docs/evaluation_and_plots.md): outputs, summaries, plots, and presentation figures
 - [`docs/limitations.md`](docs/limitations.md): current caveats and claim guardrails
+- [`docs/figures/README.md`](docs/figures/README.md): figure catalog and regeneration script

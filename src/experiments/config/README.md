@@ -2,6 +2,10 @@
 
 This folder holds the two YAML files that define the experiment before anything is launched.
 
+![Visibility artifact tutorial figure](../../../docs/figures/visibility_capture_tutorial.png)
+
+The `world_profiles.yaml` bounds and artifact paths directly shape both the driving-based capture pipeline and the online planner.
+
 ## Why This Folder Exists
 
 The current milestone is a controlled comparison. These files fix:

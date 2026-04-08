@@ -2,6 +2,16 @@
 
 This package contains the planner runtime and the planner math. It is the core method package for the thesis milestone.
 
+![Observation-model tutorial figure](../../docs/figures/observation_model_tutorial.png)
+
+For the current thesis-facing implementation, the planning question is:
+
+\[
+\hat s_t = [\hat x_t,\hat y_t]^\top \mapsto p_{\mathrm{vis}}(\hat x_t,\hat y_t) \mapsto R_{\mathrm{plan}}.
+\]
+
+That is the central mechanism implemented in this package.
+
 ## Why This Folder Exists
 
 This package answers the main research question: how does planning change when future observation quality depends on robot state?

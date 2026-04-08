@@ -2,6 +2,16 @@
 
 This folder contains the **canonical deeper documentation** for the active thesis milestone. These documents are secondary to the root [`README.md`](../README.md), which is the main onboarding entry point.
 
+## Figure Set
+
+The docs now use a shared tutorial figure set under [`figures/`](figures/README.md):
+
+![Visibility field tutorial](figures/visibility_capture_tutorial.png)
+
+![Observation model tutorial](figures/observation_model_tutorial.png)
+
+![Planner run tutorial](figures/planner_run_timeseries.png)
+
 ## Read These First
 
 1. [`architecture_overview.md`](architecture_overview.md)
@@ -21,3 +31,10 @@ This folder contains the **canonical deeper documentation** for the active thesi
 | [`limitations.md`](limitations.md) | Caveats that should constrain claims in reports, slides, and papers |
 
 These files are the only active documentation surface under `docs/`. Older planning notes and reference PDFs were removed so they stop competing with the current milestone story.
+
+To regenerate the figures used here, run:
+
+```bash
+source install/setup.bash
+python3 ../scripts/generate_docs_figures.py
+```

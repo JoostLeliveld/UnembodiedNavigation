@@ -2,6 +2,10 @@
 
 This package provides the plant and simulator plumbing for the thesis experiments.
 
+![Example top-down run in the simulated world](../../docs/figures/planner_field_story.png)
+
+This package exists so that the planner and detector run inside one fixed, inspectable external-camera world.
+
 ## Why This Folder Exists
 
 The repository is built around a fixed Gazebo external-camera setup. This package defines:

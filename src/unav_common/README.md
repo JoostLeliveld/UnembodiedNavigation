@@ -2,6 +2,10 @@
 
 This package contains shared geometry and manifest utilities used by multiple active packages.
 
+![State and camera-geometry tutorial figure](../../docs/figures/state_pipeline_tutorial.png)
+
+The camera projection and world-geometry helpers in this package are what make the detector-to-BEV conversion and visibility-aware planning possible.
+
 ## Why This Folder Exists
 
 Several packages need the same camera and world-geometry logic. This folder prevents those small but important utilities from being reimplemented in multiple places.

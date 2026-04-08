@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture empirical detection data over sampled spawn poses and fit a GP visibility field."""
+"""Collect driving-based visibility data and fit a scalar GP visibility field."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import csv
 import json
 import math
 import shutil
+import sys
 import time
 from collections import defaultdict
 from dataclasses import dataclass
@@ -15,16 +16,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
-import matplotlib.pyplot as plt
 import numpy as np
 import rclpy
-from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PoseWithCovarianceStamped
 from rclpy.node import Node
-from ros_gz_interfaces.msg import Entity
-from ros_gz_interfaces.srv import SetEntityPose
-from std_msgs.msg import Float64MultiArray
-import yaml
+from rclpy.qos import DurabilityPolicy, QoSProfile
+from std_msgs.msg import Bool, Float64MultiArray, String
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+for rel in ('src/experiments', 'src/perception', 'src/planning', 'src/unav_common'):
+    path = str((REPO_ROOT / rel).resolve())
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+from experiments.core.visibility_capture import (
+    VISIBILITY_CAPTURE_CONFIG_TOPIC,
+    VISIBILITY_CAPTURE_DONE_TOPIC,
+)
 from experiments.core.world_profiles import load_profile
 from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
@@ -36,116 +44,26 @@ from planning.core.gp_visibility_helpers import (
     logit as _logit,
     sigmoid as _sigmoid,
 )
-from unav_common.occlusion_geometry import parse_occlusion_scene_from_world, signed_distance_to_union_xy
-
-
-def _wrap_angle(a: float) -> float:
-    return math.atan2(math.sin(a), math.cos(a))
-
-
-def _yaw_to_quaternion(yaw: float):
-    return 0.0, 0.0, math.sin(0.5 * yaw), math.cos(0.5 * yaw)
 
 
 @dataclass
-class SampleResult:
+class CaptureSample:
     sample_idx: int
-    x: float
-    y: float
-    yaw: float
-    repeat_idx: int
-    detected_rate: float
-    detected_label: int
-    n_msgs: int
-    n_detected: int
-    mean_u: float
-    mean_v: float
-    mean_red_area_px: float
-    mean_border_margin_px: float
-
-
-class EmpiricalVisibilityCapture(Node):
-    def __init__(self, world_name: str, entity_name: str = 'turtlebot3'):
-        super().__init__('empirical_visibility_capture')
-        self.world_name = str(world_name)
-        self.entity_name = str(entity_name)
-        self._odom_msg = None
-        self._diag_buffer: List[Dict[str, float]] = []
-        self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
-        self.create_subscription(Float64MultiArray, DETECTION_DIAGNOSTICS_TOPIC, self._diag_cb, 10)
-        self.set_pose_client = self.create_client(SetEntityPose, f'/world/{self.world_name}/set_pose')
-
-    def _odom_cb(self, msg: Odometry):
-        self._odom_msg = msg
-
-    def _diag_cb(self, msg: Float64MultiArray):
-        self._diag_buffer.append(diagnostics_from_message(msg))
-
-    def spin_for(self, duration_s: float):
-        end = time.monotonic() + max(0.0, float(duration_s))
-        while rclpy.ok() and time.monotonic() < end:
-            rclpy.spin_once(self, timeout_sec=0.05)
-
-    def wait_for_ready(self, timeout_s: float = 10.0):
-        end = time.monotonic() + timeout_s
-        while rclpy.ok() and time.monotonic() < end:
-            if self._odom_msg is not None and self.set_pose_client.wait_for_service(timeout_sec=0.1):
-                return
-            rclpy.spin_once(self, timeout_sec=0.1)
-        raise RuntimeError('Timed out waiting for /odom and /world/.../set_pose service')
-
-    def set_pose(self, x: float, y: float, z: float, yaw: float, timeout_s: float = 3.0):
-        req = SetEntityPose.Request()
-        req.entity.name = self.entity_name
-        req.entity.type = Entity.MODEL
-        req.pose.position.x = float(x)
-        req.pose.position.y = float(y)
-        req.pose.position.z = float(z)
-        qx, qy, qz, qw = _yaw_to_quaternion(yaw)
-        req.pose.orientation.x = qx
-        req.pose.orientation.y = qy
-        req.pose.orientation.z = qz
-        req.pose.orientation.w = qw
-        future = self.set_pose_client.call_async(req)
-        end = time.monotonic() + timeout_s
-        while rclpy.ok() and time.monotonic() < end:
-            rclpy.spin_once(self, timeout_sec=0.05)
-            if future.done():
-                result = future.result()
-                if result is None or not bool(result.success):
-                    raise RuntimeError(f'SetEntityPose failed for ({x:.2f}, {y:.2f}, yaw={yaw:.2f})')
-                return
-        raise RuntimeError('Timed out waiting for SetEntityPose response')
-
-    def wait_for_odom_pose(self, x: float, y: float, yaw: float, timeout_s: float = 2.0, pos_tol: float = 0.08, yaw_tol: float = 0.20):
-        end = time.monotonic() + timeout_s
-        while rclpy.ok() and time.monotonic() < end:
-            rclpy.spin_once(self, timeout_sec=0.05)
-            msg = self._odom_msg
-            if msg is None:
-                continue
-            pos = msg.pose.pose.position
-            q = msg.pose.pose.orientation
-            est_yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
-            if math.hypot(pos.x - x, pos.y - y) <= pos_tol and abs(_wrap_angle(est_yaw - yaw)) <= yaw_tol:
-                return True
-        return False
-
-    def clear_diag_buffer(self):
-        self._diag_buffer.clear()
-
-    def collect_diagnostics(self, timeout_s: float, min_msgs: int = 1) -> List[Dict[str, float]]:
-        start = time.monotonic()
-        while rclpy.ok() and (time.monotonic() - start) < timeout_s:
-            rclpy.spin_once(self, timeout_sec=0.05)
-            if len(self._diag_buffer) >= min_msgs:
-                break
-        if len(self._diag_buffer) < min_msgs:
-            # give a little more time so very low-rate camera streams still contribute if available
-            end = time.monotonic() + 0.15
-            while rclpy.ok() and time.monotonic() < end:
-                rclpy.spin_once(self, timeout_sec=0.05)
-        return list(self._diag_buffer)
+    stamp: float
+    state_x: float
+    state_y: float
+    cov_x: float
+    cov_y: float
+    state_age_s: float
+    state_is_fresh: int
+    detected: int
+    usable_label: int
+    u_mid: float
+    v_mid: float
+    yaw_est: float
+    red_area_px: float
+    border_margin_px: float
+    normalized_blob_area: float = math.nan
 
 
 def _default_arg_path(relative: str) -> str:
@@ -162,102 +80,227 @@ def _safe_nanmean(values: List[float]) -> float:
     return float(np.mean(arr[mask]))
 
 
+def _safe_nanstd(values: List[float]) -> float:
+    arr = np.asarray(values, dtype=float)
+    if arr.size == 0:
+        return math.nan
+    mask = np.isfinite(arr)
+    if not np.any(mask):
+        return math.nan
+    return float(np.std(arr[mask]))
+
+
 def _load_world_profile(world_profiles_path: Path, world: str):
     profile, _intrinsics, world_path, camera_pose = load_profile(str(world_profiles_path), world)
     vis = dict(profile.get('visibility_defaults') or {})
     return profile, vis, Path(world_path), camera_pose
 
 
-def _resolve_sampling_bounds(vis: Dict[str, object], sampling_region: str, xmin_override, xmax_override, ymin_override, ymax_override, wall_margin_m: float):
-    xmin = float(vis.get('visibility_map_min_x', -6.0)) + wall_margin_m
-    xmax = float(vis.get('visibility_map_max_x', 6.0)) - wall_margin_m
-    ymin = float(vis.get('visibility_map_min_y', -6.0)) + wall_margin_m
-    ymax = float(vis.get('visibility_map_max_y', 6.0)) - wall_margin_m
+class DrivingVisibilityCapture(Node):
+    def __init__(self, *, usable_area_px_min: float, max_state_age_s: float):
+        super().__init__('driving_visibility_capture')
+        self.usable_area_px_min = float(usable_area_px_min)
+        self.max_state_age_s = float(max_state_age_s)
 
-    region = str(sampling_region or 'full').strip().lower()
-    if region == 'open_shelves_core':
-        xmin, xmax = -3.35, -0.95
-        ymin, ymax = -3.35, 3.15
-    elif region not in ('', 'full', 'default'):
-        raise ValueError(f'Unknown sampling region {sampling_region!r}')
+        self.samples: List[CaptureSample] = []
+        self._latest_state = None
+        self._done = False
+        self._sweep_config = None
+        self._skipped_no_state = 0
+        self._stale_state_rows = 0
 
-    if xmin_override is not None:
-        xmin = float(xmin_override)
-    if xmax_override is not None:
-        xmax = float(xmax_override)
-    if ymin_override is not None:
-        ymin = float(ymin_override)
-    if ymax_override is not None:
-        ymax = float(ymax_override)
+        latched_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.create_subscription(PoseWithCovarianceStamped, '/state/bev', self._state_cb, 10)
+        self.create_subscription(Float64MultiArray, DETECTION_DIAGNOSTICS_TOPIC, self._diag_cb, 10)
+        self.create_subscription(Bool, VISIBILITY_CAPTURE_DONE_TOPIC, self._done_cb, latched_qos)
+        self.create_subscription(String, VISIBILITY_CAPTURE_CONFIG_TOPIC, self._config_cb, latched_qos)
 
-    if not (xmin < xmax and ymin < ymax):
-        raise ValueError(f'Invalid sampling bounds: xmin={xmin}, xmax={xmax}, ymin={ymin}, ymax={ymax}')
-    return xmin, xmax, ymin, ymax
+    @property
+    def skipped_no_state(self) -> int:
+        return int(self._skipped_no_state)
+
+    @property
+    def stale_state_rows(self) -> int:
+        return int(self._stale_state_rows)
+
+    @property
+    def sweep_config(self) -> Dict[str, object] | None:
+        return dict(self._sweep_config) if self._sweep_config is not None else None
+
+    def _state_cb(self, msg: PoseWithCovarianceStamped) -> None:
+        stamp = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
+        cov = list(msg.pose.covariance)
+        self._latest_state = {
+            'stamp': stamp,
+            'x': float(msg.pose.pose.position.x),
+            'y': float(msg.pose.pose.position.y),
+            'cov_x': float(cov[0]) if len(cov) > 0 else math.nan,
+            'cov_y': float(cov[7]) if len(cov) > 7 else math.nan,
+        }
+
+    def _done_cb(self, msg: Bool) -> None:
+        self._done = bool(msg.data)
+
+    def _config_cb(self, msg: String) -> None:
+        try:
+            self._sweep_config = json.loads(msg.data)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            self.get_logger().warn(f'Ignoring malformed sweep config message: {exc}')
+
+    def _diag_cb(self, msg: Float64MultiArray) -> None:
+        diag = diagnostics_from_message(msg)
+        if self._latest_state is None:
+            self._skipped_no_state += 1
+            return
+
+        stamp = float(diag.get('stamp', math.nan))
+        if not math.isfinite(stamp):
+            self._skipped_no_state += 1
+            return
+
+        state_age_s = abs(stamp - float(self._latest_state['stamp']))
+        state_is_fresh = int(state_age_s <= self.max_state_age_s)
+        if not state_is_fresh:
+            self._stale_state_rows += 1
+
+        detected = bool(diag.get('detected', False))
+        red_area_px = float(diag.get('red_area_px', math.nan))
+        usable_label = int(detected and math.isfinite(red_area_px) and red_area_px >= self.usable_area_px_min)
+
+        self.samples.append(CaptureSample(
+            sample_idx=len(self.samples),
+            stamp=stamp,
+            state_x=float(self._latest_state['x']),
+            state_y=float(self._latest_state['y']),
+            cov_x=float(self._latest_state['cov_x']),
+            cov_y=float(self._latest_state['cov_y']),
+            state_age_s=float(state_age_s),
+            state_is_fresh=state_is_fresh,
+            detected=int(detected),
+            usable_label=usable_label,
+            u_mid=float(diag.get('u_mid', math.nan)),
+            v_mid=float(diag.get('v_mid', math.nan)),
+            yaw_est=float(diag.get('yaw_est', math.nan)),
+            red_area_px=red_area_px,
+            border_margin_px=float(diag.get('border_margin_px', math.nan)),
+        ))
+
+        if len(self.samples) % 100 == 0:
+            usable_rate = float(np.mean([s.usable_label for s in self.samples]))
+            self.get_logger().info(
+                f'Captured {len(self.samples)} diagnostic samples '
+                f'(usable_rate={usable_rate:.3f}, stale_rows={self._stale_state_rows})'
+            )
+
+    def wait_for_ready(self, timeout_s: float) -> None:
+        end = time.monotonic() + max(timeout_s, 0.0)
+        while rclpy.ok() and time.monotonic() < end:
+            rclpy.spin_once(self, timeout_sec=0.05)
+            if self._latest_state is not None and self._sweep_config is not None:
+                return
+        raise RuntimeError('Timed out waiting for /state/bev and /visibility_capture/config_json')
+
+    def run_until_complete(self, max_capture_s: float, post_done_grace_s: float) -> None:
+        start = time.monotonic()
+        done_seen_at = None
+        while rclpy.ok():
+            rclpy.spin_once(self, timeout_sec=0.05)
+            now = time.monotonic()
+            if max_capture_s > 0.0 and (now - start) > max_capture_s:
+                self.get_logger().warn('Capture reached max_capture_s before completion; stopping collection')
+                return
+            if self._done:
+                if done_seen_at is None:
+                    done_seen_at = now
+                elif (now - done_seen_at) >= max(post_done_grace_s, 0.0):
+                    return
 
 
-def _sample_positions(profile: Dict[str, object], vis: Dict[str, object], world_path: Path, sample_nx: int, sample_ny: int, wall_margin_m: float, clearance_m: float, sample_limit: int, shuffle: bool, seed: int, sampling_region: str = 'full', xmin_override=None, xmax_override=None, ymin_override=None, ymax_override=None):
-    xmin, xmax, ymin, ymax = _resolve_sampling_bounds(
-        vis,
-        sampling_region,
-        xmin_override,
-        xmax_override,
-        ymin_override,
-        ymax_override,
-        wall_margin_m,
+def _compute_blob_area_ref(samples: List[CaptureSample], percentile: float, usable_area_px_min: float) -> float:
+    areas = np.asarray(
+        [s.red_area_px for s in samples if math.isfinite(s.red_area_px) and s.red_area_px > 0.0],
+        dtype=float,
     )
-    xs = np.linspace(xmin, xmax, int(max(sample_nx, 2)))
-    ys = np.linspace(ymin, ymax, int(max(sample_ny, 2)))
-    Xg, Yg = np.meshgrid(xs, ys)
-    pts = np.column_stack([Xg.ravel(), Yg.ravel()])
-
-    scene = parse_occlusion_scene_from_world(str(world_path), model_name='warehouse_rack_occluders')
-    if scene.prisms:
-        signed = signed_distance_to_union_xy(scene.prisms, pts)
-        pts = pts[signed >= float(clearance_m)]
-
-    rng = np.random.default_rng(int(seed))
-    if shuffle and pts.shape[0] > 1:
-        pts = pts[rng.permutation(pts.shape[0])]
-    if int(sample_limit) > 0:
-        pts = pts[: int(sample_limit)]
-    return pts, (xmin, xmax, ymin, ymax)
+    if areas.size == 0:
+        return float(max(usable_area_px_min, 1.0))
+    ref = float(np.percentile(areas, np.clip(percentile, 1.0, 100.0)))
+    return float(max(ref, usable_area_px_min, 1.0))
 
 
-def _aggregate_results(rows: List[SampleResult]):
-    grouped: Dict[tuple[float, float, float], List[SampleResult]] = defaultdict(list)
-    for row in rows:
-        grouped[(row.x, row.y, row.yaw)].append(row)
+def _inject_normalized_blob_area(samples: List[CaptureSample], ref_area_px: float) -> None:
+    denom = float(max(ref_area_px, 1.0))
+    for sample in samples:
+        if math.isfinite(sample.red_area_px) and sample.red_area_px > 0.0:
+            sample.normalized_blob_area = float(np.clip(sample.red_area_px / denom, 0.0, 1.0))
+        else:
+            sample.normalized_blob_area = 0.0
+
+
+def _grid_vectors(vis: Dict[str, object]):
+    xmin = float(vis.get('visibility_map_min_x', -6.0))
+    xmax = float(vis.get('visibility_map_max_x', 6.0))
+    ymin = float(vis.get('visibility_map_min_y', -6.0))
+    ymax = float(vis.get('visibility_map_max_y', 6.0))
+    nx = int(vis.get('visibility_map_nx', 160))
+    ny = int(vis.get('visibility_map_ny', 160))
+    xs = np.linspace(xmin, xmax, max(nx, 2))
+    ys = np.linspace(ymin, ymax, max(ny, 2))
+    return xs, ys
+
+
+def _nearest_index(value: float, axis: np.ndarray) -> int:
+    if axis.size <= 1:
+        return 0
+    step = float(axis[1] - axis[0])
+    idx = int(round((value - float(axis[0])) / step))
+    return int(np.clip(idx, 0, axis.size - 1))
+
+
+def _aggregate_samples(samples: List[CaptureSample], vis: Dict[str, object]):
+    xs, ys = _grid_vectors(vis)
+    grouped: Dict[tuple[int, int], List[CaptureSample]] = defaultdict(list)
+    for sample in samples:
+        if not sample.state_is_fresh:
+            continue
+        if not (math.isfinite(sample.state_x) and math.isfinite(sample.state_y)):
+            continue
+        ix = _nearest_index(sample.state_x, xs)
+        iy = _nearest_index(sample.state_y, ys)
+        grouped[(ix, iy)].append(sample)
 
     agg_rows = []
-    for (x, y, yaw), group in grouped.items():
-        det_rates = [g.detected_rate for g in group]
-        n_msgs = sum(g.n_msgs for g in group)
-        n_detected = sum(g.n_detected for g in group)
+    for (ix, iy), group in sorted(grouped.items(), key=lambda item: (item[0][1], item[0][0])):
+        detected_flags = [float(s.detected) for s in group]
+        usable_flags = [float(s.usable_label) for s in group]
         agg_rows.append({
-            'x': x,
-            'y': y,
-            'yaw': yaw,
-            'n_repeats': len(group),
-            'detected_rate_mean': float(np.mean(det_rates)),
-            'detected_rate_std': float(np.std(det_rates)),
-            'detected_label': int(float(np.mean(det_rates)) >= 0.5),
-            'n_msgs_total': int(n_msgs),
-            'n_detected_total': int(n_detected),
-            'mean_u': _safe_nanmean([g.mean_u for g in group]),
-            'mean_v': _safe_nanmean([g.mean_v for g in group]),
-            'mean_red_area_px': _safe_nanmean([g.mean_red_area_px for g in group]),
-            'mean_border_margin_px': _safe_nanmean([g.mean_border_margin_px for g in group]),
+            'ix': int(ix),
+            'iy': int(iy),
+            'x_center': float(xs[ix]),
+            'y_center': float(ys[iy]),
+            'n_samples': int(len(group)),
+            'n_detected': int(sum(detected_flags)),
+            'n_usable': int(sum(usable_flags)),
+            'detected_rate_mean': float(np.mean(detected_flags)),
+            'detected_rate_std': float(np.std(detected_flags)),
+            'usable_rate_mean': float(np.mean(usable_flags)),
+            'usable_rate_std': float(np.std(usable_flags)),
+            'mean_red_area_px': _safe_nanmean([s.red_area_px for s in group]),
+            'mean_border_margin_px': _safe_nanmean([s.border_margin_px for s in group]),
+            'mean_blob_area_norm': _safe_nanmean([s.normalized_blob_area for s in group]),
+            'mean_state_age_s': _safe_nanmean([s.state_age_s for s in group]),
+            'mean_cov_x': _safe_nanmean([s.cov_x for s in group]),
+            'mean_cov_y': _safe_nanmean([s.cov_y for s in group]),
         })
-    agg_rows.sort(key=lambda r: (r['y'], r['x']))
     return agg_rows
 
 
 def _fit_gp_from_aggregates(agg_rows, vis: Dict[str, object], camera_pose, gp_length_scale: float, gp_noise_var: float, beta: float, min_prob: float):
-    xs = np.linspace(float(vis.get('visibility_map_min_x', -6.0)), float(vis.get('visibility_map_max_x', 6.0)), int(vis.get('visibility_map_nx', 160)))
-    ys = np.linspace(float(vis.get('visibility_map_min_y', -6.0)), float(vis.get('visibility_map_max_y', 6.0)), int(vis.get('visibility_map_ny', 160)))
+    xs, ys = _grid_vectors(vis)
+    if not agg_rows:
+        raise RuntimeError('No fresh state-aligned capture samples remained for GP fitting')
 
-    X_train = np.asarray([[r['x'], r['y']] for r in agg_rows], dtype=float)
-    p_train = np.asarray([r['detected_rate_mean'] for r in agg_rows], dtype=float)
+    X_train = np.asarray([[r['x_center'], r['y_center']] for r in agg_rows], dtype=float)
+    p_train = np.asarray([r['usable_rate_mean'] for r in agg_rows], dtype=float)
     p_train = np.clip(p_train, min_prob, 1.0 - min_prob)
 
     gp = SimpleRBFGP(
@@ -284,48 +327,84 @@ def _fit_gp_from_aggregates(agg_rows, vis: Dict[str, object], camera_pose, gp_le
     }
 
 
-def _write_raw_csv(path: Path, rows: List[SampleResult]):
+def _write_raw_csv(path: Path, rows: List[CaptureSample]) -> None:
+    fieldnames = [
+        'sample_idx',
+        'stamp',
+        'state_x',
+        'state_y',
+        'cov_x',
+        'cov_y',
+        'state_age_s',
+        'state_is_fresh',
+        'detected',
+        'usable_label',
+        'u_mid',
+        'v_mid',
+        'yaw_est',
+        'red_area_px',
+        'border_margin_px',
+        'normalized_blob_area',
+    ]
     with path.open('w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            'sample_idx', 'x', 'y', 'yaw', 'repeat_idx', 'detected_rate', 'detected_label',
-            'n_msgs', 'n_detected', 'mean_u', 'mean_v', 'mean_red_area_px', 'mean_border_margin_px',
-        ])
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
         for row in rows:
-            writer.writerow([
-                row.sample_idx, row.x, row.y, row.yaw, row.repeat_idx, row.detected_rate,
-                row.detected_label, row.n_msgs, row.n_detected, row.mean_u, row.mean_v,
-                row.mean_red_area_px, row.mean_border_margin_px,
-            ])
+            writer.writerow({
+                key: getattr(row, key) for key in fieldnames
+            })
 
 
-def _write_agg_csv(path: Path, agg_rows):
+def _write_agg_csv(path: Path, agg_rows) -> None:
+    default_fields = [
+        'ix', 'iy', 'x_center', 'y_center', 'n_samples', 'n_detected', 'n_usable',
+        'detected_rate_mean', 'detected_rate_std', 'usable_rate_mean', 'usable_rate_std',
+        'mean_red_area_px', 'mean_border_margin_px', 'mean_blob_area_norm',
+        'mean_state_age_s', 'mean_cov_x', 'mean_cov_y',
+    ]
+    fieldnames = list(agg_rows[0].keys()) if agg_rows else default_fields
     with path.open('w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=list(agg_rows[0].keys()) if agg_rows else [
-            'x', 'y', 'yaw', 'n_repeats', 'detected_rate_mean', 'detected_rate_std',
-            'detected_label', 'n_msgs_total', 'n_detected_total', 'mean_u', 'mean_v',
-            'mean_red_area_px', 'mean_border_margin_px',
-        ])
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in agg_rows:
             writer.writerow(row)
 
 
-def _plot_fit(path: Path, fit, agg_rows, title: str):
+def _plot_fit(path: Path, fit, agg_rows, title: str) -> None:
+    import matplotlib.pyplot as plt
+
     fig, axes = plt.subplots(1, 2, figsize=(13, 5), constrained_layout=True)
     extent = [fit['xs'][0], fit['xs'][-1], fit['ys'][0], fit['ys'][-1]]
-    im0 = axes[0].imshow(fit['P_mean_map'], origin='lower', extent=extent, aspect='equal', vmin=0.0, vmax=1.0, cmap='viridis')
-    axes[0].set_title('Empirical GP mean')
-    im1 = axes[1].imshow(fit['P_conservative_map'], origin='lower', extent=extent, aspect='equal', vmin=0.0, vmax=1.0, cmap='viridis')
-    axes[1].set_title('Empirical GP conservative')
-    pts = np.asarray([[r['x'], r['y']] for r in agg_rows], dtype=float) if agg_rows else np.zeros((0, 2), dtype=float)
-    vals = np.asarray([r['detected_rate_mean'] for r in agg_rows], dtype=float) if agg_rows else np.zeros((0,), dtype=float)
+    im0 = axes[0].imshow(
+        fit['P_mean_map'],
+        origin='lower',
+        extent=extent,
+        aspect='equal',
+        vmin=0.0,
+        vmax=1.0,
+        cmap='viridis',
+    )
+    axes[0].set_title('Driving-capture GP mean')
+    im1 = axes[1].imshow(
+        fit['P_conservative_map'],
+        origin='lower',
+        extent=extent,
+        aspect='equal',
+        vmin=0.0,
+        vmax=1.0,
+        cmap='viridis',
+    )
+    axes[1].set_title('Driving-capture GP conservative')
+
+    pts = np.asarray([[r['x_center'], r['y_center']] for r in agg_rows], dtype=float) if agg_rows else np.zeros((0, 2))
+    vals = np.asarray([r['usable_rate_mean'] for r in agg_rows], dtype=float) if agg_rows else np.zeros((0,))
     if pts.size:
         for ax in axes:
-            sc = ax.scatter(pts[:, 0], pts[:, 1], c=vals, cmap='coolwarm', vmin=0.0, vmax=1.0, s=28, edgecolors='k', linewidths=0.3)
+            ax.scatter(pts[:, 0], pts[:, 1], c=vals, cmap='coolwarm', vmin=0.0, vmax=1.0, s=24, edgecolors='k', linewidths=0.25)
             ax.scatter([fit['camera_pos'][0]], [fit['camera_pos'][1]], c='white', s=50, marker='x')
             ax.set_xlabel('x [m]')
             ax.set_ylabel('y [m]')
+
     fig.colorbar(im0, ax=axes[0], fraction=0.046)
     fig.colorbar(im1, ax=axes[1], fraction=0.046)
     fig.suptitle(title)
@@ -334,36 +413,23 @@ def _plot_fit(path: Path, fit, agg_rows, title: str):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description='Capture empirical detection samples and fit a GP visibility field.')
+    parser = argparse.ArgumentParser(
+        description='Collect driving-based visibility samples from /state/bev and fit a GP visibility field.'
+    )
     parser.add_argument('--world', default='warehouse_occ_light.world.sdf')
     parser.add_argument('--world-profiles', default=_default_arg_path('src/experiments/config/world_profiles.yaml'))
     parser.add_argument('--output-root', default=_default_arg_path('logs/visibility_capture'))
     parser.add_argument('--publish-artifact', default='', help='Optional stable output path for the fitted GP artifact')
-    parser.add_argument('--entity-name', default='turtlebot3')
-    parser.add_argument('--sample-nx', type=int, default=15)
-    parser.add_argument('--sample-ny', type=int, default=15)
-    parser.add_argument('--sample-limit', type=int, default=0)
-    parser.add_argument('--sampling-region', default='full', choices=['full', 'open_shelves_core'])
-    parser.add_argument('--xmin', type=float, default=None)
-    parser.add_argument('--xmax', type=float, default=None)
-    parser.add_argument('--ymin', type=float, default=None)
-    parser.add_argument('--ymax', type=float, default=None)
-    parser.add_argument('--yaw-rad', type=float, default=0.0)
-    parser.add_argument('--robot-z', type=float, default=0.05)
-    parser.add_argument('--wall-margin-m', type=float, default=0.45)
-    parser.add_argument('--clearance-m', type=float, default=0.28)
-    parser.add_argument('--repeats', type=int, default=1)
-    parser.add_argument('--shuffle', action='store_true', default=False)
-    parser.add_argument('--settle-s', type=float, default=0.25)
-    parser.add_argument('--diag-timeout-s', type=float, default=1.6)
-    parser.add_argument('--min-diag-messages', type=int, default=1)
-    parser.add_argument('--odom-timeout-s', type=float, default=2.0)
-    parser.add_argument('--label-threshold', type=float, default=0.5)
+    parser.add_argument('--usable-area-px-min', type=float, default=20.0)
+    parser.add_argument('--max-state-age-s', type=float, default=0.50)
+    parser.add_argument('--blob-area-ref-percentile', type=float, default=95.0)
+    parser.add_argument('--ready-timeout-s', type=float, default=20.0)
+    parser.add_argument('--max-capture-s', type=float, default=600.0)
+    parser.add_argument('--post-done-grace-s', type=float, default=0.75)
     parser.add_argument('--gp-length-scale', type=float, default=-1.0)
     parser.add_argument('--gp-noise-var', type=float, default=-1.0)
     parser.add_argument('--beta', type=float, default=-1.0)
     parser.add_argument('--min-prob', type=float, default=1e-4)
-    parser.add_argument('--seed', type=int, default=0)
     args = parser.parse_args()
 
     world_profiles_path = Path(args.world_profiles).resolve()
@@ -373,85 +439,38 @@ def main() -> int:
     run_dir.mkdir(parents=True, exist_ok=True)
 
     profile, vis, world_path, camera_pose = _load_world_profile(world_profiles_path, args.world)
-    points, sample_bounds = _sample_positions(
-        profile,
-        vis,
-        world_path,
-        args.sample_nx,
-        args.sample_ny,
-        args.wall_margin_m,
-        args.clearance_m,
-        args.sample_limit,
-        args.shuffle,
-        args.seed,
-        sampling_region=args.sampling_region,
-        xmin_override=args.xmin,
-        xmax_override=args.xmax,
-        ymin_override=args.ymin,
-        ymax_override=args.ymax,
-    )
-    if points.shape[0] == 0:
-        raise RuntimeError('No valid sample points remained after filtering')
-
     gp_length_scale = float(args.gp_length_scale if args.gp_length_scale > 0.0 else vis.get('visibility_gp_length_scale', 1.0))
     gp_noise_var = float(args.gp_noise_var if args.gp_noise_var > 0.0 else vis.get('visibility_gp_noise_var', 0.1))
     beta = float(args.beta if args.beta > 0.0 else vis.get('visibility_beta', 1.0))
+    min_prob = float(max(args.min_prob, 1e-6))
 
     rclpy.init()
-    node = EmpiricalVisibilityCapture(world_name=profile['world_name'], entity_name=args.entity_name)
+    node = DrivingVisibilityCapture(
+        usable_area_px_min=float(args.usable_area_px_min),
+        max_state_age_s=float(args.max_state_age_s),
+    )
     try:
-        node.get_logger().info(f'Waiting for capture interfaces in world {profile["world_name"]!r}')
-        node.wait_for_ready(timeout_s=12.0)
-        node.spin_for(0.5)
-        xmin, xmax, ymin, ymax = sample_bounds
         node.get_logger().info(
-            'Sampling %d poses in region=%r with bounds x=[%.2f, %.2f], y=[%.2f, %.2f], repeats=%d' % (
-                int(points.shape[0]),
-                str(args.sampling_region),
-                float(xmin),
-                float(xmax),
-                float(ymin),
-                float(ymax),
-                int(max(args.repeats, 1)),
-            )
+            f'Waiting for driving capture interfaces for world {profile["world_name"]!r}'
         )
-
-        raw_rows: List[SampleResult] = []
-        for sample_idx, (x, y) in enumerate(points):
-            for repeat_idx in range(int(max(args.repeats, 1))):
-                node.set_pose(float(x), float(y), float(args.robot_z), float(args.yaw_rad), timeout_s=3.0)
-                node.wait_for_odom_pose(float(x), float(y), float(args.yaw_rad), timeout_s=args.odom_timeout_s)
-                node.spin_for(args.settle_s)
-                node.clear_diag_buffer()
-                diags = node.collect_diagnostics(timeout_s=args.diag_timeout_s, min_msgs=max(args.min_diag_messages, 1))
-                detected_flags = [1.0 if bool(d['detected']) else 0.0 for d in diags]
-                detect_rate = float(np.mean(detected_flags)) if detected_flags else 0.0
-                n_detected = int(sum(detected_flags))
-                raw_rows.append(SampleResult(
-                    sample_idx=sample_idx,
-                    x=float(x),
-                    y=float(y),
-                    yaw=float(args.yaw_rad),
-                    repeat_idx=repeat_idx,
-                    detected_rate=detect_rate,
-                    detected_label=int(detect_rate >= float(args.label_threshold)),
-                    n_msgs=len(diags),
-                    n_detected=n_detected,
-                    mean_u=_safe_nanmean([d['u_mid'] for d in diags]),
-                    mean_v=_safe_nanmean([d['v_mid'] for d in diags]),
-                    mean_red_area_px=_safe_nanmean([d['red_area_px'] for d in diags]),
-                    mean_border_margin_px=_safe_nanmean([d['border_margin_px'] for d in diags]),
-                ))
-                if ((sample_idx + 1) % 10 == 0 and repeat_idx == int(max(args.repeats, 1)) - 1) or sample_idx == 0:
-                    node.get_logger().info(
-                        f'Captured {sample_idx + 1}/{points.shape[0]} poses; latest rate={detect_rate:.2f} at ({x:.2f}, {y:.2f})'
-                    )
+        node.wait_for_ready(timeout_s=float(args.ready_timeout_s))
+        node.get_logger().info('Starting driving-based visibility capture')
+        node.run_until_complete(
+            max_capture_s=float(args.max_capture_s),
+            post_done_grace_s=float(args.post_done_grace_s),
+        )
     finally:
+        samples = list(node.samples)
+        skipped_no_state = node.skipped_no_state
+        stale_state_rows = node.stale_state_rows
+        sweep_config = node.sweep_config or {}
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
 
-    agg_rows = _aggregate_results(raw_rows)
+    blob_area_ref_px = _compute_blob_area_ref(samples, float(args.blob_area_ref_percentile), float(args.usable_area_px_min))
+    _inject_normalized_blob_area(samples, blob_area_ref_px)
+    agg_rows = _aggregate_samples(samples, vis)
     fit = _fit_gp_from_aggregates(
         agg_rows,
         vis,
@@ -459,7 +478,7 @@ def main() -> int:
         gp_length_scale=gp_length_scale,
         gp_noise_var=gp_noise_var,
         beta=beta,
-        min_prob=float(max(args.min_prob, 1e-6)),
+        min_prob=min_prob,
     )
 
     raw_csv = run_dir / 'raw_detection_samples.csv'
@@ -468,7 +487,7 @@ def main() -> int:
     plot_path = run_dir / 'empirical_visibility_gp.png'
     meta_path = run_dir / 'capture_config.json'
 
-    _write_raw_csv(raw_csv, raw_rows)
+    _write_raw_csv(raw_csv, samples)
     _write_agg_csv(agg_csv, agg_rows)
     np.savez_compressed(
         npz_path,
@@ -481,38 +500,37 @@ def main() -> int:
         P_map=fit['P_map'],
         camera_pos=fit['camera_pos'],
     )
-    _plot_fit(plot_path, fit, agg_rows, title=f'Empirical visibility GP: {args.world}')
+    _plot_fit(plot_path, fit, agg_rows, title=f'Driving-based empirical visibility GP: {args.world}')
 
+    fresh_samples = [s for s in samples if s.state_is_fresh]
     meta = {
         'world': args.world,
         'world_name': profile['world_name'],
         'world_path': str(world_path),
         'world_profiles_path': str(world_profiles_path),
         'output_dir': str(run_dir),
-        'n_raw_samples': len(raw_rows),
-        'n_unique_poses': len(agg_rows),
-        'sample_nx': int(args.sample_nx),
-        'sample_ny': int(args.sample_ny),
-        'sample_limit': int(args.sample_limit),
-        'sampling_region': str(args.sampling_region),
-        'sample_bounds': {
-            'xmin': float(sample_bounds[0]),
-            'xmax': float(sample_bounds[1]),
-            'ymin': float(sample_bounds[2]),
-            'ymax': float(sample_bounds[3]),
-        },
-        'yaw_rad': float(args.yaw_rad),
-        'robot_z': float(args.robot_z),
-        'wall_margin_m': float(args.wall_margin_m),
-        'clearance_m': float(args.clearance_m),
-        'repeats': int(args.repeats),
-        'settle_s': float(args.settle_s),
-        'diag_timeout_s': float(args.diag_timeout_s),
-        'min_diag_messages': int(args.min_diag_messages),
+        'state_input_topic': '/state/bev',
+        'state_dimensions': ['x', 'y'],
+        'label_mode': 'binary_usable_detection',
+        'label_rule': 'detected && red_area_px >= usable_area_px_min',
+        'usable_area_px_min': float(args.usable_area_px_min),
+        'max_state_age_s': float(args.max_state_age_s),
+        'blob_area_ref_percentile': float(args.blob_area_ref_percentile),
+        'blob_area_ref_px': float(blob_area_ref_px),
+        'n_raw_samples': int(len(samples)),
+        'n_fresh_samples': int(len(fresh_samples)),
+        'n_occupied_cells': int(len(agg_rows)),
+        'skipped_no_state_samples': int(skipped_no_state),
+        'stale_state_rows': int(stale_state_rows),
         'gp_length_scale': gp_length_scale,
         'gp_noise_var': gp_noise_var,
         'beta': beta,
-        'mean_detected_rate': float(np.mean([r['detected_rate_mean'] for r in agg_rows])) if agg_rows else math.nan,
+        'mean_detected_rate_raw': float(np.mean([s.detected for s in samples])) if samples else math.nan,
+        'mean_usable_rate_raw': float(np.mean([s.usable_label for s in samples])) if samples else math.nan,
+        'mean_detected_rate_cells': float(np.mean([r['detected_rate_mean'] for r in agg_rows])) if agg_rows else math.nan,
+        'mean_usable_rate_cells': float(np.mean([r['usable_rate_mean'] for r in agg_rows])) if agg_rows else math.nan,
+        'sweep_config': sweep_config,
+        'published_artifact_path': str(Path(args.publish_artifact).expanduser().resolve()) if str(args.publish_artifact).strip() else '',
     }
     meta_path.write_text(json.dumps(meta, indent=2), encoding='utf-8')
 

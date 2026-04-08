@@ -2,6 +2,10 @@
 
 This document explains how the active thesis repository is partitioned and which files are central to the current milestone.
 
+![Top-down example of the runtime world, planned path, and learned visibility field](figures/planner_field_story.png)
+
+Use this figure as the mental anchor while reading the package map below: the packages exist to produce this loop, not to provide a generic framework.
+
 ## Repository-Level Architecture
 
 ```mermaid
@@ -68,6 +72,7 @@ If a supervisor wants the shortest honest route through the code, use this order
 
 - `src/experiments/launch/warehouse_visibility_agent.launch.py`
 - `src/experiments/launch/warehouse_visibility_capture.launch.py`
+- `src/experiments/experiments/nodes/visibility_sweep_controller_node.py`
 - `src/perception/perception/nodes/homography_sim_node.py`
 - `src/planning/planning/core/nogo_cost.py`
 

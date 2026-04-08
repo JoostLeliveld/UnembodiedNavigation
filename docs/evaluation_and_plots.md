@@ -2,6 +2,10 @@
 
 This document explains what the repository logs now, what the core scripts produce, and which figures best explain the current milestone.
 
+![Example field overlay used in the docs](figures/planner_field_story.png)
+
+![Example run-timeseries panel used in the docs](figures/planner_run_timeseries.png)
+
 ## Evaluation Flow
 
 ```mermaid
@@ -44,7 +48,7 @@ Caption: the logger is the bridge between runtime and evaluation. The current ev
 
 | Script | Role | Output |
 | --- | --- | --- |
-| [`../scripts/fit_empirical_visibility_gp.py`](../scripts/fit_empirical_visibility_gp.py) | offline GP artifact generation | `empirical_visibility_gp.npz`, raw/aggregated capture CSVs, fit plot |
+| [`../scripts/fit_empirical_visibility_gp.py`](../scripts/fit_empirical_visibility_gp.py) | driving-based offline GP artifact generation | `empirical_visibility_gp.npz`, raw/aggregated capture CSVs, fit plot |
 | [`../scripts/evaluate_occlusion_comparison.py`](../scripts/evaluate_occlusion_comparison.py) | summary/evaluation | `run_summary.csv`, `group_summary.csv`, `group_summary.json` |
 | [`../scripts/plot_visibility_run.py`](../scripts/plot_visibility_run.py) | qualitative single-run plotting | visibility and trajectory figures |
 

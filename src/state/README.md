@@ -2,6 +2,16 @@
 
 This package converts pixel-space observations into a planner-facing planar state estimate.
 
+![State-estimation tutorial figure](../../docs/figures/state_pipeline_tutorial.png)
+
+The planner-facing state currently used for GP learning and planning is:
+
+\[
+\hat s_t = [\hat x_t,\hat y_t]^\top
+\]
+
+for the visibility model, while heading is maintained separately through the runtime fallback chain.
+
 ## Why This Folder Exists
 
 The planner does not consume raw image coordinates. This package performs the homography-based conversion from image-space observation to BEV state.

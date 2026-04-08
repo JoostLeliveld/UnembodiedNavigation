@@ -2,6 +2,10 @@
 
 This package turns external-camera information into robot observations.
 
+![Perception-to-state tutorial figure](../../docs/figures/state_pipeline_tutorial.png)
+
+The detector is intentionally simple: it produces the image-space observation that starts the rest of the pipeline.
+
 ## Why This Folder Exists
 
 The thesis setup depends on an external camera. This package provides the observation path from camera image or synthetic camera model to a pixel-space robot observation.

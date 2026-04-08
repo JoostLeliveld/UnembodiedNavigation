@@ -2,18 +2,39 @@
 
 This document explains how offline preparation connects to the online ROS/Gazebo runtime.
 
+![State-estimation tutorial figure](figures/state_pipeline_tutorial.png)
+
+The offline and online stories are connected by one planner-facing state:
+
+\[
+\hat s_t = [\hat x_t,\hat y_t]^\top
+\]
+
+for the current GP input, with `theta` still handled separately by the runtime estimator.
+
 ## Offline Preparation
 
 ```mermaid
 flowchart LR
     A[world_profiles.yaml] --> B[warehouse_visibility_capture.launch.py]
-    C[tasks.yaml] --> E[main runtime launches]
-    B --> D[fit_empirical_visibility_gp.py]
-    D --> F[src/experiments/data/visibility_gp/*.npz]
-    F --> E
+    B --> C[visibility_sweep_controller_node]
+    C --> D[/cmd_vel sweep/]
+    D --> E[detector + pixel_to_bev_state_node]
+    E --> F[fit_empirical_visibility_gp.py]
+    F --> G[src/experiments/data/visibility_gp/*.npz]
+    H[tasks.yaml] --> I[main runtime launches]
+    G --> I
 ```
 
-Caption: the GP visibility artifact is generated before online planning. The runtime loads a fixed artifact; it does not fit a GP during execution.
+Caption: the GP visibility artifact is generated before online planning. The capture launch drives a deterministic sweep, the fitting script logs `/state/bev` x-y plus detection diagnostics, and the runtime later loads the fitted artifact without learning online.
+
+For the current v1 artifact:
+
+- GP input: `/state/bev` x-y only
+- fitted target: binary usable visual detection
+- blob area: logged as an auxiliary diagnostic, not the fitted target
+
+![Empirical visibility artifact tutorial](figures/visibility_capture_tutorial.png)
 
 ## Runtime ROS Path
 
