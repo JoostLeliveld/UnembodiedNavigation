@@ -19,6 +19,10 @@ from state.core.noise import build_covariance
 class PixelToBevStateNode(Node):
     """Convert homography pixel measurements into a BEV state belief."""
 
+    @staticmethod
+    def _wrap_angle(angle: float) -> float:
+        return math.atan2(math.sin(float(angle)), math.cos(float(angle)))
+
     def __init__(self):
         super().__init__('pixel_to_bev_state_node')
 
@@ -30,6 +34,7 @@ class PixelToBevStateNode(Node):
         self.declare_parameter('use_odom_heading_fallback', True)
         self.declare_parameter('odom_heading_timeout_s', 0.5)
         self.declare_parameter('odom_heading_sigma_rad', 0.08)
+        self.declare_parameter('odom_yaw_offset_rad', 0.0)
         self.declare_parameter('infer_yaw_from_motion', True)
         self.declare_parameter('motion_yaw_min_displacement_m', 0.03)
         self.declare_parameter('motion_yaw_sigma_rad', 0.35)
@@ -49,6 +54,7 @@ class PixelToBevStateNode(Node):
         self.use_odom_heading_fallback = bool(self.get_parameter('use_odom_heading_fallback').value)
         self.odom_heading_timeout_s = float(self.get_parameter('odom_heading_timeout_s').value)
         self.odom_heading_sigma_rad = float(self.get_parameter('odom_heading_sigma_rad').value)
+        self.odom_yaw_offset_rad = float(self.get_parameter('odom_yaw_offset_rad').value)
         self.infer_yaw_from_motion = bool(self.get_parameter('infer_yaw_from_motion').value)
         self.motion_yaw_min_displacement_m = float(self.get_parameter('motion_yaw_min_displacement_m').value)
         self.motion_yaw_sigma_rad = float(self.get_parameter('motion_yaw_sigma_rad').value)
@@ -89,7 +95,8 @@ class PixelToBevStateNode(Node):
         self.get_logger().info(
             'Pixel->BEV state node started '
             '(/perception/pixel_pose -> /state/bev; '
-            f'state sources: x,y=camera homography, theta={" -> ".join(theta_sources)})'
+            f'state sources: x,y=camera homography, theta={" -> ".join(theta_sources)}, '
+            f'odom_yaw_offset_rad={self.odom_yaw_offset_rad:.3f})'
         )
 
     @staticmethod
@@ -146,7 +153,7 @@ class PixelToBevStateNode(Node):
             return None
         if self.odom_heading_timeout_s > 0.0 and abs(odom_stamp_s - stamp_s) > self.odom_heading_timeout_s:
             return None
-        return float(self._latest_odom_yaw)
+        return float(self._wrap_angle(self._latest_odom_yaw + self.odom_yaw_offset_rad))
 
     def _heading_sigma_from_diag(self, diag) -> float:
         sigma = float(max(self.yaw_noise_floor_rad, 1e-6))

@@ -44,6 +44,12 @@ def generate_launch_description():
         description="World name (used for /world/<name>/clock bridging)",
     )
     world_name = LaunchConfiguration("world_name")
+    headless_arg = DeclareLaunchArgument(
+        "headless",
+        default_value="false",
+        description="Run Gazebo server-only if true",
+    )
+    headless = LaunchConfiguration("headless")
     reset_world_arg = DeclareLaunchArgument(
         "reset_world",
         default_value="true",
@@ -85,6 +91,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             "world": world,
+            "headless": headless,
         }.items(),
     )
 
@@ -170,6 +177,11 @@ def generate_launch_description():
         world_name,
         "' + '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'"
     ])
+    set_pose_service_arg = PythonExpression([
+        "'/world/' + '",
+        world_name,
+        "' + '/set_pose@ros_gz_interfaces/srv/SetEntityPose@gz.msgs.Pose@gz.msgs.Boolean'"
+    ])
     clock_remap_src = PythonExpression([
         "'/world/' + '",
         world_name,
@@ -187,6 +199,7 @@ def generate_launch_description():
             "/external_camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
             "/external_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
             clock_arg,
+            set_pose_service_arg,
         ],
         remappings=[
             ("/model/turtlebot3/cmd_vel", "/cmd_vel"),
@@ -213,6 +226,7 @@ def generate_launch_description():
         bridge_scan_arg,
         world_arg,
         world_name_arg,
+        headless_arg,
         reset_world_arg,
         spawn_x_arg,
         spawn_y_arg,

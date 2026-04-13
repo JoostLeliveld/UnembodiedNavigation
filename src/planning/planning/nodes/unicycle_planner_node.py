@@ -84,7 +84,9 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('visibility_geometry_json', '')
         _declare_if_not('r_visible_uv', 2.5)
         _declare_if_not('r_miss_uv', 420.0)
-        _declare_if_not('visibility_power', 3.0)
+        _declare_if_not('visibility_power', 1.0)
+        _declare_if_not('visibility_trust_low', 0.08)
+        _declare_if_not('visibility_trust_high', 0.30)
         _declare_if_not('visibility_sigma_kappa', 1.0)
         _declare_if_not('goal_prior_u_std_start', 80.0)
         _declare_if_not('goal_prior_v_std_start', 80.0)
@@ -169,6 +171,8 @@ class UnicyclePlannerNode(Node):
         self.r_visible_uv = float(self.get_parameter('r_visible_uv').value)
         self.r_miss_uv = float(self.get_parameter('r_miss_uv').value)
         self.visibility_power = float(self.get_parameter('visibility_power').value)
+        self.visibility_trust_low = float(self.get_parameter('visibility_trust_low').value)
+        self.visibility_trust_high = float(self.get_parameter('visibility_trust_high').value)
         self.visibility_sigma_kappa = float(self.get_parameter('visibility_sigma_kappa').value)
         self.goal_prior_u_std_start = float(self.get_parameter('goal_prior_u_std_start').value)
         self.goal_prior_v_std_start = float(self.get_parameter('goal_prior_v_std_start').value)
@@ -270,6 +274,8 @@ class UnicyclePlannerNode(Node):
             r_visible_uv=self.r_visible_uv,
             r_miss_uv=self.r_miss_uv,
             visibility_power=self.visibility_power,
+            visibility_trust_low=self.visibility_trust_low,
+            visibility_trust_high=self.visibility_trust_high,
             visibility_sigma_kappa=self.visibility_sigma_kappa,
             goal_prior_u_std_start=self.goal_prior_u_std_start,
             goal_prior_v_std_start=self.goal_prior_v_std_start,

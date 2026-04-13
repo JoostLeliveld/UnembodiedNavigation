@@ -2,13 +2,17 @@
 build/
 install/
 log/
+logs/
 logs/experiments/
 logs/visibility_capture/
 logs/visibility_capture_test/
 logs/ros/
 logs/perception_benchmark/
 logs/calibration/
+logs/yolo_datasets/
+logs/yolo_seg_datasets/
 artifacts/visibility_prior/
+runs/
 
 # Python
 __pycache__/
@@ -22,6 +26,9 @@ __pycache__/
 
 # Debug output
 *.gv
+*.log
+*.pt
+/empirical_visibility_gp.npz
 
 # Local notes and scratch artifacts not part of the active thesis repo story
 src/docs/

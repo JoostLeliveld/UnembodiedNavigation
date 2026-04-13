@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import rclpy
-from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from sensor_msgs.msg import Image
@@ -11,6 +10,7 @@ from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
     diagnostics_message,
 )
+from perception.core.ros_image import image_msg_to_bgr8
 from unav_common.camera_model import ObliqueCameraModel
 
 
@@ -72,7 +72,6 @@ class ImageMarkerDetectorNode(Node):
         self.red_s_min = int(self.get_parameter('red_s_min').value)
         self.red_v_min = int(self.get_parameter('red_v_min').value)
 
-        self.bridge = CvBridge()
         self.rng = np.random.default_rng(self.seed)
         self.log_counter = 0
 
@@ -175,8 +174,8 @@ class ImageMarkerDetectorNode(Node):
 
     def _image_cb(self, msg: Image):
         try:
-            image_bgr = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        except CvBridgeError as exc:
+            image_bgr = image_msg_to_bgr8(msg)
+        except ValueError as exc:
             self.get_logger().warn(f'Failed to convert image: {exc}')
             return
 

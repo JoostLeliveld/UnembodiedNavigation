@@ -78,7 +78,9 @@ class UnicyclePlannerBase:
         visibility_artifact_path='',
         r_visible_uv=2.5,
         r_miss_uv=420.0,
-        visibility_power=3.0,
+        visibility_power=1.0,
+        visibility_trust_low=0.08,
+        visibility_trust_high=0.30,
         visibility_sigma_kappa=1.0,
         goal_prior_u_std_start=80.0,
         goal_prior_v_std_start=80.0,
@@ -124,6 +126,10 @@ class UnicyclePlannerBase:
         self.r_visible_uv = float(r_visible_uv)
         self.r_miss_uv = float(r_miss_uv)
         self.visibility_power = float(max(visibility_power, 1e-6))
+        self.visibility_trust_low = float(np.clip(visibility_trust_low, 0.0, 1.0))
+        self.visibility_trust_high = float(np.clip(visibility_trust_high, 0.0, 1.0))
+        if self.visibility_trust_high < self.visibility_trust_low:
+            self.visibility_trust_high = self.visibility_trust_low
         self.visibility_sigma_kappa = float(max(visibility_sigma_kappa, 1e-6))
         self.goal_prior_u_std_start = float(goal_prior_u_std_start)
         self.goal_prior_v_std_start = float(goal_prior_v_std_start)
@@ -323,6 +329,22 @@ class UnicyclePlannerBase:
             )
         return penalty
 
+    def _visibility_effective_score(self, p_vis):
+        p_vis = float(np.clip(p_vis, self._visibility_min_prob, 1.0 - self._visibility_min_prob))
+        shaped = float(np.clip(p_vis ** self.visibility_power, self._visibility_min_prob, 1.0 - self._visibility_min_prob))
+        lo = float(np.clip(self.visibility_trust_low, self._visibility_min_prob, 1.0 - self._visibility_min_prob))
+        hi = float(np.clip(self.visibility_trust_high, lo + 1e-6, 1.0 - self._visibility_min_prob))
+        x = (shaped - lo) / max(hi - lo, 1e-6)
+        trust = self._smoothstep(x)
+        return float(np.clip(trust, self._visibility_min_prob, 1.0 - self._visibility_min_prob))
+
+    def _blend_observation_covariance(self, trust):
+        trust = float(np.clip(trust, self._visibility_min_prob, 1.0 - self._visibility_min_prob))
+        visible_std = np.sqrt(np.maximum(np.diag(self.R_visible), 0.0))
+        miss_std = np.sqrt(np.maximum(np.diag(self.R_miss), 0.0))
+        plan_std = trust * visible_std + (1.0 - trust) * miss_std
+        return np.diag(np.square(plan_std)).astype(float)
+
     def goal_obs_cov_for_progress(self, progress):
         progress_fast = float(np.clip(progress, 0.0, 1.0)) ** self.goal_tightening_power
         a = self._smoothstep(progress_fast)
@@ -332,11 +354,11 @@ class UnicyclePlannerBase:
 
     def planning_visibility_diagnostics(self, m, S):
         p_vis = self.visibility_probability_belief(m, S)
-        p_vis_eff = float(np.clip(p_vis ** self.visibility_power, self._visibility_min_prob, 1.0 - self._visibility_min_prob))
+        p_vis_eff = self._visibility_effective_score(p_vis)
         if (not self.use_visibility_model) or (self.visibility_model is None):
             p_vis = 1.0
             p_vis_eff = 1.0
-        R_plan = p_vis_eff * self.R_visible + (1.0 - p_vis_eff) * self.R_miss
+        R_plan = self._blend_observation_covariance(p_vis_eff)
         return {
             'p_vis': float(p_vis),
             'p_vis_eff': float(p_vis_eff),
@@ -460,6 +482,8 @@ class UnicyclePlannerBase:
             float(self.r_visible_uv),
             float(self.r_miss_uv),
             float(self.visibility_power),
+            float(self.visibility_trust_low),
+            float(self.visibility_trust_high),
             float(self.visibility_sigma_kappa),
             float(self.goal_prior_u_std_start),
             float(self.goal_prior_v_std_start),
@@ -529,6 +553,8 @@ class UnicyclePlannerBase:
                 visibility_barrier_scale=float(self.visibility_barrier_scale),
                 discount_gamma=float(self.discount_gamma),
                 visibility_power=float(self.visibility_power),
+                visibility_trust_low=float(self.visibility_trust_low),
+                visibility_trust_high=float(self.visibility_trust_high),
                 visibility_sigma_kappa=float(self.visibility_sigma_kappa),
                 goal_prior_u_std_start=float(self.goal_prior_u_std_start),
                 goal_prior_v_std_start=float(self.goal_prior_v_std_start),

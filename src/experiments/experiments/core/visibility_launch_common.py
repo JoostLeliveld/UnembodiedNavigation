@@ -19,7 +19,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'seed': '0',
     'perception_backend': 'image_markers',
     'sensor_pixel_noise_sigma': '1.0',
-    'odom_wait_timeout_s': '25.0',
+    'odom_wait_timeout_s': '60.0',
     'odom_wait_min_messages': '1',
     'odom_wait_require_pose_match': 'false',
     'use_pixel_correction': 'true',
@@ -39,7 +39,9 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'use_obs_risk': 'true',
     'r_visible_uv': '2.5',
     'r_miss_uv': '140.0',
-    'visibility_power': '3.0',
+    'visibility_power': '1.0',
+    'visibility_trust_low': '0.08',
+    'visibility_trust_high': '0.30',
     'visibility_sigma_kappa': '1.0',
     'goal_prior_u_std_start': '80.0',
     'goal_prior_v_std_start': '80.0',
@@ -49,7 +51,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'goal_progress_n_steps': '90',
     'observation_risk_scale': '1.25',
     'ambiguity_term_scale': '1.00',
-    'visibility_weight': '12.0',
+    'visibility_weight': '3.0',
     'visibility_barrier_threshold': '0.90',
     'visibility_barrier_scale': '25.0',
     'process_noise_xy': '0.01',
@@ -64,6 +66,16 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'auto_stop_on_goal': 'true',
     'goal_success_radius': '0.35',
     'goal_success_hold_s': '2.0',
+    'yolo_model': 'yolo11n.pt',
+    'yolo_hf_filename': 'best.pt',
+    'yolo_device': '',
+    'yolo_imgsz': '640',
+    'yolo_conf_threshold': '0.25',
+    'yolo_iou_threshold': '0.45',
+    'yolo_target_class': 'robot',
+    'yolo_use_masks': 'true',
+    'yolo_min_mask_area_px': '12.0',
+    'yolo_mask_bottom_band_px': '3.0',
 }
 
 
@@ -124,12 +136,20 @@ def _require_task_field(task, key):
 
 
 def _state_estimator_metadata(perception_backend: str) -> Dict[str, str]:
-    if str(perception_backend).strip().lower() == 'homography':
+    backend = str(perception_backend).strip().lower()
+    if backend == 'homography':
         return {
             'state_source_x': 'camera_homography',
             'state_source_y': 'camera_homography',
             'state_source_theta': 'visual_heading_else_odom',
             'state_estimator_mode': 'camera_xytheta_with_odom_fallback',
+        }
+    if backend == 'yolo':
+        return {
+            'state_source_x': 'yolo_mask_or_bbox_homography',
+            'state_source_y': 'yolo_mask_or_bbox_homography',
+            'state_source_theta': 'odometry_heading',
+            'state_estimator_mode': 'yolo_mask_or_bbox_camera_xy_odom_theta',
         }
     return {
         'state_source_x': 'camera_homography',
@@ -156,7 +176,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'seed': seed_value,
         'perception_backend': _launch_value(context, 'perception_backend', PAPER_LAUNCH_DEFAULTS['perception_backend']).strip().lower(),
         'sensor_pixel_noise_sigma': float(_launch_value(context, 'sensor_pixel_noise_sigma', '0.0')),
-        'odom_wait_timeout_s': float(_launch_value(context, 'odom_wait_timeout_s', '25.0')),
+        'odom_wait_timeout_s': float(
+            _launch_value(context, 'odom_wait_timeout_s', PAPER_LAUNCH_DEFAULTS['odom_wait_timeout_s'])
+        ),
         'odom_wait_min_messages': max(1, int(float(_launch_value(context, 'odom_wait_min_messages', '1')))),
         'odom_wait_require_pose_match': _as_bool(_launch_value(context, 'odom_wait_require_pose_match', 'false')),
         'odom_wait_position_tolerance': 0.25,
@@ -192,6 +214,8 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'r_visible_uv': float(_launch_value(context, 'r_visible_uv', PAPER_LAUNCH_DEFAULTS['r_visible_uv'])),
         'r_miss_uv': float(_launch_value(context, 'r_miss_uv', PAPER_LAUNCH_DEFAULTS['r_miss_uv'])),
         'visibility_power': float(_launch_value(context, 'visibility_power', PAPER_LAUNCH_DEFAULTS['visibility_power'])),
+        'visibility_trust_low': float(_launch_value(context, 'visibility_trust_low', PAPER_LAUNCH_DEFAULTS['visibility_trust_low'])),
+        'visibility_trust_high': float(_launch_value(context, 'visibility_trust_high', PAPER_LAUNCH_DEFAULTS['visibility_trust_high'])),
         'visibility_sigma_kappa': float(_launch_value(context, 'visibility_sigma_kappa', PAPER_LAUNCH_DEFAULTS['visibility_sigma_kappa'])),
         'goal_prior_u_std_start': float(_launch_value(context, 'goal_prior_u_std_start', PAPER_LAUNCH_DEFAULTS['goal_prior_u_std_start'])),
         'goal_prior_v_std_start': float(_launch_value(context, 'goal_prior_v_std_start', PAPER_LAUNCH_DEFAULTS['goal_prior_v_std_start'])),
@@ -251,10 +275,20 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'enable_logging': _as_bool(_launch_value(context, 'enable_logging', 'true')),
         'use_rviz': _as_bool(_launch_value(context, 'use_rviz', 'false')),
         'rviz_config': _launch_value(context, 'rviz_config', ''),
+        'yolo_model': _launch_value(context, 'yolo_model', PAPER_LAUNCH_DEFAULTS['yolo_model']),
+        'yolo_hf_filename': _launch_value(context, 'yolo_hf_filename', PAPER_LAUNCH_DEFAULTS['yolo_hf_filename']),
+        'yolo_device': _launch_value(context, 'yolo_device', PAPER_LAUNCH_DEFAULTS['yolo_device']),
+        'yolo_imgsz': int(_launch_value(context, 'yolo_imgsz', PAPER_LAUNCH_DEFAULTS['yolo_imgsz'])),
+        'yolo_conf_threshold': float(_launch_value(context, 'yolo_conf_threshold', PAPER_LAUNCH_DEFAULTS['yolo_conf_threshold'])),
+        'yolo_iou_threshold': float(_launch_value(context, 'yolo_iou_threshold', PAPER_LAUNCH_DEFAULTS['yolo_iou_threshold'])),
+        'yolo_target_class': _launch_value(context, 'yolo_target_class', PAPER_LAUNCH_DEFAULTS['yolo_target_class']),
+        'yolo_use_masks': _as_bool(_launch_value(context, 'yolo_use_masks', PAPER_LAUNCH_DEFAULTS['yolo_use_masks'])),
+        'yolo_min_mask_area_px': float(_launch_value(context, 'yolo_min_mask_area_px', PAPER_LAUNCH_DEFAULTS['yolo_min_mask_area_px'])),
+        'yolo_mask_bottom_band_px': float(_launch_value(context, 'yolo_mask_bottom_band_px', PAPER_LAUNCH_DEFAULTS['yolo_mask_bottom_band_px'])),
     }
 
-    if cfg['perception_backend'] not in ('homography', 'image_markers'):
-        raise RuntimeError("perception_backend must be 'homography' or 'image_markers'")
+    if cfg['perception_backend'] not in ('homography', 'image_markers', 'yolo'):
+        raise RuntimeError("perception_backend must be 'homography', 'image_markers', or 'yolo'")
 
     return cfg
 
@@ -444,6 +478,27 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             output='screen',
             parameters=[homography_params],
         )
+    elif cfg['perception_backend'] == 'yolo':
+        yolo_params = dict(homography_params)
+        yolo_params.update({
+            'yolo_model': cfg['yolo_model'],
+            'yolo_hf_filename': cfg['yolo_hf_filename'],
+            'yolo_device': cfg['yolo_device'],
+            'yolo_imgsz': cfg['yolo_imgsz'],
+            'yolo_conf_threshold': cfg['yolo_conf_threshold'],
+            'yolo_iou_threshold': cfg['yolo_iou_threshold'],
+            'yolo_target_class': cfg['yolo_target_class'],
+            'yolo_use_masks': cfg['yolo_use_masks'],
+            'yolo_min_mask_area_px': cfg['yolo_min_mask_area_px'],
+            'yolo_mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
+        })
+        perception_node = Node(
+            package='perception',
+            executable='yolo_robot_detector_node',
+            name='yolo_robot_detector_node',
+            output='screen',
+            parameters=[yolo_params],
+        )
     else:
         perception_node = Node(
             package='perception',
@@ -462,6 +517,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'use_odom_heading_fallback': True,
         'odom_heading_timeout_s': 0.5,
         'odom_heading_sigma_rad': 0.08,
+        'odom_yaw_offset_rad': float(cfg['spawn']['yaw']),
         'infer_yaw_from_motion': False,
         'seed': cfg['seed'],
         **cfg['camera_params'],
@@ -535,6 +591,8 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'r_visible_uv': cfg['r_visible_uv'],
                 'r_miss_uv': cfg['r_miss_uv'],
                 'visibility_power': cfg['visibility_power'],
+                'visibility_trust_low': cfg['visibility_trust_low'],
+                'visibility_trust_high': cfg['visibility_trust_high'],
                 'visibility_sigma_kappa': cfg['visibility_sigma_kappa'],
                 'goal_prior_u_std_start': cfg['goal_prior_u_std_start'],
                 'goal_prior_v_std_start': cfg['goal_prior_v_std_start'],
@@ -557,6 +615,16 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'nogo_softplus_scale': cfg['nogo_softplus_scale'],
                 'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
                 'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
+                'yolo_model': cfg['yolo_model'],
+                'yolo_hf_filename': cfg['yolo_hf_filename'],
+                'yolo_device': cfg['yolo_device'],
+                'yolo_imgsz': cfg['yolo_imgsz'],
+                'yolo_conf_threshold': cfg['yolo_conf_threshold'],
+                'yolo_iou_threshold': cfg['yolo_iou_threshold'],
+                'yolo_target_class': cfg['yolo_target_class'],
+                'yolo_use_masks': cfg['yolo_use_masks'],
+                'yolo_min_mask_area_px': cfg['yolo_min_mask_area_px'],
+                'yolo_mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
                 'world_profiles_path': cfg['world_profiles_path'],
                 'tasks_yaml': cfg['tasks_yaml'],
                 'auto_stop_on_goal': cfg['auto_stop_on_goal'],
@@ -661,6 +729,8 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'r_visible_uv': cfg['r_visible_uv'],
             'r_miss_uv': cfg['r_miss_uv'],
             'visibility_power': cfg['visibility_power'],
+            'visibility_trust_low': cfg['visibility_trust_low'],
+            'visibility_trust_high': cfg['visibility_trust_high'],
             'visibility_sigma_kappa': cfg['visibility_sigma_kappa'],
             'goal_prior_u_std_start': cfg['goal_prior_u_std_start'],
             'goal_prior_v_std_start': cfg['goal_prior_v_std_start'],

@@ -8,11 +8,12 @@ import csv
 import json
 from json import JSONDecodeError
 from pathlib import Path
+import sys
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Ellipse, Rectangle
 import numpy as np
 
 
@@ -72,6 +73,34 @@ def _load_manifest(path: Path) -> dict[str, object]:
         return payload if isinstance(payload, dict) else {}
     except (OSError, JSONDecodeError, TypeError, ValueError):
         return {}
+
+
+def _resolve_artifact_path(
+    run_dir: Path,
+    manifest: dict[str, object],
+    explicit_path: Path | None,
+) -> Path | None:
+    candidates: list[Path] = []
+    if explicit_path is not None:
+        candidates.append(explicit_path.expanduser().resolve())
+    else:
+        candidates.append((run_dir / 'visibility_artifacts.npz').resolve())
+        raw = str(manifest.get('visibility_artifact_path', '') or '').strip()
+        if raw:
+            candidates.append(Path(raw).expanduser().resolve())
+            marker = '/install/experiments/share/experiments/'
+            if marker in raw:
+                repo_alt = raw.replace(marker, '/src/experiments/')
+                candidates.append(Path(repo_alt).expanduser().resolve())
+
+    seen: set[Path] = set()
+    for path in candidates:
+        if path in seen:
+            continue
+        seen.add(path)
+        if path.is_file():
+            return path
+    return None
 
 
 def _parse_prisms(geometry_json: str) -> list[dict[str, float]]:
@@ -151,14 +180,448 @@ def _maybe_get(cols: dict[str, np.ndarray], name: str) -> np.ndarray:
     return np.asarray(cols.get(name, np.array([], dtype=float)), dtype=float)
 
 
+def _belief_sigma_xy(run_cols: dict[str, np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+    cov_x = _maybe_get(run_cols, 'planner_cov_x')
+    cov_y = _maybe_get(run_cols, 'planner_cov_y')
+    if (not cov_x.size) or (not np.any(np.isfinite(cov_x))):
+        cov_x = _maybe_get(run_cols, 'cov_x')
+    if (not cov_y.size) or (not np.any(np.isfinite(cov_y))):
+        cov_y = _maybe_get(run_cols, 'cov_y')
+    sigma_x = np.sqrt(np.clip(cov_x, 0.0, None))
+    sigma_y = np.sqrt(np.clip(cov_y, 0.0, None))
+    return sigma_x, sigma_y
+
+
+def _draw_belief_uncertainty_ellipses(
+    ax,
+    belief_x: np.ndarray,
+    belief_y: np.ndarray,
+    sigma_x: np.ndarray,
+    sigma_y: np.ndarray,
+    *,
+    n_sigma: float = 2.0,
+    max_ellipses: int = 36,
+    facecolor: str = 'deepskyblue',
+    edgecolor: str = 'none',
+    alpha: float = 0.12,
+    zorder: int = 1,
+) -> None:
+    belief_x = np.asarray(belief_x, dtype=float)
+    belief_y = np.asarray(belief_y, dtype=float)
+    sigma_x = np.asarray(sigma_x, dtype=float)
+    sigma_y = np.asarray(sigma_y, dtype=float)
+    if (
+        belief_x.size == 0
+        or belief_y.size == 0
+        or sigma_x.size == 0
+        or sigma_y.size == 0
+        or belief_x.size != belief_y.size
+        or belief_x.size != sigma_x.size
+        or belief_x.size != sigma_y.size
+    ):
+        return
+
+    valid = (
+        np.isfinite(belief_x)
+        & np.isfinite(belief_y)
+        & np.isfinite(sigma_x)
+        & np.isfinite(sigma_y)
+        & ((sigma_x > 1e-9) | (sigma_y > 1e-9))
+    )
+    idx = np.flatnonzero(valid)
+    if idx.size == 0:
+        return
+    stride = max(1, int(np.ceil(idx.size / max(max_ellipses, 1))))
+    for i in idx[::stride]:
+        width = float(2.0 * n_sigma * sigma_x[i])
+        height = float(2.0 * n_sigma * sigma_y[i])
+        if width <= 1e-9 and height <= 1e-9:
+            continue
+        ell = Ellipse(
+            (float(belief_x[i]), float(belief_y[i])),
+            width=max(width, 1e-6),
+            height=max(height, 1e-6),
+            angle=0.0,
+            facecolor=facecolor,
+            edgecolor=edgecolor,
+            alpha=alpha,
+            zorder=zorder,
+        )
+        ax.add_patch(ell)
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _ensure_repo_python_paths() -> None:
+    root = _repo_root()
+    for rel in ('src/planning', 'src/unav_common'):
+        path = str((root / rel).resolve())
+        if path not in sys.path:
+            sys.path.insert(0, path)
+
+
+def _resolve_world_path_from_manifest(manifest: dict[str, object]) -> Path | None:
+    world = str(manifest.get('world', '') or '').strip()
+    if not world:
+        return None
+    root = _repo_root()
+    candidates = [
+        root / 'src' / 'sim' / 'gazebo_worlds' / 'worlds' / world,
+        root / 'install' / 'sim' / 'share' / 'sim' / 'gazebo_worlds' / 'worlds' / world,
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _load_nogo_overlay(manifest: dict[str, object]):
+    use_nogo_cost = bool(manifest.get('use_nogo_cost', False))
+    if not use_nogo_cost:
+        return None, []
+
+    world_path = _resolve_world_path_from_manifest(manifest)
+    if world_path is None:
+        return None, []
+
+    try:
+        _ensure_repo_python_paths()
+        from planning.core.nogo_cost import NogoCostConfig, NogoZoneCostModel
+        from unav_common.occlusion_geometry import parse_occlusion_scene_from_world, scene_to_json
+    except Exception:
+        return None, []
+
+    try:
+        scene = parse_occlusion_scene_from_world(str(world_path))
+        cfg = NogoCostConfig(
+            penalty_type=str(manifest.get('nogo_penalty_type', 'softplus') or 'softplus'),
+            weight=float(manifest.get('nogo_weight', 0.0) or 0.0),
+            safe_distance=float(manifest.get('nogo_safe_distance', 0.35) or 0.35),
+            gaussian_sigma=float(manifest.get('nogo_gaussian_sigma', 0.25) or 0.25),
+            softplus_scale=float(manifest.get('nogo_softplus_scale', 0.08) or 0.08),
+            logbarrier_scale=float(manifest.get('nogo_logbarrier_scale', 0.25) or 0.25),
+            logbarrier_eps=float(manifest.get('nogo_logbarrier_eps', 1e-3) or 1e-3),
+            geometry_json=scene_to_json(scene),
+        )
+        model = NogoZoneCostModel(cfg)
+        return model, list(scene.prisms)
+    except Exception:
+        return None, []
+
+
+def _plot_path_diagnostics(
+    output_dir: Path,
+    artifact: dict[str, np.ndarray | str] | None,
+    manifest: dict[str, object],
+    run_cols: dict[str, np.ndarray],
+    plan_groups: list[np.ndarray],
+    perception_cols: dict[str, np.ndarray],
+) -> Path:
+    state_traj_x = _maybe_get(run_cols, 'x')
+    state_traj_y = _maybe_get(run_cols, 'y')
+    true_x = _maybe_get(perception_cols, 'true_x')
+    true_y = _maybe_get(perception_cols, 'true_y')
+    true_ok = _maybe_get(perception_cols, 'true_available')
+    if true_x.size and true_y.size and true_ok.size:
+        mask = np.isfinite(true_x) & np.isfinite(true_y) & (true_ok > 0.5)
+        traj_x = true_x[mask]
+        traj_y = true_y[mask]
+    else:
+        traj_x = state_traj_x
+        traj_y = state_traj_y
+    if not traj_x.size or not traj_y.size:
+        raise RuntimeError('Missing executed trajectory for path diagnostics')
+
+    belief_x = _maybe_get(run_cols, 'planner_belief_x')
+    belief_y = _maybe_get(run_cols, 'planner_belief_y')
+    belief_valid = belief_x.size and belief_y.size and np.any(np.isfinite(belief_x) & np.isfinite(belief_y))
+    belief_delta = np.array([], dtype=float)
+    if belief_valid and state_traj_x.size == belief_x.size and state_traj_y.size == belief_y.size:
+        if true_x.size and true_y.size and true_ok.size:
+            belief_true_delta = np.full_like(belief_x, np.nan, dtype=float)
+            state_true_delta = np.full_like(belief_x, np.nan, dtype=float)
+            px = _maybe_get(perception_cols, 'state_x')
+            py = _maybe_get(perception_cols, 'state_y')
+            state_err = _maybe_get(perception_cols, 'state_pos_error')
+            # use perception timeline for true and raw-state error; belief stays on run timeline
+            belief_delta = np.array([], dtype=float)
+        else:
+            belief_delta = np.hypot(belief_x - state_traj_x, belief_y - state_traj_y)
+
+    goal_x = _maybe_get(run_cols, 'goal_x')
+    goal_y = _maybe_get(run_cols, 'goal_y')
+    goal_xy = None
+    if goal_x.size and goal_y.size:
+        valid_goal = np.isfinite(goal_x) & np.isfinite(goal_y)
+        if np.any(valid_goal):
+            idx = np.flatnonzero(valid_goal)[-1]
+            goal_xy = (float(goal_x[idx]), float(goal_y[idx]))
+
+    camera_pos = (
+        np.asarray(artifact.get('camera_pos', np.array([np.nan, np.nan, np.nan])), dtype=float).reshape(-1)
+        if artifact is not None else np.array([np.nan, np.nan, np.nan], dtype=float)
+    )
+
+    belief_sigma_x, belief_sigma_y = _belief_sigma_xy(run_cols)
+    sigma_xy = np.sqrt(np.clip(belief_sigma_x, 0.0, None) ** 2 + np.clip(belief_sigma_y, 0.0, None) ** 2)
+
+    state_x = _maybe_get(perception_cols, 'state_x')
+    state_y = _maybe_get(perception_cols, 'state_y')
+    state_pos_error = _maybe_get(perception_cols, 'state_pos_error')
+    detected = _maybe_get(perception_cols, 'detected')
+    miss_mask = (detected < 0.5) if detected.size else np.zeros(0, dtype=bool)
+    true_state_pair_ok = (
+        true_x.size == state_x.size
+        and true_y.size == state_y.size
+        and state_x.size
+        and np.any(np.isfinite(true_x) & np.isfinite(true_y) & np.isfinite(state_x) & np.isfinite(state_y))
+    )
+    belief_true_pair_ok = (
+        belief_valid
+        and true_x.size
+        and true_y.size
+        and np.any(np.isfinite(true_x) & np.isfinite(true_y))
+    )
+
+    fig, axes = plt.subplots(1, 4, figsize=(23.0, 5.8), constrained_layout=True, sharex=True, sharey=True)
+
+    ax = axes[0]
+    ax.plot(traj_x, traj_y, color='black', linewidth=1.0, alpha=0.35)
+    if state_traj_x.size and state_traj_y.size:
+        ax.plot(state_traj_x, state_traj_y, color='lightgray', linewidth=1.0, alpha=0.7, zorder=1)
+    if belief_valid:
+        _draw_belief_uncertainty_ellipses(
+            ax,
+            belief_x,
+            belief_y,
+            belief_sigma_x,
+            belief_sigma_y,
+            n_sigma=2.0,
+            facecolor='deepskyblue',
+            alpha=0.14,
+            zorder=2,
+        )
+        ax.plot(belief_x, belief_y, color='white', linewidth=2.2, alpha=0.9, zorder=2)
+        ax.plot(belief_x, belief_y, color='deepskyblue', linewidth=1.2, linestyle='--', alpha=0.95, zorder=3)
+    sigma_xy_plot = sigma_xy
+    if sigma_xy.size != traj_x.size:
+        sigma_xy_plot = np.linspace(float(np.nanmin(sigma_xy)) if sigma_xy.size else 0.0, float(np.nanmax(sigma_xy)) if sigma_xy.size else 0.0, traj_x.size)
+    sc = ax.scatter(traj_x, traj_y, c=sigma_xy_plot, cmap='viridis', s=16, zorder=3)
+    fig.colorbar(sc, ax=ax, fraction=0.046, pad=0.03, label='planner sigma_xy')
+    ax.set_title('True Path And Planner Uncertainty')
+
+    ax = axes[1]
+    if belief_valid:
+        ax.plot(traj_x, traj_y, color='black', linewidth=1.0, alpha=0.35, zorder=1)
+        if state_traj_x.size and state_traj_y.size:
+            ax.plot(state_traj_x, state_traj_y, color='lightgray', linewidth=1.0, alpha=0.7, zorder=1)
+        _draw_belief_uncertainty_ellipses(
+            ax,
+            belief_x,
+            belief_y,
+            belief_sigma_x,
+            belief_sigma_y,
+            n_sigma=2.0,
+            facecolor='deepskyblue',
+            alpha=0.12,
+            zorder=2,
+        )
+        ax.plot(belief_x, belief_y, color='white', linewidth=2.4, alpha=0.95, zorder=2)
+        ax.plot(belief_x, belief_y, color='deepskyblue', linewidth=1.3, linestyle='--', alpha=0.95, zorder=3)
+        # Compare belief to the raw state estimate on the run timeline
+        if state_traj_x.size == belief_x.size and state_traj_y.size == belief_y.size:
+            belief_delta = np.hypot(belief_x - state_traj_x, belief_y - state_traj_y)
+            connector_idx = np.flatnonzero(np.isfinite(belief_delta))
+            if connector_idx.size:
+                stride = max(1, connector_idx.size // 35)
+                for idx in connector_idx[::stride]:
+                    ax.plot(
+                        [state_traj_x[idx], belief_x[idx]],
+                        [state_traj_y[idx], belief_y[idx]],
+                        color='white',
+                        linewidth=0.8,
+                        alpha=0.28,
+                        zorder=1,
+                    )
+            sc = ax.scatter(state_traj_x, state_traj_y, c=belief_delta, cmap='cividis', s=16, zorder=4)
+            fig.colorbar(sc, ax=ax, fraction=0.046, pad=0.03, label='|belief - /state| [m]')
+    ax.set_title('Belief Vs Raw State')
+
+    ax = axes[2]
+    if state_x.size and state_y.size and state_pos_error.size:
+        if true_state_pair_ok:
+            valid = np.isfinite(true_x) & np.isfinite(true_y)
+            ax.plot(true_x[valid], true_y[valid], color='black', linewidth=1.0, alpha=0.25)
+        ax.plot(state_x, state_y, color='lightgray', linewidth=1.0, alpha=0.7, zorder=1)
+        sc = ax.scatter(state_x, state_y, c=state_pos_error, cmap='plasma', s=16, zorder=3)
+        fig.colorbar(sc, ax=ax, fraction=0.046, pad=0.03, label='state position error [m]')
+        if miss_mask.size and np.any(miss_mask):
+            ax.scatter(state_x[miss_mask], state_y[miss_mask], color='crimson', marker='x', s=26, alpha=0.75, zorder=4)
+    if belief_valid:
+        _draw_belief_uncertainty_ellipses(
+            ax,
+            belief_x,
+            belief_y,
+            belief_sigma_x,
+            belief_sigma_y,
+            n_sigma=2.0,
+            facecolor='deepskyblue',
+            alpha=0.10,
+            zorder=2,
+        )
+        ax.plot(belief_x, belief_y, color='deepskyblue', linewidth=1.0, linestyle='--', alpha=0.8, zorder=2)
+    ax.set_title('Raw State Drift Vs Truth')
+
+    ax = axes[3]
+    for plan_xy in plan_groups:
+        ax.plot(plan_xy[:, 0], plan_xy[:, 1], color='tab:orange', alpha=0.16, linewidth=1.0)
+    ax.plot(traj_x, traj_y, color='black', linewidth=2.0, zorder=3)
+    if state_traj_x.size and state_traj_y.size:
+        ax.plot(state_traj_x, state_traj_y, color='lightgray', linewidth=1.2, alpha=0.8, zorder=2)
+    if belief_valid:
+        _draw_belief_uncertainty_ellipses(
+            ax,
+            belief_x,
+            belief_y,
+            belief_sigma_x,
+            belief_sigma_y,
+            n_sigma=2.0,
+            facecolor='deepskyblue',
+            alpha=0.12,
+            zorder=2,
+        )
+        ax.plot(belief_x, belief_y, color='white', linewidth=2.6, alpha=0.95, zorder=3)
+        ax.plot(belief_x, belief_y, color='deepskyblue', linewidth=1.3, linestyle='--', alpha=0.95, zorder=4)
+    ax.set_title('Replanned Path Family')
+
+    for ax in axes:
+        ax.scatter(traj_x[0], traj_y[0], color='tab:green', s=40, zorder=5)
+        ax.scatter(traj_x[-1], traj_y[-1], color='tab:red', marker='x', s=60, zorder=5)
+        if goal_xy is not None:
+            ax.scatter(goal_xy[0], goal_xy[1], color='deepskyblue', marker='*', s=90, zorder=5)
+        if camera_pos.size >= 2 and np.all(np.isfinite(camera_pos[:2])):
+            ax.scatter(camera_pos[0], camera_pos[1], color='cyan', marker='^', s=50, zorder=5)
+        ax.set_xlabel('x [m]')
+        ax.set_ylabel('y [m]')
+        ax.set_aspect('equal')
+
+    method = str(manifest.get('method', '')).strip() or str(manifest.get('planner', '')).strip() or 'unknown_method'
+    planner = str(manifest.get('planner', '')).strip() or method
+    fig.suptitle(f'{method} | planner={planner} | path, belief, drift, and 2sigma belief uncertainty')
+
+    out_path = output_dir / 'path_diagnostics.png'
+    fig.savefig(out_path, dpi=180)
+    plt.close(fig)
+    return out_path
+
+
+def _plot_nogo_story(
+    output_dir: Path,
+    artifact: dict[str, np.ndarray | str] | None,
+    manifest: dict[str, object],
+    run_cols: dict[str, np.ndarray],
+) -> Path | None:
+    model, prisms = _load_nogo_overlay(manifest)
+    if model is None or not getattr(model, 'enabled', False):
+        return None
+
+    traj_x = _maybe_get(run_cols, 'x')
+    traj_y = _maybe_get(run_cols, 'y')
+    if not traj_x.size or not traj_y.size:
+        return None
+
+    goal_x = _maybe_get(run_cols, 'goal_x')
+    goal_y = _maybe_get(run_cols, 'goal_y')
+    goal_xy = None
+    if goal_x.size and goal_y.size:
+        valid_goal = np.isfinite(goal_x) & np.isfinite(goal_y)
+        if np.any(valid_goal):
+            idx = np.flatnonzero(valid_goal)[-1]
+            goal_xy = (float(goal_x[idx]), float(goal_y[idx]))
+
+    camera_pos = (
+        np.asarray(artifact.get('camera_pos', np.array([np.nan, np.nan, np.nan])), dtype=float).reshape(-1)
+        if artifact is not None else np.array([np.nan, np.nan, np.nan], dtype=float)
+    )
+
+    xs = np.linspace(-6.0, 6.0, 240)
+    ys = np.linspace(-6.0, 6.0, 240)
+    X, Y = np.meshgrid(xs, ys)
+    XY = np.column_stack([X.ravel(), Y.ravel()])
+    penalty = np.asarray(
+        [model.penalty_state_np((float(x), float(y), 0.0)) for x, y in XY],
+        dtype=float,
+    ).reshape(Y.shape)
+    plot_penalty = np.log1p(penalty)
+
+    exec_penalty = np.asarray(
+        [model.penalty_state_np((float(x), float(y), 0.0)) for x, y in zip(traj_x, traj_y)],
+        dtype=float,
+    )
+
+    fig, ax = plt.subplots(figsize=(8.8, 8.6), constrained_layout=True)
+    im = ax.imshow(
+        plot_penalty,
+        extent=[float(xs[0]), float(xs[-1]), float(ys[0]), float(ys[-1])],
+        origin='lower',
+        cmap='magma',
+        aspect='equal',
+    )
+    for prism in prisms:
+        rect = Rectangle(
+            (prism.xmin, prism.ymin),
+            prism.xmax - prism.xmin,
+            prism.ymax - prism.ymin,
+            facecolor='white',
+            edgecolor='black',
+            linewidth=1.0,
+            alpha=0.30,
+        )
+        ax.add_patch(rect)
+    ax.plot(traj_x, traj_y, color='white', linewidth=3.2, alpha=0.95, zorder=3)
+    ax.plot(traj_x, traj_y, color='black', linewidth=1.4, alpha=0.95, zorder=4)
+    ax.scatter(traj_x[0], traj_y[0], color='tab:green', s=42, zorder=5)
+    ax.scatter(traj_x[-1], traj_y[-1], color='tab:red', marker='x', s=70, zorder=5)
+    if goal_xy is not None:
+        ax.scatter(goal_xy[0], goal_xy[1], color='deepskyblue', marker='*', s=95, zorder=5)
+    if camera_pos.size >= 2 and np.all(np.isfinite(camera_pos[:2])):
+        ax.scatter(camera_pos[0], camera_pos[1], color='white', edgecolors='black', linewidths=0.8, marker='^', s=60, zorder=5)
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03)
+    cbar.set_label('log1p(no-go penalty)')
+    ax.text(
+        0.02,
+        0.02,
+        (
+            f'Executed mean no-go penalty: {float(np.mean(exec_penalty)):.3g}\n'
+            f'Executed p95 no-go penalty: {float(np.percentile(exec_penalty, 95)):.3g}'
+        ),
+        transform=ax.transAxes,
+        fontsize=9,
+        va='bottom',
+        ha='left',
+        bbox={'facecolor': 'white', 'alpha': 0.85, 'edgecolor': 'none'},
+    )
+    method = str(manifest.get('method', '')).strip() or str(manifest.get('planner', '')).strip() or 'unknown_method'
+    planner = str(manifest.get('planner', '')).strip() or method
+    ax.set_title(f'{method} | planner={planner} | no-go penalty field')
+    ax.set_xlabel('x [m]')
+    ax.set_ylabel('y [m]')
+
+    out_path = output_dir / 'nogo_cost_story.png'
+    fig.savefig(out_path, dpi=180)
+    plt.close(fig)
+    return out_path
+
+
 def _plot_field_panels(output_dir: Path, artifact: dict[str, np.ndarray | str] | None, manifest: dict[str, object], run_cols: dict[str, np.ndarray], plan_groups: list[np.ndarray], perception_cols: dict[str, np.ndarray]) -> Path:
+    planner_uses_visibility = bool(manifest.get('use_visibility_model', False))
     if artifact is not None:
         xs = np.asarray(artifact['xs'], dtype=float)
         ys = np.asarray(artifact['ys'], dtype=float)
         p_map = np.asarray(artifact['P_map'], dtype=float)
         geometry_json = str(artifact.get('geometry_json', ''))
-        visibility_enabled_arr = np.asarray(artifact.get('use_visibility_model', np.array([1.0])), dtype=float).reshape(-1)
-        visibility_enabled = bool(visibility_enabled_arr.size and visibility_enabled_arr[0] >= 0.5)
     else:
         traj_x = _maybe_get(run_cols, 'x')
         traj_y = _maybe_get(run_cols, 'y')
@@ -173,8 +636,7 @@ def _plot_field_panels(output_dir: Path, artifact: dict[str, np.ndarray | str] |
         ys = np.linspace(ymin, ymax, 120)
         p_map = np.full((ys.size, xs.size), np.nan, dtype=float)
         geometry_json = ''
-        visibility_enabled = bool(manifest.get('use_visibility_model', False))
-    artifact_model = 'empirical_gp_visibility' if artifact is not None else None
+    artifact_model = 'blob_area_gp' if artifact is not None else None
 
     rho_mean = None if artifact is None else artifact.get('rho_mean_map')
     rho_cons = None if artifact is None else artifact.get('rho_conservative_map')
@@ -195,8 +657,26 @@ def _plot_field_panels(output_dir: Path, artifact: dict[str, np.ndarray | str] |
         if artifact is not None else np.array([np.nan, np.nan, np.nan], dtype=float)
     )
 
-    traj_x = _maybe_get(run_cols, 'x')
-    traj_y = _maybe_get(run_cols, 'y')
+    state_traj_x = _maybe_get(run_cols, 'x')
+    state_traj_y = _maybe_get(run_cols, 'y')
+    true_x = _maybe_get(perception_cols, 'true_x')
+    true_y = _maybe_get(perception_cols, 'true_y')
+    true_ok = _maybe_get(perception_cols, 'true_available')
+    if true_x.size and true_y.size and true_ok.size:
+        valid_true = np.isfinite(true_x) & np.isfinite(true_y) & (true_ok > 0.5)
+        traj_x = true_x[valid_true]
+        traj_y = true_y[valid_true]
+    else:
+        traj_x = state_traj_x
+        traj_y = state_traj_y
+    belief_x = _maybe_get(run_cols, 'planner_belief_x')
+    belief_y = _maybe_get(run_cols, 'planner_belief_y')
+    belief_sigma_x, belief_sigma_y = _belief_sigma_xy(run_cols)
+    belief_valid = (
+        belief_x.size > 0
+        and belief_y.size > 0
+        and np.any(np.isfinite(belief_x) & np.isfinite(belief_y))
+    )
     goal_x = _maybe_get(run_cols, 'goal_x')
     goal_y = _maybe_get(run_cols, 'goal_y')
     goal_xy = None
@@ -211,33 +691,51 @@ def _plot_field_panels(output_dir: Path, artifact: dict[str, np.ndarray | str] |
     miss_y = _maybe_get(perception_cols, 'true_y')[miss_mask]
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 6.2), constrained_layout=True, sharex=True, sharey=True)
-    has_gp_field = visibility_enabled and artifact is not None
-    if has_gp_field:
+    has_prior_field = artifact is not None and p_mean is not None and p_cons is not None and p_map is not None
+    if has_prior_field:
+        prior_title = 'Planner Prior (P_map)' if planner_uses_visibility else 'Reference Prior (not used)'
         panels = [
-            ('GP Visibility Mean', p_mean if p_mean is not None else p_map, 'viridis'),
-            ('GP Visibility Conservative', p_cons if p_cons is not None else p_map, 'magma'),
-            ('Visibility Prior', p_map, 'viridis'),
+            ('Blob-area GP Mean', p_mean if p_mean is not None else p_map, 'viridis'),
+            ('Blob-area GP Conservative', p_cons if p_cons is not None else p_map, 'magma'),
+            (prior_title, p_map, 'viridis'),
         ]
     else:
+        empty = np.zeros_like(p_map, dtype=float)
         panels = [
-            ('GP Occlusion Mean', rho_mean if rho_mean is not None else p_map, 'viridis'),
-            ('GP Occlusion Conservative', rho_cons if rho_cons is not None else p_map, 'magma'),
-            ('Visibility Prior', p_map, 'viridis'),
+            ('No Visibility Artifact Loaded', empty, 'Greys'),
+            ('No Conservative Prior Available', empty, 'Greys'),
+            ('Trajectory And Replans', empty, 'Greys'),
         ]
     extent = _grid_extent(xs, ys)
 
-    for ax, (title, grid, cmap) in zip(axes, panels):
+    for idx, (ax, (title, grid, cmap)) in enumerate(zip(axes, panels)):
         im = ax.imshow(grid, extent=extent, origin='lower', cmap=cmap, vmin=0.0, vmax=1.0, aspect='equal')
         _draw_scene(ax, prisms)
         if traj_x.size and traj_y.size:
-            ax.plot(traj_x, traj_y, color='black', linewidth=2.2, label='executed path')
+            ax.plot(traj_x, traj_y, color='black', linewidth=2.2, label='true path')
+            if state_traj_x.size and state_traj_y.size:
+                ax.plot(state_traj_x, state_traj_y, color='lightgray', linewidth=1.1, alpha=0.85, zorder=4)
             ax.scatter(traj_x[0], traj_y[0], color='tab:green', s=45, zorder=5)
             ax.scatter(traj_x[-1], traj_y[-1], color='tab:red', s=55, marker='x', zorder=5)
+            if idx == (len(panels) - 1) and belief_valid:
+                _draw_belief_uncertainty_ellipses(
+                    ax,
+                    belief_x,
+                    belief_y,
+                    belief_sigma_x,
+                    belief_sigma_y,
+                    n_sigma=2.0,
+                    facecolor='deepskyblue',
+                    alpha=0.14,
+                    zorder=4,
+                )
+                ax.plot(belief_x, belief_y, color='white', linewidth=2.8, alpha=0.95, zorder=5)
+                ax.plot(belief_x, belief_y, color='deepskyblue', linewidth=1.4, linestyle='--', alpha=0.95, zorder=6)
         if goal_xy is not None:
             ax.scatter(goal_xy[0], goal_xy[1], color='deepskyblue', s=90, marker='*', zorder=5)
         if camera_pos.size >= 2 and np.all(np.isfinite(camera_pos[:2])):
             ax.scatter(camera_pos[0], camera_pos[1], color='cyan', s=50, marker='^', zorder=5)
-        if title == 'Visibility Prior':
+        if idx == (len(panels) - 1):
             for plan_xy in plan_groups:
                 ax.plot(plan_xy[:, 0], plan_xy[:, 1], color='tab:orange', alpha=0.14, linewidth=1.0)
             if miss_x.size:
@@ -249,11 +747,48 @@ def _plot_field_panels(output_dir: Path, artifact: dict[str, np.ndarray | str] |
 
     method = str(manifest.get('method', '')).strip() or str(manifest.get('planner', '')).strip() or 'unknown_method'
     planner = str(manifest.get('planner', '')).strip() or method
-    enabled_note = 'uses visibility' if visibility_enabled else 'planner ignores visibility'
+    if has_prior_field and planner_uses_visibility:
+        enabled_note = 'planner uses blob-area GP prior'
+    elif has_prior_field:
+        enabled_note = 'reference blob-area GP shown; planner ignores visibility'
+    else:
+        enabled_note = 'no visibility artifact available'
     fig.suptitle(
         f"{method} | planner={planner} | model={artifact_model or 'none'} | {enabled_note}",
         fontsize=12,
     )
+    axes[-1].text(
+        0.02,
+        0.02,
+        (
+            'Black: true path\n'
+            'Gray: /state path\n'
+            'Blue dashed: planner belief path\n'
+            'Blue ellipses: planner belief 2sigma_xy\n'
+            'Orange traces: replanned previews\n'
+            'Green: start, red x: final, blue star: goal'
+        ),
+        transform=axes[-1].transAxes,
+        fontsize=9,
+        va='bottom',
+        ha='left',
+        bbox={'facecolor': 'white', 'alpha': 0.85, 'edgecolor': 'none'},
+    )
+    if has_prior_field:
+        axes[-1].text(
+            0.02,
+            0.98,
+            (
+                'This background is the learned blob-area prior.'
+                if planner_uses_visibility else
+                'This background is shown for reference only.\nThe baseline did not use it.'
+            ),
+            transform=axes[-1].transAxes,
+            fontsize=9,
+            va='top',
+            ha='left',
+            bbox={'facecolor': 'white', 'alpha': 0.85, 'edgecolor': 'none'},
+        )
 
     out_path = output_dir / 'field_story.png'
     fig.savefig(out_path, dpi=180)
@@ -454,17 +989,23 @@ def main() -> None:
     if not experiment_csv.is_file():
         raise SystemExit(f'Missing experiment log: {experiment_csv}')
 
-    artifact = _load_artifact(artifact_path) if artifact_path.is_file() else None
     manifest = _load_manifest(run_dir / 'run_manifest.json')
+    resolved_artifact_path = _resolve_artifact_path(run_dir, manifest, args.artifact)
+    artifact = _load_artifact(resolved_artifact_path) if resolved_artifact_path is not None else None
     run_cols = _load_csv_columns(experiment_csv)
     perception_cols = _load_csv_columns(run_dir / 'perception.csv') if (run_dir / 'perception.csv').is_file() else {}
     plan_groups = _load_plan_groups(run_dir / 'plan_samples.csv')
 
     field_path = _plot_field_panels(output_dir, artifact, manifest, run_cols, plan_groups, perception_cols)
     ts_path = _plot_timeseries(output_dir, artifact, manifest, run_cols, perception_cols)
+    path_diag_path = _plot_path_diagnostics(output_dir, artifact, manifest, run_cols, plan_groups, perception_cols)
+    nogo_path = _plot_nogo_story(output_dir, artifact, manifest, run_cols)
 
     print(f'Wrote {field_path}')
     print(f'Wrote {ts_path}')
+    print(f'Wrote {path_diag_path}')
+    if nogo_path is not None:
+        print(f'Wrote {nogo_path}')
 
     if args.show:
         img = plt.imread(field_path)

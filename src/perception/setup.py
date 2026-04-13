@@ -27,6 +27,7 @@ setup(
         'console_scripts': [
             'homography_sim_node = perception.nodes.homography_sim_node:main',
             'image_marker_detector_node = perception.nodes.image_marker_detector_node:main',
+            'yolo_robot_detector_node = perception.nodes.yolo_robot_detector_node:main',
         ],
     },
 

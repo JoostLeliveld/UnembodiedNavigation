@@ -2,7 +2,7 @@ from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.substitutions import FindPackageShare
-from launch.substitutions import PathJoinSubstitution, LaunchConfiguration, TextSubstitution
+from launch.substitutions import PathJoinSubstitution, LaunchConfiguration, PythonExpression
 from launch.actions import SetEnvironmentVariable
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -14,6 +14,11 @@ def generate_launch_description():
         "world",
         default_value="warehouse_occ_light.world.sdf",
         description="World file under sim/gazebo_worlds/worlds",
+    )
+    headless_arg = DeclareLaunchArgument(
+        "headless",
+        default_value="false",
+        description="Run Gazebo server-only if true",
     )
     world_path = PathJoinSubstitution([
         FindPackageShare("sim"),
@@ -47,12 +52,20 @@ def generate_launch_description():
             ])
         ]),
         launch_arguments={
-            "gz_args": [TextSubstitution(text="-r "), world_path],
+            "gz_args": [
+                PythonExpression([
+                    "'-r -s ' if '",
+                    LaunchConfiguration("headless"),
+                    "'.strip().lower() in ('1', 'true', 'yes', 'on') else '-r '",
+                ]),
+                world_path,
+            ],
         }.items()
     )
 
     return LaunchDescription([
         world_arg,
+        headless_arg,
         set_gz_resource_path,
         gazebo,
     ])

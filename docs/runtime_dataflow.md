@@ -17,22 +17,23 @@ for the current GP input, with `theta` still handled separately by the runtime e
 ```mermaid
 flowchart LR
     A[world_profiles.yaml] --> B[warehouse_visibility_capture.launch.py]
-    B --> C[visibility_sweep_controller_node]
-    C --> D[/cmd_vel sweep/]
-    D --> E[detector + pixel_to_bev_state_node]
-    E --> F[fit_empirical_visibility_gp.py]
+    B --> C[detector + state-estimation runtime]
+    C --> D[fit_empirical_visibility_gp.py]
+    D --> E[teleport sampled robot poses]
+    E --> F[detection diagnostics]
     F --> G[src/experiments/data/visibility_gp/*.npz]
     H[tasks.yaml] --> I[main runtime launches]
     G --> I
 ```
 
-Caption: the GP visibility artifact is generated before online planning. The capture launch drives a deterministic sweep, the fitting script logs `/state/bev` x-y plus detection diagnostics, and the runtime later loads the fitted artifact without learning online.
+Caption: the GP visibility artifact is generated before online planning. In the current default workflow, the capture launch brings up the simulator and detector, then the fitting script teleports the robot through a dense sampled pose grid, records detector statistics, and fits the artifact offline. The older driving sweep remains available as an alternate collection mode.
 
-For the current v1 artifact:
+For the current fitter:
 
-- GP input: `/state/bev` x-y only
-- fitted target: binary usable visual detection
-- blob area: logged as an auxiliary diagnostic, not the fitted target
+- teleport-mode input: sampled robot `x,y`
+- driving-mode input: `/state/bev` x-y only
+- default fitted target: normalized blob area
+- alternate fitted target: binary usable visual detection
 
 ![Empirical visibility artifact tutorial](figures/visibility_capture_tutorial.png)
 

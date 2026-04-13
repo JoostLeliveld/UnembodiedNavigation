@@ -30,6 +30,8 @@ class CasadiEfeParams:
     visibility_barrier_scale: float
     discount_gamma: float
     visibility_power: float
+    visibility_trust_low: float
+    visibility_trust_high: float
     visibility_sigma_kappa: float
     goal_prior_u_std_start: float
     goal_prior_v_std_start: float
@@ -167,6 +169,27 @@ def _smoothstep_ca(x):
     return x * x * (3.0 - 2.0 * x)
 
 
+def _visibility_effective_score_ca(p_vis, params: CasadiEfeParams):
+    shaped = _clip_expr(ca.power(p_vis, params.visibility_power), 1e-4, 1.0 - 1e-4)
+    lo = max(float(params.visibility_trust_low), 1e-4)
+    hi = min(max(float(params.visibility_trust_high), lo + 1e-6), 1.0 - 1e-4)
+    x = (shaped - lo) / (hi - lo)
+    return _clip_expr(_smoothstep_ca(x), 1e-4, 1.0 - 1e-4)
+
+
+def _blend_observation_covariance_ca(p_vis_eff, params: CasadiEfeParams):
+    visible_std = ca.vertcat(
+        ca.sqrt(ca.fmax(params.R_visible[0, 0], 0.0)),
+        ca.sqrt(ca.fmax(params.R_visible[1, 1], 0.0)),
+    )
+    miss_std = ca.vertcat(
+        ca.sqrt(ca.fmax(params.R_miss[0, 0], 0.0)),
+        ca.sqrt(ca.fmax(params.R_miss[1, 1], 0.0)),
+    )
+    plan_std = p_vis_eff * visible_std + (1.0 - p_vis_eff) * miss_std
+    return ca.diag(ca.power(plan_std, 2))
+
+
 def goal_obs_cov_ca_for_progress(params: CasadiEfeParams, progress):
     progress_fast = ca.power(_clip_expr(progress, 0.0, 1.0), params.goal_tightening_power)
     a = _smoothstep_ca(progress_fast)
@@ -273,8 +296,8 @@ def visibility_aware_unicycle_efe_ca(
                 p_vis_state,
                 kappa=params.visibility_sigma_kappa,
             )
-        p_vis_eff = _clip_expr(ca.power(p_vis, params.visibility_power), 1e-4, 1.0 - 1e-4)
-        R_plan = p_vis_eff * params.R_visible + (1.0 - p_vis_eff) * params.R_miss
+        p_vis_eff = _visibility_effective_score_ca(p_vis, params)
+        R_plan = _blend_observation_covariance_ca(p_vis_eff, params)
         if approx == 'ET1':
             mu, Sigma, Gamma = et1_ca(m, S, R_plan, g, dg)
         elif approx == 'ET2':

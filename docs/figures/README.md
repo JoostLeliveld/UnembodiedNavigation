@@ -29,4 +29,4 @@ The repository now teaches the method with actual visuals, not only prose:
 
 ## Important Caveat
 
-The current stored example visibility artifact predates the new driving-based collector, so it is used here as an illustrative learned field rather than as evidence of the new capture workflow itself. The docs text describes the new canonical pipeline explicitly.
+The current stored example visibility artifact comes from an older capture run and is used here as an illustrative learned field. It is useful for explaining the planner-facing artifact format, but it should not be mistaken for fresh evidence of the current teleport-first capture workflow.

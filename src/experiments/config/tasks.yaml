@@ -4,7 +4,7 @@ tasks:
     # These tasks are organized by claim:
     # - sanity and threshold behavior near the front-side basin
     # - commitment to the visible front arc
-    # - observability tradeoff in shadowed regions
+    # - observability tradeoff in lower-visibility south-side regions
     # - recovery and clearance robustness
     - name: E0_visible_sanity
       description: Main benchmark task. Very short visible sanity-check run used to verify nominal stability, perception, state estimation, and basic planner progress in a clearly observable region.
@@ -35,21 +35,21 @@ tasks:
       start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
       goal: {x: -1.2, y: 1.2}
     - name: E4_front_arc_full
-      description: Main benchmark task. Full visible reference route that stays mostly in front of the rack and outside the strongest occlusion shadow, used as the route-level comparison task.
+      description: Main benchmark task. Full visible reference route that stays mostly in front of the rack and outside the strongest lower-visibility region, used as the route-level comparison task.
       tier: benchmark
       claim: route_preference
       focus: visible_reference
       start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
       goal: {x: 0.6, y: 1.2}
     - name: E5_shadow_tradeoff
-      description: Main benchmark task. Starts in a visible north-west pose and asks the planner to reach the south-east goal that competes more directly with shadowed sensing conditions.
+      description: Main benchmark task. Starts in a visible north-west pose and asks the planner to reach the south-east goal that competes more directly with lower-visibility and occlusion-sensitive sensing conditions.
       tier: benchmark
       claim: shadow_tradeoff
       focus: visibility_tradeoff
       start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
       goal: {x: -0.8, y: -3.0}
     - name: E6_shadow_reacquire
-      description: Diagnostic task. Crosses the shadowed region and then re-emerges on the east side, reserved for missed-detection and reacquisition experiments after the main route-choice tests are stable.
+      description: Diagnostic task. Crosses the lower-visibility south-side region and then re-emerges on the east side, reserved for missed-detection and reacquisition experiments after the main route-choice tests are stable.
       tier: diagnostic
       claim: reacquisition_debug
       focus: detection_reacquisition

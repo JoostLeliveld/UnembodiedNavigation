@@ -65,7 +65,9 @@ class ExperimentLogger(Node):
         self.declare_parameter('goal_sigma_uv', 2.0)
         self.declare_parameter('r_visible_uv', 2.5)
         self.declare_parameter('r_miss_uv', 420.0)
-        self.declare_parameter('visibility_power', 3.0)
+        self.declare_parameter('visibility_power', 1.0)
+        self.declare_parameter('visibility_trust_low', 0.08)
+        self.declare_parameter('visibility_trust_high', 0.30)
         self.declare_parameter('visibility_sigma_kappa', 1.0)
         self.declare_parameter('goal_prior_u_std_start', 80.0)
         self.declare_parameter('goal_prior_v_std_start', 80.0)
@@ -88,6 +90,16 @@ class ExperimentLogger(Node):
         self.declare_parameter('nogo_softplus_scale', 0.08)
         self.declare_parameter('nogo_logbarrier_scale', 0.25)
         self.declare_parameter('nogo_logbarrier_eps', 1e-3)
+        self.declare_parameter('yolo_model', '')
+        self.declare_parameter('yolo_hf_filename', 'best.pt')
+        self.declare_parameter('yolo_device', '')
+        self.declare_parameter('yolo_imgsz', 640)
+        self.declare_parameter('yolo_conf_threshold', 0.25)
+        self.declare_parameter('yolo_iou_threshold', 0.45)
+        self.declare_parameter('yolo_target_class', 'robot')
+        self.declare_parameter('yolo_use_masks', True)
+        self.declare_parameter('yolo_min_mask_area_px', 12.0)
+        self.declare_parameter('yolo_mask_bottom_band_px', 3.0)
         self.declare_parameter('run_dir_topic', '/experiment/run_dir')
 
         log_dir = self.get_parameter('log_dir').value
@@ -119,6 +131,8 @@ class ExperimentLogger(Node):
         self.r_visible_uv = float(self.get_parameter('r_visible_uv').value)
         self.r_miss_uv = float(self.get_parameter('r_miss_uv').value)
         self.visibility_power = float(self.get_parameter('visibility_power').value)
+        self.visibility_trust_low = float(self.get_parameter('visibility_trust_low').value)
+        self.visibility_trust_high = float(self.get_parameter('visibility_trust_high').value)
         self.visibility_sigma_kappa = float(self.get_parameter('visibility_sigma_kappa').value)
         self.goal_prior_u_std_start = float(self.get_parameter('goal_prior_u_std_start').value)
         self.goal_prior_v_std_start = float(self.get_parameter('goal_prior_v_std_start').value)
@@ -141,6 +155,16 @@ class ExperimentLogger(Node):
         self.nogo_softplus_scale = float(self.get_parameter('nogo_softplus_scale').value)
         self.nogo_logbarrier_scale = float(self.get_parameter('nogo_logbarrier_scale').value)
         self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
+        self.yolo_model = str(self.get_parameter('yolo_model').value)
+        self.yolo_hf_filename = str(self.get_parameter('yolo_hf_filename').value)
+        self.yolo_device = str(self.get_parameter('yolo_device').value)
+        self.yolo_imgsz = int(self.get_parameter('yolo_imgsz').value)
+        self.yolo_conf_threshold = float(self.get_parameter('yolo_conf_threshold').value)
+        self.yolo_iou_threshold = float(self.get_parameter('yolo_iou_threshold').value)
+        self.yolo_target_class = str(self.get_parameter('yolo_target_class').value)
+        self.yolo_use_masks = bool(self.get_parameter('yolo_use_masks').value)
+        self.yolo_min_mask_area_px = float(self.get_parameter('yolo_min_mask_area_px').value)
+        self.yolo_mask_bottom_band_px = float(self.get_parameter('yolo_mask_bottom_band_px').value)
         self.run_dir_topic = str(self.get_parameter('run_dir_topic').value).strip() or '/experiment/run_dir'
 
         run_info = create_run_dir(log_dir)
@@ -172,6 +196,8 @@ class ExperimentLogger(Node):
             'r_visible_uv': self.r_visible_uv,
             'r_miss_uv': self.r_miss_uv,
             'visibility_power': self.visibility_power,
+            'visibility_trust_low': self.visibility_trust_low,
+            'visibility_trust_high': self.visibility_trust_high,
             'visibility_sigma_kappa': self.visibility_sigma_kappa,
             'goal_prior_u_std_start': self.goal_prior_u_std_start,
             'goal_prior_v_std_start': self.goal_prior_v_std_start,
@@ -192,6 +218,16 @@ class ExperimentLogger(Node):
             'nogo_softplus_scale': self.nogo_softplus_scale,
             'nogo_logbarrier_scale': self.nogo_logbarrier_scale,
             'nogo_logbarrier_eps': self.nogo_logbarrier_eps,
+            'yolo_model': self.yolo_model,
+            'yolo_hf_filename': self.yolo_hf_filename,
+            'yolo_device': self.yolo_device,
+            'yolo_imgsz': self.yolo_imgsz,
+            'yolo_conf_threshold': self.yolo_conf_threshold,
+            'yolo_iou_threshold': self.yolo_iou_threshold,
+            'yolo_target_class': self.yolo_target_class,
+            'yolo_use_masks': self.yolo_use_masks,
+            'yolo_min_mask_area_px': self.yolo_min_mask_area_px,
+            'yolo_mask_bottom_band_px': self.yolo_mask_bottom_band_px,
             'seed': self.seed,
             'state_pipeline': 'homography_to_bev',
             'observation_model': 'uv',
@@ -305,6 +341,21 @@ class ExperimentLogger(Node):
                 'blue_area_px',
                 'separation_px',
                 'border_margin_px',
+                'yolo_score',
+                'bbox_area_px',
+                'bbox_xmin',
+                'bbox_ymin',
+                'bbox_xmax',
+                'bbox_ymax',
+                'class_id',
+                'logit_margin',
+                'class_entropy',
+                'mask_area_px',
+                'mask_bottom_u',
+                'mask_bottom_v',
+                'mask_used',
+                'mask_polygon_points',
+                'confidence_logit',
                 'seed',
             ])
 
@@ -507,6 +558,21 @@ class ExperimentLogger(Node):
             diag['blue_area_px'],
             diag['separation_px'],
             diag['border_margin_px'],
+            diag.get('yolo_score', math.nan),
+            diag.get('bbox_area_px', math.nan),
+            diag.get('bbox_xmin', math.nan),
+            diag.get('bbox_ymin', math.nan),
+            diag.get('bbox_xmax', math.nan),
+            diag.get('bbox_ymax', math.nan),
+            diag.get('class_id', math.nan),
+            diag.get('logit_margin', math.nan),
+            diag.get('class_entropy', math.nan),
+            diag.get('mask_area_px', math.nan),
+            diag.get('mask_bottom_u', math.nan),
+            diag.get('mask_bottom_v', math.nan),
+            diag.get('mask_used', math.nan),
+            diag.get('mask_polygon_points', math.nan),
+            diag.get('confidence_logit', math.nan),
             self.seed,
         ])
         self.perception_file.flush()

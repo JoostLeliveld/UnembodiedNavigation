@@ -48,7 +48,7 @@ Caption: the logger is the bridge between runtime and evaluation. The current ev
 
 | Script | Role | Output |
 | --- | --- | --- |
-| [`../scripts/fit_empirical_visibility_gp.py`](../scripts/fit_empirical_visibility_gp.py) | driving-based offline GP artifact generation | `empirical_visibility_gp.npz`, raw/aggregated capture CSVs, fit plot |
+| [`../scripts/fit_empirical_visibility_gp.py`](../scripts/fit_empirical_visibility_gp.py) | offline GP artifact generation from simulated pose sampling or the retained driving mode | `empirical_visibility_gp.npz`, raw/aggregated capture CSVs, fit plot |
 | [`../scripts/evaluate_occlusion_comparison.py`](../scripts/evaluate_occlusion_comparison.py) | summary/evaluation | `run_summary.csv`, `group_summary.csv`, `group_summary.json` |
 | [`../scripts/plot_visibility_run.py`](../scripts/plot_visibility_run.py) | qualitative single-run plotting | visibility and trajectory figures |
 

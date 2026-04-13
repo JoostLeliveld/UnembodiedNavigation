@@ -38,15 +38,15 @@ The repository is easiest to understand through three figures:
 
 ![Empirical visibility artifact tutorial](docs/figures/visibility_capture_tutorial.png)
 
-The learned artifact is a scalar field over the planner-facing state estimate. In version 1, the fitted target is a binary usable-detection label, while blob area is logged only as auxiliary detector information.
+The learned artifact is a scalar field over the planner-facing state estimate. The current fitter supports two scalar targets over `/state/bev` x-y: a normalized blob-area baseline and a binary usable-detection label. For first-pass experiments, the script now defaults to the normalized blob-area target.
 
 ![Observation model tutorial](docs/figures/observation_model_tutorial.png)
 
-Planner-side visibility enters through the observation model, not by modifying the robot dynamics. The current implementation uses
+Planner-side visibility enters through the observation model, not by modifying the robot dynamics. A simple first-pass target is
 
 \[
 \hat s_t = [\hat x_t,\hat y_t]^\top,\qquad
-y_t = \mathbf 1[\text{detected} \land A_t \ge A_{\min}],
+y_t = \mathrm{clip}\left(\frac{A_t}{A_{\mathrm{ref}}},0,1\right),
 \]
 
 to learn a scalar field
@@ -70,7 +70,7 @@ This is the key method story: the GP does not command a path directly. It change
 ## What This Repository Does
 
 - defines worlds, camera setup, and benchmark tasks
-- fits and stores one empirical GP visibility artifact per supported world from driving-based capture data
+- fits and stores one empirical GP visibility artifact per supported world from noisy simulated pose sampling, with an optional retained driving-sweep mode
 - launches the simulator, detector, state estimator, planner, goal node, and optional logger
 - compares `efe1` and `visibility_unaware_baseline` under matched settings
 - logs runs and generates milestone-grade summaries and qualitative plots
@@ -120,7 +120,7 @@ flowchart LR
     L --> N[plot_visibility_run.py]
 ```
 
-Caption: the offline GP fitting stage is separate from the planning runtime. The visibility artifact is learned from a scripted sweep that logs `/state/bev` x-y and detector usability, then loaded as a fixed artifact during planning.
+Caption: the offline GP fitting stage is separate from the planning runtime. The default capture workflow teleports the robot through a dense sampled pose grid with detector noise enabled, records the resulting detector statistics, and fits a fixed artifact that is later loaded during planning.
 
 ## State Estimator Reality Check
 
@@ -154,14 +154,14 @@ mkdir -p "$ROS_LOG_DIR"
 
 ### Offline GP capture and fitting
 
-Launch the scripted sweep capture runtime:
+Launch the offline capture runtime:
 
 ```bash
 ros2 launch experiments warehouse_visibility_capture.launch.py \
   world:=warehouse_occ_light.world.sdf
 ```
 
-In a second terminal, collect the driving-based dataset and fit the GP:
+In a second terminal, collect the sampled-pose dataset and fit the GP:
 
 ```bash
 source install/setup.bash
@@ -170,7 +170,15 @@ python3 scripts/fit_empirical_visibility_gp.py \
   --publish-artifact src/experiments/data/visibility_gp/warehouse_occ_light_empirical_visibility_gp.npz
 ```
 
-The v1 GP input is `/state/bev` x-y only, and the fitted target is binary usable detection. Blob area is logged for later upgrades but is not the fitted target in v1.
+This live path now defaults to `--capture-mode teleport`, which samples many noisy simulated robot poses across the map. `--capture-mode driving` is still retained as an alternate collection mode. The fitting script also defaults to `--target-mode normalized_blob_area` for first-pass tests, while `--target-mode binary_usable_detection` remains available for comparison.
+
+If you already have a capture directory and want to refit offline without relaunching Gazebo:
+
+```bash
+python3 scripts/fit_empirical_visibility_gp.py \
+  --from-capture-dir logs/visibility_capture/capture_20260401_144115 \
+  --target-mode normalized_blob_area
+```
 
 Generate the tutorial figures used across the docs:
 
