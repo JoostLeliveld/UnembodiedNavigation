@@ -39,7 +39,7 @@
           <geometry>
             <plane>
               <normal>0 0 1</normal>
-              <size>12 12</size>
+              <size>6 6</size>
             </plane>
           </geometry>
         </collision>
@@ -47,7 +47,7 @@
           <geometry>
             <plane>
               <normal>0 0 1</normal>
-              <size>12 12</size>
+              <size>6 6</size>
             </plane>
           </geometry>
           <material>
@@ -63,18 +63,18 @@
       <static>true</static>
 
       <link name="wall_x_pos">
-        <pose>6 0 1.8 0 0 0</pose>
+        <pose>3 0 1.8 0 0 0</pose>
         <collision name="collision">
           <geometry>
             <box>
-              <size>0.16 12 3.6</size>
+              <size>0.16 6 3.6</size>
             </box>
           </geometry>
         </collision>
         <visual name="visual">
           <geometry>
             <box>
-              <size>0.16 12 3.6</size>
+              <size>0.16 6 3.6</size>
             </box>
           </geometry>
           <material>
@@ -86,18 +86,18 @@
       </link>
 
       <link name="wall_x_neg">
-        <pose>-6 0 1.8 0 0 0</pose>
+        <pose>-3 0 1.8 0 0 0</pose>
         <collision name="collision">
           <geometry>
             <box>
-              <size>0.16 12 3.6</size>
+              <size>0.16 6 3.6</size>
             </box>
           </geometry>
         </collision>
         <visual name="visual">
           <geometry>
             <box>
-              <size>0.16 12 3.6</size>
+              <size>0.16 6 3.6</size>
             </box>
           </geometry>
           <material>
@@ -109,18 +109,18 @@
       </link>
 
       <link name="wall_y_pos">
-        <pose>0 6 1.8 0 0 0</pose>
+        <pose>0 3 1.8 0 0 0</pose>
         <collision name="collision">
           <geometry>
             <box>
-              <size>12 0.16 3.6</size>
+              <size>6 0.16 3.6</size>
             </box>
           </geometry>
         </collision>
         <visual name="visual">
           <geometry>
             <box>
-              <size>12 0.16 3.6</size>
+              <size>6 0.16 3.6</size>
             </box>
           </geometry>
           <material>
@@ -132,18 +132,18 @@
       </link>
 
       <link name="wall_y_neg">
-        <pose>0 -6 1.8 0 0 0</pose>
+        <pose>0 -3 1.8 0 0 0</pose>
         <collision name="collision">
           <geometry>
             <box>
-              <size>12 0.16 3.6</size>
+              <size>6 0.16 3.6</size>
             </box>
           </geometry>
         </collision>
         <visual name="visual">
           <geometry>
             <box>
-              <size>12 0.16 3.6</size>
+              <size>6 0.16 3.6</size>
             </box>
           </geometry>
           <material>
@@ -155,202 +155,37 @@
       </link>
     </model>
 
-    <!-- Visual-only rack and pallet stack. It remains collision-free in Gazebo, but its
+    <!-- Visual-only thin shelf. It remains collision-free in Gazebo, but its
          geometry is still used by the planner-side occlusion and no-go-zone models. -->
     <model name="warehouse_rack_occluders">
       <static>true</static>
-
-      <link name="upright_sw">
-        <pose>-3.58 -2.52 1.35 0 0 0</pose>
-        <visual name="visual">
-          <geometry>
-            <cylinder>
-              <radius>0.05</radius>
-              <length>2.70</length>
-            </cylinder>
-          </geometry>
-          <material>
-            <ambient>0.16 0.16 0.16 1.0</ambient>
-            <diffuse>0.16 0.16 0.16 1.0</diffuse>
-            <specular>0.02 0.02 0.02 1.0</specular>
-          </material>
-        </visual>
-      </link>
-
-      <link name="upright_se">
-        <pose>-2.62 -2.52 1.35 0 0 0</pose>
-        <visual name="visual">
-          <geometry>
-            <cylinder>
-              <radius>0.05</radius>
-              <length>2.70</length>
-            </cylinder>
-          </geometry>
-          <material>
-            <ambient>0.16 0.16 0.16 1.0</ambient>
-            <diffuse>0.16 0.16 0.16 1.0</diffuse>
-            <specular>0.02 0.02 0.02 1.0</specular>
-          </material>
-        </visual>
-      </link>
-
-      <link name="upright_nw">
-        <pose>-3.58 -1.18 1.35 0 0 0</pose>
-        <visual name="visual">
-          <geometry>
-            <cylinder>
-              <radius>0.05</radius>
-              <length>2.70</length>
-            </cylinder>
-          </geometry>
-          <material>
-            <ambient>0.16 0.16 0.16 1.0</ambient>
-            <diffuse>0.16 0.16 0.16 1.0</diffuse>
-            <specular>0.02 0.02 0.02 1.0</specular>
-          </material>
-        </visual>
-      </link>
-
-      <link name="upright_ne">
-        <pose>-2.62 -1.18 1.35 0 0 0</pose>
-        <visual name="visual">
-          <geometry>
-            <cylinder>
-              <radius>0.05</radius>
-              <length>2.70</length>
-            </cylinder>
-          </geometry>
-          <material>
-            <ambient>0.16 0.16 0.16 1.0</ambient>
-            <diffuse>0.16 0.16 0.16 1.0</diffuse>
-            <specular>0.02 0.02 0.02 1.0</specular>
-          </material>
-        </visual>
-      </link>
-
-      <link name="beam_south_upper">
-        <pose>-3.10 -2.52 2.46 0 0 0</pose>
+      <link name="shelf_body">
+        <pose>0.20 -0.15 0.60 0 0 0</pose>
         <visual name="visual">
           <geometry>
             <box>
-              <size>1.06 0.08 0.08</size>
+              <size>2.10 0.28 1.20</size>
             </box>
           </geometry>
           <material>
-            <ambient>0.16 0.16 0.16 1.0</ambient>
-            <diffuse>0.16 0.16 0.16 1.0</diffuse>
-            <specular>0.02 0.02 0.02 1.0</specular>
-          </material>
-        </visual>
-      </link>
-
-      <link name="beam_north_upper">
-        <pose>-3.10 -1.18 2.46 0 0 0</pose>
-        <visual name="visual">
-          <geometry>
-            <box>
-              <size>1.06 0.08 0.08</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.16 0.16 0.16 1.0</ambient>
-            <diffuse>0.16 0.16 0.16 1.0</diffuse>
-            <specular>0.02 0.02 0.02 1.0</specular>
-          </material>
-        </visual>
-      </link>
-
-      <link name="beam_west_upper">
-        <pose>-3.58 -1.85 2.46 0 0 1.5708</pose>
-        <visual name="visual">
-          <geometry>
-            <box>
-              <size>1.42 0.08 0.08</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.16 0.16 0.16 1.0</ambient>
-            <diffuse>0.16 0.16 0.16 1.0</diffuse>
-            <specular>0.02 0.02 0.02 1.0</specular>
-          </material>
-        </visual>
-      </link>
-
-      <link name="beam_east_upper">
-        <pose>-2.62 -1.85 2.46 0 0 1.5708</pose>
-        <visual name="visual">
-          <geometry>
-            <box>
-              <size>1.42 0.08 0.08</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.16 0.16 0.16 1.0</ambient>
-            <diffuse>0.16 0.16 0.16 1.0</diffuse>
-            <specular>0.02 0.02 0.02 1.0</specular>
-          </material>
-        </visual>
-      </link>
-
-      <link name="pallet_lower">
-        <pose>-3.10 -1.86 0.08 0 0 0</pose>
-        <visual name="visual">
-          <geometry>
-            <box>
-              <size>0.96 0.72 0.12</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.56 0.38 0.19 1.0</ambient>
-            <diffuse>0.56 0.38 0.19 1.0</diffuse>
+            <ambient>0.32 0.35 0.38 1.0</ambient>
+            <diffuse>0.32 0.35 0.38 1.0</diffuse>
             <specular>0.03 0.03 0.03 1.0</specular>
           </material>
         </visual>
       </link>
 
-      <link name="load_lower">
-        <pose>-3.10 -1.86 0.40 0 0 0</pose>
+      <link name="shelf_top">
+        <pose>0.20 -0.15 1.18 0 0 0</pose>
         <visual name="visual">
           <geometry>
             <box>
-              <size>0.84 0.60 0.52</size>
+              <size>2.20 0.36 0.08</size>
             </box>
           </geometry>
           <material>
-            <ambient>0.64 0.52 0.34 1.0</ambient>
-            <diffuse>0.64 0.52 0.34 1.0</diffuse>
-            <specular>0.02 0.02 0.02 1.0</specular>
-          </material>
-        </visual>
-      </link>
-
-      <link name="pallet_upper">
-        <pose>-3.10 -1.86 0.78 0 0 0</pose>
-        <visual name="visual">
-          <geometry>
-            <box>
-              <size>0.96 0.72 0.12</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.56 0.38 0.19 1.0</ambient>
-            <diffuse>0.56 0.38 0.19 1.0</diffuse>
-            <specular>0.03 0.03 0.03 1.0</specular>
-          </material>
-        </visual>
-      </link>
-
-      <link name="load_upper">
-        <pose>-3.10 -1.86 1.10 0 0 0</pose>
-        <visual name="visual">
-          <geometry>
-            <box>
-              <size>0.82 0.58 0.52</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.48 0.52 0.57 1.0</ambient>
-            <diffuse>0.48 0.52 0.57 1.0</diffuse>
+            <ambient>0.20 0.22 0.24 1.0</ambient>
+            <diffuse>0.20 0.22 0.24 1.0</diffuse>
             <specular>0.02 0.02 0.02 1.0</specular>
           </material>
         </visual>
@@ -359,7 +194,7 @@
 
     <include>
       <uri>model://external_camera</uri>
-      <pose>-5.35 -5.20 3.05 0 0.56 0.7854</pose>
+      <pose>-2.45 -2.45 2.80 0 0.85 0.7854</pose>
     </include>
 
     <light name="sun" type="directional">

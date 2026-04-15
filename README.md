@@ -32,6 +32,27 @@ The current milestone is a controlled comparison, not the full thesis scope.
 - **Changed between methods**
   - whether the planner uses the learned GP visibility field inside the observation model
 
+## Current Perception Status
+
+The current perception story is intentionally narrow:
+
+- a fixed external camera observes the robot
+- the active runtime detector of interest is YOLO via `perception_backend:=yolo`
+- the runtime detector publishes an image-space observation, not a full pose
+- downstream state interpretation is:
+  - `x,y` from detector pixel -> homography
+  - `theta` from odometry fallback
+
+The recommended perception workflow is:
+
+1. try a local out-of-box YOLO segmentation model
+2. if it is not good enough, fine-tune `yolo11n-seg` from simple offline pseudo-labels
+3. use the resulting local `.pt` file at runtime
+
+The active runtime path is:
+
+`camera image -> YOLO -> mask-bottom or bbox-bottom pixel -> /perception/pixel_pose + diagnostics`
+
 ## Tutorial In One Page
 
 The repository is easiest to understand through three figures:
@@ -107,7 +128,7 @@ flowchart LR
     D --> E[empirical_visibility_gp.npz]
     E --> F[planner core]
     B --> G[Gazebo + robot + external camera]
-    G --> H[image_marker_detector_node]
+    G --> H[yolo_robot_detector_node]
     H --> I[pixel_to_bev_state_node]
     I --> F
     J[goal_mission_node] --> F
@@ -222,7 +243,7 @@ ros2 launch experiments warehouse_primary_comparison.launch.py --show-args
 
 ### Change world or task
 
-Run the main method on the secondary exploratory world:
+Run the main method on the secondary support world:
 
 ```bash
 ros2 launch experiments warehouse_primary_comparison.launch.py \
@@ -280,7 +301,7 @@ ros2 run rqt_graph rqt_graph
 
 - **Primary comparison path**: `efe1` vs `visibility_unaware_baseline`
 - **Primary world**: `warehouse_occ_light.world.sdf`
-- **Secondary exploratory world**: `warehouse_open_shelves.world.sdf`
+- **Secondary support world**: `warehouse_open_shelves.world.sdf`
 - **Primary runtime estimator**: camera-derived `x,y` plus odometry-backed `theta`
 - **Primary planner path**: ET1
 - **Retained but secondary planners**: `efe2`, `efer`, `mpc`
@@ -304,7 +325,7 @@ ros2 run rqt_graph rqt_graph
 1. [`src/experiments/launch/warehouse_primary_comparison.launch.py`](src/experiments/launch/warehouse_primary_comparison.launch.py)
 2. [`src/experiments/config/world_profiles.yaml`](src/experiments/config/world_profiles.yaml)
 3. [`src/experiments/config/tasks.yaml`](src/experiments/config/tasks.yaml)
-4. [`src/perception/perception/nodes/image_marker_detector_node.py`](src/perception/perception/nodes/image_marker_detector_node.py)
+4. [`src/perception/perception/nodes/yolo_robot_detector_node.py`](src/perception/perception/nodes/yolo_robot_detector_node.py)
 5. [`src/state/state/nodes/pixel_to_bev_state_node.py`](src/state/state/nodes/pixel_to_bev_state_node.py)
 6. [`src/planning/planning/nodes/unicycle_planner_node.py`](src/planning/planning/nodes/unicycle_planner_node.py)
 7. [`src/planning/planning/planners/base_planner.py`](src/planning/planning/planners/base_planner.py)

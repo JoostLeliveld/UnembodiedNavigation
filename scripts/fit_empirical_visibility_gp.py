@@ -69,6 +69,8 @@ class CaptureSample:
     normalized_blob_area: float = math.nan
     yolo_score: float = math.nan
     confidence_logit: float = math.nan
+    localization_error_m: float = math.nan
+    localization_quality_soft: float = math.nan
 
 
 def _default_arg_path(relative: str) -> str:
@@ -620,9 +622,17 @@ def _target_spec(target_mode: str) -> dict:
             'title': 'YOLO soft-score GP',
             'rule': 'yolo_score if finite else 0',
         }
+    if mode == 'localization_quality':
+        return {
+            'mode': mode,
+            'field': 'localization_quality_target_mean',
+            'label': 'localization quality (from homography + ground-truth error)',
+            'title': 'Localization-quality GP',
+            'rule': 'exp(-(error_m ^ 2) / sigma_m ^ 2)',
+        }
     raise ValueError(
-        f"Unsupported target mode {target_mode!r}; expected 'normalized_blob_area' "
-        "'binary_usable_detection', or 'yolo_soft_score'."
+        f"Unsupported target mode {target_mode!r}; expected 'normalized_blob_area', "
+        "'binary_usable_detection', 'yolo_soft_score', or 'localization_quality'."
     )
 
 
@@ -647,6 +657,7 @@ def _aggregate_samples(samples: List[CaptureSample], vis: Dict[str, object], *, 
             float(np.clip(s.yolo_score, 0.0, 1.0)) if math.isfinite(float(s.yolo_score)) else 0.0
             for s in group
         ]
+        locqual_scores = [float(s.localization_quality_soft) for s in group]
         agg_rows.append({
             'ix': int(ix),
             'iy': int(iy),
@@ -663,6 +674,8 @@ def _aggregate_samples(samples: List[CaptureSample], vis: Dict[str, object], *, 
             'blob_area_target_std': _safe_nanstd(blob_area_scores),
             'yolo_score_target_mean': float(np.mean(yolo_scores)),
             'yolo_score_target_std': float(np.std(yolo_scores)),
+            'localization_quality_target_mean': _safe_nanmean(locqual_scores),
+            'localization_quality_target_std': _safe_nanstd(locqual_scores),
             'mean_red_area_px': _safe_nanmean([s.red_area_px for s in group]),
             'mean_yolo_score': float(np.mean(yolo_scores)),
             'mean_confidence_logit': _safe_nanmean([s.confidence_logit for s in group]),
@@ -840,7 +853,7 @@ def main() -> int:
     )
     parser.add_argument(
         '--target-mode',
-        choices=('normalized_blob_area', 'binary_usable_detection', 'yolo_soft_score'),
+        choices=('normalized_blob_area', 'binary_usable_detection', 'yolo_soft_score', 'localization_quality'),
         default='normalized_blob_area',
         help='Scalar target fitted into the planner-facing GP artifact.',
     )

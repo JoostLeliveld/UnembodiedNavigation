@@ -13,7 +13,7 @@ The GP-aware planner needs a world-specific visibility prior at runtime. These `
 | File | World |
 | --- | --- |
 | `warehouse_occ_light_empirical_visibility_gp.npz` | primary warehouse benchmark |
-| `warehouse_open_shelves_empirical_visibility_gp.npz` | exploratory secondary world |
+| `warehouse_open_shelves_empirical_visibility_gp.npz` | secondary support world |
 
 ## Current Default Provenance
 

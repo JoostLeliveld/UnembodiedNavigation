@@ -7,52 +7,30 @@ from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float64MultiArray
+from ultralytics import YOLO
 
 from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
     diagnostics_message,
 )
 from perception.core.ros_image import image_msg_to_bgr8
-from unav_common.camera_model import ObliqueCameraModel
+
+
+SELECTED_PIXEL_SOURCE_NONE = 0.0
+SELECTED_PIXEL_SOURCE_BBOX_BOTTOM = 1.0
+SELECTED_PIXEL_SOURCE_MASK_BOTTOM = 2.0
 
 
 def _as_bool(value) -> bool:
     return str(value).strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on')
 
 
-def _resolve_model_ref(model_ref: str, hf_filename: str) -> str:
-    """Resolve local/Ultralytics/Hugging Face model references to a YOLO-loadable path."""
-    ref = str(model_ref or '').strip()
-    if not ref:
-        return 'yolo11n.pt'
-    if ref.startswith('hf://'):
-        try:
-            from huggingface_hub import hf_hub_download
-        except ImportError as exc:
-            raise RuntimeError(
-                "yolo_model uses hf:// but huggingface_hub is not installed. "
-                "Install it with `pip install huggingface_hub` or pass a local .pt path."
-            ) from exc
-
-        raw = ref[len('hf://'):].strip('/')
-        parts = [p for p in raw.split('/') if p]
-        if len(parts) < 2:
-            raise RuntimeError(
-                "Invalid hf:// YOLO model reference. Use hf://owner/repo or "
-                "hf://owner/repo/path/to/model.pt"
-            )
-        repo_id = '/'.join(parts[:2])
-        filename = '/'.join(parts[2:]) if len(parts) > 2 else str(hf_filename or 'best.pt')
-        return hf_hub_download(repo_id=repo_id, filename=filename)
-    return ref
-
-
-def _target_class_ids(names, target_class: str):
-    target = str(target_class or '').strip().lower()
+def _target_class_ids(names, class_name: str, class_id: int):
+    if int(class_id) >= 0:
+        return {int(class_id)}
+    target = str(class_name or '').strip().lower()
     if target in ('', '*', 'any', 'all'):
         return None
-    if target.lstrip('-').isdigit():
-        return {int(target)}
     if isinstance(names, dict):
         return {int(idx) for idx, name in names.items() if str(name).strip().lower() == target}
     return set()
@@ -63,143 +41,81 @@ def _confidence_logit(score: float, eps: float = 1e-6) -> float:
     return float(math.log(p / (1.0 - p)))
 
 
+def _mask_bottom_pixel(points: np.ndarray, band_px: float) -> tuple[float, float]:
+    v_bottom = float(np.max(points[:, 1]))
+    band = points[points[:, 1] >= v_bottom - max(float(band_px), 0.0)]
+    if band.size == 0:
+        return float(np.mean(points[:, 0])), v_bottom
+    return float(np.mean(band[:, 0])), v_bottom
+
+
 class YoloRobotDetectorNode(Node):
-    """Detect the robot with Ultralytics YOLO and publish the existing pixel observation contract."""
+    """Run one local YOLO model and publish the selected image-space robot observation."""
 
     def __init__(self):
         super().__init__('yolo_robot_detector_node')
 
-        def _declare_if_missing(name, default):
-            if not self.has_parameter(name):
-                self.declare_parameter(name, default)
+        self.declare_parameter('model_path', '')
+        self.declare_parameter('device', '')
+        self.declare_parameter('image_size', 640)
+        self.declare_parameter('confidence_threshold', 0.25)
+        self.declare_parameter('iou_threshold', 0.45)
+        self.declare_parameter('class_name', 'robot')
+        self.declare_parameter('class_id', -1)
+        self.declare_parameter('use_masks', True)
+        self.declare_parameter('mask_min_area', 12.0)
+        self.declare_parameter('mask_bottom_band_px', 3.0)
+        self.declare_parameter('pixel_noise_sigma', 0.0)
+        self.declare_parameter('seed', 0)
 
-        _declare_if_missing('cam_pos', [-3.0, -3.0, 6.0])
-        _declare_if_missing('look_at', [1.5, 1.5, 0.0])
-        _declare_if_missing('img_width', 1280)
-        _declare_if_missing('img_height', 720)
-        _declare_if_missing('fov_h_rad', 1.5708)
-        _declare_if_missing('pixel_noise_sigma', 0.0)
-        _declare_if_missing('seed', 0)
-        _declare_if_missing('yolo_model', 'yolo11n.pt')
-        _declare_if_missing('yolo_hf_filename', 'best.pt')
-        _declare_if_missing('yolo_device', '')
-        _declare_if_missing('yolo_imgsz', 640)
-        _declare_if_missing('yolo_conf_threshold', 0.25)
-        _declare_if_missing('yolo_iou_threshold', 0.45)
-        _declare_if_missing('yolo_target_class', 'robot')
-        _declare_if_missing('yolo_use_masks', True)
-        _declare_if_missing('yolo_min_mask_area_px', 12.0)
-        _declare_if_missing('yolo_mask_bottom_band_px', 3.0)
-        _declare_if_missing('yolo_verbose', False)
+        model_path = Path(str(self.get_parameter('model_path').value).strip()).expanduser()
+        if not str(model_path):
+            raise RuntimeError('model_path must be set for yolo_robot_detector_node')
+        if not model_path.is_file():
+            raise RuntimeError(f'model_path does not exist: {model_path}')
 
-        self.cam_pos = np.array(self.get_parameter('cam_pos').value, dtype=float)
-        self.look_at = np.array(self.get_parameter('look_at').value, dtype=float)
-        self.img_width = int(self.get_parameter('img_width').value)
-        self.img_height = int(self.get_parameter('img_height').value)
-        self.fov_h_rad = float(self.get_parameter('fov_h_rad').value)
-        self.camera_model = ObliqueCameraModel(
-            cam_pos=self.cam_pos,
-            look_at=self.look_at,
-            img_width=self.img_width,
-            img_height=self.img_height,
-            fov_h_rad=self.fov_h_rad,
-        )
+        self.model_path = model_path.resolve()
+        self.device = str(self.get_parameter('device').value).strip()
+        self.image_size = int(self.get_parameter('image_size').value)
+        self.confidence_threshold = float(self.get_parameter('confidence_threshold').value)
+        self.iou_threshold = float(self.get_parameter('iou_threshold').value)
+        self.class_name = str(self.get_parameter('class_name').value)
+        self.class_id = int(self.get_parameter('class_id').value)
+        self.use_masks = bool(self.get_parameter('use_masks').value) if isinstance(self.get_parameter('use_masks').value, bool) else _as_bool(self.get_parameter('use_masks').value)
+        self.mask_min_area = float(self.get_parameter('mask_min_area').value)
+        self.mask_bottom_band_px = float(self.get_parameter('mask_bottom_band_px').value)
+        self.pixel_noise_sigma = float(self.get_parameter('pixel_noise_sigma').value)
+        self.rng = np.random.default_rng(int(self.get_parameter('seed').value))
 
-        self.pixel_noise_std = float(self.get_parameter('pixel_noise_sigma').value)
-        self.seed = int(self.get_parameter('seed').value)
-        self.rng = np.random.default_rng(self.seed)
-        self.yolo_model_ref = str(self.get_parameter('yolo_model').value)
-        self.yolo_hf_filename = str(self.get_parameter('yolo_hf_filename').value)
-        self.yolo_device = str(self.get_parameter('yolo_device').value).strip()
-        self.yolo_imgsz = int(self.get_parameter('yolo_imgsz').value)
-        self.yolo_conf_threshold = float(self.get_parameter('yolo_conf_threshold').value)
-        self.yolo_iou_threshold = float(self.get_parameter('yolo_iou_threshold').value)
-        self.yolo_target_class = str(self.get_parameter('yolo_target_class').value)
-        self.yolo_use_masks = _as_bool(self.get_parameter('yolo_use_masks').value)
-        self.yolo_min_mask_area_px = float(self.get_parameter('yolo_min_mask_area_px').value)
-        self.yolo_mask_bottom_band_px = float(self.get_parameter('yolo_mask_bottom_band_px').value)
-        self.yolo_verbose = _as_bool(self.get_parameter('yolo_verbose').value)
-
-        try:
-            from ultralytics import YOLO
-        except ImportError as exc:
-            raise RuntimeError(
-                "Ultralytics is required for perception_backend:=yolo. "
-                "Install it with `pip install ultralytics` in the active ROS environment."
-            ) from exc
-
-        resolved_model = _resolve_model_ref(self.yolo_model_ref, self.yolo_hf_filename)
-        self.yolo = YOLO(resolved_model)
-        self.target_ids = _target_class_ids(getattr(self.yolo, 'names', {}), self.yolo_target_class)
+        self.model = YOLO(str(self.model_path))
+        self.target_ids = _target_class_ids(getattr(self.model, 'names', {}), self.class_name, self.class_id)
         if self.target_ids == set():
-            names = getattr(self.yolo, 'names', {})
-            self.get_logger().warn(
-                f"Target class {self.yolo_target_class!r} not found in YOLO names {names!r}; "
-                "no detections will pass the target-class filter."
+            names = getattr(self.model, 'names', {})
+            raise RuntimeError(
+                f'class filter does not match any YOLO class names: class_name={self.class_name!r}, '
+                f'class_id={self.class_id}, names={names!r}'
             )
 
-        self.log_counter = 0
-        self.pub = self.create_publisher(PoseStamped, '/perception/pixel_pose', 10)
+        self.pixel_pub = self.create_publisher(PoseStamped, '/perception/pixel_pose', 10)
         self.diag_pub = self.create_publisher(Float64MultiArray, DETECTION_DIAGNOSTICS_TOPIC, 10)
         self.create_subscription(Image, '/external_camera/image_raw', self._image_cb, 10)
 
-        device_text = self.yolo_device if self.yolo_device else 'auto'
-        target_text = 'any' if self.target_ids is None else sorted(self.target_ids)
         self.get_logger().info(
-            f'YOLO robot detector started (model={self.yolo_model_ref!r}, resolved={Path(str(resolved_model)).name!r}, '
-            f'target={target_text}, imgsz={self.yolo_imgsz}, conf={self.yolo_conf_threshold:.2f}, '
-            f'iou={self.yolo_iou_threshold:.2f}, use_masks={self.yolo_use_masks}, device={device_text})'
+            f'YOLO runtime detector started (model={self.model_path}, conf={self.confidence_threshold:.2f}, '
+            f'iou={self.iou_threshold:.2f}, use_masks={self.use_masks}, device={self.device or "auto"})'
         )
-
-    def _publish_failure(self, stamp_msg, reason: str, *, yolo_score: float = 0.0):
-        stamp = stamp_msg.sec + stamp_msg.nanosec * 1e-9
-        self.diag_pub.publish(
-            diagnostics_message(
-                stamp=stamp,
-                detected=False,
-                u_mid=np.nan,
-                v_mid=np.nan,
-                yaw_est=np.nan,
-                u_red=np.nan,
-                v_red=np.nan,
-                red_area_px=np.nan,
-                u_blue=np.nan,
-                v_blue=np.nan,
-                blue_area_px=np.nan,
-                separation_px=np.nan,
-                border_margin_px=np.nan,
-                yolo_score=float(yolo_score),
-                bbox_area_px=np.nan,
-                bbox_xmin=np.nan,
-                bbox_ymin=np.nan,
-                bbox_xmax=np.nan,
-                bbox_ymax=np.nan,
-                class_id=np.nan,
-                logit_margin=np.nan,
-                class_entropy=np.nan,
-                mask_area_px=np.nan,
-                mask_bottom_u=np.nan,
-                mask_bottom_v=np.nan,
-                mask_used=0.0,
-                mask_polygon_points=np.nan,
-                confidence_logit=_confidence_logit(yolo_score) if float(yolo_score) > 0.0 else np.nan,
-            )
-        )
-        self.log_counter += 1
-        if self.log_counter % 50 == 0:
-            self.get_logger().warn(f'YOLO detector missed robot: {reason}')
 
     def _predict(self, image_bgr: np.ndarray):
         kwargs = {
             'source': image_bgr,
-            'imgsz': self.yolo_imgsz,
-            'conf': self.yolo_conf_threshold,
-            'iou': self.yolo_iou_threshold,
-            'verbose': self.yolo_verbose,
+            'imgsz': self.image_size,
+            'conf': self.confidence_threshold,
+            'iou': self.iou_threshold,
+            'verbose': False,
         }
-        if self.yolo_device:
-            kwargs['device'] = self.yolo_device
-        return self.yolo.predict(**kwargs)
+        if self.device:
+            kwargs['device'] = self.device
+        return self.model.predict(**kwargs)
 
     def _select_detection(self, result):
         boxes = getattr(result, 'boxes', None)
@@ -208,173 +124,177 @@ class YoloRobotDetectorNode(Node):
         xyxy = boxes.xyxy.detach().cpu().numpy()
         conf = boxes.conf.detach().cpu().numpy()
         cls = boxes.cls.detach().cpu().numpy().astype(int)
-        if xyxy.size == 0:
-            return None
+        if xyxy.ndim != 2 or xyxy.shape[1] < 4:
+            raise RuntimeError('YOLO output boxes are malformed')
 
-        mask = np.isfinite(conf) & (conf >= self.yolo_conf_threshold)
+        valid = np.isfinite(conf) & (conf >= self.confidence_threshold)
         if self.target_ids is not None:
-            mask &= np.asarray([int(c) in self.target_ids for c in cls], dtype=bool)
-        valid = np.flatnonzero(mask)
-        if valid.size == 0:
+            valid &= np.asarray([int(c) in self.target_ids for c in cls], dtype=bool)
+        valid_idx = np.flatnonzero(valid)
+        if valid_idx.size == 0:
             return None
-        best = int(valid[np.argmax(conf[valid])])
-        x_min, y_min, x_max, y_max = [float(v) for v in xyxy[best]]
+        best_idx = int(valid_idx[np.argmax(conf[valid_idx])])
+        x0, y0, x1, y1 = [float(v) for v in xyxy[best_idx, :4]]
         return {
-            'index': best,
-            'bbox': (x_min, y_min, x_max, y_max),
-            'score': float(conf[best]),
-            'class_id': int(cls[best]),
+            'index': best_idx,
+            'bbox': (x0, y0, x1, y1),
+            'confidence': float(conf[best_idx]),
+            'class_id': int(cls[best_idx]),
         }
 
-    @staticmethod
-    def _polygon_area(pts: np.ndarray) -> float:
-        if pts.shape[0] < 3:
-            return 0.0
-        x = pts[:, 0]
-        y = pts[:, 1]
-        return float(abs(0.5 * (np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))))
-
-    def _mask_ground_reference(self, result, detection):
-        if not self.yolo_use_masks:
+    def _mask_reference(self, result, detection):
+        if not self.use_masks:
             return None
         masks = getattr(result, 'masks', None)
-        if masks is None:
+        polygons = getattr(masks, 'xy', None) if masks is not None else None
+        if polygons is None:
             return None
-        mask_polygons = getattr(masks, 'xy', None)
-        if mask_polygons is None:
+        idx = int(detection['index'])
+        if idx < 0 or idx >= len(polygons):
             return None
-        idx = int(detection.get('index', -1))
-        if idx < 0 or idx >= len(mask_polygons):
+        points = np.asarray(polygons[idx], dtype=float)
+        if points.ndim != 2 or points.shape[0] < 3 or points.shape[1] < 2:
             return None
-        pts = np.asarray(mask_polygons[idx], dtype=float)
-        if pts.ndim != 2 or pts.shape[0] < 3 or pts.shape[1] < 2:
+        points = points[np.isfinite(points[:, 0]) & np.isfinite(points[:, 1]), :2]
+        if points.shape[0] < 3:
             return None
-        pts = pts[np.isfinite(pts[:, 0]) & np.isfinite(pts[:, 1]), :2]
-        if pts.shape[0] < 3:
+        area = float(abs(0.5 * (np.dot(points[:, 0], np.roll(points[:, 1], -1)) - np.dot(points[:, 1], np.roll(points[:, 0], -1)))))
+        if area < self.mask_min_area:
             return None
-
-        area_px = self._polygon_area(pts)
-        if area_px < self.yolo_min_mask_area_px:
-            return None
-
-        v_bottom = float(np.max(pts[:, 1]))
-        band = pts[pts[:, 1] >= v_bottom - max(self.yolo_mask_bottom_band_px, 0.0)]
-        if band.size == 0:
-            u_bottom = float(np.mean(pts[:, 0]))
-        else:
-            u_bottom = float(np.mean(band[:, 0]))
+        u, v = _mask_bottom_pixel(points, self.mask_bottom_band_px)
         return {
-            'u': u_bottom,
-            'v': v_bottom,
-            'area_px': area_px,
-            'n_points': int(pts.shape[0]),
+            'u': u,
+            'v': v,
+            'area': area,
+            'n_points': int(points.shape[0]),
         }
 
-    def _image_cb(self, msg: Image):
-        try:
-            image_bgr = image_msg_to_bgr8(msg)
-        except ValueError as exc:
-            self.get_logger().warn(f'Failed to convert image: {exc}')
-            return
-
-        try:
-            results = self._predict(image_bgr)
-        except Exception as exc:
-            self.get_logger().error(f'YOLO inference failed: {exc}')
-            self._publish_failure(msg.header.stamp, 'inference failed')
-            return
-
-        if not results:
-            self._publish_failure(msg.header.stamp, 'no YOLO result returned')
-            return
-        detection = self._select_detection(results[0])
-        if detection is None:
-            self._publish_failure(msg.header.stamp, 'no target-class box above threshold')
-            return
-
-        x_min, y_min, x_max, y_max = detection['bbox']
-        mask_ref = self._mask_ground_reference(results[0], detection)
-        if mask_ref is None:
-            u_ref = 0.5 * (x_min + x_max)
-            v_ref = y_max
-            mask_used = 0.0
-            mask_area_px = math.nan
-            mask_bottom_u = math.nan
-            mask_bottom_v = math.nan
-            mask_polygon_points = math.nan
-        else:
-            u_ref = float(mask_ref['u'])
-            v_ref = float(mask_ref['v'])
-            mask_used = 1.0
-            mask_area_px = float(mask_ref['area_px'])
-            mask_bottom_u = u_ref
-            mask_bottom_v = v_ref
-            mask_polygon_points = float(mask_ref['n_points'])
-        if self.pixel_noise_std > 0.0:
-            u_ref += float(self.rng.normal(0.0, self.pixel_noise_std))
-            v_ref += float(self.rng.normal(0.0, self.pixel_noise_std))
-
-        world = self.camera_model.pixel_to_world(u_ref, v_ref)
-        if world is None:
-            self._publish_failure(
-                msg.header.stamp,
-                'YOLO box bottom-center outside homography footprint',
-                yolo_score=detection['score'],
-            )
-            return
-
-        img_h, img_w = image_bgr.shape[:2]
-        border_margin_px = float(min(u_ref, v_ref, img_w - 1.0 - u_ref, img_h - 1.0 - v_ref))
-        bbox_area_px = max(x_max - x_min, 0.0) * max(y_max - y_min, 0.0)
-
+    def _publish_failure(self, stamp_msg: Image, *, confidence: float = 0.0) -> None:
+        stamp = float(stamp_msg.sec) + float(stamp_msg.nanosec) * 1e-9
         self.diag_pub.publish(
             diagnostics_message(
-                stamp=msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9,
-                detected=True,
-                u_mid=u_ref,
-                v_mid=v_ref,
-                yaw_est=np.nan,
-                u_red=np.nan,
-                v_red=np.nan,
-                red_area_px=np.nan,
-                u_blue=np.nan,
-                v_blue=np.nan,
-                blue_area_px=np.nan,
-                separation_px=np.nan,
-                border_margin_px=border_margin_px,
-                yolo_score=detection['score'],
-                bbox_area_px=bbox_area_px,
-                bbox_xmin=x_min,
-                bbox_ymin=y_min,
-                bbox_xmax=x_max,
-                bbox_ymax=y_max,
-                class_id=detection['class_id'],
-                logit_margin=np.nan,
-                class_entropy=np.nan,
-                mask_area_px=mask_area_px,
-                mask_bottom_u=mask_bottom_u,
-                mask_bottom_v=mask_bottom_v,
-                mask_used=mask_used,
-                mask_polygon_points=mask_polygon_points,
-                confidence_logit=_confidence_logit(detection['score']),
+                stamp=stamp,
+                detected=False,
+                u_mid=math.nan,
+                v_mid=math.nan,
+                yaw_est=math.nan,
+                u_red=math.nan,
+                v_red=math.nan,
+                red_area_px=math.nan,
+                u_blue=math.nan,
+                v_blue=math.nan,
+                blue_area_px=math.nan,
+                separation_px=math.nan,
+                border_margin_px=math.nan,
+                yolo_score=float(confidence),
+                bbox_area_px=math.nan,
+                bbox_xmin=math.nan,
+                bbox_ymin=math.nan,
+                bbox_xmax=math.nan,
+                bbox_ymax=math.nan,
+                class_id=math.nan,
+                logit_margin=math.nan,
+                class_entropy=math.nan,
+                mask_area_px=math.nan,
+                mask_bottom_u=math.nan,
+                mask_bottom_v=math.nan,
+                mask_used=0.0,
+                mask_polygon_points=math.nan,
+                confidence_logit=_confidence_logit(confidence) if confidence > 0.0 else math.nan,
+                mask_compactness=math.nan,
+                mask_border_frac=math.nan,
+                mask_score=math.nan,
+                selected_pixel_source_code=SELECTED_PIXEL_SOURCE_NONE,
             )
         )
 
-        out_msg = PoseStamped()
-        out_msg.header = msg.header
-        out_msg.header.frame_id = 'image'
-        out_msg.pose.position.x = float(u_ref)
-        out_msg.pose.position.y = float(v_ref)
-        out_msg.pose.position.z = 0.0
-        out_msg.pose.orientation.w = 1.0
-        self.pub.publish(out_msg)
+    def _image_cb(self, msg: Image):
+        image_bgr = image_msg_to_bgr8(msg)
+        results = self._predict(image_bgr)
+        if not results:
+            self._publish_failure(msg.header.stamp)
+            return
 
-        self.log_counter += 1
-        if self.log_counter % 20 == 0:
-            self.get_logger().info(
-                f'YOLO robot box=({x_min:.0f},{y_min:.0f},{x_max:.0f},{y_max:.0f}) '
-                f'ground_ref=({u_ref:.0f},{v_ref:.0f}) score={detection["score"]:.3f} mask_used={bool(mask_used)}'
+        detection = self._select_detection(results[0])
+        if detection is None:
+            self._publish_failure(msg.header.stamp)
+            return
+
+        x0, y0, x1, y1 = detection['bbox']
+        mask_ref = self._mask_reference(results[0], detection)
+        if mask_ref is not None:
+            selected_u = float(mask_ref['u'])
+            selected_v = float(mask_ref['v'])
+            selected_pixel_source_code = SELECTED_PIXEL_SOURCE_MASK_BOTTOM
+            mask_used = 1.0
+            mask_area = float(mask_ref['area'])
+            mask_points = float(mask_ref['n_points'])
+            mask_bottom_u = selected_u
+            mask_bottom_v = selected_v
+        else:
+            selected_u = float(0.5 * (x0 + x1))
+            selected_v = float(y1)
+            selected_pixel_source_code = SELECTED_PIXEL_SOURCE_BBOX_BOTTOM
+            mask_used = 0.0
+            mask_area = math.nan
+            mask_points = math.nan
+            mask_bottom_u = math.nan
+            mask_bottom_v = math.nan
+
+        if self.pixel_noise_sigma > 0.0:
+            selected_u += float(self.rng.normal(0.0, self.pixel_noise_sigma))
+            selected_v += float(self.rng.normal(0.0, self.pixel_noise_sigma))
+
+        h, w = image_bgr.shape[:2]
+        border_margin = float(min(selected_u, selected_v, w - 1.0 - selected_u, h - 1.0 - selected_v))
+        bbox_area = float(max(x1 - x0, 0.0) * max(y1 - y0, 0.0))
+        confidence = float(detection['confidence'])
+
+        self.diag_pub.publish(
+            diagnostics_message(
+                stamp=float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9,
+                detected=True,
+                u_mid=selected_u,
+                v_mid=selected_v,
+                yaw_est=math.nan,
+                u_red=math.nan,
+                v_red=math.nan,
+                red_area_px=math.nan,
+                u_blue=math.nan,
+                v_blue=math.nan,
+                blue_area_px=math.nan,
+                separation_px=math.nan,
+                border_margin_px=border_margin,
+                yolo_score=confidence,
+                bbox_area_px=bbox_area,
+                bbox_xmin=x0,
+                bbox_ymin=y0,
+                bbox_xmax=x1,
+                bbox_ymax=y1,
+                class_id=float(detection['class_id']),
+                logit_margin=math.nan,
+                class_entropy=math.nan,
+                mask_area_px=mask_area,
+                mask_bottom_u=mask_bottom_u,
+                mask_bottom_v=mask_bottom_v,
+                mask_used=mask_used,
+                mask_polygon_points=mask_points,
+                confidence_logit=_confidence_logit(confidence),
+                mask_compactness=math.nan,
+                mask_border_frac=math.nan,
+                mask_score=confidence,
+                selected_pixel_source_code=selected_pixel_source_code,
             )
+        )
+
+        out = PoseStamped()
+        out.header = msg.header
+        out.header.frame_id = 'image'
+        out.pose.position.x = float(selected_u)
+        out.pose.position.y = float(selected_v)
+        out.pose.position.z = 0.0
+        out.pose.orientation.w = 1.0
+        self.pixel_pub.publish(out)
 
 
 def main(args=None):

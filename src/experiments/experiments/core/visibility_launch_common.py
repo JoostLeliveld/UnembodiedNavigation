@@ -66,8 +66,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'auto_stop_on_goal': 'true',
     'goal_success_radius': '0.35',
     'goal_success_hold_s': '2.0',
-    'yolo_model': 'yolo11n.pt',
-    'yolo_hf_filename': 'best.pt',
+    'yolo_model': '',
     'yolo_device': '',
     'yolo_imgsz': '640',
     'yolo_conf_threshold': '0.25',
@@ -276,7 +275,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'use_rviz': _as_bool(_launch_value(context, 'use_rviz', 'false')),
         'rviz_config': _launch_value(context, 'rviz_config', ''),
         'yolo_model': _launch_value(context, 'yolo_model', PAPER_LAUNCH_DEFAULTS['yolo_model']),
-        'yolo_hf_filename': _launch_value(context, 'yolo_hf_filename', PAPER_LAUNCH_DEFAULTS['yolo_hf_filename']),
         'yolo_device': _launch_value(context, 'yolo_device', PAPER_LAUNCH_DEFAULTS['yolo_device']),
         'yolo_imgsz': int(_launch_value(context, 'yolo_imgsz', PAPER_LAUNCH_DEFAULTS['yolo_imgsz'])),
         'yolo_conf_threshold': float(_launch_value(context, 'yolo_conf_threshold', PAPER_LAUNCH_DEFAULTS['yolo_conf_threshold'])),
@@ -479,19 +477,20 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             parameters=[homography_params],
         )
     elif cfg['perception_backend'] == 'yolo':
-        yolo_params = dict(homography_params)
-        yolo_params.update({
-            'yolo_model': cfg['yolo_model'],
-            'yolo_hf_filename': cfg['yolo_hf_filename'],
-            'yolo_device': cfg['yolo_device'],
-            'yolo_imgsz': cfg['yolo_imgsz'],
-            'yolo_conf_threshold': cfg['yolo_conf_threshold'],
-            'yolo_iou_threshold': cfg['yolo_iou_threshold'],
-            'yolo_target_class': cfg['yolo_target_class'],
-            'yolo_use_masks': cfg['yolo_use_masks'],
-            'yolo_min_mask_area_px': cfg['yolo_min_mask_area_px'],
-            'yolo_mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
-        })
+        yolo_params = {
+            'pixel_noise_sigma': cfg['sensor_pixel_noise_sigma'],
+            'seed': cfg['seed'],
+            'model_path': cfg['yolo_model'],
+            'device': cfg['yolo_device'],
+            'image_size': cfg['yolo_imgsz'],
+            'confidence_threshold': cfg['yolo_conf_threshold'],
+            'iou_threshold': cfg['yolo_iou_threshold'],
+            'class_name': cfg['yolo_target_class'],
+            'class_id': -1,
+            'use_masks': cfg['yolo_use_masks'],
+            'mask_min_area': cfg['yolo_min_mask_area_px'],
+            'mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
+        }
         perception_node = Node(
             package='perception',
             executable='yolo_robot_detector_node',
@@ -616,7 +615,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
                 'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
                 'yolo_model': cfg['yolo_model'],
-                'yolo_hf_filename': cfg['yolo_hf_filename'],
                 'yolo_device': cfg['yolo_device'],
                 'yolo_imgsz': cfg['yolo_imgsz'],
                 'yolo_conf_threshold': cfg['yolo_conf_threshold'],

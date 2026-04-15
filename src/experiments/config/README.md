@@ -31,5 +31,5 @@ The current milestone is a controlled comparison. These files fix:
 ## Important Caveats
 
 - `warehouse_occ_light.world.sdf` is the primary benchmark world
-- `warehouse_open_shelves.world.sdf` is secondary exploratory material
+- `warehouse_open_shelves.world.sdf` is a secondary support-world configuration
 - the current thesis-facing story is not “many maps equally validated”; it is one primary benchmark plus one exploratory extension

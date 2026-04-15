@@ -32,6 +32,24 @@
         <visualize>true</visualize>
         <topic>external_camera/image_raw</topic>
       </sensor>
+      <sensor name="segmentation_camera" type="segmentation">
+        <camera>
+          <segmentation_type>semantic</segmentation_type>
+          <horizontal_fov>1.5708</horizontal_fov>
+          <image>
+            <width>1280</width>
+            <height>720</height>
+          </image>
+          <clip>
+            <near>0.1</near>
+            <far>100</far>
+          </clip>
+        </camera>
+        <always_on>1</always_on>
+        <update_rate>30</update_rate>
+        <visualize>false</visualize>
+        <topic>external_camera/segmentation</topic>
+      </sensor>
     </link>
   </model>
 </sdf>

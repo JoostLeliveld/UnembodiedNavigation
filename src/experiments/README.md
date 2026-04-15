@@ -74,7 +74,7 @@ The planner is only one part of the experiment. This package answers:
 
 - `warehouse_visibility_agent.launch.py` keeps retained secondary planners `efe2`, `efer`, and `mpc` runnable, but it is not the main thesis-facing entry path
 - the logger is useful and important, but the evaluation built on top of it is still milestone-grade
-- `warehouse_open_shelves.world.sdf` is exploratory compared with the main warehouse benchmark
+- `warehouse_open_shelves.world.sdf` is a secondary support world compared with the main warehouse benchmark
 
 ## Connection To The Rest Of The Repository
 

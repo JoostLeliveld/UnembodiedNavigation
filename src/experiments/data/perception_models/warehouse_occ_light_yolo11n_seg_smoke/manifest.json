@@ -1,0 +1,17 @@
+{
+  "base_model": "/home/joostleliveld/Thesis/UnembodiedNavigation/yolo11n-seg.pt",
+  "dataset_yaml": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/redmask_seg_dataset_20260415_train/data.yaml",
+  "epochs": 8,
+  "image_size": 640,
+  "batch": 8,
+  "device": "cpu",
+  "output_model": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/data/perception_models/warehouse_occ_light_yolo11n_seg_smoke/model.pt",
+  "training_run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/data/perception_models/warehouse_occ_light_yolo11n_seg_smoke/ultralytics_run",
+  "timestamp": "20260415_101058",
+  "confidence_calibrated": false,
+  "notes": [
+    "Start with 5-10 epochs for a smoke test.",
+    "Use 20-30 epochs for a first usable fine-tune.",
+    "Detector confidence is not calibrated."
+  ]
+}

@@ -198,6 +198,12 @@
     <!-- ================= Gazebo Harmonic DiffDrive ================= -->
     <gazebo>
     <plugin
+        filename="gz-sim-label-system"
+        name="gz::sim::systems::Label">
+        <label>23</label>
+    </plugin>
+
+    <plugin
         filename="gz-sim-diff-drive-system"
         name="gz::sim::systems::DiffDrive">
 

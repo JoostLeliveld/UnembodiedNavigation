@@ -33,7 +33,7 @@ The repository is built around a fixed Gazebo external-camera setup. This packag
 | --- | --- |
 | [`launch/bringup_sim.launch.py`](launch/bringup_sim.launch.py) | main simulator bringup used by `experiments` |
 | [`gazebo_worlds/worlds/warehouse_occ_light.world.sdf`](gazebo_worlds/worlds/warehouse_occ_light.world.sdf) | primary benchmark world |
-| [`gazebo_worlds/worlds/warehouse_open_shelves.world.sdf`](gazebo_worlds/worlds/warehouse_open_shelves.world.sdf) | exploratory secondary world |
+| [`gazebo_worlds/worlds/warehouse_open_shelves.world.sdf`](gazebo_worlds/worlds/warehouse_open_shelves.world.sdf) | secondary support world with a long shelf line and two gaps |
 | [`sim/wait_for_odom.py`](sim/wait_for_odom.py) | startup gate used in launches |
 
 ## Support Files

@@ -7,97 +7,83 @@ tasks:
     # - observability tradeoff in lower-visibility south-side regions
     # - recovery and clearance robustness
     - name: E0_visible_sanity
-      description: Main benchmark task. Very short visible sanity-check run used to verify nominal stability, perception, state estimation, and basic planner progress in a clearly observable region.
+      description: Main benchmark task. Very short visible sanity-check run used to verify nominal stability, perception, state estimation, and basic planner progress in the open north-west corner.
       tier: benchmark
       claim: nominal_stability
       focus: visible_sanity
-      start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
-      goal: {x: -3.3, y: 1.9}
+      start: {x: -2.0, y: 1.4, z: 0.05, yaw: 0.0}
+      goal: {x: -1.2, y: 1.1}
     - name: E1_front_threshold_pre
-      description: Diagnostic task. Stops before the known front-side local basin to verify that the planner can approach the rack while staying in the easy visible regime.
+      description: Diagnostic task. Approaches the west end of the long shelf from the north-west start before any full crossover decision is required.
       tier: diagnostic
       claim: threshold_sanity
       focus: pre_basin_threshold
-      start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
-      goal: {x: -3.1, y: 1.7}
+      start: {x: -2.0, y: 1.4, z: 0.05, yaw: 0.0}
+      goal: {x: -0.9, y: 0.95}
     - name: E2_front_threshold_post
-      description: Main benchmark task. Sits just past the old front-side commit point and tests whether the planner can get beyond the basin without yet requiring the full eastward arc.
+      description: Main benchmark task. Sits just beyond the west end of the shelf and tests whether the planner can get around the obstacle without yet committing to the long eastward traverse.
       tier: benchmark
       claim: local_commitment
       focus: post_basin_threshold
-      start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
-      goal: {x: -2.45, y: 1.45}
+      start: {x: -2.0, y: 1.4, z: 0.05, yaw: 0.0}
+      goal: {x: -0.4, y: 0.95}
     - name: E3_front_arc_mid
-      description: Diagnostic task. Requires commitment to the visible front arc, but stops before the far east side so the commitment problem can be isolated from full-route endurance.
+      description: Diagnostic task. Requires commitment to the north-side lane past the shelf, but stops before the far east side so the route choice can be isolated from full-route endurance.
       tier: diagnostic
       claim: arc_commit_debug
       focus: visible_arc_commit
-      start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
-      goal: {x: -1.2, y: 1.2}
+      start: {x: -2.0, y: 1.4, z: 0.05, yaw: 0.0}
+      goal: {x: 0.7, y: 0.95}
     - name: E4_front_arc_full
-      description: Main benchmark task. Full visible reference route that stays mostly in front of the rack and outside the strongest lower-visibility region, used as the route-level comparison task.
+      description: Main benchmark task. Full north-side route past the shelf, used as a same-side reference traverse before the crossover-heavy tasks.
       tier: benchmark
       claim: route_preference
       focus: visible_reference
-      start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
-      goal: {x: 0.6, y: 1.2}
+      start: {x: -2.0, y: 1.4, z: 0.05, yaw: 0.0}
+      goal: {x: 1.7, y: 1.05}
     - name: E5_shadow_tradeoff
-      description: Main benchmark task. Starts in a visible north-west pose and asks the planner to reach the south-east goal that competes more directly with lower-visibility and occlusion-sensitive sensing conditions.
+      description: Main benchmark task. Starts north-west and asks the planner to reach the south-east goal, forcing a choice between the shorter but more occluded camera-left crossover and the longer clearer camera-right route.
       tier: benchmark
       claim: shadow_tradeoff
       focus: visibility_tradeoff
-      start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
-      goal: {x: -0.8, y: -3.0}
+      start: {x: -2.0, y: 1.4, z: 0.05, yaw: 0.0}
+      goal: {x: 1.55, y: -1.45}
     - name: E6_shadow_reacquire
-      description: Diagnostic task. Crosses the lower-visibility south-side region and then re-emerges on the east side, reserved for missed-detection and reacquisition experiments after the main route-choice tests are stable.
+      description: Diagnostic task. Stays north of the shelf longer and then re-emerges on the east-south side, reserved for missed-detection and reacquisition checks after the main route-choice tests are stable.
       tier: diagnostic
       claim: reacquisition_debug
       focus: detection_reacquisition
-      start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
-      goal: {x: 0.4, y: -0.6}
+      start: {x: -2.0, y: 1.4, z: 0.05, yaw: 0.0}
+      goal: {x: 1.5, y: -0.35}
     - name: E7_clearance_probe
-      description: Diagnostic task. South-side pass close to the rack footprint, reserved for no-go tuning and obstacle-clearance behavior separate from the front-side local basin.
+      description: Diagnostic task. South-side pass close to the shelf footprint, reserved for no-go tuning and obstacle-clearance behavior separate from the crossover route-choice tasks.
       tier: diagnostic
       claim: clearance_debug
       focus: obstacle_clearance
-      start: {x: -5.0, y: -3.8, z: 0.05, yaw: 0.0}
-      goal: {x: -1.1, y: -0.8}
+      start: {x: -2.0, y: -1.8, z: 0.05, yaw: 0.0}
+      goal: {x: 0.8, y: -0.9}
 
   warehouse_open_shelves.world.sdf:
-    # Secondary exploratory world. These tasks are intentionally not part of the
-    # single-map core thesis benchmark; they probe richer partial-occlusion use cases.
+    # Secondary support world. These tasks are intentionally smaller in number than the
+    # primary benchmark ladder and focus on transfer to a gap-commitment layout.
     - name: OS0_upper_gap_sanity
-      description: Exploratory task. Crosses from the west-north start to the east-upper goal through the clearer upper shelf gap and serves as the nominal open-shelving sanity check.
+      description: Support task. Sanity-check run on the north side of the segmented shelf world, used to verify stable progress before the stronger gap-commitment routes.
       tier: exploratory
       claim: open_gap_sanity
       focus: upper_gap_crossing
-      start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
-      goal: {x: 0.9, y: 1.8}
+      start: {x: -2.3, y: 1.7, z: 0.05, yaw: 0.0}
+      goal: {x: 1.7, y: 1.55}
     - name: OS1_lower_gap_commit
-      description: Exploratory task. Starts north-west and asks the planner to commit to the lower gap to reach the east-lower goal instead of stalling at the west face of the shelves.
+      description: Support task. Starts north-west and asks the planner to commit through the shorter camera-left crossing instead of drifting toward the longer clearer camera-right alternative.
       tier: exploratory
       claim: gap_selection
       focus: lower_gap_commit
-      start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
-      goal: {x: 0.65, y: -2.3}
+      start: {x: -2.3, y: 1.7, z: 0.05, yaw: 0.0}
+      goal: {x: 1.55, y: -1.75}
     - name: OS2_partial_occlusion_peek
-      description: Exploratory task. Finishes just east of the shelving where the robot can either accept partial visibility behind the south bay or detour to a clearer gap first.
-      tier: exploratory
-      claim: partial_occlusion
-      focus: partial_shadow_acceptance
-      start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
-      goal: {x: -0.2, y: -1.45}
-    - name: OS3_dual_gap_route
-      description: Exploratory task. Starts south-west and ends east-north, testing whether the planner threads one of the shelf openings or chooses a wider route around the segmented barrier.
-      tier: exploratory
-      claim: dual_gap_route_choice
-      focus: gap_weaving
-      start: {x: -5.0, y: -3.2, z: 0.05, yaw: 0.0}
-      goal: {x: 0.9, y: 1.8}
-    - name: OS4_east_mid_reacquire
-      description: Exploratory task. Crosses behind the shelving and finishes in the east-middle lane, useful for studying visibility reacquisition after partial shielding.
+      description: Support task. Finishes in the east-middle lane after passing the segmented shelf line, useful for checking post-gap reacquisition and route completion.
       tier: exploratory
       claim: visibility_reacquisition
       focus: east_lane_reacquire
-      start: {x: -5.0, y: 2.4, z: 0.05, yaw: 0.0}
-      goal: {x: 1.0, y: 0.1}
+      start: {x: -2.3, y: 1.7, z: 0.05, yaw: 0.0}
+      goal: {x: 1.45, y: -0.20}

@@ -23,7 +23,6 @@ def _launch_setup(context, *args, **kwargs):
     capture_mode = LaunchConfiguration('capture_mode').perform(context).strip().lower()
     perception_backend = LaunchConfiguration('perception_backend').perform(context).strip().lower()
     yolo_model = LaunchConfiguration('yolo_model').perform(context)
-    yolo_hf_filename = LaunchConfiguration('yolo_hf_filename').perform(context)
     yolo_device = LaunchConfiguration('yolo_device').perform(context)
     yolo_imgsz = int(LaunchConfiguration('yolo_imgsz').perform(context))
     yolo_conf_threshold = float(LaunchConfiguration('yolo_conf_threshold').perform(context))
@@ -88,19 +87,20 @@ def _launch_setup(context, *args, **kwargs):
         'seed': seed,
     }
     if perception_backend == 'yolo':
-        yolo_detector_params = dict(detector_params)
-        yolo_detector_params.update({
-            'yolo_model': yolo_model,
-            'yolo_hf_filename': yolo_hf_filename,
-            'yolo_device': yolo_device,
-            'yolo_imgsz': yolo_imgsz,
-            'yolo_conf_threshold': yolo_conf_threshold,
-            'yolo_iou_threshold': yolo_iou_threshold,
-            'yolo_target_class': yolo_target_class,
-            'yolo_use_masks': yolo_use_masks,
-            'yolo_min_mask_area_px': yolo_min_mask_area_px,
-            'yolo_mask_bottom_band_px': yolo_mask_bottom_band_px,
-        })
+        yolo_detector_params = {
+            'pixel_noise_sigma': pixel_noise_sigma,
+            'seed': seed,
+            'model_path': yolo_model,
+            'device': yolo_device,
+            'image_size': yolo_imgsz,
+            'confidence_threshold': yolo_conf_threshold,
+            'iou_threshold': yolo_iou_threshold,
+            'class_name': yolo_target_class,
+            'class_id': -1,
+            'use_masks': yolo_use_masks,
+            'mask_min_area': yolo_min_mask_area_px,
+            'mask_bottom_band_px': yolo_mask_bottom_band_px,
+        }
         detector = Node(
             package='perception',
             executable='yolo_robot_detector_node',
@@ -190,8 +190,7 @@ def generate_launch_description():
             description='Synthetic detector pixel noise applied in the image-marker capture path',
         ),
         DeclareLaunchArgument('perception_backend', default_value='image_markers', description='image_markers or yolo'),
-        DeclareLaunchArgument('yolo_model', default_value='yolo11n.pt', description='Ultralytics model name/path or hf://owner/repo[/file.pt]'),
-        DeclareLaunchArgument('yolo_hf_filename', default_value='best.pt', description='Default filename when yolo_model is hf://owner/repo'),
+        DeclareLaunchArgument('yolo_model', default_value='', description='Local path to a trained YOLO .pt model'),
         DeclareLaunchArgument('yolo_device', default_value='', description='Ultralytics device string; empty lets Ultralytics choose'),
         DeclareLaunchArgument('yolo_imgsz', default_value='640'),
         DeclareLaunchArgument('yolo_conf_threshold', default_value='0.25'),

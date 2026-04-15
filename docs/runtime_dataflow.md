@@ -12,6 +12,22 @@ The offline and online stories are connected by one planner-facing state:
 
 for the current GP input, with `theta` still handled separately by the runtime estimator.
 
+## Current Perception-Focused Status
+
+The current perception story has shifted to a simpler indoor warehouse:
+
+- world: `warehouse_occ_light.world.sdf`
+- lighting: fixed overhead lighting, no rendered cast shadows
+- floor: no colored floor markers
+- current runtime detector of interest: `yolo_robot_detector_node`
+- legacy detector kept for comparison/older runs: `image_marker_detector_node`
+
+Current perception interpretation:
+
+- runtime detector of interest: local YOLO `.pt` model
+- optional offline bootstrap if out-of-box YOLO is not good enough: simple red-mask pseudo-labels
+- runtime ROS path: image-only YOLO -> pixel observation -> homography `x,y` -> odometry-backed `theta`
+
 ## Offline Preparation
 
 ```mermaid
@@ -32,8 +48,10 @@ For the current fitter:
 
 - teleport-mode input: sampled robot `x,y`
 - driving-mode input: `/state/bev` x-y only
-- default fitted target: normalized blob area
-- alternate fitted target: binary usable visual detection
+- supported fitted targets:
+  - normalized blob area
+  - binary usable visual detection
+  - YOLO `yolo_soft_score`
 
 ![Empirical visibility artifact tutorial](figures/visibility_capture_tutorial.png)
 
@@ -48,7 +66,7 @@ flowchart LR
     end
 
     subgraph Perception
-        DET[image_marker_detector_node]
+        DET[yolo_robot_detector_node]
         PIX[/perception/pixel_pose/]
         DIAG[/perception/detection_diagnostics/]
     end
@@ -92,7 +110,7 @@ flowchart LR
     PLAN --> LOG
 ```
 
-Caption: this is the main online control loop. It omits TF, `ros_gz_bridge`, and robot-state publishing on purpose because those are infrastructure rather than the main method story.
+Caption: this is the current perception-focused online control loop. It omits TF, `ros_gz_bridge`, and robot-state publishing on purpose because those are infrastructure rather than the main method story. The legacy marker detector still exists, but the YOLO node is now the detector of interest for the refreshed indoor warehouse path.
 
 ## State-Estimator Provenance
 

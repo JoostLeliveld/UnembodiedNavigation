@@ -34,6 +34,10 @@ DETECTION_DIAGNOSTIC_FIELDS = (
     'mask_used',
     'mask_polygon_points',
     'confidence_logit',
+    'mask_compactness',
+    'mask_border_frac',
+    'mask_score',
+    'selected_pixel_source_code',
 )
 
 _FIELD_INDEX = {
@@ -71,6 +75,10 @@ def diagnostics_message(
     mask_used=math.nan,
     mask_polygon_points=math.nan,
     confidence_logit=math.nan,
+    mask_compactness=math.nan,
+    mask_border_frac=math.nan,
+    mask_score=math.nan,
+    selected_pixel_source_code=math.nan,
 ):
     msg = Float64MultiArray()
     msg.data = [
@@ -102,6 +110,10 @@ def diagnostics_message(
         float(mask_used),
         float(mask_polygon_points),
         float(confidence_logit),
+        float(mask_compactness),
+        float(mask_border_frac),
+        float(mask_score),
+        float(selected_pixel_source_code),
     ]
     return msg
 

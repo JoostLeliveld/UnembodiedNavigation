@@ -5,6 +5,7 @@ import os
 import time
 from datetime import datetime
 
+import numpy as np
 import rclpy
 import tf2_ros
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
@@ -91,7 +92,6 @@ class ExperimentLogger(Node):
         self.declare_parameter('nogo_logbarrier_scale', 0.25)
         self.declare_parameter('nogo_logbarrier_eps', 1e-3)
         self.declare_parameter('yolo_model', '')
-        self.declare_parameter('yolo_hf_filename', 'best.pt')
         self.declare_parameter('yolo_device', '')
         self.declare_parameter('yolo_imgsz', 640)
         self.declare_parameter('yolo_conf_threshold', 0.25)
@@ -101,6 +101,11 @@ class ExperimentLogger(Node):
         self.declare_parameter('yolo_min_mask_area_px', 12.0)
         self.declare_parameter('yolo_mask_bottom_band_px', 3.0)
         self.declare_parameter('run_dir_topic', '/experiment/run_dir')
+        self.declare_parameter('cam_pos', [-3.0, -3.0, 6.0])
+        self.declare_parameter('look_at', [1.5, 1.5, 0.0])
+        self.declare_parameter('img_width', 1280)
+        self.declare_parameter('img_height', 720)
+        self.declare_parameter('fov_h_rad', 1.5708)
 
         log_dir = self.get_parameter('log_dir').value
         self.seed = int(self.get_parameter('seed').value)
@@ -156,7 +161,6 @@ class ExperimentLogger(Node):
         self.nogo_logbarrier_scale = float(self.get_parameter('nogo_logbarrier_scale').value)
         self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
         self.yolo_model = str(self.get_parameter('yolo_model').value)
-        self.yolo_hf_filename = str(self.get_parameter('yolo_hf_filename').value)
         self.yolo_device = str(self.get_parameter('yolo_device').value)
         self.yolo_imgsz = int(self.get_parameter('yolo_imgsz').value)
         self.yolo_conf_threshold = float(self.get_parameter('yolo_conf_threshold').value)
@@ -166,6 +170,25 @@ class ExperimentLogger(Node):
         self.yolo_min_mask_area_px = float(self.get_parameter('yolo_min_mask_area_px').value)
         self.yolo_mask_bottom_band_px = float(self.get_parameter('yolo_mask_bottom_band_px').value)
         self.run_dir_topic = str(self.get_parameter('run_dir_topic').value).strip() or '/experiment/run_dir'
+
+        # Camera model for homography projection (pixel to world)
+        try:
+            from unav_common.camera_model import ObliqueCameraModel
+            cam_pos = np.array(self.get_parameter('cam_pos').value, dtype=float)
+            look_at = np.array(self.get_parameter('look_at').value, dtype=float)
+            img_width = int(self.get_parameter('img_width').value)
+            img_height = int(self.get_parameter('img_height').value)
+            fov_h_rad = float(self.get_parameter('fov_h_rad').value)
+            self.camera_model = ObliqueCameraModel(
+                cam_pos=cam_pos,
+                look_at=look_at,
+                img_width=img_width,
+                img_height=img_height,
+                fov_h_rad=fov_h_rad,
+            )
+        except Exception as e:
+            self.get_logger().warn(f'Failed to initialize camera model for homography: {e}')
+            self.camera_model = None
 
         run_info = create_run_dir(log_dir)
         self.run_id = run_info['run_id']
@@ -219,7 +242,6 @@ class ExperimentLogger(Node):
             'nogo_logbarrier_scale': self.nogo_logbarrier_scale,
             'nogo_logbarrier_eps': self.nogo_logbarrier_eps,
             'yolo_model': self.yolo_model,
-            'yolo_hf_filename': self.yolo_hf_filename,
             'yolo_device': self.yolo_device,
             'yolo_imgsz': self.yolo_imgsz,
             'yolo_conf_threshold': self.yolo_conf_threshold,
@@ -333,6 +355,9 @@ class ExperimentLogger(Node):
                 'pixel_pose_v',
                 'pixel_pose_yaw',
                 'pixel_pose_age_s',
+                'pred_world_x',
+                'pred_world_y',
+                'localization_error_m',
                 'u_red',
                 'v_red',
                 'red_area_px',
@@ -356,6 +381,10 @@ class ExperimentLogger(Node):
                 'mask_used',
                 'mask_polygon_points',
                 'confidence_logit',
+                'mask_compactness',
+                'mask_border_frac',
+                'mask_score',
+                'selected_pixel_source_code',
                 'seed',
             ])
 
@@ -526,6 +555,18 @@ class ExperimentLogger(Node):
         if obs_ok and math.isfinite(pixel_pose_stamp):
             pixel_pose_age_s = max(log_stamp - pixel_pose_stamp, 0.0)
 
+        # Compute predicted world position from image coordinates using homography
+        pred_world_x = math.nan
+        pred_world_y = math.nan
+        localization_error_m = math.nan
+        if self.camera_model is not None and obs_ok and math.isfinite(pixel_pose_u) and math.isfinite(pixel_pose_v):
+            world = self.camera_model.pixel_to_world(float(pixel_pose_u), float(pixel_pose_v))
+            if world is not None:
+                pred_world_x = float(world[0])
+                pred_world_y = float(world[1])
+                if true_ok:
+                    localization_error_m = math.hypot(pred_world_x - true_x, pred_world_y - true_y)
+
         self.perception_writer.writerow([
             diag['stamp'],
             log_stamp,
@@ -550,6 +591,9 @@ class ExperimentLogger(Node):
             pixel_pose_v,
             pixel_pose_yaw,
             pixel_pose_age_s,
+            pred_world_x,
+            pred_world_y,
+            localization_error_m,
             diag['u_red'],
             diag['v_red'],
             diag['red_area_px'],
@@ -573,6 +617,10 @@ class ExperimentLogger(Node):
             diag.get('mask_used', math.nan),
             diag.get('mask_polygon_points', math.nan),
             diag.get('confidence_logit', math.nan),
+            diag.get('mask_compactness', math.nan),
+            diag.get('mask_border_frac', math.nan),
+            diag.get('mask_score', math.nan),
+            diag.get('selected_pixel_source_code', math.nan),
             self.seed,
         ])
         self.perception_file.flush()
