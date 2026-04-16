@@ -75,6 +75,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'yolo_use_masks': 'true',
     'yolo_min_mask_area_px': '12.0',
     'yolo_mask_bottom_band_px': '3.0',
+    'log_dir': 'logs/experiments',
 }
 
 
@@ -172,6 +173,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'world_profiles_path': LaunchConfiguration('world_profiles').perform(context),
         'tasks_yaml': LaunchConfiguration('tasks_yaml').perform(context),
         'task_name': _launch_value(context, 'task', PAPER_LAUNCH_DEFAULTS['task']).strip(),
+        'log_dir': _launch_value(context, 'log_dir', PAPER_LAUNCH_DEFAULTS['log_dir']).strip(),
         'seed': seed_value,
         'perception_backend': _launch_value(context, 'perception_backend', PAPER_LAUNCH_DEFAULTS['perception_backend']).strip().lower(),
         'sensor_pixel_noise_sigma': float(_launch_value(context, 'sensor_pixel_noise_sigma', '0.0')),
@@ -570,6 +572,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             on_exit=[Shutdown(reason='experiment_logger exited')],
             parameters=[{
                 'use_sim_time': cfg['use_sim_time'],
+                'log_dir': cfg['log_dir'],
                 'seed': cfg['seed'],
                 'method': cfg['planner'],
                 'perception_backend': cfg['perception_backend'],

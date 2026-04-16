@@ -64,6 +64,7 @@ def generate_launch_description():
         DeclareLaunchArgument('yolo_mask_bottom_band_px', default_value='3.0'),
         DeclareLaunchArgument('pixel_correction_approx', default_value='AUTO'),
         DeclareLaunchArgument('enable_logging', default_value='true'),
+        DeclareLaunchArgument('log_dir', default_value='logs/experiments'),
         DeclareLaunchArgument('use_rviz', default_value='false'),
         OpaqueFunction(function=_launch_setup),
     ])

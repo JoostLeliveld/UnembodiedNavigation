@@ -64,9 +64,12 @@ If a supervisor wants the shortest honest route through the code, use this order
 - `src/planning/planning/planners/base_planner.py`
 - `src/planning/planning/core/casadi_efe.py`
 - `src/planning/planning/core/visibility_gp_map.py`
-- `scripts/fit_empirical_visibility_gp.py`
+- `scripts/visibility_comparison/capture_visibility_samples.py`
+- `scripts/visibility_comparison/build_gp_targets.py`
+- `scripts/visibility_comparison/fit_visibility_gps.py`
+- `scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py`
 - `scripts/evaluate_occlusion_comparison.py`
-- `scripts/plot_visibility_run.py`
+- `scripts/visibility_comparison/plot_planned_paths.py`
 
 ### Support or peripheral
 
@@ -76,6 +79,7 @@ If a supervisor wants the shortest honest route through the code, use this order
 - `src/perception/perception/nodes/image_marker_detector_node.py`
 - `src/perception/perception/nodes/homography_sim_node.py`
 - `src/planning/planning/core/nogo_cost.py`
+- `archive/visibility_legacy/`
 
 ## Honest Boundary Notes
 

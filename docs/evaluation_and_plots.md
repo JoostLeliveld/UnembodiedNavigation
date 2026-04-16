@@ -13,9 +13,11 @@ flowchart LR
     A[warehouse_primary_comparison.launch.py] --> B[experiment_logger]
     B --> C[experiment.csv + perception.csv + run_manifest.json]
     C --> D[evaluate_occlusion_comparison.py]
-    C --> E[plot_visibility_run.py]
+    C --> E[plot_planned_paths.py]
     D --> F[group_summary.csv / group_summary.json]
-    E --> G[qualitative run figures]
+    E --> G[path-over-field figures]
+    H[gp_targets.csv + current_gp/*.npz] --> I[plot_gp_and_ambiguity_maps.py]
+    I --> J[GP/ambiguity figures]
 ```
 
 Caption: the logger is the bridge between runtime and evaluation. The current evaluation stack is useful for milestone summaries and qualitative analysis, but it is not yet a final thesis-grade analysis suite.
@@ -48,9 +50,10 @@ Caption: the logger is the bridge between runtime and evaluation. The current ev
 
 | Script | Role | Output |
 | --- | --- | --- |
-| [`../scripts/fit_empirical_visibility_gp.py`](../scripts/fit_empirical_visibility_gp.py) | offline GP artifact generation from simulated pose sampling or the retained driving mode | `empirical_visibility_gp.npz`, raw/aggregated capture CSVs, fit plot |
+| [`../scripts/visibility_comparison/fit_visibility_gps.py`](../scripts/visibility_comparison/fit_visibility_gps.py) | offline GP artifact generation from canonical scalar targets | `*_gp.npz`, `gp_fit_summary.csv`, `gp_manifest.json` |
+| [`../scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py`](../scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py) | GP field and ambiguity plotting | per-method and combined GP/ambiguity figures |
 | [`../scripts/evaluate_occlusion_comparison.py`](../scripts/evaluate_occlusion_comparison.py) | summary/evaluation | `run_summary.csv`, `group_summary.csv`, `group_summary.json` |
-| [`../scripts/plot_visibility_run.py`](../scripts/plot_visibility_run.py) | qualitative single-run plotting | visibility and trajectory figures |
+| [`../scripts/visibility_comparison/plot_planned_paths.py`](../scripts/visibility_comparison/plot_planned_paths.py) | qualitative planned/realized path plotting | path-over-field and path-over-ambiguity figures |
 
 ## What The Current Evaluator Supports
 
@@ -69,7 +72,7 @@ This is enough for milestone inspection, but not enough for strong thesis claims
 
 | Title | Data source | X-axis | Y-axis | Methods | Insight | Caveat exposed |
 | --- | --- | --- | --- | --- | --- | --- |
-| Visibility field and trajectory overlay | `plot_visibility_run.py` + GP artifact | world `x` | world `y` | `efe1`, `visibility_unaware_baseline` | whether the GP-aware planner prefers more observable regions | if trajectories are similar, the GP may not be changing behavior much |
+| Visibility field and trajectory overlay | `plot_planned_paths.py` + GP artifact | world `x` | world `y` | `efe1`, `visibility_unaware_baseline` | whether the GP-aware planner prefers more observable regions | if trajectories are similar, the GP may not be changing behavior much |
 | Goal distance over time | `experiment.csv` | time | goal distance | `efe1`, `visibility_unaware_baseline` | progress and convergence trade-off | a more visible route may simply be slower |
 | Planned visibility over time | `experiment.csv` | time or replan index | `p_vis_plan` | both methods | whether the GP-aware planner actually plans for higher observability | if flat/equal, the comparison may be methodologically weak |
 | Detection rate summary | `perception.csv` or evaluator output | run or method | detection rate | both methods | whether route changes affect actual sensing availability | if no difference, observability modeling may be operationally irrelevant here |

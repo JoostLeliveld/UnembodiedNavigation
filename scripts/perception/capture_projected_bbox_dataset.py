@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -16,8 +17,6 @@ import numpy as np
 import rclpy
 import yaml
 from rclpy.node import Node
-from ros_gz_interfaces.msg import Entity
-from ros_gz_interfaces.srv import SetEntityPose
 from sensor_msgs.msg import Image
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -131,7 +130,6 @@ class TeleportBBoxCapture(Node):
         self.settle_s = float(settle_s)
         self.image_timeout_s = float(image_timeout_s)
         self.service_name = f'/world/{self.world_name}/set_pose'
-        self.client = self.create_client(SetEntityPose, self.service_name)
         self.image_count = 0
         self.latest_image = None
         self.create_subscription(Image, str(image_topic), self._image_cb, 10)
@@ -144,32 +142,38 @@ class TeleportBBoxCapture(Node):
         end = time.monotonic() + max(float(timeout_s), 0.0)
         while rclpy.ok() and time.monotonic() < end:
             rclpy.spin_once(self, timeout_sec=0.05)
-            if self.client.wait_for_service(timeout_sec=0.05) and self.latest_image is not None:
+            if self.latest_image is not None:
                 return
         raise RuntimeError(
-            f'Timed out waiting for {self.service_name} and first camera image. '
-            'Launch the simulator first.'
+            'Timed out waiting for first camera image. Launch the simulator first.'
         )
 
     def _set_robot_pose(self, *, x: float, y: float, yaw: float) -> None:
-        req = SetEntityPose.Request()
-        req.entity = Entity(name='turtlebot3')
-        req.entity.type = Entity.MODEL
-        req.pose.position.x = float(x)
-        req.pose.position.y = float(y)
-        req.pose.position.z = float(self.robot_z)
         half = 0.5 * float(yaw)
-        req.pose.orientation.z = math.sin(half)
-        req.pose.orientation.w = math.cos(half)
-        future = self.client.call_async(req)
-        start = time.monotonic()
-        while rclpy.ok() and not future.done():
-            rclpy.spin_once(self, timeout_sec=0.05)
-            if (time.monotonic() - start) > 10.0:
-                raise RuntimeError(f'Timed out waiting for {self.service_name} response')
-        result = future.result()
-        if result is None or not bool(getattr(result, 'success', False)):
-            raise RuntimeError(f'Set pose request failed at x={x:.3f}, y={y:.3f}, yaw={yaw:.3f}')
+        req = (
+            f'name: "turtlebot3" '
+            f'position: {{x: {float(x):.9f} y: {float(y):.9f} z: {float(self.robot_z):.9f}}} '
+            f'orientation: {{x: 0.0 y: 0.0 z: {math.sin(half):.9f} w: {math.cos(half):.9f}}}'
+        )
+        result = subprocess.run(
+            [
+                'gz', 'service',
+                '-s', self.service_name,
+                '--reqtype', 'gz.msgs.Pose',
+                '--reptype', 'gz.msgs.Boolean',
+                '--timeout', '2000',
+                '--req', req,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        output = f'{result.stdout}\n{result.stderr}'.strip().lower()
+        if result.returncode != 0 or ('false' in output and 'true' not in output):
+            raise RuntimeError(
+                f'Set pose request failed at x={x:.3f}, y={y:.3f}, yaw={yaw:.3f}. '
+                f'gz service output: {output or "<empty>"}'
+            )
 
     def capture_image_at_pose(self, *, x: float, y: float, yaw: float) -> np.ndarray:
         before = int(self.image_count)

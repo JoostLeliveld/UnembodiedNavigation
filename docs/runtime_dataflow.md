@@ -32,26 +32,25 @@ Current perception interpretation:
 
 ```mermaid
 flowchart LR
-    A[world_profiles.yaml] --> B[warehouse_visibility_capture.launch.py]
-    B --> C[detector + state-estimation runtime]
-    C --> D[fit_empirical_visibility_gp.py]
-    D --> E[teleport sampled robot poses]
-    E --> F[detection diagnostics]
-    F --> G[src/experiments/data/visibility_gp/*.npz]
+    A[world_profiles.yaml] --> B[capture_visibility_samples.py]
+    B --> C[samples.csv + images + previews]
+    C --> D[extract_perception_targets.py]
+    D --> E[build_gp_targets.py]
+    E --> F[fit_visibility_gps.py]
+    F --> G[logs/visibility_comparison/current_gp/*.npz]
     H[tasks.yaml] --> I[main runtime launches]
     G --> I
 ```
 
-Caption: the GP visibility artifact is generated before online planning. In the current default workflow, the capture launch brings up the simulator and detector, then the fitting script teleports the robot through a dense sampled pose grid, records detector statistics, and fits the artifact offline. The older driving sweep remains available as an alternate collection mode.
+Caption: the GP visibility artifact is generated before online planning. In the active workflow, the capture script teleports the robot through a dense sampled pose grid, records shared raw observations, and then method-specific targets are built on top of that fixed sample set.
 
-For the current fitter:
+The active comparison backbone reserves these fitted targets:
 
-- teleport-mode input: sampled robot `x,y`
-- driving-mode input: `/state/bev` x-y only
-- supported fitted targets:
-  - normalized blob area
-  - binary usable visual detection
-  - YOLO `yolo_soft_score`
+- red binary
+- red corrected area
+- YOLO binary
+- YOLO confidence
+- oracle/reference visibility
 
 ![Empirical visibility artifact tutorial](figures/visibility_capture_tutorial.png)
 

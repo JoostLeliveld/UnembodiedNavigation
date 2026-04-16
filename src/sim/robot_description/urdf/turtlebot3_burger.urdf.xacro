@@ -199,7 +199,7 @@
     <gazebo>
     <plugin
         filename="gz-sim-label-system"
-        name="gz::sim::systems::Label">
+        name="ignition::gazebo::systems::Label">
         <label>23</label>
     </plugin>
 

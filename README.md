@@ -114,8 +114,8 @@ This is the key method story: the GP does not command a path directly. It change
 | [`src/state`](src/state/README.md) | Pixel-to-BEV state conversion |
 | [`src/sim`](src/sim/README.md) | Gazebo bringup, world files, robot description, startup gates |
 | [`src/unav_common`](src/unav_common/README.md) | Shared camera and occlusion geometry helpers |
-| [`scripts`](scripts/README.md) | Offline GP fitting, run summaries, and plotting |
-| [`docs`](docs/README.md) | Canonical architecture, dataflow, planner, evaluation, and limitation notes |
+| [`scripts`](scripts/README.md) | Offline comparison capture, GP fitting, run summaries, and plotting |
+| [`docs`](docs/README.md) | Canonical architecture, dataflow, comparison, planner, and limitation notes |
 
 Generated directories such as `build/`, `install/`, `log/`, and `logs/` are not part of the conceptual repository story. Sibling root folders such as `core_tue4tm00_humble`, `ICRA2026-WUnEmbodied-main`, and `SPAICE2026-RxRover-main` are treated as archived/reference material, not as part of the active thesis repo.
 
@@ -124,24 +124,28 @@ Generated directories such as `build/`, `install/`, `log/`, and `logs/` are not 
 ```mermaid
 flowchart LR
     A[world_profiles.yaml + tasks.yaml] --> B[warehouse_primary_comparison.launch.py]
-    C[warehouse_visibility_capture.launch.py] --> D[fit_empirical_visibility_gp.py]
-    D --> E[empirical_visibility_gp.npz]
-    E --> F[planner core]
-    B --> G[Gazebo + robot + external camera]
-    G --> H[yolo_robot_detector_node]
-    H --> I[pixel_to_bev_state_node]
-    I --> F
-    J[goal_mission_node] --> F
-    F --> K[/cmd_vel]
-    K --> G
-    F --> L[experiment_logger]
-    I --> L
-    H --> L
-    L --> M[evaluate_occlusion_comparison.py]
-    L --> N[plot_visibility_run.py]
+    C[capture_visibility_samples.py] --> D[extract_perception_targets.py]
+    D --> E[build_gp_targets.py]
+    E --> F[fit_visibility_gps.py]
+    F --> G[current_gp/*.npz]
+    G --> H[planner core]
+    B --> I[Gazebo + robot + external camera]
+    I --> J[yolo_robot_detector_node]
+    J --> K[pixel_to_bev_state_node]
+    K --> H
+    L[goal_mission_node] --> H
+    H --> M[/cmd_vel]
+    M --> I
+    H --> N[experiment_logger]
+    K --> N
+    J --> N
+    F --> O[plot_gp_and_ambiguity_maps.py]
+    N --> P[plot_planned_paths.py]
+    O --> Q[make_visibility_comparison_report.py]
+    P --> Q
 ```
 
-Caption: the offline GP fitting stage is separate from the planning runtime. The default capture workflow teleports the robot through a dense sampled pose grid with detector noise enabled, records the resulting detector statistics, and fits a fixed artifact that is later loaded during planning.
+Caption: the offline comparison stage is separate from the planning runtime. The active workflow now uses teleport-sampled raw capture, shared scalar GP targets, planner-compatible GP artifacts, and consistent ambiguity/path plotting.
 
 ## State Estimator Reality Check
 
@@ -173,40 +177,43 @@ mkdir -p "$ROS_LOG_DIR"
 
 ## Example Launches
 
-### Offline GP capture and fitting
+### Offline visibility comparison backbone
 
-Launch the offline capture runtime:
+Start the simulator:
 
 ```bash
-ros2 launch experiments warehouse_visibility_capture.launch.py \
-  world:=warehouse_occ_light.world.sdf
+ros2 launch sim bringup_sim.launch.py \
+  world:=warehouse_occ_light.world.sdf \
+  reset_world:=false \
+  use_lidar:=false \
+  bridge_scan:=false \
+  spawn_x:=-1.55 \
+  spawn_y:=0.45 \
+  spawn_z:=0.05 \
+  spawn_yaw:=0.0
 ```
 
-In a second terminal, collect the sampled-pose dataset and fit the GP:
+In a second terminal, build the shared comparison artifacts:
 
 ```bash
 source install/setup.bash
-python3 scripts/fit_empirical_visibility_gp.py \
+python3 scripts/visibility_comparison/capture_visibility_samples.py \
   --world warehouse_occ_light.world.sdf \
-  --publish-artifact src/experiments/data/visibility_gp/warehouse_occ_light_empirical_visibility_gp.npz
+  --sample-nx 15 \
+  --sample-ny 15
+
+python3 scripts/visibility_comparison/extract_perception_targets.py
+python3 scripts/visibility_comparison/build_gp_targets.py
+python3 scripts/visibility_comparison/fit_visibility_gps.py
+python3 scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py
 ```
 
-This live path now defaults to `--capture-mode teleport`, which samples many noisy simulated robot poses across the map. `--capture-mode driving` is still retained as an alternate collection mode. The fitting script also defaults to `--target-mode normalized_blob_area` for first-pass tests, while `--target-mode binary_usable_detection` remains available for comparison.
+At the shared-backbone stage, `oracle_visibility` is the first fully populated method. Red and YOLO target columns are added in later method-specific passes without changing the capture, GP, planner, or report contracts.
 
-If you already have a capture directory and want to refit offline without relaunching Gazebo:
+For the full comparison design, see:
 
-```bash
-python3 scripts/fit_empirical_visibility_gp.py \
-  --from-capture-dir logs/visibility_capture/capture_20260401_144115 \
-  --target-mode normalized_blob_area
-```
-
-Generate the tutorial figures used across the docs:
-
-```bash
-source install/setup.bash
-python3 scripts/generate_docs_figures.py
-```
+- [`docs/perception_to_visibility_comparison.md`](docs/perception_to_visibility_comparison.md)
+- [`docs/perception_visibility_cleanup_plan.md`](docs/perception_visibility_cleanup_plan.md)
 
 ### Primary thesis comparison
 

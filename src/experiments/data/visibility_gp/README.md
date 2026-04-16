@@ -1,12 +1,14 @@
 # `experiments/data/visibility_gp`
 
-This folder stores the fixed empirical GP visibility artifacts used by the planner.
+This folder stores older packaged empirical GP visibility artifacts that may still be useful for compatibility runs, but they are no longer the canonical outputs of the active comparison framework.
 
 ![Example empirical visibility artifact](../../../../docs/figures/visibility_capture_tutorial.png)
 
-## Why This Folder Exists
+## Why This Folder Still Exists
 
-The GP-aware planner needs a world-specific visibility prior at runtime. These `.npz` files are that prior.
+Some launches and older manifests may still point here. The active comparison framework, however, now writes method-specific GP artifacts to:
+
+- `logs/visibility_comparison/current_gp/`
 
 ## Current Artifacts
 
@@ -15,15 +17,16 @@ The GP-aware planner needs a world-specific visibility prior at runtime. These `
 | `warehouse_occ_light_empirical_visibility_gp.npz` | primary warehouse benchmark |
 | `warehouse_open_shelves_empirical_visibility_gp.npz` | secondary support world |
 
-## Current Default Provenance
+## Legacy Provenance
 
 - `warehouse_occ_light_empirical_visibility_gp.npz` currently points at the fitted artifact produced in:
   - [`../../../../logs/visibility_capture/fit_capture_20260401_144115_20260408_134247`](../../../../logs/visibility_capture/fit_capture_20260401_144115_20260408_134247)
-- That artifact is a blob-area baseline GP for the current fixed-camera simulated stack. It is the active default for `warehouse_occ_light.world.sdf` unless a launch overrides `visibility_artifact_path`.
+- That artifact is a blob-area legacy baseline for the older fixed-camera simulated stack.
 
 ## How They Are Used
 
-- generated offline by [`../../../../scripts/fit_empirical_visibility_gp.py`](../../../../scripts/fit_empirical_visibility_gp.py) from noisy simulated pose sampling by default, with a retained optional driving-sweep mode
+- comparison runs in the new framework should pass an explicit `visibility_artifact_path`
+- the active comparison scripts live under [`../../../../scripts/visibility_comparison/`](../../../../scripts/visibility_comparison/)
 - resolved by [`../../experiments/core/world_profiles.py`](../../experiments/core/world_profiles.py)
 - loaded by [`../../../planning/planning/core/visibility_gp_map.py`](../../../planning/planning/core/visibility_gp_map.py)
 

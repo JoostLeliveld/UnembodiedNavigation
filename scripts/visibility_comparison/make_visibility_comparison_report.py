@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""Assemble a compact report for the shared perception-to-visibility comparison."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import math
+import shutil
+from pathlib import Path
+
+from common import (
+    ACTIVE_METHOD_IDS,
+    CURRENT_CAPTURE_DIR,
+    CURRENT_GP_DIR,
+    CURRENT_TARGETS_DIR,
+    LOGS_ROOT,
+    PLANNER_RUNS_DIR,
+    REPORT_DIR,
+    choose_preview_rows,
+    read_csv_rows,
+    write_csv,
+    write_manifest,
+)
+
+
+def _load_csv_rows(path: Path) -> list[dict[str, str]]:
+    return read_csv_rows(path) if path.is_file() else []
+
+
+def _load_json(path: Path) -> dict:
+    if not path.is_file():
+        return {}
+    import json
+    try:
+        payload = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _target_column_available(rows: list[dict[str, str]], column: str) -> bool:
+    for row in rows:
+        if str(row.get(column, '') or '').strip() != '':
+            return True
+    return False
+
+
+def _copy_if_exists(src: Path, dst: Path) -> str:
+    if not src.is_file():
+        return ''
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+    return str(dst)
+
+
+def _latest_run_dir(root: Path, method_id: str) -> Path | None:
+    candidates = [p.parent for p in root.rglob('experiment.csv') if p.parent.parent.name == method_id or p.parent.name == method_id]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime)
+
+
+def _run_metrics(run_dir: Path | None) -> dict[str, str]:
+    if run_dir is None:
+        return {
+            'run_available': '0',
+            'run_dir': '',
+            'final_goal_distance': '',
+            'minimum_goal_distance': '',
+            'mean_solve_time_ms': '',
+        }
+    csv_path = run_dir / 'experiment.csv'
+    if not csv_path.is_file():
+        return {
+            'run_available': '0',
+            'run_dir': str(run_dir),
+            'final_goal_distance': '',
+            'minimum_goal_distance': '',
+            'mean_solve_time_ms': '',
+        }
+    rows = _load_csv_rows(csv_path)
+    goal_dist = []
+    solve_ms = []
+    for row in rows:
+        try:
+            gd = float(row.get('goal_dist', 'nan'))
+            if math.isfinite(gd):
+                goal_dist.append(gd)
+        except ValueError:
+            pass
+        try:
+            st = float(row.get('solve_time_ms', 'nan'))
+            if math.isfinite(st):
+                solve_ms.append(st)
+        except ValueError:
+            pass
+    return {
+        'run_available': '1',
+        'run_dir': str(run_dir),
+        'final_goal_distance': '' if not goal_dist else f'{goal_dist[-1]:.8f}',
+        'minimum_goal_distance': '' if not goal_dist else f'{min(goal_dist):.8f}',
+        'mean_solve_time_ms': '' if not solve_ms else f'{(sum(solve_ms) / len(solve_ms)):.8f}',
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description='Assemble the shared visibility-comparison report folder.')
+    parser.add_argument('--capture-dir', default=str(CURRENT_CAPTURE_DIR))
+    parser.add_argument('--targets-dir', default=str(CURRENT_TARGETS_DIR))
+    parser.add_argument('--gp-dir', default=str(CURRENT_GP_DIR))
+    parser.add_argument('--planner-runs-root', default=str(PLANNER_RUNS_DIR))
+    parser.add_argument('--out', default=str(REPORT_DIR))
+    parser.add_argument('--preview-count', type=int, default=16)
+    args = parser.parse_args()
+
+    capture_dir = Path(args.capture_dir).expanduser().resolve()
+    targets_dir = Path(args.targets_dir).expanduser().resolve()
+    gp_dir = Path(args.gp_dir).expanduser().resolve()
+    planner_runs_root = Path(args.planner_runs_root).expanduser().resolve()
+    output_dir = Path(args.out).expanduser().resolve()
+    allowed_root = LOGS_ROOT.resolve()
+    if allowed_root not in output_dir.parents and output_dir != allowed_root:
+        raise RuntimeError(f'Report output must stay under {allowed_root}: {output_dir}')
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=False)
+
+    assets_capture = output_dir / 'assets' / 'capture_previews'
+    assets_gp = output_dir / 'assets' / 'gp_maps'
+    assets_paths = output_dir / 'assets' / 'path_plots'
+    assets_capture.mkdir(parents=True, exist_ok=False)
+    assets_gp.mkdir(parents=True, exist_ok=False)
+    assets_paths.mkdir(parents=True, exist_ok=False)
+
+    sample_rows = _load_csv_rows(capture_dir / 'samples.csv')
+    gp_target_rows = _load_csv_rows(targets_dir / 'gp_targets.csv')
+    capture_preview_rows = choose_preview_rows(sample_rows, int(args.preview_count))
+    copied_capture = []
+    for row in capture_preview_rows:
+        preview_rel = str(row.get('preview_path', '')).strip()
+        if not preview_rel:
+            continue
+        src = capture_dir / preview_rel
+        dst = assets_capture / Path(preview_rel).name
+        out = _copy_if_exists(src, dst)
+        if out:
+            copied_capture.append(out)
+
+    gp_summary_rows = _load_csv_rows(gp_dir / 'gp_fit_summary.csv')
+    gp_summary_by_method = {row['method_id']: row for row in gp_summary_rows if row.get('method_id')}
+    gp_plot_manifest = _load_json(gp_dir / 'plots' / 'plot_manifest.json')
+    path_plot_manifest = _load_json((output_dir.parent / 'path_plots' / 'plot_manifest.json'))
+    if not path_plot_manifest:
+        path_plot_manifest = _load_json(REPORT_DIR / 'path_plots' / 'plot_manifest.json')
+
+    method_rows = []
+    for method_id in ACTIVE_METHOD_IDS:
+        gp_row = gp_summary_by_method.get(method_id, {})
+        gp_available = str(gp_row.get('available', '0') or '0')
+        run_dir = _latest_run_dir(planner_runs_root, method_id)
+        run_metrics = _run_metrics(run_dir)
+        target_available = '0' if method_id == 'visibility_unaware_baseline' else str(
+            int(_target_column_available(gp_target_rows, method_id))
+        )
+        method_rows.append({
+            'method_id': method_id,
+            'target_available': target_available,
+            'gp_available': gp_available,
+            'train_points': str(gp_row.get('train_points', '') or ''),
+            'target_mean': str(gp_row.get('target_mean', '') or ''),
+            **run_metrics,
+        })
+
+    gp_assets = []
+    for entry in gp_plot_manifest.get('method_plots', []):
+        plot_path = Path(str(entry.get('plot_path', '') or '')).expanduser()
+        if plot_path.is_file():
+            dst = assets_gp / plot_path.name
+            gp_assets.append(_copy_if_exists(plot_path, dst))
+    combined_gp = Path(str(gp_plot_manifest.get('combined_plot', '') or '')).expanduser()
+    if combined_gp.is_file():
+        _copy_if_exists(combined_gp, assets_gp / combined_gp.name)
+
+    path_assets = []
+    for entry in path_plot_manifest.get('method_entries', []):
+        plot_path = Path(str(entry.get('plot_path', '') or '')).expanduser()
+        if plot_path.is_file():
+            dst = assets_paths / plot_path.name
+            path_assets.append(_copy_if_exists(plot_path, dst))
+    for key in ('combined_path_plot', 'combined_ambiguity_plot'):
+        src = Path(str(path_plot_manifest.get(key, '') or '')).expanduser()
+        if src.is_file():
+            _copy_if_exists(src, assets_paths / src.name)
+
+    write_csv(
+        output_dir / 'method_table.csv',
+        (
+            'method_id',
+            'target_available',
+            'gp_available',
+            'train_points',
+            'target_mean',
+            'run_available',
+            'run_dir',
+            'final_goal_distance',
+            'minimum_goal_distance',
+            'mean_solve_time_ms',
+        ),
+        method_rows,
+    )
+
+    report_md = output_dir / 'report.md'
+    report_md.write_text(
+        '\n'.join([
+            '# Visibility Comparison Report',
+            '',
+            '## Summary',
+            '',
+            'This report summarizes the current state of the shared perception-to-visibility comparison framework.',
+            'Oracle visibility, red binary, and the two YOLO-derived targets can all appear here when they are present in the current targets/GP folders.',
+            'Red corrected area may still be absent if it has not been built yet.',
+            '',
+            '## Included assets',
+            '',
+            f'- Capture previews copied: {len(copied_capture)}',
+            f'- GP map figures copied: {len([p for p in gp_assets if p])}',
+            f'- Path figures copied: {len([p for p in path_assets if p])}',
+            '',
+            '## Method status',
+            '',
+            'See `method_table.csv` for the current per-method availability and run metrics.',
+        ]),
+        encoding='utf-8',
+    )
+
+    write_manifest(output_dir / 'report_manifest.json', {
+        'capture_dir': str(capture_dir),
+        'targets_dir': str(targets_dir),
+        'gp_dir': str(gp_dir),
+        'planner_runs_root': str(planner_runs_root),
+        'capture_previews_copied': int(len(copied_capture)),
+        'gp_figures_copied': int(len([p for p in gp_assets if p])),
+        'path_figures_copied': int(len([p for p in path_assets if p])),
+        'notes': [
+            'This report is intentionally compact and resilient to missing methods during the shared-backbone stage.',
+            'Missing methods are left blank rather than causing report generation to fail.',
+        ],
+    })
+    print(f'Wrote visibility comparison report to {output_dir}')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
