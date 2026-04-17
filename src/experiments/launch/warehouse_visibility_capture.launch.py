@@ -28,6 +28,7 @@ def _launch_setup(context, *args, **kwargs):
     yolo_conf_threshold = float(LaunchConfiguration('yolo_conf_threshold').perform(context))
     yolo_iou_threshold = float(LaunchConfiguration('yolo_iou_threshold').perform(context))
     yolo_target_class = LaunchConfiguration('yolo_target_class').perform(context)
+    yolo_class_id = int(LaunchConfiguration('yolo_class_id').perform(context))
     yolo_use_masks = LaunchConfiguration('yolo_use_masks').perform(context)
     yolo_min_mask_area_px = float(LaunchConfiguration('yolo_min_mask_area_px').perform(context))
     yolo_mask_bottom_band_px = float(LaunchConfiguration('yolo_mask_bottom_band_px').perform(context))
@@ -96,7 +97,7 @@ def _launch_setup(context, *args, **kwargs):
             'confidence_threshold': yolo_conf_threshold,
             'iou_threshold': yolo_iou_threshold,
             'class_name': yolo_target_class,
-            'class_id': -1,
+            'class_id': yolo_class_id,
             'use_masks': yolo_use_masks,
             'mask_min_area': yolo_min_mask_area_px,
             'mask_bottom_band_px': yolo_mask_bottom_band_px,
@@ -196,6 +197,7 @@ def generate_launch_description():
         DeclareLaunchArgument('yolo_conf_threshold', default_value='0.25'),
         DeclareLaunchArgument('yolo_iou_threshold', default_value='0.45'),
         DeclareLaunchArgument('yolo_target_class', default_value='robot'),
+        DeclareLaunchArgument('yolo_class_id', default_value='-1'),
         DeclareLaunchArgument('yolo_use_masks', default_value='true', description='Use YOLO segmentation masks for pixel reference when available'),
         DeclareLaunchArgument('yolo_min_mask_area_px', default_value='12.0'),
         DeclareLaunchArgument('yolo_mask_bottom_band_px', default_value='3.0'),

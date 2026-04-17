@@ -4,7 +4,7 @@ This folder holds the two YAML files that define the experiment before anything 
 
 ![Visibility artifact tutorial figure](../../../docs/figures/visibility_capture_tutorial.png)
 
-The `world_profiles.yaml` bounds and artifact paths directly shape both the driving-based capture pipeline and the online planner.
+The `world_profiles.yaml` bounds and artifact paths directly shape both the capture pipeline and the online planner.
 
 ## Why This Folder Exists
 
@@ -19,8 +19,8 @@ The current milestone is a controlled comparison. These files fix:
 
 | File | Role |
 | --- | --- |
-| [`world_profiles.yaml`](world_profiles.yaml) | supported worlds, camera intrinsics, default planner, visibility artifact path |
-| [`tasks.yaml`](tasks.yaml) | benchmark and exploratory tasks for each world |
+| [`world_profiles.yaml`](world_profiles.yaml) | active world profile, camera intrinsics, default planner, visibility artifact path |
+| [`tasks.yaml`](tasks.yaml) | the single active benchmark task |
 | `../../archive/experiments/tasks_legacy.yaml` | archived alias map for older `T*` task names; not part of the active launch surface |
 
 ## What To Read First
@@ -30,6 +30,6 @@ The current milestone is a controlled comparison. These files fix:
 
 ## Important Caveats
 
-- `warehouse_occ_light.world.sdf` is the primary benchmark world
-- `warehouse_open_shelves.world.sdf` is a secondary support-world configuration
-- the current thesis-facing story is not “many maps equally validated”; it is one primary benchmark plus one exploratory extension
+- `warehouse_occ_light.world.sdf` is the active benchmark world
+- `main_shadow_tradeoff` is the active benchmark task
+- the current thesis-facing story is intentionally narrow: one world, one main task, clean comparison mechanics

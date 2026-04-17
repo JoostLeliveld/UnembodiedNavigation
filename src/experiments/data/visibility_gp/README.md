@@ -15,7 +15,7 @@ Some launches and older manifests may still point here. The active comparison fr
 | File | World |
 | --- | --- |
 | `warehouse_occ_light_empirical_visibility_gp.npz` | primary warehouse benchmark |
-| `warehouse_open_shelves_empirical_visibility_gp.npz` | secondary support world |
+| `warehouse_open_shelves_empirical_visibility_gp.npz` | legacy/support artifact, not part of the active single-world comparison surface |
 
 ## Legacy Provenance
 

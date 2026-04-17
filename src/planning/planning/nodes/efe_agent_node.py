@@ -1,7 +1,6 @@
 """ROS 2 node for EFE agent that publishes cmd_vel directly (unicycle dynamics)."""
 
 import numpy as np
-import time
 
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
@@ -46,7 +45,7 @@ class EfeAgentNode(UnicyclePlannerNode):
         if controls is None or controls.size == 0 or started_at is None:
             return
 
-        elapsed_s = max(time.monotonic() - started_at, 0.0)
+        elapsed_s = max((self.get_clock().now() - started_at).nanoseconds * 1e-9, 0.0)
         step_dt = max(float(self.dt), 1e-3)
         step_idx = min(int(elapsed_s / step_dt), controls.shape[0] - 1)
         u = controls[step_idx]
@@ -57,7 +56,7 @@ class EfeAgentNode(UnicyclePlannerNode):
         controls = np.asarray(result.controls, dtype=float)
         with self._data_lock:
             self._active_controls = controls.copy()
-            self._active_plan_started_at = time.monotonic()
+            self._active_plan_started_at = self.get_clock().now()
         if controls.size == 0:
             return
         self._publish_command(controls[0, 0], controls[0, 1])

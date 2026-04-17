@@ -4,14 +4,93 @@
 from __future__ import annotations
 
 import argparse
+import json
+import math
+import os
+import signal
 import subprocess
 import time
 from pathlib import Path
 
-from common import ACTIVE_METHOD_IDS, CURRENT_GP_DIR, LOGS_ROOT
+from common import ACTIVE_METHOD_IDS, CURRENT_GP_DIR, CURRENT_TARGETS_DIR, LOGS_ROOT
 
 
 COMPARISON_METHODS = tuple(method for method in ACTIVE_METHOD_IDS if method != 'visibility_unaware_baseline')
+
+
+def _uses_live_yolo(method_id: str, args) -> bool:
+    if method_id in ('yolo_binary', 'yolo_confidence'):
+        return True
+    if method_id == 'oracle_visibility':
+        return str(args.oracle_backend).strip() == 'yolo'
+    if method_id == 'visibility_unaware_baseline':
+        return str(args.baseline_backend).strip() == 'yolo'
+    return False
+
+
+def _validate_yolo_runtime_matches_targets(args, methods: list[str]) -> None:
+    if not any(_uses_live_yolo(method_id, args) for method_id in methods):
+        return
+    manifest_path = Path(args.targets_manifest).expanduser().resolve()
+    if not manifest_path.is_file():
+        raise RuntimeError(f'YOLO methods require a valid targets manifest for config matching: {manifest_path}')
+    try:
+        payload = json.loads(manifest_path.read_text(encoding='utf-8'))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f'Failed to read targets manifest {manifest_path}: {exc}') from exc
+    yolo_summary = payload.get('yolo_summary', {}) if isinstance(payload, dict) else {}
+    if not isinstance(yolo_summary, dict) or not bool(yolo_summary.get('enabled', False)):
+        raise RuntimeError(f'Targets manifest does not contain an enabled yolo_summary: {manifest_path}')
+
+    runtime_model = str(Path(args.yolo_model).expanduser().resolve()) if str(args.yolo_model).strip() else ''
+    manifest_model = str(Path(str(yolo_summary.get('model_path', '') or '')).expanduser().resolve()) if str(yolo_summary.get('model_path', '') or '').strip() else ''
+    expected = {
+        'model_path': manifest_model,
+        'class_name': str(yolo_summary.get('class_name', '')),
+        'class_id': int(yolo_summary.get('class_id', -1)),
+        'imgsz': int(yolo_summary.get('imgsz', -1)),
+        'conf_threshold': float(yolo_summary.get('conf_threshold', math.nan)),
+        'iou_threshold': float(yolo_summary.get('iou_threshold', math.nan)),
+        'use_masks': str(yolo_summary.get('use_masks', 'true')).strip().lower(),
+        'mask_min_area': float(yolo_summary.get('mask_min_area', math.nan)),
+        'mask_bottom_band_px': float(yolo_summary.get('mask_bottom_band_px', math.nan)),
+    }
+    runtime = {
+        'model_path': runtime_model,
+        'class_name': str(args.yolo_target_class),
+        'class_id': int(args.yolo_class_id),
+        'imgsz': int(args.yolo_imgsz),
+        'conf_threshold': float(args.yolo_conf_threshold),
+        'iou_threshold': float(args.yolo_iou_threshold),
+        'use_masks': str(args.yolo_use_masks).strip().lower(),
+        'mask_min_area': float(args.yolo_min_mask_area_px),
+        'mask_bottom_band_px': float(args.yolo_mask_bottom_band_px),
+    }
+    mismatches = []
+    for key in ('model_path', 'class_name', 'class_id', 'imgsz'):
+        if str(runtime[key]).strip() != str(expected[key]).strip():
+            mismatches.append(f'{key}: runtime={runtime[key]!r} extractor={expected[key]!r}')
+    for key in ('conf_threshold', 'iou_threshold', 'mask_min_area', 'mask_bottom_band_px'):
+        if abs(float(runtime[key]) - float(expected[key])) > 1e-9:
+            mismatches.append(f'{key}: runtime={runtime[key]!r} extractor={expected[key]!r}')
+    if runtime['use_masks'] != expected['use_masks']:
+        mismatches.append(f"use_masks: runtime={runtime['use_masks']!r} extractor={expected['use_masks']!r}")
+    if mismatches:
+        raise RuntimeError(
+            'Runtime YOLO configuration does not match the extracted yolo_summary in '
+            f'{manifest_path}: ' + '; '.join(mismatches)
+        )
+
+
+def _kill_process_group(pgid: int):
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+        time.sleep(1.0)
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except Exception:
+        pass
 
 
 def _cleanup_gazebo_and_ros():
@@ -23,6 +102,19 @@ def _cleanup_gazebo_and_ros():
         (['pkill', '-9', '-f', 'gazebo'], True), # Force kill old gazebo
         (['pkill', '-f', 'ros2 launch'], False), # ROS2 launch processes
         (['pkill', '-9', '-f', 'ign'], True),    # Force kill ign processes
+        (['pkill', '-f', 'image_marker_detector_node'], False),
+        (['pkill', '-f', 'homography_sim_node'], False),
+        (['pkill', '-f', 'yolo_robot_detector_node'], False),
+        (['pkill', '-f', 'pixel_to_bev_state_node'], False),
+        (['pkill', '-f', 'goal_mission_node'], False),
+        (['pkill', '-f', 'goal_marker_node'], False),
+        (['pkill', '-f', 'experiment_logger'], False),
+        (['pkill', '-f', 'install/planning/lib/planning/efe_agent'], False),
+        (['pkill', '-f', 'parameter_bridge'], False),
+        (['pkill', '-f', 'wait_for_odom'], False),
+        (['pkill', '-f', 'reset_world'], False),
+        (['pkill', '-f', 'ros_gz_sim create'], False),
+        (['pkill', '-f', 'robot_state_publisher'], False),
     ]
     
     for cmd, force_kill in cleanup_commands:
@@ -37,6 +129,7 @@ def _cleanup_gazebo_and_ros():
 def _method_launch_args(method_id: str, args, gp_dir: Path) -> list[str]:
     if method_id == 'visibility_unaware_baseline':
         launch_args = [
+            f'comparison_method_id:=visibility_unaware_baseline',
             f'planner:=visibility_unaware_baseline',
             f'perception_backend:={str(args.baseline_backend).strip()}',
         ]
@@ -49,6 +142,7 @@ def _method_launch_args(method_id: str, args, gp_dir: Path) -> list[str]:
                 f'yolo_conf_threshold:={float(args.yolo_conf_threshold)}',
                 f'yolo_iou_threshold:={float(args.yolo_iou_threshold)}',
                 f'yolo_target_class:={str(args.yolo_target_class)}',
+                f'yolo_class_id:={int(args.yolo_class_id)}',
                 f'yolo_use_masks:={str(args.yolo_use_masks)}',
                 f'yolo_min_mask_area_px:={float(args.yolo_min_mask_area_px)}',
                 f'yolo_mask_bottom_band_px:={float(args.yolo_mask_bottom_band_px)}',
@@ -71,6 +165,7 @@ def _method_launch_args(method_id: str, args, gp_dir: Path) -> list[str]:
         raise RuntimeError(f'Unsupported method id: {method_id}')
 
     launch_args = [
+        f'comparison_method_id:={method_id}',
         f'planner:={str(args.planner).strip()}',
         f'perception_backend:={perception_backend}',
         f'visibility_artifact_path:={artifact.resolve()}',
@@ -84,6 +179,7 @@ def _method_launch_args(method_id: str, args, gp_dir: Path) -> list[str]:
             f'yolo_conf_threshold:={float(args.yolo_conf_threshold)}',
             f'yolo_iou_threshold:={float(args.yolo_iou_threshold)}',
             f'yolo_target_class:={str(args.yolo_target_class)}',
+            f'yolo_class_id:={int(args.yolo_class_id)}',
             f'yolo_use_masks:={str(args.yolo_use_masks)}',
             f'yolo_min_mask_area_px:={float(args.yolo_min_mask_area_px)}',
             f'yolo_mask_bottom_band_px:={float(args.yolo_mask_bottom_band_px)}',
@@ -97,7 +193,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description='Run full detector-stack planner comparisons for visibility methods.')
     parser.add_argument('--methods', nargs='*', default=list(COMPARISON_METHODS) + ['visibility_unaware_baseline'])
     parser.add_argument('--world', default='warehouse_occ_light.world.sdf')
-    parser.add_argument('--task', default='E0')
+    parser.add_argument('--task', default='main_shadow_tradeoff')
     parser.add_argument('--planner', default='efe1')
     parser.add_argument('--launch-file', default='warehouse_primary_comparison.launch.py')
     parser.add_argument('--gp-dir', default=str(CURRENT_GP_DIR))
@@ -112,10 +208,12 @@ def main() -> int:
     parser.add_argument('--yolo-conf-threshold', type=float, default=0.25)
     parser.add_argument('--yolo-iou-threshold', type=float, default=0.45)
     parser.add_argument('--yolo-target-class', default='robot')
+    parser.add_argument('--yolo-class-id', type=int, default=-1)
     parser.add_argument('--yolo-use-masks', default='true')
     parser.add_argument('--yolo-min-mask-area-px', type=float, default=12.0)
     parser.add_argument('--yolo-mask-bottom-band-px', type=float, default=3.0)
-    parser.add_argument('--timeout', type=float, default=60.0, help='Timeout in seconds for each planner run')
+    parser.add_argument('--targets-manifest', default=str(CURRENT_TARGETS_DIR / 'target_manifest.json'))
+    parser.add_argument('--timeout', type=float, default=180.0, help='Timeout in seconds for each planner run, including simulator startup')
     parser.add_argument('--cleanup-delay', type=float, default=5.0, help='Delay in seconds between runs for cleanup')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
@@ -124,6 +222,7 @@ def main() -> int:
     invalid = [method for method in methods if method not in ACTIVE_METHOD_IDS]
     if invalid:
         raise RuntimeError(f'Unknown method ids: {invalid}. Expected subset of {ACTIVE_METHOD_IDS}')
+    _validate_yolo_runtime_matches_targets(args, methods)
 
     gp_dir = Path(args.gp_dir).expanduser().resolve()
     log_root = Path(args.log_root).expanduser().resolve()
@@ -131,6 +230,10 @@ def main() -> int:
     if allowed_root not in log_root.parents and log_root != allowed_root:
         raise RuntimeError(f'Planner log root must stay under {allowed_root}: {log_root}')
     log_root.mkdir(parents=True, exist_ok=True)
+
+    print(f'Cleaning up stale ROS/Gazebo processes before run... (waiting {args.cleanup_delay}s)')
+    _cleanup_gazebo_and_ros()
+    time.sleep(args.cleanup_delay)
 
     base_cmd = [
         'ros2', 'launch', 'experiments', str(args.launch_file),
@@ -163,11 +266,18 @@ def main() -> int:
         print('Running:', ' '.join(str(part) for part in cmd))
         if args.dry_run:
             continue
+        process = subprocess.Popen(cmd, start_new_session=True)
+        pgid = os.getpgid(process.pid)
         try:
-            subprocess.run(cmd, check=True, timeout=args.timeout)
+            process.wait(timeout=args.timeout)
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(process.returncode, cmd)
         except subprocess.TimeoutExpired:
             print(f'⏱️  Timeout after {args.timeout}s for method {method_id}. Results saved to {method_log_root}')
+        finally:
+            _kill_process_group(pgid)
             _cleanup_gazebo_and_ros()
+            time.sleep(max(args.cleanup_delay, 1.0))
 
     return 0
 

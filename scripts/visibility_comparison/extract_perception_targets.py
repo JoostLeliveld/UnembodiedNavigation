@@ -16,6 +16,7 @@ from common import (
     CURRENT_TARGETS_DIR,
     LOGS_ROOT,
     PERCEPTION_TARGET_COLUMNS,
+    bbox_bottom_center,
     choose_preview_rows,
     ensure_repo_python_paths,
     format_xyxy_text,
@@ -298,7 +299,7 @@ def main() -> int:
                     red_detected = 1
                     red_area = float(blob['area_px'])
                     red_bbox_text = format_xyxy_text(blob['bbox_xyxy'])
-                    red_bottom_u, red_bottom_v = _blob_bottom(blob, band_px=float(args.red_bottom_band_px))
+                    red_bottom_u, red_bottom_v = bbox_bottom_center(blob['bbox_xyxy'])
                     red_detected_count += 1
                     red_area_values.append(float(red_area))
                 if yolo_enabled and yolo_model is not None:
@@ -498,6 +499,7 @@ def main() -> int:
                 'red_s_min': int(args.red_s_min),
                 'red_v_min': int(args.red_v_min),
                 'bottom_band_px': float(args.red_bottom_band_px),
+                'reference_point_rule': 'bbox_bottom_center_runtime_aligned',
             },
         },
         'yolo_summary': {
@@ -513,6 +515,7 @@ def main() -> int:
             'imgsz': int(args.yolo_imgsz),
             'conf_threshold': float(args.yolo_conf_threshold),
             'iou_threshold': float(args.yolo_iou_threshold),
+            'use_masks': str(args.yolo_use_masks).strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on'),
             'mask_min_area': float(args.yolo_mask_min_area),
             'mask_bottom_band_px': float(args.yolo_mask_bottom_band_px),
             'confidence_calibrated': False,
@@ -521,6 +524,7 @@ def main() -> int:
             'Oracle/reference visibility is the first fully implemented method in the comparison backbone.',
             'Oracle columns are passed through from the raw geometry-based capture because the shared capture already computes them directly from world geometry.',
             'Red binary is now implemented using the same simple HSV + morphology + largest-blob rule as the old runtime marker detector.',
+            'Offline red_bottom_u/v now use the runtime-aligned bbox-bottom-center rule; red_bottom_band_px is retained only for backward-compatible manifests.',
             'YOLO binary and YOLO confidence now reuse the same highest-confidence mask/bbox-bottom selection rule as the YOLO runtime detector.',
             'YOLO confidence is stored as an uncalibrated detector score.',
             'Red corrected area remains deferred to a later method-specific pass.',

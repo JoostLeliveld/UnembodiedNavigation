@@ -67,6 +67,7 @@ def generate_launch_description():
         DeclareLaunchArgument('yolo_conf_threshold', default_value='0.25'),
         DeclareLaunchArgument('yolo_iou_threshold', default_value='0.45'),
         DeclareLaunchArgument('yolo_target_class', default_value='robot'),
+        DeclareLaunchArgument('yolo_class_id', default_value='-1'),
         DeclareLaunchArgument('yolo_use_masks', default_value='true', description='Use YOLO segmentation masks for pixel reference when available'),
         DeclareLaunchArgument('yolo_min_mask_area_px', default_value='12.0'),
         DeclareLaunchArgument('yolo_mask_bottom_band_px', default_value='3.0'),

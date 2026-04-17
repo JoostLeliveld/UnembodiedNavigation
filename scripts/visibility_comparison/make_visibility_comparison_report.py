@@ -7,6 +7,7 @@ import argparse
 import csv
 import math
 import shutil
+import tempfile
 from pathlib import Path
 
 from common import (
@@ -54,12 +55,32 @@ def _copy_if_exists(src: Path, dst: Path) -> str:
     return str(dst)
 
 
+def _copy_tree_pngs(src_root: Path, dst_root: Path) -> list[str]:
+    copied = []
+    if not src_root.is_dir():
+        return copied
+    for src in src_root.rglob('*.png'):
+        rel = src.relative_to(src_root)
+        out = _copy_if_exists(src, dst_root / rel)
+        if out:
+            copied.append(out)
+    return copied
+
+
+def _run_has_usable_logs(run_dir: Path) -> bool:
+    for name in ('experiment.csv', 'perception.csv', 'plan_samples.csv'):
+        path = run_dir / name
+        if path.is_file() and path.stat().st_size > 0:
+            return True
+    return False
+
+
 def _latest_run_dir(root: Path, method_id: str) -> Path | None:
     candidates = []
     for p in root.rglob('run_summary.json'):
         if p.parent.parent.name == method_id or p.parent.name == method_id:
             summary = _load_json(p)
-            if summary.get('completed', False):
+            if summary and _run_has_usable_logs(p.parent):
                 candidates.append(p.parent)
     if not candidates:
         return None
@@ -70,11 +91,22 @@ def _run_metrics(run_dir: Path | None, method_id: str, field_summary_rows: list[
     base = {
         'run_available': '0', 'run_dir': '',
         'completed': '', 'completion_reason': '',
+        'frame_sanity_recorded': '', 'frame_sanity_ok': '', 'frame_sanity_reason': '',
+        'frame_truth_start_error_m': '', 'frame_raw_start_error_m': '',
         'elapsed_after_first_cmd_s': '', 'path_length_m': '',
         'final_goal_distance': '', 'minimum_goal_distance': '',
         'mean_solve_time_ms': '', 'mean_efe_risk': '',
         'mean_efe_ambiguity': '', 'mean_p_vis_plan': '',
         'mean_p_vis_plan_eff': '', 'mean_r_plan_u_std': '',
+        'mean_state_pos_error_m': '', 'max_state_pos_error_m': '',
+        'mean_state_cov_trace': '', 'max_state_cov_trace': '',
+        'mean_state_sigma_major_m': '', 'max_state_sigma_major_m': '',
+        'mean_path_ambiguity': '', 'max_path_ambiguity': '',
+        'mean_path_r_plan_uv_std': '', 'max_path_r_plan_uv_std': '',
+        'fraction_path_in_high_ambiguity_region': '',
+        'fraction_time_in_high_ambiguity_region': '',
+        'fraction_time_p_vis_below_0_2': '',
+        'fraction_time_p_vis_eff_below_0_2': '',
         'field_p_vis_mean': '', 'field_ambiguity_mean': '', 'field_r_plan_uv_std_mean': ''
     }
     
@@ -93,10 +125,25 @@ def _run_metrics(run_dir: Path | None, method_id: str, field_summary_rows: list[
         return base
         
     summary = _load_json(summary_path)
-    base['run_available'] = '1' if summary.get('completed', False) else '0'
+    base['run_available'] = '1' if _run_has_usable_logs(run_dir) else '0'
     base['run_dir'] = str(run_dir)
     
-    for k in ['completed', 'completion_reason', 'elapsed_after_first_cmd_s', 'path_length_m', 'final_goal_distance', 'minimum_goal_distance', 'mean_solve_time_ms', 'mean_efe_risk', 'mean_efe_ambiguity', 'mean_p_vis_plan', 'mean_p_vis_plan_eff', 'mean_r_plan_u_std']:
+    for k in [
+        'completed', 'completion_reason',
+        'frame_sanity_recorded', 'frame_sanity_ok', 'frame_sanity_reason',
+        'frame_truth_start_error_m', 'frame_raw_start_error_m',
+        'elapsed_after_first_cmd_s', 'path_length_m',
+        'final_goal_distance', 'minimum_goal_distance', 'mean_solve_time_ms',
+        'mean_efe_risk', 'mean_efe_ambiguity', 'mean_p_vis_plan', 'mean_p_vis_plan_eff',
+        'mean_r_plan_u_std', 'mean_state_pos_error_m', 'max_state_pos_error_m',
+        'mean_state_cov_trace', 'max_state_cov_trace',
+        'mean_state_sigma_major_m', 'max_state_sigma_major_m',
+        'mean_path_ambiguity', 'max_path_ambiguity',
+        'mean_path_r_plan_uv_std', 'max_path_r_plan_uv_std',
+        'fraction_path_in_high_ambiguity_region', 'fraction_time_in_high_ambiguity_region',
+        'fraction_time_p_vis_below_0_2', 'fraction_time_p_vis_eff_below_0_2',
+        'max_r_plan_std',
+    ]:
         val = summary.get(k, '')
         if isinstance(val, float):
             base[k] = f'{val:.6f}'
@@ -123,6 +170,14 @@ def main() -> int:
     allowed_root = LOGS_ROOT.resolve()
     if allowed_root not in output_dir.parents and output_dir != allowed_root:
         raise RuntimeError(f'Report output must stay under {allowed_root}: {output_dir}')
+    staged_path_plots_root = None
+    staged_path_plots = None
+    if output_dir.exists():
+        existing_path_plots = output_dir / 'path_plots'
+        if existing_path_plots.is_dir():
+            staged_path_plots_root = Path(tempfile.mkdtemp(prefix='path_plots_', dir=str(LOGS_ROOT)))
+            staged_path_plots = staged_path_plots_root / 'path_plots'
+            shutil.copytree(existing_path_plots, staged_path_plots)
     if output_dir.exists():
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=False)
@@ -155,6 +210,8 @@ def main() -> int:
     path_plot_manifest = _load_json((output_dir.parent / 'path_plots' / 'plot_manifest.json'))
     if not path_plot_manifest:
         path_plot_manifest = _load_json(REPORT_DIR / 'path_plots' / 'plot_manifest.json')
+    if not path_plot_manifest and staged_path_plots is not None:
+        path_plot_manifest = _load_json(staged_path_plots / 'plot_manifest.json')
 
     method_rows = []
     for method_id in ACTIVE_METHOD_IDS:
@@ -190,16 +247,15 @@ def main() -> int:
         if plot_path.is_file():
             dst = assets_paths / plot_path.name
             path_assets.append(_copy_if_exists(plot_path, dst))
-    
+
     path_plots_dir = output_dir.parent / 'path_plots'
+    if not path_plots_dir.is_dir():
+        path_plots_dir = REPORT_DIR / 'path_plots'
+    if not path_plots_dir.is_dir() and staged_path_plots is not None:
+        path_plots_dir = staged_path_plots
+    path_assets.extend(_copy_tree_pngs(path_plots_dir, assets_paths))
     if path_plots_dir.is_dir():
-        for p in path_plots_dir.glob('combined_*.png'):
-            if p.is_file():
-                path_assets.append(_copy_if_exists(p, assets_paths / p.name))
-    elif (REPORT_DIR / 'path_plots').is_dir():
-        for p in (REPORT_DIR / 'path_plots').glob('combined_*.png'):
-            if p.is_file():
-                path_assets.append(_copy_if_exists(p, assets_paths / p.name))
+        _copy_tree_pngs(path_plots_dir, output_dir / 'path_plots')
 
     write_csv(
         output_dir / 'method_table.csv',
@@ -213,6 +269,11 @@ def main() -> int:
             'run_dir',
             'completed',
             'completion_reason',
+            'frame_sanity_recorded',
+            'frame_sanity_ok',
+            'frame_sanity_reason',
+            'frame_truth_start_error_m',
+            'frame_raw_start_error_m',
             'elapsed_after_first_cmd_s',
             'path_length_m',
             'final_goal_distance',
@@ -223,6 +284,21 @@ def main() -> int:
             'mean_p_vis_plan',
             'mean_p_vis_plan_eff',
             'mean_r_plan_u_std',
+            'mean_state_pos_error_m',
+            'max_state_pos_error_m',
+            'mean_state_cov_trace',
+            'max_state_cov_trace',
+            'mean_state_sigma_major_m',
+            'max_state_sigma_major_m',
+            'mean_path_ambiguity',
+            'max_path_ambiguity',
+            'mean_path_r_plan_uv_std',
+            'max_path_r_plan_uv_std',
+            'fraction_path_in_high_ambiguity_region',
+            'fraction_time_in_high_ambiguity_region',
+            'fraction_time_p_vis_below_0_2',
+            'fraction_time_p_vis_eff_below_0_2',
+            'max_r_plan_std',
             'field_p_vis_mean',
             'field_ambiguity_mean',
             'field_r_plan_uv_std_mean',
@@ -238,9 +314,11 @@ def main() -> int:
             '## Summary',
             '',
             'This report summarizes the current state of the shared perception-to-visibility comparison framework.',
-            'Planner traces are explicitly aligned to the first command, and incomplete runs are excluded to ensure fairness.',
+            'Planner traces are explicitly aligned to the first command, and interrupted runs with usable logs are included for diagnostics while retaining their completion labels.',
+            'Per-run frame sanity fields now expose whether transformed truth in `map_bev` matched the task start pose before motion began.',
             'Oracle visibility, red binary, and the two YOLO-derived targets can all appear here when they are present in the current targets/GP folders.',
             'Red corrected area may still be absent if it has not been built yet.',
+            'The path-plots folder now includes actual-vs-inferred state overlays, state-certainty maps, ambiguity-region overlays, and uncertainty-propagation sheets when experiment logs contain the needed belief/state fields.',
             '',
             '## Included assets',
             '',
@@ -268,6 +346,8 @@ def main() -> int:
             'Missing methods are left blank rather than causing report generation to fail.',
         ],
     })
+    if staged_path_plots_root is not None:
+        shutil.rmtree(staged_path_plots_root, ignore_errors=True)
     print(f'Wrote visibility comparison report to {output_dir}')
     return 0
 

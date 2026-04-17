@@ -7,7 +7,7 @@ worlds:
   warehouse_occ_light.world.sdf:
     world_name: warehouse_occ_light
     investigation_focus: Compact indoor warehouse scene with one short east-west shelf close to the camera. The camera-left passage is the shorter but more occluded crossover, while the camera-right passage remains the longer clearer alternative.
-    recommended_task: E5_shadow_tradeoff
+    recommended_task: main_shadow_tradeoff
     spawn: {x: -1.55, y: 0.45, z: 0.05, yaw: 0.0}
     planner_default: efe1
     visibility_artifact: data/visibility_gp/warehouse_occ_light_empirical_visibility_gp.npz
@@ -19,26 +19,6 @@ worlds:
       visibility_map_nx: 120
       visibility_map_ny: 120
       visibility_gp_length_scale: 1.05
-      visibility_gp_noise_var: 0.10
-      visibility_prior_occ: 0.005
-      visibility_beta: 1.0
-      visibility_target_height_m: 0.0
-
-  warehouse_open_shelves.world.sdf:
-    world_name: warehouse_open_shelves
-    investigation_focus: Secondary support world with one short segmented east-west shelf line. It keeps the same compact camera-side layout while providing a shorter camera-left crossing and a longer clearer camera-right alternative.
-    recommended_task: OS1_lower_gap_commit
-    spawn: {x: -1.55, y: 0.45, z: 0.05, yaw: 0.0}
-    planner_default: efe1
-    visibility_artifact: data/visibility_gp/warehouse_open_shelves_empirical_visibility_gp.npz
-    visibility_defaults:
-      visibility_map_min_x: -3.0
-      visibility_map_max_x: 3.0
-      visibility_map_min_y: -3.0
-      visibility_map_max_y: 3.0
-      visibility_map_nx: 120
-      visibility_map_ny: 120
-      visibility_gp_length_scale: 0.95
       visibility_gp_noise_var: 0.10
       visibility_prior_occ: 0.005
       visibility_beta: 1.0

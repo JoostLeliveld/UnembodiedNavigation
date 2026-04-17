@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import numpy as np
 
-from common import CURRENT_GP_DIR, CURRENT_TARGETS_DIR, LOGS_ROOT, parse_float, read_csv_rows, write_csv, write_manifest
+from common import CURRENT_GP_DIR, CURRENT_TARGETS_DIR, LOGS_ROOT, PLANNER_RUNS_DIR, parse_float, read_csv_rows, write_csv, write_manifest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -36,6 +36,86 @@ def _load_artifact(path: Path) -> dict[str, np.ndarray | str]:
             else:
                 payload[key] = value
         return payload
+
+
+def _load_json(path: Path) -> dict:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _load_run_manifest(run_dir: Path) -> dict:
+    for name in ('run_manifest.json', 'manifest.json'):
+        payload = _load_json(run_dir / name)
+        if payload:
+            return payload
+    return {}
+
+
+def _float_from_payload(payload: dict, key: str, default: float) -> tuple[float, bool]:
+    raw = payload.get(key, None)
+    if raw in (None, ''):
+        return float(default), False
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return float(default), False
+    return value, math.isfinite(value)
+
+
+def _plot_settings_for_method(run_manifest: dict, args) -> dict[str, float | str | list[str]]:
+    defaults = {
+        'r_visible_uv': float(args.r_visible_uv),
+        'r_miss_uv': float(args.r_miss_uv),
+        'visibility_power': float(args.visibility_power),
+        'visibility_trust_low': float(args.visibility_trust_low),
+        'visibility_trust_high': float(args.visibility_trust_high),
+        'visibility_sigma_kappa': float(getattr(args, 'visibility_sigma_kappa', 1.0)),
+        'min_prob': float(args.min_prob),
+    }
+    used_defaults: list[str] = []
+    cfg: dict[str, float | str | list[str]] = {'min_prob': defaults['min_prob']}
+    for key in ('r_visible_uv', 'r_miss_uv', 'visibility_power', 'visibility_trust_low', 'visibility_trust_high', 'visibility_sigma_kappa'):
+        value, ok = _float_from_payload(run_manifest, key, defaults[key])
+        if not ok:
+            used_defaults.append(key)
+        cfg[key] = value
+    cfg['source'] = 'run_manifest' if not used_defaults else 'run_manifest+args_fallback'
+    cfg['used_arg_defaults'] = used_defaults
+    return cfg
+
+
+def _infer_method_id(run_manifest: dict, run_dir: Path) -> str:
+    method = str(run_manifest.get('method', '') or '').strip()
+    if method:
+        return method
+    visibility_artifact = str(run_manifest.get('visibility_artifact_path', '') or '').strip()
+    if visibility_artifact:
+        name = Path(visibility_artifact).name
+        if name.endswith('_gp.npz'):
+            return name[:-7]
+    return run_dir.parent.name
+
+
+def _find_latest_run_manifests(root: Path) -> dict[str, dict]:
+    latest: dict[str, tuple[float, dict]] = {}
+    if not root.is_dir():
+        return {}
+    for summary_path in root.rglob('run_summary.json'):
+        run_dir = summary_path.parent
+        run_manifest = _load_run_manifest(run_dir)
+        if not run_manifest:
+            continue
+        method_id = _infer_method_id(run_manifest, run_dir)
+        mtime = run_dir.stat().st_mtime
+        current = latest.get(method_id)
+        if current is None or mtime > current[0]:
+            latest[method_id] = (mtime, run_manifest)
+    return {method_id: manifest for method_id, (_, manifest) in latest.items()}
 
 
 def _parse_geometry_json(raw: str) -> list[dict[str, float]]:
@@ -140,12 +220,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description='Plot GP visibility fields and ambiguity maps.')
     parser.add_argument('--gp-dir', default=str(CURRENT_GP_DIR))
     parser.add_argument('--gp-targets', default=str(CURRENT_TARGETS_DIR / 'gp_targets.csv'))
+    parser.add_argument('--planner-runs-root', default=str(PLANNER_RUNS_DIR))
     parser.add_argument('--out', default='')
     parser.add_argument('--r-visible-uv', type=float, default=2.5)
     parser.add_argument('--r-miss-uv', type=float, default=140.0)
     parser.add_argument('--visibility-power', type=float, default=1.0)
     parser.add_argument('--visibility-trust-low', type=float, default=0.08)
     parser.add_argument('--visibility-trust-high', type=float, default=0.30)
+    parser.add_argument('--visibility-sigma-kappa', type=float, default=1.0)
     parser.add_argument('--min-prob', type=float, default=1e-4)
     args = parser.parse_args()
 
@@ -162,30 +244,40 @@ def main() -> int:
     if not artifact_paths:
         raise RuntimeError(f'No GP artifacts found in {gp_dir}')
     gp_targets_path = Path(args.gp_targets).expanduser().resolve()
+    latest_run_manifests = _find_latest_run_manifests(Path(args.planner_runs_root).expanduser().resolve())
 
     combined_rows = []
     plot_rows = []
     summary_rows = []
+    plot_notes = ['Observation-only ambiguity uses the same visibility-to-covariance shaping as the planner.']
     for artifact_path in artifact_paths:
         method_id = artifact_path.name.replace('_gp.npz', '')
         artifact = _load_artifact(artifact_path)
         xs = np.asarray(artifact['xs'], dtype=float)
         ys = np.asarray(artifact['ys'], dtype=float)
-        p_map = np.asarray(artifact['P_map'], dtype=float)
+        p_map = np.asarray(artifact.get('P_map', artifact.get('P_conservative_map', np.zeros(1))), dtype=float)
+        p_mean = np.asarray(artifact.get('P_mean_map', p_map), dtype=float)
+        p_unc = np.clip(p_mean - p_map, 0.0, None)
         extent = _grid_extent(xs, ys)
         geometry = _parse_geometry_json(str(artifact.get('geometry_json', '')))
 
+        plot_cfg = _plot_settings_for_method(latest_run_manifests.get(method_id, {}), args)
+        if plot_cfg['used_arg_defaults']:
+            plot_notes.append(
+                f"{method_id}: GP plot settings fell back to CLI defaults for {', '.join(plot_cfg['used_arg_defaults'])}."
+            )
+
         p_eff = _visibility_effective_score(
             p_map,
-            min_prob=float(args.min_prob),
-            visibility_power=float(args.visibility_power),
-            visibility_trust_low=float(args.visibility_trust_low),
-            visibility_trust_high=float(args.visibility_trust_high),
+            min_prob=float(plot_cfg['min_prob']),
+            visibility_power=float(plot_cfg['visibility_power']),
+            visibility_trust_low=float(plot_cfg['visibility_trust_low']),
+            visibility_trust_high=float(plot_cfg['visibility_trust_high']),
         )
         plan_var = _blend_observation_covariance(
             p_eff,
-            r_visible_uv=float(args.r_visible_uv),
-            r_miss_uv=float(args.r_miss_uv),
+            r_visible_uv=float(plot_cfg['r_visible_uv']),
+            r_miss_uv=float(plot_cfg['r_miss_uv']),
         )
         observation_ambiguity = _ambiguity_from_variance(plan_var, plan_var)
         r_plan_uv_std = np.sqrt(np.clip(plan_var, 1e-12, None))
@@ -201,12 +293,13 @@ def main() -> int:
             'r_plan_uv_std_mean': float(np.mean(r_plan_uv_std)),
             'r_plan_uv_std_min': float(np.min(r_plan_uv_std)),
             'r_plan_uv_std_max': float(np.max(r_plan_uv_std)),
+            'plot_settings_source': str(plot_cfg['source']),
         })
 
         tx, ty, tv = _load_target_points(gp_targets_path, method_id)
 
-        fig, axes = plt.subplots(2, 2, figsize=(14, 10), constrained_layout=True)
-        sample_ax, gp_ax, obs_ax, std_ax = axes.ravel()
+        fig, axes = plt.subplots(2, 3, figsize=(20, 10), constrained_layout=True)
+        sample_ax, mean_ax, unc_ax, gp_ax, obs_ax, std_ax = axes.ravel()
 
         sample_ax.set_title(f'{_method_label(method_id)} samples')
         if tv.size:
@@ -219,8 +312,18 @@ def main() -> int:
 
         im_gp = gp_ax.imshow(p_map, origin='lower', extent=extent, cmap='viridis', vmin=0.0, vmax=1.0, aspect='equal')
         _draw_geometry(gp_ax, geometry)
-        gp_ax.set_title('Predicted visibility field p_vis(x,y)')
-        fig.colorbar(im_gp, ax=gp_ax, fraction=0.046, pad=0.04, label='p_vis')
+        gp_ax.set_title('Conservative visibility P_map(x,y)')
+        fig.colorbar(im_gp, ax=gp_ax, fraction=0.046, pad=0.04, label='p_vis (conservative)')
+        
+        im_mean = mean_ax.imshow(p_mean, origin='lower', extent=extent, cmap='viridis', vmin=0.0, vmax=1.0, aspect='equal')
+        _draw_geometry(mean_ax, geometry)
+        mean_ax.set_title('Predicted mean visibility P_mean_map')
+        fig.colorbar(im_mean, ax=mean_ax, fraction=0.046, pad=0.04, label='p_vis (mean)')
+        
+        im_unc = unc_ax.imshow(p_unc, origin='lower', extent=extent, cmap='plasma', vmin=0.0, vmax=0.3, aspect='equal')
+        _draw_geometry(unc_ax, geometry)
+        unc_ax.set_title('GP Epistemic Uncertainty (Mean - Conservative)')
+        fig.colorbar(im_unc, ax=unc_ax, fraction=0.046, pad=0.04, label='uncertainty')
 
         im_obs = obs_ax.imshow(observation_ambiguity, origin='lower', extent=extent, cmap='magma', aspect='equal')
         _draw_geometry(obs_ax, geometry)
@@ -240,10 +343,57 @@ def main() -> int:
         fig.savefig(method_plot, dpi=160)
         plt.close(fig)
 
+        region_fig, region_ax = plt.subplots(figsize=(8, 7), constrained_layout=True)
+        region_im = region_ax.imshow(
+            observation_ambiguity, origin='lower', extent=extent, cmap='magma', aspect='equal'
+        )
+        _draw_geometry(region_ax, geometry)
+        if tv.size:
+            region_ax.scatter(tx, ty, c='white', s=12, alpha=0.75, edgecolors='none', label='samples')
+        finite_amb = observation_ambiguity[np.isfinite(observation_ambiguity)]
+        contour_levels = []
+        contour_labels = []
+        for q, label in ((75.0, '75th pct'), (90.0, '90th pct')):
+            if finite_amb.size:
+                level = float(np.nanpercentile(finite_amb, q))
+                contour_levels.append(level)
+                contour_labels.append(label)
+        if contour_levels:
+            contours = region_ax.contour(
+                observation_ambiguity,
+                levels=contour_levels,
+                origin='lower',
+                extent=extent,
+                colors=['cyan', 'yellow'][: len(contour_levels)],
+                linewidths=1.8,
+            )
+            fmt = {lvl: lbl for lvl, lbl in zip(contours.levels, contour_labels)}
+            region_ax.clabel(contours, inline=True, fontsize=8, fmt=fmt)
+        region_ax.set_title(f'{_method_label(method_id)} ambiguity regions')
+        region_ax.set_xlabel('x [m]')
+        region_ax.set_ylabel('y [m]')
+        region_fig.colorbar(region_im, ax=region_ax, fraction=0.046, pad=0.04, label='ambiguity')
+        if tv.size:
+            region_ax.legend(loc='upper right', fontsize=8)
+        region_plot = output_dir / f'ambiguity_regions_{method_id}.png'
+        region_fig.savefig(region_plot, dpi=160)
+        plt.close(region_fig)
+
         combined_rows.append({
             'method_id': method_id,
             'artifact_path': str(artifact_path),
             'plot_path': str(method_plot),
+            'ambiguity_regions_plot': str(region_plot),
+            'plot_settings': {
+                'r_visible_uv': float(plot_cfg['r_visible_uv']),
+                'r_miss_uv': float(plot_cfg['r_miss_uv']),
+                'visibility_power': float(plot_cfg['visibility_power']),
+                'visibility_trust_low': float(plot_cfg['visibility_trust_low']),
+                'visibility_trust_high': float(plot_cfg['visibility_trust_high']),
+                'visibility_sigma_kappa': float(plot_cfg['visibility_sigma_kappa']),
+                'source': str(plot_cfg['source']),
+                'used_arg_defaults': list(plot_cfg['used_arg_defaults']),
+            },
         })
         plot_rows.append((method_id, p_map, observation_ambiguity, r_plan_uv_std, geometry, extent))
 
@@ -286,7 +436,7 @@ def main() -> int:
 
     write_csv(
         output_dir / 'field_method_summary.csv',
-        ('method_id', 'p_vis_mean', 'p_vis_min', 'p_vis_max', 'ambiguity_mean', 'ambiguity_min', 'ambiguity_max', 'r_plan_uv_std_mean', 'r_plan_uv_std_min', 'r_plan_uv_std_max'),
+        ('method_id', 'p_vis_mean', 'p_vis_min', 'p_vis_max', 'ambiguity_mean', 'ambiguity_min', 'ambiguity_max', 'r_plan_uv_std_mean', 'r_plan_uv_std_min', 'r_plan_uv_std_max', 'plot_settings_source'),
         summary_rows
     )
 
@@ -302,10 +452,9 @@ def main() -> int:
             'visibility_power': float(args.visibility_power),
             'visibility_trust_low': float(args.visibility_trust_low),
             'visibility_trust_high': float(args.visibility_trust_high),
+            'visibility_sigma_kappa': float(args.visibility_sigma_kappa),
         },
-        'notes': [
-            'Observation-only ambiguity uses the same visibility-to-covariance shaping as the planner.',
-        ],
+        'notes': plot_notes,
     })
     print(f'Wrote GP/ambiguity plots to {output_dir}')
     return 0

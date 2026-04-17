@@ -38,7 +38,7 @@ The planner is only one part of the experiment. This package answers:
 | [`launch/warehouse_visibility_agent.launch.py`](launch/warehouse_visibility_agent.launch.py) | retained secondary-planner launch |
 | [`launch/warehouse_visibility_capture.launch.py`](launch/warehouse_visibility_capture.launch.py) | offline capture launch for GP fitting; defaults to teleport/grid sampling and retains an optional driving mode |
 | [`config/world_profiles.yaml`](config/world_profiles.yaml) | world registry, camera setup, and matched visibility artifact paths |
-| [`config/tasks.yaml`](config/tasks.yaml) | benchmark and exploratory tasks |
+| [`config/tasks.yaml`](config/tasks.yaml) | single active benchmark task definition |
 | [`experiments/core/visibility_launch_common.py`](experiments/core/visibility_launch_common.py) | shared runtime assembly |
 | [`experiments/nodes/experiment_logger.py`](experiments/nodes/experiment_logger.py) | experiment logging and manifests |
 
@@ -66,7 +66,8 @@ The planner is only one part of the experiment. This package answers:
 - one primary comparison launch
 - one retained-planner launch
 - one visibility capture launch, now defaulting to sampled-pose teleport collection
-- per-world matched visibility artifacts learned from noisy simulated pose samples or the retained sweep mode
+- one active world/task comparison surface centered on the main shadow-tradeoff benchmark
+- matched visibility artifacts learned from noisy simulated pose samples or the retained sweep mode
 - run logging with manifest metadata
 - explicit state-estimator provenance in the manifest
 
@@ -74,7 +75,7 @@ The planner is only one part of the experiment. This package answers:
 
 - `warehouse_visibility_agent.launch.py` keeps retained secondary planners `efe2`, `efer`, and `mpc` runnable, but it is not the main thesis-facing entry path
 - the logger is useful and important, but the evaluation built on top of it is still milestone-grade
-- `warehouse_open_shelves.world.sdf` is a secondary support world compared with the main warehouse benchmark
+- the active experiment surface is intentionally narrow: one warehouse world and one main benchmark task
 
 ## Connection To The Rest Of The Repository
 

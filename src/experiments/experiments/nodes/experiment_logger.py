@@ -8,6 +8,7 @@ from datetime import datetime
 import numpy as np
 import rclpy
 import tf2_ros
+import yaml
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry, Path
 from rclpy.node import Node
@@ -31,6 +32,40 @@ def _find_repo_root(start_dir: str) -> str:
         if parent == current:
             return start_dir
         current = parent
+
+
+def _load_task_start_pose(tasks_yaml_path: str, world: str, task: str):
+    path = str(tasks_yaml_path or '').strip()
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, 'r', encoding='utf-8') as handle:
+            payload = yaml.safe_load(handle) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    tasks = payload.get('tasks')
+    if not isinstance(tasks, dict):
+        return None
+    world_tasks = tasks.get(str(world), [])
+    if not isinstance(world_tasks, list):
+        return None
+    for entry in world_tasks:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get('name', '')).strip() != str(task).strip():
+            continue
+        start = entry.get('start')
+        if not isinstance(start, dict):
+            return None
+        try:
+            return (
+                float(start.get('x')),
+                float(start.get('y')),
+                float(start.get('yaw', 0.0)),
+            )
+        except (TypeError, ValueError):
+            return None
+    return None
 
 
 class ExperimentLogger(Node):
@@ -60,6 +95,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('goal_success_radius', 0.35)
         self.declare_parameter('goal_success_hold_s', 2.0)
         self.declare_parameter('frame_id', 'map_bev')
+        self.declare_parameter('frame_sanity_start_tolerance_m', 0.25)
         self.declare_parameter('use_visibility_model', False)
         self.declare_parameter('visibility_artifact_path', '')
         self.declare_parameter('risk_weight_obs', 1.0)
@@ -97,6 +133,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('yolo_conf_threshold', 0.25)
         self.declare_parameter('yolo_iou_threshold', 0.45)
         self.declare_parameter('yolo_target_class', 'robot')
+        self.declare_parameter('yolo_class_id', -1)
         self.declare_parameter('yolo_use_masks', True)
         self.declare_parameter('yolo_min_mask_area_px', 12.0)
         self.declare_parameter('yolo_mask_bottom_band_px', 3.0)
@@ -136,6 +173,7 @@ class ExperimentLogger(Node):
         self.goal_success_radius = float(self.get_parameter('goal_success_radius').value)
         self.goal_success_hold_s = float(self.get_parameter('goal_success_hold_s').value)
         self.frame_id = str(self.get_parameter('frame_id').value)
+        self.frame_sanity_start_tolerance_m = float(self.get_parameter('frame_sanity_start_tolerance_m').value)
         self.use_visibility_model = bool(self.get_parameter('use_visibility_model').value)
         self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value)
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
@@ -173,6 +211,7 @@ class ExperimentLogger(Node):
         self.yolo_conf_threshold = float(self.get_parameter('yolo_conf_threshold').value)
         self.yolo_iou_threshold = float(self.get_parameter('yolo_iou_threshold').value)
         self.yolo_target_class = str(self.get_parameter('yolo_target_class').value)
+        self.yolo_class_id = int(self.get_parameter('yolo_class_id').value)
         self.yolo_use_masks = bool(self.get_parameter('yolo_use_masks').value)
         self.yolo_min_mask_area_px = float(self.get_parameter('yolo_min_mask_area_px').value)
         self.yolo_mask_bottom_band_px = float(self.get_parameter('yolo_mask_bottom_band_px').value)
@@ -211,6 +250,8 @@ class ExperimentLogger(Node):
         self.log_path = os.path.join(self.run_dir, 'experiment.csv')
 
         repo_root = _find_repo_root(os.getcwd())
+        self.repo_root = repo_root
+        self.task_start_pose = _load_task_start_pose(self.tasks_yaml, self.world, self.task)
         manifest_data = {
             'run_id': self.run_id,
             'timestamp': datetime.now().isoformat(),
@@ -261,14 +302,22 @@ class ExperimentLogger(Node):
             'yolo_conf_threshold': self.yolo_conf_threshold,
             'yolo_iou_threshold': self.yolo_iou_threshold,
             'yolo_target_class': self.yolo_target_class,
+            'yolo_class_id': self.yolo_class_id,
             'yolo_use_masks': self.yolo_use_masks,
             'yolo_min_mask_area_px': self.yolo_min_mask_area_px,
             'yolo_mask_bottom_band_px': self.yolo_mask_bottom_band_px,
             'seed': self.seed,
             'state_pipeline': 'homography_to_bev',
             'observation_model': 'uv',
+            'task_start_pose': {
+                'x': float(self.task_start_pose[0]),
+                'y': float(self.task_start_pose[1]),
+                'yaw': float(self.task_start_pose[2]),
+            } if self.task_start_pose is not None else None,
+            'frame_sanity_start_tolerance_m': self.frame_sanity_start_tolerance_m,
         }
-        write_manifest(self.run_dir, manifest_data, repo_root)
+        self._manifest_data = dict(manifest_data)
+        write_manifest(self.run_dir, self._manifest_data, repo_root)
         snapshot_configs(self.run_dir, [self.world_profiles_path, self.tasks_yaml])
 
         self.state_msg = None
@@ -286,6 +335,27 @@ class ExperimentLogger(Node):
         self._stop_requested = False
         self._completed = False
         self._last_tf_warn_wall = 0.0
+        self._frame_sanity_logged = False
+        self._frame_sanity = {
+            'recorded': False,
+            'ok': None,
+            'reason': 'pending',
+            'source_frame': '',
+            'truth_stamp': math.nan,
+            'raw_odom_x': math.nan,
+            'raw_odom_y': math.nan,
+            'raw_odom_yaw': math.nan,
+            'truth_x': math.nan,
+            'truth_y': math.nan,
+            'truth_yaw': math.nan,
+            'task_start_x': float(self.task_start_pose[0]) if self.task_start_pose is not None else math.nan,
+            'task_start_y': float(self.task_start_pose[1]) if self.task_start_pose is not None else math.nan,
+            'task_start_yaw': float(self.task_start_pose[2]) if self.task_start_pose is not None else math.nan,
+            'truth_start_error_m': math.nan,
+            'raw_start_error_m': math.nan,
+            'tolerance_m': self.frame_sanity_start_tolerance_m,
+        }
+        self._rewrite_manifest()
 
         self._first_cmd_stamp = None
         self._motion_history = []
@@ -295,6 +365,9 @@ class ExperimentLogger(Node):
 
         self._efe_risk_sum = 0.0
         self._efe_ambiguity_sum = 0.0
+        self._efe_control_sum = 0.0
+        self._efe_visibility_sum = 0.0
+        self._efe_obstacle_sum = 0.0
         self._efe_count = 0
         self._solve_time_ms_sum = 0.0
         self._solve_count = 0
@@ -303,6 +376,12 @@ class ExperimentLogger(Node):
         self._r_plan_u_std_sum = 0.0
         self._r_plan_v_std_sum = 0.0
         self._p_vis_count = 0
+        self._p_vis_plan_below_0_2_count = 0
+        self._p_vis_plan_eff_below_0_2_count = 0
+        self._max_r_plan_std = 0.0
+        self._truth_state_error_sum = 0.0
+        self._truth_belief_error_sum = 0.0
+        self._truth_error_count = 0
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
 
@@ -335,8 +414,20 @@ class ExperimentLogger(Node):
         self.writer.writerow([
             'stamp', 'x', 'y', 'yaw',
             'cov_x', 'cov_y', 'cov_yaw',
+            'truth_available', 'truth_stamp', 'truth_x', 'truth_y', 'truth_yaw',
+            'state_available', 'state_stamp', 'state_x', 'state_y', 'state_yaw',
+            'state_cov_xx', 'state_cov_xy', 'state_cov_yy', 'state_cov_yaw',
+            'planner_belief_available', 'planner_belief_stamp',
             'planner_belief_x', 'planner_belief_y', 'planner_belief_yaw',
-            'planner_cov_x', 'planner_cov_y', 'planner_cov_yaw',
+            'planner_cov_x', 'planner_cov_xy', 'planner_cov_y', 'planner_cov_yaw',
+            'est_available', 'est_x', 'est_y', 'est_yaw',
+            'est_cov_xx', 'est_cov_xy', 'est_cov_yy',
+            'state_pos_error_m', 'state_cov_trace', 'state_cov_det',
+            'state_sigma_major_m', 'state_sigma_minor_m', 'state_entropy_xy',
+            # Explicit unambiguous error columns:
+            # truth_state_error_m  = ||truth - /state/bev||   (perception estimate vs ground truth)
+            # truth_belief_error_m = ||truth - /planner_belief||  (planner internal state vs ground truth)
+            'truth_state_error_m', 'truth_belief_error_m',
             'cmd_v', 'cmd_w',
             'goal_x', 'goal_y', 'goal_dist',
             'plan_points', 'plan_length',
@@ -453,6 +544,27 @@ class ExperimentLogger(Node):
     def _wrap_angle(angle: float) -> float:
         return math.atan2(math.sin(angle), math.cos(angle))
 
+    @staticmethod
+    def _covariance_metrics_2d(cov_xx: float, cov_xy: float, cov_yy: float):
+        if not (math.isfinite(cov_xx) and math.isfinite(cov_yy)):
+            return math.nan, math.nan, math.nan, math.nan, math.nan
+        cov_xy = float(cov_xy) if math.isfinite(cov_xy) else 0.0
+        trace = float(cov_xx + cov_yy)
+        det = float(cov_xx * cov_yy - cov_xy * cov_xy)
+        sigma_major = math.nan
+        sigma_minor = math.nan
+        entropy_xy = math.nan
+        try:
+            evals = np.linalg.eigvalsh(np.array([[cov_xx, cov_xy], [cov_xy, cov_yy]], dtype=float))
+            evals = np.clip(np.asarray(evals, dtype=float), 0.0, None)
+            sigma_minor = float(math.sqrt(evals[0]))
+            sigma_major = float(math.sqrt(evals[1]))
+        except np.linalg.LinAlgError:
+            pass
+        if det > 0.0:
+            entropy_xy = float(0.5 * math.log(((2.0 * math.pi * math.e) ** 2) * det))
+        return trace, det, sigma_major, sigma_minor, entropy_xy
+
     def _odom_cb(self, msg: Odometry):
         self.odom_msg = msg
 
@@ -485,9 +597,42 @@ class ExperimentLogger(Node):
 
     def _efe_cb(self, msg: Float64MultiArray):
         self.efe_metrics = msg
+        if msg.data and len(msg.data) >= 3:
+            self._efe_risk_sum += float(msg.data[1])
+            self._efe_ambiguity_sum += float(msg.data[2])
+            if len(msg.data) >= 6:
+                self._efe_control_sum += float(msg.data[3])
+                self._efe_visibility_sum += float(msg.data[4])
+                self._efe_obstacle_sum += float(msg.data[5])
+            self._efe_count += 1
 
     def _planner_diag_cb(self, msg: Float64MultiArray):
         self.planner_diag = msg
+        if msg.data and len(msg.data) >= 6:
+            solve_time_ms = float(msg.data[5])
+            self._solve_time_ms_sum += solve_time_ms
+            self._solve_count += 1
+        if msg.data and len(msg.data) >= 12:
+            p_vis_plan = float(msg.data[6])
+            p_vis_plan_eff = float(msg.data[7])
+            r_plan_u_std = float(msg.data[8])
+            r_plan_v_std = float(msg.data[9])
+            if math.isfinite(p_vis_plan):
+                self._p_vis_plan_sum += p_vis_plan
+                self._p_vis_plan_eff_sum += p_vis_plan_eff
+                self._r_plan_u_std_sum += r_plan_u_std
+                self._r_plan_v_std_sum += r_plan_v_std
+                
+                if p_vis_plan < 0.2:
+                    self._p_vis_plan_below_0_2_count += 1
+                if p_vis_plan_eff < 0.2:
+                    self._p_vis_plan_eff_below_0_2_count += 1
+                
+                r_std_max = max(r_plan_u_std, r_plan_v_std)
+                if r_std_max > self._max_r_plan_std:
+                    self._max_r_plan_std = r_std_max
+                
+                self._p_vis_count += 1
 
     def _planner_diag_text_cb(self, msg: String):
         self.planner_diag_text = str(msg.data or '')
@@ -498,8 +643,9 @@ class ExperimentLogger(Node):
 
     def _latest_truth_pose(self):
         if self.odom_msg is None:
-            return False, math.nan, math.nan, math.nan
+            return False, math.nan, math.nan, math.nan, math.nan
 
+        stamp = self._stamp_to_float(self.odom_msg.header.stamp)
         source_frame = (self.odom_msg.header.frame_id or 'odom').strip() or 'odom'
         pose_world = self.odom_msg.pose.pose
         if source_frame != self.frame_id:
@@ -517,21 +663,124 @@ class ExperimentLogger(Node):
                     self.get_logger().warn(
                         f"Experiment logger TF transform {source_frame}->{self.frame_id} unavailable: {exc}"
                     )
-                return False, math.nan, math.nan, math.nan
+                return False, math.nan, math.nan, math.nan, math.nan
 
         return (
             True,
+            stamp,
             float(pose_world.position.x),
             float(pose_world.position.y),
             self._yaw_from_quaternion(pose_world.orientation),
         )
 
+    def _latest_raw_odom_pose(self):
+        if self.odom_msg is None:
+            return False, math.nan, math.nan, math.nan, math.nan, ''
+        pose = self.odom_msg.pose.pose
+        source_frame = (self.odom_msg.header.frame_id or 'odom').strip() or 'odom'
+        return (
+            True,
+            self._stamp_to_float(self.odom_msg.header.stamp),
+            float(pose.position.x),
+            float(pose.position.y),
+            self._yaw_from_quaternion(pose.orientation),
+            source_frame,
+        )
+
+    def _rewrite_manifest(self):
+        payload = dict(self._manifest_data)
+        payload['frame_sanity'] = dict(self._frame_sanity)
+        write_manifest(self.run_dir, payload, self.repo_root)
+
+    def _maybe_log_frame_sanity(self, now_stamp: float, cmd_v: float, cmd_w: float):
+        if self._frame_sanity_logged:
+            return
+        if self.task_start_pose is None:
+            self._frame_sanity_logged = True
+            self._frame_sanity.update({
+                'recorded': False,
+                'ok': None,
+                'reason': 'task_start_unavailable',
+            })
+            self._rewrite_manifest()
+            self.get_logger().warn(
+                f'Frame sanity check skipped because task start pose could not be loaded '
+                f'from tasks_yaml={self.tasks_yaml!r} for world={self.world!r}, task={self.task!r}.'
+            )
+            return
+        if self._first_cmd_stamp is not None:
+            self._frame_sanity_logged = True
+            self._frame_sanity.update({
+                'recorded': False,
+                'ok': None,
+                'reason': 'first_command_started_before_sanity',
+            })
+            self._rewrite_manifest()
+            self.get_logger().warn(
+                'Frame sanity check could not be recorded before the first command; '
+                'treat truth-frame validation as unavailable for this run.'
+            )
+            return
+        if abs(cmd_v) >= self.first_cmd_linear_eps or abs(cmd_w) >= self.first_cmd_angular_eps:
+            return
+
+        raw_ok, _raw_stamp, raw_x, raw_y, raw_yaw, source_frame = self._latest_raw_odom_pose()
+        true_ok, truth_stamp, truth_x, truth_y, truth_yaw = self._latest_truth_pose()
+        if not (raw_ok and true_ok):
+            return
+
+        start_x, start_y, start_yaw = self.task_start_pose
+        truth_start_error = float(math.hypot(truth_x - start_x, truth_y - start_y))
+        raw_start_error = float(math.hypot(raw_x - start_x, raw_y - start_y))
+        ok = bool(truth_start_error <= self.frame_sanity_start_tolerance_m)
+
+        self._frame_sanity_logged = True
+        self._frame_sanity.update({
+            'recorded': True,
+            'ok': ok,
+            'reason': 'ok' if ok else 'truth_start_mismatch',
+            'source_frame': source_frame,
+            'truth_stamp': truth_stamp,
+            'raw_odom_x': raw_x,
+            'raw_odom_y': raw_y,
+            'raw_odom_yaw': raw_yaw,
+            'truth_x': truth_x,
+            'truth_y': truth_y,
+            'truth_yaw': truth_yaw,
+            'task_start_x': start_x,
+            'task_start_y': start_y,
+            'task_start_yaw': start_yaw,
+            'truth_start_error_m': truth_start_error,
+            'raw_start_error_m': raw_start_error,
+            'tolerance_m': self.frame_sanity_start_tolerance_m,
+            'recorded_at_log_stamp': now_stamp,
+        })
+        self._rewrite_manifest()
+
+        message = (
+            'Frame sanity check '
+            f'({source_frame} -> {self.frame_id}): raw odom=({raw_x:.3f}, {raw_y:.3f}), '
+            f'transformed truth=({truth_x:.3f}, {truth_y:.3f}), '
+            f'task start=({start_x:.3f}, {start_y:.3f}), '
+            f'truth_start_error={truth_start_error:.3f} m'
+        )
+        if ok:
+            self.get_logger().info(message)
+        else:
+            self.get_logger().warn(
+                message
+                + f' exceeds tolerance {self.frame_sanity_start_tolerance_m:.3f} m. '
+                + 'This usually means the map_bev->odom transform or odom frame assumption is wrong.'
+            )
+
     def _latest_state_pose(self):
         if self.state_msg is None:
-            return False, math.nan, math.nan, math.nan
+            return False, math.nan, math.nan, math.nan, math.nan
+        stamp = self._stamp_to_float(self.state_msg.header.stamp)
         pose = self.state_msg.pose.pose
         return (
             True,
+            stamp,
             float(pose.position.x),
             float(pose.position.y),
             self._yaw_from_quaternion(pose.orientation),
@@ -539,15 +788,18 @@ class ExperimentLogger(Node):
 
     def _latest_planner_belief_pose(self):
         if self.planner_belief_msg is None:
-            return False, math.nan, math.nan, math.nan, math.nan, math.nan, math.nan
+            return False, math.nan, math.nan, math.nan, math.nan, math.nan, math.nan, math.nan, math.nan
+        stamp = self._stamp_to_float(self.planner_belief_msg.header.stamp)
         pose = self.planner_belief_msg.pose.pose
         cov = list(self.planner_belief_msg.pose.covariance)
         return (
             True,
+            stamp,
             float(pose.position.x),
             float(pose.position.y),
             self._yaw_from_quaternion(pose.orientation),
             float(cov[0]) if len(cov) > 0 else math.nan,
+            float(cov[1]) if len(cov) > 1 else math.nan,
             float(cov[7]) if len(cov) > 7 else math.nan,
             float(cov[35]) if len(cov) > 35 else math.nan,
         )
@@ -568,8 +820,8 @@ class ExperimentLogger(Node):
         if self.perception_writer is None:
             return
 
-        true_ok, true_x, true_y, true_yaw = self._latest_truth_pose()
-        state_ok, state_x, state_y, state_yaw = self._latest_state_pose()
+        true_ok, _truth_stamp, true_x, true_y, true_yaw = self._latest_truth_pose()
+        state_ok, _state_stamp, state_x, state_y, state_yaw = self._latest_state_pose()
         obs_ok, pixel_pose_stamp, pixel_pose_u, pixel_pose_v, pixel_pose_yaw = self._latest_pixel_pose()
 
         state_pos_error = math.nan
@@ -658,30 +910,84 @@ class ExperimentLogger(Node):
         self.perception_file.flush()
 
     def _log_once(self):
-        if self.state_msg is None:
-            return
+        now_stamp = float(self.get_clock().now().nanoseconds) * 1e-9
 
-        yaw = self._yaw_from_quaternion(self.state_msg.pose.pose.orientation)
+        state_ok, state_stamp, state_x, state_y, state_yaw = self._latest_state_pose()
+        if self.state_msg is not None:
+            cov = self.state_msg.pose.covariance
+            cov_x = float(cov[0]) if len(cov) > 0 else math.nan
+            cov_xy = float(cov[1]) if len(cov) > 1 else math.nan
+            cov_y = float(cov[7]) if len(cov) > 7 else math.nan
+            cov_yaw = float(cov[35]) if len(cov) > 35 else math.nan
+        else:
+            cov_x = cov_xy = cov_y = cov_yaw = math.nan
 
-        cov = self.state_msg.pose.covariance
-        cov_x = cov[0] if len(cov) > 0 else 0.0
-        cov_y = cov[7] if len(cov) > 7 else 0.0
-        cov_yaw = cov[35] if len(cov) > 35 else 0.0
+        true_ok, truth_stamp, true_x, true_y, true_yaw = self._latest_truth_pose()
         (
             planner_belief_ok,
+            planner_belief_stamp,
             planner_belief_x,
             planner_belief_y,
             planner_belief_yaw,
             planner_cov_x,
+            planner_cov_xy,
             planner_cov_y,
             planner_cov_yaw,
         ) = self._latest_planner_belief_pose()
         if not planner_belief_ok:
+            planner_belief_stamp = math.nan
             planner_belief_x = planner_belief_y = planner_belief_yaw = math.nan
-            planner_cov_x = planner_cov_y = planner_cov_yaw = math.nan
+            planner_cov_x = planner_cov_xy = planner_cov_y = planner_cov_yaw = math.nan
+
+        if planner_belief_ok:
+            est_available = 1.0
+            est_x = planner_belief_x
+            est_y = planner_belief_y
+            est_yaw = planner_belief_yaw
+            est_cov_xx = planner_cov_x
+            est_cov_xy = planner_cov_xy
+            est_cov_yy = planner_cov_y
+        elif state_ok:
+            est_available = 1.0
+            est_x = float(state_x)
+            est_y = float(state_y)
+            est_yaw = float(state_yaw)
+            est_cov_xx = float(cov_x)
+            est_cov_xy = float(cov_xy)
+            est_cov_yy = float(cov_y)
+        else:
+            est_available = 0.0
+            est_x = est_y = est_yaw = math.nan
+            est_cov_xx = est_cov_xy = est_cov_yy = math.nan
+
+        state_pos_error_m = math.nan
+        if true_ok and math.isfinite(est_x) and math.isfinite(est_y):
+            state_pos_error_m = float(math.hypot(true_x - est_x, true_y - est_y))
+        (
+            state_cov_trace,
+            state_cov_det,
+            state_sigma_major_m,
+            state_sigma_minor_m,
+            state_entropy_xy,
+        ) = self._covariance_metrics_2d(est_cov_xx, est_cov_xy, est_cov_yy)
+
+        # Explicit unambiguous error signals:
+        # truth_state_error_m:  ground truth vs /state/bev (perception output)
+        # truth_belief_error_m: ground truth vs /planner_belief (planner's internal belief)
+        truth_state_error_m = math.nan
+        if true_ok and state_ok and math.isfinite(state_x) and math.isfinite(state_y):
+            truth_state_error_m = float(math.hypot(true_x - state_x, true_y - state_y))
+            self._truth_state_error_sum += truth_state_error_m
+            if math.isfinite(truth_state_error_m):
+                self._truth_error_count += 1
+        truth_belief_error_m = math.nan
+        if true_ok and planner_belief_ok and math.isfinite(planner_belief_x) and math.isfinite(planner_belief_y):
+            truth_belief_error_m = float(math.hypot(true_x - planner_belief_x, true_y - planner_belief_y))
+            self._truth_belief_error_sum += truth_belief_error_m
 
         cmd_v = self.cmd_msg.linear.x if self.cmd_msg else 0.0
         cmd_w = self.cmd_msg.angular.z if self.cmd_msg else 0.0
+        self._maybe_log_frame_sanity(now_stamp, cmd_v, cmd_w)
 
         goal_x = math.nan
         goal_y = math.nan
@@ -689,12 +995,14 @@ class ExperimentLogger(Node):
         if self.goal_msg:
             goal_x = float(self.goal_msg.pose.position.x)
             goal_y = float(self.goal_msg.pose.position.y)
-            dx = goal_x - self.state_msg.pose.pose.position.x
-            dy = goal_y - self.state_msg.pose.pose.position.y
-            goal_dist = math.hypot(dx, dy)
+            if true_ok:
+                dx = goal_x - true_x
+                dy = goal_y - true_y
+                goal_dist = math.hypot(dx, dy)
 
-        if math.isfinite(self.state_msg.pose.pose.position.x) and math.isfinite(self.state_msg.pose.pose.position.y):
-            current_pose = (self.state_msg.pose.pose.position.x, self.state_msg.pose.pose.position.y)
+        current_pose = None
+        if true_ok and math.isfinite(true_x) and math.isfinite(true_y):
+            current_pose = (true_x, true_y)
             if self._last_path_pose is not None:
                 self._cumulative_path_length += math.hypot(current_pose[0] - self._last_path_pose[0], current_pose[1] - self._last_path_pose[1])
             self._last_path_pose = current_pose
@@ -711,7 +1019,7 @@ class ExperimentLogger(Node):
                 p1 = self.plan_msg.poses[i].pose.position
                 plan_length += math.hypot(p1.x - p0.x, p1.y - p0.y)
 
-        stamp = self._stamp_to_float(self.state_msg.header.stamp)
+        stamp = now_stamp
 
         efe_total = 0.0
         efe_risk = 0.0
@@ -740,9 +1048,6 @@ class ExperimentLogger(Node):
             plan_time_ms = float(self.planner_diag.data[4])
             solve_time_ms = float(self.planner_diag.data[5])
 
-            self._solve_time_ms_sum += solve_time_ms
-            self._solve_count += 1
-
             if len(self.planner_diag.data) >= 12:
                 p_vis_plan = float(self.planner_diag.data[6])
                 p_vis_plan_eff = float(self.planner_diag.data[7])
@@ -751,35 +1056,36 @@ class ExperimentLogger(Node):
                 measurement_available = float(self.planner_diag.data[10])
                 belief_age_s = float(self.planner_diag.data[11])
 
-                if math.isfinite(p_vis_plan):
-                    self._p_vis_plan_sum += p_vis_plan
-                    self._p_vis_plan_eff_sum += p_vis_plan_eff
-                    self._r_plan_u_std_sum += r_plan_u_std
-                    self._r_plan_v_std_sum += r_plan_v_std
-                    self._p_vis_count += 1
-
         if self.efe_metrics and self.efe_metrics.data and len(self.efe_metrics.data) >= 6:
             efe_total = float(self.efe_metrics.data[0])
             efe_risk = float(self.efe_metrics.data[1])
             efe_ambiguity = float(self.efe_metrics.data[2])
             efe_control = float(self.efe_metrics.data[3])
             efe_visibility = float(self.efe_metrics.data[4])
-            
-            self._efe_risk_sum += efe_risk
-            self._efe_ambiguity_sum += efe_ambiguity
-            self._efe_count += 1
 
             if len(self.efe_metrics.data) >= 6:
                 efe_obstacle = float(self.efe_metrics.data[5])
 
+        legacy_x = true_x if true_ok else math.nan
+        legacy_y = true_y if true_ok else math.nan
+        legacy_yaw = true_yaw if true_ok else math.nan
         self.writer.writerow([
             stamp,
-            self.state_msg.pose.pose.position.x,
-            self.state_msg.pose.pose.position.y,
-            yaw,
+            legacy_x,
+            legacy_y,
+            legacy_yaw,
             cov_x, cov_y, cov_yaw,
+            1.0 if true_ok else 0.0, truth_stamp, true_x, true_y, true_yaw,
+            1.0 if state_ok else 0.0, state_stamp, state_x, state_y, state_yaw,
+            cov_x, cov_xy, cov_y, cov_yaw,
+            1.0 if planner_belief_ok else 0.0, planner_belief_stamp,
             planner_belief_x, planner_belief_y, planner_belief_yaw,
-            planner_cov_x, planner_cov_y, planner_cov_yaw,
+            planner_cov_x, planner_cov_xy, planner_cov_y, planner_cov_yaw,
+            est_available, est_x, est_y, est_yaw,
+            est_cov_xx, est_cov_xy, est_cov_yy,
+            state_pos_error_m, state_cov_trace, state_cov_det,
+            state_sigma_major_m, state_sigma_minor_m, state_entropy_xy,
+            truth_state_error_m, truth_belief_error_m,
             cmd_v, cmd_w,
             goal_x, goal_y, goal_dist,
             plan_points, plan_length,
@@ -796,39 +1102,40 @@ class ExperimentLogger(Node):
         if not self._stop_requested:
             if self._first_cmd_stamp is None:
                 if abs(cmd_v) >= self.first_cmd_linear_eps or abs(cmd_w) >= self.first_cmd_angular_eps:
-                    self._first_cmd_stamp = stamp
+                    self._first_cmd_stamp = now_stamp
                     self.get_logger().info(f"First command detected. Starting {self.run_timeout_after_first_cmd_s:.1f}s timeout.")
             else:
-                elapsed = stamp - self._first_cmd_stamp
+                elapsed = now_stamp - self._first_cmd_stamp
                 if elapsed >= self.run_timeout_after_first_cmd_s:
-                    self._finish_run("timeout_after_first_cmd", stamp)
+                    self._finish_run("timeout_after_first_cmd", now_stamp)
                     return
 
-                self._motion_history.append((stamp, current_pose[0], current_pose[1], goal_dist, cmd_v, cmd_w))
-                while self._motion_history and (stamp - self._motion_history[0][0]) > self.stuck_window_s:
-                    self._motion_history.pop(0)
+                if current_pose is not None:
+                    self._motion_history.append((now_stamp, current_pose[0], current_pose[1], goal_dist, cmd_v, cmd_w))
+                    while self._motion_history and (now_stamp - self._motion_history[0][0]) > self.stuck_window_s:
+                        self._motion_history.pop(0)
 
-                if len(self._motion_history) > 1 and (stamp - self._motion_history[0][0]) >= (self.stuck_window_s - 0.2):
-                    cmd_count = sum(1 for m in self._motion_history if abs(m[4]) >= self.first_cmd_linear_eps or abs(m[5]) >= self.first_cmd_angular_eps)
-                    if cmd_count / len(self._motion_history) >= self.stuck_cmd_fraction_min:
-                        oldest = self._motion_history[0]
-                        disp = math.hypot(current_pose[0] - oldest[1], current_pose[1] - oldest[2])
-                        goal_imp = oldest[3] - goal_dist if math.isfinite(oldest[3]) and math.isfinite(goal_dist) else 0.0
-                        if disp <= self.stuck_max_displacement_m and goal_imp <= self.stuck_max_goal_improvement_m:
-                            self._finish_run("stuck", stamp)
-                            return
+                    if len(self._motion_history) > 1 and (now_stamp - self._motion_history[0][0]) >= (self.stuck_window_s - 0.2):
+                        cmd_count = sum(1 for m in self._motion_history if abs(m[4]) >= self.first_cmd_linear_eps or abs(m[5]) >= self.first_cmd_angular_eps)
+                        if cmd_count / len(self._motion_history) >= self.stuck_cmd_fraction_min:
+                            oldest = self._motion_history[0]
+                            disp = math.hypot(current_pose[0] - oldest[1], current_pose[1] - oldest[2])
+                            goal_imp = oldest[3] - goal_dist if math.isfinite(oldest[3]) and math.isfinite(goal_dist) else 0.0
+                            if disp <= self.stuck_max_displacement_m and goal_imp <= self.stuck_max_goal_improvement_m:
+                                self._finish_run("stuck", now_stamp)
+                                return
 
         if self.auto_stop_on_goal and self.goal_msg and not self._stop_requested:
-            if goal_dist <= self.goal_success_radius:
+            if math.isfinite(goal_dist) and goal_dist <= self.goal_success_radius:
                 if self._goal_in_radius_since is None:
-                    self._goal_in_radius_since = stamp
-                held_s = float(stamp - self._goal_in_radius_since)
+                    self._goal_in_radius_since = now_stamp
+                held_s = float(now_stamp - self._goal_in_radius_since)
                 if held_s >= self.goal_success_hold_s:
                     self.get_logger().info(
                         f"Goal reached (dist={goal_dist:.3f} m <= {self.goal_success_radius:.3f} m) "
                         f"and held for {held_s:.2f} s."
                     )
-                    self._finish_run("goal_reached", stamp)
+                    self._finish_run("goal_reached", now_stamp)
                     return
             else:
                 self._goal_in_radius_since = None
@@ -848,11 +1155,25 @@ class ExperimentLogger(Node):
         import json
         mean_efe_risk = self._efe_risk_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
         mean_efe_ambiguity = self._efe_ambiguity_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
+        mean_efe_control = self._efe_control_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
+        mean_efe_visibility = self._efe_visibility_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
+        mean_efe_obstacle = self._efe_obstacle_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
         mean_solve_time_ms = self._solve_time_ms_sum / max(self._solve_count, 1) if self._solve_count > 0 else math.nan
         mean_p_vis_plan = self._p_vis_plan_sum / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
         mean_p_vis_plan_eff = self._p_vis_plan_eff_sum / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
         mean_r_plan_u_std = self._r_plan_u_std_sum / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
         mean_r_plan_v_std = self._r_plan_v_std_sum / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
+        fraction_time_p_vis_below_0_2 = self._p_vis_plan_below_0_2_count / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
+        fraction_time_p_vis_eff_below_0_2 = self._p_vis_plan_eff_below_0_2_count / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
+        max_r_plan_std = self._max_r_plan_std if self._p_vis_count > 0 else math.nan
+        mean_truth_state_error_m = (
+            self._truth_state_error_sum / self._truth_error_count
+            if self._truth_error_count > 0 else math.nan
+        )
+        mean_truth_belief_error_m = (
+            self._truth_belief_error_sum / self._truth_error_count
+            if self._truth_error_count > 0 else math.nan
+        )
 
         if stamp is None:
             stamp = float(self.get_clock().now().nanoseconds) * 1e-9
@@ -860,12 +1181,13 @@ class ExperimentLogger(Node):
         elapsed_after_first_cmd_s = stamp - self._first_cmd_stamp if self._first_cmd_stamp is not None else 0.0
 
         final_goal_distance = math.nan
-        if self.state_msg and self.goal_msg:
-             goal_x = float(self.goal_msg.pose.position.x)
-             goal_y = float(self.goal_msg.pose.position.y)
-             dx = goal_x - self.state_msg.pose.pose.position.x
-             dy = goal_y - self.state_msg.pose.pose.position.y
-             final_goal_distance = math.hypot(dx, dy)
+        true_ok, _truth_stamp, true_x, true_y, _true_yaw = self._latest_truth_pose()
+        if true_ok and self.goal_msg:
+            goal_x = float(self.goal_msg.pose.position.x)
+            goal_y = float(self.goal_msg.pose.position.y)
+            dx = goal_x - true_x
+            dy = goal_y - true_y
+            final_goal_distance = math.hypot(dx, dy)
 
         summary = {
             'completed': True,
@@ -877,12 +1199,23 @@ class ExperimentLogger(Node):
             'final_goal_distance': final_goal_distance,
             'minimum_goal_distance': self._min_goal_distance if math.isfinite(self._min_goal_distance) else math.nan,
             'mean_solve_time_ms': mean_solve_time_ms,
+            # EFE terms — all six so plots can reconstruct the full decomposition
             'mean_efe_risk': mean_efe_risk,
             'mean_efe_ambiguity': mean_efe_ambiguity,
+            'mean_efe_control': mean_efe_control,
+            'mean_efe_visibility': mean_efe_visibility,
+            'mean_efe_obstacle': mean_efe_obstacle,
             'mean_p_vis_plan': mean_p_vis_plan,
             'mean_p_vis_plan_eff': mean_p_vis_plan_eff,
+            'fraction_time_p_vis_below_0_2': fraction_time_p_vis_below_0_2,
+            'fraction_time_p_vis_eff_below_0_2': fraction_time_p_vis_eff_below_0_2,
             'mean_r_plan_u_std': mean_r_plan_u_std,
             'mean_r_plan_v_std': mean_r_plan_v_std,
+            'max_r_plan_std': max_r_plan_std,
+            # Explicit truth vs perception / planner belief errors
+            'mean_truth_state_error_m': mean_truth_state_error_m,
+            'mean_truth_belief_error_m': mean_truth_belief_error_m,
+            'frame_sanity': dict(self._frame_sanity),
             'run_dir': self.run_dir
         }
         
@@ -891,7 +1224,11 @@ class ExperimentLogger(Node):
             json.dump(summary, f, indent=2)
 
         self.get_logger().info(f"Ending run. Reason: {reason}.")
-        rclpy.shutdown()
+        # rclpy.shutdown() must NOT be called from inside a timer/subscription callback
+        # (it deadlocks on the global executor lock). Schedule it on a background thread
+        # so this callback can return cleanly first.
+        import threading
+        threading.Timer(0.15, _safe_shutdown).start()
 
     def destroy_node(self):
         try:
@@ -901,6 +1238,7 @@ class ExperimentLogger(Node):
                 summary = {
                     'completed': False,
                     'completion_reason': 'interrupted',
+                    'frame_sanity': dict(getattr(self, '_frame_sanity', {})),
                     'run_dir': getattr(self, 'run_dir', '')
                 }
                 with open(summary_path, 'w', encoding='utf-8') as f:
@@ -914,6 +1252,19 @@ class ExperimentLogger(Node):
                 self.perception_file.close()
         finally:
             super().destroy_node()
+
+
+def _safe_shutdown():
+    """Deferred shutdown helper — called from a background thread, not from a ROS callback.
+
+    rclpy.shutdown() deadlocks if called from inside a timer or subscription callback
+    because it tries to acquire the executor lock, which the calling callback already holds.
+    Scheduling it on a Thread with a small delay allows the callback to return first.
+    """
+    try:
+        rclpy.shutdown()
+    except Exception:
+        pass
 
 
 def main(args=None):
