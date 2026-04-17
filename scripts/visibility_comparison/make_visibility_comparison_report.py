@@ -55,53 +55,54 @@ def _copy_if_exists(src: Path, dst: Path) -> str:
 
 
 def _latest_run_dir(root: Path, method_id: str) -> Path | None:
-    candidates = [p.parent for p in root.rglob('experiment.csv') if p.parent.parent.name == method_id or p.parent.name == method_id]
+    candidates = []
+    for p in root.rglob('run_summary.json'):
+        if p.parent.parent.name == method_id or p.parent.name == method_id:
+            summary = _load_json(p)
+            if summary.get('completed', False):
+                candidates.append(p.parent)
     if not candidates:
         return None
     return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
-def _run_metrics(run_dir: Path | None) -> dict[str, str]:
-    if run_dir is None:
-        return {
-            'run_available': '0',
-            'run_dir': '',
-            'final_goal_distance': '',
-            'minimum_goal_distance': '',
-            'mean_solve_time_ms': '',
-        }
-    csv_path = run_dir / 'experiment.csv'
-    if not csv_path.is_file():
-        return {
-            'run_available': '0',
-            'run_dir': str(run_dir),
-            'final_goal_distance': '',
-            'minimum_goal_distance': '',
-            'mean_solve_time_ms': '',
-        }
-    rows = _load_csv_rows(csv_path)
-    goal_dist = []
-    solve_ms = []
-    for row in rows:
-        try:
-            gd = float(row.get('goal_dist', 'nan'))
-            if math.isfinite(gd):
-                goal_dist.append(gd)
-        except ValueError:
-            pass
-        try:
-            st = float(row.get('solve_time_ms', 'nan'))
-            if math.isfinite(st):
-                solve_ms.append(st)
-        except ValueError:
-            pass
-    return {
-        'run_available': '1',
-        'run_dir': str(run_dir),
-        'final_goal_distance': '' if not goal_dist else f'{goal_dist[-1]:.8f}',
-        'minimum_goal_distance': '' if not goal_dist else f'{min(goal_dist):.8f}',
-        'mean_solve_time_ms': '' if not solve_ms else f'{(sum(solve_ms) / len(solve_ms)):.8f}',
+def _run_metrics(run_dir: Path | None, method_id: str, field_summary_rows: list[dict]) -> dict[str, str]:
+    base = {
+        'run_available': '0', 'run_dir': '',
+        'completed': '', 'completion_reason': '',
+        'elapsed_after_first_cmd_s': '', 'path_length_m': '',
+        'final_goal_distance': '', 'minimum_goal_distance': '',
+        'mean_solve_time_ms': '', 'mean_efe_risk': '',
+        'mean_efe_ambiguity': '', 'mean_p_vis_plan': '',
+        'mean_p_vis_plan_eff': '', 'mean_r_plan_u_std': '',
+        'field_p_vis_mean': '', 'field_ambiguity_mean': '', 'field_r_plan_uv_std_mean': ''
     }
+    
+    for row in field_summary_rows:
+        if row.get('method_id') == method_id:
+            base['field_p_vis_mean'] = str(row.get('p_vis_mean', ''))
+            base['field_ambiguity_mean'] = str(row.get('ambiguity_mean', ''))
+            base['field_r_plan_uv_std_mean'] = str(row.get('r_plan_uv_std_mean', ''))
+            break
+            
+    if run_dir is None:
+        return base
+        
+    summary_path = run_dir / 'run_summary.json'
+    if not summary_path.is_file():
+        return base
+        
+    summary = _load_json(summary_path)
+    base['run_available'] = '1' if summary.get('completed', False) else '0'
+    base['run_dir'] = str(run_dir)
+    
+    for k in ['completed', 'completion_reason', 'elapsed_after_first_cmd_s', 'path_length_m', 'final_goal_distance', 'minimum_goal_distance', 'mean_solve_time_ms', 'mean_efe_risk', 'mean_efe_ambiguity', 'mean_p_vis_plan', 'mean_p_vis_plan_eff', 'mean_r_plan_u_std']:
+        val = summary.get(k, '')
+        if isinstance(val, float):
+            base[k] = f'{val:.6f}'
+        else:
+            base[k] = str(val)
+    return base
 
 
 def main() -> int:
@@ -149,6 +150,7 @@ def main() -> int:
 
     gp_summary_rows = _load_csv_rows(gp_dir / 'gp_fit_summary.csv')
     gp_summary_by_method = {row['method_id']: row for row in gp_summary_rows if row.get('method_id')}
+    field_summary_rows = _load_csv_rows(gp_dir / 'field_method_summary.csv')
     gp_plot_manifest = _load_json(gp_dir / 'plots' / 'plot_manifest.json')
     path_plot_manifest = _load_json((output_dir.parent / 'path_plots' / 'plot_manifest.json'))
     if not path_plot_manifest:
@@ -159,7 +161,7 @@ def main() -> int:
         gp_row = gp_summary_by_method.get(method_id, {})
         gp_available = str(gp_row.get('available', '0') or '0')
         run_dir = _latest_run_dir(planner_runs_root, method_id)
-        run_metrics = _run_metrics(run_dir)
+        run_metrics = _run_metrics(run_dir, method_id, field_summary_rows)
         target_available = '0' if method_id == 'visibility_unaware_baseline' else str(
             int(_target_column_available(gp_target_rows, method_id))
         )
@@ -188,10 +190,16 @@ def main() -> int:
         if plot_path.is_file():
             dst = assets_paths / plot_path.name
             path_assets.append(_copy_if_exists(plot_path, dst))
-    for key in ('combined_path_plot', 'combined_ambiguity_plot'):
-        src = Path(str(path_plot_manifest.get(key, '') or '')).expanduser()
-        if src.is_file():
-            _copy_if_exists(src, assets_paths / src.name)
+    
+    path_plots_dir = output_dir.parent / 'path_plots'
+    if path_plots_dir.is_dir():
+        for p in path_plots_dir.glob('combined_*.png'):
+            if p.is_file():
+                path_assets.append(_copy_if_exists(p, assets_paths / p.name))
+    elif (REPORT_DIR / 'path_plots').is_dir():
+        for p in (REPORT_DIR / 'path_plots').glob('combined_*.png'):
+            if p.is_file():
+                path_assets.append(_copy_if_exists(p, assets_paths / p.name))
 
     write_csv(
         output_dir / 'method_table.csv',
@@ -203,9 +211,21 @@ def main() -> int:
             'target_mean',
             'run_available',
             'run_dir',
+            'completed',
+            'completion_reason',
+            'elapsed_after_first_cmd_s',
+            'path_length_m',
             'final_goal_distance',
             'minimum_goal_distance',
             'mean_solve_time_ms',
+            'mean_efe_risk',
+            'mean_efe_ambiguity',
+            'mean_p_vis_plan',
+            'mean_p_vis_plan_eff',
+            'mean_r_plan_u_std',
+            'field_p_vis_mean',
+            'field_ambiguity_mean',
+            'field_r_plan_uv_std_mean',
         ),
         method_rows,
     )
@@ -218,6 +238,7 @@ def main() -> int:
             '## Summary',
             '',
             'This report summarizes the current state of the shared perception-to-visibility comparison framework.',
+            'Planner traces are explicitly aligned to the first command, and incomplete runs are excluded to ensure fairness.',
             'Oracle visibility, red binary, and the two YOLO-derived targets can all appear here when they are present in the current targets/GP folders.',
             'Red corrected area may still be absent if it has not been built yet.',
             '',

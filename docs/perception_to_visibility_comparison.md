@@ -226,12 +226,23 @@ Those are not the same thing.
 
 Two fields with similar `p_vis` ranges can still induce different ambiguity structure once mapped into `R_plan(x,y)`.
 
-So both are plotted:
+So multiple fields are plotted:
 
 1. GP visibility field `p_vis(x,y)`
 2. induced ambiguity field
+3. `r_plan_uv_std(x,y)` representing the planner-facing observation-noise proxy
 
-The framework also includes a supervisor-facing diagnostic ambiguity view with `S = I` to isolate the observation-model side of the ambiguity term from belief propagation effects.
+Note: The framework explicitly does NOT plot a static field-level 'risk map' because the true `risk_cost` within the EFE planner is goal-dependent. Planner objectives like `efe_risk` are instead plotted dynamically over time since the first command.
+
+## Run Completion Contract
+
+Planner execution is governed by a strict, deterministic completion contract enforced by the logger. Runs are terminated only for three mutually exclusive reasons:
+
+- `goal_reached`: Target reached and held.
+- `timeout_after_first_cmd`: A strict time budget evaluated *after* the first physical movement command, avoiding startup bias.
+- `stuck`: A rolling window detects when the command rate is high but the robot has stopped making measurable progress toward the goal.
+
+Only runs that output a valid `run_summary.json` with one of these reasons are ingested into the final path analysis and report. Incomplete runs are explicitly excluded.
 
 ## Current Shared Backbone
 
@@ -243,6 +254,7 @@ The active shared scripts are:
 - `scripts/visibility_comparison/build_gp_targets.py`
 - `scripts/visibility_comparison/fit_visibility_gps.py`
 - `scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py`
+- `scripts/visibility_comparison/run_planner_method_sweep.py`
 - `scripts/visibility_comparison/plot_planned_paths.py`
 - `scripts/visibility_comparison/make_visibility_comparison_report.py`
 

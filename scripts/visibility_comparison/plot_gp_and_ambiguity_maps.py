@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import numpy as np
 
-from common import CURRENT_GP_DIR, CURRENT_TARGETS_DIR, LOGS_ROOT, parse_float, read_csv_rows, write_manifest
+from common import CURRENT_GP_DIR, CURRENT_TARGETS_DIR, LOGS_ROOT, parse_float, read_csv_rows, write_csv, write_manifest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -165,6 +165,7 @@ def main() -> int:
 
     combined_rows = []
     plot_rows = []
+    summary_rows = []
     for artifact_path in artifact_paths:
         method_id = artifact_path.name.replace('_gp.npz', '')
         artifact = _load_artifact(artifact_path)
@@ -187,12 +188,25 @@ def main() -> int:
             r_miss_uv=float(args.r_miss_uv),
         )
         observation_ambiguity = _ambiguity_from_variance(plan_var, plan_var)
-        diagnostic_ambiguity = observation_ambiguity.copy()
+        r_plan_uv_std = np.sqrt(np.clip(plan_var, 1e-12, None))
+
+        summary_rows.append({
+            'method_id': method_id,
+            'p_vis_mean': float(np.mean(p_map)),
+            'p_vis_min': float(np.min(p_map)),
+            'p_vis_max': float(np.max(p_map)),
+            'ambiguity_mean': float(np.mean(observation_ambiguity)),
+            'ambiguity_min': float(np.min(observation_ambiguity)),
+            'ambiguity_max': float(np.max(observation_ambiguity)),
+            'r_plan_uv_std_mean': float(np.mean(r_plan_uv_std)),
+            'r_plan_uv_std_min': float(np.min(r_plan_uv_std)),
+            'r_plan_uv_std_max': float(np.max(r_plan_uv_std)),
+        })
 
         tx, ty, tv = _load_target_points(gp_targets_path, method_id)
 
         fig, axes = plt.subplots(2, 2, figsize=(14, 10), constrained_layout=True)
-        sample_ax, gp_ax, obs_ax, diag_ax = axes.ravel()
+        sample_ax, gp_ax, obs_ax, std_ax = axes.ravel()
 
         sample_ax.set_title(f'{_method_label(method_id)} samples')
         if tv.size:
@@ -213,10 +227,10 @@ def main() -> int:
         obs_ax.set_title('Observation-only ambiguity 0.5 log det R_plan')
         fig.colorbar(im_obs, ax=obs_ax, fraction=0.046, pad=0.04, label='ambiguity')
 
-        im_diag = diag_ax.imshow(diagnostic_ambiguity, origin='lower', extent=extent, cmap='magma', aspect='equal')
-        _draw_geometry(diag_ax, geometry)
-        diag_ax.set_title('Diagnostic ambiguity with S = I')
-        fig.colorbar(im_diag, ax=diag_ax, fraction=0.046, pad=0.04, label='ambiguity')
+        im_std = std_ax.imshow(r_plan_uv_std, origin='lower', extent=extent, cmap='magma_r', aspect='equal')
+        _draw_geometry(std_ax, geometry)
+        std_ax.set_title('Planner observation noise proxy r_plan_uv_std')
+        fig.colorbar(im_std, ax=std_ax, fraction=0.046, pad=0.04, label='r_plan_uv_std')
 
         for ax in axes.ravel():
             ax.set_xlabel('x [m]')
@@ -231,15 +245,15 @@ def main() -> int:
             'artifact_path': str(artifact_path),
             'plot_path': str(method_plot),
         })
-        plot_rows.append((method_id, p_map, observation_ambiguity, geometry, extent))
+        plot_rows.append((method_id, p_map, observation_ambiguity, r_plan_uv_std, geometry, extent))
 
     if plot_rows:
-        fig, axes = plt.subplots(len(plot_rows), 3, figsize=(15, 4.8 * len(plot_rows)), constrained_layout=True)
+        fig, axes = plt.subplots(len(plot_rows), 4, figsize=(20, 4.8 * len(plot_rows)), constrained_layout=True)
         if len(plot_rows) == 1:
             axes = np.asarray([axes])
-        for row_axes, (method_id, p_map, ambiguity_map, geometry, extent) in zip(axes, plot_rows):
+        for row_axes, (method_id, p_map, ambiguity_map, std_map, geometry, extent) in zip(axes, plot_rows):
             tx, ty, tv = _load_target_points(gp_targets_path, method_id)
-            ax0, ax1, ax2 = row_axes
+            ax0, ax1, ax2, ax3 = row_axes
             if tv.size:
                 ax0.scatter(tx, ty, c=tv, s=20, cmap='viridis', vmin=0.0, vmax=1.0)
             _draw_geometry(ax0, geometry)
@@ -256,6 +270,10 @@ def main() -> int:
             _draw_geometry(ax2, geometry)
             ax2.set_title('ambiguity')
 
+            ax3.imshow(std_map, origin='lower', extent=extent, cmap='magma_r', aspect='equal')
+            _draw_geometry(ax3, geometry)
+            ax3.set_title('r_plan_uv_std')
+
             for ax in row_axes:
                 ax.set_xlabel('x [m]')
                 ax.set_ylabel('y [m]')
@@ -265,6 +283,12 @@ def main() -> int:
         plt.close(fig)
     else:
         combined_path = output_dir / 'combined_gp_comparison.png'
+
+    write_csv(
+        output_dir / 'field_method_summary.csv',
+        ('method_id', 'p_vis_mean', 'p_vis_min', 'p_vis_max', 'ambiguity_mean', 'ambiguity_min', 'ambiguity_max', 'r_plan_uv_std_mean', 'r_plan_uv_std_min', 'r_plan_uv_std_max'),
+        summary_rows
+    )
 
     write_manifest(output_dir / 'plot_manifest.json', {
         'gp_dir': str(gp_dir),
@@ -281,7 +305,6 @@ def main() -> int:
         },
         'notes': [
             'Observation-only ambiguity uses the same visibility-to-covariance shaping as the planner.',
-            'The S = I diagnostic currently matches the observation-only map under first-order conditioning, but is still plotted explicitly for supervisor-facing comparison.',
         ],
     })
     print(f'Wrote GP/ambiguity plots to {output_dir}')

@@ -101,6 +101,13 @@ class ExperimentLogger(Node):
         self.declare_parameter('yolo_min_mask_area_px', 12.0)
         self.declare_parameter('yolo_mask_bottom_band_px', 3.0)
         self.declare_parameter('run_dir_topic', '/experiment/run_dir')
+        self.declare_parameter('run_timeout_after_first_cmd_s', 60.0)
+        self.declare_parameter('first_cmd_linear_eps', 0.02)
+        self.declare_parameter('first_cmd_angular_eps', 0.10)
+        self.declare_parameter('stuck_window_s', 8.0)
+        self.declare_parameter('stuck_max_displacement_m', 0.08)
+        self.declare_parameter('stuck_max_goal_improvement_m', 0.05)
+        self.declare_parameter('stuck_cmd_fraction_min', 0.50)
         self.declare_parameter('cam_pos', [-3.0, -3.0, 6.0])
         self.declare_parameter('look_at', [1.5, 1.5, 0.0])
         self.declare_parameter('img_width', 1280)
@@ -170,6 +177,13 @@ class ExperimentLogger(Node):
         self.yolo_min_mask_area_px = float(self.get_parameter('yolo_min_mask_area_px').value)
         self.yolo_mask_bottom_band_px = float(self.get_parameter('yolo_mask_bottom_band_px').value)
         self.run_dir_topic = str(self.get_parameter('run_dir_topic').value).strip() or '/experiment/run_dir'
+        self.run_timeout_after_first_cmd_s = float(self.get_parameter('run_timeout_after_first_cmd_s').value)
+        self.first_cmd_linear_eps = float(self.get_parameter('first_cmd_linear_eps').value)
+        self.first_cmd_angular_eps = float(self.get_parameter('first_cmd_angular_eps').value)
+        self.stuck_window_s = float(self.get_parameter('stuck_window_s').value)
+        self.stuck_max_displacement_m = float(self.get_parameter('stuck_max_displacement_m').value)
+        self.stuck_max_goal_improvement_m = float(self.get_parameter('stuck_max_goal_improvement_m').value)
+        self.stuck_cmd_fraction_min = float(self.get_parameter('stuck_cmd_fraction_min').value)
 
         # Camera model for homography projection (pixel to world)
         try:
@@ -270,7 +284,25 @@ class ExperimentLogger(Node):
         self.efe_metrics = None
         self._goal_in_radius_since = None
         self._stop_requested = False
+        self._completed = False
         self._last_tf_warn_wall = 0.0
+
+        self._first_cmd_stamp = None
+        self._motion_history = []
+        self._cumulative_path_length = 0.0
+        self._last_path_pose = None
+        self._min_goal_distance = float('inf')
+
+        self._efe_risk_sum = 0.0
+        self._efe_ambiguity_sum = 0.0
+        self._efe_count = 0
+        self._solve_time_ms_sum = 0.0
+        self._solve_count = 0
+        self._p_vis_plan_sum = 0.0
+        self._p_vis_plan_eff_sum = 0.0
+        self._r_plan_u_std_sum = 0.0
+        self._r_plan_v_std_sum = 0.0
+        self._p_vis_count = 0
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
 
@@ -661,6 +693,15 @@ class ExperimentLogger(Node):
             dy = goal_y - self.state_msg.pose.pose.position.y
             goal_dist = math.hypot(dx, dy)
 
+        if math.isfinite(self.state_msg.pose.pose.position.x) and math.isfinite(self.state_msg.pose.pose.position.y):
+            current_pose = (self.state_msg.pose.pose.position.x, self.state_msg.pose.pose.position.y)
+            if self._last_path_pose is not None:
+                self._cumulative_path_length += math.hypot(current_pose[0] - self._last_path_pose[0], current_pose[1] - self._last_path_pose[1])
+            self._last_path_pose = current_pose
+
+        if math.isfinite(goal_dist):
+            self._min_goal_distance = min(self._min_goal_distance, goal_dist)
+
         plan_points = 0
         plan_length = 0.0
         if self.plan_msg and self.plan_msg.poses:
@@ -698,6 +739,10 @@ class ExperimentLogger(Node):
             optimizer_nfev = float(self.planner_diag.data[3])
             plan_time_ms = float(self.planner_diag.data[4])
             solve_time_ms = float(self.planner_diag.data[5])
+
+            self._solve_time_ms_sum += solve_time_ms
+            self._solve_count += 1
+
             if len(self.planner_diag.data) >= 12:
                 p_vis_plan = float(self.planner_diag.data[6])
                 p_vis_plan_eff = float(self.planner_diag.data[7])
@@ -705,12 +750,25 @@ class ExperimentLogger(Node):
                 r_plan_v_std = float(self.planner_diag.data[9])
                 measurement_available = float(self.planner_diag.data[10])
                 belief_age_s = float(self.planner_diag.data[11])
+
+                if math.isfinite(p_vis_plan):
+                    self._p_vis_plan_sum += p_vis_plan
+                    self._p_vis_plan_eff_sum += p_vis_plan_eff
+                    self._r_plan_u_std_sum += r_plan_u_std
+                    self._r_plan_v_std_sum += r_plan_v_std
+                    self._p_vis_count += 1
+
         if self.efe_metrics and self.efe_metrics.data and len(self.efe_metrics.data) >= 6:
             efe_total = float(self.efe_metrics.data[0])
             efe_risk = float(self.efe_metrics.data[1])
             efe_ambiguity = float(self.efe_metrics.data[2])
             efe_control = float(self.efe_metrics.data[3])
             efe_visibility = float(self.efe_metrics.data[4])
+            
+            self._efe_risk_sum += efe_risk
+            self._efe_ambiguity_sum += efe_ambiguity
+            self._efe_count += 1
+
             if len(self.efe_metrics.data) >= 6:
                 efe_obstacle = float(self.efe_metrics.data[5])
 
@@ -735,29 +793,121 @@ class ExperimentLogger(Node):
         ])
         self.file.flush()
 
+        if not self._stop_requested:
+            if self._first_cmd_stamp is None:
+                if abs(cmd_v) >= self.first_cmd_linear_eps or abs(cmd_w) >= self.first_cmd_angular_eps:
+                    self._first_cmd_stamp = stamp
+                    self.get_logger().info(f"First command detected. Starting {self.run_timeout_after_first_cmd_s:.1f}s timeout.")
+            else:
+                elapsed = stamp - self._first_cmd_stamp
+                if elapsed >= self.run_timeout_after_first_cmd_s:
+                    self._finish_run("timeout_after_first_cmd", stamp)
+                    return
+
+                self._motion_history.append((stamp, current_pose[0], current_pose[1], goal_dist, cmd_v, cmd_w))
+                while self._motion_history and (stamp - self._motion_history[0][0]) > self.stuck_window_s:
+                    self._motion_history.pop(0)
+
+                if len(self._motion_history) > 1 and (stamp - self._motion_history[0][0]) >= (self.stuck_window_s - 0.2):
+                    cmd_count = sum(1 for m in self._motion_history if abs(m[4]) >= self.first_cmd_linear_eps or abs(m[5]) >= self.first_cmd_angular_eps)
+                    if cmd_count / len(self._motion_history) >= self.stuck_cmd_fraction_min:
+                        oldest = self._motion_history[0]
+                        disp = math.hypot(current_pose[0] - oldest[1], current_pose[1] - oldest[2])
+                        goal_imp = oldest[3] - goal_dist if math.isfinite(oldest[3]) and math.isfinite(goal_dist) else 0.0
+                        if disp <= self.stuck_max_displacement_m and goal_imp <= self.stuck_max_goal_improvement_m:
+                            self._finish_run("stuck", stamp)
+                            return
+
         if self.auto_stop_on_goal and self.goal_msg and not self._stop_requested:
             if goal_dist <= self.goal_success_radius:
                 if self._goal_in_radius_since is None:
                     self._goal_in_radius_since = stamp
                 held_s = float(stamp - self._goal_in_radius_since)
                 if held_s >= self.goal_success_hold_s:
-                    self._stop_requested = True
-                    if self.plan_file is not None:
-                        self.plan_file.flush()
-                    if self.perception_file is not None:
-                        self.perception_file.flush()
                     self.get_logger().info(
                         f"Goal reached (dist={goal_dist:.3f} m <= {self.goal_success_radius:.3f} m) "
-                        f"and held for {held_s:.2f} s. Ending run."
+                        f"and held for {held_s:.2f} s."
                     )
-                    rclpy.shutdown()
+                    self._finish_run("goal_reached", stamp)
                     return
             else:
                 self._goal_in_radius_since = None
 
+    def _finish_run(self, reason: str, stamp: float = None):
+        if self._stop_requested:
+            return
+        self._stop_requested = True
+        self._completed = True
+        
+        if self.plan_file is not None:
+            self.plan_file.flush()
+        if self.perception_file is not None:
+            self.perception_file.flush()
+        self.file.flush()
+
+        import json
+        mean_efe_risk = self._efe_risk_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
+        mean_efe_ambiguity = self._efe_ambiguity_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
+        mean_solve_time_ms = self._solve_time_ms_sum / max(self._solve_count, 1) if self._solve_count > 0 else math.nan
+        mean_p_vis_plan = self._p_vis_plan_sum / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
+        mean_p_vis_plan_eff = self._p_vis_plan_eff_sum / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
+        mean_r_plan_u_std = self._r_plan_u_std_sum / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
+        mean_r_plan_v_std = self._r_plan_v_std_sum / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
+
+        if stamp is None:
+            stamp = float(self.get_clock().now().nanoseconds) * 1e-9
+
+        elapsed_after_first_cmd_s = stamp - self._first_cmd_stamp if self._first_cmd_stamp is not None else 0.0
+
+        final_goal_distance = math.nan
+        if self.state_msg and self.goal_msg:
+             goal_x = float(self.goal_msg.pose.position.x)
+             goal_y = float(self.goal_msg.pose.position.y)
+             dx = goal_x - self.state_msg.pose.pose.position.x
+             dy = goal_y - self.state_msg.pose.pose.position.y
+             final_goal_distance = math.hypot(dx, dy)
+
+        summary = {
+            'completed': True,
+            'completion_reason': reason,
+            'first_cmd_stamp': self._first_cmd_stamp if self._first_cmd_stamp is not None else math.nan,
+            'stop_stamp': stamp,
+            'elapsed_after_first_cmd_s': elapsed_after_first_cmd_s,
+            'path_length_m': self._cumulative_path_length,
+            'final_goal_distance': final_goal_distance,
+            'minimum_goal_distance': self._min_goal_distance if math.isfinite(self._min_goal_distance) else math.nan,
+            'mean_solve_time_ms': mean_solve_time_ms,
+            'mean_efe_risk': mean_efe_risk,
+            'mean_efe_ambiguity': mean_efe_ambiguity,
+            'mean_p_vis_plan': mean_p_vis_plan,
+            'mean_p_vis_plan_eff': mean_p_vis_plan_eff,
+            'mean_r_plan_u_std': mean_r_plan_u_std,
+            'mean_r_plan_v_std': mean_r_plan_v_std,
+            'run_dir': self.run_dir
+        }
+        
+        summary_path = os.path.join(self.run_dir, 'run_summary.json')
+        with open(summary_path, 'w', encoding='utf-8') as f:
+            json.dump(summary, f, indent=2)
+
+        self.get_logger().info(f"Ending run. Reason: {reason}.")
+        rclpy.shutdown()
+
     def destroy_node(self):
         try:
-            self.file.close()
+            if not getattr(self, '_completed', False):
+                import json
+                summary_path = os.path.join(self.run_dir, 'run_summary.json')
+                summary = {
+                    'completed': False,
+                    'completion_reason': 'interrupted',
+                    'run_dir': getattr(self, 'run_dir', '')
+                }
+                with open(summary_path, 'w', encoding='utf-8') as f:
+                    json.dump(summary, f, indent=2)
+
+            if hasattr(self, 'file'):
+                self.file.close()
             if self.plan_file is not None:
                 self.plan_file.close()
             if self.perception_file is not None:
