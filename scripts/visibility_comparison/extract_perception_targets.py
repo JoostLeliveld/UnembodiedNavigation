@@ -184,6 +184,17 @@ def _draw_yolo_preview(
     return preview
 
 
+def _camera_relative_bearing_deg(camera_pos_xy: np.ndarray | None, *, x: float, y: float, theta: float) -> float:
+    if camera_pos_xy is None:
+        return math.nan
+    vec = np.asarray(camera_pos_xy, dtype=float).reshape(2) - np.array([float(x), float(y)], dtype=float)
+    if not np.all(np.isfinite(vec)) or np.linalg.norm(vec) <= 1e-9:
+        return math.nan
+    bearing_world = math.atan2(float(vec[1]), float(vec[0]))
+    rel = math.atan2(math.sin(bearing_world - float(theta)), math.cos(bearing_world - float(theta)))
+    return float(abs(math.degrees(rel)))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description='Create the shared perception_targets.csv contract from a raw capture.')
     parser.add_argument('--capture-dir', default='', help='Capture folder with samples.csv; defaults to logs/visibility_comparison/current_capture')
@@ -231,6 +242,10 @@ def main() -> int:
         raise RuntimeError(f'Failed to read capture manifest {manifest_path}: {exc}') from exc
     if not isinstance(capture_manifest, dict):
         raise RuntimeError(f'Capture manifest is not a JSON object: {manifest_path}')
+    camera_pos_raw = capture_manifest.get('camera_pos', [])
+    camera_pos_xy = None
+    if isinstance(camera_pos_raw, (list, tuple)) and len(camera_pos_raw) >= 2:
+        camera_pos_xy = np.asarray(camera_pos_raw[:2], dtype=float).reshape(2)
     yolo_model_path = Path(args.yolo_model).expanduser().resolve() if str(args.yolo_model).strip() else None
     yolo_binary_previews_dir = None
     yolo_score_raw_previews_dir = None
@@ -276,6 +291,14 @@ def main() -> int:
         oracle_visible_count += oracle_visible
         oracle_reason = str(row.get('oracle_occlusion_reason', '')).strip() or 'unknown'
         oracle_reason_counts[oracle_reason] = oracle_reason_counts.get(oracle_reason, 0) + 1
+        x_value = parse_float(row.get('x', ''), math.nan)
+        y_value = parse_float(row.get('y', ''), math.nan)
+        theta_value = parse_float(row.get('theta', ''), math.nan)
+        camera_relative_bearing_deg = (
+            _camera_relative_bearing_deg(camera_pos_xy, x=x_value, y=y_value, theta=theta_value)
+            if (math.isfinite(x_value) and math.isfinite(y_value) and math.isfinite(theta_value))
+            else math.nan
+        )
 
         image_rel = str(row.get('image_path', '')).strip()
         image_path = (capture_dir / image_rel).resolve() if image_rel else None
@@ -286,9 +309,14 @@ def main() -> int:
         red_bottom_v = math.nan
         yolo_detected_after_threshold = '0' if yolo_enabled else ''
         yolo_score_raw = '0.00000000' if yolo_enabled else ''
+        yolo_raw_best_score = '0.00000000' if yolo_enabled else ''
         yolo_score_selected = '0.00000000' if yolo_enabled else ''
+        yolo_selected_score = '0.00000000' if yolo_enabled else ''
         yolo_best_class_id = ''
+        yolo_selected_class_id = ''
+        yolo_num_target_candidates = '0' if yolo_enabled else ''
         yolo_mask_area = ''
+        yolo_bbox_area = ''
         yolo_bbox_text = ''
         yolo_bottom_u = ''
         yolo_bottom_v = ''
@@ -338,9 +366,13 @@ def main() -> int:
                         )
                         yolo_detected_after_threshold = '1' if bool(selected.get('detected_after_threshold', False)) else '0'
                         yolo_score_raw = f'{float(selected.get("raw_best_score", 0.0)):.8f}'
+                        yolo_raw_best_score = yolo_score_raw
                         yolo_score_selected = f'{float(selected.get("selected_score", 0.0)):.8f}'
+                        yolo_selected_score = yolo_score_selected
                         if math.isfinite(float(selected.get('best_class_id', math.nan))):
                             yolo_best_class_id = str(int(float(selected.get('best_class_id', math.nan))))
+                            yolo_selected_class_id = yolo_best_class_id
+                        yolo_num_target_candidates = str(int(selected.get('n_candidates', 0) or 0))
                         yolo_selected_pixel_source = str(selected.get('selected_pixel_source', 'none'))
                         source_code = 0
                         if yolo_selected_pixel_source == 'bbox_bottom':
@@ -350,6 +382,8 @@ def main() -> int:
                         yolo_selected_pixel_source_code = str(int(source_code))
                         if selected.get('bbox_xyxy') is not None:
                             yolo_bbox_text = format_xyxy_text(selected.get('bbox_xyxy'))
+                            bbox_xyxy = np.asarray(selected.get('bbox_xyxy'), dtype=float).reshape(4)
+                            yolo_bbox_area = f'{float(max(bbox_xyxy[2] - bbox_xyxy[0], 0.0) * max(bbox_xyxy[3] - bbox_xyxy[1], 0.0)):.8f}'
                         if math.isfinite(float(selected.get('selected_u', math.nan))):
                             yolo_bottom_u = f'{float(selected["selected_u"]):.8f}'
                         if math.isfinite(float(selected.get('selected_v', math.nan))):
@@ -385,6 +419,7 @@ def main() -> int:
             'y': str(row.get('y', '')).strip(),
             'theta': str(row.get('theta', '')).strip(),
             'image_path': image_rel,
+            'camera_relative_bearing_deg': '' if not math.isfinite(camera_relative_bearing_deg) else f'{float(camera_relative_bearing_deg):.8f}',
             'red_detected': str(int(red_detected)),
             'red_area': '' if not math.isfinite(red_area) else f'{float(red_area):.8f}',
             'red_bbox_xyxy': red_bbox_text,
@@ -392,9 +427,14 @@ def main() -> int:
             'red_bottom_v': '' if not math.isfinite(red_bottom_v) else f'{float(red_bottom_v):.8f}',
             'yolo_detected_after_threshold': yolo_detected_after_threshold,
             'yolo_score_raw': yolo_score_raw,
+            'yolo_raw_best_score': yolo_raw_best_score,
             'yolo_score_selected': yolo_score_selected,
+            'yolo_selected_score': yolo_selected_score,
             'yolo_best_class_id': yolo_best_class_id,
+            'yolo_selected_class_id': yolo_selected_class_id,
+            'yolo_num_target_candidates': yolo_num_target_candidates,
             'yolo_mask_area': yolo_mask_area,
+            'yolo_bbox_area': yolo_bbox_area,
             'yolo_bbox_xyxy': yolo_bbox_text,
             'yolo_bottom_u': yolo_bottom_u,
             'yolo_bottom_v': yolo_bottom_v,

@@ -37,6 +37,14 @@ class PlanResult:
     p_vis_plan_eff: float = 1.0
     r_plan_u_std: float = np.nan
     r_plan_v_std: float = np.nan
+    terminal_goal_distance_pred: float = np.nan
+    terminal_goal_progress_m: float = np.nan
+    fraction_horizon_low_pvis: float = np.nan
+    fraction_horizon_high_ambiguity: float = np.nan
+    min_predicted_obstacle_distance_m: float = np.nan
+    rollout_valid: bool = True
+    invalid_reason: str = ""
+    fallback_stop_applied: bool = False
 
 
 class UnicyclePlannerBase:
@@ -75,6 +83,7 @@ class UnicyclePlannerBase:
         visibility_weight=0.0,
         visibility_target_height_m=0.0,
         visibility_geometry_json='',
+        collision_geometry_json='',
         visibility_artifact_path='',
         r_visible_uv=2.5,
         r_miss_uv=120.0,
@@ -103,6 +112,9 @@ class UnicyclePlannerBase:
         nogo_softplus_scale=0.08,
         nogo_logbarrier_scale=0.25,
         nogo_logbarrier_eps=1e-3,
+        robot_collision_radius_m=0.125,
+        min_terminal_goal_progress_m=0.20,
+        invalid_rollout_barrier_cost=1e6,
         runtime_debug=False,
     ):
         self.horizon = int(horizon)
@@ -142,6 +154,9 @@ class UnicyclePlannerBase:
         self.visibility_barrier_threshold = float(max(visibility_barrier_threshold, 0.0))
         self.visibility_barrier_scale = float(max(visibility_barrier_scale, 1e-6))
         self.discount_gamma = float(discount_gamma)
+        self.robot_collision_radius_m = float(max(robot_collision_radius_m, 0.0))
+        self.min_terminal_goal_progress_m = float(max(min_terminal_goal_progress_m, 0.0))
+        self.invalid_rollout_barrier_cost = float(max(invalid_rollout_barrier_cost, 1.0))
 
         if approx_method is None:
             self.approx_method = self.APPROX_METHOD
@@ -191,6 +206,7 @@ class UnicyclePlannerBase:
         self.nogo_logbarrier_scale = float(max(nogo_logbarrier_scale, 1e-6))
         self.nogo_logbarrier_eps = float(max(nogo_logbarrier_eps, 1e-6))
         self.nogo_cost_model = None
+        self.collision_cost_model = None
 
         self.g_obs = self.camera.g_uv
 
@@ -225,6 +241,19 @@ class UnicyclePlannerBase:
                 geometry_json=str(visibility_geometry_json or ''),
             )
             self.nogo_cost_model = NogoZoneCostModel(nogo_cfg)
+
+        if str(collision_geometry_json or '').strip():
+            collision_cfg = NogoCostConfig(
+                penalty_type='softplus',
+                weight=1.0,
+                safe_distance=0.0,
+                gaussian_sigma=1.0,
+                softplus_scale=1.0,
+                logbarrier_scale=1.0,
+                logbarrier_eps=1e-3,
+                geometry_json=str(collision_geometry_json or ''),
+            )
+            self.collision_cost_model = NogoZoneCostModel(collision_cfg)
 
         self.prev_controls_flat = None
         self._casadi_valgrad_cache = {}
@@ -368,9 +397,101 @@ class UnicyclePlannerBase:
         }
 
     def obstacle_penalty(self, m):
-        if self.nogo_cost_model is None or not self.nogo_cost_model.enabled:
+        penalty = 0.0
+        if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
+            penalty += float(self.nogo_cost_model.penalty_state_np(m))
+        penalty += self._collision_barrier_penalty(self.collision_clearance_state_np(m))
+        return float(penalty)
+
+    def collision_signed_distance_state_np(self, m):
+        if self.collision_cost_model is None:
+            return float('inf')
+        return float(self.collision_cost_model.signed_distance_state_np(m))
+
+    def collision_clearance_state_np(self, m):
+        signed_d = self.collision_signed_distance_state_np(m)
+        if not math.isfinite(signed_d):
+            return float('inf')
+        return float(signed_d - self.robot_collision_radius_m)
+
+    def collision_penetration_state_np(self, m):
+        clearance = self.collision_clearance_state_np(m)
+        if not math.isfinite(clearance):
             return 0.0
-        return float(self.nogo_cost_model.penalty_state_np(m))
+        return float(max(-clearance, 0.0))
+
+    def _collision_barrier_penalty(self, clearance):
+        if not math.isfinite(clearance):
+            return 0.0
+        near_margin = 0.05
+        near_term = 1e-3 * self.invalid_rollout_barrier_cost * self._softplus(
+            (near_margin - float(clearance)) / 0.02
+        )
+        penetration = max(-float(clearance), 0.0)
+        if penetration <= 0.0:
+            return float(near_term)
+        scale = max(self.robot_collision_radius_m, 1e-3)
+        penetration_term = self.invalid_rollout_barrier_cost * (1.0 + (penetration / scale) ** 2)
+        return float(near_term + penetration_term)
+
+    def _goal_distance_xy(self, state_xy, goal_xy):
+        state_xy = np.asarray(state_xy, dtype=float).reshape(2)
+        goal_xy = np.asarray(goal_xy, dtype=float).reshape(2)
+        return float(np.linalg.norm(state_xy - goal_xy))
+
+    def _terminal_progress_penalty(self, current_goal_distance, terminal_goal_distance):
+        progress = float(current_goal_distance) - float(terminal_goal_distance)
+        shortfall = max(self.min_terminal_goal_progress_m - progress, 0.0)
+        if shortfall <= 0.0:
+            return 0.0
+        denom = max(self.min_terminal_goal_progress_m, 1e-6)
+        return float(0.01 * self.invalid_rollout_barrier_cost * (shortfall / denom) ** 2)
+
+    def _trajectory_plan_diagnostics(self, m0, S0, controls, goal_xy):
+        goal_xy = np.asarray(goal_xy, dtype=float).reshape(2)
+        controls = np.asarray(controls, dtype=float).reshape(self.horizon, 2)
+        m = np.asarray(m0, dtype=float).copy()
+        S = np.asarray(S0, dtype=float).copy()
+        p_vis_values = []
+        ambiguity_std_values = []
+        min_clearance = float('inf')
+
+        for u in controls:
+            m, S = self.predict(m, S, u)
+            vis_diag = self.planning_visibility_diagnostics(m, S)
+            p_vis_values.append(float(vis_diag['p_vis']))
+            ambiguity_std_values.append(
+                float(max(vis_diag['r_plan_u_std'], vis_diag['r_plan_v_std']))
+            )
+            min_clearance = min(min_clearance, self.collision_clearance_state_np(m))
+
+        current_goal_distance = self._goal_distance_xy(np.asarray(m0[:2], dtype=float), goal_xy)
+        terminal_goal_distance = self._goal_distance_xy(np.asarray(m[:2], dtype=float), goal_xy)
+        terminal_goal_progress = float(current_goal_distance - terminal_goal_distance)
+        low_pvis_fraction = (
+            float(np.mean(np.asarray(p_vis_values, dtype=float) < 0.2))
+            if p_vis_values else math.nan
+        )
+        ambiguity_threshold = math.sqrt(max(self.r_visible_uv, 1e-6) * max(self.r_miss_uv, 1e-6))
+        high_ambiguity_fraction = (
+            float(np.mean(np.asarray(ambiguity_std_values, dtype=float) >= ambiguity_threshold))
+            if ambiguity_std_values else math.nan
+        )
+        rollout_valid = bool((not math.isfinite(min_clearance)) or min_clearance >= 0.0)
+        invalid_reason = ''
+        if not rollout_valid:
+            invalid_reason = 'predicted_collision_geometry'
+        return {
+            'terminal_goal_distance_pred': float(terminal_goal_distance),
+            'terminal_goal_progress_m': float(terminal_goal_progress),
+            'fraction_horizon_low_pvis': low_pvis_fraction,
+            'fraction_horizon_high_ambiguity': high_ambiguity_fraction,
+            'min_predicted_obstacle_distance_m': (
+                float(min_clearance) if math.isfinite(min_clearance) else math.inf
+            ),
+            'rollout_valid': rollout_valid,
+            'invalid_reason': invalid_reason,
+        }
 
     def _resolve_plan_problem(self, m0, goal_xy):
         goal_theta = 0.0
@@ -497,8 +618,12 @@ class UnicyclePlannerBase:
             float(self.visibility_barrier_scale),
             float(self.discount_gamma),
             float(self.visibility_weight),
+            float(self.robot_collision_radius_m),
+            float(self.min_terminal_goal_progress_m),
+            float(self.invalid_rollout_barrier_cost),
             bool(self.use_nogo_cost),
             tuple(self.nogo_cost_model.signature) if self.nogo_cost_model is not None else (),
+            tuple(self.collision_cost_model.signature) if self.collision_cost_model is not None else (),
             int(self.horizon),
             float(self.dt),
             int(np.asarray(goal_obs, dtype=float).shape[0]),
@@ -541,6 +666,9 @@ class UnicyclePlannerBase:
             nogo_cost_ca = None
             if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
                 nogo_cost_ca = self.nogo_cost_model.make_penalty_state_casadi()
+            collision_signed_distance_ca = None
+            if self.collision_cost_model is not None:
+                collision_signed_distance_ca = self.collision_cost_model.make_signed_distance_state_casadi()
             params_ca = casadi_efe.CasadiEfeParams(
                 Q=np.array(self.process_noise(self.dt), dtype=float),
                 R_visible=np.array(self.R_visible, dtype=float),
@@ -562,6 +690,9 @@ class UnicyclePlannerBase:
                 goal_prior_v_std_final=float(self.goal_prior_v_std_final),
                 goal_tightening_power=float(self.goal_tightening_power),
                 goal_progress_n_steps=int(self.goal_progress_n_steps),
+                robot_collision_radius_m=float(self.robot_collision_radius_m),
+                min_terminal_goal_progress_m=float(self.min_terminal_goal_progress_m),
+                invalid_rollout_barrier_cost=float(self.invalid_rollout_barrier_cost),
                 time_horizon=int(self.horizon),
                 dt=float(self.dt),
                 Du=2,
@@ -572,6 +703,7 @@ class UnicyclePlannerBase:
                 approx=self.approx_method,
                 p_vis_state=p_vis_ca,
                 nogo_cost=nogo_cost_ca,
+                collision_signed_distance=collision_signed_distance_ca,
             )
             self._casadi_valgrad_cache[cache_key] = valgrad
             self._runtime_debug_print(
@@ -615,7 +747,7 @@ class UnicyclePlannerBase:
         *,
         progress_index=0.0,
     ):
-        del goal_state, goal_obs_cov
+        del goal_obs_cov
         controls_flat = np.asarray(controls_flat, dtype=float)
         if controls_flat.size != self.horizon * 2:
             controls_flat = controls_flat[:self.horizon * 2]
@@ -630,6 +762,8 @@ class UnicyclePlannerBase:
         total_obstacle = 0.0
         use_observation_risk = self.use_obs_risk
         use_ambiguity_term = self.use_ambiguity
+        goal_xy = np.asarray(goal_state[:2], dtype=float).reshape(2)
+        current_goal_distance = self._goal_distance_xy(np.asarray(m0[:2], dtype=float), goal_xy)
 
         for t in range(self.horizon):
             u = controls[t]
@@ -665,6 +799,9 @@ class UnicyclePlannerBase:
                 )
             total_obstacle += weight_t * self.obstacle_penalty(m)
             total_control += weight_t * self.control_weight * float(u[0] ** 2 + u[1] ** 2)
+
+        terminal_goal_distance = self._goal_distance_xy(np.asarray(m[:2], dtype=float), goal_xy)
+        total_risk += self._terminal_progress_penalty(current_goal_distance, terminal_goal_distance)
 
         total = total_risk + total_amb + total_control + total_visibility + total_obstacle
         if return_metrics:
@@ -728,6 +865,7 @@ class UnicyclePlannerBase:
                     m0,
                     S0,
                     goal_obs_eval,
+                    np.asarray(goal_xy, dtype=float).reshape(2),
                     progress_index,
                 )
                 if fg_calls['count'] == 0:
@@ -812,6 +950,11 @@ class UnicyclePlannerBase:
         vis_diag = self.planning_visibility_diagnostics(m0, S0)
 
         states = rollout_unicycle(m0, best_controls, self.dt)
+        plan_diag = self._trajectory_plan_diagnostics(m0, S0, best_controls, goal_xy)
+        fallback_stop_applied = not bool(plan_diag['rollout_valid'])
+        selected_source = str(best_candidate.get('source', ''))
+        if fallback_stop_applied:
+            selected_source = f'{selected_source}:fallback_stop' if selected_source else 'fallback_stop'
         solve_time_s = float(max(time.perf_counter() - t_plan_start, 0.0))
         return PlanResult(
             controls=best_controls,
@@ -829,9 +972,17 @@ class UnicyclePlannerBase:
             optimizer_nfev=optimizer_nfev,
             optimizer_message=optimizer_message,
             solve_time_s=solve_time_s,
-            selected_source=str(best_candidate.get('source', '')),
+            selected_source=selected_source,
             p_vis_plan=float(vis_diag['p_vis']),
             p_vis_plan_eff=float(vis_diag['p_vis_eff']),
             r_plan_u_std=float(vis_diag['r_plan_u_std']),
             r_plan_v_std=float(vis_diag['r_plan_v_std']),
+            terminal_goal_distance_pred=float(plan_diag['terminal_goal_distance_pred']),
+            terminal_goal_progress_m=float(plan_diag['terminal_goal_progress_m']),
+            fraction_horizon_low_pvis=float(plan_diag['fraction_horizon_low_pvis']),
+            fraction_horizon_high_ambiguity=float(plan_diag['fraction_horizon_high_ambiguity']),
+            min_predicted_obstacle_distance_m=float(plan_diag['min_predicted_obstacle_distance_m']),
+            rollout_valid=bool(plan_diag['rollout_valid']),
+            invalid_reason=str(plan_diag['invalid_reason']),
+            fallback_stop_applied=bool(fallback_stop_applied),
         )

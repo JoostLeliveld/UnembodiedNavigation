@@ -6,7 +6,11 @@ from typing import Any, Dict, List, Tuple
 
 import yaml
 from ament_index_python.packages import get_package_share_directory
-from unav_common.occlusion_geometry import parse_occlusion_scene_from_world, scene_to_json
+from unav_common.occlusion_geometry import (
+    parse_collision_scene_from_world,
+    parse_occlusion_scene_from_world,
+    scene_to_json,
+)
 
 
 VALID_PLANNERS = {"efe1", "efe2", "efer", "mpc", "visibility_unaware_baseline"}
@@ -275,7 +279,15 @@ def serialize_occlusion_geometry_from_world(
     world_path: str,
     model_name: str = "warehouse_rack_occluders",
 ) -> str:
-    scene = parse_occlusion_scene_from_world(world_path, model_name=model_name)
+    scene = parse_occlusion_scene_from_world(world_path, model_name=model_name, geometry_tags=('visual',))
+    return scene_to_json(scene)
+
+
+def serialize_collision_geometry_from_world(
+    world_path: str,
+    model_names: Tuple[str, ...] = ("warehouse_walls", "warehouse_rack_occluders"),
+) -> str:
+    scene = parse_collision_scene_from_world(world_path, model_names=model_names)
     return scene_to_json(scene)
 
 

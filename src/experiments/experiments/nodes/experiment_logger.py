@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import csv
+import hashlib
 import math
 import os
 import time
@@ -11,16 +12,19 @@ import tf2_ros
 import yaml
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry, Path
+from ros_gz_interfaces.msg import Contacts
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from std_msgs.msg import Float64MultiArray, String
 from tf2_geometry_msgs import do_transform_pose
 
 from experiments.core.manifest import create_run_dir, snapshot_configs, write_manifest
+from experiments.core.world_profiles import load_profile
 from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
     diagnostics_from_message,
 )
+from unav_common.occlusion_geometry import scene_from_json, signed_distance_to_union_xy
 
 
 def _find_repo_root(start_dir: str) -> str:
@@ -66,6 +70,17 @@ def _load_task_start_pose(tasks_yaml_path: str, world: str, task: str):
         except (TypeError, ValueError):
             return None
     return None
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(str(text or '').encode('utf-8')).hexdigest()
+
+
+def _split_prisms_by_prefix(prisms, prefix: str):
+    token = str(prefix or '').strip()
+    if not token:
+        return tuple()
+    return tuple(prism for prism in tuple(prisms or ()) if str(prism.name).startswith(token))
 
 
 class ExperimentLogger(Node):
@@ -127,6 +142,9 @@ class ExperimentLogger(Node):
         self.declare_parameter('visibility_barrier_scale', 10.0)
         self.declare_parameter('visibility_target_height_m', 0.0)
         self.declare_parameter('perception_use_geometry_occlusion', True)
+        self.declare_parameter('visibility_geometry_json', '')
+        self.declare_parameter('collision_geometry_json', '')
+        self.declare_parameter('robot_collision_radius_m', 0.125)
         self.declare_parameter('optimizer_maxiter', 80)
         self.declare_parameter('optimizer_maxfun', 500)
         self.declare_parameter('optimizer_ftol', 1e-6)
@@ -218,6 +236,9 @@ class ExperimentLogger(Node):
         self.perception_use_geometry_occlusion = bool(
             self.get_parameter('perception_use_geometry_occlusion').value
         )
+        self.visibility_geometry_json = str(self.get_parameter('visibility_geometry_json').value)
+        self.collision_geometry_json = str(self.get_parameter('collision_geometry_json').value)
+        self.robot_collision_radius_m = float(self.get_parameter('robot_collision_radius_m').value)
         self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
         self.optimizer_maxfun = int(self.get_parameter('optimizer_maxfun').value)
         self.optimizer_ftol = float(self.get_parameter('optimizer_ftol').value)
@@ -265,9 +286,11 @@ class ExperimentLogger(Node):
                 img_height=img_height,
                 fov_h_rad=fov_h_rad,
             )
+            self.camera_pos_xy = np.asarray(cam_pos[:2], dtype=float).reshape(2)
         except Exception as e:
             self.get_logger().warn(f'Failed to initialize camera model for homography: {e}')
             self.camera_model = None
+            self.camera_pos_xy = None
 
         run_info = create_run_dir(log_dir)
         self.run_id = run_info['run_id']
@@ -278,6 +301,28 @@ class ExperimentLogger(Node):
         repo_root = _find_repo_root(os.getcwd())
         self.repo_root = repo_root
         self.task_start_pose = _load_task_start_pose(self.tasks_yaml, self.world, self.task)
+        self.world_bounds = {
+            'xmin': math.nan,
+            'xmax': math.nan,
+            'ymin': math.nan,
+            'ymax': math.nan,
+        }
+        try:
+            profile, _intrinsics, _world_path, _camera_pose = load_profile(self.world_profiles_path, self.world)
+            visibility_defaults = dict(profile.get('visibility_defaults') or {})
+            self.world_bounds = {
+                'xmin': float(visibility_defaults.get('visibility_map_min_x', math.nan)),
+                'xmax': float(visibility_defaults.get('visibility_map_max_x', math.nan)),
+                'ymin': float(visibility_defaults.get('visibility_map_min_y', math.nan)),
+                'ymax': float(visibility_defaults.get('visibility_map_max_y', math.nan)),
+            }
+        except Exception as exc:
+            self.get_logger().warn(f'Failed to resolve world bounds from world_profiles: {exc}')
+
+        collision_scene = scene_from_json(self.collision_geometry_json)
+        self._collision_prisms = tuple(collision_scene.prisms)
+        self._wall_prisms = _split_prisms_by_prefix(self._collision_prisms, 'warehouse_walls/')
+        self._obstacle_prisms = _split_prisms_by_prefix(self._collision_prisms, 'warehouse_rack_occluders/')
         manifest_data = {
             'run_id': self.run_id,
             'timestamp': datetime.now().isoformat(),
@@ -313,6 +358,11 @@ class ExperimentLogger(Node):
             'ambiguity_term_scale': self.ambiguity_term_scale,
             'visibility_weight': self.visibility_weight,
             'visibility_target_height_m': self.visibility_target_height_m,
+            'visibility_geometry_json': self.visibility_geometry_json,
+            'visibility_geometry_sha256': _sha256_text(self.visibility_geometry_json),
+            'collision_geometry_json': self.collision_geometry_json,
+            'collision_geometry_sha256': _sha256_text(self.collision_geometry_json),
+            'robot_collision_radius_m': self.robot_collision_radius_m,
             'perception_use_geometry_occlusion': self.perception_use_geometry_occlusion,
             'use_nogo_cost': self.use_nogo_cost,
             'nogo_penalty_type': self.nogo_penalty_type,
@@ -335,6 +385,7 @@ class ExperimentLogger(Node):
             'seed': self.seed,
             'state_pipeline': 'homography_to_bev',
             'observation_model': 'uv',
+            'world_bounds': dict(self.world_bounds),
             'task_start_pose': {
                 'x': float(self.task_start_pose[0]),
                 'y': float(self.task_start_pose[1]),
@@ -404,6 +455,18 @@ class ExperimentLogger(Node):
         self._cumulative_path_length = 0.0
         self._last_path_pose = None
         self._min_goal_distance = float('inf')
+        self._contact_collision_seen = False
+        self._geom_collision_seen = False
+        self._collision_reason = ''
+        self._first_crash_stamp = math.nan
+        self._min_wall_distance = float('inf')
+        self._min_obstacle_distance = float('inf')
+        self._max_wall_penetration = 0.0
+        self._max_obstacle_penetration = 0.0
+        self._off_map_seen = False
+        self._inside_no_go_seen = False
+        self._valid_run = True
+        self._invalid_reason = ''
 
         self._efe_risk_sum = 0.0
         self._efe_ambiguity_sum = 0.0
@@ -451,6 +514,7 @@ class ExperimentLogger(Node):
         self.create_subscription(Float64MultiArray, '/planner/diagnostics', self._planner_diag_cb, 10)
         self.create_subscription(String, '/planner/diagnostics_text', self._planner_diag_text_cb, 10)
         self.create_subscription(Float64MultiArray, '/efe/metrics', self._efe_cb, 10)
+        self.create_subscription(Contacts, '/world_contacts', self._contacts_cb, 10)
 
         self.file = open(self.log_path, 'w', newline='')
         self.writer = csv.writer(self.file)
@@ -479,7 +543,14 @@ class ExperimentLogger(Node):
             'measurement_available', 'belief_age_s',
             'p_vis_plan', 'p_vis_plan_eff',
             'r_plan_u_std', 'r_plan_v_std',
+            'terminal_goal_distance_pred', 'terminal_goal_progress_m',
+            'fraction_horizon_low_pvis', 'fraction_horizon_high_ambiguity',
+            'min_predicted_obstacle_distance_m', 'rollout_valid', 'fallback_stop_applied',
             'efe_total', 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_visibility', 'efe_obstacle',
+            'collision_any', 'collision_contact', 'collision_geom', 'collision_reason', 'first_crash_stamp',
+            'min_wall_distance_m', 'min_obstacle_distance_m',
+            'wall_penetration_m', 'obstacle_penetration_m',
+            'off_map', 'inside_no_go', 'valid_run', 'invalid_reason',
             'seed'
         ])
 
@@ -554,6 +625,14 @@ class ExperimentLogger(Node):
                 'mask_border_frac',
                 'mask_score',
                 'selected_pixel_source_code',
+                'yolo_raw_best_score',
+                'yolo_selected_score',
+                'yolo_num_target_candidates',
+                'yolo_selected_class_id',
+                'yolo_selected_pixel_source',
+                'yolo_bbox_area',
+                'yolo_mask_area',
+                'camera_relative_bearing_deg',
                 'seed',
             ])
 
@@ -686,6 +765,94 @@ class ExperimentLogger(Node):
     def _diag_cb(self, msg: Float64MultiArray):
         self.perception_diag = diagnostics_from_message(msg)
         self._log_perception_sample(self.perception_diag)
+
+    def _record_invalid(self, reason: str) -> None:
+        reason = str(reason or '').strip()
+        if not reason:
+            return
+        if self._valid_run:
+            self._valid_run = False
+            self._invalid_reason = reason
+            return
+        if reason not in self._invalid_reason.split('|'):
+            self._invalid_reason = f'{self._invalid_reason}|{reason}' if self._invalid_reason else reason
+
+    def _record_collision_event(self, *, stamp: float, reason: str, contact: bool, geom: bool) -> None:
+        if contact:
+            self._contact_collision_seen = True
+        if geom:
+            self._geom_collision_seen = True
+        if math.isfinite(float(stamp)) and not math.isfinite(self._first_crash_stamp):
+            self._first_crash_stamp = float(stamp)
+        if str(reason or '').strip():
+            self._collision_reason = str(reason).strip()
+            self._record_invalid(self._collision_reason)
+
+    def _contacts_cb(self, msg: Contacts):
+        try:
+            stamp = self._stamp_to_float(msg.header.stamp)
+        except AttributeError:
+            stamp = float(self.get_clock().now().nanoseconds) * 1e-9
+        for contact in list(msg.contacts or []):
+            name_1 = str(getattr(getattr(contact, 'collision1', None), 'name', '') or '')
+            name_2 = str(getattr(getattr(contact, 'collision2', None), 'name', '') or '')
+            pair = (name_1, name_2)
+            if not any('turtlebot3' in name for name in pair):
+                continue
+            if all('turtlebot3' in name for name in pair):
+                continue
+            other = name_2 if 'turtlebot3' in name_1 else name_1
+            if 'ground_plane' in other:
+                continue
+            self._record_collision_event(
+                stamp=stamp,
+                reason=f'contact:{other or "unknown"}',
+                contact=True,
+                geom=False,
+            )
+            break
+
+    def _signed_distance_from_prisms(self, prisms, x: float, y: float) -> float:
+        if not prisms:
+            return float('inf')
+        return float(signed_distance_to_union_xy(prisms, np.array([float(x), float(y)], dtype=float))[0])
+
+    def _geometry_safety_at_truth(self, truth_x: float, truth_y: float):
+        wall_signed = self._signed_distance_from_prisms(self._wall_prisms, truth_x, truth_y)
+        obstacle_signed = self._signed_distance_from_prisms(self._obstacle_prisms, truth_x, truth_y)
+        wall_clearance = wall_signed - self.robot_collision_radius_m if math.isfinite(wall_signed) else math.inf
+        obstacle_clearance = obstacle_signed - self.robot_collision_radius_m if math.isfinite(obstacle_signed) else math.inf
+        wall_penetration = max(-wall_clearance, 0.0) if math.isfinite(wall_clearance) else 0.0
+        obstacle_penetration = max(-obstacle_clearance, 0.0) if math.isfinite(obstacle_clearance) else 0.0
+
+        bounds = dict(self.world_bounds or {})
+        off_map = False
+        if all(math.isfinite(float(bounds.get(key, math.nan))) for key in ('xmin', 'xmax', 'ymin', 'ymax')):
+            off_map = bool(
+                float(truth_x) < float(bounds['xmin'])
+                or float(truth_x) > float(bounds['xmax'])
+                or float(truth_y) < float(bounds['ymin'])
+                or float(truth_y) > float(bounds['ymax'])
+            )
+        inside_no_go = bool(obstacle_penetration > 0.0)
+        return {
+            'min_wall_distance_m': float(wall_clearance),
+            'min_obstacle_distance_m': float(obstacle_clearance),
+            'wall_penetration_m': float(wall_penetration),
+            'obstacle_penetration_m': float(obstacle_penetration),
+            'off_map': off_map,
+            'inside_no_go': inside_no_go,
+        }
+
+    def _camera_relative_bearing_deg(self, truth_x: float, truth_y: float, truth_yaw: float) -> float:
+        if self.camera_pos_xy is None:
+            return math.nan
+        vec = np.asarray(self.camera_pos_xy, dtype=float) - np.array([float(truth_x), float(truth_y)], dtype=float)
+        if np.linalg.norm(vec) <= 1e-9:
+            return math.nan
+        bearing_world = math.atan2(float(vec[1]), float(vec[0]))
+        rel = self._wrap_angle(bearing_world - float(truth_yaw))
+        return float(abs(math.degrees(rel)))
 
     def _latest_truth_pose(self):
         if self.odom_msg is None:
@@ -891,6 +1058,9 @@ class ExperimentLogger(Node):
         obs_yaw_error_deg = math.nan
         if true_ok and diag['detected'] and math.isfinite(diag['yaw_est']):
             obs_yaw_error_deg = math.degrees(self._wrap_angle(diag['yaw_est'] - true_yaw))
+        camera_relative_bearing_deg = math.nan
+        if true_ok:
+            camera_relative_bearing_deg = self._camera_relative_bearing_deg(true_x, true_y, true_yaw)
 
         log_stamp = float(self.get_clock().now().nanoseconds) * 1e-9
         pixel_pose_age_s = math.nan
@@ -908,6 +1078,20 @@ class ExperimentLogger(Node):
                 pred_world_y = float(world[1])
                 if true_ok:
                     localization_error_m = math.hypot(pred_world_x - true_x, pred_world_y - true_y)
+
+        selected_pixel_source_code = float(diag.get('selected_pixel_source_code', math.nan))
+        if selected_pixel_source_code >= 1.5:
+            selected_pixel_source = 'mask_bottom'
+        elif selected_pixel_source_code >= 0.5:
+            selected_pixel_source = 'bbox_bottom'
+        else:
+            selected_pixel_source = 'none'
+        yolo_raw_best_score = diag.get('yolo_score_raw', math.nan)
+        yolo_selected_score = diag.get('yolo_score_selected', math.nan)
+        yolo_num_target_candidates = diag.get('yolo_target_candidate_count', math.nan)
+        yolo_selected_class_id = diag.get('yolo_best_class_id', math.nan)
+        yolo_bbox_area = diag.get('bbox_area_px', math.nan)
+        yolo_mask_area = diag.get('mask_area_px', math.nan)
 
         self.perception_writer.writerow([
             diag['stamp'],
@@ -965,7 +1149,15 @@ class ExperimentLogger(Node):
             diag.get('mask_compactness', math.nan),
             diag.get('mask_border_frac', math.nan),
             diag.get('mask_score', math.nan),
-            diag.get('selected_pixel_source_code', math.nan),
+            selected_pixel_source_code,
+            yolo_raw_best_score,
+            yolo_selected_score,
+            yolo_num_target_candidates,
+            yolo_selected_class_id,
+            selected_pixel_source,
+            yolo_bbox_area,
+            yolo_mask_area,
+            camera_relative_bearing_deg,
             self.seed,
         ])
         self.perception_file.flush()
@@ -1103,6 +1295,13 @@ class ExperimentLogger(Node):
         p_vis_plan_eff = math.nan
         r_plan_u_std = math.nan
         r_plan_v_std = math.nan
+        terminal_goal_distance_pred = math.nan
+        terminal_goal_progress_m = math.nan
+        fraction_horizon_low_pvis = math.nan
+        fraction_horizon_high_ambiguity = math.nan
+        min_predicted_obstacle_distance_m = math.nan
+        rollout_valid = math.nan
+        fallback_stop_applied = math.nan
         if self.planner_diag and self.planner_diag.data and len(self.planner_diag.data) >= 6:
             optimizer_success = float(self.planner_diag.data[0])
             optimizer_status = float(self.planner_diag.data[1])
@@ -1118,6 +1317,14 @@ class ExperimentLogger(Node):
                 r_plan_v_std = float(self.planner_diag.data[9])
                 measurement_available = float(self.planner_diag.data[10])
                 belief_age_s = float(self.planner_diag.data[11])
+            if len(self.planner_diag.data) >= 19:
+                terminal_goal_distance_pred = float(self.planner_diag.data[12])
+                terminal_goal_progress_m = float(self.planner_diag.data[13])
+                fraction_horizon_low_pvis = float(self.planner_diag.data[14])
+                fraction_horizon_high_ambiguity = float(self.planner_diag.data[15])
+                min_predicted_obstacle_distance_m = float(self.planner_diag.data[16])
+                rollout_valid = float(self.planner_diag.data[17])
+                fallback_stop_applied = float(self.planner_diag.data[18])
 
         if self.efe_metrics and self.efe_metrics.data and len(self.efe_metrics.data) >= 6:
             efe_total = float(self.efe_metrics.data[0])
@@ -1128,6 +1335,56 @@ class ExperimentLogger(Node):
 
             if len(self.efe_metrics.data) >= 6:
                 efe_obstacle = float(self.efe_metrics.data[5])
+
+        min_wall_distance_m = self._min_wall_distance if math.isfinite(self._min_wall_distance) else math.inf
+        min_obstacle_distance_m = self._min_obstacle_distance if math.isfinite(self._min_obstacle_distance) else math.inf
+        wall_penetration_m = 0.0
+        obstacle_penetration_m = 0.0
+        off_map = 0.0
+        inside_no_go = 0.0
+        if true_ok:
+            safety = self._geometry_safety_at_truth(true_x, true_y)
+            min_wall_distance_m = float(safety['min_wall_distance_m'])
+            min_obstacle_distance_m = float(safety['min_obstacle_distance_m'])
+            wall_penetration_m = float(safety['wall_penetration_m'])
+            obstacle_penetration_m = float(safety['obstacle_penetration_m'])
+            off_map = 1.0 if safety['off_map'] else 0.0
+            inside_no_go = 1.0 if safety['inside_no_go'] else 0.0
+
+            if math.isfinite(min_wall_distance_m):
+                self._min_wall_distance = min(self._min_wall_distance, min_wall_distance_m)
+            if math.isfinite(min_obstacle_distance_m):
+                self._min_obstacle_distance = min(self._min_obstacle_distance, min_obstacle_distance_m)
+            self._max_wall_penetration = max(self._max_wall_penetration, wall_penetration_m)
+            self._max_obstacle_penetration = max(self._max_obstacle_penetration, obstacle_penetration_m)
+            self._off_map_seen = self._off_map_seen or bool(off_map >= 0.5)
+            self._inside_no_go_seen = self._inside_no_go_seen or bool(inside_no_go >= 0.5)
+
+            geom_reason = []
+            if wall_penetration_m > 0.0:
+                geom_reason.append('geometry:wall_penetration')
+            if obstacle_penetration_m > 0.0:
+                geom_reason.append('geometry:obstacle_penetration')
+            if off_map >= 0.5:
+                self._record_invalid('off_map')
+            if inside_no_go >= 0.5:
+                self._record_invalid('inside_no_go')
+            if geom_reason:
+                self._record_collision_event(
+                    stamp=truth_stamp if math.isfinite(truth_stamp) else now_stamp,
+                    reason='|'.join(geom_reason),
+                    contact=False,
+                    geom=True,
+                )
+
+        collision_contact = 1.0 if self._contact_collision_seen else 0.0
+        collision_geom = 1.0 if self._geom_collision_seen else 0.0
+        collision_any = 1.0 if (collision_contact >= 0.5 or collision_geom >= 0.5) else 0.0
+        collision_reason = self._collision_reason
+        if collision_any >= 0.5:
+            self._record_invalid(collision_reason or 'collision_any')
+        valid_run = 1.0 if self._valid_run else 0.0
+        invalid_reason = self._invalid_reason
 
         legacy_x = true_x if true_ok else math.nan
         legacy_y = true_y if true_ok else math.nan
@@ -1157,7 +1414,14 @@ class ExperimentLogger(Node):
             measurement_available, belief_age_s,
             p_vis_plan, p_vis_plan_eff,
             r_plan_u_std, r_plan_v_std,
+            terminal_goal_distance_pred, terminal_goal_progress_m,
+            fraction_horizon_low_pvis, fraction_horizon_high_ambiguity,
+            min_predicted_obstacle_distance_m, rollout_valid, fallback_stop_applied,
             efe_total, efe_risk, efe_ambiguity, efe_control, efe_visibility, efe_obstacle,
+            collision_any, collision_contact, collision_geom, collision_reason, self._first_crash_stamp,
+            min_wall_distance_m, min_obstacle_distance_m,
+            wall_penetration_m, obstacle_penetration_m,
+            off_map, inside_no_go, valid_run, invalid_reason,
             self.seed,
         ])
         self.file.flush()
@@ -1252,6 +1516,10 @@ class ExperimentLogger(Node):
             dy = goal_y - true_y
             final_goal_distance = math.hypot(dx, dy)
 
+        crashed = bool(self._contact_collision_seen or self._geom_collision_seen)
+        min_wall_distance_m = self._min_wall_distance if math.isfinite(self._min_wall_distance) else math.inf
+        min_obstacle_distance_m = self._min_obstacle_distance if math.isfinite(self._min_obstacle_distance) else math.inf
+
         summary = {
             'completed': True,
             'completion_reason': reason,
@@ -1278,6 +1546,20 @@ class ExperimentLogger(Node):
             # Explicit truth vs perception / planner belief errors
             'mean_truth_state_error_m': mean_truth_state_error_m,
             'mean_truth_belief_error_m': mean_truth_belief_error_m,
+            'crashed': crashed,
+            'collision_any': crashed,
+            'collision_contact': bool(self._contact_collision_seen),
+            'collision_geom': bool(self._geom_collision_seen),
+            'collision_reason': self._collision_reason,
+            'first_crash_stamp': self._first_crash_stamp,
+            'min_wall_distance_m': min_wall_distance_m,
+            'min_obstacle_distance_m': min_obstacle_distance_m,
+            'max_wall_penetration_m': float(self._max_wall_penetration),
+            'max_obstacle_penetration_m': float(self._max_obstacle_penetration),
+            'off_map': bool(self._off_map_seen),
+            'inside_no_go': bool(self._inside_no_go_seen),
+            'valid_run': bool(self._valid_run),
+            'invalid_reason': self._invalid_reason,
             'frame_sanity': dict(self._frame_sanity),
             'run_dir': self.run_dir
         }
@@ -1301,6 +1583,8 @@ class ExperimentLogger(Node):
                 summary = {
                     'completed': False,
                     'completion_reason': 'interrupted',
+                    'valid_run': bool(getattr(self, '_valid_run', True)),
+                    'invalid_reason': str(getattr(self, '_invalid_reason', '') or ''),
                     'frame_sanity': dict(getattr(self, '_frame_sanity', {})),
                     'run_dir': getattr(self, 'run_dir', '')
                 }

@@ -155,12 +155,18 @@
       </link>
     </model>
 
-    <!-- Visual-only thin shelf. It remains collision-free in Gazebo, but its
-         geometry is still used by the planner-side occlusion and no-go-zone models. -->
+    <!-- Thin shelf used for occlusion, planning, and physical collision checks. -->
     <model name="warehouse_rack_occluders">
       <static>true</static>
       <link name="shelf_body">
         <pose>0.20 -0.15 0.60 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>2.10 0.28 1.20</size>
+            </box>
+          </geometry>
+        </collision>
         <visual name="visual">
           <geometry>
             <box>
@@ -177,6 +183,13 @@
 
       <link name="shelf_top">
         <pose>0.20 -0.15 1.18 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>2.20 0.36 0.08</size>
+            </box>
+          </geometry>
+        </collision>
         <visual name="visual">
           <geometry>
             <box>

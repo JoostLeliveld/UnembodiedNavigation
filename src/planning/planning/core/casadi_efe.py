@@ -39,6 +39,9 @@ class CasadiEfeParams:
     goal_prior_v_std_final: float
     goal_tightening_power: float
     goal_progress_n_steps: int
+    robot_collision_radius_m: float
+    min_terminal_goal_progress_m: float
+    invalid_rollout_barrier_cost: float
     time_horizon: int
     dt: float
     Du: int
@@ -207,6 +210,32 @@ def visibility_penalty_ca(p_vis, p_vis_eff, params: CasadiEfeParams):
     return penalty
 
 
+def collision_barrier_penalty_ca(clearance, params: CasadiEfeParams):
+    near_margin = 0.05
+    near_term = 1e-3 * params.invalid_rollout_barrier_cost * _softplus_expr(
+        (near_margin - clearance) / 0.02
+    )
+    penetration = ca.fmax(-clearance, 0.0)
+    scale = max(float(params.robot_collision_radius_m), 1e-3)
+    penetration_term = params.invalid_rollout_barrier_cost * (
+        1.0 + ca.power(penetration / scale, 2)
+    )
+    return near_term + ca.if_else(penetration > 0.0, penetration_term, 0.0)
+
+
+def terminal_progress_penalty_ca(m0, m_terminal, goal_xy, params: CasadiEfeParams):
+    current_goal_distance = ca.sqrt(
+        ca.power(m0[0] - goal_xy[0], 2) + ca.power(m0[1] - goal_xy[1], 2)
+    )
+    terminal_goal_distance = ca.sqrt(
+        ca.power(m_terminal[0] - goal_xy[0], 2) + ca.power(m_terminal[1] - goal_xy[1], 2)
+    )
+    progress = current_goal_distance - terminal_goal_distance
+    shortfall = ca.fmax(params.min_terminal_goal_progress_m - progress, 0.0)
+    denom = max(float(params.min_terminal_goal_progress_m), 1e-6)
+    return 0.01 * params.invalid_rollout_barrier_cost * ca.power(shortfall / denom, 2)
+
+
 def et1_ca(m, S, R_eff, g, dg):
     Jm = dg(m)
     mu = g(m)
@@ -263,6 +292,7 @@ def visibility_aware_unicycle_efe_ca(
     m0,
     S0,
     goal_obs,
+    goal_xy,
     progress_index0,
     params: CasadiEfeParams,
     g,
@@ -272,6 +302,7 @@ def visibility_aware_unicycle_efe_ca(
     d2g=None,
     p_vis_state=None,
     nogo_cost=None,
+    collision_signed_distance=None,
 ):
     m = m0
     S = S0
@@ -316,7 +347,11 @@ def visibility_aware_unicycle_efe_ca(
             total_vis += weight_t * params.visibility_weight * visibility_penalty_ca(p_vis, p_vis_eff, params)
         if nogo_cost is not None:
             total_nogo += weight_t * nogo_cost(m)
+        if collision_signed_distance is not None:
+            clearance = collision_signed_distance(m) - params.robot_collision_radius_m
+            total_nogo += weight_t * collision_barrier_penalty_ca(clearance, params)
 
+    total_risk += terminal_progress_penalty_ca(m0, m, goal_xy, params)
     return total_risk + total_amb + total_control + total_vis + total_nogo
 
 
@@ -327,6 +362,7 @@ def make_efe_valgrad_fn(
     approx='ET1',
     p_vis_state=None,
     nogo_cost=None,
+    collision_signed_distance=None,
 ):
     _require_casadi()
     approx = str(approx or 'ET1').upper()
@@ -362,6 +398,7 @@ def make_efe_valgrad_fn(
     m0 = ca.MX.sym('m0', 3)
     S0 = ca.MX.sym('S0', 3, 3)
     goal_obs = ca.MX.sym('goal_obs', 2)
+    goal_xy = ca.MX.sym('goal_xy', 2)
     progress_index0 = ca.MX.sym('progress_index0')
 
     objective = visibility_aware_unicycle_efe_ca(
@@ -369,6 +406,7 @@ def make_efe_valgrad_fn(
         m0,
         S0,
         goal_obs,
+        goal_xy,
         progress_index0,
         params,
         g,
@@ -377,22 +415,24 @@ def make_efe_valgrad_fn(
         d2g=d2g,
         p_vis_state=p_vis_state,
         nogo_cost=nogo_cost,
+        collision_signed_distance=collision_signed_distance,
     )
     gradient = ca.gradient(objective, u_flat)
     valgrad = ca.Function(
         'visibility_aware_efe_valgrad',
-        [u_flat, m0, S0, goal_obs, progress_index0],
+        [u_flat, m0, S0, goal_obs, goal_xy, progress_index0],
         [objective, gradient],
-        ['u_flat', 'm0', 'S0', 'goal_obs', 'progress_index0'],
+        ['u_flat', 'm0', 'S0', 'goal_obs', 'goal_xy', 'progress_index0'],
         ['objective', 'gradient'],
     )
 
-    def _wrapper(u_val, m_val, S_val, goal_obs_val, progress_index0_val):
+    def _wrapper(u_val, m_val, S_val, goal_obs_val, goal_xy_val, progress_index0_val):
         val, grad = valgrad(
             np.asarray(u_val, dtype=float).reshape((-1, 1)),
             np.asarray(m_val, dtype=float).reshape((3, 1)),
             np.asarray(S_val, dtype=float).reshape((3, 3)),
             np.asarray(goal_obs_val, dtype=float).reshape((2, 1)),
+            np.asarray(goal_xy_val, dtype=float).reshape((2, 1)),
             np.asarray(float(progress_index0_val), dtype=float),
         )
         return float(np.asarray(val, dtype=float).reshape(-1)[0]), np.asarray(grad, dtype=float).reshape(-1)

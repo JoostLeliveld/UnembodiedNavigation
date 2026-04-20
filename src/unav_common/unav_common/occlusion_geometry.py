@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import json
 import math
 import os
+from typing import Iterable, Sequence
 import xml.etree.ElementTree as ET
 
 import numpy as np
@@ -198,10 +199,77 @@ def _parse_cylinder_prism(name: str, pose: _Pose6D, radius_text: str, length_tex
     )
 
 
+def _geometry_prisms_from_node(
+    *,
+    model_name: str,
+    link_name: str,
+    geometry_node: ET.Element | None,
+    pose: _Pose6D,
+    element_name: str,
+) -> list[AxisAlignedPrism]:
+    if geometry_node is None:
+        return []
+
+    prisms: list[AxisAlignedPrism] = []
+    box = _find_child(geometry_node, 'box')
+    if box is not None:
+        size_node = _find_child(box, 'size')
+        if size_node is not None and size_node.text:
+            prisms.append(
+                _parse_box_prism(
+                    f'{model_name}/{link_name}:{element_name}',
+                    pose,
+                    size_node.text.strip(),
+                )
+            )
+        return prisms
+
+    cylinder = _find_child(geometry_node, 'cylinder')
+    if cylinder is not None:
+        radius_node = _find_child(cylinder, 'radius')
+        length_node = _find_child(cylinder, 'length')
+        if radius_node is not None and radius_node.text and length_node is not None and length_node.text:
+            prisms.append(
+                _parse_cylinder_prism(
+                    f'{model_name}/{link_name}:{element_name}',
+                    pose,
+                    radius_node.text.strip(),
+                    length_node.text.strip(),
+                )
+            )
+    return prisms
+
+
+def _normalize_names(names: str | Sequence[str] | None) -> tuple[str, ...]:
+    if names is None:
+        return ()
+    if isinstance(names, str):
+        value = str(names).strip()
+        return (value,) if value else ()
+    out = []
+    for item in names:
+        value = str(item).strip()
+        if value:
+            out.append(value)
+    return tuple(out)
+
+
+def _normalize_geometry_tags(geometry_tags: Iterable[str] | None) -> tuple[str, ...]:
+    if geometry_tags is None:
+        return ('visual',)
+    out = []
+    for item in geometry_tags:
+        value = str(item).strip().lower()
+        if value:
+            out.append(value)
+    return tuple(out) if out else ('visual',)
+
+
 def parse_occlusion_scene_from_world(
     world_path: str,
     *,
-    model_name: str = 'warehouse_rack_occluders',
+    model_name: str | Sequence[str] = 'warehouse_rack_occluders',
+    geometry_tags: Iterable[str] | None = None,
 ) -> OcclusionScene:
     if not os.path.isfile(world_path):
         raise RuntimeError(f'World file not found: {world_path}')
@@ -211,50 +279,64 @@ def parse_occlusion_scene_from_world(
         raise RuntimeError(f"Failed to parse world file '{world_path}': {exc}") from exc
 
     root = tree.getroot()
-    model_node = None
+    model_names = _normalize_names(model_name)
+    geometry_kinds = _normalize_geometry_tags(geometry_tags)
+    matched_models: list[ET.Element] = []
     for node in root.iter():
-        if _tag_matches(node, 'model') and node.attrib.get('name') == model_name:
-            model_node = node
-            break
-
-    if model_node is None:
-        return OcclusionScene(prisms=(), source_world=world_path, model_name=model_name)
-
-    model_pose = _parse_pose_node(_find_child(model_node, 'pose'))
-    prisms: list[AxisAlignedPrism] = []
-    for link in list(model_node):
-        if not _tag_matches(link, 'link'):
+        if not _tag_matches(node, 'model'):
             continue
-        link_name = str(link.attrib.get('name', 'link'))
-        link_pose = _compose_pose(model_pose, _parse_pose_node(_find_child(link, 'pose')))
-        for visual in list(link):
-            if not _tag_matches(visual, 'visual'):
+        node_name = str(node.attrib.get('name', '')).strip()
+        if node_name in model_names:
+            matched_models.append(node)
+
+    if not matched_models:
+        return OcclusionScene(
+            prisms=(),
+            source_world=world_path,
+            model_name=','.join(model_names) if model_names else '',
+        )
+
+    prisms: list[AxisAlignedPrism] = []
+    for model_node in matched_models:
+        node_model_name = str(model_node.attrib.get('name', 'model')).strip() or 'model'
+        model_pose = _parse_pose_node(_find_child(model_node, 'pose'))
+        for link in list(model_node):
+            if not _tag_matches(link, 'link'):
                 continue
-            visual_name = str(visual.attrib.get('name', 'visual'))
-            visual_pose = _compose_pose(link_pose, _parse_pose_node(_find_child(visual, 'pose')))
-            geometry = _find_child(visual, 'geometry')
-            if geometry is None:
-                continue
-            box = _find_child(geometry, 'box')
-            if box is not None:
-                size_node = _find_child(box, 'size')
-                if size_node is not None and size_node.text:
-                    prisms.append(_parse_box_prism(f'{link_name}:{visual_name}', visual_pose, size_node.text.strip()))
-                continue
-            cylinder = _find_child(geometry, 'cylinder')
-            if cylinder is not None:
-                radius_node = _find_child(cylinder, 'radius')
-                length_node = _find_child(cylinder, 'length')
-                if radius_node is not None and radius_node.text and length_node is not None and length_node.text:
-                    prisms.append(
-                        _parse_cylinder_prism(
-                            f'{link_name}:{visual_name}',
-                            visual_pose,
-                            radius_node.text.strip(),
-                            length_node.text.strip(),
-                        )
+            link_name = str(link.attrib.get('name', 'link'))
+            link_pose = _compose_pose(model_pose, _parse_pose_node(_find_child(link, 'pose')))
+            for element in list(link):
+                if element.tag.split('}')[-1].lower() not in geometry_kinds:
+                    continue
+                element_kind = element.tag.split('}')[-1].lower()
+                element_name = str(element.attrib.get('name', element_kind))
+                element_pose = _compose_pose(link_pose, _parse_pose_node(_find_child(element, 'pose')))
+                prisms.extend(
+                    _geometry_prisms_from_node(
+                        model_name=node_model_name,
+                        link_name=link_name,
+                        geometry_node=_find_child(element, 'geometry'),
+                        pose=element_pose,
+                        element_name=element_name,
                     )
-    return OcclusionScene(prisms=tuple(prisms), source_world=world_path, model_name=model_name)
+                )
+    return OcclusionScene(
+        prisms=tuple(prisms),
+        source_world=world_path,
+        model_name=','.join(model_names) if model_names else '',
+    )
+
+
+def parse_collision_scene_from_world(
+    world_path: str,
+    *,
+    model_names: Sequence[str] = ('warehouse_walls', 'warehouse_rack_occluders'),
+) -> OcclusionScene:
+    return parse_occlusion_scene_from_world(
+        world_path,
+        model_name=model_names,
+        geometry_tags=('collision',),
+    )
 
 
 def scene_from_json(text: str | None) -> OcclusionScene:

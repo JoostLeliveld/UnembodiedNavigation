@@ -108,7 +108,10 @@ def main() -> int:
     area_ref_payload = _load_area_reference(area_reference_path)
     calibration_path = Path(args.yolo_calibration).expanduser().resolve()
 
-    yolo_raw_present = any(str(row.get('yolo_score_raw', '')).strip() != '' for row in rows)
+    yolo_raw_present = any(
+        str(row.get('yolo_raw_best_score', row.get('yolo_score_raw', ''))).strip() != ''
+        for row in rows
+    )
     calibration_payload = _load_calibration_payload(calibration_path) if yolo_raw_present else {}
     calibration_temperature = float(calibration_payload.get('temperature', 1.0)) if calibration_payload else 1.0
 
@@ -147,7 +150,7 @@ def main() -> int:
                 )
                 red_area_corrected_values.append(float(red_area_corrected))
 
-        yolo_raw = parse_float(row.get('yolo_score_raw', ''), math.nan)
+        yolo_raw = parse_float(row.get('yolo_raw_best_score', row.get('yolo_score_raw', '')), math.nan)
         yolo_selected = parse_float(row.get('yolo_score_selected', ''), math.nan)
         yolo_detected_raw = str(row.get('yolo_detected_after_threshold', '')).strip()
         yolo_detected = int(max(0, min(1, parse_bool01(yolo_detected_raw))))
@@ -170,6 +173,7 @@ def main() -> int:
             'red_area_corrected': '' if not math.isfinite(red_area_corrected) else f'{float(red_area_corrected):.8f}',
             'yolo_binary': '' if yolo_detected_raw == '' else str(int(yolo_detected)),
             'yolo_score_raw': '' if not math.isfinite(yolo_raw) else f'{float(yolo_raw):.8f}',
+            'yolo_raw_best_score': '' if not math.isfinite(yolo_raw) else f'{float(yolo_raw):.8f}',
             'yolo_score_calibrated': '' if not math.isfinite(yolo_calibrated) else f'{float(yolo_calibrated):.8f}',
             'oracle_visibility': str(int(oracle_visible)),
         })
@@ -240,7 +244,7 @@ def main() -> int:
         'yolo_summary': dict(extractor_manifest.get('yolo_summary', {})),
         'implemented_targets': ['red_binary', 'oracle_visibility']
         + (['red_area_corrected'] if red_area_corrected_values else [])
-        + (['yolo_binary', 'yolo_score_raw', 'yolo_score_calibrated'] if (yolo_binary_values or yolo_raw_values or yolo_calibrated_values) else []),
+        + (['yolo_binary', 'yolo_score_raw', 'yolo_raw_best_score', 'yolo_score_calibrated'] if (yolo_binary_values or yolo_raw_values or yolo_calibrated_values) else []),
         'deferred_targets': ([] if red_area_corrected_values else ['red_area_corrected']),
         'red_binary_summary': {
             'mean_target': float(sum(red_values) / len(red_values)) if red_values else math.nan,

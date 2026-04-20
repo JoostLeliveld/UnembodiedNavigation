@@ -54,6 +54,10 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'visibility_weight': '0.5',
     'visibility_barrier_threshold': '0.0',
     'visibility_barrier_scale': '10.0',
+    'min_terminal_goal_progress_m': '0.20',
+    'invalid_rollout_barrier_cost': '1000000.0',
+    'robot_collision_radius_m': '0.125',
+    'bridge_contacts': 'true',
     'process_noise_xy': '0.01',
     'process_noise_theta': '0.02',
     'obs_noise_uv': '2.0',
@@ -277,6 +281,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         ),
         'visibility_target_height_m': float(_launch_value(context, 'visibility_target_height_m', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_target_height_m']))),
         'visibility_geometry_json': _launch_value(context, 'visibility_geometry_json', ''),
+        'collision_geometry_json': _launch_value(context, 'collision_geometry_json', ''),
         'visibility_artifact_path': _launch_value(context, 'visibility_artifact_path', ''),
         'use_nogo_cost': _launch_value(context, 'use_nogo_cost', str(VISIBILITY_FALLBACK_DEFAULTS['use_nogo_cost'])).strip().lower(),
         'nogo_penalty_type': _launch_value(context, 'nogo_penalty_type', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_penalty_type'])).strip().lower(),
@@ -287,6 +292,30 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'nogo_logbarrier_scale': float(_launch_value(context, 'nogo_logbarrier_scale', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_logbarrier_scale']))),
         'nogo_logbarrier_eps': float(_launch_value(context, 'nogo_logbarrier_eps', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_logbarrier_eps']))),
         'goal_sigma_uv': float(_launch_value(context, 'goal_sigma_uv', PAPER_LAUNCH_DEFAULTS['goal_sigma_uv'])),
+        'min_terminal_goal_progress_m': float(
+            _launch_value(
+                context,
+                'min_terminal_goal_progress_m',
+                PAPER_LAUNCH_DEFAULTS['min_terminal_goal_progress_m'],
+            )
+        ),
+        'invalid_rollout_barrier_cost': float(
+            _launch_value(
+                context,
+                'invalid_rollout_barrier_cost',
+                PAPER_LAUNCH_DEFAULTS['invalid_rollout_barrier_cost'],
+            )
+        ),
+        'robot_collision_radius_m': float(
+            _launch_value(
+                context,
+                'robot_collision_radius_m',
+                PAPER_LAUNCH_DEFAULTS['robot_collision_radius_m'],
+            )
+        ),
+        'bridge_contacts': _as_bool(
+            _launch_value(context, 'bridge_contacts', PAPER_LAUNCH_DEFAULTS['bridge_contacts'])
+        ),
         'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
         'debug_runtime': _as_bool(_launch_value(context, 'debug_runtime', 'false')),
         'enable_logging': _as_bool(_launch_value(context, 'enable_logging', 'true')),
@@ -317,6 +346,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         compute_camera_quaternion_from_rpy,
         compute_look_at_from_pose,
         resolve_profile_asset_path,
+        serialize_collision_geometry_from_world,
         serialize_occlusion_geometry_from_world,
     )
     from experiments.core.tasks import load_tasks, select_task
@@ -399,6 +429,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     }
 
     visibility_geometry_json = str(cfg.get('visibility_geometry_json', '') or '')
+    collision_geometry_json = str(cfg.get('collision_geometry_json', '') or '')
     if cfg.get('use_visibility_model', False) and not visibility_artifact_path:
         raise RuntimeError(
             f"World '{cfg['world']}' requires a visibility_artifact path for GP visibility planning."
@@ -411,6 +442,8 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     geometry_needed = bool(cfg.get('perception_use_geometry_occlusion', False)) or nogo_geometry_needed
     if (not visibility_geometry_json) and geometry_needed:
         visibility_geometry_json = serialize_occlusion_geometry_from_world(world_path)
+    if not collision_geometry_json:
+        collision_geometry_json = serialize_collision_geometry_from_world(world_path)
 
     cfg = dict(cfg)
     cfg.update({
@@ -425,6 +458,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         'tf_args': tf_args,
         'world_path': world_path,
         'visibility_geometry_json': visibility_geometry_json,
+        'collision_geometry_json': collision_geometry_json,
         'visibility_artifact_path': visibility_artifact_path,
     })
     return cfg
@@ -449,6 +483,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'spawn_z': str(cfg['spawn']['z']),
             'spawn_yaw': str(cfg['spawn']['yaw']),
             'reset_world': 'false',
+            'bridge_contacts': 'true' if cfg.get('bridge_contacts', True) else 'false',
         }.items(),
     )
 
@@ -626,6 +661,8 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'visibility_barrier_threshold': cfg['visibility_barrier_threshold'],
                 'visibility_barrier_scale': cfg['visibility_barrier_scale'],
                 'visibility_target_height_m': cfg['visibility_target_height_m'],
+                'visibility_geometry_json': cfg['visibility_geometry_json'],
+                'collision_geometry_json': cfg['collision_geometry_json'],
                 'perception_use_geometry_occlusion': cfg['perception_use_geometry_occlusion'],
                 'use_nogo_cost': cfg.get('resolved_use_nogo_cost', False),
                 'nogo_penalty_type': cfg['nogo_penalty_type'],
@@ -669,6 +706,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'stuck_max_displacement_m': cfg['stuck_max_displacement_m'],
                 'stuck_max_goal_improvement_m': cfg['stuck_max_goal_improvement_m'],
                 'stuck_cmd_fraction_min': cfg['stuck_cmd_fraction_min'],
+                'robot_collision_radius_m': cfg['robot_collision_radius_m'],
                 **cfg['camera_params'],
             }],
         )
@@ -786,6 +824,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'visibility_barrier_scale': cfg['visibility_barrier_scale'],
             'visibility_target_height_m': cfg['visibility_target_height_m'],
             'visibility_geometry_json': cfg['visibility_geometry_json'],
+            'collision_geometry_json': cfg['collision_geometry_json'],
             'visibility_artifact_path': cfg['visibility_artifact_path'],
             'use_nogo_cost': cfg['resolved_use_nogo_cost'],
             'nogo_penalty_type': cfg['nogo_penalty_type'],
@@ -795,6 +834,9 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'nogo_softplus_scale': cfg['nogo_softplus_scale'],
             'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
             'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
+            'robot_collision_radius_m': cfg['robot_collision_radius_m'],
+            'min_terminal_goal_progress_m': cfg['min_terminal_goal_progress_m'],
+            'invalid_rollout_barrier_cost': cfg['invalid_rollout_barrier_cost'],
             'optimizer_maxiter': cfg['optimizer_maxiter'],
             'optimizer_maxfun': cfg['optimizer_maxfun'],
             'optimizer_ftol': cfg['optimizer_ftol'],

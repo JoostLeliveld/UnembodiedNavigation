@@ -18,7 +18,7 @@ from common import (
     LOGS_ROOT,
     PLANNER_RUNS_DIR,
     REPORT_DIR,
-    accepted_completed_run,
+    accepted_plotworthy_run,
     choose_preview_rows,
     read_csv_rows,
     run_has_usable_logs,
@@ -69,19 +69,24 @@ def _copy_tree_pngs(src_root: Path, dst_root: Path) -> list[str]:
     return copied
 
 
-def _latest_run_dir(root: Path, method_id: str) -> Path | None:
+def _latest_run_dir(root: Path, method_id: str, *, include_interrupted: bool = True) -> Path | None:
     candidates = []
     for p in root.rglob('run_summary.json'):
         if p.parent.parent.name == method_id or p.parent.name == method_id:
             summary = _load_json(p)
-            if accepted_completed_run(summary) and run_has_usable_logs(p.parent):
+            if accepted_plotworthy_run(summary, include_interrupted=include_interrupted) and run_has_usable_logs(p.parent):
                 candidates.append(p.parent)
     if not candidates:
         return None
     return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
-def _run_metrics(run_dir: Path | None, method_id: str, field_summary_rows: list[dict]) -> dict[str, str]:
+def _run_metrics(
+    run_dir: Path | None,
+    method_id: str,
+    field_summary_rows: list[dict],
+    planner_summary_by_method: dict[str, dict[str, str]],
+) -> dict[str, str]:
     base = {
         'run_available': '0', 'run_dir': '',
         'completed': '', 'completion_reason': '',
@@ -102,7 +107,15 @@ def _run_metrics(run_dir: Path | None, method_id: str, field_summary_rows: list[
         'fraction_time_in_high_ambiguity_region': '',
         'fraction_time_p_vis_below_0_2': '',
         'fraction_time_p_vis_eff_below_0_2': '',
-        'field_p_vis_mean': '', 'field_ambiguity_mean': '', 'field_r_plan_uv_std_mean': ''
+        'field_p_vis_mean': '', 'field_ambiguity_mean': '', 'field_r_plan_uv_std_mean': '',
+        'crashed': '', 'valid_run': '', 'invalid_reason': '', 'first_crash_stamp': '',
+        'min_wall_distance_m': '', 'min_obstacle_distance_m': '',
+        'max_wall_penetration_m': '', 'max_obstacle_penetration_m': '',
+        'mean_terminal_goal_distance_pred': '', 'mean_terminal_goal_progress_m': '',
+        'mean_fraction_horizon_low_pvis': '', 'mean_fraction_horizon_high_ambiguity': '',
+        'min_predicted_obstacle_distance_m': '',
+        'mean_yolo_raw_score': '', 'mean_yolo_selected_score': '', 'yolo_detection_rate': '',
+        'fraction_time_low_pvis': '', 'fraction_time_low_pvis_eff': '', 'fraction_time_high_ambiguity': '',
     }
     
     for row in field_summary_rows:
@@ -113,6 +126,19 @@ def _run_metrics(run_dir: Path | None, method_id: str, field_summary_rows: list[
             break
             
     if run_dir is None:
+        summary_row = planner_summary_by_method.get(method_id, {})
+        for key in (
+            'crashed', 'valid_run', 'invalid_reason', 'first_crash_stamp',
+            'min_wall_distance_m', 'min_obstacle_distance_m',
+            'max_wall_penetration_m', 'max_obstacle_penetration_m',
+            'mean_terminal_goal_distance_pred', 'mean_terminal_goal_progress_m',
+            'mean_fraction_horizon_low_pvis', 'mean_fraction_horizon_high_ambiguity',
+            'min_predicted_obstacle_distance_m',
+            'mean_yolo_raw_score', 'mean_yolo_selected_score', 'yolo_detection_rate',
+            'fraction_time_low_pvis', 'fraction_time_low_pvis_eff', 'fraction_time_high_ambiguity',
+        ):
+            if key in summary_row:
+                base[key] = str(summary_row.get(key, '') or '')
         return base
         
     summary_path = run_dir / 'run_summary.json'
@@ -120,7 +146,7 @@ def _run_metrics(run_dir: Path | None, method_id: str, field_summary_rows: list[
         return base
         
     summary = _load_json(summary_path)
-    base['run_available'] = '1' if _run_has_usable_logs(run_dir) else '0'
+    base['run_available'] = '1' if run_has_usable_logs(run_dir) else '0'
     base['run_dir'] = str(run_dir)
     
     for k in [
@@ -146,6 +172,19 @@ def _run_metrics(run_dir: Path | None, method_id: str, field_summary_rows: list[
             base[k] = f'{val:.6f}'
         else:
             base[k] = str(val)
+    summary_row = planner_summary_by_method.get(method_id, {})
+    for key in (
+        'crashed', 'valid_run', 'invalid_reason', 'first_crash_stamp',
+        'min_wall_distance_m', 'min_obstacle_distance_m',
+        'max_wall_penetration_m', 'max_obstacle_penetration_m',
+        'mean_terminal_goal_distance_pred', 'mean_terminal_goal_progress_m',
+        'mean_fraction_horizon_low_pvis', 'mean_fraction_horizon_high_ambiguity',
+        'min_predicted_obstacle_distance_m',
+        'mean_yolo_raw_score', 'mean_yolo_selected_score', 'yolo_detection_rate',
+        'fraction_time_low_pvis', 'fraction_time_low_pvis_eff', 'fraction_time_high_ambiguity',
+    ):
+        if key in summary_row:
+            base[key] = str(summary_row.get(key, '') or '')
     return base
 
 
@@ -157,6 +196,12 @@ def main() -> int:
     parser.add_argument('--planner-runs-root', default=str(PLANNER_RUNS_DIR))
     parser.add_argument('--out', default=str(REPORT_DIR))
     parser.add_argument('--preview-count', type=int, default=16)
+    parser.add_argument(
+        '--include-interrupted',
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help='Include interrupted runs in report tables and copied path assets when they have usable logs.',
+    )
     args = parser.parse_args()
 
     capture_dir = Path(args.capture_dir).expanduser().resolve()
@@ -214,13 +259,24 @@ def main() -> int:
         path_plot_manifest = _load_json(REPORT_DIR / 'path_plots' / 'plot_manifest.json')
     if not path_plot_manifest and staged_path_plots is not None:
         path_plot_manifest = _load_json(staged_path_plots / 'plot_manifest.json')
+    path_plots_source_dir = output_dir.parent / 'path_plots'
+    if not path_plots_source_dir.is_dir():
+        path_plots_source_dir = REPORT_DIR / 'path_plots'
+    if not path_plots_source_dir.is_dir() and staged_path_plots is not None:
+        path_plots_source_dir = staged_path_plots
+    planner_summary_rows = _load_csv_rows(path_plots_source_dir / 'planner_method_summary.csv') if path_plots_source_dir.is_dir() else []
+    planner_summary_by_method = {
+        str(row.get('method_id', '') or ''): row
+        for row in planner_summary_rows
+        if str(row.get('method_id', '') or '').strip()
+    }
 
     method_rows = []
     for method_id in ACTIVE_METHOD_IDS:
         gp_row = gp_summary_by_method.get(method_id, {})
         gp_available = str(gp_row.get('available', '0') or '0')
-        run_dir = _latest_run_dir(planner_runs_root, method_id)
-        run_metrics = _run_metrics(run_dir, method_id, field_summary_rows)
+        run_dir = _latest_run_dir(planner_runs_root, method_id, include_interrupted=bool(args.include_interrupted))
+        run_metrics = _run_metrics(run_dir, method_id, field_summary_rows, planner_summary_by_method)
         target_available = '0' if method_id == 'visibility_unaware_baseline' else str(
             int(_target_column_available(gp_target_rows, method_id))
         )
@@ -310,6 +366,25 @@ def main() -> int:
             'fraction_time_p_vis_below_0_2',
             'fraction_time_p_vis_eff_below_0_2',
             'max_r_plan_std',
+            'crashed',
+            'valid_run',
+            'invalid_reason',
+            'first_crash_stamp',
+            'min_wall_distance_m',
+            'min_obstacle_distance_m',
+            'max_wall_penetration_m',
+            'max_obstacle_penetration_m',
+            'mean_terminal_goal_distance_pred',
+            'mean_terminal_goal_progress_m',
+            'mean_fraction_horizon_low_pvis',
+            'mean_fraction_horizon_high_ambiguity',
+            'min_predicted_obstacle_distance_m',
+            'mean_yolo_raw_score',
+            'mean_yolo_selected_score',
+            'yolo_detection_rate',
+            'fraction_time_low_pvis',
+            'fraction_time_low_pvis_eff',
+            'fraction_time_high_ambiguity',
             'field_p_vis_mean',
             'field_ambiguity_mean',
             'field_r_plan_uv_std_mean',
@@ -325,11 +400,12 @@ def main() -> int:
             '## Summary',
             '',
             'This report summarizes the current state of the shared perception-to-visibility comparison framework.',
-            'Planner traces are explicitly aligned to the first command, and only accepted completed runs are included in the report tables and path summaries.',
+            'Planner traces are explicitly aligned to the first command, and interrupted runs with usable logs are now included in the report tables and path summaries.',
             'Per-run frame sanity fields now expose whether transformed truth in `map_bev` matched the task start pose before motion began.',
             'Oracle visibility, red binary, and the three YOLO-derived targets can all appear here when they are present in the current targets/GP folders.',
             'Red corrected area may still be absent if it has not been built yet.',
             'The path-plots folder now includes actual-vs-inferred state overlays, state-certainty maps, ambiguity-region overlays, and uncertainty-propagation sheets when experiment logs contain the needed belief/state fields.',
+            'Per-run diagnostic overview sheets and the combined multi-method overview now surface detector confidence, planner decomposition, predicted progress, and physical safety in one place.',
             'YOLO calibration assets are copied alongside the GP and path figures so score reliability is visible next to the planner results.',
             '',
             '## Included assets',
@@ -364,12 +440,13 @@ def main() -> int:
             'gp_manifest': str(gp_dir / 'gp_manifest.json') if (gp_dir / 'gp_manifest.json').is_file() else '',
             'gp_plot_manifest': str(gp_dir / 'plots' / 'plot_manifest.json') if (gp_dir / 'plots' / 'plot_manifest.json').is_file() else '',
             'path_plot_manifest': str(path_plots_dir / 'plot_manifest.json') if path_plots_dir.is_dir() and (path_plots_dir / 'plot_manifest.json').is_file() else '',
+            'planner_method_summary': str(path_plots_dir / 'planner_method_summary.csv') if path_plots_dir.is_dir() and (path_plots_dir / 'planner_method_summary.csv').is_file() else '',
         },
         'calibration_summary': calibration_manifest,
         'notes': [
             'This report is intentionally compact and resilient to missing methods during the shared-backbone stage.',
             'Missing methods are left blank rather than causing report generation to fail.',
-            'Report tables and copied path assets exclude interrupted/incomplete runs by construction.',
+            'Interrupted runs are included when they produced usable logs, and remain labeled by their recorded completion_reason.',
         ],
     })
     if staged_path_plots_root is not None:

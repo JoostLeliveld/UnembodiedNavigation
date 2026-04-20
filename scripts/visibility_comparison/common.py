@@ -26,6 +26,7 @@ REPORT_DIR = LOGS_ROOT / 'report'
 DEFAULT_WORLD_PROFILES_PATH = REPO_ROOT / 'src' / 'experiments' / 'config' / 'world_profiles.yaml'
 ARTIFACT_SCHEMA_VERSION = 2
 ACCEPTED_COMPLETION_REASONS = ('goal_reached', 'stuck', 'timeout_after_first_cmd')
+PLOTTABLE_COMPLETION_REASONS = ACCEPTED_COMPLETION_REASONS + ('interrupted',)
 PAPER_VISIBILITY_DEFAULTS = {
     'r_visible_uv': 2.5,
     'r_miss_uv': 120.0,
@@ -70,6 +71,7 @@ PERCEPTION_TARGET_COLUMNS = (
     'y',
     'theta',
     'image_path',
+    'camera_relative_bearing_deg',
     'red_detected',
     'red_area',
     'red_bbox_xyxy',
@@ -77,9 +79,14 @@ PERCEPTION_TARGET_COLUMNS = (
     'red_bottom_v',
     'yolo_detected_after_threshold',
     'yolo_score_raw',
+    'yolo_raw_best_score',
     'yolo_score_selected',
+    'yolo_selected_score',
     'yolo_best_class_id',
+    'yolo_selected_class_id',
+    'yolo_num_target_candidates',
     'yolo_mask_area',
+    'yolo_bbox_area',
     'yolo_bbox_xyxy',
     'yolo_bottom_u',
     'yolo_bottom_v',
@@ -98,6 +105,7 @@ GP_TARGET_COLUMNS = (
     'red_area_corrected',
     'yolo_binary',
     'yolo_score_raw',
+    'yolo_raw_best_score',
     'yolo_score_calibrated',
     'oracle_visibility',
 )
@@ -184,6 +192,19 @@ def accepted_completed_run(summary: Mapping[str, Any] | None) -> bool:
     if not isinstance(summary, Mapping):
         return False
     return bool(summary.get('completed', False)) and str(summary.get('completion_reason', '')).strip() in ACCEPTED_COMPLETION_REASONS
+
+
+def accepted_plotworthy_run(
+    summary: Mapping[str, Any] | None,
+    *,
+    include_interrupted: bool = True,
+) -> bool:
+    if not isinstance(summary, Mapping):
+        return False
+    reason = str(summary.get('completion_reason', '')).strip()
+    if accepted_completed_run(summary):
+        return True
+    return bool(include_interrupted) and reason == 'interrupted'
 
 
 def run_has_usable_logs(run_dir: Path | str) -> bool:

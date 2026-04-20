@@ -28,6 +28,12 @@ def generate_launch_description():
         description="Bridge /scan between Gazebo and ROS",
     )
     bridge_scan = LaunchConfiguration("bridge_scan")
+    bridge_contacts_arg = DeclareLaunchArgument(
+        "bridge_contacts",
+        default_value="true",
+        description="Bridge Gazebo world contact events to /world_contacts",
+    )
+    bridge_contacts = LaunchConfiguration("bridge_contacts")
     world_arg = DeclareLaunchArgument(
         "world",
         default_value="warehouse_occ_light.world.sdf",
@@ -212,6 +218,22 @@ def generate_launch_description():
         ],
         output="screen",
     )
+    ros_gz_contact_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            PythonExpression([
+                "'/world/' + '",
+                world_name,
+                "' + '/physics/contacts@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts'",
+            ]),
+        ],
+        remappings=[
+            (PythonExpression(["'/world/' + '", world_name, "' + '/physics/contacts'"]), "/world_contacts"),
+        ],
+        output="screen",
+        condition=IfCondition(bridge_contacts),
+    )
     ros_gz_scan_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
@@ -229,6 +251,7 @@ def generate_launch_description():
         world_arg,
         world_name_arg,
         headless_arg,
+        bridge_contacts_arg,
         reset_world_arg,
         spawn_x_arg,
         spawn_y_arg,
@@ -241,5 +264,6 @@ def generate_launch_description():
         spawn_after_reset,
         spawn_after_clock,
         ros_gz_bridge,
+        ros_gz_contact_bridge,
         ros_gz_scan_bridge,
     ])

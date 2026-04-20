@@ -82,6 +82,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('visibility_weight', 0.0)
         _declare_if_not('visibility_target_height_m', 0.0)
         _declare_if_not('visibility_geometry_json', '')
+        _declare_if_not('collision_geometry_json', '')
         _declare_if_not('r_visible_uv', 2.5)
         _declare_if_not('r_miss_uv', 120.0)
         _declare_if_not('visibility_power', 1.0)
@@ -107,6 +108,9 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('nogo_logbarrier_scale', 0.25)
         _declare_if_not('nogo_logbarrier_eps', 1e-3)
         _declare_if_not('visibility_artifact_path', '')
+        _declare_if_not('robot_collision_radius_m', 0.125)
+        _declare_if_not('min_terminal_goal_progress_m', 0.20)
+        _declare_if_not('invalid_rollout_barrier_cost', 1e6)
 
         # Optimizer params
         _declare_if_not('optimizer_maxiter', 50)
@@ -168,6 +172,7 @@ class UnicyclePlannerNode(Node):
         self.visibility_weight = float(self.get_parameter('visibility_weight').value)
         self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
         self.visibility_geometry_json = str(self.get_parameter('visibility_geometry_json').value)
+        self.collision_geometry_json = str(self.get_parameter('collision_geometry_json').value)
         self.r_visible_uv = float(self.get_parameter('r_visible_uv').value)
         self.r_miss_uv = float(self.get_parameter('r_miss_uv').value)
         self.visibility_power = float(self.get_parameter('visibility_power').value)
@@ -193,6 +198,9 @@ class UnicyclePlannerNode(Node):
         self.nogo_logbarrier_scale = float(self.get_parameter('nogo_logbarrier_scale').value)
         self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
         self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value).strip()
+        self.robot_collision_radius_m = float(self.get_parameter('robot_collision_radius_m').value)
+        self.min_terminal_goal_progress_m = float(self.get_parameter('min_terminal_goal_progress_m').value)
+        self.invalid_rollout_barrier_cost = float(self.get_parameter('invalid_rollout_barrier_cost').value)
 
         self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
         self.optimizer_maxfun = int(self.get_parameter('optimizer_maxfun').value)
@@ -270,6 +278,7 @@ class UnicyclePlannerNode(Node):
             visibility_weight=self.visibility_weight,
             visibility_target_height_m=self.visibility_target_height_m,
             visibility_geometry_json=self.visibility_geometry_json,
+            collision_geometry_json=self.collision_geometry_json,
             visibility_artifact_path=self.visibility_artifact_path,
             r_visible_uv=self.r_visible_uv,
             r_miss_uv=self.r_miss_uv,
@@ -295,6 +304,9 @@ class UnicyclePlannerNode(Node):
             nogo_softplus_scale=self.nogo_softplus_scale,
             nogo_logbarrier_scale=self.nogo_logbarrier_scale,
             nogo_logbarrier_eps=self.nogo_logbarrier_eps,
+            robot_collision_radius_m=self.robot_collision_radius_m,
+            min_terminal_goal_progress_m=self.min_terminal_goal_progress_m,
+            invalid_rollout_barrier_cost=self.invalid_rollout_barrier_cost,
             runtime_debug=self.debug_runtime,
         )
         self._io_group = ReentrantCallbackGroup()
@@ -880,6 +892,13 @@ class UnicyclePlannerNode(Node):
             float(getattr(result, 'r_plan_v_std', np.nan)),
             1.0 if (belief_meta or {}).get('measurement_available', False) else 0.0,
             float((belief_meta or {}).get('belief_age_s', math.nan)),
+            float(getattr(result, 'terminal_goal_distance_pred', np.nan)),
+            float(getattr(result, 'terminal_goal_progress_m', np.nan)),
+            float(getattr(result, 'fraction_horizon_low_pvis', np.nan)),
+            float(getattr(result, 'fraction_horizon_high_ambiguity', np.nan)),
+            float(getattr(result, 'min_predicted_obstacle_distance_m', np.nan)),
+            1.0 if getattr(result, 'rollout_valid', True) else 0.0,
+            1.0 if getattr(result, 'fallback_stop_applied', False) else 0.0,
         ]
         self.metrics_pub.publish(metrics_msg)
 
@@ -902,10 +921,23 @@ class UnicyclePlannerNode(Node):
             float(getattr(result, 'r_plan_v_std', np.nan)),
             1.0 if (belief_meta or {}).get('measurement_available', False) else 0.0,
             float((belief_meta or {}).get('belief_age_s', math.nan)),
+            float(getattr(result, 'terminal_goal_distance_pred', np.nan)),
+            float(getattr(result, 'terminal_goal_progress_m', np.nan)),
+            float(getattr(result, 'fraction_horizon_low_pvis', np.nan)),
+            float(getattr(result, 'fraction_horizon_high_ambiguity', np.nan)),
+            float(getattr(result, 'min_predicted_obstacle_distance_m', np.nan)),
+            1.0 if getattr(result, 'rollout_valid', True) else 0.0,
+            1.0 if getattr(result, 'fallback_stop_applied', False) else 0.0,
         ]
         self.planner_diag_pub.publish(diag)
         diag_text = String()
-        diag_text.data = str(getattr(result, 'optimizer_message', '') or '')
+        diag_parts = [str(getattr(result, 'optimizer_message', '') or '').strip()]
+        invalid_reason = str(getattr(result, 'invalid_reason', '') or '').strip()
+        if invalid_reason:
+            diag_parts.append(f'invalid_reason={invalid_reason}')
+        if bool(getattr(result, 'fallback_stop_applied', False)):
+            diag_parts.append('fallback_stop_applied=1')
+        diag_text.data = ' | '.join(part for part in diag_parts if part)
         self.planner_diag_text_pub.publish(diag_text)
 
     def _plan_once(self):
@@ -983,6 +1015,12 @@ class UnicyclePlannerNode(Node):
                 f"Optimizer reported non-success status={getattr(result, 'optimizer_status', 0)} "
                 f"message='{getattr(result, 'optimizer_message', '')}'. "
                 "Executing the selected solver-returned control sequence."
+            )
+            self._last_slow_plan_log = now_wall
+        if bool(getattr(result, 'fallback_stop_applied', False)) and (now_wall - self._last_slow_plan_log > 0.5):
+            self.get_logger().warn(
+                "Planner selected a rollout that violates the collision barrier. "
+                f"Publishing a zero-motion fallback for this cycle (reason={getattr(result, 'invalid_reason', '')})."
             )
             self._last_slow_plan_log = now_wall
 

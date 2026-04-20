@@ -1,0 +1,35 @@
+# Ruthless Code Review: Part 3
+
+## A. Naming-and-Concept Review
+*Find overloaded words, inconsistent terminology, and places where the code vocabulary does not match the thesis vocabulary.*
+
+**1. "Nogo" vs. Standard Robotics Nomenclature**
+- **Location**: `use_nogo_cost`, `nogo_penalty_type`
+- **Concept Clash**: In classic motion planning, this is simply "obstacle avoidance", "barrier scale", or "collision cost". "Nogo" sounds like generic scaffolding rather than formal mathematics. The thesis likely describes "obstacle cost" or "barrier functions". 
+
+**2. Overloaded Plotting "Uncertainty" (`p_unc`)**
+- **Location**: `plot_gp_and_ambiguity_maps.py`
+- **Concept Clash**: The variable `p_unc` is used to represent *both* `F_std_map` (which is standard deviation in unbounded latent logit space) *and* the conservative gap `p_mean - p_map` (which is bounded probability `[0,1]`). 
+- **Mental Model Failure**: Naming them both `p_unc` collapses two mathematically distinct concepts into a single visual colorbar, which destroys trust in the analytical plots. Logits and Probabilities must exist in distinctly named semantic spaces (e.g., `latent_std` vs `prob_bound_gap`).
+
+**3. "Method" vs. "Planner" Fragmentation**
+- **Location**: Launch files (`planner: efe1`) vs Logging workflows (`method_id: efe1_yolo`).
+- **Concept Clash**: The codebase constantly switches between `planner`, `method`, `perception_backend`, and `comparison_method_id` to refer to the exact same launch combination. Unify this into a single concept (e.g., `experiment_configuration`).
+
+
+## B. Onboarding Review
+*Review as if a new MSc student inherits the repo tomorrow.*
+
+### The First Hour: Where does the truth live?
+- **The Confusion**: A new student wants to change the goal tightening power to see what happens. They open `warehouse_primary_comparison.launch.py`. It's not there. They check `tasks.yaml`. It's not there either. They grep the whole codebase and find `goal_tightening_power` copy-pasted as a `0.45` default inside three different python scripts (`experiment_logger.py`, `unicycle_planner_node.py`, and `base_planner.py`).
+- **The Fix**: Adopt `Hydra` or `OmegaConf`. A centralized `config/default_planner.yaml` would make the entire repository discoverable in 30 seconds.
+
+### The First Day: The Scorched-Earth Sweeps
+- **The Confusion**: The student tries to write a bash script to rapidly loop experiments. They use `run_planner_comparison.py`. Suddenly, their entirely unrelated background ROS processes die, their independent Gazebo client crashes, and their teammate on the same lab server yells at them because everything died.
+- **The Reason**: `run_planner_comparison.py` heavily relies on `_cleanup_gazebo_and_ros()` which executes `pkill -9 -f gazebo` and `pkill -9 -f ign`.
+- **The Fix**: Stop relying on global OS-level `pkill` calls to manage process lifecycles. Use proper ROS 2 lifecycle management, isolated namespaces, or strict Docker containers so local experiments do not "nuke" the host machine.
+
+### The First Week: The God Object and the NIH Syndrome
+- **The Confusion**: The student decides to add a new observation term to the Expected Free Energy (EFE) functional. They must trace variables through `UnicyclePlannerBase.__init__`, which receives 40 separate positional arguments that aren't wrapped in a struct or dataclass.
+- **The Confusion 2**: They want to change the Gaussian Process kernel from RBF to Matern to better model sharp warehouse corners. They go into the math package, fully expecting to import `sklearn` or `GPyTorch` and swap the name. Instead, they find `SimpleRBFGP`—a 50-line custom implementation doing deep NumPy linear algebra (`import numpy.linalg`). 
+- **The Fix**: Group all parameters into Dataclasses (`DynamicsConfig`, `CostConfig`). Delete the custom GP code. A MS student should not inherit numerical linear algebra if they signed up to do Active Inference navigation!

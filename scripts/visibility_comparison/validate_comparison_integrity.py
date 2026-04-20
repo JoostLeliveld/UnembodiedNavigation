@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import os
@@ -108,6 +109,28 @@ def _load_json(path: Path) -> dict:
     except (OSError, ValueError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _load_run_manifest(run_dir: Path) -> dict:
+    return _load_json(run_dir / 'run_manifest.json') or _load_json(run_dir / 'manifest.json')
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(str(text or '').encode('utf-8')).hexdigest()
+
+
+def _boolish(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    return text in ('1', 'true', 't', 'yes', 'y', 'on')
+
+
+def _artifact_visibility_map(data) -> np.ndarray:
+    for key in ('P_conservative_plan_map', 'P_map', 'P_conservative_map', 'P_mean_map'):
+        if key in data.files:
+            return np.asarray(data[key], dtype=float)
+    raise KeyError('missing planner visibility map in artifact')
 
 
 def _read_csv_head_tail(path: Path, n: int = 50) -> tuple[list[str], list[dict]]:
@@ -212,12 +235,96 @@ def check_csv_columns(method_id: str, run_dir: Path) -> list[str]:
                 'planner_belief_x', 'planner_belief_y', 'planner_belief_yaw',
                 'truth_state_error_m', 'truth_belief_error_m',
                 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_visibility', 'efe_obstacle',
+                'terminal_goal_distance_pred', 'terminal_goal_progress_m',
+                'fraction_horizon_low_pvis', 'fraction_horizon_high_ambiguity',
+                'min_predicted_obstacle_distance_m',
+                'rollout_valid', 'fallback_stop_applied',
+                'collision_any', 'collision_contact', 'collision_geom', 'collision_reason', 'first_crash_stamp',
+                'min_wall_distance_m', 'min_obstacle_distance_m',
+                'wall_penetration_m', 'obstacle_penetration_m',
+                'off_map', 'inside_no_go', 'valid_run', 'invalid_reason',
                 'stamp']
     missing = [col for col in required if col not in fieldnames]
     if missing:
         issues.append(f'experiment.csv missing columns: {missing}  '
                       f'(old run without new logger? re-run to get audit-proof columns)')
+
+    perception_path = run_dir / 'perception.csv'
+    if not perception_path.is_file():
+        issues.append('perception.csv missing; cannot validate detector instrumentation columns')
+        return issues
+
+    perception_fieldnames, _ = _read_csv_head_tail(perception_path, n=0)
+    perception_required = [
+        'yolo_raw_best_score',
+        'yolo_selected_score',
+        'yolo_detected_after_threshold',
+        'yolo_num_target_candidates',
+        'yolo_selected_class_id',
+        'yolo_selected_pixel_source',
+        'yolo_bbox_area',
+        'yolo_mask_area',
+        'camera_relative_bearing_deg',
+    ]
+    missing = [col for col in perception_required if col not in perception_fieldnames]
+    if missing:
+        issues.append(f'perception.csv missing columns: {missing}')
     return issues
+
+
+def check_geometry_hashes(method_id: str, run_dir: Path) -> list[str]:
+    issues = []
+    manifest = _load_run_manifest(run_dir)
+    if not manifest:
+        return [f'{method_id}: run manifest missing; cannot validate geometry hashes']
+
+    visibility_geometry_json = str(manifest.get('visibility_geometry_json', '') or '')
+    visibility_geometry_sha256 = str(manifest.get('visibility_geometry_sha256', '') or '')
+    collision_geometry_json = str(manifest.get('collision_geometry_json', '') or '')
+    collision_geometry_sha256 = str(manifest.get('collision_geometry_sha256', '') or '')
+
+    if not visibility_geometry_sha256:
+        issues.append(f'{method_id}: visibility_geometry_sha256 missing from run manifest')
+    elif visibility_geometry_json and visibility_geometry_sha256 != _sha256_text(visibility_geometry_json):
+        issues.append(f'{method_id}: visibility_geometry_sha256 does not match visibility_geometry_json')
+
+    if not collision_geometry_sha256:
+        issues.append(f'{method_id}: collision_geometry_sha256 missing from run manifest')
+    elif collision_geometry_json and collision_geometry_sha256 != _sha256_text(collision_geometry_json):
+        issues.append(f'{method_id}: collision_geometry_sha256 does not match collision_geometry_json')
+
+    artifact_path = Path(str(manifest.get('visibility_artifact_path', '') or '')).expanduser()
+    if artifact_path.is_file() and visibility_geometry_sha256:
+        try:
+            with np.load(artifact_path, allow_pickle=False) as data:
+                artifact_hash_raw = data['geometry_sha256'] if 'geometry_sha256' in data.files else None
+                artifact_hash = ''
+                if artifact_hash_raw is not None:
+                    artifact_hash_arr = np.asarray(artifact_hash_raw)
+                    if artifact_hash_arr.size:
+                        artifact_hash = str(artifact_hash_arr.reshape(-1)[0])
+        except Exception as exc:
+            issues.append(f'{method_id}: could not load visibility artifact geometry hash from {artifact_path}: {exc}')
+        else:
+            if not artifact_hash:
+                issues.append(f'{method_id}: visibility artifact missing geometry_sha256: {artifact_path}')
+            elif artifact_hash != visibility_geometry_sha256:
+                issues.append(
+                    f'{method_id}: visibility artifact geometry_sha256={artifact_hash!r} '
+                    f'does not match run manifest {visibility_geometry_sha256!r}'
+                )
+    return issues
+
+
+def check_invalid_run_warning(method_id: str, run_dir: Path, summary: dict) -> list[str]:
+    warnings = []
+    valid_run = summary.get('valid_run', True)
+    crashed = summary.get('crashed', False)
+    invalid_reason = str(summary.get('invalid_reason', '') or '')
+    if (not _boolish(valid_run)) or _boolish(crashed) or invalid_reason:
+        reason = invalid_reason or str(summary.get('completion_reason', '') or 'invalid')
+        warnings.append(f'Run marked invalid/crashed for analysis: reason={reason!r} (kept visible by design)')
+    return warnings
 
 
 def check_initial_poses(method_id: str, run_dir: Path, summary: dict) -> list[str]:
@@ -429,7 +536,7 @@ def check_gp_interpolation(method_id: str, run_dir: Path, gp_dir: Path | None) -
         with np.load(artifact_path, allow_pickle=False) as data:
             xs = np.asarray(data['xs'], dtype=float)
             ys = np.asarray(data['ys'], dtype=float)
-            p_map = np.asarray(data['P_conservative_plan_map'], dtype=float)
+            p_map = _artifact_visibility_map(data)
     except Exception as exc:
         return [f'Could not load GP artifact {artifact_path}: {exc}']
 
@@ -498,6 +605,7 @@ def main() -> int:
     print(f'Methods found: {sorted(run_dirs.keys())}\n')
 
     all_issues: dict[str, list[str]] = {}
+    all_warnings: dict[str, list[str]] = {}
     any_failures = False
 
     # Cross-method checks
@@ -520,10 +628,13 @@ def main() -> int:
         run_dir = run_dirs[method_id]
         summary = _load_json(run_dir / 'run_summary.json')
         method_issues: list[str] = []
+        method_warnings: list[str] = []
 
         method_issues += check_structural(method_id, run_dir, summary)
         method_issues += check_csv_columns(method_id, run_dir)
+        method_issues += check_geometry_hashes(method_id, run_dir)
         method_issues += check_initial_poses(method_id, run_dir, summary)
+        method_warnings += check_invalid_run_warning(method_id, run_dir, summary)
 
         # YOLO check only for YOLO-backed methods
         if method_id in ('yolo_binary', 'yolo_score_raw', 'yolo_score_calibrated', 'oracle_visibility'):
@@ -534,17 +645,26 @@ def main() -> int:
             method_issues += check_gp_interpolation(method_id, run_dir, gp_dir)
 
         all_issues[method_id] = method_issues
+        all_warnings[method_id] = method_warnings
         if method_issues:
             any_failures = True
             print(_hdr(f'[{method_id}]') + f'  {run_dir}')
             for issue in method_issues:
                 print(f'  {_fail(issue)}')
+            for warning in method_warnings:
+                print(f'  {_warn(warning)}')
+        elif method_warnings:
+            print(_hdr(f'[{method_id}]') + f'  {run_dir}')
+            for warning in method_warnings:
+                print(f'  {_warn(warning)}')
         else:
             print(_ok(f'[{method_id}]  {run_dir.name}'))
 
     print()
     if any_failures:
         print(_fail('Integrity check FAILED — do not run final reports until all issues are resolved.'))
+    elif any(v for v in all_warnings.values()):
+        print(_warn('Integrity check passed with warnings — invalid runs were preserved but instrumentation is intact.'))
     else:
         print(_ok('All integrity checks passed.'))
 
@@ -555,6 +675,7 @@ def main() -> int:
         'methods_checked': sorted(run_dirs.keys()),
         'any_failures': any_failures,
         'issues': {k: v for k, v in all_issues.items()},
+        'warnings': {k: v for k, v in all_warnings.items()},
     }
     try:
         out_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
