@@ -1,0 +1,61 @@
+# Ruthless Code Review: Part 2
+
+## A. Configuration Risk Review
+
+**1. Copy-Pasted 40-Parameter Config Bloat**
+- **Location**: `base_planner.py` (`__init__`), `experiment_logger.py` (`__init__`), and (likely) `unicycle_planner_node.py`.
+- **Issue**: There are over 40 numerical GP/Solver parameters (`goal_tightening_power`, `goal_prior_u_std_start`, `visibility_barrier_threshold`, etc.). These are declared as class `kwargs` in the planner, declared identically as ROS 2 parameters in the logger node, explicitly dumped into the CSV dictionary, and parsed via `get_parameter`. 
+- **Risk**: Since Python has no compiled interface checking for this sync, the moment a researcher changes a parameter's default value in `base_planner.py`, the `experiment_logger.py` ROS parameter default goes permanently out of sync. Experiments will log one value but the planner will silently use another. 
+- **Fix**: Centralize configuration! Use a single parsed `omegaconf` or `@dataclass` payload loaded by `experiment_logger.py` and passed directly into `UnicyclePlannerBase(config=payload)`. Do not duplicate 40 floating arguments explicitly.
+
+**2. Opaque ROS Launch Defaults**
+- **Location**: `warehouse_primary_comparison.launch.py`
+- **Issue**: The launch script leaves dozens of planner weights (like `visibility_trust_low`) completely unspecified, forcing the C++ or Python ROS 2 runtime to fall back to whatever is hardcoded in the node's `self.declare_parameter('visibility_trust_low', 0.15)`.
+- **Risk**: Finding the explicit configuration for an experiment requires digging into Python node source code rather than looking at a launch file or `tasks.yaml`.
+
+
+## B. Assertion and Invariant Review
+
+**1. Unprotected Matrix/Array Shaping in SciPy Wrappers**
+- **Location**: `src/planning/planning/planners/base_planner.py` (`_evaluate_controls`)
+- **Issue**: `controls_flat.reshape(self.horizon, 2)` blindly accepts incoming flattened control arrays. 
+- **Fix**: **Fail fast.** Assert `controls_flat.size == self.horizon * 2`. If an array arrives mismatched due to a config truncation, SciPy will crash deeply within CasADi's symbolic tape rather than instantly telling you "Optimizer returned size 64, expected 72".
+
+**2. GP Grid State Invariants**
+- **Location**: `src/planning/planning/core/visibility_gp_map.py` (`prob_state_np`)
+- **Issue**: `xy = np.array([float(m[0]), float(m[1])], dtype=float)` assumes `m` is an iterable of at least 2 elements with castable floats. 
+- **Fix**: Assert `len(m) >= 2` and add explicit shape checking. If a 1D tensor representing velocity is accidentally passed in here, Python will parse the first array element and silently calculate random probabilities.
+
+**3. YOLO Detections Bounds Sanity**
+- **Location**: `src/perception/perception/core/yolo_selection.py`
+- **Issue**: `bbox = xyxy[idx, :4]`. Is it normalized `[0,1]` or raw pixel bounds? 
+- **Fix**: Assert `x0 >= 0 and y0 >= 0` and explicitly tie the bounding box domain to either the camera shape or normalized floats. Without this, silent coordinate leakage pushes negative arrays into polygon maths.
+
+
+## C. Dead-Code Archaeology
+
+**1. Legacy Artifact Compatibility Shims**
+- **Location**: `scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py`
+- **Snippet**: 
+  ```python
+  if 'F_std_map' in artifact: ...
+  else: p_unc = np.clip(p_mean - p_map, 0.0, None)
+  ```
+- **Archaeology**: The codebase specifically moved to a new Offline GP schema containing `F_std_map` (Latent GP std). The script `fit_visibility_gps.py` explicitly states: *"Strict schema cutover: legacy artifacts with P_map are no longer accepted"*. Yet the plotting script retains old schema fallbacks just to render obsolete charts. 
+- **Action**: **Delete.** Rip out the bounding/clipping shim. If an artifact lacks the modern `F_std_map`, the plotting script should crash `KeyError`. Code meant for old experiments only rots the readability of the current logic.
+
+**2. Redundant Method Globals**
+- **Location**: `src/planning/planning/planners/base_planner.py`
+- **Snippet**: 
+  ```python
+  APPROX_METHOD = 'ET1'
+  USE_OBS_RISK = True
+  ```
+- **Archaeology**: The class maintains global static properties for core algorithmic paths, but relies immediately on `self.approx_method = self.APPROX_METHOD if approx_method is None`. These class globals are remnants of early testing where no initialization kwargs existed. They serve no purpose.
+- **Action**: **Delete.** Let the config class / datastructure own the defaults. Stop maintaining parallel class attributes.
+
+**3. Inactive YAML Parsing Keys**
+- **Location**: `tasks.yaml` and `_load_task_start_pose`
+- **Snippet**: `{x: -2.0, y: 1.4, z: 0.05, yaw: 0.0}`
+- **Archaeology**: The `z: 0.05` is declared in `tasks.yaml`, but `_load_task_start_pose` explicitly only pulls `(x, y, yaw)`.
+- **Action**: **Delete.** Remove `z` structurally or extract it properly. Configuration files must map 1:1 with operational logic. If `z` is not used, it is dead config noise.

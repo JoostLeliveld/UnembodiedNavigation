@@ -32,4 +32,4 @@ Some launches and older manifests may still point here. The active comparison fr
 
 ## Important Caveat
 
-These files represent a learned visibility / detection-success prior for the current simulated camera-detector stack. The current fitter defaults to a normalized blob-area target for first-pass experiments and also supports binary usable detection as an alternate scalar target. These files should not be presented as a general occlusion model.
+These files represent a learned visibility / detection-success prior for the current simulated camera-detector stack. The active comparison backbone now fits explicit method-specific targets such as `red_binary`, `yolo_binary`, `yolo_score_raw`, `yolo_score_calibrated`, and `oracle_visibility`, and the resulting planner artifacts expose `P_conservative_plan_map` as the planner-facing conservative field. These files should not be presented as a general occlusion model.

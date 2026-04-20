@@ -103,4 +103,5 @@ Deferred to later method-specific passes:
 - red binary target extraction
 - red corrected-area target extraction
 - YOLO binary target extraction
-- YOLO confidence target extraction
+- YOLO raw-score target extraction
+- YOLO calibrated-score target extraction

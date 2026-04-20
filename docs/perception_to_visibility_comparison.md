@@ -66,15 +66,19 @@ The framework reserves these method ids:
 - `red_binary`
 - `red_area_corrected`
 - `yolo_binary`
-- `yolo_confidence`
+- `yolo_score_raw`
+- `yolo_score_calibrated`
 - `oracle_visibility`
+- `visibility_unaware_baseline`
 
 At the current stage, the implemented methods are:
 
 - `oracle_visibility`
 - `red_binary`
 - `yolo_binary`
-- `yolo_confidence`
+- `yolo_score_raw`
+- `yolo_score_calibrated`
+- `visibility_unaware_baseline`
 
 The remaining deferred method is:
 
@@ -116,20 +120,35 @@ Meaning:
 
 - can the learned detector observe the robot at all?
 
-### YOLO Confidence
+### YOLO Raw Score
 
 Target:
 
-- the raw YOLO score, clipped into `[0,1]` if needed
+- the pre-threshold best-candidate YOLO score in `[0,1]`
 
 Meaning:
 
-- a soft detector-reliability signal
+- a soft detector-reliability signal before calibration
 
 Important:
 
 - this score is treated as an uncalibrated detector score
 - it is not claimed to be a calibrated probability
+
+### YOLO Calibrated Score
+
+Target:
+
+- a temperature-scaled mapping of the raw YOLO score into `[0,1]`
+
+Meaning:
+
+- an empirically calibrated soft visibility / detection-success signal
+
+Important:
+
+- calibration is fitted offline against canonical capture labels
+- calibration quality should still be checked with reliability, Brier, ECE, PR, and ROC plots
 
 ### Oracle / Reference Visibility
 
@@ -206,7 +225,7 @@ not to:
 When the comparison is run in full detector-stack mode, the live runtime perception backend is paired with the method family:
 
 - `red_binary` and `red_area_corrected` use the live `image_markers` backend
-- `yolo_binary` and `yolo_confidence` use the live `yolo` backend
+- `yolo_binary`, `yolo_score_raw`, and `yolo_score_calibrated` use the live `yolo` backend
 - `oracle_visibility` remains a reference visibility field; its live backend must be stated explicitly
 - `visibility_unaware_baseline` disables the visibility GP in the planner; its live backend must also be stated explicitly
 
@@ -263,7 +282,8 @@ Current status:
 - the shared raw/target/GP/report contracts are implemented
 - the geometry-based oracle/reference path is fully implemented
 - the red binary path is fully implemented
-- red and YOLO target extraction logic are implemented later as separate method passes
+- the YOLO raw/binary/calibrated target paths are implemented on the shared capture table
+- `red_area_corrected` remains the deferred method-specific pass
 
 ## First Finished Methods
 
@@ -271,6 +291,9 @@ The first completed methods in the new framework are:
 
 - `oracle_visibility`
 - `red_binary`
+- `yolo_binary`
+- `yolo_score_raw`
+- `yolo_score_calibrated`
 
 What is already implemented for it:
 
@@ -282,12 +305,24 @@ What is already implemented for it:
   - `red_bbox_xyxy`
   - `red_bottom_u`
   - `red_bottom_v`
+- perception target extraction also runs YOLO and fills:
+  - `yolo_score_raw`
+  - `yolo_score_selected`
+  - `yolo_detected_after_threshold`
+  - `yolo_best_class_id`
+  - selected pixel-source diagnostics
 - GP target construction writes:
   - `oracle_visibility`
   - `red_binary`
+  - `yolo_binary`
+  - `yolo_score_raw`
+  - `yolo_score_calibrated`
 - GP fitting already produces:
   - `oracle_visibility_gp.npz`
   - `red_binary_gp.npz`
+  - `yolo_binary_gp.npz`
+  - `yolo_score_raw_gp.npz`
+  - `yolo_score_calibrated_gp.npz`
   when data are available
 - GP and ambiguity plotting already works for both fields
 - planner runs can use either artifact through explicit `visibility_artifact_path`
@@ -301,11 +336,13 @@ So `oracle_visibility` is the clean geometry/reference anchor, and `red_binary` 
 - The planner interface is shared across methods.
 - Teleport sampling is used to obtain dense, comparable spatial evidence.
 - Oracle visibility is a reference field, not a runtime perception method.
-- YOLO confidence is treated as an uncalibrated detector score.
+- YOLO raw score is treated as an uncalibrated detector score.
+- YOLO calibrated score is only as trustworthy as its capture-based calibration diagnostics.
 
 ## Unsafe Claims
 
-- YOLO confidence is a calibrated probability.
+- YOLO raw score is a calibrated probability.
+- A global calibration fit proves robustness across view angle or border-margin slices by itself.
 - Red blob area is a universal visibility measure.
 - Oracle visibility is runtime perception.
 - The current estimator is a fully visual pose estimator.

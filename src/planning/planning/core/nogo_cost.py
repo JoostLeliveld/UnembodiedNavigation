@@ -83,6 +83,19 @@ class NogoZoneCostModel:
         signed_d = float(signed_distance_to_union_xy(self.prisms, np.asarray(xy, dtype=float))[0])
         return signed_d - self.safe_distance
 
+    def signed_distance_state_np(self, m) -> float:
+        if not self.prisms:
+            return float('inf')
+        xy = np.array([float(m[0]), float(m[1])], dtype=float)
+        return float(signed_distance_to_union_xy(self.prisms, xy)[0])
+
+    def penetration_depth_state_np(self, m) -> float:
+        signed_d = self.signed_distance_state_np(m)
+        return float(max(-signed_d, 0.0)) if np.isfinite(signed_d) else 0.0
+
+    def inside_state_np(self, m) -> bool:
+        return bool(self.penetration_depth_state_np(m) > 0.0)
+
     def _penalty_from_clearance_np(self, clearance: float) -> float:
         if not self.enabled:
             return 0.0
@@ -158,3 +171,35 @@ class NogoZoneCostModel:
             return weight * base
 
         return penalty_state_casadi
+
+    def make_signed_distance_state_casadi(self):
+        try:
+            import casadi as ca
+        except Exception as exc:  # pragma: no cover - optional dependency
+            raise RuntimeError('CasADi is not available for no-go-zone signed distance') from exc
+
+        if not self.prisms:
+            def inf_distance(_m):
+                return ca.DM.inf()
+            return inf_distance
+
+        xmins = ca.DM(self._xmins)
+        xmaxs = ca.DM(self._xmaxs)
+        ymins = ca.DM(self._ymins)
+        ymaxs = ca.DM(self._ymaxs)
+
+        def signed_distance_state_casadi(m):
+            x = m[0]
+            y = m[1]
+            dx = ca.fmax(ca.fmax(xmins - x, 0.0), x - xmaxs)
+            dy = ca.fmax(ca.fmax(ymins - y, 0.0), y - ymaxs)
+            outside = ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
+
+            inside_x = ca.fmin(x - xmins, xmaxs - x)
+            inside_y = ca.fmin(y - ymins, ymaxs - y)
+            inside_depth = ca.fmin(inside_x, inside_y)
+            inside = ca.logic_and(dx <= 0.0, dy <= 0.0)
+            signed = ca.if_else(inside, -inside_depth, outside)
+            return ca.mmin(signed)
+
+        return signed_distance_state_casadi

@@ -8,6 +8,9 @@ The active perception script surface is now intentionally small:
 - [`perception/make_preview_grid.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/make_preview_grid.py)
 - [`perception/train_yolo_seg.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/train_yolo_seg.py)
 - [`perception/make_redmask_pseudolabels.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/make_redmask_pseudolabels.py)
+- [`perception/capture_simseg_dataset.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/capture_simseg_dataset.py)
+- [`perception/capture_projected_bbox_dataset.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/capture_projected_bbox_dataset.py)
+- [`perception/analyze_dataset_robustness.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/analyze_dataset_robustness.py)
 
 The active visibility-comparison backbone now lives under:
 
@@ -16,6 +19,7 @@ The active visibility-comparison backbone now lives under:
 - [`visibility_comparison/compute_area_reference.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/compute_area_reference.py)
 - [`visibility_comparison/build_gp_targets.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/build_gp_targets.py)
 - [`visibility_comparison/fit_visibility_gps.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/fit_visibility_gps.py)
+- [`visibility_comparison/plot_yolo_calibration.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/plot_yolo_calibration.py)
 - [`visibility_comparison/plot_gp_and_ambiguity_maps.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py)
 - [`visibility_comparison/plot_planned_paths.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/plot_planned_paths.py)
 - [`visibility_comparison/make_visibility_comparison_report.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/make_visibility_comparison_report.py)

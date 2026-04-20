@@ -1,0 +1,95 @@
+# Ruthless Simplification Code Review
+
+## A. Top removal/refactor targets
+
+**1. Home-made Gaussian Process Math**
+- **Severity**: Critical
+- **File + Function**: `src/planning/planning/core/gp_visibility_helpers.py` (`SimpleRBFGP`)
+- **What should be removed**: The entire `SimpleRBFGP` class. It manually performs Cholesky decompositions (`np.linalg.cholesky(K)`), manual log-likelihood solves, and custom kernel dot products.
+- **Why it is unnecessarily complex**: Numerically stable matrix inversion is notoriously difficult. Implementing a manual RBF kernel with raw jitter variables introduces extreme risk of ill-conditioning for zero scientific reward (unless the thesis is literally about novel GP numerical solvers).
+- **Replacement package**: `sklearn.gaussian_process.GaussianProcessRegressor` with `RBF` kernel (or `GPyTorch` if GPU speed is needed).
+- **Estimated payoff**: Deletes highly sensitive, bug-prone linear algebra in favor of a 2-line standard library call. Massive robustness gain.
+- **Action**: Replace.
+
+**2. Manual Bilinear Grid Interpolation**
+- **Severity**: Major
+- **File + Function**: `src/planning/planning/core/visibility_gp_map.py` (`_bilinear_map_np`)
+- **What should be removed**: The 30+ lines of custom `import numpy` grid mapping that manually clamps index bounds `np.clip(ix, 0, self.xs.shape[0] - 2)` and calculates proportional geometric ratios.
+- **Why it is unnecessarily complex**: Grid interpolation is a solved problem. This custom implementation introduces a risk of silent index overflow or off-by-one errors across axes.
+- **Replacement package**: `scipy.interpolate.RegularGridInterpolator`.
+- **Estimated payoff**: Code shrinks by 80%, out-of-bounds queries can naturally throw exceptions rather than silently clamping.
+- **Action**: Replace.
+
+**3. Home-rolled Polygon Math**
+- **Severity**: Minor
+- **File + Function**: `src/perception/perception/core/yolo_selection.py` (`polygon_area`)
+- **What should be removed**: Custom shoelace formula implementation `0.5 * (np.dot(...) - np.dot(...))`.
+- **Why it is unnecessarily complex**: Unnecessary reinvention of geometry math.
+- **Replacement package**: `cv2.contourArea` (since OpenCV is likely already used) or `shapely.geometry.Polygon(points).area`.
+- **Estimated payoff**: Fewer bugs around unclosed or degenerate polygons.
+- **Action**: Delete.
+
+
+## B. Fail-fast issues
+
+**1. Silently dropping test assumptions**
+- **File + Function**: `src/experiments/experiments/nodes/experiment_logger.py` (`_load_task_start_pose`)
+- **Current behavior**: Wraps YAML loading in `except (OSError, yaml.YAMLError): return None`.
+- **Why it is dangerously silent**: If `tasks.yaml` has a syntax error, the logger returns `None` for the start pose. Later, the error metrics simply write `NaN` to the CSV logs instead of failing the experiment. The researcher might run a 6-hour simulation sweep only to find empty reference metrics.
+- **Fix**: Re-raise the exception or use `assert`. If standard configuration files are missing in a research orchestrator, the program must crash instantly.
+
+**2. Swallowing JSON Decode Errors Globally**
+- **File + Function**: Occurs in almost all scripts, e.g., `scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py` (`_load_json`) and `scripts/visibility_comparison/fit_visibility_gps.py`.
+- **Current behavior**: `except (OSError, ValueError, TypeError, json.JSONDecodeError): return {}`
+- **Why it is dangerously silent**: A corrupted or partially written manifest file results in an empty dictionary being passed downstream, silently falling back to defaults and producing graphs summarizing the wrong data.
+- **Fix**: Let JSON decoding crash loudly if the file exists but fails to parse.
+
+**3. Swallowing TF Transform Failures**
+- **File + Function**: `src/experiments/experiments/nodes/experiment_logger.py` (`_latest_truth_pose`)
+- **Current behavior**: Wraps `lookup_transform` in a try/except, logs a warning once per second, and returns `False, math.nan, math.nan`. 
+- **Why it is dangerously silent**: This leads to data frames continuing to log runs where state provenance is broken.
+- **Fix**: The logger should fail and mark the experiment as "corrupted" rather than limping along recording `NaNs` while the robot blindly drives.
+
+
+## C. Workarounds and dead weight
+
+**1. Plot Manifest Fallbacks**
+- **Workaround location**: `scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py` (`_plot_settings_for_method`)
+- **Judge**: This selectively falls back to CLI arguments `args.r_visible_uv` if the `run_manifest.json` parameter is missing or corrupt.
+- **Status**: **Compensating for deeper bad design**. If an artifact manifest is corrupted, it should not be plotted. Injecting runtime script arguments into a supposedly hermetic offline plot generates completely untrackable provenance.
+
+**2. Manual Matrix Determinants**
+- **Workaround location**: `src/planning/planning/core/casadi_efe.py` (`_det_2x2`, `_chol_2x2`)
+- **Judge**: This was likely added to sidestep exact analytical gradients failing or behaving strangely in a specific version of CasADi.
+- **Status**: **Probably obsolete / compensating**. CasADi supports matrix inversions natively.
+
+
+## D. Silent behavior risks
+
+1. **Silent Grid Clamping (`visibility_gp_map.py`)**: The custom interpolator clamps coordinates that exceed the fitted GP map size `np.clip(ix, 0, self.xs.shape[0] - 2)`. If the robot drives off the map, it will silently hallucinate visibility values frozen at the boundary instead of crashing or signaling a fatal boundary violation.
+2. **Silent Target Dropping (`fit_visibility_gps.py`)**: The dataset loading loop silently ignores lines where `y` or the value parses as `NaN` or unreadable text. If the collection script output 'ERROR' for a field, the target is silently discarded, systematically altering the GP distribution.
+3. **Empty YOLO Outputs (`train_yolo_seg.py` / `yolo_selection.py`)**: Downstream behavior heavily delegates to returning `-1` or `empty array` if the detection fails or YOLO shape constraints crash, masking fundamental vision failures.
+
+
+## E. Best package substitution opportunities
+
+1. **`sklearn.gaussian_process`** -> Replaces `SimpleRBFGP`.
+2. **`scipy.interpolate.RegularGridInterpolator`** -> Replaces custom `_bilinear_map_np` grid maths.
+3. **`shapely` / `cv2`** -> Replaces `polygon_area` coordinate manipulation.
+4. **`omegaconf` or `hydra`** -> Can replace the massive bespoke 40+ arg dictionary validation mapping cascading through `base_planner.py` and `experiment_logger.py`.
+
+
+## F. Simplify-this-now shortlist
+
+1. **Delete `SimpleRBFGP` entirely** and bind `sklearn.gaussian_process` inside `fit_visibility_gps.py`. 
+2. **Strip all `except (json.JSONDecodeError, yaml.YAMLError): return {}`** from config scripts. Force the pipeline to crash if an experiment manifest is damaged.
+3. **Remove manual boundary clipping** inside `visibility_gp_map.py`. Use Scipy and pass `bounds_error=True` to immediately crash if the planner queries outside reliable regions.
+4. **Delete the manual `_chol_2x2` and `_det_3x3` utilities** inside CasADi, replacing them with CasADi's built in dense algebra.
+5. **Delete manifest parameter fallbacks**. In `plot_gp_and_ambiguity_maps.py`, if a run manifest lacks the required variables, skip it entirely. Do not inject argparse CLI fallbacks into historical run analysis.
+
+
+## G. Keep custom only if justified
+
+**Custom `make_g_from_homography` and `unicycle_step_ca`**
+- **Location**: `src/planning/planning/core/casadi_efe.py`
+- **Why it is scientifically necessary**: The thesis hinges on symbolic Unscented / Extended transformations over oblique homographies connecting pixel noise to unicycle dynamics. No standard package stitches `ca.MX` geometry jacobians directly into expected-free-energy integrals. This must remain custom, as it represents the core predictive formulation logic of the research itself.

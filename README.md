@@ -59,7 +59,7 @@ The repository is easiest to understand through three figures:
 
 ![Empirical visibility artifact tutorial](docs/figures/visibility_capture_tutorial.png)
 
-The learned artifact is a scalar field over the planner-facing state estimate. The current fitter supports two scalar targets over `/state/bev` x-y: a normalized blob-area baseline and a binary usable-detection label. For first-pass experiments, the script now defaults to the normalized blob-area target.
+The learned artifact is a scalar field over the planner-facing state estimate. The current comparison backbone supports method-specific scalar targets over planner `x,y`, including `red_binary`, `yolo_binary`, `yolo_score_raw`, `yolo_score_calibrated`, and `oracle_visibility`, all of which are converted into the same planner-facing GP contract.
 
 ![Observation model tutorial](docs/figures/observation_model_tutorial.png)
 
@@ -203,12 +203,13 @@ python3 scripts/visibility_comparison/capture_visibility_samples.py \
   --sample-ny 15
 
 python3 scripts/visibility_comparison/extract_perception_targets.py
+python3 scripts/visibility_comparison/plot_yolo_calibration.py
 python3 scripts/visibility_comparison/build_gp_targets.py
 python3 scripts/visibility_comparison/fit_visibility_gps.py
 python3 scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py
 ```
 
-At the shared-backbone stage, `oracle_visibility` is the first fully populated method. Red and YOLO target columns are added in later method-specific passes without changing the capture, GP, planner, or report contracts.
+At the shared-backbone stage, the canonical capture table feeds red, YOLO, and oracle targets without changing the planner or report contracts. The YOLO path now preserves raw pre-threshold scores, fits a temperature-scaling calibration artifact, and exposes both `yolo_score_raw` and `yolo_score_calibrated` as explicit comparison methods.
 
 For the full comparison design, see:
 
@@ -312,6 +313,14 @@ ros2 run rqt_graph rqt_graph
 - **Primary runtime estimator**: camera-derived `x,y` plus odometry-backed `theta`
 - **Primary planner path**: ET1
 - **Retained but secondary planners**: `efe2`, `efer`, `mpc`
+- **Accepted evaluation runs**: `goal_reached`, `stuck`, and `timeout_after_first_cmd` only
+
+## Robustness Notes
+
+- The comparison reports now exclude interrupted runs instead of silently plotting the newest partial output.
+- GP artifacts expose `P_conservative_plan_map`, `P_mean_map`, and latent `F_std_map` so plotting can distinguish a conservative planner field from a true latent-std panel.
+- YOLO raw scores are logged before thresholding, then calibrated offline into `yolo_score_calibrated`.
+- The dataset builders now default to multi-yaw capture plus grouped split modes, and [`scripts/perception/analyze_dataset_robustness.py`](scripts/perception/analyze_dataset_robustness.py) can audit yaw coverage and split leakage before training.
 
 ## How To Read This Repository
 

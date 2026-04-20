@@ -49,7 +49,8 @@ The active comparison backbone reserves these fitted targets:
 - red binary
 - red corrected area
 - YOLO binary
-- YOLO confidence
+- YOLO raw score
+- YOLO calibrated score
 - oracle/reference visibility
 
 ![Empirical visibility artifact tutorial](figures/visibility_capture_tutorial.png)

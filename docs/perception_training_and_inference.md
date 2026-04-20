@@ -18,12 +18,21 @@ Runtime behavior:
 
 - load one local YOLO `.pt` model
 - run inference on `/external_camera/image_raw`
-- choose the highest-confidence detection after optional class filtering
+- run inference with a zero floor so raw candidate scores are preserved
+- choose the best target-class candidate before thresholding
 - use mask-bottom pixel if a usable mask exists
 - otherwise use bbox-bottom pixel
 - publish:
   - `/perception/pixel_pose`
   - `/perception/detection_diagnostics`
+
+The publish decision stays threshold-gated, but the diagnostics and logs now preserve:
+
+- `yolo_score_raw`
+- `yolo_score_selected`
+- `yolo_detected_after_threshold`
+- `yolo_best_class_id`
+- selected pixel-source metadata
 
 The runtime output is an image point plus diagnostics, not a full pose.
 
@@ -71,6 +80,12 @@ This is the cleanest offline supervision path when manual masks are not the goal
 
 This privileged supervision is offline only. Runtime still uses only the RGB camera and the trained YOLO model.
 
+The current dataset builders now default to stronger robustness settings:
+
+- `--yaw-samples 8` instead of a single heading
+- grouped split modes via `--split-mode {cyclic,yaw_bucket,spatial_cell,spatial_yaw_bucket}`
+- deterministic split metadata in each dataset manifest
+
 ## Optional Red-Mask Pseudo-Labels
 
 Use:
@@ -83,6 +98,30 @@ This is only an offline bootstrap tool:
 
 Red-mask is not the runtime detector and not the thesis contribution.
 
+## Dataset Robustness Audit
+
+Use:
+
+- [`scripts/perception/analyze_dataset_robustness.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/analyze_dataset_robustness.py)
+
+Purpose:
+
+- count yaw coverage in capture or dataset manifests
+- flag train/val leakage such as exact pose overlap or suspiciously small cross-split distances
+- catch single-orientation datasets before they are used for YOLO training or calibration claims
+
+This script is meant to be run after dataset generation and before training.
+
+## Calibration
+
+The active comparison pipeline now includes an explicit calibration step for YOLO raw scores:
+
+- raw scores are preserved offline and at runtime
+- temperature scaling is fitted against canonical capture labels
+- reliability, Brier, ECE, PR, ROC, score histograms, and view-angle plots are generated for audit
+
+The calibrated output is used as `yolo_score_calibrated` in the comparison backbone. It should still be treated as an empirical calibration product rather than a universal probability.
+
 ## What Is Not Claimed
 
 - The runtime detector uses a local YOLO `.pt` model only.
@@ -90,4 +129,4 @@ Red-mask is not the runtime detector and not the thesis contribution.
 - BEV `x,y` are handled downstream by the state estimator.
 - Heading `theta` is not estimated by YOLO; it remains odometry-backed downstream.
 - SAM is not part of the active runtime path.
-- Confidence is not calibrated unless an explicit calibration step is added later.
+- A single global calibration fit does not by itself prove robustness across orientation, border margin, or world changes.

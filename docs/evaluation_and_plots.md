@@ -35,6 +35,8 @@ Caption: the logger is the bridge between runtime and evaluation. The current ev
   - visibility-related planner diagnostics
 - `perception.csv`
   - detection availability
+  - YOLO raw and selected score diagnostics
+  - thresholded detection flag and selected pixel-source metadata
   - state estimate
   - pixel observation
   - truth when available
@@ -51,6 +53,7 @@ Caption: the logger is the bridge between runtime and evaluation. The current ev
 | Script | Role | Output |
 | --- | --- | --- |
 | [`../scripts/visibility_comparison/fit_visibility_gps.py`](../scripts/visibility_comparison/fit_visibility_gps.py) | offline GP artifact generation from canonical scalar targets | `*_gp.npz`, `gp_fit_summary.csv`, `gp_manifest.json` |
+| [`../scripts/visibility_comparison/plot_yolo_calibration.py`](../scripts/visibility_comparison/plot_yolo_calibration.py) | YOLO raw-score calibration and diagnostics | reliability/Brier/ECE/PR/ROC plots, score histograms, view-angle slices, calibration artifact |
 | [`../scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py`](../scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py) | GP field and ambiguity plotting | per-method and combined GP/ambiguity figures |
 | [`../scripts/evaluate_occlusion_comparison.py`](../scripts/evaluate_occlusion_comparison.py) | summary/evaluation | `run_summary.csv`, `group_summary.csv`, `group_summary.json` |
 | [`../scripts/visibility_comparison/plot_planned_paths.py`](../scripts/visibility_comparison/plot_planned_paths.py) | qualitative planned/realized path plotting | path-over-field and path-over-ambiguity figures |
@@ -64,7 +67,11 @@ Currently implemented summaries include:
 - average planning time
 - average solve time
 - average planned visibility
+- average effective planned visibility
+- mean and max planner observation-noise proxy
 - detection rate
+
+Only accepted completed runs are included in the visibility-comparison path plots and consolidated report tables.
 
 This is enough for milestone inspection, but not enough for strong thesis claims on its own.
 
@@ -93,5 +100,6 @@ Use these figures in the docs, not only in slides:
 
 - The evaluator is milestone-grade rather than thesis-final.
 - It currently emphasizes distance, timing, visibility, and detection, not full statistical analysis.
+- The GP plotting stack now distinguishes `P_conservative_plan_map` from latent `F_std_map`; if latent std is unavailable, the panel should be described as a conservative gap rather than epistemic variance.
 - If you present quantitative results, state clearly which metrics are implemented now and which are still planned.
 - A supervisor should not be told that the current evaluator fully proves route-quality or uncertainty-quality claims.

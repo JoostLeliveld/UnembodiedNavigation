@@ -25,5 +25,5 @@
 
 - [ ] If covariance is unavailable, plots describe it as an uncertainty proxy rather than state certainty.
 - [ ] Oracle visibility is treated as a reference field, not a runtime perception method.
-- [ ] YOLO confidence is described as an uncalibrated detector score.
+- [ ] YOLO raw score is described as an uncalibrated detector score, and calibrated score claims are backed by calibration plots.
 - [ ] Any path difference claim is checked against the corresponding GP and ambiguity maps first.

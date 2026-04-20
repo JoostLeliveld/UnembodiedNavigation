@@ -1,0 +1,69 @@
+# Code Review
+
+## A. Top critical issues (ranked by severity)
+
+**1. Silent compiler caching failure / shared state bug in `minimize` wrapper**
+- **Severity**: Critical
+- **Location**: `src/planning/planning/planners/base_planner.py` (`_autodiff_cache_key`, `eval_valgrad_shared`)
+- **What is wrong**: The planner creates a compiled CasADi graph via `_get_casadi_valgrad` and caches it using a manual 28-element tuple (`_autodiff_cache_key`). Then, it wraps the evaluation using a stateful closure `shared_eval` to cache the last `u` because `SciPy.optimize.minimize` accepts separate `func` and `jac` calls. 
+- **Why it matters**: If anyone adds an objective parameter but forgets to add it to the 28-element tuple, the planner will silently evaluate an old compiled objective from a previous run, invalidating research experiments. Furthermore, SciPy's `L-BFGS-B` solver isn't strictly guaranteed to perfectly alternate `func` and `jac` evaluations. Caching gradient calls inside of `func` based purely on `np.array_equal` is extremely hacky and will break silently if SciPy internals change.
+- **Concrete rewrite suggestion**: Drop the stateful closure completely. Pass `jac=True` to `minimize` and provide a single function that returns `(val, grad)` simultaneously. Use a proper hash over a frozen dataclass config, rather than a raw 28-item tuple.
+- **Action**: Rewrite.
+
+**2. `GPVisibilityMapModel` binds reproducibility to POSIX file timestamps**
+- **Severity**: Major
+- **Location**: `src/planning/planning/core/visibility_gp_map.py` (`signature` property)
+- **What is wrong**: The `.signature` property literally injects `int(stat.st_mtime_ns)` (last modified time) alongside `st_size` to validate the model's signature.
+- **Why it matters**: A researcher checking out the repository on a new machine, downloading the artifact via DVC, or moving files inside Docker will alter the `mtime`. This changes the signature for the *exact same model* and invalidates run caching across environments, destroying reproducibility.
+- **Concrete rewrite suggestion**: Hash only the model contents, hyperparameters, and grid shapes (`P_conservative_plan_map`, `xs`, `ys`). Do not hash machine-specific filesystem metadata.
+- **Action**: Patch.
+
+**3. Total violation of Single Responsibility Principle in Planner Initialization**
+- **Severity**: Major
+- **Location**: `src/planning/planning/planners/base_planner.py` (`UnicyclePlannerBase.__init__`)
+- **What is wrong**: `UnicyclePlannerBase` spans 800+ lines and requires over 40 distinct float/int/bool arguments in its constructor. It takes responsibility for managing CasADi graphs, geometric cameras, caching configurations, manual matrix operations, and soft-clipping math.
+- **Why it matters**: No MSc student would be able to safely modify this without breaking something. Debugging the logic is impossible because everything is coupled inside `__init__`.
+- **Concrete rewrite suggestion**: Decompose the 40+ arguments into smaller logically scoped Dataclasses (`CostWeights`, `OptimizerSettings`, `AgentDynamics`). Move utilities like `_smoothstep` to an isolated math util file.
+- **Action**: Refactor.
+
+**4. Imperial `pkill -9` script orchestration**
+- **Severity**: Medium
+- **Location**: `scripts/visibility_comparison/run_planner_comparison.py` (`_cleanup_gazebo_and_ros`)
+- **What is wrong**: The experiment orchestration repeatedly executes global calls to `pkill -9 -f gazebo` and `pkill -f yolo_robot_detector_node`. 
+- **Why it matters**: This aggressively assumes the benchmark script exclusively owns the operating system. If run on a shared lab environment, it will forcibly kill every other researcher's simulations. It also masks root causes of improperly closing ROS node lifecycles.
+- **Concrete rewrite suggestion**: Store process objects from `subprocess.Popen` in a list and invoke scoped `process.terminate()` or kill scoped `pgid` segments rather than executing a blind regex on `pkill`. 
+- **Action**: Refactor.
+
+
+## B. Readability problems
+
+- **Over-abstraction with zero payoff**: `casadi_efe.py` implements its own exact 2x2 and 3x3 Cholesky and Logdet symbolic operations (`_chol_2x2`, `_det_2x2`, `_logdet_small_pd`). Reimplementing highly sensitive numerical instability kernels is bizarre when CasADi natively supports symbolic matrix tools.
+- **Manual wheel-reinvention**: `src/planning/planning/core/visibility_gp_map.py` implements a bespoke 30-line bilinear grid interpolation (`_bilinear_map_np`), recreating `scipy.interpolate.RegularGridInterpolator` with brittle manual index clipping (`x - x0 / x1 - x0`). This asks the reader to mentally simulate array intersections for no reason.
+- **Naming choices**: Cryptic math acronyms `et1_ca` (Extended Transform 1), `et2_ca`, and `make_g_from_homography` have completely inadequate docstrings. They do not document their dimensionality shapes (e.g. `m=3x1`, `S=3x3`) confusing future maintainers modifying the matrix sizes.
+- **Control Flow**: The `base_planner.py::plan` splits logic between tracking CasADi compilation limits, unpacking `scipy` optimizers, updating `metrics` lists, formatting dictionaries, and iterating `time_horizons`. The core loop `_evaluate_controls` acts as a multi-purpose tool based on obscure boolean flags (`return_metrics=False`).
+- **Magic Constants**: The code heavily relies on raw literal defaults throughout constructors, e.g., default `goal_tightening_power = 0.45` and `goal_progress_n_steps = 90`. Values like `1e-4` and `1.0 - 1e-4` are redundantly coded as min-probs globally.
+
+
+## C. Reproducibility gaps
+
+Checklist for a thesis-quality repo missing here:
+- [ ] **Dependencies manifest**: `.venv` is present but no declarative `requirements.txt` or `conda.yaml` enforces library versions. CasADi versions change syntax/behavior frequently.
+- [ ] **Model checkpoints**: YOLO weights (`yolo11n.pt`) sit unversioned in the project root. Missing an automated script to download exact model weights hashes.
+- [ ] **GP Artifact execution**: Missing clear instructions on how the `.npz` GP artifact files referenced by `visibility_gp_map.py` were originally produced.
+- [ ] **Global deterministic seeding**: `seed` is piped through terminal arguments and only sets python's `numpy` defaults inside a planner node, but does not inject environment var `PYTHONHASHSEED` or bind to CasADi initial solvers securely.
+
+
+## D. Fast wins
+
+1. **Fix `minimize` value-grad loop**: Move `scipy.optimize.minimize` to use `jac=True` and rewrite the objective function to return `(val, gradient)` in a single evaluation cleanly.
+2. **Remove POSIX signatures**: Delete `int(stat.st_mtime_ns)` from the `GPVisibilityMapModel` hashing logic to enable cross-machine caches.
+3. **Replace interpolator**: Strip `_bilinear_map_np` from `visibility_gp_map.py` and implement `scipy.interpolate.RegularGridInterpolator` to remove error-prone array grid math logic out of codebase.
+4. **Scope teardown logic**: Update `_cleanup_gazebo_and_ros()` to avoid `pkill -9` by keeping actual references to `Popen` ROS2 objects and killing via `os.killpg()`.
+5. **Dataclass Initialization**: Refactor `UnicyclePlannerBase.__init__` out to parse exactly three explicitly-typed dataclasses for its configs.
+
+
+## E. Keep-as-is
+
+- **The purely functional CasADi adapter (`make_efe_valgrad_fn`)**: Decoupling the symbolic CasADi generation from ROS 2 objects entirely is high-quality design. It isolates the heaviest, brittlest part of the codebase logic.
+- **The Node / Plan separation (`efe_agent_node.py`)**: Operating the robot `cmd_vel` off of an independent timer `_cmd_timer` tracking arrays on a separate thread using `_active_controls.copy()` while the heavy planner blocks is excellently implemented.
+- **Exhaustive result metrics**: The `PlanResult` systematically logging `optimizer_nit`, `optimizer_status`, and `solve_time_s` alongside costs is top-tier research benchmarking. It's the only way to catch solver bottlenecks over an evening sweep.
