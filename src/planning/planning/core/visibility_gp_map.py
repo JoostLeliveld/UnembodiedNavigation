@@ -45,9 +45,13 @@ class GPVisibilityMapModel:
             with np.load(self.artifact_path, allow_pickle=False) as data:
                 xs = np.asarray(data["xs"], dtype=float)
                 ys = np.asarray(data["ys"], dtype=float)
-                p_map = np.asarray(data["P_map"], dtype=float)
-                p_mean = np.asarray(data["P_mean_map"], dtype=float) if "P_mean_map" in data.files else p_map
-                p_cons = np.asarray(data["P_conservative_map"], dtype=float) if "P_conservative_map" in data.files else p_map
+                if "P_conservative_plan_map" not in data.files:
+                    raise RuntimeError(
+                        f"Empirical GP visibility artifact {self.artifact_path} uses an outdated schema "
+                        "(missing P_conservative_plan_map). Re-fit the visibility GPs."
+                    )
+                p_cons = np.asarray(data["P_conservative_plan_map"], dtype=float)
+                p_mean = np.asarray(data["P_mean_map"], dtype=float)
                 camera_pos = (
                     np.asarray(data["camera_pos"], dtype=float).reshape(-1)
                     if "camera_pos" in data.files
@@ -69,9 +73,8 @@ class GPVisibilityMapModel:
                 f"Empirical GP visibility artifact {self.artifact_path} has an invalid grid."
             )
         for field_name, grid in (
-            ("P_map", p_map),
             ("P_mean_map", p_mean),
-            ("P_conservative_map", p_cons),
+            ("P_conservative_plan_map", p_cons),
         ):
             if grid.shape != expected_shape:
                 raise RuntimeError(
@@ -82,8 +85,7 @@ class GPVisibilityMapModel:
         self.xs = xs
         self.ys = ys
         self.P_mean_map = _clip_prob(p_mean, self.min_prob).astype(float)
-        self.P_conservative_map = _clip_prob(p_cons, self.min_prob).astype(float)
-        self.P_map = _clip_prob(p_map, self.min_prob).astype(float)
+        self.P_conservative_plan_map = _clip_prob(p_cons, self.min_prob).astype(float)
         self.camera_pos = np.asarray(camera_pos, dtype=float).reshape(3)
         self.target_height = float(target_height)
 
@@ -99,6 +101,7 @@ class GPVisibilityMapModel:
             int(stat.st_size),
             int(self.xs.size),
             int(self.ys.size),
+            round(float(np.mean(self.P_conservative_plan_map)), 6),
             round(float(self.xs[0]), 6),
             round(float(self.xs[-1]), 6),
             round(float(self.ys[0]), 6),
@@ -136,7 +139,7 @@ class GPVisibilityMapModel:
 
     def prob_state_np(self, m) -> float:
         xy = np.array([float(m[0]), float(m[1])], dtype=float)
-        p = self._bilinear_map_np(self.P_map, xy)[0]
+        p = self._bilinear_map_np(self.P_conservative_plan_map, xy)[0]
         return float(_clip_prob(p, self.min_prob))
 
     def make_prob_state_casadi(self):
@@ -148,7 +151,7 @@ class GPVisibilityMapModel:
         if self._prob_state_casadi is not None:
             return self._prob_state_casadi
 
-        values = np.asarray(self.P_map.T, dtype=float).ravel(order="F")
+        values = np.asarray(self.P_conservative_plan_map.T, dtype=float).ravel(order="F")
         interp = ca.interpolant(
             f"empirical_gp_visibility_{hashlib.sha1(str(self.artifact_path).encode('utf-8')).hexdigest()[:10]}",
             "linear",

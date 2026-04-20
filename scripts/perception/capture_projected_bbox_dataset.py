@@ -26,6 +26,7 @@ for rel in ('src/experiments', 'src/perception', 'src/unav_common'):
         sys.path.insert(0, path)
 
 from experiments.core.world_profiles import compute_look_at_from_pose, load_profile
+from dataset_split_utils import assign_splits, build_pose_records
 from perception.core.ros_image import image_msg_to_bgr8
 from unav_common.camera_model import ObliqueCameraModel
 
@@ -199,9 +200,12 @@ def main() -> int:
     parser.add_argument('--out', default='', help='Output dataset folder; defaults under logs/')
     parser.add_argument('--sample-nx', type=int, default=12)
     parser.add_argument('--sample-ny', type=int, default=10)
-    parser.add_argument('--yaw-samples', type=int, default=1)
+    parser.add_argument('--yaw-samples', type=int, default=8)
     parser.add_argument('--wall-margin', type=float, default=0.65)
     parser.add_argument('--val-fraction', type=float, default=0.20)
+    parser.add_argument('--split-mode', choices=('cyclic', 'yaw_bucket', 'spatial_cell', 'spatial_yaw_bucket'), default='spatial_cell')
+    parser.add_argument('--spatial-block-size', type=int, default=2)
+    parser.add_argument('--split-seed', type=int, default=0)
     parser.add_argument('--robot-z', type=float, default=0.05)
     parser.add_argument('--settle-s', type=float, default=0.35)
     parser.add_argument('--image-timeout-s', type=float, default=2.0)
@@ -236,8 +240,15 @@ def main() -> int:
     ys = np.linspace(ymin, ymax, max(int(args.sample_ny), 1))
     yaw_samples = max(int(args.yaw_samples), 1)
     yaws = np.linspace(0.0, 2.0 * math.pi, yaw_samples, endpoint=False)
-    planned = [(float(x), float(y), float(yaw)) for y in ys for x in xs for yaw in yaws]
-    val_every = max(int(round(1.0 / max(float(args.val_fraction), 1e-6))), 2)
+    pose_records = build_pose_records(xs, ys, yaws)
+    planned = [(float(item['x']), float(item['y']), float(item['yaw'])) for item in pose_records]
+    split_labels = assign_splits(
+        pose_records,
+        val_fraction=float(args.val_fraction),
+        split_mode=str(args.split_mode),
+        seed=int(args.split_seed),
+        spatial_block_size=int(args.spatial_block_size),
+    )
 
     if str(args.out).strip():
         out_dir = Path(args.out).expanduser().resolve()
@@ -306,7 +317,7 @@ def main() -> int:
                 })
                 continue
 
-            split = 'val' if (sample_idx % val_every == 0) else 'train'
+            split = str(split_labels[sample_idx])
             stem = f'{accepted:06d}'
             image_path = out_dir / 'images' / split / f'{stem}.jpg'
             label_path = out_dir / 'labels' / split / f'{stem}.txt'
@@ -388,6 +399,9 @@ def main() -> int:
                 'planned_samples': int(len(planned)),
                 'accepted_samples': int(accepted),
                 'skipped_samples': int(skipped),
+                'split_mode': str(args.split_mode),
+                'split_seed': int(args.split_seed),
+                'spatial_block_size': int(args.spatial_block_size),
                 'wall_margin': float(args.wall_margin),
                 'box_length': float(args.box_length),
                 'box_width': float(args.box_width),

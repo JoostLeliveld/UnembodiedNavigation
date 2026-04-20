@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import shutil
 from pathlib import Path
@@ -25,6 +26,7 @@ from common import (
     read_csv_rows,
     repo_relative,
     safe_reset_generated_dir,
+    visibility_geometry_sha256,
     write_csv,
     write_manifest,
 )
@@ -223,9 +225,15 @@ def main() -> int:
     oracle_previews_dir.mkdir(parents=True, exist_ok=False)
     red_previews_dir = output_dir / 'previews' / 'red_binary'
     red_previews_dir.mkdir(parents=True, exist_ok=False)
+    try:
+        capture_manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f'Failed to read capture manifest {manifest_path}: {exc}') from exc
+    if not isinstance(capture_manifest, dict):
+        raise RuntimeError(f'Capture manifest is not a JSON object: {manifest_path}')
     yolo_model_path = Path(args.yolo_model).expanduser().resolve() if str(args.yolo_model).strip() else None
     yolo_binary_previews_dir = None
-    yolo_confidence_previews_dir = None
+    yolo_score_raw_previews_dir = None
     yolo_model = None
     yolo_target_ids = None
     yolo_enabled = yolo_model_path is not None
@@ -236,8 +244,8 @@ def main() -> int:
 
         yolo_binary_previews_dir = output_dir / 'previews' / 'yolo_binary'
         yolo_binary_previews_dir.mkdir(parents=True, exist_ok=False)
-        yolo_confidence_previews_dir = output_dir / 'previews' / 'yolo_confidence'
-        yolo_confidence_previews_dir.mkdir(parents=True, exist_ok=False)
+        yolo_score_raw_previews_dir = output_dir / 'previews' / 'yolo_score_raw'
+        yolo_score_raw_previews_dir.mkdir(parents=True, exist_ok=False)
         yolo_model = YOLO(str(yolo_model_path))
         yolo_target_ids = target_class_ids(
             getattr(yolo_model, 'names', {}),
@@ -260,7 +268,8 @@ def main() -> int:
     red_area_values = []
     yolo_detected_count = 0
     yolo_mask_count = 0
-    yolo_conf_values = []
+    yolo_raw_score_values = []
+    yolo_selected_score_values = []
     yolo_preview_payloads: dict[str, dict] = {}
     for row in sample_rows:
         oracle_visible = int(parse_bool01(row.get('oracle_visible', '0')))
@@ -275,12 +284,16 @@ def main() -> int:
         red_bbox_text = ''
         red_bottom_u = math.nan
         red_bottom_v = math.nan
-        yolo_detected = '0' if yolo_enabled else ''
-        yolo_confidence = '0.00000000' if yolo_enabled else ''
+        yolo_detected_after_threshold = '0' if yolo_enabled else ''
+        yolo_score_raw = '0.00000000' if yolo_enabled else ''
+        yolo_score_selected = '0.00000000' if yolo_enabled else ''
+        yolo_best_class_id = ''
         yolo_mask_area = ''
         yolo_bbox_text = ''
         yolo_bottom_u = ''
         yolo_bottom_v = ''
+        yolo_selected_pixel_source = 'none' if yolo_enabled else ''
+        yolo_selected_pixel_source_code = '0' if yolo_enabled else ''
         if image_path is not None and image_path.is_file():
             image_bgr = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
             if image_bgr is not None:
@@ -306,7 +319,7 @@ def main() -> int:
                     kwargs = {
                         'source': image_bgr,
                         'imgsz': int(args.yolo_imgsz),
-                        'conf': float(args.yolo_conf_threshold),
+                        'conf': 0.0,
                         'iou': float(args.yolo_iou_threshold),
                         'verbose': False,
                     }
@@ -323,18 +336,32 @@ def main() -> int:
                             mask_min_area=float(args.yolo_mask_min_area),
                             mask_bottom_band_px=float(args.yolo_mask_bottom_band_px),
                         )
-                        if bool(selected.get('detected', False)):
-                            yolo_detected = '1'
-                            yolo_confidence = f'{float(selected["confidence"]):.8f}'
+                        yolo_detected_after_threshold = '1' if bool(selected.get('detected_after_threshold', False)) else '0'
+                        yolo_score_raw = f'{float(selected.get("raw_best_score", 0.0)):.8f}'
+                        yolo_score_selected = f'{float(selected.get("selected_score", 0.0)):.8f}'
+                        if math.isfinite(float(selected.get('best_class_id', math.nan))):
+                            yolo_best_class_id = str(int(float(selected.get('best_class_id', math.nan))))
+                        yolo_selected_pixel_source = str(selected.get('selected_pixel_source', 'none'))
+                        source_code = 0
+                        if yolo_selected_pixel_source == 'bbox_bottom':
+                            source_code = 1
+                        elif yolo_selected_pixel_source == 'mask_bottom':
+                            source_code = 2
+                        yolo_selected_pixel_source_code = str(int(source_code))
+                        if selected.get('bbox_xyxy') is not None:
                             yolo_bbox_text = format_xyxy_text(selected.get('bbox_xyxy'))
+                        if math.isfinite(float(selected.get('selected_u', math.nan))):
                             yolo_bottom_u = f'{float(selected["selected_u"]):.8f}'
+                        if math.isfinite(float(selected.get('selected_v', math.nan))):
                             yolo_bottom_v = f'{float(selected["selected_v"]):.8f}'
+                        if bool(selected.get('detected_after_threshold', False)):
                             yolo_detected_count += 1
-                            yolo_conf_values.append(float(selected['confidence']))
-                            mask_area = float(selected.get('mask_area', math.nan))
-                            if math.isfinite(mask_area):
-                                yolo_mask_area = f'{mask_area:.8f}'
-                                yolo_mask_count += 1
+                        yolo_raw_score_values.append(float(selected.get('raw_best_score', 0.0)))
+                        yolo_selected_score_values.append(float(selected.get('selected_score', 0.0)))
+                        mask_area = float(selected.get('mask_area', math.nan))
+                        if math.isfinite(mask_area):
+                            yolo_mask_area = f'{mask_area:.8f}'
+                            yolo_mask_count += 1
                         yolo_preview_payloads[str(row.get('sample_id', '')).strip()] = {
                             'candidates': list(selected.get('candidates', [])),
                             'selected': selected,
@@ -363,12 +390,16 @@ def main() -> int:
             'red_bbox_xyxy': red_bbox_text,
             'red_bottom_u': '' if not math.isfinite(red_bottom_u) else f'{float(red_bottom_u):.8f}',
             'red_bottom_v': '' if not math.isfinite(red_bottom_v) else f'{float(red_bottom_v):.8f}',
-            'yolo_detected': yolo_detected,
-            'yolo_confidence': yolo_confidence,
+            'yolo_detected_after_threshold': yolo_detected_after_threshold,
+            'yolo_score_raw': yolo_score_raw,
+            'yolo_score_selected': yolo_score_selected,
+            'yolo_best_class_id': yolo_best_class_id,
             'yolo_mask_area': yolo_mask_area,
             'yolo_bbox_xyxy': yolo_bbox_text,
             'yolo_bottom_u': yolo_bottom_u,
             'yolo_bottom_v': yolo_bottom_v,
+            'yolo_selected_pixel_source': yolo_selected_pixel_source,
+            'yolo_selected_pixel_source_code': yolo_selected_pixel_source_code,
             'oracle_visible': str(oracle_visible),
             'oracle_bottom_u': '' if not math.isfinite(parse_float(row.get('oracle_bottom_u', ''), math.nan)) else str(row.get('oracle_bottom_u', '')).strip(),
             'oracle_bottom_v': '' if not math.isfinite(parse_float(row.get('oracle_bottom_v', ''), math.nan)) else str(row.get('oracle_bottom_v', '')).strip(),
@@ -441,7 +472,7 @@ def main() -> int:
                     'source_preview': image_rel,
                     'copied_preview': repo_relative(red_out_preview, output_dir),
                 })
-                if yolo_enabled and yolo_binary_previews_dir is not None and yolo_confidence_previews_dir is not None:
+                if yolo_enabled and yolo_binary_previews_dir is not None and yolo_score_raw_previews_dir is not None:
                     payload = yolo_preview_payloads.get(sample_id, {'candidates': [], 'selected': {'detected': False, 'confidence': 0.0, 'selected_pixel_source': 'none'}})
                     yolo_preview = _draw_yolo_preview(
                         image_bgr,
@@ -456,13 +487,13 @@ def main() -> int:
                         'source_preview': image_rel,
                         'copied_preview': repo_relative(yolo_binary_out, output_dir),
                     })
-                    yolo_conf_out = yolo_confidence_previews_dir / raw_preview.name
-                    cv2.imwrite(str(yolo_conf_out), yolo_preview)
+                    yolo_score_raw_out = yolo_score_raw_previews_dir / raw_preview.name
+                    cv2.imwrite(str(yolo_score_raw_out), yolo_preview)
                     method_preview_index.append({
-                        'method_id': 'yolo_confidence',
+                        'method_id': 'yolo_score_raw',
                         'sample_id': sample_id,
                         'source_preview': image_rel,
-                        'copied_preview': repo_relative(yolo_conf_out, output_dir),
+                        'copied_preview': repo_relative(yolo_score_raw_out, output_dir),
                     })
 
     write_csv(output_dir / 'perception_targets.csv', PERCEPTION_TARGET_COLUMNS, target_rows)
@@ -478,8 +509,20 @@ def main() -> int:
         'row_count': int(len(target_rows)),
         'preview_count': int(len(preview_index)),
         'shared_only_stage': False,
-        'implemented_methods': ['oracle_visibility', 'red_binary'] + (['yolo_binary', 'yolo_confidence'] if yolo_enabled else []),
-        'deferred_methods': ['red_area_corrected'] + ([] if yolo_enabled else ['yolo_binary', 'yolo_confidence']),
+        'implemented_methods': ['oracle_visibility', 'red_binary'] + (['yolo_binary', 'yolo_score_raw'] if yolo_enabled else []),
+        'deferred_methods': ['red_area_corrected'] + (['yolo_score_calibrated'] if yolo_enabled else ['yolo_binary', 'yolo_score_raw', 'yolo_score_calibrated']),
+        'capture_metadata': {
+            'world': str(capture_manifest.get('world', '')),
+            'world_name': str(capture_manifest.get('world_name', '')),
+            'world_path': str(capture_manifest.get('world_path', '')),
+            'camera_pose': list(capture_manifest.get('camera_pose', [])),
+            'camera_pos': list(capture_manifest.get('camera_pos', [])),
+            'look_at': list(capture_manifest.get('look_at', [])),
+            'img_width': int(capture_manifest.get('img_width', 0) or 0),
+            'img_height': int(capture_manifest.get('img_height', 0) or 0),
+            'fov_h_rad': float(capture_manifest.get('fov_h_rad', math.nan)),
+            'geometry_sha256': visibility_geometry_sha256(str(capture_manifest.get('geometry_json', ''))),
+        },
         'oracle_summary': {
             'visible_count': int(oracle_visible_count),
             'hidden_count': int(len(target_rows) - oracle_visible_count),
@@ -507,7 +550,8 @@ def main() -> int:
             'detected_count': int(yolo_detected_count),
             'undetected_count': int(len(target_rows) - yolo_detected_count) if yolo_enabled else math.nan,
             'mask_count': int(yolo_mask_count),
-            'mean_confidence': float(np.mean(yolo_conf_values)) if yolo_conf_values else math.nan,
+            'mean_raw_score': float(np.mean(yolo_raw_score_values)) if yolo_raw_score_values else math.nan,
+            'mean_selected_score': float(np.mean(yolo_selected_score_values)) if yolo_selected_score_values else math.nan,
             'model_path': str(yolo_model_path) if yolo_model_path is not None else '',
             'class_name': str(args.yolo_class_name),
             'class_id': int(args.yolo_class_id),
@@ -525,8 +569,8 @@ def main() -> int:
             'Oracle columns are passed through from the raw geometry-based capture because the shared capture already computes them directly from world geometry.',
             'Red binary is now implemented using the same simple HSV + morphology + largest-blob rule as the old runtime marker detector.',
             'Offline red_bottom_u/v now use the runtime-aligned bbox-bottom-center rule; red_bottom_band_px is retained only for backward-compatible manifests.',
-            'YOLO binary and YOLO confidence now reuse the same highest-confidence mask/bbox-bottom selection rule as the YOLO runtime detector.',
-            'YOLO confidence is stored as an uncalibrated detector score.',
+            'YOLO binary and YOLO raw-score extraction now reuse the same pre-threshold highest-confidence mask/bbox-bottom selection rule as the YOLO runtime detector.',
+            'YOLO raw scores are logged before thresholding; detected_after_threshold records whether the selected candidate passed the publish threshold.',
             'Red corrected area remains deferred to a later method-specific pass.',
         ],
     })

@@ -12,14 +12,23 @@ import subprocess
 import time
 from pathlib import Path
 
-from common import ACTIVE_METHOD_IDS, CURRENT_GP_DIR, CURRENT_TARGETS_DIR, LOGS_ROOT
+from common import (
+    ACTIVE_METHOD_IDS,
+    CURRENT_GP_DIR,
+    CURRENT_TARGETS_DIR,
+    DEFAULT_WORLD_PROFILES_PATH,
+    LOGS_ROOT,
+    expected_visibility_metadata,
+    load_visibility_artifact_metadata,
+    validate_visibility_metadata,
+)
 
 
 COMPARISON_METHODS = tuple(method for method in ACTIVE_METHOD_IDS if method != 'visibility_unaware_baseline')
 
 
 def _uses_live_yolo(method_id: str, args) -> bool:
-    if method_id in ('yolo_binary', 'yolo_confidence'):
+    if method_id in ('yolo_binary', 'yolo_score_raw', 'yolo_score_calibrated'):
         return True
     if method_id == 'oracle_visibility':
         return str(args.oracle_backend).strip() == 'yolo'
@@ -39,12 +48,26 @@ def _validate_yolo_runtime_matches_targets(args, methods: list[str]) -> None:
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         raise RuntimeError(f'Failed to read targets manifest {manifest_path}: {exc}') from exc
     yolo_summary = payload.get('yolo_summary', {}) if isinstance(payload, dict) else {}
+    capture_metadata = payload.get('capture_metadata', {}) if isinstance(payload, dict) else {}
     if not isinstance(yolo_summary, dict) or not bool(yolo_summary.get('enabled', False)):
         raise RuntimeError(f'Targets manifest does not contain an enabled yolo_summary: {manifest_path}')
+    implemented_targets = set(str(v).strip() for v in payload.get('implemented_targets', []) if str(v).strip())
+    required_targets = {'yolo_binary', 'yolo_score_raw', 'yolo_score_calibrated'}
+    missing_targets = sorted(required_targets - implemented_targets)
+    if missing_targets:
+        raise RuntimeError(
+            f'Targets manifest {manifest_path} is missing required YOLO targets after schema cutover: {missing_targets}'
+        )
+    expected_metadata = expected_visibility_metadata(
+        str(args.world),
+        world_profiles_path=Path(args.world_profiles).expanduser().resolve(),
+    )
+    if isinstance(capture_metadata, dict) and capture_metadata:
+        validate_visibility_metadata(capture_metadata, expected_metadata, label=f'YOLO targets manifest {manifest_path}')
 
     runtime_model = str(Path(args.yolo_model).expanduser().resolve()) if str(args.yolo_model).strip() else ''
     manifest_model = str(Path(str(yolo_summary.get('model_path', '') or '')).expanduser().resolve()) if str(yolo_summary.get('model_path', '') or '').strip() else ''
-    expected = {
+    yolo_expected = {
         'model_path': manifest_model,
         'class_name': str(yolo_summary.get('class_name', '')),
         'class_id': int(yolo_summary.get('class_id', -1)),
@@ -68,13 +91,13 @@ def _validate_yolo_runtime_matches_targets(args, methods: list[str]) -> None:
     }
     mismatches = []
     for key in ('model_path', 'class_name', 'class_id', 'imgsz'):
-        if str(runtime[key]).strip() != str(expected[key]).strip():
-            mismatches.append(f'{key}: runtime={runtime[key]!r} extractor={expected[key]!r}')
+        if str(runtime[key]).strip() != str(yolo_expected[key]).strip():
+            mismatches.append(f'{key}: runtime={runtime[key]!r} extractor={yolo_expected[key]!r}')
     for key in ('conf_threshold', 'iou_threshold', 'mask_min_area', 'mask_bottom_band_px'):
-        if abs(float(runtime[key]) - float(expected[key])) > 1e-9:
-            mismatches.append(f'{key}: runtime={runtime[key]!r} extractor={expected[key]!r}')
-    if runtime['use_masks'] != expected['use_masks']:
-        mismatches.append(f"use_masks: runtime={runtime['use_masks']!r} extractor={expected['use_masks']!r}")
+        if abs(float(runtime[key]) - float(yolo_expected[key])) > 1e-9:
+            mismatches.append(f'{key}: runtime={runtime[key]!r} extractor={yolo_expected[key]!r}')
+    if runtime['use_masks'] != yolo_expected['use_masks']:
+        mismatches.append(f"use_masks: runtime={runtime['use_masks']!r} extractor={yolo_expected['use_masks']!r}")
     if mismatches:
         raise RuntimeError(
             'Runtime YOLO configuration does not match the extracted yolo_summary in '
@@ -157,7 +180,7 @@ def _method_launch_args(method_id: str, args, gp_dir: Path) -> list[str]:
 
     if method_id in ('red_binary', 'red_area_corrected'):
         perception_backend = 'image_markers'
-    elif method_id in ('yolo_binary', 'yolo_confidence'):
+    elif method_id in ('yolo_binary', 'yolo_score_raw', 'yolo_score_calibrated'):
         perception_backend = 'yolo'
     elif method_id == 'oracle_visibility':
         perception_backend = str(args.oracle_backend).strip()
@@ -213,6 +236,7 @@ def main() -> int:
     parser.add_argument('--yolo-min-mask-area-px', type=float, default=12.0)
     parser.add_argument('--yolo-mask-bottom-band-px', type=float, default=3.0)
     parser.add_argument('--targets-manifest', default=str(CURRENT_TARGETS_DIR / 'target_manifest.json'))
+    parser.add_argument('--world-profiles', default=str(DEFAULT_WORLD_PROFILES_PATH))
     parser.add_argument('--timeout', type=float, default=180.0, help='Timeout in seconds for each planner run, including simulator startup')
     parser.add_argument('--cleanup-delay', type=float, default=5.0, help='Delay in seconds between runs for cleanup')
     parser.add_argument('--dry-run', action='store_true')
@@ -230,6 +254,21 @@ def main() -> int:
     if allowed_root not in log_root.parents and log_root != allowed_root:
         raise RuntimeError(f'Planner log root must stay under {allowed_root}: {log_root}')
     log_root.mkdir(parents=True, exist_ok=True)
+
+    expected_metadata = expected_visibility_metadata(
+        str(args.world),
+        world_profiles_path=Path(args.world_profiles).expanduser().resolve(),
+    )
+    for method_id in methods:
+        if method_id == 'visibility_unaware_baseline':
+            continue
+        artifact = gp_dir / f'{method_id}_gp.npz'
+        if artifact.is_file():
+            validate_visibility_metadata(
+                load_visibility_artifact_metadata(artifact),
+                expected_metadata,
+                label=f'visibility artifact {artifact}',
+            )
 
     print(f'Cleaning up stale ROS/Gazebo processes before run... (waiting {args.cleanup_delay}s)')
     _cleanup_gazebo_and_ros()

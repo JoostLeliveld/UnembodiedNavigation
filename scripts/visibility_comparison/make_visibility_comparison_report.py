@@ -18,8 +18,10 @@ from common import (
     LOGS_ROOT,
     PLANNER_RUNS_DIR,
     REPORT_DIR,
+    accepted_completed_run,
     choose_preview_rows,
     read_csv_rows,
+    run_has_usable_logs,
     write_csv,
     write_manifest,
 )
@@ -67,20 +69,12 @@ def _copy_tree_pngs(src_root: Path, dst_root: Path) -> list[str]:
     return copied
 
 
-def _run_has_usable_logs(run_dir: Path) -> bool:
-    for name in ('experiment.csv', 'perception.csv', 'plan_samples.csv'):
-        path = run_dir / name
-        if path.is_file() and path.stat().st_size > 0:
-            return True
-    return False
-
-
 def _latest_run_dir(root: Path, method_id: str) -> Path | None:
     candidates = []
     for p in root.rglob('run_summary.json'):
         if p.parent.parent.name == method_id or p.parent.name == method_id:
             summary = _load_json(p)
-            if summary and _run_has_usable_logs(p.parent):
+            if accepted_completed_run(summary) and run_has_usable_logs(p.parent):
                 candidates.append(p.parent)
     if not candidates:
         return None
@@ -97,7 +91,8 @@ def _run_metrics(run_dir: Path | None, method_id: str, field_summary_rows: list[
         'final_goal_distance': '', 'minimum_goal_distance': '',
         'mean_solve_time_ms': '', 'mean_efe_risk': '',
         'mean_efe_ambiguity': '', 'mean_p_vis_plan': '',
-        'mean_p_vis_plan_eff': '', 'mean_r_plan_u_std': '',
+        'mean_p_vis_plan_eff': '', 'mean_r_plan_u_std': '', 'mean_r_plan_v_std': '',
+        'mean_truth_state_error_m': '', 'mean_truth_belief_error_m': '',
         'mean_state_pos_error_m': '', 'max_state_pos_error_m': '',
         'mean_state_cov_trace': '', 'max_state_cov_trace': '',
         'mean_state_sigma_major_m': '', 'max_state_sigma_major_m': '',
@@ -135,7 +130,9 @@ def _run_metrics(run_dir: Path | None, method_id: str, field_summary_rows: list[
         'elapsed_after_first_cmd_s', 'path_length_m',
         'final_goal_distance', 'minimum_goal_distance', 'mean_solve_time_ms',
         'mean_efe_risk', 'mean_efe_ambiguity', 'mean_p_vis_plan', 'mean_p_vis_plan_eff',
-        'mean_r_plan_u_std', 'mean_state_pos_error_m', 'max_state_pos_error_m',
+        'mean_r_plan_u_std', 'mean_r_plan_v_std',
+        'mean_truth_state_error_m', 'mean_truth_belief_error_m',
+        'mean_state_pos_error_m', 'max_state_pos_error_m',
         'mean_state_cov_trace', 'max_state_cov_trace',
         'mean_state_sigma_major_m', 'max_state_sigma_major_m',
         'mean_path_ambiguity', 'max_path_ambiguity',
@@ -184,9 +181,11 @@ def main() -> int:
 
     assets_capture = output_dir / 'assets' / 'capture_previews'
     assets_gp = output_dir / 'assets' / 'gp_maps'
+    assets_calibration = output_dir / 'assets' / 'calibration'
     assets_paths = output_dir / 'assets' / 'path_plots'
     assets_capture.mkdir(parents=True, exist_ok=False)
     assets_gp.mkdir(parents=True, exist_ok=False)
+    assets_calibration.mkdir(parents=True, exist_ok=False)
     assets_paths.mkdir(parents=True, exist_ok=False)
 
     sample_rows = _load_csv_rows(capture_dir / 'samples.csv')
@@ -206,6 +205,9 @@ def main() -> int:
     gp_summary_rows = _load_csv_rows(gp_dir / 'gp_fit_summary.csv')
     gp_summary_by_method = {row['method_id']: row for row in gp_summary_rows if row.get('method_id')}
     field_summary_rows = _load_csv_rows(gp_dir / 'field_method_summary.csv')
+    if not field_summary_rows:
+        field_summary_rows = _load_csv_rows(gp_dir / 'plots' / 'field_method_summary.csv')
+    calibration_manifest = _load_json(targets_dir / 'calibration' / 'manifest.json')
     gp_plot_manifest = _load_json(gp_dir / 'plots' / 'plot_manifest.json')
     path_plot_manifest = _load_json((output_dir.parent / 'path_plots' / 'plot_manifest.json'))
     if not path_plot_manifest:
@@ -240,6 +242,12 @@ def main() -> int:
     combined_gp = Path(str(gp_plot_manifest.get('combined_plot', '') or '')).expanduser()
     if combined_gp.is_file():
         _copy_if_exists(combined_gp, assets_gp / combined_gp.name)
+
+    calibration_assets = _copy_tree_pngs(targets_dir / 'calibration', assets_calibration)
+    calibration_artifact_dst = _copy_if_exists(
+        targets_dir / 'yolo_score_calibration.json',
+        assets_calibration / 'yolo_score_calibration.json',
+    )
 
     path_assets = []
     for entry in path_plot_manifest.get('method_entries', []):
@@ -284,6 +292,9 @@ def main() -> int:
             'mean_p_vis_plan',
             'mean_p_vis_plan_eff',
             'mean_r_plan_u_std',
+            'mean_r_plan_v_std',
+            'mean_truth_state_error_m',
+            'mean_truth_belief_error_m',
             'mean_state_pos_error_m',
             'max_state_pos_error_m',
             'mean_state_cov_trace',
@@ -314,16 +325,18 @@ def main() -> int:
             '## Summary',
             '',
             'This report summarizes the current state of the shared perception-to-visibility comparison framework.',
-            'Planner traces are explicitly aligned to the first command, and interrupted runs with usable logs are included for diagnostics while retaining their completion labels.',
+            'Planner traces are explicitly aligned to the first command, and only accepted completed runs are included in the report tables and path summaries.',
             'Per-run frame sanity fields now expose whether transformed truth in `map_bev` matched the task start pose before motion began.',
-            'Oracle visibility, red binary, and the two YOLO-derived targets can all appear here when they are present in the current targets/GP folders.',
+            'Oracle visibility, red binary, and the three YOLO-derived targets can all appear here when they are present in the current targets/GP folders.',
             'Red corrected area may still be absent if it has not been built yet.',
             'The path-plots folder now includes actual-vs-inferred state overlays, state-certainty maps, ambiguity-region overlays, and uncertainty-propagation sheets when experiment logs contain the needed belief/state fields.',
+            'YOLO calibration assets are copied alongside the GP and path figures so score reliability is visible next to the planner results.',
             '',
             '## Included assets',
             '',
             f'- Capture previews copied: {len(copied_capture)}',
             f'- GP map figures copied: {len([p for p in gp_assets if p])}',
+            f'- Calibration figures copied: {len([p for p in calibration_assets if p])}',
             f'- Path figures copied: {len([p for p in path_assets if p])}',
             '',
             '## Method status',
@@ -340,10 +353,23 @@ def main() -> int:
         'planner_runs_root': str(planner_runs_root),
         'capture_previews_copied': int(len(copied_capture)),
         'gp_figures_copied': int(len([p for p in gp_assets if p])),
+        'calibration_figures_copied': int(len([p for p in calibration_assets if p])),
         'path_figures_copied': int(len([p for p in path_assets if p])),
+        'lineage': {
+            'capture_manifest': str(capture_dir / 'capture_manifest.json') if (capture_dir / 'capture_manifest.json').is_file() else '',
+            'perception_targets_manifest': str(targets_dir / 'manifest.json') if (targets_dir / 'manifest.json').is_file() else '',
+            'gp_targets_manifest': str(targets_dir / 'target_manifest.json') if (targets_dir / 'target_manifest.json').is_file() else '',
+            'yolo_calibration_artifact': calibration_artifact_dst,
+            'yolo_calibration_manifest': str(targets_dir / 'calibration' / 'manifest.json') if (targets_dir / 'calibration' / 'manifest.json').is_file() else '',
+            'gp_manifest': str(gp_dir / 'gp_manifest.json') if (gp_dir / 'gp_manifest.json').is_file() else '',
+            'gp_plot_manifest': str(gp_dir / 'plots' / 'plot_manifest.json') if (gp_dir / 'plots' / 'plot_manifest.json').is_file() else '',
+            'path_plot_manifest': str(path_plots_dir / 'plot_manifest.json') if path_plots_dir.is_dir() and (path_plots_dir / 'plot_manifest.json').is_file() else '',
+        },
+        'calibration_summary': calibration_manifest,
         'notes': [
             'This report is intentionally compact and resilient to missing methods during the shared-backbone stage.',
             'Missing methods are left blank rather than causing report generation to fail.',
+            'Report tables and copied path assets exclude interrupted/incomplete runs by construction.',
         ],
     })
     if staged_path_plots_root is not None:

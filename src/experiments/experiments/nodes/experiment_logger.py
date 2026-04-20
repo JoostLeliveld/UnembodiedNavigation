@@ -96,16 +96,24 @@ class ExperimentLogger(Node):
         self.declare_parameter('goal_success_hold_s', 2.0)
         self.declare_parameter('frame_id', 'map_bev')
         self.declare_parameter('frame_sanity_start_tolerance_m', 0.25)
+        self.declare_parameter('frame_sanity_start_tolerance_yaw_rad', 0.5)
         self.declare_parameter('use_visibility_model', False)
         self.declare_parameter('visibility_artifact_path', '')
         self.declare_parameter('risk_weight_obs', 1.0)
         self.declare_parameter('goal_sigma_uv', 2.0)
         self.declare_parameter('r_visible_uv', 2.5)
-        self.declare_parameter('r_miss_uv', 420.0)
+        self.declare_parameter('r_miss_uv', 120.0)
         self.declare_parameter('visibility_power', 1.0)
-        self.declare_parameter('visibility_trust_low', 0.08)
-        self.declare_parameter('visibility_trust_high', 0.30)
+        self.declare_parameter('visibility_trust_low', 0.15)
+        self.declare_parameter('visibility_trust_high', 0.65)
         self.declare_parameter('visibility_sigma_kappa', 1.0)
+        self.declare_parameter('plan_rate', 2.0)
+        self.declare_parameter('horizon', 36)
+        self.declare_parameter('dt', 0.2)
+        self.declare_parameter('control_weight', 0.0)
+        self.declare_parameter('process_noise_xy', 0.01)
+        self.declare_parameter('process_noise_theta', 0.02)
+        self.declare_parameter('obs_noise_uv', 2.0)
         self.declare_parameter('goal_prior_u_std_start', 80.0)
         self.declare_parameter('goal_prior_v_std_start', 80.0)
         self.declare_parameter('goal_prior_u_std_final', 18.0)
@@ -119,6 +127,11 @@ class ExperimentLogger(Node):
         self.declare_parameter('visibility_barrier_scale', 10.0)
         self.declare_parameter('visibility_target_height_m', 0.0)
         self.declare_parameter('perception_use_geometry_occlusion', True)
+        self.declare_parameter('optimizer_maxiter', 80)
+        self.declare_parameter('optimizer_maxfun', 500)
+        self.declare_parameter('optimizer_ftol', 1e-6)
+        self.declare_parameter('optimizer_gtol', 1e-4)
+        self.declare_parameter('optimizer_warm_start', True)
         self.declare_parameter('use_nogo_cost', False)
         self.declare_parameter('nogo_penalty_type', 'softplus')
         self.declare_parameter('nogo_weight', 0.0)
@@ -174,6 +187,7 @@ class ExperimentLogger(Node):
         self.goal_success_hold_s = float(self.get_parameter('goal_success_hold_s').value)
         self.frame_id = str(self.get_parameter('frame_id').value)
         self.frame_sanity_start_tolerance_m = float(self.get_parameter('frame_sanity_start_tolerance_m').value)
+        self.frame_sanity_start_tolerance_yaw_rad = float(self.get_parameter('frame_sanity_start_tolerance_yaw_rad').value)
         self.use_visibility_model = bool(self.get_parameter('use_visibility_model').value)
         self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value)
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
@@ -184,6 +198,13 @@ class ExperimentLogger(Node):
         self.visibility_trust_low = float(self.get_parameter('visibility_trust_low').value)
         self.visibility_trust_high = float(self.get_parameter('visibility_trust_high').value)
         self.visibility_sigma_kappa = float(self.get_parameter('visibility_sigma_kappa').value)
+        self.plan_rate = float(self.get_parameter('plan_rate').value)
+        self.horizon = int(self.get_parameter('horizon').value)
+        self.dt = float(self.get_parameter('dt').value)
+        self.control_weight = float(self.get_parameter('control_weight').value)
+        self.process_noise_xy = float(self.get_parameter('process_noise_xy').value)
+        self.process_noise_theta = float(self.get_parameter('process_noise_theta').value)
+        self.obs_noise_uv = float(self.get_parameter('obs_noise_uv').value)
         self.goal_prior_u_std_start = float(self.get_parameter('goal_prior_u_std_start').value)
         self.goal_prior_v_std_start = float(self.get_parameter('goal_prior_v_std_start').value)
         self.goal_prior_u_std_final = float(self.get_parameter('goal_prior_u_std_final').value)
@@ -197,6 +218,11 @@ class ExperimentLogger(Node):
         self.perception_use_geometry_occlusion = bool(
             self.get_parameter('perception_use_geometry_occlusion').value
         )
+        self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
+        self.optimizer_maxfun = int(self.get_parameter('optimizer_maxfun').value)
+        self.optimizer_ftol = float(self.get_parameter('optimizer_ftol').value)
+        self.optimizer_gtol = float(self.get_parameter('optimizer_gtol').value)
+        self.optimizer_warm_start = bool(self.get_parameter('optimizer_warm_start').value)
         self.use_nogo_cost = bool(self.get_parameter('use_nogo_cost').value)
         self.nogo_penalty_type = str(self.get_parameter('nogo_penalty_type').value)
         self.nogo_weight = float(self.get_parameter('nogo_weight').value)
@@ -315,6 +341,19 @@ class ExperimentLogger(Node):
                 'yaw': float(self.task_start_pose[2]),
             } if self.task_start_pose is not None else None,
             'frame_sanity_start_tolerance_m': self.frame_sanity_start_tolerance_m,
+            'frame_sanity_start_tolerance_yaw_rad': self.frame_sanity_start_tolerance_yaw_rad,
+            'plan_rate': self.plan_rate,
+            'horizon': self.horizon,
+            'dt': self.dt,
+            'control_weight': self.control_weight,
+            'process_noise_xy': self.process_noise_xy,
+            'process_noise_theta': self.process_noise_theta,
+            'obs_noise_uv': self.obs_noise_uv,
+            'optimizer_maxiter': self.optimizer_maxiter,
+            'optimizer_maxfun': self.optimizer_maxfun,
+            'optimizer_ftol': self.optimizer_ftol,
+            'optimizer_gtol': self.optimizer_gtol,
+            'optimizer_warm_start': self.optimizer_warm_start,
         }
         self._manifest_data = dict(manifest_data)
         write_manifest(self.run_dir, self._manifest_data, repo_root)
@@ -353,7 +392,10 @@ class ExperimentLogger(Node):
             'task_start_yaw': float(self.task_start_pose[2]) if self.task_start_pose is not None else math.nan,
             'truth_start_error_m': math.nan,
             'raw_start_error_m': math.nan,
+            'truth_start_yaw_error_rad': math.nan,
+            'raw_start_yaw_error_rad': math.nan,
             'tolerance_m': self.frame_sanity_start_tolerance_m,
+            'tolerance_yaw_rad': self.frame_sanity_start_tolerance_yaw_rad,
         }
         self._rewrite_manifest()
 
@@ -381,7 +423,8 @@ class ExperimentLogger(Node):
         self._max_r_plan_std = 0.0
         self._truth_state_error_sum = 0.0
         self._truth_belief_error_sum = 0.0
-        self._truth_error_count = 0
+        self._truth_state_error_count = 0
+        self._truth_belief_error_count = 0
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
 
@@ -489,13 +532,16 @@ class ExperimentLogger(Node):
                 'blue_area_px',
                 'separation_px',
                 'border_margin_px',
-                'yolo_score',
+                'yolo_score_raw',
+                'yolo_score_selected',
+                'yolo_detected_after_threshold',
+                'yolo_best_class_id',
+                'yolo_target_candidate_count',
                 'bbox_area_px',
                 'bbox_xmin',
                 'bbox_ymin',
                 'bbox_xmax',
                 'bbox_ymax',
-                'class_id',
                 'logit_margin',
                 'class_entropy',
                 'mask_area_px',
@@ -732,7 +778,12 @@ class ExperimentLogger(Node):
         start_x, start_y, start_yaw = self.task_start_pose
         truth_start_error = float(math.hypot(truth_x - start_x, truth_y - start_y))
         raw_start_error = float(math.hypot(raw_x - start_x, raw_y - start_y))
-        ok = bool(truth_start_error <= self.frame_sanity_start_tolerance_m)
+        truth_start_yaw_error = abs(self._wrap_angle(truth_yaw - start_yaw))
+        raw_start_yaw_error = abs(self._wrap_angle(raw_yaw - start_yaw))
+        ok = bool(
+            truth_start_error <= self.frame_sanity_start_tolerance_m
+            and truth_start_yaw_error <= self.frame_sanity_start_tolerance_yaw_rad
+        )
 
         self._frame_sanity_logged = True
         self._frame_sanity.update({
@@ -752,7 +803,10 @@ class ExperimentLogger(Node):
             'task_start_yaw': start_yaw,
             'truth_start_error_m': truth_start_error,
             'raw_start_error_m': raw_start_error,
+            'truth_start_yaw_error_rad': truth_start_yaw_error,
+            'raw_start_yaw_error_rad': raw_start_yaw_error,
             'tolerance_m': self.frame_sanity_start_tolerance_m,
+            'tolerance_yaw_rad': self.frame_sanity_start_tolerance_yaw_rad,
             'recorded_at_log_stamp': now_stamp,
         })
         self._rewrite_manifest()
@@ -762,14 +816,18 @@ class ExperimentLogger(Node):
             f'({source_frame} -> {self.frame_id}): raw odom=({raw_x:.3f}, {raw_y:.3f}), '
             f'transformed truth=({truth_x:.3f}, {truth_y:.3f}), '
             f'task start=({start_x:.3f}, {start_y:.3f}), '
-            f'truth_start_error={truth_start_error:.3f} m'
+            f'truth_start_error={truth_start_error:.3f} m, '
+            f'truth_start_yaw_error={truth_start_yaw_error:.3f} rad'
         )
         if ok:
             self.get_logger().info(message)
         else:
             self.get_logger().warn(
                 message
-                + f' exceeds tolerance {self.frame_sanity_start_tolerance_m:.3f} m. '
+                + (
+                    f' exceeds tolerances {self.frame_sanity_start_tolerance_m:.3f} m and/or '
+                    f'{self.frame_sanity_start_tolerance_yaw_rad:.3f} rad. '
+                )
                 + 'This usually means the map_bev->odom transform or odom frame assumption is wrong.'
             )
 
@@ -886,13 +944,16 @@ class ExperimentLogger(Node):
             diag['blue_area_px'],
             diag['separation_px'],
             diag['border_margin_px'],
-            diag.get('yolo_score', math.nan),
+            diag.get('yolo_score_raw', math.nan),
+            diag.get('yolo_score_selected', math.nan),
+            diag.get('yolo_detected_after_threshold', math.nan),
+            diag.get('yolo_best_class_id', math.nan),
+            diag.get('yolo_target_candidate_count', math.nan),
             diag.get('bbox_area_px', math.nan),
             diag.get('bbox_xmin', math.nan),
             diag.get('bbox_ymin', math.nan),
             diag.get('bbox_xmax', math.nan),
             diag.get('bbox_ymax', math.nan),
-            diag.get('class_id', math.nan),
             diag.get('logit_margin', math.nan),
             diag.get('class_entropy', math.nan),
             diag.get('mask_area_px', math.nan),
@@ -979,11 +1040,13 @@ class ExperimentLogger(Node):
             truth_state_error_m = float(math.hypot(true_x - state_x, true_y - state_y))
             self._truth_state_error_sum += truth_state_error_m
             if math.isfinite(truth_state_error_m):
-                self._truth_error_count += 1
+                self._truth_state_error_count += 1
         truth_belief_error_m = math.nan
         if true_ok and planner_belief_ok and math.isfinite(planner_belief_x) and math.isfinite(planner_belief_y):
             truth_belief_error_m = float(math.hypot(true_x - planner_belief_x, true_y - planner_belief_y))
             self._truth_belief_error_sum += truth_belief_error_m
+            if math.isfinite(truth_belief_error_m):
+                self._truth_belief_error_count += 1
 
         cmd_v = self.cmd_msg.linear.x if self.cmd_msg else 0.0
         cmd_w = self.cmd_msg.angular.z if self.cmd_msg else 0.0
@@ -1167,12 +1230,12 @@ class ExperimentLogger(Node):
         fraction_time_p_vis_eff_below_0_2 = self._p_vis_plan_eff_below_0_2_count / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
         max_r_plan_std = self._max_r_plan_std if self._p_vis_count > 0 else math.nan
         mean_truth_state_error_m = (
-            self._truth_state_error_sum / self._truth_error_count
-            if self._truth_error_count > 0 else math.nan
+            self._truth_state_error_sum / self._truth_state_error_count
+            if self._truth_state_error_count > 0 else math.nan
         )
         mean_truth_belief_error_m = (
-            self._truth_belief_error_sum / self._truth_error_count
-            if self._truth_error_count > 0 else math.nan
+            self._truth_belief_error_sum / self._truth_belief_error_count
+            if self._truth_belief_error_count > 0 else math.nan
         )
 
         if stamp is None:

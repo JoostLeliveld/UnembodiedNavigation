@@ -25,12 +25,16 @@ from typing import Any
 import numpy as np
 
 try:
-    from common import ACTIVE_METHOD_IDS, CURRENT_TARGETS_DIR, LOGS_ROOT, PLANNER_RUNS_DIR
+    from common import ACTIVE_METHOD_IDS, CURRENT_TARGETS_DIR, LOGS_ROOT, PLANNER_RUNS_DIR, accepted_completed_run, run_has_usable_logs
 except ImportError:
     ACTIVE_METHOD_IDS = []
     CURRENT_TARGETS_DIR = Path('.')
     LOGS_ROOT = Path('logs')
     PLANNER_RUNS_DIR = Path('logs/planner_runs')
+    def accepted_completed_run(summary):
+        return bool(summary and summary.get('completed', False))
+    def run_has_usable_logs(run_dir):
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +67,7 @@ WEIGHT_KEYS = (
 
 VISIBILITY_AWARE_METHODS = {
     'oracle_visibility', 'red_binary', 'red_area_corrected',
-    'yolo_binary', 'yolo_confidence',
+    'yolo_binary', 'yolo_score_raw', 'yolo_score_calibrated',
 }
 
 
@@ -135,6 +139,10 @@ def _find_latest_run_dirs(root: Path) -> dict[str, Path]:
     for summary_path in root.rglob('run_summary.json'):
         run_dir = summary_path.parent
         summary = _load_json(summary_path)
+        if not accepted_completed_run(summary):
+            continue
+        if not run_has_usable_logs(run_dir):
+            continue
         method_id = summary.get('run_config', {}).get('method_id', '') or ''
         if not method_id:
             # Infer from parent directory name
@@ -421,7 +429,7 @@ def check_gp_interpolation(method_id: str, run_dir: Path, gp_dir: Path | None) -
         with np.load(artifact_path, allow_pickle=False) as data:
             xs = np.asarray(data['xs'], dtype=float)
             ys = np.asarray(data['ys'], dtype=float)
-            p_map = np.asarray(data['P_map'], dtype=float)
+            p_map = np.asarray(data['P_conservative_plan_map'], dtype=float)
     except Exception as exc:
         return [f'Could not load GP artifact {artifact_path}: {exc}']
 
@@ -518,7 +526,7 @@ def main() -> int:
         method_issues += check_initial_poses(method_id, run_dir, summary)
 
         # YOLO check only for YOLO-backed methods
-        if method_id in ('yolo_binary', 'yolo_confidence', 'oracle_visibility'):
+        if method_id in ('yolo_binary', 'yolo_score_raw', 'yolo_score_calibrated', 'oracle_visibility'):
             method_issues += check_yolo_config(method_id, run_dir, targets_manifest)
 
         # GP interpolation spot check

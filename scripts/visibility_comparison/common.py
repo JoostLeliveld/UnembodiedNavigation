@@ -4,13 +4,14 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
@@ -22,12 +23,24 @@ CURRENT_TARGETS_DIR = LOGS_ROOT / 'current_targets'
 CURRENT_GP_DIR = LOGS_ROOT / 'current_gp'
 PLANNER_RUNS_DIR = LOGS_ROOT / 'planner_runs'
 REPORT_DIR = LOGS_ROOT / 'report'
+DEFAULT_WORLD_PROFILES_PATH = REPO_ROOT / 'src' / 'experiments' / 'config' / 'world_profiles.yaml'
+ARTIFACT_SCHEMA_VERSION = 2
+ACCEPTED_COMPLETION_REASONS = ('goal_reached', 'stuck', 'timeout_after_first_cmd')
+PAPER_VISIBILITY_DEFAULTS = {
+    'r_visible_uv': 2.5,
+    'r_miss_uv': 120.0,
+    'visibility_power': 1.0,
+    'visibility_trust_low': 0.15,
+    'visibility_trust_high': 0.65,
+    'visibility_sigma_kappa': 1.0,
+}
 
 ACTIVE_METHOD_IDS = (
     'red_binary',
     'red_area_corrected',
     'yolo_binary',
-    'yolo_confidence',
+    'yolo_score_raw',
+    'yolo_score_calibrated',
     'oracle_visibility',
     'visibility_unaware_baseline',
 )
@@ -62,12 +75,16 @@ PERCEPTION_TARGET_COLUMNS = (
     'red_bbox_xyxy',
     'red_bottom_u',
     'red_bottom_v',
-    'yolo_detected',
-    'yolo_confidence',
+    'yolo_detected_after_threshold',
+    'yolo_score_raw',
+    'yolo_score_selected',
+    'yolo_best_class_id',
     'yolo_mask_area',
     'yolo_bbox_xyxy',
     'yolo_bottom_u',
     'yolo_bottom_v',
+    'yolo_selected_pixel_source',
+    'yolo_selected_pixel_source_code',
     'oracle_visible',
     'oracle_bottom_u',
     'oracle_bottom_v',
@@ -80,7 +97,8 @@ GP_TARGET_COLUMNS = (
     'red_binary',
     'red_area_corrected',
     'yolo_binary',
-    'yolo_confidence',
+    'yolo_score_raw',
+    'yolo_score_calibrated',
     'oracle_visibility',
 )
 
@@ -110,6 +128,29 @@ def write_manifest(path: Path | str, payload: dict) -> None:
     path.write_text(json_dumps(payload), encoding='utf-8')
 
 
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(str(text).encode('utf-8')).hexdigest()
+
+
+def sha256_json(payload: Any) -> str:
+    return sha256_text(json.dumps(payload, sort_keys=True, ensure_ascii=True))
+
+
+def sha256_file(path: Path | str) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open('rb') as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def visibility_geometry_sha256(geometry_json: str) -> str:
+    return sha256_text(str(geometry_json or '').strip())
+
+
 def safe_reset_generated_dir(path: Path | str, *, allowed_root: Path | None = None) -> Path:
     path = Path(path).expanduser().resolve()
     root = (allowed_root or LOGS_ROOT).expanduser().resolve()
@@ -137,6 +178,127 @@ def write_csv(path: Path | str, fieldnames: Sequence[str], rows: Iterable[dict])
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
+
+
+def accepted_completed_run(summary: Mapping[str, Any] | None) -> bool:
+    if not isinstance(summary, Mapping):
+        return False
+    return bool(summary.get('completed', False)) and str(summary.get('completion_reason', '')).strip() in ACCEPTED_COMPLETION_REASONS
+
+
+def run_has_usable_logs(run_dir: Path | str) -> bool:
+    run_dir = Path(run_dir)
+    for name in ('experiment.csv', 'perception.csv', 'plan_samples.csv'):
+        path = run_dir / name
+        if path.is_file() and path.stat().st_size > 0:
+            return True
+    return False
+
+
+def normalize_run_manifest_for_hash(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    ignored = {'run_id', 'timestamp', 'frame_sanity'}
+    return {
+        str(key): value
+        for key, value in dict(manifest).items()
+        if key not in ignored
+    }
+
+
+def expected_visibility_metadata(
+    world: str,
+    *,
+    world_profiles_path: Path | str = DEFAULT_WORLD_PROFILES_PATH,
+) -> dict[str, Any]:
+    ensure_repo_python_paths()
+    from experiments.core.world_profiles import (
+        compute_look_at_from_pose,
+        load_profile,
+        serialize_occlusion_geometry_from_world,
+    )
+
+    profile, intrinsics, world_path, camera_pose = load_profile(str(Path(world_profiles_path).resolve()), str(world))
+    cam_pos = np.asarray(camera_pose[:3], dtype=float)
+    look_at = np.asarray(
+        compute_look_at_from_pose(cam_pos, camera_pose[3], camera_pose[4], camera_pose[5]),
+        dtype=float,
+    )
+    geometry_json = str(serialize_occlusion_geometry_from_world(world_path))
+    return {
+        'world': str(world),
+        'world_name': str(profile.get('world_name', '')),
+        'world_path': str(Path(world_path).resolve()),
+        'camera_pose': [float(v) for v in camera_pose],
+        'camera_pos': [float(v) for v in cam_pos],
+        'look_at': [float(v) for v in look_at],
+        'img_width': int(intrinsics['img_width']),
+        'img_height': int(intrinsics['img_height']),
+        'fov_h_rad': float(intrinsics['fov_h_rad']),
+        'geometry_json': geometry_json,
+        'geometry_sha256': visibility_geometry_sha256(geometry_json),
+    }
+
+
+def _compare_numeric(name: str, actual: Any, expected: Any, mismatches: list[str], *, tol: float = 1e-9) -> None:
+    try:
+        if abs(float(actual) - float(expected)) > float(tol):
+            mismatches.append(f'{name}: actual={actual!r} expected={expected!r}')
+    except (TypeError, ValueError):
+        mismatches.append(f'{name}: actual={actual!r} expected={expected!r}')
+
+
+def validate_visibility_metadata(actual: Mapping[str, Any], expected: Mapping[str, Any], *, label: str) -> None:
+    mismatches: list[str] = []
+    for key in ('world', 'world_name', 'world_path', 'geometry_sha256'):
+        if str(actual.get(key, '')).strip() != str(expected.get(key, '')).strip():
+            mismatches.append(f'{key}: actual={actual.get(key)!r} expected={expected.get(key)!r}')
+    for key in ('img_width', 'img_height'):
+        _compare_numeric(key, actual.get(key), expected.get(key), mismatches, tol=0.0)
+    for key in ('fov_h_rad',):
+        _compare_numeric(key, actual.get(key), expected.get(key), mismatches)
+    for key in ('camera_pose', 'camera_pos', 'look_at'):
+        actual_values = np.asarray(actual.get(key, []), dtype=float).reshape(-1)
+        expected_values = np.asarray(expected.get(key, []), dtype=float).reshape(-1)
+        if actual_values.shape != expected_values.shape:
+            mismatches.append(f'{key}: actual_shape={actual_values.shape} expected_shape={expected_values.shape}')
+            continue
+        for idx, (actual_value, expected_value) in enumerate(zip(actual_values, expected_values)):
+            if abs(float(actual_value) - float(expected_value)) > 1e-9:
+                mismatches.append(f'{key}[{idx}]: actual={actual_value!r} expected={expected_value!r}')
+    if mismatches:
+        raise RuntimeError(f'{label} metadata does not match the requested world profile: ' + '; '.join(mismatches))
+
+
+def load_visibility_artifact_metadata(path: Path | str) -> dict[str, Any]:
+    path = Path(path).expanduser().resolve()
+    if not path.is_file():
+        raise RuntimeError(f'Visibility artifact not found: {path}')
+    with np.load(path, allow_pickle=False) as data:
+        def _scalar_string(name: str) -> str:
+            if name not in data.files:
+                return ''
+            arr = np.asarray(data[name])
+            return str(arr.reshape(-1)[0]) if arr.size else ''
+
+        def _float_list(name: str) -> list[float]:
+            if name not in data.files:
+                return []
+            return [float(v) for v in np.asarray(data[name], dtype=float).reshape(-1)]
+
+        return {
+            'artifact_path': str(path),
+            'artifact_sha256': sha256_file(path),
+            'artifact_schema_version': int(np.asarray(data['artifact_schema_version']).reshape(-1)[0]) if 'artifact_schema_version' in data.files else 0,
+            'world': _scalar_string('world'),
+            'world_name': _scalar_string('world_name'),
+            'world_path': _scalar_string('world_path'),
+            'camera_pose': _float_list('camera_pose'),
+            'camera_pos': _float_list('camera_pos'),
+            'look_at': _float_list('look_at'),
+            'img_width': int(np.asarray(data['img_width']).reshape(-1)[0]) if 'img_width' in data.files else 0,
+            'img_height': int(np.asarray(data['img_height']).reshape(-1)[0]) if 'img_height' in data.files else 0,
+            'fov_h_rad': float(np.asarray(data['fov_h_rad']).reshape(-1)[0]) if 'fov_h_rad' in data.files else math.nan,
+            'geometry_sha256': _scalar_string('geometry_sha256'),
+        }
 
 
 def parse_float(value, default: float = math.nan) -> float:

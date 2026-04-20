@@ -42,14 +42,14 @@ def polygon_area(points: np.ndarray) -> float:
     )
 
 
-def collect_candidate_detections(result, target_ids, confidence_threshold: float):
+def collect_candidate_detections(result, target_ids):
     boxes = getattr(result, 'boxes', None)
     if boxes is None or len(boxes) == 0:
         return []
     xyxy = boxes.xyxy.detach().cpu().numpy()
     conf = boxes.conf.detach().cpu().numpy()
     cls = boxes.cls.detach().cpu().numpy().astype(int)
-    valid = np.isfinite(conf) & (conf >= float(confidence_threshold))
+    valid = np.isfinite(conf)
     if target_ids is not None:
         valid &= np.asarray([int(c) in target_ids for c in cls], dtype=bool)
     idxs = np.flatnonzero(valid)
@@ -88,11 +88,15 @@ def select_best_detection(
     mask_min_area: float,
     mask_bottom_band_px: float,
 ):
-    detections = collect_candidate_detections(result, target_ids, confidence_threshold)
+    detections = collect_candidate_detections(result, target_ids)
     if not detections:
         return {
             'detected': False,
+            'detected_after_threshold': False,
+            'raw_best_score': 0.0,
+            'selected_score': 0.0,
             'confidence': 0.0,
+            'best_class_id': math.nan,
             'class_id': math.nan,
             'bbox_xyxy': None,
             'mask_area': math.nan,
@@ -121,10 +125,16 @@ def select_best_detection(
             mask_available = 1
             selected_u, selected_v = mask_bottom(polygon, mask_bottom_band_px)
             selected_source = 'mask_bottom'
+    raw_best_score = float(detection['confidence'])
+    detected_after_threshold = bool(raw_best_score >= float(confidence_threshold))
 
     return {
-        'detected': True,
-        'confidence': float(detection['confidence']),
+        'detected': bool(detected_after_threshold),
+        'detected_after_threshold': bool(detected_after_threshold),
+        'raw_best_score': raw_best_score,
+        'selected_score': raw_best_score,
+        'confidence': raw_best_score,
+        'best_class_id': int(detection['class_id']),
         'class_id': int(detection['class_id']),
         'bbox_xyxy': bbox,
         'mask_area': float(mask_area) if math.isfinite(mask_area) else math.nan,

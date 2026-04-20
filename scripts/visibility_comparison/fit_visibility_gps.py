@@ -12,6 +12,7 @@ import numpy as np
 
 from common import (
     ACTIVE_METHOD_IDS,
+    ARTIFACT_SCHEMA_VERSION,
     CURRENT_CAPTURE_DIR,
     CURRENT_GP_DIR,
     CURRENT_TARGETS_DIR,
@@ -20,6 +21,7 @@ from common import (
     read_csv_rows,
     repo_relative,
     safe_reset_generated_dir,
+    visibility_geometry_sha256,
     write_csv,
     write_manifest,
 )
@@ -141,9 +143,10 @@ def _fit_gp_artifact(
         'ys': ys.astype(float),
         'X_train': X_train.astype(float),
         'p_train': p_train.astype(float),
+        'F_mean_map': mu_f.reshape(Yg.shape).astype(float),
+        'F_std_map': np.clip(sigma_f.reshape(Yg.shape), 0.0, None).astype(float),
         'P_mean_map': _clip_prob(p_mean.reshape(Yg.shape), min_prob).astype(float),
-        'P_conservative_map': _clip_prob(p_cons.reshape(Yg.shape), min_prob).astype(float),
-        'P_map': _clip_prob(p_cons.reshape(Yg.shape), min_prob).astype(float),
+        'P_conservative_plan_map': _clip_prob(p_cons.reshape(Yg.shape), min_prob).astype(float),
     }
 
 
@@ -194,15 +197,24 @@ def main() -> int:
                 beta=float(args.beta),
             )
             metadata = {
+                'artifact_schema_version': np.asarray([int(ARTIFACT_SCHEMA_VERSION)], dtype=np.int32),
                 'camera_pos': np.asarray(capture_manifest.get('camera_pos', [-3.0, -3.0, 6.0]), dtype=float),
+                'camera_pose': np.asarray(capture_manifest.get('camera_pose', [-3.0, -3.0, 6.0, 0.0, 0.0, 0.0]), dtype=float),
                 'look_at': np.asarray(capture_manifest.get('look_at', [1.5, 1.5, 0.0]), dtype=float),
                 'img_width': np.asarray([int(capture_manifest.get('img_width', 1280))], dtype=np.int32),
                 'img_height': np.asarray([int(capture_manifest.get('img_height', 720))], dtype=np.int32),
                 'fov_h_rad': np.asarray([float(capture_manifest.get('fov_h_rad', 1.5708))], dtype=float),
                 'target_height': np.asarray([float(capture_manifest.get('oracle_target_height_m', 0.0))], dtype=float),
                 'geometry_json': np.asarray([str(capture_manifest.get('geometry_json', ''))], dtype=np.str_),
+                'geometry_sha256': np.asarray([visibility_geometry_sha256(str(capture_manifest.get('geometry_json', '')))], dtype=np.str_),
                 'method_id': np.asarray([method_id], dtype=np.str_),
                 'world': np.asarray([str(capture_manifest.get('world', ''))], dtype=np.str_),
+                'world_name': np.asarray([str(capture_manifest.get('world_name', ''))], dtype=np.str_),
+                'world_path': np.asarray([str(capture_manifest.get('world_path', ''))], dtype=np.str_),
+                'gp_length_scale': np.asarray([float(args.gp_length_scale)], dtype=float),
+                'gp_noise_var': np.asarray([float(args.gp_noise_var)], dtype=float),
+                'beta': np.asarray([float(args.beta)], dtype=float),
+                'min_prob': np.asarray([float(args.min_prob)], dtype=float),
             }
             np.savez_compressed(artifact_path, **fit, **metadata)
             fitted_methods.append(method_id)
@@ -241,8 +253,8 @@ def main() -> int:
         'missing_methods': [method for method in GP_METHOD_IDS if method not in fitted_methods],
         'notes': [
             'This shared-stage fitter scans gp_targets.csv and fits only target columns that are already populated.',
-            'GP artifacts are planner-compatible via xs, ys, and P_map. Extra metadata is stored for plotting and reporting.',
-            'P_map currently stores the conservative GP field used by the planner, matching the legacy empirical GP convention.',
+            'GP artifacts are planner-compatible via xs, ys, and P_conservative_plan_map. Extra metadata is stored for plotting and reporting.',
+            'Strict schema cutover: legacy artifacts with P_map are no longer accepted by the planner or plotting scripts.',
         ],
     })
     print(f'Wrote GP artifacts to {output_dir}')

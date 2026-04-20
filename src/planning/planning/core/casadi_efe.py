@@ -284,8 +284,9 @@ def visibility_aware_unicycle_efe_ca(
 
     for t in range(params.time_horizon):
         u_t = ca.vertcat(u_flat[2 * t], u_flat[2 * t + 1])
-        m = unicycle_step_ca(m, u_t, params.dt)
-        F = unicycle_jacobian_ca(m, u_t, params.dt)
+        m_prev = m
+        m = unicycle_step_ca(m_prev, u_t, params.dt)
+        F = unicycle_jacobian_ca(m_prev, u_t, params.dt)
         S = ca.mtimes([F, S, F.T]) + params.Q
 
         p_vis = 1.0

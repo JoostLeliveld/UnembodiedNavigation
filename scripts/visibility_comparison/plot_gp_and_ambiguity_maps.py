@@ -14,7 +14,19 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import numpy as np
 
-from common import CURRENT_GP_DIR, CURRENT_TARGETS_DIR, LOGS_ROOT, PLANNER_RUNS_DIR, parse_float, read_csv_rows, write_csv, write_manifest
+from common import (
+    CURRENT_GP_DIR,
+    CURRENT_TARGETS_DIR,
+    LOGS_ROOT,
+    PAPER_VISIBILITY_DEFAULTS,
+    PLANNER_RUNS_DIR,
+    accepted_completed_run,
+    parse_float,
+    read_csv_rows,
+    run_has_usable_logs,
+    write_csv,
+    write_manifest,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -107,6 +119,11 @@ def _find_latest_run_manifests(root: Path) -> dict[str, dict]:
         return {}
     for summary_path in root.rglob('run_summary.json'):
         run_dir = summary_path.parent
+        summary = _load_json(summary_path)
+        if not accepted_completed_run(summary):
+            continue
+        if not run_has_usable_logs(run_dir):
+            continue
         run_manifest = _load_run_manifest(run_dir)
         if not run_manifest:
             continue
@@ -222,12 +239,12 @@ def main() -> int:
     parser.add_argument('--gp-targets', default=str(CURRENT_TARGETS_DIR / 'gp_targets.csv'))
     parser.add_argument('--planner-runs-root', default=str(PLANNER_RUNS_DIR))
     parser.add_argument('--out', default='')
-    parser.add_argument('--r-visible-uv', type=float, default=2.5)
-    parser.add_argument('--r-miss-uv', type=float, default=140.0)
-    parser.add_argument('--visibility-power', type=float, default=1.0)
-    parser.add_argument('--visibility-trust-low', type=float, default=0.08)
-    parser.add_argument('--visibility-trust-high', type=float, default=0.30)
-    parser.add_argument('--visibility-sigma-kappa', type=float, default=1.0)
+    parser.add_argument('--r-visible-uv', type=float, default=PAPER_VISIBILITY_DEFAULTS['r_visible_uv'])
+    parser.add_argument('--r-miss-uv', type=float, default=PAPER_VISIBILITY_DEFAULTS['r_miss_uv'])
+    parser.add_argument('--visibility-power', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_power'])
+    parser.add_argument('--visibility-trust-low', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_low'])
+    parser.add_argument('--visibility-trust-high', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_high'])
+    parser.add_argument('--visibility-sigma-kappa', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_sigma_kappa'])
     parser.add_argument('--min-prob', type=float, default=1e-4)
     args = parser.parse_args()
 
@@ -249,15 +266,25 @@ def main() -> int:
     combined_rows = []
     plot_rows = []
     summary_rows = []
-    plot_notes = ['Observation-only ambiguity uses the same visibility-to-covariance shaping as the planner.']
+    plot_notes = [
+        'Observation-only ambiguity uses the same visibility-to-covariance shaping as the planner.',
+        'Only accepted completed runs are consulted for per-method plotting defaults.',
+    ]
     for artifact_path in artifact_paths:
         method_id = artifact_path.name.replace('_gp.npz', '')
         artifact = _load_artifact(artifact_path)
         xs = np.asarray(artifact['xs'], dtype=float)
         ys = np.asarray(artifact['ys'], dtype=float)
-        p_map = np.asarray(artifact.get('P_map', artifact.get('P_conservative_map', np.zeros(1))), dtype=float)
+        p_map = np.asarray(artifact['P_conservative_plan_map'], dtype=float)
         p_mean = np.asarray(artifact.get('P_mean_map', p_map), dtype=float)
-        p_unc = np.clip(p_mean - p_map, 0.0, None)
+        if 'F_std_map' in artifact:
+            p_unc = np.asarray(artifact['F_std_map'], dtype=float)
+            uncertainty_title = 'Latent GP std F_std_map'
+            uncertainty_label = 'latent std'
+        else:
+            p_unc = np.clip(p_mean - p_map, 0.0, None)
+            uncertainty_title = 'Conservative gap (P_mean - P_conservative)'
+            uncertainty_label = 'conservative gap'
         extent = _grid_extent(xs, ys)
         geometry = _parse_geometry_json(str(artifact.get('geometry_json', '')))
 
@@ -312,7 +339,7 @@ def main() -> int:
 
         im_gp = gp_ax.imshow(p_map, origin='lower', extent=extent, cmap='viridis', vmin=0.0, vmax=1.0, aspect='equal')
         _draw_geometry(gp_ax, geometry)
-        gp_ax.set_title('Conservative visibility P_map(x,y)')
+        gp_ax.set_title('Conservative visibility P_conservative_plan_map')
         fig.colorbar(im_gp, ax=gp_ax, fraction=0.046, pad=0.04, label='p_vis (conservative)')
         
         im_mean = mean_ax.imshow(p_mean, origin='lower', extent=extent, cmap='viridis', vmin=0.0, vmax=1.0, aspect='equal')
@@ -322,8 +349,8 @@ def main() -> int:
         
         im_unc = unc_ax.imshow(p_unc, origin='lower', extent=extent, cmap='plasma', vmin=0.0, vmax=0.3, aspect='equal')
         _draw_geometry(unc_ax, geometry)
-        unc_ax.set_title('GP Epistemic Uncertainty (Mean - Conservative)')
-        fig.colorbar(im_unc, ax=unc_ax, fraction=0.046, pad=0.04, label='uncertainty')
+        unc_ax.set_title(uncertainty_title)
+        fig.colorbar(im_unc, ax=unc_ax, fraction=0.046, pad=0.04, label=uncertainty_label)
 
         im_obs = obs_ax.imshow(observation_ambiguity, origin='lower', extent=extent, cmap='magma', aspect='equal')
         _draw_geometry(obs_ax, geometry)

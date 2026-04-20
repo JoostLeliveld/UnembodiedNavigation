@@ -15,7 +15,18 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Rectangle
 import numpy as np
 
-from common import ACTIVE_METHOD_IDS, CURRENT_GP_DIR, LOGS_ROOT, PLANNER_RUNS_DIR, REPORT_DIR, write_csv, write_manifest
+from common import (
+    ACTIVE_METHOD_IDS,
+    CURRENT_GP_DIR,
+    LOGS_ROOT,
+    PAPER_VISIBILITY_DEFAULTS,
+    PLANNER_RUNS_DIR,
+    REPORT_DIR,
+    accepted_completed_run,
+    run_has_usable_logs,
+    write_csv,
+    write_manifest,
+)
 
 
 RUN_MANIFEST_FILENAMES = ('run_manifest.json', 'manifest.json')
@@ -225,16 +236,6 @@ def _infer_method_id(run_manifest: dict, run_dir: Path) -> str:
     return planner or run_dir.name
 
 
-def _run_has_usable_logs(run_dir: Path) -> bool:
-    experiment_csv = run_dir / 'experiment.csv'
-    perception_csv = run_dir / 'perception.csv'
-    plan_csv = run_dir / 'plan_samples.csv'
-    for path in (experiment_csv, perception_csv, plan_csv):
-        if path.is_file() and path.stat().st_size > 0:
-            return True
-    return False
-
-
 def _find_latest_runs(root: Path) -> dict[str, Path]:
     run_dirs = []
     for summary_path in root.rglob('run_summary.json'):
@@ -242,7 +243,9 @@ def _find_latest_runs(root: Path) -> dict[str, Path]:
         summary = _load_json(summary_path)
         if not summary:
             continue
-        if not _run_has_usable_logs(run_dir):
+        if not accepted_completed_run(summary):
+            continue
+        if not run_has_usable_logs(run_dir):
             continue
         manifest = _load_run_manifest(run_dir)
         method_id = _infer_method_id(manifest, run_dir)
@@ -464,12 +467,12 @@ def main() -> int:
     parser.add_argument('--gp-dir', default=str(CURRENT_GP_DIR))
     parser.add_argument('--out', default=str(REPORT_DIR / 'path_plots'))
     parser.add_argument('--background-method', default='oracle_visibility')
-    parser.add_argument('--r-visible-uv', type=float, default=2.5)
-    parser.add_argument('--r-miss-uv', type=float, default=140.0)
-    parser.add_argument('--visibility-power', type=float, default=1.0)
-    parser.add_argument('--visibility-trust-low', type=float, default=0.08)
-    parser.add_argument('--visibility-trust-high', type=float, default=0.30)
-    parser.add_argument('--visibility-sigma-kappa', type=float, default=1.0)
+    parser.add_argument('--r-visible-uv', type=float, default=PAPER_VISIBILITY_DEFAULTS['r_visible_uv'])
+    parser.add_argument('--r-miss-uv', type=float, default=PAPER_VISIBILITY_DEFAULTS['r_miss_uv'])
+    parser.add_argument('--visibility-power', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_power'])
+    parser.add_argument('--visibility-trust-low', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_low'])
+    parser.add_argument('--visibility-trust-high', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_high'])
+    parser.add_argument('--visibility-sigma-kappa', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_sigma_kappa'])
     parser.add_argument('--min-prob', type=float, default=1e-4)
     args = parser.parse_args()
 
@@ -487,9 +490,9 @@ def main() -> int:
             'planner_runs_root': str(planner_runs_root),
             'gp_dir': str(gp_dir),
             'available_methods': [],
-            'notes': ['No usable planner runs were found; path plotting completed as a no-op.'],
+            'notes': ['No accepted completed planner runs were found; path plotting completed as a no-op.'],
         })
-        print(f'No usable planner runs found under {planner_runs_root}')
+        print(f'No accepted completed planner runs found under {planner_runs_root}')
         return 0
 
     artifacts: dict[str, Path] = {}
@@ -503,7 +506,7 @@ def main() -> int:
     combined_profiles = []
     planner_summaries = []
     plot_notes = [
-        'Usable runs are accepted even if run_summary.json marks them as interrupted.',
+        'Only accepted completed runs are plotted (goal_reached, stuck, timeout_after_first_cmd).',
         'Time series are aligned to the first_cmd_stamp rather than system startup.',
     ]
 
@@ -607,7 +610,7 @@ def main() -> int:
         extent = _grid_extent(xs, ys)
         geometry = _parse_geometry_json(str(artifact.get('geometry_json', '')))
         
-        p_map = np.asarray(artifact['P_map'], dtype=float)
+        p_map = np.asarray(artifact['P_conservative_plan_map'], dtype=float)
         ambiguity_map = _ambiguity_map(
             p_map,
             min_prob=float(plot_cfg['min_prob']),
@@ -789,7 +792,7 @@ def main() -> int:
 
         if background_artifact and background_artifact.is_file():
             bg_art = _load_artifact(background_artifact)
-            bg_p = np.asarray(bg_art['P_map'], dtype=float)
+            bg_p = np.asarray(bg_art['P_conservative_plan_map'], dtype=float)
             bg_extent = _grid_extent(np.asarray(bg_art['xs'], dtype=float), np.asarray(bg_art['ys'], dtype=float))
             ax_bg.imshow(bg_p, origin='lower', extent=bg_extent, cmap='viridis', vmin=0.0, vmax=1.0, aspect='equal')
             _draw_geometry(ax_bg, _parse_geometry_json(str(bg_art.get('geometry_json', ''))))
@@ -933,7 +936,8 @@ def main() -> int:
             high_amb_path_fraction = float(np.mean(np.asarray(amb_profile >= amb90, dtype=float)))
         high_amb_time_fraction = math.nan
         if t_plot.size and math.isfinite(amb90):
-            actual_samples = _sample_grid_along_path(ambiguity_map, extent, actual_path if actual_path.shape[0] else realized)
+            realized_path = actual_path if actual_path.shape[0] else inferred_path
+            actual_samples = _sample_grid_along_path(ambiguity_map, extent, realized_path)
             if actual_samples.size:
                 high_amb_time_fraction = float(np.mean(np.asarray(actual_samples[: t_plot.size] >= amb90, dtype=float)))
 
@@ -1006,7 +1010,7 @@ def main() -> int:
         artifact = _load_artifact(background_artifact)
         xs = np.asarray(artifact['xs'], dtype=float)
         ys = np.asarray(artifact['ys'], dtype=float)
-        p_map = np.asarray(artifact['P_map'], dtype=float)
+        p_map = np.asarray(artifact['P_conservative_plan_map'], dtype=float)
         geometry = _parse_geometry_json(str(artifact.get('geometry_json', '')))
         extent = _grid_extent(xs, ys)
         background_cfg = _plot_settings_for_run(

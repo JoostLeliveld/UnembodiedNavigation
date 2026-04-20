@@ -77,10 +77,10 @@ class UnicyclePlannerBase:
         visibility_geometry_json='',
         visibility_artifact_path='',
         r_visible_uv=2.5,
-        r_miss_uv=420.0,
+        r_miss_uv=120.0,
         visibility_power=1.0,
-        visibility_trust_low=0.08,
-        visibility_trust_high=0.30,
+        visibility_trust_low=0.15,
+        visibility_trust_high=0.65,
         visibility_sigma_kappa=1.0,
         goal_prior_u_std_start=80.0,
         goal_prior_v_std_start=80.0,
@@ -247,7 +247,7 @@ class UnicyclePlannerBase:
     def predict(self, m, S, u, dt=None):
         step_dt = self.dt if dt is None else float(dt)
         m_next = unicycle_step(m, u, step_dt)
-        F = unicycle_jacobian(m_next, u, step_dt)
+        F = unicycle_jacobian(m, u, step_dt)
         Q = self.process_noise(step_dt)
         S_next = F @ S @ F.T + Q
         return m_next, S_next

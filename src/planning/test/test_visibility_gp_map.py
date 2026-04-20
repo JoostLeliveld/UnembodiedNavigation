@@ -14,6 +14,22 @@ if str(PACKAGE_ROOT) not in sys.path:
 from planning.core.visibility_gp_map import GPVisibilityMapConfig, GPVisibilityMapModel
 
 
+def _write_artifact(tmp_path: Path, xs: np.ndarray, ys: np.ndarray, p_map: np.ndarray) -> Path:
+    artifact_path = tmp_path / 'test_gp.npz'
+    np.savez(
+        artifact_path,
+        xs=xs,
+        ys=ys,
+        P_conservative_plan_map=p_map,
+        P_mean_map=p_map,
+        F_mean_map=np.zeros_like(p_map),
+        F_std_map=np.full_like(p_map, 0.05),
+        camera_pos=np.array([-2.45, -2.45, 2.8], dtype=float),
+        target_height=np.array([0.0], dtype=float),
+    )
+    return artifact_path
+
+
 def test_prob_state_np_matches_casadi_interpolant(tmp_path: Path) -> None:
     pytest.importorskip('casadi')
 
@@ -27,17 +43,7 @@ def test_prob_state_np_matches_casadi_interpolant(tmp_path: Path) -> None:
         ],
         dtype=float,
     )
-    artifact_path = tmp_path / 'test_gp.npz'
-    np.savez(
-        artifact_path,
-        xs=xs,
-        ys=ys,
-        P_map=p_map,
-        P_mean_map=p_map,
-        P_conservative_map=p_map,
-        camera_pos=np.array([-2.45, -2.45, 2.8], dtype=float),
-        target_height=np.array([0.0], dtype=float),
-    )
+    artifact_path = _write_artifact(tmp_path, xs, ys, p_map)
 
     model = GPVisibilityMapModel(GPVisibilityMapConfig(artifact_path=str(artifact_path)))
     prob_state_ca = model.make_prob_state_casadi()
@@ -54,3 +60,31 @@ def test_prob_state_np_matches_casadi_interpolant(tmp_path: Path) -> None:
         p_np = model.prob_state_np(state)
         p_ca = float(prob_state_ca(state))
         assert abs(p_np - p_ca) < 1e-6
+
+
+def test_prob_state_np_matches_grid_values_at_corners_and_centers(tmp_path: Path) -> None:
+    xs = np.array([-1.0, 0.0, 1.0], dtype=float)
+    ys = np.array([-2.0, 0.0, 2.0], dtype=float)
+    p_map = np.array(
+        [
+            [0.10, 0.20, 0.30],
+            [0.40, 0.50, 0.60],
+            [0.70, 0.80, 0.90],
+        ],
+        dtype=float,
+    )
+    model = GPVisibilityMapModel(GPVisibilityMapConfig(artifact_path=str(_write_artifact(tmp_path, xs, ys, p_map))))
+
+    for iy, y in enumerate(ys):
+        for ix, x in enumerate(xs):
+            assert model.prob_state_np(np.array([x, y, 0.0], dtype=float)) == pytest.approx(float(p_map[iy, ix]))
+
+
+def test_prob_state_np_clips_to_grid_boundary(tmp_path: Path) -> None:
+    xs = np.array([0.0, 1.0], dtype=float)
+    ys = np.array([0.0, 1.0], dtype=float)
+    p_map = np.array([[0.2, 0.4], [0.6, 0.8]], dtype=float)
+    model = GPVisibilityMapModel(GPVisibilityMapConfig(artifact_path=str(_write_artifact(tmp_path, xs, ys, p_map))))
+
+    assert model.prob_state_np(np.array([-5.0, -5.0, 0.0], dtype=float)) == pytest.approx(0.2)
+    assert model.prob_state_np(np.array([5.0, 5.0, 0.0], dtype=float)) == pytest.approx(0.8)
