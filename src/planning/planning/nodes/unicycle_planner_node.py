@@ -13,7 +13,7 @@ from rclpy.time import Time
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
-from nav_msgs.msg import Path
+from nav_msgs.msg import Odometry, Path
 from std_msgs.msg import Float64MultiArray, String
 
 from perception.core.detection_diagnostics import (
@@ -61,7 +61,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('v_max', 0.22)
         _declare_if_not('w_min', -1.0)
         _declare_if_not('w_max', 1.0)
-        _declare_if_not('control_weight', 0.1)
+        _declare_if_not('control_weight', 0.0)
         _declare_if_not('seed', 0)
 
         # Process/observation noise
@@ -88,6 +88,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('visibility_power', 1.0)
         _declare_if_not('visibility_trust_low', 0.15)
         _declare_if_not('visibility_trust_high', 0.65)
+        _declare_if_not('visibility_trust_mode', 'smoothstep')
         _declare_if_not('visibility_sigma_kappa', 1.0)
         _declare_if_not('goal_prior_u_std_start', 80.0)
         _declare_if_not('goal_prior_v_std_start', 80.0)
@@ -97,6 +98,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('goal_progress_n_steps', 90)
         _declare_if_not('observation_risk_scale', 1.25)
         _declare_if_not('ambiguity_term_scale', 1.00)
+        _declare_if_not('discount_gamma', 0.98)
         _declare_if_not('visibility_barrier_threshold', 0.0)
         _declare_if_not('visibility_barrier_scale', 10.0)
         _declare_if_not('use_nogo_cost', False)
@@ -118,6 +120,9 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('optimizer_ftol', 1e-6)
         _declare_if_not('optimizer_gtol', 1e-4)
         _declare_if_not('optimizer_warm_start', True)
+        _declare_if_not('optimizer_multistart_seeds', False)
+        _declare_if_not('optimizer_seed_families', '')
+        _declare_if_not('optimizer_multistart_max_seeds', 0)
 
         # Pixel correction params
         _declare_if_not('use_pixel_correction', False)
@@ -127,8 +132,14 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('pixel_correction_approx', 'AUTO')
         _declare_if_not('skip_stale_pixel_correction', True)
         _declare_if_not('use_pixel_heading_correction', True)
+        _declare_if_not('use_odom_heading_correction', True)
+        _declare_if_not('odom_heading_correction_mode', 'kalman')
+        _declare_if_not('odom_heading_timeout_s', 0.75)
+        _declare_if_not('odom_heading_sigma_rad', 0.08)
+        _declare_if_not('odom_yaw_offset_rad', 0.0)
         _declare_if_not('heading_pixel_noise_sigma', 0.0)
         _declare_if_not('pixel_heading_noise_floor_rad', 0.01)
+        _declare_if_not('clamp_pixel_uv_theta_without_yaw', False)
         _declare_if_not('min_state_cov', 1e-6)
         _declare_if_not('debug_runtime', False)
         _declare_if_not('debug_log_period_s', 1.0)
@@ -178,6 +189,7 @@ class UnicyclePlannerNode(Node):
         self.visibility_power = float(self.get_parameter('visibility_power').value)
         self.visibility_trust_low = float(self.get_parameter('visibility_trust_low').value)
         self.visibility_trust_high = float(self.get_parameter('visibility_trust_high').value)
+        self.visibility_trust_mode = str(self.get_parameter('visibility_trust_mode').value)
         self.visibility_sigma_kappa = float(self.get_parameter('visibility_sigma_kappa').value)
         self.goal_prior_u_std_start = float(self.get_parameter('goal_prior_u_std_start').value)
         self.goal_prior_v_std_start = float(self.get_parameter('goal_prior_v_std_start').value)
@@ -187,6 +199,7 @@ class UnicyclePlannerNode(Node):
         self.goal_progress_n_steps = int(self.get_parameter('goal_progress_n_steps').value)
         self.observation_risk_scale = float(self.get_parameter('observation_risk_scale').value)
         self.ambiguity_term_scale = float(self.get_parameter('ambiguity_term_scale').value)
+        self.discount_gamma = float(self.get_parameter('discount_gamma').value)
         self.visibility_barrier_threshold = float(self.get_parameter('visibility_barrier_threshold').value)
         self.visibility_barrier_scale = float(self.get_parameter('visibility_barrier_scale').value)
         self.use_nogo_cost = _as_bool(self.get_parameter('use_nogo_cost').value)
@@ -207,6 +220,9 @@ class UnicyclePlannerNode(Node):
         self.optimizer_ftol = float(self.get_parameter('optimizer_ftol').value)
         self.optimizer_gtol = float(self.get_parameter('optimizer_gtol').value)
         self.optimizer_warm_start = _as_bool(self.get_parameter('optimizer_warm_start').value)
+        self.optimizer_multistart_seeds = _as_bool(self.get_parameter('optimizer_multistart_seeds').value)
+        self.optimizer_seed_families = str(self.get_parameter('optimizer_seed_families').value)
+        self.optimizer_multistart_max_seeds = int(self.get_parameter('optimizer_multistart_max_seeds').value)
 
         self.use_pixel_correction = _as_bool(self.get_parameter('use_pixel_correction').value)
         self.pixel_topic = self.get_parameter('pixel_topic').value
@@ -225,11 +241,25 @@ class UnicyclePlannerNode(Node):
         self.use_pixel_heading_correction = _as_bool(
             self.get_parameter('use_pixel_heading_correction').value
         )
+        self.use_odom_heading_correction = _as_bool(
+            self.get_parameter('use_odom_heading_correction').value
+        )
+        self.odom_heading_correction_mode = str(
+            self.get_parameter('odom_heading_correction_mode').value
+        ).strip().lower()
+        if self.odom_heading_correction_mode not in ('kalman', 'overwrite'):
+            raise RuntimeError("odom_heading_correction_mode must be one of: kalman, overwrite")
+        self.odom_heading_timeout_s = float(self.get_parameter('odom_heading_timeout_s').value)
+        self.odom_heading_sigma_rad = float(self.get_parameter('odom_heading_sigma_rad').value)
+        self.odom_yaw_offset_rad = float(self.get_parameter('odom_yaw_offset_rad').value)
         self.heading_pixel_noise_sigma = float(
             self.get_parameter('heading_pixel_noise_sigma').value
         )
         self.pixel_heading_noise_floor_rad = float(
             self.get_parameter('pixel_heading_noise_floor_rad').value
+        )
+        self.clamp_pixel_uv_theta_without_yaw = _as_bool(
+            self.get_parameter('clamp_pixel_uv_theta_without_yaw').value
         )
         self.min_state_cov = float(self.get_parameter('min_state_cov').value)
         self.debug_runtime = _as_bool(self.get_parameter('debug_runtime').value)
@@ -269,6 +299,9 @@ class UnicyclePlannerNode(Node):
             optimizer_gtol=self.optimizer_gtol,
             optimizer_warm_start=self.optimizer_warm_start,
             optimizer_warm_start_shift_steps=warm_start_shift_steps,
+            optimizer_multistart_seeds=self.optimizer_multistart_seeds,
+            optimizer_seed_families=self.optimizer_seed_families,
+            optimizer_multistart_max_seeds=self.optimizer_multistart_max_seeds,
             approx_method=self.approx_method,
             use_obs_risk=self.use_obs_risk,
             use_ambiguity=self.use_ambiguity,
@@ -285,6 +318,7 @@ class UnicyclePlannerNode(Node):
             visibility_power=self.visibility_power,
             visibility_trust_low=self.visibility_trust_low,
             visibility_trust_high=self.visibility_trust_high,
+            visibility_trust_mode=self.visibility_trust_mode,
             visibility_sigma_kappa=self.visibility_sigma_kappa,
             goal_prior_u_std_start=self.goal_prior_u_std_start,
             goal_prior_v_std_start=self.goal_prior_v_std_start,
@@ -294,6 +328,7 @@ class UnicyclePlannerNode(Node):
             goal_progress_n_steps=self.goal_progress_n_steps,
             observation_risk_scale=self.observation_risk_scale,
             ambiguity_term_scale=self.ambiguity_term_scale,
+            discount_gamma=self.discount_gamma,
             visibility_barrier_threshold=self.visibility_barrier_threshold,
             visibility_barrier_scale=self.visibility_barrier_scale,
             use_nogo_cost=self.use_nogo_cost,
@@ -338,6 +373,10 @@ class UnicyclePlannerNode(Node):
             Twist, '/cmd_vel', self._cmd_cb, qos_profile=state_qos,
             callback_group=self._io_group
         )
+        self.odom_sub = self.create_subscription(
+            Odometry, '/odom', self._odom_cb, qos_profile=state_qos,
+            callback_group=self._io_group
+        )
 
         # Publishers
         path_qos = QoSProfile(depth=1)
@@ -350,6 +389,9 @@ class UnicyclePlannerNode(Node):
         self.metrics_pub = self.create_publisher(Float64MultiArray, '/efe/metrics', 10)
         self.planner_diag_pub = self.create_publisher(Float64MultiArray, '/planner/diagnostics', 10)
         self.planner_diag_text_pub = self.create_publisher(String, '/planner/diagnostics_text', 10)
+        self.pixel_correction_diag_pub = self.create_publisher(
+            Float64MultiArray, '/planner/pixel_correction_diagnostics', 10
+        )
 
         # State
         self.state_msg = None
@@ -359,6 +401,8 @@ class UnicyclePlannerNode(Node):
         self.pixel_stamp = None
         self.pixel_yaw_meas = None
         self.pixel_heading_sigma = math.nan
+        self.odom_yaw_meas = None
+        self.odom_stamp = None
         self._latest_detection_diag = None
         self._last_correction_log = 0.0
         self._last_correction_stamp = None
@@ -399,6 +443,9 @@ class UnicyclePlannerNode(Node):
             f"use_pixel_correction={self.use_pixel_correction}, "
             f"pixel_correction_approx={self.pixel_correction_approx}, "
             f"use_pixel_heading_correction={self.use_pixel_heading_correction}, "
+            f"use_odom_heading_correction={self.use_odom_heading_correction}, "
+            f"odom_heading_correction_mode={self.odom_heading_correction_mode}, "
+            f"clamp_pixel_uv_theta_without_yaw={self.clamp_pixel_uv_theta_without_yaw}, "
             f"debug_runtime={self.debug_runtime})"
         )
 
@@ -488,6 +535,29 @@ class UnicyclePlannerNode(Node):
         with self._data_lock:
             self.last_cmd = np.array([msg.linear.x, msg.angular.z], dtype=float)
 
+    @staticmethod
+    def _yaw_from_quaternion(q) -> float:
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        return math.atan2(siny_cosp, cosy_cosp)
+
+    def _odom_cb(self, msg: Odometry):
+        yaw = self._yaw_from_quaternion(msg.pose.pose.orientation)
+        with self._data_lock:
+            self.odom_yaw_meas = wrap_angle(float(yaw + self.odom_yaw_offset_rad))
+            self.odom_stamp = msg.header.stamp
+
+    def _fresh_odom_heading_locked(self, ref_stamp) -> tuple[float | None, float]:
+        if self.odom_yaw_meas is None or self.odom_stamp is None:
+            return None, math.nan
+        try:
+            age = abs(self._stamp_to_float(ref_stamp) - self._stamp_to_float(self.odom_stamp))
+        except (AttributeError, TypeError, ValueError):
+            return None, math.nan
+        if self.odom_heading_timeout_s > 0.0 and age > self.odom_heading_timeout_s:
+            return None, age
+        return float(self.odom_yaw_meas), float(age)
+
     def _heading_sigma_from_diag(self, diag) -> float:
         sigma_floor = float(max(self.pixel_heading_noise_floor_rad, 1e-6))
         if not diag:
@@ -500,6 +570,56 @@ class UnicyclePlannerNode(Node):
             return sigma_floor
         sigma_sep = math.sqrt(2.0) * max(float(self.heading_pixel_noise_sigma), 1e-6) / max(sep, 1.0)
         return float(max(sigma_floor, sigma_sep))
+
+    @staticmethod
+    def _fuse_heading_measurement(m, S, yaw_meas: float, yaw_sigma: float):
+        m = np.asarray(m, dtype=float).copy()
+        S = np.asarray(S, dtype=float).copy()
+        if (
+            m.shape[0] < 3
+            or S.shape[0] < 3
+            or S.shape[1] < 3
+            or not math.isfinite(float(yaw_meas))
+            or not math.isfinite(float(yaw_sigma))
+            or float(yaw_sigma) <= 0.0
+        ):
+            return m, S, False, math.nan, math.nan
+        P_theta = S[:, 2].copy()
+        innov_theta = wrap_angle(float(yaw_meas) - float(m[2]))
+        S_theta = float(S[2, 2] + float(yaw_sigma) ** 2)
+        if S_theta <= 1e-12:
+            return m, S, False, innov_theta, math.nan
+        K_theta = P_theta / S_theta
+        m = m + K_theta * innov_theta
+        m[2] = wrap_angle(m[2])
+        S = S - np.outer(P_theta, P_theta) / S_theta
+        S = (S + S.T) / 2.0
+        return m, S, True, innov_theta, float(K_theta[2]) if K_theta.size >= 3 else math.nan
+
+    @staticmethod
+    def _overwrite_heading_measurement(m, S, yaw_meas: float, yaw_sigma: float):
+        m = np.asarray(m, dtype=float).copy()
+        S = np.asarray(S, dtype=float).copy()
+        if (
+            m.shape[0] < 3
+            or S.shape[0] < 3
+            or S.shape[1] < 3
+            or not math.isfinite(float(yaw_meas))
+        ):
+            return m, S, False, math.nan, math.nan
+        innov_theta = wrap_angle(float(yaw_meas) - float(m[2]))
+        m[2] = wrap_angle(float(yaw_meas))
+        if math.isfinite(float(yaw_sigma)) and float(yaw_sigma) > 0.0:
+            S[2, :] = 0.0
+            S[:, 2] = 0.0
+            S[2, 2] = float(yaw_sigma) ** 2
+        S = (S + S.T) / 2.0
+        return m, S, True, innov_theta, 1.0
+
+    def _apply_heading_measurement(self, m, S, yaw_meas: float, yaw_sigma: float, *, source_code: float):
+        if source_code == 2.0 and self.odom_heading_correction_mode == 'overwrite':
+            return self._overwrite_heading_measurement(m, S, yaw_meas, yaw_sigma)
+        return self._fuse_heading_measurement(m, S, yaw_meas, yaw_sigma)
 
     @staticmethod
     def _stamp_to_float(stamp) -> float:
@@ -588,10 +708,13 @@ class UnicyclePlannerNode(Node):
             age = (now - Time.from_msg(stamp_msg)).nanoseconds * 1e-9
         except (AttributeError, TypeError, ValueError):
             age = 0.0
-        if self.skip_stale_pixel_correction and age > self.pixel_timeout_s:
+        future_tolerance_s = max(float(self.pixel_timeout_s), 0.25)
+        if self.skip_stale_pixel_correction and (
+            age > self.pixel_timeout_s or age < -future_tolerance_s
+        ):
             now_wall = time.monotonic()
             if now_wall - self._last_stale_log > 2.0:
-                self.get_logger().warn(f"Skipping stale pixel measurement (age {age:.2f}s)")
+                self.get_logger().warn(f"Skipping time-inconsistent pixel measurement (age {age:.2f}s)")
                 self._last_stale_log = now_wall
             return
 
@@ -626,6 +749,16 @@ class UnicyclePlannerNode(Node):
                 dt_s = self.dt
         except (AttributeError, TypeError, ValueError):
             dt_s = self.dt
+        max_correction_dt_s = max(2.0 * float(self.pixel_timeout_s), 4.0 * float(self.dt), 0.5)
+        if dt_s > max_correction_dt_s:
+            now_wall = time.monotonic()
+            if now_wall - self._last_stale_log > 2.0:
+                self.get_logger().warn(
+                    f"Skipping pixel correction with implausible dt={dt_s:.2f}s "
+                    f"(max {max_correction_dt_s:.2f}s)"
+                )
+                self._last_stale_log = now_wall
+            return
 
         with self._data_lock:
             belief_m = None if self.belief_m is None else self.belief_m.copy()
@@ -634,6 +767,16 @@ class UnicyclePlannerNode(Node):
             meas = None if self.pixel_meas is None else self.pixel_meas.copy()
             yaw_meas = self.pixel_yaw_meas
             yaw_sigma = float(self.pixel_heading_sigma)
+            yaw_meas_source = 1.0 if yaw_meas is not None and math.isfinite(float(yaw_meas)) else 0.0
+            if (
+                yaw_meas_source <= 0.0
+                and self.use_odom_heading_correction
+            ):
+                odom_yaw, _odom_age = self._fresh_odom_heading_locked(stamp_msg)
+                if odom_yaw is not None:
+                    yaw_meas = float(odom_yaw)
+                    yaw_sigma = float(max(self.odom_heading_sigma_rad, self.pixel_heading_noise_floor_rad, 1e-6))
+                    yaw_meas_source = 2.0
         if belief_m is None or belief_S is None or meas is None:
             return
 
@@ -679,25 +822,39 @@ class UnicyclePlannerNode(Node):
         K = Gamma @ Sigma_inv
         next_m = m_pred + gain_scale * (K @ innov)
         next_m[2] = wrap_angle(next_m[2])
+        xy_update_norm_m = float(np.linalg.norm(np.asarray(next_m[:2] - m_pred[:2], dtype=float)))
+        theta_update_from_uv_rad = float(wrap_angle(float(next_m[2]) - float(m_pred[2])))
+        if self.clamp_pixel_uv_theta_without_yaw and yaw_meas_source != 1.0:
+            next_m[2] = float(m_pred[2])
+            theta_update_from_uv_rad = 0.0
+        yaw_correction_applied = False
+        innov_theta = math.nan
+        k_theta_theta = math.nan
         next_S = S_eff - gain_scale * (Gamma @ Sigma_inv @ Gamma.T)
         next_S = (next_S + next_S.T) / 2.0
+        if self.clamp_pixel_uv_theta_without_yaw and yaw_meas_source != 1.0 and next_S.shape[0] >= 3:
+            next_S[2, :] = S_pred[2, :]
+            next_S[:, 2] = S_pred[:, 2]
+            next_S = (next_S + next_S.T) / 2.0
         if (
-            self.use_pixel_heading_correction
+            (
+                (yaw_meas_source == 1.0 and self.use_pixel_heading_correction)
+                or (yaw_meas_source == 2.0 and self.use_odom_heading_correction)
+            )
             and yaw_meas is not None
             and math.isfinite(float(yaw_meas))
             and math.isfinite(yaw_sigma)
             and yaw_sigma > 0.0
             and next_S.shape[0] >= 3
         ):
-            P_theta = next_S[:, 2].copy()
-            innov_theta = wrap_angle(float(yaw_meas) - float(next_m[2]))
-            S_theta = float(next_S[2, 2] + yaw_sigma ** 2)
-            if S_theta > 1e-12:
-                K_theta = P_theta / S_theta
-                next_m = next_m + K_theta * innov_theta
-                next_m[2] = wrap_angle(next_m[2])
-                next_S = next_S - np.outer(P_theta, P_theta) / S_theta
-                next_S = (next_S + next_S.T) / 2.0
+            next_m, next_S, yaw_correction_applied, innov_theta, k_theta_theta = self._apply_heading_measurement(
+                next_m,
+                next_S,
+                float(yaw_meas),
+                float(yaw_sigma),
+                source_code=float(yaw_meas_source),
+            )
+        theta_update_total_rad = float(wrap_angle(float(next_m[2]) - float(m_pred[2])))
         if self.min_state_cov > 0.0:
             for i in range(min(3, next_S.shape[0])):
                 if next_S[i, i] < self.min_state_cov:
@@ -707,6 +864,41 @@ class UnicyclePlannerNode(Node):
             self.belief_S = next_S
             self.belief_stamp = stamp_msg
             self._last_correction_stamp = stamp_msg
+
+        diag_msg = Float64MultiArray()
+        r_eff = np.asarray(R_eff, dtype=float)
+        diag_msg.data = [
+            float(self._stamp_to_float(stamp_msg)),
+            1.0,
+            float(age),
+            float(dt_s),
+            float(p_vis),
+            float(gain_scale),
+            float(innov[0]) if innov.size > 0 else math.nan,
+            float(innov[1]) if innov.size > 1 else math.nan,
+            float(xy_update_norm_m),
+            float(theta_update_from_uv_rad),
+            1.0 if yaw_correction_applied else 0.0,
+            float(innov_theta),
+            float(k_theta_theta),
+            float(theta_update_total_rad),
+            float(m_pred[0]),
+            float(m_pred[1]),
+            float(m_pred[2]),
+            float(next_m[0]),
+            float(next_m[1]),
+            float(next_m[2]),
+            float(meas[0]) if meas.size > 0 else math.nan,
+            float(meas[1]) if meas.size > 1 else math.nan,
+            float(mu_y[0]) if mu_y.size > 0 else math.nan,
+            float(mu_y[1]) if mu_y.size > 1 else math.nan,
+            float(r_eff[0, 0]) if r_eff.ndim == 2 and r_eff.shape[0] > 0 and r_eff.shape[1] > 0 else math.nan,
+            float(r_eff[1, 1]) if r_eff.ndim == 2 and r_eff.shape[0] > 1 and r_eff.shape[1] > 1 else math.nan,
+            float(yaw_meas) if yaw_meas is not None and math.isfinite(float(yaw_meas)) else math.nan,
+            float(yaw_sigma) if math.isfinite(float(yaw_sigma)) else math.nan,
+            float(yaw_meas_source),
+        ]
+        self.pixel_correction_diag_pub.publish(diag_msg)
 
         now_wall = time.monotonic()
         if self.debug_runtime and (now_wall - self._last_correction_log > 2.0):
@@ -746,21 +938,33 @@ class UnicyclePlannerNode(Node):
                 last_cmd = self.last_cmd.copy()
             if stamp_ref is not None:
                 try:
-                    belief_age_s = max(
-                        (Time.from_msg(now_msg) - Time.from_msg(stamp_ref)).nanoseconds * 1e-9,
-                        0.0,
-                    )
+                    raw_belief_age_s = (Time.from_msg(now_msg) - Time.from_msg(stamp_ref)).nanoseconds * 1e-9
+                    if raw_belief_age_s < -max(float(self.pixel_timeout_s), 0.25):
+                        now_wall = time.monotonic()
+                        if now_wall - self._last_stale_log > 2.0:
+                            self.get_logger().warn(
+                                f"Pixel belief stamp is in the future (age {raw_belief_age_s:.2f}s); "
+                                "resetting belief from state."
+                            )
+                            self._last_stale_log = now_wall
+                        if not self._init_belief_from_state():
+                            return None, None, {}
+                        with self._data_lock:
+                            m0 = self.belief_m.copy()
+                            S0 = self.belief_S.copy()
+                            stamp_ref = self.belief_stamp
+                            last_cmd = self.last_cmd.copy()
+                        belief_age_s = 0.0
+                    else:
+                        belief_age_s = max(raw_belief_age_s, 0.0)
                 except (AttributeError, TypeError, ValueError):
                     belief_age_s = 0.0
             if pixel_stamp_ref is not None:
                 try:
-                    measurement_age = max(
-                        (Time.from_msg(now_msg) - Time.from_msg(pixel_stamp_ref)).nanoseconds * 1e-9,
-                        0.0,
-                    )
+                    raw_measurement_age = (Time.from_msg(now_msg) - Time.from_msg(pixel_stamp_ref)).nanoseconds * 1e-9
                 except (AttributeError, TypeError, ValueError):
-                    measurement_age = math.inf
-                measurement_available = measurement_age <= self.pixel_timeout_s
+                    raw_measurement_age = math.inf
+                measurement_available = 0.0 <= raw_measurement_age <= self.pixel_timeout_s
             if belief_age_s > 0.0:
                 m0, S0 = self.planner.predict(
                     m0, S0, np.asarray(last_cmd, dtype=float), dt=belief_age_s
@@ -769,6 +973,22 @@ class UnicyclePlannerNode(Node):
                     self.belief_m = m0.copy()
                     self.belief_S = S0.copy()
                     self.belief_stamp = now_msg
+            if self.use_odom_heading_correction:
+                with self._data_lock:
+                    odom_yaw, _odom_age = self._fresh_odom_heading_locked(now_msg)
+                if odom_yaw is not None:
+                    m0, S0, applied, _innov_theta, _k_theta = self._apply_heading_measurement(
+                        m0,
+                        S0,
+                        float(odom_yaw),
+                        float(max(self.odom_heading_sigma_rad, self.pixel_heading_noise_floor_rad, 1e-6)),
+                        source_code=2.0,
+                    )
+                    if applied:
+                        with self._data_lock:
+                            self.belief_m = m0.copy()
+                            self.belief_S = S0.copy()
+                            self.belief_stamp = now_msg
             if belief_age_s > self.pixel_timeout_s:
                 now_wall = time.monotonic()
                 if now_wall - self._last_stale_log > 2.0:
@@ -899,6 +1119,11 @@ class UnicyclePlannerNode(Node):
             float(getattr(result, 'min_predicted_obstacle_distance_m', np.nan)),
             1.0 if getattr(result, 'rollout_valid', True) else 0.0,
             1.0 if getattr(result, 'fallback_stop_applied', False) else 0.0,
+            float(getattr(result, 'risk_mean', np.nan)),
+            float(getattr(result, 'risk_cov_trace', np.nan)),
+            float(getattr(result, 'risk_cov_logdet', np.nan)),
+            float(getattr(result, 'delta_risk_visibility', np.nan)),
+            float(getattr(result, 'delta_ambiguity_visibility', np.nan)),
         ]
         self.metrics_pub.publish(metrics_msg)
 
@@ -928,6 +1153,11 @@ class UnicyclePlannerNode(Node):
             float(getattr(result, 'min_predicted_obstacle_distance_m', np.nan)),
             1.0 if getattr(result, 'rollout_valid', True) else 0.0,
             1.0 if getattr(result, 'fallback_stop_applied', False) else 0.0,
+            float(getattr(result, 'risk_mean', np.nan)),
+            float(getattr(result, 'risk_cov_trace', np.nan)),
+            float(getattr(result, 'risk_cov_logdet', np.nan)),
+            float(getattr(result, 'delta_risk_visibility', np.nan)),
+            float(getattr(result, 'delta_ambiguity_visibility', np.nan)),
         ]
         self.planner_diag_pub.publish(diag)
         diag_text = String()

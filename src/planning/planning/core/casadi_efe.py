@@ -32,6 +32,7 @@ class CasadiEfeParams:
     visibility_power: float
     visibility_trust_low: float
     visibility_trust_high: float
+    visibility_trust_mode: str
     visibility_sigma_kappa: float
     goal_prior_u_std_start: float
     goal_prior_v_std_start: float
@@ -56,12 +57,11 @@ def _clip_expr(x, lo, hi):
     return ca.fmin(ca.fmax(x, lo), hi)
 
 
-def _softplus_expr(x):
-    return ca.log(1.0 + ca.exp(x))
-
-
 def make_g_from_homography(H):
-    """Return a CasADi-friendly planar homography observation function."""
+    """
+    Return a CasADi-friendly planar homography observation function.
+    H: (3,3) projective mapping -> returns Function(state(3,) -> uv(2,))
+    """
     _require_casadi()
     H_ca = ca.DM(np.asarray(H, dtype=float))
     state = ca.MX.sym('state', 3)
@@ -159,6 +159,10 @@ def _xy_visibility_sigma_points_ca(mean_xy, cov_xy, kappa=1.0):
 
 
 def expected_visibility_ca(mean, cov, prob_state, *, kappa=1.0, lo=1e-4, hi=1.0 - 1e-4):
+    """
+    Approximate expected visibility via Unscented Transform (Sigma Points).
+    mean: (3,) S: (3,3) -> return p_vis: float (scalar MX)
+    """
     sigma_points_xy, weights = _xy_visibility_sigma_points_ca(mean[:2], cov[:2, :2], kappa=kappa)
     total = 0
     for sigma_xy, weight in zip(sigma_points_xy, weights):
@@ -172,7 +176,14 @@ def _smoothstep_ca(x):
     return x * x * (3.0 - 2.0 * x)
 
 
+def _softplus_expr(x):
+    x = _clip_expr(x, -60.0, 60.0)
+    return ca.log(1.0 + ca.exp(x))
+
+
 def _visibility_effective_score_ca(p_vis, params: CasadiEfeParams):
+    if str(getattr(params, "visibility_trust_mode", "smoothstep")).strip().lower() in ("direct", "identity", "gp"):
+        return _clip_expr(p_vis, 1e-4, 1.0 - 1e-4)
     shaped = _clip_expr(ca.power(p_vis, params.visibility_power), 1e-4, 1.0 - 1e-4)
     lo = max(float(params.visibility_trust_low), 1e-4)
     hi = min(max(float(params.visibility_trust_high), lo + 1e-6), 1.0 - 1e-4)
@@ -181,16 +192,16 @@ def _visibility_effective_score_ca(p_vis, params: CasadiEfeParams):
 
 
 def _blend_observation_covariance_ca(p_vis_eff, params: CasadiEfeParams):
-    visible_std = ca.vertcat(
-        ca.sqrt(ca.fmax(params.R_visible[0, 0], 0.0)),
-        ca.sqrt(ca.fmax(params.R_visible[1, 1], 0.0)),
+    visible_prec = ca.vertcat(
+        1.0 / ca.fmax(params.R_visible[0, 0], 1e-6),
+        1.0 / ca.fmax(params.R_visible[1, 1], 1e-6),
     )
-    miss_std = ca.vertcat(
-        ca.sqrt(ca.fmax(params.R_miss[0, 0], 0.0)),
-        ca.sqrt(ca.fmax(params.R_miss[1, 1], 0.0)),
+    miss_prec = ca.vertcat(
+        1.0 / ca.fmax(params.R_miss[0, 0], 1e-6),
+        1.0 / ca.fmax(params.R_miss[1, 1], 1e-6),
     )
-    plan_std = p_vis_eff * visible_std + (1.0 - p_vis_eff) * miss_std
-    return ca.diag(ca.power(plan_std, 2))
+    blended_prec = p_vis_eff * visible_prec + (1.0 - p_vis_eff) * miss_prec
+    return ca.diag(1.0 / ca.fmax(blended_prec, 1e-9))
 
 
 def goal_obs_cov_ca_for_progress(params: CasadiEfeParams, progress):
@@ -237,6 +248,11 @@ def terminal_progress_penalty_ca(m0, m_terminal, goal_xy, params: CasadiEfeParam
 
 
 def et1_ca(m, S, R_eff, g, dg):
+    """
+    Extended Transform (1st order) linearization.
+    m: (3,) S: (3,3) R_eff: (2,2) g/dg: mapping functions
+    returns: mu_y: (2,) Sigma_y: (2,2) Gamma_xy: (3,2)
+    """
     Jm = dg(m)
     mu = g(m)
     Sigma = ca.mtimes([Jm, S, Jm.T]) + R_eff
@@ -245,7 +261,11 @@ def et1_ca(m, S, R_eff, g, dg):
 
 
 def et2_ca(m, S, R_eff, g, dg, d2g):
-    """Second-order extended transform using CasADi Jacobians and Hessians."""
+    """
+    Second-order extended transform using CasADi Jacobians and Hessians.
+    m: (3,) S: (3,3) R_eff: (2,2) g/dg/d2g: mapping functions
+    returns: mu_y: (2,) Sigma_y: (2,2) Gamma_xy: (3,2)
+    """
     Jm = dg(m)
     mu0 = g(m)
     dim_y = int(mu0.size1())
@@ -267,6 +287,10 @@ def et2_ca(m, S, R_eff, g, dg, d2g):
 
 
 def risk_ca(mu, Sigma, goal_mu, goal_S):
+    """
+    KL-Divergence based instrumental risk cost.
+    mu: (2,) Sigma: (2,2) goal_mu: (2,) goal_S: (2,2)
+    """
     Sigma_pd = _ensure_symmetric_pd(Sigma)
     goal_S_pd = _ensure_symmetric_pd(goal_S)
     diff = goal_mu - mu
@@ -279,6 +303,10 @@ def risk_ca(mu, Sigma, goal_mu, goal_S):
 
 
 def ambiguity_ca(Sigma, Gamma, S):
+    """
+    Expected information gain (epistemic uncertainty reduction).
+    Sigma: (2,2) Gamma: (3,2) S: (3,3)
+    """
     S_pd = _ensure_symmetric_pd(S)
     Sigma_cond = Sigma - ca.mtimes([Gamma.T, ca.solve(S_pd, Gamma)])
     Sigma_cond = _ensure_symmetric_pd(Sigma_cond)
@@ -304,6 +332,10 @@ def visibility_aware_unicycle_efe_ca(
     nogo_cost=None,
     collision_signed_distance=None,
 ):
+    """
+    Core Expected Free Energy functional for a unicycle agent.
+    Iteratively propagates Gaussian state (m, S) over params.time_horizon.
+    """
     m = m0
     S = S0
     total_risk = 0

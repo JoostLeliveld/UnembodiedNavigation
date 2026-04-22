@@ -33,6 +33,7 @@ PAPER_VISIBILITY_DEFAULTS = {
     'visibility_power': 1.0,
     'visibility_trust_low': 0.15,
     'visibility_trust_high': 0.65,
+    'visibility_trust_mode': 'smoothstep',
     'visibility_sigma_kappa': 1.0,
 }
 

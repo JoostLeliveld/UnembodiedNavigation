@@ -27,18 +27,18 @@ from common import (
 )
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-for rel in ('src/planning',):
-    path = str((REPO_ROOT / rel).resolve())
-    if path not in __import__('sys').path:
-        __import__('sys').path.insert(0, path)
+def _clip_prob(p: np.ndarray | float, eps: float) -> np.ndarray | float:
+    return np.clip(p, eps, 1.0 - eps)
 
-from planning.core.gp_visibility_helpers import (
-    SimpleRBFGP,
-    clip_prob as _clip_prob,
-    logit as _logit,
-    sigmoid as _sigmoid,
-)
+def _sigmoid(x):
+    arr = np.asarray(x, dtype=float)
+    arr = np.clip(arr, -60.0, 60.0)
+    return 1.0 / (1.0 + np.exp(-arr))
+
+def _logit(p):
+    arr = np.asarray(p, dtype=float)
+    arr = np.clip(arr, 1e-6, 1.0 - 1e-6)
+    return np.log(arr / (1.0 - arr))
 
 
 GP_METHOD_IDS = tuple(method for method in ACTIVE_METHOD_IDS if method != 'visibility_unaware_baseline')
@@ -47,10 +47,7 @@ GP_METHOD_IDS = tuple(method for method in ACTIVE_METHOD_IDS if method != 'visib
 def _load_json(path: Path) -> dict:
     if not path.is_file():
         return {}
-    try:
-        payload = json.loads(path.read_text(encoding='utf-8'))
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        return {}
+    payload = json.loads(path.read_text(encoding='utf-8'))
     return payload if isinstance(payload, dict) else {}
 
 
@@ -100,8 +97,10 @@ def _aggregate_targets(rows: list[dict[str, str]], target_key: str) -> tuple[np.
             continue
         x = parse_float(row.get('x', ''), math.nan)
         y = parse_float(row.get('y', ''), math.nan)
+        if not (math.isfinite(x) and math.isfinite(y)):
+            raise ValueError(f"Missing x or y in row: {row}")
         val = parse_float(raw_value, math.nan)
-        if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(val)):
+        if not math.isfinite(val):
             continue
         key = (round(float(x), 6), round(float(y), 6))
         grouped.setdefault(key, []).append(float(val))
@@ -127,15 +126,20 @@ def _fit_gp_artifact(
     beta: float,
 ) -> dict[str, np.ndarray]:
     p_train = np.asarray(_clip_prob(p_train, min_prob), dtype=float)
-    gp = SimpleRBFGP(
-        length_scale=float(gp_length_scale),
-        signal_var=1.0,
-        noise_var=float(max(gp_noise_var, 1e-8)),
+    from sklearn.gaussian_process import GaussianProcessRegressor
+    from sklearn.gaussian_process.kernels import RBF
+
+    kernel = 1.0 * RBF(length_scale=float(gp_length_scale))
+    gp = GaussianProcessRegressor(
+        kernel=kernel,
+        alpha=float(max(gp_noise_var, 1e-8)),
+        normalize_y=True,
+        optimizer=None,
     ).fit(X_train, _logit(p_train))
 
     Xg, Yg = np.meshgrid(xs, ys)
     XY = np.column_stack([Xg.ravel(), Yg.ravel()])
-    mu_f, sigma_f = gp.predict_mean_std(XY)
+    mu_f, sigma_f = gp.predict(XY, return_std=True)
     p_mean = _sigmoid(mu_f)
     p_cons = _sigmoid(mu_f - float(beta) * sigma_f)
     return {
@@ -152,20 +156,26 @@ def _fit_gp_artifact(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Fit planner-compatible GP artifacts from gp_targets.csv.')
-    parser.add_argument('--gp-targets', default=str(CURRENT_TARGETS_DIR / 'gp_targets.csv'))
+    parser.add_argument('--gp-targets', default=str(CURRENT_TARGETS_DIR / 'gp_targets_xy_aggregated.csv'))
     parser.add_argument('--capture-manifest', default=str(CURRENT_CAPTURE_DIR / 'capture_manifest.json'))
     parser.add_argument('--out', default=str(CURRENT_GP_DIR))
-    parser.add_argument('--grid-nx', type=int, default=0)
-    parser.add_argument('--grid-ny', type=int, default=0)
-    parser.add_argument('--gp-length-scale', type=float, default=1.0)
-    parser.add_argument('--gp-noise-var', type=float, default=0.05)
-    parser.add_argument('--beta', type=float, default=1.0)
+    parser.add_argument('--grid-nx', type=int, default=120)
+    parser.add_argument('--grid-ny', type=int, default=120)
+    parser.add_argument('--gp-length-scale', type=float, default=1.35)
+    parser.add_argument('--gp-noise-var', type=float, default=0.12)
+    parser.add_argument('--beta', type=float, default=0.75)
     parser.add_argument('--min-prob', type=float, default=1e-4)
+    parser.add_argument('--max-train-points', type=int, default=0, help='Optional deterministic xy-point subsample for low-data GP diagnostics.')
+    parser.add_argument('--subsample-seed', type=int, default=0)
     args = parser.parse_args()
 
     gp_targets_path = Path(args.gp_targets).expanduser().resolve()
     if not gp_targets_path.is_file():
-        raise RuntimeError(f'GP targets CSV not found: {gp_targets_path}')
+        legacy_path = (CURRENT_TARGETS_DIR / 'gp_targets.csv').resolve()
+        if gp_targets_path == (CURRENT_TARGETS_DIR / 'gp_targets_xy_aggregated.csv').resolve() and legacy_path.is_file():
+            gp_targets_path = legacy_path
+        else:
+            raise RuntimeError(f'GP targets CSV not found: {gp_targets_path}')
 
     capture_manifest_path = Path(args.capture_manifest).expanduser().resolve()
     capture_manifest = _load_json(capture_manifest_path)
@@ -183,6 +193,11 @@ def main() -> int:
 
     for method_id in GP_METHOD_IDS:
         X_train, p_train = _aggregate_targets(rows, method_id)
+        if int(args.max_train_points) > 0 and X_train.shape[0] > int(args.max_train_points):
+            rng = np.random.default_rng(int(args.subsample_seed))
+            keep = np.sort(rng.choice(X_train.shape[0], size=int(args.max_train_points), replace=False))
+            X_train = X_train[keep]
+            p_train = p_train[keep]
         available = bool(X_train.shape[0] >= 4)
         artifact_path = output_dir / f'{method_id}_gp.npz'
         if available:
@@ -215,6 +230,8 @@ def main() -> int:
                 'gp_noise_var': np.asarray([float(args.gp_noise_var)], dtype=float),
                 'beta': np.asarray([float(args.beta)], dtype=float),
                 'min_prob': np.asarray([float(args.min_prob)], dtype=float),
+                'max_train_points': np.asarray([int(args.max_train_points)], dtype=np.int32),
+                'subsample_seed': np.asarray([int(args.subsample_seed)], dtype=np.int32),
             }
             np.savez_compressed(artifact_path, **fit, **metadata)
             fitted_methods.append(method_id)
@@ -249,10 +266,13 @@ def main() -> int:
         'gp_noise_var': float(args.gp_noise_var),
         'beta': float(args.beta),
         'min_prob': float(args.min_prob),
+        'max_train_points': int(args.max_train_points),
+        'subsample_seed': int(args.subsample_seed),
         'available_methods': fitted_methods,
         'missing_methods': [method for method in GP_METHOD_IDS if method not in fitted_methods],
         'notes': [
-            'This shared-stage fitter scans gp_targets.csv and fits only target columns that are already populated.',
+            'This shared-stage fitter scans the heading-aggregated GP target table and fits only target columns that are already populated.',
+            'If gp_targets_xy_aggregated.csv is absent, the fitter falls back to gp_targets.csv and still averages repeated (x, y) rows internally.',
             'GP artifacts are planner-compatible via xs, ys, and P_conservative_plan_map. Extra metadata is stored for plotting and reporting.',
             'Strict schema cutover: legacy artifacts with P_map are no longer accepted by the planner or plotting scripts.',
         ],

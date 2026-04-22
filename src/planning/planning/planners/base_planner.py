@@ -8,7 +8,7 @@ import numpy as np
 from scipy.optimize import minimize
 
 from planning.core.dynamics import unicycle_step, unicycle_jacobian, unicycle_process_noise
-from planning.core.efe_utils import ET1, ET2, UT, ambiguity, risk
+from planning.core.efe_utils import ET1, ET2, UT, ambiguity, risk_components, wrap_angle
 from planning.core.nogo_cost import NogoCostConfig, NogoZoneCostModel
 from planning.core.visibility_gp_map import GPVisibilityMapConfig, GPVisibilityMapModel
 from unav_common.camera_model import ObliqueCameraModel
@@ -23,6 +23,11 @@ class PlanResult:
     risk_cost: float
     ambiguity_cost: float
     control_cost: float
+    risk_mean: float = 0.0
+    risk_cov_trace: float = 0.0
+    risk_cov_logdet: float = 0.0
+    delta_risk_visibility: float = 0.0
+    delta_ambiguity_visibility: float = 0.0
     visibility_cost: float = 0.0
     obstacle_cost: float = 0.0
     backend: str = "unknown"
@@ -49,10 +54,6 @@ class PlanResult:
 
 class UnicyclePlannerBase:
     """Shared unicycle planner logic. Subclasses define objective specifics."""
-
-    APPROX_METHOD = 'ET1'
-    USE_OBS_RISK = True
-    USE_AMBIGUITY = True
 
     def __init__(
         self,
@@ -90,6 +91,7 @@ class UnicyclePlannerBase:
         visibility_power=1.0,
         visibility_trust_low=0.15,
         visibility_trust_high=0.65,
+        visibility_trust_mode='smoothstep',
         visibility_sigma_kappa=1.0,
         goal_prior_u_std_start=80.0,
         goal_prior_v_std_start=80.0,
@@ -104,6 +106,9 @@ class UnicyclePlannerBase:
         discount_gamma=0.98,
         optimizer_maxfun=500,
         optimizer_ftol=1e-6,
+        optimizer_multistart_seeds=False,
+        optimizer_seed_families='',
+        optimizer_multistart_max_seeds=0,
         use_nogo_cost=False,
         nogo_penalty_type='softplus',
         nogo_weight=0.0,
@@ -140,6 +145,9 @@ class UnicyclePlannerBase:
         self.visibility_power = float(max(visibility_power, 1e-6))
         self.visibility_trust_low = float(np.clip(visibility_trust_low, 0.0, 1.0))
         self.visibility_trust_high = float(np.clip(visibility_trust_high, 0.0, 1.0))
+        self.visibility_trust_mode = str(visibility_trust_mode or 'smoothstep').strip().lower()
+        if self.visibility_trust_mode not in ('smoothstep', 'direct', 'identity', 'gp'):
+            raise ValueError("visibility_trust_mode must be 'smoothstep' or 'direct'")
         if self.visibility_trust_high < self.visibility_trust_low:
             self.visibility_trust_high = self.visibility_trust_low
         self.visibility_sigma_kappa = float(max(visibility_sigma_kappa, 1e-6))
@@ -159,19 +167,19 @@ class UnicyclePlannerBase:
         self.invalid_rollout_barrier_cost = float(max(invalid_rollout_barrier_cost, 1.0))
 
         if approx_method is None:
-            self.approx_method = self.APPROX_METHOD
+            self.approx_method = 'ET1'
         else:
             self.approx_method = str(approx_method).upper()
         if self.approx_method not in ('ET1', 'ET2'):
             raise ValueError("approx_method must be 'ET1' or 'ET2'")
 
         if use_obs_risk is None:
-            self.use_obs_risk = bool(self.USE_OBS_RISK)
+            self.use_obs_risk = True
         else:
             self.use_obs_risk = bool(use_obs_risk)
 
         if use_ambiguity is None:
-            self.use_ambiguity = bool(self.USE_AMBIGUITY)
+            self.use_ambiguity = True
         else:
             self.use_ambiguity = bool(use_ambiguity)
 
@@ -181,6 +189,9 @@ class UnicyclePlannerBase:
         self.optimizer_warm_start_shift_steps = int(max(optimizer_warm_start_shift_steps, 1))
         self.optimizer_maxfun = int(max(optimizer_maxfun, 1))
         self.optimizer_ftol = float(max(optimizer_ftol, 1e-12))
+        self.optimizer_multistart_seeds = bool(optimizer_multistart_seeds)
+        self.optimizer_seed_families = str(optimizer_seed_families or '').strip()
+        self.optimizer_multistart_max_seeds = int(max(optimizer_multistart_max_seeds, 0))
 
         self.rng = np.random.default_rng(int(seed))
 
@@ -360,6 +371,8 @@ class UnicyclePlannerBase:
 
     def _visibility_effective_score(self, p_vis):
         p_vis = float(np.clip(p_vis, self._visibility_min_prob, 1.0 - self._visibility_min_prob))
+        if self.visibility_trust_mode in ('direct', 'identity', 'gp'):
+            return p_vis
         shaped = float(np.clip(p_vis ** self.visibility_power, self._visibility_min_prob, 1.0 - self._visibility_min_prob))
         lo = float(np.clip(self.visibility_trust_low, self._visibility_min_prob, 1.0 - self._visibility_min_prob))
         hi = float(np.clip(self.visibility_trust_high, lo + 1e-6, 1.0 - self._visibility_min_prob))
@@ -369,10 +382,13 @@ class UnicyclePlannerBase:
 
     def _blend_observation_covariance(self, trust):
         trust = float(np.clip(trust, self._visibility_min_prob, 1.0 - self._visibility_min_prob))
-        visible_std = np.sqrt(np.maximum(np.diag(self.R_visible), 0.0))
-        miss_std = np.sqrt(np.maximum(np.diag(self.R_miss), 0.0))
-        plan_std = trust * visible_std + (1.0 - trust) * miss_std
-        return np.diag(np.square(plan_std)).astype(float)
+        # Precision Blending: var = 1 / (trust/var_vis + (1-trust)/var_miss)
+        # This makes R much more responsive to visibility improvements.
+        visible_prec = 1.0 / np.maximum(np.diag(self.R_visible), 1e-6)
+        miss_prec = 1.0 / np.maximum(np.diag(self.R_miss), 1e-6)
+        blended_prec = trust * visible_prec + (1.0 - trust) * miss_prec
+        plan_var = 1.0 / np.maximum(blended_prec, 1e-9)
+        return np.diag(plan_var).astype(float)
 
     def goal_obs_cov_for_progress(self, progress):
         progress_fast = float(np.clip(progress, 0.0, 1.0)) ** self.goal_tightening_power
@@ -382,6 +398,10 @@ class UnicyclePlannerBase:
         return np.diag([sigma_u ** 2, sigma_v ** 2]).astype(float)
 
     def planning_visibility_diagnostics(self, m, S):
+        # NOTE:
+        # This function is planner-facing only.
+        # It defines predictive observability/trust for route evaluation.
+        # It must not be used as the sole source of measurement-update trust.
         p_vis = self.visibility_probability_belief(m, S)
         p_vis_eff = self._visibility_effective_score(p_vis)
         if (not self.use_visibility_model) or (self.visibility_model is None):
@@ -514,6 +534,71 @@ class UnicyclePlannerBase:
             use_ambiguity_term,
         )
 
+    def evaluate_rollout_controls(self, m0, S0, goal_xy, controls, *, progress_index=0.0):
+        """Evaluate one fixed control rollout using the same accounting as planner selection."""
+        (
+            goal_state,
+            goal_obs,
+            goal_obs_cov,
+            _use_observation_risk,
+            _use_ambiguity_term,
+        ) = self._resolve_plan_problem(m0, goal_xy)
+        controls = np.asarray(controls, dtype=float).reshape(self.horizon, 2)
+        total_cost, metrics = self._evaluate_controls(
+            controls.reshape(-1),
+            np.asarray(m0, dtype=float),
+            np.asarray(S0, dtype=float),
+            goal_state,
+            goal_obs,
+            goal_obs_cov,
+            True,
+            progress_index=float(max(progress_index, 0.0)),
+        )
+        states = rollout_unicycle(np.asarray(m0, dtype=float), controls, self.dt)
+        plan_diag = self._trajectory_plan_diagnostics(m0, S0, controls, goal_xy)
+
+        p_vis_values = []
+        p_vis_eff_values = []
+        r_u_values = []
+        r_v_values = []
+        m = np.asarray(m0, dtype=float).copy()
+        S = np.asarray(S0, dtype=float).copy()
+        for u in controls:
+            m, S = self.predict(m, S, u)
+            vis_diag = self.planning_visibility_diagnostics(m, S)
+            p_vis_values.append(float(vis_diag['p_vis']))
+            p_vis_eff_values.append(float(vis_diag['p_vis_eff']))
+            r_u_values.append(float(vis_diag['r_plan_u_std']))
+            r_v_values.append(float(vis_diag['r_plan_v_std']))
+
+        return {
+            'controls': controls,
+            'states': states,
+            'total_cost': float(total_cost),
+            'risk_cost': float(metrics.get('risk_cost', math.nan)),
+            'ambiguity_cost': float(metrics.get('ambiguity_cost', math.nan)),
+            'control_cost': float(metrics.get('control_cost', math.nan)),
+            'visibility_cost': float(metrics.get('visibility_cost', 0.0)),
+            'obstacle_cost': float(metrics.get('obstacle_cost', 0.0)),
+            'risk_mean': float(metrics.get('risk_mean', 0.0)),
+            'risk_cov_trace': float(metrics.get('risk_cov_trace', 0.0)),
+            'risk_cov_logdet': float(metrics.get('risk_cov_logdet', 0.0)),
+            'delta_risk_visibility': float(metrics.get('delta_risk_visibility', 0.0)),
+            'delta_ambiguity_visibility': float(metrics.get('delta_ambiguity_visibility', 0.0)),
+            'terminal_goal_distance_pred': float(plan_diag['terminal_goal_distance_pred']),
+            'terminal_goal_progress_m': float(plan_diag['terminal_goal_progress_m']),
+            'fraction_horizon_low_pvis': float(plan_diag['fraction_horizon_low_pvis']),
+            'fraction_horizon_high_ambiguity': float(plan_diag['fraction_horizon_high_ambiguity']),
+            'min_predicted_obstacle_distance_m': float(plan_diag['min_predicted_obstacle_distance_m']),
+            'rollout_valid': bool(plan_diag['rollout_valid']),
+            'fallback_stop_applied': not bool(plan_diag['rollout_valid']),
+            'invalid_reason': str(plan_diag['invalid_reason']),
+            'mean_p_vis_plan': float(np.mean(p_vis_values)) if p_vis_values else math.nan,
+            'mean_p_vis_plan_eff': float(np.mean(p_vis_eff_values)) if p_vis_eff_values else math.nan,
+            'mean_r_plan_u_std': float(np.mean(r_u_values)) if r_u_values else math.nan,
+            'mean_r_plan_v_std': float(np.mean(r_v_values)) if r_v_values else math.nan,
+        }
+
     def _nominal_controls_flat(self):
         return np.zeros(self.horizon * 2, dtype=float)
 
@@ -536,6 +621,119 @@ class UnicyclePlannerBase:
             return self._shift_controls_flat(self.prev_controls_flat)
         return self._nominal_controls_flat()
 
+    def _phase_controls_flat(self, v, w_first, w_second, split_fraction):
+        split = int(np.clip(round(float(split_fraction) * self.horizon), 1, max(self.horizon - 1, 1)))
+        controls = np.column_stack([
+            np.full(self.horizon, float(v), dtype=float),
+            np.full(self.horizon, float(w_second), dtype=float),
+        ])
+        controls[:split, 1] = float(w_first)
+        return controls.reshape(-1)
+
+    def _simulate_target_tracking_controls_flat(self, m0, goal_xy, target_xy, switch_fraction=0.52):
+        controls = []
+        state = np.asarray(m0, dtype=float).copy()
+        goal_xy = np.asarray(goal_xy, dtype=float).reshape(2)
+        target_xy = np.asarray(target_xy, dtype=float).reshape(2)
+        switch_idx = int(np.clip(round(float(switch_fraction) * self.horizon), 1, max(self.horizon - 1, 1)))
+        v = min(float(self.v_max), 0.18)
+        for k in range(self.horizon):
+            target = target_xy if k < switch_idx else goal_xy
+            desired = math.atan2(float(target[1] - state[1]), float(target[0] - state[0]))
+            w = float(np.clip(1.35 * wrap_angle(desired - float(state[2])), self.w_min, self.w_max))
+            u = np.array([float(np.clip(v, self.v_min, self.v_max)), w], dtype=float)
+            controls.append(u)
+            state = unicycle_step(state, u, self.dt)
+        return np.asarray(controls, dtype=float).reshape(-1)
+
+    def _visibility_target_np(self, m0, goal_xy, side):
+        x0 = float(np.asarray(m0, dtype=float)[0])
+        y0 = float(np.asarray(m0, dtype=float)[1])
+        gx = float(np.asarray(goal_xy, dtype=float)[0])
+        xmin = min(x0, gx) - 0.25
+        xmax = max(x0, gx) + 0.85
+        fallback_y = 1.45 if side == 'upper' else -1.45
+        fallback = np.array([(x0 + gx) * 0.5, fallback_y], dtype=float)
+        if self.visibility_model is None:
+            return fallback
+        xs = np.asarray(getattr(self.visibility_model, 'xs', []), dtype=float)
+        ys = np.asarray(getattr(self.visibility_model, 'ys', []), dtype=float)
+        p_map = np.asarray(getattr(self.visibility_model, 'P_conservative_plan_map', []), dtype=float)
+        if xs.size == 0 or ys.size == 0 or p_map.shape != (ys.size, xs.size):
+            p_map = np.asarray(getattr(self.visibility_model, 'P_mean_map', []), dtype=float)
+        if xs.size == 0 or ys.size == 0 or p_map.shape != (ys.size, xs.size):
+            return fallback
+        if side == 'upper':
+            mask_y = ys >= max(y0, -0.15)
+        else:
+            mask_y = ys <= min(y0, 0.15)
+        mask_x = (xs >= xmin) & (xs <= xmax)
+        if not np.any(mask_x) or not np.any(mask_y):
+            return fallback
+        sub = np.asarray(p_map[np.ix_(mask_y, mask_x)], dtype=float)
+        if sub.size == 0 or not np.any(np.isfinite(sub)):
+            return fallback
+        iy, ix = np.unravel_index(int(np.nanargmax(sub)), sub.shape)
+        return np.array([xs[mask_x][ix], ys[mask_y][iy]], dtype=float)
+
+    def _optimizer_seed_controls(self, base_seed, m0, goal_xy):
+        seeds = [('warm_start' if self.prev_controls_flat is not None else 'zero_seed', np.asarray(base_seed, dtype=float).reshape(-1))]
+        if not self.optimizer_multistart_seeds:
+            return seeds
+
+        requested = [
+            item.strip()
+            for item in self.optimizer_seed_families.split(',')
+            if item.strip()
+        ]
+        if not requested:
+            requested = [
+                'straight_to_goal',
+                'wide_upper_arc',
+                'wide_lower_arc',
+                'turn_then_upper_commit',
+                'turn_then_lower_commit',
+                'visible_recover_upper',
+                'visible_recover_lower',
+            ]
+        v = float(np.clip(min(float(self.v_max), 0.18), self.v_min, self.v_max))
+        moderate = min(0.33, abs(float(self.w_max)) * 0.45)
+        strong = min(0.85, abs(float(self.w_max)) * 0.90)
+        goal_xy = np.asarray(goal_xy, dtype=float).reshape(2)
+        for family in requested:
+            if family == 'straight_to_goal':
+                controls = self._simulate_target_tracking_controls_flat(m0, goal_xy, goal_xy, switch_fraction=0.0)
+            elif family == 'zero_seed':
+                controls = self._nominal_controls_flat()
+            elif family == 'wide_upper_arc':
+                controls = np.column_stack([np.full(self.horizon, v), np.full(self.horizon, moderate)]).reshape(-1)
+            elif family == 'wide_lower_arc':
+                controls = np.column_stack([np.full(self.horizon, v), np.full(self.horizon, -moderate)]).reshape(-1)
+            elif family == 'turn_then_upper_commit':
+                controls = self._phase_controls_flat(v, strong, 0.0, 0.30)
+            elif family == 'turn_then_lower_commit':
+                controls = self._phase_controls_flat(v, -strong, 0.0, 0.30)
+            elif family == 'visible_recover_upper':
+                target = self._visibility_target_np(m0, goal_xy, 'upper')
+                controls = self._simulate_target_tracking_controls_flat(m0, goal_xy, target, switch_fraction=0.52)
+            elif family == 'visible_recover_lower':
+                target = self._visibility_target_np(m0, goal_xy, 'lower')
+                controls = self._simulate_target_tracking_controls_flat(m0, goal_xy, target, switch_fraction=0.52)
+            else:
+                continue
+            seeds.append((family, np.asarray(controls, dtype=float).reshape(-1)))
+
+        deduped = []
+        seen = set()
+        for name, controls in seeds:
+            if name in seen:
+                continue
+            seen.add(name)
+            deduped.append((name, controls))
+        if self.optimizer_multistart_max_seeds > 0:
+            return deduped[:self.optimizer_multistart_max_seeds]
+        return deduped
+
     def _objective_scales(self, controls_flat, m0, S0, goal_state, goal_obs, goal_obs_cov):
         del controls_flat, m0, S0, goal_state, goal_obs, goal_obs_cov
         return 1.0, 1.0
@@ -543,13 +741,14 @@ class UnicyclePlannerBase:
     @staticmethod
     def _scaled_objective_from_metrics(metrics, objective_scales):
         risk_scale, ambiguity_scale = objective_scales
-        risk_term = float(metrics[0]) / float(max(risk_scale, 1e-9))
-        ambiguity_term = float(metrics[1]) / float(max(ambiguity_scale, 1e-9))
+        risk_term = float(metrics.get('risk_cost', 0.0)) / float(max(risk_scale, 1e-9))
+        ambiguity_term = float(metrics.get('ambiguity_cost', 0.0)) / float(max(ambiguity_scale, 1e-9))
         return (
             risk_term
-            + float(metrics[2])
-            + float(metrics[3])
-            + float(metrics[4])
+            + ambiguity_term
+            + float(metrics.get('control_cost', 0.0))
+            + float(metrics.get('visibility_cost', 0.0))
+            + float(metrics.get('obstacle_cost', 0.0))
         )
 
     def _evaluate_candidate_controls(
@@ -580,7 +779,7 @@ class UnicyclePlannerBase:
         return {
             'controls_flat': controls_flat,
             'total_cost': float(total_cost),
-            'metrics': tuple(float(v) for v in metrics),
+            'metrics': {str(k): float(v) for k, v in metrics.items()},
             'scaled_total': float(scaled_total),
         }
 
@@ -605,6 +804,7 @@ class UnicyclePlannerBase:
             float(self.visibility_power),
             float(self.visibility_trust_low),
             float(self.visibility_trust_high),
+            str(self.visibility_trust_mode),
             float(self.visibility_sigma_kappa),
             float(self.goal_prior_u_std_start),
             float(self.goal_prior_v_std_start),
@@ -683,6 +883,7 @@ class UnicyclePlannerBase:
                 visibility_power=float(self.visibility_power),
                 visibility_trust_low=float(self.visibility_trust_low),
                 visibility_trust_high=float(self.visibility_trust_high),
+                visibility_trust_mode=str(self.visibility_trust_mode),
                 visibility_sigma_kappa=float(self.visibility_sigma_kappa),
                 goal_prior_u_std_start=float(self.goal_prior_u_std_start),
                 goal_prior_v_std_start=float(self.goal_prior_v_std_start),
@@ -746,11 +947,11 @@ class UnicyclePlannerBase:
         return_metrics=False,
         *,
         progress_index=0.0,
+        R_baseline_override=None,
     ):
         del goal_obs_cov
         controls_flat = np.asarray(controls_flat, dtype=float)
-        if controls_flat.size != self.horizon * 2:
-            controls_flat = controls_flat[:self.horizon * 2]
+        assert controls_flat.size == self.horizon * 2, f"controls_flat size {controls_flat.size} != expected {self.horizon * 2}"
         controls = controls_flat.reshape(self.horizon, 2)
 
         m = m0.copy()
@@ -760,10 +961,22 @@ class UnicyclePlannerBase:
         total_control = 0.0
         total_visibility = 0.0
         total_obstacle = 0.0
+        total_risk_mean = 0.0
+        total_risk_cov_trace = 0.0
+        total_risk_cov_logdet = 0.0
+        total_risk_const = 0.0
+        total_delta_risk_visibility = 0.0
+        total_delta_ambiguity_visibility = 0.0
         use_observation_risk = self.use_obs_risk
         use_ambiguity_term = self.use_ambiguity
         goal_xy = np.asarray(goal_state[:2], dtype=float).reshape(2)
         current_goal_distance = self._goal_distance_xy(np.asarray(m0[:2], dtype=float), goal_xy)
+        R_good = np.asarray(
+            R_baseline_override
+            if R_baseline_override is not None
+            else np.diag([float(self.r_visible_uv) ** 2, float(self.r_visible_uv) ** 2]),
+            dtype=float,
+        )
 
         for t in range(self.horizon):
             u = controls[t]
@@ -781,18 +994,45 @@ class UnicyclePlannerBase:
                 )
             weight_t = self.discount_gamma ** t
             observation_risk = 0.0
+            baseline_risk = 0.0
+            ambiguity_current = 0.0
+            ambiguity_baseline = 0.0
+            Sigma_good = None
+            Gamma_good = None
             if use_observation_risk and mu_y is not None:
                 goal_cov_t = self.goal_obs_cov_for_progress(
                     (float(progress_index) + float(t)) / max(self.goal_progress_n_steps, 1)
                 )
-                observation_risk = self.risk_weight_obs * self.observation_risk_scale * risk(
-                    mu_y, Sigma_y, (goal_obs, goal_cov_t)
+                risk_parts = risk_components(mu_y, Sigma_y, (goal_obs, goal_cov_t))
+                risk_scale = self.risk_weight_obs * self.observation_risk_scale
+                observation_risk = risk_scale * risk_parts['total']
+                total_risk_mean += weight_t * risk_scale * risk_parts['mean']
+                total_risk_cov_trace += weight_t * risk_scale * risk_parts['cov_trace']
+                total_risk_cov_logdet += weight_t * risk_scale * risk_parts['cov_logdet']
+                total_risk_const += weight_t * risk_scale * risk_parts['const']
+                mu_good, Sigma_good, Gamma_good = self.approx_observation(
+                    m,
+                    S,
+                    method=self.approx_method,
+                    R_override=R_good,
                 )
+                baseline_parts = risk_components(mu_good, Sigma_good, (goal_obs, goal_cov_t))
+                baseline_risk = risk_scale * baseline_parts['total']
             total_risk += weight_t * observation_risk
             if use_ambiguity_term and Sigma_y is not None:
-                total_amb += weight_t * (
-                    self.ambiguity_weight * self.ambiguity_term_scale * ambiguity(Sigma_y, Gamma, S)
-                )
+                ambiguity_scale = self.ambiguity_weight * self.ambiguity_term_scale
+                ambiguity_current = ambiguity_scale * ambiguity(Sigma_y, Gamma, S)
+                if Sigma_good is None or Gamma_good is None:
+                    _mu_good, Sigma_good, Gamma_good = self.approx_observation(
+                        m,
+                        S,
+                        method=self.approx_method,
+                        R_override=R_good,
+                    )
+                ambiguity_baseline = ambiguity_scale * ambiguity(Sigma_good, Gamma_good, S)
+                total_amb += weight_t * ambiguity_current
+            total_delta_risk_visibility += weight_t * (observation_risk - baseline_risk)
+            total_delta_ambiguity_visibility += weight_t * (ambiguity_current - ambiguity_baseline)
             if self.use_visibility_model and self.visibility_weight > 0.0:
                 total_visibility += weight_t * self.visibility_weight * self._visibility_penalty_value(
                     p_vis, vis_diag.get('p_vis_eff', p_vis)
@@ -801,11 +1041,25 @@ class UnicyclePlannerBase:
             total_control += weight_t * self.control_weight * float(u[0] ** 2 + u[1] ** 2)
 
         terminal_goal_distance = self._goal_distance_xy(np.asarray(m[:2], dtype=float), goal_xy)
-        total_risk += self._terminal_progress_penalty(current_goal_distance, terminal_goal_distance)
+        terminal_progress_penalty = self._terminal_progress_penalty(current_goal_distance, terminal_goal_distance)
+        total_risk += terminal_progress_penalty
 
         total = total_risk + total_amb + total_control + total_visibility + total_obstacle
         if return_metrics:
-            return total, (total_risk, total_amb, total_control, total_visibility, total_obstacle)
+            return total, {
+                'risk_cost': float(total_risk),
+                'ambiguity_cost': float(total_amb),
+                'control_cost': float(total_control),
+                'visibility_cost': float(total_visibility),
+                'obstacle_cost': float(total_obstacle),
+                'risk_mean': float(total_risk_mean),
+                'risk_cov_trace': float(total_risk_cov_trace),
+                'risk_cov_logdet': float(total_risk_cov_logdet),
+                'risk_const': float(total_risk_const),
+                'risk_terminal_progress': float(terminal_progress_penalty),
+                'delta_risk_visibility': float(total_delta_risk_visibility),
+                'delta_ambiguity_visibility': float(total_delta_ambiguity_visibility),
+            }
         return total
 
     def plan(self, m0, S0, goal_xy, *, progress_index=0.0):
@@ -847,18 +1101,8 @@ class UnicyclePlannerBase:
                 use_ambiguity_term=use_ambiguity_term,
             )
 
-            shared_eval = {
-                'u': None,
-                'val': None,
-                'grad': None,
-            }
-
-            def eval_valgrad_shared(u):
+            def objective(u):
                 u_arr = np.asarray(u, dtype=float)
-                cached_u = shared_eval['u']
-                if cached_u is not None and cached_u.shape == u_arr.shape and np.array_equal(cached_u, u_arr):
-                    return shared_eval['val'], shared_eval['grad']
-
                 start = time.perf_counter()
                 val_out, grad_out = valgrad(
                     u_arr,
@@ -875,62 +1119,83 @@ class UnicyclePlannerBase:
                         f"with J={val_out:.3f}, grad_norm={np.linalg.norm(grad_out):.3f}"
                     )
                 fg_calls['count'] += 1
-                shared_eval['u'] = u_arr.copy()
-                shared_eval['val'] = val_out
-                shared_eval['grad'] = grad_out
                 return val_out, grad_out
 
-            def func(u):
-                val_out, _ = eval_valgrad_shared(u)
-                return val_out
-
-            def jac(u):
-                _, grad_out = eval_valgrad_shared(u)
-                return grad_out
-
+            seed_controls = self._optimizer_seed_controls(x0, m0, goal_xy)
+            solve_records = []
             minimize_start = time.perf_counter()
             self._runtime_debug_print(
                 "[planner_debug] Starting CasADi-backed scipy.optimize.minimize "
+                f"with {len(seed_controls)} seed(s) "
                 f"(maxiter={self.optimizer_maxiter}, maxfun={self.optimizer_maxfun}, ftol={self.optimizer_ftol})"
             )
-            result = minimize(
-                func,
-                np.asarray(x0, dtype=float),
-                jac=jac,
-                method='L-BFGS-B',
-                bounds=bounds,
-                options={
-                    'maxiter': self.optimizer_maxiter,
-                    'maxfun': self.optimizer_maxfun,
-                    'ftol': self.optimizer_ftol,
-                    'gtol': self.optimizer_gtol,
-                },
-            )
+            for seed_name, seed_flat in seed_controls:
+                seed_start = time.perf_counter()
+                result = minimize(
+                    objective,
+                    np.asarray(seed_flat, dtype=float),
+                    jac=True,
+                    method='L-BFGS-B',
+                    bounds=bounds,
+                    options={
+                        'maxiter': self.optimizer_maxiter,
+                        'maxfun': self.optimizer_maxfun,
+                        'ftol': self.optimizer_ftol,
+                        'gtol': self.optimizer_gtol,
+                    },
+                )
+                if result.x is None or not np.all(np.isfinite(np.asarray(result.x, dtype=float))):
+                    self._runtime_debug_print(f"[planner_debug] Seed '{seed_name}' returned no finite solution")
+                    continue
+                candidate = self._evaluate_candidate_controls(
+                    np.asarray(result.x, dtype=float),
+                    m0,
+                    S0,
+                    goal_state,
+                    goal_obs,
+                    goal_obs_cov,
+                    objective_scales,
+                    progress_index=progress_index,
+                )
+                controls = np.asarray(candidate['controls_flat'], dtype=float).reshape(self.horizon, 2)
+                diag = self._trajectory_plan_diagnostics(m0, S0, controls, goal_xy)
+                candidate.update({
+                    'source': f'solver_multistart:{seed_name}' if len(seed_controls) > 1 else (
+                        'solver:shifted_warm_start' if self.prev_controls_flat is not None else 'solver:zero_seed'
+                    ),
+                    'seed_name': str(seed_name),
+                    'rollout_valid': bool(diag['rollout_valid']),
+                    'optimizer_result': result,
+                    'seed_solve_time_s': float(max(time.perf_counter() - seed_start, 0.0)),
+                })
+                solve_records.append(candidate)
+                self._runtime_debug_print(
+                    f"[planner_debug] Seed '{seed_name}' finished "
+                    f"J={candidate['total_cost']:.3f}, valid={bool(diag['rollout_valid'])}, "
+                    f"success={bool(result.success)}, status={int(result.status)}, "
+                    f"nit={int(getattr(result, 'nit', 0) or 0)}, nfev={int(getattr(result, 'nfev', 0) or 0)}"
+                )
             self._runtime_debug_print(
                 "[planner_debug] CasADi-backed minimize finished in "
                 f"{(time.perf_counter() - minimize_start) * 1000.0:.1f} ms "
-                f"(success={bool(result.success)}, status={int(result.status)}, "
-                f"nit={int(getattr(result, 'nit', 0) or 0)}, nfev={int(getattr(result, 'nfev', 0) or 0)}, "
-                f"shared_fg_evals={fg_calls['count']})"
+                f"(shared_fg_evals={fg_calls['count']})"
             )
-            if result.x is None or not np.all(np.isfinite(np.asarray(result.x, dtype=float))):
+            if not solve_records:
                 raise RuntimeError("Planner optimizer returned no finite solution")
-            best_candidate = self._evaluate_candidate_controls(
-                np.asarray(result.x, dtype=float),
-                m0,
-                S0,
-                goal_state,
-                goal_obs,
-                goal_obs_cov,
-                objective_scales,
-                progress_index=progress_index,
-            )
-            best_candidate.update({'source': 'solver:shifted_warm_start' if self.prev_controls_flat is not None else 'solver:zero_seed'})
-            optimizer_success = bool(result.success)
-            optimizer_status = int(result.status)
-            optimizer_nit = int(getattr(result, 'nit', 0) or 0)
-            optimizer_nfev = int(getattr(result, 'nfev', 0) or 0)
-            optimizer_message = str(result.message or '')
+            valid_records = [record for record in solve_records if bool(record.get('rollout_valid', True))]
+            candidate_pool = valid_records if valid_records else solve_records
+            best_candidate = min(candidate_pool, key=lambda record: float(record['total_cost']))
+            selected_result = best_candidate['optimizer_result']
+            optimizer_success = bool(selected_result.success)
+            optimizer_status = int(selected_result.status)
+            optimizer_nit = int(getattr(selected_result, 'nit', 0) or 0)
+            optimizer_nfev = int(getattr(selected_result, 'nfev', 0) or 0)
+            optimizer_message = str(selected_result.message or '')
+            if len(seed_controls) > 1:
+                optimizer_message = (
+                    f"{optimizer_message} | selected_seed={best_candidate.get('seed_name', '')} "
+                    f"| multistart_seeds={len(seed_controls)} | valid_candidates={len(valid_records)}"
+                )
         except Exception as exc:
             raise RuntimeError(
                 "Planner optimization failed "
@@ -946,7 +1211,7 @@ class UnicyclePlannerBase:
         self.prev_controls_flat = np.array(best_controls_flat, dtype=float)
         best_controls = self.prev_controls_flat.reshape(self.horizon, 2)
         total_cost = float(best_candidate['total_cost'])
-        metrics = tuple(best_candidate['metrics'])
+        metrics = dict(best_candidate['metrics'])
         vis_diag = self.planning_visibility_diagnostics(m0, S0)
 
         states = rollout_unicycle(m0, best_controls, self.dt)
@@ -960,11 +1225,16 @@ class UnicyclePlannerBase:
             controls=best_controls,
             states=states,
             total_cost=float(total_cost),
-            risk_cost=float(metrics[0]),
-            ambiguity_cost=float(metrics[1]),
-            control_cost=float(metrics[2]),
-            visibility_cost=float(metrics[3]) if len(metrics) > 3 else 0.0,
-            obstacle_cost=float(metrics[4]) if len(metrics) > 4 else 0.0,
+            risk_cost=float(metrics.get('risk_cost', 0.0)),
+            ambiguity_cost=float(metrics.get('ambiguity_cost', 0.0)),
+            control_cost=float(metrics.get('control_cost', 0.0)),
+            visibility_cost=float(metrics.get('visibility_cost', 0.0)),
+            obstacle_cost=float(metrics.get('obstacle_cost', 0.0)),
+            risk_mean=float(metrics.get('risk_mean', 0.0)),
+            risk_cov_trace=float(metrics.get('risk_cov_trace', 0.0)),
+            risk_cov_logdet=float(metrics.get('risk_cov_logdet', 0.0)),
+            delta_risk_visibility=float(metrics.get('delta_risk_visibility', 0.0)),
+            delta_ambiguity_visibility=float(metrics.get('delta_ambiguity_visibility', 0.0)),
             backend=str(backend_used),
             optimizer_success=optimizer_success,
             optimizer_status=optimizer_status,

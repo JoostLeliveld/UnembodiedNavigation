@@ -53,10 +53,7 @@ def _load_artifact(path: Path) -> dict[str, np.ndarray | str]:
 def _load_json(path: Path) -> dict:
     if not path.is_file():
         return {}
-    try:
-        payload = json.loads(path.read_text(encoding='utf-8'))
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        return {}
+    payload = json.loads(path.read_text(encoding='utf-8'))
     return payload if isinstance(payload, dict) else {}
 
 
@@ -79,24 +76,28 @@ def _float_from_payload(payload: dict, key: str, default: float) -> tuple[float,
     return value, math.isfinite(value)
 
 
-def _plot_settings_for_method(run_manifest: dict, args) -> dict[str, float | str | list[str]]:
-    defaults = {
-        'r_visible_uv': float(args.r_visible_uv),
-        'r_miss_uv': float(args.r_miss_uv),
-        'visibility_power': float(args.visibility_power),
-        'visibility_trust_low': float(args.visibility_trust_low),
-        'visibility_trust_high': float(args.visibility_trust_high),
-        'visibility_sigma_kappa': float(getattr(args, 'visibility_sigma_kappa', 1.0)),
-        'min_prob': float(args.min_prob),
-    }
+def _plot_settings_for_method(run_manifest: dict, args) -> dict[str, float | str | list[str]] | None:
     used_defaults: list[str] = []
-    cfg: dict[str, float | str | list[str]] = {'min_prob': defaults['min_prob']}
+    cfg: dict[str, float | str | list[str]] = {'min_prob': float(args.min_prob)}
     for key in ('r_visible_uv', 'r_miss_uv', 'visibility_power', 'visibility_trust_low', 'visibility_trust_high', 'visibility_sigma_kappa'):
-        value, ok = _float_from_payload(run_manifest, key, defaults[key])
-        if not ok:
+        raw = run_manifest.get(key) if run_manifest else None
+        if raw in (None, ''):
+            cfg[key] = float(getattr(args, key.replace('-', '_')))
             used_defaults.append(key)
-        cfg[key] = value
-    cfg['source'] = 'run_manifest' if not used_defaults else 'run_manifest+args_fallback'
+            continue
+        try:
+            value = float(raw)
+            if not math.isfinite(value):
+                raise ValueError('non-finite plotting parameter')
+            cfg[key] = value
+        except (TypeError, ValueError):
+            cfg[key] = float(getattr(args, key.replace('-', '_')))
+            used_defaults.append(key)
+    cfg['visibility_trust_mode'] = str(
+        (run_manifest.get('visibility_trust_mode') if run_manifest else None)
+        or getattr(args, 'visibility_trust_mode', 'smoothstep')
+    ).strip().lower()
+    cfg['source'] = 'run_manifest' if run_manifest and not used_defaults else 'arg_defaults'
     cfg['used_arg_defaults'] = used_defaults
     return cfg
 
@@ -188,8 +189,11 @@ def _visibility_effective_score(
     visibility_power: float,
     visibility_trust_low: float,
     visibility_trust_high: float,
+    visibility_trust_mode: str = 'smoothstep',
 ) -> np.ndarray:
     p_vis = np.clip(np.asarray(p_vis, dtype=float), min_prob, 1.0 - min_prob)
+    if str(visibility_trust_mode).strip().lower() in ('direct', 'identity', 'gp'):
+        return p_vis
     shaped = np.clip(p_vis ** float(visibility_power), min_prob, 1.0 - min_prob)
     lo = float(np.clip(visibility_trust_low, min_prob, 1.0 - min_prob))
     hi = float(np.clip(visibility_trust_high, lo + 1e-6, 1.0 - min_prob))
@@ -199,10 +203,9 @@ def _visibility_effective_score(
 
 def _blend_observation_covariance(trust: np.ndarray, *, r_visible_uv: float, r_miss_uv: float) -> np.ndarray:
     trust = np.asarray(trust, dtype=float)
-    visible_std = float(r_visible_uv)
-    miss_std = float(r_miss_uv)
-    plan_std = trust * visible_std + (1.0 - trust) * miss_std
-    return np.square(plan_std)
+    visible_var = float(r_visible_uv) ** 2
+    miss_var = float(r_miss_uv) ** 2
+    return 1.0 / np.maximum(trust / max(visible_var, 1e-6) + (1.0 - trust) / max(miss_var, 1e-6), 1e-9)
 
 
 def _ambiguity_from_variance(var_u: np.ndarray, var_v: np.ndarray) -> np.ndarray:
@@ -244,6 +247,7 @@ def main() -> int:
     parser.add_argument('--visibility-power', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_power'])
     parser.add_argument('--visibility-trust-low', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_low'])
     parser.add_argument('--visibility-trust-high', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_high'])
+    parser.add_argument('--visibility-trust-mode', default='smoothstep')
     parser.add_argument('--visibility-sigma-kappa', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_sigma_kappa'])
     parser.add_argument('--min-prob', type=float, default=1e-4)
     args = parser.parse_args()
@@ -277,21 +281,19 @@ def main() -> int:
         ys = np.asarray(artifact['ys'], dtype=float)
         p_map = np.asarray(artifact['P_conservative_plan_map'], dtype=float)
         p_mean = np.asarray(artifact.get('P_mean_map', p_map), dtype=float)
-        if 'F_std_map' in artifact:
-            p_unc = np.asarray(artifact['F_std_map'], dtype=float)
-            uncertainty_title = 'Latent GP std F_std_map'
-            uncertainty_label = 'latent std'
-        else:
-            p_unc = np.clip(p_mean - p_map, 0.0, None)
-            uncertainty_title = 'Conservative gap (P_mean - P_conservative)'
-            uncertainty_label = 'conservative gap'
+        latent_std = np.asarray(artifact['F_std_map'], dtype=float)
+        latent_std_title = 'Latent GP std F_std_map'
+        latent_std_label = 'latent std'
         extent = _grid_extent(xs, ys)
         geometry = _parse_geometry_json(str(artifact.get('geometry_json', '')))
 
         plot_cfg = _plot_settings_for_method(latest_run_manifests.get(method_id, {}), args)
+        if plot_cfg is None:
+            plot_notes.append(f"{method_id}: Skipped plotting due to missing plotting settings.")
+            continue
         if plot_cfg['used_arg_defaults']:
             plot_notes.append(
-                f"{method_id}: GP plot settings fell back to CLI defaults for {', '.join(plot_cfg['used_arg_defaults'])}."
+                f"{method_id}: Used argument defaults for {', '.join(str(name) for name in plot_cfg['used_arg_defaults'])}."
             )
 
         p_eff = _visibility_effective_score(
@@ -300,6 +302,7 @@ def main() -> int:
             visibility_power=float(plot_cfg['visibility_power']),
             visibility_trust_low=float(plot_cfg['visibility_trust_low']),
             visibility_trust_high=float(plot_cfg['visibility_trust_high']),
+            visibility_trust_mode=str(plot_cfg.get('visibility_trust_mode', 'smoothstep')),
         )
         plan_var = _blend_observation_covariance(
             p_eff,
@@ -347,10 +350,10 @@ def main() -> int:
         mean_ax.set_title('Predicted mean visibility P_mean_map')
         fig.colorbar(im_mean, ax=mean_ax, fraction=0.046, pad=0.04, label='p_vis (mean)')
         
-        im_unc = unc_ax.imshow(p_unc, origin='lower', extent=extent, cmap='plasma', vmin=0.0, vmax=0.3, aspect='equal')
+        im_unc = unc_ax.imshow(latent_std, origin='lower', extent=extent, cmap='plasma', vmin=0.0, vmax=0.3, aspect='equal')
         _draw_geometry(unc_ax, geometry)
-        unc_ax.set_title(uncertainty_title)
-        fig.colorbar(im_unc, ax=unc_ax, fraction=0.046, pad=0.04, label=uncertainty_label)
+        unc_ax.set_title(latent_std_title)
+        fig.colorbar(im_unc, ax=unc_ax, fraction=0.046, pad=0.04, label=latent_std_label)
 
         im_obs = obs_ax.imshow(observation_ambiguity, origin='lower', extent=extent, cmap='magma', aspect='equal')
         _draw_geometry(obs_ax, geometry)
@@ -385,6 +388,14 @@ def main() -> int:
                 level = float(np.nanpercentile(finite_amb, q))
                 contour_levels.append(level)
                 contour_labels.append(label)
+        if contour_levels:
+            deduped: list[tuple[float, str]] = []
+            for level, label in sorted(zip(contour_levels, contour_labels), key=lambda item: item[0]):
+                if deduped and math.isclose(level, deduped[-1][0], rel_tol=1e-9, abs_tol=1e-9):
+                    continue
+                deduped.append((level, label))
+            contour_levels = [level for level, _ in deduped]
+            contour_labels = [label for _, label in deduped]
         if contour_levels:
             contours = region_ax.contour(
                 observation_ambiguity,
@@ -479,6 +490,7 @@ def main() -> int:
             'visibility_power': float(args.visibility_power),
             'visibility_trust_low': float(args.visibility_trust_low),
             'visibility_trust_high': float(args.visibility_trust_high),
+            'visibility_trust_mode': str(args.visibility_trust_mode),
             'visibility_sigma_kappa': float(args.visibility_sigma_kappa),
         },
         'notes': plot_notes,

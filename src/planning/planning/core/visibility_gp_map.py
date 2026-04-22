@@ -7,8 +7,11 @@ import hashlib
 from pathlib import Path
 
 import numpy as np
+import scipy.interpolate
 
-from planning.core.gp_visibility_helpers import clip_prob as _clip_prob
+
+def _clip_prob(p, eps: float):
+    return np.clip(p, eps, 1.0 - eps)
 
 
 @dataclass
@@ -88,6 +91,23 @@ class GPVisibilityMapModel:
         self.P_conservative_plan_map = _clip_prob(p_cons, self.min_prob).astype(float)
         self.camera_pos = np.asarray(camera_pos, dtype=float).reshape(3)
         self.target_height = float(target_height)
+        self.x_min = float(self.xs[0])
+        self.x_max = float(self.xs[-1])
+        self.y_min = float(self.ys[0])
+        self.y_max = float(self.ys[-1])
+        self._prob_interp = scipy.interpolate.RegularGridInterpolator(
+            (self.ys, self.xs), 
+            self.P_conservative_plan_map, 
+            method='linear', 
+            bounds_error=False,
+            fill_value=None,
+        )
+
+    def _clip_xy_np(self, x: float, y: float) -> tuple[float, float]:
+        return (
+            float(np.clip(x, self.x_min, self.x_max)),
+            float(np.clip(y, self.y_min, self.y_max)),
+        )
 
     @property
     def signature(self) -> tuple:
@@ -97,7 +117,6 @@ class GPVisibilityMapModel:
             "empirical_gp_visibility",
             digest,
             str(self.artifact_path),
-            int(stat.st_mtime_ns),
             int(stat.st_size),
             int(self.xs.size),
             int(self.ys.size),
@@ -108,38 +127,11 @@ class GPVisibilityMapModel:
             round(float(self.ys[-1]), 6),
         )
 
-    def _bilinear_map_np(self, field: np.ndarray, xy: np.ndarray) -> np.ndarray:
-        pts = np.asarray(xy, dtype=float)
-        if pts.ndim == 1:
-            pts = pts.reshape(1, 2)
-        x = pts[:, 0]
-        y = pts[:, 1]
-
-        ix = np.searchsorted(self.xs, x, side="right") - 1
-        iy = np.searchsorted(self.ys, y, side="right") - 1
-        ix = np.clip(ix, 0, self.xs.shape[0] - 2)
-        iy = np.clip(iy, 0, self.ys.shape[0] - 2)
-
-        x0 = self.xs[ix]
-        x1 = self.xs[ix + 1]
-        y0 = self.ys[iy]
-        y1 = self.ys[iy + 1]
-        tx = np.where(x1 == x0, 0.0, (x - x0) / (x1 - x0))
-        ty = np.where(y1 == y0, 0.0, (y - y0) / (y1 - y0))
-        tx = np.clip(tx, 0.0, 1.0)
-        ty = np.clip(ty, 0.0, 1.0)
-
-        z00 = field[iy, ix]
-        z10 = field[iy, ix + 1]
-        z01 = field[iy + 1, ix]
-        z11 = field[iy + 1, ix + 1]
-        z0 = (1.0 - tx) * z00 + tx * z10
-        z1 = (1.0 - tx) * z01 + tx * z11
-        return (1.0 - ty) * z0 + ty * z1
-
     def prob_state_np(self, m) -> float:
-        xy = np.array([float(m[0]), float(m[1])], dtype=float)
-        p = self._bilinear_map_np(self.P_conservative_plan_map, xy)[0]
+        if len(m) < 2:
+            raise ValueError(f"State vector m must have length >= 2, got {len(m)}")
+        x, y = self._clip_xy_np(float(m[0]), float(m[1]))
+        p = self._prob_interp((y, x))
         return float(_clip_prob(p, self.min_prob))
 
     def make_prob_state_casadi(self):
@@ -159,9 +151,15 @@ class GPVisibilityMapModel:
             values,
         )
         eps = float(self.min_prob)
+        x_min = float(self.x_min)
+        x_max = float(self.x_max)
+        y_min = float(self.y_min)
+        y_max = float(self.y_max)
 
         def p_vis_ca(m):
-            z = interp(ca.vertcat(m[0], m[1]))
+            x = ca.fmin(ca.fmax(m[0], x_min), x_max)
+            y = ca.fmin(ca.fmax(m[1], y_min), y_max)
+            z = interp(ca.vertcat(x, y))
             return ca.fmin(ca.fmax(z, eps), 1.0 - eps)
 
         self._prob_state_casadi = p_vis_ca

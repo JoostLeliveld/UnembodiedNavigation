@@ -350,9 +350,23 @@ ros2 run rqt_graph rqt_graph
 
 ## Documentation Map
 
+## Reproducibility
+
+To ensure deterministic and reproducible research runs:
+
+1. **Environment**: Install dependencies from the root `requirements.txt`.
+2. **Determinism**: Set `export PYTHONHASHSEED=0` before running experiments, in addition to using the `--seed` argument.
+3. **Perception**:
+   - Primary model: `yolo11n-seg.pt` (Ultralytics YOLOv11 Nano Segmentation).
+   - Provenance: Fine-tuned on simulated warehouse captures using 5-fold cross-validation.
+4. **GP Artifacts**: See [`scripts/visibility_comparison/README_GP_ARTIFACTS.md`](scripts/visibility_comparison/README_GP_ARTIFACTS.md) for details on fitting the visibility fields.
+
+---
+
 - [`docs/architecture_overview.md`](docs/architecture_overview.md): package architecture and minimum reading path
 - [`docs/runtime_dataflow.md`](docs/runtime_dataflow.md): offline preparation and runtime ROS dataflow
 - [`docs/planner_method.md`](docs/planner_method.md): planner-internal method and comparison logic
 - [`docs/evaluation_and_plots.md`](docs/evaluation_and_plots.md): outputs, summaries, plots, and presentation figures
 - [`docs/limitations.md`](docs/limitations.md): current caveats and claim guardrails
 - [`docs/figures/README.md`](docs/figures/README.md): figure catalog and regeneration script
+- [`requirements.txt`](requirements.txt): Python dependency manifest

@@ -190,8 +190,8 @@ def ambiguity(Sigma, Gamma, S):
     return 0.5 * (d * np.log(2 * np.pi * np.e) + logdet)
 
 
-def risk(mu, Sigma, goal):
-    """KL(N(mu,Sigma) || N(m*,S*)) as risk term."""
+def risk_components(mu, Sigma, goal):
+    """KL(N(mu,Sigma) || N(m*,S*)) split into interpretable pieces."""
     m_star, S_star = goal
     mu = np.asarray(mu, dtype=float)
     Sigma = np.asarray(Sigma, dtype=float)
@@ -211,7 +211,23 @@ def risk(mu, Sigma, goal):
 
     term_trace = np.trace(S_inv @ Sigma)
     term_quad = float(diff.T @ S_inv @ diff)
-    return 0.5 * (term_trace + term_quad - d + (logdet_t - logdet_s))
+    mean = 0.5 * term_quad
+    cov_trace = 0.5 * float(term_trace)
+    cov_logdet = 0.5 * float(logdet_t - logdet_s)
+    const = -0.5 * float(d)
+    total = mean + cov_trace + cov_logdet + const
+    return {
+        'total': float(total),
+        'mean': float(mean),
+        'cov_trace': float(cov_trace),
+        'cov_logdet': float(cov_logdet),
+        'const': float(const),
+    }
+
+
+def risk(mu, Sigma, goal):
+    """KL(N(mu,Sigma) || N(m*,S*)) as risk term."""
+    return risk_components(mu, Sigma, goal)['total']
 
 
 def risk_obs(mu, Sigma, goal):

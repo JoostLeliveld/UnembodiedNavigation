@@ -1,16 +1,9 @@
 tasks:
   warehouse_occ_light.world.sdf:
     - name: main_shadow_tradeoff
-      description: Main benchmark task. Starts north-west and asks the planner to reach the south-east goal, forcing a choice between the shorter but more occluded camera-left crossover and the longer clearer camera-right route.
+      description: Main benchmark task. Starts on the lower northwest approach and asks the planner to reach the southeast goal, forcing a choice between the shorter occluded crossover and the longer clearer route.
       tier: benchmark
       claim: shadow_tradeoff
       focus: visibility_tradeoff
-      start: {x: -2.0, y: 1.4, z: 0.05, yaw: 0.0}
+      start: {x: -2.0, y: 0.5, z: 0.05, yaw: 0.0}
       goal:  {x: 1.55, y: -1.45}
-    - name: E_short_validation
-      description: Compact validation task for fast debugging. Short diagonal crossing in the same world. Use with timeout_after_first_cmd_s=35, horizon=24, sample_nx=8, sample_ny=8. Do NOT use for final thesis claims.
-      tier: validation
-      claim: none
-      focus: fast_iteration
-      start: {x: -2.0, y: 1.2, z: 0.05, yaw: 0.0}
-      goal:  {x: 1.2, y: -1.2}

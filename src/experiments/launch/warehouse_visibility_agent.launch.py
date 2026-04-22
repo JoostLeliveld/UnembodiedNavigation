@@ -9,6 +9,31 @@ ALLOWED_PLANNERS = ('efe1', 'efe2', 'efer', 'mpc', 'visibility_unaware_baseline'
 PLANNER_DESCRIPTION = 'Planner: efe1 | efe2 | efer | mpc | visibility_unaware_baseline'
 
 
+def _planner_precision_arguments():
+    return [
+        DeclareLaunchArgument('horizon', default_value='36'),
+        DeclareLaunchArgument('dt', default_value='0.2'),
+        DeclareLaunchArgument('discount_gamma', default_value='0.98'),
+        DeclareLaunchArgument('goal_prior_u_std_start', default_value='80.0'),
+        DeclareLaunchArgument('goal_prior_v_std_start', default_value='80.0'),
+        DeclareLaunchArgument('goal_prior_u_std_final', default_value='4.0'),
+        DeclareLaunchArgument('goal_prior_v_std_final', default_value='4.0'),
+        DeclareLaunchArgument('goal_tightening_power', default_value='0.45'),
+        DeclareLaunchArgument('r_visible_uv', default_value='2.5'),
+        DeclareLaunchArgument('r_miss_uv', default_value='120.0'),
+        DeclareLaunchArgument('visibility_power', default_value='1.0'),
+        DeclareLaunchArgument('visibility_trust_low', default_value='0.15'),
+        DeclareLaunchArgument('visibility_trust_high', default_value='0.65'),
+        DeclareLaunchArgument('visibility_trust_mode', default_value='smoothstep'),
+        DeclareLaunchArgument('visibility_weight', default_value='0.5'),
+        DeclareLaunchArgument('optimizer_multistart_seeds', default_value='false'),
+        DeclareLaunchArgument('optimizer_seed_families', default_value=''),
+        DeclareLaunchArgument('optimizer_multistart_max_seeds', default_value='0'),
+        DeclareLaunchArgument('odom_heading_correction_mode', default_value='kalman'),
+        DeclareLaunchArgument('clamp_pixel_uv_theta_without_yaw', default_value='false'),
+    ]
+
+
 def _launch_setup(context, *args, **kwargs):
     from experiments.core.visibility_launch_common import (
         build_agent_runtime_actions,
@@ -51,6 +76,14 @@ def generate_launch_description():
         DeclareLaunchArgument('tasks_yaml', default_value=tasks_default, description='Task YAML'),
         DeclareLaunchArgument('task', default_value='', description='Task name; empty uses the world profile recommended_task'),
         DeclareLaunchArgument('seed', default_value='0'),
+        DeclareLaunchArgument('comparison_method_id', default_value=''),
+        DeclareLaunchArgument('run_timeout_after_first_cmd_s', default_value='60.0'),
+        DeclareLaunchArgument('first_cmd_linear_eps', default_value='0.02'),
+        DeclareLaunchArgument('first_cmd_angular_eps', default_value='0.10'),
+        DeclareLaunchArgument('stuck_window_s', default_value='8.0'),
+        DeclareLaunchArgument('stuck_max_displacement_m', default_value='0.08'),
+        DeclareLaunchArgument('stuck_max_goal_improvement_m', default_value='0.05'),
+        DeclareLaunchArgument('stuck_cmd_fraction_min', default_value='0.50'),
         DeclareLaunchArgument('perception_backend', default_value='image_markers', description='image_markers, yolo, or homography'),
         DeclareLaunchArgument('sensor_pixel_noise_sigma', default_value='1.0'),
         DeclareLaunchArgument('yolo_model', default_value='', description='Local path to a trained YOLO .pt model'),
@@ -64,6 +97,7 @@ def generate_launch_description():
         DeclareLaunchArgument('yolo_min_mask_area_px', default_value='12.0'),
         DeclareLaunchArgument('yolo_mask_bottom_band_px', default_value='3.0'),
         DeclareLaunchArgument('pixel_correction_approx', default_value='AUTO'),
+        *_planner_precision_arguments(),
         DeclareLaunchArgument('enable_logging', default_value='true'),
         DeclareLaunchArgument('log_dir', default_value='logs/experiments'),
         DeclareLaunchArgument('use_rviz', default_value='false'),

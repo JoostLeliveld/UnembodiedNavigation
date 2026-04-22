@@ -58,6 +58,25 @@ def _sample_positions(vis: dict[str, object], *, sample_nx: int, sample_ny: int,
     return positions
 
 
+def _sample_yaws(*, yaw_rad: float, yaw_samples: int, yaw_list_rad: str) -> list[float]:
+    raw_list = str(yaw_list_rad or '').strip()
+    if raw_list:
+        yaws = []
+        for part in raw_list.replace(',', ' ').split():
+            try:
+                yaws.append(float(part))
+            except ValueError as exc:
+                raise RuntimeError(f'Invalid yaw value in --yaw-list-rad: {part!r}') from exc
+        if not yaws:
+            raise RuntimeError('--yaw-list-rad was provided but no finite yaw values were parsed')
+        return yaws
+
+    n = int(max(yaw_samples, 1))
+    if n <= 1:
+        return [float(yaw_rad)]
+    return [float(yaw_rad) + (2.0 * math.pi * float(i) / float(n)) for i in range(n)]
+
+
 class TeleportImageCapture(Node):
     def __init__(
         self,
@@ -73,6 +92,7 @@ class TeleportImageCapture(Node):
         yaw_tolerance_rad: float,
         verify_with_odom: bool,
         min_new_frames: int,
+        warn_on_odom_mismatch: bool = False,
     ):
         super().__init__('capture_visibility_samples')
         self.world_name = str(world_name)
@@ -83,6 +103,7 @@ class TeleportImageCapture(Node):
         self.pose_tolerance_m = float(pose_tolerance_m)
         self.yaw_tolerance_rad = float(yaw_tolerance_rad)
         self.verify_with_odom = bool(verify_with_odom)
+        self.warn_on_odom_mismatch = bool(warn_on_odom_mismatch)
         self.min_new_frames = max(int(min_new_frames), 1)
         self.service_name = f'/world/{self.world_name}/set_pose'
         self.client = self.create_client(SetEntityPose, self.service_name)
@@ -168,9 +189,20 @@ class TeleportImageCapture(Node):
                 if self._pose_matches(x=x, y=y, yaw=yaw):
                     break
             else:
-                raise RuntimeError(
-                    f'Robot pose did not converge to commanded sample x={x:.3f}, y={y:.3f}, yaw={yaw:.3f}'
-                )
+                message = f'Robot pose did not converge to commanded sample x={x:.3f}, y={y:.3f}, yaw={yaw:.3f}'
+                if self.warn_on_odom_mismatch:
+                    if self.latest_odom_xyyaw is None:
+                        self.get_logger().warn(
+                            f'{message}; no /odom pose received, continuing because --warn-on-odom-mismatch is set'
+                        )
+                    else:
+                        ox, oy, oyaw = self.latest_odom_xyyaw
+                        self.get_logger().warn(
+                            f'{message}; latest /odom=({ox:.3f}, {oy:.3f}, {oyaw:.3f}), '
+                            'continuing because --warn-on-odom-mismatch is set'
+                        )
+                else:
+                    raise RuntimeError(message)
 
         deadline = time.monotonic() + max(self.image_timeout_s, 0.0)
         while rclpy.ok() and time.monotonic() < deadline:
@@ -189,7 +221,9 @@ def main() -> int:
     parser.add_argument('--out', default=str(CURRENT_CAPTURE_DIR))
     parser.add_argument('--sample-nx', type=int, default=15)
     parser.add_argument('--sample-ny', type=int, default=15)
-    parser.add_argument('--yaw-rad', type=float, default=0.0)
+    parser.add_argument('--yaw-rad', type=float, default=0.0, help='Base yaw in radians. Preserves the legacy single-heading capture when --yaw-samples=1.')
+    parser.add_argument('--yaw-samples', type=int, default=1, help='Number of evenly spaced robot headings to capture at each (x,y).')
+    parser.add_argument('--yaw-list-rad', default='', help='Optional explicit whitespace/comma-separated yaw list in radians; overrides --yaw-samples.')
     parser.add_argument('--wall-margin-m', type=float, default=0.45)
     parser.add_argument('--robot-z', type=float, default=0.05)
     parser.add_argument('--settle-s', type=float, default=0.35)
@@ -202,6 +236,7 @@ def main() -> int:
     parser.add_argument('--pose-tolerance-m', type=float, default=0.05)
     parser.add_argument('--yaw-tolerance-rad', type=float, default=0.20)
     parser.add_argument('--verify-with-odom', action='store_true', help='Require /odom to converge to each commanded teleport pose before capture.')
+    parser.add_argument('--warn-on-odom-mismatch', action='store_true', help='With --verify-with-odom, warn and continue instead of aborting if /odom does not match the commanded world pose.')
     parser.add_argument('--min-new-frames', type=int, default=1, help='Minimum number of fresh camera frames to wait for after each teleport.')
     parser.add_argument('--target-height-m', type=float, default=0.0)
     parser.add_argument('--robot-box-length', type=float, default=0.22)
@@ -217,6 +252,11 @@ def main() -> int:
         sample_nx=int(args.sample_nx),
         sample_ny=int(args.sample_ny),
         wall_margin_m=float(args.wall_margin_m),
+    )
+    yaws = _sample_yaws(
+        yaw_rad=float(args.yaw_rad),
+        yaw_samples=int(args.yaw_samples),
+        yaw_list_rad=str(args.yaw_list_rad),
     )
     output_dir = safe_reset_generated_dir(Path(args.out), allowed_root=LOGS_ROOT)
     (output_dir / 'images').mkdir(parents=True, exist_ok=False)
@@ -248,78 +288,82 @@ def main() -> int:
         yaw_tolerance_rad=float(args.yaw_tolerance_rad),
         verify_with_odom=bool(args.verify_with_odom),
         min_new_frames=int(args.min_new_frames),
+        warn_on_odom_mismatch=bool(args.warn_on_odom_mismatch),
     )
     try:
         node.wait_for_ready(timeout_s=float(args.ready_timeout_s))
-        for sample_id, (x, y) in enumerate(positions):
-            image = node.capture_image_at_pose(x=x, y=y, yaw=float(args.yaw_rad))
-            image_path = output_dir / 'images' / f'{sample_id:06d}.jpg'
-            preview_path = output_dir / 'previews' / f'{sample_id:06d}.jpg'
-            cv2.imwrite(str(image_path), image)
-            image_hashes.append(hashlib.md5(image_path.read_bytes()).hexdigest())
+        sample_id = 0
+        for position_idx, (x, y) in enumerate(positions):
+            for heading_idx, yaw in enumerate(yaws):
+                image = node.capture_image_at_pose(x=x, y=y, yaw=float(yaw))
+                image_path = output_dir / 'images' / f'{sample_id:06d}_xy{position_idx:04d}_h{heading_idx:02d}.jpg'
+                preview_path = output_dir / 'previews' / f'{sample_id:06d}_xy{position_idx:04d}_h{heading_idx:02d}.jpg'
+                cv2.imwrite(str(image_path), image)
+                image_hashes.append(hashlib.md5(image_path.read_bytes()).hexdigest())
 
-            bbox = project_robot_bbox(
-                camera,
-                x=float(x),
-                y=float(y),
-                yaw=float(args.yaw_rad),
-                box_length=float(args.robot_box_length),
-                box_width=float(args.robot_box_width),
-                box_height=float(args.robot_box_height),
-                img_w=image.shape[1],
-                img_h=image.shape[0],
-            )
-            bottom_u, bottom_v = bbox_bottom_center(bbox)
-            target_xyz = np.asarray([float(x), float(y), float(args.target_height_m)], dtype=float)
-            occluded = segment_occluded(occlusion_scene.prisms, camera.cam_pos, target_xyz)
-            in_frame = bbox is not None and math.isfinite(bottom_u) and math.isfinite(bottom_v)
-            if not in_frame:
-                oracle_visible = 0
-                oracle_reason = 'outside_image'
-            elif occluded:
-                oracle_visible = 0
-                oracle_reason = 'occluded'
-            else:
-                oracle_visible = 1
-                oracle_reason = 'visible'
+                bbox = project_robot_bbox(
+                    camera,
+                    x=float(x),
+                    y=float(y),
+                    yaw=float(yaw),
+                    box_length=float(args.robot_box_length),
+                    box_width=float(args.robot_box_width),
+                    box_height=float(args.robot_box_height),
+                    img_w=image.shape[1],
+                    img_h=image.shape[0],
+                )
+                bottom_u, bottom_v = bbox_bottom_center(bbox)
+                target_xyz = np.asarray([float(x), float(y), float(args.target_height_m)], dtype=float)
+                occluded = segment_occluded(occlusion_scene.prisms, camera.cam_pos, target_xyz)
+                in_frame = bbox is not None and math.isfinite(bottom_u) and math.isfinite(bottom_v)
+                if not in_frame:
+                    oracle_visible = 0
+                    oracle_reason = 'outside_image'
+                elif occluded:
+                    oracle_visible = 0
+                    oracle_reason = 'occluded'
+                else:
+                    oracle_visible = 1
+                    oracle_reason = 'visible'
 
-            preview = image.copy()
-            if bool(args.draw_oracle_box) and bbox is not None:
-                x0, y0, x1, y1 = [int(round(v)) for v in bbox]
-                cv2.rectangle(preview, (x0, y0), (x1, y1), (255, 200, 0), 2)
-            if math.isfinite(bottom_u) and math.isfinite(bottom_v):
-                color = (0, 255, 0) if oracle_visible else (0, 0, 255)
-                cv2.circle(preview, (int(round(bottom_u)), int(round(bottom_v))), 5, color, -1)
-            cv2.putText(
-                preview,
-                f'sample={sample_id} oracle={oracle_visible} reason={oracle_reason}',
-                (12, 28),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (255, 255, 255),
-                2,
-                cv2.LINE_AA,
-            )
-            cv2.imwrite(str(preview_path), preview)
+                preview = image.copy()
+                if bool(args.draw_oracle_box) and bbox is not None:
+                    x0, y0, x1, y1 = [int(round(v)) for v in bbox]
+                    cv2.rectangle(preview, (x0, y0), (x1, y1), (255, 200, 0), 2)
+                if math.isfinite(bottom_u) and math.isfinite(bottom_v):
+                    color = (0, 255, 0) if oracle_visible else (0, 0, 255)
+                    cv2.circle(preview, (int(round(bottom_u)), int(round(bottom_v))), 5, color, -1)
+                cv2.putText(
+                    preview,
+                    f'sample={sample_id} xy={position_idx} h={heading_idx} oracle={oracle_visible} reason={oracle_reason}',
+                    (12, 28),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.55,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+                cv2.imwrite(str(preview_path), preview)
 
-            rows.append({
-                'sample_id': str(sample_id),
-                'image_path': repo_relative(image_path, output_dir),
-                'preview_path': repo_relative(preview_path, output_dir),
-                'x': f'{float(x):.8f}',
-                'y': f'{float(y):.8f}',
-                'theta': f'{float(args.yaw_rad):.8f}',
-                'timestamp': f'{time.time():.6f}',
-                'world': str(args.world),
-                'camera_frame': str(args.camera_frame),
-                'oracle_visible': str(int(oracle_visible)),
-                'oracle_bottom_u': '' if not math.isfinite(bottom_u) else f'{float(bottom_u):.8f}',
-                'oracle_bottom_v': '' if not math.isfinite(bottom_v) else f'{float(bottom_v):.8f}',
-                'oracle_occlusion_reason': oracle_reason,
-                'segmentation_path': '',
-                'labels_map_path': '',
-                'robot_label': '',
-            })
+                rows.append({
+                    'sample_id': str(sample_id),
+                    'image_path': repo_relative(image_path, output_dir),
+                    'preview_path': repo_relative(preview_path, output_dir),
+                    'x': f'{float(x):.8f}',
+                    'y': f'{float(y):.8f}',
+                    'theta': f'{float(yaw):.8f}',
+                    'timestamp': f'{time.time():.6f}',
+                    'world': str(args.world),
+                    'camera_frame': str(args.camera_frame),
+                    'oracle_visible': str(int(oracle_visible)),
+                    'oracle_bottom_u': '' if not math.isfinite(bottom_u) else f'{float(bottom_u):.8f}',
+                    'oracle_bottom_v': '' if not math.isfinite(bottom_v) else f'{float(bottom_v):.8f}',
+                    'oracle_occlusion_reason': oracle_reason,
+                    'segmentation_path': '',
+                    'labels_map_path': '',
+                    'robot_label': '',
+                })
+                sample_id += 1
     finally:
         node.destroy_node()
         rclpy.shutdown()
@@ -349,6 +393,16 @@ def main() -> int:
             'ny': int(args.sample_ny),
             'wall_margin_m': float(args.wall_margin_m),
         },
+        'heading_sampling': {
+            'yaw_base_rad': float(args.yaw_rad),
+            'yaw_samples': int(len(yaws)),
+            'yaw_list_rad': [float(v) for v in yaws],
+            'explicit_yaw_list_rad': str(args.yaw_list_rad).strip(),
+            'samples_per_xy': int(len(yaws)),
+            'position_count': int(len(positions)),
+            'verify_with_odom': bool(args.verify_with_odom),
+            'warn_on_odom_mismatch': bool(args.warn_on_odom_mismatch),
+        },
         'oracle_source': 'geometry',
         'oracle_target_height_m': float(args.target_height_m),
         'oracle_preview_draws_reference_box': bool(args.draw_oracle_box),
@@ -368,11 +422,14 @@ def main() -> int:
             'samples.csv contains raw shared observations only; method-specific targets are created later.',
             'Each sample is captured after teleporting the robot with the ROS-bridged Gazebo set_pose service.',
             'A configurable number of fresh camera frames are skipped after each teleport to avoid stale images.',
+            'When yaw_samples > 1, repeated rows at the same (x, y) are intentional and downstream GP targets average them into a heading-marginal 2D detectability target.',
         ],
     }
     write_manifest(output_dir / 'capture_manifest.json', manifest)
     print(f'Wrote capture to {output_dir}')
     print(f'Samples: {len(rows)}')
+    print(f'Positions: {len(positions)}')
+    print(f'Headings per position: {len(yaws)}')
     if duplicate_image_count > 0:
         print(
             'Warning: duplicate frames detected during capture '

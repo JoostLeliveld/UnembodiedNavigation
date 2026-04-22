@@ -7,6 +7,13 @@ import hashlib
 import math
 from typing import Iterable
 
+import numpy as np
+
+
+def evenly_spaced_yaws(yaw_count: int) -> list[float]:
+    yaw_count = max(int(yaw_count), 1)
+    return [float(v) for v in np.linspace(0.0, 2.0 * math.pi, yaw_count, endpoint=False)]
+
 
 def yaw_bucket_index(yaw_rad: float, bucket_count: int) -> int:
     bucket_count = max(int(bucket_count), 1)

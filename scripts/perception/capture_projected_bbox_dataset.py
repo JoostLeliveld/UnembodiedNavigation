@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import subprocess
 import sys
 import time
 from datetime import datetime
@@ -16,6 +15,8 @@ import cv2
 import numpy as np
 import rclpy
 import yaml
+from ros_gz_interfaces.msg import Entity
+from ros_gz_interfaces.srv import SetEntityPose
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 
@@ -26,7 +27,7 @@ for rel in ('src/experiments', 'src/perception', 'src/unav_common'):
         sys.path.insert(0, path)
 
 from experiments.core.world_profiles import compute_look_at_from_pose, load_profile
-from dataset_split_utils import assign_splits, build_pose_records
+from dataset_split_utils import assign_splits, build_pose_records, evenly_spaced_yaws
 from perception.core.ros_image import image_msg_to_bgr8
 from unav_common.camera_model import ObliqueCameraModel
 
@@ -131,6 +132,7 @@ class TeleportBBoxCapture(Node):
         self.settle_s = float(settle_s)
         self.image_timeout_s = float(image_timeout_s)
         self.service_name = f'/world/{self.world_name}/set_pose'
+        self.client = self.create_client(SetEntityPose, self.service_name)
         self.image_count = 0
         self.latest_image = None
         self.create_subscription(Image, str(image_topic), self._image_cb, 10)
@@ -141,39 +143,37 @@ class TeleportBBoxCapture(Node):
 
     def wait_for_ready(self, timeout_s: float) -> None:
         end = time.monotonic() + max(float(timeout_s), 0.0)
+        service_ready = False
         while rclpy.ok() and time.monotonic() < end:
             rclpy.spin_once(self, timeout_sec=0.05)
-            if self.latest_image is not None:
+            if (not service_ready) and self.client.wait_for_service(timeout_sec=0.05):
+                service_ready = True
+            if self.latest_image is not None and service_ready:
                 return
         raise RuntimeError(
-            'Timed out waiting for first camera image. Launch the simulator first.'
+            f'Timed out waiting for {self.service_name} and first camera image. Launch the simulator first.'
         )
 
     def _set_robot_pose(self, *, x: float, y: float, yaw: float) -> None:
+        req = SetEntityPose.Request()
+        req.entity = Entity(name='turtlebot3')
+        req.entity.type = Entity.MODEL
+        req.pose.position.x = float(x)
+        req.pose.position.y = float(y)
+        req.pose.position.z = float(self.robot_z)
         half = 0.5 * float(yaw)
-        req = (
-            f'name: "turtlebot3" '
-            f'position: {{x: {float(x):.9f} y: {float(y):.9f} z: {float(self.robot_z):.9f}}} '
-            f'orientation: {{x: 0.0 y: 0.0 z: {math.sin(half):.9f} w: {math.cos(half):.9f}}}'
-        )
-        result = subprocess.run(
-            [
-                'gz', 'service',
-                '-s', self.service_name,
-                '--reqtype', 'gz.msgs.Pose',
-                '--reptype', 'gz.msgs.Boolean',
-                '--timeout', '2000',
-                '--req', req,
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        output = f'{result.stdout}\n{result.stderr}'.strip().lower()
-        if result.returncode != 0 or ('false' in output and 'true' not in output):
+        req.pose.orientation.z = math.sin(half)
+        req.pose.orientation.w = math.cos(half)
+        future = self.client.call_async(req)
+        start = time.monotonic()
+        while rclpy.ok() and not future.done():
+            rclpy.spin_once(self, timeout_sec=0.05)
+            if (time.monotonic() - start) > 10.0:
+                raise RuntimeError(f'Timed out waiting for {self.service_name} response')
+        result = future.result()
+        if result is None or not bool(getattr(result, 'success', False)):
             raise RuntimeError(
-                f'Set pose request failed at x={x:.3f}, y={y:.3f}, yaw={yaw:.3f}. '
-                f'gz service output: {output or "<empty>"}'
+                f'Set pose request failed at x={x:.3f}, y={y:.3f}, yaw={yaw:.3f}'
             )
 
     def capture_image_at_pose(self, *, x: float, y: float, yaw: float) -> np.ndarray:
@@ -200,10 +200,10 @@ def main() -> int:
     parser.add_argument('--out', default='', help='Output dataset folder; defaults under logs/')
     parser.add_argument('--sample-nx', type=int, default=12)
     parser.add_argument('--sample-ny', type=int, default=10)
-    parser.add_argument('--yaw-samples', type=int, default=8)
+    parser.add_argument('--yaw-samples', type=int, default=4)
     parser.add_argument('--wall-margin', type=float, default=0.65)
     parser.add_argument('--val-fraction', type=float, default=0.20)
-    parser.add_argument('--split-mode', choices=('cyclic', 'yaw_bucket', 'spatial_cell', 'spatial_yaw_bucket'), default='spatial_cell')
+    parser.add_argument('--split-mode', choices=('cyclic', 'yaw_bucket', 'spatial_cell', 'spatial_yaw_bucket'), default='spatial_yaw_bucket')
     parser.add_argument('--spatial-block-size', type=int, default=2)
     parser.add_argument('--split-seed', type=int, default=0)
     parser.add_argument('--robot-z', type=float, default=0.05)
@@ -239,7 +239,7 @@ def main() -> int:
     xs = np.linspace(xmin, xmax, max(int(args.sample_nx), 1))
     ys = np.linspace(ymin, ymax, max(int(args.sample_ny), 1))
     yaw_samples = max(int(args.yaw_samples), 1)
-    yaws = np.linspace(0.0, 2.0 * math.pi, yaw_samples, endpoint=False)
+    yaws = np.asarray(evenly_spaced_yaws(yaw_samples), dtype=float)
     pose_records = build_pose_records(xs, ys, yaws)
     planned = [(float(item['x']), float(item['y']), float(item['yaw'])) for item in pose_records]
     split_labels = assign_splits(
@@ -396,6 +396,8 @@ def main() -> int:
                 'sample_nx': int(args.sample_nx),
                 'sample_ny': int(args.sample_ny),
                 'yaw_samples': int(args.yaw_samples),
+                'yaw_values_rad': [float(v) for v in yaws.tolist()],
+                'yaw_sampling_strategy': 'fixed_uniform',
                 'planned_samples': int(len(planned)),
                 'accepted_samples': int(accepted),
                 'skipped_samples': int(skipped),
@@ -407,6 +409,10 @@ def main() -> int:
                 'box_width': float(args.box_width),
                 'box_height': float(args.box_height),
                 'timestamp': _timestamp(),
+                'notes': [
+                    'Robot poses are sampled over fixed evenly spaced headings so training covers orientation variation consistently.',
+                    'The default split_mode=spatial_yaw_bucket separates nearby poses and heading buckets to reduce leakage.',
+                ],
             },
             indent=2,
         ),

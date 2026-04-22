@@ -28,18 +28,11 @@ def mask_bottom(points: np.ndarray, band_px: float) -> tuple[float, float]:
 
 
 def polygon_area(points: np.ndarray) -> float:
-    points = np.asarray(points, dtype=float)
+    points = np.asarray(points, dtype=np.float32)
     if points.ndim != 2 or points.shape[0] < 3 or points.shape[1] < 2:
         return math.nan
-    return float(
-        abs(
-            0.5
-            * (
-                np.dot(points[:, 0], np.roll(points[:, 1], -1))
-                - np.dot(points[:, 1], np.roll(points[:, 0], -1))
-            )
-        )
-    )
+    import cv2
+    return float(cv2.contourArea(points[:, :2]))
 
 
 def collect_candidate_detections(result, target_ids):
@@ -112,6 +105,7 @@ def select_best_detection(
     detection = detections[0]
     bbox = np.asarray(detection['bbox'], dtype=float)
     x0, y0, x1, y1 = [float(v) for v in bbox]
+    assert x0 >= 0.0 and y0 >= 0.0, f"YOLO bounding box out of bounds: {bbox}"
     polygon = detection['polygon']
     mask_area = math.nan
     mask_available = 0

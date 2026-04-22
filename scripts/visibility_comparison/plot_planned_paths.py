@@ -68,6 +68,7 @@ def _plot_settings_for_run(run_manifest: dict, args) -> dict[str, float | str | 
         'visibility_power': float(args.visibility_power),
         'visibility_trust_low': float(args.visibility_trust_low),
         'visibility_trust_high': float(args.visibility_trust_high),
+        'visibility_trust_mode': str(getattr(args, 'visibility_trust_mode', 'smoothstep')),
         'visibility_sigma_kappa': float(getattr(args, 'visibility_sigma_kappa', 1.0)),
         'min_prob': float(args.min_prob),
     }
@@ -78,6 +79,7 @@ def _plot_settings_for_run(run_manifest: dict, args) -> dict[str, float | str | 
         if not ok:
             used_defaults.append(key)
         cfg[key] = value
+    cfg['visibility_trust_mode'] = str(run_manifest.get('visibility_trust_mode', defaults['visibility_trust_mode']) or defaults['visibility_trust_mode']).strip().lower()
     cfg['source'] = 'run_manifest' if not used_defaults else 'run_manifest+args_fallback'
     cfg['used_arg_defaults'] = used_defaults
     return cfg
@@ -187,8 +189,41 @@ def _smoothstep(x: np.ndarray) -> np.ndarray:
     return x * x * (3.0 - 2.0 * x)
 
 
-def _visibility_effective_score(p_vis: np.ndarray, *, min_prob: float, visibility_power: float, visibility_trust_low: float, visibility_trust_high: float) -> np.ndarray:
+def _live_detection_trust(
+    *,
+    detected_after_threshold: np.ndarray,
+    raw_score: np.ndarray,
+    selected_score: np.ndarray,
+    mask_available: np.ndarray,
+    mask_area: np.ndarray,
+    bbox_area: np.ndarray,
+    selected_pixel_source_code: np.ndarray,
+) -> np.ndarray:
+    trust = np.zeros_like(raw_score, dtype=float)
+    active = np.asarray(detected_after_threshold, dtype=bool)
+    
+    # Use selected_score if finite, else raw_score
+    scores = np.where(np.isfinite(selected_score), selected_score, raw_score)
+    scores = np.clip(scores, 0.0, 1.0)
+    
+    # Mapping
+    score_low = 0.15
+    score_high = 0.55
+    t = _smoothstep((scores - score_low) / max(score_high - score_low, 1e-6))
+    
+    # Modifiers
+    t = np.where(selected_pixel_source_code == 1.0, t * 0.90, t) # bbox_bottom
+    t = np.where(mask_available & np.isfinite(mask_area) & (mask_area >= 20.0), t * 1.00, t)
+    t = np.where(np.isfinite(bbox_area) & (bbox_area < 25.0), t * 0.85, t)
+    
+    trust[active] = t[active]
+    return np.clip(trust, 1e-4, 1.0 - 1e-4)
+
+
+def _visibility_effective_score(p_vis: np.ndarray, *, min_prob: float, visibility_power: float, visibility_trust_low: float, visibility_trust_high: float, visibility_trust_mode: str = 'smoothstep') -> np.ndarray:
     p_vis = np.clip(np.asarray(p_vis, dtype=float), min_prob, 1.0 - min_prob)
+    if str(visibility_trust_mode).strip().lower() in ('direct', 'identity', 'gp'):
+        return p_vis
     shaped = np.clip(p_vis ** float(visibility_power), min_prob, 1.0 - min_prob)
     lo = float(np.clip(visibility_trust_low, min_prob, 1.0 - min_prob))
     hi = float(np.clip(visibility_trust_high, lo + 1e-6, 1.0 - min_prob))
@@ -196,40 +231,47 @@ def _visibility_effective_score(p_vis: np.ndarray, *, min_prob: float, visibilit
     return np.clip(_smoothstep(x), min_prob, 1.0 - min_prob)
 
 
-def _ambiguity_map(p_map: np.ndarray, *, min_prob: float, r_visible_uv: float, r_miss_uv: float, visibility_power: float, visibility_trust_low: float, visibility_trust_high: float) -> np.ndarray:
+def _ambiguity_map(p_map: np.ndarray, *, min_prob: float, r_visible_uv: float, r_miss_uv: float, visibility_power: float, visibility_trust_low: float, visibility_trust_high: float, visibility_trust_mode: str = 'smoothstep') -> np.ndarray:
     trust = _visibility_effective_score(
         p_map,
         min_prob=min_prob,
         visibility_power=visibility_power,
         visibility_trust_low=visibility_trust_low,
         visibility_trust_high=visibility_trust_high,
+        visibility_trust_mode=visibility_trust_mode,
     )
-    std = trust * float(r_visible_uv) + (1.0 - trust) * float(r_miss_uv)
-    det = np.clip(np.square(std) * np.square(std), 1e-12, None)
+    visible_var = float(r_visible_uv) ** 2
+    miss_var = float(r_miss_uv) ** 2
+    var = 1.0 / np.maximum(trust / max(visible_var, 1e-6) + (1.0 - trust) / max(miss_var, 1e-6), 1e-9)
+    det = np.clip(var * var, 1e-12, None)
     return 0.5 * np.log(det)
 
 
-def _r_plan_uv_std_map(p_map: np.ndarray, *, min_prob: float, r_visible_uv: float, r_miss_uv: float, visibility_power: float, visibility_trust_low: float, visibility_trust_high: float) -> np.ndarray:
+def _r_plan_uv_std_map(p_map: np.ndarray, *, min_prob: float, r_visible_uv: float, r_miss_uv: float, visibility_power: float, visibility_trust_low: float, visibility_trust_high: float, visibility_trust_mode: str = 'smoothstep') -> np.ndarray:
     trust = _visibility_effective_score(
         p_map,
         min_prob=min_prob,
         visibility_power=visibility_power,
         visibility_trust_low=visibility_trust_low,
         visibility_trust_high=visibility_trust_high,
+        visibility_trust_mode=visibility_trust_mode,
     )
-    return trust * float(r_visible_uv) + (1.0 - trust) * float(r_miss_uv)
+    visible_var = float(r_visible_uv) ** 2
+    miss_var = float(r_miss_uv) ** 2
+    var = 1.0 / np.maximum(trust / max(visible_var, 1e-6) + (1.0 - trust) / max(miss_var, 1e-6), 1e-9)
+    return np.sqrt(np.maximum(var, 0.0))
 
 
 def _infer_method_id(run_manifest: dict, run_dir: Path) -> str:
     method = str(run_manifest.get('method', '') or '').strip()
-    if method and method in ACTIVE_METHOD_IDS:
+    if method:
         return method
     planner = str(run_manifest.get('planner', '') or '').strip()
     if planner == 'visibility_unaware_baseline':
         return 'visibility_unaware_baseline'
     
     comp_id = str(run_manifest.get('comparison_method_id', '') or '').strip()
-    if comp_id and comp_id in ACTIVE_METHOD_IDS:
+    if comp_id:
         return comp_id
 
     raw_artifact = str(run_manifest.get('visibility_artifact_path', '') or '').strip()
@@ -239,7 +281,7 @@ def _infer_method_id(run_manifest: dict, run_dir: Path) -> str:
             return name[:-7]
 
     parent_name = run_dir.parent.name
-    if parent_name in ACTIVE_METHOD_IDS:
+    if parent_name:
         return parent_name
     return planner or run_dir.name
 
@@ -537,6 +579,7 @@ def main() -> int:
     parser.add_argument('--visibility-power', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_power'])
     parser.add_argument('--visibility-trust-low', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_low'])
     parser.add_argument('--visibility-trust-high', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_high'])
+    parser.add_argument('--visibility-trust-mode', default='smoothstep')
     parser.add_argument('--visibility-sigma-kappa', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_sigma_kappa'])
     parser.add_argument('--min-prob', type=float, default=1e-4)
     parser.add_argument(
@@ -651,9 +694,49 @@ def main() -> int:
         yolo_bbox_area = _column_with_fallback(perception_cols, 'yolo_bbox_area', 'bbox_area_px')
         yolo_mask_area = _column_with_fallback(perception_cols, 'yolo_mask_area', 'mask_area_px')
         camera_relative_bearing_deg = _column_with_fallback(perception_cols, 'camera_relative_bearing_deg')
+        
+        # Recalculate live detection trust from perception diagnostics
+        p_diag_stamp = _column_with_fallback(perception_cols, 'diag_stamp', 'stamp')
+        p_detected = _column_with_fallback(perception_cols, 'yolo_detected_after_threshold', 'detected')
+        p_raw = _column_with_fallback(perception_cols, 'yolo_score_raw', 'yolo_raw_best_score')
+        p_sel = _column_with_fallback(perception_cols, 'yolo_score_selected', 'yolo_selected_score')
+        p_mask_used = _column_with_fallback(perception_cols, 'mask_used')
+        p_mask_area = _column_with_fallback(perception_cols, 'mask_area_px', 'yolo_mask_area')
+        p_bbox_area = _column_with_fallback(perception_cols, 'bbox_area_px', 'yolo_bbox_area')
+        p_src_code = _column_with_fallback(perception_cols, 'selected_pixel_source_code')
+        
+        trust_update_raw = np.array([], dtype=float)
+        if p_diag_stamp.size > 0:
+            trust_update_raw = _live_detection_trust(
+                detected_after_threshold=p_detected >= 0.5,
+                raw_score=p_raw,
+                selected_score=p_sel,
+                mask_available=p_mask_used >= 0.5,
+                mask_area=p_mask_area,
+                bbox_area=p_bbox_area,
+                selected_pixel_source_code=p_src_code,
+            )
+        
+        # Interpolate trust_update onto experiment timestamps (t_aligned)
+        trust_update = np.full_like(t_aligned, math.nan)
+        if trust_update_raw.size > 0 and p_diag_stamp.size > 0:
+            # Align p_diag_stamp to first_cmd_stamp
+            p_t_aligned = p_diag_stamp - first_cmd_stamp if math.isfinite(first_cmd_stamp) else p_diag_stamp
+            # Only interpolate where we have recent data? For now, simple interp
+            trust_update = np.interp(t_aligned, p_t_aligned, trust_update_raw, left=0.0, right=0.0)
+
+        trust_update_series = trust_update
+
+        # Prefer explicit unambiguous error columns; fall back to legacy state_pos_error_m
         # Prefer explicit unambiguous error columns; fall back to legacy state_pos_error_m
         truth_state_error_m = _column_with_fallback(run_cols, 'truth_state_error_m')
         truth_belief_error_m = _column_with_fallback(run_cols, 'truth_belief_error_m')
+        yaw_error_truth_odom_rad = _column_with_fallback(run_cols, 'yaw_error_truth_odom_rad')
+        yaw_error_truth_state_rad = _column_with_fallback(run_cols, 'yaw_error_truth_state_rad')
+        yaw_error_truth_belief_rad = _column_with_fallback(run_cols, 'yaw_error_truth_belief_rad')
+        pixel_corr_xy_update_norm_m = _column_with_fallback(run_cols, 'pixel_corr_xy_update_norm_m')
+        pixel_corr_theta_update_total_rad = _column_with_fallback(run_cols, 'pixel_corr_theta_update_total_rad')
+        pixel_heading_correction_applied = _column_with_fallback(run_cols, 'pixel_heading_correction_applied')
         state_pos_error = _column_with_fallback(run_cols, 'state_pos_error_m')
         cov_trace = _column_with_fallback(run_cols, 'state_cov_trace')
         cov_major = _column_with_fallback(run_cols, 'state_sigma_major_m')
@@ -707,9 +790,16 @@ def main() -> int:
             'yolo_bbox_area': yolo_bbox_area,
             'yolo_mask_area': yolo_mask_area,
             'camera_relative_bearing_deg': camera_relative_bearing_deg,
+            'trust_update': trust_update_series,
             'planner_belief_yaw': planner_belief_yaw,
             'truth_state_error_m': truth_state_error_m,
             'truth_belief_error_m': truth_belief_error_m,
+            'yaw_error_truth_odom_rad': yaw_error_truth_odom_rad,
+            'yaw_error_truth_state_rad': yaw_error_truth_state_rad,
+            'yaw_error_truth_belief_rad': yaw_error_truth_belief_rad,
+            'pixel_corr_xy_update_norm_m': pixel_corr_xy_update_norm_m,
+            'pixel_corr_theta_update_total_rad': pixel_corr_theta_update_total_rad,
+            'pixel_heading_correction_applied': pixel_heading_correction_applied,
             'state_pos_error_m': state_pos_error,   # legacy fallback
             'state_cov_trace': cov_trace,
             'state_sigma_major_m': cov_major,
@@ -751,6 +841,7 @@ def main() -> int:
             visibility_power=float(plot_cfg['visibility_power']),
             visibility_trust_low=float(plot_cfg['visibility_trust_low']),
             visibility_trust_high=float(plot_cfg['visibility_trust_high']),
+            visibility_trust_mode=str(plot_cfg.get('visibility_trust_mode', 'smoothstep')),
         )
         std_map = _r_plan_uv_std_map(
             p_map,
@@ -760,6 +851,7 @@ def main() -> int:
             visibility_power=float(plot_cfg['visibility_power']),
             visibility_trust_low=float(plot_cfg['visibility_trust_low']),
             visibility_trust_high=float(plot_cfg['visibility_trust_high']),
+            visibility_trust_mode=str(plot_cfg.get('visibility_trust_mode', 'smoothstep')),
         )
 
         method_dir = output_dir / method_id
@@ -1429,6 +1521,7 @@ def main() -> int:
             visibility_power=float(background_cfg['visibility_power']),
             visibility_trust_low=float(background_cfg['visibility_trust_low']),
             visibility_trust_high=float(background_cfg['visibility_trust_high']),
+            visibility_trust_mode=str(background_cfg.get('visibility_trust_mode', 'smoothstep')),
         )
         fig, ax = plt.subplots(figsize=(8, 7), constrained_layout=True)
         ax.imshow(amb_bg, origin='lower', extent=extent, cmap='magma', aspect='equal')
@@ -1521,6 +1614,9 @@ def main() -> int:
                 mask = t_aligned[:n_vis] >= 0.0
                 row_axes[2].plot(t_aligned[:n_vis][mask], p_vis_plan[:n_vis][mask], color='forestgreen', linewidth=1.6, label='p_vis')
                 row_axes[2].plot(t_aligned[:n_vis][mask], p_vis_plan_eff[:n_vis][mask], color='mediumseagreen', linewidth=1.3, linestyle='--', label='p_vis_eff')
+                trust_upd = np.asarray(pack.get('trust_update', np.array([], dtype=float)), dtype=float)
+                if trust_upd.size >= n_vis:
+                    row_axes[2].plot(t_aligned[:n_vis][mask], trust_upd[:n_vis][mask], color='dodgerblue', linewidth=1.5, label='trust_update')
                 ax2 = row_axes[2].twinx()
                 ax2.plot(t_aligned[:n_vis][mask], r_plan_u_std[:n_vis][mask], color='purple', linewidth=1.2, label='r_u')
                 if row_idx == 0:
@@ -1744,6 +1840,11 @@ def main() -> int:
         ('combined_state_error_vs_time.png',       'truth_state_error_m',  '||truth - state|| [m]',  'State perception error vs time (truth vs /state/bev)'),
         ('combined_belief_error_vs_time.png',      'truth_belief_error_m', '||truth - belief|| [m]', 'Planner belief error vs time (truth vs /planner_belief)'),
         ('combined_state_uncertainty_vs_time.png', 'state_cov_trace',      'state_cov_trace',        'State covariance trace vs time'),
+        ('combined_yaw_error_odom_vs_time.png',    'yaw_error_truth_odom_rad',   '|truth - odom yaw| [deg]',   'Odom yaw error vs time'),
+        ('combined_yaw_error_state_vs_time.png',   'yaw_error_truth_state_rad',  '|truth - state yaw| [deg]',  'State yaw error vs time'),
+        ('combined_yaw_error_belief_vs_time.png',  'yaw_error_truth_belief_rad', '|truth - belief yaw| [deg]', 'Planner belief yaw error vs time'),
+        ('combined_pixel_correction_xy_vs_time.png', 'pixel_corr_xy_update_norm_m', '||camera correction|| [m]', 'Pixel correction position update vs time'),
+        ('combined_pixel_correction_theta_vs_time.png', 'pixel_corr_theta_update_total_rad', '|camera correction theta| [deg]', 'Pixel correction theta update vs time'),
     ):
         fig, ax = plt.subplots(figsize=(10, 6), constrained_layout=True)
         for color, pack in zip(palette, combined_ts):
@@ -1757,6 +1858,8 @@ def main() -> int:
                 continue
             n = min(t_aligned.size, series.size)
             m = (t_aligned[:n] >= 0.0)
+            if 'yaw_error' in key or key == 'pixel_corr_theta_update_total_rad':
+                series = np.abs(series) * 180.0 / math.pi
             ax.plot(t_aligned[:n][m], series[:n][m], color=color, linewidth=2, label=_method_label(method_id))
         ax.set_xlabel('Time since first command [s]')
         ax.set_ylabel(ylabel)
@@ -1780,6 +1883,11 @@ def main() -> int:
             'combined_visibility_vs_time': str(output_dir / 'combined_visibility_vs_time.png'),
             'combined_efe_breakdown_vs_time': str(output_dir / 'combined_efe_breakdown_vs_time.png'),
             'combined_path_profile_uncertainty': str(output_dir / 'combined_path_profile_uncertainty.png'),
+            'combined_yaw_error_odom_vs_time': str(output_dir / 'combined_yaw_error_odom_vs_time.png'),
+            'combined_yaw_error_state_vs_time': str(output_dir / 'combined_yaw_error_state_vs_time.png'),
+            'combined_yaw_error_belief_vs_time': str(output_dir / 'combined_yaw_error_belief_vs_time.png'),
+            'combined_pixel_correction_xy_vs_time': str(output_dir / 'combined_pixel_correction_xy_vs_time.png'),
+            'combined_pixel_correction_theta_vs_time': str(output_dir / 'combined_pixel_correction_theta_vs_time.png'),
         },
         'notes': plot_notes,
     })

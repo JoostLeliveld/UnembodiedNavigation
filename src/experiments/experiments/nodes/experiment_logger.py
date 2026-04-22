@@ -42,11 +42,8 @@ def _load_task_start_pose(tasks_yaml_path: str, world: str, task: str):
     path = str(tasks_yaml_path or '').strip()
     if not path or not os.path.isfile(path):
         return None
-    try:
-        with open(path, 'r', encoding='utf-8') as handle:
-            payload = yaml.safe_load(handle) or {}
-    except (OSError, yaml.YAMLError):
-        return None
+    with open(path, 'r', encoding='utf-8') as handle:
+        payload = yaml.safe_load(handle) or {}
     tasks = payload.get('tasks')
     if not isinstance(tasks, dict):
         return None
@@ -61,15 +58,11 @@ def _load_task_start_pose(tasks_yaml_path: str, world: str, task: str):
         start = entry.get('start')
         if not isinstance(start, dict):
             return None
-        try:
-            return (
-                float(start.get('x')),
-                float(start.get('y')),
-                float(start.get('yaw', 0.0)),
-            )
-        except (TypeError, ValueError):
-            return None
-    return None
+        return (
+            float(start['x']),
+            float(start['y']),
+            float(start.get('yaw', 0.0)),
+        )
 
 
 def _sha256_text(text: str) -> str:
@@ -121,6 +114,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('visibility_power', 1.0)
         self.declare_parameter('visibility_trust_low', 0.15)
         self.declare_parameter('visibility_trust_high', 0.65)
+        self.declare_parameter('visibility_trust_mode', 'smoothstep')
         self.declare_parameter('visibility_sigma_kappa', 1.0)
         self.declare_parameter('plan_rate', 2.0)
         self.declare_parameter('horizon', 36)
@@ -137,6 +131,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('goal_progress_n_steps', 90)
         self.declare_parameter('observation_risk_scale', 1.25)
         self.declare_parameter('ambiguity_term_scale', 1.00)
+        self.declare_parameter('discount_gamma', 0.98)
         self.declare_parameter('visibility_weight', 0.0)
         self.declare_parameter('visibility_barrier_threshold', 0.0)
         self.declare_parameter('visibility_barrier_scale', 10.0)
@@ -150,6 +145,11 @@ class ExperimentLogger(Node):
         self.declare_parameter('optimizer_ftol', 1e-6)
         self.declare_parameter('optimizer_gtol', 1e-4)
         self.declare_parameter('optimizer_warm_start', True)
+        self.declare_parameter('optimizer_multistart_seeds', False)
+        self.declare_parameter('optimizer_seed_families', '')
+        self.declare_parameter('optimizer_multistart_max_seeds', 0)
+        self.declare_parameter('odom_heading_correction_mode', 'kalman')
+        self.declare_parameter('clamp_pixel_uv_theta_without_yaw', False)
         self.declare_parameter('use_nogo_cost', False)
         self.declare_parameter('nogo_penalty_type', 'softplus')
         self.declare_parameter('nogo_weight', 0.0)
@@ -215,6 +215,7 @@ class ExperimentLogger(Node):
         self.visibility_power = float(self.get_parameter('visibility_power').value)
         self.visibility_trust_low = float(self.get_parameter('visibility_trust_low').value)
         self.visibility_trust_high = float(self.get_parameter('visibility_trust_high').value)
+        self.visibility_trust_mode = str(self.get_parameter('visibility_trust_mode').value)
         self.visibility_sigma_kappa = float(self.get_parameter('visibility_sigma_kappa').value)
         self.plan_rate = float(self.get_parameter('plan_rate').value)
         self.horizon = int(self.get_parameter('horizon').value)
@@ -231,6 +232,7 @@ class ExperimentLogger(Node):
         self.goal_progress_n_steps = int(self.get_parameter('goal_progress_n_steps').value)
         self.observation_risk_scale = float(self.get_parameter('observation_risk_scale').value)
         self.ambiguity_term_scale = float(self.get_parameter('ambiguity_term_scale').value)
+        self.discount_gamma = float(self.get_parameter('discount_gamma').value)
         self.visibility_weight = float(self.get_parameter('visibility_weight').value)
         self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
         self.perception_use_geometry_occlusion = bool(
@@ -244,6 +246,13 @@ class ExperimentLogger(Node):
         self.optimizer_ftol = float(self.get_parameter('optimizer_ftol').value)
         self.optimizer_gtol = float(self.get_parameter('optimizer_gtol').value)
         self.optimizer_warm_start = bool(self.get_parameter('optimizer_warm_start').value)
+        self.optimizer_multistart_seeds = bool(self.get_parameter('optimizer_multistart_seeds').value)
+        self.optimizer_seed_families = str(self.get_parameter('optimizer_seed_families').value)
+        self.optimizer_multistart_max_seeds = int(self.get_parameter('optimizer_multistart_max_seeds').value)
+        self.odom_heading_correction_mode = str(self.get_parameter('odom_heading_correction_mode').value)
+        self.clamp_pixel_uv_theta_without_yaw = bool(
+            self.get_parameter('clamp_pixel_uv_theta_without_yaw').value
+        )
         self.use_nogo_cost = bool(self.get_parameter('use_nogo_cost').value)
         self.nogo_penalty_type = str(self.get_parameter('nogo_penalty_type').value)
         self.nogo_weight = float(self.get_parameter('nogo_weight').value)
@@ -347,6 +356,7 @@ class ExperimentLogger(Node):
             'visibility_power': self.visibility_power,
             'visibility_trust_low': self.visibility_trust_low,
             'visibility_trust_high': self.visibility_trust_high,
+            'visibility_trust_mode': self.visibility_trust_mode,
             'visibility_sigma_kappa': self.visibility_sigma_kappa,
             'goal_prior_u_std_start': self.goal_prior_u_std_start,
             'goal_prior_v_std_start': self.goal_prior_v_std_start,
@@ -356,6 +366,7 @@ class ExperimentLogger(Node):
             'goal_progress_n_steps': self.goal_progress_n_steps,
             'observation_risk_scale': self.observation_risk_scale,
             'ambiguity_term_scale': self.ambiguity_term_scale,
+            'discount_gamma': self.discount_gamma,
             'visibility_weight': self.visibility_weight,
             'visibility_target_height_m': self.visibility_target_height_m,
             'visibility_geometry_json': self.visibility_geometry_json,
@@ -405,6 +416,11 @@ class ExperimentLogger(Node):
             'optimizer_ftol': self.optimizer_ftol,
             'optimizer_gtol': self.optimizer_gtol,
             'optimizer_warm_start': self.optimizer_warm_start,
+            'optimizer_multistart_seeds': self.optimizer_multistart_seeds,
+            'optimizer_seed_families': self.optimizer_seed_families,
+            'optimizer_multistart_max_seeds': self.optimizer_multistart_max_seeds,
+            'odom_heading_correction_mode': self.odom_heading_correction_mode,
+            'clamp_pixel_uv_theta_without_yaw': self.clamp_pixel_uv_theta_without_yaw,
         }
         self._manifest_data = dict(manifest_data)
         write_manifest(self.run_dir, self._manifest_data, repo_root)
@@ -415,6 +431,8 @@ class ExperimentLogger(Node):
         self.odom_msg = None
         self.obs_msg = None
         self.perception_diag = None
+        self.heading_diag = None
+        self.pixel_correction_diag = None
         self.cmd_msg = None
         self.goal_msg = None
         self.plan_msg = None
@@ -488,6 +506,12 @@ class ExperimentLogger(Node):
         self._truth_belief_error_sum = 0.0
         self._truth_state_error_count = 0
         self._truth_belief_error_count = 0
+        self._truth_odom_yaw_error_sum = 0.0
+        self._truth_state_yaw_error_sum = 0.0
+        self._truth_belief_yaw_error_sum = 0.0
+        self._truth_odom_yaw_error_count = 0
+        self._truth_state_yaw_error_count = 0
+        self._truth_belief_yaw_error_count = 0
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
 
@@ -500,6 +524,7 @@ class ExperimentLogger(Node):
         goal_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
         self.create_subscription(PoseWithCovarianceStamped, '/state/bev', self._state_cb, 10)
+        self.create_subscription(Float64MultiArray, '/state/heading_diagnostics', self._heading_diag_cb, 10)
         self.create_subscription(PoseWithCovarianceStamped, '/planner_belief', self._planner_belief_cb, 10)
         self.create_subscription(PoseStamped, '/perception/pixel_pose', self._obs_cb, 10)
         self.create_subscription(
@@ -512,6 +537,12 @@ class ExperimentLogger(Node):
         self.create_subscription(PoseStamped, '/goal_bev', self._goal_cb, qos_profile=goal_qos)
         self.create_subscription(Path, '/plan_preview', self._plan_cb, 10)
         self.create_subscription(Float64MultiArray, '/planner/diagnostics', self._planner_diag_cb, 10)
+        self.create_subscription(
+            Float64MultiArray,
+            '/planner/pixel_correction_diagnostics',
+            self._pixel_correction_diag_cb,
+            10,
+        )
         self.create_subscription(String, '/planner/diagnostics_text', self._planner_diag_text_cb, 10)
         self.create_subscription(Float64MultiArray, '/efe/metrics', self._efe_cb, 10)
         self.create_subscription(Contacts, '/world_contacts', self._contacts_cb, 10)
@@ -535,6 +566,20 @@ class ExperimentLogger(Node):
             # truth_state_error_m  = ||truth - /state/bev||   (perception estimate vs ground truth)
             # truth_belief_error_m = ||truth - /planner_belief||  (planner internal state vs ground truth)
             'truth_state_error_m', 'truth_belief_error_m',
+            'odom_available', 'odom_stamp', 'odom_x', 'odom_y', 'odom_yaw',
+            'yaw_error_truth_odom_rad', 'yaw_error_truth_state_rad', 'yaw_error_truth_belief_rad',
+            'pixel_yaw_meas', 'heading_source_code', 'heading_source',
+            'heading_diag_stamp', 'heading_diag_age_s',
+            'state_heading_yaw_sigma', 'state_heading_odom_age_s',
+            'planner_pixel_correction_available', 'planner_pixel_correction_stamp',
+            'planner_pixel_correction_age_s',
+            'pixel_corr_innov_u', 'pixel_corr_innov_v',
+            'pixel_corr_xy_update_norm_m', 'pixel_corr_theta_update_from_uv_rad',
+            'pixel_heading_correction_applied', 'pixel_heading_meas_source',
+            'pixel_heading_innov_rad',
+            'pixel_heading_gain_theta', 'pixel_corr_theta_update_total_rad',
+            'pixel_corr_pred_x', 'pixel_corr_pred_y', 'pixel_corr_pred_yaw',
+            'pixel_corr_next_x', 'pixel_corr_next_y', 'pixel_corr_next_yaw',
             'cmd_v', 'cmd_w',
             'goal_x', 'goal_y', 'goal_dist',
             'plan_points', 'plan_length',
@@ -547,6 +592,8 @@ class ExperimentLogger(Node):
             'fraction_horizon_low_pvis', 'fraction_horizon_high_ambiguity',
             'min_predicted_obstacle_distance_m', 'rollout_valid', 'fallback_stop_applied',
             'efe_total', 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_visibility', 'efe_obstacle',
+            'efe_risk_mean', 'efe_risk_cov_trace', 'efe_risk_cov_logdet',
+            'efe_delta_risk_visibility', 'efe_delta_ambiguity_visibility',
             'collision_any', 'collision_contact', 'collision_geom', 'collision_reason', 'first_crash_stamp',
             'min_wall_distance_m', 'min_obstacle_distance_m',
             'wall_penetration_m', 'obstacle_penetration_m',
@@ -766,6 +813,25 @@ class ExperimentLogger(Node):
         self.perception_diag = diagnostics_from_message(msg)
         self._log_perception_sample(self.perception_diag)
 
+    def _heading_diag_cb(self, msg: Float64MultiArray):
+        self.heading_diag = msg
+
+    def _pixel_correction_diag_cb(self, msg: Float64MultiArray):
+        self.pixel_correction_diag = msg
+
+    @staticmethod
+    def _heading_source_name(code: float) -> str:
+        try:
+            value = int(round(float(code)))
+        except (TypeError, ValueError):
+            value = 0
+        return {
+            1: 'pixel_heading',
+            2: 'odom_heading_fallback',
+            3: 'motion_heading_fallback',
+            4: 'held_previous_heading',
+        }.get(value, 'unknown')
+
     def _record_invalid(self, reason: str) -> None:
         reason = str(reason or '').strip()
         if not reason:
@@ -870,13 +936,13 @@ class ExperimentLogger(Node):
                 )
                 pose_world = do_transform_pose(self.odom_msg.pose.pose, tf_msg)
             except tf2_ros.TransformException as exc:
-                now = time.monotonic()
-                if (now - self._last_tf_warn_wall) > 1.0:
-                    self._last_tf_warn_wall = now
+                now_wall = time.monotonic()
+                if now_wall - self._last_tf_warn_wall > 2.0:
                     self.get_logger().warn(
-                        f"Experiment logger TF transform {source_frame}->{self.frame_id} unavailable: {exc}"
+                        f"Truth pose unavailable until TF {source_frame}->{self.frame_id} exists: {exc}"
                     )
-                return False, math.nan, math.nan, math.nan, math.nan
+                    self._last_tf_warn_wall = now_wall
+                return False, stamp, math.nan, math.nan, math.nan
 
         return (
             True,
@@ -1240,6 +1306,86 @@ class ExperimentLogger(Node):
             if math.isfinite(truth_belief_error_m):
                 self._truth_belief_error_count += 1
 
+        odom_ok, odom_stamp, odom_x, odom_y, odom_yaw, _odom_source_frame = self._latest_raw_odom_pose()
+        yaw_error_truth_odom_rad = math.nan
+        yaw_error_truth_state_rad = math.nan
+        yaw_error_truth_belief_rad = math.nan
+        if true_ok and odom_ok and math.isfinite(odom_yaw):
+            yaw_error_truth_odom_rad = float(self._wrap_angle(odom_yaw - true_yaw))
+            self._truth_odom_yaw_error_sum += abs(yaw_error_truth_odom_rad)
+            self._truth_odom_yaw_error_count += 1
+        if true_ok and state_ok and math.isfinite(state_yaw):
+            yaw_error_truth_state_rad = float(self._wrap_angle(state_yaw - true_yaw))
+            self._truth_state_yaw_error_sum += abs(yaw_error_truth_state_rad)
+            self._truth_state_yaw_error_count += 1
+        if true_ok and planner_belief_ok and math.isfinite(planner_belief_yaw):
+            yaw_error_truth_belief_rad = float(self._wrap_angle(planner_belief_yaw - true_yaw))
+            self._truth_belief_yaw_error_sum += abs(yaw_error_truth_belief_rad)
+            self._truth_belief_yaw_error_count += 1
+
+        heading_diag_stamp = math.nan
+        heading_diag_age_s = math.nan
+        pixel_yaw_meas = math.nan
+        heading_source_code = math.nan
+        heading_source = 'unknown'
+        state_heading_yaw_sigma = math.nan
+        state_heading_odom_age_s = math.nan
+        if self.heading_diag is not None and self.heading_diag.data and len(self.heading_diag.data) >= 10:
+            hdata = list(self.heading_diag.data)
+            heading_diag_stamp = float(hdata[0])
+            heading_source_code = float(hdata[1])
+            pixel_yaw_meas = float(hdata[2])
+            state_heading_yaw_sigma = float(hdata[6])
+            state_heading_odom_age_s = float(hdata[9])
+            heading_source = self._heading_source_name(heading_source_code)
+            if math.isfinite(heading_diag_stamp):
+                heading_diag_age_s = max(now_stamp - heading_diag_stamp, 0.0)
+
+        planner_pixel_correction_available = 0.0
+        planner_pixel_correction_stamp = math.nan
+        planner_pixel_correction_age_s = math.nan
+        pixel_corr_innov_u = math.nan
+        pixel_corr_innov_v = math.nan
+        pixel_corr_xy_update_norm_m = math.nan
+        pixel_corr_theta_update_from_uv_rad = math.nan
+        pixel_heading_correction_applied = math.nan
+        pixel_heading_meas_source = math.nan
+        pixel_heading_innov_rad = math.nan
+        pixel_heading_gain_theta = math.nan
+        pixel_corr_theta_update_total_rad = math.nan
+        pixel_corr_pred_x = math.nan
+        pixel_corr_pred_y = math.nan
+        pixel_corr_pred_yaw = math.nan
+        pixel_corr_next_x = math.nan
+        pixel_corr_next_y = math.nan
+        pixel_corr_next_yaw = math.nan
+        if (
+            self.pixel_correction_diag is not None
+            and self.pixel_correction_diag.data
+            and len(self.pixel_correction_diag.data) >= 20
+        ):
+            cdata = list(self.pixel_correction_diag.data)
+            planner_pixel_correction_available = float(cdata[1])
+            planner_pixel_correction_stamp = float(cdata[0])
+            if math.isfinite(planner_pixel_correction_stamp):
+                planner_pixel_correction_age_s = max(now_stamp - planner_pixel_correction_stamp, 0.0)
+            pixel_corr_innov_u = float(cdata[6])
+            pixel_corr_innov_v = float(cdata[7])
+            pixel_corr_xy_update_norm_m = float(cdata[8])
+            pixel_corr_theta_update_from_uv_rad = float(cdata[9])
+            pixel_heading_correction_applied = float(cdata[10])
+            pixel_heading_innov_rad = float(cdata[11])
+            pixel_heading_gain_theta = float(cdata[12])
+            pixel_corr_theta_update_total_rad = float(cdata[13])
+            pixel_corr_pred_x = float(cdata[14])
+            pixel_corr_pred_y = float(cdata[15])
+            pixel_corr_pred_yaw = float(cdata[16])
+            pixel_corr_next_x = float(cdata[17])
+            pixel_corr_next_y = float(cdata[18])
+            pixel_corr_next_yaw = float(cdata[19])
+            if len(cdata) >= 29:
+                pixel_heading_meas_source = float(cdata[28])
+
         cmd_v = self.cmd_msg.linear.x if self.cmd_msg else 0.0
         cmd_w = self.cmd_msg.angular.z if self.cmd_msg else 0.0
         self._maybe_log_frame_sanity(now_stamp, cmd_v, cmd_w)
@@ -1282,6 +1428,11 @@ class ExperimentLogger(Node):
         efe_control = 0.0
         efe_visibility = 0.0
         efe_obstacle = 0.0
+        efe_risk_mean = math.nan
+        efe_risk_cov_trace = math.nan
+        efe_risk_cov_logdet = math.nan
+        efe_delta_risk_visibility = math.nan
+        efe_delta_ambiguity_visibility = math.nan
         optimizer_success = 0.0
         optimizer_status = 0.0
         optimizer_nit = 0.0
@@ -1325,6 +1476,12 @@ class ExperimentLogger(Node):
                 min_predicted_obstacle_distance_m = float(self.planner_diag.data[16])
                 rollout_valid = float(self.planner_diag.data[17])
                 fallback_stop_applied = float(self.planner_diag.data[18])
+            if len(self.planner_diag.data) >= 24:
+                efe_risk_mean = float(self.planner_diag.data[19])
+                efe_risk_cov_trace = float(self.planner_diag.data[20])
+                efe_risk_cov_logdet = float(self.planner_diag.data[21])
+                efe_delta_risk_visibility = float(self.planner_diag.data[22])
+                efe_delta_ambiguity_visibility = float(self.planner_diag.data[23])
 
         if self.efe_metrics and self.efe_metrics.data and len(self.efe_metrics.data) >= 6:
             efe_total = float(self.efe_metrics.data[0])
@@ -1335,6 +1492,12 @@ class ExperimentLogger(Node):
 
             if len(self.efe_metrics.data) >= 6:
                 efe_obstacle = float(self.efe_metrics.data[5])
+            if len(self.efe_metrics.data) >= 24:
+                efe_risk_mean = float(self.efe_metrics.data[19])
+                efe_risk_cov_trace = float(self.efe_metrics.data[20])
+                efe_risk_cov_logdet = float(self.efe_metrics.data[21])
+                efe_delta_risk_visibility = float(self.efe_metrics.data[22])
+                efe_delta_ambiguity_visibility = float(self.efe_metrics.data[23])
 
         min_wall_distance_m = self._min_wall_distance if math.isfinite(self._min_wall_distance) else math.inf
         min_obstacle_distance_m = self._min_obstacle_distance if math.isfinite(self._min_obstacle_distance) else math.inf
@@ -1406,6 +1569,20 @@ class ExperimentLogger(Node):
             state_pos_error_m, state_cov_trace, state_cov_det,
             state_sigma_major_m, state_sigma_minor_m, state_entropy_xy,
             truth_state_error_m, truth_belief_error_m,
+            1.0 if odom_ok else 0.0, odom_stamp, odom_x, odom_y, odom_yaw,
+            yaw_error_truth_odom_rad, yaw_error_truth_state_rad, yaw_error_truth_belief_rad,
+            pixel_yaw_meas, heading_source_code, heading_source,
+            heading_diag_stamp, heading_diag_age_s,
+            state_heading_yaw_sigma, state_heading_odom_age_s,
+            planner_pixel_correction_available, planner_pixel_correction_stamp,
+            planner_pixel_correction_age_s,
+            pixel_corr_innov_u, pixel_corr_innov_v,
+            pixel_corr_xy_update_norm_m, pixel_corr_theta_update_from_uv_rad,
+            pixel_heading_correction_applied, pixel_heading_meas_source,
+            pixel_heading_innov_rad,
+            pixel_heading_gain_theta, pixel_corr_theta_update_total_rad,
+            pixel_corr_pred_x, pixel_corr_pred_y, pixel_corr_pred_yaw,
+            pixel_corr_next_x, pixel_corr_next_y, pixel_corr_next_yaw,
             cmd_v, cmd_w,
             goal_x, goal_y, goal_dist,
             plan_points, plan_length,
@@ -1418,6 +1595,8 @@ class ExperimentLogger(Node):
             fraction_horizon_low_pvis, fraction_horizon_high_ambiguity,
             min_predicted_obstacle_distance_m, rollout_valid, fallback_stop_applied,
             efe_total, efe_risk, efe_ambiguity, efe_control, efe_visibility, efe_obstacle,
+            efe_risk_mean, efe_risk_cov_trace, efe_risk_cov_logdet,
+            efe_delta_risk_visibility, efe_delta_ambiguity_visibility,
             collision_any, collision_contact, collision_geom, collision_reason, self._first_crash_stamp,
             min_wall_distance_m, min_obstacle_distance_m,
             wall_penetration_m, obstacle_penetration_m,
@@ -1501,6 +1680,18 @@ class ExperimentLogger(Node):
             self._truth_belief_error_sum / self._truth_belief_error_count
             if self._truth_belief_error_count > 0 else math.nan
         )
+        mean_abs_truth_odom_yaw_error_rad = (
+            self._truth_odom_yaw_error_sum / self._truth_odom_yaw_error_count
+            if self._truth_odom_yaw_error_count > 0 else math.nan
+        )
+        mean_abs_truth_state_yaw_error_rad = (
+            self._truth_state_yaw_error_sum / self._truth_state_yaw_error_count
+            if self._truth_state_yaw_error_count > 0 else math.nan
+        )
+        mean_abs_truth_belief_yaw_error_rad = (
+            self._truth_belief_yaw_error_sum / self._truth_belief_yaw_error_count
+            if self._truth_belief_yaw_error_count > 0 else math.nan
+        )
 
         if stamp is None:
             stamp = float(self.get_clock().now().nanoseconds) * 1e-9
@@ -1546,6 +1737,9 @@ class ExperimentLogger(Node):
             # Explicit truth vs perception / planner belief errors
             'mean_truth_state_error_m': mean_truth_state_error_m,
             'mean_truth_belief_error_m': mean_truth_belief_error_m,
+            'mean_abs_truth_odom_yaw_error_rad': mean_abs_truth_odom_yaw_error_rad,
+            'mean_abs_truth_state_yaw_error_rad': mean_abs_truth_state_yaw_error_rad,
+            'mean_abs_truth_belief_yaw_error_rad': mean_abs_truth_belief_yaw_error_rad,
             'crashed': crashed,
             'collision_any': crashed,
             'collision_contact': bool(self._contact_collision_seen),

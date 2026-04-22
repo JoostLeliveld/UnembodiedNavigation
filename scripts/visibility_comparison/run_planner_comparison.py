@@ -105,47 +105,45 @@ def _validate_yolo_runtime_matches_targets(args, methods: list[str]) -> None:
         )
 
 
-def _kill_process_group(pgid: int):
+def _terminate_process_group(pgid: int, *, grace_s: float = 3.0) -> None:
+    """Send SIGTERM to the process group we own, wait, then SIGKILL stragglers."""
     try:
         os.killpg(pgid, signal.SIGTERM)
-        time.sleep(1.0)
+    except ProcessLookupError:
+        return
+    time.sleep(grace_s)
+    try:
         os.killpg(pgid, signal.SIGKILL)
     except ProcessLookupError:
         pass
-    except Exception:
-        pass
 
 
-def _cleanup_gazebo_and_ros():
-    """Kill any remaining gazebo and ros2 processes."""
-    # Try graceful shutdown first, then forceful if needed
-    cleanup_commands = [
-        (['pkill', '-f', 'ign gazebo'], False),  # Ignition Gazebo
-        (['pkill', '-f', 'gzserver'], False),    # Gazebo Server
-        (['pkill', '-9', '-f', 'gazebo'], True), # Force kill old gazebo
-        (['pkill', '-f', 'ros2 launch'], False), # ROS2 launch processes
-        (['pkill', '-9', '-f', 'ign'], True),    # Force kill ign processes
-        (['pkill', '-f', 'image_marker_detector_node'], False),
-        (['pkill', '-f', 'homography_sim_node'], False),
-        (['pkill', '-f', 'yolo_robot_detector_node'], False),
-        (['pkill', '-f', 'pixel_to_bev_state_node'], False),
-        (['pkill', '-f', 'goal_mission_node'], False),
-        (['pkill', '-f', 'goal_marker_node'], False),
-        (['pkill', '-f', 'experiment_logger'], False),
-        (['pkill', '-f', 'install/planning/lib/planning/efe_agent'], False),
-        (['pkill', '-f', 'parameter_bridge'], False),
-        (['pkill', '-f', 'wait_for_odom'], False),
-        (['pkill', '-f', 'reset_world'], False),
-        (['pkill', '-f', 'ros_gz_sim create'], False),
-        (['pkill', '-f', 'robot_state_publisher'], False),
-    ]
-    
-    for cmd, force_kill in cleanup_commands:
+# Last-resort: ROS 2 launch can spawn grandchildren that escape the PGID on
+# some distros. Kill only this repo's own node executables by name - never
+# broad patterns like 'gazebo' or 'ign' that would nuke unrelated processes.
+_OWN_NODE_PATTERNS = [
+    'image_marker_detector_node',
+    'homography_sim_node',
+    'yolo_robot_detector_node',
+    'pixel_to_bev_state_node',
+    'goal_mission_node',
+    'goal_marker_node',
+    'experiment_logger',
+    'install/planning/lib/planning/efe_agent',
+    'wait_for_odom',
+    'reset_world',
+]
+
+
+def _reap_own_node_stragglers() -> None:
+    """Kill only repo-specific node processes that outlived their PGID teardown."""
+    for pattern in _OWN_NODE_PATTERNS:
         try:
-            subprocess.run(cmd, timeout=2, capture_output=True, text=True)
-        except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
-            pass
-        except Exception:
+            subprocess.run(
+                ['pkill', '-f', pattern],
+                timeout=2, capture_output=True, check=False,
+            )
+        except (subprocess.TimeoutExpired, OSError):
             pass
 
 
@@ -270,8 +268,8 @@ def main() -> int:
                 label=f'visibility artifact {artifact}',
             )
 
-    print(f'Cleaning up stale ROS/Gazebo processes before run... (waiting {args.cleanup_delay}s)')
-    _cleanup_gazebo_and_ros()
+    print('Cleaning up any stale own-node processes before first run...')
+    _reap_own_node_stragglers()
     time.sleep(args.cleanup_delay)
 
     base_cmd = [
@@ -285,8 +283,8 @@ def main() -> int:
     for method_id in methods:
         # Cleanup before starting a new run
         if method_id != methods[0]:
-            print(f'Cleaning up before next run... (waiting {args.cleanup_delay}s)')
-            _cleanup_gazebo_and_ros()
+            print(f'Cleaning up between runs (waiting {args.cleanup_delay}s)...')
+            _reap_own_node_stragglers()
             time.sleep(args.cleanup_delay)
         
         method_log_root = (log_root / method_id).resolve()
@@ -314,8 +312,8 @@ def main() -> int:
         except subprocess.TimeoutExpired:
             print(f'⏱️  Timeout after {args.timeout}s for method {method_id}. Results saved to {method_log_root}')
         finally:
-            _kill_process_group(pgid)
-            _cleanup_gazebo_and_ros()
+            _terminate_process_group(pgid)
+            _reap_own_node_stragglers()
             time.sleep(max(args.cleanup_delay, 1.0))
 
     return 0

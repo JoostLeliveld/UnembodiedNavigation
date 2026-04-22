@@ -16,6 +16,15 @@ from state.core.pixel_to_bev import PixelToBevTransformer
 from state.core.noise import build_covariance
 
 
+HEADING_SOURCE_CODES = {
+    'unknown': 0.0,
+    'pixel_heading': 1.0,
+    'odom_heading_fallback': 2.0,
+    'motion_heading_fallback': 3.0,
+    'held_previous_heading': 4.0,
+}
+
+
 class PixelToBevStateNode(Node):
     """Convert homography pixel measurements into a BEV state belief."""
 
@@ -60,6 +69,10 @@ class PixelToBevStateNode(Node):
         self.motion_yaw_sigma_rad = float(self.get_parameter('motion_yaw_sigma_rad').value)
         self.seed = int(self.get_parameter('seed').value)
 
+        # Baseline measurement noise (pixels)
+        self.R_visible_std = 2.5
+        self.R_update_miss_std = 80.0
+
         cam_pos = np.array(self.get_parameter('cam_pos').value, dtype=float)
         look_at = np.array(self.get_parameter('look_at').value, dtype=float)
         img_width = int(self.get_parameter('img_width').value)
@@ -76,6 +89,7 @@ class PixelToBevStateNode(Node):
             rng=self._rng,
         )
         self._publisher = self.create_publisher(PoseWithCovarianceStamped, '/state/bev', 10)
+        self._heading_diag_pub = self.create_publisher(Float64MultiArray, '/state/heading_diagnostics', 10)
         self.create_subscription(PoseStamped, '/perception/pixel_pose', self._pixel_callback, 10)
         self.create_subscription(Float64MultiArray, DETECTION_DIAGNOSTICS_TOPIC, self._diag_callback, 10)
         self.create_subscription(Odometry, '/odom', self._odom_callback, 10)
@@ -155,6 +169,14 @@ class PixelToBevStateNode(Node):
             return None
         return float(self._wrap_angle(self._latest_odom_yaw + self.odom_yaw_offset_rad))
 
+    def _odom_age_s(self, stamp) -> float:
+        if self._latest_odom_stamp is None:
+            return math.nan
+        try:
+            return float(self._stamp_to_float(stamp) - self._stamp_to_float(self._latest_odom_stamp))
+        except (AttributeError, TypeError, ValueError):
+            return math.nan
+
     def _heading_sigma_from_diag(self, diag) -> float:
         sigma = float(max(self.yaw_noise_floor_rad, 1e-6))
         if not diag:
@@ -162,9 +184,51 @@ class PixelToBevStateNode(Node):
         sep = float(diag.get('separation_px', math.nan))
         if not math.isfinite(sep) or sep <= 1e-6:
             return sigma
-        pixel_sigma = max(float(self.heading_pixel_noise_sigma), 1e-6)
+        pixel_sigma = max(self.pixel_noise_sigma, 1e-6)
         sigma_sep = math.sqrt(2.0) * pixel_sigma / max(sep, 1.0)
         return float(max(sigma, sigma_sep))
+
+    @staticmethod
+    def _smoothstep01(x: float) -> float:
+        x = max(0.0, min(1.0, float(x)))
+        return x * x * (3.0 - 2.0 * x)
+
+    def live_detection_trust(
+        self,
+        *,
+        detected_after_threshold: bool,
+        raw_score: float,
+        selected_score: float,
+        mask_available: bool,
+        mask_area: float,
+        bbox_area: float,
+        selected_pixel_source_code: float,
+    ) -> float:
+        if not detected_after_threshold:
+            return 0.0
+
+        score = float(selected_score if selected_score == selected_score else raw_score)
+        score = max(0.0, min(1.0, score))
+
+        # First working mapping:
+        score_low = 0.15
+        score_high = 0.55
+        trust = self._smoothstep01((score - score_low) / max(score_high - score_low, 1e-6))
+
+        # Small quality modifiers, keep weak for now.
+        # Codes from perception/nodes/yolo_robot_detector_node.py:
+        # SELECTED_PIXEL_SOURCE_BBOX_BOTTOM = 1.0
+        # SELECTED_PIXEL_SOURCE_MASK_BOTTOM = 2.0
+        if selected_pixel_source_code == 1.0: # bbox_bottom
+            trust *= 0.90
+        
+        if mask_available and mask_area == mask_area and mask_area >= 20.0:
+            trust *= 1.00
+        
+        if (bbox_area == bbox_area) and bbox_area < 25.0:
+            trust *= 0.85
+
+        return max(1e-4, min(1.0 - 1e-4, trust))
 
     def _pixel_callback(self, msg: PoseStamped):
         u = float(msg.pose.position.x)
@@ -184,27 +248,55 @@ class PixelToBevStateNode(Node):
         x, y = world
         sigma_x = self.transform_noise_sigma
         sigma_y = self.transform_noise_sigma
-        if self.pixel_noise_sigma > 0.0:
+
+        diag = self._matching_diag(msg.header.stamp)
+
+        # Base pixel noise starts at CLI default
+        pixel_noise_sigma = self.pixel_noise_sigma
+
+        if diag:
+            trust_update = self.live_detection_trust(
+                detected_after_threshold=bool(diag.get('yolo_detected_after_threshold', 0.0) >= 0.5),
+                raw_score=float(diag.get('yolo_score_raw', 0.0)),
+                selected_score=float(diag.get('yolo_score_selected', 0.0)),
+                mask_available=bool(diag.get('mask_used', 0.0) >= 0.5),
+                mask_area=float(diag.get('mask_area_px', 0.0)),
+                bbox_area=float(diag.get('bbox_area_px', 0.0)),
+                selected_pixel_source_code=float(diag.get('selected_pixel_source_code', 0.0)),
+            )
+            # R_update blending (Precision Blending)
+            # This ensures that high-trust detections drop R rapidly.
+            prec_visible = 1.0 / max(self.R_visible_std**2, 1e-6)
+            prec_miss = 1.0 / max(self.R_update_miss_std**2, 1e-6)
+            blended_prec = trust_update * prec_visible + (1.0 - trust_update) * prec_miss
+            pixel_noise_sigma = math.sqrt(1.0 / blended_prec)
+
+        if pixel_noise_sigma > 0.0:
             sigmas = self._transformer.pixel_noise_to_metric(
                 u,
                 v,
-                self.pixel_noise_sigma,
+                pixel_noise_sigma,
                 transform_noise_sigma=self.transform_noise_sigma,
             )
             if sigmas is not None:
                 sigma_x, sigma_y = sigmas
-        diag = self._matching_diag(msg.header.stamp)
 
         yaw_out = self._last_yaw
         sigma_yaw = float(
             max(self.motion_yaw_sigma_rad, self.odom_heading_sigma_rad, self.yaw_noise_floor_rad)
         )
         heading_source = 'held_previous_heading'
+        pixel_yaw_meas = math.nan
+        odom_yaw_used = math.nan
+        motion_yaw_meas = math.nan
+        diag_yaw_est = float(diag.get('yaw_est', math.nan)) if diag else math.nan
+        diag_detected = 1.0 if (diag and bool(diag.get('detected', False))) else 0.0
         if diag and bool(diag.get('detected', False)) and math.isfinite(float(diag.get('yaw_est', math.nan))):
             q = msg.pose.orientation
             siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
             cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
             yaw_out = math.atan2(siny_cosp, cosy_cosp)
+            pixel_yaw_meas = float(yaw_out)
             sigma_yaw = self._heading_sigma_from_diag(diag)
             heading_source = 'pixel_heading'
         else:
@@ -213,6 +305,7 @@ class PixelToBevStateNode(Node):
                 odom_yaw = self._fresh_odom_yaw(msg.header.stamp)
                 if odom_yaw is not None:
                     yaw_out = odom_yaw
+                    odom_yaw_used = float(odom_yaw)
                     sigma_yaw = float(max(self.odom_heading_sigma_rad, self.yaw_noise_floor_rad))
                     odom_applied = True
                     heading_source = 'odom_heading_fallback'
@@ -222,6 +315,7 @@ class PixelToBevStateNode(Node):
                 disp = math.hypot(dx, dy)
                 if disp >= self.motion_yaw_min_displacement_m:
                     yaw_out = math.atan2(dy, dx)
+                    motion_yaw_meas = float(yaw_out)
                     sigma_yaw = float(max(self.motion_yaw_sigma_rad, self.yaw_noise_floor_rad))
                     heading_source = 'motion_heading_fallback'
         self._set_heading_source(heading_source)
@@ -240,6 +334,21 @@ class PixelToBevStateNode(Node):
         out.pose.pose.orientation.w = qw
         out.pose.covariance = build_covariance(sigma_x, sigma_y, sigma_yaw)
         self._publisher.publish(out)
+
+        diag_msg = Float64MultiArray()
+        diag_msg.data = [
+            self._stamp_to_float(msg.header.stamp),
+            float(HEADING_SOURCE_CODES.get(heading_source, HEADING_SOURCE_CODES['unknown'])),
+            float(pixel_yaw_meas),
+            float(odom_yaw_used),
+            float(motion_yaw_meas),
+            float(yaw_out),
+            float(sigma_yaw),
+            float(diag_yaw_est),
+            float(diag_detected),
+            float(self._odom_age_s(msg.header.stamp)),
+        ]
+        self._heading_diag_pub.publish(diag_msg)
 
 
 def main(args=None):
