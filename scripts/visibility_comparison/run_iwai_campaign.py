@@ -29,9 +29,9 @@ LOGS_ROOT = REPO_ROOT / 'logs' / 'visibility_comparison'
 
 # Map condition ID to planner name (must match ALLOWED_PLANNERS in launch file).
 CONDITION_PLANNER = {
-    'C1': 'visibility_unaware_baseline',
-    'C2': 'efe1',
-    'C3': 'gp_risk_only',
+    'C1': 'constant_R_efe',
+    'C2': 'visibility_aware_efe',
+    'C3': 'risk_only_ablation',
 }
 
 
@@ -168,7 +168,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
     ]
 
     # Planner-specific args: pass GP artifact for C2/C3, locked weights
-    if planner != 'visibility_unaware_baseline':
+    if planner != 'constant_R_efe':
         cmd.append(f'visibility_artifact_path:={gp_artifact}')
 
     for key in ('observation_risk_scale', 'ambiguity_term_scale'):

@@ -118,7 +118,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--allow-nonconstant-r0",
         action="store_true",
-        help="Allow plotting a run that is not planner=visibility_unaware_baseline/use_visibility_model=false.",
+        help="Allow plotting a run that is not planner=constant_R_efe/use_visibility_model=false.",
     )
     return parser.parse_args()
 
@@ -706,7 +706,7 @@ def _draw_problem_statement_topdown(ax, geom: dict, start: dict, goal: dict, tra
     ax.text(start_xy[0] - 0.10, start_xy[1] + 0.20, "start", fontsize=6.2, ha="right", va="bottom")
     ax.text(goal_xy[0] + 0.10, goal_xy[1] + 0.20, "goal", fontsize=6.2, ha="left", va="bottom")
     ax.text(cam_x + 0.14, cam_y - 0.04, "fixed camera", fontsize=5.8, ha="left", va="top")
-    ax.text(0.20, 0.10, "shelf", fontsize=5.8, ha="center", va="bottom")
+    ax.text(-0.05, 0.10, "shelf", fontsize=5.8, ha="center", va="bottom")
     ax.annotate(
         "reduced camera\nupdate reliability",
         xy=(0.95, 0.28),
@@ -909,7 +909,7 @@ def _draw_snapshot_topdown(
     ax.text(start_xy[0] - 0.10, start_xy[1] + 0.18, "start", fontsize=5.8, ha="right", va="bottom")
     ax.text(goal_xy[0] + 0.10, goal_xy[1] + 0.18, "goal", fontsize=5.8, ha="left", va="bottom")
     ax.text(cam_x + 0.12, cam_y - 0.05, "fixed camera", fontsize=5.4, ha="left", va="top")
-    ax.text(0.20, 0.10, "shelf", fontsize=5.4, ha="center", va="bottom")
+    ax.text(-0.05, 0.10, "shelf", fontsize=5.4, ha="center", va="bottom")
     if annotation == "stale":
         ax.text(1.45, 1.22, "reduced\nupdates", fontsize=5.4, ha="center", va="center", color="#8a5b0b")
         ax.text(float(snap["belief_xy"][0]) + 0.15, float(snap["belief_xy"][1]) - 0.25, "predicted\nuncertainty", fontsize=5.4, color=COLORS["belief"], ha="center", va="top")
@@ -1271,10 +1271,10 @@ def main() -> int:
     manifest = _load_run_manifest(run_dir)
     planner = str(manifest.get("planner", "") or "")
     use_visibility_model = bool(manifest.get("use_visibility_model", False))
-    if (planner != "visibility_unaware_baseline" or use_visibility_model) and not args.allow_nonconstant_r0:
+    if (planner != "constant_R_efe" or use_visibility_model) and not args.allow_nonconstant_r0:
         raise RuntimeError(
             "Refusing to label this as a constant-R0 problem figure because the run is not "
-            f"visibility_unaware_baseline/use_visibility_model=false: planner={planner!r}, "
+            f"constant_R_efe/use_visibility_model=false: planner={planner!r}, "
             f"use_visibility_model={manifest.get('use_visibility_model', None)!r}. "
             "Pass --allow-nonconstant-r0 only for debugging."
         )

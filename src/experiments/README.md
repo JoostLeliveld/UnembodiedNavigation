@@ -34,9 +34,9 @@ The planner is only one part of the experiment. This package answers:
 
 | File | Role |
 | --- | --- |
-| [`launch/warehouse_primary_comparison.launch.py`](launch/warehouse_primary_comparison.launch.py) | main entry point for `efe1` vs `visibility_unaware_baseline` |
+| [`launch/warehouse_primary_comparison.launch.py`](launch/warehouse_primary_comparison.launch.py) | main entry point for `visibility_aware_efe` vs `constant_R_efe` |
 | [`launch/warehouse_visibility_agent.launch.py`](launch/warehouse_visibility_agent.launch.py) | diagnostic launch for non-primary planner variants |
-| [`launch/warehouse_visibility_capture.launch.py`](launch/warehouse_visibility_capture.launch.py) | offline capture launch for GP fitting; defaults to teleport/grid sampling and retains an optional driving mode |
+| [`launch/warehouse_visibility_capture.launch.py`](launch/warehouse_visibility_capture.launch.py) | offline capture launch for GP fitting with sampled-pose teleport collection |
 | [`config/world_profiles.yaml`](config/world_profiles.yaml) | world registry, camera setup, and matched visibility artifact paths |
 | [`config/tasks.yaml`](config/tasks.yaml) | single active benchmark task definition |
 | [`experiments/core/visibility_launch_common.py`](experiments/core/visibility_launch_common.py) | shared runtime assembly |
@@ -51,7 +51,6 @@ The planner is only one part of the experiment. This package answers:
 | `experiments/core/manifest.py` | run-directory and manifest helpers |
 | `experiments/nodes/goal_mission_node.py` | publishes the active goal |
 | `experiments/nodes/goal_marker_node.py` | visual marker for the goal |
-| `experiments/nodes/visibility_sweep_controller_node.py` | retained optional `/cmd_vel` lawnmower sweep for offline visibility capture |
 
 ## What To Read First
 
@@ -67,7 +66,7 @@ The planner is only one part of the experiment. This package answers:
 - one retained-planner launch
 - one visibility capture launch, now defaulting to sampled-pose teleport collection
 - one active world/task comparison surface centered on the main shadow-tradeoff benchmark
-- matched visibility artifacts learned from noisy simulated pose samples or the retained sweep mode
+- matched visibility artifacts learned from noisy simulated pose samples
 - run logging with manifest metadata
 - explicit state-estimator provenance in the manifest
 

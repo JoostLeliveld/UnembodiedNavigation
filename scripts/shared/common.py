@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Shared helpers for the visibility-comparison backbone."""
+# Canonical location: scripts/shared/common.py
 
 from __future__ import annotations
 

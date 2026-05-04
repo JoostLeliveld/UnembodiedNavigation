@@ -32,6 +32,7 @@ external camera image
 -> GP observability artifact
 -> state-dependent R_eff
 -> EFE rollout objective
+-> known obstacle map / no-go safety barrier
 -> cmd_vel_raw
 -> command noise node
 -> cmd_vel
@@ -54,6 +55,7 @@ These files should stay first-class and be cleaned for readability.
 | State | `src/state/state/nodes/pixel_to_bev_state_node.py` | Pixel-to-BEV conversion and odom-backed heading. |
 | Planner node | `src/planning/planning/nodes/unicycle_planner_node.py` | Runtime belief update, planning loop, diagnostics. |
 | Planner math | `src/planning/planning/planners/base_planner.py`, `src/planning/planning/core/casadi_efe.py`, `src/planning/planning/core/efe_utils.py` | EFE objective and rollout evaluation. |
+| Safety geometry | `src/planning/planning/core/nogo_cost.py`, collision geometry from the world profile | Known obstacle-map barrier shared by all paper conditions. |
 | GP map | `src/planning/planning/core/visibility_gp_map.py` | Loaded observability field and planner queries. |
 | Actuation noise | `src/sim/sim/actuation_noise_node.py` | Realistic command-space noise/slip for paper experiments. |
 | Logger | `src/experiments/experiments/nodes/experiment_logger.py` | Paper evidence: CSVs, manifest, summary. |
@@ -87,6 +89,7 @@ The paper path should fail early when assumptions are violated. Warning and fall
 6. The selected planner must be one of the paper conditions.
 7. Command noise settings must be explicitly logged in the manifest.
 8. If a planner condition uses constant observation covariance, it must be named as constant-R or visibility-unaware, not "no R".
+9. The known obstacle/no-go barrier settings must be explicit in the manifest and paper method section.
 
 ### Runtime Hard Fails
 
@@ -95,6 +98,7 @@ The paper path should fail early when assumptions are violated. Warning and fall
 3. If a YOLO frame is required but the detector cannot load the model, the run should fail.
 4. If diagnostics schema fields are missing, logger parsing should fail instead of silently writing NaNs for paper-critical metrics.
 5. If TF/world-state truth is unavailable for a paper run, the logger should fail instead of producing incomplete success metrics.
+6. If the known obstacle/no-go barrier is enabled, its geometry source and weight must be logged; if it is disabled, the run must be labeled as a no-safety-barrier diagnostic.
 
 ### GP / Observability Hard Fails
 
@@ -238,6 +242,28 @@ Condition B: visibility-aware EFE
 optional diagnostic: risk-only visibility ablation
 ```
 
+### 8. Known Obstacle Barrier Must Be Disclosed
+
+Files:
+
+```text
+src/planning/planning/core/nogo_cost.py
+src/planning/planning/planners/base_planner.py
+src/experiments/experiments/core/visibility_launch_common.py
+```
+
+The no-go/obstacle term is not legacy deadwood. It represents the known obstacle map and is a legitimate safety/feasibility component of the navigation problem. The paper risk is that it looks like a hidden route-shaping trick if it is not explicitly described.
+
+Paper behavior:
+
+```text
+keep obstacle-map barrier active for all main conditions
+describe it as a known-map safety term, not as visibility reward
+report obstacle/barrier cost separately from EFE risk and ambiguity
+log geometry source, enabled flag, weight, and clearance parameters
+do not compare methods with different obstacle-barrier settings
+```
+
 ## Naming Conventions To Enforce
 
 The naming should make method assumptions clear.
@@ -320,7 +346,8 @@ These changes are high-value and relatively safe.
 5. Split "completed run" from "successful navigation" in metrics names.
 6. Add GP artifact verification before campaign runs.
 7. Record command noise settings in every paper run manifest and metrics table.
-8. Update README with one paper build command, one paper run command, and one paper metrics command.
+8. Record known obstacle/no-go barrier settings in every paper run manifest and metrics table.
+9. Update README with one paper build command, one paper run command, and one paper metrics command.
 
 ## Second Cleanup Pass
 
@@ -345,6 +372,7 @@ Do not delete these casually while experiments are still moving.
 | Broad sweep scripts | Useful until final experiment matrix is frozen. |
 | Diagnostic rollout/video scripts | Useful for debugging paper failures. |
 | Legacy planner modes | Keep until final ablation list is decided. |
+| Known obstacle/no-go barrier | Required safety/feasibility term for paper runs; delete only if replaced by a clearer obstacle-map barrier implementation. |
 
 ## Grader-Facing Standard
 

@@ -14,13 +14,6 @@ def _launch_setup(context, *args, **kwargs):
     use_sim_time = LaunchConfiguration('use_sim_time').perform(context).strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on')
     pixel_noise_sigma = float(LaunchConfiguration('sensor_pixel_noise_sigma').perform(context))
     seed = int(LaunchConfiguration('seed').perform(context))
-    sweep_margin_m = float(LaunchConfiguration('sweep_margin_m').perform(context))
-    sweep_row_spacing_m = float(LaunchConfiguration('sweep_row_spacing_m').perform(context))
-    sweep_linear_speed_mps = float(LaunchConfiguration('sweep_linear_speed_mps').perform(context))
-    sweep_angular_speed_radps = float(LaunchConfiguration('sweep_angular_speed_radps').perform(context))
-    sweep_waypoint_tolerance_m = float(LaunchConfiguration('sweep_waypoint_tolerance_m').perform(context))
-    sweep_turn_pause_s = float(LaunchConfiguration('sweep_turn_pause_s').perform(context))
-    capture_mode = LaunchConfiguration('capture_mode').perform(context).strip().lower()
     perception_backend = LaunchConfiguration('perception_backend').perform(context).strip().lower()
     yolo_model = LaunchConfiguration('yolo_model').perform(context)
     yolo_device = LaunchConfiguration('yolo_device').perform(context)
@@ -35,16 +28,10 @@ def _launch_setup(context, *args, **kwargs):
 
     profile, intrinsics, _world_path, camera_pose = load_profile(world_profiles, world)
     spawn = profile['spawn']
-    vis = dict(profile.get('visibility_defaults') or {})
 
     cam_pos = [camera_pose[0], camera_pose[1], camera_pose[2]]
     roll, pitch, yaw = camera_pose[3], camera_pose[4], camera_pose[5]
     look_at = compute_look_at_from_pose(cam_pos, roll, pitch, yaw)
-
-    xmin = float(vis.get('visibility_map_min_x', -6.0))
-    xmax = float(vis.get('visibility_map_max_x', 6.0))
-    ymin = float(vis.get('visibility_map_min_y', -6.0))
-    ymax = float(vis.get('visibility_map_max_y', 6.0))
 
     sim_pkg = FindPackageShare('sim')
     bringup_sim = IncludeLaunchDescription(
@@ -125,42 +112,13 @@ def _launch_setup(context, *args, **kwargs):
         }],
     )
 
-    nodes = [bringup_sim, wait_for_odom, detector, state_node]
-    if capture_mode == 'driving':
-        sweep_controller = Node(
-            package='experiments',
-            executable='visibility_sweep_controller_node',
-            name='visibility_sweep_controller',
-            output='screen',
-            parameters=[{
-                'use_sim_time': use_sim_time,
-                'frame_id': 'map_bev',
-                'xmin': xmin,
-                'xmax': xmax,
-                'ymin': ymin,
-                'ymax': ymax,
-                'sweep_margin_m': sweep_margin_m,
-                'sweep_row_spacing_m': sweep_row_spacing_m,
-                'linear_speed_mps': sweep_linear_speed_mps,
-                'angular_speed_radps': sweep_angular_speed_radps,
-                'waypoint_tolerance_m': sweep_waypoint_tolerance_m,
-                'turn_pause_s': sweep_turn_pause_s,
-            }],
-        )
-        nodes.append(sweep_controller)
-
-    return nodes
+    return [bringup_sim, wait_for_odom, detector, state_node]
 
 
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('world', default_value='warehouse_occ_light.world.sdf'),
-        DeclareLaunchArgument(
-            'capture_mode',
-            default_value='teleport',
-            description='offline capture mode: teleport sampled poses or driving sweep',
-        ),
         DeclareLaunchArgument(
             'world_profiles',
             default_value=PathJoinSubstitution([
@@ -185,11 +143,5 @@ def generate_launch_description():
         DeclareLaunchArgument('yolo_min_mask_area_px', default_value='12.0'),
         DeclareLaunchArgument('yolo_mask_bottom_band_px', default_value='3.0'),
         DeclareLaunchArgument('seed', default_value='0'),
-        DeclareLaunchArgument('sweep_margin_m', default_value='0.45'),
-        DeclareLaunchArgument('sweep_row_spacing_m', default_value='0.75'),
-        DeclareLaunchArgument('sweep_linear_speed_mps', default_value='0.22'),
-        DeclareLaunchArgument('sweep_angular_speed_radps', default_value='0.90'),
-        DeclareLaunchArgument('sweep_waypoint_tolerance_m', default_value='0.18'),
-        DeclareLaunchArgument('sweep_turn_pause_s', default_value='0.20'),
         OpaqueFunction(function=_launch_setup),
     ])

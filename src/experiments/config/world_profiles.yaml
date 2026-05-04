@@ -9,7 +9,7 @@ worlds:
     investigation_focus: Compact indoor warehouse scene with one short east-west shelf close to the camera. The camera-left passage is the shorter but more occluded crossover, while the camera-right passage remains the longer clearer alternative.
     recommended_task: shadow_tradeoff_a
     spawn: {x: -1.55, y: 0.45, z: 0.05, yaw: 0.0}
-    planner_default: efe1
+    planner_default: visibility_aware_efe
     visibility_artifact: data/visibility_gp/warehouse_occ_light_empirical_visibility_gp.npz
     visibility_defaults:
       visibility_map_min_x: -3.0

@@ -59,8 +59,8 @@ This package answers the main research question: how does planning change when f
 
 ## Implemented Now
 
-- ET1-based `efe1` as the main thesis path
-- `visibility_unaware_baseline` under the same planner wrapper
+- ET1-based `visibility_aware_efe` as the main thesis path
+- `constant_R_efe` under the same planner wrapper
 - planner-side loading of a fixed empirical visibility field
 
 ## Caveats

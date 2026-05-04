@@ -110,7 +110,7 @@ flowchart LR
     PLAN --> LOG
 ```
 
-Caption: this is the current perception-focused online control loop. It omits TF, `ros_gz_bridge`, and robot-state publishing on purpose because those are infrastructure rather than the main method story. The legacy marker detector still exists, but the YOLO node is now the detector of interest for the refreshed indoor warehouse path.
+Caption: this is the current perception-focused online control loop. It omits TF, `ros_gz_bridge`, and robot-state publishing on purpose because those are infrastructure rather than the main method story. The paper runtime uses the YOLO detector path.
 
 ## State-Estimator Provenance
 

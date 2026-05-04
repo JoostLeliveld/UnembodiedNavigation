@@ -277,7 +277,7 @@ def main() -> int:
         gp_available = str(gp_row.get('available', '0') or '0')
         run_dir = _latest_run_dir(planner_runs_root, method_id, include_interrupted=bool(args.include_interrupted))
         run_metrics = _run_metrics(run_dir, method_id, field_summary_rows, planner_summary_by_method)
-        target_available = '0' if method_id == 'visibility_unaware_baseline' else str(
+        target_available = '0' if method_id == 'constant_R_efe' else str(
             int(_target_column_available(gp_target_rows, method_id))
         )
         method_rows.append({

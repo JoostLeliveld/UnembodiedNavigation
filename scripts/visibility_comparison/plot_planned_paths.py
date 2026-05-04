@@ -224,8 +224,8 @@ def _infer_method_id(run_manifest: dict, run_dir: Path) -> str:
     if method:
         return method
     planner = str(run_manifest.get('planner', '') or '').strip()
-    if planner == 'visibility_unaware_baseline':
-        return 'visibility_unaware_baseline'
+    if planner == 'constant_R_efe':
+        return 'constant_R_efe'
     
     comp_id = str(run_manifest.get('comparison_method_id', '') or '').strip()
     if comp_id:

@@ -38,12 +38,12 @@ from scipy.interpolate import RegularGridInterpolator
 TASKS = {
     'shadow_tradeoff_a': {
         'start': (-2.0, 0.5),
-        'goal':  (2.0,  0.5),
+        'goal':  (2.0,  1.5),
         'is_shadow_task': True,
     },
     'shadow_tradeoff_b': {
         'start': (-2.0, -1.0),
-        'goal':  (2.0,  0.5),
+        'goal':  (2.0,  1.5),
         'is_shadow_task': True,
     },
     'sanity_open': {

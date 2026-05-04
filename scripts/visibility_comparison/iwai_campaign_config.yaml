@@ -7,19 +7,19 @@ world: warehouse_occ_light.world.sdf
 launch_file: warehouse_primary_comparison.launch.py
 
 # --- Conditions ---
-# C1: constant-R0 baseline (visibility_unaware_baseline)
-# C2: full GP-EFE with ambiguity (efe1, use_ambiguity=true)
-# C3: GP-risk only, no ambiguity (gp_risk_only, use_ambiguity=false)
+# C1: constant-R0 baseline (constant_R_efe)
+# C2: full GP-EFE with ambiguity (visibility_aware_efe, use_ambiguity=true)
+# C3: GP-risk only, no ambiguity (risk_only_ablation, use_ambiguity=false)
 conditions:
   C1:
-    planner: visibility_unaware_baseline
-    label: constant_R0
+    planner: constant_R_efe
+    label: constant_R_efe
   C2:
-    planner: efe1
-    label: gp_efe
+    planner: visibility_aware_efe
+    label: visibility_aware_efe
   C3:
-    planner: gp_risk_only
-    label: gp_risk_only
+    planner: risk_only_ablation
+    label: risk_only_ablation
 
 # --- Tasks and seeds ---
 tasks:
@@ -51,7 +51,7 @@ yolo_mask_bottom_band_px: 3.0
 # --- GP artifact ---
 # Path to the fitted visibility GP .npz artifact (yolo_score_calibrated or yolo_score_raw).
 # Used by C2 and C3; C1 ignores it.
-gp_artifact: "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/data/visibility_gp/warehouse_occ_light_empirical_visibility_gp.npz"
+gp_artifact: "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/current_gp/oracle_visibility_gp.npz"
 
 # --- Planner / EFE hyperparameters ---
 # These are the locked values from Section 0c of the pre-registration.
@@ -63,12 +63,10 @@ process_noise_theta: 0.02
 
 # lambda_risk and lambda_amb in the paper map to the planner parameters below.
 # Verify these mappings against the planner source before running.
-# lambda_risk = 0.75  →  observation_risk_scale (current default 1.25 — VERIFY)
-# lambda_amb  = 1.25  →  ambiguity_term_scale   (current default 1.00 — VERIFY)
-# lambda_ctrl = 0.0   →  control_weight         (matches)
-# Effective risk scale  = risk_weight_obs × observation_risk_scale = 1.0 × 1.25 = 1.25 (lambda_risk)
-# Effective ambig scale = ambiguity_weight × ambiguity_term_scale  = 3.0 × 1.00 = 3.0  (lambda_amb)
-# These are the empirically validated values from pre-campaign runs; update lambda table in paper.
+# lambda_risk = 1.25  →  risk_weight_obs (1.0) × observation_risk_scale (1.25) = 1.25
+# lambda_amb  = 3.0   →  ambiguity_weight (3.0) × ambiguity_term_scale (1.0)  = 3.0
+# lambda_ctrl = 0.0   →  control_weight = 0.0
+# These are the empirically validated values from pre-campaign runs; use these in the paper lambda table.
 observation_risk_scale: 1.25
 ambiguity_term_scale: 1.0
 control_weight: 0.0

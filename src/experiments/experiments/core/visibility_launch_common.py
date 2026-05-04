@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Dict, List
 
 from launch.actions import IncludeLaunchDescription, RegisterEventHandler, Shutdown
@@ -13,12 +14,10 @@ from launch_ros.substitutions import FindPackageShare
 
 
 PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
-    'planner': 'efe1',
+    'planner': 'visibility_aware_efe',
     'world': 'warehouse_occ_light.world.sdf',
     'task': '',
     'seed': '0',
-    'perception_backend': 'yolo',
-    'sensor_pixel_noise_sigma': '1.0',
     'odom_wait_timeout_s': '60.0',
     'odom_wait_min_messages': '1',
     'odom_wait_require_pose_match': 'false',
@@ -54,13 +53,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'robot_collision_radius_m': '0.125',
     'bridge_contacts': 'true',
     'use_command_noise': 'true',
-    'command_noise_linear_slip_mean': '0.03',
-    'command_noise_linear_slip_std': '0.06',
-    'command_noise_angular_slip_mean': '0.00',
-    'command_noise_angular_slip_std': '0.04',
-    'command_noise_linear_additive_std': '0.008',
-    'command_noise_angular_additive_std': '0.035',
-    'command_noise_correlation_alpha': '0.85',
     'process_noise_xy': '0.01',
     'process_noise_theta': '0.02',
     'obs_noise_uv': '2.0',
@@ -78,10 +70,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'run_timeout_after_first_cmd_s': '75.0',
     'first_cmd_linear_eps': '0.02',
     'first_cmd_angular_eps': '0.10',
-    'stuck_window_s': '8.0',
-    'stuck_max_displacement_m': '0.08',
-    'stuck_max_goal_improvement_m': '0.05',
-    'stuck_cmd_fraction_min': '0.50',
     'yolo_model': '',
     'yolo_device': '',
     'yolo_imgsz': '640',
@@ -94,6 +82,19 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'yolo_mask_bottom_band_px': '3.0',
     'log_dir': 'logs/experiments',
 }
+
+# Command noise shape — paper-locked, not user-overridable.
+# These values were calibrated for the TurtleBot3 in Gazebo and must not change between runs.
+_COMMAND_NOISE_LINEAR_SLIP_MEAN: float = 0.03
+_COMMAND_NOISE_LINEAR_SLIP_STD: float = 0.06
+_COMMAND_NOISE_ANGULAR_SLIP_MEAN: float = 0.00
+_COMMAND_NOISE_ANGULAR_SLIP_STD: float = 0.04
+_COMMAND_NOISE_LINEAR_ADDITIVE_STD: float = 0.008
+_COMMAND_NOISE_ANGULAR_ADDITIVE_STD: float = 0.035
+_COMMAND_NOISE_CORRELATION_ALPHA: float = 0.85
+
+# Sensor pixel noise — paper-locked, not user-overridable.
+_SENSOR_PIXEL_NOISE_SIGMA: float = 1.0
 
 
 VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
@@ -149,7 +150,7 @@ def _require_task_field(task, key):
     return task[key]
 
 
-def _state_estimator_metadata(_perception_backend: str) -> Dict[str, str]:
+def _state_estimator_metadata() -> Dict[str, str]:
     return {
         'state_source_x': 'yolo_mask_or_bbox_homography',
         'state_source_y': 'yolo_mask_or_bbox_homography',
@@ -166,7 +167,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
     use_visibility_raw = _launch_value(context, 'use_visibility_model', visibility_enabled_default).strip().lower()
 
     cfg: Dict[str, object] = {
-        'use_sim_time': _as_bool(LaunchConfiguration('use_sim_time').perform(context)),
+        'use_sim_time': True,
         'planner': _launch_value(context, 'planner', PAPER_LAUNCH_DEFAULTS['planner']).strip(),
         'world': world_value,
         'world_profiles_path': LaunchConfiguration('world_profiles').perform(context),
@@ -175,8 +176,8 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'comparison_method_id': _launch_value(context, 'comparison_method_id', '').strip(),
         'log_dir': _launch_value(context, 'log_dir', PAPER_LAUNCH_DEFAULTS['log_dir']).strip(),
         'seed': seed_value,
-        'perception_backend': _launch_value(context, 'perception_backend', PAPER_LAUNCH_DEFAULTS['perception_backend']).strip().lower(),
-        'sensor_pixel_noise_sigma': float(_launch_value(context, 'sensor_pixel_noise_sigma', '0.0')),
+        'perception_backend': 'yolo',
+        'sensor_pixel_noise_sigma': _SENSOR_PIXEL_NOISE_SIGMA,
         'odom_wait_timeout_s': float(
             _launch_value(context, 'odom_wait_timeout_s', PAPER_LAUNCH_DEFAULTS['odom_wait_timeout_s'])
         ),
@@ -201,10 +202,10 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'run_timeout_after_first_cmd_s': float(_launch_value(context, 'run_timeout_after_first_cmd_s', PAPER_LAUNCH_DEFAULTS['run_timeout_after_first_cmd_s'])),
         'first_cmd_linear_eps': float(_launch_value(context, 'first_cmd_linear_eps', PAPER_LAUNCH_DEFAULTS['first_cmd_linear_eps'])),
         'first_cmd_angular_eps': float(_launch_value(context, 'first_cmd_angular_eps', PAPER_LAUNCH_DEFAULTS['first_cmd_angular_eps'])),
-        'stuck_window_s': float(_launch_value(context, 'stuck_window_s', PAPER_LAUNCH_DEFAULTS['stuck_window_s'])),
-        'stuck_max_displacement_m': float(_launch_value(context, 'stuck_max_displacement_m', PAPER_LAUNCH_DEFAULTS['stuck_max_displacement_m'])),
-        'stuck_max_goal_improvement_m': float(_launch_value(context, 'stuck_max_goal_improvement_m', PAPER_LAUNCH_DEFAULTS['stuck_max_goal_improvement_m'])),
-        'stuck_cmd_fraction_min': float(_launch_value(context, 'stuck_cmd_fraction_min', PAPER_LAUNCH_DEFAULTS['stuck_cmd_fraction_min'])),
+        'stuck_window_s': 8.0,
+        'stuck_max_displacement_m': 0.08,
+        'stuck_max_goal_improvement_m': 0.05,
+        'stuck_cmd_fraction_min': 0.50,
         'process_noise_xy': float(_launch_value(context, 'process_noise_xy', PAPER_LAUNCH_DEFAULTS['process_noise_xy'])),
         'process_noise_theta': float(_launch_value(context, 'process_noise_theta', PAPER_LAUNCH_DEFAULTS['process_noise_theta'])),
         'obs_noise_uv': float(_launch_value(context, 'obs_noise_uv', PAPER_LAUNCH_DEFAULTS['obs_noise_uv'])),
@@ -283,27 +284,13 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'use_command_noise': _as_bool(
             _launch_value(context, 'use_command_noise', PAPER_LAUNCH_DEFAULTS['use_command_noise'])
         ),
-        'command_noise_linear_slip_mean': float(
-            _launch_value(context, 'command_noise_linear_slip_mean', PAPER_LAUNCH_DEFAULTS['command_noise_linear_slip_mean'])
-        ),
-        'command_noise_linear_slip_std': float(
-            _launch_value(context, 'command_noise_linear_slip_std', PAPER_LAUNCH_DEFAULTS['command_noise_linear_slip_std'])
-        ),
-        'command_noise_angular_slip_mean': float(
-            _launch_value(context, 'command_noise_angular_slip_mean', PAPER_LAUNCH_DEFAULTS['command_noise_angular_slip_mean'])
-        ),
-        'command_noise_angular_slip_std': float(
-            _launch_value(context, 'command_noise_angular_slip_std', PAPER_LAUNCH_DEFAULTS['command_noise_angular_slip_std'])
-        ),
-        'command_noise_linear_additive_std': float(
-            _launch_value(context, 'command_noise_linear_additive_std', PAPER_LAUNCH_DEFAULTS['command_noise_linear_additive_std'])
-        ),
-        'command_noise_angular_additive_std': float(
-            _launch_value(context, 'command_noise_angular_additive_std', PAPER_LAUNCH_DEFAULTS['command_noise_angular_additive_std'])
-        ),
-        'command_noise_correlation_alpha': float(
-            _launch_value(context, 'command_noise_correlation_alpha', PAPER_LAUNCH_DEFAULTS['command_noise_correlation_alpha'])
-        ),
+        'command_noise_linear_slip_mean': _COMMAND_NOISE_LINEAR_SLIP_MEAN,
+        'command_noise_linear_slip_std': _COMMAND_NOISE_LINEAR_SLIP_STD,
+        'command_noise_angular_slip_mean': _COMMAND_NOISE_ANGULAR_SLIP_MEAN,
+        'command_noise_angular_slip_std': _COMMAND_NOISE_ANGULAR_SLIP_STD,
+        'command_noise_linear_additive_std': _COMMAND_NOISE_LINEAR_ADDITIVE_STD,
+        'command_noise_angular_additive_std': _COMMAND_NOISE_ANGULAR_ADDITIVE_STD,
+        'command_noise_correlation_alpha': _COMMAND_NOISE_CORRELATION_ALPHA,
         'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
         'debug_runtime': _as_bool(_launch_value(context, 'debug_runtime', 'false')),
         'enable_logging': _as_bool(_launch_value(context, 'enable_logging', 'true')),
@@ -320,9 +307,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'yolo_min_mask_area_px': float(_launch_value(context, 'yolo_min_mask_area_px', PAPER_LAUNCH_DEFAULTS['yolo_min_mask_area_px'])),
         'yolo_mask_bottom_band_px': float(_launch_value(context, 'yolo_mask_bottom_band_px', PAPER_LAUNCH_DEFAULTS['yolo_mask_bottom_band_px'])),
     }
-
-    if cfg['perception_backend'] != 'yolo':
-        raise RuntimeError("Paper runtime supports only perception_backend:=yolo")
 
     return cfg
 
@@ -373,23 +357,24 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     planner = str(cfg['planner'])
     if planner == 'auto':
         planner = profile['planner_default']
-    if planner == 'visibility_unaware_baseline':
+    if planner == 'constant_R_efe':
         cfg['use_visibility_model'] = False
         cfg['use_ambiguity'] = False
         cfg['use_obs_risk'] = True
-    elif planner == 'gp_risk_only':
+    elif planner == 'risk_only_ablation':
         cfg['use_visibility_model'] = True
         cfg['use_ambiguity'] = False
         cfg['use_obs_risk'] = True
 
-    profile_visibility_artifact = resolve_profile_asset_path(
-        cfg['world_profiles_path'],
-        str(profile.get('visibility_artifact', '') or ''),
-    )
-    visibility_artifact_path = resolve_profile_asset_path(
-        cfg['world_profiles_path'],
-        str(cfg.get('visibility_artifact_path', '') or ''),
-    ) or profile_visibility_artifact
+    visibility_artifact_path = str(cfg.get('visibility_artifact_path', '') or '').strip()
+    if not visibility_artifact_path:
+        raise RuntimeError(
+            "visibility_artifact_path must be provided explicitly — "
+            "no fallback to world profile defaults is allowed for paper runs."
+        )
+    visibility_artifact_path = resolve_profile_asset_path(cfg['world_profiles_path'], visibility_artifact_path)
+    if not Path(visibility_artifact_path).exists():
+        raise RuntimeError(f"visibility_artifact_path does not exist: {visibility_artifact_path}")
 
     cam_pos = [camera_pose[0], camera_pose[1], camera_pose[2]]
     roll, pitch, yaw = camera_pose[3], camera_pose[4], camera_pose[5]
@@ -406,7 +391,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         'fov_h_rad': float(intrinsics['fov_h_rad']),
     }
     tf_args = {
-        'use_sim_time': 'true' if cfg['use_sim_time'] else 'false',
+        'use_sim_time': 'true',
         'cam_x': str(cam_pos[0]),
         'cam_y': str(cam_pos[1]),
         'cam_z': str(cam_pos[2]),
@@ -425,10 +410,6 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
 
     visibility_geometry_json = str(cfg.get('visibility_geometry_json', '') or '')
     collision_geometry_json = str(cfg.get('collision_geometry_json', '') or '')
-    if cfg.get('use_visibility_model', False) and not visibility_artifact_path:
-        raise RuntimeError(
-            f"World '{cfg['world']}' requires a visibility_artifact path for GP visibility planning."
-        )
     raw_use_nogo_cost = str(cfg.get('use_nogo_cost', 'auto')).strip().lower()
     nogo_geometry_needed = (
         raw_use_nogo_cost in ('1', 'true', 't', 'yes', 'y', 'on')
@@ -460,14 +441,14 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
 
 def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     """Create shared nodes/components for the thesis pipeline."""
-    state_sources = _state_estimator_metadata(str(cfg['perception_backend']))
+    state_sources = _state_estimator_metadata()
     sim_pkg = FindPackageShare('sim')
     bringup_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([sim_pkg, 'launch', 'bringup_sim.launch.py'])
         ),
         launch_arguments={
-            'use_sim_time': 'true' if cfg['use_sim_time'] else 'false',
+            'use_sim_time': 'true',
             'use_lidar': 'false',
             'bridge_scan': 'false',
             'world': cfg['world'],
@@ -515,19 +496,19 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             name='actuation_noise_node',
             output='screen',
             parameters=[{
-                'use_sim_time': cfg['use_sim_time'],
+                'use_sim_time': True,
                 'enabled': True,
                 'input_topic': '/cmd_vel_raw',
                 'output_topic': '/cmd_vel',
                 'diagnostics_topic': '/cmd_vel_noise/diagnostics',
                 'seed': cfg['seed'],
-                'linear_slip_mean': cfg['command_noise_linear_slip_mean'],
-                'linear_slip_std': cfg['command_noise_linear_slip_std'],
-                'angular_slip_mean': cfg['command_noise_angular_slip_mean'],
-                'angular_slip_std': cfg['command_noise_angular_slip_std'],
-                'linear_additive_std': cfg['command_noise_linear_additive_std'],
-                'angular_additive_std': cfg['command_noise_angular_additive_std'],
-                'correlation_alpha': cfg['command_noise_correlation_alpha'],
+                'linear_slip_mean': _COMMAND_NOISE_LINEAR_SLIP_MEAN,
+                'linear_slip_std': _COMMAND_NOISE_LINEAR_SLIP_STD,
+                'angular_slip_mean': _COMMAND_NOISE_ANGULAR_SLIP_MEAN,
+                'angular_slip_std': _COMMAND_NOISE_ANGULAR_SLIP_STD,
+                'linear_additive_std': _COMMAND_NOISE_LINEAR_ADDITIVE_STD,
+                'angular_additive_std': _COMMAND_NOISE_ANGULAR_ADDITIVE_STD,
+                'correlation_alpha': _COMMAND_NOISE_CORRELATION_ALPHA,
                 'linear_min': 0.0,
                 'linear_max': 0.22,
                 'angular_min': -1.0,
@@ -536,7 +517,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         )
 
     yolo_params = {
-        'pixel_noise_sigma': cfg['sensor_pixel_noise_sigma'],
+        'pixel_noise_sigma': _SENSOR_PIXEL_NOISE_SIGMA,
         'seed': cfg['seed'],
         'model_path': cfg['yolo_model'],
         'device': cfg['yolo_device'],
@@ -558,10 +539,10 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     )
 
     pixel_params = {
-        'use_sim_time': cfg['use_sim_time'],
+        'use_sim_time': True,
         'frame_id': 'map_bev',
         'pixel_noise_sigma': 0.0,
-        'heading_pixel_noise_sigma': cfg['sensor_pixel_noise_sigma'],
+        'heading_pixel_noise_sigma': _SENSOR_PIXEL_NOISE_SIGMA,
         'transform_noise_sigma': 0.0,
         'use_odom_heading_fallback': True,
         'odom_heading_timeout_s': 0.5,
@@ -585,7 +566,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         name='goal_mission_node',
         output='screen',
         parameters=[{
-            'use_sim_time': cfg['use_sim_time'],
+            'use_sim_time': True,
             'frame_id': 'map_bev',
             'goal_x': cfg['goal_x'],
             'goal_y': cfg['goal_y'],
@@ -598,7 +579,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         name='goal_marker_node',
         output='screen',
         parameters=[{
-            'use_sim_time': cfg['use_sim_time'],
+            'use_sim_time': True,
             'marker_topic': '/goal_marker',
             'marker_ns': 'goal',
             'scale': 0.35,
@@ -619,7 +600,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             output='screen',
             on_exit=[Shutdown(reason='experiment_logger exited')],
             parameters=[{
-                'use_sim_time': cfg['use_sim_time'],
+                'use_sim_time': True,
                 'log_dir': cfg['log_dir'],
                 'seed': cfg['seed'],
                 'method': cfg['comparison_method_id'] or cfg['planner'],
@@ -717,7 +698,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         name='rviz2',
         arguments=['-d', cfg['rviz_config']],
         output='screen',
-        parameters=[{'use_sim_time': cfg['use_sim_time']}],
+        parameters=[{'use_sim_time': True}],
     )
 
     return {
@@ -747,48 +728,38 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     shared_nodes = build_shared_nodes(cfg)
     planner = cfg['planner']
 
-    if planner not in ('efe1', 'efe2', 'efer', 'gp_risk_only', 'visibility_unaware_baseline'):
+    if planner not in ('visibility_aware_efe', 'constant_R_efe', 'risk_only_ablation'):
         raise RuntimeError(
-            "planner must be 'efe1', 'efe2', 'efer', 'gp_risk_only', or 'visibility_unaware_baseline' for agent launch"
+            "planner must be 'visibility_aware_efe', 'constant_R_efe', or 'risk_only_ablation' for agent launch"
         )
 
     planner_params = {
-        'efe1': {
+        'visibility_aware_efe': {
             'approx_method': 'ET1',
             'use_ambiguity': cfg['use_ambiguity'],
             'use_obs_risk': cfg['use_obs_risk'],
-        },
-        'efe2': {
-            'approx_method': 'ET2',
-            'use_ambiguity': cfg['use_ambiguity'],
-            'use_obs_risk': cfg['use_obs_risk'],
-        },
-        'efer': {
-            'approx_method': 'ET2',
-            'use_ambiguity': False,
-            'use_obs_risk': True,
         },
         # C3: GP-derived R_eff active, ambiguity term disabled.
         # Isolates whether the risk term alone (through R_eff) drives rerouting.
-        'gp_risk_only': {
+        'risk_only_ablation': {
             'approx_method': 'ET1',
             'use_ambiguity': False,
             'use_obs_risk': True,
         },
-        'visibility_unaware_baseline': {
+        'constant_R_efe': {
             'approx_method': 'ET1',
             'use_ambiguity': False,
             'use_obs_risk': True,
         },
     }
-    planner_uses_visibility = bool(cfg['use_visibility_model']) and planner != 'visibility_unaware_baseline'
+    planner_uses_visibility = bool(cfg['use_visibility_model']) and planner != 'constant_R_efe'
     agent_node = Node(
         package='planning',
         executable='efe_agent',
         name=f'{planner}_agent',
         output='screen',
         parameters=[{
-            'use_sim_time': cfg['use_sim_time'],
+            'use_sim_time': True,
             'cmd_topic': '/cmd_vel_raw' if cfg.get('use_command_noise', True) else '/cmd_vel',
             'plan_rate': cfg['plan_rate'],
             'horizon': cfg['horizon'],
@@ -799,7 +770,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'pixel_correction_min_interval_s': cfg['pixel_correction_min_interval_s'],
             'pixel_correction_approx': cfg['pixel_correction_approx'],
             'skip_stale_pixel_correction': cfg['skip_stale_pixel_correction'],
-            'heading_pixel_noise_sigma': cfg['sensor_pixel_noise_sigma'],
+            'heading_pixel_noise_sigma': _SENSOR_PIXEL_NOISE_SIGMA,
             'use_odom_heading_correction': True,
             'odom_heading_correction_mode': cfg['odom_heading_correction_mode'],
             'odom_heading_timeout_s': 0.75,

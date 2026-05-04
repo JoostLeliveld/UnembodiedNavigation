@@ -41,7 +41,7 @@ def _logit(p):
     return np.log(arr / (1.0 - arr))
 
 
-GP_METHOD_IDS = tuple(method for method in ACTIVE_METHOD_IDS if method != 'visibility_unaware_baseline')
+GP_METHOD_IDS = tuple(method for method in ACTIVE_METHOD_IDS if method != 'constant_R_efe')
 
 
 def _load_json(path: Path) -> dict:

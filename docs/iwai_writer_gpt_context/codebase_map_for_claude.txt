@@ -290,7 +290,6 @@ Legacy or secondary paths can confuse the paper story.
 Mention them only if they are part of a diagnostic:
 
 - non-paper detector/controller runs removed from the active launch surface;
-- older visibility sweep scripts and historical profile names;
 - old logs generated before the cleanup.
 
 

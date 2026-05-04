@@ -21,7 +21,7 @@ colcon build --symlink-install --packages-select experiments planning perception
 
 # Run the primary campaign launch
 ros2 launch experiments warehouse_primary_comparison.launch.py \
-    planner:=efe1 task:=shadow_tradeoff_a seed:=0
+    planner:=visibility_aware_efe task:=shadow_tradeoff_a seed:=0
 ```
 
 ## Key directories
@@ -40,13 +40,13 @@ ros2 launch experiments warehouse_primary_comparison.launch.py \
 36-run pre-registered experiment comparing 3 planner conditions across 3 tasks.
 
 **Conditions:**
-- C1 `visibility_unaware_baseline` — constant R₀, ignores GP
-- C2 `efe1` — full GP-EFE with ambiguity term
-- C3 `gp_risk_only` — GP risk only, no ambiguity
+- C1 `constant_R_efe` — constant R₀, ignores GP
+- C2 `visibility_aware_efe` — full GP-EFE with ambiguity term
+- C3 `risk_only_ablation` — GP risk only, no ambiguity
 
 **Tasks (all in `warehouse_occ_light.world.sdf`):**
-- `shadow_tradeoff_a`: start (-2, 0.5) → goal (2, 0.5) — straight path through shadow
-- `shadow_tradeoff_b`: start (-2, -1.0) → goal (2, 0.5) — diagonal through shadow
+- `shadow_tradeoff_a`: start (-2, 0.5) → goal (2, 1.5) — straight path through shadow
+- `shadow_tradeoff_b`: start (-2, -1.0) → goal (2, 1.5) — diagonal through shadow
 - `sanity_open`: start (-2, -1.5) → goal (2, -1.5) — fully visible, sanity check
 
 **Run campaign:**
@@ -61,7 +61,7 @@ python3 run_iwai_campaign.py --config iwai_campaign_config.yaml --dry-run  # pre
 ```bash
 python3 compute_paper_metrics.py \
     --campaign-log logs/visibility_comparison/iwai_campaign/campaign_log.json \
-    --gp-artifact src/experiments/data/visibility_gp/warehouse_occ_light_empirical_visibility_gp.npz \
+    --gp-artifact logs/visibility_comparison/current_gp/oracle_visibility_gp.npz \
     --out paper_metrics.csv
 ```
 
@@ -81,7 +81,9 @@ The `.npz` files use these exact keys (NOT the names in old scripts):
 **There is NO `P_conservative_plan_map` or `P_std_map` key.** Scripts that reference those need `.get('P_conservative_plan_map', data.get('P_conservative_map'))`.
 
 **Artifact for IWAI campaign:**
-`src/experiments/data/visibility_gp/warehouse_occ_light_empirical_visibility_gp.npz`
+`logs/visibility_comparison/current_gp/oracle_visibility_gp.npz`
+
+**Camera pose (warehouse_occ_light):** `(-2.45, -2.45, 2.80)`, yaw 45°, pitch ~49° downward.
 
 Note: this artifact shows near-zero visibility in the task region (P ≈ 0.001–0.05) because the `occ_light` world has heavy occlusion. This is expected — the planner still uses it for gradient guidance even at low absolute values.
 
@@ -120,6 +122,6 @@ run_timeout_after_first_cmd_s: 75.0
 ## Common gotchas
 
 - `auto_stop_on_goal` must be `'true'` (string) in launch args — was silently `false` before fix
-- `gp_risk_only` planner: `use_visibility_model=True`, `use_ambiguity=False`, `use_obs_risk=True`
+- `risk_only_ablation` planner: `use_visibility_model=True`, `use_ambiguity=False`, `use_obs_risk=True`
 - `dt` default in `visibility_launch_common.py` must come from `PAPER_LAUNCH_DEFAULTS`, not hardcoded `'0.2'`
 - Collision callback `_contacts_cb` calls `_finish_run` after `_record_collision_event` — geometry collision check in `_log_once` calls it after writing the CSV row

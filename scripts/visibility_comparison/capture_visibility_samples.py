@@ -376,7 +376,7 @@ def main() -> int:
         'world_name': str(profile['world_name']),
         'world_profiles_path': str(Path(args.world_profiles).resolve()),
         'world_path': str(Path(world_path).resolve()),
-        'capture_mode': 'teleport',
+        'capture_method': 'grid_teleport',
         'camera_frame': str(args.camera_frame),
         'camera_pose': [float(v) for v in camera_pose],
         'camera_pos': [float(v) for v in cam_pos],

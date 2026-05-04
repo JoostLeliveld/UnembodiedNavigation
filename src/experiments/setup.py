@@ -40,7 +40,6 @@ setup(
             'goal_mission_node = experiments.nodes.goal_mission_node:main',
             'goal_marker_node = experiments.nodes.goal_marker_node:main',
             'experiment_logger = experiments.nodes.experiment_logger:main',
-            'visibility_sweep_controller_node = experiments.nodes.visibility_sweep_controller_node:main',
         ],
     },
 )

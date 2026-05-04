@@ -4,9 +4,9 @@ from launch.substitutions import PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 
 
-DEFAULT_PLANNER = 'efe1'
-ALLOWED_PLANNERS = ('efe1', 'efe2', 'efer', 'visibility_unaware_baseline')
-PLANNER_DESCRIPTION = 'Planner: efe1 | efe2 | efer | visibility_unaware_baseline'
+DEFAULT_PLANNER = 'visibility_aware_efe'
+ALLOWED_PLANNERS = ('visibility_aware_efe', 'risk_only_ablation', 'constant_R_efe')
+PLANNER_DESCRIPTION = 'Planner: visibility_aware_efe | risk_only_ablation | constant_R_efe'
 
 
 def _planner_precision_arguments():
@@ -41,7 +41,7 @@ def _launch_setup(context, *args, **kwargs):
     cfg['planner'] = planner
     cfg['use_rviz'] = bool(cfg.get('use_rviz', False))
 
-    if planner == 'visibility_unaware_baseline':
+    if planner == 'constant_R_efe':
         cfg['use_visibility_model'] = False
         cfg['use_ambiguity'] = False
         cfg['use_obs_risk'] = True

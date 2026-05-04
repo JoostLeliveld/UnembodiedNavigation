@@ -3,10 +3,15 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 
+# Quick launch:
+# ros2 launch experiments warehouse_primary_comparison.launch.py \
+#     planner:=visibility_aware_efe task:=shadow_tradeoff_a seed:=0 \
+#     yolo_model:=/home/joostleliveld/Thesis/UnembodiedNavigation/yolo11n-seg.pt \
+#     comparison_method_id:=efe_main
 
-DEFAULT_PLANNER = 'efe1'
-ALLOWED_PLANNERS = ('efe1', 'gp_risk_only', 'visibility_unaware_baseline')
-PLANNER_DESCRIPTION = 'Primary thesis comparison: efe1 | gp_risk_only | visibility_unaware_baseline'
+DEFAULT_PLANNER = 'visibility_aware_efe'
+ALLOWED_PLANNERS = ('visibility_aware_efe', 'risk_only_ablation', 'constant_R_efe')
+PLANNER_DESCRIPTION = 'Primary thesis comparison: visibility_aware_efe | risk_only_ablation | constant_R_efe'
 
 
 def _planner_precision_arguments():
@@ -41,11 +46,11 @@ def _launch_setup(context, *args, **kwargs):
     cfg['planner'] = planner
     cfg['use_rviz'] = bool(cfg.get('use_rviz', False))
 
-    if planner == 'visibility_unaware_baseline':
+    if planner == 'constant_R_efe':
         cfg['use_visibility_model'] = False
         cfg['use_ambiguity'] = False
         cfg['use_obs_risk'] = True
-    elif planner == 'gp_risk_only':
+    elif planner == 'risk_only_ablation':
         cfg['use_visibility_model'] = True
         cfg['use_ambiguity'] = False
         cfg['use_obs_risk'] = True
@@ -65,7 +70,6 @@ def generate_launch_description():
     ])
 
     return LaunchDescription([
-        DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('planner', default_value=DEFAULT_PLANNER, description=PLANNER_DESCRIPTION),
         DeclareLaunchArgument('world', default_value='warehouse_occ_light.world.sdf'),
         DeclareLaunchArgument('world_profiles', default_value=world_profiles_default, description='World profile YAML'),
@@ -76,20 +80,7 @@ def generate_launch_description():
         DeclareLaunchArgument('run_timeout_after_first_cmd_s', default_value='75.0'),
         DeclareLaunchArgument('first_cmd_linear_eps', default_value='0.02'),
         DeclareLaunchArgument('first_cmd_angular_eps', default_value='0.10'),
-        DeclareLaunchArgument('stuck_window_s', default_value='8.0'),
-        DeclareLaunchArgument('stuck_max_displacement_m', default_value='0.08'),
-        DeclareLaunchArgument('stuck_max_goal_improvement_m', default_value='0.05'),
-        DeclareLaunchArgument('stuck_cmd_fraction_min', default_value='0.50'),
         DeclareLaunchArgument('use_command_noise', default_value='true'),
-        DeclareLaunchArgument('command_noise_linear_slip_mean', default_value='0.03'),
-        DeclareLaunchArgument('command_noise_linear_slip_std', default_value='0.06'),
-        DeclareLaunchArgument('command_noise_angular_slip_mean', default_value='0.00'),
-        DeclareLaunchArgument('command_noise_angular_slip_std', default_value='0.04'),
-        DeclareLaunchArgument('command_noise_linear_additive_std', default_value='0.008'),
-        DeclareLaunchArgument('command_noise_angular_additive_std', default_value='0.035'),
-        DeclareLaunchArgument('command_noise_correlation_alpha', default_value='0.85'),
-        DeclareLaunchArgument('perception_backend', default_value='yolo', description='Paper runtime perception backend: yolo'),
-        DeclareLaunchArgument('sensor_pixel_noise_sigma', default_value='1.0'),
         DeclareLaunchArgument('yolo_model', default_value='', description='Local path to a trained YOLO .pt model'),
         DeclareLaunchArgument('yolo_device', default_value='', description='Ultralytics device string; empty lets Ultralytics choose'),
         DeclareLaunchArgument('yolo_imgsz', default_value='640'),

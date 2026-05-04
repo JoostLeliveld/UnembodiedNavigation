@@ -40,6 +40,10 @@ paper_runtime_contract:
     use_direct_visibility_trust: true
     direct_visibility_reward_allowed: false
     visibility_weight_required_value: 0.0
+    known_obstacle_map_required: true
+    no_go_barrier_allowed: true
+    no_go_barrier_must_match_across_conditions: true
+    no_go_barrier_must_be_reported_separately: true
 
   required_paths:
     yolo_model:
@@ -58,6 +62,7 @@ paper_runtime_contract:
     - camera_projection_model
     - world_bounds
     - obstacle_geometry
+    - obstacle_barrier_parameters
     - truth_pose_source
     - run_manifest
     - experiment_csv

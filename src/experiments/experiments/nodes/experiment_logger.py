@@ -283,25 +283,20 @@ class ExperimentLogger(Node):
         self.stuck_cmd_fraction_min = float(self.get_parameter('stuck_cmd_fraction_min').value)
 
         # Camera model for homography projection (pixel to world)
-        try:
-            from unav_common.camera_model import ObliqueCameraModel
-            cam_pos = np.array(self.get_parameter('cam_pos').value, dtype=float)
-            look_at = np.array(self.get_parameter('look_at').value, dtype=float)
-            img_width = int(self.get_parameter('img_width').value)
-            img_height = int(self.get_parameter('img_height').value)
-            fov_h_rad = float(self.get_parameter('fov_h_rad').value)
-            self.camera_model = ObliqueCameraModel(
-                cam_pos=cam_pos,
-                look_at=look_at,
-                img_width=img_width,
-                img_height=img_height,
-                fov_h_rad=fov_h_rad,
-            )
-            self.camera_pos_xy = np.asarray(cam_pos[:2], dtype=float).reshape(2)
-        except Exception as e:
-            self.get_logger().warn(f'Failed to initialize camera model for homography: {e}')
-            self.camera_model = None
-            self.camera_pos_xy = None
+        from unav_common.camera_model import ObliqueCameraModel
+        cam_pos = np.array(self.get_parameter('cam_pos').value, dtype=float)
+        look_at = np.array(self.get_parameter('look_at').value, dtype=float)
+        img_width = int(self.get_parameter('img_width').value)
+        img_height = int(self.get_parameter('img_height').value)
+        fov_h_rad = float(self.get_parameter('fov_h_rad').value)
+        self.camera_model = ObliqueCameraModel(
+            cam_pos=cam_pos,
+            look_at=look_at,
+            img_width=img_width,
+            img_height=img_height,
+            fov_h_rad=fov_h_rad,
+        )
+        self.camera_pos_xy = np.asarray(cam_pos[:2], dtype=float).reshape(2)
 
         run_info = create_run_dir(log_dir)
         self.run_id = run_info['run_id']
@@ -312,23 +307,14 @@ class ExperimentLogger(Node):
         repo_root = _find_repo_root(os.getcwd())
         self.repo_root = repo_root
         self.task_start_pose = _load_task_start_pose(self.tasks_yaml, self.world, self.task)
+        profile, _intrinsics, _world_path, _camera_pose = load_profile(self.world_profiles_path, self.world)
+        visibility_defaults = dict(profile.get('visibility_defaults') or {})
         self.world_bounds = {
-            'xmin': math.nan,
-            'xmax': math.nan,
-            'ymin': math.nan,
-            'ymax': math.nan,
+            'xmin': float(visibility_defaults.get('visibility_map_min_x', math.nan)),
+            'xmax': float(visibility_defaults.get('visibility_map_max_x', math.nan)),
+            'ymin': float(visibility_defaults.get('visibility_map_min_y', math.nan)),
+            'ymax': float(visibility_defaults.get('visibility_map_max_y', math.nan)),
         }
-        try:
-            profile, _intrinsics, _world_path, _camera_pose = load_profile(self.world_profiles_path, self.world)
-            visibility_defaults = dict(profile.get('visibility_defaults') or {})
-            self.world_bounds = {
-                'xmin': float(visibility_defaults.get('visibility_map_min_x', math.nan)),
-                'xmax': float(visibility_defaults.get('visibility_map_max_x', math.nan)),
-                'ymin': float(visibility_defaults.get('visibility_map_min_y', math.nan)),
-                'ymax': float(visibility_defaults.get('visibility_map_max_y', math.nan)),
-            }
-        except Exception as exc:
-            self.get_logger().warn(f'Failed to resolve world bounds from world_profiles: {exc}')
 
         collision_scene = scene_from_json(self.collision_geometry_json)
         self._collision_prisms = tuple(collision_scene.prisms)
@@ -927,8 +913,6 @@ class ExperimentLogger(Node):
         }
 
     def _camera_relative_bearing_deg(self, truth_x: float, truth_y: float, truth_yaw: float) -> float:
-        if self.camera_pos_xy is None:
-            return math.nan
         vec = np.asarray(self.camera_pos_xy, dtype=float) - np.array([float(truth_x), float(truth_y)], dtype=float)
         if np.linalg.norm(vec) <= 1e-9:
             return math.nan
@@ -1153,7 +1137,7 @@ class ExperimentLogger(Node):
         pred_world_x = math.nan
         pred_world_y = math.nan
         localization_error_m = math.nan
-        if self.camera_model is not None and obs_ok and math.isfinite(pixel_pose_u) and math.isfinite(pixel_pose_v):
+        if obs_ok and math.isfinite(pixel_pose_u) and math.isfinite(pixel_pose_v):
             world = self.camera_model.pixel_to_world(float(pixel_pose_u), float(pixel_pose_v))
             if world is not None:
                 pred_world_x = float(world[0])
