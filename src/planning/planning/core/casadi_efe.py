@@ -25,14 +25,7 @@ class CasadiEfeParams:
     control_weight: float
     risk_scale: float
     ambiguity_scale: float
-    visibility_weight: float
-    visibility_barrier_threshold: float
-    visibility_barrier_scale: float
     discount_gamma: float
-    visibility_power: float
-    visibility_trust_low: float
-    visibility_trust_high: float
-    visibility_trust_mode: str
     visibility_sigma_kappa: float
     goal_prior_u_std_start: float
     goal_prior_v_std_start: float
@@ -182,13 +175,8 @@ def _softplus_expr(x):
 
 
 def _visibility_effective_score_ca(p_vis, params: CasadiEfeParams):
-    if str(getattr(params, "visibility_trust_mode", "smoothstep")).strip().lower() in ("direct", "identity", "gp"):
-        return _clip_expr(p_vis, 1e-4, 1.0 - 1e-4)
-    shaped = _clip_expr(ca.power(p_vis, params.visibility_power), 1e-4, 1.0 - 1e-4)
-    lo = max(float(params.visibility_trust_low), 1e-4)
-    hi = min(max(float(params.visibility_trust_high), lo + 1e-6), 1.0 - 1e-4)
-    x = (shaped - lo) / (hi - lo)
-    return _clip_expr(_smoothstep_ca(x), 1e-4, 1.0 - 1e-4)
+    del params
+    return _clip_expr(p_vis, 1e-4, 1.0 - 1e-4)
 
 
 def _blend_observation_covariance_ca(p_vis_eff, params: CasadiEfeParams):
@@ -212,15 +200,6 @@ def goal_obs_cov_ca_for_progress(params: CasadiEfeParams, progress):
     return ca.diag(ca.vertcat(ca.power(sigma_u, 2), ca.power(sigma_v, 2)))
 
 
-def visibility_penalty_ca(p_vis, p_vis_eff, params: CasadiEfeParams):
-    penalty = 1.0 - p_vis
-    if params.visibility_barrier_threshold > 0.0:
-        penalty += _softplus_expr(
-            params.visibility_barrier_scale * (params.visibility_barrier_threshold - p_vis_eff)
-        )
-    return penalty
-
-
 def collision_barrier_penalty_ca(clearance, params: CasadiEfeParams):
     near_margin = 0.05
     near_term = 1e-3 * params.invalid_rollout_barrier_cost * _softplus_expr(
@@ -235,6 +214,8 @@ def collision_barrier_penalty_ca(clearance, params: CasadiEfeParams):
 
 
 def terminal_progress_penalty_ca(m0, m_terminal, goal_xy, params: CasadiEfeParams):
+    if float(params.min_terminal_goal_progress_m) <= 0.0:
+        return 0.0
     current_goal_distance = ca.sqrt(
         ca.power(m0[0] - goal_xy[0], 2) + ca.power(m0[1] - goal_xy[1], 2)
     )
@@ -341,7 +322,6 @@ def visibility_aware_unicycle_efe_ca(
     total_risk = 0
     total_amb = 0
     total_control = 0
-    total_vis = 0
     total_nogo = 0
     denom = float(max(params.goal_progress_n_steps, 1))
 
@@ -375,8 +355,6 @@ def visibility_aware_unicycle_efe_ca(
         total_risk += weight_t * params.risk_scale * risk_ca(mu, Sigma, goal_obs, goal_cov_t)
         total_amb += weight_t * params.ambiguity_scale * ambiguity_ca(Sigma, Gamma, S)
         total_control += weight_t * params.control_weight * ca.sumsqr(u_t)
-        if p_vis_state is not None and params.visibility_weight > 0.0:
-            total_vis += weight_t * params.visibility_weight * visibility_penalty_ca(p_vis, p_vis_eff, params)
         if nogo_cost is not None:
             total_nogo += weight_t * nogo_cost(m)
         if collision_signed_distance is not None:
@@ -384,7 +362,7 @@ def visibility_aware_unicycle_efe_ca(
             total_nogo += weight_t * collision_barrier_penalty_ca(clearance, params)
 
     total_risk += terminal_progress_penalty_ca(m0, m, goal_xy, params)
-    return total_risk + total_amb + total_control + total_vis + total_nogo
+    return total_risk + total_amb + total_control + total_nogo
 
 
 def make_efe_valgrad_fn(

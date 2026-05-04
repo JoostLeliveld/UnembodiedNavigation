@@ -29,8 +29,8 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'skip_stale_pixel_correction': 'true',
     'min_state_cov': '1e-6',
     'plan_rate': '2.0',
-    'horizon': '36',
-    'dt': '0.2',
+    'horizon': '40',
+    'dt': '0.25',
     'control_weight': '0.0',
     'risk_weight_obs': '1.0',
     'ambiguity_weight': '3.0',
@@ -39,10 +39,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'use_obs_risk': 'true',
     'r_visible_uv': '2.5',
     'r_miss_uv': '120.0',
-    'visibility_power': '1.0',
-    'visibility_trust_low': '0.15',
-    'visibility_trust_high': '0.65',
-    'visibility_trust_mode': 'smoothstep',
     'visibility_sigma_kappa': '1.0',
     'goal_prior_u_std_start': '80.0',
     'goal_prior_v_std_start': '80.0',
@@ -53,13 +49,18 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'observation_risk_scale': '1.25',
     'ambiguity_term_scale': '1.00',
     'discount_gamma': '0.98',
-    'visibility_weight': '0.5',
-    'visibility_barrier_threshold': '0.0',
-    'visibility_barrier_scale': '10.0',
-    'min_terminal_goal_progress_m': '0.20',
+    'min_terminal_goal_progress_m': '0.0',
     'invalid_rollout_barrier_cost': '1000000.0',
     'robot_collision_radius_m': '0.125',
     'bridge_contacts': 'true',
+    'use_command_noise': 'true',
+    'command_noise_linear_slip_mean': '0.03',
+    'command_noise_linear_slip_std': '0.06',
+    'command_noise_angular_slip_mean': '0.00',
+    'command_noise_angular_slip_std': '0.04',
+    'command_noise_linear_additive_std': '0.008',
+    'command_noise_angular_additive_std': '0.035',
+    'command_noise_correlation_alpha': '0.85',
     'process_noise_xy': '0.01',
     'process_noise_theta': '0.02',
     'obs_noise_uv': '2.0',
@@ -68,16 +69,13 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'optimizer_ftol': '1e-6',
     'optimizer_gtol': '1e-4',
     'optimizer_warm_start': 'true',
-    'optimizer_multistart_seeds': 'false',
-    'optimizer_seed_families': '',
-    'optimizer_multistart_max_seeds': '0',
     'odom_heading_correction_mode': 'kalman',
     'clamp_pixel_uv_theta_without_yaw': 'false',
     'debug_runtime': 'false',
     'auto_stop_on_goal': 'true',
-    'goal_success_radius': '0.35',
+    'goal_success_radius': '0.20',
     'goal_success_hold_s': '2.0',
-    'run_timeout_after_first_cmd_s': '60.0',
+    'run_timeout_after_first_cmd_s': '75.0',
     'first_cmd_linear_eps': '0.02',
     'first_cmd_angular_eps': '0.10',
     'stuck_window_s': '8.0',
@@ -99,9 +97,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
 
 
 VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
-    'visibility_weight': 4.0,
-    'visibility_barrier_threshold': 0.0,
-    'visibility_barrier_scale': 10.0,
     'visibility_target_height_m': 0.0,
     'use_nogo_cost': 'true',
     'nogo_penalty_type': 'softplus',
@@ -215,8 +210,8 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'skip_stale_pixel_correction': _as_bool(_launch_value(context, 'skip_stale_pixel_correction', 'true')),
         'use_ambiguity': _as_bool(_launch_value(context, 'use_ambiguity', PAPER_LAUNCH_DEFAULTS['use_ambiguity'])),
         'use_obs_risk': _as_bool(_launch_value(context, 'use_obs_risk', PAPER_LAUNCH_DEFAULTS['use_obs_risk'])),
-        'auto_stop_on_goal': _as_bool(_launch_value(context, 'auto_stop_on_goal', 'false')),
-        'goal_success_radius': float(_launch_value(context, 'goal_success_radius', '0.35')),
+        'auto_stop_on_goal': _as_bool(_launch_value(context, 'auto_stop_on_goal', PAPER_LAUNCH_DEFAULTS['auto_stop_on_goal'])),
+        'goal_success_radius': float(_launch_value(context, 'goal_success_radius', PAPER_LAUNCH_DEFAULTS['goal_success_radius'])),
         'goal_success_hold_s': float(_launch_value(context, 'goal_success_hold_s', '2.0')),
         'run_timeout_after_first_cmd_s': float(_launch_value(context, 'run_timeout_after_first_cmd_s', PAPER_LAUNCH_DEFAULTS['run_timeout_after_first_cmd_s'])),
         'first_cmd_linear_eps': float(_launch_value(context, 'first_cmd_linear_eps', PAPER_LAUNCH_DEFAULTS['first_cmd_linear_eps'])),
@@ -233,15 +228,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'optimizer_ftol': float(_launch_value(context, 'optimizer_ftol', PAPER_LAUNCH_DEFAULTS['optimizer_ftol'])),
         'optimizer_gtol': float(_launch_value(context, 'optimizer_gtol', PAPER_LAUNCH_DEFAULTS['optimizer_gtol'])),
         'optimizer_warm_start': _as_bool(_launch_value(context, 'optimizer_warm_start', PAPER_LAUNCH_DEFAULTS['optimizer_warm_start'])),
-        'optimizer_multistart_seeds': _as_bool(
-            _launch_value(context, 'optimizer_multistart_seeds', PAPER_LAUNCH_DEFAULTS['optimizer_multistart_seeds'])
-        ),
-        'optimizer_seed_families': _launch_value(
-            context, 'optimizer_seed_families', PAPER_LAUNCH_DEFAULTS['optimizer_seed_families']
-        ).strip(),
-        'optimizer_multistart_max_seeds': int(
-            _launch_value(context, 'optimizer_multistart_max_seeds', PAPER_LAUNCH_DEFAULTS['optimizer_multistart_max_seeds'])
-        ),
         'odom_heading_correction_mode': _launch_value(
             context, 'odom_heading_correction_mode', PAPER_LAUNCH_DEFAULTS['odom_heading_correction_mode']
         ).strip().lower(),
@@ -250,16 +236,12 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         ),
         'plan_rate': float(_launch_value(context, 'plan_rate', PAPER_LAUNCH_DEFAULTS['plan_rate'])),
         'horizon': int(_launch_value(context, 'horizon', PAPER_LAUNCH_DEFAULTS['horizon'])),
-        'dt': float(_launch_value(context, 'dt', '0.2')),
+        'dt': float(_launch_value(context, 'dt', PAPER_LAUNCH_DEFAULTS['dt'])),
         'control_weight': float(_launch_value(context, 'control_weight', PAPER_LAUNCH_DEFAULTS['control_weight'])),
         'risk_weight_obs': float(_launch_value(context, 'risk_weight_obs', '1.0')),
         'ambiguity_weight': float(_launch_value(context, 'ambiguity_weight', '1.0')),
         'r_visible_uv': float(_launch_value(context, 'r_visible_uv', PAPER_LAUNCH_DEFAULTS['r_visible_uv'])),
         'r_miss_uv': float(_launch_value(context, 'r_miss_uv', PAPER_LAUNCH_DEFAULTS['r_miss_uv'])),
-        'visibility_power': float(_launch_value(context, 'visibility_power', PAPER_LAUNCH_DEFAULTS['visibility_power'])),
-        'visibility_trust_low': float(_launch_value(context, 'visibility_trust_low', PAPER_LAUNCH_DEFAULTS['visibility_trust_low'])),
-        'visibility_trust_high': float(_launch_value(context, 'visibility_trust_high', PAPER_LAUNCH_DEFAULTS['visibility_trust_high'])),
-        'visibility_trust_mode': _launch_value(context, 'visibility_trust_mode', PAPER_LAUNCH_DEFAULTS['visibility_trust_mode']),
         'visibility_sigma_kappa': float(_launch_value(context, 'visibility_sigma_kappa', PAPER_LAUNCH_DEFAULTS['visibility_sigma_kappa'])),
         'goal_prior_u_std_start': float(_launch_value(context, 'goal_prior_u_std_start', PAPER_LAUNCH_DEFAULTS['goal_prior_u_std_start'])),
         'goal_prior_v_std_start': float(_launch_value(context, 'goal_prior_v_std_start', PAPER_LAUNCH_DEFAULTS['goal_prior_v_std_start'])),
@@ -270,38 +252,11 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'observation_risk_scale': float(_launch_value(context, 'observation_risk_scale', PAPER_LAUNCH_DEFAULTS['observation_risk_scale'])),
         'ambiguity_term_scale': float(_launch_value(context, 'ambiguity_term_scale', PAPER_LAUNCH_DEFAULTS['ambiguity_term_scale'])),
         'discount_gamma': float(_launch_value(context, 'discount_gamma', PAPER_LAUNCH_DEFAULTS['discount_gamma'])),
-        'visibility_barrier_threshold': float(
-            _launch_value(
-                context,
-                'visibility_barrier_threshold',
-                PAPER_LAUNCH_DEFAULTS.get(
-                    'visibility_barrier_threshold',
-                    str(VISIBILITY_FALLBACK_DEFAULTS['visibility_barrier_threshold']),
-                ),
-            )
-        ),
-        'visibility_barrier_scale': float(
-            _launch_value(
-                context,
-                'visibility_barrier_scale',
-                PAPER_LAUNCH_DEFAULTS.get(
-                    'visibility_barrier_scale',
-                    str(VISIBILITY_FALLBACK_DEFAULTS['visibility_barrier_scale']),
-                ),
-            )
-        ),
         'use_visibility_model': _as_bool(
             visibility_enabled_default if use_visibility_raw in ('', 'auto', 'default') else use_visibility_raw
         ),
         'perception_use_geometry_occlusion': _as_bool(
             _launch_value(context, 'perception_use_geometry_occlusion', 'true')
-        ),
-        'visibility_weight': float(
-            _launch_value(
-                context,
-                'visibility_weight',
-                PAPER_LAUNCH_DEFAULTS.get('visibility_weight', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_weight'])),
-            )
         ),
         'visibility_target_height_m': float(_launch_value(context, 'visibility_target_height_m', str(VISIBILITY_FALLBACK_DEFAULTS['visibility_target_height_m']))),
         'visibility_geometry_json': _launch_value(context, 'visibility_geometry_json', ''),
@@ -339,6 +294,30 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         ),
         'bridge_contacts': _as_bool(
             _launch_value(context, 'bridge_contacts', PAPER_LAUNCH_DEFAULTS['bridge_contacts'])
+        ),
+        'use_command_noise': _as_bool(
+            _launch_value(context, 'use_command_noise', PAPER_LAUNCH_DEFAULTS['use_command_noise'])
+        ),
+        'command_noise_linear_slip_mean': float(
+            _launch_value(context, 'command_noise_linear_slip_mean', PAPER_LAUNCH_DEFAULTS['command_noise_linear_slip_mean'])
+        ),
+        'command_noise_linear_slip_std': float(
+            _launch_value(context, 'command_noise_linear_slip_std', PAPER_LAUNCH_DEFAULTS['command_noise_linear_slip_std'])
+        ),
+        'command_noise_angular_slip_mean': float(
+            _launch_value(context, 'command_noise_angular_slip_mean', PAPER_LAUNCH_DEFAULTS['command_noise_angular_slip_mean'])
+        ),
+        'command_noise_angular_slip_std': float(
+            _launch_value(context, 'command_noise_angular_slip_std', PAPER_LAUNCH_DEFAULTS['command_noise_angular_slip_std'])
+        ),
+        'command_noise_linear_additive_std': float(
+            _launch_value(context, 'command_noise_linear_additive_std', PAPER_LAUNCH_DEFAULTS['command_noise_linear_additive_std'])
+        ),
+        'command_noise_angular_additive_std': float(
+            _launch_value(context, 'command_noise_angular_additive_std', PAPER_LAUNCH_DEFAULTS['command_noise_angular_additive_std'])
+        ),
+        'command_noise_correlation_alpha': float(
+            _launch_value(context, 'command_noise_correlation_alpha', PAPER_LAUNCH_DEFAULTS['command_noise_correlation_alpha'])
         ),
         'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
         'debug_runtime': _as_bool(_launch_value(context, 'debug_runtime', 'false')),
@@ -411,6 +390,10 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         planner = profile['planner_default']
     if planner == 'visibility_unaware_baseline':
         cfg['use_visibility_model'] = False
+        cfg['use_ambiguity'] = False
+        cfg['use_obs_risk'] = True
+    elif planner == 'gp_risk_only':
+        cfg['use_visibility_model'] = True
         cfg['use_ambiguity'] = False
         cfg['use_obs_risk'] = True
 
@@ -539,6 +522,34 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'yaw_tolerance': cfg['odom_wait_yaw_tolerance'],
         }],
     )
+
+    command_noise_node = None
+    if cfg.get('use_command_noise', True):
+        command_noise_node = Node(
+            package='sim',
+            executable='actuation_noise_node',
+            name='actuation_noise_node',
+            output='screen',
+            parameters=[{
+                'use_sim_time': cfg['use_sim_time'],
+                'enabled': True,
+                'input_topic': '/cmd_vel_raw',
+                'output_topic': '/cmd_vel',
+                'diagnostics_topic': '/cmd_vel_noise/diagnostics',
+                'seed': cfg['seed'],
+                'linear_slip_mean': cfg['command_noise_linear_slip_mean'],
+                'linear_slip_std': cfg['command_noise_linear_slip_std'],
+                'angular_slip_mean': cfg['command_noise_angular_slip_mean'],
+                'angular_slip_std': cfg['command_noise_angular_slip_std'],
+                'linear_additive_std': cfg['command_noise_linear_additive_std'],
+                'angular_additive_std': cfg['command_noise_angular_additive_std'],
+                'correlation_alpha': cfg['command_noise_correlation_alpha'],
+                'linear_min': 0.0,
+                'linear_max': 0.22,
+                'angular_min': -1.0,
+                'angular_max': 1.0,
+            }],
+        )
 
     homography_params = {'use_sim_time': cfg['use_sim_time']}
     homography_params.update(cfg['camera_params'])
@@ -672,10 +683,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'goal_sigma_uv': cfg['goal_sigma_uv'],
                 'r_visible_uv': cfg['r_visible_uv'],
                 'r_miss_uv': cfg['r_miss_uv'],
-                'visibility_power': cfg['visibility_power'],
-                'visibility_trust_low': cfg['visibility_trust_low'],
-                'visibility_trust_high': cfg['visibility_trust_high'],
-                'visibility_trust_mode': cfg['visibility_trust_mode'],
                 'visibility_sigma_kappa': cfg['visibility_sigma_kappa'],
                 'goal_prior_u_std_start': cfg['goal_prior_u_std_start'],
                 'goal_prior_v_std_start': cfg['goal_prior_v_std_start'],
@@ -686,9 +693,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'observation_risk_scale': cfg['observation_risk_scale'],
                 'ambiguity_term_scale': cfg['ambiguity_term_scale'],
                 'discount_gamma': cfg['discount_gamma'],
-                'visibility_weight': cfg['visibility_weight'],
-                'visibility_barrier_threshold': cfg['visibility_barrier_threshold'],
-                'visibility_barrier_scale': cfg['visibility_barrier_scale'],
                 'visibility_target_height_m': cfg['visibility_target_height_m'],
                 'visibility_geometry_json': cfg['visibility_geometry_json'],
                 'collision_geometry_json': cfg['collision_geometry_json'],
@@ -728,9 +732,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'optimizer_ftol': cfg['optimizer_ftol'],
                 'optimizer_gtol': cfg['optimizer_gtol'],
                 'optimizer_warm_start': cfg['optimizer_warm_start'],
-                'optimizer_multistart_seeds': cfg['optimizer_multistart_seeds'],
-                'optimizer_seed_families': cfg['optimizer_seed_families'],
-                'optimizer_multistart_max_seeds': cfg['optimizer_multistart_max_seeds'],
                 'odom_heading_correction_mode': cfg['odom_heading_correction_mode'],
                 'clamp_pixel_uv_theta_without_yaw': cfg['clamp_pixel_uv_theta_without_yaw'],
                 'run_timeout_after_first_cmd_s': cfg['run_timeout_after_first_cmd_s'],
@@ -741,6 +742,14 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'stuck_max_goal_improvement_m': cfg['stuck_max_goal_improvement_m'],
                 'stuck_cmd_fraction_min': cfg['stuck_cmd_fraction_min'],
                 'robot_collision_radius_m': cfg['robot_collision_radius_m'],
+                'use_command_noise': cfg['use_command_noise'],
+                'command_noise_linear_slip_mean': cfg['command_noise_linear_slip_mean'],
+                'command_noise_linear_slip_std': cfg['command_noise_linear_slip_std'],
+                'command_noise_angular_slip_mean': cfg['command_noise_angular_slip_mean'],
+                'command_noise_angular_slip_std': cfg['command_noise_angular_slip_std'],
+                'command_noise_linear_additive_std': cfg['command_noise_linear_additive_std'],
+                'command_noise_angular_additive_std': cfg['command_noise_angular_additive_std'],
+                'command_noise_correlation_alpha': cfg['command_noise_correlation_alpha'],
                 **cfg['camera_params'],
             }],
         )
@@ -758,6 +767,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'bringup_sim': bringup_sim,
         'tf_static': tf_static,
         'wait_for_odom': wait_for_odom,
+        'command_noise_node': command_noise_node,
         'homography_sim': perception_node,
         'pixel_to_bev': pixel_to_bev,
         'mission_node': mission_node,
@@ -780,9 +790,9 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     shared_nodes = build_shared_nodes(cfg)
     planner = cfg['planner']
 
-    if planner not in ('efe1', 'efe2', 'efer', 'mpc', 'visibility_unaware_baseline'):
+    if planner not in ('efe1', 'efe2', 'efer', 'mpc', 'gp_risk_only', 'visibility_unaware_baseline'):
         raise RuntimeError(
-            "planner must be 'efe1', 'efe2', 'efer', 'mpc', or 'visibility_unaware_baseline' for agent launch"
+            "planner must be 'efe1', 'efe2', 'efer', 'mpc', 'gp_risk_only', or 'visibility_unaware_baseline' for agent launch"
         )
 
     planner_params = {
@@ -806,6 +816,13 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'use_ambiguity': False,
             'use_obs_risk': True,
         },
+        # C3: GP-derived R_eff active, ambiguity term disabled.
+        # Isolates whether the risk term alone (through R_eff) drives rerouting.
+        'gp_risk_only': {
+            'approx_method': 'ET1',
+            'use_ambiguity': False,
+            'use_obs_risk': True,
+        },
         'visibility_unaware_baseline': {
             'approx_method': 'ET1',
             'use_ambiguity': False,
@@ -820,6 +837,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
         output='screen',
         parameters=[{
             'use_sim_time': cfg['use_sim_time'],
+            'cmd_topic': '/cmd_vel_raw' if cfg.get('use_command_noise', True) else '/cmd_vel',
             'plan_rate': cfg['plan_rate'],
             'horizon': cfg['horizon'],
             'dt': cfg['dt'],
@@ -846,10 +864,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'ambiguity_weight': cfg['ambiguity_weight'],
             'r_visible_uv': cfg['r_visible_uv'],
             'r_miss_uv': cfg['r_miss_uv'],
-            'visibility_power': cfg['visibility_power'],
-            'visibility_trust_low': cfg['visibility_trust_low'],
-            'visibility_trust_high': cfg['visibility_trust_high'],
-            'visibility_trust_mode': cfg['visibility_trust_mode'],
             'visibility_sigma_kappa': cfg['visibility_sigma_kappa'],
             'goal_prior_u_std_start': cfg['goal_prior_u_std_start'],
             'goal_prior_v_std_start': cfg['goal_prior_v_std_start'],
@@ -861,9 +875,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'ambiguity_term_scale': cfg['ambiguity_term_scale'],
             'discount_gamma': cfg['discount_gamma'],
             'use_visibility_model': planner_uses_visibility,
-            'visibility_weight': cfg['visibility_weight'],
-            'visibility_barrier_threshold': cfg['visibility_barrier_threshold'],
-            'visibility_barrier_scale': cfg['visibility_barrier_scale'],
             'visibility_target_height_m': cfg['visibility_target_height_m'],
             'visibility_geometry_json': cfg['visibility_geometry_json'],
             'collision_geometry_json': cfg['collision_geometry_json'],
@@ -884,9 +895,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'optimizer_ftol': cfg['optimizer_ftol'],
             'optimizer_gtol': cfg['optimizer_gtol'],
             'optimizer_warm_start': cfg['optimizer_warm_start'],
-            'optimizer_multistart_seeds': cfg['optimizer_multistart_seeds'],
-            'optimizer_seed_families': cfg['optimizer_seed_families'],
-            'optimizer_multistart_max_seeds': cfg['optimizer_multistart_max_seeds'],
             **cfg['camera_params'],
             **planner_params[planner],
         }],
@@ -910,10 +918,15 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
         )
     )
 
-    return [
+    runtime_actions = [
         shared_nodes['bringup_sim'],
         shared_nodes['tf_static'],
+    ]
+    if shared_nodes.get('command_noise_node') is not None:
+        runtime_actions.append(shared_nodes['command_noise_node'])
+    runtime_actions.extend([
         agent_node,
         shared_nodes['wait_for_odom'],
         start_after_odom,
-    ]
+    ])
+    return runtime_actions

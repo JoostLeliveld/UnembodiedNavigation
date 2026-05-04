@@ -37,3 +37,4 @@ scripts/artifacts/
 core_tue4tm00_humble/
 ICRA2026-WUnEmbodied-main/
 SPAICE2026-RxRover-main/
+.claude/settings.local.json

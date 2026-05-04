@@ -54,16 +54,12 @@ GP_INTERP_TOL = 0.15  # max mean abs error between logged and nearest-neighbour-
 # Planner weights that must be identical across all visibility-aware methods
 WEIGHT_KEYS = (
     'ambiguity_weight',
-    'visibility_weight',
     'risk_weight_obs',
     'horizon',
     'dt',
     'plan_rate',
     'r_visible_uv',
     'r_miss_uv',
-    'visibility_trust_low',
-    'visibility_trust_high',
-    'visibility_power',
 )
 
 VISIBILITY_AWARE_METHODS = {
@@ -234,7 +230,7 @@ def check_csv_columns(method_id: str, run_dir: Path) -> list[str]:
                 'state_x', 'state_y', 'state_yaw',
                 'planner_belief_x', 'planner_belief_y', 'planner_belief_yaw',
                 'truth_state_error_m', 'truth_belief_error_m',
-                'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_visibility', 'efe_obstacle',
+                'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_obstacle',
                 'terminal_goal_distance_pred', 'terminal_goal_progress_m',
                 'fraction_horizon_low_pvis', 'fraction_horizon_high_ambiguity',
                 'min_predicted_obstacle_distance_m',

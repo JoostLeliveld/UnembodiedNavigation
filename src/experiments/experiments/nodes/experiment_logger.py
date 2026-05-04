@@ -100,7 +100,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('log_plan_samples', True)
         self.declare_parameter('log_perception_samples', True)
         self.declare_parameter('auto_stop_on_goal', False)
-        self.declare_parameter('goal_success_radius', 0.35)
+        self.declare_parameter('goal_success_radius', 0.20)
         self.declare_parameter('goal_success_hold_s', 2.0)
         self.declare_parameter('frame_id', 'map_bev')
         self.declare_parameter('frame_sanity_start_tolerance_m', 0.25)
@@ -111,10 +111,6 @@ class ExperimentLogger(Node):
         self.declare_parameter('goal_sigma_uv', 2.0)
         self.declare_parameter('r_visible_uv', 2.5)
         self.declare_parameter('r_miss_uv', 120.0)
-        self.declare_parameter('visibility_power', 1.0)
-        self.declare_parameter('visibility_trust_low', 0.15)
-        self.declare_parameter('visibility_trust_high', 0.65)
-        self.declare_parameter('visibility_trust_mode', 'smoothstep')
         self.declare_parameter('visibility_sigma_kappa', 1.0)
         self.declare_parameter('plan_rate', 2.0)
         self.declare_parameter('horizon', 36)
@@ -132,22 +128,26 @@ class ExperimentLogger(Node):
         self.declare_parameter('observation_risk_scale', 1.25)
         self.declare_parameter('ambiguity_term_scale', 1.00)
         self.declare_parameter('discount_gamma', 0.98)
-        self.declare_parameter('visibility_weight', 0.0)
-        self.declare_parameter('visibility_barrier_threshold', 0.0)
-        self.declare_parameter('visibility_barrier_scale', 10.0)
         self.declare_parameter('visibility_target_height_m', 0.0)
         self.declare_parameter('perception_use_geometry_occlusion', True)
         self.declare_parameter('visibility_geometry_json', '')
         self.declare_parameter('collision_geometry_json', '')
         self.declare_parameter('robot_collision_radius_m', 0.125)
+        self.declare_parameter('use_command_noise', True)
+        self.declare_parameter('command_noise_linear_slip_mean', 0.03)
+        self.declare_parameter('command_noise_linear_slip_std', 0.06)
+        self.declare_parameter('command_noise_angular_slip_mean', 0.0)
+        self.declare_parameter('command_noise_angular_slip_std', 0.04)
+        self.declare_parameter('command_noise_linear_additive_std', 0.008)
+        self.declare_parameter('command_noise_angular_additive_std', 0.035)
+        self.declare_parameter('command_noise_correlation_alpha', 0.85)
+        self.declare_parameter('min_terminal_goal_progress_m', 0.0)
+        self.declare_parameter('invalid_rollout_barrier_cost', 1e6)
         self.declare_parameter('optimizer_maxiter', 80)
         self.declare_parameter('optimizer_maxfun', 500)
         self.declare_parameter('optimizer_ftol', 1e-6)
         self.declare_parameter('optimizer_gtol', 1e-4)
         self.declare_parameter('optimizer_warm_start', True)
-        self.declare_parameter('optimizer_multistart_seeds', False)
-        self.declare_parameter('optimizer_seed_families', '')
-        self.declare_parameter('optimizer_multistart_max_seeds', 0)
         self.declare_parameter('odom_heading_correction_mode', 'kalman')
         self.declare_parameter('clamp_pixel_uv_theta_without_yaw', False)
         self.declare_parameter('use_nogo_cost', False)
@@ -169,7 +169,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('yolo_min_mask_area_px', 12.0)
         self.declare_parameter('yolo_mask_bottom_band_px', 3.0)
         self.declare_parameter('run_dir_topic', '/experiment/run_dir')
-        self.declare_parameter('run_timeout_after_first_cmd_s', 60.0)
+        self.declare_parameter('run_timeout_after_first_cmd_s', 75.0)
         self.declare_parameter('first_cmd_linear_eps', 0.02)
         self.declare_parameter('first_cmd_angular_eps', 0.10)
         self.declare_parameter('stuck_window_s', 8.0)
@@ -212,10 +212,6 @@ class ExperimentLogger(Node):
         self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
         self.r_visible_uv = float(self.get_parameter('r_visible_uv').value)
         self.r_miss_uv = float(self.get_parameter('r_miss_uv').value)
-        self.visibility_power = float(self.get_parameter('visibility_power').value)
-        self.visibility_trust_low = float(self.get_parameter('visibility_trust_low').value)
-        self.visibility_trust_high = float(self.get_parameter('visibility_trust_high').value)
-        self.visibility_trust_mode = str(self.get_parameter('visibility_trust_mode').value)
         self.visibility_sigma_kappa = float(self.get_parameter('visibility_sigma_kappa').value)
         self.plan_rate = float(self.get_parameter('plan_rate').value)
         self.horizon = int(self.get_parameter('horizon').value)
@@ -233,7 +229,6 @@ class ExperimentLogger(Node):
         self.observation_risk_scale = float(self.get_parameter('observation_risk_scale').value)
         self.ambiguity_term_scale = float(self.get_parameter('ambiguity_term_scale').value)
         self.discount_gamma = float(self.get_parameter('discount_gamma').value)
-        self.visibility_weight = float(self.get_parameter('visibility_weight').value)
         self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
         self.perception_use_geometry_occlusion = bool(
             self.get_parameter('perception_use_geometry_occlusion').value
@@ -241,14 +236,21 @@ class ExperimentLogger(Node):
         self.visibility_geometry_json = str(self.get_parameter('visibility_geometry_json').value)
         self.collision_geometry_json = str(self.get_parameter('collision_geometry_json').value)
         self.robot_collision_radius_m = float(self.get_parameter('robot_collision_radius_m').value)
+        self.use_command_noise = bool(self.get_parameter('use_command_noise').value)
+        self.command_noise_linear_slip_mean = float(self.get_parameter('command_noise_linear_slip_mean').value)
+        self.command_noise_linear_slip_std = float(self.get_parameter('command_noise_linear_slip_std').value)
+        self.command_noise_angular_slip_mean = float(self.get_parameter('command_noise_angular_slip_mean').value)
+        self.command_noise_angular_slip_std = float(self.get_parameter('command_noise_angular_slip_std').value)
+        self.command_noise_linear_additive_std = float(self.get_parameter('command_noise_linear_additive_std').value)
+        self.command_noise_angular_additive_std = float(self.get_parameter('command_noise_angular_additive_std').value)
+        self.command_noise_correlation_alpha = float(self.get_parameter('command_noise_correlation_alpha').value)
+        self.min_terminal_goal_progress_m = float(self.get_parameter('min_terminal_goal_progress_m').value)
+        self.invalid_rollout_barrier_cost = float(self.get_parameter('invalid_rollout_barrier_cost').value)
         self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
         self.optimizer_maxfun = int(self.get_parameter('optimizer_maxfun').value)
         self.optimizer_ftol = float(self.get_parameter('optimizer_ftol').value)
         self.optimizer_gtol = float(self.get_parameter('optimizer_gtol').value)
         self.optimizer_warm_start = bool(self.get_parameter('optimizer_warm_start').value)
-        self.optimizer_multistart_seeds = bool(self.get_parameter('optimizer_multistart_seeds').value)
-        self.optimizer_seed_families = str(self.get_parameter('optimizer_seed_families').value)
-        self.optimizer_multistart_max_seeds = int(self.get_parameter('optimizer_multistart_max_seeds').value)
         self.odom_heading_correction_mode = str(self.get_parameter('odom_heading_correction_mode').value)
         self.clamp_pixel_uv_theta_without_yaw = bool(
             self.get_parameter('clamp_pixel_uv_theta_without_yaw').value
@@ -353,10 +355,6 @@ class ExperimentLogger(Node):
             'goal_sigma_uv': self.goal_sigma_uv,
             'r_visible_uv': self.r_visible_uv,
             'r_miss_uv': self.r_miss_uv,
-            'visibility_power': self.visibility_power,
-            'visibility_trust_low': self.visibility_trust_low,
-            'visibility_trust_high': self.visibility_trust_high,
-            'visibility_trust_mode': self.visibility_trust_mode,
             'visibility_sigma_kappa': self.visibility_sigma_kappa,
             'goal_prior_u_std_start': self.goal_prior_u_std_start,
             'goal_prior_v_std_start': self.goal_prior_v_std_start,
@@ -367,13 +365,20 @@ class ExperimentLogger(Node):
             'observation_risk_scale': self.observation_risk_scale,
             'ambiguity_term_scale': self.ambiguity_term_scale,
             'discount_gamma': self.discount_gamma,
-            'visibility_weight': self.visibility_weight,
             'visibility_target_height_m': self.visibility_target_height_m,
             'visibility_geometry_json': self.visibility_geometry_json,
             'visibility_geometry_sha256': _sha256_text(self.visibility_geometry_json),
             'collision_geometry_json': self.collision_geometry_json,
             'collision_geometry_sha256': _sha256_text(self.collision_geometry_json),
             'robot_collision_radius_m': self.robot_collision_radius_m,
+            'use_command_noise': self.use_command_noise,
+            'command_noise_linear_slip_mean': self.command_noise_linear_slip_mean,
+            'command_noise_linear_slip_std': self.command_noise_linear_slip_std,
+            'command_noise_angular_slip_mean': self.command_noise_angular_slip_mean,
+            'command_noise_angular_slip_std': self.command_noise_angular_slip_std,
+            'command_noise_linear_additive_std': self.command_noise_linear_additive_std,
+            'command_noise_angular_additive_std': self.command_noise_angular_additive_std,
+            'command_noise_correlation_alpha': self.command_noise_correlation_alpha,
             'perception_use_geometry_occlusion': self.perception_use_geometry_occlusion,
             'use_nogo_cost': self.use_nogo_cost,
             'nogo_penalty_type': self.nogo_penalty_type,
@@ -411,14 +416,13 @@ class ExperimentLogger(Node):
             'process_noise_xy': self.process_noise_xy,
             'process_noise_theta': self.process_noise_theta,
             'obs_noise_uv': self.obs_noise_uv,
+            'min_terminal_goal_progress_m': self.min_terminal_goal_progress_m,
+            'invalid_rollout_barrier_cost': self.invalid_rollout_barrier_cost,
             'optimizer_maxiter': self.optimizer_maxiter,
             'optimizer_maxfun': self.optimizer_maxfun,
             'optimizer_ftol': self.optimizer_ftol,
             'optimizer_gtol': self.optimizer_gtol,
             'optimizer_warm_start': self.optimizer_warm_start,
-            'optimizer_multistart_seeds': self.optimizer_multistart_seeds,
-            'optimizer_seed_families': self.optimizer_seed_families,
-            'optimizer_multistart_max_seeds': self.optimizer_multistart_max_seeds,
             'odom_heading_correction_mode': self.odom_heading_correction_mode,
             'clamp_pixel_uv_theta_without_yaw': self.clamp_pixel_uv_theta_without_yaw,
         }
@@ -434,6 +438,8 @@ class ExperimentLogger(Node):
         self.heading_diag = None
         self.pixel_correction_diag = None
         self.cmd_msg = None
+        self.cmd_raw_msg = None
+        self.cmd_noise_diag = None
         self.goal_msg = None
         self.plan_msg = None
         self.planner_diag = None
@@ -469,7 +475,6 @@ class ExperimentLogger(Node):
         self._rewrite_manifest()
 
         self._first_cmd_stamp = None
-        self._motion_history = []
         self._cumulative_path_length = 0.0
         self._last_path_pose = None
         self._min_goal_distance = float('inf')
@@ -489,7 +494,6 @@ class ExperimentLogger(Node):
         self._efe_risk_sum = 0.0
         self._efe_ambiguity_sum = 0.0
         self._efe_control_sum = 0.0
-        self._efe_visibility_sum = 0.0
         self._efe_obstacle_sum = 0.0
         self._efe_count = 0
         self._solve_time_ms_sum = 0.0
@@ -534,6 +538,8 @@ class ExperimentLogger(Node):
             10,
         )
         self.create_subscription(Twist, '/cmd_vel', self._cmd_cb, 10)
+        self.create_subscription(Twist, '/cmd_vel_raw', self._cmd_raw_cb, 10)
+        self.create_subscription(Float64MultiArray, '/cmd_vel_noise/diagnostics', self._cmd_noise_diag_cb, 10)
         self.create_subscription(PoseStamped, '/goal_bev', self._goal_cb, qos_profile=goal_qos)
         self.create_subscription(Path, '/plan_preview', self._plan_cb, 10)
         self.create_subscription(Float64MultiArray, '/planner/diagnostics', self._planner_diag_cb, 10)
@@ -550,8 +556,7 @@ class ExperimentLogger(Node):
         self.file = open(self.log_path, 'w', newline='')
         self.writer = csv.writer(self.file)
         self.writer.writerow([
-            'stamp', 'x', 'y', 'yaw',
-            'cov_x', 'cov_y', 'cov_yaw',
+            'stamp',
             'truth_available', 'truth_stamp', 'truth_x', 'truth_y', 'truth_yaw',
             'state_available', 'state_stamp', 'state_x', 'state_y', 'state_yaw',
             'state_cov_xx', 'state_cov_xy', 'state_cov_yy', 'state_cov_yaw',
@@ -581,6 +586,11 @@ class ExperimentLogger(Node):
             'pixel_corr_pred_x', 'pixel_corr_pred_y', 'pixel_corr_pred_yaw',
             'pixel_corr_next_x', 'pixel_corr_next_y', 'pixel_corr_next_yaw',
             'cmd_v', 'cmd_w',
+            'cmd_raw_v', 'cmd_raw_w',
+            'cmd_noise_enabled',
+            'cmd_noise_linear_multiplier', 'cmd_noise_angular_multiplier',
+            'cmd_noise_linear_additive', 'cmd_noise_angular_additive',
+            'cmd_noise_v_error', 'cmd_noise_w_error',
             'goal_x', 'goal_y', 'goal_dist',
             'plan_points', 'plan_length',
             'optimizer_success', 'optimizer_status', 'optimizer_nit', 'optimizer_nfev', 'optimizer_message',
@@ -591,7 +601,7 @@ class ExperimentLogger(Node):
             'terminal_goal_distance_pred', 'terminal_goal_progress_m',
             'fraction_horizon_low_pvis', 'fraction_horizon_high_ambiguity',
             'min_predicted_obstacle_distance_m', 'rollout_valid', 'fallback_stop_applied',
-            'efe_total', 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_visibility', 'efe_obstacle',
+            'efe_total', 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_obstacle',
             'efe_risk_mean', 'efe_risk_cov_trace', 'efe_risk_cov_logdet',
             'efe_delta_risk_visibility', 'efe_delta_ambiguity_visibility',
             'collision_any', 'collision_contact', 'collision_geom', 'collision_reason', 'first_crash_stamp',
@@ -752,6 +762,12 @@ class ExperimentLogger(Node):
     def _cmd_cb(self, msg: Twist):
         self.cmd_msg = msg
 
+    def _cmd_raw_cb(self, msg: Twist):
+        self.cmd_raw_msg = msg
+
+    def _cmd_noise_diag_cb(self, msg: Float64MultiArray):
+        self.cmd_noise_diag = msg
+
     def _goal_cb(self, msg: PoseStamped):
         self.goal_msg = msg
 
@@ -772,10 +788,9 @@ class ExperimentLogger(Node):
         if msg.data and len(msg.data) >= 3:
             self._efe_risk_sum += float(msg.data[1])
             self._efe_ambiguity_sum += float(msg.data[2])
-            if len(msg.data) >= 6:
+            if len(msg.data) >= 5:
                 self._efe_control_sum += float(msg.data[3])
-                self._efe_visibility_sum += float(msg.data[4])
-                self._efe_obstacle_sum += float(msg.data[5])
+                self._efe_obstacle_sum += float(msg.data[4])
             self._efe_count += 1
 
     def _planner_diag_cb(self, msg: Float64MultiArray):
@@ -876,6 +891,7 @@ class ExperimentLogger(Node):
                 contact=True,
                 geom=False,
             )
+            self._finish_run("collision", stamp)
             break
 
     def _signed_distance_from_prisms(self, prisms, x: float, y: float) -> float:
@@ -1388,6 +1404,24 @@ class ExperimentLogger(Node):
 
         cmd_v = self.cmd_msg.linear.x if self.cmd_msg else 0.0
         cmd_w = self.cmd_msg.angular.z if self.cmd_msg else 0.0
+        cmd_raw_v = self.cmd_raw_msg.linear.x if self.cmd_raw_msg else cmd_v
+        cmd_raw_w = self.cmd_raw_msg.angular.z if self.cmd_raw_msg else cmd_w
+        cmd_noise_enabled = math.nan
+        cmd_noise_linear_multiplier = math.nan
+        cmd_noise_angular_multiplier = math.nan
+        cmd_noise_linear_additive = math.nan
+        cmd_noise_angular_additive = math.nan
+        if self.cmd_noise_diag is not None and self.cmd_noise_diag.data and len(self.cmd_noise_diag.data) >= 10:
+            ndata = list(self.cmd_noise_diag.data)
+            cmd_noise_enabled = float(ndata[1])
+            cmd_raw_v = float(ndata[2])
+            cmd_raw_w = float(ndata[3])
+            cmd_noise_linear_multiplier = float(ndata[6])
+            cmd_noise_angular_multiplier = float(ndata[7])
+            cmd_noise_linear_additive = float(ndata[8])
+            cmd_noise_angular_additive = float(ndata[9])
+        cmd_noise_v_error = float(cmd_v - cmd_raw_v)
+        cmd_noise_w_error = float(cmd_w - cmd_raw_w)
         self._maybe_log_frame_sanity(now_stamp, cmd_v, cmd_w)
 
         goal_x = math.nan
@@ -1426,7 +1460,6 @@ class ExperimentLogger(Node):
         efe_risk = 0.0
         efe_ambiguity = 0.0
         efe_control = 0.0
-        efe_visibility = 0.0
         efe_obstacle = 0.0
         efe_risk_mean = math.nan
         efe_risk_cov_trace = math.nan
@@ -1483,21 +1516,18 @@ class ExperimentLogger(Node):
                 efe_delta_risk_visibility = float(self.planner_diag.data[22])
                 efe_delta_ambiguity_visibility = float(self.planner_diag.data[23])
 
-        if self.efe_metrics and self.efe_metrics.data and len(self.efe_metrics.data) >= 6:
+        if self.efe_metrics and self.efe_metrics.data and len(self.efe_metrics.data) >= 5:
             efe_total = float(self.efe_metrics.data[0])
             efe_risk = float(self.efe_metrics.data[1])
             efe_ambiguity = float(self.efe_metrics.data[2])
             efe_control = float(self.efe_metrics.data[3])
-            efe_visibility = float(self.efe_metrics.data[4])
-
-            if len(self.efe_metrics.data) >= 6:
-                efe_obstacle = float(self.efe_metrics.data[5])
-            if len(self.efe_metrics.data) >= 24:
-                efe_risk_mean = float(self.efe_metrics.data[19])
-                efe_risk_cov_trace = float(self.efe_metrics.data[20])
-                efe_risk_cov_logdet = float(self.efe_metrics.data[21])
-                efe_delta_risk_visibility = float(self.efe_metrics.data[22])
-                efe_delta_ambiguity_visibility = float(self.efe_metrics.data[23])
+            efe_obstacle = float(self.efe_metrics.data[4])
+            if len(self.efe_metrics.data) >= 23:
+                efe_risk_mean = float(self.efe_metrics.data[18])
+                efe_risk_cov_trace = float(self.efe_metrics.data[19])
+                efe_risk_cov_logdet = float(self.efe_metrics.data[20])
+                efe_delta_risk_visibility = float(self.efe_metrics.data[21])
+                efe_delta_ambiguity_visibility = float(self.efe_metrics.data[22])
 
         min_wall_distance_m = self._min_wall_distance if math.isfinite(self._min_wall_distance) else math.inf
         min_obstacle_distance_m = self._min_obstacle_distance if math.isfinite(self._min_obstacle_distance) else math.inf
@@ -1549,15 +1579,8 @@ class ExperimentLogger(Node):
         valid_run = 1.0 if self._valid_run else 0.0
         invalid_reason = self._invalid_reason
 
-        legacy_x = true_x if true_ok else math.nan
-        legacy_y = true_y if true_ok else math.nan
-        legacy_yaw = true_yaw if true_ok else math.nan
         self.writer.writerow([
             stamp,
-            legacy_x,
-            legacy_y,
-            legacy_yaw,
-            cov_x, cov_y, cov_yaw,
             1.0 if true_ok else 0.0, truth_stamp, true_x, true_y, true_yaw,
             1.0 if state_ok else 0.0, state_stamp, state_x, state_y, state_yaw,
             cov_x, cov_xy, cov_y, cov_yaw,
@@ -1584,6 +1607,11 @@ class ExperimentLogger(Node):
             pixel_corr_pred_x, pixel_corr_pred_y, pixel_corr_pred_yaw,
             pixel_corr_next_x, pixel_corr_next_y, pixel_corr_next_yaw,
             cmd_v, cmd_w,
+            cmd_raw_v, cmd_raw_w,
+            cmd_noise_enabled,
+            cmd_noise_linear_multiplier, cmd_noise_angular_multiplier,
+            cmd_noise_linear_additive, cmd_noise_angular_additive,
+            cmd_noise_v_error, cmd_noise_w_error,
             goal_x, goal_y, goal_dist,
             plan_points, plan_length,
             optimizer_success, optimizer_status, optimizer_nit, optimizer_nfev, optimizer_message,
@@ -1594,7 +1622,7 @@ class ExperimentLogger(Node):
             terminal_goal_distance_pred, terminal_goal_progress_m,
             fraction_horizon_low_pvis, fraction_horizon_high_ambiguity,
             min_predicted_obstacle_distance_m, rollout_valid, fallback_stop_applied,
-            efe_total, efe_risk, efe_ambiguity, efe_control, efe_visibility, efe_obstacle,
+            efe_total, efe_risk, efe_ambiguity, efe_control, efe_obstacle,
             efe_risk_mean, efe_risk_cov_trace, efe_risk_cov_logdet,
             efe_delta_risk_visibility, efe_delta_ambiguity_visibility,
             collision_any, collision_contact, collision_geom, collision_reason, self._first_crash_stamp,
@@ -1604,6 +1632,11 @@ class ExperimentLogger(Node):
             self.seed,
         ])
         self.file.flush()
+
+        if not self._stop_requested and (self._contact_collision_seen or self._geom_collision_seen):
+            crash_stamp = self._first_crash_stamp if math.isfinite(self._first_crash_stamp) else now_stamp
+            self._finish_run("collision", crash_stamp)
+            return
 
         if not self._stop_requested:
             if self._first_cmd_stamp is None:
@@ -1615,21 +1648,6 @@ class ExperimentLogger(Node):
                 if elapsed >= self.run_timeout_after_first_cmd_s:
                     self._finish_run("timeout_after_first_cmd", now_stamp)
                     return
-
-                if current_pose is not None:
-                    self._motion_history.append((now_stamp, current_pose[0], current_pose[1], goal_dist, cmd_v, cmd_w))
-                    while self._motion_history and (now_stamp - self._motion_history[0][0]) > self.stuck_window_s:
-                        self._motion_history.pop(0)
-
-                    if len(self._motion_history) > 1 and (now_stamp - self._motion_history[0][0]) >= (self.stuck_window_s - 0.2):
-                        cmd_count = sum(1 for m in self._motion_history if abs(m[4]) >= self.first_cmd_linear_eps or abs(m[5]) >= self.first_cmd_angular_eps)
-                        if cmd_count / len(self._motion_history) >= self.stuck_cmd_fraction_min:
-                            oldest = self._motion_history[0]
-                            disp = math.hypot(current_pose[0] - oldest[1], current_pose[1] - oldest[2])
-                            goal_imp = oldest[3] - goal_dist if math.isfinite(oldest[3]) and math.isfinite(goal_dist) else 0.0
-                            if disp <= self.stuck_max_displacement_m and goal_imp <= self.stuck_max_goal_improvement_m:
-                                self._finish_run("stuck", now_stamp)
-                                return
 
         if self.auto_stop_on_goal and self.goal_msg and not self._stop_requested:
             if math.isfinite(goal_dist) and goal_dist <= self.goal_success_radius:
@@ -1662,7 +1680,6 @@ class ExperimentLogger(Node):
         mean_efe_risk = self._efe_risk_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
         mean_efe_ambiguity = self._efe_ambiguity_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
         mean_efe_control = self._efe_control_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
-        mean_efe_visibility = self._efe_visibility_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
         mean_efe_obstacle = self._efe_obstacle_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
         mean_solve_time_ms = self._solve_time_ms_sum / max(self._solve_count, 1) if self._solve_count > 0 else math.nan
         mean_p_vis_plan = self._p_vis_plan_sum / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
@@ -1721,11 +1738,10 @@ class ExperimentLogger(Node):
             'final_goal_distance': final_goal_distance,
             'minimum_goal_distance': self._min_goal_distance if math.isfinite(self._min_goal_distance) else math.nan,
             'mean_solve_time_ms': mean_solve_time_ms,
-            # EFE terms — all six so plots can reconstruct the full decomposition
+            # EFE terms used by the paper objective.
             'mean_efe_risk': mean_efe_risk,
             'mean_efe_ambiguity': mean_efe_ambiguity,
             'mean_efe_control': mean_efe_control,
-            'mean_efe_visibility': mean_efe_visibility,
             'mean_efe_obstacle': mean_efe_obstacle,
             'mean_p_vis_plan': mean_p_vis_plan,
             'mean_p_vis_plan_eff': mean_p_vis_plan_eff,

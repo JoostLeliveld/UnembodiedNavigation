@@ -158,20 +158,8 @@ def _nearest_plan(plan_stamps: np.ndarray, plans: list[np.ndarray], stamp: float
     return plans[int(np.argmin(np.abs(plan_stamps - float(stamp))))]
 
 
-def _smoothstep(x: np.ndarray) -> np.ndarray:
-    x = np.clip(np.asarray(x, dtype=float), 0.0, 1.0)
-    return x * x * (3.0 - 2.0 * x)
-
-
 def _ambiguity_map(planner, p_map: np.ndarray) -> np.ndarray:
-    p = np.clip(np.asarray(p_map, dtype=float), planner._visibility_min_prob, 1.0 - planner._visibility_min_prob)
-    if getattr(planner, 'visibility_trust_mode', 'smoothstep') in ('direct', 'identity', 'gp'):
-        trust = p
-    else:
-        shaped = np.clip(p ** planner.visibility_power, planner._visibility_min_prob, 1.0 - planner._visibility_min_prob)
-        lo = float(np.clip(planner.visibility_trust_low, planner._visibility_min_prob, 1.0 - planner._visibility_min_prob))
-        hi = float(np.clip(planner.visibility_trust_high, lo + 1e-6, 1.0 - planner._visibility_min_prob))
-        trust = np.clip(_smoothstep((shaped - lo) / max(hi - lo, 1e-6)), planner._visibility_min_prob, 1.0 - planner._visibility_min_prob)
+    trust = np.clip(np.asarray(p_map, dtype=float), planner._visibility_min_prob, 1.0 - planner._visibility_min_prob)
     visible_var = float(planner.r_visible_uv) ** 2
     miss_var = float(planner.r_miss_uv) ** 2
     var = 1.0 / np.maximum(trust / max(visible_var, 1e-6) + (1.0 - trust) / max(miss_var, 1e-6), 1e-9)
@@ -228,17 +216,12 @@ def _build_planner(run_dir: Path, manifest: dict):
         seed=int(manifest.get('seed', 0)),
         camera_params=camera_params,
         use_visibility_model=bool(manifest.get('use_visibility_model', True)),
-        visibility_weight=float(manifest.get('visibility_weight', 0.0)),
         visibility_target_height_m=float(manifest.get('visibility_target_height_m', 0.0)),
         visibility_geometry_json=str(manifest.get('visibility_geometry_json', '') or ''),
         collision_geometry_json=str(manifest.get('collision_geometry_json', '') or ''),
         visibility_artifact_path=str(manifest.get('visibility_artifact_path', '') or ''),
         r_visible_uv=float(manifest.get('r_visible_uv', 2.5)),
         r_miss_uv=float(manifest.get('r_miss_uv', 120.0)),
-        visibility_power=float(manifest.get('visibility_power', 1.0)),
-        visibility_trust_low=float(manifest.get('visibility_trust_low', 0.15)),
-        visibility_trust_high=float(manifest.get('visibility_trust_high', 0.65)),
-        visibility_trust_mode=str(manifest.get('visibility_trust_mode', 'smoothstep')),
         visibility_sigma_kappa=float(manifest.get('visibility_sigma_kappa', 1.0)),
         goal_prior_u_std_start=float(manifest.get('goal_prior_u_std_start', 80.0)),
         goal_prior_v_std_start=float(manifest.get('goal_prior_v_std_start', 80.0)),
@@ -258,7 +241,7 @@ def _build_planner(run_dir: Path, manifest: dict):
         nogo_logbarrier_scale=float(manifest.get('nogo_logbarrier_scale', 0.25)),
         nogo_logbarrier_eps=float(manifest.get('nogo_logbarrier_eps', 1e-3)),
         robot_collision_radius_m=float(manifest.get('robot_collision_radius_m', 0.125)),
-        min_terminal_goal_progress_m=float(manifest.get('min_terminal_goal_progress_m', 0.20)),
+        min_terminal_goal_progress_m=float(manifest.get('min_terminal_goal_progress_m', 0.0)),
         invalid_rollout_barrier_cost=float(manifest.get('invalid_rollout_barrier_cost', 1e6)),
     )
 
@@ -463,7 +446,6 @@ def _selected_summary(planner, exp: dict[str, np.ndarray], idx: int, selected_pl
         'ambiguity_cost': _at(_col(exp, 'efe_ambiguity'), idx),
         'obstacle_cost': _at(_col(exp, 'efe_obstacle'), idx),
         'control_cost': _at(_col(exp, 'efe_control'), idx),
-        'visibility_cost': _at(_col(exp, 'efe_visibility'), idx),
         'risk_mean': _at(_col(exp, 'efe_risk_mean'), idx),
         'risk_cov_trace': _at(_col(exp, 'efe_risk_cov_trace'), idx),
         'risk_cov_logdet': _at(_col(exp, 'efe_risk_cov_logdet'), idx),
@@ -787,7 +769,7 @@ def main() -> int:
                 'selected': int(item.get('selected', 0)),
             }
             for key in (
-                'total_cost', 'risk_cost', 'ambiguity_cost', 'obstacle_cost', 'control_cost', 'visibility_cost',
+                'total_cost', 'risk_cost', 'ambiguity_cost', 'obstacle_cost', 'control_cost',
                 'risk_mean', 'risk_cov_trace', 'risk_cov_logdet',
                 'delta_risk_visibility', 'delta_ambiguity_visibility',
                 'terminal_goal_distance_pred', 'terminal_goal_progress_m', 'fraction_horizon_low_pvis',
@@ -824,7 +806,7 @@ def main() -> int:
         'probe_name', 'frame_idx', 'stamp', 'time_after_first_cmd_s',
         'belief_x', 'belief_y', 'belief_yaw', 'truth_x', 'truth_y', 'goal_x', 'goal_y',
         'family', 'selected',
-        'total_cost', 'risk_cost', 'ambiguity_cost', 'obstacle_cost', 'control_cost', 'visibility_cost',
+        'total_cost', 'risk_cost', 'ambiguity_cost', 'obstacle_cost', 'control_cost',
         'risk_mean', 'risk_cov_trace', 'risk_cov_logdet',
         'delta_risk_visibility', 'delta_ambiguity_visibility',
         'terminal_goal_distance_pred', 'terminal_goal_progress_m',

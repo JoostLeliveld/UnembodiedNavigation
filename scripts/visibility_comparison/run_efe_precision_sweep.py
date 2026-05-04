@@ -16,7 +16,6 @@ from common import CURRENT_GP_DIR, LOGS_ROOT
 
 PROFILE_ORDER = (
     'efe_main',
-    'efe_seeded',
     'mpc_diagnostic',
 )
 
@@ -30,47 +29,21 @@ EFE_MAIN_PARAMS = {
     'horizon': '50',
     'dt': '0.2',
     'discount_gamma': '0.98',
-    'visibility_trust_low': '0.20',
-    'visibility_trust_high': '0.75',
-    'visibility_trust_mode': 'direct',
-    'visibility_power': '1.0',
     'r_visible_uv': '2.5',
     'r_miss_uv': '100.0',
-    'visibility_weight': '0.0',
-    'optimizer_multistart_seeds': 'false',
-    'optimizer_seed_families': '',
-    'optimizer_multistart_max_seeds': '0',
     'odom_heading_correction_mode': 'overwrite',
     'clamp_pixel_uv_theta_without_yaw': 'true',
 }
-
-SEEDED_DIAGNOSTIC_PARAMS = dict(EFE_MAIN_PARAMS)
-SEEDED_DIAGNOSTIC_PARAMS.update({
-    'optimizer_multistart_seeds': 'true',
-    'optimizer_seed_families': (
-        'straight_to_goal,turn_then_upper_commit,turn_then_lower_commit,'
-        'visible_recover_upper,visible_recover_lower'
-    ),
-})
-
 
 PROFILES = {
     'efe_main': {
         'planner': 'efe1',
         'description': (
             'Current thesis EFE configuration: broad goal preferences, horizon 50, direct '
-            'GP-to-trust mapping, old single warm-start optimizer, and odom-anchored belief yaw '
+            'GP-to-covariance mapping, single warm-start optimizer, and odom-anchored belief yaw '
             'for the YOLO position-only pipeline.'
         ),
         'params': dict(EFE_MAIN_PARAMS),
-    },
-    'efe_seeded': {
-        'planner': 'efe1',
-        'description': (
-            'Diagnostic only: same model and precisions as efe_main, but with route-family '
-            'multistart seeds enabled to check whether the old optimizer misses a basin.'
-        ),
-        'params': dict(SEEDED_DIAGNOSTIC_PARAMS),
     },
     'mpc_diagnostic': {
         'planner': 'mpc',
@@ -247,9 +220,8 @@ def main() -> int:
         'yolo_model': str(yolo_model),
         'profiles': PROFILES,
         'notes': [
-            'EFE main preserves the risk and ambiguity equations; tuning is limited to precisions, horizon, discount, and GP-to-trust semantics.',
-            'visibility_weight is forced to 0.0 for the main EFE profile.',
-            'efe_seeded is diagnostic only and checks whether the old single warm-start optimizer misses a basin.',
+            'EFE main preserves the risk and ambiguity equations; tuning is limited to precisions, horizon, discount, and GP-to-covariance semantics.',
+            'There is no direct visibility reward or route penalty in the paper EFE profile.',
             'mpc_diagnostic is the retained risk-only / ambiguity-disabled MPC-like baseline, not a final classical MPC claim.',
             'Runs with collision or positive penetration are invalid for success claims but remain included in plots.',
         ],

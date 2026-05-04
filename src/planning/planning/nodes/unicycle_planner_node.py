@@ -79,16 +79,11 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('use_obs_risk', True)
         _declare_if_not('use_ambiguity', True)
         _declare_if_not('use_visibility_model', False)
-        _declare_if_not('visibility_weight', 0.0)
         _declare_if_not('visibility_target_height_m', 0.0)
         _declare_if_not('visibility_geometry_json', '')
         _declare_if_not('collision_geometry_json', '')
         _declare_if_not('r_visible_uv', 2.5)
         _declare_if_not('r_miss_uv', 120.0)
-        _declare_if_not('visibility_power', 1.0)
-        _declare_if_not('visibility_trust_low', 0.15)
-        _declare_if_not('visibility_trust_high', 0.65)
-        _declare_if_not('visibility_trust_mode', 'smoothstep')
         _declare_if_not('visibility_sigma_kappa', 1.0)
         _declare_if_not('goal_prior_u_std_start', 80.0)
         _declare_if_not('goal_prior_v_std_start', 80.0)
@@ -99,8 +94,6 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('observation_risk_scale', 1.25)
         _declare_if_not('ambiguity_term_scale', 1.00)
         _declare_if_not('discount_gamma', 0.98)
-        _declare_if_not('visibility_barrier_threshold', 0.0)
-        _declare_if_not('visibility_barrier_scale', 10.0)
         _declare_if_not('use_nogo_cost', False)
         _declare_if_not('nogo_penalty_type', 'softplus')
         _declare_if_not('nogo_weight', 0.0)
@@ -111,7 +104,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('nogo_logbarrier_eps', 1e-3)
         _declare_if_not('visibility_artifact_path', '')
         _declare_if_not('robot_collision_radius_m', 0.125)
-        _declare_if_not('min_terminal_goal_progress_m', 0.20)
+        _declare_if_not('min_terminal_goal_progress_m', 0.0)
         _declare_if_not('invalid_rollout_barrier_cost', 1e6)
 
         # Optimizer params
@@ -120,9 +113,6 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('optimizer_ftol', 1e-6)
         _declare_if_not('optimizer_gtol', 1e-4)
         _declare_if_not('optimizer_warm_start', True)
-        _declare_if_not('optimizer_multistart_seeds', False)
-        _declare_if_not('optimizer_seed_families', '')
-        _declare_if_not('optimizer_multistart_max_seeds', 0)
 
         # Pixel correction params
         _declare_if_not('use_pixel_correction', False)
@@ -180,16 +170,11 @@ class UnicyclePlannerNode(Node):
         self.use_obs_risk = _as_bool(self.get_parameter('use_obs_risk').value)
         self.use_ambiguity = _as_bool(self.get_parameter('use_ambiguity').value)
         self.use_visibility_model = _as_bool(self.get_parameter('use_visibility_model').value)
-        self.visibility_weight = float(self.get_parameter('visibility_weight').value)
         self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
         self.visibility_geometry_json = str(self.get_parameter('visibility_geometry_json').value)
         self.collision_geometry_json = str(self.get_parameter('collision_geometry_json').value)
         self.r_visible_uv = float(self.get_parameter('r_visible_uv').value)
         self.r_miss_uv = float(self.get_parameter('r_miss_uv').value)
-        self.visibility_power = float(self.get_parameter('visibility_power').value)
-        self.visibility_trust_low = float(self.get_parameter('visibility_trust_low').value)
-        self.visibility_trust_high = float(self.get_parameter('visibility_trust_high').value)
-        self.visibility_trust_mode = str(self.get_parameter('visibility_trust_mode').value)
         self.visibility_sigma_kappa = float(self.get_parameter('visibility_sigma_kappa').value)
         self.goal_prior_u_std_start = float(self.get_parameter('goal_prior_u_std_start').value)
         self.goal_prior_v_std_start = float(self.get_parameter('goal_prior_v_std_start').value)
@@ -200,8 +185,6 @@ class UnicyclePlannerNode(Node):
         self.observation_risk_scale = float(self.get_parameter('observation_risk_scale').value)
         self.ambiguity_term_scale = float(self.get_parameter('ambiguity_term_scale').value)
         self.discount_gamma = float(self.get_parameter('discount_gamma').value)
-        self.visibility_barrier_threshold = float(self.get_parameter('visibility_barrier_threshold').value)
-        self.visibility_barrier_scale = float(self.get_parameter('visibility_barrier_scale').value)
         self.use_nogo_cost = _as_bool(self.get_parameter('use_nogo_cost').value)
         self.nogo_penalty_type = str(self.get_parameter('nogo_penalty_type').value).strip().lower()
         self.nogo_weight = float(self.get_parameter('nogo_weight').value)
@@ -220,9 +203,6 @@ class UnicyclePlannerNode(Node):
         self.optimizer_ftol = float(self.get_parameter('optimizer_ftol').value)
         self.optimizer_gtol = float(self.get_parameter('optimizer_gtol').value)
         self.optimizer_warm_start = _as_bool(self.get_parameter('optimizer_warm_start').value)
-        self.optimizer_multistart_seeds = _as_bool(self.get_parameter('optimizer_multistart_seeds').value)
-        self.optimizer_seed_families = str(self.get_parameter('optimizer_seed_families').value)
-        self.optimizer_multistart_max_seeds = int(self.get_parameter('optimizer_multistart_max_seeds').value)
 
         self.use_pixel_correction = _as_bool(self.get_parameter('use_pixel_correction').value)
         self.pixel_topic = self.get_parameter('pixel_topic').value
@@ -299,26 +279,18 @@ class UnicyclePlannerNode(Node):
             optimizer_gtol=self.optimizer_gtol,
             optimizer_warm_start=self.optimizer_warm_start,
             optimizer_warm_start_shift_steps=warm_start_shift_steps,
-            optimizer_multistart_seeds=self.optimizer_multistart_seeds,
-            optimizer_seed_families=self.optimizer_seed_families,
-            optimizer_multistart_max_seeds=self.optimizer_multistart_max_seeds,
             approx_method=self.approx_method,
             use_obs_risk=self.use_obs_risk,
             use_ambiguity=self.use_ambiguity,
             seed=self.seed,
             camera_params=camera_params,
             use_visibility_model=self.use_visibility_model,
-            visibility_weight=self.visibility_weight,
             visibility_target_height_m=self.visibility_target_height_m,
             visibility_geometry_json=self.visibility_geometry_json,
             collision_geometry_json=self.collision_geometry_json,
             visibility_artifact_path=self.visibility_artifact_path,
             r_visible_uv=self.r_visible_uv,
             r_miss_uv=self.r_miss_uv,
-            visibility_power=self.visibility_power,
-            visibility_trust_low=self.visibility_trust_low,
-            visibility_trust_high=self.visibility_trust_high,
-            visibility_trust_mode=self.visibility_trust_mode,
             visibility_sigma_kappa=self.visibility_sigma_kappa,
             goal_prior_u_std_start=self.goal_prior_u_std_start,
             goal_prior_v_std_start=self.goal_prior_v_std_start,
@@ -329,8 +301,6 @@ class UnicyclePlannerNode(Node):
             observation_risk_scale=self.observation_risk_scale,
             ambiguity_term_scale=self.ambiguity_term_scale,
             discount_gamma=self.discount_gamma,
-            visibility_barrier_threshold=self.visibility_barrier_threshold,
-            visibility_barrier_scale=self.visibility_barrier_scale,
             use_nogo_cost=self.use_nogo_cost,
             nogo_penalty_type=self.nogo_penalty_type,
             nogo_weight=self.nogo_weight,
@@ -438,7 +408,6 @@ class UnicyclePlannerNode(Node):
             f"use_obs_risk={self.use_obs_risk}, use_ambiguity={self.use_ambiguity}, "
             f"goal_progress_n_steps={self.goal_progress_n_steps}, "
             f"use_visibility_model={self.use_visibility_model}, "
-            f"visibility_weight={self.visibility_weight:.3f}, "
             f"use_nogo_cost={self.use_nogo_cost}, nogo_penalty_type={self.nogo_penalty_type}, "
             f"use_pixel_correction={self.use_pixel_correction}, "
             f"pixel_correction_approx={self.pixel_correction_approx}, "
@@ -633,58 +602,76 @@ class UnicyclePlannerNode(Node):
         with self._data_lock:
             self._latest_detection_diag = diag
 
+    def _state_msg_to_belief(self, state_ref: PoseWithCovarianceStamped):
+        """Convert the external state estimate into planner belief coordinates."""
+        q = state_ref.pose.pose.orientation
+        theta = self._yaw_from_quaternion(q)
+        m = np.array([
+            state_ref.pose.pose.position.x,
+            state_ref.pose.pose.position.y,
+            theta,
+        ], dtype=float)
+
+        cov = state_ref.pose.covariance
+        S = np.diag([
+            cov[0] if len(cov) > 0 else 1e-6,
+            cov[7] if len(cov) > 7 else 1e-6,
+            cov[35] if len(cov) > 35 else 1e-6,
+        ]).astype(float)
+        return m, self._regularize_state_covariance(S)
+
+    def _regularize_state_covariance(self, S):
+        """Keep planner belief covariance positive enough for stable updates."""
+        S = np.asarray(S, dtype=float).copy()
+        if self.min_state_cov > 0.0:
+            for i in range(min(3, S.shape[0])):
+                if S[i, i] < self.min_state_cov:
+                    S[i, i] = self.min_state_cov
+        return (S + S.T) / 2.0
+
     def _init_belief_from_state(self):
         with self._data_lock:
             if self.state_msg is None:
                 return False
-            q = self.state_msg.pose.pose.orientation
-            siny_cosp = 2 * (q.w * q.z + q.x * q.y)
-            cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
-            theta = math.atan2(siny_cosp, cosy_cosp)
-            self.belief_m = np.array([
-                self.state_msg.pose.pose.position.x,
-                self.state_msg.pose.pose.position.y,
-                theta,
-            ], dtype=float)
-            cov = self.state_msg.pose.covariance
-            self.belief_S = np.diag([
-                cov[0] if len(cov) > 0 else 1e-6,
-                cov[7] if len(cov) > 7 else 1e-6,
-                cov[35] if len(cov) > 35 else 1e-6,
-            ]).astype(float)
-            if self.min_state_cov > 0.0:
-                for i in range(min(3, self.belief_S.shape[0])):
-                    if self.belief_S[i, i] < self.min_state_cov:
-                        self.belief_S[i, i] = self.min_state_cov
+            self.belief_m, self.belief_S = self._state_msg_to_belief(self.state_msg)
             self.belief_stamp = self.state_msg.header.stamp
             return True
+
+    def _matching_detection_diag_locked(self, stamp_msg):
+        """Return the diagnostics message that belongs to a pixel observation."""
+        if self._latest_detection_diag is None:
+            return None
+        diag_ref = dict(self._latest_detection_diag)
+        try:
+            stamp_s = self._stamp_to_float(stamp_msg)
+            diag_stamp = float(diag_ref.get('stamp', math.nan))
+        except (AttributeError, TypeError, ValueError):
+            return None
+        if (not math.isfinite(diag_stamp)) or abs(diag_stamp - stamp_s) > 1e-3:
+            return None
+        return diag_ref
+
+    def _pixel_yaw_measurement_from_msg(self, msg: PoseStamped, diag_ref):
+        """Extract visual yaw only when detector diagnostics explicitly support it."""
+        if not (
+            diag_ref is not None
+            and bool(diag_ref.get('detected', False))
+            and math.isfinite(float(diag_ref.get('yaw_est', math.nan)))
+        ):
+            return None, math.nan
+        yaw_meas = self._yaw_from_quaternion(msg.pose.orientation)
+        return float(yaw_meas), self._heading_sigma_from_diag(diag_ref)
 
     def _pixel_cb(self, msg: PoseStamped):
         u = msg.pose.position.x
         v = msg.pose.position.y
-        q = msg.pose.orientation
-        siny_cosp = 2 * (q.w * q.z + q.x * q.y)
-        cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
-        yaw_meas = math.atan2(siny_cosp, cosy_cosp)
         with self._data_lock:
-            diag_ref = None if self._latest_detection_diag is None else dict(self._latest_detection_diag)
+            diag_ref = self._matching_detection_diag_locked(msg.header.stamp)
+            yaw_meas, yaw_sigma = self._pixel_yaw_measurement_from_msg(msg, diag_ref)
             self.pixel_meas = np.array([u, v], dtype=float)
             self.pixel_stamp = msg.header.stamp
-            if diag_ref is not None:
-                stamp_s = self._stamp_to_float(msg.header.stamp)
-                diag_stamp = float(diag_ref.get('stamp', math.nan))
-                if (not math.isfinite(diag_stamp)) or abs(diag_stamp - stamp_s) > 1e-3:
-                    diag_ref = None
-            if (
-                diag_ref is not None
-                and bool(diag_ref.get('detected', False))
-                and math.isfinite(float(diag_ref.get('yaw_est', math.nan)))
-            ):
-                self.pixel_yaw_meas = float(yaw_meas)
-                self.pixel_heading_sigma = self._heading_sigma_from_diag(diag_ref)
-            else:
-                self.pixel_yaw_meas = None
-                self.pixel_heading_sigma = math.nan
+            self.pixel_yaw_meas = yaw_meas
+            self.pixel_heading_sigma = yaw_sigma
 
         if not self.use_pixel_correction:
             return
@@ -701,44 +688,41 @@ class UnicyclePlannerNode(Node):
             return
         self._apply_pixel_correction(stamp_ref, source='timer')
 
-    def _apply_pixel_correction(self, stamp_msg, *, source='callback'):
-        cb_start = time.perf_counter()
+    def _stamp_age_s(self, stamp_msg) -> float:
         try:
-            now = self.get_clock().now()
-            age = (now - Time.from_msg(stamp_msg)).nanoseconds * 1e-9
+            return (self.get_clock().now() - Time.from_msg(stamp_msg)).nanoseconds * 1e-9
         except (AttributeError, TypeError, ValueError):
-            age = 0.0
+            return 0.0
+
+    def _pixel_correction_age_is_invalid(self, age: float) -> bool:
         future_tolerance_s = max(float(self.pixel_timeout_s), 0.25)
-        if self.skip_stale_pixel_correction and (
-            age > self.pixel_timeout_s or age < -future_tolerance_s
-        ):
-            now_wall = time.monotonic()
-            if now_wall - self._last_stale_log > 2.0:
-                self.get_logger().warn(f"Skipping time-inconsistent pixel measurement (age {age:.2f}s)")
-                self._last_stale_log = now_wall
-            return
+        return bool(
+            self.skip_stale_pixel_correction
+            and (age > self.pixel_timeout_s or age < -future_tolerance_s)
+        )
 
-        if self.pixel_correction_min_interval_s > 0.0:
-            with self._data_lock:
-                last_correction_stamp = self._last_correction_stamp
-            if last_correction_stamp is not None:
-                try:
-                    dt_since_correction = (
-                        Time.from_msg(stamp_msg) - Time.from_msg(last_correction_stamp)
-                    ).nanoseconds * 1e-9
-                except (AttributeError, TypeError, ValueError):
-                    dt_since_correction = None
-                if (
-                    dt_since_correction is not None
-                    and 0.0 <= dt_since_correction < self.pixel_correction_min_interval_s
-                ):
-                    return
+    def _warn_stale_pixel_once(self, message: str):
+        now_wall = time.monotonic()
+        if now_wall - self._last_stale_log > 2.0:
+            self.get_logger().warn(message)
+            self._last_stale_log = now_wall
 
+    def _pixel_correction_is_throttled(self, stamp_msg) -> bool:
+        if self.pixel_correction_min_interval_s <= 0.0:
+            return False
         with self._data_lock:
-            has_belief = self.belief_m is not None and self.belief_S is not None
-        if not has_belief and not self._init_belief_from_state():
-            return
+            last_correction_stamp = self._last_correction_stamp
+        if last_correction_stamp is None:
+            return False
+        try:
+            dt_since_correction = (
+                Time.from_msg(stamp_msg) - Time.from_msg(last_correction_stamp)
+            ).nanoseconds * 1e-9
+        except (AttributeError, TypeError, ValueError):
+            return False
+        return bool(0.0 <= dt_since_correction < self.pixel_correction_min_interval_s)
 
+    def _pixel_correction_dt_s(self, stamp_msg) -> float | None:
         try:
             now = Time.from_msg(stamp_msg)
             with self._data_lock:
@@ -749,71 +733,82 @@ class UnicyclePlannerNode(Node):
                 dt_s = self.dt
         except (AttributeError, TypeError, ValueError):
             dt_s = self.dt
-        max_correction_dt_s = max(2.0 * float(self.pixel_timeout_s), 4.0 * float(self.dt), 0.5)
-        if dt_s > max_correction_dt_s:
-            now_wall = time.monotonic()
-            if now_wall - self._last_stale_log > 2.0:
-                self.get_logger().warn(
-                    f"Skipping pixel correction with implausible dt={dt_s:.2f}s "
-                    f"(max {max_correction_dt_s:.2f}s)"
-                )
-                self._last_stale_log = now_wall
-            return
 
+        max_dt_s = max(2.0 * float(self.pixel_timeout_s), 4.0 * float(self.dt), 0.5)
+        if dt_s > max_dt_s:
+            self._warn_stale_pixel_once(
+                f"Skipping pixel correction with implausible dt={dt_s:.2f}s "
+                f"(max {max_dt_s:.2f}s)"
+            )
+            return None
+        return float(dt_s)
+
+    def _select_heading_measurement_locked(self, stamp_msg):
+        """Prefer visual yaw when available, otherwise optionally anchor to odom yaw."""
+        yaw_meas = self.pixel_yaw_meas
+        yaw_sigma = float(self.pixel_heading_sigma)
+        yaw_source = 1.0 if yaw_meas is not None and math.isfinite(float(yaw_meas)) else 0.0
+        if yaw_source <= 0.0 and self.use_odom_heading_correction:
+            odom_yaw, _odom_age = self._fresh_odom_heading_locked(stamp_msg)
+            if odom_yaw is not None:
+                yaw_meas = float(odom_yaw)
+                yaw_sigma = float(max(
+                    self.odom_heading_sigma_rad,
+                    self.pixel_heading_noise_floor_rad,
+                    1e-6,
+                ))
+                yaw_source = 2.0
+        return yaw_meas, yaw_sigma, yaw_source
+
+    def _snapshot_pixel_correction_inputs(self, stamp_msg):
         with self._data_lock:
             belief_m = None if self.belief_m is None else self.belief_m.copy()
             belief_S = None if self.belief_S is None else self.belief_S.copy()
             v_cmd, w_cmd = float(self.last_cmd[0]), float(self.last_cmd[1])
             meas = None if self.pixel_meas is None else self.pixel_meas.copy()
-            yaw_meas = self.pixel_yaw_meas
-            yaw_sigma = float(self.pixel_heading_sigma)
-            yaw_meas_source = 1.0 if yaw_meas is not None and math.isfinite(float(yaw_meas)) else 0.0
-            if (
-                yaw_meas_source <= 0.0
-                and self.use_odom_heading_correction
-            ):
-                odom_yaw, _odom_age = self._fresh_odom_heading_locked(stamp_msg)
-                if odom_yaw is not None:
-                    yaw_meas = float(odom_yaw)
-                    yaw_sigma = float(max(self.odom_heading_sigma_rad, self.pixel_heading_noise_floor_rad, 1e-6))
-                    yaw_meas_source = 2.0
+            yaw_meas, yaw_sigma, yaw_source = self._select_heading_measurement_locked(stamp_msg)
         if belief_m is None or belief_S is None or meas is None:
-            return
+            return None
+        return {
+            'belief_m': belief_m,
+            'belief_S': belief_S,
+            'cmd': np.array([v_cmd, w_cmd], dtype=float),
+            'meas': meas,
+            'yaw_meas': yaw_meas,
+            'yaw_sigma': yaw_sigma,
+            'yaw_source': yaw_source,
+        }
 
-        m_pred, S_pred = self.planner.predict(
-            belief_m, belief_S, np.array([v_cmd, w_cmd], dtype=float), dt=dt_s
-        )
-        p_vis, R_eff, S_eff, gain_scale = self.planner.observation_model_with_visibility(m_pred, S_pred)
+    def _log_pixel_shape_error_once(self, message: str):
+        now_wall = time.monotonic()
+        if now_wall - self._last_shape_mismatch_log > 2.0:
+            self.get_logger().error(message)
+            self._last_shape_mismatch_log = now_wall
 
-        corr_method = 'ET1'
-        corr_method = self.approx_method if self.pixel_correction_approx == 'AUTO' else self.pixel_correction_approx
+    def _compute_pixel_uv_update(self, m_pred, S_eff, meas, R_eff, gain_scale, *, corr_method):
         mu_y, Sigma_y, Gamma = self.planner.approx_observation(
             m_pred, S_eff, method=corr_method, R_override=R_eff
         )
         mu_y = np.asarray(mu_y, dtype=float).reshape(-1)
         meas = np.asarray(meas, dtype=float).reshape(-1)
         if meas.size != mu_y.size:
-            now_wall = time.monotonic()
-            if now_wall - self._last_shape_mismatch_log > 2.0:
-                self.get_logger().error(
-                    "Pixel correction shape mismatch: "
-                    f"meas_dim={meas.size}, pred_dim={mu_y.size}. "
-                    "Skipping correction for this message."
-                )
-                self._last_shape_mismatch_log = now_wall
-            return
+            self._log_pixel_shape_error_once(
+                "Pixel correction shape mismatch: "
+                f"meas_dim={meas.size}, pred_dim={mu_y.size}. "
+                "Skipping correction for this message."
+            )
+            return None
+
         Sigma_y = np.asarray(Sigma_y, dtype=float)
         Gamma = np.asarray(Gamma, dtype=float)
         if Sigma_y.shape != (meas.size, meas.size) or Gamma.shape[1] != meas.size:
-            now_wall = time.monotonic()
-            if now_wall - self._last_shape_mismatch_log > 2.0:
-                self.get_logger().error(
-                    "Pixel correction covariance shape mismatch: "
-                    f"Sigma_y={Sigma_y.shape}, Gamma={Gamma.shape}, meas_dim={meas.size}. "
-                    "Skipping correction for this message."
-                )
-                self._last_shape_mismatch_log = now_wall
-            return
+            self._log_pixel_shape_error_once(
+                "Pixel correction covariance shape mismatch: "
+                f"Sigma_y={Sigma_y.shape}, Gamma={Gamma.shape}, meas_dim={meas.size}. "
+                "Skipping correction for this message."
+            )
+            return None
+
         innov = meas - mu_y
         if innov.size >= 3:
             innov[2] = wrap_angle(innov[2])
@@ -822,24 +817,42 @@ class UnicyclePlannerNode(Node):
         K = Gamma @ Sigma_inv
         next_m = m_pred + gain_scale * (K @ innov)
         next_m[2] = wrap_angle(next_m[2])
-        xy_update_norm_m = float(np.linalg.norm(np.asarray(next_m[:2] - m_pred[:2], dtype=float)))
+        next_S = S_eff - gain_scale * (Gamma @ Sigma_inv @ Gamma.T)
+        next_S = (next_S + next_S.T) / 2.0
+        return {
+            'next_m': next_m,
+            'next_S': next_S,
+            'innov': innov,
+            'mu_y': mu_y,
+        }
+
+    def _apply_yaw_anchor_after_pixel_update(
+        self,
+        next_m,
+        next_S,
+        m_pred,
+        S_pred,
+        yaw_meas,
+        yaw_sigma,
+        yaw_source,
+    ):
+        """Keep theta correction explicit: visual yaw or odom yaw, never hidden in u/v."""
         theta_update_from_uv_rad = float(wrap_angle(float(next_m[2]) - float(m_pred[2])))
-        if self.clamp_pixel_uv_theta_without_yaw and yaw_meas_source != 1.0:
+        if self.clamp_pixel_uv_theta_without_yaw and yaw_source != 1.0:
             next_m[2] = float(m_pred[2])
             theta_update_from_uv_rad = 0.0
+            if next_S.shape[0] >= 3:
+                next_S[2, :] = S_pred[2, :]
+                next_S[:, 2] = S_pred[:, 2]
+                next_S = (next_S + next_S.T) / 2.0
+
         yaw_correction_applied = False
         innov_theta = math.nan
         k_theta_theta = math.nan
-        next_S = S_eff - gain_scale * (Gamma @ Sigma_inv @ Gamma.T)
-        next_S = (next_S + next_S.T) / 2.0
-        if self.clamp_pixel_uv_theta_without_yaw and yaw_meas_source != 1.0 and next_S.shape[0] >= 3:
-            next_S[2, :] = S_pred[2, :]
-            next_S[:, 2] = S_pred[:, 2]
-            next_S = (next_S + next_S.T) / 2.0
         if (
             (
-                (yaw_meas_source == 1.0 and self.use_pixel_heading_correction)
-                or (yaw_meas_source == 2.0 and self.use_odom_heading_correction)
+                (yaw_source == 1.0 and self.use_pixel_heading_correction)
+                or (yaw_source == 2.0 and self.use_odom_heading_correction)
             )
             and yaw_meas is not None
             and math.isfinite(float(yaw_meas))
@@ -852,19 +865,39 @@ class UnicyclePlannerNode(Node):
                 next_S,
                 float(yaw_meas),
                 float(yaw_sigma),
-                source_code=float(yaw_meas_source),
+                source_code=float(yaw_source),
             )
-        theta_update_total_rad = float(wrap_angle(float(next_m[2]) - float(m_pred[2])))
-        if self.min_state_cov > 0.0:
-            for i in range(min(3, next_S.shape[0])):
-                if next_S[i, i] < self.min_state_cov:
-                    next_S[i, i] = self.min_state_cov
-        with self._data_lock:
-            self.belief_m = next_m
-            self.belief_S = next_S
-            self.belief_stamp = stamp_msg
-            self._last_correction_stamp = stamp_msg
 
+        return {
+            'next_m': next_m,
+            'next_S': next_S,
+            'theta_update_from_uv_rad': theta_update_from_uv_rad,
+            'yaw_correction_applied': yaw_correction_applied,
+            'innov_theta': innov_theta,
+            'k_theta_theta': k_theta_theta,
+            'theta_update_total_rad': float(wrap_angle(float(next_m[2]) - float(m_pred[2]))),
+        }
+
+    def _publish_pixel_correction_diagnostics(
+        self,
+        *,
+        stamp_msg,
+        age,
+        dt_s,
+        p_vis,
+        gain_scale,
+        innov,
+        xy_update_norm_m,
+        yaw_info,
+        m_pred,
+        next_m,
+        meas,
+        mu_y,
+        R_eff,
+        yaw_meas,
+        yaw_sigma,
+        yaw_source,
+    ):
         diag_msg = Float64MultiArray()
         r_eff = np.asarray(R_eff, dtype=float)
         diag_msg.data = [
@@ -877,11 +910,11 @@ class UnicyclePlannerNode(Node):
             float(innov[0]) if innov.size > 0 else math.nan,
             float(innov[1]) if innov.size > 1 else math.nan,
             float(xy_update_norm_m),
-            float(theta_update_from_uv_rad),
-            1.0 if yaw_correction_applied else 0.0,
-            float(innov_theta),
-            float(k_theta_theta),
-            float(theta_update_total_rad),
+            float(yaw_info['theta_update_from_uv_rad']),
+            1.0 if yaw_info['yaw_correction_applied'] else 0.0,
+            float(yaw_info['innov_theta']),
+            float(yaw_info['k_theta_theta']),
+            float(yaw_info['theta_update_total_rad']),
             float(m_pred[0]),
             float(m_pred[1]),
             float(m_pred[2]),
@@ -896,9 +929,93 @@ class UnicyclePlannerNode(Node):
             float(r_eff[1, 1]) if r_eff.ndim == 2 and r_eff.shape[0] > 1 and r_eff.shape[1] > 1 else math.nan,
             float(yaw_meas) if yaw_meas is not None and math.isfinite(float(yaw_meas)) else math.nan,
             float(yaw_sigma) if math.isfinite(float(yaw_sigma)) else math.nan,
-            float(yaw_meas_source),
+            float(yaw_source),
         ]
         self.pixel_correction_diag_pub.publish(diag_msg)
+
+    def _apply_pixel_correction(self, stamp_msg, *, source='callback'):
+        cb_start = time.perf_counter()
+        age = self._stamp_age_s(stamp_msg)
+        if self._pixel_correction_age_is_invalid(age):
+            self._warn_stale_pixel_once(
+                f"Skipping time-inconsistent pixel measurement (age {age:.2f}s)"
+            )
+            return
+        if self._pixel_correction_is_throttled(stamp_msg):
+            return
+
+        with self._data_lock:
+            has_belief = self.belief_m is not None and self.belief_S is not None
+        if not has_belief and not self._init_belief_from_state():
+            return
+
+        dt_s = self._pixel_correction_dt_s(stamp_msg)
+        if dt_s is None:
+            return
+
+        snapshot = self._snapshot_pixel_correction_inputs(stamp_msg)
+        if snapshot is None:
+            return
+        belief_m = snapshot['belief_m']
+        belief_S = snapshot['belief_S']
+        meas = snapshot['meas']
+        yaw_meas = snapshot['yaw_meas']
+        yaw_sigma = snapshot['yaw_sigma']
+        yaw_meas_source = snapshot['yaw_source']
+
+        m_pred, S_pred = self.planner.predict(
+            belief_m, belief_S, snapshot['cmd'], dt=dt_s
+        )
+        p_vis, R_eff, S_eff, gain_scale = self.planner.observation_model_with_visibility(m_pred, S_pred)
+
+        corr_method = self.approx_method if self.pixel_correction_approx == 'AUTO' else self.pixel_correction_approx
+        uv_update = self._compute_pixel_uv_update(
+            m_pred, S_eff, meas, R_eff, gain_scale, corr_method=corr_method
+        )
+        if uv_update is None:
+            return
+
+        next_m = uv_update['next_m']
+        next_S = uv_update['next_S']
+        innov = uv_update['innov']
+        meas = np.asarray(meas, dtype=float).reshape(-1)
+        mu_y = uv_update['mu_y']
+        xy_update_norm_m = float(np.linalg.norm(np.asarray(next_m[:2] - m_pred[:2], dtype=float)))
+        yaw_info = self._apply_yaw_anchor_after_pixel_update(
+            next_m,
+            next_S,
+            m_pred,
+            S_pred,
+            yaw_meas,
+            yaw_sigma,
+            yaw_meas_source,
+        )
+        next_m = yaw_info['next_m']
+        next_S = self._regularize_state_covariance(yaw_info['next_S'])
+        with self._data_lock:
+            self.belief_m = next_m
+            self.belief_S = next_S
+            self.belief_stamp = stamp_msg
+            self._last_correction_stamp = stamp_msg
+
+        self._publish_pixel_correction_diagnostics(
+            stamp_msg=stamp_msg,
+            age=age,
+            dt_s=dt_s,
+            p_vis=p_vis,
+            gain_scale=gain_scale,
+            innov=innov,
+            xy_update_norm_m=xy_update_norm_m,
+            yaw_info=yaw_info,
+            m_pred=m_pred,
+            next_m=next_m,
+            meas=meas,
+            mu_y=mu_y,
+            R_eff=R_eff,
+            yaw_meas=yaw_meas,
+            yaw_sigma=yaw_sigma,
+            yaw_source=yaw_meas_source,
+        )
 
         now_wall = time.monotonic()
         if self.debug_runtime and (now_wall - self._last_correction_log > 2.0):
@@ -920,107 +1037,132 @@ class UnicyclePlannerNode(Node):
             )
             self._last_slow_correction_log = now_wall
 
+    def _belief_snapshot_for_planning(self):
+        with self._data_lock:
+            has_belief = self.belief_m is not None and self.belief_S is not None
+        if not has_belief and not self._init_belief_from_state():
+            return None
+        with self._data_lock:
+            return {
+                'm': self.belief_m.copy(),
+                'S': self.belief_S.copy(),
+                'stamp': self.belief_stamp,
+                'pixel_stamp': self.pixel_stamp,
+                'last_cmd': self.last_cmd.copy(),
+            }
+
+    def _belief_age_for_planning(self, now_msg, stamp_ref) -> float | None:
+        if stamp_ref is None:
+            return 0.0
+        try:
+            raw_age_s = (Time.from_msg(now_msg) - Time.from_msg(stamp_ref)).nanoseconds * 1e-9
+        except (AttributeError, TypeError, ValueError):
+            return 0.0
+        if raw_age_s < -max(float(self.pixel_timeout_s), 0.25):
+            self._warn_stale_pixel_once(
+                f"Pixel belief stamp is in the future (age {raw_age_s:.2f}s); "
+                "resetting belief from state."
+            )
+            return None
+        return float(max(raw_age_s, 0.0))
+
+    def _pixel_measurement_available_for_planning(self, now_msg, pixel_stamp_ref) -> bool:
+        if pixel_stamp_ref is None:
+            return False
+        try:
+            raw_measurement_age = (
+                Time.from_msg(now_msg) - Time.from_msg(pixel_stamp_ref)
+            ).nanoseconds * 1e-9
+        except (AttributeError, TypeError, ValueError):
+            raw_measurement_age = math.inf
+        return bool(0.0 <= raw_measurement_age <= self.pixel_timeout_s)
+
+    def _predict_belief_to_now(self, m0, S0, last_cmd, belief_age_s: float, now_msg):
+        if belief_age_s <= 0.0:
+            return m0, S0
+        m0, S0 = self.planner.predict(
+            m0, S0, np.asarray(last_cmd, dtype=float), dt=belief_age_s
+        )
+        with self._data_lock:
+            self.belief_m = m0.copy()
+            self.belief_S = S0.copy()
+            self.belief_stamp = now_msg
+        return m0, S0
+
+    def _anchor_belief_yaw_to_odom_for_planning(self, m0, S0, now_msg):
+        """Apply the explicit odom yaw correction used when visual yaw is unavailable."""
+        if not self.use_odom_heading_correction:
+            return m0, S0
+        with self._data_lock:
+            odom_yaw, _odom_age = self._fresh_odom_heading_locked(now_msg)
+        if odom_yaw is None:
+            return m0, S0
+        m0, S0, applied, _innov_theta, _k_theta = self._apply_heading_measurement(
+            m0,
+            S0,
+            float(odom_yaw),
+            float(max(self.odom_heading_sigma_rad, self.pixel_heading_noise_floor_rad, 1e-6)),
+            source_code=2.0,
+        )
+        if applied:
+            with self._data_lock:
+                self.belief_m = m0.copy()
+                self.belief_S = S0.copy()
+                self.belief_stamp = now_msg
+        return m0, S0
+
+    def _resolve_pixel_corrected_belief_for_planning(self, now_msg):
+        snapshot = self._belief_snapshot_for_planning()
+        if snapshot is None:
+            return None, None, {}
+
+        belief_age_s = self._belief_age_for_planning(now_msg, snapshot['stamp'])
+        if belief_age_s is None:
+            if not self._init_belief_from_state():
+                return None, None, {}
+            snapshot = self._belief_snapshot_for_planning()
+            if snapshot is None:
+                return None, None, {}
+            belief_age_s = 0.0
+
+        measurement_available = self._pixel_measurement_available_for_planning(
+            now_msg, snapshot['pixel_stamp']
+        )
+        m0, S0 = self._predict_belief_to_now(
+            snapshot['m'], snapshot['S'], snapshot['last_cmd'], belief_age_s, now_msg
+        )
+        m0, S0 = self._anchor_belief_yaw_to_odom_for_planning(m0, S0, now_msg)
+
+        if belief_age_s > self.pixel_timeout_s:
+            self._warn_stale_pixel_once(
+                f"Pixel belief stale (age {belief_age_s:.2f}s); planning on prediction-only belief"
+            )
+        return m0, S0, {
+            'measurement_available': bool(measurement_available),
+            'belief_age_s': float(belief_age_s),
+        }
+
+    def _resolve_state_belief_for_planning(self):
+        with self._data_lock:
+            state_ref = self.state_msg
+        if state_ref is None:
+            return None, None, {}
+        m0, S0 = self._state_msg_to_belief(state_ref)
+        return m0, S0, {
+            'measurement_available': False,
+            'belief_age_s': 0.0,
+        }
+
     def _resolve_belief_for_planning(self):
         now_msg = self.get_clock().now().to_msg()
         if self.use_pixel_correction:
-            with self._data_lock:
-                has_belief = self.belief_m is not None and self.belief_S is not None
-            if not has_belief:
-                if not self._init_belief_from_state():
-                    return None, None, {}
-            belief_age_s = 0.0
-            measurement_available = False
-            with self._data_lock:
-                m0 = self.belief_m.copy()
-                S0 = self.belief_S.copy()
-                stamp_ref = self.belief_stamp
-                pixel_stamp_ref = self.pixel_stamp
-                last_cmd = self.last_cmd.copy()
-            if stamp_ref is not None:
-                try:
-                    raw_belief_age_s = (Time.from_msg(now_msg) - Time.from_msg(stamp_ref)).nanoseconds * 1e-9
-                    if raw_belief_age_s < -max(float(self.pixel_timeout_s), 0.25):
-                        now_wall = time.monotonic()
-                        if now_wall - self._last_stale_log > 2.0:
-                            self.get_logger().warn(
-                                f"Pixel belief stamp is in the future (age {raw_belief_age_s:.2f}s); "
-                                "resetting belief from state."
-                            )
-                            self._last_stale_log = now_wall
-                        if not self._init_belief_from_state():
-                            return None, None, {}
-                        with self._data_lock:
-                            m0 = self.belief_m.copy()
-                            S0 = self.belief_S.copy()
-                            stamp_ref = self.belief_stamp
-                            last_cmd = self.last_cmd.copy()
-                        belief_age_s = 0.0
-                    else:
-                        belief_age_s = max(raw_belief_age_s, 0.0)
-                except (AttributeError, TypeError, ValueError):
-                    belief_age_s = 0.0
-            if pixel_stamp_ref is not None:
-                try:
-                    raw_measurement_age = (Time.from_msg(now_msg) - Time.from_msg(pixel_stamp_ref)).nanoseconds * 1e-9
-                except (AttributeError, TypeError, ValueError):
-                    raw_measurement_age = math.inf
-                measurement_available = 0.0 <= raw_measurement_age <= self.pixel_timeout_s
-            if belief_age_s > 0.0:
-                m0, S0 = self.planner.predict(
-                    m0, S0, np.asarray(last_cmd, dtype=float), dt=belief_age_s
-                )
-                with self._data_lock:
-                    self.belief_m = m0.copy()
-                    self.belief_S = S0.copy()
-                    self.belief_stamp = now_msg
-            if self.use_odom_heading_correction:
-                with self._data_lock:
-                    odom_yaw, _odom_age = self._fresh_odom_heading_locked(now_msg)
-                if odom_yaw is not None:
-                    m0, S0, applied, _innov_theta, _k_theta = self._apply_heading_measurement(
-                        m0,
-                        S0,
-                        float(odom_yaw),
-                        float(max(self.odom_heading_sigma_rad, self.pixel_heading_noise_floor_rad, 1e-6)),
-                        source_code=2.0,
-                    )
-                    if applied:
-                        with self._data_lock:
-                            self.belief_m = m0.copy()
-                            self.belief_S = S0.copy()
-                            self.belief_stamp = now_msg
-            if belief_age_s > self.pixel_timeout_s:
-                now_wall = time.monotonic()
-                if now_wall - self._last_stale_log > 2.0:
-                    self.get_logger().warn(f"Pixel belief stale (age {belief_age_s:.2f}s); planning on prediction-only belief")
-                    self._last_stale_log = now_wall
+            m0, S0, meta = self._resolve_pixel_corrected_belief_for_planning(now_msg)
         else:
-            with self._data_lock:
-                state_ref = self.state_msg
-            if state_ref is None:
-                return None, None, {}
-            q = state_ref.pose.pose.orientation
-            siny_cosp = 2 * (q.w * q.z + q.x * q.y)
-            cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
-            theta = math.atan2(siny_cosp, cosy_cosp)
-            m0 = np.array([
-                state_ref.pose.pose.position.x,
-                state_ref.pose.pose.position.y,
-                theta,
-            ], dtype=float)
-
-            cov = state_ref.pose.covariance
-            S0 = np.diag([
-                cov[0] if len(cov) > 0 else 1e-6,
-                cov[7] if len(cov) > 7 else 1e-6,
-                cov[35] if len(cov) > 35 else 1e-6,
-            ]).astype(float)
-            if self.min_state_cov > 0.0:
-                for i in range(min(3, S0.shape[0])):
-                    if S0[i, i] < self.min_state_cov:
-                        S0[i, i] = self.min_state_cov
-            belief_age_s = 0.0
-            measurement_available = False
+            m0, S0, meta = self._resolve_state_belief_for_planning()
+        if m0 is None or S0 is None:
+            return None, None, {}
+        measurement_available = bool(meta.get('measurement_available', False))
+        belief_age_s = float(meta.get('belief_age_s', 0.0))
         self._latest_measurement_available = bool(measurement_available)
         self._latest_belief_age_s = float(belief_age_s)
         return m0, S0, {
@@ -1104,7 +1246,6 @@ class UnicyclePlannerNode(Node):
             float(result.risk_cost),
             float(result.ambiguity_cost),
             float(result.control_cost),
-            float(result.visibility_cost),
             float(result.obstacle_cost),
             float(getattr(result, 'p_vis_plan', 1.0)),
             float(getattr(result, 'p_vis_plan_eff', 1.0)),
@@ -1170,35 +1311,31 @@ class UnicyclePlannerNode(Node):
         diag_text.data = ' | '.join(part for part in diag_parts if part)
         self.planner_diag_text_pub.publish(diag_text)
 
-    def _plan_once(self):
+    def _snapshot_plan_inputs(self):
         with self._data_lock:
-            goal_ref = self.goal_msg
-            pixel_stamp_ref = self.pixel_stamp
-            state_ref = self.state_msg
-        if goal_ref is None:
-            return
+            return {
+                'goal': self.goal_msg,
+                'pixel_stamp': self.pixel_stamp,
+                'state': self.state_msg,
+            }
 
+    def _validate_plan_frames(self, goal_ref, state_ref) -> tuple[str, str]:
         goal_frame = (goal_ref.header.frame_id or '').strip()
         state_frame = (state_ref.header.frame_id or '').strip() if state_ref is not None else ''
-        now_wall = time.monotonic()
         if goal_frame and state_frame and goal_frame != state_frame:
             self._fatal_experiment_stop(
                 "Frame mismatch between /goal_bev and /state/bev "
                 f"(goal='{goal_frame}', state='{state_frame}')"
             )
-            return
+        return goal_frame, state_frame
 
-        m0, S0, belief_meta = self._resolve_belief_for_planning()
-        if m0 is None or S0 is None:
-            return
-
-        goal_xy = (
+    def _goal_xy_from_msg(self, goal_ref: PoseStamped):
+        return (
             float(goal_ref.pose.position.x),
             float(goal_ref.pose.position.y),
         )
-        progress_index = self._current_goal_progress_index(m0, goal_xy)
 
-        plan_start = time.perf_counter()
+    def _call_planner(self, m0, S0, goal_xy, progress_index, *, plan_start, now_wall):
         if self.debug_runtime and (now_wall - self._last_plan_entry_log) > self.debug_log_period_s:
             self.get_logger().info(
                 "Entering planner.plan: "
@@ -1212,7 +1349,8 @@ class UnicyclePlannerNode(Node):
             result = self.planner.plan(m0, S0, goal_xy, progress_index=progress_index)
         except Exception as exc:
             self._fatal_experiment_stop("Planner.solve raised an exception", exc)
-            return
+            return None
+
         after_plan_wall = time.monotonic()
         if self.debug_runtime and (after_plan_wall - self._last_plan_return_log) > self.debug_log_period_s:
             elapsed_ms = max((time.perf_counter() - plan_start) * 1000.0, 0.0)
@@ -1225,14 +1363,15 @@ class UnicyclePlannerNode(Node):
             self._last_plan_return_log = after_plan_wall
         if result is None:
             self._fatal_experiment_stop("Planner returned no result")
-            return
+            return None
+        return result
 
+    def _publish_plan_result_bundle(self, result, goal_xy, m0, S0, *, belief_meta, plan_elapsed_ms):
         self._publish_plan_and_metrics(result, goal_xy, m0, S0, belief_meta=belief_meta)
         self._after_plan_result(result)
-
-        plan_elapsed_ms = max((time.perf_counter() - plan_start) * 1000.0, 0.0)
-        solve_elapsed_ms = float(getattr(result, 'solve_time_s', 0.0)) * 1000.0
         self._publish_planner_diagnostics(result, plan_elapsed_ms, belief_meta=belief_meta)
+
+    def _warn_on_plan_health(self, result, plan_elapsed_ms, solve_elapsed_ms, *, now_wall):
         if self.debug_runtime and plan_elapsed_ms > (self.slow_plan_factor * self._plan_period_s * 1000.0):
             if now_wall - self._last_slow_plan_log > 2.0:
                 self.get_logger().warn(
@@ -1247,6 +1386,7 @@ class UnicyclePlannerNode(Node):
                 "Executing the selected solver-returned control sequence."
             )
             self._last_slow_plan_log = now_wall
+
         if bool(getattr(result, 'fallback_stop_applied', False)) and (now_wall - self._last_slow_plan_log > 0.5):
             self.get_logger().warn(
                 "Planner selected a rollout that violates the collision barrier. "
@@ -1254,26 +1394,86 @@ class UnicyclePlannerNode(Node):
             )
             self._last_slow_plan_log = now_wall
 
-        if self.debug_runtime and (now_wall - self._last_runtime_log) > self.debug_log_period_s:
-            pixel_age = None
-            if pixel_stamp_ref is not None:
-                try:
-                    pixel_age = (self.get_clock().now() - Time.from_msg(pixel_stamp_ref)).nanoseconds * 1e-9
-                except (AttributeError, TypeError, ValueError):
-                    pixel_age = None
-            self.get_logger().info(
-                "Plan debug: "
-                f"backend={getattr(result, 'backend', 'unknown')}, "
-                f"success={getattr(result, 'optimizer_success', False)}, "
-                f"status={getattr(result, 'optimizer_status', 0)}, "
-                f"nit={getattr(result, 'optimizer_nit', 0)}, "
-                f"nfev={getattr(result, 'optimizer_nfev', 0)}, "
-                f"plan_ms={plan_elapsed_ms:.1f}, solve_ms={solve_elapsed_ms:.1f}, "
-                f"x0=({m0[0]:.2f},{m0[1]:.2f},{m0[2]:.2f}), "
-                f"goal=({goal_xy[0]:.2f},{goal_xy[1]:.2f}), "
-                f"frames=({state_frame or 'n/a'}->{goal_frame or 'n/a'}), "
-                f"u0=({result.controls[0, 0]:.3f},{result.controls[0, 1]:.3f}), "
-                f"J={result.total_cost:.3f}, "
-                f"pixel_age={pixel_age if pixel_age is not None else 'n/a'}"
-            )
-            self._last_runtime_log = now_wall
+    def _pixel_age_for_debug(self, pixel_stamp_ref):
+        if pixel_stamp_ref is None:
+            return None
+        try:
+            return (self.get_clock().now() - Time.from_msg(pixel_stamp_ref)).nanoseconds * 1e-9
+        except (AttributeError, TypeError, ValueError):
+            return None
+
+    def _log_plan_debug_once(
+        self,
+        result,
+        m0,
+        goal_xy,
+        *,
+        plan_elapsed_ms,
+        solve_elapsed_ms,
+        goal_frame,
+        state_frame,
+        pixel_stamp_ref,
+        now_wall,
+    ):
+        if not (self.debug_runtime and (now_wall - self._last_runtime_log) > self.debug_log_period_s):
+            return
+        pixel_age = self._pixel_age_for_debug(pixel_stamp_ref)
+        self.get_logger().info(
+            "Plan debug: "
+            f"backend={getattr(result, 'backend', 'unknown')}, "
+            f"success={getattr(result, 'optimizer_success', False)}, "
+            f"status={getattr(result, 'optimizer_status', 0)}, "
+            f"nit={getattr(result, 'optimizer_nit', 0)}, "
+            f"nfev={getattr(result, 'optimizer_nfev', 0)}, "
+            f"plan_ms={plan_elapsed_ms:.1f}, solve_ms={solve_elapsed_ms:.1f}, "
+            f"x0=({m0[0]:.2f},{m0[1]:.2f},{m0[2]:.2f}), "
+            f"goal=({goal_xy[0]:.2f},{goal_xy[1]:.2f}), "
+            f"frames=({state_frame or 'n/a'}->{goal_frame or 'n/a'}), "
+            f"u0=({result.controls[0, 0]:.3f},{result.controls[0, 1]:.3f}), "
+            f"J={result.total_cost:.3f}, "
+            f"pixel_age={pixel_age if pixel_age is not None else 'n/a'}"
+        )
+        self._last_runtime_log = now_wall
+
+    def _plan_once(self):
+        inputs = self._snapshot_plan_inputs()
+        goal_ref = inputs['goal']
+        pixel_stamp_ref = inputs['pixel_stamp']
+        state_ref = inputs['state']
+        if goal_ref is None:
+            return
+
+        now_wall = time.monotonic()
+        goal_frame, state_frame = self._validate_plan_frames(goal_ref, state_ref)
+
+        m0, S0, belief_meta = self._resolve_belief_for_planning()
+        if m0 is None or S0 is None:
+            return
+
+        goal_xy = self._goal_xy_from_msg(goal_ref)
+        progress_index = self._current_goal_progress_index(m0, goal_xy)
+
+        plan_start = time.perf_counter()
+        result = self._call_planner(
+            m0, S0, goal_xy, progress_index, plan_start=plan_start, now_wall=now_wall
+        )
+        if result is None:
+            return
+
+        plan_elapsed_ms = max((time.perf_counter() - plan_start) * 1000.0, 0.0)
+        solve_elapsed_ms = float(getattr(result, 'solve_time_s', 0.0)) * 1000.0
+        self._publish_plan_result_bundle(
+            result, goal_xy, m0, S0, belief_meta=belief_meta, plan_elapsed_ms=plan_elapsed_ms
+        )
+        self._warn_on_plan_health(result, plan_elapsed_ms, solve_elapsed_ms, now_wall=now_wall)
+        self._log_plan_debug_once(
+            result,
+            m0,
+            goal_xy,
+            plan_elapsed_ms=plan_elapsed_ms,
+            solve_elapsed_ms=solve_elapsed_ms,
+            goal_frame=goal_frame,
+            state_frame=state_frame,
+            pixel_stamp_ref=pixel_stamp_ref,
+            now_wall=now_wall,
+        )

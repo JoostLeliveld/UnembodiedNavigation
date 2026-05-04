@@ -188,11 +188,6 @@ class PixelToBevStateNode(Node):
         sigma_sep = math.sqrt(2.0) * pixel_sigma / max(sep, 1.0)
         return float(max(sigma, sigma_sep))
 
-    @staticmethod
-    def _smoothstep01(x: float) -> float:
-        x = max(0.0, min(1.0, float(x)))
-        return x * x * (3.0 - 2.0 * x)
-
     def live_detection_trust(
         self,
         *,
@@ -204,31 +199,13 @@ class PixelToBevStateNode(Node):
         bbox_area: float,
         selected_pixel_source_code: float,
     ) -> float:
+        del mask_available, mask_area, bbox_area, selected_pixel_source_code
         if not detected_after_threshold:
             return 0.0
 
         score = float(selected_score if selected_score == selected_score else raw_score)
         score = max(0.0, min(1.0, score))
-
-        # First working mapping:
-        score_low = 0.15
-        score_high = 0.55
-        trust = self._smoothstep01((score - score_low) / max(score_high - score_low, 1e-6))
-
-        # Small quality modifiers, keep weak for now.
-        # Codes from perception/nodes/yolo_robot_detector_node.py:
-        # SELECTED_PIXEL_SOURCE_BBOX_BOTTOM = 1.0
-        # SELECTED_PIXEL_SOURCE_MASK_BOTTOM = 2.0
-        if selected_pixel_source_code == 1.0: # bbox_bottom
-            trust *= 0.90
-        
-        if mask_available and mask_area == mask_area and mask_area >= 20.0:
-            trust *= 1.00
-        
-        if (bbox_area == bbox_area) and bbox_area < 25.0:
-            trust *= 0.85
-
-        return max(1e-4, min(1.0 - 1e-4, trust))
+        return max(1e-4, min(1.0 - 1e-4, score))
 
     def _pixel_callback(self, msg: PoseStamped):
         u = float(msg.pose.position.x)

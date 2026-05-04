@@ -1,0 +1,46 @@
+Claims and caveats ledger
+=========================
+
+Allowed claims now:
+- The implementation can produce a valid collision-free route through the lower side of the occluding shelf region using a learned YOLO-score GP and no direct visibility reward.
+- The learned observability field enters the EFE planner through the effective observation covariance.
+- The GP provides both a smooth mean detectability estimate and a conservative uncertainty-discounted planner map.
+- Current completed runs reach the goal region with no wall or obstacle penetration.
+- The current best configuration is promising enough to motivate a predefined experiment campaign.
+
+Claims that require the full experiment campaign:
+- Learned observability is statistically better than constant observability.
+- EFE outperforms MPC or any classical baseline.
+- The method robustly avoids occlusion.
+- The system is real-world ready.
+- The YOLO score is a calibrated visibility probability.
+
+Do not claim:
+- "The planner uses a visibility reward" for the main case-study run.
+  Correct: the paper planner has no direct visibility reward; learned observability affects `R_eff`, risk, and ambiguity.
+- "The GP models heading."
+  Correct: the current GP is 2D and heading-marginal.
+- "The latest interrupted run is a successful completed run."
+  Correct: `experiment_20260423_112814` is valid so far but interrupted.
+- "Stuck means failure to reach the goal."
+  Correct: in the case-study runs, minimum goal distance is very small; stuck appears near/after goal-region arrival and needs termination-logic cleanup.
+
+Main caveats:
+- YOLO raw confidence is uncalibrated and detector-specific.
+- The current GP averages heading-dependent visibility effects.
+- The current state estimator uses visual XY and odometry heading; it is not a full visual pose estimator.
+- Pixel correction age can become large, suggesting runtime scheduling/callback timing issues.
+- Solve time is still high for a control loop.
+- Near-goal risk can spike due to covariance/log-det mismatch when the planner predicts almost zero terminal goal distance.
+- Safety barriers, covariance clipping, conservative beta, and optimizer limits are engineering guards and should be disclosed.
+- Gazebo dynamics are unrealistically accurate unless actuation noise is added explicitly; planner process noise \(Q\) only inflates belief.
+- Runtime route-family multistart seeding has been removed from paper code. If route families are discussed, call them offline rollout probes.
+
+Current case-study wording:
+"A representative completed run reaches within 0.039 m of the goal without collision or penetration, but is logged as `stuck` after entering the goal region. We therefore treat this as a valid near-success case study and use it to inspect the signal pathway, while leaving success-rate claims to the planned multi-seed comparison."
+
+Current method wording:
+"The learned map is not a direct reward. It modulates the predictive observation covariance used in the EFE rollout. Poor predicted observability makes future observations less informative, which affects risk and ambiguity."
+
+Current experiment-planning wording:
+"The main comparison should be between a constant-observability EFE baseline and the learned YOLO-score-GP EFE planner under matched dynamics, estimator, detector, safety geometry, optimizer limits, and stopping logic."

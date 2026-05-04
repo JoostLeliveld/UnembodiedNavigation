@@ -162,27 +162,12 @@ def _draw_geometry(ax, prisms: list[dict[str, float]]) -> None:
         ))
 
 
-def _smoothstep(x: np.ndarray) -> np.ndarray:
-    x = np.clip(np.asarray(x, dtype=float), 0.0, 1.0)
-    return x * x * (3.0 - 2.0 * x)
-
-
 def _visibility_effective_score(
     p_vis: np.ndarray,
     *,
     min_prob: float,
-    visibility_power: float,
-    visibility_trust_low: float,
-    visibility_trust_high: float,
-    visibility_trust_mode: str = 'smoothstep',
 ) -> np.ndarray:
-    p_vis = np.clip(np.asarray(p_vis, dtype=float), min_prob, 1.0 - min_prob)
-    if str(visibility_trust_mode).strip().lower() in ('direct', 'identity', 'gp'):
-        return p_vis
-    shaped = np.clip(p_vis ** float(visibility_power), min_prob, 1.0 - min_prob)
-    lo = float(np.clip(visibility_trust_low, min_prob, 1.0 - min_prob))
-    hi = float(np.clip(visibility_trust_high, lo + 1e-6, 1.0 - min_prob))
-    return np.clip(_smoothstep((shaped - lo) / max(hi - lo, 1e-6)), min_prob, 1.0 - min_prob)
+    return np.clip(np.asarray(p_vis, dtype=float), min_prob, 1.0 - min_prob)
 
 
 def _ambiguity_map(
@@ -191,18 +176,10 @@ def _ambiguity_map(
     min_prob: float,
     r_visible_uv: float,
     r_miss_uv: float,
-    visibility_power: float,
-    visibility_trust_low: float,
-    visibility_trust_high: float,
-    visibility_trust_mode: str = 'smoothstep',
 ) -> np.ndarray:
     trust = _visibility_effective_score(
         p_map,
         min_prob=min_prob,
-        visibility_power=visibility_power,
-        visibility_trust_low=visibility_trust_low,
-        visibility_trust_high=visibility_trust_high,
-        visibility_trust_mode=visibility_trust_mode,
     )
     visible_var = float(r_visible_uv) ** 2
     miss_var = float(r_miss_uv) ** 2
@@ -326,10 +303,6 @@ def main() -> int:
     parser.add_argument('--min-prob', type=float, default=1e-4)
     parser.add_argument('--r-visible-uv', type=float, default=PAPER_VISIBILITY_DEFAULTS['r_visible_uv'])
     parser.add_argument('--r-miss-uv', type=float, default=PAPER_VISIBILITY_DEFAULTS['r_miss_uv'])
-    parser.add_argument('--visibility-power', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_power'])
-    parser.add_argument('--visibility-trust-low', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_low'])
-    parser.add_argument('--visibility-trust-high', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_high'])
-    parser.add_argument('--visibility-trust-mode', default='smoothstep')
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir).expanduser().resolve()
@@ -359,10 +332,6 @@ def main() -> int:
         'min_prob': float(args.min_prob),
         'r_visible_uv': float(run_manifest.get('r_visible_uv', args.r_visible_uv) or args.r_visible_uv),
         'r_miss_uv': float(run_manifest.get('r_miss_uv', args.r_miss_uv) or args.r_miss_uv),
-        'visibility_power': float(run_manifest.get('visibility_power', args.visibility_power) or args.visibility_power),
-        'visibility_trust_low': float(run_manifest.get('visibility_trust_low', args.visibility_trust_low) or args.visibility_trust_low),
-        'visibility_trust_high': float(run_manifest.get('visibility_trust_high', args.visibility_trust_high) or args.visibility_trust_high),
-        'visibility_trust_mode': str(run_manifest.get('visibility_trust_mode', args.visibility_trust_mode) or args.visibility_trust_mode),
     }
     ambiguity_bg = _ambiguity_map(p_map, **plot_cfg)
 

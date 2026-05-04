@@ -1,0 +1,77 @@
+Project brief for IWAI paper drafting
+=====================================
+
+Working topic:
+Visibility-aware Expected Free Energy navigation under fixed external-camera observations.
+
+Current thesis-report title:
+Active Inference Navigation Under External Camera Observations
+
+One-sentence problem:
+A mobile robot may choose a collision-free route through a region where an external camera detector gives weak or intermittent position updates, so planning should account for future observation reliability rather than only geometric progress.
+
+Core method:
+Use a receding-horizon EFE planner in belief space.
+The learned external-camera observability model changes the predictive observation covariance \(R_{\mathrm{eff}}\).
+It is not a direct visibility reward, route penalty, hard visibility constraint, or shadow heuristic.
+
+Current runtime signal path:
+1. Gazebo external RGB camera observes a TurtleBot-like robot in `warehouse_occ_light.world.sdf`.
+2. YOLO segmentation returns candidate masks, selected image point, and raw detector score.
+3. The selected bottom image point is projected to planar position through homography.
+4. Heading is supplied by odometry; YOLO does not currently provide reliable yaw.
+5. Offline detector-score captures are averaged over headings at each \((x,y)\).
+6. A 2D heading-marginal RBF GP is fit in logit space.
+7. The planner uses \( \rho_{\mathrm{plan}}=\sigma(\mu_h-\beta\sigma_h) \).
+8. \( \rho_{\mathrm{plan}} \) is queried over predicted belief sigma points.
+9. \(R_{\mathrm{eff}}\) is obtained by precision-blending \(R_{\mathrm{visible}}\) and \(R_{\mathrm{miss}}\).
+10. \(R_{\mathrm{eff}}\) affects predicted observation covariance, EFE risk, EFE ambiguity, and predicted covariance updates.
+
+Current benchmark text:
+- World: `warehouse_occ_light.world.sdf`
+- Task: `main_shadow_tradeoff`
+- Start: `(-2.0, 1.0, 0.0)`
+- Goal: `(2.0, -1.0)`
+- Perception backend: YOLO segmentation
+- Visibility artifact: `logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz`
+
+Current code semantics after cleanup:
+- no `visibility_weight`;
+- no direct visibility cost/reward/barrier;
+- no `efe_visibility` or `visibility_cost` logging;
+- no visibility trust shaping knobs;
+- no runtime multistart route-family seed knobs;
+- paper figure generation requires real run traces and refuses schematic fallback.
+
+Representative previous case-study evidence:
+Use as preliminary motivation only, not final validation.
+
+`logs/experiments/experiment_20260422_180449`
+- valid_run: true
+- collision_any: false
+- minimum_goal_distance: 0.039 m
+- final_goal_distance: 0.179 m
+- completion_reason: `stuck`
+- no wall/obstacle penetration
+
+`logs/experiments/experiment_20260423_111758`
+- valid_run: true
+- collision_any: false
+- minimum_goal_distance: 0.008 m
+- final_goal_distance: 0.105 m
+- completion_reason: `stuck`
+- no wall/obstacle penetration
+
+Primary current interpretation:
+The current implementation is promising enough to define the final experiment campaign.
+It is not yet a statistically complete comparison.
+
+Known caveats:
+- YOLO raw score is uncalibrated.
+- The GP is 2D and heading-marginal.
+- The estimator uses camera-derived \(x,y\) and odometry-derived yaw.
+- Gazebo dynamics are unrealistically accurate unless an explicit actuation-noise node is added.
+- Planner \(Q\) inflates belief only; it does not physically disturb the robot.
+- Solve time and pixel-correction age can affect runtime behavior.
+- `stuck` near the goal should be reported separately until stopping logic is cleaned.
+- Section 6 currently still mentions a "Seeded diagnostic" condition; this should be removed or reframed as offline rollout analysis because runtime multistart seeding was removed from paper code.

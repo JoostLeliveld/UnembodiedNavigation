@@ -1,0 +1,205 @@
+Claude handoff context: visibility-aware EFE navigation paper
+==============================================================
+
+Purpose of this handoff
+-----------------------
+I want to brainstorm and refine the experiments and metrics for an IWAI-style paper.
+Please act as a careful research collaborator, not a hype writer.
+The goal is to turn a promising implementation into a defensible experiment plan and concise paper text.
+
+Writing target
+--------------
+Style: compact IWAI/LNCS, close to Wouter Kouw style: sober, technical, caveat-aware.
+Prefer precise claims over polished sales language.
+Keep caveats near the claims they qualify.
+Do not invent results, citations, baselines, or implementation details.
+If something is only planned, say it is planned.
+
+Working paper title
+-------------------
+Active Inference Navigation Under External Camera Observations
+
+Core problem
+------------
+A ground robot navigates in a compact Gazebo warehouse world while observed by a fixed external camera.
+A geometrically feasible or short route can pass near/behind a shelf-like occluder where detector-derived camera updates become less reliable.
+The issue is not only collision avoidance; the planner should account for whether future observations will remain informative.
+
+Core method
+-----------
+The method is a receding-horizon belief-space Expected Free Energy planner.
+The key idea is to replace a constant detector-observation covariance with a learned state-dependent covariance.
+The learned map is not a reward, cost, hard visibility constraint, or hand-coded shadow penalty.
+It changes the predictive observation covariance \(R_{\mathrm{eff}}\), which then affects EFE risk, ambiguity, and predicted belief covariance updates.
+
+Current pipeline
+----------------
+1. Gazebo world: `warehouse_occ_light.world.sdf`.
+2. Runtime perception: external RGB camera -> YOLO segmentation detector.
+3. YOLO output used by the state pipeline: selected image point and raw detector score.
+4. Selected image point: bottom of segmentation mask when usable; bounding-box bottom fallback otherwise.
+5. Planar position: image point projected to BEV/world using homography.
+6. Heading: currently odometry anchored; YOLO does not provide reliable visual yaw.
+7. Offline observability data: sample positions over the workspace and repeat at several headings.
+8. GP target: average raw YOLO scores over headings at each \((x,y)\).
+9. GP fit: logit-space RBF Gaussian process.
+10. Planner map: conservative reliability
+    \( \rho_{\mathrm{plan}}(x,y)=\sigma(\mu_h(x,y)-\beta\sigma_h(x,y)) \).
+11. Belief-aware query: evaluate the field at sigma points around predicted position belief and average.
+12. Precision blend:
+    \( R_{\mathrm{eff}}^{-1}=\bar{\rho}R_{\mathrm{visible}}^{-1}+(1-\bar{\rho})R_{\mathrm{miss}}^{-1} \).
+13. EFE planner evaluates predicted risk, ambiguity, controls, and obstacle/workspace barrier terms.
+
+Current thesis text status
+--------------------------
+Section 4, "Expected-Free-Energy Planning":
+- Predicts belief under unicycle dynamics:
+  \( \bar{\Sigma}_{k+1}=F_k\Sigma_kF_k^\top+Q \).
+- Predicts image observation moments:
+  \( \Sigma^y=J\bar{\Sigma}J^\top+R_{\mathrm{eff}} \).
+- Risk is KL between predicted observation distribution and preferred goal-observation distribution.
+- Ambiguity is conditional observation entropy; under the local Gaussian surrogate it reduces to dependence on \(R_{\mathrm{eff}}\) up to constants.
+- Implemented objective in the text:
+  \(G=\lambda_{\mathrm{risk}}G_{\mathrm{risk}}+\lambda_{\mathrm{amb}}G_{\mathrm{amb}}+\lambda_{\mathrm{ctrl}}G_{\mathrm{ctrl}}+G_{\mathrm{barrier}}\).
+- There is no \(G_{\mathrm{term}}\) in the current paper equation.
+
+Section 5, "Learned External-Camera Observability":
+- Explains raw YOLO score as an uncalibrated detector-specific reliability proxy.
+- Builds a 2D heading-marginal target:
+  \( \bar{s}_j = n_j^{-1}\sum_{i\in I(j)}s_i^{raw} \).
+- Clips and logit-transforms target:
+  \( r_j=\log(\bar{s}^\epsilon_j/(1-\bar{s}^\epsilon_j)) \).
+- Fits RBF GP in latent/logit space.
+- Uses conservative map:
+  \( \rho_{\mathrm{plan}}=\sigma(\mu_h-\beta\sigma_h) \).
+- Converts reliability to image-space \(R_{\mathrm{eff}}\) by precision blending.
+- States limitations: YOLO score uncalibrated, GP is heading-marginal, setup-specific.
+
+Section 6, "Experimental Setup":
+- Current benchmark in text:
+  world `warehouse_occ_light.world.sdf`;
+  task `main_shadow_tradeoff`;
+  start \((-2.0,1.0,0.0)\);
+  goal \((2.0,-1.0)\).
+- Runtime detector: YOLO segmentation, image size 640, confidence threshold 0.10, IoU 0.45.
+- State estimator: camera-derived \(x,y\), odometry-derived heading.
+- Main comparison should focus on observation covariance model:
+  constant \(R_0\) baseline versus learned state-dependent \(R_{\mathrm{eff}}\).
+- Known text cleanup item: the current Section 6 table still mentions a "Seeded diagnostic" condition, but the current cleaned paper code removed runtime multistart route-family seeding. Unless we deliberately reintroduce this as an offline diagnostic, remove it from the main experiment table.
+
+Current code status after cleanup
+---------------------------------
+Active planner code no longer contains:
+- `visibility_weight`;
+- visibility barriers or direct visibility penalties;
+- `efe_visibility` or `visibility_cost` logging;
+- visibility trust shaping knobs such as `visibility_trust_low/high`, `visibility_power`, `visibility_trust_mode`;
+- runtime optimizer multistart route-family seed knobs.
+
+Current paper-code semantics:
+- GP reliability is used directly as clipped reliability for precision blending.
+- Route-family rollout probes may remain as offline diagnostics, but not as runtime optimizer seeds.
+- Paper figure generation now refuses schematic/hardcoded path fallback and requires real run traces.
+- Experiment logs now focus on `efe_total`, `efe_risk`, `efe_ambiguity`, `efe_control`, `efe_obstacle`, risk split terms, `p_vis_plan`, `p_vis_plan_eff`, and `r_plan_*_std`.
+
+Important current implementation caveats
+----------------------------------------
+- Planner \(Q\) inflates belief; physical disturbance is handled separately by command-space actuation noise.
+- The planner publishes `/cmd_vel_raw`; Gazebo receives noisy `/cmd_vel` from `actuation_noise_node`.
+- YOLO confidence is not calibrated probability.
+- The GP is 2D and heading-marginal.
+- The estimator is hybrid: visual position, odometry yaw.
+- Solve time and callback timing/pixel age may affect runtime behavior.
+- Stuck near the goal has appeared in previous successful-looking runs; treat this as a termination-logic issue, not automatic failure or success.
+- Safety barriers and covariance clipping are engineering guards and should be disclosed.
+
+Representative previous case-study evidence
+-------------------------------------------
+Use these only as preliminary case-study evidence, not final statistical validation.
+For implementation-level grounding, also upload `codebase_map_for_claude.txt`.
+
+Run: `logs/experiments/experiment_20260422_180449`
+- method label used then: `efe_main_fast_soft_risk`;
+- valid run: true;
+- collision_any: false;
+- min goal distance: 0.039 m;
+- final goal distance: 0.179 m;
+- completion_reason: `stuck`;
+- no wall/obstacle penetration.
+
+Run: `logs/experiments/experiment_20260423_111758`
+- valid run: true;
+- collision_any: false;
+- min goal distance: 0.008 m;
+- final goal distance: 0.105 m;
+- completion_reason: `stuck`;
+- no wall/obstacle penetration.
+
+These older runs may not exactly match the cleaned code interface. Treat them as motivation/diagnostics unless rerun under the final experiment protocol.
+
+Main experiment question to brainstorm
+--------------------------------------
+Does a learned state-dependent external-camera observation covariance improve route choice, belief quality, or safety-valid goal reaching compared with a constant-observability EFE baseline, under matched dynamics, estimator, detector, task, optimizer limits, and stopping logic?
+
+Proposed main conditions
+------------------------
+1. Constant-observability EFE baseline:
+   same EFE planner, fixed detector-observation covariance \(R_0\), no learned GP.
+2. Learned YOLO-score-GP EFE:
+   same planner, GP-derived \(R_{\mathrm{eff}}\), no direct visibility reward.
+3. Optional oracle/reference:
+   only as diagnostic or upper-bound, not a deployable method.
+4. Optional MPC diagnostic:
+   only if the objective is clearly specified; otherwise label as diagnostic, not a classical MPC claim.
+
+Metrics to brainstorm/refine
+----------------------------
+Primary task/safety:
+- valid_run;
+- collision_any;
+- wall/obstacle penetration;
+- final goal distance;
+- minimum goal distance;
+- completion reason;
+- path length;
+- elapsed time after first command;
+- valid completion rate.
+
+State estimation:
+- mean/max truth-state error;
+- mean/max truth-belief error;
+- yaw error for odom/state/belief;
+- belief covariance trace or position covariance ellipse growth;
+- pixel correction age / stale correction rate.
+
+Planning/runtime:
+- mean/median/p90 solve time;
+- optimizer success/status;
+- EFE risk, ambiguity, obstacle, control;
+- risk split: mean term, covariance trace term, logdet term;
+- predicted \(p_{\mathrm{vis}}\), \(R_{\mathrm{eff}}\), and fraction of horizon in low-reliability regions;
+- terminal predicted goal progress or final predicted goal distance as diagnostics, not hidden objective terms.
+
+Paper claim hygiene
+-------------------
+Allowed now:
+- The learned observability field enters planning through \(R_{\mathrm{eff}}\).
+- The implementation can produce collision-free near-goal runs without a direct visibility reward.
+- The current evidence motivates a predefined multi-seed comparison.
+
+Not allowed yet:
+- Learned observability statistically outperforms constant \(R_0\).
+- The method robustly avoids occlusion.
+- EFE outperforms MPC.
+- YOLO confidence is a calibrated probability.
+- The system is real-world ready.
+
+What I want help with next
+--------------------------
+Please critique and improve the experimental protocol:
+- Which baseline conditions are necessary and which are overkill?
+- Which metrics best support the paper’s central claim without overclaiming?
+- How should invalid/stuck/interrupted runs be counted?
+- How many seeds/runs are enough for an IWAI short paper?
+- What plots should appear in the main paper versus appendix?
+- How should actuation noise or observation noise be included, if at all, without muddying the core comparison?

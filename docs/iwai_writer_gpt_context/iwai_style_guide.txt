@@ -1,0 +1,56 @@
+IWAI / Wouter-Kouw-adjacent writing style guide
+===============================================
+
+Use this as a style target, not as an imitation of a person. The safest style source is the existing `thesis-report` LaTeX text.
+
+General style:
+- Clear, compact, and formal.
+- Strong distinction between problem formulation, method, experiment, result, and limitation.
+- Prefer "we model", "we approximate", "we evaluate", and "the planner uses" over vague passive phrasing.
+- Do not use hype words such as "novel", "breakthrough", "robust", or "optimal" unless a precise claim supports them.
+- Put the technical caveat near the claim it qualifies.
+- A paragraph should usually make one point: motivation, definition, consequence, or limitation.
+
+Preferred paper rhythm:
+1. Start from a concrete robotics failure mode.
+2. State why ordinary geometric planning is insufficient.
+3. Introduce active inference as the mechanism by which observation quality affects action.
+4. Separate the abstract planning formulation from the current YOLO/GP implementation.
+5. State exactly what differs between compared methods.
+6. Present case-study diagnostics before strong claims.
+7. End with limitations that motivate the planned experiments.
+
+Sentence examples in the desired style:
+- "The learned observability field is not used as an additional reward. It enters planning through the predictive observation covariance."
+- "In this work, observability denotes empirical reliability of the external-camera measurement pathway, not formal nonlinear observability."
+- "The GP is heading-marginal: orientation-dependent detector variation is averaged into a 2D spatial target rather than modeled explicitly."
+- "The present results should therefore be read as evidence that the pipeline can produce the desired behavior, not yet as a statistically complete comparison."
+
+Avoid:
+- "The model understands visibility."
+- "The planner knows where it can see."
+- "YOLO probability."
+- "The active inference planner solves the problem."
+- "The GP removes noise."
+- "The best path."
+
+Use instead:
+- "The model predicts detector-score-derived observability."
+- "The planner predicts observation reliability."
+- "Raw YOLO detector score."
+- "The current configuration reaches the goal region in the representative run."
+- "The GP smooths noisy target observations under an RBF prior."
+- "The selected route under the implemented objective."
+
+Equation style:
+- Introduce variables in prose before showing equations.
+- Use equations when they explain a modeling choice, not for decoration.
+- After each important equation, write one sentence explaining what changes when the quantity is high or low.
+
+Claim style:
+- The central claim should be conditional and testable:
+  "A learned state-dependent observation covariance can change EFE route choice compared with a constant-observability baseline."
+- The current result should be framed as preliminary:
+  "Representative runs show collision-free arrival near the goal while using the learned YOLO-score GP without a direct visibility cost."
+- The final experimental paper should require repeated seeds, fixed task setup, and explicit invalid-run accounting.
+

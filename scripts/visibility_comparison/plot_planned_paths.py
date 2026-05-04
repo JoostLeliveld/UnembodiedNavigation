@@ -65,21 +65,16 @@ def _plot_settings_for_run(run_manifest: dict, args) -> dict[str, float | str | 
     defaults = {
         'r_visible_uv': float(args.r_visible_uv),
         'r_miss_uv': float(args.r_miss_uv),
-        'visibility_power': float(args.visibility_power),
-        'visibility_trust_low': float(args.visibility_trust_low),
-        'visibility_trust_high': float(args.visibility_trust_high),
-        'visibility_trust_mode': str(getattr(args, 'visibility_trust_mode', 'smoothstep')),
         'visibility_sigma_kappa': float(getattr(args, 'visibility_sigma_kappa', 1.0)),
         'min_prob': float(args.min_prob),
     }
     used_defaults: list[str] = []
     cfg: dict[str, float | str | list[str]] = {'min_prob': defaults['min_prob']}
-    for key in ('r_visible_uv', 'r_miss_uv', 'visibility_power', 'visibility_trust_low', 'visibility_trust_high', 'visibility_sigma_kappa'):
+    for key in ('r_visible_uv', 'r_miss_uv', 'visibility_sigma_kappa'):
         value, ok = _float_from_payload(run_manifest, key, defaults[key])
         if not ok:
             used_defaults.append(key)
         cfg[key] = value
-    cfg['visibility_trust_mode'] = str(run_manifest.get('visibility_trust_mode', defaults['visibility_trust_mode']) or defaults['visibility_trust_mode']).strip().lower()
     cfg['source'] = 'run_manifest' if not used_defaults else 'run_manifest+args_fallback'
     cfg['used_arg_defaults'] = used_defaults
     return cfg
@@ -184,11 +179,6 @@ def _draw_geometry(ax, prisms: list[dict[str, float]]) -> None:
         ax.add_patch(rect)
 
 
-def _smoothstep(x: np.ndarray) -> np.ndarray:
-    x = np.clip(np.asarray(x, dtype=float), 0.0, 1.0)
-    return x * x * (3.0 - 2.0 * x)
-
-
 def _live_detection_trust(
     *,
     detected_after_threshold: np.ndarray,
@@ -199,47 +189,21 @@ def _live_detection_trust(
     bbox_area: np.ndarray,
     selected_pixel_source_code: np.ndarray,
 ) -> np.ndarray:
+    del mask_available, mask_area, bbox_area, selected_pixel_source_code
     trust = np.zeros_like(raw_score, dtype=float)
     active = np.asarray(detected_after_threshold, dtype=bool)
-    
-    # Use selected_score if finite, else raw_score
     scores = np.where(np.isfinite(selected_score), selected_score, raw_score)
     scores = np.clip(scores, 0.0, 1.0)
-    
-    # Mapping
-    score_low = 0.15
-    score_high = 0.55
-    t = _smoothstep((scores - score_low) / max(score_high - score_low, 1e-6))
-    
-    # Modifiers
-    t = np.where(selected_pixel_source_code == 1.0, t * 0.90, t) # bbox_bottom
-    t = np.where(mask_available & np.isfinite(mask_area) & (mask_area >= 20.0), t * 1.00, t)
-    t = np.where(np.isfinite(bbox_area) & (bbox_area < 25.0), t * 0.85, t)
-    
-    trust[active] = t[active]
+    trust[active] = scores[active]
     return np.clip(trust, 1e-4, 1.0 - 1e-4)
 
 
-def _visibility_effective_score(p_vis: np.ndarray, *, min_prob: float, visibility_power: float, visibility_trust_low: float, visibility_trust_high: float, visibility_trust_mode: str = 'smoothstep') -> np.ndarray:
-    p_vis = np.clip(np.asarray(p_vis, dtype=float), min_prob, 1.0 - min_prob)
-    if str(visibility_trust_mode).strip().lower() in ('direct', 'identity', 'gp'):
-        return p_vis
-    shaped = np.clip(p_vis ** float(visibility_power), min_prob, 1.0 - min_prob)
-    lo = float(np.clip(visibility_trust_low, min_prob, 1.0 - min_prob))
-    hi = float(np.clip(visibility_trust_high, lo + 1e-6, 1.0 - min_prob))
-    x = (shaped - lo) / max(hi - lo, 1e-6)
-    return np.clip(_smoothstep(x), min_prob, 1.0 - min_prob)
+def _visibility_effective_score(p_vis: np.ndarray, *, min_prob: float) -> np.ndarray:
+    return np.clip(np.asarray(p_vis, dtype=float), min_prob, 1.0 - min_prob)
 
 
-def _ambiguity_map(p_map: np.ndarray, *, min_prob: float, r_visible_uv: float, r_miss_uv: float, visibility_power: float, visibility_trust_low: float, visibility_trust_high: float, visibility_trust_mode: str = 'smoothstep') -> np.ndarray:
-    trust = _visibility_effective_score(
-        p_map,
-        min_prob=min_prob,
-        visibility_power=visibility_power,
-        visibility_trust_low=visibility_trust_low,
-        visibility_trust_high=visibility_trust_high,
-        visibility_trust_mode=visibility_trust_mode,
-    )
+def _ambiguity_map(p_map: np.ndarray, *, min_prob: float, r_visible_uv: float, r_miss_uv: float) -> np.ndarray:
+    trust = _visibility_effective_score(p_map, min_prob=min_prob)
     visible_var = float(r_visible_uv) ** 2
     miss_var = float(r_miss_uv) ** 2
     var = 1.0 / np.maximum(trust / max(visible_var, 1e-6) + (1.0 - trust) / max(miss_var, 1e-6), 1e-9)
@@ -247,15 +211,8 @@ def _ambiguity_map(p_map: np.ndarray, *, min_prob: float, r_visible_uv: float, r
     return 0.5 * np.log(det)
 
 
-def _r_plan_uv_std_map(p_map: np.ndarray, *, min_prob: float, r_visible_uv: float, r_miss_uv: float, visibility_power: float, visibility_trust_low: float, visibility_trust_high: float, visibility_trust_mode: str = 'smoothstep') -> np.ndarray:
-    trust = _visibility_effective_score(
-        p_map,
-        min_prob=min_prob,
-        visibility_power=visibility_power,
-        visibility_trust_low=visibility_trust_low,
-        visibility_trust_high=visibility_trust_high,
-        visibility_trust_mode=visibility_trust_mode,
-    )
+def _r_plan_uv_std_map(p_map: np.ndarray, *, min_prob: float, r_visible_uv: float, r_miss_uv: float) -> np.ndarray:
+    trust = _visibility_effective_score(p_map, min_prob=min_prob)
     visible_var = float(r_visible_uv) ** 2
     miss_var = float(r_miss_uv) ** 2
     var = 1.0 / np.maximum(trust / max(visible_var, 1e-6) + (1.0 - trust) / max(miss_var, 1e-6), 1e-9)
@@ -307,15 +264,6 @@ def _find_latest_runs(root: Path, *, include_interrupted: bool = True) -> dict[s
         if current is None or run_dir.stat().st_mtime > current.stat().st_mtime:
             latest[method_id] = run_dir
     return latest
-
-
-def _trajectory_from_cols(cols: dict[str, np.ndarray]) -> np.ndarray:
-    x = np.asarray(cols.get('x', np.array([], dtype=float)), dtype=float)
-    y = np.asarray(cols.get('y', np.array([], dtype=float)), dtype=float)
-    if x.size == 0 or y.size == 0 or x.size != y.size:
-        return np.zeros((0, 2), dtype=float)
-    mask = np.isfinite(x) & np.isfinite(y)
-    return np.column_stack([x[mask], y[mask]]) if np.any(mask) else np.zeros((0, 2), dtype=float)
 
 
 def _time_align_trajectory(cols: dict[str, np.ndarray], first_cmd_stamp: float) -> np.ndarray:
@@ -402,9 +350,9 @@ def _first_finite_scalar(cols: dict[str, np.ndarray], *names: str) -> np.ndarray
 
 
 def _build_covariance_arrays(cols: dict[str, np.ndarray], n: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    xx = _column_with_fallback(cols, 'est_cov_xx', 'planner_cov_x', 'state_cov_xx', 'cov_x')
-    xy = _column_with_fallback(cols, 'est_cov_xy', 'state_cov_xy')
-    yy = _column_with_fallback(cols, 'est_cov_yy', 'planner_cov_y', 'state_cov_yy', 'cov_y')
+    xx = _column_with_fallback(cols, 'planner_cov_x')
+    xy = _column_with_fallback(cols, 'planner_cov_xy')
+    yy = _column_with_fallback(cols, 'planner_cov_y')
     if xx.size == 0:
         xx = np.full(n, math.nan, dtype=float)
     if yy.size == 0:
@@ -576,10 +524,6 @@ def main() -> int:
     parser.add_argument('--background-method', default='oracle_visibility')
     parser.add_argument('--r-visible-uv', type=float, default=PAPER_VISIBILITY_DEFAULTS['r_visible_uv'])
     parser.add_argument('--r-miss-uv', type=float, default=PAPER_VISIBILITY_DEFAULTS['r_miss_uv'])
-    parser.add_argument('--visibility-power', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_power'])
-    parser.add_argument('--visibility-trust-low', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_low'])
-    parser.add_argument('--visibility-trust-high', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_high'])
-    parser.add_argument('--visibility-trust-mode', default='smoothstep')
     parser.add_argument('--visibility-sigma-kappa', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_sigma_kappa'])
     parser.add_argument('--min-prob', type=float, default=1e-4)
     parser.add_argument(
@@ -661,7 +605,6 @@ def main() -> int:
         efe_risk = np.asarray(run_cols.get('efe_risk', []), dtype=float)
         efe_ambiguity = np.asarray(run_cols.get('efe_ambiguity', []), dtype=float)
         efe_control = np.asarray(run_cols.get('efe_control', []), dtype=float)
-        efe_visibility = np.asarray(run_cols.get('efe_visibility', []), dtype=float)
         efe_obstacle = np.asarray(run_cols.get('efe_obstacle', []), dtype=float)
         efe_total = np.asarray(run_cols.get('efe_total', []), dtype=float)
         p_vis_plan = np.asarray(run_cols.get('p_vis_plan', []), dtype=float)
@@ -727,8 +670,6 @@ def main() -> int:
 
         trust_update_series = trust_update
 
-        # Prefer explicit unambiguous error columns; fall back to legacy state_pos_error_m
-        # Prefer explicit unambiguous error columns; fall back to legacy state_pos_error_m
         truth_state_error_m = _column_with_fallback(run_cols, 'truth_state_error_m')
         truth_belief_error_m = _column_with_fallback(run_cols, 'truth_belief_error_m')
         yaw_error_truth_odom_rad = _column_with_fallback(run_cols, 'yaw_error_truth_odom_rad')
@@ -737,14 +678,13 @@ def main() -> int:
         pixel_corr_xy_update_norm_m = _column_with_fallback(run_cols, 'pixel_corr_xy_update_norm_m')
         pixel_corr_theta_update_total_rad = _column_with_fallback(run_cols, 'pixel_corr_theta_update_total_rad')
         pixel_heading_correction_applied = _column_with_fallback(run_cols, 'pixel_heading_correction_applied')
-        state_pos_error = _column_with_fallback(run_cols, 'state_pos_error_m')
         cov_trace = _column_with_fallback(run_cols, 'state_cov_trace')
         cov_major = _column_with_fallback(run_cols, 'state_sigma_major_m')
 
         max_len = max(
             inferred_path.shape[0],
             raw_state_path.shape[0],
-            _first_finite_scalar(run_cols, 'planner_belief_x', 'est_x', 'state_x', 'x').size,
+            _first_finite_scalar(run_cols, 'planner_belief_x', 'state_x').size,
             _first_finite_scalar(run_cols, 'stamp').size,
         )
         est_cov_xx, est_cov_xy, est_cov_yy = _build_covariance_arrays(run_cols, max_len)
@@ -758,7 +698,6 @@ def main() -> int:
             'efe_risk': efe_risk,
             'efe_ambiguity': efe_ambiguity,
             'efe_control': efe_control,
-            'efe_visibility': efe_visibility,
             'efe_obstacle': efe_obstacle,
             'efe_total': efe_total,
             'p_vis_plan': p_vis_plan,
@@ -800,7 +739,6 @@ def main() -> int:
             'pixel_corr_xy_update_norm_m': pixel_corr_xy_update_norm_m,
             'pixel_corr_theta_update_total_rad': pixel_corr_theta_update_total_rad,
             'pixel_heading_correction_applied': pixel_heading_correction_applied,
-            'state_pos_error_m': state_pos_error,   # legacy fallback
             'state_cov_trace': cov_trace,
             'state_sigma_major_m': cov_major,
             'actual_path': actual_path,
@@ -838,20 +776,12 @@ def main() -> int:
             min_prob=float(plot_cfg['min_prob']),
             r_visible_uv=float(plot_cfg['r_visible_uv']),
             r_miss_uv=float(plot_cfg['r_miss_uv']),
-            visibility_power=float(plot_cfg['visibility_power']),
-            visibility_trust_low=float(plot_cfg['visibility_trust_low']),
-            visibility_trust_high=float(plot_cfg['visibility_trust_high']),
-            visibility_trust_mode=str(plot_cfg.get('visibility_trust_mode', 'smoothstep')),
         )
         std_map = _r_plan_uv_std_map(
             p_map,
             min_prob=float(plot_cfg['min_prob']),
             r_visible_uv=float(plot_cfg['r_visible_uv']),
             r_miss_uv=float(plot_cfg['r_miss_uv']),
-            visibility_power=float(plot_cfg['visibility_power']),
-            visibility_trust_low=float(plot_cfg['visibility_trust_low']),
-            visibility_trust_high=float(plot_cfg['visibility_trust_high']),
-            visibility_trust_mode=str(plot_cfg.get('visibility_trust_mode', 'smoothstep')),
         )
 
         method_dir = output_dir / method_id
@@ -1051,7 +981,6 @@ def main() -> int:
             ('efe_risk',       efe_risk,       'crimson',     'risk'),
             ('efe_ambiguity',  efe_ambiguity,  'darkorange',  'ambiguity'),
             ('efe_control',    efe_control,    'steelblue',   'control'),
-            ('efe_visibility', efe_visibility, 'forestgreen', 'visibility'),
             ('efe_obstacle',   efe_obstacle,   'purple',      'obstacle'),
         ]
         for term_key, term_arr, color, lbl in efe_terms:
@@ -1071,7 +1000,6 @@ def main() -> int:
         ax_vis.plot(t_plot, p_vis_plan_eff[mask_t], label='p_vis_plan_eff (shaped)', linewidth=2, color='mediumseagreen', linestyle='--')
         ax_vis2 = ax_vis.twinx()
         ax_vis2.plot(t_plot, r_plan_u_std[mask_t], label='r_plan_u_std', linewidth=2, color='purple', alpha=0.7)
-        # Show explicit unambiguous error signals; fall back to legacy if new columns absent
         if truth_state_error_m.size:
             n_err = min(t_aligned.size, truth_state_error_m.size)
             err_mask = t_aligned[:n_err] >= 0.0
@@ -1093,17 +1021,6 @@ def main() -> int:
                 linewidth=1.6,
                 color='crimson',
                 linestyle='-.',
-            )
-        elif state_pos_error.size:
-            n_err = min(t_aligned.size, state_pos_error.size)
-            err_mask = t_aligned[:n_err] >= 0.0
-            ax_vis2.plot(
-                t_aligned[:n_err][err_mask],
-                state_pos_error[:n_err][err_mask],
-                label='state_pos_error_m (legacy)',
-                linewidth=1.6,
-                color='crimson',
-                linestyle=':',
             )
         if cov_trace.size:
             n_cov = min(t_aligned.size, cov_trace.size)
@@ -1282,12 +1199,11 @@ def main() -> int:
 
         ax = axes_diag[2, 0]
         if t_aligned.size and efe_total.size:
-            n = min(t_aligned.size, efe_total.size, efe_risk.size, efe_ambiguity.size, efe_control.size, efe_visibility.size, efe_obstacle.size)
+            n = min(t_aligned.size, efe_total.size, efe_risk.size, efe_ambiguity.size, efe_control.size, efe_obstacle.size)
             mask = t_aligned[:n] >= 0.0
             ax.plot(t_aligned[:n][mask], efe_total[:n][mask], color='black', linewidth=2.0, label='total')
             ax.plot(t_aligned[:n][mask], efe_risk[:n][mask], color='crimson', linewidth=1.4, label='risk')
             ax.plot(t_aligned[:n][mask], efe_ambiguity[:n][mask], color='darkorange', linewidth=1.2, label='ambiguity')
-            ax.plot(t_aligned[:n][mask], efe_visibility[:n][mask], color='forestgreen', linewidth=1.2, label='visibility')
             ax.plot(t_aligned[:n][mask], efe_obstacle[:n][mask], color='purple', linewidth=1.2, label='obstacle')
             ax.plot(t_aligned[:n][mask], efe_control[:n][mask], color='steelblue', linewidth=1.2, label='control')
             ax.legend(fontsize=7, loc='upper right')
@@ -1367,9 +1283,6 @@ def main() -> int:
             'plot_settings': {
                 'r_visible_uv': float(plot_cfg['r_visible_uv']),
                 'r_miss_uv': float(plot_cfg['r_miss_uv']),
-                'visibility_power': float(plot_cfg['visibility_power']),
-                'visibility_trust_low': float(plot_cfg['visibility_trust_low']),
-                'visibility_trust_high': float(plot_cfg['visibility_trust_high']),
                 'visibility_sigma_kappa': float(plot_cfg['visibility_sigma_kappa']),
                 'source': str(plot_cfg['source']),
                 'used_arg_defaults': list(plot_cfg['used_arg_defaults']),
@@ -1403,7 +1316,6 @@ def main() -> int:
             'mean_efe_risk': run_summary.get('mean_efe_risk', ''),
             'mean_efe_ambiguity': run_summary.get('mean_efe_ambiguity', ''),
             'mean_efe_control': run_summary.get('mean_efe_control', ''),
-            'mean_efe_visibility': run_summary.get('mean_efe_visibility', ''),
             'mean_efe_obstacle': run_summary.get('mean_efe_obstacle', ''),
             'mean_p_vis_plan': run_summary.get('mean_p_vis_plan', ''),
             'mean_p_vis_plan_eff': run_summary.get('mean_p_vis_plan_eff', ''),
@@ -1455,7 +1367,7 @@ def main() -> int:
             'elapsed_after_first_cmd_s', 'path_length_m',
             'final_goal_distance', 'minimum_goal_distance', 'mean_solve_time_ms',
             'mean_efe_risk', 'mean_efe_ambiguity',
-            'mean_efe_control', 'mean_efe_visibility', 'mean_efe_obstacle',
+            'mean_efe_control', 'mean_efe_obstacle',
             'mean_p_vis_plan', 'mean_p_vis_plan_eff', 'mean_r_plan_u_std', 'mean_r_plan_v_std',
             'mean_terminal_goal_distance_pred', 'mean_terminal_goal_progress_m',
             'mean_fraction_horizon_low_pvis', 'mean_fraction_horizon_high_ambiguity',
@@ -1518,10 +1430,6 @@ def main() -> int:
             min_prob=float(background_cfg['min_prob']),
             r_visible_uv=float(background_cfg['r_visible_uv']),
             r_miss_uv=float(background_cfg['r_miss_uv']),
-            visibility_power=float(background_cfg['visibility_power']),
-            visibility_trust_low=float(background_cfg['visibility_trust_low']),
-            visibility_trust_high=float(background_cfg['visibility_trust_high']),
-            visibility_trust_mode=str(background_cfg.get('visibility_trust_mode', 'smoothstep')),
         )
         fig, ax = plt.subplots(figsize=(8, 7), constrained_layout=True)
         ax.imshow(amb_bg, origin='lower', extent=extent, cmap='magma', aspect='equal')
@@ -1630,15 +1538,13 @@ def main() -> int:
             efe_total = np.asarray(pack.get('efe_total', np.array([], dtype=float)), dtype=float)
             efe_risk = np.asarray(pack.get('efe_risk', np.array([], dtype=float)), dtype=float)
             efe_ambiguity = np.asarray(pack.get('efe_ambiguity', np.array([], dtype=float)), dtype=float)
-            efe_visibility = np.asarray(pack.get('efe_visibility', np.array([], dtype=float)), dtype=float)
             efe_obstacle = np.asarray(pack.get('efe_obstacle', np.array([], dtype=float)), dtype=float)
-            n_efe = min(t_aligned.size, efe_total.size, efe_risk.size, efe_ambiguity.size, efe_visibility.size, efe_obstacle.size)
+            n_efe = min(t_aligned.size, efe_total.size, efe_risk.size, efe_ambiguity.size, efe_obstacle.size)
             if n_efe:
                 mask = t_aligned[:n_efe] >= 0.0
                 row_axes[3].plot(t_aligned[:n_efe][mask], efe_total[:n_efe][mask], color='black', linewidth=1.8, label='total')
                 row_axes[3].plot(t_aligned[:n_efe][mask], efe_risk[:n_efe][mask], color='crimson', linewidth=1.1, label='risk')
                 row_axes[3].plot(t_aligned[:n_efe][mask], efe_ambiguity[:n_efe][mask], color='darkorange', linewidth=1.1, label='amb')
-                row_axes[3].plot(t_aligned[:n_efe][mask], efe_visibility[:n_efe][mask], color='forestgreen', linewidth=1.1, label='vis')
                 row_axes[3].plot(t_aligned[:n_efe][mask], efe_obstacle[:n_efe][mask], color='purple', linewidth=1.1, label='obs')
             row_axes[3].set_title('Objective decomposition')
             row_axes[3].set_xlabel('Time [s]')
@@ -1731,7 +1637,6 @@ def main() -> int:
         ('efe_risk',       'crimson',     '-',  'risk'),
         ('efe_ambiguity',  'darkorange',  '-',  'ambiguity'),
         ('efe_control',    'steelblue',   '-',  'control'),
-        ('efe_visibility', 'forestgreen', '-',  'visibility'),
         ('efe_obstacle',   'purple',      '-',  'obstacle'),
     ]
     fig_efe, axes_efe = plt.subplots(2, 1, figsize=(12, 10), constrained_layout=True, sharex=True)
@@ -1851,9 +1756,6 @@ def main() -> int:
             method_id = pack['method_id']
             t_aligned = pack['t']
             series = np.asarray(pack.get(key, np.array([])), dtype=float)
-            # For old logs that lack truth_{state,belief}_error_m, fall back to state_pos_error_m
-            if series.size == 0 and key in ('truth_state_error_m', 'truth_belief_error_m'):
-                series = np.asarray(pack.get('state_pos_error_m', np.array([])), dtype=float)
             if t_aligned.size == 0 or series.size == 0:
                 continue
             n = min(t_aligned.size, series.size)

@@ -79,7 +79,7 @@ def _float_from_payload(payload: dict, key: str, default: float) -> tuple[float,
 def _plot_settings_for_method(run_manifest: dict, args) -> dict[str, float | str | list[str]] | None:
     used_defaults: list[str] = []
     cfg: dict[str, float | str | list[str]] = {'min_prob': float(args.min_prob)}
-    for key in ('r_visible_uv', 'r_miss_uv', 'visibility_power', 'visibility_trust_low', 'visibility_trust_high', 'visibility_sigma_kappa'):
+    for key in ('r_visible_uv', 'r_miss_uv', 'visibility_sigma_kappa'):
         raw = run_manifest.get(key) if run_manifest else None
         if raw in (None, ''):
             cfg[key] = float(getattr(args, key.replace('-', '_')))
@@ -93,10 +93,6 @@ def _plot_settings_for_method(run_manifest: dict, args) -> dict[str, float | str
         except (TypeError, ValueError):
             cfg[key] = float(getattr(args, key.replace('-', '_')))
             used_defaults.append(key)
-    cfg['visibility_trust_mode'] = str(
-        (run_manifest.get('visibility_trust_mode') if run_manifest else None)
-        or getattr(args, 'visibility_trust_mode', 'smoothstep')
-    ).strip().lower()
     cfg['source'] = 'run_manifest' if run_manifest and not used_defaults else 'arg_defaults'
     cfg['used_arg_defaults'] = used_defaults
     return cfg
@@ -177,28 +173,12 @@ def _draw_geometry(ax, prisms: list[dict[str, float]]) -> None:
         ax.add_patch(rect)
 
 
-def _smoothstep(x: np.ndarray) -> np.ndarray:
-    x = np.clip(np.asarray(x, dtype=float), 0.0, 1.0)
-    return x * x * (3.0 - 2.0 * x)
-
-
 def _visibility_effective_score(
     p_vis: np.ndarray,
     *,
     min_prob: float,
-    visibility_power: float,
-    visibility_trust_low: float,
-    visibility_trust_high: float,
-    visibility_trust_mode: str = 'smoothstep',
 ) -> np.ndarray:
-    p_vis = np.clip(np.asarray(p_vis, dtype=float), min_prob, 1.0 - min_prob)
-    if str(visibility_trust_mode).strip().lower() in ('direct', 'identity', 'gp'):
-        return p_vis
-    shaped = np.clip(p_vis ** float(visibility_power), min_prob, 1.0 - min_prob)
-    lo = float(np.clip(visibility_trust_low, min_prob, 1.0 - min_prob))
-    hi = float(np.clip(visibility_trust_high, lo + 1e-6, 1.0 - min_prob))
-    x = (shaped - lo) / max(hi - lo, 1e-6)
-    return np.clip(_smoothstep(x), min_prob, 1.0 - min_prob)
+    return np.clip(np.asarray(p_vis, dtype=float), min_prob, 1.0 - min_prob)
 
 
 def _blend_observation_covariance(trust: np.ndarray, *, r_visible_uv: float, r_miss_uv: float) -> np.ndarray:
@@ -244,10 +224,6 @@ def main() -> int:
     parser.add_argument('--out', default='')
     parser.add_argument('--r-visible-uv', type=float, default=PAPER_VISIBILITY_DEFAULTS['r_visible_uv'])
     parser.add_argument('--r-miss-uv', type=float, default=PAPER_VISIBILITY_DEFAULTS['r_miss_uv'])
-    parser.add_argument('--visibility-power', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_power'])
-    parser.add_argument('--visibility-trust-low', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_low'])
-    parser.add_argument('--visibility-trust-high', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_trust_high'])
-    parser.add_argument('--visibility-trust-mode', default='smoothstep')
     parser.add_argument('--visibility-sigma-kappa', type=float, default=PAPER_VISIBILITY_DEFAULTS['visibility_sigma_kappa'])
     parser.add_argument('--min-prob', type=float, default=1e-4)
     args = parser.parse_args()
@@ -299,10 +275,6 @@ def main() -> int:
         p_eff = _visibility_effective_score(
             p_map,
             min_prob=float(plot_cfg['min_prob']),
-            visibility_power=float(plot_cfg['visibility_power']),
-            visibility_trust_low=float(plot_cfg['visibility_trust_low']),
-            visibility_trust_high=float(plot_cfg['visibility_trust_high']),
-            visibility_trust_mode=str(plot_cfg.get('visibility_trust_mode', 'smoothstep')),
         )
         plan_var = _blend_observation_covariance(
             p_eff,
@@ -425,9 +397,6 @@ def main() -> int:
             'plot_settings': {
                 'r_visible_uv': float(plot_cfg['r_visible_uv']),
                 'r_miss_uv': float(plot_cfg['r_miss_uv']),
-                'visibility_power': float(plot_cfg['visibility_power']),
-                'visibility_trust_low': float(plot_cfg['visibility_trust_low']),
-                'visibility_trust_high': float(plot_cfg['visibility_trust_high']),
                 'visibility_sigma_kappa': float(plot_cfg['visibility_sigma_kappa']),
                 'source': str(plot_cfg['source']),
                 'used_arg_defaults': list(plot_cfg['used_arg_defaults']),
@@ -487,10 +456,6 @@ def main() -> int:
         'planner_covariance_defaults': {
             'r_visible_uv': float(args.r_visible_uv),
             'r_miss_uv': float(args.r_miss_uv),
-            'visibility_power': float(args.visibility_power),
-            'visibility_trust_low': float(args.visibility_trust_low),
-            'visibility_trust_high': float(args.visibility_trust_high),
-            'visibility_trust_mode': str(args.visibility_trust_mode),
             'visibility_sigma_kappa': float(args.visibility_sigma_kappa),
         },
         'notes': plot_notes,

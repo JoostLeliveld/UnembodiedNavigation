@@ -155,7 +155,6 @@ def _validate_intrinsics(intrinsics: Dict[str, Any]) -> None:
 def _validate_visibility_defaults(visibility_defaults: Dict[str, Any]) -> None:
     _ensure_mapping(visibility_defaults, "visibility_defaults")
     numeric_keys = (
-        "visibility_weight",
         "visibility_map_min_x",
         "visibility_map_max_x",
         "visibility_map_min_y",

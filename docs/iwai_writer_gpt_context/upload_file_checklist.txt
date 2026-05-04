@@ -1,0 +1,51 @@
+Token-efficient upload checklist
+================================
+
+Minimal upload for experiment brainstorming:
+- `UnembodiedNavigation/docs/iwai_writer_gpt_context/claude_handoff_context.txt`
+- `UnembodiedNavigation/docs/iwai_writer_gpt_context/codebase_map_for_claude.txt`
+- `UnembodiedNavigation/docs/iwai_writer_gpt_context/gpt_system_instructions.txt`
+- `UnembodiedNavigation/docs/iwai_writer_gpt_context/iwai_style_guide.txt`
+- `UnembodiedNavigation/docs/iwai_writer_gpt_context/starter_prompts.txt`
+- `thesis-report/sections/04_efe_planning.tex`
+- `thesis-report/sections/05_gp_observability.tex`
+- `thesis-report/sections/06_experiments.tex`
+
+Add these if Claude is drafting the whole paper:
+- `UnembodiedNavigation/docs/iwai_writer_gpt_context/paper_outline.txt`
+- `UnembodiedNavigation/docs/iwai_writer_gpt_context/experiment_blueprint.txt`
+- `UnembodiedNavigation/docs/iwai_writer_gpt_context/claims_and_caveats.txt`
+- `thesis-report/sections/01_introduction.tex`
+- `thesis-report/sections/02_related_work.tex`
+- `thesis-report/sections/03_problem_formulation.tex`
+- `thesis-report/sections/07_results.tex`
+- `thesis-report/sections/08_discussion.tex`
+- `thesis-report/sections/09_conclusion.tex`
+- `thesis-report/references.bib`
+
+Add these only if Claude needs implementation-level grounding:
+- First upload `UnembodiedNavigation/docs/iwai_writer_gpt_context/codebase_map_for_claude.txt`.
+- Then add only the specific source files below if needed.
+- `UnembodiedNavigation/src/planning/planning/planners/base_planner.py`
+- `UnembodiedNavigation/src/planning/planning/core/casadi_efe.py`
+- `UnembodiedNavigation/src/planning/planning/nodes/efe_agent_node.py`
+- `UnembodiedNavigation/src/planning/planning/nodes/unicycle_planner_node.py`
+- `UnembodiedNavigation/src/sim/sim/actuation_noise_node.py`
+- `UnembodiedNavigation/src/experiments/experiments/core/visibility_launch_common.py`
+- `UnembodiedNavigation/src/experiments/experiments/nodes/experiment_logger.py`
+- `UnembodiedNavigation/src/state/state/nodes/pixel_to_bev_state_node.py`
+- `UnembodiedNavigation/src/perception/perception/nodes/yolo_robot_detector_node.py`
+
+Add compact evidence only when discussing results:
+- selected `run_summary.json` and `run_manifest.json` files;
+- selected final figures;
+- small summary CSV tables.
+
+Avoid by default:
+- full `experiment.csv`, `perception.csv`, and `plan_samples.csv`;
+- old historical logs;
+- archived/deleted compatibility notes;
+- raw datasets unless discussing YOLO training or GP fitting in detail.
+
+Suggested first Claude prompt:
+"Use the uploaded handoff context and thesis sections to critique the proposed experiment protocol. Focus on necessary baselines, primary metrics, validity rules for stuck/interrupted runs, and the minimum figure/table set for an IWAI short paper. Do not invent results and do not assume runtime multistart seeding exists."

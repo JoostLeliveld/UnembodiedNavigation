@@ -1,9 +1,63 @@
 tasks:
   warehouse_occ_light.world.sdf:
-    - name: main_shadow_tradeoff
-      description: Main benchmark task. Starts on the lower northwest approach and asks the planner to reach the southeast goal, forcing a choice between the shorter occluded crossover and the longer clearer route.
+
+    # Task A — primary shadow-tradeoff task.
+    # Both start and goal are at y=0.5, just above the shelf top.
+    # Direct path traverses the shadow region (x in [0,2], y~0.5).
+    # Visible detour drops to y~-0.8, passes below the shelf, climbs back (~2.5 m extra).
+    # VERIFY before running (Section 0a): rho_plan(-2,0.5)>0.6, rho_plan(2,0.5)>0.6,
+    # rho_plan(0.5,0.7)<0.35, and robot clearance at y=-0.8.
+    - name: shadow_tradeoff_a
+      description: >
+        Primary shadow-tradeoff task. Start and goal both at y=0.5 above the shelf top.
+        The direct straight path crosses the camera shadow; the safe detour passes below
+        the shelf at y~-0.8, adding ~2.5 m of path length.
       tier: benchmark
       claim: shadow_tradeoff
       focus: visibility_tradeoff
       start: {x: -2.0, y: 0.5, z: 0.05, yaw: 0.0}
-      goal:  {x: 1.55, y: -1.45}
+      goal:  {x: 2.0, y: 0.5}
+
+    # Task B — rotated shadow-tradeoff task.
+    # Direct path is a diagonal from lower-left to upper-right crossing the shadow.
+    # Tests GP-EFE response from a different approach angle than Task A.
+    # VERIFY before running: rho_plan(2,0.5)>0.6, rho_plan(0.5,0.3)<0.35.
+    - name: shadow_tradeoff_b
+      description: >
+        Rotated shadow-tradeoff task. Start at lower-left, goal at upper-right.
+        The direct diagonal crosses the shadow around x in [0,1.5], y in [0,0.5].
+        The safe detour stays below y=-0.5 and approaches the goal from below.
+      tier: benchmark
+      claim: shadow_tradeoff
+      focus: visibility_tradeoff
+      start: {x: -2.0, y: -1.0, z: 0.05, yaw: 0.7854}
+      goal:  {x: 2.0, y: 0.5}
+
+    # Task S — sanity check (no shadow involvement).
+    # Entire path stays below the shelf in high-rho_plan territory.
+    # C1 and C2 should produce nearly identical paths. Any significant divergence
+    # indicates a bug or spurious GP signal in the visible region.
+    - name: sanity_open
+      description: >
+        Sanity check task. Both start and goal are well below the shelf in the
+        high-reliability visible region. C1 and C2 should behave identically.
+      tier: sanity
+      claim: null
+      focus: sanity
+      start: {x: -2.0, y: -1.5, z: 0.05, yaw: 0.0}
+      goal:  {x: 2.0, y: -1.5}
+
+    # Legacy task kept for reference. Geometry does NOT produce a forced tradeoff:
+    # the goal is already below the shelf so the visible detour costs no extra distance.
+    # Do NOT use for the IWAI campaign comparison.
+    - name: main_shadow_tradeoff
+      description: >
+        Legacy benchmark task (pre-IWAI geometry). Start on northwest approach,
+        goal at southeast. The goal position at y=-1.0 is already below the shelf,
+        so both routes have similar length — no strong shadow tradeoff is forced.
+        Retained for reference only.
+      tier: legacy
+      claim: null
+      focus: legacy
+      start: {x: -2.0, y: 1.0, z: 0.05, yaw: 0.0}
+      goal:  {x: 2.0, y: -1.0}

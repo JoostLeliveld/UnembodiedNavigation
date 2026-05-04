@@ -1,0 +1,104 @@
+# Machine-readable draft of the intended paper runtime contract.
+# This is not enforced yet. It is the checklist that should become launch,
+# metrics, and plotting validation.
+
+paper_runtime_contract:
+  version: 0.1
+  purpose: >
+    Define the behavior that counts as paper-facing execution for the
+    external-camera visibility-aware EFE experiments.
+
+  allowed_worlds:
+    - warehouse_occ_light.world.sdf
+
+  allowed_tasks:
+    - shadow_tradeoff_a
+    - shadow_tradeoff_b
+    - sanity_open
+
+  legacy_tasks:
+    - main_shadow_tradeoff
+
+  allowed_planner_conditions:
+    constant_R_efe:
+      implementation_name: visibility_unaware_baseline
+      description: EFE planner with constant observation covariance R0.
+      requires_visibility_artifact: false
+    visibility_aware_efe:
+      implementation_name: efe1
+      description: EFE planner with learned state-dependent observation covariance.
+      requires_visibility_artifact: true
+    risk_only_gp_ablation:
+      implementation_name: gp_risk_only
+      description: Optional ablation; not the main method.
+      requires_visibility_artifact: true
+
+  required_runtime_settings:
+    perception_backend: yolo
+    heading_source: odometry
+    visual_yaw_required: false
+    use_direct_visibility_trust: true
+    direct_visibility_reward_allowed: false
+    visibility_weight_required_value: 0.0
+
+  required_paths:
+    yolo_model:
+      must_exist: true
+      may_be_empty: false
+    visibility_artifact_path:
+      must_exist_for:
+        - visibility_aware_efe
+        - risk_only_gp_ablation
+      may_be_implicit_from_world_profile: false
+
+  hard_fail_on_missing:
+    - yolo_model
+    - visibility_artifact_path_for_visibility_conditions
+    - camera_model
+    - homography
+    - world_bounds
+    - obstacle_geometry
+    - truth_pose_source
+    - run_manifest
+    - experiment_csv
+    - run_summary
+    - collision_fields_for_success_claims
+
+  plotting_rules:
+    require_real_run_dir: true
+    require_real_trace_csv: true
+    allow_schematic_fallback_by_default: false
+    require_panel_a_screenshot_for_problem_figure: true
+    allow_placeholder_panel_a_by_default: false
+
+  metric_rules:
+    separate_completed_protocol_from_success: true
+    timeout_after_first_cmd_is_success_by_itself: false
+    collision_or_penetration_invalidates_success: true
+    near_goal_stuck_requires_explicit_label: true
+
+  artifact_rules:
+    gp_artifact_must_record:
+      - schema_version
+      - source_samples
+      - source_targets
+      - world
+      - camera_setup
+      - kernel
+      - length_scale
+      - noise_variance
+      - beta
+      - grid_shape
+    yolo_model_must_record:
+      - dataset_path
+      - train_val_split
+      - model_path
+      - inference_threshold
+
+  forbidden_silent_behaviors:
+    - silently_using_image_markers_in_paper_launch
+    - silently_falling_back_to_profile_gp_artifact
+    - silently_plotting_schematic_trajectory_when_run_trace_missing
+    - silently_counting_timeout_as_goal_success
+    - silently_clipping_gp_queries_without_diagnostic
+    - silently_continuing_without_camera_geometry
