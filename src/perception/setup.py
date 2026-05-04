@@ -16,7 +16,7 @@ setup(
     zip_safe=True,
     maintainer='joostleliveld',
     maintainer_email='j.j.p.leliveld@student.tue.nl',
-    description='External-camera perception simulation and homography utilities for UnembodiedNavigation',
+    description='YOLO external-camera perception for UnembodiedNavigation',
     license='MIT',
     extras_require={
         'test': [
@@ -25,8 +25,6 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'homography_sim_node = perception.nodes.homography_sim_node:main',
-            'image_marker_detector_node = perception.nodes.image_marker_detector_node:main',
             'yolo_robot_detector_node = perception.nodes.yolo_robot_detector_node:main',
         ],
     },

@@ -35,7 +35,7 @@ The planner is only one part of the experiment. This package answers:
 | File | Role |
 | --- | --- |
 | [`launch/warehouse_primary_comparison.launch.py`](launch/warehouse_primary_comparison.launch.py) | main entry point for `efe1` vs `visibility_unaware_baseline` |
-| [`launch/warehouse_visibility_agent.launch.py`](launch/warehouse_visibility_agent.launch.py) | retained secondary-planner launch |
+| [`launch/warehouse_visibility_agent.launch.py`](launch/warehouse_visibility_agent.launch.py) | diagnostic launch for non-primary planner variants |
 | [`launch/warehouse_visibility_capture.launch.py`](launch/warehouse_visibility_capture.launch.py) | offline capture launch for GP fitting; defaults to teleport/grid sampling and retains an optional driving mode |
 | [`config/world_profiles.yaml`](config/world_profiles.yaml) | world registry, camera setup, and matched visibility artifact paths |
 | [`config/tasks.yaml`](config/tasks.yaml) | single active benchmark task definition |
@@ -73,7 +73,7 @@ The planner is only one part of the experiment. This package answers:
 
 ## Provisional Or Peripheral
 
-- `warehouse_visibility_agent.launch.py` keeps retained secondary planners `efe2`, `efer`, and `mpc` runnable, but it is not the main thesis-facing entry path
+- `warehouse_visibility_agent.launch.py` is diagnostic and is not the main thesis-facing entry path
 - the logger is useful and important, but the evaluation built on top of it is still milestone-grade
 - the active experiment surface is intentionally narrow: one warehouse world and one main benchmark task
 

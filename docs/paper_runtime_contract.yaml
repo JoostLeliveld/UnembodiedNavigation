@@ -55,7 +55,7 @@ paper_runtime_contract:
     - yolo_model
     - visibility_artifact_path_for_visibility_conditions
     - camera_model
-    - homography
+    - camera_projection_model
     - world_bounds
     - obstacle_geometry
     - truth_pose_source
@@ -96,7 +96,7 @@ paper_runtime_contract:
       - inference_threshold
 
   forbidden_silent_behaviors:
-    - silently_using_image_markers_in_paper_launch
+    - silently_using_non_yolo_perception_in_paper_launch
     - silently_falling_back_to_profile_gp_artifact
     - silently_plotting_schematic_trajectory_when_run_trace_missing
     - silently_counting_timeout_as_goal_success

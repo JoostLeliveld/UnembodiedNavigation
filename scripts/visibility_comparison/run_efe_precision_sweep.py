@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the current EFE thesis profile and optional MPC diagnostic."""
+"""Run the current EFE thesis profile."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from common import CURRENT_GP_DIR, LOGS_ROOT
 
 PROFILE_ORDER = (
     'efe_main',
-    'mpc_diagnostic',
 )
 
 
@@ -45,20 +44,10 @@ PROFILES = {
         ),
         'params': dict(EFE_MAIN_PARAMS),
     },
-    'mpc_diagnostic': {
-        'planner': 'mpc',
-        'description': (
-            'Retained MPC-like diagnostic: ambiguity disabled by launch mode; '
-            'uses the same estimator, GP artifact, safety model, and current EFE precisions.'
-        ),
-        'params': dict(EFE_MAIN_PARAMS),
-    },
 }
 
 
 OWN_NODE_PATTERNS = (
-    'image_marker_detector_node',
-    'homography_sim_node',
     'yolo_robot_detector_node',
     'pixel_to_bev_state_node',
     'goal_mission_node',
@@ -222,7 +211,6 @@ def main() -> int:
         'notes': [
             'EFE main preserves the risk and ambiguity equations; tuning is limited to precisions, horizon, discount, and GP-to-covariance semantics.',
             'There is no direct visibility reward or route penalty in the paper EFE profile.',
-            'mpc_diagnostic is the retained risk-only / ambiguity-disabled MPC-like baseline, not a final classical MPC claim.',
             'Runs with collision or positive penetration are invalid for success claims but remain included in plots.',
         ],
     }

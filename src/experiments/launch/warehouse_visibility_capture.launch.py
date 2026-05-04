@@ -77,46 +77,29 @@ def _launch_setup(context, *args, **kwargs):
         }],
     )
 
-    detector_params = {
-        'use_sim_time': use_sim_time,
-        'cam_pos': cam_pos,
-        'look_at': look_at,
-        'img_width': int(intrinsics['img_width']),
-        'img_height': int(intrinsics['img_height']),
-        'fov_h_rad': float(intrinsics['fov_h_rad']),
+    if perception_backend != 'yolo':
+        raise RuntimeError("Visibility capture supports only perception_backend:=yolo")
+    yolo_detector_params = {
         'pixel_noise_sigma': pixel_noise_sigma,
         'seed': seed,
+        'model_path': yolo_model,
+        'device': yolo_device,
+        'image_size': yolo_imgsz,
+        'confidence_threshold': yolo_conf_threshold,
+        'iou_threshold': yolo_iou_threshold,
+        'class_name': yolo_target_class,
+        'class_id': yolo_class_id,
+        'use_masks': yolo_use_masks,
+        'mask_min_area': yolo_min_mask_area_px,
+        'mask_bottom_band_px': yolo_mask_bottom_band_px,
     }
-    if perception_backend == 'yolo':
-        yolo_detector_params = {
-            'pixel_noise_sigma': pixel_noise_sigma,
-            'seed': seed,
-            'model_path': yolo_model,
-            'device': yolo_device,
-            'image_size': yolo_imgsz,
-            'confidence_threshold': yolo_conf_threshold,
-            'iou_threshold': yolo_iou_threshold,
-            'class_name': yolo_target_class,
-            'class_id': yolo_class_id,
-            'use_masks': yolo_use_masks,
-            'mask_min_area': yolo_min_mask_area_px,
-            'mask_bottom_band_px': yolo_mask_bottom_band_px,
-        }
-        detector = Node(
-            package='perception',
-            executable='yolo_robot_detector_node',
-            name='yolo_robot_detector_node',
-            output='screen',
-            parameters=[yolo_detector_params],
-        )
-    else:
-        detector = Node(
-            package='perception',
-            executable='image_marker_detector_node',
-            name='image_marker_detector_node',
-            output='screen',
-            parameters=[detector_params],
-        )
+    detector = Node(
+        package='perception',
+        executable='yolo_robot_detector_node',
+        name='yolo_robot_detector_node',
+        output='screen',
+        parameters=[yolo_detector_params],
+    )
 
     state_node = Node(
         package='state',
@@ -188,9 +171,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'sensor_pixel_noise_sigma',
             default_value='1.0',
-            description='Synthetic detector pixel noise applied in the image-marker capture path',
+            description='Synthetic detector pixel noise applied before state conversion',
         ),
-        DeclareLaunchArgument('perception_backend', default_value='image_markers', description='image_markers or yolo'),
+        DeclareLaunchArgument('perception_backend', default_value='yolo', description='Capture perception backend: yolo'),
         DeclareLaunchArgument('yolo_model', default_value='', description='Local path to a trained YOLO .pt model'),
         DeclareLaunchArgument('yolo_device', default_value='', description='Ultralytics device string; empty lets Ultralytics choose'),
         DeclareLaunchArgument('yolo_imgsz', default_value='640'),

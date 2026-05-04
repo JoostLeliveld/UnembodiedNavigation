@@ -20,7 +20,7 @@ The current perception story has shifted to a simpler indoor warehouse:
 - lighting: fixed overhead lighting, no rendered cast shadows
 - floor: no colored floor markers
 - current runtime detector of interest: `yolo_robot_detector_node`
-- legacy detector kept for comparison/older runs: `image_marker_detector_node`
+- the paper runtime does not expose older detector backends as runnable conditions
 
 Current perception interpretation:
 
@@ -79,7 +79,7 @@ flowchart LR
     subgraph Planning
         GOALNODE[goal_mission_node]
         GOAL[/goal_bev/]
-        PLAN[efe1_agent or visibility_unaware_baseline]
+        PLAN[efe1_agent]
         CMD[/cmd_vel/]
     end
 
@@ -136,11 +136,7 @@ This launch is the thesis-facing entry point for:
 - `planner:=efe1`
 - `planner:=visibility_unaware_baseline`
 
-### Retained secondary planners
-
-- [`../src/experiments/launch/warehouse_visibility_agent.launch.py`](../src/experiments/launch/warehouse_visibility_agent.launch.py)
-
-This launch keeps `efe2`, `efer`, and `mpc` runnable as retained secondary modes, but it is not the main comparison surface.
+Older detector and controller runs are not part of the paper-facing runtime surface.
 
 ## Main Topics
 

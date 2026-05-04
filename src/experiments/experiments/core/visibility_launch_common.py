@@ -17,7 +17,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'world': 'warehouse_occ_light.world.sdf',
     'task': '',
     'seed': '0',
-    'perception_backend': 'image_markers',
+    'perception_backend': 'yolo',
     'sensor_pixel_noise_sigma': '1.0',
     'odom_wait_timeout_s': '60.0',
     'odom_wait_min_messages': '1',
@@ -149,27 +149,12 @@ def _require_task_field(task, key):
     return task[key]
 
 
-def _state_estimator_metadata(perception_backend: str) -> Dict[str, str]:
-    backend = str(perception_backend).strip().lower()
-    if backend == 'homography':
-        return {
-            'state_source_x': 'camera_homography',
-            'state_source_y': 'camera_homography',
-            'state_source_theta': 'visual_heading_else_odom',
-            'state_estimator_mode': 'camera_xytheta_with_odom_fallback',
-        }
-    if backend == 'yolo':
-        return {
-            'state_source_x': 'yolo_mask_or_bbox_homography',
-            'state_source_y': 'yolo_mask_or_bbox_homography',
-            'state_source_theta': 'odometry_heading',
-            'state_estimator_mode': 'yolo_mask_or_bbox_camera_xy_odom_theta',
-        }
+def _state_estimator_metadata(_perception_backend: str) -> Dict[str, str]:
     return {
-        'state_source_x': 'camera_homography',
-        'state_source_y': 'camera_homography',
+        'state_source_x': 'yolo_mask_or_bbox_homography',
+        'state_source_y': 'yolo_mask_or_bbox_homography',
         'state_source_theta': 'odometry_heading',
-        'state_estimator_mode': 'camera_xy_odom_theta',
+        'state_estimator_mode': 'yolo_mask_or_bbox_camera_xy_odom_theta',
     }
 
 
@@ -336,8 +321,8 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'yolo_mask_bottom_band_px': float(_launch_value(context, 'yolo_mask_bottom_band_px', PAPER_LAUNCH_DEFAULTS['yolo_mask_bottom_band_px'])),
     }
 
-    if cfg['perception_backend'] not in ('homography', 'image_markers', 'yolo'):
-        raise RuntimeError("perception_backend must be 'homography', 'image_markers', or 'yolo'")
+    if cfg['perception_backend'] != 'yolo':
+        raise RuntimeError("Paper runtime supports only perception_backend:=yolo")
 
     return cfg
 
@@ -447,7 +432,6 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     raw_use_nogo_cost = str(cfg.get('use_nogo_cost', 'auto')).strip().lower()
     nogo_geometry_needed = (
         raw_use_nogo_cost in ('1', 'true', 't', 'yes', 'y', 'on')
-        or (raw_use_nogo_cost in ('', 'auto', 'default') and str(cfg.get('planner', '')).strip().lower() == 'mpc')
     )
     geometry_needed = bool(cfg.get('perception_use_geometry_occlusion', False)) or nogo_geometry_needed
     if (not visibility_geometry_json) and geometry_needed:
@@ -551,54 +535,27 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             }],
         )
 
-    homography_params = {'use_sim_time': cfg['use_sim_time']}
-    homography_params.update(cfg['camera_params'])
-    homography_params.update({
+    yolo_params = {
         'pixel_noise_sigma': cfg['sensor_pixel_noise_sigma'],
         'seed': cfg['seed'],
-        'world_frame': 'map_bev',
-        'use_geometry_occlusion': cfg['perception_use_geometry_occlusion'],
-        'visibility_geometry_json': cfg['visibility_geometry_json'],
-        'visibility_target_height_m': cfg['visibility_target_height_m'],
-    })
-    if cfg['perception_backend'] == 'image_markers':
-        perception_node = Node(
-            package='perception',
-            executable='image_marker_detector_node',
-            name='image_marker_detector_node',
-            output='screen',
-            parameters=[homography_params],
-        )
-    elif cfg['perception_backend'] == 'yolo':
-        yolo_params = {
-            'pixel_noise_sigma': cfg['sensor_pixel_noise_sigma'],
-            'seed': cfg['seed'],
-            'model_path': cfg['yolo_model'],
-            'device': cfg['yolo_device'],
-            'image_size': cfg['yolo_imgsz'],
-            'confidence_threshold': cfg['yolo_conf_threshold'],
-            'iou_threshold': cfg['yolo_iou_threshold'],
-            'class_name': cfg['yolo_target_class'],
-            'class_id': cfg['yolo_class_id'],
-            'use_masks': cfg['yolo_use_masks'],
-            'mask_min_area': cfg['yolo_min_mask_area_px'],
-            'mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
-        }
-        perception_node = Node(
-            package='perception',
-            executable='yolo_robot_detector_node',
-            name='yolo_robot_detector_node',
-            output='screen',
-            parameters=[yolo_params],
-        )
-    else:
-        perception_node = Node(
-            package='perception',
-            executable='homography_sim_node',
-            name='homography_sim_node',
-            output='screen',
-            parameters=[homography_params],
-        )
+        'model_path': cfg['yolo_model'],
+        'device': cfg['yolo_device'],
+        'image_size': cfg['yolo_imgsz'],
+        'confidence_threshold': cfg['yolo_conf_threshold'],
+        'iou_threshold': cfg['yolo_iou_threshold'],
+        'class_name': cfg['yolo_target_class'],
+        'class_id': cfg['yolo_class_id'],
+        'use_masks': cfg['yolo_use_masks'],
+        'mask_min_area': cfg['yolo_min_mask_area_px'],
+        'mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
+    }
+    perception_node = Node(
+        package='perception',
+        executable='yolo_robot_detector_node',
+        name='yolo_robot_detector_node',
+        output='screen',
+        parameters=[yolo_params],
+    )
 
     pixel_params = {
         'use_sim_time': cfg['use_sim_time'],
@@ -768,7 +725,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'tf_static': tf_static,
         'wait_for_odom': wait_for_odom,
         'command_noise_node': command_noise_node,
-        'homography_sim': perception_node,
+        'perception_node': perception_node,
         'pixel_to_bev': pixel_to_bev,
         'mission_node': mission_node,
         'goal_marker_node': goal_marker_node,
@@ -781,7 +738,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     """Create runtime actions for the visibility-aware agent launch."""
     raw_use_nogo_cost = cfg.get('use_nogo_cost', 'auto')
     if isinstance(raw_use_nogo_cost, str) and raw_use_nogo_cost in ('', 'auto', 'default'):
-        resolved_use_nogo_cost = cfg['planner'] == 'mpc'
+        resolved_use_nogo_cost = False
     else:
         resolved_use_nogo_cost = _as_bool(raw_use_nogo_cost)
 
@@ -790,9 +747,9 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     shared_nodes = build_shared_nodes(cfg)
     planner = cfg['planner']
 
-    if planner not in ('efe1', 'efe2', 'efer', 'mpc', 'gp_risk_only', 'visibility_unaware_baseline'):
+    if planner not in ('efe1', 'efe2', 'efer', 'gp_risk_only', 'visibility_unaware_baseline'):
         raise RuntimeError(
-            "planner must be 'efe1', 'efe2', 'efer', 'mpc', 'gp_risk_only', or 'visibility_unaware_baseline' for agent launch"
+            "planner must be 'efe1', 'efe2', 'efer', 'gp_risk_only', or 'visibility_unaware_baseline' for agent launch"
         )
 
     planner_params = {
@@ -808,11 +765,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
         },
         'efer': {
             'approx_method': 'ET2',
-            'use_ambiguity': False,
-            'use_obs_risk': True,
-        },
-        'mpc': {
-            'approx_method': 'ET1',
             'use_ambiguity': False,
             'use_obs_risk': True,
         },
@@ -901,7 +853,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     )
 
     after_odom = [
-        shared_nodes['homography_sim'],
+        shared_nodes['perception_node'],
         shared_nodes['pixel_to_bev'],
         shared_nodes['mission_node'],
         shared_nodes['goal_marker_node'],

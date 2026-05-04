@@ -5,8 +5,8 @@ from launch_ros.substitutions import FindPackageShare
 
 
 DEFAULT_PLANNER = 'efe1'
-ALLOWED_PLANNERS = ('efe1', 'efe2', 'efer', 'mpc', 'visibility_unaware_baseline')
-PLANNER_DESCRIPTION = 'Planner: efe1 | efe2 | efer | mpc | visibility_unaware_baseline'
+ALLOWED_PLANNERS = ('efe1', 'efe2', 'efer', 'visibility_unaware_baseline')
+PLANNER_DESCRIPTION = 'Planner: efe1 | efe2 | efer | visibility_unaware_baseline'
 
 
 def _planner_precision_arguments():
@@ -84,7 +84,7 @@ def generate_launch_description():
         DeclareLaunchArgument('command_noise_linear_additive_std', default_value='0.008'),
         DeclareLaunchArgument('command_noise_angular_additive_std', default_value='0.035'),
         DeclareLaunchArgument('command_noise_correlation_alpha', default_value='0.85'),
-        DeclareLaunchArgument('perception_backend', default_value='image_markers', description='image_markers, yolo, or homography'),
+        DeclareLaunchArgument('perception_backend', default_value='yolo', description='Paper runtime perception backend: yolo'),
         DeclareLaunchArgument('sensor_pixel_noise_sigma', default_value='1.0'),
         DeclareLaunchArgument('yolo_model', default_value='', description='Local path to a trained YOLO .pt model'),
         DeclareLaunchArgument('yolo_device', default_value='', description='Ultralytics device string; empty lets Ultralytics choose'),

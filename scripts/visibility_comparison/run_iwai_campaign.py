@@ -75,8 +75,6 @@ def _terminate_process_group(pgid: int, *, grace_s: float = 3.0) -> None:
 
 
 _OWN_NODE_PATTERNS = [
-    'image_marker_detector_node',
-    'homography_sim_node',
     'yolo_robot_detector_node',
     'pixel_to_bev_state_node',
     'goal_mission_node',

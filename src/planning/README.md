@@ -61,12 +61,11 @@ This package answers the main research question: how does planning change when f
 
 - ET1-based `efe1` as the main thesis path
 - `visibility_unaware_baseline` under the same planner wrapper
-- retained `efe2`, `efer`, and `mpc`
 - planner-side loading of a fixed empirical visibility field
 
 ## Caveats
 
 - The baseline is not true dead reckoning.
 - `base_planner.py` is still monolithic.
-- ET1 is the primary claim path; `efe2`, `efer`, and `mpc` are retained but secondary.
+- ET1 is the primary claim path; broader planner variants are diagnostic, not paper conditions.
 - The GP artifact is setup-specific and changes observation modeling indirectly rather than encoding a full geometric theory.

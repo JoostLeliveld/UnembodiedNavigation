@@ -59,11 +59,11 @@ The audit was done on the current working tree, not a clean checkout. These loca
 
 | Finding | Why it matters for the paper | Evidence | Recommended action |
 | --- | --- | --- | --- |
-| Launch default still points at `image_markers` | The paper story is YOLO-first, so the first launch path tells the wrong story | `src/experiments/launch/warehouse_primary_comparison.launch.py` and `visibility_launch_common.py` still default to `image_markers` | Flip defaults to `yolo` and demote legacy backends behind explicit flags |
+| Launch default must remain YOLO-only | The paper story is YOLO-first, so the first launch path must not expose old detector runs | `src/experiments/launch/warehouse_primary_comparison.launch.py` and `visibility_launch_common.py` | Keep defaults and validation pinned to `yolo` |
 | `tasks.yaml` no longer matches the paper run snapshot | The paper methodology now names a concrete logged run, so config drift is dangerous | Current working tree goal differs from the representative `experiment_20260423_111758` snapshot | Decide whether `tasks.yaml` should match the paper benchmark exactly or be treated as a newer benchmark revision |
 | World profile defaults still point at packaged legacy GP artifacts | The paper now treats `logs/visibility_comparison/current_gp` as canonical | `world_profiles.yaml` still defaults to packaged `src/experiments/data/visibility_gp/*.npz` and older hyperparameters | Replace defaults with one canonical artifact story and archive the old packaged defaults |
 | The repo has three competing artifact locations | It is hard to tell what is "source of truth" for models and GP artifacts | `src/experiments/data/**`, `logs/**`, and root `.pt` checkpoints all coexist | Choose one canonical artifact location per artifact type and archive or externalize the rest |
-| Planner and launch surfaces are broader than the current claim | `efe2`, `efer`, `mpc`, `image_markers`, and standalone `homography` all inflate the code story | Runtime surface still exposes them even though the paper focuses on `efe1` vs baseline | Keep them only if you still need them for active experiments; otherwise archive or remove from the active path |
+| Planner and launch surfaces should stay narrow | Extra detector/controller run modes inflate the code story | Runtime surface should focus on `efe1` vs baseline | Keep diagnostics out of the primary launch path |
 | Docs still describe older math and older surfaces | This makes the repo look less controlled than the implementation actually is | `docs/planner_method.md`, `src/planning/README.md`, `README.md`, and optional script READMEs all drift | Tighten docs around the exact paper path and archive broader notes |
 | `docs/figures` is currently half-present in git history and half-removed locally | This creates broken docs and extra ambiguity about what is maintained | `docs/README.md` still references deleted figure assets | Either restore and keep them consistently, or remove all references and treat them as external outputs |
 
@@ -88,11 +88,11 @@ These are the noisiest areas relative to the current thesis scope.
 | --- | --- | --- | --- | --- |
 | 157-178 | `_state_estimator_metadata()` | paper-core | Encodes the thesis state-estimation story shown in logs and manifests | Keep, but make it the single place where the state story is declared |
 | 181-363 | `parse_common_launch_config()` | keep but simplify | Central launch config parser, but it carries too many knobs for the current paper | Split paper-default args from optional research args |
-| 189-201 within parser | `perception_backend` default path | docs mismatch | Current thesis is YOLO-first, but active defaults still tell a legacy story | Change default to `yolo` |
+| 189-201 within parser | `perception_backend` default path | paper-core | Current thesis is YOLO-first | Keep default and validation pinned to `yolo` |
 | 494-767 | `build_shared_nodes()` | keep but simplify | This is the real runtime assembly point for the paper pipeline | Break into smaller builders by concern: perception, state, planner, logging |
-| 553-589 | `image_markers` / `yolo` / `homography` branch | legacy compatibility | `yolo` is current, `image_markers` and standalone `homography` are retained legacy modes | Move legacy modes behind explicit legacy launch wrappers |
+| 553-589 | detector node construction | paper-core | `yolo` is the active detector path | Keep this branchless in the paper launch path |
 | 770-919 | `build_agent_runtime_actions()` | keep but simplify | Core launch logic for the planner comparison | Narrow the active comparison surface |
-| 783-804 | planner whitelist and planner params | docs mismatch | Current paper compares `efe1` vs `visibility_unaware_baseline`, but launch still centers a broader family | Collapse defaults to the paper pair and demote `efe2/efer/mpc` |
+| 783-804 | planner whitelist and planner params | paper-core but simplify | Current paper compares `efe1` vs `visibility_unaware_baseline` | Keep non-paper variants out of the primary launch |
 
 ### `src/experiments/experiments/nodes/experiment_logger.py`
 
@@ -179,7 +179,7 @@ These are the noisiest areas relative to the current thesis scope.
 - Whether packaged model artifacts under `src/experiments/data/perception_models/**` should remain versioned in-repo
 - Whether `src/experiments/data/visibility_gp/**` should remain as a packaged fallback after switching defaults
 - Whether `docs/figures/**` should be restored and maintained or fully removed from docs
-- Whether `efe2`, `efer`, `mpc`, `image_markers`, and standalone `homography` still deserve first-class support
+- Whether broader diagnostic planner variants still deserve first-class support
 
 ### Remove last after replacement
 

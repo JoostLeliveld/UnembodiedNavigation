@@ -66,8 +66,8 @@ These are useful, but should not be mixed into the paper-core path.
 
 | Area | Examples | Cleanup direction |
 | --- | --- | --- |
-| Old perception backends | `image_markers`, standalone `homography` modes | Move behind explicit legacy launch or remove from paper launch defaults. |
-| Retained planner modes | `efe2`, `efer`, `mpc`, older sweep profiles | Keep only in diagnostic launch/scripts, not primary paper launch. |
+| Old perception/controller runs | older detector backends and old controller baselines | Do not expose as paper launch conditions. |
+| Retained planner variants | broader EFE variants and older sweep profiles | Keep only in diagnostic launch/scripts, not primary paper launch. |
 | Rollout probes | `probe_rollout_families.py`, diagnostic videos | Keep as `scripts/diagnostics/`, not as runtime method. |
 | Parameter sweeps | `run_efe_precision_sweep.py`, broad planner sweeps | Archive or move under `scripts/diagnostics/old_sweeps/`. |
 | Historical docs/artifacts | `archive/`, old packaged GP/model artifacts | Keep only if explicitly referenced for provenance. |
@@ -90,7 +90,7 @@ The paper path should fail early when assumptions are violated. Warning and fall
 
 ### Runtime Hard Fails
 
-1. If the camera model or homography cannot be initialized, the run should fail.
+1. If the camera model or projection model cannot be initialized, the run should fail.
 2. If world bounds or obstacle geometry cannot be loaded, the run should fail.
 3. If a YOLO frame is required but the detector cannot load the model, the run should fail.
 4. If diagnostics schema fields are missing, logger parsing should fail instead of silently writing NaNs for paper-critical metrics.
@@ -328,7 +328,7 @@ These are larger and should happen after the paper path is guarded.
 
 1. Move broad comparison and sweep scripts into diagnostics or archive.
 2. Move GP capture/target/fit scripts into a clean observability pipeline folder.
-3. Remove paper-runtime exposure of `image_markers`, `homography`, `efe2`, `efer`, and old `mpc` unless they are part of the final experiment matrix.
+3. Remove paper-runtime exposure of old detector/controller runs unless they are part of the final experiment matrix.
 4. Replace numeric diagnostics parsing in the logger with a named schema helper.
 5. Refactor `experiment_logger.py` into smaller blocks: manifest setup, perception logging, planner logging, safety metrics, summary writing.
 6. Refactor `unicycle_planner_node.py` into clearer blocks: belief update, odom yaw anchoring, pixel correction, planning, publishing.
@@ -364,7 +364,7 @@ At no point should they have to know:
 
 ```text
 - which old GP artifact was current
-- whether image_markers or YOLO was used
+- whether the paper run used the required YOLO perception path
 - whether a plotted trajectory was schematic
 - whether timeout was counted as success
 - whether visibility was a reward or a covariance change
