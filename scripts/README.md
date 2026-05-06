@@ -16,12 +16,10 @@ The active visibility-comparison backbone now lives under:
 
 - [`visibility_comparison/capture_visibility_samples.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/capture_visibility_samples.py)
 - [`visibility_comparison/extract_perception_targets.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/extract_perception_targets.py)
-- [`visibility_comparison/compute_area_reference.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/compute_area_reference.py)
 - [`visibility_comparison/build_gp_targets.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/build_gp_targets.py)
 - [`visibility_comparison/fit_visibility_gps.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/fit_visibility_gps.py)
-- [`visibility_comparison/plot_yolo_calibration.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/plot_yolo_calibration.py)
 - [`visibility_comparison/plot_gp_and_ambiguity_maps.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py)
+- [`visibility_comparison/plot_gp_signal_figure.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/plot_gp_signal_figure.py)
 - [`visibility_comparison/plot_planned_paths.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/plot_planned_paths.py)
-- [`visibility_comparison/make_visibility_comparison_report.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/make_visibility_comparison_report.py)
 
 Everything else in this folder should be treated as secondary or legacy unless a specific experiment still depends on it.

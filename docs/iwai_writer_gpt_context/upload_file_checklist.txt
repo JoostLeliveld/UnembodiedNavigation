@@ -16,8 +16,7 @@ Add these if Claude is drafting the whole paper:
 - `UnembodiedNavigation/docs/iwai_writer_gpt_context/experiment_blueprint.txt`
 - `UnembodiedNavigation/docs/iwai_writer_gpt_context/claims_and_caveats.txt`
 - `thesis-report/sections/01_introduction.tex`
-- `thesis-report/sections/02_related_work.tex`
-- `thesis-report/sections/03_problem_formulation.tex`
+- `thesis-report/sections/03_problem_statement.tex`
 - `thesis-report/sections/07_results.tex`
 - `thesis-report/sections/08_discussion.tex`
 - `thesis-report/sections/09_conclusion.tex`
@@ -48,4 +47,4 @@ Avoid by default:
 - raw datasets unless discussing YOLO training or GP fitting in detail.
 
 Suggested first Claude prompt:
-"Use the uploaded handoff context and thesis sections to critique the proposed experiment protocol. Focus on necessary baselines, primary metrics, validity rules for stuck/interrupted runs, and the minimum figure/table set for an IWAI short paper. Do not invent results and do not assume runtime multistart seeding exists."
+"Use the uploaded handoff context and thesis sections to critique the proposed experiment protocol. Focus on necessary baselines, primary metrics, validity rules for stuck/interrupted runs, and the minimum figure/table set for an IWAI paper. Do not invent results and do not assume runtime multistart seeding exists."

@@ -78,14 +78,13 @@ Section 5, "Learned External-Camera Observability":
 Section 6, "Experimental Setup":
 - Current benchmark in text:
   world `warehouse_occ_light.world.sdf`;
-  task `main_shadow_tradeoff`;
-  start \((-2.0,1.0,0.0)\);
-  goal \((2.0,-1.0)\).
+  task `shadow_tradeoff_a`;
+  start \((-2.0,0.5,0.0)\);
+  goal \((2.0,1.5)\).
 - Runtime detector: YOLO segmentation, image size 640, confidence threshold 0.10, IoU 0.45.
 - State estimator: camera-derived \(x,y\), odometry-derived heading.
 - Main comparison should focus on observation covariance model:
   constant \(R_0\) baseline versus learned state-dependent \(R_{\mathrm{eff}}\).
-- Known text cleanup item: the current Section 6 table still mentions a "Seeded diagnostic" condition, but the current cleaned paper code removed runtime multistart route-family seeding. Unless we deliberately reintroduce this as an offline diagnostic, remove it from the main experiment table.
 
 Current code status after cleanup
 ---------------------------------
@@ -110,12 +109,13 @@ Important current implementation caveats
 - The GP is 2D and heading-marginal.
 - The estimator is hybrid: visual position, odometry yaw.
 - Solve time and callback timing/pixel age may affect runtime behavior.
-- Stuck near the goal has appeared in previous successful-looking runs; treat this as a termination-logic issue, not automatic failure or success.
+- Older runs sometimes logged `stuck` after entering the goal region; treat those as legacy near-success case studies.
+- Current logging records goal-region entry separately and terminates stable/idle goal behavior as goal-reaching.
 - Safety barriers and covariance clipping are engineering guards and should be disclosed.
 
 Representative previous case-study evidence
 -------------------------------------------
-Use these only as preliminary case-study evidence, not final statistical validation.
+Use these only as preliminary legacy case-study evidence, not final statistical validation for `shadow_tradeoff_a`.
 For implementation-level grounding, also upload `codebase_map_for_claude.txt`.
 
 Run: `logs/experiments/experiment_20260422_180449`
@@ -136,6 +136,7 @@ Run: `logs/experiments/experiment_20260423_111758`
 - no wall/obstacle penetration.
 
 These older runs may not exactly match the cleaned code interface. Treat them as motivation/diagnostics unless rerun under the final experiment protocol.
+They also use legacy task geometry and should not be reported as final benchmark results.
 
 Main experiment question to brainstorm
 --------------------------------------

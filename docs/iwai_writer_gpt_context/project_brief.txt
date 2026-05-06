@@ -29,9 +29,9 @@ Current runtime signal path:
 
 Current benchmark text:
 - World: `warehouse_occ_light.world.sdf`
-- Task: `main_shadow_tradeoff`
-- Start: `(-2.0, 1.0, 0.0)`
-- Goal: `(2.0, -1.0)`
+- Task: `shadow_tradeoff_a`
+- Start: `(-2.0, 0.5, 0.0)`
+- Goal: `(2.0, 1.5)`
 - Perception backend: YOLO segmentation
 - Visibility artifact: `logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz`
 
@@ -44,7 +44,7 @@ Current code semantics after cleanup:
 - paper figure generation requires real run traces and refuses schematic fallback.
 
 Representative previous case-study evidence:
-Use as preliminary motivation only, not final validation.
+Use as preliminary legacy motivation only, not final validation for `shadow_tradeoff_a`.
 
 `logs/experiments/experiment_20260422_180449`
 - valid_run: true
@@ -73,5 +73,8 @@ Known caveats:
 - Gazebo dynamics are unrealistically accurate unless an explicit actuation-noise node is added.
 - Planner \(Q\) inflates belief only; it does not physically disturb the robot.
 - Solve time and pixel-correction age can affect runtime behavior.
-- `stuck` near the goal should be reported separately until stopping logic is cleaned.
-- Section 6 currently still mentions a "Seeded diagnostic" condition; this should be removed or reframed as offline rollout analysis because runtime multistart seeding was removed from paper code.
+- Current logger separates goal-region entry from completion reason. Stable or idle
+  behavior inside the goal region terminates as goal-reaching; `stuck` is reserved
+  for lack of displacement and lack of goal progress outside the goal region.
+- Older logs that ended as near-goal `stuck` remain legacy case-study evidence only.
+- Older `main_shadow_tradeoff` runs use legacy geometry and should not be treated as final benchmark evidence.

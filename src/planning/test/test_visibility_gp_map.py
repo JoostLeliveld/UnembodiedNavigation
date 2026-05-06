@@ -80,11 +80,13 @@ def test_prob_state_np_matches_grid_values_at_corners_and_centers(tmp_path: Path
             assert model.prob_state_np(np.array([x, y, 0.0], dtype=float)) == pytest.approx(float(p_map[iy, ix]))
 
 
-def test_prob_state_np_clips_to_grid_boundary(tmp_path: Path) -> None:
+def test_prob_state_np_rejects_queries_outside_grid_boundary(tmp_path: Path) -> None:
     xs = np.array([0.0, 1.0], dtype=float)
     ys = np.array([0.0, 1.0], dtype=float)
     p_map = np.array([[0.2, 0.4], [0.6, 0.8]], dtype=float)
     model = GPVisibilityMapModel(GPVisibilityMapConfig(artifact_path=str(_write_artifact(tmp_path, xs, ys, p_map))))
 
-    assert model.prob_state_np(np.array([-5.0, -5.0, 0.0], dtype=float)) == pytest.approx(0.2)
-    assert model.prob_state_np(np.array([5.0, 5.0, 0.0], dtype=float)) == pytest.approx(0.8)
+    with pytest.raises(RuntimeError, match='outside artifact support'):
+        model.prob_state_np(np.array([-5.0, -5.0, 0.0], dtype=float))
+    with pytest.raises(RuntimeError, match='outside artifact support'):
+        model.prob_state_np(np.array([5.0, 5.0, 0.0], dtype=float))

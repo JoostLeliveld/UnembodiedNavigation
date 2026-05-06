@@ -112,6 +112,65 @@ def _save_run_log(log_path: Path, log: dict) -> None:
     log_path.write_text(json.dumps(log, indent=2, default=str), encoding='utf-8')
 
 
+def _resolve_for_compare(path_str: str) -> Path:
+    return Path(path_str).expanduser().resolve(strict=False)
+
+
+def _float_close(a, b, *, tol: float = 1e-8) -> bool:
+    try:
+        fa = float(a)
+        fb = float(b)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(fa) and math.isfinite(fb) and abs(fa - fb) <= tol
+
+
+def _load_run_manifest(run_dir: Path) -> dict:
+    p = run_dir / 'run_manifest.json'
+    if not p.is_file():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
+    condition_id = str(entry.get('condition', ''))
+    run_dir_str = str(entry.get('run_dir', '') or '')
+    if not run_dir_str:
+        return False, 'missing run_dir'
+    manifest = _load_run_manifest(Path(run_dir_str))
+    if not manifest:
+        return False, f'missing run_manifest.json in {run_dir_str}'
+
+    expected_yolo_model = str(Path(cfg['yolo_model']).expanduser().resolve(strict=False))
+    actual_yolo_model = str(manifest.get('yolo_model', '') or '')
+    if _resolve_for_compare(actual_yolo_model) != _resolve_for_compare(expected_yolo_model):
+        return False, f'yolo_model mismatch: run used {actual_yolo_model or "<missing>"}, config expects {expected_yolo_model}'
+
+    numeric_keys = (
+        'horizon', 'dt', 'goal_success_radius', 'goal_success_hold_s',
+        'run_timeout_after_first_cmd_s', 'r_visible_uv', 'r_miss_uv',
+        'process_noise_xy', 'process_noise_theta', 'risk_weight_obs',
+        'ambiguity_weight', 'observation_risk_scale', 'ambiguity_term_scale',
+        'control_weight', 'discount_gamma', 'yolo_conf_threshold',
+    )
+    for key in numeric_keys:
+        if key in cfg and (key not in manifest or not _float_close(manifest.get(key), cfg[key])):
+            return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")}, config expects {cfg[key]}'
+
+    if CONDITION_PLANNER.get(condition_id) != 'constant_R_efe':
+        actual = str(manifest.get('visibility_artifact_path', '') or '')
+        expected = str(Path(cfg['gp_artifact']).expanduser().resolve(strict=False))
+        if _resolve_for_compare(actual) != _resolve_for_compare(expected):
+            return (
+                False,
+                f'visibility_artifact_path mismatch: run used {actual or "<missing>"}, config expects {expected}',
+            )
+    return True, ''
+
+
 def _build_run_matrix(cfg: dict) -> list[tuple[str, str, int]]:
     """Return list of (task_name, condition_id, seed) in deterministic order."""
     runs = []
@@ -171,7 +230,9 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
     if planner != 'constant_R_efe':
         cmd.append(f'visibility_artifact_path:={gp_artifact}')
 
-    for key in ('observation_risk_scale', 'ambiguity_term_scale'):
+    for key in ('observation_risk_scale', 'ambiguity_term_scale',
+                'risk_weight_obs', 'ambiguity_weight',
+                'belief_publish_rate'):
         if key in cfg and not str(cfg[key]).startswith('[FILL'):
             cmd.append(f'{key}:={cfg[key]}')
 
@@ -202,7 +263,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description='Run the full IWAI 36-run campaign.')
     parser.add_argument('--config', default='iwai_campaign_config.yaml',
                         help='Path to the locked campaign config YAML.')
-    parser.add_argument('--log-root', default=str(LOGS_ROOT / 'iwai_campaign'),
+    parser.add_argument('--log-root', default=str(LOGS_ROOT / 'iwai_campaign_rawgp_v1'),
                         help='Root directory for all run logs.')
     parser.add_argument('--dry-run', action='store_true',
                         help='Print what would be run without executing.')
@@ -245,6 +306,12 @@ def main() -> int:
         label = f'[{run_idx + 1}/{len(run_matrix)}] task={task_name} condition={condition_id} seed={seed}'
 
         if args.resume and key in campaign_log and campaign_log[key].get('outcome') not in (None, 'infra_invalid'):
+            matches, reason = _existing_entry_matches_config(campaign_log[key], cfg)
+            if not matches:
+                raise RuntimeError(
+                    f'Cannot resume campaign with stale run entry for {label}: {reason}. '
+                    'Start a fresh log root or rerun the campaign without --resume.'
+                )
             print(f'  SKIP (already done): {label}')
             continue
 

@@ -38,9 +38,9 @@ tasks:
 perception_backend: yolo
 # Path to the trained YOLO model used during the GP capture.
 # Must match the model used to fit the GP artifact.
-yolo_model: "/home/joostleliveld/Thesis/UnembodiedNavigation/yolo11n-seg.pt"
+yolo_model: "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/yolo_simseg_smoke/model.pt"
 yolo_imgsz: 640
-yolo_conf_threshold: 0.25
+yolo_conf_threshold: 0.10           # aligned with the GP capture threshold
 yolo_iou_threshold: 0.45
 yolo_target_class: robot
 yolo_class_id: -1
@@ -49,15 +49,16 @@ yolo_min_mask_area_px: 12.0
 yolo_mask_bottom_band_px: 3.0
 
 # --- GP artifact ---
-# Path to the fitted visibility GP .npz artifact (yolo_score_calibrated or yolo_score_raw).
+# Path to the fitted raw-YOLO-score GP .npz artifact.
 # Used by C2 and C3; C1 ignores it.
-gp_artifact: "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/current_gp/oracle_visibility_gp.npz"
+gp_artifact: "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz"
 
 # --- Planner / EFE hyperparameters ---
 # These are the locked values from Section 0c of the pre-registration.
 horizon: 40
 dt: 0.25
 discount_gamma: 0.98
+belief_publish_rate: 10.0           # high-rate planner-belief publication for diagnostic logging
 process_noise_xy: 0.01
 process_noise_theta: 0.02
 
@@ -67,6 +68,8 @@ process_noise_theta: 0.02
 # lambda_amb  = 3.0   →  ambiguity_weight (3.0) × ambiguity_term_scale (1.0)  = 3.0
 # lambda_ctrl = 0.0   →  control_weight = 0.0
 # These are the empirically validated values from pre-campaign runs; use these in the paper lambda table.
+risk_weight_obs: 1.0
+ambiguity_weight: 3.0
 observation_risk_scale: 1.25
 ambiguity_term_scale: 1.0
 control_weight: 0.0

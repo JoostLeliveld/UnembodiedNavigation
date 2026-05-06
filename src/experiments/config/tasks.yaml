@@ -2,36 +2,65 @@ tasks:
   warehouse_occ_light.world.sdf:
 
     # Task A — primary shadow-tradeoff task.
-    # Both start and goal are at y=0.5, just above the shelf top.
-    # Direct path traverses the shadow region (x in [0,2], y~0.5).
-    # Visible detour drops to y~-0.8, passes below the shelf, climbs back (~2.5 m extra).
-    # VERIFY before running (Section 0a): rho_plan(-2,0.5)>0.6, rho_plan(2,0.5)>0.6,
-    # rho_plan(0.5,0.7)<0.35, and robot clearance at y=-0.8.
+    # Start visible (y=0.5, west of shelf). Goal at y=-0.5, east/south of shelf.
+    # Direct path crosses the reduced camera-update region near the shelf.
+    # Visible detour drops farther below the shelf before returning to the goal.
+    # VERIFY before running: rho_plan(-2,0.5), rho_plan(2,-0.5), shadow on direct path,
+    # and robot clearance along the lower detour.
     - name: shadow_tradeoff_a
       description: >
-        Primary shadow-tradeoff task. Start and goal both at y=0.5 above the shelf top.
-        The direct straight path crosses the camera shadow; the safe detour passes below
-        the shelf at y~-0.8, adding ~2.5 m of path length.
+        Primary shadow-tradeoff task. Start at y=0.5 (west of shelf).
+        Goal at y=-0.5 (south of shelf, moderate visibility).
+        The direct path crosses the camera shadow zone.
       tier: benchmark
       claim: shadow_tradeoff
       focus: visibility_tradeoff
       start: {x: -2.0, y: 0.5, z: 0.05, yaw: 0.0}
-      goal:  {x: 2.0, y: 1.5}
+      goal:  {x: 2.0, y: -0.5}
+
+    # Task A-left — exploratory start farther west.
+    # This keeps the same shelf/goal geometry as Task A, but gives the planner
+    # more approach distance before the shadow. The lower visible route is less
+    # path-length-expensive relative to the direct route from this start.
+    - name: shadow_tradeoff_a_leftstart
+      description: >
+        Exploratory Task A variant. Start at x=-2.5, y=0.5, with the same
+        goal as Task A. Used to test whether extra approach distance helps the
+        visibility-aware objective commit to the lower visible route.
+      tier: exploratory
+      claim: shadow_tradeoff
+      focus: visibility_tradeoff_start_sensitivity
+      start: {x: -2.5, y: 0.5, z: 0.05, yaw: 0.0}
+      goal:  {x: 2.0, y: -0.5}
+
+    # Task A-close-goal — same world / same GP, but the goal sits closer to the
+    # shelf so the robot has less post-shadow distance to recover after a direct
+    # blind crossing. This keeps the environment fixed while strengthening the
+    # consequence of stale updates.
+    - name: shadow_tradeoff_a_goalclose
+      description: >
+        Exploratory Task A variant with the goal moved closer to the shelf on
+        the east side. Intended to preserve the same world and visibility field
+        while making a shadow-cutting route less forgiving.
+      tier: exploratory
+      claim: shadow_tradeoff
+      focus: visibility_tradeoff_goal_sensitivity
+      start: {x: -2.0, y: 0.5, z: 0.05, yaw: 0.0}
+      goal:  {x: 1.7, y: -0.25}
 
     # Task B — rotated shadow-tradeoff task.
-    # Direct path is a diagonal from lower-left to upper-right crossing the shadow.
-    # Tests GP-EFE response from a different approach angle than Task A.
-    # VERIFY before running: rho_plan(2,0.5)>0.6, rho_plan(0.5,0.3)<0.35.
+    # Start at y=-1.0 and goal at y=-0.5. Tests the same shelf region from a
+    # different approach angle.
+    # VERIFY before running: rho_plan(-2,-1.0), rho_plan(2,-0.5), shadow on direct path.
     - name: shadow_tradeoff_b
       description: >
-        Rotated shadow-tradeoff task. Start at lower-left, goal at upper-right.
-        The direct diagonal crosses the shadow around x in [0,1.5], y in [0,0.5].
-        The safe detour stays below y=-0.5 and approaches the goal from below.
+        Rotated shadow-tradeoff task. Start south of shelf at y=-1.0.
+        Goal at y=-0.5. The direct diagonal crosses the shadow zone.
       tier: benchmark
       claim: shadow_tradeoff
       focus: visibility_tradeoff
       start: {x: -2.0, y: -1.0, z: 0.05, yaw: 0.7854}
-      goal:  {x: 2.0, y: 1.5}
+      goal:  {x: 2.0, y: -0.5}
 
     # Task S — sanity check (no shadow involvement).
     # Entire path stays below the shelf in high-rho_plan territory.
@@ -61,3 +90,32 @@ tasks:
       focus: legacy
       start: {x: -2.0, y: 1.0, z: 0.05, yaw: 0.0}
       goal:  {x: 2.0, y: -1.0}
+
+  warehouse_occ_longshadow.world.sdf:
+
+    # Long-shadow Task A — proposed follow-up benchmark to make C2 more useful.
+    # The extra upper obstacle keeps the short northern crossover blind for longer
+    # and narrows its clearance. The lower route stays open but moderately longer.
+    - name: shadow_tradeoff_a_longshadow
+      description: >
+        Task A variant in the long-shadow world. Same start/goal family as the
+        main benchmark, but an added upper-route obstacle extends the reduced-
+        visibility shortcut and makes stale-update drift more consequential.
+      tier: exploratory
+      claim: shadow_tradeoff
+      focus: visibility_tradeoff_robustness
+      start: {x: -2.0, y: 0.5, z: 0.05, yaw: 0.0}
+      goal:  {x: 2.0, y: -0.5}
+
+    # Slightly farther goal to increase the payoff of committing to the lower
+    # visible corridor instead of trying to squeeze through the blind shortcut.
+    - name: shadow_tradeoff_a_longshadow_far
+      description: >
+        Long-shadow Task A variant with a slightly farther goal. Intended to
+        stretch the post-shadow segment so a poor blind-route commitment has
+        longer to hurt before the robot can recover.
+      tier: exploratory
+      claim: shadow_tradeoff
+      focus: visibility_tradeoff_robustness
+      start: {x: -2.0, y: 0.5, z: 0.05, yaw: 0.0}
+      goal:  {x: 2.35, y: -0.45}

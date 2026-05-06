@@ -99,15 +99,30 @@ class GPVisibilityMapModel:
             (self.ys, self.xs), 
             self.P_conservative_plan_map, 
             method='linear', 
-            bounds_error=False,
+            bounds_error=True,
             fill_value=None,
         )
 
-    def _clip_xy_np(self, x: float, y: float) -> tuple[float, float]:
-        return (
-            float(np.clip(x, self.x_min, self.x_max)),
-            float(np.clip(y, self.y_min, self.y_max)),
+    def contains_xy_np(self, x: float, y: float) -> bool:
+        if not (np.isfinite(x) and np.isfinite(y)):
+            return False
+        eps = 1e-9
+        return bool(
+            self.x_min - eps <= float(x) <= self.x_max + eps
+            and self.y_min - eps <= float(y) <= self.y_max + eps
         )
+
+    def _require_xy_in_support_np(self, x: float, y: float) -> tuple[float, float]:
+        x = float(x)
+        y = float(y)
+        if not self.contains_xy_np(x, y):
+            raise RuntimeError(
+                "GP visibility query outside artifact support: "
+                f"x={x:.3f}, y={y:.3f}, "
+                f"support=[{self.x_min:.3f},{self.x_max:.3f}]x"
+                f"[{self.y_min:.3f},{self.y_max:.3f}]."
+            )
+        return x, y
 
     @property
     def signature(self) -> tuple:
@@ -130,7 +145,7 @@ class GPVisibilityMapModel:
     def prob_state_np(self, m) -> float:
         if len(m) < 2:
             raise ValueError(f"State vector m must have length >= 2, got {len(m)}")
-        x, y = self._clip_xy_np(float(m[0]), float(m[1]))
+        x, y = self._require_xy_in_support_np(float(m[0]), float(m[1]))
         p = self._prob_interp((y, x))
         return float(_clip_prob(p, self.min_prob))
 

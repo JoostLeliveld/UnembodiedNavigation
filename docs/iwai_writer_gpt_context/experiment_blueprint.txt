@@ -9,9 +9,9 @@ Does learned state-dependent external-camera observation covariance improve rout
 
 Fixed scenario:
 - World: `warehouse_occ_light.world.sdf`
-- Task: `main_shadow_tradeoff`
-- Start: `(-2.0, 1.0, 0.0)`
-- Goal: `(2.0, -1.0)`
+- Task: `shadow_tradeoff_a`
+- Start: `(-2.0, 0.5, 0.0)`
+- Goal: `(2.0, 1.5)`
 - Runtime detector: YOLO segmentation model `logs/perception_models/yolo_simseg_smoke/model.pt`
 - Learned artifact: `logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz`
 - Same state estimator, safety geometry, stopping logic, optimizer limits, and seed set across conditions.
@@ -93,11 +93,14 @@ Appendix or supplementary plots:
 Validity rules:
 - Any collision or wall/obstacle penetration invalidates success claims.
 - Interrupted runs are not completed successes.
-- `stuck` near the goal is reported separately until stopping logic is improved.
-- Near-goal stuck runs can be qualitative case studies, not clean aggregate successes.
+- Current runs record goal-region entry separately from completion reason.
+- Stable or idle behavior inside the goal region terminates as goal-reaching.
+- `stuck` denotes lack of displacement and lack of goal progress outside the goal region.
+- Older near-goal `stuck` logs remain qualitative legacy case studies, not clean aggregate successes.
 
 Decision criteria:
 - Learned GP EFE is better only if it improves valid completion, min/final goal distance, or belief quality without increasing collision/penetration.
 - If constant and learned conditions choose similar routes, inspect whether the GP creates enough contrast in \(R_{\mathrm{eff}}\).
 - If learned observability only helps after adding a direct visibility penalty, report that as engineering, not the main active-inference claim.
 - If actuation noise is added, use the same noisy command wrapper for all conditions.
+- Older `main_shadow_tradeoff` runs are preliminary legacy case studies, not final campaign results.

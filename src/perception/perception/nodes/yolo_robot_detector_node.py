@@ -123,8 +123,8 @@ class YoloRobotDetectorNode(Node):
         selected_score = float(selection.get('selected_score', raw_score) or raw_score)
         mask_area = float(selection.get('mask_area', math.nan))
         mask_available = int(selection.get('mask_available', 0) or 0)
-        mask_bottom_u = selected_u if mask_available else math.nan
-        mask_bottom_v = selected_v if mask_available else math.nan
+        mask_bottom_u = float(selection.get('mask_bottom_u', math.nan)) if mask_available else math.nan
+        mask_bottom_v = float(selection.get('mask_bottom_v', math.nan)) if mask_available else math.nan
         mask_points = float(
             selection.get('detection', {}).get('polygon').shape[0]
         ) if mask_available and selection.get('detection', {}).get('polygon') is not None else math.nan

@@ -49,6 +49,32 @@ class _Result:
         self.masks = None
 
 
+class _Masks:
+    def __init__(self, polygons):
+        self.xy = polygons
+
+
+class _MaskedResult:
+    def __init__(self):
+        self.boxes = _Boxes(
+            cls=[0],
+            conf=[0.70],
+            xyxy=[[10.0, 20.0, 30.0, 60.0]],
+        )
+        self.masks = _Masks([
+            np.array(
+                [
+                    [12.0, 22.0],
+                    [28.0, 22.0],
+                    [28.0, 58.0],
+                    [18.0, 60.0],
+                    [12.0, 58.0],
+                ],
+                dtype=float,
+            )
+        ])
+
+
 def test_select_best_detection_preserves_subthreshold_raw_score() -> None:
     selected = select_best_detection(
         _Result(),
@@ -65,3 +91,26 @@ def test_select_best_detection_preserves_subthreshold_raw_score() -> None:
     assert selected['selected_score'] == 0.18
     assert selected['best_class_id'] == 0
     assert selected['selected_pixel_source'] == 'bbox_bottom'
+    assert selected['selected_u'] == 20.0
+    assert selected['selected_v'] == 60.0
+
+
+def test_select_best_detection_keeps_bbox_bottom_as_state_point_when_mask_exists() -> None:
+    selected = select_best_detection(
+        _MaskedResult(),
+        confidence_threshold=0.25,
+        target_ids={0},
+        use_masks=True,
+        mask_min_area=0.0,
+        mask_bottom_band_px=3,
+    )
+
+    assert selected['detected'] is True
+    assert selected['mask_available'] == 1
+    assert selected['selected_pixel_source'] == 'bbox_bottom'
+    assert selected['selected_u'] == 20.0
+    assert selected['selected_v'] == 60.0
+    assert selected['bbox_bottom_u'] == 20.0
+    assert selected['bbox_bottom_v'] == 60.0
+    assert np.isclose(selected['mask_bottom_u'], 58.0 / 3.0)
+    assert selected['mask_bottom_v'] == 60.0

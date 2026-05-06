@@ -93,6 +93,14 @@ def select_best_detection(
             'class_id': math.nan,
             'bbox_xyxy': None,
             'mask_area': math.nan,
+            'mask_bottom_u': math.nan,
+            'mask_bottom_v': math.nan,
+            'mask_centroid_u': math.nan,
+            'mask_centroid_v': math.nan,
+            'bbox_bottom_u': math.nan,
+            'bbox_bottom_v': math.nan,
+            'bbox_center_u': math.nan,
+            'bbox_center_v': math.nan,
             'selected_u': math.nan,
             'selected_v': math.nan,
             'selected_pixel_source': 'none',
@@ -109,16 +117,29 @@ def select_best_detection(
     polygon = detection['polygon']
     mask_area = math.nan
     mask_available = 0
+    bbox_center_u = float(0.5 * (x0 + x1))
+    bbox_center_v = float(0.5 * (y0 + y1))
+    bbox_bottom_u = bbox_center_u
+    bbox_bottom_v = float(y1)
+    mask_bottom_u = math.nan
+    mask_bottom_v = math.nan
+    mask_centroid_u = math.nan
+    mask_centroid_v = math.nan
+
+    # The state estimator inverts the selected pixel through a ground-plane
+    # homography. Empirically, the bbox bottom-center is the most stable proxy
+    # for the robot's ground-plane pose in the current external-camera setup.
     selected_source = 'bbox_bottom'
-    selected_u = float(0.5 * (x0 + x1))
-    selected_v = float(y1)
+    selected_u = bbox_bottom_u
+    selected_v = bbox_bottom_v
     if use_masks and polygon is not None:
         area = polygon_area(polygon)
         if math.isfinite(area) and area >= float(mask_min_area):
             mask_area = float(area)
             mask_available = 1
-            selected_u, selected_v = mask_bottom(polygon, mask_bottom_band_px)
-            selected_source = 'mask_bottom'
+            mask_centroid_u = float(np.mean(polygon[:, 0]))
+            mask_centroid_v = float(np.mean(polygon[:, 1]))
+            mask_bottom_u, mask_bottom_v = mask_bottom(polygon, float(mask_bottom_band_px))
     raw_best_score = float(detection['confidence'])
     detected_after_threshold = bool(raw_best_score >= float(confidence_threshold))
 
@@ -132,6 +153,14 @@ def select_best_detection(
         'class_id': int(detection['class_id']),
         'bbox_xyxy': bbox,
         'mask_area': float(mask_area) if math.isfinite(mask_area) else math.nan,
+        'mask_bottom_u': float(mask_bottom_u) if math.isfinite(mask_bottom_u) else math.nan,
+        'mask_bottom_v': float(mask_bottom_v) if math.isfinite(mask_bottom_v) else math.nan,
+        'mask_centroid_u': float(mask_centroid_u) if math.isfinite(mask_centroid_u) else math.nan,
+        'mask_centroid_v': float(mask_centroid_v) if math.isfinite(mask_centroid_v) else math.nan,
+        'bbox_bottom_u': float(bbox_bottom_u),
+        'bbox_bottom_v': float(bbox_bottom_v),
+        'bbox_center_u': float(bbox_center_u),
+        'bbox_center_v': float(bbox_center_v),
         'selected_u': float(selected_u),
         'selected_v': float(selected_v),
         'selected_pixel_source': selected_source,

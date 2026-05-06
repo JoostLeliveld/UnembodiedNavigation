@@ -34,7 +34,7 @@ def _launch_setup(context, *args, **kwargs):
     )
 
     cfg = parse_common_launch_config(context)
-    planner = str(cfg.get('planner', DEFAULT_PLANNER) or DEFAULT_PLANNER).strip().lower()
+    planner = str(cfg.get('planner', DEFAULT_PLANNER) or DEFAULT_PLANNER).strip()
     if planner not in ALLOWED_PLANNERS:
         raise RuntimeError(f"planner must be one of: {', '.join(ALLOWED_PLANNERS)}")
 
@@ -69,6 +69,12 @@ def generate_launch_description():
         DeclareLaunchArgument('task', default_value='', description='Task name; empty uses the world profile recommended_task'),
         DeclareLaunchArgument('seed', default_value='0'),
         DeclareLaunchArgument('comparison_method_id', default_value=''),
+        DeclareLaunchArgument('auto_stop_on_goal', default_value='true'),
+        DeclareLaunchArgument('goal_success_radius', default_value='0.20'),
+        DeclareLaunchArgument('goal_success_hold_s', default_value='2.0'),
+        DeclareLaunchArgument('goal_stable_radius', default_value='0.20'),
+        DeclareLaunchArgument('goal_stable_hold_s', default_value='2.0'),
+        DeclareLaunchArgument('goal_stable_max_displacement_m', default_value='0.04'),
         DeclareLaunchArgument('run_timeout_after_first_cmd_s', default_value='60.0'),
         DeclareLaunchArgument('first_cmd_linear_eps', default_value='0.02'),
         DeclareLaunchArgument('first_cmd_angular_eps', default_value='0.10'),
@@ -96,10 +102,12 @@ def generate_launch_description():
         DeclareLaunchArgument('yolo_use_masks', default_value='true', description='Use YOLO segmentation masks for pixel reference when available'),
         DeclareLaunchArgument('yolo_min_mask_area_px', default_value='12.0'),
         DeclareLaunchArgument('yolo_mask_bottom_band_px', default_value='3.0'),
+        DeclareLaunchArgument('use_pixel_correction', default_value='true'),
         DeclareLaunchArgument('pixel_correction_approx', default_value='AUTO'),
         *_planner_precision_arguments(),
         DeclareLaunchArgument('enable_logging', default_value='true'),
         DeclareLaunchArgument('log_dir', default_value='logs/experiments'),
+        DeclareLaunchArgument('headless', default_value='false'),
         DeclareLaunchArgument('use_rviz', default_value='false'),
         OpaqueFunction(function=_launch_setup),
     ])

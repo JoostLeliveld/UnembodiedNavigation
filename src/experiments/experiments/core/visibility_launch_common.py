@@ -28,6 +28,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'skip_stale_pixel_correction': 'true',
     'min_state_cov': '1e-6',
     'plan_rate': '2.0',
+    'belief_publish_rate': '10.0',
     'horizon': '40',
     'dt': '0.25',
     'control_weight': '0.0',
@@ -67,9 +68,16 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'auto_stop_on_goal': 'true',
     'goal_success_radius': '0.20',
     'goal_success_hold_s': '2.0',
+    'goal_stable_radius': '0.20',
+    'goal_stable_hold_s': '2.0',
+    'goal_stable_max_displacement_m': '0.04',
     'run_timeout_after_first_cmd_s': '75.0',
     'first_cmd_linear_eps': '0.02',
     'first_cmd_angular_eps': '0.10',
+    'stuck_window_s': '8.0',
+    'stuck_max_displacement_m': '0.08',
+    'stuck_max_goal_improvement_m': '0.05',
+    'stuck_cmd_fraction_min': '0.50',
     'yolo_model': '',
     'yolo_device': '',
     'yolo_imgsz': '640',
@@ -198,14 +206,25 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'use_obs_risk': _as_bool(_launch_value(context, 'use_obs_risk', PAPER_LAUNCH_DEFAULTS['use_obs_risk'])),
         'auto_stop_on_goal': _as_bool(_launch_value(context, 'auto_stop_on_goal', PAPER_LAUNCH_DEFAULTS['auto_stop_on_goal'])),
         'goal_success_radius': float(_launch_value(context, 'goal_success_radius', PAPER_LAUNCH_DEFAULTS['goal_success_radius'])),
-        'goal_success_hold_s': float(_launch_value(context, 'goal_success_hold_s', '2.0')),
+        'goal_success_hold_s': float(_launch_value(context, 'goal_success_hold_s', PAPER_LAUNCH_DEFAULTS['goal_success_hold_s'])),
+        'goal_stable_radius': float(_launch_value(context, 'goal_stable_radius', PAPER_LAUNCH_DEFAULTS['goal_stable_radius'])),
+        'goal_stable_hold_s': float(_launch_value(context, 'goal_stable_hold_s', PAPER_LAUNCH_DEFAULTS['goal_stable_hold_s'])),
+        'goal_stable_max_displacement_m': float(_launch_value(
+            context,
+            'goal_stable_max_displacement_m',
+            PAPER_LAUNCH_DEFAULTS['goal_stable_max_displacement_m'],
+        )),
         'run_timeout_after_first_cmd_s': float(_launch_value(context, 'run_timeout_after_first_cmd_s', PAPER_LAUNCH_DEFAULTS['run_timeout_after_first_cmd_s'])),
         'first_cmd_linear_eps': float(_launch_value(context, 'first_cmd_linear_eps', PAPER_LAUNCH_DEFAULTS['first_cmd_linear_eps'])),
         'first_cmd_angular_eps': float(_launch_value(context, 'first_cmd_angular_eps', PAPER_LAUNCH_DEFAULTS['first_cmd_angular_eps'])),
-        'stuck_window_s': 8.0,
-        'stuck_max_displacement_m': 0.08,
-        'stuck_max_goal_improvement_m': 0.05,
-        'stuck_cmd_fraction_min': 0.50,
+        'stuck_window_s': float(_launch_value(context, 'stuck_window_s', PAPER_LAUNCH_DEFAULTS['stuck_window_s'])),
+        'stuck_max_displacement_m': float(_launch_value(context, 'stuck_max_displacement_m', PAPER_LAUNCH_DEFAULTS['stuck_max_displacement_m'])),
+        'stuck_max_goal_improvement_m': float(_launch_value(
+            context,
+            'stuck_max_goal_improvement_m',
+            PAPER_LAUNCH_DEFAULTS['stuck_max_goal_improvement_m'],
+        )),
+        'stuck_cmd_fraction_min': float(_launch_value(context, 'stuck_cmd_fraction_min', PAPER_LAUNCH_DEFAULTS['stuck_cmd_fraction_min'])),
         'process_noise_xy': float(_launch_value(context, 'process_noise_xy', PAPER_LAUNCH_DEFAULTS['process_noise_xy'])),
         'process_noise_theta': float(_launch_value(context, 'process_noise_theta', PAPER_LAUNCH_DEFAULTS['process_noise_theta'])),
         'obs_noise_uv': float(_launch_value(context, 'obs_noise_uv', PAPER_LAUNCH_DEFAULTS['obs_noise_uv'])),
@@ -221,11 +240,12 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             _launch_value(context, 'clamp_pixel_uv_theta_without_yaw', PAPER_LAUNCH_DEFAULTS['clamp_pixel_uv_theta_without_yaw'])
         ),
         'plan_rate': float(_launch_value(context, 'plan_rate', PAPER_LAUNCH_DEFAULTS['plan_rate'])),
+        'belief_publish_rate': float(_launch_value(context, 'belief_publish_rate', PAPER_LAUNCH_DEFAULTS['belief_publish_rate'])),
         'horizon': int(_launch_value(context, 'horizon', PAPER_LAUNCH_DEFAULTS['horizon'])),
         'dt': float(_launch_value(context, 'dt', PAPER_LAUNCH_DEFAULTS['dt'])),
         'control_weight': float(_launch_value(context, 'control_weight', PAPER_LAUNCH_DEFAULTS['control_weight'])),
-        'risk_weight_obs': float(_launch_value(context, 'risk_weight_obs', '1.0')),
-        'ambiguity_weight': float(_launch_value(context, 'ambiguity_weight', '1.0')),
+        'risk_weight_obs': float(_launch_value(context, 'risk_weight_obs', PAPER_LAUNCH_DEFAULTS['risk_weight_obs'])),
+        'ambiguity_weight': float(_launch_value(context, 'ambiguity_weight', PAPER_LAUNCH_DEFAULTS['ambiguity_weight'])),
         'r_visible_uv': float(_launch_value(context, 'r_visible_uv', PAPER_LAUNCH_DEFAULTS['r_visible_uv'])),
         'r_miss_uv': float(_launch_value(context, 'r_miss_uv', PAPER_LAUNCH_DEFAULTS['r_miss_uv'])),
         'visibility_sigma_kappa': float(_launch_value(context, 'visibility_sigma_kappa', PAPER_LAUNCH_DEFAULTS['visibility_sigma_kappa'])),
@@ -284,13 +304,32 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'use_command_noise': _as_bool(
             _launch_value(context, 'use_command_noise', PAPER_LAUNCH_DEFAULTS['use_command_noise'])
         ),
-        'command_noise_linear_slip_mean': _COMMAND_NOISE_LINEAR_SLIP_MEAN,
-        'command_noise_linear_slip_std': _COMMAND_NOISE_LINEAR_SLIP_STD,
-        'command_noise_angular_slip_mean': _COMMAND_NOISE_ANGULAR_SLIP_MEAN,
-        'command_noise_angular_slip_std': _COMMAND_NOISE_ANGULAR_SLIP_STD,
-        'command_noise_linear_additive_std': _COMMAND_NOISE_LINEAR_ADDITIVE_STD,
-        'command_noise_angular_additive_std': _COMMAND_NOISE_ANGULAR_ADDITIVE_STD,
-        'command_noise_correlation_alpha': _COMMAND_NOISE_CORRELATION_ALPHA,
+        'headless': _as_bool(_launch_value(context, 'headless', 'false')),
+        'command_noise_linear_slip_mean': float(
+            _launch_value(context, 'command_noise_linear_slip_mean', _COMMAND_NOISE_LINEAR_SLIP_MEAN)
+        ),
+        'command_noise_linear_slip_std': float(
+            _launch_value(context, 'command_noise_linear_slip_std', _COMMAND_NOISE_LINEAR_SLIP_STD)
+        ),
+        'command_noise_angular_slip_mean': float(
+            _launch_value(context, 'command_noise_angular_slip_mean', _COMMAND_NOISE_ANGULAR_SLIP_MEAN)
+        ),
+        'command_noise_angular_slip_std': float(
+            _launch_value(context, 'command_noise_angular_slip_std', _COMMAND_NOISE_ANGULAR_SLIP_STD)
+        ),
+        'command_noise_linear_additive_std': float(
+            _launch_value(
+                context, 'command_noise_linear_additive_std', _COMMAND_NOISE_LINEAR_ADDITIVE_STD
+            )
+        ),
+        'command_noise_angular_additive_std': float(
+            _launch_value(
+                context, 'command_noise_angular_additive_std', _COMMAND_NOISE_ANGULAR_ADDITIVE_STD
+            )
+        ),
+        'command_noise_correlation_alpha': float(
+            _launch_value(context, 'command_noise_correlation_alpha', _COMMAND_NOISE_CORRELATION_ALPHA)
+        ),
         'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
         'debug_runtime': _as_bool(_launch_value(context, 'debug_runtime', 'false')),
         'enable_logging': _as_bool(_launch_value(context, 'enable_logging', 'true')),
@@ -367,14 +406,15 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         cfg['use_obs_risk'] = True
 
     visibility_artifact_path = str(cfg.get('visibility_artifact_path', '') or '').strip()
-    if not visibility_artifact_path:
-        raise RuntimeError(
-            "visibility_artifact_path must be provided explicitly — "
-            "no fallback to world profile defaults is allowed for paper runs."
-        )
-    visibility_artifact_path = resolve_profile_asset_path(cfg['world_profiles_path'], visibility_artifact_path)
-    if not Path(visibility_artifact_path).exists():
-        raise RuntimeError(f"visibility_artifact_path does not exist: {visibility_artifact_path}")
+    if planner != 'constant_R_efe':
+        if not visibility_artifact_path:
+            raise RuntimeError(
+                "visibility_artifact_path must be provided explicitly — "
+                "no fallback to world profile defaults is allowed."
+            )
+        visibility_artifact_path = resolve_profile_asset_path(cfg['world_profiles_path'], visibility_artifact_path)
+        if not Path(visibility_artifact_path).exists():
+            raise RuntimeError(f"visibility_artifact_path does not exist: {visibility_artifact_path}")
 
     cam_pos = [camera_pose[0], camera_pose[1], camera_pose[2]]
     roll, pitch, yaw = camera_pose[3], camera_pose[4], camera_pose[5]
@@ -451,6 +491,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'use_sim_time': 'true',
             'use_lidar': 'false',
             'bridge_scan': 'false',
+            'headless': 'true' if cfg.get('headless', False) else 'false',
             'world': cfg['world'],
             'world_name': cfg['profile']['world_name'],
             'spawn_x': str(cfg['spawn']['x']),
@@ -502,13 +543,13 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'output_topic': '/cmd_vel',
                 'diagnostics_topic': '/cmd_vel_noise/diagnostics',
                 'seed': cfg['seed'],
-                'linear_slip_mean': _COMMAND_NOISE_LINEAR_SLIP_MEAN,
-                'linear_slip_std': _COMMAND_NOISE_LINEAR_SLIP_STD,
-                'angular_slip_mean': _COMMAND_NOISE_ANGULAR_SLIP_MEAN,
-                'angular_slip_std': _COMMAND_NOISE_ANGULAR_SLIP_STD,
-                'linear_additive_std': _COMMAND_NOISE_LINEAR_ADDITIVE_STD,
-                'angular_additive_std': _COMMAND_NOISE_ANGULAR_ADDITIVE_STD,
-                'correlation_alpha': _COMMAND_NOISE_CORRELATION_ALPHA,
+                'linear_slip_mean': cfg['command_noise_linear_slip_mean'],
+                'linear_slip_std': cfg['command_noise_linear_slip_std'],
+                'angular_slip_mean': cfg['command_noise_angular_slip_mean'],
+                'angular_slip_std': cfg['command_noise_angular_slip_std'],
+                'linear_additive_std': cfg['command_noise_linear_additive_std'],
+                'angular_additive_std': cfg['command_noise_angular_additive_std'],
+                'correlation_alpha': cfg['command_noise_correlation_alpha'],
                 'linear_min': 0.0,
                 'linear_max': 0.22,
                 'angular_min': -1.0,
@@ -618,6 +659,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'use_visibility_model': cfg['use_visibility_model'],
                 'visibility_artifact_path': cfg['visibility_artifact_path'],
                 'risk_weight_obs': cfg['risk_weight_obs'],
+                'ambiguity_weight': cfg['ambiguity_weight'],
                 'goal_sigma_uv': cfg['goal_sigma_uv'],
                 'r_visible_uv': cfg['r_visible_uv'],
                 'r_miss_uv': cfg['r_miss_uv'],
@@ -658,6 +700,9 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'auto_stop_on_goal': cfg['auto_stop_on_goal'],
                 'goal_success_radius': cfg['goal_success_radius'],
                 'goal_success_hold_s': cfg['goal_success_hold_s'],
+                'goal_stable_radius': cfg['goal_stable_radius'],
+                'goal_stable_hold_s': cfg['goal_stable_hold_s'],
+                'goal_stable_max_displacement_m': cfg['goal_stable_max_displacement_m'],
                 'plan_rate': cfg['plan_rate'],
                 'horizon': cfg['horizon'],
                 'dt': cfg['dt'],
@@ -762,6 +807,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'use_sim_time': True,
             'cmd_topic': '/cmd_vel_raw' if cfg.get('use_command_noise', True) else '/cmd_vel',
             'plan_rate': cfg['plan_rate'],
+            'belief_publish_rate': cfg['belief_publish_rate'],
             'horizon': cfg['horizon'],
             'dt': cfg['dt'],
             'control_weight': cfg['control_weight'],

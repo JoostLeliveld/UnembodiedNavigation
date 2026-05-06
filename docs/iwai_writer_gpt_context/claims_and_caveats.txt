@@ -23,7 +23,7 @@ Do not claim:
 - "The latest interrupted run is a successful completed run."
   Correct: `experiment_20260423_112814` is valid so far but interrupted.
 - "Stuck means failure to reach the goal."
-  Correct: in the case-study runs, minimum goal distance is very small; stuck appears near/after goal-region arrival and needs termination-logic cleanup.
+  Correct: in older case-study runs, minimum goal distance is very small and `stuck` appears near/after goal-region arrival. Current logging records goal-region entry separately and terminates stable/idle goal behavior as goal-reaching.
 
 Main caveats:
 - YOLO raw confidence is uncalibrated and detector-specific.
@@ -38,6 +38,9 @@ Main caveats:
 
 Current case-study wording:
 "A representative completed run reaches within 0.039 m of the goal without collision or penetration, but is logged as `stuck` after entering the goal region. We therefore treat this as a valid near-success case study and use it to inspect the signal pathway, while leaving success-rate claims to the planned multi-seed comparison."
+
+Current stopping-logic wording:
+"Current runs separate goal-region entry from completion reason. Stable or idle behavior inside the goal region terminates as goal-reaching, while `stuck` is reserved for lack of displacement and lack of goal progress outside the goal region. Older near-goal `stuck` logs are legacy case-study evidence."
 
 Current method wording:
 "The learned map is not a direct reward. It modulates the predictive observation covariance used in the EFE rollout. Poor predicted observability makes future observations less informative, which affects risk and ambiguity."

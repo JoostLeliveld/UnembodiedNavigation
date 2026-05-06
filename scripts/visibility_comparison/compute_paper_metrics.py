@@ -22,7 +22,7 @@ Secondary:
 Usage:
     python compute_paper_metrics.py \\
         --campaign-log logs/visibility_comparison/iwai_campaign/campaign_log.json \\
-        --gp-artifact logs/visibility_comparison/current_gp/yolo_score_calibrated_gp.npz \\
+        --gp-artifact logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz \\
         --out paper_metrics.csv
 
 Outputs:
@@ -49,11 +49,57 @@ def _load_gp(artifact_path: Path):
     with np.load(artifact_path, allow_pickle=False) as data:
         xs = np.asarray(data['xs'], dtype=float)
         ys = np.asarray(data['ys'], dtype=float)
-        p_plan = np.asarray(data.get('P_conservative_plan_map', data.get('P_conservative_map')), dtype=float)
+        if 'P_conservative_plan_map' not in data.files:
+            raise RuntimeError(f'Paper GP artifact is missing P_conservative_plan_map: {artifact_path}')
+        p_plan = np.asarray(data['P_conservative_plan_map'], dtype=float)
     interp = RegularGridInterpolator(
         (ys, xs), p_plan, method='linear', bounds_error=False, fill_value=np.nan
     )
     return interp
+
+
+def _resolve_for_compare(path_str: str) -> Path:
+    return Path(path_str).expanduser().resolve(strict=False)
+
+
+def _load_run_manifest(run_dir: Path) -> dict:
+    p = run_dir / 'run_manifest.json'
+    if not p.is_file():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _validate_campaign_gp_artifact(campaign_log: dict, gp_artifact: Path) -> None:
+    """Hard-fail if C2/C3 run manifests do not match the metrics GP artifact."""
+    expected = _resolve_for_compare(str(gp_artifact))
+    mismatches = []
+    for entry in campaign_log.values():
+        condition = str(entry.get('condition', ''))
+        if condition == 'C1':
+            continue
+        run_dir_str = str(entry.get('run_dir', '') or '')
+        if not run_dir_str:
+            continue
+        run_dir = Path(run_dir_str)
+        manifest = _load_run_manifest(run_dir)
+        actual_str = str(manifest.get('visibility_artifact_path', '') or '')
+        actual = _resolve_for_compare(actual_str) if actual_str else None
+        if actual != expected:
+            mismatches.append((entry.get('task', ''), condition,
+                               entry.get('seed', ''), run_dir,
+                               actual_str or '<missing>'))
+    if mismatches:
+        print('ERROR: refusing to compute paper metrics from mixed GP artifacts.', file=sys.stderr)
+        print(f'Expected metrics artifact: {expected}', file=sys.stderr)
+        for task, condition, seed, run_dir, actual in mismatches[:12]:
+            print(f'  {task}/{condition}/seed{seed}: {actual} ({run_dir})', file=sys.stderr)
+        if len(mismatches) > 12:
+            print(f'  ... and {len(mismatches) - 12} more', file=sys.stderr)
+        print('Rerun the campaign with the current raw-YOLO-score GP before computing paper metrics.', file=sys.stderr)
+        raise SystemExit(1)
 
 
 def _query_rho(interp, x: float, y: float) -> float:
@@ -176,8 +222,8 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
 
 
 TASK_INFO = {
-    'shadow_tradeoff_a': {'start': (-2.0, 0.5), 'goal': (2.0, 0.5)},
-    'shadow_tradeoff_b': {'start': (-2.0, -1.0), 'goal': (2.0, 0.5)},
+    'shadow_tradeoff_a': {'start': (-2.0, 0.5), 'goal': (2.0, -0.5)},
+    'shadow_tradeoff_b': {'start': (-2.0, -1.0), 'goal': (2.0, -0.5)},
     'sanity_open':       {'start': (-2.0, -1.5), 'goal': (2.0, -1.5)},
 }
 
@@ -266,6 +312,7 @@ def main() -> int:
         gp_path = Path(args.gp_artifact).expanduser().resolve()
         if gp_path.is_file():
             print(f'Loading GP artifact: {gp_path}')
+            _validate_campaign_gp_artifact(campaign_log, gp_path)
             gp_interp = _load_gp(gp_path)
         else:
             print(f'WARNING: GP artifact not found: {gp_path} — f_shadow and mean_rho will be NaN')

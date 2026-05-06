@@ -22,9 +22,7 @@ from common import (
     CAPTURE_COLUMNS,
     CURRENT_CAPTURE_DIR,
     LOGS_ROOT,
-    bbox_bottom_center,
     ensure_repo_python_paths,
-    project_robot_bbox,
     repo_relative,
     safe_reset_generated_dir,
     timestamp,
@@ -222,7 +220,7 @@ def main() -> int:
     parser.add_argument('--sample-nx', type=int, default=15)
     parser.add_argument('--sample-ny', type=int, default=15)
     parser.add_argument('--yaw-rad', type=float, default=0.0, help='Base yaw in radians. Preserves the legacy single-heading capture when --yaw-samples=1.')
-    parser.add_argument('--yaw-samples', type=int, default=1, help='Number of evenly spaced robot headings to capture at each (x,y).')
+    parser.add_argument('--yaw-samples', type=int, default=4, help='Number of evenly spaced robot headings to capture at each (x,y).')
     parser.add_argument('--yaw-list-rad', default='', help='Optional explicit whitespace/comma-separated yaw list in radians; overrides --yaw-samples.')
     parser.add_argument('--wall-margin-m', type=float, default=0.45)
     parser.add_argument('--robot-z', type=float, default=0.05)
@@ -239,10 +237,6 @@ def main() -> int:
     parser.add_argument('--warn-on-odom-mismatch', action='store_true', help='With --verify-with-odom, warn and continue instead of aborting if /odom does not match the commanded world pose.')
     parser.add_argument('--min-new-frames', type=int, default=1, help='Minimum number of fresh camera frames to wait for after each teleport.')
     parser.add_argument('--target-height-m', type=float, default=0.0)
-    parser.add_argument('--robot-box-length', type=float, default=0.22)
-    parser.add_argument('--robot-box-width', type=float, default=0.22)
-    parser.add_argument('--robot-box-height', type=float, default=0.20)
-    parser.add_argument('--draw-oracle-box', action='store_true', help='Overlay the projected oracle reference box in preview images.')
     args = parser.parse_args()
 
     profile, intrinsics, world_path, camera_pose = load_profile(str(args.world_profiles), str(args.world))
@@ -301,21 +295,12 @@ def main() -> int:
                 cv2.imwrite(str(image_path), image)
                 image_hashes.append(hashlib.md5(image_path.read_bytes()).hexdigest())
 
-                bbox = project_robot_bbox(
-                    camera,
-                    x=float(x),
-                    y=float(y),
-                    yaw=float(yaw),
-                    box_length=float(args.robot_box_length),
-                    box_width=float(args.robot_box_width),
-                    box_height=float(args.robot_box_height),
-                    img_w=image.shape[1],
-                    img_h=image.shape[0],
-                )
-                bottom_u, bottom_v = bbox_bottom_center(bbox)
+                bottom_u, bottom_v, _ = camera.world_to_pixel(float(x), float(y), 0.0)
                 target_xyz = np.asarray([float(x), float(y), float(args.target_height_m)], dtype=float)
                 occluded = segment_occluded(occlusion_scene.prisms, camera.cam_pos, target_xyz)
-                in_frame = bbox is not None and math.isfinite(bottom_u) and math.isfinite(bottom_v)
+                in_frame = (math.isfinite(bottom_u) and math.isfinite(bottom_v)
+                            and 0.0 <= bottom_u < image.shape[1]
+                            and 0.0 <= bottom_v < image.shape[0])
                 if not in_frame:
                     oracle_visible = 0
                     oracle_reason = 'outside_image'
@@ -327,9 +312,6 @@ def main() -> int:
                     oracle_reason = 'visible'
 
                 preview = image.copy()
-                if bool(args.draw_oracle_box) and bbox is not None:
-                    x0, y0, x1, y1 = [int(round(v)) for v in bbox]
-                    cv2.rectangle(preview, (x0, y0), (x1, y1), (255, 200, 0), 2)
                 if math.isfinite(bottom_u) and math.isfinite(bottom_v):
                     color = (0, 255, 0) if oracle_visible else (0, 0, 255)
                     cv2.circle(preview, (int(round(bottom_u)), int(round(bottom_v))), 5, color, -1)
@@ -405,12 +387,7 @@ def main() -> int:
         },
         'oracle_source': 'geometry',
         'oracle_target_height_m': float(args.target_height_m),
-        'oracle_preview_draws_reference_box': bool(args.draw_oracle_box),
-        'robot_box': {
-            'length': float(args.robot_box_length),
-            'width': float(args.robot_box_width),
-            'height': float(args.robot_box_height),
-        },
+        'oracle_reference_point': 'ground_plane_robot_pose',
         'geometry_json': scene_to_json(occlusion_scene),
         'sample_count': int(len(rows)),
         'unique_image_count': int(unique_image_count),

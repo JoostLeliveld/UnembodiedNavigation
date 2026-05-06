@@ -4,6 +4,7 @@ import hashlib
 import math
 import os
 import time
+from collections import deque
 from datetime import datetime
 
 import numpy as np
@@ -102,12 +103,16 @@ class ExperimentLogger(Node):
         self.declare_parameter('auto_stop_on_goal', False)
         self.declare_parameter('goal_success_radius', 0.20)
         self.declare_parameter('goal_success_hold_s', 2.0)
+        self.declare_parameter('goal_stable_radius', 0.20)
+        self.declare_parameter('goal_stable_hold_s', 2.0)
+        self.declare_parameter('goal_stable_max_displacement_m', 0.04)
         self.declare_parameter('frame_id', 'map_bev')
         self.declare_parameter('frame_sanity_start_tolerance_m', 0.25)
         self.declare_parameter('frame_sanity_start_tolerance_yaw_rad', 0.5)
         self.declare_parameter('use_visibility_model', False)
         self.declare_parameter('visibility_artifact_path', '')
         self.declare_parameter('risk_weight_obs', 1.0)
+        self.declare_parameter('ambiguity_weight', 1.0)
         self.declare_parameter('goal_sigma_uv', 2.0)
         self.declare_parameter('r_visible_uv', 2.5)
         self.declare_parameter('r_miss_uv', 120.0)
@@ -203,12 +208,18 @@ class ExperimentLogger(Node):
         self.auto_stop_on_goal = bool(self.get_parameter('auto_stop_on_goal').value)
         self.goal_success_radius = float(self.get_parameter('goal_success_radius').value)
         self.goal_success_hold_s = float(self.get_parameter('goal_success_hold_s').value)
+        self.goal_stable_radius = float(self.get_parameter('goal_stable_radius').value)
+        self.goal_stable_hold_s = float(self.get_parameter('goal_stable_hold_s').value)
+        self.goal_stable_max_displacement_m = float(
+            self.get_parameter('goal_stable_max_displacement_m').value
+        )
         self.frame_id = str(self.get_parameter('frame_id').value)
         self.frame_sanity_start_tolerance_m = float(self.get_parameter('frame_sanity_start_tolerance_m').value)
         self.frame_sanity_start_tolerance_yaw_rad = float(self.get_parameter('frame_sanity_start_tolerance_yaw_rad').value)
         self.use_visibility_model = bool(self.get_parameter('use_visibility_model').value)
         self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value)
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
+        self.ambiguity_weight = float(self.get_parameter('ambiguity_weight').value)
         self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
         self.r_visible_uv = float(self.get_parameter('r_visible_uv').value)
         self.r_miss_uv = float(self.get_parameter('r_miss_uv').value)
@@ -338,6 +349,7 @@ class ExperimentLogger(Node):
             'use_visibility_model': self.use_visibility_model,
             'visibility_artifact_path': self.visibility_artifact_path,
             'risk_weight_obs': self.risk_weight_obs,
+            'ambiguity_weight': self.ambiguity_weight,
             'goal_sigma_uv': self.goal_sigma_uv,
             'r_visible_uv': self.r_visible_uv,
             'r_miss_uv': self.r_miss_uv,
@@ -411,6 +423,19 @@ class ExperimentLogger(Node):
             'optimizer_warm_start': self.optimizer_warm_start,
             'odom_heading_correction_mode': self.odom_heading_correction_mode,
             'clamp_pixel_uv_theta_without_yaw': self.clamp_pixel_uv_theta_without_yaw,
+            'auto_stop_on_goal': self.auto_stop_on_goal,
+            'goal_success_radius': self.goal_success_radius,
+            'goal_success_hold_s': self.goal_success_hold_s,
+            'goal_stable_radius': self.goal_stable_radius,
+            'goal_stable_hold_s': self.goal_stable_hold_s,
+            'goal_stable_max_displacement_m': self.goal_stable_max_displacement_m,
+            'run_timeout_after_first_cmd_s': self.run_timeout_after_first_cmd_s,
+            'first_cmd_linear_eps': self.first_cmd_linear_eps,
+            'first_cmd_angular_eps': self.first_cmd_angular_eps,
+            'stuck_window_s': self.stuck_window_s,
+            'stuck_max_displacement_m': self.stuck_max_displacement_m,
+            'stuck_max_goal_improvement_m': self.stuck_max_goal_improvement_m,
+            'stuck_cmd_fraction_min': self.stuck_cmd_fraction_min,
         }
         self._manifest_data = dict(manifest_data)
         write_manifest(self.run_dir, self._manifest_data, repo_root)
@@ -432,6 +457,10 @@ class ExperimentLogger(Node):
         self.planner_diag_text = ''
         self.efe_metrics = None
         self._goal_in_radius_since = None
+        self._goal_stable_since = None
+        self._goal_region_entered = False
+        self._goal_region_first_stamp = math.nan
+        self._motion_history = deque()
         self._stop_requested = False
         self._completed = False
         self._last_tf_warn_wall = 0.0
@@ -547,6 +576,7 @@ class ExperimentLogger(Node):
             'state_available', 'state_stamp', 'state_x', 'state_y', 'state_yaw',
             'state_cov_xx', 'state_cov_xy', 'state_cov_yy', 'state_cov_yaw',
             'planner_belief_available', 'planner_belief_stamp',
+            'planner_belief_age_s',
             'planner_belief_x', 'planner_belief_y', 'planner_belief_yaw',
             'planner_cov_x', 'planner_cov_xy', 'planner_cov_y', 'planner_cov_yaw',
             'est_available', 'est_x', 'est_y', 'est_yaw',
@@ -695,7 +725,14 @@ class ExperimentLogger(Node):
         if self.auto_stop_on_goal:
             self.get_logger().info(
                 f"Auto-stop enabled: goal radius <= {self.goal_success_radius:.3f} m "
-                f"for {self.goal_success_hold_s:.2f} s"
+                f"for {self.goal_success_hold_s:.2f} s; stable/idle goal radius <= "
+                f"{self.goal_stable_radius:.3f} m for {self.goal_stable_hold_s:.2f} s"
+            )
+        if self.stuck_window_s > 0.0:
+            self.get_logger().info(
+                f"Stuck-stop enabled: {self.stuck_window_s:.2f}s window, "
+                f"max displacement {self.stuck_max_displacement_m:.3f} m, "
+                f"max goal improvement {self.stuck_max_goal_improvement_m:.3f} m"
             )
 
     @staticmethod
@@ -732,6 +769,149 @@ class ExperimentLogger(Node):
         if det > 0.0:
             entropy_xy = float(0.5 * math.log(((2.0 * math.pi * math.e) ** 2) * det))
         return trace, det, sigma_major, sigma_minor, entropy_xy
+
+    def _command_active(self, cmd_v: float, cmd_w: float) -> bool:
+        return (
+            abs(float(cmd_v)) >= self.first_cmd_linear_eps
+            or abs(float(cmd_w)) >= self.first_cmd_angular_eps
+        )
+
+    def _remember_motion_sample(
+        self,
+        stamp: float,
+        true_ok: bool,
+        true_x: float,
+        true_y: float,
+        goal_dist: float,
+        cmd_v: float,
+        cmd_w: float,
+    ) -> None:
+        if not true_ok:
+            return
+        if not (
+            math.isfinite(stamp)
+            and math.isfinite(true_x)
+            and math.isfinite(true_y)
+            and math.isfinite(goal_dist)
+        ):
+            return
+        self._motion_history.append((
+            float(stamp),
+            float(true_x),
+            float(true_y),
+            float(goal_dist),
+            1.0 if self._command_active(cmd_v, cmd_w) else 0.0,
+        ))
+        keep_window_s = max(
+            float(self.stuck_window_s),
+            float(self.goal_success_hold_s),
+            float(self.goal_stable_hold_s),
+            1.0,
+        ) + 1.0
+        while self._motion_history and stamp - self._motion_history[0][0] > keep_window_s:
+            self._motion_history.popleft()
+
+    def _motion_window_stats(self, stamp: float, window_s: float):
+        if window_s <= 0.0 or len(self._motion_history) < 2:
+            return None
+        window_start = stamp - window_s
+        samples = [sample for sample in self._motion_history if sample[0] >= window_start]
+        if len(samples) < 2:
+            return None
+        duration_s = float(samples[-1][0] - samples[0][0])
+        if duration_s < min(max(0.5 * window_s, 0.5), window_s):
+            return None
+        displacement_m = float(math.hypot(samples[-1][1] - samples[0][1], samples[-1][2] - samples[0][2]))
+        goal_improvement_m = float(samples[0][3] - samples[-1][3])
+        cmd_fraction = float(sum(sample[4] for sample in samples) / len(samples))
+        return {
+            'duration_s': duration_s,
+            'displacement_m': displacement_m,
+            'goal_improvement_m': goal_improvement_m,
+            'cmd_fraction': cmd_fraction,
+        }
+
+    def _update_goal_region_state(self, stamp: float, goal_dist: float) -> None:
+        if not (math.isfinite(stamp) and math.isfinite(goal_dist)):
+            return
+        if goal_dist <= self.goal_success_radius and not self._goal_region_entered:
+            self._goal_region_entered = True
+            self._goal_region_first_stamp = float(stamp)
+
+    def _goal_region_reached(self) -> bool:
+        return bool(self._goal_region_entered)
+
+    def _maybe_finish_for_goal(self, stamp: float, goal_dist: float, cmd_v: float, cmd_w: float) -> bool:
+        if not (self.auto_stop_on_goal and self.goal_msg and math.isfinite(goal_dist)):
+            self._goal_in_radius_since = None
+            self._goal_stable_since = None
+            return False
+
+        if goal_dist <= self.goal_success_radius:
+            if self._goal_in_radius_since is None:
+                self._goal_in_radius_since = stamp
+            held_s = float(stamp - self._goal_in_radius_since)
+            if held_s >= self.goal_success_hold_s:
+                self.get_logger().info(
+                    f"Goal reached (dist={goal_dist:.3f} m <= {self.goal_success_radius:.3f} m) "
+                    f"and held for {held_s:.2f} s."
+                )
+                self._finish_run("goal_reached", stamp)
+                return True
+        else:
+            self._goal_in_radius_since = None
+
+        if goal_dist > self.goal_stable_radius:
+            self._goal_stable_since = None
+            return False
+
+        stats = self._motion_window_stats(stamp, self.goal_stable_hold_s)
+        stable_at_goal = (
+            stats is not None
+            and stats['displacement_m'] <= self.goal_stable_max_displacement_m
+        )
+        idle_at_goal = not self._command_active(cmd_v, cmd_w)
+        if stable_at_goal or idle_at_goal:
+            if self._goal_stable_since is None:
+                self._goal_stable_since = stamp
+            stable_held_s = float(stamp - self._goal_stable_since)
+            if stable_held_s >= self.goal_stable_hold_s:
+                mode = 'stable' if stable_at_goal else 'idle'
+                self.get_logger().info(
+                    f"Goal reached and {mode} "
+                    f"(dist={goal_dist:.3f} m <= {self.goal_stable_radius:.3f} m) "
+                    f"for {stable_held_s:.2f} s."
+                )
+                self._finish_run("goal_reached_stable", stamp)
+                return True
+        else:
+            self._goal_stable_since = None
+        return False
+
+    def _maybe_finish_for_stuck(self, stamp: float, goal_dist: float) -> bool:
+        if self._first_cmd_stamp is None or self.stuck_window_s <= 0.0:
+            return False
+        if math.isfinite(goal_dist) and goal_dist <= self.goal_stable_radius:
+            return False
+        stats = self._motion_window_stats(stamp, self.stuck_window_s)
+        if stats is None:
+            return False
+        stuck = (
+            stats['displacement_m'] <= self.stuck_max_displacement_m
+            and stats['goal_improvement_m'] <= self.stuck_max_goal_improvement_m
+            and stats['cmd_fraction'] >= self.stuck_cmd_fraction_min
+        )
+        if not stuck:
+            return False
+        self.get_logger().info(
+            "Stuck termination: "
+            f"displacement={stats['displacement_m']:.3f} m <= {self.stuck_max_displacement_m:.3f} m, "
+            f"goal_improvement={stats['goal_improvement_m']:.3f} m <= "
+            f"{self.stuck_max_goal_improvement_m:.3f} m, "
+            f"cmd_fraction={stats['cmd_fraction']:.2f} >= {self.stuck_cmd_fraction_min:.2f}."
+        )
+        self._finish_run("stuck", stamp)
+        return True
 
     def _odom_cb(self, msg: Odometry):
         self.odom_msg = msg
@@ -1257,6 +1437,10 @@ class ExperimentLogger(Node):
             planner_belief_stamp = math.nan
             planner_belief_x = planner_belief_y = planner_belief_yaw = math.nan
             planner_cov_x = planner_cov_xy = planner_cov_y = planner_cov_yaw = math.nan
+        if planner_belief_ok and math.isfinite(planner_belief_stamp):
+            planner_belief_age_s = max(0.0, now_stamp - float(planner_belief_stamp))
+        else:
+            planner_belief_age_s = math.nan
 
         if planner_belief_ok:
             est_available = 1.0
@@ -1428,6 +1612,9 @@ class ExperimentLogger(Node):
 
         if math.isfinite(goal_dist):
             self._min_goal_distance = min(self._min_goal_distance, goal_dist)
+            self._update_goal_region_state(now_stamp, goal_dist)
+
+        self._remember_motion_sample(now_stamp, true_ok, true_x, true_y, goal_dist, cmd_v, cmd_w)
 
         plan_points = 0
         plan_length = 0.0
@@ -1569,6 +1756,7 @@ class ExperimentLogger(Node):
             1.0 if state_ok else 0.0, state_stamp, state_x, state_y, state_yaw,
             cov_x, cov_xy, cov_y, cov_yaw,
             1.0 if planner_belief_ok else 0.0, planner_belief_stamp,
+            planner_belief_age_s,
             planner_belief_x, planner_belief_y, planner_belief_yaw,
             planner_cov_x, planner_cov_xy, planner_cov_y, planner_cov_yaw,
             est_available, est_x, est_y, est_yaw,
@@ -1624,7 +1812,7 @@ class ExperimentLogger(Node):
 
         if not self._stop_requested:
             if self._first_cmd_stamp is None:
-                if abs(cmd_v) >= self.first_cmd_linear_eps or abs(cmd_w) >= self.first_cmd_angular_eps:
+                if self._command_active(cmd_v, cmd_w):
                     self._first_cmd_stamp = now_stamp
                     self.get_logger().info(f"First command detected. Starting {self.run_timeout_after_first_cmd_s:.1f}s timeout.")
             else:
@@ -1633,20 +1821,11 @@ class ExperimentLogger(Node):
                     self._finish_run("timeout_after_first_cmd", now_stamp)
                     return
 
-        if self.auto_stop_on_goal and self.goal_msg and not self._stop_requested:
-            if math.isfinite(goal_dist) and goal_dist <= self.goal_success_radius:
-                if self._goal_in_radius_since is None:
-                    self._goal_in_radius_since = now_stamp
-                held_s = float(now_stamp - self._goal_in_radius_since)
-                if held_s >= self.goal_success_hold_s:
-                    self.get_logger().info(
-                        f"Goal reached (dist={goal_dist:.3f} m <= {self.goal_success_radius:.3f} m) "
-                        f"and held for {held_s:.2f} s."
-                    )
-                    self._finish_run("goal_reached", now_stamp)
-                    return
-            else:
-                self._goal_in_radius_since = None
+        if not self._stop_requested and self._maybe_finish_for_goal(now_stamp, goal_dist, cmd_v, cmd_w):
+            return
+
+        if not self._stop_requested and self._maybe_finish_for_stuck(now_stamp, goal_dist):
+            return
 
     def _finish_run(self, reason: str, stamp: float = None):
         if self._stop_requested:
@@ -1698,6 +1877,13 @@ class ExperimentLogger(Node):
             stamp = float(self.get_clock().now().nanoseconds) * 1e-9
 
         elapsed_after_first_cmd_s = stamp - self._first_cmd_stamp if self._first_cmd_stamp is not None else 0.0
+        if (
+            self._first_cmd_stamp is not None
+            and math.isfinite(self._goal_region_first_stamp)
+        ):
+            goal_region_after_first_cmd_s = float(self._goal_region_first_stamp - self._first_cmd_stamp)
+        else:
+            goal_region_after_first_cmd_s = math.nan
 
         final_goal_distance = math.nan
         true_ok, _truth_stamp, true_x, true_y, _true_yaw = self._latest_truth_pose()
@@ -1711,6 +1897,11 @@ class ExperimentLogger(Node):
         crashed = bool(self._contact_collision_seen or self._geom_collision_seen)
         min_wall_distance_m = self._min_wall_distance if math.isfinite(self._min_wall_distance) else math.inf
         min_obstacle_distance_m = self._min_obstacle_distance if math.isfinite(self._min_obstacle_distance) else math.inf
+        goal_region_success = bool(
+            self._goal_region_reached()
+            and not crashed
+            and self._valid_run
+        )
 
         summary = {
             'completed': True,
@@ -1721,6 +1912,19 @@ class ExperimentLogger(Node):
             'path_length_m': self._cumulative_path_length,
             'final_goal_distance': final_goal_distance,
             'minimum_goal_distance': self._min_goal_distance if math.isfinite(self._min_goal_distance) else math.nan,
+            'goal_success_radius': self.goal_success_radius,
+            'goal_success_hold_s': self.goal_success_hold_s,
+            'goal_stable_radius': self.goal_stable_radius,
+            'goal_stable_hold_s': self.goal_stable_hold_s,
+            'goal_stable_max_displacement_m': self.goal_stable_max_displacement_m,
+            'goal_region_entered': bool(self._goal_region_entered),
+            'goal_region_first_stamp': self._goal_region_first_stamp,
+            'goal_region_after_first_cmd_s': goal_region_after_first_cmd_s,
+            'goal_region_success': goal_region_success,
+            'stuck_window_s': self.stuck_window_s,
+            'stuck_max_displacement_m': self.stuck_max_displacement_m,
+            'stuck_max_goal_improvement_m': self.stuck_max_goal_improvement_m,
+            'stuck_cmd_fraction_min': self.stuck_cmd_fraction_min,
             'mean_solve_time_ms': mean_solve_time_ms,
             # EFE terms used by the paper objective.
             'mean_efe_risk': mean_efe_risk,

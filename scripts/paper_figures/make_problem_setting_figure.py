@@ -120,16 +120,30 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Allow plotting a run that is not planner=constant_R_efe/use_visibility_model=false.",
     )
+    parser.add_argument(
+        "--task-name",
+        type=str,
+        default="shadow_tradeoff_a",
+        help="Task entry from tasks.yaml whose start/goal define the figure markers.",
+    )
+    parser.add_argument(
+        "--use-raw-state",
+        action="store_true",
+        help=(
+            "Use state_x/state_y (raw YOLO-based position) instead of planner_belief_x/y "
+            "for the belief trace. Shows the camera estimate that freezes in the shadow zone."
+        ),
+    )
     return parser.parse_args()
 
 
-def _load_task() -> tuple[dict, dict]:
+def _load_task(task_name: str = "shadow_tradeoff_a") -> tuple[dict, dict]:
     payload = yaml.safe_load(TASKS_PATH.read_text(encoding="utf-8"))
     tasks = payload["tasks"]["warehouse_occ_light.world.sdf"]
     for task in tasks:
-        if task["name"] == "main_shadow_tradeoff":
+        if task["name"] == task_name:
             return task["start"], task["goal"]
-    raise RuntimeError("main_shadow_tradeoff not found in tasks.yaml")
+    raise RuntimeError(f"{task_name!r} not found in tasks.yaml")
 
 
 def _parse_vec(text: str) -> list[float]:
@@ -239,16 +253,13 @@ def _load_gp_visibility_field(path: Path | None) -> dict[str, np.ndarray]:
     if not path.is_absolute():
         path = (REPO_ROOT / path).resolve()
     if not path.is_file():
-        return {}
+        raise RuntimeError(f'GP visibility field not found: {path}')
     with np.load(path, allow_pickle=False) as data:
         xs = np.asarray(data["xs"], dtype=float)
         ys = np.asarray(data["ys"], dtype=float)
-        for key in ("P_conservative_plan_map", "P_mean_map", "P_map", "P_conservative_map"):
-            if key in data.files:
-                p_map = np.asarray(data[key], dtype=float)
-                break
-        else:
-            return {}
+        if "P_conservative_plan_map" not in data.files:
+            raise RuntimeError(f'Paper GP artifact is missing P_conservative_plan_map: {path}')
+        p_map = np.asarray(data["P_conservative_plan_map"], dtype=float)
     return {"xs": xs, "ys": ys, "p_map": p_map, "kind": "gp"}
 
 
@@ -329,7 +340,7 @@ def _load_run_manifest(run_dir: Path | None) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
-def _load_run_trace(run_dir: Path | None) -> dict[str, np.ndarray]:
+def _load_run_trace(run_dir: Path | None, use_raw_state: bool = False) -> dict[str, np.ndarray]:
     if run_dir is None:
         raise RuntimeError("--run-dir is required for paper figure generation")
 
@@ -344,22 +355,43 @@ def _load_run_trace(run_dir: Path | None) -> dict[str, np.ndarray]:
 
     df = pd.read_csv(exp_path)
     traces: dict[str, np.ndarray] = {}
-    required_columns = (
-        "stamp",
-        "truth_x",
-        "truth_y",
-        "planner_belief_x",
-        "planner_belief_y",
-        "planner_cov_x",
-        "planner_cov_xy",
-        "planner_cov_y",
-    )
-    missing_columns = [name for name in required_columns if name not in df.columns]
-    if missing_columns:
-        raise RuntimeError(f"experiment.csv is missing required columns: {', '.join(missing_columns)}")
-    for name in required_columns:
-        if name in df.columns:
+
+    if use_raw_state:
+        # Use state_x/y (raw YOLO-homography position) as the belief trace.
+        # This column only updates when YOLO fires; it freezes in shadow, showing
+        # camera-based localization failure in the invisible region.
+        required_columns = ("stamp", "truth_x", "truth_y", "state_x", "state_y")
+        missing_columns = [name for name in required_columns if name not in df.columns]
+        if missing_columns:
+            raise RuntimeError(f"experiment.csv is missing required columns: {', '.join(missing_columns)}")
+        for name in required_columns:
             traces[name] = df[name].to_numpy(dtype=float)
+        # Map state columns → planner_belief keys so the rest of the code is unchanged
+        traces["planner_belief_x"] = traces.pop("state_x")
+        traces["planner_belief_y"] = traces.pop("state_y")
+        # Covariance: use EKF covariance if available, else small fixed value
+        for cov_col, default in (("planner_cov_x", 1e-6), ("planner_cov_xy", 0.0), ("planner_cov_y", 1e-6)):
+            if cov_col in df.columns:
+                traces[cov_col] = df[cov_col].to_numpy(dtype=float)
+            else:
+                traces[cov_col] = np.full(len(df), default)
+    else:
+        required_columns = (
+            "stamp",
+            "truth_x",
+            "truth_y",
+            "planner_belief_x",
+            "planner_belief_y",
+            "planner_cov_x",
+            "planner_cov_xy",
+            "planner_cov_y",
+        )
+        missing_columns = [name for name in required_columns if name not in df.columns]
+        if missing_columns:
+            raise RuntimeError(f"experiment.csv is missing required columns: {', '.join(missing_columns)}")
+        for name in required_columns:
+            if name in df.columns:
+                traces[name] = df[name].to_numpy(dtype=float)
     summary_path = run_dir / "run_summary.json"
     if summary_path.exists():
         try:
@@ -397,45 +429,25 @@ def _bezier(points: list[tuple[float, float]], **kwargs) -> PathPatch:
 
 
 def _draw_screenshot_panel(ax, screenshot: Path | None) -> None:
-    ax.set_axis_off()
-    ax.set_title("(a) simulation setup", fontsize=8, loc="left", pad=4)
-
+    ax.set_xticks([]); ax.set_yticks([])
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_title("(a) simulation setup", fontsize=10, loc="center", pad=6)
     if screenshot is not None and screenshot.exists():
         image = mpimg.imread(screenshot)
-        ax.imshow(image)
+        ax.imshow(image, aspect="auto")
         ax.text(
-            0.03,
-            0.06,
-            "External-camera / Gazebo view",
-            transform=ax.transAxes,
-            fontsize=7,
-            color="white",
+            0.03, 0.06, "External-camera / Gazebo view",
+            transform=ax.transAxes, fontsize=8, color="white",
             bbox={"facecolor": "black", "alpha": 0.55, "edgecolor": "none", "pad": 3},
         )
         return
 
-    ax.add_patch(Rectangle((0, 0), 1, 1, transform=ax.transAxes, facecolor="#eeeeee", edgecolor="#999999"))
-    ax.text(
-        0.5,
-        0.58,
-        "External-camera / Gazebo image",
-        transform=ax.transAxes,
-        ha="center",
-        va="center",
-        fontsize=10,
-        fontweight="bold",
-        color="#333333",
-    )
-    ax.text(
-        0.5,
-        0.42,
-        "Pass an image with\n--panel-a-image path/to/image.png",
-        transform=ax.transAxes,
-        ha="center",
-        va="center",
-        fontsize=7,
-        color="#333333",
-    )
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+    ax.add_patch(Rectangle((0, 0), 1, 1, facecolor="#eeeeee", edgecolor="#999999", linewidth=0.6))
+    ax.text(0.5, 0.58, "External-camera /\nGazebo view",
+            ha="center", va="center", fontsize=11, color="#444444")
+    ax.text(0.5, 0.30, "(insert image with\n--panel-a-image)",
+            ha="center", va="center", fontsize=8, color="#777777", style="italic")
 
 
 def _draw_reliability_overlay(ax, geom: dict, visibility: dict[str, np.ndarray]) -> None:
@@ -876,45 +888,61 @@ def _draw_snapshot_topdown(
 
     _style_topdown_axis(ax)
     _draw_paper_workspace(ax, geom)
-    ax.set_title(f"{panel} {snap['time_label']}: {title_suffix}", fontsize=8)
+    ax.set_title(f"{panel} {title_suffix}\n{snap['time_label']}", fontsize=10)
 
     plan = np.asarray(snap["plan"], dtype=float)
     if plan.ndim == 2 and plan.shape[0] >= 2:
-        ax.plot(plan[:, 0], plan[:, 1], color=COLORS["fail"], linewidth=1.15, alpha=0.78, zorder=7)
+        ax.plot(plan[:, 0], plan[:, 1], color=COLORS["fail"], linewidth=1.4, alpha=0.85, zorder=7)
     truth = np.asarray(snap["truth_history"], dtype=float)
     belief = np.asarray(snap["belief_history"], dtype=float)
-    ax.plot(truth[:, 0], truth[:, 1], color="#222222", linewidth=1.35, zorder=8)
-    ax.plot(belief[:, 0], belief[:, 1], color=COLORS["belief"], linewidth=1.15, linestyle=(0, (4, 2)), zorder=8)
-    ax.scatter([snap["truth_xy"][0]], [snap["truth_xy"][1]], color="#222222", s=26, zorder=10)
-    ax.scatter([snap["belief_xy"][0]], [snap["belief_xy"][1]], color=COLORS["belief"], s=30, zorder=10)
+    ax.plot(truth[:, 0], truth[:, 1], color="#222222", linewidth=1.7, zorder=8)
+    ax.plot(belief[:, 0], belief[:, 1], color=COLORS["belief"], linewidth=1.4, linestyle=(0, (4, 2)), zorder=8)
+    ax.scatter([snap["truth_xy"][0]], [snap["truth_xy"][1]], color="#222222", s=34, zorder=10)
+    ax.scatter([snap["belief_xy"][0]], [snap["belief_xy"][1]], color=COLORS["belief"], s=38, zorder=10)
     ax.plot(
         [snap["truth_xy"][0], snap["belief_xy"][0]],
         [snap["truth_xy"][1], snap["belief_xy"][1]],
         color="#777777",
-        linewidth=0.55,
+        linewidth=0.7,
         linestyle=":",
         zorder=6,
     )
+    # Realized posterior covariance is small; visualize at 3sigma so the
+    # cross-condition difference reads at this figure size. Legend marks it
+    # explicitly as "covariance illustration".
     _covariance_ellipse(
         ax,
         (float(snap["belief_xy"][0]), float(snap["belief_xy"][1])),
         np.asarray(snap["cov"], dtype=float),
         color=COLORS["belief"],
-        alpha=0.15,
+        alpha=0.35,
         zorder=4,
-        sigma=2.0,
+        sigma=3.0,
     )
-    ax.scatter([start_xy[0]], [start_xy[1]], s=28, color=COLORS["start"], edgecolor="black", linewidth=0.5, zorder=11)
-    ax.scatter([goal_xy[0]], [goal_xy[1]], s=32, color=COLORS["goal"], edgecolor="black", linewidth=0.5, zorder=11)
-    ax.text(start_xy[0] - 0.10, start_xy[1] + 0.18, "start", fontsize=5.8, ha="right", va="bottom")
-    ax.text(goal_xy[0] + 0.10, goal_xy[1] + 0.18, "goal", fontsize=5.8, ha="left", va="bottom")
-    ax.text(cam_x + 0.12, cam_y - 0.05, "fixed camera", fontsize=5.4, ha="left", va="top")
-    ax.text(-0.05, 0.10, "shelf", fontsize=5.4, ha="center", va="bottom")
+    ax.scatter([start_xy[0]], [start_xy[1]], s=46, color=COLORS["start"], edgecolor="black", linewidth=0.6, zorder=11)
+    ax.scatter([goal_xy[0]], [goal_xy[1]], s=52, color=COLORS["goal"], edgecolor="black", linewidth=0.6, zorder=11)
+    ax.text(start_xy[0] - 0.15, start_xy[1] + 0.22, "start", fontsize=8.5, ha="right", va="bottom")
+    ax.text(goal_xy[0] + 0.15, goal_xy[1] + 0.22, "goal", fontsize=8.5, ha="left", va="bottom")
+    ax.text(cam_x + 0.18, cam_y - 0.05, "fixed camera", fontsize=8, ha="left", va="top")
+    ax.text(-0.05, 0.12, "shelf", fontsize=8, ha="center", va="bottom")
     if annotation == "stale":
-        ax.text(1.45, 1.22, "reduced\nupdates", fontsize=5.4, ha="center", va="center", color="#8a5b0b")
-        ax.text(float(snap["belief_xy"][0]) + 0.15, float(snap["belief_xy"][1]) - 0.25, "predicted\nuncertainty", fontsize=5.4, color=COLORS["belief"], ha="center", va="top")
+        ax.text(1.5, 1.85, "reduced\nupdates", fontsize=8.5, ha="center", va="center", color="#8a5b0b")
+        bx = float(snap["belief_xy"][0]); by = float(snap["belief_xy"][1])
+        # Anchor "predicted uncertainty" label to upper-left of belief, away from shelf and goal
+        lx = bx - 0.85
+        ly = by + 0.95
+        ax.annotate(
+            "predicted\nuncertainty",
+            xy=(bx, by),
+            xytext=(lx, ly),
+            fontsize=8.5,
+            color=COLORS["belief"],
+            ha="center",
+            va="bottom",
+            arrowprops={"arrowstyle": "->", "linewidth": 0.7, "color": COLORS["belief"]},
+        )
     elif annotation == "recovered":
-        ax.text(1.45, 1.22, "updates\nreturn", fontsize=5.4, ha="center", va="center", color="#8a5b0b")
+        ax.text(1.5, 1.85, "updates\nreturn", fontsize=8.5, ha="center", va="center", color="#8a5b0b")
 
 
 def _snapshot_panel_spec(index: int, count: int) -> tuple[str, str, str]:
@@ -930,13 +958,13 @@ def _snapshot_panel_spec(index: int, count: int) -> tuple[str, str, str]:
 
 def _problem_legend_handles() -> list:
     return [
-        Line2D([0], [0], color="#222222", linewidth=1.35, label="truth path"),
-        Line2D([0], [0], color=COLORS["belief"], linewidth=1.15, linestyle=(0, (4, 2)), label="belief mean"),
-        Line2D([0], [0], color=COLORS["fail"], linewidth=1.0, alpha=0.6, label="current horizon"),
-        Ellipse((0, 0), 0.18, 0.10, facecolor=COLORS["belief"], edgecolor=COLORS["belief"], alpha=0.18, label=r"2$\sigma$ covariance"),
-        Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["start"], markeredgecolor="black", markersize=5.5, label="start"),
-        Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["goal"], markeredgecolor="black", markersize=5.5, label="goal"),
-        Rectangle((0, 0), 1, 1, facecolor=COLORS["low_rel"], edgecolor="none", alpha=0.18, label="reduced camera-update reliability"),
+        Line2D([0], [0], color="#222222", linewidth=1.7, label="truth path"),
+        Line2D([0], [0], color=COLORS["belief"], linewidth=1.4, linestyle=(0, (4, 2)), label="belief mean"),
+        Line2D([0], [0], color=COLORS["fail"], linewidth=1.4, alpha=0.85, label="current horizon"),
+        Ellipse((0, 0), 0.18, 0.10, facecolor=COLORS["belief"], edgecolor=COLORS["belief"], alpha=0.35, label=r"3$\sigma$ posterior covariance"),
+        Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["start"], markeredgecolor="black", markersize=7, label="start"),
+        Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["goal"], markeredgecolor="black", markersize=7, label="goal"),
+        Rectangle((0, 0), 1, 1, facecolor=COLORS["low_rel"], edgecolor="none", alpha=0.25, label="reduced camera-update reliability"),
     ]
 
 
@@ -944,12 +972,12 @@ def _style_topdown_axis(ax) -> None:
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlim(-3.15, 3.15)
     ax.set_ylim(-3.15, 3.15)
-    ax.set_xlabel("position x [m]", fontsize=8)
-    ax.set_ylabel("position y [m]", fontsize=8)
+    ax.set_xlabel("position x [m]", fontsize=9)
+    ax.set_ylabel("position y [m]", fontsize=9)
     ax.set_xticks([-3, -2, -1, 0, 1, 2, 3])
     ax.set_yticks([-3, -2, -1, 0, 1, 2, 3])
     ax.grid(True, color=COLORS["grid"], linewidth=0.45, zorder=-1)
-    ax.tick_params(labelsize=7, length=2)
+    ax.tick_params(labelsize=8, length=2)
 
 
 def _draw_markers(ax, start_xy: tuple[float, float], goal_xy: tuple[float, float]) -> None:
@@ -1262,7 +1290,7 @@ def _save_setup_topdown_panel(out_dir: Path, geom: dict, start: dict, goal: dict
 
 def main() -> int:
     args = _parse_args()
-    start, goal = _load_task()
+    start, goal = _load_task(args.task_name)
     geom = _load_world_geometry()
     visibility = _load_visibility_field(args.visibility_artifact_path, geom, mode=args.visibility_field)
     run_dir = _resolve_run_dir(args.run_dir)
@@ -1278,7 +1306,7 @@ def main() -> int:
             f"use_visibility_model={manifest.get('use_visibility_model', None)!r}. "
             "Pass --allow-nonconstant-r0 only for debugging."
         )
-    traces = _load_run_trace(run_dir)
+    traces = _load_run_trace(run_dir, use_raw_state=args.use_raw_state)
     panel_a_image = args.panel_a_image if args.panel_a_image is not None else args.gazebo_screenshot
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -1286,8 +1314,12 @@ def main() -> int:
     plt.rcParams.update(
         {
             "font.family": "DejaVu Sans",
-            "font.size": 8,
-            "axes.titlesize": 9,
+            "font.size": 9,
+            "axes.titlesize": 10,
+            "axes.labelsize": 9,
+            "xtick.labelsize": 8,
+            "ytick.labelsize": 8,
+            "legend.fontsize": 8,
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
         }
@@ -1297,9 +1329,10 @@ def main() -> int:
     if len(snapshot_times) < 2:
         raise RuntimeError("--snapshot-times needs at least two values")
 
-    fig_width = 7.05 if len(snapshot_times) == 2 else max(7.05, 2.35 + 2.35 * len(snapshot_times))
-    fig = plt.figure(figsize=(fig_width, 3.05), constrained_layout=True)
-    gs = fig.add_gridspec(1, 1 + len(snapshot_times), width_ratios=[1.12] + [1.0] * len(snapshot_times))
+    n_snap = len(snapshot_times)
+    fig_width = 4.4 + 3.6 * n_snap
+    fig = plt.figure(figsize=(fig_width, 4.0), constrained_layout=True)
+    gs = fig.add_gridspec(1, 1 + n_snap, width_ratios=[1.0] + [1.05] * n_snap)
     ax_a = fig.add_subplot(gs[0, 0])
 
     _draw_screenshot_panel(ax_a, panel_a_image)
@@ -1320,10 +1353,10 @@ def main() -> int:
     fig.legend(
         handles=_problem_legend_handles(),
         loc="lower center",
-        ncol=4,
-        fontsize=5.8,
+        ncol=7,
+        fontsize=8.5,
         frameon=False,
-        bbox_to_anchor=(0.5, -0.04),
+        bbox_to_anchor=(0.5, -0.10),
     )
 
     fig.savefig(args.out_dir / "problem_setup.pdf", bbox_inches="tight")

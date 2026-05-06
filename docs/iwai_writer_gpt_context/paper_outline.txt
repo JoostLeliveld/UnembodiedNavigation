@@ -20,11 +20,7 @@ State the external-camera navigation problem, the EFE mechanism, the learned GP 
   4. Predefined experiment plan for comparing learned observability against constant-observability baselines.
 
 2. Related Work
-- Active inference and EFE planning.
-- Perception-aware and visibility-aware robot navigation.
-- External-camera localization and detector-based state estimation.
-- Gaussian-process modeling of spatial reliability/observability.
-- Keep this concise; use existing `references.bib` and do not invent citations.
+- Keep this file available as background material, but do not include it in the current compiled paper unless the paper is expanded later.
 
 3. Problem Formulation
 - Planar robot state, unicycle dynamics, fixed external camera, known workspace and obstacles.
@@ -51,7 +47,7 @@ State the external-camera navigation problem, the EFE mechanism, the learned GP 
 - Caveats: uncalibrated confidence, 2D heading marginalization, simulator-generated labels.
 
 6. Experimental Protocol
-- Fixed world/task/start/goal.
+- Fixed world/task/start/goal: `warehouse_occ_light.world.sdf`, `shadow_tradeoff_a`, start `(-2.0, 0.5, 0.0)`, goal `(2.0, 1.5)`.
 - Methods to compare:
   - Constant-observability baseline.
   - Learned YOLO-score GP EFE.
@@ -67,11 +63,12 @@ State the external-camera navigation problem, the EFE mechanism, the learned GP 
   collisions and wall/obstacle penetration invalidate success claims.
 
 7. Preliminary Case Study / Results
-- Present completed case-study run `experiment_20260422_180449`.
-- Present recent supporting completed run `experiment_20260423_111758` carefully.
+- Present completed legacy case-study run `experiment_20260422_180449` only as preliminary evidence.
+- Present recent supporting legacy run `experiment_20260423_111758` carefully.
 - Show route, goal distance, validity, EFE decomposition, visibility/trust, state error, solve time.
-- Say clearly that `completion_reason=stuck` near the goal is a termination-label issue to investigate, not a clean success label.
+- Say clearly that older `completion_reason=stuck` near the goal logs are legacy near-success evidence. Current runs log goal-region entry separately and terminate stable/idle goal behavior as goal-reaching.
 - Do not claim final statistical validation until full experiment batch is run.
+- Do not treat legacy `main_shadow_tradeoff` runs as final `shadow_tradeoff_a` benchmark results.
 
 8. Discussion and Limitations
 - Learned observability can influence planning without direct visibility cost.

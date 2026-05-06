@@ -45,8 +45,8 @@ ros2 launch experiments warehouse_primary_comparison.launch.py \
 - C3 `risk_only_ablation` — GP risk only, no ambiguity
 
 **Tasks (all in `warehouse_occ_light.world.sdf`):**
-- `shadow_tradeoff_a`: start (-2, 0.5) → goal (2, 1.5) — straight path through shadow
-- `shadow_tradeoff_b`: start (-2, -1.0) → goal (2, 1.5) — diagonal through shadow
+- `shadow_tradeoff_a`: start (-2, 0.5) → goal (2, -0.5) — straight path through shadow
+- `shadow_tradeoff_b`: start (-2, -1.0) → goal (2, -0.5) — diagonal through shadow
 - `sanity_open`: start (-2, -1.5) → goal (2, -1.5) — fully visible, sanity check
 
 **Run campaign:**
@@ -61,7 +61,7 @@ python3 run_iwai_campaign.py --config iwai_campaign_config.yaml --dry-run  # pre
 ```bash
 python3 compute_paper_metrics.py \
     --campaign-log logs/visibility_comparison/iwai_campaign/campaign_log.json \
-    --gp-artifact logs/visibility_comparison/current_gp/oracle_visibility_gp.npz \
+    --gp-artifact logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz \
     --out paper_metrics.csv
 ```
 
@@ -73,15 +73,14 @@ The `.npz` files use these exact keys (NOT the names in old scripts):
 |-----|---------|
 | `xs`, `ys` | Grid axes (shape (160,)) |
 | `P_mean_map` | GP posterior mean, shape (160, 160) |
-| `P_conservative_map` | Conservative planning map ρ_plan (what the planner uses) |
-| `P_map` | Raw map (same shape) |
+| `P_conservative_plan_map` | Conservative planning map ρ_plan (what the planner uses) |
 | `X_train`, `p_train` | Training data |
 | `camera_pos` | Camera (x, y, z) |
 
-**There is NO `P_conservative_plan_map` or `P_std_map` key.** Scripts that reference those need `.get('P_conservative_plan_map', data.get('P_conservative_map'))`.
+Legacy artifacts with `P_map` or `P_conservative_map` are not accepted in the paper runtime path.
 
 **Artifact for IWAI campaign:**
-`logs/visibility_comparison/current_gp/oracle_visibility_gp.npz`
+`logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz`
 
 **Camera pose (warehouse_occ_light):** `(-2.45, -2.45, 2.80)`, yaw 45°, pitch ~49° downward.
 
@@ -117,7 +116,8 @@ run_timeout_after_first_cmd_s: 75.0
 
 ## YOLO model path
 
-`/home/joostleliveld/Thesis/UnembodiedNavigation/yolo11n-seg.pt`
+`/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/yolo_simseg_smoke/model.pt`
+(fine-tuned, 1 class: robot — NOT the COCO base `yolo11n-seg.pt` in the repo root)
 
 ## Common gotchas
 

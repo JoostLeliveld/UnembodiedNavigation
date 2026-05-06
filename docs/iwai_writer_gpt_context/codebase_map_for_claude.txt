@@ -55,9 +55,9 @@ Task and world configuration:
 Current main benchmark text uses:
 
 - world: `warehouse_occ_light.world.sdf`
-- task: `main_shadow_tradeoff`
-- start: approximately `(-2.0, 1.0, 0.0)`
-- goal: approximately `(2.0, -1.0)`
+- task: `shadow_tradeoff_a`
+- start: approximately `(-2.0, 0.5, 0.0)`
+- goal: approximately `(2.0, 1.5)`
 
 
 Runtime node graph
@@ -254,7 +254,6 @@ Important plotting/diagnostic scripts:
 - `scripts/visibility_comparison/plot_planned_paths.py`
 - `scripts/visibility_comparison/probe_rollout_families.py`
 - `scripts/visibility_comparison/make_run_diagnostic_video.py`
-- `scripts/visibility_comparison/validate_comparison_integrity.py`
 - `scripts/paper_figures/make_problem_setting_figure.py`
 
 Paper figure warning:

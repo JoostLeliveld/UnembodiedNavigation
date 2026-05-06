@@ -34,12 +34,7 @@ PAPER_VISIBILITY_DEFAULTS = {
 }
 
 ACTIVE_METHOD_IDS = (
-    'red_binary',
-    'red_area_corrected',
-    'yolo_binary',
     'yolo_score_raw',
-    'yolo_score_calibrated',
-    'oracle_visibility',
     'constant_R_efe',
 )
 
@@ -69,11 +64,6 @@ PERCEPTION_TARGET_COLUMNS = (
     'theta',
     'image_path',
     'camera_relative_bearing_deg',
-    'red_detected',
-    'red_area',
-    'red_bbox_xyxy',
-    'red_bottom_u',
-    'red_bottom_v',
     'yolo_detected_after_threshold',
     'yolo_score_raw',
     'yolo_raw_best_score',
@@ -98,13 +88,8 @@ GP_TARGET_COLUMNS = (
     'sample_id',
     'x',
     'y',
-    'red_binary',
-    'red_area_corrected',
-    'yolo_binary',
     'yolo_score_raw',
     'yolo_raw_best_score',
-    'yolo_score_calibrated',
-    'oracle_visibility',
 )
 
 

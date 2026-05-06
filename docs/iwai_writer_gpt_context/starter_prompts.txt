@@ -16,7 +16,7 @@ Prompt 4: Design the experiment section before running experiments
 "Draft the experimental protocol section for the planned comparison. Use the uploaded experiment blueprint. Make clear what is fixed across methods, what changes, what metrics are primary, and how invalid/interrupted runs are handled."
 
 Prompt 5: Write preliminary-results wording
-"Draft a preliminary case-study results paragraph using `experiment_20260422_180449` and `experiment_20260423_111758`. Treat them as representative completed runs, not final statistical validation. Mention the `stuck` termination caveat."
+"Draft a preliminary case-study results paragraph using `experiment_20260422_180449` and `experiment_20260423_111758`. Treat them as legacy case-study runs, not final `shadow_tradeoff_a` validation. Mention that older near-goal `stuck` labels are not clean aggregate successes, while current runs log goal-region entry separately."
 
 Prompt 6: Create a claims audit
 "Review the current draft and list every sentence that overclaims. For each one, propose a more precise replacement consistent with the uploaded claims-and-caveats file."

@@ -171,11 +171,7 @@ def main() -> int:
 
     gp_targets_path = Path(args.gp_targets).expanduser().resolve()
     if not gp_targets_path.is_file():
-        legacy_path = (CURRENT_TARGETS_DIR / 'gp_targets.csv').resolve()
-        if gp_targets_path == (CURRENT_TARGETS_DIR / 'gp_targets_xy_aggregated.csv').resolve() and legacy_path.is_file():
-            gp_targets_path = legacy_path
-        else:
-            raise RuntimeError(f'GP targets CSV not found: {gp_targets_path}')
+        raise RuntimeError(f'Heading-aggregated GP targets CSV not found: {gp_targets_path}')
 
     capture_manifest_path = Path(args.capture_manifest).expanduser().resolve()
     capture_manifest = _load_json(capture_manifest_path)
@@ -271,10 +267,9 @@ def main() -> int:
         'available_methods': fitted_methods,
         'missing_methods': [method for method in GP_METHOD_IDS if method not in fitted_methods],
         'notes': [
-            'This shared-stage fitter scans the heading-aggregated GP target table and fits only target columns that are already populated.',
-            'If gp_targets_xy_aggregated.csv is absent, the fitter falls back to gp_targets.csv and still averages repeated (x, y) rows internally.',
+            'Paper GP fitting uses the heading-aggregated yolo_score_raw target table.',
             'GP artifacts are planner-compatible via xs, ys, and P_conservative_plan_map. Extra metadata is stored for plotting and reporting.',
-            'Strict schema cutover: legacy artifacts with P_map are no longer accepted by the planner or plotting scripts.',
+            'Strict schema cutover: legacy artifacts with P_map or P_conservative_map are no longer accepted by the planner.',
         ],
     })
     print(f'Wrote GP artifacts to {output_dir}')

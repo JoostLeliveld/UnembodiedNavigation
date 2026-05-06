@@ -4,7 +4,7 @@ This document maps the current codebase into the paper-facing runtime path, diag
 
 > Paper code should be boring, explicit, reproducible, and hard to misuse.
 
-For this project, "paper behavior" means the IWAI/thesis experiment path for visibility-aware active-inference navigation under external-camera observations. Anything outside that path should either be clearly labeled as diagnostic/legacy, moved out of the primary surface, or removed.
+For this project, the normal runtime behavior is the IWAI/thesis experiment path for visibility-aware active-inference navigation under external-camera observations. Anything outside that path should either be clearly labeled as diagnostic/legacy, moved out of the primary surface, or removed.
 
 ## Current Paper-Core Runtime Path
 
@@ -59,7 +59,7 @@ These files should stay first-class and be cleaned for readability.
 | GP map | `src/planning/planning/core/visibility_gp_map.py` | Loaded observability field and planner queries. |
 | Actuation noise | `src/sim/sim/actuation_noise_node.py` | Realistic command-space noise/slip for paper experiments. |
 | Logger | `src/experiments/experiments/nodes/experiment_logger.py` | Paper evidence: CSVs, manifest, summary. |
-| Paper campaign | `scripts/visibility_comparison/run_iwai_campaign.py`, `scripts/visibility_comparison/compute_paper_metrics.py`, `scripts/visibility_comparison/validate_comparison_integrity.py` | Current paper experiment orchestration and metrics. |
+| Paper campaign | `scripts/visibility_comparison/run_iwai_campaign.py`, `scripts/visibility_comparison/compute_paper_metrics.py` | Current paper experiment orchestration and metrics. |
 | Paper figures | `scripts/paper_figures/make_problem_setting_figure.py` | Paper figure generation. |
 
 ## Diagnostic Or Legacy Surfaces
@@ -71,13 +71,13 @@ These are useful, but should not be mixed into the paper-core path.
 | Old perception/controller runs | older detector backends and old controller baselines | Do not expose as paper launch conditions. |
 | Retained planner variants | broader EFE variants and older sweep profiles | Keep only in diagnostic launch/scripts, not primary paper launch. |
 | Rollout probes | `probe_rollout_families.py`, diagnostic videos | Keep as `scripts/diagnostics/`, not as runtime method. |
-| Parameter sweeps | `run_efe_precision_sweep.py`, broad planner sweeps | Archive or move under `scripts/diagnostics/old_sweeps/`. |
+| Parameter sweeps | broad planner sweeps | Removed from the paper-code surface; rerun only from a separate diagnostic branch if needed. |
 | Historical docs/artifacts | `archive/`, old packaged GP/model artifacts | Keep only if explicitly referenced for provenance. |
 | One-off figure fallbacks | schematic fallback lines, placeholder panels | Disallow by default for paper figure generation. |
 
-## Hard-Fail Rules For Paper Behavior
+## Hard-Fail Rules For Runtime Behavior
 
-The paper path should fail early when assumptions are violated. Warning and fallback behavior is acceptable for exploratory debugging, but not for paper runs.
+All primary runtime paths should fail early when assumptions are violated. The codebase should not have a separate "paper mode" that behaves more honestly than normal runs; the default behavior should be explicit, reproducible, and hard to misuse.
 
 ### Launch-Time Hard Fails
 
@@ -121,7 +121,9 @@ The paper path should fail early when assumptions are violated. Warning and fall
 1. Collision and penetration fields must exist for any claimed successful run.
 2. `timeout_after_first_cmd` must not be counted as goal success unless the goal-distance criterion is also satisfied and the report labels it carefully.
 3. "Completed protocol run" and "successful navigation run" must be separate metric concepts.
-4. Paper metrics scripts should fail if required columns are missing rather than silently outputting NaN.
+4. Goal-region entry must be reported separately from completion reason.
+5. Stable or idle behavior inside the goal region should terminate as goal-reaching, not as generic `stuck`.
+6. Paper metrics scripts should fail if required columns are missing rather than silently outputting NaN.
 
 ## Current High-Risk Hidden Behavior
 
@@ -131,14 +133,14 @@ These are the first places to clean because they can quietly change the scientif
 
 File: `src/planning/planning/core/visibility_gp_map.py`
 
-Current behavior clips query positions to the GP map bounds before interpolation. This is safe numerically, but scientifically risky: an off-map predicted state can receive an edge reliability value as if it were a valid query.
+Numeric GP queries now reject positions outside the artifact support instead of clipping them to the nearest grid edge. Symbolic optimizer interpolation still uses a clamp as a numerical guard inside CasADi, so selected rollouts must continue to be checked by the numeric diagnostics path.
 
-Paper behavior should be one of:
+Required behavior:
 
 ```text
-preferred: hard-fail or invalidate rollout when predicted belief leaves GP support
-acceptable: keep symbolic clamp only as numerical guard, but log/query-count boundary violations
-not acceptable: silent clipping with no diagnostic
+numeric query outside support -> hard failure
+symbolic clamp -> numerical guard only
+selected rollout outside support -> invalid experiment / planner failure, not silent clipping
 ```
 
 ### 2. Implicit Visibility Artifact Fallback
@@ -147,7 +149,7 @@ File: `src/experiments/experiments/core/visibility_launch_common.py`
 
 If `visibility_artifact_path` is empty, the launch can fall back to `world_profiles.yaml`. That is convenient for development but bad for paper reproducibility.
 
-Paper behavior:
+Required behavior:
 
 ```text
 visibility_artifact_path must be explicit
@@ -165,9 +167,9 @@ src/experiments/launch/warehouse_visibility_agent.launch.py
 src/experiments/experiments/core/visibility_launch_common.py
 ```
 
-The current launch surface can still default to non-YOLO perception modes. That makes it too easy to run a non-paper method by accident.
+The current launch surface should not default to non-YOLO perception modes. That makes it too easy to run a non-final method by accident.
 
-Paper behavior:
+Required behavior:
 
 ```text
 primary paper launch defaults to yolo
@@ -178,13 +180,13 @@ legacy perception backends require explicit diagnostic launch
 
 File: `src/experiments/experiments/nodes/experiment_logger.py`
 
-Some initialization failures currently warn and continue. For exploratory runs that is useful. For paper runs, missing camera/world geometry means several metrics and plots can become invalid.
+Some initialization failures currently warn and continue. Missing camera/world geometry means several metrics and plots can become invalid.
 
-Paper behavior:
+Required behavior:
 
 ```text
-paper_mode=true -> camera/world/safety geometry failures are fatal
-diagnostic_mode=true -> warnings allowed
+camera/world/safety geometry failures are fatal
+debug runs should use separate scripts, not weaker behavior in the primary launch path
 ```
 
 ### 5. Figure Fallbacks
@@ -193,7 +195,7 @@ File: `scripts/paper_figures/make_problem_setting_figure.py`
 
 The script is much closer now, but any fallback schematic or placeholder panel needs an explicit opt-in flag.
 
-Paper behavior:
+Required behavior:
 
 ```text
 real run required
@@ -214,7 +216,7 @@ scripts/visibility_comparison/iwai_campaign_config.yaml
 
 The packaged GP artifact location and the current generated GP artifact story are not yet fully aligned. A reader should not have to guess whether `logs/visibility_comparison/current_gp` or `src/experiments/data/visibility_gp` is canonical.
 
-Paper behavior:
+Required behavior:
 
 ```text
 one canonical artifact path
@@ -234,7 +236,7 @@ src/experiments/experiments/core/world_profiles.py
 
 Planner names such as `gp_risk_only`, `visibility_unaware_baseline`, and broader retained modes must be consistent across launch validation, campaign config, and report text.
 
-Paper behavior:
+Required behavior:
 
 ```text
 Condition A: constant-R EFE
@@ -254,7 +256,7 @@ src/experiments/experiments/core/visibility_launch_common.py
 
 The no-go/obstacle term is not legacy deadwood. It represents the known obstacle map and is a legitimate safety/feasibility component of the navigation problem. The paper risk is that it looks like a hidden route-shaping trick if it is not explicitly described.
 
-Paper behavior:
+Required behavior:
 
 ```text
 keep obstacle-map barrier active for all main conditions
@@ -339,8 +341,8 @@ The important part is not the exact folder names. The important part is that pap
 
 These changes are high-value and relatively safe.
 
-1. Add a `paper_mode` or `strict_paper_mode` flag to the primary launch path, defaulting to `true` in the paper launch.
-2. In paper mode, hard-fail on non-YOLO perception, missing YOLO model, missing GP artifact, invalid task, invalid world, and missing geometry.
+1. Hard-fail on non-YOLO perception, missing YOLO model, missing GP artifact, invalid task, invalid world, and missing geometry in the primary launch path.
+2. Do not add a weaker diagnostic/paper-mode split. If a legacy diagnostic is needed, move it to a separate diagnostic script or launch file.
 3. Rename or alias planner conditions to paper-facing names in campaign/report output.
 4. Make the paper figure script fail without a real `--run-dir` and real `--panel-a-image`.
 5. Split "completed run" from "successful navigation" in metrics names.
@@ -351,7 +353,7 @@ These changes are high-value and relatively safe.
 
 ## Second Cleanup Pass
 
-These are larger and should happen after the paper path is guarded.
+These are larger and should happen after the primary runtime path is guarded.
 
 1. Move broad comparison and sweep scripts into diagnostics or archive.
 2. Move GP capture/target/fit scripts into a clean observability pipeline folder.
@@ -400,7 +402,7 @@ At no point should they have to know:
 
 ## Bottom Line
 
-The current codebase contains the right method, but the active surface is still too broad. The cleanup should not start by deleting random files. It should start by making the paper path strict:
+The current codebase contains the right method, but the active surface is still too broad. The cleanup should not start by deleting random files. It should start by making the primary runtime path strict:
 
 ```text
 explicit inputs
@@ -411,4 +413,4 @@ separate diagnostics
 no silent fallback plots
 ```
 
-Once the paper path is strict, redundant code becomes much easier to identify and remove without breaking useful tools.
+Once the primary runtime path is strict, redundant code becomes much easier to identify and remove without breaking useful tools.

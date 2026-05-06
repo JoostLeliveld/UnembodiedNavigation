@@ -55,6 +55,7 @@ class UnicyclePlannerNode(Node):
 
         # Planner params
         _declare_if_not('plan_rate', 1.0)
+        _declare_if_not('belief_publish_rate', 10.0)
         _declare_if_not('horizon', 10)
         _declare_if_not('dt', 0.2)
         _declare_if_not('v_min', 0.0)
@@ -117,6 +118,7 @@ class UnicyclePlannerNode(Node):
         # Pixel correction params
         _declare_if_not('use_pixel_correction', False)
         _declare_if_not('pixel_topic', '/perception/pixel_pose')
+        _declare_if_not('cmd_topic', '/cmd_vel')
         _declare_if_not('pixel_timeout_s', 0.5)
         _declare_if_not('pixel_correction_min_interval_s', 0.0)
         _declare_if_not('pixel_correction_approx', 'AUTO')
@@ -144,6 +146,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('fov_h_rad', 1.5708)
 
         self.plan_rate = float(self.get_parameter('plan_rate').value)
+        self.belief_publish_rate = float(self.get_parameter('belief_publish_rate').value)
         self.horizon = int(self.get_parameter('horizon').value)
         self.dt = float(self.get_parameter('dt').value)
         self.v_min = float(self.get_parameter('v_min').value)
@@ -206,6 +209,7 @@ class UnicyclePlannerNode(Node):
 
         self.use_pixel_correction = _as_bool(self.get_parameter('use_pixel_correction').value)
         self.pixel_topic = self.get_parameter('pixel_topic').value
+        self.cmd_topic = str(self.get_parameter('cmd_topic').value).strip() or '/cmd_vel'
         self.pixel_timeout_s = float(self.get_parameter('pixel_timeout_s').value)
         self.pixel_correction_min_interval_s = float(
             self.get_parameter('pixel_correction_min_interval_s').value
@@ -340,7 +344,7 @@ class UnicyclePlannerNode(Node):
             callback_group=self._io_group
         )
         self.cmd_sub = self.create_subscription(
-            Twist, '/cmd_vel', self._cmd_cb, qos_profile=state_qos,
+            Twist, self.cmd_topic, self._cmd_cb, qos_profile=state_qos,
             callback_group=self._io_group
         )
         self.odom_sub = self.create_subscription(
@@ -395,6 +399,13 @@ class UnicyclePlannerNode(Node):
 
         self._plan_period_s = 1.0 / max(self.plan_rate, 0.1)
         self.create_timer(self._plan_period_s, self._plan_once, callback_group=self._plan_group)
+        if self.belief_publish_rate > 0.0:
+            self._belief_publish_period_s = 1.0 / max(self.belief_publish_rate, 0.1)
+            self.create_timer(
+                self._belief_publish_period_s,
+                self._belief_publish_tick,
+                callback_group=self._io_group,
+            )
         self._pixel_correction_timer = None
         if self.use_pixel_correction and self.pixel_correction_min_interval_s > 0.0:
             correction_period = max(self.pixel_correction_min_interval_s, 0.02)
@@ -410,6 +421,7 @@ class UnicyclePlannerNode(Node):
             f"use_visibility_model={self.use_visibility_model}, "
             f"use_nogo_cost={self.use_nogo_cost}, nogo_penalty_type={self.nogo_penalty_type}, "
             f"use_pixel_correction={self.use_pixel_correction}, "
+            f"cmd_topic={self.cmd_topic}, "
             f"pixel_correction_approx={self.pixel_correction_approx}, "
             f"use_pixel_heading_correction={self.use_pixel_heading_correction}, "
             f"use_odom_heading_correction={self.use_odom_heading_correction}, "
@@ -1214,6 +1226,40 @@ class UnicyclePlannerNode(Node):
             goal_pose.pose.orientation.w = 1.0
             path.poses.append(goal_pose)
         return path
+
+    def _belief_publish_tick(self):
+        """High-rate belief publisher.
+
+        Propagates the latest internal belief by the motion model with the
+        most recent commanded velocity, then publishes the result. This
+        keeps the belief mean alive (with growing covariance) between plan
+        iterations and during stretches where no perception update arrives,
+        which is what the post-hoc analysis needs in order to visualize
+        prior-only propagation.
+        """
+        with self._data_lock:
+            if self.belief_m is None or self.belief_S is None:
+                return
+            m = self.belief_m.copy()
+            S = self.belief_S.copy()
+            stamp_msg = self.belief_stamp
+            last_cmd = np.asarray(self.last_cmd, dtype=float).copy()
+        if stamp_msg is None:
+            return
+        try:
+            age_s = max(0.0, self._stamp_age_s(stamp_msg))
+        except Exception:
+            age_s = 0.0
+        if age_s > 1e-3:
+            try:
+                m, S = self.planner.predict(m, S, last_cmd, dt=age_s)
+            except Exception:
+                return
+        belief_msg = self._build_belief_message(
+            m, S, frame_id=self._resolve_plan_frame_id(),
+            stamp=self.get_clock().now().to_msg(),
+        )
+        self.planner_belief_pub.publish(belief_msg)
 
     def _build_belief_message(self, m0, S0, *, frame_id=None, stamp=None):
         belief = PoseWithCovarianceStamped()
