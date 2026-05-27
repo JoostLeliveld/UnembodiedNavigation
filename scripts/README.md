@@ -1,25 +1,35 @@
 # `scripts`
 
-The active perception script surface is now intentionally small:
+This folder contains offline tooling around the ROS runtime. Treat scripts as paper-facing only when they are part of the locked campaign, metric, figure, or artifact pipeline.
 
-- [`perception/capture_external_camera_images.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/capture_external_camera_images.py)
-- [`perception/drive_robot_pattern.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/drive_robot_pattern.py)
-- [`perception/test_yolo_out_of_box.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/test_yolo_out_of_box.py)
-- [`perception/make_preview_grid.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/make_preview_grid.py)
-- [`perception/train_yolo_seg.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/train_yolo_seg.py)
-- [`perception/make_redmask_pseudolabels.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/make_redmask_pseudolabels.py)
-- [`perception/capture_simseg_dataset.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/capture_simseg_dataset.py)
-- [`perception/capture_projected_bbox_dataset.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/capture_projected_bbox_dataset.py)
-- [`perception/analyze_dataset_robustness.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/analyze_dataset_robustness.py)
+## Paper-Facing Visibility Pipeline
 
-The active visibility-comparison backbone now lives under:
+| Purpose | File |
+| --- | --- |
+| Capture visibility samples | [`visibility_comparison/capture_visibility_samples.py`](visibility_comparison/capture_visibility_samples.py) |
+| Extract YOLO perception targets | [`visibility_comparison/extract_perception_targets.py`](visibility_comparison/extract_perception_targets.py) |
+| Build GP targets | [`visibility_comparison/build_gp_targets.py`](visibility_comparison/build_gp_targets.py) |
+| Fit GP artifacts | [`visibility_comparison/fit_visibility_gps.py`](visibility_comparison/fit_visibility_gps.py) |
+| Run compact benchmark campaign | [`visibility_comparison/run_visibility_campaign.py`](visibility_comparison/run_visibility_campaign.py) |
+| Compact benchmark config | [`visibility_comparison/paper_campaign_config.yaml`](visibility_comparison/paper_campaign_config.yaml) |
+| Compute paper metrics | [`visibility_comparison/compute_paper_metrics.py`](visibility_comparison/compute_paper_metrics.py) |
+| Generate thesis figures | [`visibility_comparison/thesis_plots/make_thesis_figures.py`](visibility_comparison/thesis_plots/make_thesis_figures.py) |
+| Generate supervisor-feedback diagnostic figures | [`visibility_comparison/thesis_plots/make_supervisor_feedback_figures.py`](visibility_comparison/thesis_plots/make_supervisor_feedback_figures.py) |
 
-- [`visibility_comparison/capture_visibility_samples.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/capture_visibility_samples.py)
-- [`visibility_comparison/extract_perception_targets.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/extract_perception_targets.py)
-- [`visibility_comparison/build_gp_targets.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/build_gp_targets.py)
-- [`visibility_comparison/fit_visibility_gps.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/fit_visibility_gps.py)
-- [`visibility_comparison/plot_gp_and_ambiguity_maps.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/plot_gp_and_ambiguity_maps.py)
-- [`visibility_comparison/plot_gp_signal_figure.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/plot_gp_signal_figure.py)
-- [`visibility_comparison/plot_planned_paths.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/plot_planned_paths.py)
+## Exploratory Failure Benchmarks
 
-Everything else in this folder should be treated as secondary or legacy unless a specific experiment still depends on it.
+| Purpose | File |
+| --- | --- |
+| Experiment B AWS/JdeRobot-style campaign config | [`visibility_comparison/aws_campaign_config.yaml`](visibility_comparison/aws_campaign_config.yaml) |
+| Experiment B AWS/JdeRobot-style smoke config | [`visibility_comparison/aws_smoke_config.yaml`](visibility_comparison/aws_smoke_config.yaml) |
+| Offline coarse route evaluator | [`visibility_comparison/coarse_route_evaluator.py`](visibility_comparison/coarse_route_evaluator.py) |
+
+The coarse route evaluator is diagnostic only. It scores automatically generated
+routes on the known driveable 2D layer with and without a GP-derived ambiguity
+proxy. It must not be used as mission-waypoint evidence.
+
+## Perception Training And Capture
+
+The perception scripts are support tooling. They are relevant when regenerating the detector or validating a detector dataset, but they are not direct paper evidence unless the paper discusses detector training provenance. Experiment B should use a world-specific detector rather than the compact Task A detector.
+
+Everything else in this folder should be treated as diagnostic, exploratory, or legacy until a paper section explicitly depends on it.

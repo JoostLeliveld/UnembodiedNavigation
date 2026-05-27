@@ -11,16 +11,23 @@ It publishes:
 - `/perception/pixel_pose`
 - `/perception/detection_diagnostics`
 
-The node outputs an image-space observation only.
+The node loads an Ultralytics YOLO model and detects the configured robot class.
 
-## Downstream Interpretation
+## Detector Modes
 
-Downstream, the state path uses:
+| Mode | x, y source | theta source |
+| --- | --- | --- |
+| Seg/detect model | selected pixel via homography | no visual yaw; downstream uses odometry, displacement heading, or propagated heading depending on launch config |
+| Pose model with `keypoint_marker_world_z > 0` | selected pixel via homography | front/rear keypoints back-projected to BEV |
 
-- `x,y` from the selected image pixel via homography
-- `theta` from odometry fallback in the state estimator
+The current compact campaign uses the segmentation/detection path for `x,y` and odometry-backed heading correction.
 
-## Documentation
+## Pose-Keypoint Support
 
-- [`../../docs/perception_training_and_inference.md`](/home/joostleliveld/Thesis/UnembodiedNavigation/docs/perception_training_and_inference.md)
-- [`../../docs/perception_cleanup_audit.md`](/home/joostleliveld/Thesis/UnembodiedNavigation/docs/perception_cleanup_audit.md)
+Pose-keypoint support is implemented but optional. The keypoints are anchored to the TurtleBot3 Burger geometry: the red base mesh for the front anchor and the blue lidar for the rear anchor. The source of truth is [`perception/core/pose_keypoints.py`](perception/core/pose_keypoints.py), with geometry checked by `tests/perception/test_pose_keypoint_geometry.py`.
+
+Enable the pose-heading path by using pose-model weights and setting `keypoint_marker_world_z` to the marker world height. The default `0.0` keeps pose-heading disabled.
+
+## Training Scripts
+
+Detector training and dataset generation live under `scripts/perception/`. They are support/provenance tooling, not the runtime method itself.

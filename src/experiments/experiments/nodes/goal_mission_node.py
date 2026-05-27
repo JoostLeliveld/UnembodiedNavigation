@@ -32,6 +32,7 @@ class GoalMissionNode(Node):
 
         period = 1.0 / max(self.repeat_rate, 0.1)
         self.create_timer(period, self._send_goal, clock=self.wall_clock)
+
         self.get_logger().info(
             f"Mission ready. Goal ({self.goal_x}, {self.goal_y}) in frame '{self.frame_id}' "
             f"in {self.delay}s (transient-local publisher)"
@@ -58,7 +59,7 @@ class GoalMissionNode(Node):
         )
         self.get_logger().info(
             f"Goal published {publish_tag} "
-            f"at ({self.goal_x}, {self.goal_y}) frame='{self.frame_id}'"
+            f"at ({self.goal_x:.3f}, {self.goal_y:.3f}) frame='{self.frame_id}'"
         )
 
 

@@ -1,88 +1,37 @@
 # `experiments`
 
-This package defines the experiment surface for the current thesis milestone. It exists to make the comparison reproducible: it chooses the world, task, planner label, logging mode, and shared runtime wiring.
-
-![Experiment-surface tutorial figure](../../docs/figures/visibility_capture_tutorial.png)
-
-This package owns both ends of the experimental story:
-
-- the offline capture launch that produces the visibility artifact
-- the online comparison launch that consumes that artifact
-
-## Why This Folder Exists
-
-The planner is only one part of the experiment. This package answers:
-
-- which world is used
-- which goal task is run
-- which planner is launched
-- whether logging is enabled
-- where run outputs are written
-
-## Inputs And Outputs
-
-- **Inputs**
-  - world/task configuration
-  - planner label
-  - launch arguments
-- **Outputs**
-  - composed ROS runtime
-  - goal publication
-  - run logs and manifests when logging is enabled
+This package defines the experiment surface: world, task, planner condition, launch wiring, logging, and campaign reproducibility.
 
 ## Central Files
 
 | File | Role |
 | --- | --- |
-| [`launch/warehouse_primary_comparison.launch.py`](launch/warehouse_primary_comparison.launch.py) | main entry point for `visibility_aware_efe` vs `constant_R_efe` |
-| [`launch/warehouse_visibility_agent.launch.py`](launch/warehouse_visibility_agent.launch.py) | diagnostic launch for non-primary planner variants |
-| [`launch/warehouse_visibility_capture.launch.py`](launch/warehouse_visibility_capture.launch.py) | offline capture launch for GP fitting with sampled-pose teleport collection |
-| [`config/world_profiles.yaml`](config/world_profiles.yaml) | world registry, camera setup, and matched visibility artifact paths |
-| [`config/tasks.yaml`](config/tasks.yaml) | single active benchmark task definition |
+| [`launch/warehouse_primary_comparison.launch.py`](launch/warehouse_primary_comparison.launch.py) | main paper launch for `constant_R_efe`, `visibility_aware_efe`, and optional `risk_only_ablation` |
+| [`launch/warehouse_visibility_agent.launch.py`](launch/warehouse_visibility_agent.launch.py) | diagnostic launch for non-primary probing |
+| [`launch/warehouse_visibility_capture.launch.py`](launch/warehouse_visibility_capture.launch.py) | offline capture launch for GP fitting |
+| [`config/world_profiles.yaml`](config/world_profiles.yaml) | world registry and camera/profile metadata |
+| [`config/tasks.yaml`](config/tasks.yaml) | benchmark, support, exploratory, and legacy task definitions |
 | [`experiments/core/visibility_launch_common.py`](experiments/core/visibility_launch_common.py) | shared runtime assembly |
-| [`experiments/nodes/experiment_logger.py`](experiments/nodes/experiment_logger.py) | experiment logging and manifests |
+| [`experiments/nodes/experiment_logger.py`](experiments/nodes/experiment_logger.py) | run manifest, CSV logging, and summary writing |
 
-## Support Files
+## Paper-Facing Use
 
-| File | Role |
-| --- | --- |
-| `experiments/core/world_profiles.py` | YAML loading and profile resolution |
-| `experiments/core/tasks.py` | task loading and selection |
-| `experiments/core/manifest.py` | run-directory and manifest helpers |
-| `experiments/nodes/goal_mission_node.py` | publishes the active goal |
-| `experiments/nodes/goal_marker_node.py` | visual marker for the goal |
+The compact paper benchmark is configured by `scripts/visibility_comparison/paper_campaign_config.yaml` and run through `scripts/visibility_comparison/run_visibility_campaign.py`.
 
-## What To Read First
+The primary launch enforces the important paper assumptions:
 
-1. `launch/warehouse_primary_comparison.launch.py`
-2. `config/world_profiles.yaml`
-3. `config/tasks.yaml`
-4. `experiments/core/visibility_launch_common.py`
-5. `experiments/nodes/experiment_logger.py`
+- YOLO perception path
+- explicit trained YOLO model path
+- explicit GP artifact path for GP-using planner conditions
+- shared world/task/obstacle geometry across compared planners
+- run manifests that record planner, artifact, estimator, noise, and safety settings
 
-## Implemented Now
+## Current Extension Work
 
-- one primary comparison launch
-- one retained-planner launch
-- one visibility capture launch, now defaulting to sampled-pose teleport collection
-- one active world/task comparison surface centered on the main shadow-tradeoff benchmark
-- matched visibility artifacts learned from noisy simulated pose samples
-- run logging with manifest metadata
-- explicit state-estimator provenance in the manifest
-
-## Provisional Or Peripheral
-
-- `warehouse_visibility_agent.launch.py` is diagnostic and is not the main thesis-facing entry path
-- the logger is useful and important, but the evaluation built on top of it is still milestone-grade
-- the active experiment surface is intentionally narrow: one warehouse world and one main benchmark task
-
-## Connection To The Rest Of The Repository
-
-- launches `sim`, `perception`, `state`, and `planning`
-- snapshots config files into run directories
-- points the planner at the correct GP visibility artifact
+The AWS/JdeRobot-style warehouse is the single active exploratory Experiment B benchmark. Keep it labeled exploratory in docs and paper text until it has a trained detector, fitted GP, completed campaign logs, and generated result figures.
 
 See also:
 
+- [`../../docs/paper_alignment.md`](../../docs/paper_alignment.md)
+- [`../../docs/runtime_dataflow.md`](../../docs/runtime_dataflow.md)
 - [`config/README.md`](config/README.md)
-- [`data/visibility_gp/README.md`](data/visibility_gp/README.md)

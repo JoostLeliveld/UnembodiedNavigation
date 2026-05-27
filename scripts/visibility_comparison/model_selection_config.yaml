@@ -6,7 +6,7 @@
 #   ambiguity=0.0 comes from C3 anchor.
 #
 # Run the fresh raw-GP anchor campaign separately in a new log root, e.g.
-# logs/visibility_comparison/iwai_campaign_rawgp_v1.
+# logs/visibility_comparison/paper_campaign_rawgp_v1.
 
 base:
   world: warehouse_occ_light.world.sdf
@@ -15,7 +15,7 @@ base:
   planner: visibility_aware_efe       # C2; ambiguity term ON
   seeds: [0, 1, 2, 3, 4]
 
-  # Locked planner / EFE settings (must match the iwai campaign except
+  # Locked planner / EFE settings (must match the paper campaign except
   # where the sensitivity axes override them)
   horizon: 40
   dt: 0.25

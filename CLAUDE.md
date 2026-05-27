@@ -1,127 +1,148 @@
-# UnembodiedNavigation — Claude Context
+# CLAUDE.md
 
-## What this project is
+This repository supports a thesis/paper on visibility-aware planning for an
+external-camera navigation setup. Treat this file as the shared operating
+contract for AI assistants working in this repo.
 
-ROS 2 / Gazebo robotics thesis: Visibility-Aware EFE (Expected Free Energy) Navigation.
-The robot uses active inference to plan paths that keep itself detectable by a fixed overhead camera,
-using a GP-fitted observability map instead of constant observation noise.
+## Non-Negotiables
 
-## Build & run
+- Do not edit TeX files unless the user explicitly asks for TeX edits.
+- The compact `warehouse_occ_light.world.sdf` benchmark is the current paper
+  core.
+- `warehouse_aws.world.sdf` is an exploratory Experiment B world until it has a
+  complete detector, GP, smoke-run, seeded-log, and figure chain.
+- Do not add or use mission waypoints to force route choice. A route difference
+  must emerge from the planner objective.
+- Every claimed result needs a named world, detector artifact, GP artifact,
+  config, run logs, and generated figures.
+- Keep 2D traversability separate from 3D visibility. Known driveable /
+  forbidden-zone layers are planner constraints. Learned observation reliability
+  affects camera `(x, y)` covariance only, not heading directly.
+- Sparse planning is future work only in the current cleanup pass. It may be
+  discussed as fair route-candidate scoring, not as mission waypoint scripting.
 
-```bash
-# Source ROS 2 first (always required)
-source /opt/ros/humble/setup.bash
-source install/setup.bash   # after first build
+## Maintained Context
 
-# Build (use --symlink-install during dev so Python edits take effect without rebuild)
-colcon build --symlink-install
+Read these files before changing experiment logic or paper-facing docs:
 
-# Build a single package
-colcon build --symlink-install --packages-select experiments planning perception
+- `docs/active_research_state.md`
+- `docs/decision_log.md`
+- `docs/experiment_registry.md`
+- `docs/paper_alignment.md`
+- `docs/runtime_dataflow.md`
+- `docs/paper_runtime_contract.yaml`
+- `docs/publication_checklist.md`
 
-# Run the primary campaign launch
-ros2 launch experiments warehouse_primary_comparison.launch.py \
-    planner:=visibility_aware_efe task:=shadow_tradeoff_a seed:=0
-```
+## Evidence Standard
 
-## Key directories
+Paper evidence must pass the full artifact chain:
 
-| Path | Purpose |
-|------|---------|
-| `src/experiments/` | Campaign orchestration, experiment logger, launch files |
-| `src/planning/` | EFE planner, base_planner, CasADi optimizer |
-| `src/perception/` | YOLO detector, GP inference node |
-| `scripts/visibility_comparison/` | Offline scripts: campaign runner, GP verification, paper metrics |
-| `src/experiments/data/visibility_gp/` | GP .npz artifacts |
-| `logs/` | All run output (experiment.csv, run_summary.json per run) |
+1. world geometry and camera pose fixed;
+2. detector trained or selected for that world;
+3. visibility samples captured in that same world;
+4. GP fit from those samples with `P_conservative_plan_map`;
+5. campaign config records the exact detector and GP artifacts;
+6. seeded logs complete without hidden fallbacks;
+7. figures/metrics are generated from those logs.
 
-## IWAI campaign
+AWS Experiment B should be described as a planned or exploratory extension until
+that chain exists.
 
-36-run pre-registered experiment comparing 3 planner conditions across 3 tasks.
+---
 
-**Conditions:**
-- C1 `constant_R_efe` — constant R₀, ignores GP
-- C2 `visibility_aware_efe` — full GP-EFE with ambiguity term
-- C3 `risk_only_ablation` — GP risk only, no ambiguity
+## Thesis claim (short form — long form in memory)
 
-**Tasks (all in `warehouse_occ_light.world.sdf`):**
-- `shadow_tradeoff_a`: start (-2, 0.5) → goal (2, -0.5) — straight path through shadow
-- `shadow_tradeoff_b`: start (-2, -1.0) → goal (2, -0.5) — diagonal through shadow
-- `sanity_open`: start (-2, -1.5) → goal (2, -1.5) — fully visible, sanity check
+**Stability and safety, not goal-reaching speed.**
 
-**Run campaign:**
-```bash
-cd scripts/visibility_comparison
-python3 run_iwai_campaign.py --config iwai_campaign_config.yaml
-python3 run_iwai_campaign.py --config iwai_campaign_config.yaml --resume  # after interruption
-python3 run_iwai_campaign.py --config iwai_campaign_config.yaml --dry-run  # preview only
-```
+- On easy tasks (a visible alternative to the goal exists), C1 and C2 both reach the
+  goal; C2 may take a slightly safer trajectory but no real penalty.
+- On hard tasks (no visible path to the goal), C2 **stops safely** at the shadow
+  boundary while C1 risks a blind traversal and may crash. C2 not reaching the goal in
+  the hardest case is a **success**, not a failure.
 
-**Compute paper metrics after campaign:**
-```bash
-python3 compute_paper_metrics.py \
-    --campaign-log logs/visibility_comparison/iwai_campaign/campaign_log.json \
-    --gp-artifact logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz \
-    --out paper_metrics.csv
-```
+Long form: `~/.claude/projects/-home-joostleliveld-Thesis/memory/project_thesis_stability_claim.md`.
 
-## GP artifacts — CRITICAL
+## Ideal demonstration behaviours
 
-The `.npz` files use these exact keys (NOT the names in old scripts):
+- **Lateral preference**: in a uniform aisle whose one side is more visible to the
+  external camera, C2 hugs the visible side; C1 drifts to centerline and may lose track.
+- **Late commit**: when the goal is in shadow, C2 stays in the visible region as long
+  as possible and only enters the dark zone for the last 1–2 m of approach.
+- **Safe stop**: when no visible path to the goal exists at all, C2 refuses to enter
+  shadow and stops safely. No collision is the success criterion.
 
-| Key | Contents |
-|-----|---------|
-| `xs`, `ys` | Grid axes (shape (160,)) |
-| `P_mean_map` | GP posterior mean, shape (160, 160) |
-| `P_conservative_plan_map` | Conservative planning map ρ_plan (what the planner uses) |
-| `X_train`, `p_train` | Training data |
-| `camera_pos` | Camera (x, y, z) |
+## Where context lives
 
-Legacy artifacts with `P_map` or `P_conservative_map` are not accepted in the paper runtime path.
+**Auto-memory** (`~/.claude/projects/-home-joostleliveld-Thesis/memory/`):
+- `MEMORY.md` — index.
+- `project_thesis_stability_claim.md` — the reframed stability claim (above).
+- `project_world_design_intent.md` — shelf-end pads, blockage from height not mid-aisle.
+- `project_shadow_behaviour_design.md` — what shadow exposure is acceptable.
+- `project_iwai_experiment.md` — broader campaign protocol.
+- `project_supervisor_feedback_may2026.md` — last supervisor meeting action items.
 
-**Artifact for IWAI campaign:**
-`logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz`
+**Repo reference docs** (`docs/`):
+- `docs/PLANNER_HYPERPARAMETERS.md` — every knob, what it does, recipes for eliciting
+  specific behaviours.
+- `docs/CONSISTENCY_CHECKLIST.md` — the World ↔ YOLO ↔ GP ↔ Costmap chain. Run it before
+  any new campaign.
+- `docs/AGENT_BOUNDARIES.md` — what each subagent may read / propose / never touch.
 
-**Camera pose (warehouse_occ_light):** `(-2.45, -2.45, 2.80)`, yaw 45°, pitch ~49° downward.
+## Subagents (in `.claude/agents/`)
 
-Note: this artifact shows near-zero visibility in the task region (P ≈ 0.001–0.05) because the `occ_light` world has heavy occlusion. This is expected — the planner still uses it for gradient guidance even at low absolute values.
+Five specialised agents form the iteration loop. Three are loop agents
+(propose → run → diagnose); two are guardrails (consistency + writeup):
 
-## EFE objective and λ mapping
+| agent | role | use when |
+|---|---|---|
+| `scenario-designer` | proposes the next experiment — new task OR hyperparameter change | "what should we try next?" / "design a task that shows X" |
+| `rollout-runner` | executes the proposed change (offline-first; Gazebo only on user-approval) and produces canonical artifacts | after scenario-designer; before plot-analyst |
+| `plot-analyst` | plots the rollout result, identifies what is or isn't emerging, recommends the next intervention | after rollout-runner; or when looking at any existing run |
+| `consistency-guardian` | runs the World↔GP↔YOLO↔Costmap checklist | before any rollout; after any SDF / world_profiles / tasks.yaml / GP edit |
+| `rigor-writer` | writes up converged results in thesis-quality prose; audits claims | when an iteration is paper-ready, or before sharing a writeup |
 
-```
-EFE = risk_scale × risk_term + ambiguity_scale × ambiguity_term + control_cost
-risk_scale     = risk_weight_obs × observation_risk_scale  = 1.0 × 1.25 = 1.25
-ambiguity_scale = ambiguity_weight × ambiguity_term_scale  = 3.0 × 1.00 = 3.0
-```
+Typical loop: `scenario-designer → consistency-guardian → rollout-runner → plot-analyst →
+(loop back to scenario-designer with the recommendation) → rigor-writer`.
 
-These are set in `src/planning/planning/planners/base_planner.py` (lines ~711-712).
-The paper's λ_risk and λ_amb map to these effective scales, not the raw parameters.
+Invoke via the Agent tool with `subagent_type=<name>`.
 
-## Stopping logic
+## Hard rules (applies to humans + agents + main session)
 
-Three and only three valid completion reasons: `goal_reached`, `timeout_after_first_cmd`, `collision`.
-- Timeout: 75 s after first nonzero command
-- Goal: within 0.20 m radius, held for 2.0 s
-- Collision: triggers `_finish_run("collision", stamp)` immediately (both contact and geometry)
+- **Clean EFE invariant**: no new cost terms in
+  `src/planning/planning/core/casadi_efe.py`. The objective stays
+  `risk + ambiguity + control + nogo + terminal_progress_penalty`. Tune existing weights;
+  do not add accumulators.
+- **GP / YOLO are not auto-touched**. World geometry edits invalidate the GP. Decisions
+  to recapture or retrain go through the user; the `experimentalist` agent (Stage B) may
+  invoke the capture pipeline only on user approval.
+- **Memory files are append-mostly**, owned by the main session. Agents propose updates;
+  the main session writes them.
 
-## Key locked hyperparameters (campaign config)
+## Recurring-pain reminders
 
-```yaml
-horizon: 40          dt: 0.25
-observation_risk_scale: 1.25   ambiguity_term_scale: 1.0
-optimizer_maxiter: 50          optimizer_maxfun: 300   # ~1.4 s/plan at T=40
-goal_success_radius: 0.20      goal_success_hold_s: 2.0
-run_timeout_after_first_cmd_s: 75.0
-```
+The user has re-explained each of these multiple times. Read the linked memory first
+before responding to:
 
-## YOLO model path
+1. "C2 should stop safely, not chase the goal" → `project_thesis_stability_claim.md`.
+2. "Boxes at shelf-end pads, blockage from height" → `project_world_design_intent.md`.
+3. "Don't add cost terms — tune existing ones" → `docs/PLANNER_HYPERPARAMETERS.md`.
+4. "Did the GP get recaptured after the world change?" → `docs/CONSISTENCY_CHECKLIST.md`.
 
-`/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/yolo_simseg_smoke/model.pt`
-(fine-tuned, 1 class: robot — NOT the COCO base `yolo11n-seg.pt` in the repo root)
+## Typical agent composition (worked example)
 
-## Common gotchas
+User: *"design a task in A1 that shows lateral preference"*
 
-- `auto_stop_on_goal` must be `'true'` (string) in launch args — was silently `false` before fix
-- `risk_only_ablation` planner: `use_visibility_model=True`, `use_ambiguity=False`, `use_obs_risk=True`
-- `dt` default in `visibility_launch_common.py` must come from `PAPER_LAUNCH_DEFAULTS`, not hardcoded `'0.2'`
-- Collision callback `_contacts_cb` calls `_finish_run` after `_record_collision_event` — geometry collision check in `_log_once` calls it after writing the CSV row
+1. `scenario-designer` proposes the task with sampled-GP evidence and a paste-ready
+   `tasks.yaml` entry; predicts what C1 vs C2 should do differently.
+2. `consistency-guardian` validates the proposal (start/goal in green region, GP support
+   present, no stale GP / SDF drift).
+3. `rollout-runner` executes the task offline against the current planner; emits
+   canonical artifacts (trajectory CSVs + plots) into a rollout output directory.
+4. `plot-analyst` inspects the artifacts, identifies whether lateral preference is
+   actually emerging, hypothesises the cause if not, and recommends the next intervention
+   (back to `scenario-designer` with a specific tuning, OR forward to `rigor-writer` if
+   the result is already publication-ready).
+5. (loop) `scenario-designer` applies the recommendation; back to step 2.
+6. When converged, `rigor-writer` writes the thesis-quality summary into the
+   dedicated rollout writeup or a maintained paper-results directory registered
+   in `docs/experiment_registry.md`.

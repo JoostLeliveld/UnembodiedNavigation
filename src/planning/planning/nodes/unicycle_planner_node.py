@@ -103,10 +103,10 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('nogo_softplus_scale', 0.08)
         _declare_if_not('nogo_logbarrier_scale', 0.25)
         _declare_if_not('nogo_logbarrier_eps', 1e-3)
+        _declare_if_not('use_belief_nogo_cost', False)
+        _declare_if_not('nogo_belief_kappa', 1.0)
         _declare_if_not('visibility_artifact_path', '')
         _declare_if_not('robot_collision_radius_m', 0.125)
-        _declare_if_not('min_terminal_goal_progress_m', 0.0)
-        _declare_if_not('invalid_rollout_barrier_cost', 1e6)
 
         # Optimizer params
         _declare_if_not('optimizer_maxiter', 50)
@@ -114,6 +114,10 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('optimizer_ftol', 1e-6)
         _declare_if_not('optimizer_gtol', 1e-4)
         _declare_if_not('optimizer_warm_start', True)
+        _declare_if_not('optimizer_multistart', False)
+        _declare_if_not('optimizer_multistart_include_direct', True)
+        _declare_if_not('optimizer_multistart_lateral_offsets', '')
+        _declare_if_not('optimizer_initial_routes_json', '')
 
         # Pixel correction params
         _declare_if_not('use_pixel_correction', False)
@@ -129,8 +133,14 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('odom_heading_timeout_s', 0.75)
         _declare_if_not('odom_heading_sigma_rad', 0.08)
         _declare_if_not('odom_yaw_offset_rad', 0.0)
+        _declare_if_not('odom_topic', '/odom')
+        _declare_if_not('use_odom_for_predict', True)
         _declare_if_not('heading_pixel_noise_sigma', 0.0)
         _declare_if_not('pixel_heading_noise_floor_rad', 0.01)
+        _declare_if_not('use_displacement_heading', False)
+        _declare_if_not('heading_min_displacement_m', 0.10)
+        _declare_if_not('heading_max_displacement_m', 1.0)
+        _declare_if_not('heading_bev_noise_sigma_m', 0.05)
         _declare_if_not('clamp_pixel_uv_theta_without_yaw', False)
         _declare_if_not('min_state_cov', 1e-6)
         _declare_if_not('debug_runtime', False)
@@ -196,16 +206,26 @@ class UnicyclePlannerNode(Node):
         self.nogo_softplus_scale = float(self.get_parameter('nogo_softplus_scale').value)
         self.nogo_logbarrier_scale = float(self.get_parameter('nogo_logbarrier_scale').value)
         self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
+        self.use_belief_nogo_cost = _as_bool(self.get_parameter('use_belief_nogo_cost').value)
+        self.nogo_belief_kappa = float(self.get_parameter('nogo_belief_kappa').value)
         self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value).strip()
         self.robot_collision_radius_m = float(self.get_parameter('robot_collision_radius_m').value)
-        self.min_terminal_goal_progress_m = float(self.get_parameter('min_terminal_goal_progress_m').value)
-        self.invalid_rollout_barrier_cost = float(self.get_parameter('invalid_rollout_barrier_cost').value)
 
         self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
         self.optimizer_maxfun = int(self.get_parameter('optimizer_maxfun').value)
         self.optimizer_ftol = float(self.get_parameter('optimizer_ftol').value)
         self.optimizer_gtol = float(self.get_parameter('optimizer_gtol').value)
         self.optimizer_warm_start = _as_bool(self.get_parameter('optimizer_warm_start').value)
+        self.optimizer_multistart = _as_bool(self.get_parameter('optimizer_multistart').value)
+        self.optimizer_multistart_include_direct = _as_bool(
+            self.get_parameter('optimizer_multistart_include_direct').value
+        )
+        self.optimizer_multistart_lateral_offsets = str(
+            self.get_parameter('optimizer_multistart_lateral_offsets').value
+        )
+        self.optimizer_initial_routes_json = str(
+            self.get_parameter('optimizer_initial_routes_json').value
+        )
 
         self.use_pixel_correction = _as_bool(self.get_parameter('use_pixel_correction').value)
         self.pixel_topic = self.get_parameter('pixel_topic').value
@@ -231,6 +251,8 @@ class UnicyclePlannerNode(Node):
         self.odom_heading_correction_mode = str(
             self.get_parameter('odom_heading_correction_mode').value
         ).strip().lower()
+        self.odom_topic = str(self.get_parameter('odom_topic').value)
+        self.use_odom_for_predict = _as_bool(self.get_parameter('use_odom_for_predict').value)
         if self.odom_heading_correction_mode not in ('kalman', 'overwrite'):
             raise RuntimeError("odom_heading_correction_mode must be one of: kalman, overwrite")
         self.odom_heading_timeout_s = float(self.get_parameter('odom_heading_timeout_s').value)
@@ -241,6 +263,18 @@ class UnicyclePlannerNode(Node):
         )
         self.pixel_heading_noise_floor_rad = float(
             self.get_parameter('pixel_heading_noise_floor_rad').value
+        )
+        self.use_displacement_heading = _as_bool(
+            self.get_parameter('use_displacement_heading').value
+        )
+        self.heading_min_displacement_m = float(
+            self.get_parameter('heading_min_displacement_m').value
+        )
+        self.heading_max_displacement_m = float(
+            self.get_parameter('heading_max_displacement_m').value
+        )
+        self.heading_bev_noise_sigma_m = float(
+            self.get_parameter('heading_bev_noise_sigma_m').value
         )
         self.clamp_pixel_uv_theta_without_yaw = _as_bool(
             self.get_parameter('clamp_pixel_uv_theta_without_yaw').value
@@ -283,6 +317,10 @@ class UnicyclePlannerNode(Node):
             optimizer_gtol=self.optimizer_gtol,
             optimizer_warm_start=self.optimizer_warm_start,
             optimizer_warm_start_shift_steps=warm_start_shift_steps,
+            optimizer_multistart=self.optimizer_multistart,
+            optimizer_multistart_include_direct=self.optimizer_multistart_include_direct,
+            optimizer_multistart_lateral_offsets=self.optimizer_multistart_lateral_offsets,
+            optimizer_initial_routes_json=self.optimizer_initial_routes_json,
             approx_method=self.approx_method,
             use_obs_risk=self.use_obs_risk,
             use_ambiguity=self.use_ambiguity,
@@ -313,9 +351,9 @@ class UnicyclePlannerNode(Node):
             nogo_softplus_scale=self.nogo_softplus_scale,
             nogo_logbarrier_scale=self.nogo_logbarrier_scale,
             nogo_logbarrier_eps=self.nogo_logbarrier_eps,
+            use_belief_nogo_cost=self.use_belief_nogo_cost,
+            nogo_belief_kappa=self.nogo_belief_kappa,
             robot_collision_radius_m=self.robot_collision_radius_m,
-            min_terminal_goal_progress_m=self.min_terminal_goal_progress_m,
-            invalid_rollout_barrier_cost=self.invalid_rollout_barrier_cost,
             runtime_debug=self.debug_runtime,
         )
         self._io_group = ReentrantCallbackGroup()
@@ -348,7 +386,7 @@ class UnicyclePlannerNode(Node):
             callback_group=self._io_group
         )
         self.odom_sub = self.create_subscription(
-            Odometry, '/odom', self._odom_cb, qos_profile=state_qos,
+            Odometry, self.odom_topic, self._odom_cb, qos_profile=state_qos,
             callback_group=self._io_group
         )
 
@@ -377,6 +415,8 @@ class UnicyclePlannerNode(Node):
         self.pixel_heading_sigma = math.nan
         self.odom_yaw_meas = None
         self.odom_stamp = None
+        self._prev_bev_x = None
+        self._prev_bev_y = None
         self._latest_detection_diag = None
         self._last_correction_log = 0.0
         self._last_correction_stamp = None
@@ -394,6 +434,7 @@ class UnicyclePlannerNode(Node):
         self.belief_S = None
         self.belief_stamp = None
         self.last_cmd = np.array([0.0, 0.0], dtype=float)
+        self.odom_vel = np.array([0.0, 0.0], dtype=float)
         self._latest_measurement_available = False
         self._latest_belief_age_s = math.nan
 
@@ -420,6 +461,7 @@ class UnicyclePlannerNode(Node):
             f"goal_progress_n_steps={self.goal_progress_n_steps}, "
             f"use_visibility_model={self.use_visibility_model}, "
             f"use_nogo_cost={self.use_nogo_cost}, nogo_penalty_type={self.nogo_penalty_type}, "
+            f"use_belief_nogo_cost={self.use_belief_nogo_cost}, "
             f"use_pixel_correction={self.use_pixel_correction}, "
             f"cmd_topic={self.cmd_topic}, "
             f"pixel_correction_approx={self.pixel_correction_approx}, "
@@ -524,9 +566,12 @@ class UnicyclePlannerNode(Node):
 
     def _odom_cb(self, msg: Odometry):
         yaw = self._yaw_from_quaternion(msg.pose.pose.orientation)
+        v_odom = float(msg.twist.twist.linear.x)
+        w_odom = float(msg.twist.twist.angular.z)
         with self._data_lock:
             self.odom_yaw_meas = wrap_angle(float(yaw + self.odom_yaw_offset_rad))
             self.odom_stamp = msg.header.stamp
+            self.odom_vel = np.array([v_odom, w_odom], dtype=float)
 
     def _fresh_odom_heading_locked(self, ref_stamp) -> tuple[float | None, float]:
         if self.odom_yaw_meas is None or self.odom_stamp is None:
@@ -663,6 +708,42 @@ class UnicyclePlannerNode(Node):
             return None
         return diag_ref
 
+    def _displacement_heading_locked(self, u: float, v: float):
+        """Estimate heading from displacement between consecutive BEV detections.
+
+        Must be called with _data_lock held. Returns (yaw_rad, sigma_rad) or
+        (None, nan) when the displacement is outside [min, max] thresholds.
+        The BEV transform uses the planar homography (z=0), which is fine for
+        the robot centre projected to the ground plane.
+        """
+        bev = self.planner.camera.pixel_to_world(u, v)
+        if bev is None:
+            return None, math.nan
+        bx, by = bev
+
+        if self._prev_bev_x is None:
+            self._prev_bev_x, self._prev_bev_y = bx, by
+            return None, math.nan
+
+        dx = bx - self._prev_bev_x
+        dy = by - self._prev_bev_y
+        disp = math.hypot(dx, dy)
+
+        if disp > self.heading_max_displacement_m:
+            # Large jump — likely a gap in detections; reset anchor without estimate.
+            self._prev_bev_x, self._prev_bev_y = bx, by
+            return None, math.nan
+
+        if disp < self.heading_min_displacement_m:
+            # Too little movement; keep anchor, wait for more displacement.
+            return None, math.nan
+
+        yaw = math.atan2(dy, dx)
+        sigma = math.sqrt(2.0) * max(self.heading_bev_noise_sigma_m, 1e-3) / disp
+        sigma = float(max(sigma, self.pixel_heading_noise_floor_rad))
+        self._prev_bev_x, self._prev_bev_y = bx, by
+        return float(yaw), sigma
+
     def _pixel_yaw_measurement_from_msg(self, msg: PoseStamped, diag_ref):
         """Extract visual yaw only when detector diagnostics explicitly support it."""
         if not (
@@ -678,8 +759,11 @@ class UnicyclePlannerNode(Node):
         u = msg.pose.position.x
         v = msg.pose.position.y
         with self._data_lock:
-            diag_ref = self._matching_detection_diag_locked(msg.header.stamp)
-            yaw_meas, yaw_sigma = self._pixel_yaw_measurement_from_msg(msg, diag_ref)
+            if self.use_displacement_heading:
+                yaw_meas, yaw_sigma = self._displacement_heading_locked(u, v)
+            else:
+                diag_ref = self._matching_detection_diag_locked(msg.header.stamp)
+                yaw_meas, yaw_sigma = self._pixel_yaw_measurement_from_msg(msg, diag_ref)
             self.pixel_meas = np.array([u, v], dtype=float)
             self.pixel_stamp = msg.header.stamp
             self.pixel_yaw_meas = yaw_meas
@@ -1092,9 +1176,12 @@ class UnicyclePlannerNode(Node):
     def _predict_belief_to_now(self, m0, S0, last_cmd, belief_age_s: float, now_msg):
         if belief_age_s <= 0.0:
             return m0, S0
-        m0, S0 = self.planner.predict(
-            m0, S0, np.asarray(last_cmd, dtype=float), dt=belief_age_s
-        )
+        if self.use_odom_for_predict:
+            with self._data_lock:
+                predict_vel = self.odom_vel.copy()
+        else:
+            predict_vel = np.asarray(last_cmd, dtype=float)
+        m0, S0 = self.planner.predict(m0, S0, predict_vel, dt=belief_age_s)
         with self._data_lock:
             self.belief_m = m0.copy()
             self.belief_S = S0.copy()
@@ -1244,6 +1331,7 @@ class UnicyclePlannerNode(Node):
             S = self.belief_S.copy()
             stamp_msg = self.belief_stamp
             last_cmd = np.asarray(self.last_cmd, dtype=float).copy()
+            predict_vel = self.odom_vel.copy() if self.use_odom_for_predict else last_cmd
         if stamp_msg is None:
             return
         try:
@@ -1252,7 +1340,7 @@ class UnicyclePlannerNode(Node):
             age_s = 0.0
         if age_s > 1e-3:
             try:
-                m, S = self.planner.predict(m, S, last_cmd, dt=age_s)
+                m, S = self.planner.predict(m, S, predict_vel, dt=age_s)
             except Exception:
                 return
         belief_msg = self._build_belief_message(
@@ -1305,7 +1393,6 @@ class UnicyclePlannerNode(Node):
             float(getattr(result, 'fraction_horizon_high_ambiguity', np.nan)),
             float(getattr(result, 'min_predicted_obstacle_distance_m', np.nan)),
             1.0 if getattr(result, 'rollout_valid', True) else 0.0,
-            1.0 if getattr(result, 'fallback_stop_applied', False) else 0.0,
             float(getattr(result, 'risk_mean', np.nan)),
             float(getattr(result, 'risk_cov_trace', np.nan)),
             float(getattr(result, 'risk_cov_logdet', np.nan)),
@@ -1339,7 +1426,6 @@ class UnicyclePlannerNode(Node):
             float(getattr(result, 'fraction_horizon_high_ambiguity', np.nan)),
             float(getattr(result, 'min_predicted_obstacle_distance_m', np.nan)),
             1.0 if getattr(result, 'rollout_valid', True) else 0.0,
-            1.0 if getattr(result, 'fallback_stop_applied', False) else 0.0,
             float(getattr(result, 'risk_mean', np.nan)),
             float(getattr(result, 'risk_cov_trace', np.nan)),
             float(getattr(result, 'risk_cov_logdet', np.nan)),
@@ -1352,8 +1438,6 @@ class UnicyclePlannerNode(Node):
         invalid_reason = str(getattr(result, 'invalid_reason', '') or '').strip()
         if invalid_reason:
             diag_parts.append(f'invalid_reason={invalid_reason}')
-        if bool(getattr(result, 'fallback_stop_applied', False)):
-            diag_parts.append('fallback_stop_applied=1')
         diag_text.data = ' | '.join(part for part in diag_parts if part)
         self.planner_diag_text_pub.publish(diag_text)
 
@@ -1430,13 +1514,6 @@ class UnicyclePlannerNode(Node):
                 f"Optimizer reported non-success status={getattr(result, 'optimizer_status', 0)} "
                 f"message='{getattr(result, 'optimizer_message', '')}'. "
                 "Executing the selected solver-returned control sequence."
-            )
-            self._last_slow_plan_log = now_wall
-
-        if bool(getattr(result, 'fallback_stop_applied', False)) and (now_wall - self._last_slow_plan_log > 0.5):
-            self.get_logger().warn(
-                "Planner selected a rollout that violates the collision barrier. "
-                f"Publishing a zero-motion fallback for this cycle (reason={getattr(result, 'invalid_reason', '')})."
             )
             self._last_slow_plan_log = now_wall
 

@@ -2,57 +2,23 @@
 
 This package provides the plant and simulator plumbing for the thesis experiments.
 
-![Example top-down run in the simulated world](../../docs/figures/planner_field_story.png)
-
-This package exists so that the planner and detector run inside one fixed, inspectable external-camera world.
-
-## Why This Folder Exists
-
-The repository is built around a fixed Gazebo external-camera setup. This package defines:
-
-- the world files
-- the robot description
-- the external camera model
-- startup helpers for the runtime
-
-## Inputs And Outputs
-
-- **Inputs**
-  - selected world
-  - spawn pose
-  - launch parameters
-- **Outputs**
-  - Gazebo world
-  - `/odom`
-  - `/external_camera/image_raw`
-  - robot spawn and startup readiness
-
 ## Central Files
 
 | File | Role |
 | --- | --- |
-| [`launch/bringup_sim.launch.py`](launch/bringup_sim.launch.py) | main simulator bringup used by `experiments` |
-| [`gazebo_worlds/worlds/warehouse_occ_light.world.sdf`](gazebo_worlds/worlds/warehouse_occ_light.world.sdf) | primary benchmark world |
-| [`gazebo_worlds/worlds/warehouse_open_shelves.world.sdf`](gazebo_worlds/worlds/warehouse_open_shelves.world.sdf) | secondary support world with a long shelf line and two gaps |
+| [`launch/bringup_sim.launch.py`](launch/bringup_sim.launch.py) | simulator bringup used by `experiments` |
+| [`gazebo_worlds/worlds/warehouse_occ_light.world.sdf`](gazebo_worlds/worlds/warehouse_occ_light.world.sdf) | compact reported benchmark world |
+| [`gazebo_worlds/worlds/warehouse_aws.world.sdf`](gazebo_worlds/worlds/warehouse_aws.world.sdf) | exploratory Experiment B AWS/JdeRobot-style warehouse visibility benchmark with B1/B2/B3 tasks |
+| [`models/external_camera/model.sdf`](models/external_camera/model.sdf) | external camera model |
 | [`sim/wait_for_odom.py`](sim/wait_for_odom.py) | startup gate used in launches |
 
-## Support Files
+## Outputs
 
-| File | Role |
-| --- | --- |
-| `launch/gazebo.launch.py` | Gazebo support launch |
-| `launch/robot_description.launch.py` | robot-description support launch |
-| `models/external_camera/model.sdf` | external camera simulation model |
-| `robot_description/urdf/*.xacro` | TurtleBot3 description |
-| `sim/reset_world.py`, `sim/wait_for_clock.py` | support utilities |
+- Gazebo world
+- `/odom`
+- `/external_camera/image_raw`
+- robot spawn and startup readiness
 
-## What To Read First
+## Caveat
 
-1. `launch/bringup_sim.launch.py`
-2. `gazebo_worlds/worlds/warehouse_occ_light.world.sdf`
-3. `models/external_camera/model.sdf`
-4. `sim/wait_for_odom.py`
-
-## Important Caveat
-
-This package is infrastructure, not the main method. It should appear in documentation as the plant and sensing environment, not as the thesis contribution.
+This package is infrastructure. It should appear in the paper as the plant and sensing environment, not as the thesis contribution.

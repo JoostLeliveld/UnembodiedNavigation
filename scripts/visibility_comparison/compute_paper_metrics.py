@@ -1,33 +1,30 @@
 #!/usr/bin/env python3
 """Compute protocol-defined paper metrics from completed run directories.
 
-Metrics computed per run (all from experiment.csv + run_summary.json):
+Supports two campaign-log formats:
+  * `campaign_log.json` from `run_visibility_campaign.py`, with explicit
+    `task` / `condition` / `outcome` per entry;
+  * current `grid_log.json` from `run_model_selection.py`, where each entry
+    carries `label` (e.g. `C1_constant_R`, `C2_h40_*`) and `merged_config.task`.
 
-Primary (main table):
-  goal_reached        : bool — from run_summary.json
-  collision           : bool — from run_summary.json
-  path_length_m  (L)  : cumulative ground-truth path length (in summary)
-  mean_loc_error (ē)  : mean ||truth - state_estimate|| using planner belief
-  mean_overconf  (c̄)  : mean error / sqrt(tr(Σ_xy))  [planner belief covariance]
-  f_shadow            : fraction of path steps with rho_plan < 0.35
-  completion_reason   : goal_reached | timeout_after_first_cmd | collision
+The figure-side condition vocabulary is fixed: C1 = constant covariance baseline,
+C2 = learned-observability EFE (any C2_* label collapses to `C2`).
 
-Secondary:
-  min_goal_distance   : d_min — closest approach to goal
-  path_efficiency (η) : straight-line / path_length
-  mean_rho_plan       : mean rho_plan along ground-truth path
-  elapsed_s           : seconds from first cmd to termination
-  mean_cov_trace      : mean tr(Σ_xy) over run
+Outcome classifier (added 2026-05): each row also gets boolean flags
+  is_clean_success / is_near_success / is_collision / is_penetration
+  / is_timeout / is_interrupted / is_invalid
+plus the underlying `valid_run` and penetration depths from run_summary.json.
+This mirrors the paper categories defined in 07_results.
 
-Usage:
+Usage (current data):
     python compute_paper_metrics.py \\
-        --campaign-log logs/visibility_comparison/iwai_campaign/campaign_log.json \\
+        --campaign-log logs/visibility_comparison/paper_taskA_mc_nominal_c1_vs_c2_v1/grid_log.json \\
         --gp-artifact logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz \\
         --out paper_metrics.csv
 
 Outputs:
     paper_metrics.csv   : one row per run, all metrics
-    paper_summary.txt   : mean ± std per (task, condition), copy-pasteable for paper
+    paper_summary.txt   : mean ± std per (task, condition)
 """
 
 from __future__ import annotations
@@ -72,15 +69,77 @@ def _load_run_manifest(run_dir: Path) -> dict:
         return {}
 
 
-def _validate_campaign_gp_artifact(campaign_log: dict, gp_artifact: Path) -> None:
-    """Hard-fail if C2/C3 run manifests do not match the metrics GP artifact."""
+def _label_to_condition(label: str) -> str:
+    """Collapse model-selection labels into paper conditions C1 / C2.
+
+    Anything starting `C1` → `C1` (constant covariance).
+    Anything starting `C2` or `C3` → `C2` (learned covariance) for paper rows;
+    callers that need to distinguish the C3 ablation should branch on the
+    raw label, not the condition column.
+    """
+    s = label.strip()
+    if s.startswith('C1'):
+        return 'C1'
+    if s.startswith('C2'):
+        return 'C2'
+    if s.startswith('C3'):
+        return 'C3'
+    return s
+
+
+def _normalize_entry(key: str, entry: dict, campaign_root: Path) -> dict:
+    """Return a flat record with task/condition/seed/planner/run_dir/outcome.
+
+    Handles both campaign `campaign_log.json` rows (which already have those
+    columns) and current `grid_log.json` rows (label + merged_config).
+    Resolves stale `run_dir` paths by re-locating the experiment_id under
+    `<campaign_root>/<axis>/<label>/seed<N>/`.
+    """
+    task = str(entry.get('task') or entry.get('merged_config', {}).get('task', ''))
+    raw_label = str(entry.get('condition') or entry.get('label', ''))
+    condition = _label_to_condition(raw_label)
+    seed = entry.get('seed', '')
+    planner = str(entry.get('planner')
+                  or entry.get('overrides', {}).get('planner')
+                  or entry.get('merged_config', {}).get('planner', ''))
+    outcome = str(entry.get('outcome', ''))
+    run_dir_str = str(entry.get('run_dir', '') or '')
+
+    run_dir = Path(run_dir_str) if run_dir_str else None
+    if (run_dir is None or not run_dir.is_dir()) and campaign_root and seed != '':
+        axis = str(entry.get('axis', 'monte_carlo_compare'))
+        candidate_parent = campaign_root / axis / raw_label / f'seed{seed}'
+        if candidate_parent.is_dir():
+            # Prefer the experiment_id from the original run_dir if we can
+            # match it, else take the most recent experiment_*.
+            exp_id = run_dir.name if run_dir is not None else ''
+            picked = (candidate_parent / exp_id) if exp_id else None
+            if picked is None or not picked.is_dir():
+                experiments = sorted(candidate_parent.glob('experiment_*'))
+                if experiments:
+                    picked = experiments[-1]
+            if picked is not None and picked.is_dir():
+                run_dir = picked
+
+    return {
+        'task': task,
+        'condition': condition,
+        'label': raw_label,
+        'seed': seed,
+        'planner': planner,
+        'outcome': outcome,
+        'run_dir': str(run_dir) if run_dir is not None else '',
+    }
+
+
+def _validate_campaign_gp_artifact(records: list[dict], gp_artifact: Path) -> None:
+    """Hard-fail if learned-condition run manifests do not match the metrics GP."""
     expected = _resolve_for_compare(str(gp_artifact))
     mismatches = []
-    for entry in campaign_log.values():
-        condition = str(entry.get('condition', ''))
-        if condition == 'C1':
+    for r in records:
+        if r['condition'] == 'C1':
             continue
-        run_dir_str = str(entry.get('run_dir', '') or '')
+        run_dir_str = r['run_dir']
         if not run_dir_str:
             continue
         run_dir = Path(run_dir_str)
@@ -88,8 +147,8 @@ def _validate_campaign_gp_artifact(campaign_log: dict, gp_artifact: Path) -> Non
         actual_str = str(manifest.get('visibility_artifact_path', '') or '')
         actual = _resolve_for_compare(actual_str) if actual_str else None
         if actual != expected:
-            mismatches.append((entry.get('task', ''), condition,
-                               entry.get('seed', ''), run_dir,
+            mismatches.append((r.get('task', ''), r['condition'],
+                               r.get('seed', ''), run_dir,
                                actual_str or '<missing>'))
     if mismatches:
         print('ERROR: refusing to compute paper metrics from mixed GP artifacts.', file=sys.stderr)
@@ -119,6 +178,21 @@ def _load_experiment_csv(run_dir: Path) -> list[dict]:
     return rows
 
 
+def _load_perception_csv(run_dir: Path) -> list[dict]:
+    csv_path = run_dir / 'perception.csv'
+    if not csv_path.is_file():
+        for p in run_dir.rglob('perception.csv'):
+            csv_path = p
+            break
+    if not csv_path.is_file():
+        return []
+    rows = []
+    with csv_path.open('r', newline='', encoding='utf-8') as f:
+        for row in csv.DictReader(f):
+            rows.append(row)
+    return rows
+
+
 def _pf(row: dict, key: str) -> float:
     v = row.get(key, '')
     if v in (None, '', 'nan', 'NaN'):
@@ -129,8 +203,72 @@ def _pf(row: dict, key: str) -> float:
         return math.nan
 
 
+NEAR_SUCCESS_RADIUS_M = 0.40  # entered goal region but did not satisfy hold
+
+
+def _classify_outcome(summary: dict, completed_externally: bool = True) -> dict:
+    """Map run_summary fields to the paper outcome categories.
+
+    Categories (mutually exclusive for primary outcome flags):
+      is_invalid       : run_summary.valid_run is False for non-outcome reasons
+                          (logger / infra / frame-sanity failure)
+      is_interrupted   : run did not reach a planned termination (no completion_reason)
+      is_collision     : collision_any True
+      is_penetration   : max_obstacle_penetration_m or max_wall_penetration_m > 0
+                          (recorded separately even when no collision was logged)
+      is_timeout       : completion_reason == 'timeout_after_first_cmd'
+      is_clean_success : completion_reason == 'goal_reached' AND not collision/penetration
+      is_near_success  : not clean_success and goal_region_entered or
+                          minimum_goal_distance <= NEAR_SUCCESS_RADIUS_M
+    """
+    valid_run = summary.get('valid_run')
+    completion_reason = str(summary.get('completion_reason', '') or '')
+    coll_any = bool(summary.get('collision_any', False))
+    pen_o = float(summary.get('max_obstacle_penetration_m', 0.0) or 0.0)
+    pen_w = float(summary.get('max_wall_penetration_m', 0.0) or 0.0)
+    has_penetration = (pen_o > 0.0) or (pen_w > 0.0)
+    goal_region_entered = bool(summary.get('goal_region_entered', False))
+    min_goal = float(summary.get('minimum_goal_distance', math.nan) or math.nan)
+
+    is_collision = coll_any or completion_reason == 'collision'
+    is_penetration = has_penetration  # reported separately, may overlap with collision
+    is_timeout = completion_reason == 'timeout_after_first_cmd'
+    is_invalid = (
+        valid_run is False
+        and not is_collision
+        and not is_penetration
+        and not is_timeout
+    )
+    is_interrupted = (not is_invalid) and (not completion_reason) and completed_externally is False
+    is_clean_success = (
+        completion_reason == 'goal_reached'
+        and not coll_any
+        and not has_penetration
+    )
+    is_near_success = (
+        (not is_clean_success)
+        and (goal_region_entered or
+             (math.isfinite(min_goal) and min_goal <= NEAR_SUCCESS_RADIUS_M))
+        and not is_collision and not is_invalid
+    )
+    return {
+        'valid_run': bool(valid_run) if valid_run is not None else True,
+        'is_clean_success': is_clean_success,
+        'is_near_success': is_near_success,
+        'is_collision': is_collision,
+        'is_penetration': is_penetration,
+        'is_timeout': is_timeout,
+        'is_interrupted': is_interrupted,
+        'is_invalid': is_invalid,
+        'goal_region_entered': goal_region_entered,
+        'max_obstacle_penetration_m': pen_o,
+        'max_wall_penetration_m': pen_w,
+    }
+
+
 def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dict | None) -> dict:
     rows = _load_experiment_csv(run_dir)
+    perception_rows = _load_perception_csv(run_dir)
 
     # --- From summary ---
     goal_reached = bool(summary.get('goal_reached', False)) or summary.get('completion_reason') == 'goal_reached'
@@ -138,17 +276,25 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
     completion_reason = str(summary.get('completion_reason', ''))
     path_length_m = float(summary.get('path_length_m', math.nan) or math.nan)
     min_goal_distance = float(summary.get('minimum_goal_distance', math.nan) or math.nan)
+    final_goal_distance = float(summary.get('final_goal_distance', math.nan) or math.nan)
     elapsed_s = float(summary.get('elapsed_after_first_cmd_s', math.nan) or math.nan)
+    mean_solve_time_ms = float(summary.get('mean_solve_time_ms', math.nan) or math.nan)
+    summary_mean_truth_belief = float(summary.get('mean_truth_belief_error_m', math.nan) or math.nan)
+    summary_mean_p_vis_eff = float(summary.get('mean_p_vis_plan_eff', math.nan) or math.nan)
 
     if not rows:
         return {
             'goal_reached': goal_reached, 'collision': crashed,
             'completion_reason': completion_reason,
             'path_length_m': path_length_m, 'min_goal_distance': min_goal_distance,
+            'final_goal_distance': final_goal_distance,
             'elapsed_s': elapsed_s,
-            'mean_loc_error_m': math.nan, 'mean_overconf': math.nan,
-            'f_shadow': math.nan, 'mean_rho_plan': math.nan,
+            'mean_loc_error_m': summary_mean_truth_belief, 'mean_overconf': math.nan,
+            'f_shadow': math.nan, 'mean_rho_plan': summary_mean_p_vis_eff,
             'path_efficiency': math.nan, 'mean_cov_trace': math.nan,
+            'mean_solve_time_ms': mean_solve_time_ms,
+            'p90_solve_time_ms': math.nan,
+            'yolo_detection_rate': math.nan,
             'n_rows': 0,
         }
 
@@ -157,6 +303,7 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
     overconf_values = []
     rho_values = []
     cov_traces = []
+    solve_times_ms = []
 
     for row in rows:
         # Use planner belief as the estimator (that's what drives control)
@@ -185,6 +332,10 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
             if math.isfinite(rho):
                 rho_values.append(rho)
 
+        st = _pf(row, 'solve_time_ms')
+        if math.isfinite(st):
+            solve_times_ms.append(st)
+
     mean_loc_error = float(np.mean(loc_errors)) if loc_errors else math.nan
     mean_overconf = float(np.mean(overconf_values)) if overconf_values else math.nan
     mean_cov_trace = float(np.mean(cov_traces)) if cov_traces else math.nan
@@ -204,35 +355,66 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
             straight = math.hypot(goal[0] - start[0], goal[1] - start[1])
             path_efficiency = straight / path_length_m
 
+    p90_solve_time_ms = (
+        float(np.percentile(solve_times_ms, 90)) if solve_times_ms else math.nan
+    )
+
+    # Empirical YOLO detection rate from perception.csv
+    yolo_detection_rate = math.nan
+    if perception_rows:
+        n_detected = sum(
+            1 for r in perception_rows
+            if _pf(r, 'yolo_detected_after_threshold') >= 0.5
+        )
+        yolo_detection_rate = n_detected / len(perception_rows)
+
+    # Prefer summary-level mean for truth-belief error; fall back to CSV mean.
+    if not math.isfinite(summary_mean_truth_belief):
+        summary_mean_truth_belief = mean_loc_error
+
     return {
         'goal_reached': goal_reached,
         'collision': crashed,
         'completion_reason': completion_reason,
         'path_length_m': path_length_m,
         'min_goal_distance': min_goal_distance,
+        'final_goal_distance': final_goal_distance,
         'elapsed_s': elapsed_s,
-        'mean_loc_error_m': mean_loc_error,
+        'mean_loc_error_m': summary_mean_truth_belief,
         'mean_overconf': mean_overconf,
         'f_shadow': f_shadow,
         'mean_rho_plan': mean_rho_plan,
         'path_efficiency': path_efficiency,
         'mean_cov_trace': mean_cov_trace,
+        'mean_solve_time_ms': mean_solve_time_ms,
+        'p90_solve_time_ms': p90_solve_time_ms,
+        'yolo_detection_rate': yolo_detection_rate,
         'n_rows': len(rows),
     }
 
 
 TASK_INFO = {
+    # Paper metrics are intentionally limited to the compact benchmark. AWS
+    # Experiment B remains exploratory until it is registered with a validated
+    # world/detector/GP/config/log/figure chain.
     'shadow_tradeoff_a': {'start': (-2.0, 0.5), 'goal': (2.0, -0.5)},
     'shadow_tradeoff_b': {'start': (-2.0, -1.0), 'goal': (2.0, -0.5)},
     'sanity_open':       {'start': (-2.0, -1.5), 'goal': (2.0, -1.5)},
 }
 
 FIELDNAMES = [
-    'task', 'condition', 'seed', 'planner', 'run_dir',
+    'task', 'condition', 'label', 'seed', 'planner', 'run_dir',
     'goal_reached', 'collision', 'completion_reason',
-    'path_length_m', 'min_goal_distance', 'elapsed_s',
+    'path_length_m', 'min_goal_distance', 'final_goal_distance', 'elapsed_s',
     'mean_loc_error_m', 'mean_overconf', 'f_shadow', 'mean_rho_plan',
-    'path_efficiency', 'mean_cov_trace', 'n_rows', 'outcome',
+    'path_efficiency', 'mean_cov_trace',
+    'yolo_detection_rate',
+    'mean_solve_time_ms', 'p90_solve_time_ms',
+    'valid_run', 'is_clean_success', 'is_near_success',
+    'is_collision', 'is_penetration', 'is_timeout', 'is_interrupted', 'is_invalid',
+    'goal_region_entered',
+    'max_obstacle_penetration_m', 'max_wall_penetration_m',
+    'n_rows', 'outcome',
 ]
 
 
@@ -246,53 +428,76 @@ def _format(v) -> str:
     return str(v)
 
 
+CONDITION_DISPLAY = {
+    'C1': 'Constant cov.',
+    'C2': 'Learned cov.',
+    'C3': 'GP-risk only (abl.)',
+}
+
+
 def _print_summary(rows: list[dict]) -> str:
     lines = []
-    header = f'{"Task":<20} {"Cond":<6} {"N":>3} {"Goal%":>6} {"Coll%":>6} '
-    header += f'{"L(m)":>9} {"ē(m)":>9} {"c̄":>9} {"f_shad":>8} {"η":>8}'
+    header = (f'{"Task":<22} {"Cond":<22} {"N":>3} {"Clean%":>7} {"Near%":>6} '
+              f'{"Coll%":>6} {"Pen%":>5} {"Inv%":>5} '
+              f'{"L(m)":>10} {"ē(m)":>10} {"c̄":>9} '
+              f'{"f_shad":>8} {"det_rate":>9} {"η":>8} {"solve(ms)":>10}')
     lines.append(header)
     lines.append('-' * len(header))
 
-    tasks = ['shadow_tradeoff_a', 'shadow_tradeoff_b', 'sanity_open']
+    tasks = sorted({r['task'] for r in rows if r.get('task')})
     conditions = ['C1', 'C2', 'C3']
 
     for task in tasks:
         for cond in conditions:
-            subset = [r for r in rows if r['task'] == task and r['condition'] == cond
-                      and r['outcome'] not in ('infra_invalid', None)]
+            subset = [r for r in rows if r['task'] == task and r['condition'] == cond]
             if not subset:
                 continue
             n = len(subset)
-            goal_rate = 100.0 * sum(1 for r in subset if r['goal_reached']) / n
-            coll_rate = 100.0 * sum(1 for r in subset if r['collision']) / n
-            valid = [r for r in subset if not r['collision']]
+            def _pct(flag):
+                return 100.0 * sum(1 for r in subset if r.get(flag)) / n
+            clean_pct = _pct('is_clean_success')
+            near_pct = _pct('is_near_success')
+            coll_pct = _pct('is_collision')
+            pen_pct = _pct('is_penetration')
+            inv_pct = _pct('is_invalid')
+            valid = [r for r in subset if r.get('is_clean_success')]
 
             def _mean_std(key):
-                vals = [r[key] for r in valid if math.isfinite(float(r[key] or 'nan'))]
+                vals = []
+                for r in valid:
+                    v = r.get(key)
+                    try:
+                        vf = float(v if v not in (None, '') else 'nan')
+                    except (TypeError, ValueError):
+                        vf = math.nan
+                    if math.isfinite(vf):
+                        vals.append(vf)
                 if not vals:
                     return 'n/a'
                 return f'{np.mean(vals):.2f}±{np.std(vals):.2f}'
 
-            l_str = _mean_std('path_length_m')
-            e_str = _mean_std('mean_loc_error_m')
-            c_str = _mean_std('mean_overconf')
-            f_str = _mean_std('f_shadow')
-            eta_str = _mean_std('path_efficiency')
             lines.append(
-                f'{task:<20} {cond:<6} {n:>3} {goal_rate:>5.0f}% {coll_rate:>5.0f}% '
-                f'{l_str:>9} {e_str:>9} {c_str:>9} {f_str:>8} {eta_str:>8}'
+                f'{task:<22} {CONDITION_DISPLAY.get(cond, cond):<22} {n:>3} '
+                f'{clean_pct:>6.0f}% {near_pct:>5.0f}% '
+                f'{coll_pct:>5.0f}% {pen_pct:>4.0f}% {inv_pct:>4.0f}% '
+                f'{_mean_std("path_length_m"):>10} {_mean_std("mean_loc_error_m"):>10} '
+                f'{_mean_std("mean_overconf"):>9} {_mean_std("f_shadow"):>8} '
+                f'{_mean_std("yolo_detection_rate"):>9} '
+                f'{_mean_std("path_efficiency"):>8} {_mean_std("mean_solve_time_ms"):>10}'
             )
         lines.append('')
 
+    lines.append('Outcome counts pool every attempted run; continuous metrics '
+                 'are pooled over clean successes only.')
     return '\n'.join(lines)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description='Compute paper metrics from IWAI campaign runs.')
+    parser = argparse.ArgumentParser(description='Compute paper metrics from a campaign run log.')
     parser.add_argument('--campaign-log', required=True,
-                        help='Path to campaign_log.json from run_iwai_campaign.py.')
+                        help='Path to campaign_log.json or grid_log.json.')
     parser.add_argument('--gp-artifact', default='',
-                        help='Path to GP .npz artifact for rho_plan queries (optional but needed for f_shadow).')
+                        help='Path to GP .npz artifact for rho_plan queries (needed for f_shadow).')
     parser.add_argument('--out', default='paper_metrics.csv',
                         help='Output CSV path.')
     parser.add_argument('--summary-out', default='paper_summary.txt',
@@ -305,14 +510,19 @@ def main() -> int:
         return 1
 
     campaign_log = json.loads(campaign_log_path.read_text(encoding='utf-8'))
+    campaign_root = campaign_log_path.parent
     print(f'Loaded {len(campaign_log)} run entries from {campaign_log_path}')
+
+    records = [_normalize_entry(k, v, campaign_root) for k, v in campaign_log.items()]
+    n_resolved = sum(1 for r in records if r['run_dir'])
+    print(f'  resolved run_dir for {n_resolved}/{len(records)} entries')
 
     gp_interp = None
     if args.gp_artifact:
         gp_path = Path(args.gp_artifact).expanduser().resolve()
         if gp_path.is_file():
             print(f'Loading GP artifact: {gp_path}')
-            _validate_campaign_gp_artifact(campaign_log, gp_path)
+            _validate_campaign_gp_artifact(records, gp_path)
             gp_interp = _load_gp(gp_path)
         else:
             print(f'WARNING: GP artifact not found: {gp_path} — f_shadow and mean_rho will be NaN')
@@ -321,24 +531,24 @@ def main() -> int:
     summary_path = Path(args.summary_out).expanduser().resolve()
 
     all_rows = []
-    for key, entry in campaign_log.items():
-        task = str(entry.get('task', ''))
-        condition = str(entry.get('condition', ''))
-        seed = entry.get('seed', '')
-        planner = str(entry.get('planner', ''))
-        outcome = str(entry.get('outcome', ''))
-        run_dir_str = str(entry.get('run_dir', ''))
+    for r in records:
+        base_row = dict(r)
+        run_dir_str = r['run_dir']
+        task = r['task']
+        condition = r['condition']
+        seed = r['seed']
 
-        base_row = {
-            'task': task, 'condition': condition, 'seed': seed,
-            'planner': planner, 'run_dir': run_dir_str, 'outcome': outcome,
-        }
-
-        if outcome == 'infra_invalid' or not run_dir_str:
+        if r['outcome'] == 'infra_invalid' or not run_dir_str:
             base_row.update({k: math.nan for k in FIELDNAMES if k not in base_row})
             base_row['goal_reached'] = False
             base_row['collision'] = False
             base_row['completion_reason'] = 'infra_invalid'
+            base_row['valid_run'] = False
+            base_row['is_invalid'] = True
+            for flag in ('is_clean_success', 'is_near_success', 'is_collision',
+                         'is_penetration', 'is_timeout', 'is_interrupted',
+                         'goal_region_entered'):
+                base_row[flag] = False
             all_rows.append(base_row)
             print(f'  infra_invalid: {task}/{condition}/seed{seed}')
             continue
@@ -346,7 +556,6 @@ def main() -> int:
         run_dir = Path(run_dir_str)
         summary_path_run = run_dir / 'run_summary.json'
         if not summary_path_run.is_file():
-            # Try to find summary in subdirectory
             candidates = sorted(run_dir.rglob('run_summary.json'))
             if candidates:
                 summary_path_run = candidates[-1]
@@ -356,18 +565,30 @@ def main() -> int:
             print(f'  WARNING: no run_summary.json for {task}/{condition}/seed{seed}')
             base_row.update({k: math.nan for k in FIELDNAMES if k not in base_row})
             base_row['outcome'] = 'infra_invalid'
+            base_row['is_invalid'] = True
             all_rows.append(base_row)
             continue
 
         summary = json.loads(summary_path_run.read_text(encoding='utf-8'))
         task_info = TASK_INFO.get(task)
         metrics = _compute_run_metrics(run_dir, summary, gp_interp, task_info)
+        classification = _classify_outcome(summary)
         base_row.update(metrics)
+        base_row.update(classification)
         all_rows.append(base_row)
-        gr = 'YES' if metrics['goal_reached'] else 'no '
-        print(f'  {task:<22} {condition} seed{seed}: goal={gr} '
+        tag = (
+            'clean' if classification['is_clean_success']
+            else 'near'  if classification['is_near_success']
+            else 'coll'  if classification['is_collision']
+            else 'pen'   if classification['is_penetration']
+            else 'time'  if classification['is_timeout']
+            else 'inv'   if classification['is_invalid']
+            else '?'
+        )
+        f_shadow = metrics['f_shadow'] if math.isfinite(metrics['f_shadow']) else float('nan')
+        print(f'  {task:<22} {condition} seed{seed}: {tag:<5} '
               f'L={metrics["path_length_m"]:.2f}m  ē={metrics["mean_loc_error_m"]:.3f}m  '
-              f'c̄={metrics["mean_overconf"]:.2f}  f_shadow={metrics["f_shadow"]:.2f}')
+              f'f_shadow={f_shadow:.2f}')
 
     with out_path.open('w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES, extrasaction='ignore')

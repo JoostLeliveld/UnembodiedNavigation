@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-"""Generate thesis figures from the IWAI campaign data.
+"""Generate thesis figures from the multi-seed Task A campaign.
 
-Mechanism-first results layout. Main-text figures (Task A is the headline):
+Mechanism-first results layout. Main-text figures:
 
-    gp_pipeline.pdf            data -> rho_plan -> induced ambiguity (\xa75)
-    mechanism_taskA.pdf        single representative C2 run with truth, one
-                                belief mean, fresh camera-correction evidence,
-                                YOLO-score diagnostics, 2sigma ellipses, and
-                                time series
-    compare_taskA.pdf          two-panel C1 vs C2 multi-seed truth paths
+    gp_pipeline.pdf            data -> planner-facing reliability rho_plan ->
+                                induced ambiguity (Setup, not Results)
+    paired_mechanism_taskA.pdf paired representative run on the main
+                                shadow-tradeoff task: Constant covariance vs
+                                Learned covariance, same seed, same world,
+                                showing route, belief mean, 2sigma ellipses,
+                                fresh camera corrections, and shared time
+                                series for rho_plan/score, error/std, and
+                                EFE risk/ambiguity.
+    compare_taskA.pdf          multi-seed truth paths, Constant vs Learned.
+                                Faded per-seed paths only (no across-seed
+                                averaging band).
     (Tables 1 & 2 are written into 07_results.tex directly.)
 
-Appendix figures:
+Appendix:
 
-    paths_overview_BS.pdf      Task B and Task S overlays
-    paths_per_seed.pdf         per-seed paths for every (task, condition)
-    compare_C3_taskA.pdf       C3 ablation pulled out of main text
-    metrics_box.pdf            pooled boxplots (supporting visualization)
+    paths_per_seed.pdf         per-seed paths for Constant and Learned
 
-Problem-setup helper:
-
-    problem_setup_panels.pdf   replaces (b)/(c) of the legacy figure with
-                                current Q-noise dynamics; (a) Gazebo screenshot
-                                must be captured separately.
+The driver expects paper_metrics.csv from compute_paper_metrics.py and the
+companion grid_log.json from the live campaign.
 """
 
 from __future__ import annotations
@@ -33,6 +33,8 @@ import json
 import math
 from pathlib import Path
 
+import yaml
+
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -41,31 +43,20 @@ import numpy as np
 
 
 REPO = Path('/home/joostleliveld/Thesis/UnembodiedNavigation')
-CAMPAIGN_DIR = REPO / 'logs' / 'visibility_comparison' / 'iwai_campaign'
-GP_PATH = REPO / 'logs' / 'visibility_comparison' / 'current_gp' / 'yolo_score_raw_gp.npz'
 
-TASKS = ['shadow_tradeoff_a', 'shadow_tradeoff_b', 'sanity_open']
-TASK_LABELS = {
-    'shadow_tradeoff_a': 'Task A: shadow tradeoff (front)',
-    'shadow_tradeoff_b': 'Task B: shadow tradeoff (diagonal)',
-    'sanity_open': 'Task S: sanity, no shadow',
-}
-TASK_INFO = {
-    'shadow_tradeoff_a': {'start': (-2.0, 0.5), 'goal': (2.0, -0.5)},
-    'shadow_tradeoff_b': {'start': (-2.0, -1.0), 'goal': (2.0, -0.5)},
-    'sanity_open':       {'start': (-2.0, -1.5), 'goal': (2.0, -1.5)},
-}
+# Populated at runtime from CLI args + tasks.yaml/world_profiles.yaml.
+TASKS: list[str] = []
+TASK_LABELS: dict[str, str] = {}
+TASK_INFO: dict[str, dict] = {}
 
-CONDS = ['C1', 'C2', 'C3']
+CONDS = ['C1', 'C2']
 COND_LABEL = {
-    'C1': r'C1: constant $R_0$',
-    'C2': r'C2: visibility-aware (full)',
-    'C3': r'C3: GP-risk only (ablation)',
+    'C1': 'Constant covariance',
+    'C2': 'Learned covariance',
 }
 COND_COLOR = {
-    'C1': '#d62728',  # red
-    'C2': '#1f77b4',  # blue
-    'C3': '#2ca02c',  # green
+    'C1': '#d62728',  # red — constant covariance
+    'C2': '#1f77b4',  # blue — learned covariance
 }
 OUTCOME_COLOR = {
     'goal_reached': '#2ca02c',
@@ -74,13 +65,65 @@ OUTCOME_COLOR = {
     'infra_invalid': '#7f7f7f',
 }
 
-SHELF = dict(xmin=-0.9, xmax=0.8, ymin=-0.33, ymax=0.03)
-CAM_XY = (-2.45, -2.45)
+# Set at runtime by _load_world_context(); replaced by actual obstacle boxes.
+SHELF_BOXES: list[dict] = []   # list of {xmin, xmax, ymin, ymax}
+CAM_XY = (-2.45, -2.45)        # overwritten at runtime from GP cam field
+AXIS_XLIM = (-2.6, 2.6)        # overwritten at runtime from world profile
+AXIS_YLIM = (-2.4, 2.4)        # overwritten at runtime from world profile
 FRESH_CAMERA_UPDATE_MAX_AGE_S = 1.0
 
 
+def _label_to_condition(label: str) -> str:
+    s = (label or '').strip()
+    if s.startswith('C1'):
+        return 'C1'
+    if s.startswith('C2'):
+        return 'C2'
+    if s.startswith('C3'):
+        return 'C3'
+    return s
+
+
 def load_campaign(log_path: Path) -> dict:
-    return json.loads(log_path.read_text(encoding='utf-8'))
+    """Return a dict keyed by `task__condition__seedN` for both schemas.
+
+    The current grid_log.json schema stores entries under keys like
+    `monte_carlo_compare__C1_constant_R__seed0` with `label`, `merged_config.task`,
+    and a possibly-stale `run_dir`. This function resolves the run_dir under
+    the campaign root so downstream loaders find the actual experiment_*.
+    """
+    raw = json.loads(log_path.read_text(encoding='utf-8'))
+    campaign_root = log_path.parent
+    out: dict[str, dict] = {}
+    for entry in raw.values():
+        task = (entry.get('task')
+                or entry.get('merged_config', {}).get('task', ''))
+        raw_label = entry.get('condition') or entry.get('label', '')
+        condition = _label_to_condition(raw_label)
+        seed = entry.get('seed', '')
+        run_dir_str = str(entry.get('run_dir', '') or '')
+        run_dir = Path(run_dir_str) if run_dir_str else None
+        if (run_dir is None or not run_dir.is_dir()) and seed != '':
+            axis = entry.get('axis', 'monte_carlo_compare')
+            parent = campaign_root / axis / raw_label / f'seed{seed}'
+            if parent.is_dir():
+                exp_id = run_dir.name if run_dir is not None else ''
+                cand = (parent / exp_id) if exp_id else None
+                if cand is None or not cand.is_dir():
+                    matches = sorted(parent.glob('experiment_*'))
+                    cand = matches[-1] if matches else None
+                if cand is not None and cand.is_dir():
+                    run_dir = cand
+        key = f'{task}__{condition}__seed{seed}'
+        out[key] = {
+            'task': task,
+            'condition': condition,
+            'label': raw_label,
+            'seed': seed,
+            'run_dir': str(run_dir) if run_dir is not None else '',
+            'outcome': entry.get('outcome', '') or entry.get('completion_reason', ''),
+        }
+    return out
 
 
 def load_metrics_csv(path: Path) -> list[dict]:
@@ -265,13 +308,14 @@ def load_gp(path: Path):
 
 
 def draw_workspace_overlay(ax, alpha=0.85, edgecolor='black'):
-    ax.add_patch(Rectangle(
-        (SHELF['xmin'], SHELF['ymin']),
-        SHELF['xmax'] - SHELF['xmin'],
-        SHELF['ymax'] - SHELF['ymin'],
-        facecolor='dimgray', edgecolor=edgecolor, alpha=alpha, linewidth=0.6,
-        zorder=3,
-    ))
+    for box in SHELF_BOXES:
+        ax.add_patch(Rectangle(
+            (box['xmin'], box['ymin']),
+            box['xmax'] - box['xmin'],
+            box['ymax'] - box['ymin'],
+            facecolor='dimgray', edgecolor=edgecolor, alpha=alpha, linewidth=0.6,
+            zorder=3,
+        ))
 
 
 def draw_camera_marker(ax, color='black'):
@@ -398,7 +442,7 @@ def plot_gp_pipeline(gp, out_path, r_visible_uv=2.5, r_miss_uv=120.0,
                    aspect='equal')
     draw_workspace_overlay(ax, alpha=0.6)
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label=r'$\rho_{\mathrm{plan}}$')
-    ax.set_title(r'(b) planner reliability $\rho_{\mathrm{plan}}$')
+    ax.set_title(r'(b) planner-facing reliability $\rho_{\mathrm{plan}}$')
     ax.set_xlabel(r'$x$ (m)'); ax.tick_params(labelleft=False)
     ax.set_xlim(extent[0], extent[1]); ax.set_ylim(extent[2], extent[3])
 
@@ -411,7 +455,7 @@ def plot_gp_pipeline(gp, out_path, r_visible_uv=2.5, r_miss_uv=120.0,
     im = ax.imshow(log_det, extent=extent, origin='lower', cmap='magma', aspect='equal')
     draw_workspace_overlay(ax, alpha=0.6, edgecolor='white')
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04,
-                 label=r'$\frac{1}{2}\log|R_{\mathrm{eff}}|$')
+                 label=r'$\frac{1}{2}\log|R(\mathbf{p})|$')
     ax.set_title('(c) induced ambiguity')
     ax.set_xlabel(r'$x$ (m)'); ax.tick_params(labelleft=False)
     ax.set_xlim(extent[0], extent[1]); ax.set_ylim(extent[2], extent[3])
@@ -422,12 +466,230 @@ def plot_gp_pipeline(gp, out_path, r_visible_uv=2.5, r_miss_uv=120.0,
 
 
 # -------------------------------------------------------------------------
-# Figure: mechanism (representative C2 run, path + time series)
+# Figure: paired mechanism (Constant vs Learned, same seed, on Task A)
 # -------------------------------------------------------------------------
 
-def plot_mechanism_taskA(rows, gp, out_path, cond='C2', seed=0):
+def _draw_path_panel(ax, gp, task, cond, run_dir, seed, fig=None,
+                     show_colorbar=False):
+    """Draw one path-on-rho_plan panel for a single run_dir."""
+    csv_rows = load_run_csv(run_dir)
+    plan_rows = load_plan_samples(run_dir)
+    t_t, t_x, t_y = extract_truth_path(csv_rows)
+    b_t, b_x, b_y, sxx, sxy, syy, b_upd = extract_belief_path(csv_rows)
+
+    extent = (gp['xs'][0], gp['xs'][-1], gp['ys'][0], gp['ys'][-1])
+    im = ax.imshow(gp['P_plan'], extent=extent, origin='lower',
+                   cmap='viridis', vmin=0.0, vmax=0.62, aspect='equal',
+                   alpha=0.85, zorder=1)
+    draw_workspace_overlay(ax, alpha=0.85)
+    draw_camera_marker(ax)
+    ti = TASK_INFO[task]
+    ax.scatter([ti['start'][0]], [ti['start'][1]], marker='o', s=80,
+               facecolor='lime', edgecolor='black', zorder=10, label='start')
+    ax.scatter([ti['goal'][0]], [ti['goal'][1]], marker='*', s=170,
+               facecolor='red', edgecolor='black', zorder=10, label='goal')
+    ax.add_patch(Circle(ti['goal'], 0.20, fill=False, edgecolor='red',
+                        linewidth=1.0, linestyle='--', zorder=9))
+
+    ax.plot(t_x, t_y, color='black', linewidth=2.0, zorder=8, label='truth')
+    _draw_plan_horizon_snapshots(ax, plan_rows)
+
+    if b_x.size:
+        max_gap_s = 1.5
+        gap_mask = np.concatenate([[False], np.diff(b_t) > max_gap_s])
+        bx_seg = b_x.copy().astype(float)
+        by_seg = b_y.copy().astype(float)
+        bx_seg[gap_mask] = np.nan
+        by_seg[gap_mask] = np.nan
+        ax.plot(bx_seg, by_seg, color='purple', linewidth=1.6,
+                linestyle='--', alpha=0.95, zorder=7, label='belief mean')
+        upd_mask = b_upd >= 0.5
+        if np.any(upd_mask):
+            ax.scatter(bx_seg[upd_mask], by_seg[upd_mask], s=14,
+                       facecolor='white', edgecolor='#1f77b4', linewidth=0.7,
+                       alpha=0.9, zorder=8, label='fresh camera correction')
+    _draw_cov_ellipses(ax, b_x, b_y, sxx, sxy, syy, n_ellipses=8, scale=2.0,
+                       color='purple')
+    ax.set_xlim(*AXIS_XLIM); ax.set_ylim(*AXIS_YLIM)
+    ax.set_aspect('equal')
+    ax.set_xlabel(r'$x$ (m)')
+    if show_colorbar and fig is not None:
+        cbar = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02,
+                            label=r'$\rho_{\mathrm{plan}}$')
+        cbar.ax.tick_params(labelsize=8)
+    return csv_rows
+
+
+def _draw_time_series_row(ax_pvis, ax_err, ax_efe, csv_rows, perception_rows,
+                          manifest, color, label):
+    """Plot rho_plan/score, error/std, EFE risk/ambiguity for one run."""
+    t_p = np.asarray([_f(r, 'stamp') for r in csv_rows])
+    pvis = np.asarray([_f(r, 'p_vis_plan_eff') for r in csv_rows])
+    err = np.asarray([_f(r, 'truth_belief_error_m') for r in csv_rows])
+    cov_tr = np.asarray([_f(r, 'state_cov_trace') for r in csv_rows])
+    efe_risk = np.asarray([_f(r, 'efe_risk') for r in csv_rows])
+    efe_amb = np.asarray([_f(r, 'efe_ambiguity') for r in csv_rows])
+    yolo_t, yolo_score, yolo_detected = extract_yolo_scores(perception_rows)
+    yolo_threshold = float(manifest.get('yolo_conf_threshold', 0.25))
+
+    finite = np.isfinite(pvis)
+    if np.any(finite):
+        ax_pvis.plot(t_p[finite], pvis[finite], color=color, linewidth=1.4,
+                     label=label)
+    if yolo_t.size:
+        det = yolo_detected >= 0.5
+        if np.any(det):
+            ax_pvis.scatter(yolo_t[det], yolo_score[det], s=10,
+                            color=color, alpha=0.40, zorder=3)
+
+    finite_e = np.isfinite(err)
+    if np.any(finite_e):
+        ax_err.plot(t_p[finite_e], err[finite_e], color=color, linewidth=1.2,
+                    label=label)
+    finite_c = np.isfinite(cov_tr)
+    if np.any(finite_c):
+        sigma_pos = np.sqrt(np.clip(cov_tr / 2.0, 1e-9, None))
+        ax_err.plot(t_p[finite_c], sigma_pos[finite_c], color=color,
+                    linewidth=0.9, linestyle='--', alpha=0.7)
+
+    finite_r = np.isfinite(efe_risk)
+    finite_a = np.isfinite(efe_amb)
+    if np.any(finite_r):
+        ax_efe.plot(t_p[finite_r], efe_risk[finite_r], color=color,
+                    linewidth=1.1, label=label)
+    if np.any(finite_a):
+        ax_efe.plot(t_p[finite_a], efe_amb[finite_a], color=color,
+                    linewidth=1.1, linestyle=':')
+    return yolo_threshold
+
+
+def _pick_paired_seed(rows, task='shadow_tradeoff_a') -> int | None:
+    """Choose a seed where both Constant and Learned have a usable run.
+
+    Preference order:
+      1. seed with the largest mean |y_c2 - y_c1| at matched arclength
+         (most visually informative paired figure);
+      2. fall back to seed 0 if the divergence calculation fails.
+    """
+    by_seed: dict[int, dict[str, Path]] = {}
+    for r in rows:
+        if r['task'] != task or r['condition'] not in ('C1', 'C2'):
+            continue
+        rd = r.get('run_dir', '')
+        if not rd:
+            continue
+        try:
+            seed = int(r['seed'])
+        except (TypeError, ValueError):
+            continue
+        by_seed.setdefault(seed, {})[r['condition']] = Path(rd)
+
+    paired_seeds = [s for s, d in by_seed.items() if 'C1' in d and 'C2' in d]
+    if not paired_seeds:
+        return None
+    best_seed = paired_seeds[0]
+    best_div = -math.inf
+    for s in paired_seeds:
+        try:
+            _, x1, y1 = extract_truth_path(load_run_csv(by_seed[s]['C1']))
+            _, x2, y2 = extract_truth_path(load_run_csv(by_seed[s]['C2']))
+            if x1.size < 5 or x2.size < 5:
+                continue
+            _, _, y1r, _ = resample_by_arclength(x1, y1, n=128)
+            _, _, y2r, _ = resample_by_arclength(x2, y2, n=128)
+            div = float(np.mean(np.abs(y2r - y1r)))
+            if div > best_div:
+                best_div = div
+                best_seed = s
+        except Exception:
+            continue
+    return best_seed
+
+
+def plot_paired_mechanism_taskA(rows, gp, out_path, seed=None, task=None):
+    """Fig 4: Constant covariance vs Learned covariance, same seed, Task A.
+
+    Layout: top row is two paths over rho_plan; bottom row is three shared
+    time series (rho_plan/YOLO score, error vs std, EFE risk/ambiguity)
+    with both conditions overlaid using the COND_COLOR mapping.
+    """
+    task = task or (TASKS[0] if TASKS else "shadow_tradeoff_a")
+    if seed is None:
+        seed = _pick_paired_seed(rows, task=task)
+    if seed is None:
+        return
+
+    runs: dict[str, Path] = {}
+    for r in rows:
+        if r['task'] != task or r['condition'] not in ('C1', 'C2'):
+            continue
+        try:
+            if int(r['seed']) != seed:
+                continue
+        except (TypeError, ValueError):
+            continue
+        rd = r.get('run_dir', '')
+        if rd:
+            runs[r['condition']] = Path(rd)
+    if 'C1' not in runs or 'C2' not in runs:
+        return
+
+    fig = plt.figure(figsize=(12.4, 8.8))
+    gs = fig.add_gridspec(4, 2, height_ratios=[1.6, 0.7, 0.7, 0.7],
+                          hspace=0.42, wspace=0.18)
+    ax_c1 = fig.add_subplot(gs[0, 0])
+    ax_c2 = fig.add_subplot(gs[0, 1], sharey=ax_c1)
+    ax_pvis = fig.add_subplot(gs[1, :])
+    ax_err = fig.add_subplot(gs[2, :], sharex=ax_pvis)
+    ax_efe = fig.add_subplot(gs[3, :], sharex=ax_pvis)
+
+    csv_c1 = _draw_path_panel(ax_c1, gp, task, 'C1', runs['C1'], seed,
+                              fig=fig, show_colorbar=False)
+    csv_c2 = _draw_path_panel(ax_c2, gp, task, 'C2', runs['C2'], seed,
+                              fig=fig, show_colorbar=True)
+    ax_c1.set_title(f'(a) {COND_LABEL["C1"]} — seed {seed}', fontsize=10)
+    ax_c2.set_title(f'(b) {COND_LABEL["C2"]} — seed {seed}', fontsize=10)
+    ax_c1.set_ylabel(r'$y$ (m)')
+    ax_c1.legend(loc='upper left', fontsize=7.5, frameon=True)
+
+    perc_c1 = load_perception_csv(runs['C1'])
+    perc_c2 = load_perception_csv(runs['C2'])
+    man_c1 = load_run_manifest(runs['C1'])
+    man_c2 = load_run_manifest(runs['C2'])
+
+    _draw_time_series_row(ax_pvis, ax_err, ax_efe, csv_c1, perc_c1, man_c1,
+                          color=COND_COLOR['C1'], label=COND_LABEL['C1'])
+    yolo_thr = _draw_time_series_row(
+        ax_pvis, ax_err, ax_efe, csv_c2, perc_c2, man_c2,
+        color=COND_COLOR['C2'], label=COND_LABEL['C2'])
+    ax_pvis.axhline(yolo_thr, color='orange', linestyle=':', linewidth=0.8,
+                    alpha=0.6, label=f'YOLO threshold {yolo_thr:.2f}')
+
+    ax_pvis.set_ylabel(r'$\rho_{\mathrm{plan}}$ / YOLO score', fontsize=9)
+    ax_pvis.legend(fontsize=7.5, loc='upper right', frameon=False, ncol=3)
+    ax_pvis.grid(alpha=0.3, linestyle=':')
+    ax_err.set_ylabel(r'error / $\sigma$ (m)', fontsize=9)
+    ax_err.grid(alpha=0.3, linestyle=':')
+    ax_efe.set_ylabel('EFE risk (solid) / amb. (dot.)', fontsize=9)
+    ax_efe.set_xlabel('time (s)', fontsize=9)
+    ax_efe.grid(alpha=0.3, linestyle=':')
+
+    fig.suptitle(
+        f'Paired representative run on the main shadow-tradeoff task '
+        f'(seed {seed}). Only the predictive detector-observation '
+        f'covariance differs.',
+        fontsize=10, y=0.995)
+    fig.savefig(out_path, bbox_inches='tight', dpi=200)
+    plt.close(fig)
+
+
+# -------------------------------------------------------------------------
+# Figure: single-condition mechanism (kept for appendix use)
+# -------------------------------------------------------------------------
+
+def plot_mechanism_taskA(rows, gp, out_path, cond='C2', seed=0, task=None):
     target = next((r for r in rows
-                   if r['task'] == 'shadow_tradeoff_a'
+                   if r['task'] == (task or (TASKS[0] if TASKS else 'shadow_tradeoff_a'))
                    and r['condition'] == cond
                    and int(r.get('seed') or -1) == seed), None)
     if target is None or not target.get('run_dir'):
@@ -464,7 +726,7 @@ def plot_mechanism_taskA(rows, gp, out_path, cond='C2', seed=0):
                         alpha=0.85, zorder=1)
     draw_workspace_overlay(ax_path, alpha=0.85)
     draw_camera_marker(ax_path)
-    ti = TASK_INFO['shadow_tradeoff_a']
+    _mech_task = task or (TASKS[0] if TASKS else 'shadow_tradeoff_a'); ti = TASK_INFO[_mech_task]
     ax_path.scatter([ti['start'][0]], [ti['start'][1]], marker='o', s=80,
                     facecolor='lime', edgecolor='black', zorder=10, label='start')
     ax_path.scatter([ti['goal'][0]], [ti['goal'][1]], marker='*', s=170,
@@ -497,11 +759,11 @@ def plot_mechanism_taskA(rows, gp, out_path, cond='C2', seed=0):
     _draw_cov_ellipses(ax_path, b_x, b_y, sxx, sxy, syy,
                        n_ellipses=10, scale=2.0, color='purple')
 
-    ax_path.set_xlim(-2.6, 2.6); ax_path.set_ylim(-2.4, 2.4)
+    ax_path.set_xlim(*AXIS_XLIM); ax_path.set_ylim(*AXIS_YLIM)
     ax_path.set_aspect('equal')
     ax_path.set_xlabel(r'$x$ (m)'); ax_path.set_ylabel(r'$y$ (m)')
     ax_path.set_title(f'truth, belief mean, $2\\sigma$ ellipses, and fresh corrections\n'
-                      f'over $\\rho_{{\\mathrm{{plan}}}}$ — {COND_LABEL[cond]}, seed {seed}',
+                      f'over $\\rho_{{\\mathrm{{plan}}}}$ — {COND_LABEL.get(cond, cond)}, seed {seed}',
                       fontsize=10)
     cbar = fig.colorbar(im, ax=ax_path, fraction=0.04, pad=0.02,
                         label=r'$\rho_{\mathrm{plan}}$')
@@ -593,6 +855,14 @@ def plot_mechanism_taskA(rows, gp, out_path, cond='C2', seed=0):
 
 def _plot_cond_panel(ax, gp, task, cond, by_cond, n_grid=200,
                      show_belief=False):
+    """Multi-seed truth-path panel for a single condition.
+
+    Shows faded individual seed paths only. No across-seed averaging band:
+    averaging y over an arclength grid is not a meaningful summary of a
+    2D route, so we report the spread visually through density of overlapping
+    individual seeds.
+    """
+    del n_grid  # kept in signature for backwards compatibility
     extent = (gp['xs'][0], gp['xs'][-1], gp['ys'][0], gp['ys'][-1])
     ax.imshow(gp['P_plan'], extent=extent, origin='lower', cmap='viridis',
               vmin=0.0, vmax=0.62, aspect='equal', alpha=0.85, zorder=1)
@@ -606,40 +876,31 @@ def _plot_cond_panel(ax, gp, task, cond, by_cond, n_grid=200,
     ax.add_patch(Circle(ti['goal'], 0.20, fill=False, edgecolor='red',
                         linewidth=1.0, linestyle='--', zorder=9))
 
-    truth_grid = []
+    n_drawn = 0
     for run_dir, outc in by_cond.get(cond, []):
         csv_rows = load_run_csv(run_dir)
         _, t_x, t_y = extract_truth_path(csv_rows)
         if t_x.size < 5:
             continue
-        ls = '-' if outc == 'goal_reached' else ':'
-        lw = 1.3 if outc == 'goal_reached' else 1.6
-        ax.plot(t_x, t_y, color=COND_COLOR[cond], alpha=0.55, linewidth=lw,
-                linestyle=ls, zorder=4)
-        if outc == 'goal_reached':
-            _, x_rs, y_rs, _ = resample_by_arclength(t_x, t_y, n=n_grid)
-            truth_grid.append((x_rs, y_rs))
+        is_clean = (outc == 'goal_reached')
+        ls = '-' if is_clean else ':'
+        lw = 1.0 if is_clean else 1.4
+        alpha = 0.35 if is_clean else 0.7
+        ax.plot(t_x, t_y, color=COND_COLOR[cond], alpha=alpha, linewidth=lw,
+                linestyle=ls, zorder=4,
+                label=COND_LABEL.get(cond, cond) if n_drawn == 0 else None)
+        n_drawn += 1
         if show_belief:
             _, b_x, b_y, *_ = extract_belief_path(csv_rows)
             if b_x.size >= 5:
-                ax.plot(b_x, b_y, color='purple', alpha=0.20, linewidth=0.9,
+                ax.plot(b_x, b_y, color='purple', alpha=0.18, linewidth=0.8,
                         linestyle='--', zorder=4)
 
-    if truth_grid:
-        tx = np.stack([g[0] for g in truth_grid], axis=0)
-        ty = np.stack([g[1] for g in truth_grid], axis=0)
-        mx, my = np.mean(tx, axis=0), np.mean(ty, axis=0)
-        sy = np.std(ty, axis=0)
-        ax.plot(mx, my, color=COND_COLOR[cond], linewidth=2.4, zorder=7,
-                label=f'{cond} truth mean (success)')
-        ax.fill_between(mx, my - sy, my + sy, color=COND_COLOR[cond],
-                        alpha=0.20, zorder=2, linewidth=0,
-                        label=fr'{cond} $\pm 1\sigma$ across seeds')
-    ax.set_xlim(-2.6, 2.6); ax.set_ylim(-2.4, 2.4)
+    ax.set_xlim(*AXIS_XLIM); ax.set_ylim(*AXIS_YLIM)
 
 
-def plot_compare_taskA(rows, gp, out_path, conds=('C1', 'C2')):
-    task = 'shadow_tradeoff_a'
+def plot_compare_taskA(rows, gp, out_path, conds=('C1', 'C2'), task=None):
+    task = task or (TASKS[0] if TASKS else "shadow_tradeoff_a")
     by_cond = {c: [] for c in conds}
     for r in rows:
         if r['task'] != task or r['condition'] not in conds:
@@ -653,16 +914,16 @@ def plot_compare_taskA(rows, gp, out_path, conds=('C1', 'C2')):
     if len(conds) == 1:
         axes = [axes]
     for ax, cond in zip(axes, conds):
-        _plot_cond_panel(ax, gp, task, cond, by_cond)
+        _plot_cond_panel(ax, gp, task, cond, by_cond, show_belief=True)
         ax.set_title(COND_LABEL[cond], fontsize=10)
         ax.set_xlabel(r'$x$ (m)')
     axes[0].set_ylabel(r'$y$ (m)')
 
-    handles, labels = axes[0].get_legend_handles_labels()
-    seen = {}
-    for h, l in zip(handles, labels):
-        if l not in seen:
-            seen[l] = h
+    seen: dict[str, object] = {}
+    for ax in axes:
+        for h, l in zip(*ax.get_legend_handles_labels()):
+            if l not in seen:
+                seen[l] = h
     fig.legend(seen.values(), seen.keys(), loc='lower center',
                bbox_to_anchor=(0.5, -0.04), ncol=4, frameon=False, fontsize=8.5)
     fig.subplots_adjust(left=0.07, right=0.98, top=0.92, bottom=0.18, wspace=0.05)
@@ -674,15 +935,18 @@ def plot_compare_taskA(rows, gp, out_path, conds=('C1', 'C2')):
 # Figure: appendix — Task B and Task S overview
 # -------------------------------------------------------------------------
 
-def plot_paths_overview_BS(rows, gp, out_path):
-    fig, axes = plt.subplots(1, 2, figsize=(8.5, 3.8), sharey=True)
+def plot_paths_overview_BS(rows, gp, out_path,
+                           tasks=('shadow_tradeoff_b', 'sanity_open')):
+    fig, axes = plt.subplots(1, len(tasks), figsize=(4.25 * len(tasks), 3.8), sharey=True)
+    if len(tasks) == 1:
+        axes = [axes]
     extent = (gp['xs'][0], gp['xs'][-1], gp['ys'][0], gp['ys'][-1])
     by_task_cond = {}
     for r in rows:
         rd = r.get('run_dir', '')
         if rd:
             by_task_cond.setdefault((r['task'], r['condition']), []).append(Path(rd))
-    for ax, task in zip(axes, ['shadow_tradeoff_b', 'sanity_open']):
+    for ax, task in zip(axes, tasks):
         im = ax.imshow(gp['P_plan'], extent=extent, origin='lower',
                        cmap='viridis', vmin=0.0, vmax=0.62, aspect='equal',
                        alpha=0.9, zorder=1)
@@ -704,7 +968,7 @@ def plot_paths_overview_BS(rows, gp, out_path):
                         linewidth=1.1, zorder=5,
                         label=COND_LABEL[cond] if i == 0 else None)
         ax.set_title(TASK_LABELS[task], fontsize=10)
-        ax.set_xlim(-2.6, 2.6); ax.set_ylim(-2.4, 2.4)
+        ax.set_xlim(*AXIS_XLIM); ax.set_ylim(*AXIS_YLIM)
         ax.set_xlabel(r'$x$ (m)')
     axes[0].set_ylabel(r'$y$ (m)')
     cbar_ax = fig.add_axes([0.93, 0.20, 0.014, 0.62])
@@ -726,7 +990,9 @@ def plot_paths_overview_BS(rows, gp, out_path):
 # -------------------------------------------------------------------------
 
 def plot_paths_per_seed(rows, gp, out_path):
-    fig, axes = plt.subplots(3, 3, figsize=(10.0, 9.0), sharex=True, sharey=True)
+    n_rows, n_cols = max(1, len(TASKS)), max(1, len(CONDS))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4.5 * n_cols, 4.0 * n_rows),
+                             sharex=True, sharey=True, squeeze=False)
     extent = (gp['xs'][0], gp['xs'][-1], gp['ys'][0], gp['ys'][-1])
     by_tc = {}
     for r in rows:
@@ -765,7 +1031,7 @@ def plot_paths_per_seed(rows, gp, out_path):
                 ax.set_title(COND_LABEL[cond], fontsize=9)
             if ci_idx == 0:
                 ax.set_ylabel(TASK_LABELS[task], fontsize=9)
-            ax.set_xlim(-2.6, 2.6); ax.set_ylim(-2.4, 2.4)
+            ax.set_xlim(*AXIS_XLIM); ax.set_ylim(*AXIS_YLIM)
             ax.text(0.03, 0.96, f'goal {n_goal}/{n_total}',
                     transform=ax.transAxes, va='top', ha='left', fontsize=8.5,
                     bbox=dict(boxstyle='round,pad=0.25', facecolor='white',
@@ -828,9 +1094,9 @@ def plot_metrics_box(rows, out_path):
 # Figure: problem-setup belief-rollout panels
 # -------------------------------------------------------------------------
 
-def plot_problem_setup_panels(rows, gp, out_path):
+def plot_problem_setup_panels(rows, gp, out_path, task=None):
     target = next((r for r in rows
-                   if r['task'] == 'shadow_tradeoff_a'
+                   if r['task'] == (task or (TASKS[0] if TASKS else 'shadow_tradeoff_a'))
                    and r['condition'] == 'C1'
                    and r.get('outcome') in ('collision', 'timeout', 'infra_invalid')
                    and r.get('run_dir')), None)
@@ -858,7 +1124,7 @@ def plot_problem_setup_panels(rows, gp, out_path):
 
     fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.4), sharey=True)
     extent = (gp['xs'][0], gp['xs'][-1], gp['ys'][0], gp['ys'][-1])
-    ti = TASK_INFO['shadow_tradeoff_a']
+    _ps_task = task or (TASKS[0] if TASKS else 'shadow_tradeoff_a'); ti = TASK_INFO[_ps_task]
     for ax, stamp, title in zip(
             axes, [early_stamp, late_stamp],
             ['(b) initial constant-$R_0$ rollout',
@@ -905,7 +1171,7 @@ def plot_problem_setup_panels(rows, gp, out_path):
             ax.plot(pa[:, 0], pa[:, 1], color='red', linewidth=1.0,
                     zorder=8, label='current horizon')
         ax.set_title(title, fontsize=10)
-        ax.set_xlim(-3.0, 3.0); ax.set_ylim(-2.6, 2.6)
+        ax.set_xlim(*AXIS_XLIM); ax.set_ylim(*AXIS_YLIM)
         ax.set_xlabel('position x (m)')
     axes[0].set_ylabel('position y (m)')
     handles, labels = axes[1].get_legend_handles_labels()
@@ -924,60 +1190,131 @@ def plot_problem_setup_panels(rows, gp, out_path):
 # Driver
 # -------------------------------------------------------------------------
 
+def _load_world_context(world: str, tasks_yaml: Path, profiles_yaml: Path,
+                        task_filter: list[str] | None) -> tuple[list[str], dict, dict, tuple, tuple]:
+    """Read tasks.yaml and world_profiles.yaml for the given world.
+
+    Returns (tasks, task_labels, task_info, axis_xlim, axis_ylim).
+    task_filter restricts which tasks are included when provided.
+    """
+    tasks_raw = yaml.safe_load(tasks_yaml.read_text(encoding='utf-8'))
+    profiles_raw = yaml.safe_load(profiles_yaml.read_text(encoding='utf-8'))
+
+    world_tasks = tasks_raw.get('tasks', {}).get(world, [])
+    task_info: dict = {}
+    task_labels: dict = {}
+    task_list: list[str] = []
+    for entry in world_tasks:
+        name = entry.get('name', '')
+        if task_filter and name not in task_filter:
+            continue
+        start = entry.get('start', {})
+        goal = entry.get('goal', {})
+        task_info[name] = {
+            'start': (float(start.get('x', 0.0)), float(start.get('y', 0.0))),
+            'goal': (float(goal.get('x', 0.0)), float(goal.get('y', 0.0))),
+        }
+        task_labels[name] = entry.get('description', name).split('\n')[0].strip()
+        task_list.append(name)
+
+    profile = profiles_raw.get('worlds', {}).get(world, {})
+    vd = profile.get('visibility_defaults', {})
+    x_min = float(vd.get('visibility_map_min_x', -3.0))
+    x_max = float(vd.get('visibility_map_max_x', 3.0))
+    y_min = float(vd.get('visibility_map_min_y', -3.0))
+    y_max = float(vd.get('visibility_map_max_y', 3.0))
+    margin = 0.1 * max(x_max - x_min, y_max - y_min)
+    axis_xlim = (x_min - margin, x_max + margin)
+    axis_ylim = (y_min - margin, y_max + margin)
+
+    return task_list, task_labels, task_info, axis_xlim, axis_ylim
+
+
 def main():
     p = argparse.ArgumentParser()
+    p.add_argument('--campaign-log', required=True,
+                   help='Path to grid_log.json or campaign_log.json.')
+    p.add_argument('--gp-artifact', required=True,
+                   help='Path to GP .npz artifact.')
+    p.add_argument('--world', default='warehouse_occ_light.world.sdf',
+                   help='World SDF filename (must match tasks.yaml key).')
+    p.add_argument('--task', nargs='*', default=None,
+                   help='Task name(s) to include. Defaults to all tasks for the world.')
     p.add_argument('--metrics-csv', default='/tmp/paper_metrics.csv')
     p.add_argument('--out-dir',
                    default='/home/joostleliveld/Thesis/thesis-report/figures/campaign')
+    p.add_argument('--paired-seed', type=int, default=None,
+                   help='Seed for paired Fig 4. Auto-picked by max y-divergence if omitted.')
+    p.add_argument('--tasks-yaml',
+                   default=str(REPO / 'src/experiments/config/tasks.yaml'))
+    p.add_argument('--profiles-yaml',
+                   default=str(REPO / 'src/experiments/config/world_profiles.yaml'))
     args = p.parse_args()
 
+    # ---- Load world context ----
+    global TASKS, TASK_LABELS, TASK_INFO, AXIS_XLIM, AXIS_YLIM, CAM_XY, SHELF_BOXES
+
+    tasks_yaml = Path(args.tasks_yaml)
+    profiles_yaml = Path(args.profiles_yaml)
+    TASKS, TASK_LABELS, TASK_INFO, AXIS_XLIM, AXIS_YLIM = _load_world_context(
+        args.world, tasks_yaml, profiles_yaml, args.task)
+    if not TASKS:
+        print(f'WARNING: no tasks found for world "{args.world}" in {tasks_yaml}')
+
+    # ---- Load GP, set camera position and shelf boxes ----
+    gp_path = Path(args.gp_artifact).expanduser().resolve()
+    gp = load_gp(gp_path)
+    cam = gp.get('cam')
+    if cam is not None and len(cam) >= 2:
+        CAM_XY = (float(cam[0]), float(cam[1]))
+
+    # Build shelf boxes from the GP training extent (no collision parser needed).
+    # The GP xs/ys bounds serve as the workspace; SHELF_BOXES is left empty so
+    # draw_workspace_overlay becomes a no-op — the heatmap conveys occlusion.
+    SHELF_BOXES = []
+
+    # ---- Load campaign log ----
+    campaign_log_path = Path(args.campaign_log).expanduser().resolve()
+    grid_log = load_campaign(campaign_log_path)
+
     rows = load_metrics_csv(Path(args.metrics_csv))
-    log = load_campaign(CAMPAIGN_DIR / 'campaign_log.json')
     for r in rows:
         key = f"{r['task']}__{r['condition']}__seed{r['seed']}"
-        entry = log.get(key, {})
-        if 'run_dir' in entry and entry['run_dir']:
+        entry = grid_log.get(key, {})
+        if entry.get('run_dir'):
             r['run_dir'] = entry['run_dir']
         if not r.get('outcome'):
             r['outcome'] = entry.get('outcome', '')
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    validate_campaign_gp_artifact(rows, GP_PATH)
-    gp = load_gp(GP_PATH)
+    validate_campaign_gp_artifact(rows, gp_path)
 
     matplotlib.rcParams['text.usetex'] = False
     matplotlib.rcParams['font.family'] = 'serif'
     matplotlib.rcParams['mathtext.fontset'] = 'cm'
 
-    # main text — mechanism-first ordering
+    primary_task = TASKS[0] if TASKS else None
+
+    # Setup: GP pipeline (data -> rho_plan -> induced ambiguity)
     plot_gp_pipeline(gp, out_dir / 'gp_pipeline.pdf')
     print(f'wrote {out_dir / "gp_pipeline.pdf"}')
 
-    plot_mechanism_taskA(rows, gp, out_dir / 'mechanism_taskA.pdf',
-                         cond='C2', seed=0)
-    print(f'wrote {out_dir / "mechanism_taskA.pdf"}')
+    if primary_task:
+        # Paired representative run (Constant vs Learned, same seed)
+        plot_paired_mechanism_taskA(
+            rows, gp, out_dir / 'paired_mechanism_taskA.pdf',
+            seed=args.paired_seed, task=primary_task)
+        print(f'wrote {out_dir / "paired_mechanism_taskA.pdf"}')
 
-    plot_compare_taskA(rows, gp, out_dir / 'compare_taskA.pdf',
-                       conds=('C1', 'C2'))
-    print(f'wrote {out_dir / "compare_taskA.pdf"}')
+        # Multi-seed truth paths
+        plot_compare_taskA(rows, gp, out_dir / 'compare_taskA.pdf',
+                           conds=('C1', 'C2'), task=primary_task)
+        print(f'wrote {out_dir / "compare_taskA.pdf"}')
 
-    # appendix
-    plot_compare_taskA(rows, gp, out_dir / 'compare_C3_taskA.pdf',
-                       conds=('C2', 'C3'))
-    print(f'wrote {out_dir / "compare_C3_taskA.pdf"}')
-
-    plot_paths_overview_BS(rows, gp, out_dir / 'paths_overview_BS.pdf')
-    print(f'wrote {out_dir / "paths_overview_BS.pdf"}')
-
+    # Appendix: per-seed grid for audit
     plot_paths_per_seed(rows, gp, out_dir / 'paths_per_seed.pdf')
     print(f'wrote {out_dir / "paths_per_seed.pdf"}')
-
-    plot_metrics_box(rows, out_dir / 'metrics_box.pdf')
-    print(f'wrote {out_dir / "metrics_box.pdf"}')
-
-    plot_problem_setup_panels(rows, gp, out_dir.parent / 'problem_setup_panels.pdf')
-    print(f'wrote {out_dir.parent / "problem_setup_panels.pdf"}')
 
 
 if __name__ == '__main__':

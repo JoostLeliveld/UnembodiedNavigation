@@ -1,49 +1,65 @@
-# Machine-readable draft of the intended paper runtime contract.
-# This is not enforced yet. It is the checklist that should become launch,
-# metrics, and plotting validation.
+# Machine-readable checklist for paper-facing runs.
+# Keep this aligned with docs/paper_alignment.md and thesis-report/sections/*.tex.
 
 paper_runtime_contract:
-  version: 0.1
+  version: 0.2
   purpose: >
     Define the behavior that counts as paper-facing execution for the
     external-camera visibility-aware EFE experiments.
 
-  allowed_worlds:
+  reported_worlds:
     - warehouse_occ_light.world.sdf
 
-  allowed_tasks:
+  exploratory_failure_worlds:
+    - warehouse_aws.world.sdf
+
+  reported_tasks:
     - shadow_tradeoff_a
     - shadow_tradeoff_b
     - sanity_open
+
+  exploratory_failure_tasks:
+    - B1_visible_goal_smoke
+    - B1_clean_route_choice
+    - B2_reacquire_after_occlusion
+    - B3_long_horizon_far_corner
+    - visible_aisle_sanity_aws
 
   legacy_tasks:
     - main_shadow_tradeoff
 
   allowed_planner_conditions:
     constant_R_efe:
-      implementation_name: visibility_unaware_baseline
-      description: EFE planner with constant observation covariance R0.
+      paper_name: constant-observability EFE
+      description: EFE planner with spatially uniform detector-observation covariance.
       requires_visibility_artifact: false
     visibility_aware_efe:
-      implementation_name: efe1
-      description: EFE planner with learned state-dependent observation covariance.
+      paper_name: learned-observability EFE
+      description: EFE planner with learned state-dependent detector-observation covariance.
       requires_visibility_artifact: true
-    risk_only_gp_ablation:
-      implementation_name: gp_risk_only
-      description: Optional ablation; not the main method.
+    risk_only_ablation:
+      paper_name: GP-risk-only ablation
+      description: Optional ablation with GP covariance active and ambiguity disabled.
       requires_visibility_artifact: true
 
   required_runtime_settings:
     perception_backend: yolo
-    heading_source: odometry
-    visual_yaw_required: false
-    use_direct_visibility_trust: true
     direct_visibility_reward_allowed: false
     visibility_weight_required_value: 0.0
     known_obstacle_map_required: true
-    no_go_barrier_allowed: true
     no_go_barrier_must_match_across_conditions: true
-    no_go_barrier_must_be_reported_separately: true
+    yolo_model_must_be_explicit: true
+    visibility_artifact_path_must_be_explicit_for_gp_conditions: true
+
+  heading_modes:
+    current_campaign:
+      use_displacement_heading: false
+      use_odom_heading_correction: true
+      manifest_state_source_theta: odometry_heading
+    displacement_heading_diagnostic:
+      use_displacement_heading: true
+      use_odom_heading_correction: false
+      manifest_state_source_theta: pixel_displacement_heading
 
   required_paths:
     yolo_model:
@@ -52,7 +68,7 @@ paper_runtime_contract:
     visibility_artifact_path:
       must_exist_for:
         - visibility_aware_efe
-        - risk_only_gp_ablation
+        - risk_only_ablation
       may_be_implicit_from_world_profile: false
 
   hard_fail_on_missing:
@@ -107,3 +123,4 @@ paper_runtime_contract:
     - silently_counting_timeout_as_goal_success
     - silently_clipping_gp_queries_without_diagnostic
     - silently_continuing_without_camera_geometry
+    - mission_waypoints_for_route_choice

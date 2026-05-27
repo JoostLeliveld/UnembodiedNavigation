@@ -48,6 +48,7 @@ setup(
     entry_points={
         'console_scripts': [
             'actuation_noise_node = sim.actuation_noise_node:main',
+            'encoder_noise_node = sim.encoder_noise_node:main',
             'wait_for_clock = sim.wait_for_clock:main',
             'wait_for_odom = sim.wait_for_odom:main',
             'reset_world = sim.reset_world:main',

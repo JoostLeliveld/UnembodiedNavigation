@@ -6,6 +6,21 @@
   <xacro:arg name="use_lidar" default="true"/>
   <xacro:property name="ns" value="$(arg namespace)"/>
 
+  <!-- Pose-keypoint definitions (in base_link frame). No extra geometry is
+       added: the keypoints are virtual points anchored on the existing
+       robot. The blue lidar (rear_blue material on the lds.stl mesh) is the
+       visible "rear" feature; the red base mesh (front_red on burger_base.stl)
+       extends forward of the lidar, providing the heading cue. The model
+       learns to predict both keypoints at the same world Z so the state node
+       can back-project them to a single z-plane without bias.
+
+       World Z given a base_footprint at z=robot_z is:
+         z_world = robot_z + base_joint_z(0.010) + pm_marker_z. -->
+  <xacro:property name="pm_front_x" value="0.050"/>
+  <xacro:property name="pm_rear_x"  value="-0.032"/>
+  <xacro:property name="pm_marker_y" value="0.0"/>
+  <xacro:property name="pm_marker_z" value="0.188"/>
+
   <!-- ===================== -->
   <!-- Materials (REQUIRED) -->
   <!-- ===================== -->

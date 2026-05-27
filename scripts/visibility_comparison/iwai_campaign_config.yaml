@@ -1,4 +1,7 @@
-# IWAI Campaign Hyperparameter Lock
+# Deprecated compatibility copy.
+# Prefer scripts/visibility_comparison/paper_campaign_config.yaml for new work.
+#
+# Paper Campaign Hyperparameter Lock
 # All values below are fixed before the first run.
 # If ANY value changes after a run has been executed, the entire campaign restarts.
 # Fill in [FILL] entries before running — do not leave them blank.
@@ -61,6 +64,10 @@ discount_gamma: 0.98
 belief_publish_rate: 10.0           # high-rate planner-belief publication for diagnostic logging
 process_noise_xy: 0.01
 process_noise_theta: 0.02
+use_displacement_heading: false      # paper-facing runs use odometry heading
+use_odom_heading_correction: true    # aligned with the current Task A figures/manifests
+heading_min_displacement_m: 0.10
+heading_bev_noise_sigma_m: 0.05
 
 # lambda_risk and lambda_amb in the paper map to the planner parameters below.
 # Verify these mappings against the planner source before running.

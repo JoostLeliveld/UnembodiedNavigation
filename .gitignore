@@ -23,12 +23,17 @@ __pycache__/
 .vscode/
 .idea/
 .DS_Store
+.agents/
+.claude/
+.codex/
 
 # Debug output
 *.gv
 *.log
 *.pt
 /empirical_visibility_gp.npz
+/aws_gp_plot.png
+/gp_verification.png
 
 # Local notes and scratch artifacts not part of the active thesis repo story
 src/docs/

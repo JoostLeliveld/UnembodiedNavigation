@@ -13,6 +13,10 @@ from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
     diagnostics_message,
 )
+from perception.core.pose_extraction import (
+    model_exposes_keypoints,
+    select_pose_detection,
+)
 from perception.core.ros_image import image_msg_to_bgr8
 from perception.core.yolo_selection import select_best_detection, target_class_ids
 
@@ -58,6 +62,7 @@ class YoloRobotDetectorNode(Node):
         self.declare_parameter('mask_bottom_band_px', 3.0)
         self.declare_parameter('pixel_noise_sigma', 0.0)
         self.declare_parameter('seed', 0)
+        self.declare_parameter('min_keypoint_conf', 0.5)
 
         model_path = Path(str(self.get_parameter('model_path').value).strip()).expanduser()
         if not str(model_path):
@@ -77,6 +82,7 @@ class YoloRobotDetectorNode(Node):
         self.mask_bottom_band_px = float(self.get_parameter('mask_bottom_band_px').value)
         self.pixel_noise_sigma = float(self.get_parameter('pixel_noise_sigma').value)
         self.rng = np.random.default_rng(int(self.get_parameter('seed').value))
+        self.min_keypoint_conf = float(self.get_parameter('min_keypoint_conf').value)
 
         self.model = YOLO(str(self.model_path))
         self.target_ids = target_class_ids(getattr(self.model, 'names', {}), self.class_name, self.class_id)
@@ -86,6 +92,7 @@ class YoloRobotDetectorNode(Node):
                 f'class filter does not match any YOLO class names: class_name={self.class_name!r}, '
                 f'class_id={self.class_id}, names={names!r}'
             )
+        self.is_pose_model = model_exposes_keypoints(self.model)
 
         self.pixel_pub = self.create_publisher(PoseStamped, '/perception/pixel_pose', 10)
         self.diag_pub = self.create_publisher(Float64MultiArray, DETECTION_DIAGNOSTICS_TOPIC, 10)
@@ -93,7 +100,8 @@ class YoloRobotDetectorNode(Node):
 
         self.get_logger().info(
             f'YOLO runtime detector started (model={self.model_path}, conf={self.confidence_threshold:.2f}, '
-            f'iou={self.iou_threshold:.2f}, use_masks={self.use_masks}, device={self.device or "auto"})'
+            f'iou={self.iou_threshold:.2f}, use_masks={self.use_masks}, '
+            f'task={"pose" if self.is_pose_model else "seg/det"}, device={self.device or "auto"})'
         )
 
     def _predict(self, image_bgr: np.ndarray):
@@ -108,8 +116,14 @@ class YoloRobotDetectorNode(Node):
             kwargs['device'] = self.device
         return self.model.predict(**kwargs)
 
-    def _publish_diagnostics(self, stamp_msg, selection: dict | None) -> None:
+    def _publish_diagnostics(
+        self,
+        stamp_msg,
+        selection: dict | None,
+        pose_extra: dict | None = None,
+    ) -> None:
         selection = dict(selection or {})
+        pose_extra = dict(pose_extra or {})
         stamp = float(stamp_msg.sec) + float(stamp_msg.nanosec) * 1e-9
         detected_after_threshold = bool(selection.get('detected_after_threshold', False))
         bbox = selection.get('bbox_xyxy')
@@ -135,20 +149,32 @@ class YoloRobotDetectorNode(Node):
         else:
             border_margin = math.nan
         bbox_area = float(max(x1 - x0, 0.0) * max(y1 - y0, 0.0)) if math.isfinite(x0) else math.nan
+        yaw_est = float(pose_extra.get('yaw_est', math.nan))
+        u_front = float(pose_extra.get('u_front', math.nan))
+        v_front = float(pose_extra.get('v_front', math.nan))
+        u_rear = float(pose_extra.get('u_rear', math.nan))
+        v_rear = float(pose_extra.get('v_rear', math.nan))
+        if (
+            math.isfinite(u_front) and math.isfinite(v_front)
+            and math.isfinite(u_rear) and math.isfinite(v_rear)
+        ):
+            separation_px = float(math.hypot(u_front - u_rear, v_front - v_rear))
+        else:
+            separation_px = math.nan
         self.diag_pub.publish(
             diagnostics_message(
                 stamp=stamp,
                 detected=detected_after_threshold,
                 u_mid=selected_u,
                 v_mid=selected_v,
-                yaw_est=math.nan,
-                u_red=math.nan,
-                v_red=math.nan,
+                yaw_est=yaw_est,
+                u_red=u_front,
+                v_red=v_front,
                 red_area_px=math.nan,
-                u_blue=math.nan,
-                v_blue=math.nan,
+                u_blue=u_rear,
+                v_blue=v_rear,
                 blue_area_px=math.nan,
-                separation_px=math.nan,
+                separation_px=separation_px,
                 border_margin_px=border_margin,
                 yolo_score_raw=raw_score,
                 yolo_score_selected=selected_score,
@@ -183,8 +209,14 @@ class YoloRobotDetectorNode(Node):
             self._publish_diagnostics(msg.header.stamp, None)
             return
 
+        if self.is_pose_model:
+            self._handle_pose_result(msg, results[0])
+        else:
+            self._handle_seg_result(msg, results[0])
+
+    def _handle_seg_result(self, msg: Image, result) -> None:
         selection = select_best_detection(
-            results[0],
+            result,
             target_ids=self.target_ids,
             confidence_threshold=float(self.confidence_threshold),
             use_masks=self.use_masks,
@@ -205,6 +237,86 @@ class YoloRobotDetectorNode(Node):
         selection['selected_v'] = selected_v
         self._publish_diagnostics(msg.header.stamp, selection)
         if not bool(selection.get('detected_after_threshold', False)):
+            return
+
+        out = PoseStamped()
+        out.header = msg.header
+        out.header.frame_id = 'image'
+        out.pose.position.x = float(selected_u)
+        out.pose.position.y = float(selected_v)
+        out.pose.position.z = 0.0
+        out.pose.orientation.w = 1.0
+        self.pixel_pub.publish(out)
+
+    def _handle_pose_result(self, msg: Image, result) -> None:
+        boxes = getattr(result, 'boxes', None)
+        keypoints = getattr(result, 'keypoints', None)
+        if boxes is None or keypoints is None or len(boxes) == 0:
+            self._publish_diagnostics(msg.header.stamp, None)
+            return
+
+        boxes_xyxy = boxes.xyxy.detach().cpu().numpy()
+        boxes_conf = boxes.conf.detach().cpu().numpy()
+        boxes_cls = boxes.cls.detach().cpu().numpy().astype(int)
+        kpt_data = keypoints.data.detach().cpu().numpy()
+
+        sel = select_pose_detection(
+            boxes_xyxy=boxes_xyxy,
+            boxes_conf=boxes_conf,
+            boxes_cls=boxes_cls,
+            keypoints_data=kpt_data,
+            target_ids=self.target_ids,
+            confidence_threshold=float(self.confidence_threshold),
+            min_keypoint_conf=float(self.min_keypoint_conf),
+        )
+
+        if sel.bbox_xyxy is None:
+            self._publish_diagnostics(msg.header.stamp, None)
+            return
+
+        x0, y0, x1, y1 = sel.bbox_xyxy
+        # Apply pixel noise consistently to the centre AND each keypoint so the
+        # reported yaw stays internally consistent with what state node sees.
+        if self.pixel_noise_sigma > 0.0:
+            noise = self.rng.normal(0.0, self.pixel_noise_sigma, size=6)
+            front_u = float(sel.front_u + noise[0])
+            front_v = float(sel.front_v + noise[1])
+            rear_u = float(sel.rear_u + noise[2])
+            rear_v = float(sel.rear_v + noise[3])
+        else:
+            front_u, front_v = float(sel.front_u), float(sel.front_v)
+            rear_u, rear_v = float(sel.rear_u), float(sel.rear_v)
+        if math.isfinite(front_u) and math.isfinite(rear_u):
+            selected_u = 0.5 * (front_u + rear_u)
+            selected_v = 0.5 * (front_v + rear_v)
+        else:
+            selected_u = float(sel.selected_u)
+            selected_v = float(sel.selected_v)
+
+        detected_after_threshold = bool(sel.valid)
+        selection = {
+            'detected_after_threshold': detected_after_threshold,
+            'bbox_xyxy': sel.bbox_xyxy,
+            'selected_u': selected_u,
+            'selected_v': selected_v,
+            'raw_best_score': float(sel.box_score),
+            'selected_score': float(sel.box_score),
+            'mask_available': 0,
+            'best_class_id': math.nan,
+            'n_candidates': int(boxes_conf.size),
+            'selected_pixel_source': 'pose_keypoints',
+        }
+        if detected_after_threshold and math.isfinite(front_u) and math.isfinite(rear_u):
+            yaw_image = math.atan2(front_v - rear_v, front_u - rear_u)
+        else:
+            yaw_image = math.nan
+        pose_extra = {
+            'yaw_est': yaw_image,
+            'u_front': front_u, 'v_front': front_v,
+            'u_rear': rear_u, 'v_rear': rear_v,
+        }
+        self._publish_diagnostics(msg.header.stamp, selection, pose_extra=pose_extra)
+        if not detected_after_threshold:
             return
 
         out = PoseStamped()

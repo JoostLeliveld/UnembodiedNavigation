@@ -82,7 +82,6 @@ _MANIFEST_FLOAT_KEYS = (
     'goal_tightening_power',
     'goal_progress_n_steps',
     'goal_sigma_uv',
-    'min_terminal_goal_progress_m',
     'goal_success_radius',
     'goal_success_hold_s',
     'run_timeout_after_first_cmd_s',

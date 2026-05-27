@@ -1,35 +1,31 @@
 # `experiments/config`
 
-This folder holds the two YAML files that define the experiment before anything is launched.
-
-![Visibility artifact tutorial figure](../../../docs/figures/visibility_capture_tutorial.png)
-
-The `world_profiles.yaml` bounds and artifact paths directly shape both the capture pipeline and the online planner.
-
-## Why This Folder Exists
-
-The current milestone is a controlled comparison. These files fix:
-
-- which worlds are supported
-- where the camera is placed
-- which GP artifact belongs to which world
-- which start/goal tasks are benchmark, diagnostic, or exploratory
+This folder defines the experiment before anything is launched.
 
 ## Main Files
 
 | File | Role |
 | --- | --- |
-| [`world_profiles.yaml`](world_profiles.yaml) | active world profile, camera intrinsics, default planner, visibility artifact path |
-| [`tasks.yaml`](tasks.yaml) | the single active benchmark task |
-| `../../archive/experiments/tasks_legacy.yaml` | archived alias map for older `T*` task names; not part of the active launch surface |
+| [`world_profiles.yaml`](world_profiles.yaml) | world registry, camera intrinsics, planner defaults, map bounds, and legacy packaged artifact paths |
+| [`tasks.yaml`](tasks.yaml) | start/goal definitions, with each task labeled as benchmark, exploratory, sanity, or legacy |
+| `../../archive/experiments/tasks_legacy.yaml` | archived aliases for older task names |
 
-## What To Read First
+## Current Paper Surface
 
-1. `world_profiles.yaml`
-2. `tasks.yaml`
+The compact benchmark currently reported by the paper uses:
 
-## Important Caveats
+- `warehouse_occ_light.world.sdf`
+- `shadow_tradeoff_a` as the main task
+- `shadow_tradeoff_b` and `sanity_open` as support tasks
 
-- `warehouse_occ_light.world.sdf` is the active benchmark world
-- `main_shadow_tradeoff` is the active benchmark task
-- the current thesis-facing story is intentionally narrow: one world, one main task, clean comparison mechanics
+`main_shadow_tradeoff` is legacy and must not be used as current paper evidence.
+
+## Failure-Oriented Extensions
+
+The following worlds/tasks are implemented for the next benchmark step, but they need completed runs and paper figures before they can support result claims:
+
+- `warehouse_aws.world.sdf`: `B1_visible_goal_smoke` (first stability gate with visible final goal), `B1_clean_route_choice` (harder exploratory route-choice candidate), `B2_reacquire_after_occlusion` (stress), `B3_long_horizon_far_corner` (stress), `visible_aisle_sanity_aws`
+
+## Important Rule
+
+Visibility-aware paper runs must pass an explicit `visibility_artifact_path`. The profile-level `visibility_artifact` entries are compatibility metadata, not permission to silently choose an artifact for a paper run.

@@ -70,7 +70,6 @@ base:
   goal_tightening_power: 1.0
   goal_progress_n_steps: 140
   goal_sigma_uv: 2.0
-  min_terminal_goal_progress_m: 0.0
   goal_success_radius: 0.2
   goal_success_hold_s: 2.0
   run_timeout_after_first_cmd_s: 75.0

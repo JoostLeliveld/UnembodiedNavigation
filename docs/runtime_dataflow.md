@@ -1,142 +1,102 @@
 # Runtime Dataflow
 
-This document explains how offline preparation connects to the online ROS/Gazebo runtime.
-
-![State-estimation tutorial figure](figures/state_pipeline_tutorial.png)
-
-The offline and online stories are connected by one planner-facing state:
-
-\[
-\hat s_t = [\hat x_t,\hat y_t]^\top
-\]
-
-for the current GP input, with `theta` still handled separately by the runtime estimator.
-
-## Current Perception-Focused Status
-
-The current perception story has shifted to a simpler indoor warehouse:
-
-- world: `warehouse_occ_light.world.sdf`
-- lighting: fixed overhead lighting, no rendered cast shadows
-- floor: no colored floor markers
-- current runtime detector of interest: `yolo_robot_detector_node`
-- the paper runtime does not expose older detector backends as runnable conditions
-
-Current perception interpretation:
-
-- runtime detector of interest: local YOLO `.pt` model
-- optional offline bootstrap if out-of-box YOLO is not good enough: simple red-mask pseudo-labels
-- runtime ROS path: image-only YOLO -> pixel observation -> homography `x,y` -> odometry-backed `theta`
+This document describes how the offline observability artifact connects to the online ROS/Gazebo runtime. For paper-level protocol and naming, see [`paper_alignment.md`](paper_alignment.md).
 
 ## Offline Preparation
 
-```mermaid
-flowchart LR
-    A[world_profiles.yaml] --> B[capture_visibility_samples.py]
-    B --> C[samples.csv + images + previews]
-    C --> D[extract_perception_targets.py]
-    D --> E[build_gp_targets.py]
-    E --> F[fit_visibility_gps.py]
-    F --> G[logs/visibility_comparison/current_gp/*.npz]
-    H[tasks.yaml] --> I[main runtime launches]
-    G --> I
+```text
+world_profiles.yaml
+-> capture_visibility_samples.py
+-> raw detector samples
+-> extract_perception_targets.py
+-> build_gp_targets.py
+-> fit_visibility_gps.py
+-> logs/visibility_comparison/current_gp/*.npz
+-> warehouse_primary_comparison.launch.py
 ```
 
-Caption: the GP visibility artifact is generated before online planning. In the active workflow, the capture script teleports the robot through a dense sampled pose grid, records shared raw observations, and then method-specific targets are built on top of that fixed sample set.
+The paper-facing GP artifact is fitted before navigation trials and then held fixed. The current compact benchmark uses:
 
-The active comparison backbone reserves these fitted targets:
+- world: `warehouse_occ_light.world.sdf`
+- artifact: `logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz`
+- planner-facing field: `P_conservative_plan_map`
 
-- red binary
-- red corrected area
-- YOLO binary
-- YOLO raw score
-- YOLO calibrated score
-- oracle/reference visibility
+Visibility-aware planner runs must pass `visibility_artifact_path` explicitly. The primary launch now fails instead of silently falling back to profile defaults.
 
-![Empirical visibility artifact tutorial](figures/visibility_capture_tutorial.png)
+## Online Runtime Path
 
-## Runtime ROS Path
-
-```mermaid
-flowchart LR
-    subgraph Infrastructure
-        SIM[Gazebo + robot + external camera]
-        ODOM[/odom/]
-        IMG[/external_camera/image_raw/]
-    end
-
-    subgraph Perception
-        DET[yolo_robot_detector_node]
-        PIX[/perception/pixel_pose/]
-        DIAG[/perception/detection_diagnostics/]
-    end
-
-    subgraph State
-        BEVNODE[pixel_to_bev_state_node]
-        BEV[/state/bev/]
-    end
-
-    subgraph Planning
-        GOALNODE[goal_mission_node]
-        GOAL[/goal_bev/]
-        PLAN[efe1_agent]
-        CMD[/cmd_vel/]
-    end
-
-    subgraph Evaluation
-        LOG[experiment_logger]
-    end
-
-    IMG --> DET
-    DET --> PIX
-    DET --> DIAG
-    PIX --> BEVNODE
-    DIAG --> BEVNODE
-    ODOM --> BEVNODE
-    BEVNODE --> BEV
-    GOALNODE --> GOAL
-    BEV --> PLAN
-    GOAL --> PLAN
-    PIX --> PLAN
-    DIAG --> PLAN
-    PLAN --> CMD
-    CMD --> SIM
-    SIM --> IMG
-    SIM --> ODOM
-    BEV --> LOG
-    PIX --> LOG
-    DIAG --> LOG
-    GOAL --> LOG
-    PLAN --> LOG
+```text
+Gazebo external camera
+-> /external_camera/image_raw
+-> yolo_robot_detector_node
+-> /perception/pixel_pose + /perception/detection_diagnostics
+-> pixel_to_bev_state_node
+-> /state/bev
+-> efe_agent
+-> /cmd_vel_raw
+-> optional actuation_noise_node
+-> /cmd_vel
+-> Gazebo
+-> experiment_logger
+-> experiment.csv + run_manifest.json + run_summary.json
 ```
 
-Caption: this is the current perception-focused online control loop. It omits TF, `ros_gz_bridge`, and robot-state publishing on purpose because those are infrastructure rather than the main method story. The paper runtime uses the YOLO detector path.
+The method intervention is inside the planner prediction model:
 
-## State-Estimator Provenance
+```text
+predicted state
+-> GP reliability query
+-> state-dependent detector-observation covariance
+-> EFE risk and ambiguity terms
+-> receding-horizon control
+```
 
-The main runtime path is **not** fully visual state estimation.
+Observability is not a direct reward in the paper path.
 
-- `x, y`: camera-derived via image detection and homography to the ground plane
-- `theta`: odometry-backed in the main image-detector path
+## State Sources
 
-That means the current estimator is best described as:
+The stable part of the estimator is:
 
-`camera x,y + odometry theta`
+- `x,y`: YOLO-selected pixel projected to the ground plane by camera geometry.
+- GP input: planar `x,y` only.
 
-This caveat should appear in presentations and in any method figure.
+The heading source is run-config dependent and is recorded in `run_manifest.json`:
 
-## Main Runtime Entry Points
+| Run setting | Manifest value | Meaning |
+| --- | --- | --- |
+| `use_displacement_heading:=false`, `use_odom_heading_correction:=true` | `odometry_heading` | heading anchored by odometry |
+| `use_displacement_heading:=true`, `use_odom_heading_correction:=false` | `pixel_displacement_heading` | diagnostic heading from consecutive camera-derived position updates |
+| `keypoint_marker_world_z > 0` | `keypoint_bev_heading_with_odom_fallback` | visual keypoint heading with odometry fallback |
 
-### Primary comparison
+The current paper-facing configs and Task A figure manifests use odometry heading.
 
-- [`../src/experiments/launch/warehouse_primary_comparison.launch.py`](../src/experiments/launch/warehouse_primary_comparison.launch.py)
+## Main Entry Points
 
-This launch is the thesis-facing entry point for:
+| Purpose | File |
+| --- | --- |
+| Primary launch | `src/experiments/launch/warehouse_primary_comparison.launch.py` |
+| Compact benchmark campaign | `scripts/visibility_comparison/paper_campaign_config.yaml` |
+| Compact benchmark runner | `scripts/visibility_comparison/run_visibility_campaign.py` |
+| Paper metrics | `scripts/visibility_comparison/compute_paper_metrics.py` |
+| Paper figures | `scripts/visibility_comparison/thesis_plots/make_thesis_figures.py` |
 
-- `planner:=efe1`
-- `planner:=visibility_unaware_baseline`
+The primary planner names are `constant_R_efe`, `visibility_aware_efe`, and optional `risk_only_ablation`.
 
-Older detector and controller runs are not part of the paper-facing runtime surface.
+## Failure-Oriented Extension
+
+Experiment B has one active world:
+
+- `warehouse_aws.world.sdf`, configured by
+  `scripts/visibility_comparison/aws_campaign_config.yaml` only after an
+  AWS-specific detector and GP are fitted for the final geometry. Use
+  `scripts/visibility_comparison/aws_smoke_config.yaml` first to validate the
+  AWS-style storage racks, green driveable boundaries, loading-apron props,
+  B1/B2/B3 task starts/goals, wall-mounted camera, R4/A4 occluder, and detector
+  behavior.
+
+It should be treated as exploratory until it has fitted artifacts, completed
+campaign logs, and figures/tables in the paper. Do not use mission waypoints to
+force the route.
 
 ## Main Topics
 
@@ -145,27 +105,12 @@ Older detector and controller runs are not part of the paper-facing runtime surf
 | `/external_camera/image_raw` | simulator/bridge | detector | external camera image |
 | `/perception/pixel_pose` | detector | state node, planner, logger | image-space robot observation |
 | `/perception/detection_diagnostics` | detector | state node, planner, logger | observation diagnostics |
-| `/state/bev` | state node | planner, logger | planner-facing state estimate |
+| `/state/bev` | state node | planner, logger | camera-derived BEV position state |
 | `/goal_bev` | goal node | planner, logger | experiment goal |
-| `/cmd_vel` | planner | simulator | control command |
+| `/cmd_vel_raw` | planner | command-noise node or simulator | commanded control before optional noise |
+| `/cmd_vel` | command-noise node or planner | simulator | executed control |
 | `/planner_belief`, `/efe/metrics`, `/planner/diagnostics` | planner | logger | planner introspection |
 
-## Optional Logging
+## What This Omits
 
-The main launches expose:
-
-- `enable_logging:=true|false`
-
-Use `enable_logging:=false` when you want a cleaner `rqt_graph` focused on the method-facing nodes rather than the logger sink.
-
-## What This Diagram Omits
-
-- TF and robot-state publishing infrastructure
-- internal planner math
-- the offline GP-fitting procedure
-- evaluation scripts that operate after runtime
-
-Those are covered in the other docs:
-
-- planner internals: [`planner_method.md`](planner_method.md)
-- evaluation outputs: [`evaluation_and_plots.md`](evaluation_and_plots.md)
+This page intentionally omits TF, robot-state publishing details, and plotting internals. Those are infrastructure, not the main method story.

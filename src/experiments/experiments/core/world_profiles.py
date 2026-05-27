@@ -49,8 +49,31 @@ def load_world_profiles(path: str) -> Dict[str, Any]:
 
 
 def get_worlds_dir() -> str:
-    sim_share = get_package_share_directory("sim")
-    return os.path.join(sim_share, "gazebo_worlds", "worlds")
+    try:
+        sim_share = get_package_share_directory("sim")
+        world_dir = os.path.join(sim_share, "gazebo_worlds", "worlds")
+        if os.path.isdir(world_dir):
+            return world_dir
+    except Exception:
+        # fall through to local fallbacks
+        pass
+
+    # Fallback: prefer the repository-local source world directory when present.
+    # File is located at: <repo>/src/experiments/experiments/core/world_profiles.py
+    # parents[4] resolves to the repo root (UnembodiedNavigation).
+    repo_root = Path(__file__).resolve().parents[4]
+    candidate = repo_root / "src" / "sim" / "gazebo_worlds" / "worlds"
+    if candidate.is_dir():
+        return str(candidate)
+
+    # Last-resort fallback: try a nearby relative path (defensive).
+    candidate2 = Path(__file__).resolve().parents[3] / "sim" / "gazebo_worlds" / "worlds"
+    if candidate2.is_dir():
+        return str(candidate2)
+
+    raise RuntimeError(
+        "Could not locate 'sim' gazebo_worlds/worlds; install the 'sim' package or provide local src/sim/gazebo_worlds/worlds"
+    )
 
 
 def resolve_world_path(world_file: str) -> str:
@@ -276,9 +299,9 @@ def parse_camera_pose_from_world(world_path: str, camera_model: str = "external_
 
 def serialize_occlusion_geometry_from_world(
     world_path: str,
-    model_name: str = "warehouse_rack_occluders",
+    model_name: str | Tuple[str, ...] = "warehouse_rack_occluders",
 ) -> str:
-    scene = parse_occlusion_scene_from_world(world_path, model_name=model_name, geometry_tags=('visual',))
+    scene = parse_occlusion_scene_from_world(world_path, model_name=model_name, geometry_tags=('collision',))
     return scene_to_json(scene)
 
 

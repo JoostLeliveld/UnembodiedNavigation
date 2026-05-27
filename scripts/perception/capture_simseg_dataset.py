@@ -284,6 +284,14 @@ class TeleportSimSegCapture(Node):
         return self.latest_image.copy(), self.latest_labels.copy()
 
 
+def _in_any_region(x: float, y: float, regions: list[dict], shrink_m: float) -> bool:
+    for r in regions:
+        if (float(r['xmin']) + shrink_m <= x <= float(r['xmax']) - shrink_m and
+                float(r['ymin']) + shrink_m <= y <= float(r['ymax']) - shrink_m):
+            return True
+    return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description='Capture a YOLO-seg dataset directly from Gazebo semantic segmentation labels.')
     parser.add_argument('--world', default='warehouse_occ_light.world.sdf')
@@ -314,6 +322,10 @@ def main() -> int:
     parser.add_argument('--image-topic', default='/external_camera/image_raw')
     parser.add_argument('--labels-topic', default='/external_camera/segmentation/labels_map')
     parser.add_argument('--robot-label', type=int, default=23)
+    parser.add_argument('--skip-region-filter', action='store_true',
+                        help='Disable known_2d_regions traversability filter even when the profile defines regions.')
+    parser.add_argument('--region-shrink-m', type=float, default=0.05,
+                        help='Shrink each traversable region boundary inward before testing grid points.')
     args = parser.parse_args()
 
     profile, _intrinsics, _world_path, _camera_pose = load_profile(str(args.world_profiles), str(args.world))
@@ -330,6 +342,14 @@ def main() -> int:
     yaw_samples = max(int(args.yaw_samples), 1)
     yaws = np.asarray(evenly_spaced_yaws(yaw_samples), dtype=float)
     pose_records = build_pose_records(xs, ys, yaws)
+    known_regions = list(profile.get('known_2d_regions') or [])
+    if known_regions and not args.skip_region_filter:
+        traversable = [r for r in known_regions if str(r.get('type', '')) == 'traversable']
+        if traversable:
+            pose_records = [
+                rec for rec in pose_records
+                if _in_any_region(float(rec['x']), float(rec['y']), traversable, float(args.region_shrink_m))
+            ]
     planned = [(float(item['x']), float(item['y']), float(item['yaw'])) for item in pose_records]
     split_labels = assign_splits(
         pose_records,

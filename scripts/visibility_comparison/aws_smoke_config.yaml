@@ -1,0 +1,136 @@
+# Experiment B / AWS warehouse visible-goal smoke run.
+#
+# Purpose:
+#   Quick C1/C2 stability check on the redesigned AWS geometry. The task uses a
+#   visible final goal so failures are not confounded with terminating inside a
+#   camera-dark region. Route-choice claims should be tested separately after
+#   this visible-goal gate is stable.
+#
+# Run:
+#   python3 scripts/visibility_comparison/run_visibility_campaign.py \
+#     --config scripts/visibility_comparison/aws_smoke_config.yaml \
+#     --log-root logs/visibility_comparison/experiment_b_aws_smoke_next
+
+world: warehouse_aws.world.sdf
+launch_file: warehouse_primary_comparison.launch.py
+
+conditions:
+  C1:
+    planner: constant_R_efe
+    label: C1_constant_R
+  C2:
+    planner: visibility_aware_efe
+    label: C2_visibility_aware
+
+tasks:
+  B1_visible_goal_smoke:
+    conditions: [C1, C2]
+    seeds: [1, 2]
+
+# --- Perception ---
+perception_backend: yolo
+yolo_model: "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/aws_yolo_simseg_v2/model.pt"
+yolo_imgsz: 640
+yolo_conf_threshold: 0.10
+yolo_iou_threshold: 0.45
+yolo_target_class: robot
+yolo_class_id: -1
+yolo_use_masks: true
+yolo_min_mask_area_px: 12.0
+yolo_mask_bottom_band_px: 3.0
+
+# Required by the shared runner, but ignored by C1.
+gp_artifact: "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/aws_gp_v5/yolo_score_raw_gp.npz"
+
+# --- Runtime display ---
+headless: true
+use_rviz: false
+reset_world: false
+ros_domain_id_base: 80
+cleanup_sim_stragglers: true
+
+# --- Heading: odometry-backed, same estimator family as Task A ---
+use_displacement_heading: false
+use_odom_heading_correction: true
+heading_min_displacement_m: 0.10
+heading_bev_noise_sigma_m: 0.05
+
+# --- Known 2D traversability / no-go layer ---
+# Shared physical-safety tuning for the narrow AWS aisles. This is not a
+# visibility route hint: C1 and C2 receive the same forbidden-zone layer. The
+# mean clearance band is kept passable for 0.90 m aisles; belief-aware no-go
+# adds extra cost only when the predicted state covariance grows near racks.
+use_nogo_cost: true
+nogo_weight: 80.0
+nogo_safe_distance: 0.22
+nogo_penalty_type: softplus
+nogo_softplus_scale: 0.06
+use_belief_nogo_cost: true
+nogo_belief_kappa: 1.0
+
+# --- Planner ---
+# No-waypoint B1 stability pass:
+#   1. First prove that C1 and C2 can both reach the final goal without mission
+#      scripting through A3.
+#   2. Keep ambiguity moderate. Larger weights (≈20+) are useful diagnostics,
+#      but can make C2 avoid the dark goal region rather than solve the task.
+#   3. If this reaches reliably, sweep ambiguity_weight upward in a separate
+#      route-choice probe.
+horizon: 40
+dt: 0.25
+# Slower than the TurtleBot default so the optimizer has a feasible way to stay
+# off rack corners in 0.90 m aisles under state-estimation error.
+v_max: 0.15
+discount_gamma: 0.98
+belief_publish_rate: 10.0
+process_noise_xy: 0.01
+process_noise_theta: 0.02
+risk_weight_obs: 1.0
+r_visible_uv: 2.5
+r_miss_uv: 15.0
+# ambiguity_weight=6: moderate visibility preference without route forcing.
+ambiguity_weight: 6.0
+observation_risk_scale: 1.25
+ambiguity_term_scale: 1.0
+control_weight: 0.0
+# goal_prior_u_std_final must exceed r_miss_uv so that in shadow (belief_std≈r_miss=15px)
+# trace term = 0.5*(15/goal_std)²×2 < 1 — prevents risk explosion at shadowed goal approach.
+# At 20px: trace=0.56 (vs 3.52 at 8px, vs 14 at 4px). Risk drops ~6× compared to v23.
+goal_prior_u_std_final: 20.0
+goal_prior_v_std_final: 20.0
+goal_tightening_power: 0.45
+
+robot_collision_radius_m: 0.125
+
+# --- Optimizer ---
+optimizer_maxiter: 150
+optimizer_maxfun: 900
+optimizer_ftol: 1.0e-6
+optimizer_gtol: 1.0e-4
+optimizer_warm_start: true
+
+# Stuck detection: increase window so the robot has time to complete a turning
+# maneuver after goal switch before stuck is declared.
+stuck_window_s: 20.0
+stuck_max_displacement_m: 0.08
+stuck_max_goal_improvement_m: 0.05
+stuck_cmd_fraction_min: 0.5
+
+# --- Stopping ---
+goal_success_radius: 0.25
+goal_success_hold_s: 2.0
+run_timeout_after_first_cmd_s: 200.0
+auto_stop_on_goal: true
+
+# --- Command noise ---
+# Off for first smoke validation so world/perception/planner geometry can be
+# isolated. Re-enable in aws_campaign_config.yaml once the smoke passes.
+use_command_noise: false
+use_encoder_noise: false
+command_noise_linear_slip_mean: 0.03
+command_noise_linear_slip_std: 0.06
+command_noise_angular_slip_mean: 0.00
+command_noise_angular_slip_std: 0.04
+command_noise_linear_additive_std: 0.008
+command_noise_angular_additive_std: 0.035
+command_noise_correlation_alpha: 0.85

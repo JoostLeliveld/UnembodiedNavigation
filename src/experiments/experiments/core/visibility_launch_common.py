@@ -31,6 +31,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'belief_publish_rate': '10.0',
     'horizon': '40',
     'dt': '0.25',
+    'v_max': '0.22',
     'control_weight': '0.0',
     'risk_weight_obs': '1.0',
     'ambiguity_weight': '3.0',
@@ -49,11 +50,12 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'observation_risk_scale': '1.25',
     'ambiguity_term_scale': '1.00',
     'discount_gamma': '0.98',
-    'min_terminal_goal_progress_m': '0.0',
-    'invalid_rollout_barrier_cost': '1000000.0',
     'robot_collision_radius_m': '0.125',
     'bridge_contacts': 'true',
     'use_command_noise': 'true',
+    'use_encoder_noise': 'true',
+    'use_odom_for_predict': 'true',
+    'odom_topic': '/odom_noisy',
     'process_noise_xy': '0.01',
     'process_noise_theta': '0.02',
     'obs_noise_uv': '2.0',
@@ -62,6 +64,10 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'optimizer_ftol': '1e-6',
     'optimizer_gtol': '1e-4',
     'optimizer_warm_start': 'true',
+    'optimizer_multistart': 'false',
+    'optimizer_multistart_include_direct': 'true',
+    'optimizer_multistart_lateral_offsets': '',
+    'optimizer_initial_routes_json': '',
     'odom_heading_correction_mode': 'kalman',
     'clamp_pixel_uv_theta_without_yaw': 'false',
     'debug_runtime': 'false',
@@ -78,6 +84,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'stuck_max_displacement_m': '0.08',
     'stuck_max_goal_improvement_m': '0.05',
     'stuck_cmd_fraction_min': '0.50',
+    'reset_world': 'false',
     'yolo_model': '',
     'yolo_device': '',
     'yolo_imgsz': '640',
@@ -101,6 +108,18 @@ _COMMAND_NOISE_LINEAR_ADDITIVE_STD: float = 0.008
 _COMMAND_NOISE_ANGULAR_ADDITIVE_STD: float = 0.035
 _COMMAND_NOISE_CORRELATION_ALPHA: float = 0.85
 
+# Encoder noise shape — paper-locked, not user-overridable.
+# Models cheap wheel encoder imprecision on top of actuation slip.
+# Independent AR(1) process (different RNG seed offset) so that belief and
+# truth diverge at a realistic rate when camera observations are unavailable.
+_ENCODER_NOISE_LINEAR_SLIP_MEAN: float = 0.02
+_ENCODER_NOISE_LINEAR_SLIP_STD: float = 0.05
+_ENCODER_NOISE_ANGULAR_SLIP_MEAN: float = 0.00
+_ENCODER_NOISE_ANGULAR_SLIP_STD: float = 0.03
+_ENCODER_NOISE_LINEAR_ADDITIVE_STD: float = 0.004
+_ENCODER_NOISE_ANGULAR_ADDITIVE_STD: float = 0.020
+_ENCODER_NOISE_CORRELATION_ALPHA: float = 0.80
+
 # Sensor pixel noise — paper-locked, not user-overridable.
 _SENSOR_PIXEL_NOISE_SIGMA: float = 1.0
 
@@ -115,6 +134,8 @@ VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
     'nogo_softplus_scale': 0.08,
     'nogo_logbarrier_scale': 0.25,
     'nogo_logbarrier_eps': 1e-3,
+    'use_belief_nogo_cost': 'false',
+    'nogo_belief_kappa': 1.0,
 }
 
 
@@ -152,19 +173,58 @@ def _apply_visibility_profile_defaults(cfg: Dict[str, object], profile: Dict[str
             cfg[key] = float(visibility_defaults[key])
 
 
+def _profile_name_tuple(profile: Dict[str, object], plural_key: str, singular_key: str) -> tuple[str, ...]:
+    raw = profile.get(plural_key, profile.get(singular_key, ()))
+    if isinstance(raw, str):
+        value = raw.strip()
+        return (value,) if value else ()
+    if isinstance(raw, (list, tuple)):
+        return tuple(str(item).strip() for item in raw if str(item).strip())
+    return ()
+
+
 def _require_task_field(task, key):
     if key not in task:
         raise RuntimeError(f"Task is missing '{key}' field")
     return task[key]
 
 
-def _state_estimator_metadata() -> Dict[str, str]:
-    return {
+def _state_estimator_metadata(cfg: Dict[str, object] | None = None) -> Dict[str, str]:
+    cfg = cfg or {}
+    metadata = {
         'state_source_x': 'yolo_mask_or_bbox_homography',
         'state_source_y': 'yolo_mask_or_bbox_homography',
         'state_source_theta': 'odometry_heading',
         'state_estimator_mode': 'yolo_mask_or_bbox_camera_xy_odom_theta',
     }
+
+    keypoint_marker_world_z = float(cfg.get('keypoint_marker_world_z', 0.0) or 0.0)
+    if keypoint_marker_world_z > 0.0:
+        metadata.update({
+            'state_source_theta': 'keypoint_bev_heading_with_odom_fallback',
+            'state_estimator_mode': 'yolo_pose_keypoint_bev_heading',
+        })
+        return metadata
+
+    use_displacement_heading = _as_bool(cfg.get('use_displacement_heading', False))
+    use_odom_heading = _as_bool(cfg.get('use_odom_heading_correction', True))
+    if use_displacement_heading:
+        if use_odom_heading:
+            metadata.update({
+                'state_source_theta': 'pixel_displacement_heading_with_odom_fallback',
+                'state_estimator_mode': 'yolo_mask_or_bbox_camera_xy_displacement_theta_with_odom_fallback',
+            })
+        else:
+            metadata.update({
+                'state_source_theta': 'pixel_displacement_heading',
+                'state_estimator_mode': 'yolo_mask_or_bbox_camera_xy_displacement_theta',
+            })
+    elif not use_odom_heading:
+        metadata.update({
+            'state_source_theta': 'pixel_heading_or_propagated_unicycle_heading',
+            'state_estimator_mode': 'yolo_mask_or_bbox_camera_xy_no_odom_theta_correction',
+        })
+    return metadata
 
 
 def parse_common_launch_config(context) -> Dict[str, object]:
@@ -233,9 +293,25 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'optimizer_ftol': float(_launch_value(context, 'optimizer_ftol', PAPER_LAUNCH_DEFAULTS['optimizer_ftol'])),
         'optimizer_gtol': float(_launch_value(context, 'optimizer_gtol', PAPER_LAUNCH_DEFAULTS['optimizer_gtol'])),
         'optimizer_warm_start': _as_bool(_launch_value(context, 'optimizer_warm_start', PAPER_LAUNCH_DEFAULTS['optimizer_warm_start'])),
+        'optimizer_multistart': _as_bool(_launch_value(context, 'optimizer_multistart', PAPER_LAUNCH_DEFAULTS['optimizer_multistart'])),
+        'optimizer_multistart_include_direct': _as_bool(_launch_value(context, 'optimizer_multistart_include_direct', PAPER_LAUNCH_DEFAULTS['optimizer_multistart_include_direct'])),
+        'optimizer_multistart_lateral_offsets': _launch_value(context, 'optimizer_multistart_lateral_offsets', PAPER_LAUNCH_DEFAULTS['optimizer_multistart_lateral_offsets']),
+        'optimizer_initial_routes_json': _launch_value(context, 'optimizer_initial_routes_json', PAPER_LAUNCH_DEFAULTS['optimizer_initial_routes_json']),
         'odom_heading_correction_mode': _launch_value(
             context, 'odom_heading_correction_mode', PAPER_LAUNCH_DEFAULTS['odom_heading_correction_mode']
         ).strip().lower(),
+        'use_odom_heading_correction': _as_bool(
+            _launch_value(context, 'use_odom_heading_correction', 'true')
+        ),
+        'use_displacement_heading': _as_bool(
+            _launch_value(context, 'use_displacement_heading', 'false')
+        ),
+        'heading_min_displacement_m': float(
+            _launch_value(context, 'heading_min_displacement_m', '0.10')
+        ),
+        'heading_bev_noise_sigma_m': float(
+            _launch_value(context, 'heading_bev_noise_sigma_m', '0.05')
+        ),
         'clamp_pixel_uv_theta_without_yaw': _as_bool(
             _launch_value(context, 'clamp_pixel_uv_theta_without_yaw', PAPER_LAUNCH_DEFAULTS['clamp_pixel_uv_theta_without_yaw'])
         ),
@@ -243,6 +319,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'belief_publish_rate': float(_launch_value(context, 'belief_publish_rate', PAPER_LAUNCH_DEFAULTS['belief_publish_rate'])),
         'horizon': int(_launch_value(context, 'horizon', PAPER_LAUNCH_DEFAULTS['horizon'])),
         'dt': float(_launch_value(context, 'dt', PAPER_LAUNCH_DEFAULTS['dt'])),
+        'v_max': float(_launch_value(context, 'v_max', PAPER_LAUNCH_DEFAULTS['v_max'])),
         'control_weight': float(_launch_value(context, 'control_weight', PAPER_LAUNCH_DEFAULTS['control_weight'])),
         'risk_weight_obs': float(_launch_value(context, 'risk_weight_obs', PAPER_LAUNCH_DEFAULTS['risk_weight_obs'])),
         'ambiguity_weight': float(_launch_value(context, 'ambiguity_weight', PAPER_LAUNCH_DEFAULTS['ambiguity_weight'])),
@@ -276,21 +353,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'nogo_softplus_scale': float(_launch_value(context, 'nogo_softplus_scale', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_softplus_scale']))),
         'nogo_logbarrier_scale': float(_launch_value(context, 'nogo_logbarrier_scale', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_logbarrier_scale']))),
         'nogo_logbarrier_eps': float(_launch_value(context, 'nogo_logbarrier_eps', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_logbarrier_eps']))),
+        'use_belief_nogo_cost': _as_bool(_launch_value(context, 'use_belief_nogo_cost', str(VISIBILITY_FALLBACK_DEFAULTS['use_belief_nogo_cost']))),
+        'nogo_belief_kappa': float(_launch_value(context, 'nogo_belief_kappa', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_belief_kappa']))),
         'goal_sigma_uv': float(_launch_value(context, 'goal_sigma_uv', PAPER_LAUNCH_DEFAULTS['goal_sigma_uv'])),
-        'min_terminal_goal_progress_m': float(
-            _launch_value(
-                context,
-                'min_terminal_goal_progress_m',
-                PAPER_LAUNCH_DEFAULTS['min_terminal_goal_progress_m'],
-            )
-        ),
-        'invalid_rollout_barrier_cost': float(
-            _launch_value(
-                context,
-                'invalid_rollout_barrier_cost',
-                PAPER_LAUNCH_DEFAULTS['invalid_rollout_barrier_cost'],
-            )
-        ),
         'robot_collision_radius_m': float(
             _launch_value(
                 context,
@@ -304,7 +369,15 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'use_command_noise': _as_bool(
             _launch_value(context, 'use_command_noise', PAPER_LAUNCH_DEFAULTS['use_command_noise'])
         ),
+        'use_encoder_noise': _as_bool(
+            _launch_value(context, 'use_encoder_noise', PAPER_LAUNCH_DEFAULTS['use_encoder_noise'])
+        ),
+        'use_odom_for_predict': _as_bool(
+            _launch_value(context, 'use_odom_for_predict', PAPER_LAUNCH_DEFAULTS['use_odom_for_predict'])
+        ),
+        'odom_topic': _launch_value(context, 'odom_topic', PAPER_LAUNCH_DEFAULTS['odom_topic']).strip(),
         'headless': _as_bool(_launch_value(context, 'headless', 'false')),
+        'reset_world': _as_bool(_launch_value(context, 'reset_world', PAPER_LAUNCH_DEFAULTS['reset_world'])),
         'command_noise_linear_slip_mean': float(
             _launch_value(context, 'command_noise_linear_slip_mean', _COMMAND_NOISE_LINEAR_SLIP_MEAN)
         ),
@@ -345,6 +418,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'yolo_use_masks': _as_bool(_launch_value(context, 'yolo_use_masks', PAPER_LAUNCH_DEFAULTS['yolo_use_masks'])),
         'yolo_min_mask_area_px': float(_launch_value(context, 'yolo_min_mask_area_px', PAPER_LAUNCH_DEFAULTS['yolo_min_mask_area_px'])),
         'yolo_mask_bottom_band_px': float(_launch_value(context, 'yolo_mask_bottom_band_px', PAPER_LAUNCH_DEFAULTS['yolo_mask_bottom_band_px'])),
+        'yolo_min_keypoint_conf': float(_launch_value(context, 'yolo_min_keypoint_conf', '0.5')),
+        'keypoint_marker_world_z': float(_launch_value(context, 'keypoint_marker_world_z', '0.0')),
+        'keypoint_heading_sigma_rad': float(_launch_value(context, 'keypoint_heading_sigma_rad', '0.05')),
     }
 
     return cfg
@@ -455,10 +531,29 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         raw_use_nogo_cost in ('1', 'true', 't', 'yes', 'y', 'on')
     )
     geometry_needed = bool(cfg.get('perception_use_geometry_occlusion', False)) or nogo_geometry_needed
+    occlusion_model_names = _profile_name_tuple(
+        profile,
+        'occlusion_model_names',
+        'occlusion_model_name',
+    )
+    collision_model_names = _profile_name_tuple(
+        profile,
+        'collision_model_names',
+        'collision_model_name',
+    )
     if (not visibility_geometry_json) and geometry_needed:
-        visibility_geometry_json = serialize_occlusion_geometry_from_world(world_path)
+        visibility_geometry_json = serialize_occlusion_geometry_from_world(
+            world_path,
+            model_name=occlusion_model_names or 'warehouse_rack_occluders',
+        )
     if not collision_geometry_json:
-        collision_geometry_json = serialize_collision_geometry_from_world(world_path)
+        if collision_model_names:
+            collision_geometry_json = serialize_collision_geometry_from_world(
+                world_path,
+                model_names=collision_model_names,
+            )
+        else:
+            collision_geometry_json = serialize_collision_geometry_from_world(world_path)
 
     cfg = dict(cfg)
     cfg.update({
@@ -469,6 +564,9 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         'spawn': spawn,
         'goal_x': goal_x,
         'goal_y': goal_y,
+        'start_x': float(start['x']),
+        'start_y': float(start['y']),
+        'start_yaw': float(start['yaw']),
         'camera_params': camera_params,
         'tf_args': tf_args,
         'world_path': world_path,
@@ -481,7 +579,14 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
 
 def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     """Create shared nodes/components for the thesis pipeline."""
-    state_sources = _state_estimator_metadata()
+    state_sources = _state_estimator_metadata(cfg)
+    keypoint_marker_world_z = float(cfg.get('keypoint_marker_world_z', 0.0))
+    keypoint_heading_enabled = keypoint_marker_world_z > 0.0
+    diagnostics_match_tolerance_s = 0.05 if keypoint_heading_enabled else 1e-3
+    odom_topic = str(cfg.get('odom_topic') or '/odom_noisy')
+    use_encoder_noise = bool(cfg.get('use_encoder_noise', True))
+    if not use_encoder_noise and odom_topic == '/odom_noisy':
+        odom_topic = '/odom'
     sim_pkg = FindPackageShare('sim')
     bringup_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -498,7 +603,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'spawn_y': str(cfg['spawn']['y']),
             'spawn_z': str(cfg['spawn']['z']),
             'spawn_yaw': str(cfg['spawn']['yaw']),
-            'reset_world': 'false',
+            'reset_world': 'true' if cfg.get('reset_world', False) else 'false',
             'bridge_contacts': 'true' if cfg.get('bridge_contacts', True) else 'false',
         }.items(),
     )
@@ -557,6 +662,27 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             }],
         )
 
+    encoder_noise_node = Node(
+        package='sim',
+        executable='encoder_noise_node',
+        name='encoder_noise_node',
+        output='screen',
+        parameters=[{
+            'use_sim_time': True,
+            'enabled': True,
+            'input_topic': '/odom',
+            'output_topic': '/odom_noisy',
+            'seed': cfg['seed'],
+            'linear_slip_mean': _ENCODER_NOISE_LINEAR_SLIP_MEAN,
+            'linear_slip_std': _ENCODER_NOISE_LINEAR_SLIP_STD,
+            'angular_slip_mean': _ENCODER_NOISE_ANGULAR_SLIP_MEAN,
+            'angular_slip_std': _ENCODER_NOISE_ANGULAR_SLIP_STD,
+            'linear_additive_std': _ENCODER_NOISE_LINEAR_ADDITIVE_STD,
+            'angular_additive_std': _ENCODER_NOISE_ANGULAR_ADDITIVE_STD,
+            'correlation_alpha': _ENCODER_NOISE_CORRELATION_ALPHA,
+        }],
+    )
+
     yolo_params = {
         'pixel_noise_sigma': _SENSOR_PIXEL_NOISE_SIGMA,
         'seed': cfg['seed'],
@@ -570,6 +696,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'use_masks': cfg['yolo_use_masks'],
         'mask_min_area': cfg['yolo_min_mask_area_px'],
         'mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
+        'min_keypoint_conf': float(cfg.get('yolo_min_keypoint_conf', 0.5)),
     }
     perception_node = Node(
         package='perception',
@@ -591,6 +718,12 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'odom_yaw_offset_rad': float(cfg['spawn']['yaw']),
         'infer_yaw_from_motion': False,
         'seed': cfg['seed'],
+        # Pose-keypoint heading is opt-in. When > 0 the state node back-projects
+        # front/rear marker pixels at this world Z and computes BEV yaw. Default
+        # 0.0 keeps the legacy odom-heading-fallback path active.
+        'keypoint_marker_world_z': keypoint_marker_world_z,
+        'keypoint_heading_sigma_rad': float(cfg.get('keypoint_heading_sigma_rad', 0.05)),
+        'diagnostics_match_tolerance_s': diagnostics_match_tolerance_s,
         **cfg['camera_params'],
     }
     pixel_to_bev = Node(
@@ -601,17 +734,18 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         parameters=[pixel_params],
     )
 
+    mission_params = {
+        'use_sim_time': True,
+        'frame_id': 'map_bev',
+        'goal_x': cfg['goal_x'],
+        'goal_y': cfg['goal_y'],
+    }
     mission_node = Node(
         package='experiments',
         executable='goal_mission_node',
         name='goal_mission_node',
         output='screen',
-        parameters=[{
-            'use_sim_time': True,
-            'frame_id': 'map_bev',
-            'goal_x': cfg['goal_x'],
-            'goal_y': cfg['goal_y'],
-        }],
+        parameters=[mission_params],
     )
 
     goal_marker_node = Node(
@@ -673,6 +807,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'observation_risk_scale': cfg['observation_risk_scale'],
                 'ambiguity_term_scale': cfg['ambiguity_term_scale'],
                 'discount_gamma': cfg['discount_gamma'],
+                'v_max': cfg['v_max'],
                 'visibility_target_height_m': cfg['visibility_target_height_m'],
                 'visibility_geometry_json': cfg['visibility_geometry_json'],
                 'collision_geometry_json': cfg['collision_geometry_json'],
@@ -685,6 +820,8 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'nogo_softplus_scale': cfg['nogo_softplus_scale'],
                 'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
                 'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
+                'use_belief_nogo_cost': cfg['use_belief_nogo_cost'],
+                'nogo_belief_kappa': cfg['nogo_belief_kappa'],
                 'yolo_model': cfg['yolo_model'],
                 'yolo_device': cfg['yolo_device'],
                 'yolo_imgsz': cfg['yolo_imgsz'],
@@ -695,6 +832,10 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'yolo_use_masks': cfg['yolo_use_masks'],
                 'yolo_min_mask_area_px': cfg['yolo_min_mask_area_px'],
                 'yolo_mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
+                'yolo_min_keypoint_conf': cfg.get('yolo_min_keypoint_conf', 0.5),
+                'keypoint_marker_world_z': keypoint_marker_world_z,
+                'keypoint_heading_sigma_rad': cfg.get('keypoint_heading_sigma_rad', 0.05),
+                'diagnostics_match_tolerance_s': diagnostics_match_tolerance_s,
                 'world_profiles_path': cfg['world_profiles_path'],
                 'tasks_yaml': cfg['tasks_yaml'],
                 'auto_stop_on_goal': cfg['auto_stop_on_goal'],
@@ -715,6 +856,14 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'optimizer_ftol': cfg['optimizer_ftol'],
                 'optimizer_gtol': cfg['optimizer_gtol'],
                 'optimizer_warm_start': cfg['optimizer_warm_start'],
+                'optimizer_multistart': cfg['optimizer_multistart'],
+                'optimizer_multistart_include_direct': cfg['optimizer_multistart_include_direct'],
+                'optimizer_multistart_lateral_offsets': cfg['optimizer_multistart_lateral_offsets'],
+                'optimizer_initial_routes_json': cfg['optimizer_initial_routes_json'],
+                'use_odom_heading_correction': cfg['use_odom_heading_correction'],
+                'use_displacement_heading': cfg['use_displacement_heading'],
+                'heading_min_displacement_m': cfg['heading_min_displacement_m'],
+                'heading_bev_noise_sigma_m': cfg['heading_bev_noise_sigma_m'],
                 'odom_heading_correction_mode': cfg['odom_heading_correction_mode'],
                 'clamp_pixel_uv_theta_without_yaw': cfg['clamp_pixel_uv_theta_without_yaw'],
                 'run_timeout_after_first_cmd_s': cfg['run_timeout_after_first_cmd_s'],
@@ -726,6 +875,8 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'stuck_cmd_fraction_min': cfg['stuck_cmd_fraction_min'],
                 'robot_collision_radius_m': cfg['robot_collision_radius_m'],
                 'use_command_noise': cfg['use_command_noise'],
+                'use_odom_for_predict': cfg['use_odom_for_predict'],
+                'odom_topic': odom_topic,
                 'command_noise_linear_slip_mean': cfg['command_noise_linear_slip_mean'],
                 'command_noise_linear_slip_std': cfg['command_noise_linear_slip_std'],
                 'command_noise_angular_slip_mean': cfg['command_noise_angular_slip_mean'],
@@ -751,6 +902,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'tf_static': tf_static,
         'wait_for_odom': wait_for_odom,
         'command_noise_node': command_noise_node,
+        'encoder_noise_node': encoder_noise_node,
         'perception_node': perception_node,
         'pixel_to_bev': pixel_to_bev,
         'mission_node': mission_node,
@@ -762,6 +914,9 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
 
 def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     """Create runtime actions for the visibility-aware agent launch."""
+    odom_topic = str(cfg.get('odom_topic') or '/odom_noisy')
+    if not bool(cfg.get('use_encoder_noise', True)) and odom_topic == '/odom_noisy':
+        odom_topic = '/odom'
     raw_use_nogo_cost = cfg.get('use_nogo_cost', 'auto')
     if isinstance(raw_use_nogo_cost, str) and raw_use_nogo_cost in ('', 'auto', 'default'):
         resolved_use_nogo_cost = False
@@ -810,6 +965,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'belief_publish_rate': cfg['belief_publish_rate'],
             'horizon': cfg['horizon'],
             'dt': cfg['dt'],
+            'v_max': cfg['v_max'],
             'control_weight': cfg['control_weight'],
             'use_pixel_correction': cfg['use_pixel_correction'],
             'pixel_timeout_s': cfg['pixel_timeout_s'],
@@ -817,10 +973,15 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'pixel_correction_approx': cfg['pixel_correction_approx'],
             'skip_stale_pixel_correction': cfg['skip_stale_pixel_correction'],
             'heading_pixel_noise_sigma': _SENSOR_PIXEL_NOISE_SIGMA,
-            'use_odom_heading_correction': True,
+            'use_odom_heading_correction': cfg['use_odom_heading_correction'],
             'odom_heading_correction_mode': cfg['odom_heading_correction_mode'],
             'odom_heading_timeout_s': 0.75,
             'odom_heading_sigma_rad': 0.08,
+            'odom_topic': odom_topic,
+            'use_odom_for_predict': cfg['use_odom_for_predict'],
+            'use_displacement_heading': cfg['use_displacement_heading'],
+            'heading_min_displacement_m': cfg['heading_min_displacement_m'],
+            'heading_bev_noise_sigma_m': cfg['heading_bev_noise_sigma_m'],
             'odom_yaw_offset_rad': float(cfg['spawn']['yaw']),
             'clamp_pixel_uv_theta_without_yaw': cfg['clamp_pixel_uv_theta_without_yaw'],
             'min_state_cov': cfg['min_state_cov'],
@@ -856,14 +1017,18 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'nogo_softplus_scale': cfg['nogo_softplus_scale'],
             'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
             'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
+            'use_belief_nogo_cost': cfg['use_belief_nogo_cost'],
+            'nogo_belief_kappa': cfg['nogo_belief_kappa'],
             'robot_collision_radius_m': cfg['robot_collision_radius_m'],
-            'min_terminal_goal_progress_m': cfg['min_terminal_goal_progress_m'],
-            'invalid_rollout_barrier_cost': cfg['invalid_rollout_barrier_cost'],
             'optimizer_maxiter': cfg['optimizer_maxiter'],
             'optimizer_maxfun': cfg['optimizer_maxfun'],
             'optimizer_ftol': cfg['optimizer_ftol'],
             'optimizer_gtol': cfg['optimizer_gtol'],
             'optimizer_warm_start': cfg['optimizer_warm_start'],
+            'optimizer_multistart': cfg['optimizer_multistart'],
+            'optimizer_multistart_include_direct': cfg['optimizer_multistart_include_direct'],
+            'optimizer_multistart_lateral_offsets': cfg['optimizer_multistart_lateral_offsets'],
+            'optimizer_initial_routes_json': cfg['optimizer_initial_routes_json'],
             **cfg['camera_params'],
             **planner_params[planner],
         }],
@@ -893,6 +1058,8 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     ]
     if shared_nodes.get('command_noise_node') is not None:
         runtime_actions.append(shared_nodes['command_noise_node'])
+    if cfg.get('use_encoder_noise', True):
+        runtime_actions.append(shared_nodes['encoder_noise_node'])
     runtime_actions.extend([
         agent_node,
         shared_nodes['wait_for_odom'],

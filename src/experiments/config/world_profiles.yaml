@@ -30,6 +30,8 @@ worlds:
     recommended_task: shadow_tradeoff_a_longshadow
     spawn: {x: -1.55, y: 0.45, z: 0.05, yaw: 0.0}
     planner_default: visibility_aware_efe
+    # TODO: this artifact was collected in warehouse_occ_light, not longshadow — replace
+    # with a GP trained on the longshadow layout before running any longshadow campaign.
     visibility_artifact: data/visibility_gp/warehouse_occ_light_empirical_visibility_gp.npz
     visibility_defaults:
       visibility_map_min_x: -3.0
@@ -43,3 +45,221 @@ worlds:
       visibility_prior_occ: 0.005
       visibility_beta: 1.0
       visibility_target_height_m: 0.0
+
+  warehouse_aws.world.sdf:
+    world_name: warehouse_aws
+    investigation_focus: Corrected AWS-style Experiment B extension world with an 11.0 m by 10.0 m footprint, split R1-R5 rack rows, narrow 0.55 m rack footprints, 0.90 m reachable driveable aisles, explicit green visual-only driveable boundaries, red non-driveable box/staging spots, and a loading/dispatch apron pulled away from the camera wall. Only the R4 rack carries a HIGH STACK (~2.6 m tall) on top of its shelf-end pad as the main 3D occluder; other box spots have low crates. The high stack lives at the same kind of shelf-end position as the other rack boxes — visibility blockage comes from its HEIGHT (above the rack body), never from a box sitting in a drive lane. The B1 start is in the shipping/apron decision lane, the short A4 route is physically routeable but camera-poor where the R4 stack casts its shadow, and the neighboring A3 route is a modest more-visible detour. Learned visibility must come from an AWS-specific GP artifact with P_conservative_plan_map.
+    route_choice_design: B1_visible_goal_smoke is the first stability gate and ends at G_pick_A_visible, a camera-visible A4-side handoff point. B1_clean_route_choice remains the harder exploratory route-choice candidate toward G_pick_A in the mid cross-aisle; it should not be treated as evidence until the dark-goal confound is resolved or explicitly studied.
+    recommended_task: B1_visible_goal_smoke
+    spawn: {x: 2.15, y: -3.15, z: 0.05, yaw: 1.5708}
+    planner_default: visibility_aware_efe
+    visibility_artifact: data/visibility_gp/warehouse_aws_empirical_visibility_gp.npz
+    visibility_defaults:
+      visibility_map_min_x: -5.5
+      visibility_map_max_x: 5.5
+      visibility_map_min_y: -5.0
+      visibility_map_max_y: 5.0
+      visibility_map_nx: 220
+      visibility_map_ny: 200
+      visibility_gp_length_scale: 1.20
+      visibility_gp_noise_var: 0.10
+      visibility_prior_occ: 0.005
+      visibility_beta: 1.0
+      visibility_target_height_m: 0.35
+    start_goal_pads:
+      S_apron_left:  {x: -4.25, y: -3.15, role: loading_apron_dispatch_start, visibility_type: open_visible}
+      S_apron_right: {x: 2.15, y: -3.15, role: shipping_apron_route_choice_start, visibility_type: open_visible}
+      S_rack_west:   {x: -5.05, y: 0.10, role: west_service_lane_start, visibility_type: moderate_visibility}
+      S_rack_south:  {x: -4.85, y: -1.55, role: west_lower_cross_aisle_start, visibility_type: open_to_occluded_transition}
+      S_far_corner:  {x: -5.05, y: 4.45, role: far_upper_storage_start, visibility_type: low_coverage_or_prior_region}
+      G_pick_A_visible: {x: 3.25, y: -2.10, role: a4_visible_handoff_target_before_r4_shadow, visibility_type: open_visible}
+      G_pick_A:      {x: 3.25, y: 1.72, role: a4_mid_cross_picking_target, visibility_type: partially_occluded_shelf_end}
+      G_pick_B:      {x: -0.975, y: 1.72, role: visible_picking_target, visibility_type: visible_shelf_end}
+      G_drop_apron:  {x: -0.20, y: -3.15, role: dispatch_dropoff, visibility_type: open_visible}
+      G_far_rack:    {x: 4.85, y: 4.55, role: far_corner_rack_endpoint, visibility_type: long_horizon_stress}
+      G_shadow_exit: {x: 1.35, y: 1.72, role: post_occlusion_reacquisition_target, visibility_type: reacquisition_test}
+    known_2d_regions:
+      - {name: loading_apron_drive_lane, type: traversable, xmin: -5.10, xmax: 5.10, ymin: -3.45, ymax: -2.85, note: green driveable dispatch/loading lane pulled away from the camera wall; not a visibility reward}
+      - {name: lower_main_aisle, type: traversable, xmin: -5.15, xmax: 5.15, ymin: -2.85, ymax: -2.03, note: lower route-choice corridor}
+      - {name: mid_cross_aisle, type: traversable, xmin: -4.85, xmax: 4.85, ymin: 1.25, ymax: 2.03, note: open mid cross-aisle through split rack rows}
+      - {name: upper_cross_aisle, type: traversable, xmin: -4.85, xmax: 4.85, ymin: 4.28, ymax: 4.80, note: upper visible detour candidate for B1}
+      - {name: west_service_lane, type: traversable, xmin: -5.15, xmax: -4.60, ymin: -3.45, ymax: 4.80, note: west-side rack access lane}
+      - {name: east_far_corner_route, type: traversable, xmin: 4.65, xmax: 5.15, ymin: -3.45, ymax: 4.80, note: long-horizon east-side route used by B3}
+      - {name: rack_aisle_A1, type: traversable, xmin: -3.475, xmax: -2.575, ymin: -2.85, ymax: 4.80, note: 0.90 m marked driveable lane between R1 and R2}
+      - {name: rack_aisle_A2, type: traversable, xmin: -1.425, xmax: -0.525, ymin: -2.85, ymax: 4.80, note: 0.90 m marked driveable lane between R2 and R3}
+      - {name: rack_aisle_A3, type: traversable, xmin: 0.625, xmax: 1.525, ymin: -2.85, ymax: 4.80, note: visible detour lane for B1}
+      - {name: rack_aisle_A4, type: traversable, xmin: 2.575, xmax: 3.675, ymin: -2.85, ymax: 4.80, note: v2 1.10 m driveable lane between R4 (now at x=2.0) and R5; widened from 0.90 m for realistic forklift clearance under EKF uncertainty. Visibility degrades in the south half behind the R4 high stack.}
+      - {name: shelf_end_box_spot_R1, type: non_driveable_staging, xmin: -4.46, xmax: -3.64, ymin: -1.66, ymax: -0.88, note: red shelf-end pad outside the green driveable union; low crate only}
+      - {name: shelf_end_box_spot_R2, type: non_driveable_staging, xmin: -2.41, xmax: -1.59, ymin: -1.66, ymax: -0.88, note: red shelf-end pad outside the green driveable union; low crate only}
+      - {name: shelf_end_box_spot_R3, type: non_driveable_staging, xmin: -0.36, xmax: 0.46, ymin: -1.66, ymax: -0.88, note: red shelf-end pad outside the green driveable union; low crate only}
+      - {name: shelf_end_box_spot_R4, type: non_driveable_staging, xmin: 1.725, xmax: 2.275, ymin: -1.685, ymax: -0.845, note: red shelf-end pad south of R4 rack body; low crate only (R4 high stack removed v5; original bbox preserved per floor-plan convention)}
+      - {name: shelf_end_box_spot_R5, type: non_driveable_staging, xmin: 3.74, xmax: 4.56, ymin: -1.66, ymax: -0.88, note: red shelf-end pad outside the green driveable union; low crate only}
+      - {name: wall_side_staging_left, type: non_driveable_staging, xmin: -5.03, xmax: -3.83, ymin: -4.20, ymax: -3.64, note: wall-side red staging pad, pulled 0.8 m away from the camera wall}
+      - {name: wall_side_receiving, type: non_driveable_staging, xmin: -0.93, xmax: 0.68, ymin: -4.20, ymax: -3.64, note: wall-side red receiving pad; green apron lane is north of it}
+      - {name: wall_side_shipping, type: non_driveable_staging, xmin: 2.08, xmax: 3.68, ymin: -4.20, ymax: -3.64, note: wall-side red shipping pad; green apron lane is north of it}
+      - {name: wall_side_charging, type: non_driveable_staging, xmin: 4.05, xmax: 5.00, ymin: -4.20, ymax: -3.64, note: wall-side red charging pad; green apron lane is north of it}
+    occlusion_annotations:
+      - name: OZ_A_r4_stack_shadow
+        cause: v2 R4 shelf-end high stack (height ~2.6 m, base 0.55 m wide, flush with R4 east face at x=2.275) casts a learned low-visibility wedge from the south-wall camera now mounted at z=4.5 m
+        traversability: driveable_centerline
+        learned_by: AWS visibility capture v5 and GP fit (REQUIRES RECAPTURE after 2026-05-20 v2 changes)
+        expected_effect: low YOLO score / high observation covariance throughout most of A4 between y ~ -0.5 and y ~ 2.5. The wider stack base + lower camera together pinch the previously clear mid-aisle channel. Geometric verification (v2_shadow_geometric.json) shows residual east-edge visible channel that empirical YOLO degradation may close.
+        approx_region: {xmin: 2.30, xmax: 3.60, ymin: -1.685, ymax: 3.50}
+      - name: OZ_B_loaded_rack_band
+        cause: shelf/rack visual structure and low shelf contents near aisle edges
+        traversability: driveable_aisles
+        learned_by: AWS visibility capture and GP fit
+        expected_effect: partial detections and mask-centroid bias risk near rack rows
+        approx_region: {xmin: -4.35, xmax: 4.35, ymin: -0.65, ymax: 4.25}
+      - name: OZ_C_far_corner_low_coverage
+        cause: long range and oblique camera angle in the upper east/far-corner route
+        traversability: driveable_if_lane_marked
+        learned_by: GP coverage / prior if under-sampled
+        expected_effect: conservative planner should avoid overtrusting sparse far-corner observations
+        approx_region: {xmin: 4.55, xmax: 5.15, ymin: 3.80, ymax: 4.80}
+      - name: OZ_D_reacquisition_zone
+        cause: robot exits the R4-stack shadow into the open mid cross-aisle
+        traversability: driveable
+        learned_by: AWS visibility capture and GP fit
+        expected_effect: visibility improves after the occluded segment
+        approx_region: {xmin: 0.80, xmax: 1.80, ymin: 1.25, ymax: 2.03}
+    r4_occluder_variants:
+      low:    {height_m: 1.20, width_m: 0.24, expected_regime: weak_occlusion}
+      medium: {height_m: 1.90, width_m: 0.32, expected_regime: main_partial_occlusion}
+      high:   {height_m: 2.60, width_m: 0.38, expected_regime: main_partial_to_strong_occlusion}
+  warehouse_putaway.world.sdf:
+    world_name: warehouse_putaway
+    investigation_focus: >
+      Receiving-to-putaway warehouse. An inbound tote is picked up at a scan/QC
+      station (A, south of the inbound staging buffer) and transported to a
+      rack-side put-away handoff bay (B, just east of the staging shadow). The
+      direct rear AMR lane is shorter but passes behind the tall pallet stacks
+      where the central-south overview camera loses sight of the robot. The
+      longer front lane runs on the camera side of the staging area and stays
+      visible before turning north with clear margin after the known staging island. Designed to
+      elicit a real visibility-aware detour, not a lateral-preference within-aisle
+      tweak.
+    route_choice_design: >
+      shadow_tradeoff_putaway_discriminating is the load-bearing
+      discriminating-regime task. shadow_tradeoff_putaway_easy is the easy
+      regime (both routes visible). shadow_tradeoff_putaway_hard places the
+      goal inside the rear shadow so the regime degenerates to safe-stop.
+    recommended_task: shadow_tradeoff_putaway_discriminating
+    spawn: {x: -3.80, y: -2.00, z: 0.05, yaw: 0.7854}   # yaw = pi/4 (NE-facing)
+    planner_default: visibility_aware_efe
+    visibility_artifact: data/visibility_gp/warehouse_putaway_empirical_visibility_gp.npz
+    visibility_defaults:
+      visibility_map_min_x: -6.0
+      visibility_map_max_x: 7.2
+      visibility_map_min_y: -3.6
+      visibility_map_max_y: 3.4
+      visibility_map_nx: 264
+      visibility_map_ny: 140
+      visibility_gp_length_scale: 1.20
+      visibility_gp_noise_var: 0.10
+      visibility_prior_occ: 0.005
+      visibility_beta: 1.0
+      visibility_target_height_m: 0.35
+    start_goal_pads:
+      A_scan_pickup:        {x: -3.80, y: -2.00, role: receiving_scan_QC_amr_pickup, visibility_type: open_visible}
+      B_putaway_handoff:    {x: 4.20, y: 1.25, role: rear_lane_putaway_handoff_bay_after_shadow, visibility_type: open_visible}
+      G_outbound_dock:      {x: 5.00, y: -2.30, role: outbound_dock_return_path, visibility_type: open_visible}
+      G_in_shadow_rack:     {x: 0.50, y: 2.40, role: deep_rack_drop_inside_shadow, visibility_type: partially_occluded}
+    known_2d_regions:
+      # Driveable regions (green)
+      - {name: front_circulation_lane, type: traversable, xmin: -5.50, xmax: 6.95, ymin: -2.60, ymax: -1.40,
+         note: front (south) AMR + forklift circulation lane on the camera side; visible everywhere}
+      - {name: rear_putaway_lane, type: traversable, xmin: -5.50, xmax: 6.95, ymin: 0.95, ymax: 1.55,
+         note: rear (north) AMR direct put-away lane; passes behind the staging stacks; shadowed in the middle}
+      - {name: west_cross_lane, type: traversable, xmin: -5.50, xmax: -3.30, ymin: -2.60, ymax: 1.55,
+         note: west connecting lane between front and rear lanes, west of staging}
+      - {name: east_cross_lane, type: traversable, xmin: 3.75, xmax: 4.65, ymin: -2.60, ymax: 1.55,
+         note: east connecting lane between front lane and put-away bay, just east of the staging island}
+      - {name: pickup_zone_A, type: traversable, xmin: -4.20, xmax: -3.40, ymin: -2.40, ymax: -1.60,
+         note: green AMR pickup bay below the scan station}
+      - {name: putaway_zone_B, type: traversable, xmin: 3.80, xmax: 4.60, ymin: 0.95, ymax: 1.55,
+         note: blue AMR handoff bay in the visible rear lane after the staging shadow}
+      # Non-driveable staging / structural regions (red)
+      - {name: staging_buffer_island, type: non_driveable_staging, xmin: -2.80, xmax: 2.80, ymin: -0.55, ymax: 0.85,
+         note: inbound pallet staging buffer; three tall stacks; visibility blockage comes from STACK HEIGHT (z up to 2.4 m)}
+      - {name: rear_rack_zone, type: non_driveable_staging, xmin: -5.10, xmax: 5.70, ymin: 2.55, ymax: 3.15,
+         note: rear pallet rack zone (visual + collision); AMR drops off at the south face but does not enter the rack itself}
+      - {name: dock_apron, type: non_driveable_staging, xmin: -5.80, xmax: 6.70, ymin: -3.55, ymax: -2.85,
+         note: south dock apron behind the AMR lanes; forklift territory; non-driveable for the AMR}
+    occlusion_annotations:
+      - name: OZ_putaway_staging_shadow
+        cause: >
+          Three tall inbound pallet stacks (~2.4 m) form the staging buffer between the
+          front and rear AMR lanes. Together they cast a contiguous low-visibility wedge
+          from the central-south camera into the rear lane.
+        traversability: driveable_centerline
+        learned_by: warehouse_putaway visibility capture (REQUIRES CAPTURE before use)
+        expected_effect: >
+          Low YOLO score / high observation covariance on the rear lane between
+          approximately x = -2.7 and x = 2.7. East-end of the rear lane (x > 2.8) and
+          west-end (x < -2.8) remain visible from the central camera.
+        approx_region: {xmin: -2.80, xmax: 2.80, ymin: 0.85, ymax: 2.10}
+  parcel_sortation.world.sdf:
+    world_name: parcel_sortation_visibility_cell
+    investigation_focus: >
+      Compact parcel-sortation warehouse cell. The robot picks up at an
+      induction/scan station on the west side and delivers to a sort-wall
+      handoff bay on the east side. A rear lane provides the short direct
+      route, while a front lane remains more visible from the centered
+      south-wall overview camera. Tall parcel stacks in the inbound staging buffer
+      degrade camera observations on the rear lane without making that lane
+      physically blocked.
+    route_choice_design: >
+      shadow_tradeoff_sortation_discriminating is the first geometry/perception
+      gate. The known 2D forbidden-zone layer contains the staging buffer,
+      rear sort wall, and building walls. Learned observation reliability must
+      come from a parcel_sortation-specific GP capture before C2 evidence is
+      claimed.
+    recommended_task: shadow_tradeoff_sortation_discriminating
+    spawn: {x: -3.40, y: 1.00, z: 0.05, yaw: 0.0}
+    planner_default: visibility_aware_efe
+    occlusion_model_names: [sort_wall, peak_occluders]
+    collision_model_names: [building_walls, sort_wall, peak_occluders, induction_station, sortwall_dropoff, receiving_context]
+    visibility_defaults:
+      visibility_map_min_x: -5.0
+      visibility_map_max_x: 5.0
+      visibility_map_min_y: -3.7
+      visibility_map_max_y: 3.2
+      visibility_map_nx: 220
+      visibility_map_ny: 152
+      visibility_gp_length_scale: 1.0
+      visibility_gp_noise_var: 0.10
+      visibility_prior_occ: 0.005
+      visibility_beta: 1.0
+      visibility_target_height_m: 0.35
+    start_goal_pads:
+      A_induction_pickup: {x: -3.40, y: 1.00, role: induction_scan_pickup, visibility_type: open_visible}
+      B_sortwall_dropoff: {x: 3.60, y: 1.00, role: sortwall_dropoff_after_shadow, visibility_type: open_visible}
+      G_front_lane_sanity: {x: 3.60, y: -1.25, role: front_visible_sanity_goal, visibility_type: open_visible}
+    known_2d_regions:
+      - {name: rear_sortation_lane, type: traversable, xmin: -3.85, xmax: 4.05, ymin: 0.60, ymax: 1.40,
+         note: short direct AMR lane behind the inbound staging stacks}
+      - {name: front_circulation_lane, type: traversable, xmin: -3.85, xmax: 4.05, ymin: -1.70, ymax: -0.80,
+         note: longer camera-side lane kept visible from the centered south-wall overview camera}
+      - {name: west_connector_lane, type: traversable, xmin: -3.85, xmax: -2.98, ymin: -1.70, ymax: 1.40,
+         note: west connection between front and rear lanes beside the induction station}
+      - {name: east_connector_lane, type: traversable, xmin: 3.18, xmax: 4.05, ymin: -1.70, ymax: 1.40,
+         note: east connection from front lane to sort-wall dropoff bay}
+      - {name: inbound_staging_buffer, type: non_driveable_staging, xmin: -2.30, xmax: 2.10, ymin: -0.65, ymax: 0.55,
+         note: known forbidden zone with tall parcel stacks; creates camera shadow but is not a route waypoint}
+      - {name: rear_sort_wall, type: non_driveable_staging, xmin: -3.70, xmax: 3.70, ymin: 2.20, ymax: 2.70,
+         note: pallet-rack / sort-wall structure, not part of the AMR driveable floor}
+      - {name: south_dock_apron, type: non_driveable_staging, xmin: -4.80, xmax: 4.80, ymin: -3.20, ymax: -2.65,
+         note: dock/conveyor context outside the AMR route-choice lanes}
+    occlusion_annotations:
+      - name: OZ_sortation_staging_shadow
+        cause: >
+          Tall parcel stacks in the central inbound staging buffer partially
+          occlude the rear sortation lane from the centered south-wall overview camera.
+        traversability: driveable_centerline
+        learned_by: parcel_sortation visibility capture and GP fit
+        expected_effect: >
+          Lower detector score / higher planner-facing covariance along the
+          rear lane near the central staging buffer. The front lane should
+          remain comparatively visible.
+        approx_region: {xmin: -2.30, xmax: 2.10, ymin: 0.60, ymax: 1.40}

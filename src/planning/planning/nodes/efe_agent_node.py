@@ -52,12 +52,6 @@ class EfeAgentNode(UnicyclePlannerNode):
         self._publish_command(u[0], u[1])
 
     def _after_plan_result(self, result):
-        if bool(getattr(result, 'fallback_stop_applied', False)):
-            with self._data_lock:
-                self._active_controls = None
-                self._active_plan_started_at = None
-            self._publish_command(0.0, 0.0)
-            return
         # Keep following the current planned control sequence until replanning replaces it.
         controls = np.asarray(result.controls, dtype=float)
         with self._data_lock:

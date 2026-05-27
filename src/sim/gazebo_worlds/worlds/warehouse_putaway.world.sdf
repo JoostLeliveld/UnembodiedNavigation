@@ -1,0 +1,302 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <world name="warehouse_putaway">
+
+    <atmosphere type="adiabatic"/>
+    <gravity>0 0 -9.8</gravity>
+    <magnetic_field>6.0e-6 2.3e-5 -4.2e-5</magnetic_field>
+
+    <physics type="ode" name="default_physics">
+      <max_step_size>0.004</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>250</real_time_update_rate>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <light name="sun" type="directional">
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>1.0 1.0 1.0 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.3 0.2 -0.9</direction>
+      <cast_shadows>true</cast_shadows>
+    </light>
+
+    <scene><ambient>0.58 0.58 0.58 1</ambient><background>0.70 0.72 0.74 1</background><shadows>true</shadows></scene>
+
+    <!-- ===== Ground (AWS gray floor) ===== -->
+    <model name="ground_plane"><static>true</static>
+      <link name="link">
+        <collision name="collision"><geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry></collision>
+        <visual name="visual"><geometry><plane><normal>0 0 1</normal><size>14.6 8.0</size></plane></geometry>
+          <material><ambient>0.56 0.55 0.51 1</ambient><diffuse>0.56 0.55 0.51 1</diffuse><specular>0.05 0.05 0.05 1</specular></material></visual>
+      </link>
+    </model>
+
+    <!-- ===== Perimeter walls + dock context ===== -->
+    <model name="warehouse_walls"><static>true</static>
+      <link name="south_wall"><pose>0.60 -3.65 1.75 0 0 0</pose><collision name="collision"><geometry><box><size>13.40 0.10 3.50</size></box></geometry></collision><visual name="visual"><geometry><box><size>13.40 0.10 3.50</size></box></geometry><material><ambient>0.62 0.64 0.67 1</ambient><diffuse>0.62 0.64 0.67 1</diffuse></material></visual></link>
+      <link name="north_wall"><pose>0.60  3.45 1.75 0 0 0</pose><collision name="collision"><geometry><box><size>13.40 0.10 3.50</size></box></geometry></collision><visual name="visual"><geometry><box><size>13.40 0.10 3.50</size></box></geometry><material><ambient>0.62 0.64 0.67 1</ambient><diffuse>0.62 0.64 0.67 1</diffuse></material></visual></link>
+      <link name="west_wall"><pose>-6.05 -0.10 1.75 0 0 0</pose><collision name="collision"><geometry><box><size>0.10 7.10 3.50</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.10 7.10 3.50</size></box></geometry><material><ambient>0.62 0.64 0.67 1</ambient><diffuse>0.62 0.64 0.67 1</diffuse></material></visual></link>
+      <link name="east_wall"><pose> 7.25 -0.10 1.75 0 0 0</pose><collision name="collision"><geometry><box><size>0.10 7.10 3.50</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.10 7.10 3.50</size></box></geometry><material><ambient>0.62 0.64 0.67 1</ambient><diffuse>0.62 0.64 0.67 1</diffuse></material></visual></link>
+
+      <!-- AWS-style short gray dock bumpers along the south wall base -->
+      <link name="dock_bumper_1"><pose>-4.50 -3.59 0.075 0 0 0</pose><visual name="visual"><geometry><box><size>1.60 0.055 0.15</size></box></geometry><material><ambient>0.50 0.50 0.50 1</ambient><diffuse>0.50 0.50 0.50 1</diffuse></material></visual></link>
+      <link name="dock_bumper_2"><pose>-1.50 -3.59 0.075 0 0 0</pose><visual name="visual"><geometry><box><size>1.60 0.055 0.15</size></box></geometry><material><ambient>0.50 0.50 0.50 1</ambient><diffuse>0.50 0.50 0.50 1</diffuse></material></visual></link>
+      <link name="dock_bumper_3"><pose>2.00 -3.59 0.075 0 0 0</pose><visual name="visual"><geometry><box><size>1.60 0.055 0.15</size></box></geometry><material><ambient>0.50 0.50 0.50 1</ambient><diffuse>0.50 0.50 0.50 1</diffuse></material></visual></link>
+      <link name="dock_bumper_4"><pose>5.00 -3.59 0.075 0 0 0</pose><visual name="visual"><geometry><box><size>1.60 0.055 0.15</size></box></geometry><material><ambient>0.50 0.50 0.50 1</ambient><diffuse>0.50 0.50 0.50 1</diffuse></material></visual></link>
+
+      <!-- Corrugated-metal dock door visuals on the inside face of the south wall.
+           Three closed doors above bumpers 1-3; bumper 4 stands in for an
+           "active dock door open" stall. -->
+      <link name="dock_door_1"><pose>-4.50 -3.57 1.30 0 0 0</pose><visual name="visual"><geometry><box><size>2.30 0.06 2.60</size></box></geometry><material><ambient>0.45 0.48 0.52 1</ambient><diffuse>0.45 0.48 0.52 1</diffuse></material></visual></link>
+      <link name="dock_door_2"><pose>-1.50 -3.57 1.30 0 0 0</pose><visual name="visual"><geometry><box><size>2.30 0.06 2.60</size></box></geometry><material><ambient>0.45 0.48 0.52 1</ambient><diffuse>0.45 0.48 0.52 1</diffuse></material></visual></link>
+      <link name="dock_door_3"><pose>2.00 -3.57 1.30 0 0 0</pose><visual name="visual"><geometry><box><size>2.30 0.06 2.60</size></box></geometry><material><ambient>0.45 0.48 0.52 1</ambient><diffuse>0.45 0.48 0.52 1</diffuse></material></visual></link>
+    </model>
+
+    <!-- ===== Central staging buffer: 5 palletized stacks =====
+         Inline geometry (brown pallet + tidy tan carton layers + matching
+         collision envelope per stack). Replaces the AWS Cluttering meshes
+         which read as random heaps. Heights 1.65-2.40 m. -->
+    <model name="pallet_stacks"><static>true</static>
+
+      <!-- w1: x=-2.60, y=-0.05, 4 levels @ 0.50 m, total h=2.15 m -->
+      <link name="w1_pallet"><pose>-2.60 -0.05 0.075 0 0 0.04</pose><visual name="visual"><geometry><box><size>1.00 1.20 0.15</size></box></geometry><material><ambient>0.36 0.22 0.10 1</ambient><diffuse>0.36 0.22 0.10 1</diffuse></material></visual></link>
+      <link name="w1_envelope"><pose>-2.60 -0.05 1.075 0 0 0</pose><collision name="collision"><geometry><box><size>1.00 1.20 2.15</size></box></geometry></collision></link>
+      <link name="w1_l1"><pose>-2.60 -0.05 0.40 0 0 0.04</pose><visual name="visual"><geometry><box><size>0.95 1.15 0.50</size></box></geometry><material><ambient>0.78 0.66 0.46 1</ambient><diffuse>0.78 0.66 0.46 1</diffuse></material></visual></link>
+      <link name="w1_l2"><pose>-2.60 -0.05 0.90 0 0 0.04</pose><visual name="visual"><geometry><box><size>0.92 1.12 0.50</size></box></geometry><material><ambient>0.74 0.62 0.42 1</ambient><diffuse>0.74 0.62 0.42 1</diffuse></material></visual></link>
+      <link name="w1_l3"><pose>-2.60 -0.05 1.40 0 0 0.04</pose><visual name="visual"><geometry><box><size>0.90 1.10 0.50</size></box></geometry><material><ambient>0.80 0.68 0.48 1</ambient><diffuse>0.80 0.68 0.48 1</diffuse></material></visual></link>
+      <link name="w1_l4"><pose>-2.60 -0.05 1.90 0 0 0.04</pose><visual name="visual"><geometry><box><size>0.88 1.08 0.50</size></box></geometry><material><ambient>0.76 0.64 0.44 1</ambient><diffuse>0.76 0.64 0.44 1</diffuse></material></visual></link>
+
+      <!-- w2: x=-2.60, y=0.55, 5 levels @ 0.45 m, total h=2.40 m -->
+      <link name="w2_pallet"><pose>-2.60 0.55 0.075 0 0 -0.06</pose><visual name="visual"><geometry><box><size>1.00 1.20 0.15</size></box></geometry><material><ambient>0.36 0.22 0.10 1</ambient><diffuse>0.36 0.22 0.10 1</diffuse></material></visual></link>
+      <link name="w2_envelope"><pose>-2.60 0.55 1.275 0 0 0</pose><collision name="collision"><geometry><box><size>1.00 1.20 2.40</size></box></geometry></collision></link>
+      <link name="w2_l1"><pose>-2.60 0.55 0.375 0 0 -0.06</pose><visual name="visual"><geometry><box><size>0.95 1.15 0.45</size></box></geometry><material><ambient>0.76 0.64 0.44 1</ambient><diffuse>0.76 0.64 0.44 1</diffuse></material></visual></link>
+      <link name="w2_l2"><pose>-2.60 0.55 0.825 0 0 -0.06</pose><visual name="visual"><geometry><box><size>0.92 1.12 0.45</size></box></geometry><material><ambient>0.80 0.68 0.48 1</ambient><diffuse>0.80 0.68 0.48 1</diffuse></material></visual></link>
+      <link name="w2_l3"><pose>-2.60 0.55 1.275 0 0 -0.06</pose><visual name="visual"><geometry><box><size>0.90 1.10 0.45</size></box></geometry><material><ambient>0.74 0.62 0.42 1</ambient><diffuse>0.74 0.62 0.42 1</diffuse></material></visual></link>
+      <link name="w2_l4"><pose>-2.60 0.55 1.725 0 0 -0.06</pose><visual name="visual"><geometry><box><size>0.88 1.08 0.45</size></box></geometry><material><ambient>0.78 0.66 0.46 1</ambient><diffuse>0.78 0.66 0.46 1</diffuse></material></visual></link>
+      <link name="w2_l5"><pose>-2.60 0.55 2.175 0 0 -0.06</pose><visual name="visual"><geometry><box><size>0.86 1.06 0.45</size></box></geometry><material><ambient>0.74 0.62 0.42 1</ambient><diffuse>0.74 0.62 0.42 1</diffuse></material></visual></link>
+
+      <!-- m: x=0.00, y=0.25, 3 levels @ 0.50 m, total h=1.65 m -->
+      <link name="m_pallet"><pose>0.00 0.25 0.075 0 0 0.08</pose><visual name="visual"><geometry><box><size>1.00 1.20 0.15</size></box></geometry><material><ambient>0.36 0.22 0.10 1</ambient><diffuse>0.36 0.22 0.10 1</diffuse></material></visual></link>
+      <link name="m_envelope"><pose>0.00 0.25 0.825 0 0 0</pose><collision name="collision"><geometry><box><size>1.00 1.20 1.65</size></box></geometry></collision></link>
+      <link name="m_l1"><pose>0.00 0.25 0.40 0 0 0.08</pose><visual name="visual"><geometry><box><size>0.95 1.15 0.50</size></box></geometry><material><ambient>0.78 0.66 0.46 1</ambient><diffuse>0.78 0.66 0.46 1</diffuse></material></visual></link>
+      <link name="m_l2"><pose>0.00 0.25 0.90 0 0 0.08</pose><visual name="visual"><geometry><box><size>0.92 1.12 0.50</size></box></geometry><material><ambient>0.74 0.62 0.42 1</ambient><diffuse>0.74 0.62 0.42 1</diffuse></material></visual></link>
+      <link name="m_l3"><pose>0.00 0.25 1.40 0 0 0.08</pose><visual name="visual"><geometry><box><size>0.90 1.10 0.50</size></box></geometry><material><ambient>0.80 0.68 0.48 1</ambient><diffuse>0.80 0.68 0.48 1</diffuse></material></visual></link>
+
+      <!-- e1: x=2.60, y=-0.05, 5 levels @ 0.45 m, total h=2.40 m -->
+      <link name="e1_pallet"><pose>2.60 -0.05 0.075 0 0 -0.05</pose><visual name="visual"><geometry><box><size>1.00 1.20 0.15</size></box></geometry><material><ambient>0.36 0.22 0.10 1</ambient><diffuse>0.36 0.22 0.10 1</diffuse></material></visual></link>
+      <link name="e1_envelope"><pose>2.60 -0.05 1.275 0 0 0</pose><collision name="collision"><geometry><box><size>1.00 1.20 2.40</size></box></geometry></collision></link>
+      <link name="e1_l1"><pose>2.60 -0.05 0.375 0 0 -0.05</pose><visual name="visual"><geometry><box><size>0.95 1.15 0.45</size></box></geometry><material><ambient>0.78 0.66 0.46 1</ambient><diffuse>0.78 0.66 0.46 1</diffuse></material></visual></link>
+      <link name="e1_l2"><pose>2.60 -0.05 0.825 0 0 -0.05</pose><visual name="visual"><geometry><box><size>0.92 1.12 0.45</size></box></geometry><material><ambient>0.74 0.62 0.42 1</ambient><diffuse>0.74 0.62 0.42 1</diffuse></material></visual></link>
+      <link name="e1_l3"><pose>2.60 -0.05 1.275 0 0 -0.05</pose><visual name="visual"><geometry><box><size>0.90 1.10 0.45</size></box></geometry><material><ambient>0.80 0.68 0.48 1</ambient><diffuse>0.80 0.68 0.48 1</diffuse></material></visual></link>
+      <link name="e1_l4"><pose>2.60 -0.05 1.725 0 0 -0.05</pose><visual name="visual"><geometry><box><size>0.88 1.08 0.45</size></box></geometry><material><ambient>0.76 0.64 0.44 1</ambient><diffuse>0.76 0.64 0.44 1</diffuse></material></visual></link>
+      <link name="e1_l5"><pose>2.60 -0.05 2.175 0 0 -0.05</pose><visual name="visual"><geometry><box><size>0.86 1.06 0.45</size></box></geometry><material><ambient>0.78 0.66 0.46 1</ambient><diffuse>0.78 0.66 0.46 1</diffuse></material></visual></link>
+
+      <!-- e2: x=2.60, y=0.55, 4 levels @ 0.50 m, total h=2.15 m -->
+      <link name="e2_pallet"><pose>2.60 0.55 0.075 0 0 0.07</pose><visual name="visual"><geometry><box><size>1.00 1.20 0.15</size></box></geometry><material><ambient>0.36 0.22 0.10 1</ambient><diffuse>0.36 0.22 0.10 1</diffuse></material></visual></link>
+      <link name="e2_envelope"><pose>2.60 0.55 1.075 0 0 0</pose><collision name="collision"><geometry><box><size>1.00 1.20 2.15</size></box></geometry></collision></link>
+      <link name="e2_l1"><pose>2.60 0.55 0.40 0 0 0.07</pose><visual name="visual"><geometry><box><size>0.95 1.15 0.50</size></box></geometry><material><ambient>0.76 0.64 0.44 1</ambient><diffuse>0.76 0.64 0.44 1</diffuse></material></visual></link>
+      <link name="e2_l2"><pose>2.60 0.55 0.90 0 0 0.07</pose><visual name="visual"><geometry><box><size>0.92 1.12 0.50</size></box></geometry><material><ambient>0.80 0.68 0.48 1</ambient><diffuse>0.80 0.68 0.48 1</diffuse></material></visual></link>
+      <link name="e2_l3"><pose>2.60 0.55 1.40 0 0 0.07</pose><visual name="visual"><geometry><box><size>0.90 1.10 0.50</size></box></geometry><material><ambient>0.74 0.62 0.42 1</ambient><diffuse>0.74 0.62 0.42 1</diffuse></material></visual></link>
+      <link name="e2_l4"><pose>2.60 0.55 1.90 0 0 0.07</pose><visual name="visual"><geometry><box><size>0.88 1.08 0.50</size></box></geometry><material><ambient>0.78 0.66 0.46 1</ambient><diffuse>0.78 0.66 0.46 1</diffuse></material></visual></link>
+    </model>
+
+    <!-- ===== Rear pallet racks =====
+         Three racks behind the rear lane. Collision height trimmed to 1.20 m
+         and only the lower AWS Shelf mesh is kept (no upper shelf) so the
+         racks read as destination racks, not as a wall competing with the
+         staging stacks for visual weight. -->
+    <model name="rear_rack_collisions"><static>true</static>
+      <link name="rear_rack_west"><pose>-3.80 2.85 0.60 0 0 0</pose>
+        <collision name="collision"><geometry><box><size>2.20 0.45 1.20</size></box></geometry></collision>
+      </link>
+      <link name="rear_rack_mid"><pose>0.00 2.85 0.60 0 0 0</pose>
+        <collision name="collision"><geometry><box><size>2.60 0.45 1.20</size></box></geometry></collision>
+      </link>
+      <link name="rear_rack_east"><pose>4.20 2.85 0.60 0 0 0</pose>
+        <collision name="collision"><geometry><box><size>2.60 0.45 1.20</size></box></geometry></collision>
+      </link>
+    </model>
+
+    <model name="aws_rear_rack_mesh_visuals"><static>true</static>
+      <link name="aws_rack_west_lower"><pose>-3.80 2.85 0.575 0 0 1.5708</pose>
+        <visual name="visual"><geometry><mesh>
+          <uri>model://aws_robomaker_warehouse_ShelfE_01/meshes/aws_robomaker_warehouse_ShelfE_01_visual.DAE</uri>
+          <scale>0.225 0.670 0.80</scale>
+        </mesh></geometry></visual></link>
+
+      <link name="aws_rack_mid_lower"><pose>0.00 2.85 0.575 0 0 1.5708</pose>
+        <visual name="visual"><geometry><mesh>
+          <uri>model://aws_robomaker_warehouse_ShelfD_01/meshes/aws_robomaker_warehouse_ShelfD_01_visual.DAE</uri>
+          <scale>0.225 0.790 0.80</scale>
+        </mesh></geometry></visual></link>
+
+      <link name="aws_rack_east_lower"><pose>4.20 2.85 0.575 0 0 1.5708</pose>
+        <visual name="visual"><geometry><mesh>
+          <uri>model://aws_robomaker_warehouse_ShelfF_01/meshes/aws_robomaker_warehouse_ShelfF_01_visual.DAE</uri>
+          <scale>0.225 0.790 0.80</scale>
+        </mesh></geometry></visual></link>
+    </model>
+
+    <!-- ===== Operational visuals (no collision; outside planner geometry) ===== -->
+    <model name="warehouse_operational_visuals"><static>true</static>
+
+      <!-- A: receiving scan/QC station -->
+      <link name="scan_station_aws_desk"><pose>-3.80 -1.40 0 0 0 0</pose>
+        <visual name="visual"><geometry><mesh>
+          <uri>model://aws_robomaker_warehouse_DeskC_01/meshes/aws_robomaker_warehouse_DeskC_01_visual.DAE</uri>
+          <scale>0.85 0.85 0.85</scale>
+        </mesh></geometry></visual></link>
+
+      <!-- Laptop on the desk (dark slab) -->
+      <link name="scan_laptop"><pose>-3.80 -1.40 0.86 0 0 0</pose>
+        <visual name="visual"><geometry><box><size>0.30 0.22 0.025</size></box></geometry>
+          <material><ambient>0.10 0.11 0.13 1</ambient><diffuse>0.10 0.11 0.13 1</diffuse></material></visual></link>
+
+      <!-- Barcode scanner cradle next to the laptop -->
+      <link name="scan_scanner"><pose>-3.65 -1.40 0.86 0 0 0</pose>
+        <visual name="visual"><geometry><box><size>0.08 0.06 0.10</size></box></geometry>
+          <material><ambient>0.08 0.09 0.10 1</ambient><diffuse>0.08 0.09 0.10 1</diffuse></material></visual></link>
+
+      <!-- Two totes waiting on the desk top -->
+      <link name="scan_desk_tote_1"><pose>-4.00 -1.30 0.87 0 0 0.08</pose>
+        <visual name="visual"><geometry><box><size>0.30 0.20 0.18</size></box></geometry>
+          <material><ambient>0.78 0.66 0.46 1</ambient><diffuse>0.78 0.66 0.46 1</diffuse></material></visual></link>
+      <link name="scan_desk_tote_2"><pose>-3.60 -1.50 0.87 0 0 -0.10</pose>
+        <visual name="visual"><geometry><box><size>0.30 0.20 0.18</size></box></geometry>
+          <material><ambient>0.74 0.62 0.42 1</ambient><diffuse>0.74 0.62 0.42 1</diffuse></material></visual></link>
+
+      <!-- Single clean tote waiting in the AMR pickup bay (replaces ClutteringA mesh) -->
+      <link name="pickup_bay_tote"><pose>-4.10 -1.95 0.125 0 0 0.10</pose>
+        <visual name="visual"><geometry><box><size>0.40 0.30 0.25</size></box></geometry>
+          <material><ambient>0.78 0.66 0.46 1</ambient><diffuse>0.78 0.66 0.46 1</diffuse></material></visual></link>
+
+      <!-- B: rack-side put-away handoff bay -->
+      <link name="putaway_buffer_frame"><pose>4.20 1.95 0.39 0 0 0</pose>
+        <visual name="visual"><geometry><box><size>0.90 0.50 0.78</size></box></geometry>
+          <material><ambient>0.55 0.57 0.60 1</ambient><diffuse>0.55 0.57 0.60 1</diffuse></material></visual></link>
+      <link name="putaway_buffer_tote_1"><pose>4.05 1.95 0.88 0 0 0.05</pose>
+        <visual name="visual"><geometry><box><size>0.32 0.24 0.20</size></box></geometry>
+          <material><ambient>0.78 0.66 0.46 1</ambient><diffuse>0.78 0.66 0.46 1</diffuse></material></visual></link>
+      <link name="putaway_buffer_tote_2"><pose>4.35 1.95 0.88 0 0 -0.07</pose>
+        <visual name="visual"><geometry><box><size>0.32 0.24 0.20</size></box></geometry>
+          <material><ambient>0.74 0.62 0.42 1</ambient><diffuse>0.74 0.62 0.42 1</diffuse></material></visual></link>
+
+      <!-- "Put-away Zone C" sign panel attached to the east rear rack -->
+      <link name="putaway_zone_sign"><pose>4.20 2.62 1.55 0 0 0</pose>
+        <visual name="visual"><geometry><box><size>0.60 0.02 0.30</size></box></geometry>
+          <material><ambient>0.96 0.96 0.94 1</ambient><diffuse>0.96 0.96 0.94 1</diffuse></material></visual></link>
+
+      <!-- Pallet jack parked at the far-east dock apron (out of the front lane) -->
+      <link name="east_apron_pallet_jack"><pose>6.30 -2.80 0 0 0 1.5708</pose>
+        <visual name="visual"><geometry><mesh>
+          <uri>model://aws_robomaker_warehouse_PalletJackB_01/meshes/aws_robomaker_warehouse_PalletJackB_01_visual.DAE</uri>
+          <scale>1.0 1.0 1.0</scale>
+        </mesh></geometry></visual></link>
+
+      <!-- Charging dock: dark pad + AWS Bucket-mesh charger -->
+      <link name="charge_pad"><pose>-5.85 1.80 0.010 0 0 0</pose>
+        <visual name="visual"><geometry><box><size>0.45 0.34 0.018</size></box></geometry>
+          <material><ambient>0.10 0.11 0.12 1</ambient><diffuse>0.10 0.11 0.12 1</diffuse></material></visual></link>
+      <link name="charge_bucket"><pose>-5.85 1.80 0 0 0 0</pose>
+        <visual name="visual"><geometry><mesh>
+          <uri>model://aws_robomaker_warehouse_Bucket_01/meshes/aws_robomaker_warehouse_Bucket_01_visual.DAE</uri>
+          <scale>0.0030 0.0030 0.0030</scale>
+        </mesh></geometry></visual></link>
+
+      <!-- AWS trash can near receiving -->
+      <link name="receiving_trashcan"><pose>-5.30 -2.50 0 0 0 0</pose>
+        <visual name="visual"><geometry><mesh>
+          <uri>model://aws_robomaker_warehouse_TrashCanC_01/meshes/aws_robomaker_warehouse_TrashCanC_01_visual.DAE</uri>
+          <scale>1.0 1.0 1.0</scale>
+        </mesh></geometry></visual></link>
+
+      <!-- Overhead lamp (kept in same spot for ceiling-mount feel) -->
+      <link name="overhead_lamp"><pose>0.60 -2.50 0 0 0 0</pose>
+        <visual name="visual"><geometry><mesh>
+          <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_visual.DAE</uri>
+          <scale>1.0 1.0 1.0</scale>
+        </mesh></geometry></visual></link>
+
+      <!-- ===== Tinted floor patches: three legible zones =====
+           Sit at z=0.002 just under the yellow tape so the lane reading
+           survives even at oblique camera angles. -->
+      <link name="zone_front_lane"><pose>0.60 -2.00 0.002 0 0 0</pose>
+        <visual name="visual"><transparency>0.78</transparency>
+          <geometry><box><size>11.40 1.20 0.003</size></box></geometry>
+          <material><ambient>0.16 0.55 0.26 1</ambient><diffuse>0.16 0.55 0.26 1</diffuse></material></visual></link>
+      <link name="zone_staging_pad"><pose>0.00 0.15 0.002 0 0 0</pose>
+        <visual name="visual"><transparency>0.82</transparency>
+          <geometry><box><size>6.40 1.40 0.003</size></box></geometry>
+          <material><ambient>0.86 0.78 0.18 1</ambient><diffuse>0.86 0.78 0.18 1</diffuse></material></visual></link>
+      <link name="zone_rear_lane"><pose>0.60 1.25 0.002 0 0 0</pose>
+        <visual name="visual"><transparency>0.80</transparency>
+          <geometry><box><size>11.40 0.60 0.003</size></box></geometry>
+          <material><ambient>0.20 0.30 0.55 1</ambient><diffuse>0.20 0.30 0.55 1</diffuse></material></visual></link>
+
+      <!-- Yellow lane tape: front lane y ∈ [-2.6, -1.4] -->
+      <link name="lane_front_south"><pose>0.60 -2.60 0.005 0 0 0</pose><visual name="visual"><geometry><box><size>11.40 0.06 0.005</size></box></geometry><material><ambient>0.95 0.85 0.10 1</ambient><diffuse>0.95 0.85 0.10 1</diffuse></material></visual></link>
+      <link name="lane_front_north"><pose>0.60 -1.40 0.005 0 0 0</pose><visual name="visual"><geometry><box><size>11.40 0.06 0.005</size></box></geometry><material><ambient>0.95 0.85 0.10 1</ambient><diffuse>0.95 0.85 0.10 1</diffuse></material></visual></link>
+      <!-- Yellow lane tape: rear lane y ∈ [0.95, 1.55] -->
+      <link name="lane_rear_south"><pose>0.60 0.95 0.005 0 0 0</pose><visual name="visual"><geometry><box><size>11.40 0.06 0.005</size></box></geometry><material><ambient>0.95 0.85 0.10 1</ambient><diffuse>0.95 0.85 0.10 1</diffuse></material></visual></link>
+      <link name="lane_rear_north"><pose>0.60 1.55 0.005 0 0 0</pose><visual name="visual"><geometry><box><size>11.40 0.06 0.005</size></box></geometry><material><ambient>0.95 0.85 0.10 1</ambient><diffuse>0.95 0.85 0.10 1</diffuse></material></visual></link>
+
+      <!-- Yellow staging pad outline -->
+      <link name="staging_pad_south"><pose>0.00 -0.55 0.005 0 0 0</pose><visual name="visual"><geometry><box><size>6.40 0.06 0.005</size></box></geometry><material><ambient>0.95 0.85 0.10 1</ambient><diffuse>0.95 0.85 0.10 1</diffuse></material></visual></link>
+      <link name="staging_pad_north"><pose>0.00 0.85 0.005 0 0 0</pose><visual name="visual"><geometry><box><size>6.40 0.06 0.005</size></box></geometry><material><ambient>0.95 0.85 0.10 1</ambient><diffuse>0.95 0.85 0.10 1</diffuse></material></visual></link>
+      <link name="staging_pad_west"><pose>-3.20 0.15 0.005 0 0 0</pose><visual name="visual"><geometry><box><size>0.06 1.40 0.005</size></box></geometry><material><ambient>0.95 0.85 0.10 1</ambient><diffuse>0.95 0.85 0.10 1</diffuse></material></visual></link>
+      <link name="staging_pad_east"><pose>3.20 0.15 0.005 0 0 0</pose><visual name="visual"><geometry><box><size>0.06 1.40 0.005</size></box></geometry><material><ambient>0.95 0.85 0.10 1</ambient><diffuse>0.95 0.85 0.10 1</diffuse></material></visual></link>
+
+      <!-- A: pickup bay floor marker (green painted square) -->
+      <link name="pickup_bay_A"><pose>-3.80 -2.00 0.032 0 0 0</pose>
+        <visual name="visual"><transparency>0.35</transparency>
+          <geometry><box><size>0.80 0.80 0.014</size></box></geometry>
+          <material><ambient>0.20 0.85 0.30 1</ambient><diffuse>0.20 0.85 0.30 1</diffuse></material></visual></link>
+
+      <!-- B: handoff bay floor marker (blue painted square) -->
+      <link name="handoff_bay_B"><pose>4.20 1.25 0.032 0 0 0</pose>
+        <visual name="visual"><transparency>0.35</transparency>
+          <geometry><box><size>0.80 0.80 0.014</size></box></geometry>
+          <material><ambient>0.20 0.45 0.95 1</ambient><diffuse>0.20 0.45 0.95 1</diffuse></material></visual></link>
+    </model>
+
+    <!-- ===== Mission floor markers (task anchors) ===== -->
+    <model name="mission_floor_markers"><static>true</static>
+      <link name="A_scan_pickup"><pose>-3.80 -2.00 0.055 0 0 0</pose><visual name="visual"><geometry><cylinder><radius>0.16</radius><length>0.018</length></cylinder></geometry><material><ambient>0.02 0.22 0.86 1</ambient><diffuse>0.02 0.22 0.86 1</diffuse></material></visual></link>
+      <link name="B_putaway"><pose>4.20 1.25 0.057 0 0 0</pose><visual name="visual"><geometry><cylinder><radius>0.16</radius><length>0.018</length></cylinder></geometry><material><ambient>0.02 0.52 0.22 1</ambient><diffuse>0.02 0.52 0.22 1</diffuse></material></visual></link>
+      <link name="G_outbound"><pose>5.00 -2.30 0.057 0 0 0</pose><visual name="visual"><geometry><cylinder><radius>0.16</radius><length>0.018</length></cylinder></geometry><material><ambient>0.02 0.70 0.30 1</ambient><diffuse>0.02 0.70 0.30 1</diffuse></material></visual></link>
+      <link name="G_in_shadow"><pose>0.50 1.30 0.057 0 0 0</pose><visual name="visual"><geometry><cylinder><radius>0.16</radius><length>0.018</length></cylinder></geometry><material><ambient>0.86 0.12 0.10 1</ambient><diffuse>0.86 0.12 0.10 1</diffuse></material></visual></link>
+    </model>
+
+    <!-- ===== SW-corner column-mounted camera =====
+         Column visible from the working area; camera body sits on top of the
+         column. Camera sensor pose updated to look NE-up across receiving →
+         staging → rear racks. -->
+    <model name="camera_mount"><static>true</static>
+      <link name="column"><pose>-5.40 -3.40 2.025 0 0 0</pose>
+        <visual name="visual"><geometry><cylinder><radius>0.06</radius><length>4.05</length></cylinder></geometry>
+          <material><ambient>0.32 0.34 0.36 1</ambient><diffuse>0.32 0.34 0.36 1</diffuse></material></visual></link>
+      <link name="bracket"><pose>-5.40 -3.40 4.10 0 0 0</pose>
+        <visual name="visual"><geometry><box><size>0.06 0.18 0.04</size></box></geometry>
+          <material><ambient>0.42 0.44 0.46 1</ambient><diffuse>0.42 0.44 0.46 1</diffuse></material></visual></link>
+      <link name="camera_body"><pose>-5.40 -3.40 4.20 0 0 0</pose>
+        <visual name="visual"><geometry><box><size>0.22 0.20 0.16</size></box></geometry>
+          <material><ambient>0.08 0.09 0.10 1</ambient><diffuse>0.08 0.09 0.10 1</diffuse></material></visual></link>
+    </model>
+
+    <!-- External overview camera (sensor). FOV/intrinsics live inside the
+         external_camera model. SW corner mount, looking NE and down. -->
+    <include>
+      <name>external_camera</name>
+      <uri>model://external_camera</uri>
+      <pose>-5.40 -3.40 4.20 0 0.70 0.65</pose>
+    </include>
+
+  </world>
+</sdf>

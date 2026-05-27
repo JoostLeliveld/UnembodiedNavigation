@@ -22,6 +22,7 @@ HEADING_SOURCE_CODES = {
     'odom_heading_fallback': 2.0,
     'motion_heading_fallback': 3.0,
     'held_previous_heading': 4.0,
+    'keypoint_bev_heading': 5.0,
 }
 
 
@@ -48,6 +49,9 @@ class PixelToBevStateNode(Node):
         self.declare_parameter('motion_yaw_min_displacement_m', 0.03)
         self.declare_parameter('motion_yaw_sigma_rad', 0.35)
         self.declare_parameter('seed', 0)
+        self.declare_parameter('keypoint_marker_world_z', 0.0)
+        self.declare_parameter('keypoint_heading_sigma_rad', 0.05)
+        self.declare_parameter('diagnostics_match_tolerance_s', 1e-3)
 
         self.declare_parameter('cam_pos', [-3.0, -3.0, 6.0])
         self.declare_parameter('look_at', [1.5, 1.5, 0.0])
@@ -68,6 +72,11 @@ class PixelToBevStateNode(Node):
         self.motion_yaw_min_displacement_m = float(self.get_parameter('motion_yaw_min_displacement_m').value)
         self.motion_yaw_sigma_rad = float(self.get_parameter('motion_yaw_sigma_rad').value)
         self.seed = int(self.get_parameter('seed').value)
+        self.keypoint_marker_world_z = float(self.get_parameter('keypoint_marker_world_z').value)
+        self.keypoint_heading_sigma_rad = float(self.get_parameter('keypoint_heading_sigma_rad').value)
+        self.diagnostics_match_tolerance_s = float(
+            self.get_parameter('diagnostics_match_tolerance_s').value
+        )
 
         # Baseline measurement noise (pixels)
         self.R_visible_std = 2.5
@@ -110,7 +119,9 @@ class PixelToBevStateNode(Node):
             'Pixel->BEV state node started '
             '(/perception/pixel_pose -> /state/bev; '
             f'state sources: x,y=camera homography, theta={" -> ".join(theta_sources)}, '
-            f'odom_yaw_offset_rad={self.odom_yaw_offset_rad:.3f})'
+            f'odom_yaw_offset_rad={self.odom_yaw_offset_rad:.3f}, '
+            f'keypoint_marker_world_z={self.keypoint_marker_world_z:.3f}, '
+            f'diag_match_tol_s={self.diagnostics_match_tolerance_s:.3f})'
         )
 
     @staticmethod
@@ -154,7 +165,8 @@ class PixelToBevStateNode(Node):
             return None
         stamp_s = self._stamp_to_float(stamp)
         diag_stamp = float(diag.get('stamp', math.nan))
-        if (not math.isfinite(diag_stamp)) or abs(diag_stamp - stamp_s) > 1e-3:
+        tolerance = max(float(self.diagnostics_match_tolerance_s), 1e-6)
+        if (not math.isfinite(diag_stamp)) or abs(diag_stamp - stamp_s) > tolerance:
             return None
         return diag
 
@@ -176,6 +188,42 @@ class PixelToBevStateNode(Node):
             return float(self._stamp_to_float(stamp) - self._stamp_to_float(self._latest_odom_stamp))
         except (AttributeError, TypeError, ValueError):
             return math.nan
+
+    def _yaw_from_keypoints(self, diag):
+        """Compute BEV heading from front/rear marker pixels.
+
+        Returns (yaw_out, sigma_yaw) or None if disabled / data not finite.
+        Disabled when keypoint_marker_world_z <= 0 so legacy seg-model runs are
+        unaffected.
+        """
+        if self.keypoint_marker_world_z <= 0.0:
+            return None
+        if not bool(diag.get('detected', False)):
+            return None
+        u_front = float(diag.get('u_red', math.nan))
+        v_front = float(diag.get('v_red', math.nan))
+        u_rear = float(diag.get('u_blue', math.nan))
+        v_rear = float(diag.get('v_blue', math.nan))
+        if not (math.isfinite(u_front) and math.isfinite(v_front)
+                and math.isfinite(u_rear) and math.isfinite(v_rear)):
+            return None
+        front_world = self._transformer.pixel_to_world_at_z(
+            u_front, v_front, self.keypoint_marker_world_z,
+            transform_noise_sigma=self.transform_noise_sigma,
+        )
+        rear_world = self._transformer.pixel_to_world_at_z(
+            u_rear, v_rear, self.keypoint_marker_world_z,
+            transform_noise_sigma=self.transform_noise_sigma,
+        )
+        if front_world is None or rear_world is None:
+            return None
+        dx = float(front_world[0] - rear_world[0])
+        dy = float(front_world[1] - rear_world[1])
+        if math.hypot(dx, dy) < 1e-4:
+            return None
+        yaw_out = math.atan2(dy, dx)
+        sigma_yaw = float(max(self.keypoint_heading_sigma_rad, self.yaw_noise_floor_rad))
+        return yaw_out, sigma_yaw
 
     def _heading_sigma_from_diag(self, diag) -> float:
         sigma = float(max(self.yaw_noise_floor_rad, 1e-6))
@@ -268,7 +316,12 @@ class PixelToBevStateNode(Node):
         motion_yaw_meas = math.nan
         diag_yaw_est = float(diag.get('yaw_est', math.nan)) if diag else math.nan
         diag_detected = 1.0 if (diag and bool(diag.get('detected', False))) else 0.0
-        if diag and bool(diag.get('detected', False)) and math.isfinite(float(diag.get('yaw_est', math.nan))):
+        keypoint_yaw = self._yaw_from_keypoints(diag) if diag else None
+        if keypoint_yaw is not None:
+            yaw_out, sigma_yaw = keypoint_yaw
+            pixel_yaw_meas = float(yaw_out)
+            heading_source = 'keypoint_bev_heading'
+        elif diag and bool(diag.get('detected', False)) and math.isfinite(float(diag.get('yaw_est', math.nan))):
             q = msg.pose.orientation
             siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
             cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)

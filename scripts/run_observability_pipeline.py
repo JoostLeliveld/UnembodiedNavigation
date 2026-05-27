@@ -6,7 +6,6 @@ Steps (run each script directly):
   2. scripts/visibility_comparison/extract_perception_targets.py
   3. scripts/visibility_comparison/build_gp_targets.py
   4. scripts/visibility_comparison/fit_visibility_gps.py
-  5. scripts/visibility_comparison/verify_gp_artifact.py
 """
 import sys
 from pathlib import Path

@@ -1,5 +1,5 @@
 # Exploratory left-start probe.
-# This is intentionally separate from iwai_campaign_config.yaml so the paper
+# This is intentionally separate from paper_campaign_config.yaml so the paper
 # anchor remains locked to the already-run raw-GP task definitions.
 
 world: warehouse_occ_light.world.sdf

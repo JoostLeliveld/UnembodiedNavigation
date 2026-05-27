@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 import numpy as np
 
@@ -119,6 +120,36 @@ class NogoZoneCostModel:
         clearance = self._clearance_np(xy)
         return self._penalty_from_clearance_np(clearance)
 
+    def penalty_belief_np(self, m, S, *, kappa: float = 1.0) -> float:
+        """Expected no-go penalty under the current xy belief covariance."""
+        if not self.enabled:
+            return 0.0
+        mean_xy = np.asarray([float(m[0]), float(m[1])], dtype=float)
+        cov_xy = np.asarray(S, dtype=float)[:2, :2]
+        cov_xy = 0.5 * (cov_xy + cov_xy.T)
+        kappa = max(float(kappa), 1e-6)
+        try:
+            chol = np.linalg.cholesky(cov_xy + 1e-9 * np.eye(2))
+        except np.linalg.LinAlgError:
+            eigvals, eigvecs = np.linalg.eigh(cov_xy)
+            chol = eigvecs @ np.diag(np.sqrt(np.maximum(eigvals, 1e-9)))
+        spread = math.sqrt(2.0 + kappa) * chol
+        sigma_points = (
+            mean_xy,
+            mean_xy + spread[:, 0],
+            mean_xy - spread[:, 0],
+            mean_xy + spread[:, 1],
+            mean_xy - spread[:, 1],
+        )
+        weights = (
+            kappa / (2.0 + kappa),
+            1.0 / (2.0 * (2.0 + kappa)),
+            1.0 / (2.0 * (2.0 + kappa)),
+            1.0 / (2.0 * (2.0 + kappa)),
+            1.0 / (2.0 * (2.0 + kappa)),
+        )
+        return float(sum(w * self.penalty_state_np([p[0], p[1], 0.0]) for p, w in zip(sigma_points, weights)))
+
     def make_penalty_state_casadi(self):
         try:
             import casadi as ca
@@ -171,6 +202,95 @@ class NogoZoneCostModel:
             return weight * base
 
         return penalty_state_casadi
+
+    def make_penalty_belief_casadi(self, *, kappa: float = 1.0):
+        try:
+            import casadi as ca
+        except Exception as exc:  # pragma: no cover - optional dependency
+            raise RuntimeError('CasADi is not available for no-go-zone cost') from exc
+
+        if (not self.prisms) or self.weight <= 0.0:
+            def zero_penalty(_m, _S):
+                return 0.0
+            return zero_penalty
+
+        xmins = ca.DM(self._xmins)
+        xmaxs = ca.DM(self._xmaxs)
+        ymins = ca.DM(self._ymins)
+        ymaxs = ca.DM(self._ymaxs)
+        weight = float(self.weight)
+        safe_distance = float(self.safe_distance)
+        gaussian_sigma = float(self.gaussian_sigma)
+        softplus_scale = float(self.softplus_scale)
+        logbarrier_scale = float(self.logbarrier_scale)
+        logbarrier_eps = float(self.logbarrier_eps)
+        penalty_type = self.penalty_type
+        kappa = max(float(kappa), 1e-6)
+
+        def chol_2x2(M, eps=1e-9):
+            M = 0.5 * (M + M.T)
+            a = ca.fmax(M[0, 0], eps)
+            l11 = ca.sqrt(a)
+            l21 = M[1, 0] / l11
+            diag22 = ca.fmax(M[1, 1] - l21 * l21, eps)
+            l22 = ca.sqrt(diag22)
+            return ca.vertcat(
+                ca.horzcat(l11, 0.0),
+                ca.horzcat(l21, l22),
+            )
+
+        def signed_distance_xy(x, y):
+            dx = ca.fmax(ca.fmax(xmins - x, 0.0), x - xmaxs)
+            dy = ca.fmax(ca.fmax(ymins - y, 0.0), y - ymaxs)
+            outside = ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
+
+            inside_x = ca.fmin(x - xmins, xmaxs - x)
+            inside_y = ca.fmin(y - ymins, ymaxs - y)
+            inside_depth = ca.fmin(inside_x, inside_y)
+            inside = ca.logic_and(dx <= 0.0, dy <= 0.0)
+            signed = ca.if_else(inside, -inside_depth, outside)
+            return ca.mmin(signed)
+
+        def penalty_xy(x, y):
+            signed_d = signed_distance_xy(x, y)
+            clearance = signed_d - safe_distance
+
+            if penalty_type == 'gaussian':
+                outside = ca.exp(-0.5 * ca.power(ca.fmax(clearance, 0.0) / gaussian_sigma, 2))
+                inside_extra = ca.fmax(-clearance, 0.0) / gaussian_sigma
+                base = outside + inside_extra
+            elif penalty_type == 'softplus':
+                z = ca.fmin(ca.fmax(-clearance / softplus_scale, -60.0), 60.0)
+                base = ca.log(1.0 + ca.exp(z))
+            else:
+                denom = ca.fmax(clearance, logbarrier_eps)
+                base = ca.log(1.0 + logbarrier_scale / denom)
+            return weight * base
+
+        def penalty_belief_casadi(m, S):
+            mean_xy = ca.reshape(m[:2], 2, 1)
+            cov_xy = 0.5 * (S[:2, :2] + S[:2, :2].T)
+            spread = math.sqrt(2.0 + kappa) * chol_2x2(cov_xy + 1e-9 * ca.DM.eye(2))
+            sigma_points = (
+                mean_xy,
+                mean_xy + spread[:, 0],
+                mean_xy - spread[:, 0],
+                mean_xy + spread[:, 1],
+                mean_xy - spread[:, 1],
+            )
+            weights = (
+                kappa / (2.0 + kappa),
+                1.0 / (2.0 * (2.0 + kappa)),
+                1.0 / (2.0 * (2.0 + kappa)),
+                1.0 / (2.0 * (2.0 + kappa)),
+                1.0 / (2.0 * (2.0 + kappa)),
+            )
+            total = 0
+            for sigma_xy, sigma_weight in zip(sigma_points, weights):
+                total += float(sigma_weight) * penalty_xy(sigma_xy[0], sigma_xy[1])
+            return total
+
+        return penalty_belief_casadi
 
     def make_signed_distance_state_casadi(self):
         try:

@@ -33,9 +33,7 @@ class CasadiEfeParams:
     goal_prior_v_std_final: float
     goal_tightening_power: float
     goal_progress_n_steps: int
-    robot_collision_radius_m: float
-    min_terminal_goal_progress_m: float
-    invalid_rollout_barrier_cost: float
+    use_belief_nogo_cost: bool
     time_horizon: int
     dt: float
     Du: int
@@ -200,34 +198,6 @@ def goal_obs_cov_ca_for_progress(params: CasadiEfeParams, progress):
     return ca.diag(ca.vertcat(ca.power(sigma_u, 2), ca.power(sigma_v, 2)))
 
 
-def collision_barrier_penalty_ca(clearance, params: CasadiEfeParams):
-    near_margin = 0.05
-    near_term = 1e-3 * params.invalid_rollout_barrier_cost * _softplus_expr(
-        (near_margin - clearance) / 0.02
-    )
-    penetration = ca.fmax(-clearance, 0.0)
-    scale = max(float(params.robot_collision_radius_m), 1e-3)
-    penetration_term = params.invalid_rollout_barrier_cost * (
-        1.0 + ca.power(penetration / scale, 2)
-    )
-    return near_term + ca.if_else(penetration > 0.0, penetration_term, 0.0)
-
-
-def terminal_progress_penalty_ca(m0, m_terminal, goal_xy, params: CasadiEfeParams):
-    if float(params.min_terminal_goal_progress_m) <= 0.0:
-        return 0.0
-    current_goal_distance = ca.sqrt(
-        ca.power(m0[0] - goal_xy[0], 2) + ca.power(m0[1] - goal_xy[1], 2)
-    )
-    terminal_goal_distance = ca.sqrt(
-        ca.power(m_terminal[0] - goal_xy[0], 2) + ca.power(m_terminal[1] - goal_xy[1], 2)
-    )
-    progress = current_goal_distance - terminal_goal_distance
-    shortfall = ca.fmax(params.min_terminal_goal_progress_m - progress, 0.0)
-    denom = max(float(params.min_terminal_goal_progress_m), 1e-6)
-    return 0.01 * params.invalid_rollout_barrier_cost * ca.power(shortfall / denom, 2)
-
-
 def et1_ca(m, S, R_eff, g, dg):
     """
     Extended Transform (1st order) linearization.
@@ -311,7 +281,7 @@ def visibility_aware_unicycle_efe_ca(
     d2g=None,
     p_vis_state=None,
     nogo_cost=None,
-    collision_signed_distance=None,
+    nogo_belief_cost=None,
 ):
     """
     Core Expected Free Energy functional for a unicycle agent.
@@ -355,14 +325,17 @@ def visibility_aware_unicycle_efe_ca(
         total_risk += weight_t * params.risk_scale * risk_ca(mu, Sigma, goal_obs, goal_cov_t)
         total_amb += weight_t * params.ambiguity_scale * ambiguity_ca(Sigma, Gamma, S)
         total_control += weight_t * params.control_weight * ca.sumsqr(u_t)
-        if nogo_cost is not None:
+        if nogo_belief_cost is not None and params.use_belief_nogo_cost:
+            total_nogo += weight_t * nogo_belief_cost(m, S)
+        elif nogo_cost is not None:
             total_nogo += weight_t * nogo_cost(m)
-        if collision_signed_distance is not None:
-            clearance = collision_signed_distance(m) - params.robot_collision_radius_m
-            total_nogo += weight_t * collision_barrier_penalty_ca(clearance, params)
 
-    total_risk += terminal_progress_penalty_ca(m0, m, goal_xy, params)
-    return total_risk + total_amb + total_control + total_nogo
+    # Normalise per-step sums by the effective discounted horizon so that changing
+    # time_horizon does not rescale the weight balance between terms.
+    H_eff = sum(params.discount_gamma ** t for t in range(params.time_horizon))
+    inv_H = 1.0 / max(H_eff, 1e-8)
+    return (total_risk * inv_H + total_amb * inv_H
+            + total_control * inv_H + total_nogo * inv_H)
 
 
 def make_efe_valgrad_fn(
@@ -372,7 +345,7 @@ def make_efe_valgrad_fn(
     approx='ET1',
     p_vis_state=None,
     nogo_cost=None,
-    collision_signed_distance=None,
+    nogo_belief_cost=None,
 ):
     _require_casadi()
     approx = str(approx or 'ET1').upper()
@@ -425,7 +398,7 @@ def make_efe_valgrad_fn(
         d2g=d2g,
         p_vis_state=p_vis_state,
         nogo_cost=nogo_cost,
-        collision_signed_distance=collision_signed_distance,
+        nogo_belief_cost=nogo_belief_cost,
     )
     gradient = ca.gradient(objective, u_flat)
     valgrad = ca.Function(

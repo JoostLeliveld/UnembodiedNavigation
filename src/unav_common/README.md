@@ -2,14 +2,6 @@
 
 This package contains shared geometry and manifest utilities used by multiple active packages.
 
-![State and camera-geometry tutorial figure](../../docs/figures/state_pipeline_tutorial.png)
-
-The camera projection and world-geometry helpers in this package are what make the detector-to-BEV conversion and visibility-aware planning possible.
-
-## Why This Folder Exists
-
-Several packages need the same camera and world-geometry logic. This folder prevents those small but important utilities from being reimplemented in multiple places.
-
 ## Main Files
 
 | File | Role |
@@ -26,12 +18,6 @@ Several packages need the same camera and world-geometry logic. This folder prev
 - `planning`
 - `experiments`
 
-## What To Read First
-
-1. `unav_common/camera_model.py`
-2. `unav_common/occlusion_geometry.py`
-3. `unav_common/manifest.py`
-
 ## Caveat
 
-This is support code. It is important for understanding how camera geometry and world geometry are handled, but it is not where the thesis comparison itself is defined.
+This is support code. It is important for understanding camera geometry and world geometry, but it is not where the thesis comparison itself is defined.

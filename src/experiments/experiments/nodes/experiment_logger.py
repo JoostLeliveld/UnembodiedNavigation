@@ -146,13 +146,19 @@ class ExperimentLogger(Node):
         self.declare_parameter('command_noise_linear_additive_std', 0.008)
         self.declare_parameter('command_noise_angular_additive_std', 0.035)
         self.declare_parameter('command_noise_correlation_alpha', 0.85)
-        self.declare_parameter('min_terminal_goal_progress_m', 0.0)
-        self.declare_parameter('invalid_rollout_barrier_cost', 1e6)
         self.declare_parameter('optimizer_maxiter', 80)
         self.declare_parameter('optimizer_maxfun', 500)
         self.declare_parameter('optimizer_ftol', 1e-6)
         self.declare_parameter('optimizer_gtol', 1e-4)
         self.declare_parameter('optimizer_warm_start', True)
+        self.declare_parameter('optimizer_multistart', False)
+        self.declare_parameter('optimizer_multistart_include_direct', True)
+        self.declare_parameter('optimizer_multistart_lateral_offsets', '')
+        self.declare_parameter('optimizer_initial_routes_json', '')
+        self.declare_parameter('use_odom_heading_correction', True)
+        self.declare_parameter('use_displacement_heading', False)
+        self.declare_parameter('heading_min_displacement_m', 0.10)
+        self.declare_parameter('heading_bev_noise_sigma_m', 0.05)
         self.declare_parameter('odom_heading_correction_mode', 'kalman')
         self.declare_parameter('clamp_pixel_uv_theta_without_yaw', False)
         self.declare_parameter('use_nogo_cost', False)
@@ -163,6 +169,8 @@ class ExperimentLogger(Node):
         self.declare_parameter('nogo_softplus_scale', 0.08)
         self.declare_parameter('nogo_logbarrier_scale', 0.25)
         self.declare_parameter('nogo_logbarrier_eps', 1e-3)
+        self.declare_parameter('use_belief_nogo_cost', False)
+        self.declare_parameter('nogo_belief_kappa', 1.0)
         self.declare_parameter('yolo_model', '')
         self.declare_parameter('yolo_device', '')
         self.declare_parameter('yolo_imgsz', 640)
@@ -173,6 +181,10 @@ class ExperimentLogger(Node):
         self.declare_parameter('yolo_use_masks', True)
         self.declare_parameter('yolo_min_mask_area_px', 12.0)
         self.declare_parameter('yolo_mask_bottom_band_px', 3.0)
+        self.declare_parameter('yolo_min_keypoint_conf', 0.5)
+        self.declare_parameter('keypoint_marker_world_z', 0.0)
+        self.declare_parameter('keypoint_heading_sigma_rad', 0.05)
+        self.declare_parameter('diagnostics_match_tolerance_s', 1e-3)
         self.declare_parameter('run_dir_topic', '/experiment/run_dir')
         self.declare_parameter('run_timeout_after_first_cmd_s', 75.0)
         self.declare_parameter('first_cmd_linear_eps', 0.02)
@@ -255,13 +267,33 @@ class ExperimentLogger(Node):
         self.command_noise_linear_additive_std = float(self.get_parameter('command_noise_linear_additive_std').value)
         self.command_noise_angular_additive_std = float(self.get_parameter('command_noise_angular_additive_std').value)
         self.command_noise_correlation_alpha = float(self.get_parameter('command_noise_correlation_alpha').value)
-        self.min_terminal_goal_progress_m = float(self.get_parameter('min_terminal_goal_progress_m').value)
-        self.invalid_rollout_barrier_cost = float(self.get_parameter('invalid_rollout_barrier_cost').value)
         self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
         self.optimizer_maxfun = int(self.get_parameter('optimizer_maxfun').value)
         self.optimizer_ftol = float(self.get_parameter('optimizer_ftol').value)
         self.optimizer_gtol = float(self.get_parameter('optimizer_gtol').value)
         self.optimizer_warm_start = bool(self.get_parameter('optimizer_warm_start').value)
+        self.optimizer_multistart = bool(self.get_parameter('optimizer_multistart').value)
+        self.optimizer_multistart_include_direct = bool(
+            self.get_parameter('optimizer_multistart_include_direct').value
+        )
+        self.optimizer_multistart_lateral_offsets = str(
+            self.get_parameter('optimizer_multistart_lateral_offsets').value
+        )
+        self.optimizer_initial_routes_json = str(
+            self.get_parameter('optimizer_initial_routes_json').value
+        )
+        self.use_odom_heading_correction = bool(
+            self.get_parameter('use_odom_heading_correction').value
+        )
+        self.use_displacement_heading = bool(
+            self.get_parameter('use_displacement_heading').value
+        )
+        self.heading_min_displacement_m = float(
+            self.get_parameter('heading_min_displacement_m').value
+        )
+        self.heading_bev_noise_sigma_m = float(
+            self.get_parameter('heading_bev_noise_sigma_m').value
+        )
         self.odom_heading_correction_mode = str(self.get_parameter('odom_heading_correction_mode').value)
         self.clamp_pixel_uv_theta_without_yaw = bool(
             self.get_parameter('clamp_pixel_uv_theta_without_yaw').value
@@ -274,6 +306,8 @@ class ExperimentLogger(Node):
         self.nogo_softplus_scale = float(self.get_parameter('nogo_softplus_scale').value)
         self.nogo_logbarrier_scale = float(self.get_parameter('nogo_logbarrier_scale').value)
         self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
+        self.use_belief_nogo_cost = bool(self.get_parameter('use_belief_nogo_cost').value)
+        self.nogo_belief_kappa = float(self.get_parameter('nogo_belief_kappa').value)
         self.yolo_model = str(self.get_parameter('yolo_model').value)
         self.yolo_device = str(self.get_parameter('yolo_device').value)
         self.yolo_imgsz = int(self.get_parameter('yolo_imgsz').value)
@@ -284,6 +318,12 @@ class ExperimentLogger(Node):
         self.yolo_use_masks = bool(self.get_parameter('yolo_use_masks').value)
         self.yolo_min_mask_area_px = float(self.get_parameter('yolo_min_mask_area_px').value)
         self.yolo_mask_bottom_band_px = float(self.get_parameter('yolo_mask_bottom_band_px').value)
+        self.yolo_min_keypoint_conf = float(self.get_parameter('yolo_min_keypoint_conf').value)
+        self.keypoint_marker_world_z = float(self.get_parameter('keypoint_marker_world_z').value)
+        self.keypoint_heading_sigma_rad = float(self.get_parameter('keypoint_heading_sigma_rad').value)
+        self.diagnostics_match_tolerance_s = float(
+            self.get_parameter('diagnostics_match_tolerance_s').value
+        )
         self.run_dir_topic = str(self.get_parameter('run_dir_topic').value).strip() or '/experiment/run_dir'
         self.run_timeout_after_first_cmd_s = float(self.get_parameter('run_timeout_after_first_cmd_s').value)
         self.first_cmd_linear_eps = float(self.get_parameter('first_cmd_linear_eps').value)
@@ -386,6 +426,8 @@ class ExperimentLogger(Node):
             'nogo_softplus_scale': self.nogo_softplus_scale,
             'nogo_logbarrier_scale': self.nogo_logbarrier_scale,
             'nogo_logbarrier_eps': self.nogo_logbarrier_eps,
+            'use_belief_nogo_cost': self.use_belief_nogo_cost,
+            'nogo_belief_kappa': self.nogo_belief_kappa,
             'yolo_model': self.yolo_model,
             'yolo_device': self.yolo_device,
             'yolo_imgsz': self.yolo_imgsz,
@@ -396,6 +438,10 @@ class ExperimentLogger(Node):
             'yolo_use_masks': self.yolo_use_masks,
             'yolo_min_mask_area_px': self.yolo_min_mask_area_px,
             'yolo_mask_bottom_band_px': self.yolo_mask_bottom_band_px,
+            'yolo_min_keypoint_conf': self.yolo_min_keypoint_conf,
+            'keypoint_marker_world_z': self.keypoint_marker_world_z,
+            'keypoint_heading_sigma_rad': self.keypoint_heading_sigma_rad,
+            'diagnostics_match_tolerance_s': self.diagnostics_match_tolerance_s,
             'seed': self.seed,
             'state_pipeline': 'homography_to_bev',
             'observation_model': 'uv',
@@ -414,13 +460,19 @@ class ExperimentLogger(Node):
             'process_noise_xy': self.process_noise_xy,
             'process_noise_theta': self.process_noise_theta,
             'obs_noise_uv': self.obs_noise_uv,
-            'min_terminal_goal_progress_m': self.min_terminal_goal_progress_m,
-            'invalid_rollout_barrier_cost': self.invalid_rollout_barrier_cost,
             'optimizer_maxiter': self.optimizer_maxiter,
             'optimizer_maxfun': self.optimizer_maxfun,
             'optimizer_ftol': self.optimizer_ftol,
             'optimizer_gtol': self.optimizer_gtol,
             'optimizer_warm_start': self.optimizer_warm_start,
+            'optimizer_multistart': self.optimizer_multistart,
+            'optimizer_multistart_include_direct': self.optimizer_multistart_include_direct,
+            'optimizer_multistart_lateral_offsets': self.optimizer_multistart_lateral_offsets,
+            'optimizer_initial_routes_json': self.optimizer_initial_routes_json,
+            'use_odom_heading_correction': self.use_odom_heading_correction,
+            'use_displacement_heading': self.use_displacement_heading,
+            'heading_min_displacement_m': self.heading_min_displacement_m,
+            'heading_bev_noise_sigma_m': self.heading_bev_noise_sigma_m,
             'odom_heading_correction_mode': self.odom_heading_correction_mode,
             'clamp_pixel_uv_theta_without_yaw': self.clamp_pixel_uv_theta_without_yaw,
             'auto_stop_on_goal': self.auto_stop_on_goal,
@@ -616,7 +668,7 @@ class ExperimentLogger(Node):
             'r_plan_u_std', 'r_plan_v_std',
             'terminal_goal_distance_pred', 'terminal_goal_progress_m',
             'fraction_horizon_low_pvis', 'fraction_horizon_high_ambiguity',
-            'min_predicted_obstacle_distance_m', 'rollout_valid', 'fallback_stop_applied',
+            'min_predicted_obstacle_distance_m', 'rollout_valid',
             'efe_total', 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_obstacle',
             'efe_risk_mean', 'efe_risk_cov_trace', 'efe_risk_cov_logdet',
             'efe_delta_risk_visibility', 'efe_delta_ambiguity_visibility',
@@ -1011,6 +1063,7 @@ class ExperimentLogger(Node):
             2: 'odom_heading_fallback',
             3: 'motion_heading_fallback',
             4: 'held_previous_heading',
+            5: 'keypoint_bev_heading',
         }.get(value, 'unknown')
 
     def _record_invalid(self, reason: str) -> None:
@@ -1656,7 +1709,6 @@ class ExperimentLogger(Node):
         fraction_horizon_high_ambiguity = math.nan
         min_predicted_obstacle_distance_m = math.nan
         rollout_valid = math.nan
-        fallback_stop_applied = math.nan
         if self.planner_diag and self.planner_diag.data and len(self.planner_diag.data) >= 6:
             optimizer_success = float(self.planner_diag.data[0])
             optimizer_status = float(self.planner_diag.data[1])
@@ -1672,20 +1724,19 @@ class ExperimentLogger(Node):
                 r_plan_v_std = float(self.planner_diag.data[9])
                 measurement_available = float(self.planner_diag.data[10])
                 belief_age_s = float(self.planner_diag.data[11])
-            if len(self.planner_diag.data) >= 19:
+            if len(self.planner_diag.data) >= 18:
                 terminal_goal_distance_pred = float(self.planner_diag.data[12])
                 terminal_goal_progress_m = float(self.planner_diag.data[13])
                 fraction_horizon_low_pvis = float(self.planner_diag.data[14])
                 fraction_horizon_high_ambiguity = float(self.planner_diag.data[15])
                 min_predicted_obstacle_distance_m = float(self.planner_diag.data[16])
                 rollout_valid = float(self.planner_diag.data[17])
-                fallback_stop_applied = float(self.planner_diag.data[18])
-            if len(self.planner_diag.data) >= 24:
-                efe_risk_mean = float(self.planner_diag.data[19])
-                efe_risk_cov_trace = float(self.planner_diag.data[20])
-                efe_risk_cov_logdet = float(self.planner_diag.data[21])
-                efe_delta_risk_visibility = float(self.planner_diag.data[22])
-                efe_delta_ambiguity_visibility = float(self.planner_diag.data[23])
+            if len(self.planner_diag.data) >= 23:
+                efe_risk_mean = float(self.planner_diag.data[18])
+                efe_risk_cov_trace = float(self.planner_diag.data[19])
+                efe_risk_cov_logdet = float(self.planner_diag.data[20])
+                efe_delta_risk_visibility = float(self.planner_diag.data[21])
+                efe_delta_ambiguity_visibility = float(self.planner_diag.data[22])
 
         if self.efe_metrics and self.efe_metrics.data and len(self.efe_metrics.data) >= 5:
             efe_total = float(self.efe_metrics.data[0])
@@ -1793,7 +1844,7 @@ class ExperimentLogger(Node):
             r_plan_u_std, r_plan_v_std,
             terminal_goal_distance_pred, terminal_goal_progress_m,
             fraction_horizon_low_pvis, fraction_horizon_high_ambiguity,
-            min_predicted_obstacle_distance_m, rollout_valid, fallback_stop_applied,
+            min_predicted_obstacle_distance_m, rollout_valid,
             efe_total, efe_risk, efe_ambiguity, efe_control, efe_obstacle,
             efe_risk_mean, efe_risk_cov_trace, efe_risk_cov_logdet,
             efe_delta_risk_visibility, efe_delta_ambiguity_visibility,
@@ -1806,8 +1857,7 @@ class ExperimentLogger(Node):
         self.file.flush()
 
         if not self._stop_requested and (self._contact_collision_seen or self._geom_collision_seen):
-            crash_stamp = self._first_crash_stamp if math.isfinite(self._first_crash_stamp) else now_stamp
-            self._finish_run("collision", crash_stamp)
+            self._finish_run("collision", now_stamp)
             return
 
         if not self._stop_requested:

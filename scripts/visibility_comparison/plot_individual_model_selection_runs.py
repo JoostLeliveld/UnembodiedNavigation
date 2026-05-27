@@ -38,7 +38,7 @@ RHO_LOW_THRESHOLD = 0.35
 GOAL_SUCCESS_RADIUS_M = 0.20
 RUN_TIMEOUT_AFTER_FIRST_CMD_S = 75.0
 
-DEFAULT_ANCHOR_LOG = Path("logs/visibility_comparison/iwai_campaign_rawgp_v1/campaign_log.json")
+DEFAULT_ANCHOR_LOG = Path("logs/visibility_comparison/paper_campaign_rawgp_v1/campaign_log.json")
 DEFAULT_GRID_LOG = Path("logs/visibility_comparison/model_selection_rawgp_v1/grid_log.json")
 DEFAULT_REFERENCE_GP = Path("logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz")
 DEFAULT_OUT_DIR = Path("logs/visibility_comparison/run_investigation_rawgp_v1")

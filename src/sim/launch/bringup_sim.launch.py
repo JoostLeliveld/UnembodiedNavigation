@@ -188,6 +188,11 @@ def generate_launch_description():
         world_name,
         "' + '/set_pose@ros_gz_interfaces/srv/SetEntityPose@gz.msgs.Pose@gz.msgs.Boolean'"
     ])
+    control_service_arg = PythonExpression([
+        "'/world/' + '",
+        world_name,
+        "' + '/control@ros_gz_interfaces/srv/ControlWorld@gz.msgs.WorldControl@gz.msgs.Boolean'"
+    ])
     clock_remap_src = PythonExpression([
         "'/world/' + '",
         world_name,
@@ -208,6 +213,7 @@ def generate_launch_description():
             "/external_camera/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
             clock_arg,
             set_pose_service_arg,
+            control_service_arg,
         ],
         remappings=[
             ("/model/turtlebot3/cmd_vel", "/cmd_vel"),

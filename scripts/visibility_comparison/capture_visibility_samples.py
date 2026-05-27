@@ -38,7 +38,23 @@ from unav_common.camera_model import ObliqueCameraModel
 from unav_common.occlusion_geometry import parse_occlusion_scene_from_world, scene_to_json, segment_occluded
 
 
-def _sample_positions(vis: dict[str, object], *, sample_nx: int, sample_ny: int, wall_margin_m: float):
+def _in_any_region(x: float, y: float, regions: list[dict], shrink_m: float) -> bool:
+    for r in regions:
+        if (float(r['xmin']) + shrink_m <= x <= float(r['xmax']) - shrink_m and
+                float(r['ymin']) + shrink_m <= y <= float(r['ymax']) - shrink_m):
+            return True
+    return False
+
+
+def _sample_positions(
+    vis: dict[str, object],
+    *,
+    sample_nx: int,
+    sample_ny: int,
+    wall_margin_m: float,
+    traversable_regions: list[dict] | None = None,
+    region_shrink_m: float = 0.05,
+):
     xmin = float(vis.get('visibility_map_min_x', -6.0)) + float(max(wall_margin_m, 0.0))
     xmax = float(vis.get('visibility_map_max_x', 6.0)) - float(max(wall_margin_m, 0.0))
     ymin = float(vis.get('visibility_map_min_y', -6.0)) + float(max(wall_margin_m, 0.0))
@@ -52,6 +68,8 @@ def _sample_positions(vis: dict[str, object], *, sample_nx: int, sample_ny: int,
     for row_idx, y in enumerate(ys):
         x_iter = xs if (row_idx % 2 == 0) else xs[::-1]
         for x in x_iter:
+            if traversable_regions is not None and not _in_any_region(x, y, traversable_regions, region_shrink_m):
+                continue
             positions.append((float(x), float(y)))
     return positions
 
@@ -223,6 +241,10 @@ def main() -> int:
     parser.add_argument('--yaw-samples', type=int, default=4, help='Number of evenly spaced robot headings to capture at each (x,y).')
     parser.add_argument('--yaw-list-rad', default='', help='Optional explicit whitespace/comma-separated yaw list in radians; overrides --yaw-samples.')
     parser.add_argument('--wall-margin-m', type=float, default=0.45)
+    parser.add_argument('--skip-region-filter', action='store_true',
+                        help='Disable known_2d_regions traversability filter even when the profile defines regions.')
+    parser.add_argument('--region-shrink-m', type=float, default=0.05,
+                        help='Shrink each traversable region boundary inward before testing grid points.')
     parser.add_argument('--robot-z', type=float, default=0.05)
     parser.add_argument('--settle-s', type=float, default=0.35)
     parser.add_argument('--image-timeout-s', type=float, default=2.0)
@@ -241,11 +263,19 @@ def main() -> int:
 
     profile, intrinsics, world_path, camera_pose = load_profile(str(args.world_profiles), str(args.world))
     vis = dict(profile.get('visibility_defaults') or {})
+    known_regions = list(profile.get('known_2d_regions') or [])
+    traversable_regions: list[dict] | None = None
+    if known_regions and not args.skip_region_filter:
+        traversable_regions = [r for r in known_regions if str(r.get('type', '')) == 'traversable']
+        if not traversable_regions:
+            traversable_regions = None
     positions = _sample_positions(
         vis,
         sample_nx=int(args.sample_nx),
         sample_ny=int(args.sample_ny),
         wall_margin_m=float(args.wall_margin_m),
+        traversable_regions=traversable_regions,
+        region_shrink_m=float(args.region_shrink_m),
     )
     yaws = _sample_yaws(
         yaw_rad=float(args.yaw_rad),
@@ -265,7 +295,7 @@ def main() -> int:
         img_height=int(intrinsics['img_height']),
         fov_h_rad=float(intrinsics['fov_h_rad']),
     )
-    occlusion_scene = parse_occlusion_scene_from_world(str(world_path))
+    occlusion_scene = parse_occlusion_scene_from_world(str(world_path), geometry_tags=('collision',))
 
     rows: list[dict[str, str]] = []
     image_hashes: list[str] = []

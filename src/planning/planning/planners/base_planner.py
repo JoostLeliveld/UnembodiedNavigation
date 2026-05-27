@@ -1,6 +1,7 @@
 """Base planner classes (pure Python, no ROS)."""
 
 from dataclasses import dataclass
+import json
 import math
 import time
 import numpy as np
@@ -48,7 +49,6 @@ class PlanResult:
     min_predicted_obstacle_distance_m: float = np.nan
     rollout_valid: bool = True
     invalid_reason: str = ""
-    fallback_stop_applied: bool = False
 
 
 class UnicyclePlannerBase:
@@ -98,6 +98,10 @@ class UnicyclePlannerBase:
         discount_gamma=0.98,
         optimizer_maxfun=500,
         optimizer_ftol=1e-6,
+        optimizer_multistart=False,
+        optimizer_multistart_include_direct=True,
+        optimizer_multistart_lateral_offsets='',
+        optimizer_initial_routes_json='',
         use_nogo_cost=False,
         nogo_penalty_type='softplus',
         nogo_weight=0.0,
@@ -106,9 +110,9 @@ class UnicyclePlannerBase:
         nogo_softplus_scale=0.08,
         nogo_logbarrier_scale=0.25,
         nogo_logbarrier_eps=1e-3,
+        use_belief_nogo_cost=False,
+        nogo_belief_kappa=1.0,
         robot_collision_radius_m=0.125,
-        min_terminal_goal_progress_m=0.0,
-        invalid_rollout_barrier_cost=1e6,
         runtime_debug=False,
     ):
         self.horizon = int(horizon)
@@ -142,8 +146,6 @@ class UnicyclePlannerBase:
         self.ambiguity_term_scale = float(ambiguity_term_scale)
         self.discount_gamma = float(discount_gamma)
         self.robot_collision_radius_m = float(max(robot_collision_radius_m, 0.0))
-        self.min_terminal_goal_progress_m = float(max(min_terminal_goal_progress_m, 0.0))
-        self.invalid_rollout_barrier_cost = float(max(invalid_rollout_barrier_cost, 1.0))
 
         if approx_method is None:
             self.approx_method = 'ET1'
@@ -168,6 +170,14 @@ class UnicyclePlannerBase:
         self.optimizer_warm_start_shift_steps = int(max(optimizer_warm_start_shift_steps, 1))
         self.optimizer_maxfun = int(max(optimizer_maxfun, 1))
         self.optimizer_ftol = float(max(optimizer_ftol, 1e-12))
+        self.optimizer_multistart = self._as_bool_like(optimizer_multistart)
+        self.optimizer_multistart_include_direct = self._as_bool_like(
+            optimizer_multistart_include_direct
+        )
+        self.optimizer_multistart_lateral_offsets = self._parse_float_list(
+            optimizer_multistart_lateral_offsets
+        )
+        self.optimizer_initial_routes = self._parse_initial_routes(optimizer_initial_routes_json)
         self.rng = np.random.default_rng(int(seed))
 
         self.camera = ObliqueCameraModel(
@@ -190,6 +200,8 @@ class UnicyclePlannerBase:
         self.nogo_softplus_scale = float(max(nogo_softplus_scale, 1e-6))
         self.nogo_logbarrier_scale = float(max(nogo_logbarrier_scale, 1e-6))
         self.nogo_logbarrier_eps = float(max(nogo_logbarrier_eps, 1e-6))
+        self.use_belief_nogo_cost = bool(use_belief_nogo_cost)
+        self.nogo_belief_kappa = float(max(nogo_belief_kappa, 1e-6))
         self.nogo_cost_model = None
         self.collision_cost_model = None
 
@@ -241,7 +253,78 @@ class UnicyclePlannerBase:
             self.collision_cost_model = NogoZoneCostModel(collision_cfg)
 
         self.prev_controls_flat = None
+        self._prev_goal_xy = None
         self._casadi_valgrad_cache = {}
+
+    @staticmethod
+    def _as_bool_like(value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        return str(value).strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on')
+
+    @staticmethod
+    def _parse_float_list(raw):
+        if raw is None:
+            return []
+        if isinstance(raw, (list, tuple)):
+            values = raw
+        else:
+            text = str(raw).strip()
+            if not text:
+                return []
+            if text.startswith('[') and text.endswith(']'):
+                try:
+                    values = json.loads(text)
+                except json.JSONDecodeError:
+                    values = text[1:-1].split(',')
+            else:
+                values = text.split(',')
+        out = []
+        for item in values:
+            try:
+                value = float(item)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(value):
+                out.append(value)
+        return out
+
+    @staticmethod
+    def _parse_initial_routes(raw):
+        if raw is None:
+            return []
+        if isinstance(raw, (list, tuple)):
+            payload = raw
+        else:
+            text = str(raw).strip()
+            if not text:
+                return []
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                return []
+        routes = []
+        if not isinstance(payload, (list, tuple)):
+            return routes
+        for idx, route in enumerate(payload):
+            if not isinstance(route, dict):
+                continue
+            name = str(route.get('name', f'route_{idx}')).strip() or f'route_{idx}'
+            waypoints_raw = route.get('waypoints', [])
+            waypoints = []
+            if isinstance(waypoints_raw, (list, tuple)):
+                for wp in waypoints_raw:
+                    try:
+                        arr = np.asarray(wp, dtype=float).reshape(-1)
+                    except (TypeError, ValueError):
+                        continue
+                    if arr.size >= 2 and np.all(np.isfinite(arr[:2])):
+                        waypoints.append((float(arr[0]), float(arr[1])))
+            if waypoints:
+                routes.append({'name': name, 'waypoints': waypoints})
+        return routes
 
     def _runtime_debug_print(self, message):
         if not self.runtime_debug:
@@ -370,11 +453,17 @@ class UnicyclePlannerBase:
             'r_plan_v_std': float(np.sqrt(max(R_plan[1, 1], 0.0))),
         }
 
-    def obstacle_penalty(self, m):
+    def obstacle_penalty(self, m, S=None):
         penalty = 0.0
         if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
-            penalty += float(self.nogo_cost_model.penalty_state_np(m))
-        penalty += self._collision_barrier_penalty(self.collision_clearance_state_np(m))
+            if self.use_belief_nogo_cost and S is not None:
+                penalty += float(self.nogo_cost_model.penalty_belief_np(
+                    m,
+                    S,
+                    kappa=self.nogo_belief_kappa,
+                ))
+            else:
+                penalty += float(self.nogo_cost_model.penalty_state_np(m))
         return float(penalty)
 
     def collision_signed_distance_state_np(self, m):
@@ -394,34 +483,10 @@ class UnicyclePlannerBase:
             return 0.0
         return float(max(-clearance, 0.0))
 
-    def _collision_barrier_penalty(self, clearance):
-        if not math.isfinite(clearance):
-            return 0.0
-        near_margin = 0.05
-        near_term = 1e-3 * self.invalid_rollout_barrier_cost * self._softplus(
-            (near_margin - float(clearance)) / 0.02
-        )
-        penetration = max(-float(clearance), 0.0)
-        if penetration <= 0.0:
-            return float(near_term)
-        scale = max(self.robot_collision_radius_m, 1e-3)
-        penetration_term = self.invalid_rollout_barrier_cost * (1.0 + (penetration / scale) ** 2)
-        return float(near_term + penetration_term)
-
     def _goal_distance_xy(self, state_xy, goal_xy):
         state_xy = np.asarray(state_xy, dtype=float).reshape(2)
         goal_xy = np.asarray(goal_xy, dtype=float).reshape(2)
         return float(np.linalg.norm(state_xy - goal_xy))
-
-    def _terminal_progress_penalty(self, current_goal_distance, terminal_goal_distance):
-        if self.min_terminal_goal_progress_m <= 0.0:
-            return 0.0
-        progress = float(current_goal_distance) - float(terminal_goal_distance)
-        shortfall = max(self.min_terminal_goal_progress_m - progress, 0.0)
-        if shortfall <= 0.0:
-            return 0.0
-        denom = max(self.min_terminal_goal_progress_m, 1e-6)
-        return float(0.01 * self.invalid_rollout_barrier_cost * (shortfall / denom) ** 2)
 
     def _trajectory_plan_diagnostics(self, m0, S0, controls, goal_xy):
         goal_xy = np.asarray(goal_xy, dtype=float).reshape(2)
@@ -546,7 +611,6 @@ class UnicyclePlannerBase:
             'fraction_horizon_high_ambiguity': float(plan_diag['fraction_horizon_high_ambiguity']),
             'min_predicted_obstacle_distance_m': float(plan_diag['min_predicted_obstacle_distance_m']),
             'rollout_valid': bool(plan_diag['rollout_valid']),
-            'fallback_stop_applied': not bool(plan_diag['rollout_valid']),
             'invalid_reason': str(plan_diag['invalid_reason']),
             'mean_p_vis_plan': float(np.mean(p_vis_values)) if p_vis_values else math.nan,
             'mean_p_vis_plan_eff': float(np.mean(p_vis_eff_values)) if p_vis_eff_values else math.nan,
@@ -575,6 +639,72 @@ class UnicyclePlannerBase:
         if self.optimizer_warm_start and self.prev_controls_flat is not None:
             return self._shift_controls_flat(self.prev_controls_flat)
         return self._nominal_controls_flat()
+
+    def _controls_for_waypoints(self, start_xy_yaw, waypoints):
+        """Crude unicycle route seed used only as optimizer initialization."""
+        controls = np.zeros((self.horizon, 2), dtype=float)
+        wps = [np.asarray(wp, dtype=float).reshape(2) for wp in waypoints]
+        if not wps:
+            return controls.reshape(-1)
+
+        m = np.asarray(start_xy_yaw, dtype=float).reshape(-1)[:3].copy()
+        S_dummy = np.eye(3, dtype=float) * 1e-6
+        waypoint_idx = 0
+        for k in range(self.horizon):
+            if waypoint_idx >= len(wps):
+                break
+            target = wps[waypoint_idx]
+            d = target - m[:2]
+            if float(np.linalg.norm(d)) < 0.18 and waypoint_idx < len(wps) - 1:
+                waypoint_idx += 1
+                target = wps[waypoint_idx]
+                d = target - m[:2]
+            desired_yaw = math.atan2(float(d[1]), float(d[0]))
+            yaw_err = wrap_angle(desired_yaw - float(m[2]))
+            w = float(np.clip(yaw_err / max(self.dt, 1e-6), self.w_min, self.w_max))
+            v = self.v_max if abs(yaw_err) < 0.65 else 0.0
+            controls[k] = [float(np.clip(v, self.v_min, self.v_max)), w]
+            m, _ = self.predict(m, S_dummy, controls[k])
+        return controls.reshape(-1)
+
+    def _build_multistart_candidates(self, m0, goal_xy):
+        """Build optional optimizer seeds; these are not mission waypoints."""
+        candidates: list[tuple[str, np.ndarray]] = []
+        if not self.optimizer_multistart:
+            return candidates
+
+        start = np.asarray(m0, dtype=float).reshape(-1)[:3]
+        goal = np.asarray(goal_xy, dtype=float).reshape(2)
+
+        if self.optimizer_warm_start and self.prev_controls_flat is not None:
+            candidates.append(('cold', self._nominal_controls_flat()))
+
+        if self.optimizer_multistart_include_direct:
+            candidates.append(('direct_goal', self._controls_for_waypoints(start, [goal])))
+
+        dvec = goal - start[:2]
+        dist = float(np.linalg.norm(dvec))
+        if dist > 1e-3:
+            unit = dvec / dist
+            perp = np.array([-unit[1], unit[0]], dtype=float)
+            mid = start[:2] + 0.5 * dvec
+            for offset in self.optimizer_multistart_lateral_offsets:
+                waypoint = mid + float(offset) * perp
+                candidates.append((
+                    f'lateral_{float(offset):+.2f}',
+                    self._controls_for_waypoints(start, [waypoint, goal]),
+                ))
+
+        for route in self.optimizer_initial_routes:
+            name = str(route.get('name', 'route'))
+            waypoints = list(route.get('waypoints', []))
+            if waypoints:
+                candidates.append((
+                    f'route:{name}',
+                    self._controls_for_waypoints(start, waypoints),
+                ))
+
+        return candidates
 
     def _objective_scales(self, controls_flat, m0, S0, goal_state, goal_obs, goal_obs_cov):
         del controls_flat, m0, S0, goal_state, goal_obs, goal_obs_cov
@@ -653,9 +783,9 @@ class UnicyclePlannerBase:
             float(self.ambiguity_term_scale),
             float(self.discount_gamma),
             float(self.robot_collision_radius_m),
-            float(self.min_terminal_goal_progress_m),
-            float(self.invalid_rollout_barrier_cost),
             bool(self.use_nogo_cost),
+            bool(self.use_belief_nogo_cost),
+            float(self.nogo_belief_kappa),
             tuple(self.nogo_cost_model.signature) if self.nogo_cost_model is not None else (),
             tuple(self.collision_cost_model.signature) if self.collision_cost_model is not None else (),
             int(self.horizon),
@@ -698,11 +828,14 @@ class UnicyclePlannerBase:
             if self.use_visibility_model and self.visibility_model is not None:
                 p_vis_ca = self.visibility_model.make_prob_state_casadi()
             nogo_cost_ca = None
+            nogo_belief_cost_ca = None
             if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
-                nogo_cost_ca = self.nogo_cost_model.make_penalty_state_casadi()
-            collision_signed_distance_ca = None
-            if self.collision_cost_model is not None:
-                collision_signed_distance_ca = self.collision_cost_model.make_signed_distance_state_casadi()
+                if self.use_belief_nogo_cost:
+                    nogo_belief_cost_ca = self.nogo_cost_model.make_penalty_belief_casadi(
+                        kappa=self.nogo_belief_kappa,
+                    )
+                else:
+                    nogo_cost_ca = self.nogo_cost_model.make_penalty_state_casadi()
             params_ca = casadi_efe.CasadiEfeParams(
                 Q=np.array(self.process_noise(self.dt), dtype=float),
                 R_visible=np.array(self.R_visible, dtype=float),
@@ -718,9 +851,7 @@ class UnicyclePlannerBase:
                 goal_prior_v_std_final=float(self.goal_prior_v_std_final),
                 goal_tightening_power=float(self.goal_tightening_power),
                 goal_progress_n_steps=int(self.goal_progress_n_steps),
-                robot_collision_radius_m=float(self.robot_collision_radius_m),
-                min_terminal_goal_progress_m=float(self.min_terminal_goal_progress_m),
-                invalid_rollout_barrier_cost=float(self.invalid_rollout_barrier_cost),
+                use_belief_nogo_cost=bool(self.use_belief_nogo_cost),
                 time_horizon=int(self.horizon),
                 dt=float(self.dt),
                 Du=2,
@@ -731,7 +862,7 @@ class UnicyclePlannerBase:
                 approx=self.approx_method,
                 p_vis_state=p_vis_ca,
                 nogo_cost=nogo_cost_ca,
-                collision_signed_distance=collision_signed_distance_ca,
+                nogo_belief_cost=nogo_belief_cost_ca,
             )
             self._casadi_valgrad_cache[cache_key] = valgrad
             self._runtime_debug_print(
@@ -796,7 +927,6 @@ class UnicyclePlannerBase:
         use_observation_risk = self.use_obs_risk
         use_ambiguity_term = self.use_ambiguity
         goal_xy = np.asarray(goal_state[:2], dtype=float).reshape(2)
-        current_goal_distance = self._goal_distance_xy(np.asarray(m0[:2], dtype=float), goal_xy)
         R_good = np.asarray(
             R_baseline_override
             if R_baseline_override is not None
@@ -859,12 +989,8 @@ class UnicyclePlannerBase:
                 total_amb += weight_t * ambiguity_current
             total_delta_risk_visibility += weight_t * (observation_risk - baseline_risk)
             total_delta_ambiguity_visibility += weight_t * (ambiguity_current - ambiguity_baseline)
-            total_obstacle += weight_t * self.obstacle_penalty(m)
+            total_obstacle += weight_t * self.obstacle_penalty(m, S)
             total_control += weight_t * self.control_weight * float(u[0] ** 2 + u[1] ** 2)
-
-        terminal_goal_distance = self._goal_distance_xy(np.asarray(m[:2], dtype=float), goal_xy)
-        terminal_progress_penalty = self._terminal_progress_penalty(current_goal_distance, terminal_goal_distance)
-        total_risk += terminal_progress_penalty
 
         total = total_risk + total_amb + total_control + total_obstacle
         if return_metrics:
@@ -877,7 +1003,6 @@ class UnicyclePlannerBase:
                 'risk_cov_trace': float(total_risk_cov_trace),
                 'risk_cov_logdet': float(total_risk_cov_logdet),
                 'risk_const': float(total_risk_const),
-                'risk_terminal_progress': float(terminal_progress_penalty),
                 'delta_risk_visibility': float(total_delta_risk_visibility),
                 'delta_ambiguity_visibility': float(total_delta_ambiguity_visibility),
             }
@@ -886,6 +1011,14 @@ class UnicyclePlannerBase:
     def plan(self, m0, S0, goal_xy, *, progress_index=0.0):
         t_plan_start = time.perf_counter()
         progress_index = float(max(progress_index, 0.0))
+
+        # Reset warm start when goal changes by more than 0.5 m to prevent
+        # stale plans from creating a stuck local minimum after goal switch.
+        goal_xy_arr = np.asarray(goal_xy, dtype=float).reshape(2)
+        if self._prev_goal_xy is not None:
+            if float(np.linalg.norm(goal_xy_arr - self._prev_goal_xy)) > 0.5:
+                self.prev_controls_flat = None
+        self._prev_goal_xy = goal_xy_arr.copy()
 
         (
             goal_state,
@@ -900,11 +1033,18 @@ class UnicyclePlannerBase:
             bounds.append((self.v_min, self.v_max))
             bounds.append((self.w_min, self.w_max))
 
-        x0 = self._initial_controls_flat()
+        x0_default = self._initial_controls_flat()
+        init_candidates: list[tuple[str, np.ndarray]] = [
+            ('warm_or_cold', np.asarray(x0_default, dtype=float)),
+        ]
+        for ms_name, ms_controls in self._build_multistart_candidates(m0, goal_xy):
+            init_candidates.append((ms_name, np.asarray(ms_controls, dtype=float)))
+
         objective_scales = self._objective_scales(
-            x0, m0, S0, goal_state, goal_obs, goal_obs_cov
+            init_candidates[0][1], m0, S0, goal_state, goal_obs, goal_obs_cov,
         )
         best_candidate = None
+        best_init_name = ''
         backend_used = 'casadi'
         optimizer_success = False
         optimizer_status = 0
@@ -945,56 +1085,93 @@ class UnicyclePlannerBase:
             minimize_start = time.perf_counter()
             self._runtime_debug_print(
                 "[planner_debug] Starting CasADi-backed scipy.optimize.minimize "
-                f"(maxiter={self.optimizer_maxiter}, maxfun={self.optimizer_maxfun}, ftol={self.optimizer_ftol})"
+                f"(maxiter={self.optimizer_maxiter}, maxfun={self.optimizer_maxfun}, ftol={self.optimizer_ftol}, "
+                f"init_candidates={len(init_candidates)})"
             )
-            result = minimize(
-                objective,
-                np.asarray(x0, dtype=float),
-                jac=True,
-                method='L-BFGS-B',
-                bounds=bounds,
-                options={
-                    'maxiter': self.optimizer_maxiter,
-                    'maxfun': self.optimizer_maxfun,
-                    'ftol': self.optimizer_ftol,
-                    'gtol': self.optimizer_gtol,
-                },
-            )
-            if result.x is None or not np.all(np.isfinite(np.asarray(result.x, dtype=float))):
-                raise RuntimeError("Planner optimizer returned no finite solution")
-            best_candidate = self._evaluate_candidate_controls(
-                np.asarray(result.x, dtype=float),
-                m0,
-                S0,
-                goal_state,
-                goal_obs,
-                goal_obs_cov,
-                objective_scales,
-                progress_index=progress_index,
-            )
-            controls = np.asarray(best_candidate['controls_flat'], dtype=float).reshape(self.horizon, 2)
-            diag = self._trajectory_plan_diagnostics(m0, S0, controls, goal_xy)
-            best_candidate.update({
-                'source': 'solver:shifted_warm_start' if self.prev_controls_flat is not None else 'solver:zero_seed',
-                'rollout_valid': bool(diag['rollout_valid']),
-                'optimizer_result': result,
-            })
+
+            for init_name, x_init in init_candidates:
+                # Reset the fg call counter per attempt so debug timing is per-attempt.
+                attempt_start = time.perf_counter()
+                try:
+                    result = minimize(
+                        objective,
+                        np.asarray(x_init, dtype=float),
+                        jac=True,
+                        method='L-BFGS-B',
+                        bounds=bounds,
+                        options={
+                            'maxiter': self.optimizer_maxiter,
+                            'maxfun': self.optimizer_maxfun,
+                            'ftol': self.optimizer_ftol,
+                            'gtol': self.optimizer_gtol,
+                        },
+                    )
+                except Exception as exc:
+                    self._runtime_debug_print(
+                        f"[planner_debug] init={init_name!s} threw {type(exc).__name__}: {exc}"
+                    )
+                    continue
+                if result.x is None or not np.all(np.isfinite(np.asarray(result.x, dtype=float))):
+                    self._runtime_debug_print(
+                        f"[planner_debug] init={init_name!s} returned non-finite solution; skip"
+                    )
+                    continue
+                candidate = self._evaluate_candidate_controls(
+                    np.asarray(result.x, dtype=float),
+                    m0,
+                    S0,
+                    goal_state,
+                    goal_obs,
+                    goal_obs_cov,
+                    objective_scales,
+                    progress_index=progress_index,
+                )
+                ctrls_attempt = np.asarray(candidate['controls_flat'], dtype=float).reshape(self.horizon, 2)
+                diag_attempt = self._trajectory_plan_diagnostics(m0, S0, ctrls_attempt, goal_xy)
+                cand_valid = bool(diag_attempt['rollout_valid'])
+                source_label = (
+                    f'solver:shifted_warm_start' if (init_name == 'warm_or_cold' and self.prev_controls_flat is not None)
+                    else f'solver:{init_name}'
+                )
+                candidate.update({
+                    'source': source_label,
+                    'rollout_valid': cand_valid,
+                    'optimizer_result': result,
+                })
+                self._runtime_debug_print(
+                    f"[planner_debug] init={init_name!s} solver finished "
+                    f"J={candidate['total_cost']:.3f}, valid={cand_valid}, "
+                    f"success={bool(result.success)}, status={int(result.status)}, "
+                    f"nit={int(getattr(result, 'nit', 0) or 0)}, "
+                    f"nfev={int(getattr(result, 'nfev', 0) or 0)}, "
+                    f"dt={(time.perf_counter() - attempt_start) * 1000.0:.0f}ms"
+                )
+
+                # Candidate validity is diagnostic-only; the optimizer objective decides.
+                if best_candidate is None:
+                    keep = True
+                else:
+                    keep = float(candidate['total_cost']) < float(best_candidate['total_cost'])
+                if keep:
+                    best_candidate = candidate
+                    best_init_name = init_name
+                    optimizer_success = bool(result.success)
+                    optimizer_status = int(result.status)
+                    optimizer_nit = int(getattr(result, 'nit', 0) or 0)
+                    optimizer_nfev = int(getattr(result, 'nfev', 0) or 0)
+                    optimizer_message = str(result.message or '')
+
+            if best_candidate is None:
+                raise RuntimeError("Planner optimizer returned no finite solution from any init")
             self._runtime_debug_print(
-                f"[planner_debug] Solver finished J={best_candidate['total_cost']:.3f}, "
-                f"valid={bool(diag['rollout_valid'])}, success={bool(result.success)}, "
-                f"status={int(result.status)}, nit={int(getattr(result, 'nit', 0) or 0)}, "
-                f"nfev={int(getattr(result, 'nfev', 0) or 0)}"
+                f"[planner_debug] Best optimizer init={best_init_name!s} "
+                f"J={best_candidate['total_cost']:.3f}, valid={best_candidate.get('rollout_valid', False)}"
             )
             self._runtime_debug_print(
                 "[planner_debug] CasADi-backed minimize finished in "
                 f"{(time.perf_counter() - minimize_start) * 1000.0:.1f} ms "
                 f"(shared_fg_evals={fg_calls['count']})"
             )
-            optimizer_success = bool(result.success)
-            optimizer_status = int(result.status)
-            optimizer_nit = int(getattr(result, 'nit', 0) or 0)
-            optimizer_nfev = int(getattr(result, 'nfev', 0) or 0)
-            optimizer_message = str(result.message or '')
         except Exception as exc:
             raise RuntimeError(
                 "Planner optimization failed "
@@ -1015,10 +1192,7 @@ class UnicyclePlannerBase:
 
         states = rollout_unicycle(m0, best_controls, self.dt)
         plan_diag = self._trajectory_plan_diagnostics(m0, S0, best_controls, goal_xy)
-        fallback_stop_applied = not bool(plan_diag['rollout_valid'])
         selected_source = str(best_candidate.get('source', ''))
-        if fallback_stop_applied:
-            selected_source = f'{selected_source}:fallback_stop' if selected_source else 'fallback_stop'
         solve_time_s = float(max(time.perf_counter() - t_plan_start, 0.0))
         return PlanResult(
             controls=best_controls,
@@ -1052,5 +1226,4 @@ class UnicyclePlannerBase:
             min_predicted_obstacle_distance_m=float(plan_diag['min_predicted_obstacle_distance_m']),
             rollout_valid=bool(plan_diag['rollout_valid']),
             invalid_reason=str(plan_diag['invalid_reason']),
-            fallback_stop_applied=bool(fallback_stop_applied),
         )

@@ -76,7 +76,7 @@ def _launch_setup(context, *args, **kwargs):
         'iou_threshold': yolo_iou_threshold,
         'class_name': yolo_target_class,
         'class_id': yolo_class_id,
-        'use_masks': yolo_use_masks,
+        'use_masks': yolo_use_masks.strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on'),
         'mask_min_area': yolo_min_mask_area_px,
         'mask_bottom_band_px': yolo_mask_bottom_band_px,
     }
