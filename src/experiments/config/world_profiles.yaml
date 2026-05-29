@@ -48,10 +48,10 @@ worlds:
 
   warehouse_aws.world.sdf:
     world_name: warehouse_aws
-    investigation_focus: Corrected AWS-style Experiment B extension world with an 11.0 m by 10.0 m footprint, split R1-R5 rack rows, narrow 0.55 m rack footprints, 0.90 m reachable driveable aisles, explicit green visual-only driveable boundaries, red non-driveable box/staging spots, and a loading/dispatch apron pulled away from the camera wall. Only the R4 rack carries a HIGH STACK (~2.6 m tall) on top of its shelf-end pad as the main 3D occluder; other box spots have low crates. The high stack lives at the same kind of shelf-end position as the other rack boxes — visibility blockage comes from its HEIGHT (above the rack body), never from a box sitting in a drive lane. The B1 start is in the shipping/apron decision lane, the short A4 route is physically routeable but camera-poor where the R4 stack casts its shadow, and the neighboring A3 route is a modest more-visible detour. Learned visibility must come from an AWS-specific GP artifact with P_conservative_plan_map.
-    route_choice_design: B1_visible_goal_smoke is the first stability gate and ends at G_pick_A_visible, a camera-visible A4-side handoff point. B1_clean_route_choice remains the harder exploratory route-choice candidate toward G_pick_A in the mid cross-aisle; it should not be treated as evidence until the dark-goal confound is resolved or explicitly studied.
-    recommended_task: B1_visible_goal_smoke
-    spawn: {x: 2.15, y: -3.15, z: 0.05, yaw: 1.5708}
+    investigation_focus: Corrected AWS-style Experiment B extension world with an 11.0 m by 10.0 m footprint, split R1-R5 rack rows, narrow rack footprints, reachable driveable aisles, explicit green visual-only driveable boundaries, red non-driveable box/staging spots, and a loading/dispatch apron pulled away from the camera wall. The earlier R4 high stack was removed on purpose; the current world uses low crates and rack geometry only. Visibility differences must therefore be read from the accepted camera view and AWS-specific GP artifact, not from an assumed tall-stack occluder. The B1 start is in the A4-side shelf-pick pose, and the neighboring A3 route is a modest more-visible detour candidate. Learned visibility must come from an AWS-specific GP artifact with P_conservative_plan_map.
+    route_choice_design: B1_apron_a4_to_uppermid_a3 is the active AWS route-choice diagnostic. The robot starts at (3.2, -1.0) on the A4 side facing east toward the R5 shelf after a hypothetical pick, and must reach the A3-side mid-cross-aisle goal at (1.0, 1.75). Route choice must emerge from planner-facing reliability and EFE costs, not mission waypoints.
+    recommended_task: B1_apron_a4_to_uppermid_a3
+    spawn: {x: 3.20, y: -1.00, z: 0.05, yaw: 0.0}
     planner_default: visibility_aware_efe
     visibility_artifact: data/visibility_gp/warehouse_aws_empirical_visibility_gp.npz
     visibility_defaults:
@@ -88,7 +88,7 @@ worlds:
       - {name: rack_aisle_A1, type: traversable, xmin: -3.475, xmax: -2.575, ymin: -2.85, ymax: 4.80, note: 0.90 m marked driveable lane between R1 and R2}
       - {name: rack_aisle_A2, type: traversable, xmin: -1.425, xmax: -0.525, ymin: -2.85, ymax: 4.80, note: 0.90 m marked driveable lane between R2 and R3}
       - {name: rack_aisle_A3, type: traversable, xmin: 0.625, xmax: 1.525, ymin: -2.85, ymax: 4.80, note: visible detour lane for B1}
-      - {name: rack_aisle_A4, type: traversable, xmin: 2.575, xmax: 3.675, ymin: -2.85, ymax: 4.80, note: v2 1.10 m driveable lane between R4 (now at x=2.0) and R5; widened from 0.90 m for realistic forklift clearance under EKF uncertainty. Visibility degrades in the south half behind the R4 high stack.}
+      - {name: rack_aisle_A4, type: traversable, xmin: 2.575, xmax: 3.675, ymin: -2.85, ymax: 4.80, note: 1.10 m driveable lane between R4 and R5; widened from 0.90 m for realistic clearance under EKF uncertainty. Current visibility effects come from the camera viewpoint, rack geometry, low crates, and the fitted GP, not a high floor stack.}
       - {name: shelf_end_box_spot_R1, type: non_driveable_staging, xmin: -4.46, xmax: -3.64, ymin: -1.66, ymax: -0.88, note: red shelf-end pad outside the green driveable union; low crate only}
       - {name: shelf_end_box_spot_R2, type: non_driveable_staging, xmin: -2.41, xmax: -1.59, ymin: -1.66, ymax: -0.88, note: red shelf-end pad outside the green driveable union; low crate only}
       - {name: shelf_end_box_spot_R3, type: non_driveable_staging, xmin: -0.36, xmax: 0.46, ymin: -1.66, ymax: -0.88, note: red shelf-end pad outside the green driveable union; low crate only}
@@ -99,11 +99,11 @@ worlds:
       - {name: wall_side_shipping, type: non_driveable_staging, xmin: 2.08, xmax: 3.68, ymin: -4.20, ymax: -3.64, note: wall-side red shipping pad; green apron lane is north of it}
       - {name: wall_side_charging, type: non_driveable_staging, xmin: 4.05, xmax: 5.00, ymin: -4.20, ymax: -3.64, note: wall-side red charging pad; green apron lane is north of it}
     occlusion_annotations:
-      - name: OZ_A_r4_stack_shadow
-        cause: v2 R4 shelf-end high stack (height ~2.6 m, base 0.55 m wide, flush with R4 east face at x=2.275) casts a learned low-visibility wedge from the south-wall camera now mounted at z=4.5 m
+      - name: OZ_A_a4_low_reliability_band
+        cause: South-wall camera viewpoint, R4/R5 rack geometry, low shelf-end crates, and perspective effects reduce learned observation reliability in parts of A4. The former R4 high stack is intentionally absent in the current world.
         traversability: driveable_centerline
-        learned_by: AWS visibility capture v5 and GP fit (REQUIRES RECAPTURE after 2026-05-20 v2 changes)
-        expected_effect: low YOLO score / high observation covariance throughout most of A4 between y ~ -0.5 and y ~ 2.5. The wider stack base + lower camera together pinch the previously clear mid-aisle channel. Geometric verification (v2_shadow_geometric.json) shows residual east-edge visible channel that empirical YOLO degradation may close.
+        learned_by: AWS visibility capture v5 and GP fit
+        expected_effect: lower YOLO score / higher observation covariance in the A4-side corridor relative to the neighboring A3 detour. This is an empirical learned-reliability region, not a physical wall.
         approx_region: {xmin: 2.30, xmax: 3.60, ymin: -1.685, ymax: 3.50}
       - name: OZ_B_loaded_rack_band
         cause: shelf/rack visual structure and low shelf contents near aisle edges
@@ -118,7 +118,7 @@ worlds:
         expected_effect: conservative planner should avoid overtrusting sparse far-corner observations
         approx_region: {xmin: 4.55, xmax: 5.15, ymin: 3.80, ymax: 4.80}
       - name: OZ_D_reacquisition_zone
-        cause: robot exits the R4-stack shadow into the open mid cross-aisle
+        cause: robot exits the A4 low-reliability band into the open mid cross-aisle
         traversability: driveable
         learned_by: AWS visibility capture and GP fit
         expected_effect: visibility improves after the occluded segment

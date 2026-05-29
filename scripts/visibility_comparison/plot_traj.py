@@ -35,7 +35,7 @@ def main():
     ap.add_argument("--log-root", required=True)
     ap.add_argument("--gp-artifact", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--task", default="B1_clean_route_choice")
+    ap.add_argument("--task", default="B1_apron_a4_to_uppermid_a3")
     args = ap.parse_args()
 
     log_root = Path(args.log_root)
@@ -94,10 +94,10 @@ def main():
                                            facecolor='none', zorder=3))
 
             # Goal marker
-            ax.plot(3.25, 1.72, 'g*', ms=10, zorder=5)
+            ax.plot(1.0, 1.75, 'g*', ms=10, zorder=5)
 
             # Start marker
-            ax.plot(2.15, -3.15, 'go', ms=6, zorder=5)
+            ax.plot(3.2, -1.0, 'go', ms=6, zorder=5)
 
             if key in all_runs:
                 df = all_runs[key]
@@ -108,7 +108,7 @@ def main():
                 ax.plot(traj.truth_x.iloc[-1], traj.truth_y.iloc[-1], 'x', color=color, ms=6, zorder=5, mew=2)
 
             # Title
-            camp_key = f"B1_clean_route_choice__{cond}__seed{seed.replace('seed','')}"
+            camp_key = f"{args.task}__{cond}__seed{seed.replace('seed','')}"
             info = camp_log.get(camp_key, {})
             outcome = info.get('outcome', 'unknown')
             mg = info.get('minimum_goal_distance')

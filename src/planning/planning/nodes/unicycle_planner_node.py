@@ -23,6 +23,14 @@ from perception.core.detection_diagnostics import (
 from planning.core.efe_utils import wrap_angle
 
 
+def _as_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on')
+    return bool(value)
+
+
 class UnicyclePlannerNode(Node):
     """Base class for EFE/MPC planners using unicycle dynamics."""
 
@@ -105,6 +113,8 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('nogo_logbarrier_eps', 1e-3)
         _declare_if_not('use_belief_nogo_cost', False)
         _declare_if_not('nogo_belief_kappa', 1.0)
+        _declare_if_not('nogo_mode', 'keep_out')
+        _declare_if_not('driveable_geometry_json', '')
         _declare_if_not('visibility_artifact_path', '')
         _declare_if_not('robot_collision_radius_m', 0.125)
 
@@ -118,6 +128,23 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('optimizer_multistart_include_direct', True)
         _declare_if_not('optimizer_multistart_lateral_offsets', '')
         _declare_if_not('optimizer_initial_routes_json', '')
+        # Two-stage (global-then-local) hierarchical planning
+        _declare_if_not('use_hierarchical', False)
+        _declare_if_not('global_horizon', 60)
+        _declare_if_not('local_horizon', 12)
+        _declare_if_not('local_plan_rate', 4.0)
+        _declare_if_not('local_optimizer_maxiter', 60)
+        _declare_if_not('global_use_ambiguity', True)
+        _declare_if_not('local_use_ambiguity', False)
+        _declare_if_not('global_optimizer_multistart', True)
+        _declare_if_not('local_optimizer_multistart', True)
+        _declare_if_not('local_use_visibility_model', False)
+        _declare_if_not('local_use_belief_nogo_cost', False)
+        _declare_if_not('local_nogo_penalty_type', '')
+        _declare_if_not('local_nogo_weight', -1.0)
+        _declare_if_not('local_nogo_safe_distance', -1.0)
+        _declare_if_not('waypoint_spacing_m', 1.0)
+        _declare_if_not('waypoint_arrival_radius_m', 0.35)
 
         # Pixel correction params
         _declare_if_not('use_pixel_correction', False)
@@ -208,6 +235,8 @@ class UnicyclePlannerNode(Node):
         self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
         self.use_belief_nogo_cost = _as_bool(self.get_parameter('use_belief_nogo_cost').value)
         self.nogo_belief_kappa = float(self.get_parameter('nogo_belief_kappa').value)
+        self.nogo_mode = str(self.get_parameter('nogo_mode').value or 'keep_out').strip().lower()
+        self.driveable_geometry_json = str(self.get_parameter('driveable_geometry_json').value or '')
         self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value).strip()
         self.robot_collision_radius_m = float(self.get_parameter('robot_collision_radius_m').value)
 
@@ -226,6 +255,34 @@ class UnicyclePlannerNode(Node):
         self.optimizer_initial_routes_json = str(
             self.get_parameter('optimizer_initial_routes_json').value
         )
+        self.use_hierarchical = _as_bool(self.get_parameter('use_hierarchical').value)
+        self.global_horizon = int(self.get_parameter('global_horizon').value)
+        self.local_horizon = int(self.get_parameter('local_horizon').value)
+        self.local_plan_rate = float(self.get_parameter('local_plan_rate').value)
+        self.local_optimizer_maxiter = int(self.get_parameter('local_optimizer_maxiter').value)
+        self.global_use_ambiguity = _as_bool(self.get_parameter('global_use_ambiguity').value)
+        self.local_use_ambiguity = _as_bool(self.get_parameter('local_use_ambiguity').value)
+        self.global_optimizer_multistart = _as_bool(
+            self.get_parameter('global_optimizer_multistart').value
+        )
+        self.local_optimizer_multistart = _as_bool(
+            self.get_parameter('local_optimizer_multistart').value
+        )
+        self.local_use_visibility_model = _as_bool(
+            self.get_parameter('local_use_visibility_model').value
+        )
+        self.local_use_belief_nogo_cost = _as_bool(
+            self.get_parameter('local_use_belief_nogo_cost').value
+        )
+        self.local_nogo_penalty_type = str(
+            self.get_parameter('local_nogo_penalty_type').value or ''
+        ).strip().lower()
+        self.local_nogo_weight = float(self.get_parameter('local_nogo_weight').value)
+        self.local_nogo_safe_distance = float(
+            self.get_parameter('local_nogo_safe_distance').value
+        )
+        self.waypoint_spacing_m = float(self.get_parameter('waypoint_spacing_m').value)
+        self.waypoint_arrival_radius_m = float(self.get_parameter('waypoint_arrival_radius_m').value)
 
         self.use_pixel_correction = _as_bool(self.get_parameter('use_pixel_correction').value)
         self.pixel_topic = self.get_parameter('pixel_topic').value
@@ -292,70 +349,12 @@ class UnicyclePlannerNode(Node):
             'img_height': int(self.get_parameter('img_height').value),
             'fov_h_rad': float(self.get_parameter('fov_h_rad').value),
         }
-        warm_start_shift_steps = max(
-            1,
-            int(round((1.0 / max(self.plan_rate, 0.1)) / max(self.dt, 1e-3))),
-        )
+        warm_start_shift_steps = self._warm_start_shift_steps_for_rate(self.plan_rate)
 
-        self.planner = self.PLANNER_CLASS(
-            horizon=self.horizon,
-            dt=self.dt,
-            v_min=self.v_min,
-            v_max=self.v_max,
-            w_min=self.w_min,
-            w_max=self.w_max,
-            control_weight=self.control_weight,
-            process_noise_xy=self.process_noise_xy,
-            process_noise_theta=self.process_noise_theta,
-            obs_noise_uv=self.obs_noise_uv,
-            goal_sigma_uv=self.goal_sigma_uv,
-            risk_weight_obs=self.risk_weight_obs,
-            ambiguity_weight=self.ambiguity_weight,
-            optimizer_maxiter=self.optimizer_maxiter,
-            optimizer_maxfun=self.optimizer_maxfun,
-            optimizer_ftol=self.optimizer_ftol,
-            optimizer_gtol=self.optimizer_gtol,
-            optimizer_warm_start=self.optimizer_warm_start,
-            optimizer_warm_start_shift_steps=warm_start_shift_steps,
-            optimizer_multistart=self.optimizer_multistart,
-            optimizer_multistart_include_direct=self.optimizer_multistart_include_direct,
-            optimizer_multistart_lateral_offsets=self.optimizer_multistart_lateral_offsets,
-            optimizer_initial_routes_json=self.optimizer_initial_routes_json,
-            approx_method=self.approx_method,
-            use_obs_risk=self.use_obs_risk,
-            use_ambiguity=self.use_ambiguity,
-            seed=self.seed,
-            camera_params=camera_params,
-            use_visibility_model=self.use_visibility_model,
-            visibility_target_height_m=self.visibility_target_height_m,
-            visibility_geometry_json=self.visibility_geometry_json,
-            collision_geometry_json=self.collision_geometry_json,
-            visibility_artifact_path=self.visibility_artifact_path,
-            r_visible_uv=self.r_visible_uv,
-            r_miss_uv=self.r_miss_uv,
-            visibility_sigma_kappa=self.visibility_sigma_kappa,
-            goal_prior_u_std_start=self.goal_prior_u_std_start,
-            goal_prior_v_std_start=self.goal_prior_v_std_start,
-            goal_prior_u_std_final=self.goal_prior_u_std_final,
-            goal_prior_v_std_final=self.goal_prior_v_std_final,
-            goal_tightening_power=self.goal_tightening_power,
-            goal_progress_n_steps=self.goal_progress_n_steps,
-            observation_risk_scale=self.observation_risk_scale,
-            ambiguity_term_scale=self.ambiguity_term_scale,
-            discount_gamma=self.discount_gamma,
-            use_nogo_cost=self.use_nogo_cost,
-            nogo_penalty_type=self.nogo_penalty_type,
-            nogo_weight=self.nogo_weight,
-            nogo_safe_distance=self.nogo_safe_distance,
-            nogo_gaussian_sigma=self.nogo_gaussian_sigma,
-            nogo_softplus_scale=self.nogo_softplus_scale,
-            nogo_logbarrier_scale=self.nogo_logbarrier_scale,
-            nogo_logbarrier_eps=self.nogo_logbarrier_eps,
-            use_belief_nogo_cost=self.use_belief_nogo_cost,
-            nogo_belief_kappa=self.nogo_belief_kappa,
-            robot_collision_radius_m=self.robot_collision_radius_m,
-            runtime_debug=self.debug_runtime,
-        )
+        self._camera_params = camera_params
+        self._warm_start_shift_steps = warm_start_shift_steps
+        self.optimizer_warm_start_shift_steps = warm_start_shift_steps
+        self.planner = self._construct_planner()
         self._io_group = ReentrantCallbackGroup()
         self._plan_group = MutuallyExclusiveCallbackGroup()
         self._data_lock = threading.RLock()
@@ -438,7 +437,8 @@ class UnicyclePlannerNode(Node):
         self._latest_measurement_available = False
         self._latest_belief_age_s = math.nan
 
-        self._plan_period_s = 1.0 / max(self.plan_rate, 0.1)
+        planner_rate = self.local_plan_rate if self.use_hierarchical else self.plan_rate
+        self._plan_period_s = 1.0 / max(planner_rate, 0.1)
         self.create_timer(self._plan_period_s, self._plan_once, callback_group=self._plan_group)
         if self.belief_publish_rate > 0.0:
             self._belief_publish_period_s = 1.0 / max(self.belief_publish_rate, 0.1)
@@ -528,6 +528,66 @@ class UnicyclePlannerNode(Node):
             if changed:
                 self._goal_signature = signature
                 self._goal_progress_start_dist_m = None
+
+    def _warm_start_shift_steps_for_rate(self, plan_rate: float) -> int:
+        return max(
+            1,
+            int(round((1.0 / max(float(plan_rate), 0.1)) / max(self.dt, 1e-3))),
+        )
+
+    def _construct_planner(self, **ov):
+        """Build a planner from the node's params, with optional overrides.
+
+        Overridable (for the two-stage global/local planners): horizon,
+        visibility/no-go switches, goal tightening, optimizer settings, and
+        warm-start shift. Keeping these as real overrides prevents hidden
+        local/global planner behavior from diverging from the manifest.
+        """
+        def g(key):
+            return ov[key] if key in ov else getattr(self, key)
+        return self.PLANNER_CLASS(
+            horizon=int(g('horizon')),
+            dt=self.dt, v_min=self.v_min, v_max=self.v_max, w_min=self.w_min, w_max=self.w_max,
+            control_weight=self.control_weight,
+            process_noise_xy=self.process_noise_xy, process_noise_theta=self.process_noise_theta,
+            obs_noise_uv=self.obs_noise_uv, goal_sigma_uv=self.goal_sigma_uv,
+            risk_weight_obs=self.risk_weight_obs, ambiguity_weight=self.ambiguity_weight,
+            optimizer_maxiter=int(g('optimizer_maxiter')), optimizer_maxfun=int(g('optimizer_maxfun')),
+            optimizer_ftol=float(g('optimizer_ftol')), optimizer_gtol=float(g('optimizer_gtol')),
+            optimizer_warm_start=_as_bool(g('optimizer_warm_start')),
+            optimizer_warm_start_shift_steps=int(g('optimizer_warm_start_shift_steps')),
+            optimizer_multistart=_as_bool(g('optimizer_multistart')),
+            optimizer_multistart_include_direct=_as_bool(g('optimizer_multistart_include_direct')),
+            optimizer_multistart_lateral_offsets=g('optimizer_multistart_lateral_offsets'),
+            optimizer_initial_routes_json=g('optimizer_initial_routes_json'),
+            approx_method=self.approx_method, use_obs_risk=_as_bool(g('use_obs_risk')),
+            use_ambiguity=_as_bool(g('use_ambiguity')), seed=self.seed, camera_params=self._camera_params,
+            use_visibility_model=_as_bool(g('use_visibility_model')),
+            visibility_target_height_m=self.visibility_target_height_m,
+            visibility_geometry_json=self.visibility_geometry_json,
+            collision_geometry_json=self.collision_geometry_json,
+            visibility_artifact_path=self.visibility_artifact_path,
+            r_visible_uv=self.r_visible_uv, r_miss_uv=self.r_miss_uv,
+            visibility_sigma_kappa=self.visibility_sigma_kappa,
+            goal_prior_u_std_start=g('goal_prior_u_std_start'),
+            goal_prior_v_std_start=g('goal_prior_v_std_start'),
+            goal_prior_u_std_final=self.goal_prior_u_std_final,
+            goal_prior_v_std_final=self.goal_prior_v_std_final,
+            goal_tightening_power=self.goal_tightening_power,
+            goal_progress_n_steps=int(g('goal_progress_n_steps')),
+            observation_risk_scale=float(g('observation_risk_scale')),
+            ambiguity_term_scale=float(g('ambiguity_term_scale')), discount_gamma=float(g('discount_gamma')),
+            use_nogo_cost=_as_bool(g('use_nogo_cost')), nogo_penalty_type=str(g('nogo_penalty_type')),
+            nogo_weight=float(g('nogo_weight')), nogo_safe_distance=float(g('nogo_safe_distance')),
+            nogo_gaussian_sigma=float(g('nogo_gaussian_sigma')),
+            nogo_softplus_scale=float(g('nogo_softplus_scale')),
+            nogo_logbarrier_scale=float(g('nogo_logbarrier_scale')),
+            nogo_logbarrier_eps=float(g('nogo_logbarrier_eps')),
+            use_belief_nogo_cost=_as_bool(g('use_belief_nogo_cost')),
+            nogo_belief_kappa=float(g('nogo_belief_kappa')),
+            nogo_mode=str(g('nogo_mode')), driveable_geometry_json=g('driveable_geometry_json'),
+            robot_collision_radius_m=self.robot_collision_radius_m, runtime_debug=self.debug_runtime,
+        )
 
     def _current_goal_progress_index(self, m0, goal_xy) -> float:
         current_dist = float(math.hypot(float(m0[0]) - float(goal_xy[0]), float(m0[1]) - float(goal_xy[1])))
@@ -834,8 +894,9 @@ class UnicyclePlannerNode(Node):
         if dt_s > max_dt_s:
             self._warn_stale_pixel_once(
                 f"Skipping pixel correction with implausible dt={dt_s:.2f}s "
-                f"(max {max_dt_s:.2f}s)"
+                f"(max {max_dt_s:.2f}s); resetting belief from state."
             )
+            self._init_belief_from_state()
             return None
         return float(dt_s)
 
@@ -1062,7 +1123,8 @@ class UnicyclePlannerNode(Node):
         m_pred, S_pred = self.planner.predict(
             belief_m, belief_S, snapshot['cmd'], dt=dt_s
         )
-        p_vis, R_eff, S_eff, gain_scale = self.planner.observation_model_with_visibility(m_pred, S_pred)
+        planner_for_obs = getattr(self, 'global_planner', None) or self.planner
+        p_vis, R_eff, S_eff, gain_scale = planner_for_obs.observation_model_with_visibility(m_pred, S_pred)
 
         corr_method = self.approx_method if self.pixel_correction_approx == 'AUTO' else self.pixel_correction_approx
         uv_update = self._compute_pixel_uv_update(
@@ -1173,7 +1235,7 @@ class UnicyclePlannerNode(Node):
             raw_measurement_age = math.inf
         return bool(0.0 <= raw_measurement_age <= self.pixel_timeout_s)
 
-    def _predict_belief_to_now(self, m0, S0, last_cmd, belief_age_s: float, now_msg):
+    def _predict_belief_to_now(self, m0, S0, last_cmd, belief_age_s: float, now_msg, mutate=True):
         if belief_age_s <= 0.0:
             return m0, S0
         if self.use_odom_for_predict:
@@ -1182,13 +1244,14 @@ class UnicyclePlannerNode(Node):
         else:
             predict_vel = np.asarray(last_cmd, dtype=float)
         m0, S0 = self.planner.predict(m0, S0, predict_vel, dt=belief_age_s)
-        with self._data_lock:
-            self.belief_m = m0.copy()
-            self.belief_S = S0.copy()
-            self.belief_stamp = now_msg
+        if mutate:
+            with self._data_lock:
+                self.belief_m = m0.copy()
+                self.belief_S = S0.copy()
+                self.belief_stamp = now_msg
         return m0, S0
 
-    def _anchor_belief_yaw_to_odom_for_planning(self, m0, S0, now_msg):
+    def _anchor_belief_yaw_to_odom_for_planning(self, m0, S0, now_msg, mutate=True):
         """Apply the explicit odom yaw correction used when visual yaw is unavailable."""
         if not self.use_odom_heading_correction:
             return m0, S0
@@ -1203,7 +1266,7 @@ class UnicyclePlannerNode(Node):
             float(max(self.odom_heading_sigma_rad, self.pixel_heading_noise_floor_rad, 1e-6)),
             source_code=2.0,
         )
-        if applied:
+        if applied and mutate:
             with self._data_lock:
                 self.belief_m = m0.copy()
                 self.belief_S = S0.copy()
@@ -1228,9 +1291,9 @@ class UnicyclePlannerNode(Node):
             now_msg, snapshot['pixel_stamp']
         )
         m0, S0 = self._predict_belief_to_now(
-            snapshot['m'], snapshot['S'], snapshot['last_cmd'], belief_age_s, now_msg
+            snapshot['m'], snapshot['S'], snapshot['last_cmd'], belief_age_s, now_msg, mutate=False
         )
-        m0, S0 = self._anchor_belief_yaw_to_odom_for_planning(m0, S0, now_msg)
+        m0, S0 = self._anchor_belief_yaw_to_odom_for_planning(m0, S0, now_msg, mutate=False)
 
         if belief_age_s > self.pixel_timeout_s:
             self._warn_stale_pixel_once(

@@ -51,6 +51,35 @@ class PlanResult:
     invalid_reason: str = ""
 
 
+def extract_waypoints(states, spacing_m=1.0, include_goal=True):
+    """Arc-length downsample a plan's xy states into waypoints.
+
+    Drops a waypoint every `spacing_m` of cumulative path length; the final
+    state (the plan's terminus / goal) is always included when `include_goal`.
+    Returns a list of (x, y). Used to decompose a long-horizon global plan into
+    targets for a short-horizon local tracker (planner-derived, not scripted).
+    """
+    pts = np.asarray(states, dtype=float)[:, :2]
+    if pts.shape[0] == 0:
+        return []
+    spacing = max(float(spacing_m), 1e-3)
+    waypoints = []
+    last = pts[0]
+    acc = 0.0
+    for i in range(1, len(pts)):
+        acc += float(np.linalg.norm(pts[i] - pts[i - 1]))
+        if acc >= spacing:
+            waypoints.append((float(pts[i, 0]), float(pts[i, 1])))
+            acc = 0.0
+        last = pts[i]
+    if include_goal:
+        if not waypoints or float(np.linalg.norm(np.asarray(waypoints[-1]) - last)) > 1e-3:
+            waypoints.append((float(last[0]), float(last[1])))
+    if not waypoints:
+        waypoints.append((float(last[0]), float(last[1])))
+    return waypoints
+
+
 class UnicyclePlannerBase:
     """Shared unicycle planner logic. Subclasses define objective specifics."""
 
@@ -112,6 +141,8 @@ class UnicyclePlannerBase:
         nogo_logbarrier_eps=1e-3,
         use_belief_nogo_cost=False,
         nogo_belief_kappa=1.0,
+        nogo_mode='keep_out',
+        driveable_geometry_json='',
         robot_collision_radius_m=0.125,
         runtime_debug=False,
     ):
@@ -202,6 +233,8 @@ class UnicyclePlannerBase:
         self.nogo_logbarrier_eps = float(max(nogo_logbarrier_eps, 1e-6))
         self.use_belief_nogo_cost = bool(use_belief_nogo_cost)
         self.nogo_belief_kappa = float(max(nogo_belief_kappa, 1e-6))
+        self.nogo_mode = str(nogo_mode or 'keep_out').strip().lower()
+        self.driveable_geometry_json = str(driveable_geometry_json or '')
         self.nogo_cost_model = None
         self.collision_cost_model = None
 
@@ -227,6 +260,12 @@ class UnicyclePlannerBase:
             self.visibility_model = GPVisibilityMapModel(vis_cfg)
 
         if self.use_nogo_cost:
+            # keep_in: penalise leaving the driveable lane union (safe_distance =
+            # soft edge margin). keep_out: penalise proximity to occluder prisms.
+            if self.nogo_mode == 'keep_in':
+                nogo_geometry = self.driveable_geometry_json
+            else:
+                nogo_geometry = str(visibility_geometry_json or '')
             nogo_cfg = NogoCostConfig(
                 penalty_type=self.nogo_penalty_type,
                 weight=self.nogo_weight,
@@ -235,7 +274,8 @@ class UnicyclePlannerBase:
                 softplus_scale=self.nogo_softplus_scale,
                 logbarrier_scale=self.nogo_logbarrier_scale,
                 logbarrier_eps=self.nogo_logbarrier_eps,
-                geometry_json=str(visibility_geometry_json or ''),
+                geometry_json=nogo_geometry,
+                mode=self.nogo_mode,
             )
             self.nogo_cost_model = NogoZoneCostModel(nogo_cfg)
 
@@ -365,10 +405,31 @@ class UnicyclePlannerBase:
         R_use = self.R if R_override is None else np.asarray(R_override, dtype=float)
         return fn(m, S, self.g_obs, addmatrix=R_use, forceHermitian=True)
 
+    @staticmethod
+    def _expected_state_posterior_covariance(S, Sigma_y, Gamma):
+        S = np.asarray(S, dtype=float)
+        Sigma_y = np.asarray(Sigma_y, dtype=float)
+        Gamma = np.asarray(Gamma, dtype=float)
+        S = 0.5 * (S + S.T)
+        Sigma_y = 0.5 * (Sigma_y + Sigma_y.T)
+        try:
+            update = Gamma @ np.linalg.solve(Sigma_y + 1e-9 * np.eye(2), Gamma.T)
+        except np.linalg.LinAlgError:
+            update = Gamma @ np.linalg.pinv(Sigma_y + 1e-9 * np.eye(2)) @ Gamma.T
+        S_post = S - update
+        return 0.5 * (S_post + S_post.T)
+
     def visibility_probability(self, m):
         if (not self.use_visibility_model) or (self.visibility_model is None):
             return 1.0
-        p = float(self.visibility_model.prob_state_np(m))
+        try:
+            p = float(self.visibility_model.prob_state_np(m))
+        except RuntimeError:
+            # Long-horizon line searches can briefly sample outside the fitted
+            # GP grid. Treat that as conservative low visibility so candidate
+            # scoring remains defined; physical feasibility is handled by the
+            # driveable-region barrier.
+            p = float(self._visibility_min_prob)
         return float(np.clip(p, self._visibility_min_prob, 1.0 - self._visibility_min_prob))
 
     def visibility_probability_belief(self, m, S):
@@ -393,8 +454,14 @@ class UnicyclePlannerBase:
             dtype=float,
         )
         samples = np.column_stack([sigma_points[:, 0], sigma_points[:, 1], np.full(5, float(m[2]), dtype=float)])
+        raw_probs = []
+        for sample in samples:
+            try:
+                raw_probs.append(float(self.visibility_model.prob_state_np(sample)))
+            except RuntimeError:
+                raw_probs.append(float(self._visibility_min_prob))
         probs = np.clip(
-            np.asarray([self.visibility_model.prob_state_np(sample) for sample in samples], dtype=float),
+            np.asarray(raw_probs, dtype=float),
             self._visibility_min_prob,
             1.0 - self._visibility_min_prob,
         )
@@ -495,7 +562,8 @@ class UnicyclePlannerBase:
         S = np.asarray(S0, dtype=float).copy()
         p_vis_values = []
         ambiguity_std_values = []
-        min_clearance = float('inf')
+        min_collision_clearance = float('inf')
+        min_nogo_clearance = float('inf')
 
         for u in controls:
             m, S = self.predict(m, S, u)
@@ -504,7 +572,27 @@ class UnicyclePlannerBase:
             ambiguity_std_values.append(
                 float(max(vis_diag['r_plan_u_std'], vis_diag['r_plan_v_std']))
             )
-            min_clearance = min(min_clearance, self.collision_clearance_state_np(m))
+            min_collision_clearance = min(
+                min_collision_clearance,
+                self.collision_clearance_state_np(m),
+            )
+            if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
+                if self.use_belief_nogo_cost:
+                    _mu_y, Sigma_y, Gamma = self.approx_observation(
+                        m,
+                        S,
+                        method=self.approx_method,
+                        R_override=vis_diag['R_plan'],
+                    )
+                    S_nogo = self._expected_state_posterior_covariance(S, Sigma_y, Gamma)
+                    nogo_clearance = self.nogo_cost_model.clearance_belief_tube_np(
+                        m,
+                        S_nogo,
+                        kappa=self.nogo_belief_kappa,
+                    )
+                else:
+                    nogo_clearance = self.nogo_cost_model.clearance_state_np(m)
+                min_nogo_clearance = min(min_nogo_clearance, float(nogo_clearance))
 
         current_goal_distance = self._goal_distance_xy(np.asarray(m0[:2], dtype=float), goal_xy)
         terminal_goal_distance = self._goal_distance_xy(np.asarray(m[:2], dtype=float), goal_xy)
@@ -518,10 +606,15 @@ class UnicyclePlannerBase:
             float(np.mean(np.asarray(ambiguity_std_values, dtype=float) >= ambiguity_threshold))
             if ambiguity_std_values else math.nan
         )
+        min_clearance = min(min_collision_clearance, min_nogo_clearance)
         rollout_valid = bool((not math.isfinite(min_clearance)) or min_clearance >= 0.0)
         invalid_reason = ''
         if not rollout_valid:
-            invalid_reason = 'predicted_collision_geometry'
+            invalid_reason = (
+                'predicted_driveable_region_violation'
+                if min_nogo_clearance <= min_collision_clearance
+                else 'predicted_collision_geometry'
+            )
         return {
             'terminal_goal_distance_pred': float(terminal_goal_distance),
             'terminal_goal_progress_m': float(terminal_goal_progress),
@@ -941,7 +1034,7 @@ class UnicyclePlannerBase:
             p_vis = vis_diag['p_vis']
             R_plan = vis_diag['R_plan']
             mu_y = Sigma_y = Gamma = None
-            if use_observation_risk or use_ambiguity_term:
+            if use_observation_risk or use_ambiguity_term or self.use_belief_nogo_cost:
                 mu_y, Sigma_y, Gamma = self.approx_observation(
                     m,
                     S,
@@ -989,7 +1082,10 @@ class UnicyclePlannerBase:
                 total_amb += weight_t * ambiguity_current
             total_delta_risk_visibility += weight_t * (observation_risk - baseline_risk)
             total_delta_ambiguity_visibility += weight_t * (ambiguity_current - ambiguity_baseline)
-            total_obstacle += weight_t * self.obstacle_penalty(m, S)
+            S_nogo = S
+            if self.use_belief_nogo_cost and Sigma_y is not None and Gamma is not None:
+                S_nogo = self._expected_state_posterior_covariance(S, Sigma_y, Gamma)
+            total_obstacle += weight_t * self.obstacle_penalty(m, S_nogo)
             total_control += weight_t * self.control_weight * float(u[0] ** 2 + u[1] ** 2)
 
         total = total_risk + total_amb + total_control + total_obstacle
@@ -1147,11 +1243,20 @@ class UnicyclePlannerBase:
                     f"dt={(time.perf_counter() - attempt_start) * 1000.0:.0f}ms"
                 )
 
-                # Candidate validity is diagnostic-only; the optimizer objective decides.
                 if best_candidate is None:
                     keep = True
                 else:
-                    keep = float(candidate['total_cost']) < float(best_candidate['total_cost'])
+                    best_valid = bool(best_candidate.get('rollout_valid', False))
+                    # The smooth no-go term shapes the continuous optimization,
+                    # but the final multi-start choice should never prefer an
+                    # invalid shortcut over a valid rollout. This is
+                    # condition-neutral safety handling, not route scripting.
+                    if cand_valid and not best_valid:
+                        keep = True
+                    elif best_valid and not cand_valid:
+                        keep = False
+                    else:
+                        keep = float(candidate['total_cost']) < float(best_candidate['total_cost'])
                 if keep:
                     best_candidate = candidate
                     best_init_name = init_name
@@ -1163,6 +1268,40 @@ class UnicyclePlannerBase:
 
             if best_candidate is None:
                 raise RuntimeError("Planner optimizer returned no finite solution from any init")
+            if not bool(best_candidate.get('rollout_valid', False)):
+                stop_controls = np.zeros(self.horizon * 2, dtype=float)
+                stop_candidate = self._evaluate_candidate_controls(
+                    stop_controls,
+                    m0,
+                    S0,
+                    goal_state,
+                    goal_obs,
+                    goal_obs_cov,
+                    objective_scales,
+                    progress_index=progress_index,
+                )
+                stop_diag = self._trajectory_plan_diagnostics(
+                    m0,
+                    S0,
+                    stop_controls.reshape(self.horizon, 2),
+                    goal_xy,
+                )
+                if bool(stop_diag['rollout_valid']):
+                    stop_candidate.update({
+                        'source': 'safe_stop_invalid_rollout',
+                        'rollout_valid': True,
+                        'optimizer_result': best_candidate.get('optimizer_result'),
+                    })
+                    best_candidate = stop_candidate
+                    best_init_name = 'safe_stop_invalid_rollout'
+                    optimizer_success = False
+                    optimizer_status = -2
+                    optimizer_nit = 0
+                    optimizer_nfev = 0
+                    optimizer_message = (
+                        'All optimized candidates violated the known driveable '
+                        'region; selected zero-control safe stop.'
+                    )
             self._runtime_debug_print(
                 f"[planner_debug] Best optimizer init={best_init_name!s} "
                 f"J={best_candidate['total_cost']:.3f}, valid={best_candidate.get('rollout_valid', False)}"

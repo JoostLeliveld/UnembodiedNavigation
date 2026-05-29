@@ -32,8 +32,16 @@ not paper evidence unless the full artifact chain is present.
 | --- | --- | --- |
 | exploratory | `logs/perception_datasets/aws_simseg_v2` | AWS detector data line |
 | exploratory | `logs/perception_models/aws_yolo_simseg_v2` | AWS detector line |
-| exploratory | `logs/visibility_comparison/aws_gp_v5` | Latest retained AWS GP line for the old AWS exploratory world; capture images/targets were cleaned to keep only the fitted artifact and current diagnostic plots |
-| exploratory | `logs/visibility_comparison/experiment_b_aws_v33_smoke` | smoke/diagnostic only |
+| exploratory | `logs/visibility_comparison/aws_gp_v5` | Latest retained AWS GP line; capture/targets cleaned, only fitted artifact and diagnostic plots remain |
+| diagnostic | `logs/visibility_comparison/f24_r01_gazebo_smoke_v2` | F25 Gazebo smoke: both conditions crashed (geometry penetration); config aws_f24_r01_gazebo_smoke_config.yaml |
+| diagnostic | `logs/visibility_comparison/initial_rollout_diagnostics/` | F26 config (aws_f26_r01_gazebo_smoke_config.yaml) addresses F25 root causes: nogo_safe_distance 0.13→0.30, local_optimizer_maxiter 60→25 |
+
+## Timing And Initial-Plan Diagnostics
+
+| Status | Asset / Run Family | Notes |
+| --- | --- | --- |
+| diagnostic | `timing_presentation/figures/` | horizon and multistart timing figures (F1–F25); useful for solver/horizon discussion, not closed-loop evidence |
+| diagnostic | `logs/visibility_comparison/initial_rollout_diagnostics/` | initial-plan sweeps showing objective/optimizer behavior before Gazebo validation |
 
 ## Invalid Or Rejected Lines
 
@@ -42,6 +50,7 @@ not paper evidence unless the full artifact chain is present.
 | invalid | visible-goal AWS route-choice probe | baseline behavior already used the detour-like route; learned condition stalled at high ambiguity weight |
 | invalid | dark-final-goal AWS route-choice probe | final goal was itself camera-poor, confounding route-choice interpretation |
 | invalid | waypoint-driven mission behavior | route sequence is externally imposed rather than emerging from EFE |
+| invalid | oversized-ambiguity-only demonstration | route difference is not scientifically persuasive if it only appears by overwhelming the rest of the objective |
 
 ## Adding A New Evidence Line
 

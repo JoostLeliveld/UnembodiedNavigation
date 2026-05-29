@@ -122,159 +122,57 @@ tasks:
 
   warehouse_aws.world.sdf:
 
-    # B1-visible: first AWS stability gate.
-    # The final goal is deliberately in a planner-visible A4-side handoff
-    # region. This checks base world/perception/planner stability without
-    # asking the visibility-aware objective to terminate inside a camera-dark
-    # region. No intermediate waypoint is used.
-    - name: B1_visible_goal_smoke
-      description: >
-        Simple AWS visible-goal smoke task. The robot starts in the south
-        shipping/apron lane near the A3/A4 fork and must reach a visible
-        A4-side handoff target before the R4-stack shadow. This is a
-        stability gate for the redesigned AWS world, not paper evidence for
-        route-choice behavior.
-      tier: smoke
-      claim: aws_stability_visible_goal
-      focus: stable_goal_reaching_visible_goal
-      start: {x: 2.15, y: -3.15, z: 0.05, yaw: 1.5708}
-      goal:  {x: 3.25, y: -2.10}
-
-    # B1: primary AWS/JDeRobot-style route-choice task.
-    # Start is in the shipping/apron decision lane. The short route enters A4
-    # immediately and passes behind the R4 lane-side stack. The neighboring A3
-    # route is modestly longer and crosses back at the mid cross-aisle. No
-    # intermediate waypoint is used for the benchmark: route choice must emerge
-    # from the planner objective rather than the mission script.
-    - name: B1_clean_route_choice
-      description: >
-        B1 primary AWS route-choice task. The robot starts in the south
-        shipping/apron lane near the A3/A4 fork and must reach G_pick_A at the
-        A4-side mid cross-aisle. The short A4 route is physically driveable but
-        passes behind the R4 high stack. The A3 route is a modest detour through
-        the neighboring visible aisle before crossing back to the same pick
-        target.
-      tier: benchmark
-      claim: visibility_route_choice
-      focus: visibility_tradeoff_route_choice
-      start: {x: 2.15, y: -3.15, z: 0.05, yaw: 1.5708}
-      goal:  {x: 3.25, y: 1.72}
-
-    # Alias with the explicit A4-vs-A3 name, kept so older configs can target
-    # the route-choice version without inheriting the old over-long detour.
-    - name: B1_a4_vs_a3
-      description: >
-        Explicit A4-vs-A3 version of B1. The short route enters A4 from the
-        shipping/apron lane and passes behind the R4 high stack; the alternate
-        route enters A3, stays more observable, and crosses back through the
-        mid cross-aisle.
-      tier: benchmark
-      claim: visibility_route_choice
-      focus: visibility_tradeoff_route_choice
-      start: {x: 2.15, y: -3.15, z: 0.05, yaw: 1.5708}
-      goal:  {x: 3.25, y: 1.72}
-
-    # B1 v2 — discriminating-regime task for the AWS world v2 (2026-05-20 redesign).
-    # World changes vs. v1: R4 stack flush + widened to 0.55 m base; R4 rack body
-    # shifted 0.10 m west; A4 widened to 1.10 m; camera lowered to z=4.5. Goal at
-    # x=3.0 (A4-centerline column) instead of x=3.25 (slightly east of A4
-    # centerline) so the short A4 route's shadow exposure is uniform across width.
-    # See logs/visibility_comparison/rollouts/20260520_204144_world_v2_design/proposal.md.
-    - name: B1_clean_route_choice_v2
-      description: >
-        v2 discriminating-regime task. South-east apron start; A4-side
-        mid_cross_aisle goal in open visible terrain. Shortest route is up A4
-        (through the R4 stack shadow). Visible alternative is up A3 then east
-        via mid_cross_aisle (+~2 m). C1 should take A4 shortcut; C2 should
-        detour via A3.
-      tier: exploratory
-      claim: visibility_route_choice_v2
-      focus: visibility_tradeoff_route_choice_v2
-      start: {x: 2.15, y: -3.15, z: 0.05, yaw: 1.5708}
-      goal:  {x: 3.00, y: 1.72}
-
-    - name: B1_north_goal_v2
-      description: >
-        v2 stress test. Same start; goal pushed further north into
-        upper_cross_aisle so the shadowed A4 leg is longer and the visible
-        detour cost grows. Should show a stronger C1-vs-C2 contrast.
-      tier: exploratory
-      claim: visibility_route_choice_v2
-      focus: visibility_tradeoff_route_choice_v2_stress
-      start: {x: 2.15, y: -3.15, z: 0.05, yaw: 1.5708}
-      goal:  {x: 3.00, y: 4.55}
-
-    # B2: secondary reacquisition stress task.
-    - name: B2_reacquire_after_occlusion
-      description: >
-        B2 secondary stress task. The robot starts at S_rack_south on the west
-        service lane and must reach G_shadow_exit in the mid cross-aisle. The
-        path passes through the R4-stack shadow and then exits into a more
-        observable reacquisition area.
-      tier: exploratory
-      claim: relocalize_before_dispatch
-      focus: reacquire_after_occlusion
-      start: {x: -4.85, y: -1.55, z: 0.05, yaw: 0.0}
-      goal:  {x: 1.35, y: 1.72}
-
-    # B3: secondary long-horizon far-corner stress task.
-    - name: B3_long_horizon_far_corner
-      description: >
-        B3 secondary stress task. The robot starts at S_apron_right in the
-        dispatch apron and must reach G_far_rack near the far north-east rack
-        endpoint. This creates a longer route with far-camera perspective,
-        sparse coverage risk, and a realistic main-aisle to rack-aisle
-        transition.
-      tier: exploratory
-      claim: relocalize_before_dispatch
-      focus: long_horizon_far_corner
-      start: {x: 2.15, y: -3.15, z: 0.05, yaw: 1.5708}
-      goal:  {x: 4.85, y: 4.55}
-
-    # Round-3 diagnostic task in the simplified AWS world (R4 high stack
-    # removed, aws_gp_v5). Start in A4 apron at (3,-1) — now visible per
-    # v5 GP (P_conservative=0.74; was 0.004 before stack removal). Goal in
-    # A3 at south edge of mid_cross_aisle (1, 2) — visible (P=0.50). The
-    # direct east-west path is blocked by the R4 LOWER rack body, so the
-    # planner must detour either north up A4 (partially shadowed by R4
-    # lower rack at x=2 between y=0 and y=1) or south via the apron then
-    # up A3 (fully visible). Used to diagnose whether the wavy half-circle
-    # plan behavior persists when the R4-stack shadow is no longer driving
-    # the optimisation.
+    # Active AWS route-choice diagnostic.
+    # Start on the right side of A4, facing east toward the R5 shelf as if the
+    # robot has just completed a pick. Goal is visible in A3 near the mid
+    # cross-aisle. Route choice must emerge from the planner objective: no
+    # mission waypoints are used.
     - name: B1_apron_a4_to_uppermid_a3
       description: >
-        Diagnostic task in the simplified AWS world (R4 high stack removed,
-        aws_gp_v5). Start in A4 apron (3, -1), goal at south edge of
-        mid_cross_aisle in A3 (1, 2). Direct east-west blocked by R4 lower
-        rack body; planner must detour either north via mid_cross_aisle or
-        south via apron and A3.
+        Active AWS diagnostic task. Robot starts on the right side of aisle A4
+        at (3.2, -1.0), facing east toward the R5 shelf (yaw=0), as if it just
+        finished a pick. The goal is the A3-side mid-cross-aisle target at
+        (1.0, 1.75). The task is intended to reveal whether learned observation
+        reliability makes the planner prefer a more observable route without
+        scripted intermediate waypoints.
+      tier: diagnostic
+      claim: visibility_route_choice
+      focus: shelf_pick_visibility_tradeoff
+      start: {x: 3.20, y: -1.00, z: 0.05, yaw: 0.0}
+      goal:  {x: 1.00, y: 1.75}
+
+    # F31 B1 route-choice task: start (3.3, -1.0) facing east, goal A3 mid (1.0, 1.75).
+    # Identical intent to B1_apron_a4_to_uppermid_a3 but start is 0.1 m east (x=3.3)
+    # to place the robot clearly in the A4 apron pick-pose with the R5 shelf in view.
+    # F23 offline showed C2 preferring the lower-sweep route on this task geometry.
+    - name: F31_b1_apron_a3_mid
+      description: >
+        F31 route-choice smoke: robot at A4 apron pick-pose (3.3, -1.0, yaw=0, facing east)
+        must reach A3 mid-cross-aisle (1.0, 1.75). Both start and goal are in the
+        GP-visible region. The short northward route passes near the R4/R5 rack tops
+        where visibility is lower; the southern sweep stays in the open apron.
+        F23 offline: C2 preferred the lower sweep, C1 went direct north.
+      tier: diagnostic
+      claim: visibility_route_choice
+      focus: shelf_pick_visibility_tradeoff
+      start: {x: 3.30, y: -1.00, z: 0.05, yaw: 0.0}
+      goal:  {x: 1.00, y: 1.75}
+
+    # F24 R01 Gazebo smoke: visible endpoint route from lower A4 to mid A3.
+    # This is the first visible-to-visible route selected for closed-loop
+    # execution after the offline F24 battery.
+    - name: F24_R01_a4_lower_to_a3_mid
+      description: >
+        Gazebo smoke task corresponding to F24 route R01. Start and goal are
+        both in GP-visible regions. The robot starts in the lower A4 lane and
+        must reach the A3 mid-cross-aisle target. Used to check whether the
+        planner-derived global route and short-horizon tracker survive noisy
+        closed-loop execution.
       tier: diagnostic
       claim: null
-      focus: planner_smoothness_diagnostic
-      start: {x: 3.00, y: -1.00, z: 0.05, yaw: 1.5708}
-      goal:  {x: 1.00, y: 2.00}
-
-    # Round-1 cross-aisle visibility showcase (II-A reformulation).
-    # Start (3.0, -2.5) in the south apron is camera-visible (P_GP=0.87) so
-    # the EKF can bootstrap. Goal (1.0, 0.5) in A3 is also visible (P=0.68).
-    # The "short" route is up A4 from the apron (~3 m north) which crosses
-    # the R4-stack shadow band in the A4 aisle at x≥2.5 (P~0 for the whole
-    # north-east quadrant per the empirical GP). The visible alternative is
-    # west across the apron then up A3 (~5 m). C1 should take the shorter
-    # shadowed path and drift; C2 should detour via the visible apron/A3
-    # corridor.
-    - name: B1_a4_to_a3_aisle_shadow_cross
-      description: >
-        AWS apron-to-A3 cross-aisle move. Start in the south apron at the
-        A3/A4 fork (visible). Goal in A3 at the lower-rack-row latitude
-        (visible). Short route via A4 north passes through the R4-stack
-        shadow band; visible detour goes west along the apron then north
-        through A3.
-      tier: exploratory
-      claim: visibility_route_choice
-      focus: visibility_tradeoff_cross_aisle
-      start: {x: 3.00, y: -2.50, z: 0.05, yaw: 1.5708}    # facing north
-      goal:  {x: 1.00, y: 0.50}
+      focus: visible_to_visible_gazebo_smoke
+      start: {x: 3.125, y: -2.44, z: 0.05, yaw: 2.0360}
+      goal:  {x: 1.075, y: 1.64}
 
     # Sanity check: both planners should behave similarly in the visible south
     # apron and should not need the hidden aisle.
@@ -289,88 +187,6 @@ tasks:
       focus: sanity
       start: {x: -4.25, y: -3.15, z: 0.05, yaw: 0.0}
       goal:  {x: 3.45, y: -3.15}
-  warehouse_putaway.world.sdf:
-
-    # ----- DISCRIMINATING regime -----------------------------------------------
-    # Inbound scan/QC pickup A -> rear-lane put-away handoff B. Both A and B
-    # sit in camera-visible terrain. The direct rear lane is shorter but the
-    # staging stacks occlude the central-south camera's view of the robot along it.
-    # C1 should take the rear lane (geometry-only); C2 should detour via the
-    # front lane (visibility-aware). A is placed slightly east of the far-left
-    # wall so the detector has a valid initial observation.
-    - name: shadow_tradeoff_putaway_discriminating
-      description: >
-        Discriminating-regime task for warehouse_putaway. South-west scan/QC
-        pickup A (-3.8, -2.0) to rack-side put-away handoff bay B
-        (4.2, 1.25). Both A and B are camera-visible. Rear (north) lane is
-        shorter but shadowed by the inbound staging stacks. Front (south)
-        circulation lane is the visible detour around the known staging island.
-      tier: benchmark
-      claim: shadow_tradeoff
-      focus: visibility_tradeoff_putaway
-      start: {x: -3.80, y: -2.00, z: 0.05, yaw: 0.7854}     # yaw = pi/4 (NE)
-      goal:  {x: 4.20, y: 1.25}
-
-    # ----- EASY regime (sanity check) ------------------------------------------
-    # A -> outbound dock (front of staging). Both routes are visible; the rear
-    # lane offers no advantage. C1 and C2 should produce nearly identical paths.
-    - name: shadow_tradeoff_putaway_easy
-      description: >
-        Easy / sanity task for warehouse_putaway. Pickup A (-3.8, -2.0) to
-        outbound dock return point (5.0, -2.3). Both routes stay in the camera-
-        visible front-lane region. C1 and C2 should produce identical paths.
-        Significant divergence indicates a bug or spurious GP signal.
-      tier: sanity
-      claim: null
-      focus: sanity
-      start: {x: -3.80, y: -2.00, z: 0.05, yaw: 0.0}
-      goal:  {x: 5.00, y: -2.30}
-
-    # ----- HARD regime (safe-stop) ---------------------------------------------
-    # A -> goal deep inside the rear-lane shadow. No visible path to the goal.
-    # C2 should refuse to enter the shadow and stop safely; C1 may push through
-    # and lose track. Per project_thesis_stability_claim.md.
-    - name: shadow_tradeoff_putaway_hard
-      description: >
-        Hard / safe-stop task for warehouse_putaway. Pickup A (-3.8, -2.0) to
-        a rack-internal drop point (0.5, 2.4) deep inside the staging shadow.
-        No fully visible path to the goal. C2 should refuse to enter shadow
-        and stop safely; C1 may risk a blind traversal. The thesis stability
-        claim: not reaching this goal in C2 is a SUCCESS outcome, not a failure.
-      tier: benchmark
-      claim: visibility_safe_stop
-      focus: visibility_safe_stop_putaway
-      start: {x: -3.80, y: -2.00, z: 0.05, yaw: 1.5708}     # yaw = pi/2 (N)
-      goal:  {x: 0.50, y: 2.40}
-
-  parcel_sortation.world.sdf:
-
-    # Sortation route-choice gate.
-    # The direct rear lane is physically open but passes behind the central
-    # inbound parcel stacks. The front lane is longer but camera-side. No
-    # intermediate waypoints are used; C1/C2 receive the same start, goal, and
-    # known forbidden-zone layer.
-    - name: shadow_tradeoff_sortation_discriminating
-      description: >
-        Parcel-sortation route-choice task. The robot starts at the west
-        induction pickup bay and must reach the east sort-wall handoff bay.
-        The short rear lane is physically driveable but expected to be less
-        observable behind the inbound staging stacks; the front circulation
-        lane is the longer visible alternative.
-      tier: exploratory
-      claim: shadow_tradeoff_extension
-      focus: visibility_tradeoff_sortation
-      start: {x: -3.40, y: 1.00, z: 0.05, yaw: 0.0}
-      goal:  {x: 3.60, y: 1.00}
-
-    # Visible-lane sanity check for the same sortation world.
-    - name: shadow_tradeoff_sortation_front_sanity
-      description: >
-        Parcel-sortation sanity task from the west induction pickup bay to a
-        camera-side front-lane target. Both planners should behave similarly
-        once a parcel_sortation-specific GP exists.
-      tier: sanity
-      claim: null
-      focus: sortation_visible_sanity
-      start: {x: -3.40, y: 1.00, z: 0.05, yaw: -1.5708}
-      goal:  {x: 3.60, y: -1.25}
+  # warehouse_putaway.world.sdf and parcel_sortation.world.sdf task entries
+  # were removed. Their GP artifacts and campaign configs were deleted;
+  # these worlds are no longer active experiment lines.

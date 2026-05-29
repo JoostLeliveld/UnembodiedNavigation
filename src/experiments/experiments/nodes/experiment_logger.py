@@ -155,6 +155,21 @@ class ExperimentLogger(Node):
         self.declare_parameter('optimizer_multistart_include_direct', True)
         self.declare_parameter('optimizer_multistart_lateral_offsets', '')
         self.declare_parameter('optimizer_initial_routes_json', '')
+        self.declare_parameter('use_hierarchical', False)
+        self.declare_parameter('global_horizon', 60)
+        self.declare_parameter('local_horizon', 12)
+        self.declare_parameter('local_plan_rate', 4.0)
+        self.declare_parameter('local_optimizer_maxiter', 60)
+        self.declare_parameter('global_use_ambiguity', True)
+        self.declare_parameter('local_use_ambiguity', False)
+        self.declare_parameter('global_optimizer_multistart', True)
+        self.declare_parameter('local_optimizer_multistart', True)
+        self.declare_parameter('local_use_visibility_model', False)
+        self.declare_parameter('local_use_belief_nogo_cost', False)
+        self.declare_parameter('local_nogo_penalty_type', '')
+        self.declare_parameter('local_nogo_weight', -1.0)
+        self.declare_parameter('waypoint_spacing_m', 1.0)
+        self.declare_parameter('waypoint_arrival_radius_m', 0.35)
         self.declare_parameter('use_odom_heading_correction', True)
         self.declare_parameter('use_displacement_heading', False)
         self.declare_parameter('heading_min_displacement_m', 0.10)
@@ -171,6 +186,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('nogo_logbarrier_eps', 1e-3)
         self.declare_parameter('use_belief_nogo_cost', False)
         self.declare_parameter('nogo_belief_kappa', 1.0)
+        self.declare_parameter('nogo_mode', 'keep_out')
         self.declare_parameter('yolo_model', '')
         self.declare_parameter('yolo_device', '')
         self.declare_parameter('yolo_imgsz', 640)
@@ -282,6 +298,33 @@ class ExperimentLogger(Node):
         self.optimizer_initial_routes_json = str(
             self.get_parameter('optimizer_initial_routes_json').value
         )
+        self.use_hierarchical = bool(self.get_parameter('use_hierarchical').value)
+        self.global_horizon = int(self.get_parameter('global_horizon').value)
+        self.local_horizon = int(self.get_parameter('local_horizon').value)
+        self.local_plan_rate = float(self.get_parameter('local_plan_rate').value)
+        self.local_optimizer_maxiter = int(self.get_parameter('local_optimizer_maxiter').value)
+        self.global_use_ambiguity = bool(self.get_parameter('global_use_ambiguity').value)
+        self.local_use_ambiguity = bool(self.get_parameter('local_use_ambiguity').value)
+        self.global_optimizer_multistart = bool(
+            self.get_parameter('global_optimizer_multistart').value
+        )
+        self.local_optimizer_multistart = bool(
+            self.get_parameter('local_optimizer_multistart').value
+        )
+        self.local_use_visibility_model = bool(
+            self.get_parameter('local_use_visibility_model').value
+        )
+        self.local_use_belief_nogo_cost = bool(
+            self.get_parameter('local_use_belief_nogo_cost').value
+        )
+        self.local_nogo_penalty_type = str(
+            self.get_parameter('local_nogo_penalty_type').value or ''
+        )
+        self.local_nogo_weight = float(self.get_parameter('local_nogo_weight').value)
+        self.waypoint_spacing_m = float(self.get_parameter('waypoint_spacing_m').value)
+        self.waypoint_arrival_radius_m = float(
+            self.get_parameter('waypoint_arrival_radius_m').value
+        )
         self.use_odom_heading_correction = bool(
             self.get_parameter('use_odom_heading_correction').value
         )
@@ -308,6 +351,7 @@ class ExperimentLogger(Node):
         self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
         self.use_belief_nogo_cost = bool(self.get_parameter('use_belief_nogo_cost').value)
         self.nogo_belief_kappa = float(self.get_parameter('nogo_belief_kappa').value)
+        self.nogo_mode = str(self.get_parameter('nogo_mode').value or 'keep_out')
         self.yolo_model = str(self.get_parameter('yolo_model').value)
         self.yolo_device = str(self.get_parameter('yolo_device').value)
         self.yolo_imgsz = int(self.get_parameter('yolo_imgsz').value)
@@ -428,6 +472,7 @@ class ExperimentLogger(Node):
             'nogo_logbarrier_eps': self.nogo_logbarrier_eps,
             'use_belief_nogo_cost': self.use_belief_nogo_cost,
             'nogo_belief_kappa': self.nogo_belief_kappa,
+            'nogo_mode': self.nogo_mode,
             'yolo_model': self.yolo_model,
             'yolo_device': self.yolo_device,
             'yolo_imgsz': self.yolo_imgsz,
@@ -469,6 +514,21 @@ class ExperimentLogger(Node):
             'optimizer_multistart_include_direct': self.optimizer_multistart_include_direct,
             'optimizer_multistart_lateral_offsets': self.optimizer_multistart_lateral_offsets,
             'optimizer_initial_routes_json': self.optimizer_initial_routes_json,
+            'use_hierarchical': self.use_hierarchical,
+            'global_horizon': self.global_horizon,
+            'local_horizon': self.local_horizon,
+            'local_plan_rate': self.local_plan_rate,
+            'local_optimizer_maxiter': self.local_optimizer_maxiter,
+            'global_use_ambiguity': self.global_use_ambiguity,
+            'local_use_ambiguity': self.local_use_ambiguity,
+            'global_optimizer_multistart': self.global_optimizer_multistart,
+            'local_optimizer_multistart': self.local_optimizer_multistart,
+            'local_use_visibility_model': self.local_use_visibility_model,
+            'local_use_belief_nogo_cost': self.local_use_belief_nogo_cost,
+            'local_nogo_penalty_type': self.local_nogo_penalty_type,
+            'local_nogo_weight': self.local_nogo_weight,
+            'waypoint_spacing_m': self.waypoint_spacing_m,
+            'waypoint_arrival_radius_m': self.waypoint_arrival_radius_m,
             'use_odom_heading_correction': self.use_odom_heading_correction,
             'use_displacement_heading': self.use_displacement_heading,
             'heading_min_displacement_m': self.heading_min_displacement_m,

@@ -30,7 +30,8 @@ Use this as the release gate before putting the repository next to the paper.
 
 ## Must Be True For Experiment B Claims
 
-- [ ] Final AWS R4/A4 occluder placement and route geometry are fixed.
+- [ ] Final AWS world geometry, camera pose, route geometry, and learned
+  reliability artifact are fixed.
 - [ ] `warehouse_aws.world.sdf` has its own validated camera image.
 - [ ] AWS detector dataset exists and is documented.
 - [ ] AWS YOLO model path is explicit in the AWS configs.

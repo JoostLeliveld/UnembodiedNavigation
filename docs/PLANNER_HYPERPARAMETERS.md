@@ -133,15 +133,25 @@ paper-facing runs.
 
 ## Optimizer Initialisation
 
-Paper-facing runs use neutral optimiser initialisation:
+Paper-facing runs may use neutral optimiser initialisation:
 
 - shifted warm-start from the previous optimized control sequence when available;
-- all-zero controls on the first plan or after a goal reset.
+- all-zero controls on the first plan or after a goal reset;
+- small local escape maneuvers from the current heading;
+- modest lane-graph route seeds generated from the known 2D driveable floor;
+- condition-neutral multistart candidates, if every compared condition receives
+  the same generic candidate set and the paper reports this as optimizer basin
+  handling.
 
-Do not add goal-facing cold starts, rotated multi-starts, route-candidate seeds, or mission
-waypoints to the live controller unless the paper explicitly studies that as a separate
-planner variant. Those ideas can remain offline diagnostics/future work, but they should not
-quietly influence the C1/C2 comparison.
+Robotics reason: this is a nonlinear receding-horizon planner. Local optima can
+dominate the result, especially in aisle/cross-aisle layouts. A real AMR stack
+would use the known map/lane topology to propose plausible route basins before
+letting the local optimizer refine them. That is scientifically faithful here
+when the seeds use only the known driveable floor.
+
+Do not add visibility-derived route seeds or mission waypoints to the live
+controller. Multistart is acceptable only when it is neutral, shared by C1/C2,
+and reported as optimizer basin handling.
 
 ---
 
@@ -151,7 +161,12 @@ quietly influence the C1/C2 comparison.
 |---|---|---|---|---|
 | `process_noise_xy` | 0.01 | 0.01 | 0.01 | XY process-noise std rate (m/√s); scales correctly with dt |
 | `process_noise_theta` | 0.02 | 0.02 | 0.02 | heading process-noise std rate (rad/√s) |
-| `command_noise_*` (family) | OFF in smoke | OFF | OFF | injected noise on issued commands; enable to evaluate robustness |
+| `command_noise_*` (family) | ON for AWS | ON for AWS | ON for AWS | execution disturbance / slip on issued commands |
+| `encoder_noise_*` (family) | ON for AWS | ON for AWS | ON for AWS | dead-reckoning / odometry integration error |
+
+For AWS diagnostics, command and encoder noise are part of the realism claim.
+Command noise changes the true executed motion; encoder noise changes the
+dead-reckoning estimate used when camera updates are weak or absent.
 
 ---
 
@@ -243,6 +258,7 @@ question — if it breaks that chain, it is forbidden.
 - Adding a per-step term that overrides the ambiguity gradient (e.g., a hard "stay
   on centerline" penalty that ignores visibility).
 
-Each of these math-level interventions is a **proposal** that flows through the agent
-loop: `plot-analyst` recommends it after a diagnosed failure mode → main session
-implements the code edit → `rollout-runner` re-runs → `plot-analyst` verifies.
+Each of these math-level interventions is a **proposal** that flows through the
+root agent loop: `planner-diagnostician` recommends it after a diagnosed failure
+mode, the main session implements the code edit, `rollout-runner` re-runs, and
+`figure-analyst` verifies.

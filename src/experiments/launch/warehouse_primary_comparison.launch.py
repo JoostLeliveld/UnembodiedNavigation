@@ -50,6 +50,22 @@ def _planner_precision_arguments():
                               description='Comma/JSON list of perpendicular bulge offsets (m) for L-shaped detour seeds, e.g. "-1.5,1.5".'),
         DeclareLaunchArgument('optimizer_initial_routes_json', default_value='',
                               description='Optional JSON list of named waypoint routes used only as optimizer seeds (not mission waypoints).'),
+        DeclareLaunchArgument('use_hierarchical', default_value='false'),
+        DeclareLaunchArgument('global_horizon', default_value='60'),
+        DeclareLaunchArgument('local_horizon', default_value='12'),
+        DeclareLaunchArgument('local_plan_rate', default_value='4.0'),
+        DeclareLaunchArgument('local_optimizer_maxiter', default_value='60'),
+        DeclareLaunchArgument('global_use_ambiguity', default_value='true'),
+        DeclareLaunchArgument('local_use_ambiguity', default_value='false'),
+        DeclareLaunchArgument('global_optimizer_multistart', default_value='true'),
+        DeclareLaunchArgument('local_optimizer_multistart', default_value='true'),
+        DeclareLaunchArgument('local_use_visibility_model', default_value='false'),
+        DeclareLaunchArgument('local_use_belief_nogo_cost', default_value='false'),
+        DeclareLaunchArgument('local_nogo_penalty_type', default_value=''),
+        DeclareLaunchArgument('local_nogo_weight', default_value='-1.0'),
+        DeclareLaunchArgument('local_nogo_safe_distance', default_value='-1.0'),
+        DeclareLaunchArgument('waypoint_spacing_m', default_value='1.0'),
+        DeclareLaunchArgument('waypoint_arrival_radius_m', default_value='0.35'),
     ]
 
 
@@ -70,7 +86,9 @@ def _launch_setup(context, *args, **kwargs):
 
     if planner == 'constant_R_efe':
         cfg['use_visibility_model'] = False
-        cfg['use_ambiguity'] = False
+        # C1 is constant-observability EFE: risk and ambiguity remain active,
+        # but the observation covariance is spatially uniform instead of GP-based.
+        cfg['use_ambiguity'] = True
         cfg['use_obs_risk'] = True
     elif planner == 'risk_only_ablation':
         cfg['use_visibility_model'] = True

@@ -1,7 +1,9 @@
 # Consistency Checklist: World ↔ YOLO ↔ GP ↔ Costmap ↔ Tasks
 
-Four-way dependency chain. Editing any node without re-deriving downstream nodes silently
-breaks the planner. The `world-consistency` subagent runs this checklist.
+Four-way dependency chain. Editing any node without re-deriving downstream nodes
+silently breaks the planner. The root `planner-diagnostician` and
+`rollout-runner` agents use this checklist before a rollout is treated as more
+than diagnostic.
 
 ```
               ┌────────────┐         ┌──────────┐

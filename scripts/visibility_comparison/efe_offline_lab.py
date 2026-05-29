@@ -43,6 +43,7 @@ sys.path.insert(0, str(REPO_ROOT / "src" / "experiments"))
 from experiments.core.world_profiles import (  # noqa: E402
     resolve_world_path,
     serialize_collision_geometry_from_world,
+    serialize_driveable_geometry_from_profile,
     serialize_occlusion_geometry_from_world,
 )
 from planning.planners.base_planner import UnicyclePlannerBase  # noqa: E402
@@ -67,6 +68,7 @@ class Setup:
     gp: dict
     camera_params: dict
     geometry_json: str
+    driveable_geometry_json: str
     planner: UnicyclePlannerBase
     planner_kind: str  # 'constant_R_efe' or 'visibility_aware_efe'
     start_xy_yaw: tuple
@@ -141,6 +143,7 @@ def build_planner(
     visibility_artifact_path: str,
     visibility_geometry_json: str,
     collision_geometry_json: str,
+    driveable_geometry_json: str = '',
     seed: int = 1,
     visibility_target_height_m: float = 0.35,
 ) -> UnicyclePlannerBase:
@@ -150,7 +153,9 @@ def build_planner(
     use_obs_risk = True
     if planner_kind == "constant_R_efe":
         use_visibility_model = False
-        use_ambiguity = False
+        # C1 still optimizes the EFE ambiguity term; it simply uses a constant
+        # observation covariance instead of the GP-conditioned covariance.
+        use_ambiguity = True
         use_obs_risk = True
     elif planner_kind == "risk_only_ablation":
         use_visibility_model = True
@@ -215,8 +220,12 @@ def build_planner(
         nogo_safe_distance=float(cfg.get("nogo_safe_distance", 0.35)),
         nogo_gaussian_sigma=float(cfg.get("nogo_gaussian_sigma", 0.25)),
         nogo_softplus_scale=float(cfg.get("nogo_softplus_scale", 0.08)),
+        nogo_logbarrier_scale=float(cfg.get("nogo_logbarrier_scale", 0.25)),
+        nogo_logbarrier_eps=float(cfg.get("nogo_logbarrier_eps", 1e-3)),
         use_belief_nogo_cost=_as_bool(cfg.get("use_belief_nogo_cost", False)),
         nogo_belief_kappa=float(cfg.get("nogo_belief_kappa", 1.0)),
+        nogo_mode=str(cfg.get("nogo_mode", "keep_out")),
+        driveable_geometry_json=str(driveable_geometry_json or cfg.get("driveable_geometry_json", "")),
         robot_collision_radius_m=float(cfg.get("robot_collision_radius_m", 0.125)),
         runtime_debug=False,
     )
@@ -247,6 +256,9 @@ def load_setup(
     world_path = resolve_world_path(world)
     current_visibility_geometry_json = serialize_occlusion_geometry_from_world(world_path)
     current_collision_geometry_json = serialize_collision_geometry_from_world(world_path)
+    current_driveable_geometry_json = serialize_driveable_geometry_from_profile(profile)
+    cfg = dict(cfg)
+    cfg["driveable_geometry_json"] = current_driveable_geometry_json
 
     camera_params = {
         "cam_pos": tuple(gp["camera_pos"][:3].tolist()),
@@ -269,6 +281,7 @@ def load_setup(
         visibility_artifact_path=str(gp_path),
         visibility_geometry_json=current_visibility_geometry_json,
         collision_geometry_json=current_collision_geometry_json,
+        driveable_geometry_json=current_driveable_geometry_json,
         seed=seed,
         visibility_target_height_m=gp["target_height"],
     )
@@ -286,6 +299,7 @@ def load_setup(
         gp=gp,
         camera_params=camera_params,
         geometry_json=current_collision_geometry_json,
+        driveable_geometry_json=current_driveable_geometry_json,
         planner=planner,
         planner_kind=planner_kind,
         start_xy_yaw=(float(start["x"]), float(start["y"]), float(start["yaw"])),

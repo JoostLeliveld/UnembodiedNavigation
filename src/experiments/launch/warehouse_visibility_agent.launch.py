@@ -13,6 +13,7 @@ def _planner_precision_arguments():
     return [
         DeclareLaunchArgument('horizon', default_value='36'),
         DeclareLaunchArgument('dt', default_value='0.2'),
+        DeclareLaunchArgument('v_max', default_value='0.22'),
         DeclareLaunchArgument('discount_gamma', default_value='0.98'),
         DeclareLaunchArgument('goal_prior_u_std_start', default_value='80.0'),
         DeclareLaunchArgument('goal_prior_v_std_start', default_value='80.0'),
@@ -43,6 +44,22 @@ def _planner_precision_arguments():
                               description='Comma/JSON list of perpendicular offsets (m) for detour init seeds.'),
         DeclareLaunchArgument('optimizer_initial_routes_json', default_value='',
                               description='Optional JSON list of named routes used only as optimizer seeds.'),
+        DeclareLaunchArgument('use_hierarchical', default_value='false'),
+        DeclareLaunchArgument('global_horizon', default_value='60'),
+        DeclareLaunchArgument('local_horizon', default_value='12'),
+        DeclareLaunchArgument('local_plan_rate', default_value='4.0'),
+        DeclareLaunchArgument('local_optimizer_maxiter', default_value='60'),
+        DeclareLaunchArgument('global_use_ambiguity', default_value='true'),
+        DeclareLaunchArgument('local_use_ambiguity', default_value='false'),
+        DeclareLaunchArgument('global_optimizer_multistart', default_value='true'),
+        DeclareLaunchArgument('local_optimizer_multistart', default_value='true'),
+        DeclareLaunchArgument('local_use_visibility_model', default_value='false'),
+        DeclareLaunchArgument('local_use_belief_nogo_cost', default_value='false'),
+        DeclareLaunchArgument('local_nogo_penalty_type', default_value=''),
+        DeclareLaunchArgument('local_nogo_weight', default_value='-1.0'),
+        DeclareLaunchArgument('local_nogo_safe_distance', default_value='-1.0'),
+        DeclareLaunchArgument('waypoint_spacing_m', default_value='1.0'),
+        DeclareLaunchArgument('waypoint_arrival_radius_m', default_value='0.35'),
     ]
 
 
@@ -63,7 +80,9 @@ def _launch_setup(context, *args, **kwargs):
 
     if planner == 'constant_R_efe':
         cfg['use_visibility_model'] = False
-        cfg['use_ambiguity'] = False
+        # C1 is constant-observability EFE: risk and ambiguity remain active,
+        # but the observation covariance is spatially uniform instead of GP-based.
+        cfg['use_ambiguity'] = True
         cfg['use_obs_risk'] = True
     else:
         cfg['use_visibility_model'] = True

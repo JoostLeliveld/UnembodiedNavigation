@@ -185,6 +185,10 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'nogo_logbarrier_scale', 'nogo_logbarrier_eps',
         'nogo_belief_kappa',
         'robot_collision_radius_m',
+        'global_horizon', 'local_horizon', 'local_plan_rate',
+        'local_optimizer_maxiter', 'local_nogo_weight',
+        'local_nogo_safe_distance',
+        'waypoint_spacing_m', 'waypoint_arrival_radius_m',
     )
     for key in numeric_keys:
         if key in cfg and (key not in manifest or not _float_close(manifest.get(key), cfg[key])):
@@ -198,10 +202,27 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'use_odom_for_predict',
         'optimizer_multistart',
         'optimizer_multistart_include_direct',
+        'use_hierarchical',
+        'global_use_ambiguity',
+        'local_use_ambiguity',
+        'global_optimizer_multistart',
+        'local_optimizer_multistart',
+        'local_use_visibility_model',
+        'local_use_belief_nogo_cost',
     )
     for key in bool_keys:
         if key in cfg and (key not in manifest or bool(manifest.get(key)) != bool(cfg[key])):
             return False, f'{key} mismatch: run used {manifest.get(key)}, config expects {cfg[key]}'
+
+    string_keys = (
+        'nogo_penalty_type',
+        'optimizer_multistart_lateral_offsets',
+        'optimizer_initial_routes_json',
+        'local_nogo_penalty_type',
+    )
+    for key in string_keys:
+        if key in cfg and str(manifest.get(key, '')) != str(cfg[key]):
+            return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")!r}, config expects {cfg[key]!r}'
 
     if CONDITION_PLANNER.get(condition_id) != 'constant_R_efe':
         actual = str(manifest.get('visibility_artifact_path', '') or '')
@@ -300,9 +321,18 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'observation_risk_scale', 'ambiguity_term_scale',
         'risk_weight_obs', 'ambiguity_weight',
         'belief_publish_rate',
+        'pixel_timeout_s', 'skip_stale_pixel_correction',
         'optimizer_ftol', 'optimizer_gtol', 'optimizer_warm_start',
         'optimizer_multistart_lateral_offsets',
         'optimizer_initial_routes_json',
+        'use_hierarchical', 'global_horizon', 'local_horizon',
+        'local_plan_rate', 'local_optimizer_maxiter',
+        'global_use_ambiguity', 'local_use_ambiguity',
+        'global_optimizer_multistart', 'local_optimizer_multistart',
+        'local_use_visibility_model', 'local_use_belief_nogo_cost',
+        'local_nogo_penalty_type', 'local_nogo_weight',
+        'local_nogo_safe_distance',
+        'waypoint_spacing_m', 'waypoint_arrival_radius_m',
         'goal_prior_u_std_start', 'goal_prior_v_std_start',
         'goal_prior_u_std_final', 'goal_prior_v_std_final',
         'goal_tightening_power',

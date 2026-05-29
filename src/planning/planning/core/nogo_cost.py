@@ -23,6 +23,12 @@ class NogoCostConfig:
     logbarrier_scale: float = 0.25
     logbarrier_eps: float = 1e-3
     geometry_json: str = ''
+    # 'keep_out': penalise being inside/near the prisms (obstacle footprints).
+    # 'keep_in':  penalise leaving the prism union (driveable region);
+    #             safe_distance is the required mean clearance from the
+    #             driveable-region boundary. When belief no-go is enabled,
+    #             kappa additionally expands this by kappa * sigma_max.
+    mode: str = 'keep_out'
 
 
 class NogoZoneCostModel:
@@ -36,6 +42,9 @@ class NogoZoneCostModel:
             )
         self.cfg = cfg
         self.penalty_type = penalty_type
+        self.mode = str(getattr(cfg, 'mode', 'keep_out') or 'keep_out').strip().lower()
+        if self.mode not in ('keep_out', 'keep_in'):
+            raise ValueError("mode must be 'keep_out' or 'keep_in'")
         self.weight = float(max(cfg.weight, 0.0))
         self.safe_distance = float(max(cfg.safe_distance, 0.0))
         self.gaussian_sigma = float(max(cfg.gaussian_sigma, 1e-6))
@@ -69,6 +78,7 @@ class NogoZoneCostModel:
             ])
         return (
             'nogo_cost',
+            self.mode,
             self.penalty_type,
             round(self.weight, 6),
             round(self.safe_distance, 6),
@@ -82,17 +92,56 @@ class NogoZoneCostModel:
 
     def _clearance_np(self, xy: np.ndarray) -> float:
         signed_d = float(signed_distance_to_union_xy(self.prisms, np.asarray(xy, dtype=float))[0])
+        if self.mode == 'keep_in':
+            # signed_d <= 0 inside the driveable union. Positive clearance
+            # means the mean state is safely inside the known driveable floor.
+            return -signed_d - self.safe_distance
         return signed_d - self.safe_distance
 
     def signed_distance_state_np(self, m) -> float:
         if not self.prisms:
             return float('inf')
         xy = np.array([float(m[0]), float(m[1])], dtype=float)
-        return float(signed_distance_to_union_xy(self.prisms, xy)[0])
+        signed_d = float(signed_distance_to_union_xy(self.prisms, xy)[0])
+        if self.mode == 'keep_in':
+            # Positive means inside the known driveable union; negative means
+            # outside it. This keeps penetration/inside diagnostics aligned with
+            # "violation depth" instead of reporting valid lanes as no-go.
+            return -signed_d
+        return signed_d
 
     def penetration_depth_state_np(self, m) -> float:
         signed_d = self.signed_distance_state_np(m)
         return float(max(-signed_d, 0.0)) if np.isfinite(signed_d) else 0.0
+
+    def clearance_state_np(self, m) -> float:
+        if not self.enabled:
+            return float('inf')
+        xy = np.array([float(m[0]), float(m[1])], dtype=float)
+        return float(self._clearance_np(xy))
+
+    @staticmethod
+    def _sigma_max_xy_np(S) -> float:
+        cov_xy = np.asarray(S, dtype=float)[:2, :2]
+        cov_xy = 0.5 * (cov_xy + cov_xy.T)
+        try:
+            eigvals = np.linalg.eigvalsh(cov_xy)
+        except np.linalg.LinAlgError:
+            return 0.0
+        return float(math.sqrt(max(float(np.max(eigvals)), 0.0)))
+
+    def clearance_belief_tube_np(self, m, S, *, kappa: float = 2.0) -> float:
+        """Clearance of the mean plus a kappa-sigma xy belief tube.
+
+        For keep_in, positive means the predicted belief tube remains inside
+        the known driveable region after the configured mean clearance margin.
+        For keep_out, this conservatively shrinks the obstacle clearance by the
+        same covariance margin.
+        """
+        if not self.enabled:
+            return float('inf')
+        margin = max(float(kappa), 0.0) * self._sigma_max_xy_np(S)
+        return float(self.clearance_state_np(m) - margin)
 
     def inside_state_np(self, m) -> bool:
         return bool(self.penetration_depth_state_np(m) > 0.0)
@@ -111,7 +160,10 @@ class NogoZoneCostModel:
             return self.weight * float(np.log1p(np.exp(z)))
 
         denom = max(clearance, self.logbarrier_eps)
-        return self.weight * float(np.log1p(self.logbarrier_scale / denom))
+        violation = max(self.logbarrier_eps - clearance, 0.0) / self.logbarrier_eps
+        return self.weight * float(
+            np.log1p(self.logbarrier_scale / denom) + 100.0 * violation * violation
+        )
 
     def penalty_state_np(self, m) -> float:
         if not self.enabled:
@@ -124,6 +176,10 @@ class NogoZoneCostModel:
         """Expected no-go penalty under the current xy belief covariance."""
         if not self.enabled:
             return 0.0
+        if self.mode == 'keep_in':
+            clearance = self.clearance_belief_tube_np(m, S, kappa=kappa)
+            return self._penalty_from_clearance_np(clearance)
+
         mean_xy = np.asarray([float(m[0]), float(m[1])], dtype=float)
         cov_xy = np.asarray(S, dtype=float)[:2, :2]
         cov_xy = 0.5 * (cov_xy + cov_xy.T)
@@ -185,9 +241,14 @@ class NogoZoneCostModel:
             signed = ca.if_else(inside, -inside_depth, outside)
             return ca.mmin(signed)
 
+        mode = self.mode
+
         def penalty_state_casadi(m):
             signed_d = signed_distance_xy(m[0], m[1])
-            clearance = signed_d - safe_distance
+            if mode == 'keep_in':
+                clearance = -signed_d - safe_distance
+            else:
+                clearance = signed_d - safe_distance
 
             if penalty_type == 'gaussian':
                 outside = ca.exp(-0.5 * ca.power(ca.fmax(clearance, 0.0) / gaussian_sigma, 2))
@@ -198,7 +259,8 @@ class NogoZoneCostModel:
                 base = ca.log(1.0 + ca.exp(z))
             else:
                 denom = ca.fmax(clearance, logbarrier_eps)
-                base = ca.log(1.0 + logbarrier_scale / denom)
+                violation = ca.fmax(logbarrier_eps - clearance, 0.0) / logbarrier_eps
+                base = ca.log(1.0 + logbarrier_scale / denom) + 100.0 * ca.power(violation, 2)
             return weight * base
 
         return penalty_state_casadi
@@ -251,9 +313,14 @@ class NogoZoneCostModel:
             signed = ca.if_else(inside, -inside_depth, outside)
             return ca.mmin(signed)
 
+        mode = self.mode
+
         def penalty_xy(x, y):
             signed_d = signed_distance_xy(x, y)
-            clearance = signed_d - safe_distance
+            if mode == 'keep_in':
+                clearance = -signed_d - safe_distance
+            else:
+                clearance = signed_d - safe_distance
 
             if penalty_type == 'gaussian':
                 outside = ca.exp(-0.5 * ca.power(ca.fmax(clearance, 0.0) / gaussian_sigma, 2))
@@ -264,10 +331,34 @@ class NogoZoneCostModel:
                 base = ca.log(1.0 + ca.exp(z))
             else:
                 denom = ca.fmax(clearance, logbarrier_eps)
-                base = ca.log(1.0 + logbarrier_scale / denom)
+                violation = ca.fmax(logbarrier_eps - clearance, 0.0) / logbarrier_eps
+                base = ca.log(1.0 + logbarrier_scale / denom) + 100.0 * ca.power(violation, 2)
             return weight * base
 
         def penalty_belief_casadi(m, S):
+            if mode == 'keep_in':
+                signed_d = signed_distance_xy(m[0], m[1])
+                cov_xy = 0.5 * (S[:2, :2] + S[:2, :2].T)
+                trace = cov_xy[0, 0] + cov_xy[1, 1]
+                det = cov_xy[0, 0] * cov_xy[1, 1] - cov_xy[0, 1] * cov_xy[1, 0]
+                disc = ca.sqrt(ca.fmax(ca.power(trace, 2) - 4.0 * det, 0.0))
+                lambda_max = ca.fmax(0.5 * (trace + disc), 0.0)
+                sigma_margin = kappa * ca.sqrt(lambda_max + 1e-9)
+                clearance = -signed_d - safe_distance - sigma_margin
+                if penalty_type == 'gaussian':
+                    outside = ca.exp(-0.5 * ca.power(ca.fmax(clearance, 0.0) / gaussian_sigma, 2))
+                    inside_extra = ca.fmax(-clearance, 0.0) / gaussian_sigma
+                    return weight * (outside + inside_extra)
+                if penalty_type == 'softplus':
+                    z = ca.fmin(ca.fmax(-clearance / softplus_scale, -60.0), 60.0)
+                    return weight * ca.log(1.0 + ca.exp(z))
+                denom = ca.fmax(clearance, logbarrier_eps)
+                violation = ca.fmax(logbarrier_eps - clearance, 0.0) / logbarrier_eps
+                return weight * (
+                    ca.log(1.0 + logbarrier_scale / denom)
+                    + 100.0 * ca.power(violation, 2)
+                )
+
             mean_xy = ca.reshape(m[:2], 2, 1)
             cov_xy = 0.5 * (S[:2, :2] + S[:2, :2].T)
             spread = math.sqrt(2.0 + kappa) * chol_2x2(cov_xy + 1e-9 * ca.DM.eye(2))
@@ -320,6 +411,9 @@ class NogoZoneCostModel:
             inside_depth = ca.fmin(inside_x, inside_y)
             inside = ca.logic_and(dx <= 0.0, dy <= 0.0)
             signed = ca.if_else(inside, -inside_depth, outside)
-            return ca.mmin(signed)
+            signed_min = ca.mmin(signed)
+            if self.mode == 'keep_in':
+                return -signed_min
+            return signed_min
 
         return signed_distance_state_casadi

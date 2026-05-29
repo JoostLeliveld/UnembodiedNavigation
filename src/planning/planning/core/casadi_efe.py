@@ -266,6 +266,14 @@ def ambiguity_ca(Sigma, Gamma, S):
     return 0.5 * (dim * math.log(2.0 * math.pi * math.e) + logdet)
 
 
+def state_posterior_cov_ca(S, Sigma, Gamma):
+    """Expected state covariance after the planner-facing camera update."""
+    S_pd = _ensure_symmetric_pd(S)
+    Sigma_pd = _ensure_symmetric_pd(Sigma)
+    S_post = S_pd - ca.mtimes([Gamma, ca.solve(Sigma_pd, Gamma.T)])
+    return _ensure_symmetric_pd(S_post)
+
+
 def visibility_aware_unicycle_efe_ca(
     u_flat,
     m0,
@@ -326,7 +334,8 @@ def visibility_aware_unicycle_efe_ca(
         total_amb += weight_t * params.ambiguity_scale * ambiguity_ca(Sigma, Gamma, S)
         total_control += weight_t * params.control_weight * ca.sumsqr(u_t)
         if nogo_belief_cost is not None and params.use_belief_nogo_cost:
-            total_nogo += weight_t * nogo_belief_cost(m, S)
+            S_drive = state_posterior_cov_ca(S, Sigma, Gamma)
+            total_nogo += weight_t * nogo_belief_cost(m, S_drive)
         elif nogo_cost is not None:
             total_nogo += weight_t * nogo_cost(m)
 

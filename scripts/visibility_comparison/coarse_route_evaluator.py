@@ -430,7 +430,7 @@ def _write_csv(path: Path, rows: Iterable[dict]):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--world", default="warehouse_aws.world.sdf")
-    parser.add_argument("--task", default="B1_clean_route_choice")
+    parser.add_argument("--task", default="B1_apron_a4_to_uppermid_a3")
     parser.add_argument("--start", default="", help="Optional x,y override for diagnostic route scoring")
     parser.add_argument("--goal", default="", help="Optional x,y override for diagnostic route scoring")
     parser.add_argument("--gp", default=None, help="GP .npz artifact. Defaults to current world line.")

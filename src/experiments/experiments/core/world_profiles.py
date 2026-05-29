@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import xml.etree.ElementTree as ET
@@ -311,6 +312,30 @@ def serialize_collision_geometry_from_world(
 ) -> str:
     scene = parse_collision_scene_from_world(world_path, model_names=model_names)
     return scene_to_json(scene)
+
+
+def serialize_driveable_geometry_from_profile(profile: Dict[str, Any]) -> str:
+    """Serialize a profile's driveable (traversable) 2D lanes to prism JSON.
+
+    Used as a planner 'keep-in' region: the robot is penalised for leaving the
+    union of these lanes (obstacles sit outside the lanes, so this also keeps it
+    off them). Regions are planar; z range is nominal.
+    """
+    regions = profile.get("known_2d_regions", []) or []
+    prisms = []
+    for r in regions:
+        if str(r.get("type", "")).strip().lower() != "traversable":
+            continue
+        try:
+            prisms.append({
+                "name": str(r.get("name", "lane")),
+                "xmin": float(r["xmin"]), "xmax": float(r["xmax"]),
+                "ymin": float(r["ymin"]), "ymax": float(r["ymax"]),
+                "zmin": 0.0, "zmax": 0.1,
+            })
+        except (KeyError, TypeError, ValueError):
+            continue
+    return json.dumps({"prisms": prisms, "model_name": "driveable_region"})
 
 
 def compute_look_at_from_pose(cam_pos: List[float], roll: float, pitch: float, yaw: float) -> List[float]:

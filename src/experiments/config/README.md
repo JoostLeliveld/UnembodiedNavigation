@@ -24,7 +24,7 @@ The compact benchmark currently reported by the paper uses:
 
 The following worlds/tasks are implemented for the next benchmark step, but they need completed runs and paper figures before they can support result claims:
 
-- `warehouse_aws.world.sdf`: `B1_visible_goal_smoke` (first stability gate with visible final goal), `B1_clean_route_choice` (harder exploratory route-choice candidate), `B2_reacquire_after_occlusion` (stress), `B3_long_horizon_far_corner` (stress), `visible_aisle_sanity_aws`
+- `warehouse_aws.world.sdf`: `B1_apron_a4_to_uppermid_a3` (active shelf-pick visibility diagnostic), `visible_aisle_sanity_aws`
 
 ## Important Rule
 

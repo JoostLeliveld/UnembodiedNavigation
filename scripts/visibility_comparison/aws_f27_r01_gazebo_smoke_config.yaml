@@ -1,0 +1,145 @@
+# F27 R01 closed-loop Gazebo smoke — incremental margin fix.
+#
+# Purpose:
+#   F26 stalled: nogo_safe_distance=0.30 overconstrains the ~1.6 m AWS aisles,
+#   global solver ran 133 s without producing a plan (plan_samples.csv: 0 rows).
+#   F27 uses a smaller step: 0.20 m (+0.07 m vs F25). This adds meaningful buffer
+#   against the ~0.28 m truth-state error without blocking feasible paths.
+#
+# Changes vs aws_f24_r01_gazebo_smoke_config.yaml (F25 baseline):
+#   nogo_safe_distance: 0.13 -> 0.20  (incremental, aisles remain feasible)
+#   local_optimizer_maxiter: 60 -> 25  (warm start active; target <400 ms)
+#
+# Run:
+#   python3 scripts/visibility_comparison/run_visibility_campaign.py \
+#     --config scripts/visibility_comparison/aws_f27_r01_gazebo_smoke_config.yaml \
+#     --log-root logs/visibility_comparison/f27_r01_gazebo_smoke_v1 \
+#     --run-timeout 260
+
+world: warehouse_aws.world.sdf
+launch_file: warehouse_primary_comparison.launch.py
+
+conditions:
+  C1:
+    planner: constant_R_efe
+    label: C1_constant_R
+  C2:
+    planner: visibility_aware_efe
+    label: C2_visibility_aware
+
+tasks:
+  F24_R01_a4_lower_to_a3_mid:
+    conditions: [C1, C2]
+    seeds: [1]
+
+# --- Perception ---
+perception_backend: yolo
+yolo_model: "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/aws_yolo_simseg_v2/model.pt"
+yolo_imgsz: 640
+yolo_conf_threshold: 0.10
+yolo_iou_threshold: 0.45
+yolo_target_class: robot
+yolo_class_id: -1
+yolo_use_masks: true
+yolo_min_mask_area_px: 12.0
+yolo_mask_bottom_band_px: 3.0
+
+# Required by shared runner; ignored by C1.
+gp_artifact: "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/aws_gp_v5/yolo_score_raw_gp.npz"
+
+# --- Runtime display ---
+headless: true
+use_rviz: false
+reset_world: false
+ros_domain_id_base: 104
+cleanup_sim_stragglers: true
+
+# --- Heading: odometry-backed ---
+use_displacement_heading: false
+use_odom_heading_correction: true
+heading_min_displacement_m: 0.10
+heading_bev_noise_sigma_m: 0.05
+
+# --- Known 2D traversability / no-go layer ---
+use_nogo_cost: true
+nogo_weight: 80.0
+nogo_safe_distance: 0.20
+nogo_penalty_type: log_barrier
+nogo_logbarrier_scale: 0.10
+nogo_logbarrier_eps: 0.01
+use_belief_nogo_cost: true
+nogo_belief_kappa: 2.0
+
+# --- Planner ---
+horizon: 20
+dt: 0.25
+v_max: 1.0
+discount_gamma: 0.98
+belief_publish_rate: 10.0
+process_noise_xy: 0.01
+process_noise_theta: 0.02
+init_belief_sigma_xy: 0.05
+init_belief_sigma_theta: 0.05
+risk_weight_obs: 1.0
+r_visible_uv: 2.5
+r_miss_uv: 40.0
+ambiguity_weight: 8.0
+observation_risk_scale: 1.25
+ambiguity_term_scale: 1.0
+control_weight: 0.0
+goal_prior_u_std_final: 8.0
+goal_prior_v_std_final: 8.0
+goal_tightening_power: 0.45
+
+robot_collision_radius_m: 0.125
+
+# --- Hierarchical route solve + local tracking ---
+use_hierarchical: true
+global_horizon: 80
+local_horizon: 20
+local_plan_rate: 4.0
+local_optimizer_maxiter: 25
+global_use_ambiguity: true
+local_use_ambiguity: false
+global_optimizer_multistart: true
+local_optimizer_multistart: true
+local_use_visibility_model: false
+local_use_belief_nogo_cost: true
+local_nogo_penalty_type: log_barrier
+local_nogo_weight: 80.0
+waypoint_spacing_m: 0.80
+waypoint_arrival_radius_m: 0.35
+
+# --- Optimizer ---
+optimizer_maxiter: 150
+optimizer_maxfun: 900
+optimizer_ftol: 1.0e-6
+optimizer_gtol: 1.0e-4
+optimizer_warm_start: true
+optimizer_multistart: true
+optimizer_multistart_include_direct: false
+optimizer_multistart_lateral_offsets: "-1.0,1.0"
+optimizer_initial_routes_json: '[{"name":"mid_cross_lane","waypoints":[[3.125,1.64],[1.075,1.64]]},{"name":"lower_sweep_lane","waypoints":[[3.125,-2.44],[1.075,-2.44],[1.075,1.64]]}]'
+
+# Stuck detection.
+stuck_window_s: 20.0
+stuck_max_displacement_m: 0.08
+stuck_max_goal_improvement_m: 0.05
+stuck_cmd_fraction_min: 0.5
+
+# --- Stopping ---
+goal_success_radius: 0.25
+goal_success_hold_s: 2.0
+run_timeout_after_first_cmd_s: 160.0
+auto_stop_on_goal: true
+
+# --- Command and encoder noise ---
+use_command_noise: true
+use_encoder_noise: true
+command_noise_linear_slip_mean: 0.03
+command_noise_linear_slip_std: 0.06
+command_noise_angular_slip_mean: 0.00
+command_noise_angular_slip_std: 0.04
+command_noise_linear_additive_std: 0.008
+command_noise_angular_additive_std: 0.035
+command_noise_correlation_alpha: 0.85

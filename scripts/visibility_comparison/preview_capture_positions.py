@@ -214,12 +214,8 @@ def main():
     for t in world_tasks:
         name = t.get('name', '')
         label = None
-        if 'B1' in name or name == 'B1_clean_route_choice':
+        if name == 'B1_apron_a4_to_uppermid_a3':
             label = 'B1'
-        elif 'B2' in name or name == 'B2_reacquire_after_occlusion':
-            label = 'B2'
-        elif 'B3' in name or name == 'B3_long_horizon_far_corner':
-            label = 'B3'
         elif 'sanity' in name.lower() and 'aws' in name.lower():
             label = 'S'
         if label and label not in [a[0] for a in task_arrows]:

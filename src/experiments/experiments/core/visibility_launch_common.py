@@ -68,6 +68,22 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'optimizer_multistart_include_direct': 'true',
     'optimizer_multistart_lateral_offsets': '',
     'optimizer_initial_routes_json': '',
+    'use_hierarchical': 'false',
+    'global_horizon': '60',
+    'local_horizon': '12',
+    'local_plan_rate': '4.0',
+    'local_optimizer_maxiter': '60',
+    'global_use_ambiguity': 'true',
+    'local_use_ambiguity': 'false',
+    'global_optimizer_multistart': 'true',
+    'local_optimizer_multistart': 'true',
+    'local_use_visibility_model': 'false',
+    'local_use_belief_nogo_cost': 'false',
+    'local_nogo_penalty_type': '',
+    'local_nogo_weight': '-1.0',
+    'local_nogo_safe_distance': '-1.0',
+    'waypoint_spacing_m': '1.0',
+    'waypoint_arrival_radius_m': '0.35',
     'odom_heading_correction_mode': 'kalman',
     'clamp_pixel_uv_theta_without_yaw': 'false',
     'debug_runtime': 'false',
@@ -136,6 +152,7 @@ VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
     'nogo_logbarrier_eps': 1e-3,
     'use_belief_nogo_cost': 'false',
     'nogo_belief_kappa': 1.0,
+    'nogo_mode': 'keep_out',
 }
 
 
@@ -297,6 +314,36 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'optimizer_multistart_include_direct': _as_bool(_launch_value(context, 'optimizer_multistart_include_direct', PAPER_LAUNCH_DEFAULTS['optimizer_multistart_include_direct'])),
         'optimizer_multistart_lateral_offsets': _launch_value(context, 'optimizer_multistart_lateral_offsets', PAPER_LAUNCH_DEFAULTS['optimizer_multistart_lateral_offsets']),
         'optimizer_initial_routes_json': _launch_value(context, 'optimizer_initial_routes_json', PAPER_LAUNCH_DEFAULTS['optimizer_initial_routes_json']),
+        'use_hierarchical': _as_bool(_launch_value(context, 'use_hierarchical', PAPER_LAUNCH_DEFAULTS['use_hierarchical'])),
+        'global_horizon': int(_launch_value(context, 'global_horizon', PAPER_LAUNCH_DEFAULTS['global_horizon'])),
+        'local_horizon': int(_launch_value(context, 'local_horizon', PAPER_LAUNCH_DEFAULTS['local_horizon'])),
+        'local_plan_rate': float(_launch_value(context, 'local_plan_rate', PAPER_LAUNCH_DEFAULTS['local_plan_rate'])),
+        'local_optimizer_maxiter': int(_launch_value(context, 'local_optimizer_maxiter', PAPER_LAUNCH_DEFAULTS['local_optimizer_maxiter'])),
+        'global_use_ambiguity': _as_bool(_launch_value(context, 'global_use_ambiguity', PAPER_LAUNCH_DEFAULTS['global_use_ambiguity'])),
+        'local_use_ambiguity': _as_bool(_launch_value(context, 'local_use_ambiguity', PAPER_LAUNCH_DEFAULTS['local_use_ambiguity'])),
+        'global_optimizer_multistart': _as_bool(_launch_value(
+            context, 'global_optimizer_multistart', PAPER_LAUNCH_DEFAULTS['global_optimizer_multistart']
+        )),
+        'local_optimizer_multistart': _as_bool(_launch_value(
+            context, 'local_optimizer_multistart', PAPER_LAUNCH_DEFAULTS['local_optimizer_multistart']
+        )),
+        'local_use_visibility_model': _as_bool(_launch_value(
+            context, 'local_use_visibility_model', PAPER_LAUNCH_DEFAULTS['local_use_visibility_model']
+        )),
+        'local_use_belief_nogo_cost': _as_bool(_launch_value(
+            context, 'local_use_belief_nogo_cost', PAPER_LAUNCH_DEFAULTS['local_use_belief_nogo_cost']
+        )),
+        'local_nogo_penalty_type': _launch_value(
+            context, 'local_nogo_penalty_type', PAPER_LAUNCH_DEFAULTS['local_nogo_penalty_type']
+        ).strip().lower(),
+        'local_nogo_weight': float(_launch_value(
+            context, 'local_nogo_weight', PAPER_LAUNCH_DEFAULTS['local_nogo_weight']
+        )),
+        'local_nogo_safe_distance': float(_launch_value(
+            context, 'local_nogo_safe_distance', PAPER_LAUNCH_DEFAULTS['local_nogo_safe_distance']
+        )),
+        'waypoint_spacing_m': float(_launch_value(context, 'waypoint_spacing_m', PAPER_LAUNCH_DEFAULTS['waypoint_spacing_m'])),
+        'waypoint_arrival_radius_m': float(_launch_value(context, 'waypoint_arrival_radius_m', PAPER_LAUNCH_DEFAULTS['waypoint_arrival_radius_m'])),
         'odom_heading_correction_mode': _launch_value(
             context, 'odom_heading_correction_mode', PAPER_LAUNCH_DEFAULTS['odom_heading_correction_mode']
         ).strip().lower(),
@@ -355,6 +402,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'nogo_logbarrier_eps': float(_launch_value(context, 'nogo_logbarrier_eps', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_logbarrier_eps']))),
         'use_belief_nogo_cost': _as_bool(_launch_value(context, 'use_belief_nogo_cost', str(VISIBILITY_FALLBACK_DEFAULTS['use_belief_nogo_cost']))),
         'nogo_belief_kappa': float(_launch_value(context, 'nogo_belief_kappa', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_belief_kappa']))),
+        'nogo_mode': _launch_value(context, 'nogo_mode', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_mode'])).strip().lower(),
         'goal_sigma_uv': float(_launch_value(context, 'goal_sigma_uv', PAPER_LAUNCH_DEFAULTS['goal_sigma_uv'])),
         'robot_collision_radius_m': float(
             _launch_value(
@@ -434,6 +482,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         compute_look_at_from_pose,
         resolve_profile_asset_path,
         serialize_collision_geometry_from_world,
+        serialize_driveable_geometry_from_profile,
         serialize_occlusion_geometry_from_world,
     )
     from experiments.core.tasks import load_tasks, select_task
@@ -474,7 +523,10 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         planner = profile['planner_default']
     if planner == 'constant_R_efe':
         cfg['use_visibility_model'] = False
-        cfg['use_ambiguity'] = False
+        # C1 is still an EFE planner. It uses constant observation covariance
+        # instead of the GP-conditioned covariance, but it does not remove the
+        # ambiguity term.
+        cfg['use_ambiguity'] = True
         cfg['use_obs_risk'] = True
     elif planner == 'risk_only_ablation':
         cfg['use_visibility_model'] = True
@@ -526,6 +578,9 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
 
     visibility_geometry_json = str(cfg.get('visibility_geometry_json', '') or '')
     collision_geometry_json = str(cfg.get('collision_geometry_json', '') or '')
+    driveable_geometry_json = str(cfg.get('driveable_geometry_json', '') or '')
+    if not driveable_geometry_json:
+        driveable_geometry_json = serialize_driveable_geometry_from_profile(profile)
     raw_use_nogo_cost = str(cfg.get('use_nogo_cost', 'auto')).strip().lower()
     nogo_geometry_needed = (
         raw_use_nogo_cost in ('1', 'true', 't', 'yes', 'y', 'on')
@@ -572,6 +627,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         'world_path': world_path,
         'visibility_geometry_json': visibility_geometry_json,
         'collision_geometry_json': collision_geometry_json,
+        'driveable_geometry_json': driveable_geometry_json,
         'visibility_artifact_path': visibility_artifact_path,
     })
     return cfg
@@ -656,7 +712,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'angular_additive_std': cfg['command_noise_angular_additive_std'],
                 'correlation_alpha': cfg['command_noise_correlation_alpha'],
                 'linear_min': 0.0,
-                'linear_max': 0.22,
+                'linear_max': cfg['v_max'],
                 'angular_min': -1.0,
                 'angular_max': 1.0,
             }],
@@ -822,6 +878,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
                 'use_belief_nogo_cost': cfg['use_belief_nogo_cost'],
                 'nogo_belief_kappa': cfg['nogo_belief_kappa'],
+                'nogo_mode': cfg.get('nogo_mode', 'keep_out'),
                 'yolo_model': cfg['yolo_model'],
                 'yolo_device': cfg['yolo_device'],
                 'yolo_imgsz': cfg['yolo_imgsz'],
@@ -860,6 +917,22 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'optimizer_multistart_include_direct': cfg['optimizer_multistart_include_direct'],
                 'optimizer_multistart_lateral_offsets': cfg['optimizer_multistart_lateral_offsets'],
                 'optimizer_initial_routes_json': cfg['optimizer_initial_routes_json'],
+                'use_hierarchical': cfg.get('use_hierarchical', False),
+                'global_horizon': cfg.get('global_horizon', 60),
+                'local_horizon': cfg.get('local_horizon', 12),
+                'local_plan_rate': cfg.get('local_plan_rate', 4.0),
+                'local_optimizer_maxiter': cfg.get('local_optimizer_maxiter', 60),
+                'global_use_ambiguity': cfg.get('global_use_ambiguity', True),
+                'local_use_ambiguity': cfg.get('local_use_ambiguity', False),
+                'global_optimizer_multistart': cfg.get('global_optimizer_multistart', True),
+                'local_optimizer_multistart': cfg.get('local_optimizer_multistart', True),
+                'local_use_visibility_model': cfg.get('local_use_visibility_model', False),
+                'local_use_belief_nogo_cost': cfg.get('local_use_belief_nogo_cost', False),
+                'local_nogo_penalty_type': cfg.get('local_nogo_penalty_type', ''),
+                'local_nogo_weight': cfg.get('local_nogo_weight', -1.0),
+                'local_nogo_safe_distance': cfg.get('local_nogo_safe_distance', -1.0),
+                'waypoint_spacing_m': cfg.get('waypoint_spacing_m', 1.0),
+                'waypoint_arrival_radius_m': cfg.get('waypoint_arrival_radius_m', 0.35),
                 'use_odom_heading_correction': cfg['use_odom_heading_correction'],
                 'use_displacement_heading': cfg['use_displacement_heading'],
                 'heading_min_displacement_m': cfg['heading_min_displacement_m'],
@@ -948,7 +1021,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
         },
         'constant_R_efe': {
             'approx_method': 'ET1',
-            'use_ambiguity': False,
+            'use_ambiguity': True,
             'use_obs_risk': True,
         },
     }
@@ -1008,6 +1081,8 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'visibility_target_height_m': cfg['visibility_target_height_m'],
             'visibility_geometry_json': cfg['visibility_geometry_json'],
             'collision_geometry_json': cfg['collision_geometry_json'],
+            'driveable_geometry_json': cfg.get('driveable_geometry_json', ''),
+            'nogo_mode': cfg.get('nogo_mode', 'keep_out'),
             'visibility_artifact_path': cfg['visibility_artifact_path'],
             'use_nogo_cost': cfg['resolved_use_nogo_cost'],
             'nogo_penalty_type': cfg['nogo_penalty_type'],
@@ -1029,6 +1104,22 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'optimizer_multistart_include_direct': cfg['optimizer_multistart_include_direct'],
             'optimizer_multistart_lateral_offsets': cfg['optimizer_multistart_lateral_offsets'],
             'optimizer_initial_routes_json': cfg['optimizer_initial_routes_json'],
+            'use_hierarchical': cfg.get('use_hierarchical', False),
+            'global_horizon': cfg.get('global_horizon', 60),
+            'local_horizon': cfg.get('local_horizon', 12),
+            'local_plan_rate': cfg.get('local_plan_rate', 4.0),
+            'local_optimizer_maxiter': cfg.get('local_optimizer_maxiter', 60),
+            'global_use_ambiguity': cfg.get('global_use_ambiguity', True),
+            'local_use_ambiguity': cfg.get('local_use_ambiguity', False),
+            'global_optimizer_multistart': cfg.get('global_optimizer_multistart', True),
+            'local_optimizer_multistart': cfg.get('local_optimizer_multistart', True),
+            'local_use_visibility_model': cfg.get('local_use_visibility_model', False),
+            'local_use_belief_nogo_cost': cfg.get('local_use_belief_nogo_cost', False),
+            'local_nogo_penalty_type': cfg.get('local_nogo_penalty_type', ''),
+            'local_nogo_weight': cfg.get('local_nogo_weight', -1.0),
+            'local_nogo_safe_distance': cfg.get('local_nogo_safe_distance', -1.0),
+            'waypoint_spacing_m': cfg.get('waypoint_spacing_m', 1.0),
+            'waypoint_arrival_radius_m': cfg.get('waypoint_arrival_radius_m', 0.35),
             **cfg['camera_params'],
             **planner_params[planner],
         }],

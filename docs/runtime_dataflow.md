@@ -91,8 +91,8 @@ Experiment B has one active world:
   AWS-specific detector and GP are fitted for the final geometry. Use
   `scripts/visibility_comparison/aws_smoke_config.yaml` first to validate the
   AWS-style storage racks, green driveable boundaries, loading-apron props,
-  B1/B2/B3 task starts/goals, wall-mounted camera, R4/A4 occluder, and detector
-  behavior.
+  B1/B2/B3 task starts/goals, wall-mounted camera, learned reliability pattern,
+  and detector behavior.
 
 It should be treated as exploratory until it has fitted artifacts, completed
 campaign logs, and figures/tables in the paper. Do not use mission waypoints to

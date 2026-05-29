@@ -2,7 +2,7 @@
 # Keep this aligned with docs/paper_alignment.md and thesis-report/sections/*.tex.
 
 paper_runtime_contract:
-  version: 0.2
+  version: 0.3
   purpose: >
     Define the behavior that counts as paper-facing execution for the
     external-camera visibility-aware EFE experiments.
@@ -19,10 +19,7 @@ paper_runtime_contract:
     - sanity_open
 
   exploratory_failure_tasks:
-    - B1_visible_goal_smoke
-    - B1_clean_route_choice
-    - B2_reacquire_after_occlusion
-    - B3_long_horizon_far_corner
+    - B1_apron_a4_to_uppermid_a3
     - visible_aisle_sanity_aws
 
   legacy_tasks:
@@ -31,23 +28,96 @@ paper_runtime_contract:
   allowed_planner_conditions:
     constant_R_efe:
       paper_name: constant-observability EFE
-      description: EFE planner with spatially uniform detector-observation covariance.
+      description: EFE planner with spatially uniform detector-observation covariance. Risk and ambiguity are both active.
       requires_visibility_artifact: false
+      use_observation_risk: true
+      use_ambiguity: true
+      uses_gp_visibility: false
     visibility_aware_efe:
       paper_name: learned-observability EFE
-      description: EFE planner with learned state-dependent detector-observation covariance.
+      description: EFE planner with learned state-dependent detector-observation covariance. Risk and ambiguity are both active.
       requires_visibility_artifact: true
+      use_observation_risk: true
+      use_ambiguity: true
+      uses_gp_visibility: true
     risk_only_ablation:
       paper_name: GP-risk-only ablation
       description: Optional ablation with GP covariance active and ambiguity disabled.
       requires_visibility_artifact: true
+      use_observation_risk: true
+      use_ambiguity: false
+      uses_gp_visibility: true
+
+  locked_runtime_method:
+    active_diagnostic_task:
+      world: warehouse_aws.world.sdf
+      task: B1_apron_a4_to_uppermid_a3
+      start: {x: 3.20, y: -1.00, yaw: 0.0}
+      goal: {x: 1.00, y: 1.75}
+      status: diagnostic_not_paper_evidence
+    c1_c2_difference_allowed:
+      - planner_facing_camera_observation_covariance
+      - gp_query_enabled_only_for_c2
+    c1_c2_difference_forbidden:
+      - different_task
+      - different_driveable_barrier
+      - different_candidate_set
+      - different_horizon_or_optimizer_budget
+      - mission_waypoints
+    multistart:
+      allowed: true
+      interpretation: condition-neutral_optimizer_basin_handling
+      candidate_generation_may_use:
+        - known_2d_driveable_floor
+        - known_2d_lane_graph_route_seeds
+        - local_escape_maneuvers
+        - shifted_previous_solution
+      candidate_generation_must_not_use:
+        - gp_visibility_map
+        - condition_label
+        - hand_authored_visibility_route
+        - mission_waypoints
+    driveable_region_handling:
+      layer_name: known_driveable_forbidden_zone_layer
+      barrier: two_sigma_belief_tube_log_barrier
+      same_across_conditions: true
+      covariance_for_tube: expected_posterior_after_planner_facing_camera_update
+      hard_validity_gate_required: true
+      safe_stop_fallback_role: execution_hygiene_only
+      leaving_driveable_floor_must_not_be_cost_optimal: true
+    hierarchical_runtime:
+      required_for_aws_diagnostics: true
+      global_solve_role: route_level_EFE_choice
+      local_solve_role: short_horizon_tracking_of_planner_derived_waypoints
+      mission_waypoints_allowed: false
+      global_waypoints_are_condition_specific: true
+    aws_locked_candidate:
+      use_hierarchical: true
+      global_horizon: 80
+      local_horizon: 20
+      optimizer_multistart_include_direct: false
+      optimizer_multistart_lateral_offsets: "-1.0,1.0"
+      optimizer_initial_routes:
+        - mid_cross_lane
+        - lower_sweep_lane
+      use_command_noise: true
+      use_encoder_noise: true
+      route_seed_constraints:
+        same_for_c1_and_c2: true
+        may_use_known_2d_driveable_floor: true
+        must_not_use_gp_visibility: true
+        must_not_encode_expected_conclusion: true
 
   required_runtime_settings:
     perception_backend: yolo
     direct_visibility_reward_allowed: false
     visibility_weight_required_value: 0.0
     known_obstacle_map_required: true
+    known_driveable_region_required: true
     no_go_barrier_must_match_across_conditions: true
+    two_sigma_belief_tube_barrier_required_for_aws_diagnostics: true
+    command_noise_required_for_aws_diagnostics: true
+    crash_or_contact_ends_run_and_is_tracked: true
     yolo_model_must_be_explicit: true
     visibility_artifact_path_must_be_explicit_for_gp_conditions: true
 
@@ -124,3 +194,5 @@ paper_runtime_contract:
     - silently_clipping_gp_queries_without_diagnostic
     - silently_continuing_without_camera_geometry
     - mission_waypoints_for_route_choice
+    - constant_R_efe_without_ambiguity
+    - visibility_dependent_multistart_candidates
