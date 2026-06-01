@@ -1,4 +1,21 @@
-# F33 B1 route-choice smoke — restored CasADi-efficient parameters.
+# F35 B1 route-choice smoke — fix overconfident EKF heading noise.
+#
+# Purpose:
+#   F34 belief_uncertainty_bands.pdf showed that when YOLO corrections go stale
+#   (C1 in rack shadow), the EKF dead-reckons with process_noise_theta=0.02 rad/step
+#   which is 2.3x smaller than actual angular encoder noise (~0.046 rad/step from
+#   ang_slip_std=0.030 + ang_additive_std=0.035). The belief diverges to x=20m, y=8m
+#   while truth stays at x=3m, y=2m. The 2sigma band grows but tracks the WRONG value.
+#
+#   Fix: set process_noise_theta = 0.046 (= sqrt(0.030^2 + 0.035^2), matches spec).
+#   Expected: during stale corrections, EKF uncertainty grows faster, 2sigma band
+#   widens enough to contain truth, nogo_belief_kappa cost activates sooner.
+#
+# Change vs F34:
+#   process_noise_theta: 0.02 → 0.046
+#
+# Run:
+#   python3 scripts/visibility_comparison/run_visibility_campaign.py #     --config scripts/visibility_comparison/aws_f35_b1_route_choice_config.yaml #     --log-root logs/visibility_comparison/f35_b1_route_choice_v1 #     --run-timeout 400
 #
 # Purpose:
 #   F32 local solves were 2600-3600ms because r_visible_uv=8.0 (R=64px²) and
@@ -17,7 +34,7 @@
 # Run:
 #   python3 scripts/visibility_comparison/run_visibility_campaign.py \
 #     --config scripts/visibility_comparison/aws_f33_b1_route_choice_config.yaml \
-#     --log-root logs/visibility_comparison/f33_b1_route_choice_v1 \
+#     --log-root logs/visibility_comparison/f35_b1_route_choice_v1 \
 #     --run-timeout 400
 #
 # Task and route seeds unchanged from F32:
@@ -100,7 +117,7 @@ v_max: 0.60
 discount_gamma: 0.98
 belief_publish_rate: 10.0
 process_noise_xy: 0.01
-process_noise_theta: 0.02
+process_noise_theta: 0.046
 init_belief_sigma_xy: 0.05
 init_belief_sigma_theta: 0.05
 risk_weight_obs: 1.0
@@ -120,7 +137,7 @@ robot_collision_radius_m: 0.125
 
 use_hierarchical: true
 global_horizon: 80
-local_horizon: 10
+local_horizon: 20
 local_plan_rate: 1.0
 local_optimizer_maxiter: 30
 global_use_ambiguity: true
@@ -131,9 +148,9 @@ local_use_visibility_model: false
 local_use_belief_nogo_cost: true
 local_nogo_penalty_type: log_barrier
 local_nogo_weight: 80.0
-local_nogo_safe_distance: 0.16
+local_nogo_safe_distance: 0.13
 waypoint_spacing_m: 0.60
-waypoint_arrival_radius_m: 0.30
+waypoint_arrival_radius_m: 0.10
 
 optimizer_maxiter: 150
 optimizer_maxfun: 900

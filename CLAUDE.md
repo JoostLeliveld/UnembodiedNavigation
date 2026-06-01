@@ -9,10 +9,11 @@ context.
 This folder contains the simulation, planner, detector/GP artifacts, diagnostics,
 and experiment logs for the visibility-aware external-camera navigation project.
 
-The compact `warehouse_occ_light.world.sdf` line is the current paper core. New
-warehouse/AWS-style worlds, timing diagnostics, long-horizon probes, multistart
-studies, and goal-prior annealing experiments are exploratory until the full
-artifact chain is complete and registered.
+The current paper benchmark is `warehouse_aws.world.sdf` with the B1 route-choice
+task (`F31_b1_apron_a3_mid`). The `warehouse_occ_light` world was the original
+benchmark candidate but was superseded before seeded Gazebo validation.
+New multistart probes, long-horizon studies, and goal-prior annealing experiments
+remain exploratory until the full artifact chain is complete and registered.
 
 ## Maintained Repo Docs
 

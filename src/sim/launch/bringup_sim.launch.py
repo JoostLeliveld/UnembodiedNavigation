@@ -209,8 +209,12 @@ def generate_launch_description():
             "/model/turtlebot3/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model",
             "/external_camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
             "/external_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
-            "/external_camera/segmentation/colored_map@sensor_msgs/msg/Image[gz.msgs.Image",
-            "/external_camera/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
+            # Segmentation bridges removed: Gazebo renders 1280×720 semantic
+            # segmentation at 30 Hz which is a major rendering bottleneck.
+            # YOLO uses its own internal mask from the plain RGB image; these
+            # semantic segmentation topics are never consumed at runtime.
+            # "/external_camera/segmentation/colored_map@sensor_msgs/msg/Image[gz.msgs.Image",
+            # "/external_camera/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
             clock_arg,
             set_pose_service_arg,
             control_service_arg,

@@ -52,6 +52,13 @@ class PixelToBevStateNode(Node):
         self.declare_parameter('keypoint_marker_world_z', 0.0)
         self.declare_parameter('keypoint_heading_sigma_rad', 0.05)
         self.declare_parameter('diagnostics_match_tolerance_s', 1e-3)
+        # Empirical y-axis calibration offset.  The oblique camera geometry
+        # causes the YOLO centroid back-projection to land systematically south
+        # of the robot's true ground position.  This offset corrects that bias.
+        # Derived from |pred_world_y - truth_y| over N=346 held-out detections
+        # (F37v3 diagnostic run): mean y-bias = -0.127 m.  Apply +0.127 m here.
+        # Default 0.0 preserves the original behaviour when not set.
+        self.declare_parameter('bev_y_calibration_offset_m', 0.0)
 
         self.declare_parameter('cam_pos', [-3.0, -3.0, 6.0])
         self.declare_parameter('look_at', [1.5, 1.5, 0.0])
@@ -76,6 +83,9 @@ class PixelToBevStateNode(Node):
         self.keypoint_heading_sigma_rad = float(self.get_parameter('keypoint_heading_sigma_rad').value)
         self.diagnostics_match_tolerance_s = float(
             self.get_parameter('diagnostics_match_tolerance_s').value
+        )
+        self.bev_y_calibration_offset_m = float(
+            self.get_parameter('bev_y_calibration_offset_m').value
         )
 
         # Baseline measurement noise (pixels)
@@ -271,6 +281,9 @@ class PixelToBevStateNode(Node):
             return
 
         x, y = world
+        # Apply empirical y-axis calibration offset to correct the systematic
+        # south-bias introduced by oblique camera back-projection.
+        y += self.bev_y_calibration_offset_m
         sigma_x = self.transform_noise_sigma
         sigma_y = self.transform_noise_sigma
 

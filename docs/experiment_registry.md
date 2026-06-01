@@ -22,9 +22,9 @@ not paper evidence unless the full artifact chain is present.
 | valid | `logs/visibility_comparison/current_capture` | compact benchmark visibility capture |
 | valid | `logs/visibility_comparison/current_targets` | compact benchmark detector targets |
 | valid | `logs/visibility_comparison/current_gp` | compact benchmark planner-facing GP |
-| valid | `logs/visibility_comparison/paper_taskA_model_selection_c2_v1` | model-selection evidence |
-| valid | `logs/visibility_comparison/paper_taskA_mc_nominal_c1_vs_c2_v1` | nominal C1/C2 comparison |
-| valid | `logs/visibility_comparison/paper_taskA_mc_highnoise_c1_vs_c2_v1` | high-noise C1/C2 comparison |
+| archived (pre-code-fix) | `logs/visibility_comparison/paper_taskA_model_selection_c2_v1` | model-selection evidence |
+| archived (pre-code-fix) | `logs/visibility_comparison/paper_taskA_mc_nominal_c1_vs_c2_v1` | nominal C1/C2 comparison |
+| archived (pre-code-fix) | `logs/visibility_comparison/paper_taskA_mc_highnoise_c1_vs_c2_v1` | high-noise C1/C2 comparison |
 
 ## Exploratory AWS Line
 

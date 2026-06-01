@@ -434,6 +434,12 @@ class UnicyclePlannerNode(Node):
         self.belief_stamp = None
         self.last_cmd = np.array([0.0, 0.0], dtype=float)
         self.odom_vel = np.array([0.0, 0.0], dtype=float)
+        # Ring buffer of (sim_time_s, v, w) for intended pre-noise commands.
+        # Used to replay the actual command sequence when dead-reckoning the
+        # belief forward over a long gap (instead of extrapolating at the
+        # single current velocity, which diverges when the robot turns).
+        self._cmd_log: list[tuple[float, float, float]] = []
+        self._CMD_LOG_MAX_S: float = 60.0
         self._latest_measurement_available = False
         self._latest_belief_age_s = math.nan
 
@@ -615,8 +621,15 @@ class UnicyclePlannerNode(Node):
             )
 
     def _cmd_cb(self, msg: Twist):
+        now_s = self.get_clock().now().nanoseconds * 1e-9
         with self._data_lock:
             self.last_cmd = np.array([msg.linear.x, msg.angular.z], dtype=float)
+            # Log the intended pre-noise command with its sim timestamp.
+            self._cmd_log.append((now_s, msg.linear.x, msg.angular.z))
+            # Trim entries older than the ring-buffer horizon.
+            cutoff = now_s - self._CMD_LOG_MAX_S
+            while self._cmd_log and self._cmd_log[0][0] < cutoff:
+                self._cmd_log.pop(0)
 
     @staticmethod
     def _yaw_from_quaternion(q) -> float:
@@ -1120,6 +1133,8 @@ class UnicyclePlannerNode(Node):
         yaw_sigma = snapshot['yaw_sigma']
         yaw_meas_source = snapshot['yaw_source']
 
+        # Forward-predict the pixel measurement from image-capture time (T_cap)
+        # to T_now using the measured world-space velocity from the last two
         m_pred, S_pred = self.planner.predict(
             belief_m, belief_S, snapshot['cmd'], dt=dt_s
         )
@@ -1155,7 +1170,7 @@ class UnicyclePlannerNode(Node):
             self.belief_S = next_S
             self.belief_stamp = stamp_msg
             self._last_correction_stamp = stamp_msg
-
+            # Update rolling BEV correction cache for velocity estimation.
         self._publish_pixel_correction_diagnostics(
             stamp_msg=stamp_msg,
             age=age,
@@ -1238,12 +1253,48 @@ class UnicyclePlannerNode(Node):
     def _predict_belief_to_now(self, m0, S0, last_cmd, belief_age_s: float, now_msg, mutate=True):
         if belief_age_s <= 0.0:
             return m0, S0
-        if self.use_odom_for_predict:
-            with self._data_lock:
-                predict_vel = self.odom_vel.copy()
+
+        # Replay the buffered sequence of intended (pre-noise) commanded
+        # velocities so the belief follows the actual command path instead
+        # of extrapolating at a single constant velocity.  The additive
+        # actuation noise is for Gazebo realism only; the planner dead-
+        # reckons from the commands it actually sent.
+        now_s = self.get_clock().now().nanoseconds * 1e-9
+        t_start = now_s - belief_age_s
+        with self._data_lock:
+            # Snapshot relevant entries: all commands issued since t_start.
+            relevant = [(t, v, w) for t, v, w in self._cmd_log if t >= t_start]
+
+        if len(relevant) >= 1:
+            # Step through the intended command sequence.
+            # Gap before the first logged command: robot was stationary
+            # (global solve phase — no commands published yet).
+            prev_t = t_start
+            for t, v, w in relevant:
+                dt_gap = t - prev_t   # time with no logged cmd → zero vel
+                if dt_gap > 1e-4:
+                    m0, S0 = self.planner.predict(
+                        m0, S0, np.array([0.0, 0.0], dtype=float), dt=dt_gap
+                    )
+                m0, S0 = self.planner.predict(
+                    m0, S0, np.array([v, w], dtype=float), dt=min(self.dt, now_s - t)
+                )
+                prev_t = t + min(self.dt, now_s - t)
+            # Final step to now.
+            dt_tail = now_s - prev_t
+            if dt_tail > 1e-4 and relevant:
+                last_v, last_w = relevant[-1][1], relevant[-1][2]
+                m0, S0 = self.planner.predict(
+                    m0, S0, np.array([last_v, last_w], dtype=float), dt=dt_tail
+                )
         else:
-            predict_vel = np.asarray(last_cmd, dtype=float)
-        m0, S0 = self.planner.predict(m0, S0, predict_vel, dt=belief_age_s)
+            # No commands logged in this window — robot was stationary
+            # (e.g. during global solve).  Predict with zero velocity so the
+            # belief does not drift; process noise widens the covariance.
+            m0, S0 = self.planner.predict(
+                m0, S0, np.array([0.0, 0.0], dtype=float), dt=belief_age_s
+            )
+
         if mutate:
             with self._data_lock:
                 self.belief_m = m0.copy()

@@ -4,7 +4,7 @@ Last updated: 2026-05-28.
 
 ## Current Paper Position
 
-The compact `warehouse_occ_light.world.sdf` benchmark remains the current paper
+The current paper benchmark is `warehouse_aws.world.sdf` (B1 route-choice task). The `warehouse_occ_light` world was the original
 core. It is the cleanest validated evidence for the mechanism: a known driveable
 / forbidden-zone layer is shared across conditions, while learned observation
 reliability changes the planner-facing camera `(x, y)` covariance.

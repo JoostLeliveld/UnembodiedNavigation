@@ -5,7 +5,7 @@ scientific choices.
 
 ## 2026-05-20
 
-- Keep `warehouse_occ_light.world.sdf` as the paper core. It is the simplest
+- `warehouse_aws.world.sdf` is now the paper benchmark. `warehouse_occ_light` was the original candidate but superseded before seeded Gazebo validation. It is the simplest
   validated setting for showing state-dependent observation uncertainty.
 - Keep `warehouse_aws.world.sdf` exploratory. It requires final geometry,
   detector retraining/validation, visibility capture, GP fitting, smoke tests,

@@ -27,7 +27,7 @@ python3 scripts/visibility_comparison/run_visibility_campaign.py \
 
 | Role | Code name | Paper meaning |
 | --- | --- | --- |
-| Core world | `warehouse_occ_light.world.sdf` | compact external-camera warehouse benchmark |
+| Core world | `warehouse_aws.world.sdf` | AWS route-choice benchmark (B1 task) |
 | Main tasks | `shadow_tradeoff_a`, `shadow_tradeoff_b`, `sanity_open` | compact route-choice and sanity tasks |
 | Baseline | `constant_R_efe` | EFE with spatially uniform detector-observation covariance |
 | Method | `visibility_aware_efe` | EFE with GP-derived state-dependent detector-observation covariance |
