@@ -168,8 +168,19 @@ class ExperimentLogger(Node):
         self.declare_parameter('local_use_belief_nogo_cost', False)
         self.declare_parameter('local_nogo_penalty_type', '')
         self.declare_parameter('local_nogo_weight', -1.0)
+        self.declare_parameter('local_nogo_safe_distance', -1.0)
+        self.declare_parameter('local_goal_prior_u_std_start', -1.0)
+        self.declare_parameter('local_goal_prior_v_std_start', -1.0)
+        self.declare_parameter('local_goal_prior_u_std_final', -1.0)
+        self.declare_parameter('local_goal_prior_v_std_final', -1.0)
         self.declare_parameter('waypoint_spacing_m', 1.0)
         self.declare_parameter('waypoint_arrival_radius_m', 0.35)
+        self.declare_parameter('local_replan_min_remaining_s', 0.0)
+        self.declare_parameter('local_replan_on_waypoint_change', False)
+        self.declare_parameter('latency_compensate_plan_handoff', False)
+        self.declare_parameter('use_simple_local_controller', False)
+        self.declare_parameter('local_tracking_use_odom_yaw', False)
+        self.declare_parameter('cmd_publish_rate', 10.0)
         self.declare_parameter('use_odom_heading_correction', True)
         self.declare_parameter('use_displacement_heading', False)
         self.declare_parameter('heading_min_displacement_m', 0.10)
@@ -201,6 +212,9 @@ class ExperimentLogger(Node):
         self.declare_parameter('keypoint_marker_world_z', 0.0)
         self.declare_parameter('keypoint_heading_sigma_rad', 0.05)
         self.declare_parameter('diagnostics_match_tolerance_s', 1e-3)
+        self.declare_parameter('bev_y_calibration_offset_m', 0.0)
+        self.declare_parameter('pixel_correction_nis_threshold', 0.0)
+        self.declare_parameter('odom_topic', '/odom')
         self.declare_parameter('run_dir_topic', '/experiment/run_dir')
         self.declare_parameter('run_timeout_after_first_cmd_s', 75.0)
         self.declare_parameter('first_cmd_linear_eps', 0.02)
@@ -209,6 +223,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('stuck_max_displacement_m', 0.08)
         self.declare_parameter('stuck_max_goal_improvement_m', 0.05)
         self.declare_parameter('stuck_cmd_fraction_min', 0.50)
+        self.declare_parameter('stuck_idle_cmd_fraction_max', 0.10)
         self.declare_parameter('cam_pos', [-3.0, -3.0, 6.0])
         self.declare_parameter('look_at', [1.5, 1.5, 0.0])
         self.declare_parameter('img_width', 1280)
@@ -321,10 +336,41 @@ class ExperimentLogger(Node):
             self.get_parameter('local_nogo_penalty_type').value or ''
         )
         self.local_nogo_weight = float(self.get_parameter('local_nogo_weight').value)
+        self.local_nogo_safe_distance = float(
+            self.get_parameter('local_nogo_safe_distance').value
+        )
+        self.local_goal_prior_u_std_start = float(
+            self.get_parameter('local_goal_prior_u_std_start').value
+        )
+        self.local_goal_prior_v_std_start = float(
+            self.get_parameter('local_goal_prior_v_std_start').value
+        )
+        self.local_goal_prior_u_std_final = float(
+            self.get_parameter('local_goal_prior_u_std_final').value
+        )
+        self.local_goal_prior_v_std_final = float(
+            self.get_parameter('local_goal_prior_v_std_final').value
+        )
         self.waypoint_spacing_m = float(self.get_parameter('waypoint_spacing_m').value)
         self.waypoint_arrival_radius_m = float(
             self.get_parameter('waypoint_arrival_radius_m').value
         )
+        self.local_replan_min_remaining_s = float(
+            self.get_parameter('local_replan_min_remaining_s').value
+        )
+        self.local_replan_on_waypoint_change = bool(
+            self.get_parameter('local_replan_on_waypoint_change').value
+        )
+        self.latency_compensate_plan_handoff = bool(
+            self.get_parameter('latency_compensate_plan_handoff').value
+        )
+        self.use_simple_local_controller = bool(
+            self.get_parameter('use_simple_local_controller').value
+        )
+        self.local_tracking_use_odom_yaw = bool(
+            self.get_parameter('local_tracking_use_odom_yaw').value
+        )
+        self.cmd_publish_rate = float(self.get_parameter('cmd_publish_rate').value)
         self.use_odom_heading_correction = bool(
             self.get_parameter('use_odom_heading_correction').value
         )
@@ -368,6 +414,13 @@ class ExperimentLogger(Node):
         self.diagnostics_match_tolerance_s = float(
             self.get_parameter('diagnostics_match_tolerance_s').value
         )
+        self.bev_y_calibration_offset_m = float(
+            self.get_parameter('bev_y_calibration_offset_m').value
+        )
+        self.pixel_correction_nis_threshold = float(
+            self.get_parameter('pixel_correction_nis_threshold').value
+        )
+        self.odom_topic = str(self.get_parameter('odom_topic').value or '/odom')
         self.run_dir_topic = str(self.get_parameter('run_dir_topic').value).strip() or '/experiment/run_dir'
         self.run_timeout_after_first_cmd_s = float(self.get_parameter('run_timeout_after_first_cmd_s').value)
         self.first_cmd_linear_eps = float(self.get_parameter('first_cmd_linear_eps').value)
@@ -376,6 +429,9 @@ class ExperimentLogger(Node):
         self.stuck_max_displacement_m = float(self.get_parameter('stuck_max_displacement_m').value)
         self.stuck_max_goal_improvement_m = float(self.get_parameter('stuck_max_goal_improvement_m').value)
         self.stuck_cmd_fraction_min = float(self.get_parameter('stuck_cmd_fraction_min').value)
+        self.stuck_idle_cmd_fraction_max = float(
+            self.get_parameter('stuck_idle_cmd_fraction_max').value
+        )
 
         # Camera model for homography projection (pixel to world)
         from unav_common.camera_model import ObliqueCameraModel
@@ -487,6 +543,9 @@ class ExperimentLogger(Node):
             'keypoint_marker_world_z': self.keypoint_marker_world_z,
             'keypoint_heading_sigma_rad': self.keypoint_heading_sigma_rad,
             'diagnostics_match_tolerance_s': self.diagnostics_match_tolerance_s,
+            'bev_y_calibration_offset_m': self.bev_y_calibration_offset_m,
+            'pixel_correction_nis_threshold': self.pixel_correction_nis_threshold,
+            'odom_topic': self.odom_topic,
             'seed': self.seed,
             'state_pipeline': 'homography_to_bev',
             'observation_model': 'uv',
@@ -527,8 +586,19 @@ class ExperimentLogger(Node):
             'local_use_belief_nogo_cost': self.local_use_belief_nogo_cost,
             'local_nogo_penalty_type': self.local_nogo_penalty_type,
             'local_nogo_weight': self.local_nogo_weight,
+            'local_nogo_safe_distance': self.local_nogo_safe_distance,
+            'local_goal_prior_u_std_start': self.local_goal_prior_u_std_start,
+            'local_goal_prior_v_std_start': self.local_goal_prior_v_std_start,
+            'local_goal_prior_u_std_final': self.local_goal_prior_u_std_final,
+            'local_goal_prior_v_std_final': self.local_goal_prior_v_std_final,
             'waypoint_spacing_m': self.waypoint_spacing_m,
             'waypoint_arrival_radius_m': self.waypoint_arrival_radius_m,
+            'local_replan_min_remaining_s': self.local_replan_min_remaining_s,
+            'local_replan_on_waypoint_change': self.local_replan_on_waypoint_change,
+            'latency_compensate_plan_handoff': self.latency_compensate_plan_handoff,
+            'use_simple_local_controller': self.use_simple_local_controller,
+            'local_tracking_use_odom_yaw': self.local_tracking_use_odom_yaw,
+            'cmd_publish_rate': self.cmd_publish_rate,
             'use_odom_heading_correction': self.use_odom_heading_correction,
             'use_displacement_heading': self.use_displacement_heading,
             'heading_min_displacement_m': self.heading_min_displacement_m,
@@ -548,6 +618,7 @@ class ExperimentLogger(Node):
             'stuck_max_displacement_m': self.stuck_max_displacement_m,
             'stuck_max_goal_improvement_m': self.stuck_max_goal_improvement_m,
             'stuck_cmd_fraction_min': self.stuck_cmd_fraction_min,
+            'stuck_idle_cmd_fraction_max': self.stuck_idle_cmd_fraction_max,
         }
         self._manifest_data = dict(manifest_data)
         write_manifest(self.run_dir, self._manifest_data, repo_root)
@@ -556,6 +627,7 @@ class ExperimentLogger(Node):
         self.state_msg = None
         self.planner_belief_msg = None
         self.odom_msg = None
+        self.odom_noisy_msg = None
         self.obs_msg = None
         self.perception_diag = None
         self.heading_diag = None
@@ -563,10 +635,14 @@ class ExperimentLogger(Node):
         self.cmd_msg = None
         self.cmd_raw_msg = None
         self.cmd_noise_diag = None
+        self.cmd_stamp_s = math.nan
+        self.cmd_raw_stamp_s = math.nan
+        self.cmd_noise_diag_stamp_s = math.nan
         self.goal_msg = None
         self.plan_msg = None
         self.planner_diag = None
         self.planner_diag_text = ''
+        self.active_execution_diag = None
         self.efe_metrics = None
         self._goal_in_radius_since = None
         self._goal_stable_since = None
@@ -654,6 +730,7 @@ class ExperimentLogger(Node):
 
         goal_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
+        self.create_subscription(Odometry, '/odom_noisy', self._odom_noisy_cb, 10)
         self.create_subscription(PoseWithCovarianceStamped, '/state/bev', self._state_cb, 10)
         self.create_subscription(Float64MultiArray, '/state/heading_diagnostics', self._heading_diag_cb, 10)
         self.create_subscription(PoseWithCovarianceStamped, '/planner_belief', self._planner_belief_cb, 10)
@@ -670,6 +747,12 @@ class ExperimentLogger(Node):
         self.create_subscription(PoseStamped, '/goal_bev', self._goal_cb, qos_profile=goal_qos)
         self.create_subscription(Path, '/plan_preview', self._plan_cb, 10)
         self.create_subscription(Float64MultiArray, '/planner/diagnostics', self._planner_diag_cb, 10)
+        self.create_subscription(
+            Float64MultiArray,
+            '/planner/active_execution_diagnostics',
+            self._active_execution_diag_cb,
+            10,
+        )
         self.create_subscription(
             Float64MultiArray,
             '/planner/pixel_correction_diagnostics',
@@ -700,6 +783,9 @@ class ExperimentLogger(Node):
             # truth_belief_error_m = ||truth - /planner_belief||  (planner internal state vs ground truth)
             'truth_state_error_m', 'truth_belief_error_m',
             'odom_available', 'odom_stamp', 'odom_x', 'odom_y', 'odom_yaw',
+            'odom_v', 'odom_w',
+            'odom_noisy_available', 'odom_noisy_stamp', 'odom_noisy_x', 'odom_noisy_y',
+            'odom_noisy_yaw', 'odom_noisy_v', 'odom_noisy_w',
             'yaw_error_truth_odom_rad', 'yaw_error_truth_state_rad', 'yaw_error_truth_belief_rad',
             'pixel_yaw_meas', 'heading_source_code', 'heading_source',
             'heading_diag_stamp', 'heading_diag_age_s',
@@ -708,13 +794,21 @@ class ExperimentLogger(Node):
             'planner_pixel_correction_age_s',
             'pixel_corr_innov_u', 'pixel_corr_innov_v',
             'pixel_corr_xy_update_norm_m', 'pixel_corr_theta_update_from_uv_rad',
+            'pixel_corr_nis',
+            'pixel_corr_accepted', 'pixel_corr_reject_reason_code', 'pixel_corr_reject_reason',
+            'pixel_corr_apply_stamp', 'pixel_corr_belief_input_stamp',
+            'pixel_corr_cmd_replay_count', 'pixel_corr_cmd_replay_duration_s',
+            'pixel_corr_cmd_replay_used_fallback', 'pixel_corr_nis_threshold',
             'pixel_heading_correction_applied', 'pixel_heading_meas_source',
             'pixel_heading_innov_rad',
             'pixel_heading_gain_theta', 'pixel_corr_theta_update_total_rad',
             'pixel_corr_pred_x', 'pixel_corr_pred_y', 'pixel_corr_pred_yaw',
             'pixel_corr_next_x', 'pixel_corr_next_y', 'pixel_corr_next_yaw',
+            'pixel_corr_expected_after_u', 'pixel_corr_expected_after_v',
+            'pixel_corr_expected_after_visible',
             'cmd_v', 'cmd_w',
             'cmd_raw_v', 'cmd_raw_w',
+            'cmd_stamp', 'cmd_age_s', 'cmd_raw_stamp', 'cmd_raw_age_s',
             'cmd_noise_enabled',
             'cmd_noise_linear_multiplier', 'cmd_noise_angular_multiplier',
             'cmd_noise_linear_additive', 'cmd_noise_angular_additive',
@@ -732,6 +826,18 @@ class ExperimentLogger(Node):
             'efe_total', 'efe_risk', 'efe_ambiguity', 'efe_control', 'efe_obstacle',
             'efe_risk_mean', 'efe_risk_cov_trace', 'efe_risk_cov_logdet',
             'efe_delta_risk_visibility', 'efe_delta_ambiguity_visibility',
+            'active_plan_age_s', 'active_plan_remaining_s', 'active_control_index',
+            'active_controls_len', 'active_controls_original_len',
+            'latency_skip_steps', 'latency_skip_s',
+            'command_timer_period_s', 'planner_timer_period_s',
+            'pending_plan_started_active_remaining_s',
+            'exec_plan_age_s', 'exec_plan_remaining_s', 'exec_control_index',
+            'exec_controls_len', 'exec_controls_original_len',
+            'exec_cmd_v', 'exec_cmd_w', 'exec_latency_skip_steps',
+            'exec_latency_skip_s',
+            'exec_wp_idx', 'exec_wp_count', 'exec_wp_target_x', 'exec_wp_target_y',
+            'exec_wp_dist_m', 'exec_desired_yaw', 'exec_yaw_error',
+            'exec_tracking_yaw', 'exec_tracking_yaw_source',
             'collision_any', 'collision_contact', 'collision_geom', 'collision_reason', 'first_crash_stamp',
             'min_wall_distance_m', 'min_obstacle_distance_m',
             'wall_penetration_m', 'obstacle_penetration_m',
@@ -780,6 +886,10 @@ class ExperimentLogger(Node):
                 'pred_world_x',
                 'pred_world_y',
                 'localization_error_m',
+                'pred_world_x_calibrated',
+                'pred_world_y_calibrated',
+                'localization_error_calibrated_m',
+                'bev_y_calibration_offset_m',
                 'u_red',
                 'v_red',
                 'red_area_px',
@@ -817,6 +927,15 @@ class ExperimentLogger(Node):
                 'yolo_selected_pixel_source',
                 'yolo_bbox_area',
                 'yolo_mask_area',
+                'yolo_inference_ms',
+                'detector_callback_ms',
+                'yolo_receive_stamp',
+                'yolo_start_stamp',
+                'yolo_finish_stamp',
+                'yolo_publish_stamp',
+                'yolo_latency_s',
+                'frame_age_at_publish_s',
+                'detector_total_latency_s',
                 'camera_relative_bearing_deg',
                 'seed',
             ])
@@ -844,7 +963,9 @@ class ExperimentLogger(Node):
             self.get_logger().info(
                 f"Stuck-stop enabled: {self.stuck_window_s:.2f}s window, "
                 f"max displacement {self.stuck_max_displacement_m:.3f} m, "
-                f"max goal improvement {self.stuck_max_goal_improvement_m:.3f} m"
+                f"max goal improvement {self.stuck_max_goal_improvement_m:.3f} m, "
+                f"active cmd fraction >= {self.stuck_cmd_fraction_min:.2f}, "
+                f"idle cmd fraction <= {self.stuck_idle_cmd_fraction_max:.2f}"
             )
 
     @staticmethod
@@ -1003,30 +1124,41 @@ class ExperimentLogger(Node):
     def _maybe_finish_for_stuck(self, stamp: float, goal_dist: float) -> bool:
         if self._first_cmd_stamp is None or self.stuck_window_s <= 0.0:
             return False
+        elapsed_after_first_cmd = float(stamp - self._first_cmd_stamp)
+        if elapsed_after_first_cmd < self.stuck_window_s:
+            return False
         if math.isfinite(goal_dist) and goal_dist <= self.goal_stable_radius:
             return False
         stats = self._motion_window_stats(stamp, self.stuck_window_s)
         if stats is None:
             return False
-        stuck = (
+        no_motion = (
             stats['displacement_m'] <= self.stuck_max_displacement_m
             and stats['goal_improvement_m'] <= self.stuck_max_goal_improvement_m
-            and stats['cmd_fraction'] >= self.stuck_cmd_fraction_min
         )
+        active_stuck = stats['cmd_fraction'] >= self.stuck_cmd_fraction_min
+        idle_stuck = stats['cmd_fraction'] <= self.stuck_idle_cmd_fraction_max
+        stuck = no_motion and (active_stuck or idle_stuck)
         if not stuck:
             return False
+        mode = 'active' if active_stuck else 'idle'
         self.get_logger().info(
-            "Stuck termination: "
+            f"Stuck termination ({mode}): "
             f"displacement={stats['displacement_m']:.3f} m <= {self.stuck_max_displacement_m:.3f} m, "
             f"goal_improvement={stats['goal_improvement_m']:.3f} m <= "
             f"{self.stuck_max_goal_improvement_m:.3f} m, "
-            f"cmd_fraction={stats['cmd_fraction']:.2f} >= {self.stuck_cmd_fraction_min:.2f}."
+            f"cmd_fraction={stats['cmd_fraction']:.2f}, "
+            f"active_threshold={self.stuck_cmd_fraction_min:.2f}, "
+            f"idle_threshold={self.stuck_idle_cmd_fraction_max:.2f}."
         )
         self._finish_run("stuck", stamp)
         return True
 
     def _odom_cb(self, msg: Odometry):
         self.odom_msg = msg
+
+    def _odom_noisy_cb(self, msg: Odometry):
+        self.odom_noisy_msg = msg
 
     def _state_cb(self, msg: PoseWithCovarianceStamped):
         self.state_msg = msg
@@ -1039,12 +1171,15 @@ class ExperimentLogger(Node):
 
     def _cmd_cb(self, msg: Twist):
         self.cmd_msg = msg
+        self.cmd_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9
 
     def _cmd_raw_cb(self, msg: Twist):
         self.cmd_raw_msg = msg
+        self.cmd_raw_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9
 
     def _cmd_noise_diag_cb(self, msg: Float64MultiArray):
         self.cmd_noise_diag = msg
+        self.cmd_noise_diag_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9
 
     def _goal_cb(self, msg: PoseStamped):
         self.goal_msg = msg
@@ -1102,6 +1237,9 @@ class ExperimentLogger(Node):
     def _planner_diag_text_cb(self, msg: String):
         self.planner_diag_text = str(msg.data or '')
 
+    def _active_execution_diag_cb(self, msg: Float64MultiArray):
+        self.active_execution_diag = msg
+
     def _diag_cb(self, msg: Float64MultiArray):
         self.perception_diag = diagnostics_from_message(msg)
         self._log_perception_sample(self.perception_diag)
@@ -1124,6 +1262,22 @@ class ExperimentLogger(Node):
             3: 'motion_heading_fallback',
             4: 'held_previous_heading',
             5: 'keypoint_bev_heading',
+        }.get(value, 'unknown')
+
+    @staticmethod
+    def _pixel_correction_reject_reason_name(code: float) -> str:
+        try:
+            value = int(round(float(code)))
+        except (TypeError, ValueError):
+            value = 99
+        return {
+            0: 'accepted',
+            1: 'stale_age',
+            2: 'dt_implausible',
+            3: 'missing_snapshot',
+            4: 'update_failed',
+            5: 'jump_too_large',
+            6: 'nis_too_large',
         }.get(value, 'unknown')
 
     def _record_invalid(self, reason: str) -> None:
@@ -1257,6 +1411,21 @@ class ExperimentLogger(Node):
             float(pose.position.y),
             self._yaw_from_quaternion(pose.orientation),
             source_frame,
+        )
+
+    def _odom_record(self, msg: Odometry | None):
+        if msg is None:
+            return False, math.nan, math.nan, math.nan, math.nan, math.nan, math.nan
+        pose = msg.pose.pose
+        twist = msg.twist.twist
+        return (
+            True,
+            self._stamp_to_float(msg.header.stamp),
+            float(pose.position.x),
+            float(pose.position.y),
+            self._yaw_from_quaternion(pose.orientation),
+            float(twist.linear.x),
+            float(twist.angular.z),
         )
 
     def _rewrite_manifest(self):
@@ -1430,13 +1599,22 @@ class ExperimentLogger(Node):
         pred_world_x = math.nan
         pred_world_y = math.nan
         localization_error_m = math.nan
+        pred_world_x_calibrated = math.nan
+        pred_world_y_calibrated = math.nan
+        localization_error_calibrated_m = math.nan
         if obs_ok and math.isfinite(pixel_pose_u) and math.isfinite(pixel_pose_v):
             world = self.camera_model.pixel_to_world(float(pixel_pose_u), float(pixel_pose_v))
             if world is not None:
                 pred_world_x = float(world[0])
                 pred_world_y = float(world[1])
+                pred_world_x_calibrated = pred_world_x
+                pred_world_y_calibrated = pred_world_y + self.bev_y_calibration_offset_m
                 if true_ok:
                     localization_error_m = math.hypot(pred_world_x - true_x, pred_world_y - true_y)
+                    localization_error_calibrated_m = math.hypot(
+                        pred_world_x_calibrated - true_x,
+                        pred_world_y_calibrated - true_y,
+                    )
 
         selected_pixel_source_code = float(diag.get('selected_pixel_source_code', math.nan))
         if selected_pixel_source_code >= 1.5:
@@ -1451,6 +1629,21 @@ class ExperimentLogger(Node):
         yolo_selected_class_id = diag.get('yolo_best_class_id', math.nan)
         yolo_bbox_area = diag.get('bbox_area_px', math.nan)
         yolo_mask_area = diag.get('mask_area_px', math.nan)
+        yolo_inference_ms = diag.get('yolo_inference_ms', math.nan)
+        detector_callback_ms = diag.get('detector_callback_ms', math.nan)
+        yolo_receive_stamp = diag.get('yolo_receive_stamp', math.nan)
+        yolo_start_stamp = diag.get('yolo_start_stamp', math.nan)
+        yolo_finish_stamp = diag.get('yolo_finish_stamp', math.nan)
+        yolo_publish_stamp = diag.get('yolo_publish_stamp', math.nan)
+        yolo_latency_s = diag.get('yolo_latency_s', math.nan)
+        frame_age_at_publish_s = diag.get('frame_age_at_publish_s', math.nan)
+        if math.isfinite(float(yolo_publish_stamp)):
+            detector_total_latency_s = max(float(yolo_publish_stamp) - float(diag['stamp']), 0.0)
+        else:
+            detector_total_latency_s = (
+                max(log_stamp - float(diag['stamp']), 0.0)
+                if math.isfinite(float(diag.get('stamp', math.nan))) else math.nan
+            )
 
         self.perception_writer.writerow([
             diag['stamp'],
@@ -1479,6 +1672,10 @@ class ExperimentLogger(Node):
             pred_world_x,
             pred_world_y,
             localization_error_m,
+            pred_world_x_calibrated,
+            pred_world_y_calibrated,
+            localization_error_calibrated_m,
+            self.bev_y_calibration_offset_m,
             diag['u_red'],
             diag['v_red'],
             diag['red_area_px'],
@@ -1516,6 +1713,15 @@ class ExperimentLogger(Node):
             selected_pixel_source,
             yolo_bbox_area,
             yolo_mask_area,
+            yolo_inference_ms,
+            detector_callback_ms,
+            yolo_receive_stamp,
+            yolo_start_stamp,
+            yolo_finish_stamp,
+            yolo_publish_stamp,
+            yolo_latency_s,
+            frame_age_at_publish_s,
+            detector_total_latency_s,
             camera_relative_bearing_deg,
             self.seed,
         ])
@@ -1603,7 +1809,16 @@ class ExperimentLogger(Node):
             if math.isfinite(truth_belief_error_m):
                 self._truth_belief_error_count += 1
 
-        odom_ok, odom_stamp, odom_x, odom_y, odom_yaw, _odom_source_frame = self._latest_raw_odom_pose()
+        odom_ok, odom_stamp, odom_x, odom_y, odom_yaw, odom_v, odom_w = self._odom_record(self.odom_msg)
+        (
+            odom_noisy_ok,
+            odom_noisy_stamp,
+            odom_noisy_x,
+            odom_noisy_y,
+            odom_noisy_yaw,
+            odom_noisy_v,
+            odom_noisy_w,
+        ) = self._odom_record(self.odom_noisy_msg)
         yaw_error_truth_odom_rad = math.nan
         yaw_error_truth_state_rad = math.nan
         yaw_error_truth_belief_rad = math.nan
@@ -1645,6 +1860,16 @@ class ExperimentLogger(Node):
         pixel_corr_innov_v = math.nan
         pixel_corr_xy_update_norm_m = math.nan
         pixel_corr_theta_update_from_uv_rad = math.nan
+        pixel_corr_nis = math.nan
+        pixel_corr_accepted = math.nan
+        pixel_corr_reject_reason_code = math.nan
+        pixel_corr_reject_reason = 'unknown'
+        pixel_corr_apply_stamp = math.nan
+        pixel_corr_belief_input_stamp = math.nan
+        pixel_corr_cmd_replay_count = math.nan
+        pixel_corr_cmd_replay_duration_s = math.nan
+        pixel_corr_cmd_replay_used_fallback = math.nan
+        pixel_corr_nis_threshold = math.nan
         pixel_heading_correction_applied = math.nan
         pixel_heading_meas_source = math.nan
         pixel_heading_innov_rad = math.nan
@@ -1656,6 +1881,9 @@ class ExperimentLogger(Node):
         pixel_corr_next_x = math.nan
         pixel_corr_next_y = math.nan
         pixel_corr_next_yaw = math.nan
+        pixel_corr_expected_after_u = math.nan
+        pixel_corr_expected_after_v = math.nan
+        pixel_corr_expected_after_visible = math.nan
         if (
             self.pixel_correction_diag is not None
             and self.pixel_correction_diag.data
@@ -1682,11 +1910,33 @@ class ExperimentLogger(Node):
             pixel_corr_next_yaw = float(cdata[19])
             if len(cdata) >= 29:
                 pixel_heading_meas_source = float(cdata[28])
+            if len(cdata) >= 30:
+                pixel_corr_nis = float(cdata[29])
+            if len(cdata) >= 38:
+                pixel_corr_accepted = float(cdata[30])
+                pixel_corr_reject_reason_code = float(cdata[31])
+                pixel_corr_reject_reason = self._pixel_correction_reject_reason_name(
+                    pixel_corr_reject_reason_code
+                )
+                pixel_corr_apply_stamp = float(cdata[32])
+                pixel_corr_belief_input_stamp = float(cdata[33])
+                pixel_corr_cmd_replay_count = float(cdata[34])
+                pixel_corr_cmd_replay_duration_s = float(cdata[35])
+                pixel_corr_cmd_replay_used_fallback = float(cdata[36])
+                pixel_corr_nis_threshold = float(cdata[37])
+            if len(cdata) >= 41:
+                pixel_corr_expected_after_u = float(cdata[38])
+                pixel_corr_expected_after_v = float(cdata[39])
+                pixel_corr_expected_after_visible = float(cdata[40])
 
         cmd_v = self.cmd_msg.linear.x if self.cmd_msg else 0.0
         cmd_w = self.cmd_msg.angular.z if self.cmd_msg else 0.0
         cmd_raw_v = self.cmd_raw_msg.linear.x if self.cmd_raw_msg else cmd_v
         cmd_raw_w = self.cmd_raw_msg.angular.z if self.cmd_raw_msg else cmd_w
+        cmd_stamp = self.cmd_stamp_s
+        cmd_raw_stamp = self.cmd_raw_stamp_s
+        cmd_age_s = max(now_stamp - cmd_stamp, 0.0) if math.isfinite(cmd_stamp) else math.nan
+        cmd_raw_age_s = max(now_stamp - cmd_raw_stamp, 0.0) if math.isfinite(cmd_raw_stamp) else math.nan
         cmd_noise_enabled = math.nan
         cmd_noise_linear_multiplier = math.nan
         cmd_noise_angular_multiplier = math.nan
@@ -1750,6 +2000,34 @@ class ExperimentLogger(Node):
         efe_risk_cov_logdet = math.nan
         efe_delta_risk_visibility = math.nan
         efe_delta_ambiguity_visibility = math.nan
+        active_plan_age_s = math.nan
+        active_plan_remaining_s = math.nan
+        active_control_index = math.nan
+        active_controls_len = math.nan
+        active_controls_original_len = math.nan
+        latency_skip_steps = math.nan
+        latency_skip_s = math.nan
+        command_timer_period_s = math.nan
+        planner_timer_period_s = math.nan
+        pending_plan_started_active_remaining_s = math.nan
+        exec_plan_age_s = math.nan
+        exec_plan_remaining_s = math.nan
+        exec_control_index = math.nan
+        exec_controls_len = math.nan
+        exec_controls_original_len = math.nan
+        exec_cmd_v = math.nan
+        exec_cmd_w = math.nan
+        exec_latency_skip_steps = math.nan
+        exec_latency_skip_s = math.nan
+        exec_wp_idx = math.nan
+        exec_wp_count = math.nan
+        exec_wp_target_x = math.nan
+        exec_wp_target_y = math.nan
+        exec_wp_dist_m = math.nan
+        exec_desired_yaw = math.nan
+        exec_yaw_error = math.nan
+        exec_tracking_yaw = math.nan
+        exec_tracking_yaw_source = math.nan
         optimizer_success = 0.0
         optimizer_status = 0.0
         optimizer_nit = 0.0
@@ -1797,6 +2075,42 @@ class ExperimentLogger(Node):
                 efe_risk_cov_logdet = float(self.planner_diag.data[20])
                 efe_delta_risk_visibility = float(self.planner_diag.data[21])
                 efe_delta_ambiguity_visibility = float(self.planner_diag.data[22])
+            if len(self.planner_diag.data) >= 33:
+                active_plan_age_s = float(self.planner_diag.data[23])
+                active_plan_remaining_s = float(self.planner_diag.data[24])
+                active_control_index = float(self.planner_diag.data[25])
+                active_controls_len = float(self.planner_diag.data[26])
+                active_controls_original_len = float(self.planner_diag.data[27])
+                latency_skip_steps = float(self.planner_diag.data[28])
+                latency_skip_s = float(self.planner_diag.data[29])
+                command_timer_period_s = float(self.planner_diag.data[30])
+                planner_timer_period_s = float(self.planner_diag.data[31])
+                pending_plan_started_active_remaining_s = float(self.planner_diag.data[32])
+
+        if (
+            self.active_execution_diag
+            and self.active_execution_diag.data
+            and len(self.active_execution_diag.data) >= 9
+        ):
+            exec_plan_age_s = float(self.active_execution_diag.data[0])
+            exec_plan_remaining_s = float(self.active_execution_diag.data[1])
+            exec_control_index = float(self.active_execution_diag.data[2])
+            exec_controls_len = float(self.active_execution_diag.data[3])
+            exec_controls_original_len = float(self.active_execution_diag.data[4])
+            exec_cmd_v = float(self.active_execution_diag.data[5])
+            exec_cmd_w = float(self.active_execution_diag.data[6])
+            exec_latency_skip_steps = float(self.active_execution_diag.data[7])
+            exec_latency_skip_s = float(self.active_execution_diag.data[8])
+            if len(self.active_execution_diag.data) >= 18:
+                exec_wp_idx = float(self.active_execution_diag.data[9])
+                exec_wp_count = float(self.active_execution_diag.data[10])
+                exec_wp_target_x = float(self.active_execution_diag.data[11])
+                exec_wp_target_y = float(self.active_execution_diag.data[12])
+                exec_wp_dist_m = float(self.active_execution_diag.data[13])
+                exec_desired_yaw = float(self.active_execution_diag.data[14])
+                exec_yaw_error = float(self.active_execution_diag.data[15])
+                exec_tracking_yaw = float(self.active_execution_diag.data[16])
+                exec_tracking_yaw_source = float(self.active_execution_diag.data[17])
 
         if self.efe_metrics and self.efe_metrics.data and len(self.efe_metrics.data) >= 5:
             efe_total = float(self.efe_metrics.data[0])
@@ -1876,6 +2190,9 @@ class ExperimentLogger(Node):
             state_sigma_major_m, state_sigma_minor_m, state_entropy_xy,
             truth_state_error_m, truth_belief_error_m,
             1.0 if odom_ok else 0.0, odom_stamp, odom_x, odom_y, odom_yaw,
+            odom_v, odom_w,
+            1.0 if odom_noisy_ok else 0.0, odom_noisy_stamp, odom_noisy_x, odom_noisy_y,
+            odom_noisy_yaw, odom_noisy_v, odom_noisy_w,
             yaw_error_truth_odom_rad, yaw_error_truth_state_rad, yaw_error_truth_belief_rad,
             pixel_yaw_meas, heading_source_code, heading_source,
             heading_diag_stamp, heading_diag_age_s,
@@ -1884,13 +2201,21 @@ class ExperimentLogger(Node):
             planner_pixel_correction_age_s,
             pixel_corr_innov_u, pixel_corr_innov_v,
             pixel_corr_xy_update_norm_m, pixel_corr_theta_update_from_uv_rad,
+            pixel_corr_nis,
+            pixel_corr_accepted, pixel_corr_reject_reason_code, pixel_corr_reject_reason,
+            pixel_corr_apply_stamp, pixel_corr_belief_input_stamp,
+            pixel_corr_cmd_replay_count, pixel_corr_cmd_replay_duration_s,
+            pixel_corr_cmd_replay_used_fallback, pixel_corr_nis_threshold,
             pixel_heading_correction_applied, pixel_heading_meas_source,
             pixel_heading_innov_rad,
             pixel_heading_gain_theta, pixel_corr_theta_update_total_rad,
             pixel_corr_pred_x, pixel_corr_pred_y, pixel_corr_pred_yaw,
             pixel_corr_next_x, pixel_corr_next_y, pixel_corr_next_yaw,
+            pixel_corr_expected_after_u, pixel_corr_expected_after_v,
+            pixel_corr_expected_after_visible,
             cmd_v, cmd_w,
             cmd_raw_v, cmd_raw_w,
+            cmd_stamp, cmd_age_s, cmd_raw_stamp, cmd_raw_age_s,
             cmd_noise_enabled,
             cmd_noise_linear_multiplier, cmd_noise_angular_multiplier,
             cmd_noise_linear_additive, cmd_noise_angular_additive,
@@ -1908,6 +2233,18 @@ class ExperimentLogger(Node):
             efe_total, efe_risk, efe_ambiguity, efe_control, efe_obstacle,
             efe_risk_mean, efe_risk_cov_trace, efe_risk_cov_logdet,
             efe_delta_risk_visibility, efe_delta_ambiguity_visibility,
+            active_plan_age_s, active_plan_remaining_s, active_control_index,
+            active_controls_len, active_controls_original_len,
+            latency_skip_steps, latency_skip_s,
+            command_timer_period_s, planner_timer_period_s,
+            pending_plan_started_active_remaining_s,
+            exec_plan_age_s, exec_plan_remaining_s, exec_control_index,
+            exec_controls_len, exec_controls_original_len,
+            exec_cmd_v, exec_cmd_w, exec_latency_skip_steps,
+            exec_latency_skip_s,
+            exec_wp_idx, exec_wp_count, exec_wp_target_x, exec_wp_target_y,
+            exec_wp_dist_m, exec_desired_yaw, exec_yaw_error,
+            exec_tracking_yaw, exec_tracking_yaw_source,
             collision_any, collision_contact, collision_geom, collision_reason, self._first_crash_stamp,
             min_wall_distance_m, min_obstacle_distance_m,
             wall_penetration_m, obstacle_penetration_m,
@@ -2035,6 +2372,7 @@ class ExperimentLogger(Node):
             'stuck_max_displacement_m': self.stuck_max_displacement_m,
             'stuck_max_goal_improvement_m': self.stuck_max_goal_improvement_m,
             'stuck_cmd_fraction_min': self.stuck_cmd_fraction_min,
+            'stuck_idle_cmd_fraction_max': self.stuck_idle_cmd_fraction_max,
             'mean_solve_time_ms': mean_solve_time_ms,
             # EFE terms used by the paper objective.
             'mean_efe_risk': mean_efe_risk,

@@ -42,6 +42,7 @@ class PixelToBevStateNode(Node):
         self.declare_parameter('heading_pixel_noise_sigma', 0.0)
         self.declare_parameter('yaw_noise_floor_rad', 0.01)
         self.declare_parameter('use_odom_heading_fallback', True)
+        self.declare_parameter('odom_topic', '/odom')
         self.declare_parameter('odom_heading_timeout_s', 0.5)
         self.declare_parameter('odom_heading_sigma_rad', 0.08)
         self.declare_parameter('odom_yaw_offset_rad', 0.0)
@@ -72,6 +73,7 @@ class PixelToBevStateNode(Node):
         self.heading_pixel_noise_sigma = float(self.get_parameter('heading_pixel_noise_sigma').value)
         self.yaw_noise_floor_rad = float(self.get_parameter('yaw_noise_floor_rad').value)
         self.use_odom_heading_fallback = bool(self.get_parameter('use_odom_heading_fallback').value)
+        self.odom_topic = str(self.get_parameter('odom_topic').value or '/odom')
         self.odom_heading_timeout_s = float(self.get_parameter('odom_heading_timeout_s').value)
         self.odom_heading_sigma_rad = float(self.get_parameter('odom_heading_sigma_rad').value)
         self.odom_yaw_offset_rad = float(self.get_parameter('odom_yaw_offset_rad').value)
@@ -111,7 +113,7 @@ class PixelToBevStateNode(Node):
         self._heading_diag_pub = self.create_publisher(Float64MultiArray, '/state/heading_diagnostics', 10)
         self.create_subscription(PoseStamped, '/perception/pixel_pose', self._pixel_callback, 10)
         self.create_subscription(Float64MultiArray, DETECTION_DIAGNOSTICS_TOPIC, self._diag_callback, 10)
-        self.create_subscription(Odometry, '/odom', self._odom_callback, 10)
+        self.create_subscription(Odometry, self.odom_topic, self._odom_callback, 10)
         self._latest_diag = None
         self._latest_odom_yaw = None
         self._latest_odom_stamp = None
@@ -129,6 +131,7 @@ class PixelToBevStateNode(Node):
             'Pixel->BEV state node started '
             '(/perception/pixel_pose -> /state/bev; '
             f'state sources: x,y=camera homography, theta={" -> ".join(theta_sources)}, '
+            f'odom_topic={self.odom_topic}, '
             f'odom_yaw_offset_rad={self.odom_yaw_offset_rad:.3f}, '
             f'keypoint_marker_world_z={self.keypoint_marker_world_z:.3f}, '
             f'diag_match_tol_s={self.diagnostics_match_tolerance_s:.3f})'

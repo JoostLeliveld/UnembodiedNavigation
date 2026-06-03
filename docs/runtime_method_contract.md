@@ -1,6 +1,6 @@
 # Runtime Method Contract
 
-Last updated: 2026-05-28.
+Last updated: 2026-06-03.
 
 This document locks the runtime interpretation for the current visibility-aware
 planning experiments. It is the reference for offline diagnostics, Gazebo smoke
@@ -125,22 +125,22 @@ The barrier should be hard enough that leaving the known driveable floor is not
 an attractive tradeoff. If the robot physically collides or penetrates a
 forbidden region during execution, the run terminates as a tracked failure.
 
-## Active AWS Diagnostic Task
+## Active AWS Candidate Task
 
-The active no-waypoint AWS diagnostic task is:
+The active no-waypoint AWS paper-facing candidate task is:
 
 ```text
 world: warehouse_aws.world.sdf
-task:  B1_apron_a4_to_uppermid_a3
-start: (3.20, -1.00, yaw=0.0)
+task:  F31_b1_apron_a3_mid
+start: (3.30, -1.00, yaw=0.0)
 goal:  (1.00, 1.75)
 ```
 
-Interpretation: the robot is shelf-facing after servicing the right-side shelf
-and must move to the upper target through the known driveable floor.
+Interpretation: the robot starts in the right-side route-choice region and must
+move to the upper target through the known driveable floor.
 
-This remains diagnostic/exploratory until the full artifact chain is complete:
-accepted world geometry, detector validation, GP capture/fit, smoke runs,
+This remains candidate evidence until the full artifact chain is complete:
+accepted world geometry, detector validation, GP capture/fit, complete C1/C2/C3
 seeded logs, figures, and paper text alignment.
 
 ## Parameters To Freeze Before Gazebo
@@ -161,6 +161,66 @@ Do not tune these during a Gazebo campaign:
 Tune offline first. Gazebo should test execution/replanning of a locked method,
 not be used as the design loop.
 
+## Runtime Finalization Gates
+
+Before AWS route-choice runs are interpreted as evidence, the runtime must make
+the state-observation-command chain reconstructable from logs. A run is only
+paper-eligible when these diagnostics are available:
+
+- image, YOLO receive/start/finish/publish, and frame-age timestamps;
+- pixel-correction target/apply stamps, innovation, NIS, accept/reject flag, and
+  reject reason;
+- belief input stamp, command-replay count/duration, and whether replay fell
+  back to a single command;
+- raw command, command after noise, command age, active control index, and active
+  plan age;
+- `/odom` and `/odom_noisy` pose/twist records for dead-reckoning comparison;
+- raw and calibrated homography projection errors, so plots distinguish detector
+  projection bias from the active state estimator.
+
+The configured `odom_topic` must be explicit in the run manifest and shared by
+the planner and BEV state node. When encoder noise is enabled this should be
+`/odom_noisy`; otherwise state yaw fallback can silently use a cleaner heading
+source than planner dead reckoning, making C1/C2 behavior hard to interpret.
+
+Pixel corrections must be treated as delayed measurements:
+
+```text
+image-time belief -> correction -> replay/predict to now -> planning belief
+```
+
+Large corrections are diagnostic failures unless explicitly accepted by the
+gate. Extreme updates should be rejected by configured jump/NIS thresholds, and
+detection gaps should grow covariance rather than yanking the belief.
+
+Belief prediction must replay commands over their real timestamped intervals.
+Command logs are not horizon samples: a 10 Hz command stream must not be
+replayed as if every command lasted the planner `dt`, and a command published
+after an image stamp must not be applied before that image existed.
+
+Local execution is route tracking, not route choice. The long/global EFE solve
+selects the route; the local controller tracks planner-derived waypoints with no
+local visibility reward. Local solver outputs may replace the active control
+tape only when they are finite, rollout-valid, have nonnegative predicted
+driveable clearance, are not stale, and reduce the current waypoint distance.
+Otherwise the execution layer safe-stops and the run is logged as stuck/safe-stop
+if progress does not recover.
+
+F66-F72 gate sequence:
+
+- F66: static BEV calibration grid; compare raw homography, calibrated
+  homography, `/state/bev`, and planner correction-implied BEV.
+- F67: open-loop estimator replay; compare raw command replay, applied/noisy
+  command, `/odom_noisy`, camera-corrected state, and planner belief.
+- F68: pixel-correction gate test; inspect innovation/NIS/rejection and
+  covariance behavior near racks and on open floor.
+- F69: open-floor local tracking; no visibility tradeoff, just timing, waypoint
+  progress, convergence, and safe command publication.
+- F70: uniform-visibility C1/C2 sanity; both methods should behave almost the
+  same when GP should not matter.
+- F71: AWS B1 single-seed smoke only after F66-F70 pass.
+- F72: AWS B1 three-seed smoke only after F71 is clean.
+
 ## Locked AWS Gazebo Candidate
 
 The current candidate for AWS smoke testing is:
@@ -168,32 +228,48 @@ The current candidate for AWS smoke testing is:
 ```text
 use_hierarchical: true
 global_horizon: 80
-local_horizon: 20
-local_plan_rate: 4.0
+global_dt: 0.25
+use_simple_local_controller: true
+local_horizon: 6
+local_plan_rate: 5.0
 global_use_ambiguity: true
 local_use_ambiguity: false
 global_optimizer_multistart: true
-local_optimizer_multistart: true
+local_optimizer_multistart: false
+local_use_visibility_model: false
 optimizer_multistart_include_direct: false
 optimizer_multistart_lateral_offsets: -1.0,1.0
 optimizer_initial_routes_json: mid_cross_lane + lower_sweep_lane, generated
   from known driveable-floor geometry only
+nogo_weight: 200.0
+nogo_safe_distance: 0.30
+use_belief_nogo_cost: true
+nogo_belief_kappa: 2.0
+r_visible_uv: 2.5
+r_miss_uv: 40.0
+ambiguity_weight: 8.0
 use_command_noise: true
 use_encoder_noise: true
 ```
 
-Interpretation: the long solve can see the route-level tradeoff; the local
-controller keeps execution smooth. Noise is part of the realism claim and must
-be on for interpretable AWS Gazebo results.
+Interpretation: the long global solve can see the route-level tradeoff; the
+shared local tracker keeps execution smooth. Noise is part of the realism claim
+and must be on for interpretable AWS Gazebo results.
 
-## Current Diagnostic Status
+## Current Candidate Evidence Status
 
-F22 is the current fair initial-planning diagnostic:
+The current candidate log root is:
 
-- `/home/joostleliveld/Thesis/UnembodiedNavigation/timing_presentation/figures/F22_realistic_multistart_choice.png`
-- `/home/joostleliveld/Thesis/UnembodiedNavigation/timing_presentation/figures/F22_realistic_multistart_choice.csv`
+`logs/visibility_comparison/paper_final_v1`
 
-It shows the corrected condition definitions: C1 now has nonzero ambiguity under
-constant covariance. It also shows that the AWS task is not yet final paper
-evidence: C1 and C2 select different basins, but the qualitative contrast still
-needs to be made cleaner before Gazebo testing.
+Current inspected summaries show C1 reaching by a shorter route with much larger
+localization error, and C2 reaching by a longer route with lower localization
+error. This supports a localization-safety/stability claim, not yet a
+deterministic C1-fails/C2-succeeds claim.
+
+Before using this as paper evidence:
+
+- complete C1/C2/C3 with matched seeds;
+- run the visible-route sanity task;
+- generate cost-decomposition and perception/belief validation figures;
+- clean stale inherited comments from the final config.

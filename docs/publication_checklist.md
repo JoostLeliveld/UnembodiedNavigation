@@ -9,8 +9,10 @@ Use this as the release gate before putting the repository next to the paper.
   traversability/visibility separation.
 - [ ] Every reported figure/table maps to a run directory, campaign log, GP
   artifact, and generation script.
-- [ ] `paper_campaign_config.yaml` is the config used for reported compact
-  benchmark runs.
+- [ ] For compact benchmark claims, `paper_campaign_config.yaml` is the config
+  used for reported compact runs.
+- [ ] For AWS claims, `scripts/visibility_comparison/aws_paper_final_config.yaml`
+  is cleaned, locked, and matches the run manifests.
 - [ ] Run manifests record the YOLO model, GP artifact, planner condition,
   world, task, seed, heading source, noise settings, and no-go settings.
 - [ ] `compute_paper_metrics.py` is run against the same GP artifact used by
@@ -37,9 +39,14 @@ Use this as the release gate before putting the repository next to the paper.
 - [ ] AWS YOLO model path is explicit in the AWS configs.
 - [ ] AWS visibility samples are captured in the AWS world.
 - [ ] AWS GP artifact contains `P_conservative_plan_map`.
-- [ ] B1 smoke run passes for C1 and C2.
-- [ ] B1/B2/B3 campaign logs exist for the selected seeds and conditions.
-- [ ] AWS figures/metrics are generated from those logs.
+- [ ] Main AWS route-choice campaign has complete matched seeds for C1, C2, and
+  C3 risk-only ablation.
+- [ ] Uniform-visible sanity campaign shows C1/C2 behave similarly when learned
+  visibility should not change the route.
+- [ ] AWS figures/metrics are generated from final logs, including route class,
+  localization error, p95 error, yaw error, clearance, and cost decomposition.
+- [ ] Paper wording states the current AWS claim as localization-safety /
+  stability unless a completed stress task shows a fair failure-rate contrast.
 
 ## Release Hygiene
 

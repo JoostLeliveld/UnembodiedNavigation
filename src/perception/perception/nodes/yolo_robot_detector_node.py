@@ -1,4 +1,5 @@
 import math
+import time
 from pathlib import Path
 
 import numpy as np
@@ -83,6 +84,11 @@ class YoloRobotDetectorNode(Node):
         self.pixel_noise_sigma = float(self.get_parameter('pixel_noise_sigma').value)
         self.rng = np.random.default_rng(int(self.get_parameter('seed').value))
         self.min_keypoint_conf = float(self.get_parameter('min_keypoint_conf').value)
+        self._last_inference_ms = math.nan
+        self._last_callback_ms = math.nan
+        self._last_receive_stamp_s = math.nan
+        self._last_predict_start_stamp_s = math.nan
+        self._last_predict_finish_stamp_s = math.nan
 
         self.model = YOLO(str(self.model_path))
         self.target_ids = target_class_ids(getattr(self.model, 'names', {}), self.class_name, self.class_id)
@@ -161,6 +167,14 @@ class YoloRobotDetectorNode(Node):
             separation_px = float(math.hypot(u_front - u_rear, v_front - v_rear))
         else:
             separation_px = math.nan
+        publish_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9
+        if math.isfinite(self._last_predict_start_stamp_s) and math.isfinite(self._last_predict_finish_stamp_s):
+            yolo_latency_s = max(self._last_predict_finish_stamp_s - self._last_predict_start_stamp_s, 0.0)
+        elif math.isfinite(self._last_inference_ms):
+            yolo_latency_s = max(self._last_inference_ms * 1e-3, 0.0)
+        else:
+            yolo_latency_s = math.nan
+        frame_age_at_publish_s = max(publish_stamp_s - stamp, 0.0) if math.isfinite(stamp) else math.nan
         self.diag_pub.publish(
             diagnostics_message(
                 stamp=stamp,
@@ -198,13 +212,28 @@ class YoloRobotDetectorNode(Node):
                 mask_border_frac=math.nan,
                 mask_score=selected_score if mask_available else math.nan,
                 selected_pixel_source_code=_selected_pixel_source_code(selection.get('selected_pixel_source', 'none')),
+                yolo_inference_ms=self._last_inference_ms,
+                detector_callback_ms=self._last_callback_ms,
+                yolo_receive_stamp=self._last_receive_stamp_s,
+                yolo_start_stamp=self._last_predict_start_stamp_s,
+                yolo_finish_stamp=self._last_predict_finish_stamp_s,
+                yolo_publish_stamp=publish_stamp_s,
+                yolo_latency_s=yolo_latency_s,
+                frame_age_at_publish_s=frame_age_at_publish_s,
             )
         )
 
     def _image_cb(self, msg: Image):
+        callback_start = time.perf_counter()
+        self._last_receive_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9
         image_bgr = image_msg_to_bgr8(msg)
         self._latest_image_shape = image_bgr.shape[:2]
+        predict_start = time.perf_counter()
+        self._last_predict_start_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9
         results = self._predict(image_bgr)
+        self._last_predict_finish_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9
+        self._last_inference_ms = max((time.perf_counter() - predict_start) * 1000.0, 0.0)
+        self._last_callback_ms = max((time.perf_counter() - callback_start) * 1000.0, 0.0)
         if not results:
             self._publish_diagnostics(msg.header.stamp, None)
             return

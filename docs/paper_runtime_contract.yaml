@@ -2,27 +2,36 @@
 # Keep this aligned with docs/paper_alignment.md and thesis-report/sections/*.tex.
 
 paper_runtime_contract:
-  version: 0.3
+  version: 0.4
   purpose: >
     Define the behavior that counts as paper-facing execution for the
     external-camera visibility-aware EFE experiments.
+  changelog_0_4: >
+    Define the AWS paper-facing candidate method. Warehouse_aws may become the
+    reported benchmark only after the final artifact chain is complete. Lock the
+    candidate method: hierarchical global EFE (H80/dt0.25) + simple proportional
+    local tracker (yaw_gate rotate-then-go), GP-conditioned belief-nogo, imgsz480
+    perception with forward-prediction. Add process-hygiene requirement (reap
+    encoder/actuation noise nodes between runs). Claim axis = localization
+    safety/stability, not deterministic goal-reaching.
+
+  evidence_status: candidate_until_complete_artifact_chain
 
   reported_worlds:
-    - warehouse_occ_light.world.sdf
-
-  exploratory_failure_worlds:
     - warehouse_aws.world.sdf
 
+  legacy_worlds:
+    - warehouse_occ_light.world.sdf
+
   reported_tasks:
+    - F31_b1_apron_a3_mid        # main route-choice (occluded vs visible)
+    - visible_aisle_sanity_aws   # visible->visible control (C1~=C2)
+    # Tier-C generality tasks added after GP-field coordinate validation.
+
+  legacy_tasks:
     - shadow_tradeoff_a
     - shadow_tradeoff_b
     - sanity_open
-
-  exploratory_failure_tasks:
-    - B1_apron_a4_to_uppermid_a3
-    - visible_aisle_sanity_aws
-
-  legacy_tasks:
     - main_shadow_tradeoff
 
   allowed_planner_conditions:
@@ -49,12 +58,12 @@ paper_runtime_contract:
       uses_gp_visibility: true
 
   locked_runtime_method:
-    active_diagnostic_task:
+    main_route_choice_task:
       world: warehouse_aws.world.sdf
-      task: B1_apron_a4_to_uppermid_a3
-      start: {x: 3.20, y: -1.00, yaw: 0.0}
+      task: F31_b1_apron_a3_mid
+      start: {x: 3.30, y: -1.00, yaw: 0.0}
       goal: {x: 1.00, y: 1.75}
-      status: diagnostic_not_paper_evidence
+      status: candidate_paper_facing
     c1_c2_difference_allowed:
       - planner_facing_camera_observation_covariance
       - gp_query_enabled_only_for_c2
@@ -91,22 +100,56 @@ paper_runtime_contract:
       local_solve_role: short_horizon_tracking_of_planner_derived_waypoints
       mission_waypoints_allowed: false
       global_waypoints_are_condition_specific: true
-    aws_locked_candidate:
+    aws_locked_candidate:   # frozen 2026-06-03 (Phase 0); see aws_paper_final_config.yaml
       use_hierarchical: true
       global_horizon: 80
-      local_horizon: 20
+      global_dt: 0.25
+      global_optimizer_maxiter: 80
+      # Local tracker: boring proportional waypoint follower (no GP/ambiguity/EFE),
+      # rotate-in-place when misaligned. Identical across C1/C2/C3.
+      use_simple_local_controller: true
+      simple_tracker_yaw_gate_rad: 0.6
+      local_tracking_use_odom_yaw: true
+      waypoint_spacing_m: 0.40
+      waypoint_arrival_radius_m: 0.20
+      v_max: 0.60
       optimizer_multistart_include_direct: false
       optimizer_multistart_lateral_offsets: "-1.0,1.0"
-      optimizer_initial_routes:
+      optimizer_initial_routes:        # warehouse domain-prior lanes (known aisles)
         - mid_cross_lane
         - lower_sweep_lane
+      nogo_weight: 200.0
+      nogo_safe_distance: 0.30
+      use_belief_nogo_cost: true
+      nogo_belief_kappa: 2.0
+      r_visible_uv: 2.5
+      r_miss_uv: 40.0
+      ambiguity_weight: 8.0
       use_command_noise: true
       use_encoder_noise: true
+      perception:
+        yolo_imgsz: 480              # ~90ms inference (was 137ms at 640)
+        selected_pixel_source: bbox_bottom
+        visual_heading_from_yolo: false
+        pixel_forward_prediction: cmd_log_replay   # delayed-measurement handling
+        bev_y_calibration_offset_m: 0.05           # measured static geometric dy bias
+        pixel_max_correction_jump_m: 0.50          # near-rack outlier rejection
+        pixel_corr_nis_logged: true
       route_seed_constraints:
         same_for_c1_and_c2: true
         may_use_known_2d_driveable_floor: true
         must_not_use_gp_visibility: true
         must_not_encode_expected_conclusion: true
+      mechanism_note: >
+        Route choice is driven by GP-conditioned belief-nogo feasibility: in the
+        occluded gap the high R_plan barely reduces the predicted covariance, so
+        the per-step belief-nogo posterior covariance is ~4x larger for C2
+        (0.165m vs C1 0.042m major-axis), raising the occluded route's clearance
+        demand. The ambiguity term contributes modestly; C3 (ambiguity off, GP on)
+        is the decisive ablation. Report as belief-space localization-safety, NOT
+        as an information/ambiguity-cost flip. The binary route-flip can be
+        optimizer-basin sensitive in the narrow aisle (disclose as a local-minima
+        / solver limitation).
 
   required_runtime_settings:
     perception_backend: yolo
@@ -120,6 +163,8 @@ paper_runtime_contract:
     crash_or_contact_ends_run_and_is_tracked: true
     yolo_model_must_be_explicit: true
     visibility_artifact_path_must_be_explicit_for_gp_conditions: true
+    process_hygiene_required: true   # reap encoder_noise_node + actuation_noise_node
+    single_odom_noisy_publisher_required: true  # >1 => pi-offset heading corruption (C1 bug, fixed 2026-06-03)
 
   heading_modes:
     current_campaign:

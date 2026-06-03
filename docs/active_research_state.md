@@ -1,160 +1,134 @@
 # Active Research State
 
-Last updated: 2026-05-28.
+Last updated: 2026-06-03.
 
 ## Current Paper Position
 
-The current paper benchmark is `warehouse_aws.world.sdf` (B1 route-choice task). The `warehouse_occ_light` world was the original
-core. It is the cleanest validated evidence for the mechanism: a known driveable
-/ forbidden-zone layer is shared across conditions, while learned observation
-reliability changes the planner-facing camera `(x, y)` covariance.
+The compact benchmark remains the cleanest validated mechanism evidence already
+available in the repository. The AWS-style warehouse line is now the active
+paper-facing candidate, but it should be treated as final paper evidence only
+after the complete artifact chain is present:
 
-The new warehouse/AWS-style line is exploratory. It may become Experiment B, but
-it is not paper evidence until final geometry, camera view, detector, GP, smoke
-validation, seeded logs, figures, and paper wording are complete.
+- fixed world and camera pose;
+- validated YOLO detector for that world;
+- fitted AWS GP artifact;
+- locked config;
+- complete C1/C2/C3 seeded logs;
+- final figures/tables generated from those logs;
+- paper wording aligned with the actual runtime method.
+
+The current AWS claim should be framed as localization-safety and route
+observability, not as deterministic goal-reaching superiority.
 
 ## Active Hypothesis
 
-The addition of learned observation reliability should make the planner prefer
-routes that are longer but more observable when that tradeoff is meaningful. It
-may also stop or become cautious when planner-facing covariance makes the state
-estimate too unreliable. The baseline can still reach easy goals, but is
-expected to be more prone to poor localization and collision in camera-poor
-regions.
+Learned observation reliability should make the planner prefer a longer route
+through better-observed floor space when that route keeps the belief more
+localized near the known driveable / forbidden-zone layer. The constant-R
+baseline may still reach the goal, but it is expected to do so with larger
+localization error, larger p95 error, worse yaw consistency, and lower safety
+margin in camera-poor regions.
 
-This should not be demonstrated by simply using an oversized ambiguity weight.
-The preferred direction is a general planner setup: adequate horizon coverage,
-condition-neutral multistart for local minima, and goal-prior scheduling or
-annealing so the planner can choose visible progress before tightening to the
-goal.
+The effect must emerge from planner-facing covariance, shared driveability
+handling, and condition-neutral optimizer basin handling. It must not be
+created by mission waypoints, GP-dependent route seeds, or simply overwhelming
+the objective with an oversized ambiguity weight.
 
-## Current Validity
+## Locked Runtime Interpretation
 
-Valid paper-facing line:
+The current AWS runtime is hierarchical:
 
-- compact benchmark world;
-- explicit detector and GP artifacts;
-- C1 constant-covariance baseline versus C2 learned-observability EFE;
-- paper metrics focused on compact tasks.
+- a global EFE solve performs route-level planning;
+- neutral multistart seeds may use the known 2D driveable/lane layout;
+- the selected global plan is converted into planner-derived waypoints;
+- a shared local tracker follows those waypoints;
+- local tracking is execution plumbing and is not the GP contribution.
 
-Exploratory line:
+The C1/C2 comparison is:
 
-- AWS world with richer shelves, loading apron, and a high wall-mounted camera;
-- newer warehouse layouts and timing diagnostics can test route-choice
-  mechanisms, but route-choice evidence is not yet validated;
-- AWS route geometry, camera view, GP capture, and solver timing must be
-  settled before interpreting C2 behavior.
+| Condition | Paper name | GP? | Risk | Ambiguity | Intended difference |
+| --- | --- | --- | --- | --- | --- |
+| C1 | constant-observability EFE | no | active | active | constant camera covariance |
+| C2 | learned-observability EFE | yes | active | active | GP-derived camera covariance |
+| C3 | GP-risk-only ablation | yes | active | off | tests whether ambiguity is needed |
 
-Rejected AWS lessons:
+The only intended C1/C2 difference is planner-facing camera observation
+covariance. The task, detector, GP availability except for C1 queries, known
+driveable barrier, tracker, noise, seeds, horizons, optimizer budgets, and
+candidate route seeds must be shared.
 
-- A visible-goal route-choice probe was not faithful evidence because the
-  baseline already selected the detour-like route and the learned condition
-  stalled at high ambiguity weight.
-- A dark-final-goal probe confounded the experiment because both the route and
-  the final goal were camera-poor.
+## Current AWS Candidate
 
-## Current Timing / Optimizer Diagnostic
+Primary candidate config:
 
-Initial rollout diagnostics show that longer horizons and multistart can reveal a
-visibility-aware solution basin that shorter horizons miss. In particular, H120
-/ H200 multistart diagnostics reached near the intended goal while H40 / H80 did
-not. This is useful evidence about local minima and horizon coverage, but the
-solve times are too high to treat as a solved closed-loop method without further
-work.
+`scripts/visibility_comparison/aws_paper_final_config.yaml`
 
-Interpretation: multistart may stay, but only as condition-neutral optimizer
-basin handling. It must not become route-specific waypoint scripting.
+Primary candidate log root:
 
-Update from the latest AWS cleanup/check:
+`logs/visibility_comparison/paper_final_v1`
 
-- `efe_offline_lab.py` now passes the same `nogo_mode=keep_in` and serialized
-  driveable-region geometry used by Gazebo. Earlier offline route-choice
-  diagnostics were therefore too optimistic when they omitted the true
-  driveable-layer no-go.
-- The active AWS task registry has been reduced to
-  `B1_apron_a4_to_uppermid_a3` plus `visible_aisle_sanity_aws` to avoid
-  selecting stale B1 variants. The active route-choice diagnostic starts at
-  `(3.20, -1.00)` with yaw `0.0` (facing east toward R5 after a hypothetical
-  pick) and goals at `(1.00, 1.75)`.
-- For this active task, F18 shows that C2 H80 can prefer the A3-detour basin
-  when seeded there, but the original/cold initialization does not find it. At
-  H120 the direct-to-goal basin wins. This supports a local-optimum /
-  first-long-solve investigation, but not yet a clean closed-loop paper result.
-- The C2 Gazebo smoke run on the cross task failed by leaving the known
-  driveable layer after only three replans. The main failure was solve-time /
-  execution-cadence mismatch at `H=120`, not an interpretable visibility
-  tradeoff.
-- Important next-method option: the first solve can use a higher horizon than
-  later replans. A long initial solve can expose the route-scale visibility
-  tradeoff, while shorter subsequent replans keep closed-loop timing realistic.
-  This should be treated as condition-neutral optimizer basin handling /
-  warm-starting, not as mission waypoint forcing.
-- Locked AWS runtime direction: hierarchical global-local planning is now the
-  intended Gazebo path. The first/global solve uses a longer horizon to avoid
-  local route-choice basins; the local tracker follows planner-derived
-  waypoints. This is a robotics/MPC practicality, not a hand-authored mission.
-- Realistic, modest lane-graph seeds are allowed because local optima strongly
-  influence this nonlinear EFE controller. They may use the known 2D
-  traversability/lane layout, but not the GP visibility field or condition
-  labels.
-- Runtime method contract is now locked in
-  `docs/runtime_method_contract.md`. The corrected comparison is:
-  C1 = constant-observability EFE with risk and ambiguity active; C2 =
-  learned-observability EFE with risk and ambiguity active. The only intended
-  condition difference is planner-facing camera observation covariance.
-- Earlier offline/runtime wiring incorrectly disabled ambiguity for
-  `constant_R_efe`; this has been corrected. Any older figure or run where C1
-  has `ambiguity_cost=0` should be treated as stale for C1/C2 interpretation.
-- AWS diagnostics now use a shared 2-sigma belief-tube driveable-region log
-  barrier. Non-driveable floor is not a negotiable visibility tradeoff.
-- F22 is the current fair initial-planning diagnostic. It uses the same neutral
-  multistart candidates for C1 and C2; candidates may use known 2D driveability
-  but not GP visibility.
+Primary task:
 
-Latest diagnostic figure:
+```text
+world: warehouse_aws.world.sdf
+task:  F31_b1_apron_a3_mid
+start: (3.30, -1.00, yaw=0.0)
+goal:  (1.00, 1.75)
+```
 
-- `/home/joostleliveld/Thesis/UnembodiedNavigation/timing_presentation/figures/F17_aws_route_choice_diagnosis.png`
-- `/home/joostleliveld/Thesis/UnembodiedNavigation/timing_presentation/figures/F18_pick_east_plan_alternatives.png`
-- `/home/joostleliveld/Thesis/UnembodiedNavigation/timing_presentation/figures/F22_realistic_multistart_choice.png`
-- `/home/joostleliveld/Thesis/UnembodiedNavigation/timing_presentation/figures/F23/F23_hier_locked_smoke.png`
-- `/home/joostleliveld/Thesis/UnembodiedNavigation/timing_presentation/figures/F24/F24_visible_route_battery.png`
-- `/home/joostleliveld/Thesis/UnembodiedNavigation/timing_presentation/figures/F25/F25_r01_gazebo_smoke.png`
+Current inspected summaries:
 
-Latest AWS route-choice status:
+| Condition | Completed seeds | Outcome | Mean path | Mean truth-state error | Mean p95 truth-state error |
+| --- | ---: | --- | ---: | ---: | ---: |
+| C1 constant-R | 5 | 5/5 goal reached | 4.64 m | 0.366 m | 1.66 m |
+| C2 learned-R | 5 | 5/5 goal reached | 6.82 m | 0.195 m | 0.43 m |
+| C3 risk-only | 5 | 5/5 goal reached | 6.89 m | 0.196 m | 0.45 m |
 
-- F23 shows that the hierarchical long-global / short-local method can make C2
-  select the lower visible detour in offline initial planning when the goal prior
-  and missing-observation covariance are set less aggressively.
-- F24 shows a broader visible-to-visible offline route battery, but it is an
-  initial-planning diagnostic only. Command and encoder noise do not act in that
-  figure.
-- F25 tested R01 in Gazebo. Both C1 and C2 crashed before reaching the goal.
-  During local tracking, `p_vis_plan` was approximately 1 for both conditions,
-  so the failure is not yet evidence about the visibility tradeoff. It is a
-  closed-loop tracking / driveable-margin problem: the local tracker cuts close
-  to the forbidden staging region under noise and belief error.
+Current interpretation:
 
-## Next Decision
+> The constant-observability baseline takes a shorter route and can reach the
+> goal, but with much larger localization error. The learned-observability
+> planner takes a longer route and reaches with lower localization error and a
+> more stable belief.
 
-Decide whether to invest in making the new warehouse line a validated Experiment
-B. If yes, the next blocker is not another full Gazebo campaign; it is local
-closed-loop tracking that preserves the global route while maintaining margin to
-the known driveable/forbidden-zone layer. If no, keep AWS as future work and
-strengthen compact benchmark figures: traversability map, learned
-reliability/coverage, ambiguity field, total EFE cost decomposition, and solver
-limitations.
+C3 currently behaves similarly to C2, which suggests the dominant AWS mechanism
+is GP-conditioned belief-risk / driveable-margin behavior rather than an
+ambiguity-only route flip. The paper should present this honestly.
 
-Sparse route candidates are future work only. They should be framed as fair
-coarse route scoring, not mission waypoints.
+Do not claim yet:
 
-## Historical Coarse-Planning Diagnostic
+- C1 fails while C2 succeeds;
+- AWS is final paper evidence;
+- the GP directly models physical occlusion geometry;
+- YOLO provides heading;
+- local waypoint tracking is itself the visibility-aware contribution.
 
-`scripts/visibility_comparison/coarse_route_evaluator.py` is an offline
-diagnostic for testing whether the known driveable map plus learned observation
-reliability naturally prefers a longer visible route. It does not publish
-waypoints and is not an online planner.
+## Runtime Details To Keep Paper-Accurate
 
-Initial AWS B1 checks showed that earlier non-hierarchical/cold-start settings
-did not cleanly demonstrate the intended route-choice incentive. The current
-direction is to test a robotics-faithful hierarchical global/local runtime with
-shared lane-graph seeds before making any AWS claim.
+- Current YOLO-selected localization pixel is bounding-box bottom center. Mask
+  diagnostics exist, but mask-bottom is not the selected pixel source.
+- Camera updates provide `(x, y)` through ground-plane projection.
+- Heading comes from odometry.
+- Projection/calibration uncertainty is not separately propagated into EKF or
+  EFE covariance.
+- The known 2D driveable / forbidden-zone layer is shared across conditions.
+- The 2-sigma belief-tube driveable barrier is a feasibility/safety mechanism,
+  not learned occlusion.
+- Command and encoder noise are part of the AWS realism claim and should remain
+  on for final AWS campaigns.
+- Crash/contact ends a run and must be tracked separately from stuck, timeout,
+  and goal reached.
+
+## Immediate Next Decisions
+
+1. Run the uniform-visible sanity task with the same locked runtime.
+2. Generate final dashboards, summary tables, and cost-decomposition figures
+   from the completed logs.
+3. Clean stale inherited comments from `aws_paper_final_config.yaml`.
+4. Once the artifact chain is complete, decide whether the thesis/paper presents
+   AWS as the main result or as an Experiment B extension alongside the compact
+   benchmark.
+
+For the detailed final experiment suite, use:
+
+`docs/final_experiment_definition.md`

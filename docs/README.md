@@ -11,6 +11,7 @@ contract; these docs are repo-specific references.
 | `experiment_registry.md` | valid, exploratory, and invalid run families plus the required artifact chain |
 | `paper_alignment.md` | code-to-paper contract, assumptions, and paper wording boundaries |
 | `paper_runtime_contract.yaml` | machine-readable checklist for paper-facing runs |
+| `final_experiment_definition.md` | final runtime audit, paper-safe claim, and experiment suite |
 | `runtime_method_contract.md` | locked C1/C2, multistart, driveability, and pre-Gazebo method contract |
 | `runtime_dataflow.md` | offline artifact flow and online ROS topic flow |
 | `publication_checklist.md` | release-readiness checklist and remaining decisions |

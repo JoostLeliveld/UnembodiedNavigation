@@ -33,6 +33,7 @@ not paper evidence unless the full artifact chain is present.
 | exploratory | `logs/perception_datasets/aws_simseg_v2` | AWS detector data line |
 | exploratory | `logs/perception_models/aws_yolo_simseg_v2` | AWS detector line |
 | exploratory | `logs/visibility_comparison/aws_gp_v5` | Latest retained AWS GP line; capture/targets cleaned, only fitted artifact and diagnostic plots remain |
+| candidate (seeded route-choice complete) | `logs/visibility_comparison/paper_final_v1` | Current AWS route-choice candidate. Matched C1/C2/C3 seed summaries support localization-safety/stability; still needs uniform-visible sanity, final cost decomposition, and final paper wording. |
 | diagnostic | `logs/visibility_comparison/f24_r01_gazebo_smoke_v2` | F25 Gazebo smoke: both conditions crashed (geometry penetration); config aws_f24_r01_gazebo_smoke_config.yaml |
 | diagnostic | `logs/visibility_comparison/initial_rollout_diagnostics/` | F26 config (aws_f26_r01_gazebo_smoke_config.yaml) addresses F25 root causes: nogo_safe_distance 0.13→0.30, local_optimizer_maxiter 60→25 |
 
@@ -40,7 +41,7 @@ not paper evidence unless the full artifact chain is present.
 
 | Status | Asset / Run Family | Notes |
 | --- | --- | --- |
-| diagnostic | `timing_presentation/figures/` | horizon and multistart timing figures (F1–F25); useful for solver/horizon discussion, not closed-loop evidence |
+| diagnostic | `timing_presentation/figures/` | horizon, runtime, yaw, tracker, and route-choice diagnostic figures (F1+); useful for method development, not evidence unless tied to final logs |
 | diagnostic | `logs/visibility_comparison/initial_rollout_diagnostics/` | initial-plan sweeps showing objective/optimizer behavior before Gazebo validation |
 
 ## Invalid Or Rejected Lines
@@ -56,3 +57,6 @@ not paper evidence unless the full artifact chain is present.
 
 Add a row here only after the chain is complete. Until then, mark the run
 `exploratory` or `diagnostic` and avoid paper-result language.
+
+For the current final AWS experiment plan, see
+`docs/final_experiment_definition.md`.

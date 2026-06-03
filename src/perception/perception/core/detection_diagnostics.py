@@ -41,6 +41,16 @@ DETECTION_DIAGNOSTIC_FIELDS = (
     'mask_border_frac',
     'mask_score',
     'selected_pixel_source_code',
+    'yolo_inference_ms',
+    'detector_callback_ms',
+    # Runtime causality ledger.  These are ROS-clock stamps in seconds and
+    # preserve the delayed-measurement chain: image -> detector -> correction.
+    'yolo_receive_stamp',
+    'yolo_start_stamp',
+    'yolo_finish_stamp',
+    'yolo_publish_stamp',
+    'yolo_latency_s',
+    'frame_age_at_publish_s',
 )
 
 _FIELD_INDEX = {
@@ -85,6 +95,14 @@ def diagnostics_message(
     mask_border_frac=math.nan,
     mask_score=math.nan,
     selected_pixel_source_code=math.nan,
+    yolo_inference_ms=math.nan,
+    detector_callback_ms=math.nan,
+    yolo_receive_stamp=math.nan,
+    yolo_start_stamp=math.nan,
+    yolo_finish_stamp=math.nan,
+    yolo_publish_stamp=math.nan,
+    yolo_latency_s=math.nan,
+    frame_age_at_publish_s=math.nan,
 ):
     msg = Float64MultiArray()
     msg.data = [
@@ -123,6 +141,14 @@ def diagnostics_message(
         float(mask_border_frac),
         float(mask_score),
         float(selected_pixel_source_code),
+        float(yolo_inference_ms),
+        float(detector_callback_ms),
+        float(yolo_receive_stamp),
+        float(yolo_start_stamp),
+        float(yolo_finish_stamp),
+        float(yolo_publish_stamp),
+        float(yolo_latency_s),
+        float(frame_age_at_publish_s),
     ]
     return msg
 

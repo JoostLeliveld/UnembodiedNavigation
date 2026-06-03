@@ -143,15 +143,34 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('local_nogo_penalty_type', '')
         _declare_if_not('local_nogo_weight', -1.0)
         _declare_if_not('local_nogo_safe_distance', -1.0)
+        _declare_if_not('local_goal_prior_u_std_start', -1.0)
+        _declare_if_not('local_goal_prior_v_std_start', -1.0)
+        _declare_if_not('local_goal_prior_u_std_final', -1.0)
+        _declare_if_not('local_goal_prior_v_std_final', -1.0)
         _declare_if_not('waypoint_spacing_m', 1.0)
         _declare_if_not('waypoint_arrival_radius_m', 0.35)
+        _declare_if_not('local_replan_min_remaining_s', 0.0)
+        _declare_if_not('local_replan_on_waypoint_change', False)
+        _declare_if_not('latency_compensate_plan_handoff', False)
+        _declare_if_not('use_simple_local_controller', False)
+        _declare_if_not('local_tracking_use_odom_yaw', False)
 
         # Pixel correction params
         _declare_if_not('use_pixel_correction', False)
         _declare_if_not('pixel_topic', '/perception/pixel_pose')
         _declare_if_not('cmd_topic', '/cmd_vel')
+        _declare_if_not('cmd_publish_rate', 10.0)
         _declare_if_not('pixel_timeout_s', 0.5)
         _declare_if_not('pixel_correction_min_interval_s', 0.0)
+        _declare_if_not('bev_y_calibration_offset_m', 0.0)
+        _declare_if_not('pixel_max_correction_jump_m', 0.0)
+        # DIAGNOSTIC ONLY: feed ground-truth pose (TF odom->plan_frame of raw
+        # /odom) as the planner belief, bypassing perception entirely. Used to
+        # isolate the controller from the estimator. MUST be false for any
+        # comparison/paper run.
+        _declare_if_not('use_truth_localization', False)
+        _declare_if_not('truth_odom_topic', '/odom')
+        _declare_if_not('pixel_correction_nis_threshold', 0.0)
         _declare_if_not('pixel_correction_approx', 'AUTO')
         _declare_if_not('skip_stale_pixel_correction', True)
         _declare_if_not('use_pixel_heading_correction', True)
@@ -281,15 +300,56 @@ class UnicyclePlannerNode(Node):
         self.local_nogo_safe_distance = float(
             self.get_parameter('local_nogo_safe_distance').value
         )
+        self.local_goal_prior_u_std_start = float(
+            self.get_parameter('local_goal_prior_u_std_start').value
+        )
+        self.local_goal_prior_v_std_start = float(
+            self.get_parameter('local_goal_prior_v_std_start').value
+        )
+        self.local_goal_prior_u_std_final = float(
+            self.get_parameter('local_goal_prior_u_std_final').value
+        )
+        self.local_goal_prior_v_std_final = float(
+            self.get_parameter('local_goal_prior_v_std_final').value
+        )
         self.waypoint_spacing_m = float(self.get_parameter('waypoint_spacing_m').value)
         self.waypoint_arrival_radius_m = float(self.get_parameter('waypoint_arrival_radius_m').value)
+        self.local_replan_min_remaining_s = max(
+            0.0, float(self.get_parameter('local_replan_min_remaining_s').value)
+        )
+        self.local_replan_on_waypoint_change = _as_bool(
+            self.get_parameter('local_replan_on_waypoint_change').value
+        )
+        self.latency_compensate_plan_handoff = _as_bool(
+            self.get_parameter('latency_compensate_plan_handoff').value
+        )
+        self.use_simple_local_controller = _as_bool(
+            self.get_parameter('use_simple_local_controller').value
+        )
+        self.local_tracking_use_odom_yaw = _as_bool(
+            self.get_parameter('local_tracking_use_odom_yaw').value
+        )
 
         self.use_pixel_correction = _as_bool(self.get_parameter('use_pixel_correction').value)
         self.pixel_topic = self.get_parameter('pixel_topic').value
         self.cmd_topic = str(self.get_parameter('cmd_topic').value).strip() or '/cmd_vel'
+        self.cmd_publish_rate = max(0.1, float(self.get_parameter('cmd_publish_rate').value))
         self.pixel_timeout_s = float(self.get_parameter('pixel_timeout_s').value)
         self.pixel_correction_min_interval_s = float(
             self.get_parameter('pixel_correction_min_interval_s').value
+        )
+        self.bev_y_calibration_offset_m = float(
+            self.get_parameter('bev_y_calibration_offset_m').value
+        )
+        self.pixel_max_correction_jump_m = float(
+            self.get_parameter('pixel_max_correction_jump_m').value
+        )
+        self.use_truth_localization = _as_bool(
+            self.get_parameter('use_truth_localization').value
+        )
+        self.truth_odom_topic = str(self.get_parameter('truth_odom_topic').value)
+        self.pixel_correction_nis_threshold = float(
+            self.get_parameter('pixel_correction_nis_threshold').value
         )
         self.pixel_correction_approx = str(
             self.get_parameter('pixel_correction_approx').value
@@ -388,6 +448,27 @@ class UnicyclePlannerNode(Node):
             Odometry, self.odom_topic, self._odom_cb, qos_profile=state_qos,
             callback_group=self._io_group
         )
+
+        # DIAGNOSTIC: ground-truth localization path (TF odom->plan_frame of raw odom).
+        self.truth_pose = None  # (x, y, yaw) in plan frame
+        self.truth_pose_stamp = None
+        self._tf_buffer = None
+        self._tf_listener = None
+        self.truth_odom_sub = None
+        if self.use_truth_localization:
+            import tf2_ros
+            from tf2_geometry_msgs import do_transform_pose  # noqa: F401  (registers PoseStamped)
+            self._tf_buffer = tf2_ros.Buffer()
+            self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
+            self._do_transform_pose = do_transform_pose
+            self.truth_odom_sub = self.create_subscription(
+                Odometry, self.truth_odom_topic, self._truth_odom_cb,
+                qos_profile=state_qos, callback_group=self._io_group,
+            )
+            self.get_logger().warn(
+                "*** use_truth_localization=TRUE — planner belief is GROUND TRUTH "
+                "(perception bypassed). DIAGNOSTIC ONLY, not valid for comparison runs. ***"
+            )
 
         # Publishers
         path_qos = QoSProfile(depth=1)
@@ -577,9 +658,9 @@ class UnicyclePlannerNode(Node):
             visibility_sigma_kappa=self.visibility_sigma_kappa,
             goal_prior_u_std_start=g('goal_prior_u_std_start'),
             goal_prior_v_std_start=g('goal_prior_v_std_start'),
-            goal_prior_u_std_final=self.goal_prior_u_std_final,
-            goal_prior_v_std_final=self.goal_prior_v_std_final,
-            goal_tightening_power=self.goal_tightening_power,
+            goal_prior_u_std_final=g('goal_prior_u_std_final'),
+            goal_prior_v_std_final=g('goal_prior_v_std_final'),
+            goal_tightening_power=g('goal_tightening_power'),
             goal_progress_n_steps=int(g('goal_progress_n_steps')),
             observation_risk_scale=float(g('observation_risk_scale')),
             ambiguity_term_scale=float(g('ambiguity_term_scale')), discount_gamma=float(g('discount_gamma')),
@@ -645,6 +726,25 @@ class UnicyclePlannerNode(Node):
             self.odom_yaw_meas = wrap_angle(float(yaw + self.odom_yaw_offset_rad))
             self.odom_stamp = msg.header.stamp
             self.odom_vel = np.array([v_odom, w_odom], dtype=float)
+
+    def _truth_odom_cb(self, msg: Odometry):
+        """DIAGNOSTIC: transform raw odom (truth) into the plan frame via TF."""
+        source_frame = (msg.header.frame_id or 'odom').strip() or 'odom'
+        plan_frame = self._resolve_plan_frame_id()
+        pose_world = msg.pose.pose
+        if source_frame != plan_frame:
+            try:
+                tf_msg = self._tf_buffer.lookup_transform(
+                    plan_frame, source_frame, Time())
+                pose_world = self._do_transform_pose(msg.pose.pose, tf_msg)
+            except Exception:
+                return
+        x = float(pose_world.position.x)
+        y = float(pose_world.position.y)
+        yaw = self._yaw_from_quaternion(pose_world.orientation)
+        with self._data_lock:
+            self.truth_pose = (x, y, yaw)
+            self.truth_pose_stamp = msg.header.stamp
 
     def _fresh_odom_heading_locked(self, ref_stamp) -> tuple[float | None, float]:
         if self.odom_yaw_meas is None or self.odom_stamp is None:
@@ -831,6 +931,19 @@ class UnicyclePlannerNode(Node):
     def _pixel_cb(self, msg: PoseStamped):
         u = msg.pose.position.x
         v = msg.pose.position.y
+        # Apply the same y-calibration offset the state node uses so both
+        # nodes converge to the same world position from the same pixel.
+        if self.bev_y_calibration_offset_m != 0.0:
+            try:
+                camera = self.planner.camera
+                xy = camera.pixel_to_world(u, v)
+                if xy is not None:
+                    u_cal, v_cal, vis = camera.world_to_pixel(
+                        xy[0], xy[1] + self.bev_y_calibration_offset_m, 0.0)
+                    if vis:
+                        u, v = u_cal, v_cal
+            except Exception:
+                pass
         with self._data_lock:
             if self.use_displacement_heading:
                 yaw_meas, yaw_sigma = self._displacement_heading_locked(u, v)
@@ -891,6 +1004,71 @@ class UnicyclePlannerNode(Node):
             return False
         return bool(0.0 <= dt_since_correction < self.pixel_correction_min_interval_s)
 
+    def _replay_cmd_log_interval(self, m0, S0, from_stamp, to_stamp,
+                                   fallback_cmd, fallback_dt):
+        """Predict (m0, S0) from from_stamp to to_stamp using _cmd_log replay.
+
+        Falls back to single-step prediction with fallback_cmd if the log has
+        no entries in the interval or timestamps are unavailable.
+        """
+        try:
+            from_s = Time.from_msg(from_stamp).nanoseconds * 1e-9
+            to_s   = Time.from_msg(to_stamp).nanoseconds * 1e-9
+        except (AttributeError, TypeError, ValueError):
+            m0, S0 = self.planner.predict(m0, S0, fallback_cmd, dt=fallback_dt)
+            return m0, S0, {
+                'cmd_replay_count': 0.0,
+                'cmd_replay_duration_s': float(fallback_dt),
+                'cmd_replay_used_fallback': 1.0,
+            }
+
+        if to_s <= from_s:
+            return m0, S0, {
+                'cmd_replay_count': 0.0,
+                'cmd_replay_duration_s': 0.0,
+                'cmd_replay_used_fallback': 0.0,
+            }
+
+        with self._data_lock:
+            entries = list(self._cmd_log)
+        previous = [(t, v, w) for t, v, w in entries if t <= from_s]
+        relevant = [(t, v, w) for t, v, w in entries if from_s < t <= to_s]
+
+        if previous:
+            current_cmd = np.array([previous[-1][1], previous[-1][2]], dtype=float)
+            used_fallback = 0.0
+        elif relevant:
+            # No command at the measurement stamp.  Treat the robot as
+            # stationary until the first later command; this avoids applying a
+            # future command to the past during delayed-measurement replay.
+            current_cmd = np.array([0.0, 0.0], dtype=float)
+            used_fallback = 0.0
+        else:
+            m0, S0 = self.planner.predict(m0, S0, fallback_cmd, dt=fallback_dt)
+            return m0, S0, {
+                'cmd_replay_count': 0.0,
+                'cmd_replay_duration_s': float(fallback_dt),
+                'cmd_replay_used_fallback': 1.0,
+            }
+
+        prev_t = from_s
+        for t, v, w in relevant:
+            dt_gap = t - prev_t
+            if dt_gap > 1e-4:
+                m0, S0 = self.planner.predict(
+                    m0, S0, current_cmd, dt=dt_gap)
+            current_cmd = np.array([v, w], dtype=float)
+            prev_t = t
+        dt_tail = to_s - prev_t
+        if dt_tail > 1e-4:
+            m0, S0 = self.planner.predict(
+                m0, S0, current_cmd, dt=dt_tail)
+        return m0, S0, {
+            'cmd_replay_count': float(len(relevant)),
+            'cmd_replay_duration_s': float(max(to_s - from_s, 0.0)),
+            'cmd_replay_used_fallback': float(used_fallback),
+        }
+
     def _pixel_correction_dt_s(self, stamp_msg) -> float | None:
         try:
             now = Time.from_msg(stamp_msg)
@@ -934,6 +1112,7 @@ class UnicyclePlannerNode(Node):
         with self._data_lock:
             belief_m = None if self.belief_m is None else self.belief_m.copy()
             belief_S = None if self.belief_S is None else self.belief_S.copy()
+            belief_stamp = self.belief_stamp
             v_cmd, w_cmd = float(self.last_cmd[0]), float(self.last_cmd[1])
             meas = None if self.pixel_meas is None else self.pixel_meas.copy()
             yaw_meas, yaw_sigma, yaw_source = self._select_heading_measurement_locked(stamp_msg)
@@ -942,6 +1121,7 @@ class UnicyclePlannerNode(Node):
         return {
             'belief_m': belief_m,
             'belief_S': belief_S,
+            'belief_stamp': belief_stamp,
             'cmd': np.array([v_cmd, w_cmd], dtype=float),
             'meas': meas,
             'yaw_meas': yaw_meas,
@@ -994,6 +1174,7 @@ class UnicyclePlannerNode(Node):
             'next_S': next_S,
             'innov': innov,
             'mu_y': mu_y,
+            'S_y': Sigma_y,
         }
 
     def _apply_yaw_anchor_after_pixel_update(
@@ -1067,9 +1248,34 @@ class UnicyclePlannerNode(Node):
         yaw_meas,
         yaw_sigma,
         yaw_source,
+        nis=float('nan'),
+        accepted=True,
+        reject_reason_code=0.0,
+        apply_stamp_s=math.nan,
+        belief_input_stamp_s=math.nan,
+        cmd_replay_count=math.nan,
+        cmd_replay_duration_s=math.nan,
+        cmd_replay_used_fallback=math.nan,
+        nis_threshold=math.nan,
     ):
         diag_msg = Float64MultiArray()
         r_eff = np.asarray(R_eff, dtype=float)
+        if not math.isfinite(float(apply_stamp_s)):
+            apply_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9
+        expected_after_u = math.nan
+        expected_after_v = math.nan
+        expected_after_visible = math.nan
+        try:
+            expected_after_u, expected_after_v, visible = self.planner.camera.world_to_pixel(
+                float(next_m[0]),
+                float(next_m[1]),
+                0.0,
+            )
+            expected_after_visible = 1.0 if bool(visible) else 0.0
+        except Exception:
+            expected_after_u = math.nan
+            expected_after_v = math.nan
+            expected_after_visible = math.nan
         diag_msg.data = [
             float(self._stamp_to_float(stamp_msg)),
             1.0,
@@ -1100,8 +1306,87 @@ class UnicyclePlannerNode(Node):
             float(yaw_meas) if yaw_meas is not None and math.isfinite(float(yaw_meas)) else math.nan,
             float(yaw_sigma) if math.isfinite(float(yaw_sigma)) else math.nan,
             float(yaw_source),
+            float(nis) if math.isfinite(float(nis)) else math.nan,
+            1.0 if accepted else 0.0,
+            float(reject_reason_code),
+            float(apply_stamp_s),
+            float(belief_input_stamp_s),
+            float(cmd_replay_count),
+            float(cmd_replay_duration_s),
+            float(cmd_replay_used_fallback),
+            float(nis_threshold),
+            float(expected_after_u) if math.isfinite(float(expected_after_u)) else math.nan,
+            float(expected_after_v) if math.isfinite(float(expected_after_v)) else math.nan,
+            float(expected_after_visible) if math.isfinite(float(expected_after_visible)) else math.nan,
         ]
         self.pixel_correction_diag_pub.publish(diag_msg)
+
+    @staticmethod
+    def _pixel_correction_reject_code(reason: str) -> float:
+        return float({
+            'stale_age': 1,
+            'dt_implausible': 2,
+            'missing_snapshot': 3,
+            'update_failed': 4,
+            'jump_too_large': 5,
+            'nis_too_large': 6,
+        }.get(str(reason or '').strip(), 99))
+
+    def _publish_pixel_correction_rejection(
+        self,
+        stamp_msg,
+        *,
+        reason: str,
+        age=math.nan,
+        dt_s=math.nan,
+        m_pred=None,
+        meas=None,
+        mu_y=None,
+        innov=None,
+        xy_update_norm_m=math.nan,
+        R_eff=None,
+        nis=math.nan,
+        belief_input_stamp_s=math.nan,
+        cmd_replay_count=math.nan,
+        cmd_replay_duration_s=math.nan,
+        cmd_replay_used_fallback=math.nan,
+    ):
+        nan_state = np.array([math.nan, math.nan, math.nan], dtype=float)
+        nan_meas = np.array([math.nan, math.nan], dtype=float)
+        yaw_info = {
+            'theta_update_from_uv_rad': math.nan,
+            'yaw_correction_applied': False,
+            'innov_theta': math.nan,
+            'k_theta_theta': math.nan,
+            'theta_update_total_rad': math.nan,
+        }
+        self._publish_pixel_correction_diagnostics(
+            stamp_msg=stamp_msg,
+            age=age,
+            dt_s=dt_s,
+            p_vis=math.nan,
+            gain_scale=math.nan,
+            innov=np.asarray(innov if innov is not None else nan_meas, dtype=float),
+            xy_update_norm_m=xy_update_norm_m,
+            yaw_info=yaw_info,
+            m_pred=np.asarray(m_pred if m_pred is not None else nan_state, dtype=float),
+            next_m=nan_state,
+            meas=np.asarray(meas if meas is not None else nan_meas, dtype=float),
+            mu_y=np.asarray(mu_y if mu_y is not None else nan_meas, dtype=float),
+            R_eff=np.asarray(R_eff if R_eff is not None else np.full((2, 2), math.nan), dtype=float),
+            yaw_meas=math.nan,
+            yaw_sigma=math.nan,
+            yaw_source=0.0,
+            nis=nis,
+            accepted=False,
+            reject_reason_code=self._pixel_correction_reject_code(reason),
+            apply_stamp_s=float(self.get_clock().now().nanoseconds) * 1e-9,
+            belief_input_stamp_s=belief_input_stamp_s,
+            cmd_replay_count=cmd_replay_count,
+            cmd_replay_duration_s=cmd_replay_duration_s,
+            cmd_replay_used_fallback=cmd_replay_used_fallback,
+            nis_threshold=float(self.pixel_correction_nis_threshold),
+        )
 
     def _apply_pixel_correction(self, stamp_msg, *, source='callback'):
         cb_start = time.perf_counter()
@@ -1109,6 +1394,11 @@ class UnicyclePlannerNode(Node):
         if self._pixel_correction_age_is_invalid(age):
             self._warn_stale_pixel_once(
                 f"Skipping time-inconsistent pixel measurement (age {age:.2f}s)"
+            )
+            self._publish_pixel_correction_rejection(
+                stamp_msg,
+                reason='stale_age',
+                age=age,
             )
             return
         if self._pixel_correction_is_throttled(stamp_msg):
@@ -1121,10 +1411,21 @@ class UnicyclePlannerNode(Node):
 
         dt_s = self._pixel_correction_dt_s(stamp_msg)
         if dt_s is None:
+            self._publish_pixel_correction_rejection(
+                stamp_msg,
+                reason='dt_implausible',
+                age=age,
+            )
             return
 
         snapshot = self._snapshot_pixel_correction_inputs(stamp_msg)
         if snapshot is None:
+            self._publish_pixel_correction_rejection(
+                stamp_msg,
+                reason='missing_snapshot',
+                age=age,
+                dt_s=dt_s,
+            )
             return
         belief_m = snapshot['belief_m']
         belief_S = snapshot['belief_S']
@@ -1133,10 +1434,12 @@ class UnicyclePlannerNode(Node):
         yaw_sigma = snapshot['yaw_sigma']
         yaw_meas_source = snapshot['yaw_source']
 
-        # Forward-predict the pixel measurement from image-capture time (T_cap)
-        # to T_now using the measured world-space velocity from the last two
-        m_pred, S_pred = self.planner.predict(
-            belief_m, belief_S, snapshot['cmd'], dt=dt_s
+        # Forward-predict belief from T_belief_stamp to T_pixel using cmd_log
+        # replay instead of a single-snapshot command value.  This is accurate
+        # during turns where the command changes multiple times in the interval.
+        m_pred, S_pred, replay_meta = self._replay_cmd_log_interval(
+            belief_m, belief_S, snapshot['belief_stamp'], stamp_msg,
+            fallback_cmd=snapshot['cmd'], fallback_dt=dt_s,
         )
         planner_for_obs = getattr(self, 'global_planner', None) or self.planner
         p_vis, R_eff, S_eff, gain_scale = planner_for_obs.observation_model_with_visibility(m_pred, S_pred)
@@ -1146,6 +1449,19 @@ class UnicyclePlannerNode(Node):
             m_pred, S_eff, meas, R_eff, gain_scale, corr_method=corr_method
         )
         if uv_update is None:
+            self._publish_pixel_correction_rejection(
+                stamp_msg,
+                reason='update_failed',
+                age=age,
+                dt_s=dt_s,
+                m_pred=m_pred,
+                meas=meas,
+                R_eff=R_eff,
+                belief_input_stamp_s=self._stamp_to_float(snapshot['belief_stamp']),
+                cmd_replay_count=float(replay_meta.get('cmd_replay_count', math.nan)),
+                cmd_replay_duration_s=float(replay_meta.get('cmd_replay_duration_s', math.nan)),
+                cmd_replay_used_fallback=float(replay_meta.get('cmd_replay_used_fallback', math.nan)),
+            )
             return
 
         next_m = uv_update['next_m']
@@ -1154,6 +1470,67 @@ class UnicyclePlannerNode(Node):
         meas = np.asarray(meas, dtype=float).reshape(-1)
         mu_y = uv_update['mu_y']
         xy_update_norm_m = float(np.linalg.norm(np.asarray(next_m[:2] - m_pred[:2], dtype=float)))
+        # Compute Normalized Innovation Squared (NIS) before any state mutation.
+        nis = float('nan')
+        S_y = uv_update.get('S_y')
+        if S_y is not None:
+            innov_2d = np.asarray(innov, dtype=float).reshape(-1)[:2]
+            try:
+                S_inv = np.linalg.inv(np.asarray(S_y, dtype=float)[:2, :2])
+                nis = float(innov_2d @ S_inv @ innov_2d)
+            except np.linalg.LinAlgError:
+                pass
+        if (self.pixel_max_correction_jump_m > 0.0
+                and xy_update_norm_m > self.pixel_max_correction_jump_m):
+            self._warn_stale_pixel_once(
+                f"Pixel correction jump {xy_update_norm_m:.3f} m exceeds "
+                f"limit {self.pixel_max_correction_jump_m:.3f} m; rejecting"
+            )
+            self._publish_pixel_correction_rejection(
+                stamp_msg,
+                reason='jump_too_large',
+                age=age,
+                dt_s=dt_s,
+                m_pred=m_pred,
+                meas=meas,
+                mu_y=mu_y,
+                innov=innov,
+                xy_update_norm_m=xy_update_norm_m,
+                R_eff=R_eff,
+                nis=nis,
+                belief_input_stamp_s=self._stamp_to_float(snapshot['belief_stamp']),
+                cmd_replay_count=float(replay_meta.get('cmd_replay_count', math.nan)),
+                cmd_replay_duration_s=float(replay_meta.get('cmd_replay_duration_s', math.nan)),
+                cmd_replay_used_fallback=float(replay_meta.get('cmd_replay_used_fallback', math.nan)),
+            )
+            return
+        if (
+            self.pixel_correction_nis_threshold > 0.0
+            and math.isfinite(nis)
+            and nis > self.pixel_correction_nis_threshold
+        ):
+            self._warn_stale_pixel_once(
+                f"Pixel correction NIS {nis:.2f} exceeds "
+                f"threshold {self.pixel_correction_nis_threshold:.2f}; rejecting"
+            )
+            self._publish_pixel_correction_rejection(
+                stamp_msg,
+                reason='nis_too_large',
+                age=age,
+                dt_s=dt_s,
+                m_pred=m_pred,
+                meas=meas,
+                mu_y=mu_y,
+                innov=innov,
+                xy_update_norm_m=xy_update_norm_m,
+                R_eff=R_eff,
+                nis=nis,
+                belief_input_stamp_s=self._stamp_to_float(snapshot['belief_stamp']),
+                cmd_replay_count=float(replay_meta.get('cmd_replay_count', math.nan)),
+                cmd_replay_duration_s=float(replay_meta.get('cmd_replay_duration_s', math.nan)),
+                cmd_replay_used_fallback=float(replay_meta.get('cmd_replay_used_fallback', math.nan)),
+            )
+            return
         yaw_info = self._apply_yaw_anchor_after_pixel_update(
             next_m,
             next_S,
@@ -1188,6 +1565,15 @@ class UnicyclePlannerNode(Node):
             yaw_meas=yaw_meas,
             yaw_sigma=yaw_sigma,
             yaw_source=yaw_meas_source,
+            nis=nis,
+            accepted=True,
+            reject_reason_code=0.0,
+            apply_stamp_s=float(self.get_clock().now().nanoseconds) * 1e-9,
+            belief_input_stamp_s=self._stamp_to_float(snapshot['belief_stamp']),
+            cmd_replay_count=float(replay_meta.get('cmd_replay_count', math.nan)),
+            cmd_replay_duration_s=float(replay_meta.get('cmd_replay_duration_s', math.nan)),
+            cmd_replay_used_fallback=float(replay_meta.get('cmd_replay_used_fallback', math.nan)),
+            nis_threshold=float(self.pixel_correction_nis_threshold),
         )
 
         now_wall = time.monotonic()
@@ -1254,46 +1640,46 @@ class UnicyclePlannerNode(Node):
         if belief_age_s <= 0.0:
             return m0, S0
 
-        # Replay the buffered sequence of intended (pre-noise) commanded
-        # velocities so the belief follows the actual command path instead
-        # of extrapolating at a single constant velocity.  The additive
-        # actuation noise is for Gazebo realism only; the planner dead-
-        # reckons from the commands it actually sent.
-        now_s = self.get_clock().now().nanoseconds * 1e-9
+        # Replay intended pre-noise commands over their true timestamped
+        # intervals.  Do not apply a future command to the past, and do not
+        # apply each logged command for a fixed planner dt; command publication
+        # can be faster than the planner horizon discretization.
+        try:
+            now_s = Time.from_msg(now_msg).nanoseconds * 1e-9
+        except (AttributeError, TypeError, ValueError):
+            now_s = self.get_clock().now().nanoseconds * 1e-9
         t_start = now_s - belief_age_s
         with self._data_lock:
-            # Snapshot relevant entries: all commands issued since t_start.
-            relevant = [(t, v, w) for t, v, w in self._cmd_log if t >= t_start]
+            entries = list(self._cmd_log)
 
-        if len(relevant) >= 1:
-            # Step through the intended command sequence.
-            # Gap before the first logged command: robot was stationary
-            # (global solve phase — no commands published yet).
-            prev_t = t_start
-            for t, v, w in relevant:
-                dt_gap = t - prev_t   # time with no logged cmd → zero vel
-                if dt_gap > 1e-4:
-                    m0, S0 = self.planner.predict(
-                        m0, S0, np.array([0.0, 0.0], dtype=float), dt=dt_gap
-                    )
-                m0, S0 = self.planner.predict(
-                    m0, S0, np.array([v, w], dtype=float), dt=min(self.dt, now_s - t)
-                )
-                prev_t = t + min(self.dt, now_s - t)
-            # Final step to now.
-            dt_tail = now_s - prev_t
-            if dt_tail > 1e-4 and relevant:
-                last_v, last_w = relevant[-1][1], relevant[-1][2]
-                m0, S0 = self.planner.predict(
-                    m0, S0, np.array([last_v, last_w], dtype=float), dt=dt_tail
-                )
+        previous = [(t, v, w) for t, v, w in entries if t <= t_start]
+        relevant = [(t, v, w) for t, v, w in entries if t_start < t <= now_s]
+        if previous:
+            current_cmd = np.array([previous[-1][1], previous[-1][2]], dtype=float)
+        elif relevant:
+            current_cmd = np.array([0.0, 0.0], dtype=float)
         else:
-            # No commands logged in this window — robot was stationary
-            # (e.g. during global solve).  Predict with zero velocity so the
-            # belief does not drift; process noise widens the covariance.
             m0, S0 = self.planner.predict(
                 m0, S0, np.array([0.0, 0.0], dtype=float), dt=belief_age_s
             )
+            if mutate:
+                with self._data_lock:
+                    self.belief_m = m0.copy()
+                    self.belief_S = S0.copy()
+                    self.belief_stamp = now_msg
+            return m0, S0
+
+        prev_t = t_start
+        for t, v, w in relevant:
+            dt_gap = t - prev_t
+            if dt_gap > 1e-4:
+                m0, S0 = self.planner.predict(m0, S0, current_cmd, dt=dt_gap)
+            current_cmd = np.array([v, w], dtype=float)
+            prev_t = t
+
+        dt_tail = now_s - prev_t
+        if dt_tail > 1e-4:
+            m0, S0 = self.planner.predict(m0, S0, current_cmd, dt=dt_tail)
 
         if mutate:
             with self._data_lock:
@@ -1350,6 +1736,15 @@ class UnicyclePlannerNode(Node):
             self._warn_stale_pixel_once(
                 f"Pixel belief stale (age {belief_age_s:.2f}s); planning on prediction-only belief"
             )
+            # Inflate xy covariance so nogo_belief_kappa grows and the planner
+            # becomes conservative. Without YOLO the heading drifts, which
+            # causes growing xy error; 0.3 m²/s inflation matches the observed
+            # drift rate (~0.6 m/s × sin(heading_err) at typical conditions).
+            staleness_s = belief_age_s - float(self.pixel_timeout_s)
+            inflate = min(staleness_s * 0.3, 1.5)
+            S0 = S0.copy()
+            S0[0, 0] += inflate
+            S0[1, 1] += inflate
         return m0, S0, {
             'measurement_available': bool(measurement_available),
             'belief_age_s': float(belief_age_s),
@@ -1366,9 +1761,21 @@ class UnicyclePlannerNode(Node):
             'belief_age_s': 0.0,
         }
 
+    def _resolve_truth_belief_for_planning(self):
+        """DIAGNOSTIC: return ground-truth pose as the belief with tiny covariance."""
+        with self._data_lock:
+            truth = self.truth_pose
+        if truth is None:
+            return None, None, {}
+        m0 = np.array([truth[0], truth[1], truth[2]], dtype=float)
+        S0 = np.diag([1e-4, 1e-4, 1e-4]).astype(float)
+        return m0, S0, {'measurement_available': True, 'belief_age_s': 0.0}
+
     def _resolve_belief_for_planning(self):
         now_msg = self.get_clock().now().to_msg()
-        if self.use_pixel_correction:
+        if self.use_truth_localization:
+            m0, S0, meta = self._resolve_truth_belief_for_planning()
+        elif self.use_pixel_correction:
             m0, S0, meta = self._resolve_pixel_corrected_belief_for_planning(now_msg)
         else:
             m0, S0, meta = self._resolve_state_belief_for_planning()
@@ -1520,6 +1927,39 @@ class UnicyclePlannerNode(Node):
         return
 
     def _publish_planner_diagnostics(self, result, plan_elapsed_ms, *, belief_meta=None):
+        active_plan_age_s = math.nan
+        active_plan_remaining_s = math.nan
+        active_control_index = math.nan
+        active_controls_len = math.nan
+        active_controls_original_len = math.nan
+        latency_skip_steps = float(getattr(self, '_last_latency_skip_steps', 0))
+        latency_skip_s = float(getattr(self, '_last_latency_skip_s', 0.0))
+        command_timer_period_s = float(getattr(self, '_cmd_timer_period_s', math.nan))
+        planner_timer_period_s = float(getattr(self, '_plan_period_s', math.nan))
+        pending_active_remaining_s = float(
+            getattr(self, '_pending_plan_started_active_remaining_s', math.nan)
+        )
+        if hasattr(self, '_active_controls') and hasattr(self, '_active_plan_started_at'):
+            with self._data_lock:
+                active_controls = None if self._active_controls is None else self._active_controls
+                active_started_at = self._active_plan_started_at
+                active_controls_original_len = float(
+                    getattr(self, '_active_controls_original_len', 0)
+                )
+            if active_controls is not None and active_started_at is not None:
+                step_dt = max(float(self.dt), 1e-3)
+                active_plan_age_s = max(
+                    (self.get_clock().now() - active_started_at).nanoseconds * 1e-9,
+                    0.0,
+                )
+                active_controls_len = float(active_controls.shape[0])
+                active_control_index = float(
+                    min(int(active_plan_age_s / step_dt), active_controls.shape[0] - 1)
+                )
+                active_plan_remaining_s = max(
+                    float(active_controls.shape[0]) * step_dt - active_plan_age_s,
+                    0.0,
+                )
         diag = Float64MultiArray()
         diag.data = [
             1.0 if getattr(result, 'optimizer_success', False) else 0.0,
@@ -1545,6 +1985,16 @@ class UnicyclePlannerNode(Node):
             float(getattr(result, 'risk_cov_logdet', np.nan)),
             float(getattr(result, 'delta_risk_visibility', np.nan)),
             float(getattr(result, 'delta_ambiguity_visibility', np.nan)),
+            active_plan_age_s,
+            active_plan_remaining_s,
+            active_control_index,
+            active_controls_len,
+            active_controls_original_len,
+            latency_skip_steps,
+            latency_skip_s,
+            command_timer_period_s,
+            planner_timer_period_s,
+            pending_active_remaining_s,
         ]
         self.planner_diag_pub.publish(diag)
         diag_text = String()

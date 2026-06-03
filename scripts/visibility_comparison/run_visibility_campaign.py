@@ -82,7 +82,13 @@ _OWN_NODE_PATTERNS = [
     'experiment_logger',
     'install/planning/lib/planning/efe_agent',
     'wait_for_odom',
+    'wait_for_clock',
     'reset_world',
+    # Sim noise nodes MUST be reaped: a leftover encoder_noise_node from a prior
+    # run publishes a second (pi-offset) heading on /odom_noisy, corrupting the
+    # planner's heading. This caused C1's spurious start-divergence (2026-06-03).
+    'encoder_noise_node',
+    'actuation_noise_node',
 ]
 
 
@@ -176,7 +182,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'ambiguity_weight', 'observation_risk_scale', 'ambiguity_term_scale',
         'control_weight', 'v_max', 'discount_gamma', 'yolo_conf_threshold',
         'yolo_iou_threshold', 'heading_min_displacement_m',
-        'heading_bev_noise_sigma_m', 'optimizer_maxiter',
+        'heading_bev_noise_sigma_m', 'odom_heading_timeout_s', 'optimizer_maxiter',
         'optimizer_maxfun', 'optimizer_ftol', 'optimizer_gtol',
         'goal_prior_u_std_start', 'goal_prior_v_std_start',
         'goal_prior_u_std_final', 'goal_prior_v_std_final',
@@ -184,11 +190,15 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'nogo_gaussian_sigma', 'nogo_softplus_scale',
         'nogo_logbarrier_scale', 'nogo_logbarrier_eps',
         'nogo_belief_kappa',
+        'pixel_correction_nis_threshold',
         'robot_collision_radius_m',
         'global_horizon', 'local_horizon', 'local_plan_rate',
         'local_optimizer_maxiter', 'local_nogo_weight',
         'local_nogo_safe_distance',
+        'local_goal_prior_u_std_start', 'local_goal_prior_v_std_start',
+        'local_goal_prior_u_std_final', 'local_goal_prior_v_std_final',
         'waypoint_spacing_m', 'waypoint_arrival_radius_m',
+        'local_replan_min_remaining_s', 'cmd_publish_rate',
     )
     for key in numeric_keys:
         if key in cfg and (key not in manifest or not _float_close(manifest.get(key), cfg[key])):
@@ -209,6 +219,11 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'local_optimizer_multistart',
         'local_use_visibility_model',
         'local_use_belief_nogo_cost',
+        'local_replan_on_waypoint_change',
+        'latency_compensate_plan_handoff',
+        'use_simple_local_controller',
+        'local_tracking_use_odom_yaw',
+        'use_truth_localization',
     )
     for key in bool_keys:
         if key in cfg and (key not in manifest or bool(manifest.get(key)) != bool(cfg[key])):
@@ -300,6 +315,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'command_noise_correlation_alpha:={cfg.get("command_noise_correlation_alpha", 0.85)}',
         f'use_odom_heading_correction:={str(cfg.get("use_odom_heading_correction", True)).lower()}',
         f'use_displacement_heading:={str(cfg.get("use_displacement_heading", False)).lower()}',
+        f'odom_heading_timeout_s:={cfg.get("odom_heading_timeout_s", 0.75)}',
         f'heading_min_displacement_m:={cfg.get("heading_min_displacement_m", 0.10)}',
         f'heading_bev_noise_sigma_m:={cfg.get("heading_bev_noise_sigma_m", 0.05)}',
         f'yolo_model:={yolo_model}',
@@ -322,6 +338,9 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'risk_weight_obs', 'ambiguity_weight',
         'belief_publish_rate',
         'pixel_timeout_s', 'skip_stale_pixel_correction',
+        'bev_y_calibration_offset_m', 'pixel_max_correction_jump_m',
+        'pixel_correction_nis_threshold', 'use_truth_localization',
+        'debug_runtime',
         'optimizer_ftol', 'optimizer_gtol', 'optimizer_warm_start',
         'optimizer_multistart_lateral_offsets',
         'optimizer_initial_routes_json',
@@ -332,7 +351,12 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'local_use_visibility_model', 'local_use_belief_nogo_cost',
         'local_nogo_penalty_type', 'local_nogo_weight',
         'local_nogo_safe_distance',
+        'local_goal_prior_u_std_start', 'local_goal_prior_v_std_start',
+        'local_goal_prior_u_std_final', 'local_goal_prior_v_std_final',
         'waypoint_spacing_m', 'waypoint_arrival_radius_m',
+        'local_replan_min_remaining_s', 'local_replan_on_waypoint_change',
+        'latency_compensate_plan_handoff', 'use_simple_local_controller',
+        'local_tracking_use_odom_yaw', 'cmd_publish_rate',
         'goal_prior_u_std_start', 'goal_prior_v_std_start',
         'goal_prior_u_std_final', 'goal_prior_v_std_final',
         'goal_tightening_power',
@@ -344,6 +368,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'robot_collision_radius_m',
         'stuck_window_s', 'stuck_max_displacement_m',
         'stuck_max_goal_improvement_m', 'stuck_cmd_fraction_min',
+        'stuck_idle_cmd_fraction_max',
     ):
         if key in cfg and not str(cfg[key]).startswith('[FILL'):
             cmd.append(f'{key}:={cfg[key]}')
@@ -517,14 +542,14 @@ def main() -> int:
         else:
             completion_reason = str(summary.get('completion_reason', ''))
             crashed = bool(summary.get('crashed', False))
-            if completion_reason == 'goal_reached':
+            if crashed:
+                outcome = 'collision'
+            elif completion_reason in ('goal_reached', 'goal_reached_stable'):
                 outcome = 'goal_reached'
             elif completion_reason == 'timeout_after_first_cmd':
                 outcome = 'timeout'
-            elif crashed or completion_reason not in ('goal_reached', 'timeout_after_first_cmd'):
-                outcome = 'collision'
             else:
-                outcome = completion_reason
+                outcome = completion_reason or 'completed'
 
         run_entry.update({
             'finished_at': datetime.now().isoformat(),
