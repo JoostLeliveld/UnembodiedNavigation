@@ -80,6 +80,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'local_optimizer_maxiter': '60',
     'global_use_ambiguity': 'true',
     'local_use_ambiguity': 'false',
+    'local_use_obs_risk': 'true',
     'global_optimizer_multistart': 'true',
     'local_optimizer_multistart': 'true',
     'local_use_visibility_model': 'false',
@@ -87,6 +88,10 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'local_nogo_penalty_type': '',
     'local_nogo_weight': '-1.0',
     'local_nogo_safe_distance': '-1.0',
+    'local_goal_progress_weight': '-1.0',
+    'local_ref_weight': '-1.0',
+    'local_terminal_ref_weight': '-1.0',
+    'local_du_weight': '-1.0',
     'local_goal_prior_u_std_start': '-1.0',
     'local_goal_prior_v_std_start': '-1.0',
     'local_goal_prior_u_std_final': '-1.0',
@@ -97,6 +102,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'local_replan_on_waypoint_change': 'false',
     'latency_compensate_plan_handoff': 'false',
     'use_simple_local_controller': 'false',
+    'simple_tracker_yaw_gate_rad': '0.6',
     'local_tracking_use_odom_yaw': 'false',
     'odom_heading_timeout_s': '0.75',
     'odom_heading_correction_mode': 'kalman',
@@ -342,6 +348,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'local_optimizer_maxiter': int(_launch_value(context, 'local_optimizer_maxiter', PAPER_LAUNCH_DEFAULTS['local_optimizer_maxiter'])),
         'global_use_ambiguity': _as_bool(_launch_value(context, 'global_use_ambiguity', PAPER_LAUNCH_DEFAULTS['global_use_ambiguity'])),
         'local_use_ambiguity': _as_bool(_launch_value(context, 'local_use_ambiguity', PAPER_LAUNCH_DEFAULTS['local_use_ambiguity'])),
+        'local_use_obs_risk': _as_bool(_launch_value(context, 'local_use_obs_risk', PAPER_LAUNCH_DEFAULTS['local_use_obs_risk'])),
         'global_optimizer_multistart': _as_bool(_launch_value(
             context, 'global_optimizer_multistart', PAPER_LAUNCH_DEFAULTS['global_optimizer_multistart']
         )),
@@ -362,6 +369,18 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         )),
         'local_nogo_safe_distance': float(_launch_value(
             context, 'local_nogo_safe_distance', PAPER_LAUNCH_DEFAULTS['local_nogo_safe_distance']
+        )),
+        'local_goal_progress_weight': float(_launch_value(
+            context, 'local_goal_progress_weight', PAPER_LAUNCH_DEFAULTS['local_goal_progress_weight']
+        )),
+        'local_ref_weight': float(_launch_value(
+            context, 'local_ref_weight', PAPER_LAUNCH_DEFAULTS['local_ref_weight']
+        )),
+        'local_terminal_ref_weight': float(_launch_value(
+            context, 'local_terminal_ref_weight', PAPER_LAUNCH_DEFAULTS['local_terminal_ref_weight']
+        )),
+        'local_du_weight': float(_launch_value(
+            context, 'local_du_weight', PAPER_LAUNCH_DEFAULTS['local_du_weight']
         )),
         'local_goal_prior_u_std_start': float(_launch_value(
             context,
@@ -404,6 +423,11 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             context,
             'use_simple_local_controller',
             PAPER_LAUNCH_DEFAULTS['use_simple_local_controller'],
+        )),
+        'simple_tracker_yaw_gate_rad': float(_launch_value(
+            context,
+            'simple_tracker_yaw_gate_rad',
+            PAPER_LAUNCH_DEFAULTS['simple_tracker_yaw_gate_rad'],
         )),
         'local_tracking_use_odom_yaw': _as_bool(_launch_value(
             context,
@@ -524,6 +548,12 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         ),
         'command_noise_correlation_alpha': float(
             _launch_value(context, 'command_noise_correlation_alpha', _COMMAND_NOISE_CORRELATION_ALPHA)
+        ),
+        'encoder_noise_angular_slip_std': float(
+            _launch_value(context, 'encoder_noise_angular_slip_std', _ENCODER_NOISE_ANGULAR_SLIP_STD)
+        ),
+        'encoder_noise_angular_additive_std': float(
+            _launch_value(context, 'encoder_noise_angular_additive_std', _ENCODER_NOISE_ANGULAR_ADDITIVE_STD)
         ),
         'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
         'debug_runtime': _as_bool(_launch_value(context, 'debug_runtime', 'false')),
@@ -806,9 +836,12 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'linear_slip_mean': _ENCODER_NOISE_LINEAR_SLIP_MEAN,
             'linear_slip_std': _ENCODER_NOISE_LINEAR_SLIP_STD,
             'angular_slip_mean': _ENCODER_NOISE_ANGULAR_SLIP_MEAN,
-            'angular_slip_std': _ENCODER_NOISE_ANGULAR_SLIP_STD,
+            'angular_slip_std': cfg.get('encoder_noise_angular_slip_std', _ENCODER_NOISE_ANGULAR_SLIP_STD),
             'linear_additive_std': _ENCODER_NOISE_LINEAR_ADDITIVE_STD,
-            'angular_additive_std': _ENCODER_NOISE_ANGULAR_ADDITIVE_STD,
+            'angular_additive_std': cfg.get(
+                'encoder_noise_angular_additive_std',
+                _ENCODER_NOISE_ANGULAR_ADDITIVE_STD,
+            ),
             'correlation_alpha': _ENCODER_NOISE_CORRELATION_ALPHA,
         }],
     )
@@ -919,6 +952,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'state_source_theta': state_sources['state_source_theta'],
                 'state_estimator_mode': state_sources['state_estimator_mode'],
                 'use_pixel_correction': cfg['use_pixel_correction'],
+                'pixel_timeout_s': cfg['pixel_timeout_s'],
                 'use_ambiguity': cfg['use_ambiguity'],
                 'use_obs_risk': cfg['use_obs_risk'],
                 'use_visibility_model': cfg['use_visibility_model'],
@@ -1002,6 +1036,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'local_optimizer_maxiter': cfg.get('local_optimizer_maxiter', 60),
                 'global_use_ambiguity': cfg.get('global_use_ambiguity', True),
                 'local_use_ambiguity': cfg.get('local_use_ambiguity', False),
+                'local_use_obs_risk': cfg.get('local_use_obs_risk', True),
                 'global_optimizer_multistart': cfg.get('global_optimizer_multistart', True),
                 'local_optimizer_multistart': cfg.get('local_optimizer_multistart', True),
                 'local_use_visibility_model': cfg.get('local_use_visibility_model', False),
@@ -1009,12 +1044,17 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'local_nogo_penalty_type': cfg.get('local_nogo_penalty_type', ''),
                 'local_nogo_weight': cfg.get('local_nogo_weight', -1.0),
                 'local_nogo_safe_distance': cfg.get('local_nogo_safe_distance', -1.0),
+                'local_goal_progress_weight': cfg.get('local_goal_progress_weight', -1.0),
+                'local_ref_weight': cfg.get('local_ref_weight', -1.0),
+                'local_terminal_ref_weight': cfg.get('local_terminal_ref_weight', -1.0),
+                'local_du_weight': cfg.get('local_du_weight', -1.0),
                 'waypoint_spacing_m': cfg.get('waypoint_spacing_m', 1.0),
                 'waypoint_arrival_radius_m': cfg.get('waypoint_arrival_radius_m', 0.35),
                 'local_replan_min_remaining_s': cfg.get('local_replan_min_remaining_s', 0.0),
                 'local_replan_on_waypoint_change': cfg.get('local_replan_on_waypoint_change', False),
                 'latency_compensate_plan_handoff': cfg.get('latency_compensate_plan_handoff', False),
                 'use_simple_local_controller': cfg.get('use_simple_local_controller', False),
+                'simple_tracker_yaw_gate_rad': cfg.get('simple_tracker_yaw_gate_rad', 0.6),
                 'local_tracking_use_odom_yaw': cfg.get('local_tracking_use_odom_yaw', False),
                 'use_odom_heading_correction': cfg['use_odom_heading_correction'],
                 'use_displacement_heading': cfg['use_displacement_heading'],
@@ -1041,6 +1081,14 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'command_noise_linear_additive_std': cfg['command_noise_linear_additive_std'],
                 'command_noise_angular_additive_std': cfg['command_noise_angular_additive_std'],
                 'command_noise_correlation_alpha': cfg['command_noise_correlation_alpha'],
+                'encoder_noise_angular_slip_std': cfg.get(
+                    'encoder_noise_angular_slip_std',
+                    _ENCODER_NOISE_ANGULAR_SLIP_STD,
+                ),
+                'encoder_noise_angular_additive_std': cfg.get(
+                    'encoder_noise_angular_additive_std',
+                    _ENCODER_NOISE_ANGULAR_ADDITIVE_STD,
+                ),
                 **cfg['camera_params'],
             }],
         )
@@ -1200,6 +1248,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'local_optimizer_maxiter': cfg.get('local_optimizer_maxiter', 60),
             'global_use_ambiguity': cfg.get('global_use_ambiguity', True),
             'local_use_ambiguity': cfg.get('local_use_ambiguity', False),
+            'local_use_obs_risk': cfg.get('local_use_obs_risk', True),
             'global_optimizer_multistart': cfg.get('global_optimizer_multistart', True),
             'local_optimizer_multistart': cfg.get('local_optimizer_multistart', True),
             'local_use_visibility_model': cfg.get('local_use_visibility_model', False),
@@ -1207,6 +1256,10 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'local_nogo_penalty_type': cfg.get('local_nogo_penalty_type', ''),
             'local_nogo_weight': cfg.get('local_nogo_weight', -1.0),
             'local_nogo_safe_distance': cfg.get('local_nogo_safe_distance', -1.0),
+            'local_goal_progress_weight': cfg.get('local_goal_progress_weight', -1.0),
+            'local_ref_weight': cfg.get('local_ref_weight', -1.0),
+            'local_terminal_ref_weight': cfg.get('local_terminal_ref_weight', -1.0),
+            'local_du_weight': cfg.get('local_du_weight', -1.0),
             'local_goal_prior_u_std_start': cfg.get('local_goal_prior_u_std_start', -1.0),
             'local_goal_prior_v_std_start': cfg.get('local_goal_prior_v_std_start', -1.0),
             'local_goal_prior_u_std_final': cfg.get('local_goal_prior_u_std_final', -1.0),
@@ -1217,6 +1270,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'local_replan_on_waypoint_change': cfg.get('local_replan_on_waypoint_change', False),
             'latency_compensate_plan_handoff': cfg.get('latency_compensate_plan_handoff', False),
             'use_simple_local_controller': cfg.get('use_simple_local_controller', False),
+            'simple_tracker_yaw_gate_rad': cfg.get('simple_tracker_yaw_gate_rad', 0.6),
             'local_tracking_use_odom_yaw': cfg.get('local_tracking_use_odom_yaw', False),
             **cfg['camera_params'],
             **planner_params[planner],

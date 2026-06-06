@@ -94,6 +94,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('state_source_theta', 'unknown')
         self.declare_parameter('state_estimator_mode', 'unknown')
         self.declare_parameter('use_pixel_correction', False)
+        self.declare_parameter('pixel_timeout_s', 0.5)
         self.declare_parameter('use_ambiguity', False)
         self.declare_parameter('use_obs_risk', True)
         self.declare_parameter('world_profiles_path', '')
@@ -146,6 +147,8 @@ class ExperimentLogger(Node):
         self.declare_parameter('command_noise_linear_additive_std', 0.008)
         self.declare_parameter('command_noise_angular_additive_std', 0.035)
         self.declare_parameter('command_noise_correlation_alpha', 0.85)
+        self.declare_parameter('encoder_noise_angular_slip_std', 0.03)
+        self.declare_parameter('encoder_noise_angular_additive_std', 0.020)
         self.declare_parameter('optimizer_maxiter', 80)
         self.declare_parameter('optimizer_maxfun', 500)
         self.declare_parameter('optimizer_ftol', 1e-6)
@@ -242,6 +245,7 @@ class ExperimentLogger(Node):
         self.state_source_theta = str(self.get_parameter('state_source_theta').value)
         self.state_estimator_mode = str(self.get_parameter('state_estimator_mode').value)
         self.use_pixel_correction = bool(self.get_parameter('use_pixel_correction').value)
+        self.pixel_timeout_s = float(self.get_parameter('pixel_timeout_s').value)
         self.use_ambiguity = bool(self.get_parameter('use_ambiguity').value)
         self.use_obs_risk = bool(self.get_parameter('use_obs_risk').value)
         self.world_profiles_path = self.get_parameter('world_profiles_path').value
@@ -298,6 +302,8 @@ class ExperimentLogger(Node):
         self.command_noise_linear_additive_std = float(self.get_parameter('command_noise_linear_additive_std').value)
         self.command_noise_angular_additive_std = float(self.get_parameter('command_noise_angular_additive_std').value)
         self.command_noise_correlation_alpha = float(self.get_parameter('command_noise_correlation_alpha').value)
+        self.encoder_noise_angular_slip_std = float(self.get_parameter('encoder_noise_angular_slip_std').value)
+        self.encoder_noise_angular_additive_std = float(self.get_parameter('encoder_noise_angular_additive_std').value)
         self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
         self.optimizer_maxfun = int(self.get_parameter('optimizer_maxfun').value)
         self.optimizer_ftol = float(self.get_parameter('optimizer_ftol').value)
@@ -484,6 +490,7 @@ class ExperimentLogger(Node):
             'state_source_theta': self.state_source_theta,
             'state_estimator_mode': self.state_estimator_mode,
             'use_pixel_correction': self.use_pixel_correction,
+            'pixel_timeout_s': self.pixel_timeout_s,
             'use_ambiguity': self.use_ambiguity,
             'use_obs_risk': self.use_obs_risk,
             'use_visibility_model': self.use_visibility_model,
@@ -517,6 +524,8 @@ class ExperimentLogger(Node):
             'command_noise_linear_additive_std': self.command_noise_linear_additive_std,
             'command_noise_angular_additive_std': self.command_noise_angular_additive_std,
             'command_noise_correlation_alpha': self.command_noise_correlation_alpha,
+            'encoder_noise_angular_slip_std': self.encoder_noise_angular_slip_std,
+            'encoder_noise_angular_additive_std': self.encoder_noise_angular_additive_std,
             'perception_use_geometry_occlusion': self.perception_use_geometry_occlusion,
             'use_nogo_cost': self.use_nogo_cost,
             'nogo_penalty_type': self.nogo_penalty_type,
@@ -713,12 +722,22 @@ class ExperimentLogger(Node):
         self._truth_belief_error_sum = 0.0
         self._truth_state_error_count = 0
         self._truth_belief_error_count = 0
+        self._truth_state_error_after_first_cmd_sum = 0.0
+        self._truth_belief_error_after_first_cmd_sum = 0.0
+        self._truth_state_error_after_first_cmd_count = 0
+        self._truth_belief_error_after_first_cmd_count = 0
         self._truth_odom_yaw_error_sum = 0.0
         self._truth_state_yaw_error_sum = 0.0
         self._truth_belief_yaw_error_sum = 0.0
         self._truth_odom_yaw_error_count = 0
         self._truth_state_yaw_error_count = 0
         self._truth_belief_yaw_error_count = 0
+        self._truth_odom_yaw_error_after_first_cmd_sum = 0.0
+        self._truth_state_yaw_error_after_first_cmd_sum = 0.0
+        self._truth_belief_yaw_error_after_first_cmd_sum = 0.0
+        self._truth_odom_yaw_error_after_first_cmd_count = 0
+        self._truth_state_yaw_error_after_first_cmd_count = 0
+        self._truth_belief_yaw_error_after_first_cmd_count = 0
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
 
@@ -769,6 +788,7 @@ class ExperimentLogger(Node):
             'stamp',
             'truth_available', 'truth_stamp', 'truth_x', 'truth_y', 'truth_yaw',
             'state_available', 'state_stamp', 'state_x', 'state_y', 'state_yaw',
+            'state_age_s', 'state_fresh',
             'state_cov_xx', 'state_cov_xy', 'state_cov_yy', 'state_cov_yaw',
             'planner_belief_available', 'planner_belief_stamp',
             'planner_belief_age_s',
@@ -883,6 +903,7 @@ class ExperimentLogger(Node):
                 'pixel_pose_v',
                 'pixel_pose_yaw',
                 'pixel_pose_age_s',
+                'pixel_pose_fresh',
                 'pred_world_x',
                 'pred_world_y',
                 'localization_error_m',
@@ -1574,7 +1595,7 @@ class ExperimentLogger(Node):
             return
 
         true_ok, _truth_stamp, true_x, true_y, true_yaw = self._latest_truth_pose()
-        state_ok, _state_stamp, state_x, state_y, state_yaw = self._latest_state_pose()
+        state_ok, state_stamp, state_x, state_y, state_yaw = self._latest_state_pose()
         obs_ok, pixel_pose_stamp, pixel_pose_u, pixel_pose_v, pixel_pose_yaw = self._latest_pixel_pose()
 
         state_pos_error = math.nan
@@ -1591,9 +1612,22 @@ class ExperimentLogger(Node):
             camera_relative_bearing_deg = self._camera_relative_bearing_deg(true_x, true_y, true_yaw)
 
         log_stamp = float(self.get_clock().now().nanoseconds) * 1e-9
+        state_age_s = math.nan
+        if state_ok and math.isfinite(state_stamp):
+            state_age_s = max(log_stamp - state_stamp, 0.0)
+        state_fresh = bool(
+            state_ok
+            and math.isfinite(state_age_s)
+            and state_age_s <= max(float(self.pixel_timeout_s), 0.0)
+        )
         pixel_pose_age_s = math.nan
         if obs_ok and math.isfinite(pixel_pose_stamp):
             pixel_pose_age_s = max(log_stamp - pixel_pose_stamp, 0.0)
+        pixel_pose_fresh = bool(
+            obs_ok
+            and math.isfinite(pixel_pose_age_s)
+            and pixel_pose_age_s <= max(float(self.pixel_timeout_s), 0.0)
+        )
 
         # Compute predicted world position from image coordinates using homography
         pred_world_x = math.nan
@@ -1657,6 +1691,8 @@ class ExperimentLogger(Node):
             state_x,
             state_y,
             state_yaw,
+            state_age_s,
+            1.0 if state_fresh else 0.0,
             state_pos_error,
             state_yaw_error_deg,
             diag['u_mid'],
@@ -1669,6 +1705,7 @@ class ExperimentLogger(Node):
             pixel_pose_v,
             pixel_pose_yaw,
             pixel_pose_age_s,
+            1.0 if pixel_pose_fresh else 0.0,
             pred_world_x,
             pred_world_y,
             localization_error_m,
@@ -1731,6 +1768,14 @@ class ExperimentLogger(Node):
         now_stamp = float(self.get_clock().now().nanoseconds) * 1e-9
 
         state_ok, state_stamp, state_x, state_y, state_yaw = self._latest_state_pose()
+        state_age_s = math.nan
+        if state_ok and math.isfinite(state_stamp):
+            state_age_s = max(now_stamp - state_stamp, 0.0)
+        state_fresh = bool(
+            state_ok
+            and math.isfinite(state_age_s)
+            and state_age_s <= max(float(self.pixel_timeout_s), 0.0)
+        )
         if self.state_msg is not None:
             cov = self.state_msg.pose.covariance
             cov_x = float(cov[0]) if len(cov) > 0 else math.nan
@@ -1797,17 +1842,24 @@ class ExperimentLogger(Node):
         # truth_state_error_m:  ground truth vs /state/bev (perception output)
         # truth_belief_error_m: ground truth vs /planner_belief (planner's internal belief)
         truth_state_error_m = math.nan
+        after_first_cmd = bool(self._first_cmd_stamp is not None and now_stamp >= self._first_cmd_stamp)
         if true_ok and state_ok and math.isfinite(state_x) and math.isfinite(state_y):
             truth_state_error_m = float(math.hypot(true_x - state_x, true_y - state_y))
             self._truth_state_error_sum += truth_state_error_m
             if math.isfinite(truth_state_error_m):
                 self._truth_state_error_count += 1
+                if after_first_cmd:
+                    self._truth_state_error_after_first_cmd_sum += truth_state_error_m
+                    self._truth_state_error_after_first_cmd_count += 1
         truth_belief_error_m = math.nan
         if true_ok and planner_belief_ok and math.isfinite(planner_belief_x) and math.isfinite(planner_belief_y):
             truth_belief_error_m = float(math.hypot(true_x - planner_belief_x, true_y - planner_belief_y))
             self._truth_belief_error_sum += truth_belief_error_m
             if math.isfinite(truth_belief_error_m):
                 self._truth_belief_error_count += 1
+                if after_first_cmd:
+                    self._truth_belief_error_after_first_cmd_sum += truth_belief_error_m
+                    self._truth_belief_error_after_first_cmd_count += 1
 
         odom_ok, odom_stamp, odom_x, odom_y, odom_yaw, odom_v, odom_w = self._odom_record(self.odom_msg)
         (
@@ -1826,14 +1878,23 @@ class ExperimentLogger(Node):
             yaw_error_truth_odom_rad = float(self._wrap_angle(odom_yaw - true_yaw))
             self._truth_odom_yaw_error_sum += abs(yaw_error_truth_odom_rad)
             self._truth_odom_yaw_error_count += 1
+            if after_first_cmd:
+                self._truth_odom_yaw_error_after_first_cmd_sum += abs(yaw_error_truth_odom_rad)
+                self._truth_odom_yaw_error_after_first_cmd_count += 1
         if true_ok and state_ok and math.isfinite(state_yaw):
             yaw_error_truth_state_rad = float(self._wrap_angle(state_yaw - true_yaw))
             self._truth_state_yaw_error_sum += abs(yaw_error_truth_state_rad)
             self._truth_state_yaw_error_count += 1
+            if after_first_cmd:
+                self._truth_state_yaw_error_after_first_cmd_sum += abs(yaw_error_truth_state_rad)
+                self._truth_state_yaw_error_after_first_cmd_count += 1
         if true_ok and planner_belief_ok and math.isfinite(planner_belief_yaw):
             yaw_error_truth_belief_rad = float(self._wrap_angle(planner_belief_yaw - true_yaw))
             self._truth_belief_yaw_error_sum += abs(yaw_error_truth_belief_rad)
             self._truth_belief_yaw_error_count += 1
+            if after_first_cmd:
+                self._truth_belief_yaw_error_after_first_cmd_sum += abs(yaw_error_truth_belief_rad)
+                self._truth_belief_yaw_error_after_first_cmd_count += 1
 
         heading_diag_stamp = math.nan
         heading_diag_age_s = math.nan
@@ -2179,6 +2240,7 @@ class ExperimentLogger(Node):
             stamp,
             1.0 if true_ok else 0.0, truth_stamp, true_x, true_y, true_yaw,
             1.0 if state_ok else 0.0, state_stamp, state_x, state_y, state_yaw,
+            state_age_s, 1.0 if state_fresh else 0.0,
             cov_x, cov_xy, cov_y, cov_yaw,
             1.0 if planner_belief_ok else 0.0, planner_belief_stamp,
             planner_belief_age_s,
@@ -2307,6 +2369,16 @@ class ExperimentLogger(Node):
             self._truth_belief_error_sum / self._truth_belief_error_count
             if self._truth_belief_error_count > 0 else math.nan
         )
+        mean_truth_state_error_after_first_cmd_m = (
+            self._truth_state_error_after_first_cmd_sum
+            / self._truth_state_error_after_first_cmd_count
+            if self._truth_state_error_after_first_cmd_count > 0 else math.nan
+        )
+        mean_truth_belief_error_after_first_cmd_m = (
+            self._truth_belief_error_after_first_cmd_sum
+            / self._truth_belief_error_after_first_cmd_count
+            if self._truth_belief_error_after_first_cmd_count > 0 else math.nan
+        )
         mean_abs_truth_odom_yaw_error_rad = (
             self._truth_odom_yaw_error_sum / self._truth_odom_yaw_error_count
             if self._truth_odom_yaw_error_count > 0 else math.nan
@@ -2318,6 +2390,21 @@ class ExperimentLogger(Node):
         mean_abs_truth_belief_yaw_error_rad = (
             self._truth_belief_yaw_error_sum / self._truth_belief_yaw_error_count
             if self._truth_belief_yaw_error_count > 0 else math.nan
+        )
+        mean_abs_truth_odom_yaw_error_after_first_cmd_rad = (
+            self._truth_odom_yaw_error_after_first_cmd_sum
+            / self._truth_odom_yaw_error_after_first_cmd_count
+            if self._truth_odom_yaw_error_after_first_cmd_count > 0 else math.nan
+        )
+        mean_abs_truth_state_yaw_error_after_first_cmd_rad = (
+            self._truth_state_yaw_error_after_first_cmd_sum
+            / self._truth_state_yaw_error_after_first_cmd_count
+            if self._truth_state_yaw_error_after_first_cmd_count > 0 else math.nan
+        )
+        mean_abs_truth_belief_yaw_error_after_first_cmd_rad = (
+            self._truth_belief_yaw_error_after_first_cmd_sum
+            / self._truth_belief_yaw_error_after_first_cmd_count
+            if self._truth_belief_yaw_error_after_first_cmd_count > 0 else math.nan
         )
 
         if stamp is None:
@@ -2389,9 +2476,14 @@ class ExperimentLogger(Node):
             # Explicit truth vs perception / planner belief errors
             'mean_truth_state_error_m': mean_truth_state_error_m,
             'mean_truth_belief_error_m': mean_truth_belief_error_m,
+            'mean_truth_state_error_after_first_cmd_m': mean_truth_state_error_after_first_cmd_m,
+            'mean_truth_belief_error_after_first_cmd_m': mean_truth_belief_error_after_first_cmd_m,
             'mean_abs_truth_odom_yaw_error_rad': mean_abs_truth_odom_yaw_error_rad,
             'mean_abs_truth_state_yaw_error_rad': mean_abs_truth_state_yaw_error_rad,
             'mean_abs_truth_belief_yaw_error_rad': mean_abs_truth_belief_yaw_error_rad,
+            'mean_abs_truth_odom_yaw_error_after_first_cmd_rad': mean_abs_truth_odom_yaw_error_after_first_cmd_rad,
+            'mean_abs_truth_state_yaw_error_after_first_cmd_rad': mean_abs_truth_state_yaw_error_after_first_cmd_rad,
+            'mean_abs_truth_belief_yaw_error_after_first_cmd_rad': mean_abs_truth_belief_yaw_error_after_first_cmd_rad,
             'crashed': crashed,
             'collision_any': crashed,
             'collision_contact': bool(self._contact_collision_seen),

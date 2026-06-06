@@ -25,8 +25,12 @@ PLANNER_RUNS_DIR = LOGS_ROOT / 'planner_runs'
 REPORT_DIR = LOGS_ROOT / 'report'
 DEFAULT_WORLD_PROFILES_PATH = REPO_ROOT / 'src' / 'experiments' / 'config' / 'world_profiles.yaml'
 ARTIFACT_SCHEMA_VERSION = 2
-ACCEPTED_COMPLETION_REASONS = ('goal_reached', 'timeout_after_first_cmd')
-PLOTTABLE_COMPLETION_REASONS = ACCEPTED_COMPLETION_REASONS + ('interrupted',)
+ACCEPTED_COMPLETION_REASONS = ('goal_reached', 'goal_reached_stable')
+PLOTTABLE_COMPLETION_REASONS = ACCEPTED_COMPLETION_REASONS + (
+    'timeout_after_first_cmd',
+    'stuck',
+    'interrupted',
+)
 PAPER_VISIBILITY_DEFAULTS = {
     'r_visible_uv': 2.5,
     'r_miss_uv': 120.0,

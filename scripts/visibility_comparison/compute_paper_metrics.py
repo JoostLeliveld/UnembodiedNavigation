@@ -269,6 +269,7 @@ def _classify_outcome(summary: dict, completed_externally: bool = True) -> dict:
 def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dict | None) -> dict:
     rows = _load_experiment_csv(run_dir)
     perception_rows = _load_perception_csv(run_dir)
+    manifest = _load_run_manifest(run_dir)
 
     # --- From summary ---
     goal_reached = bool(summary.get('goal_reached', False)) or summary.get('completion_reason') == 'goal_reached'
@@ -279,7 +280,15 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
     final_goal_distance = float(summary.get('final_goal_distance', math.nan) or math.nan)
     elapsed_s = float(summary.get('elapsed_after_first_cmd_s', math.nan) or math.nan)
     mean_solve_time_ms = float(summary.get('mean_solve_time_ms', math.nan) or math.nan)
-    summary_mean_truth_belief = float(summary.get('mean_truth_belief_error_m', math.nan) or math.nan)
+    # Prefer explicit driving-only summary fields when available. Older logs
+    # only have mean_truth_belief_error_m, which can include launch/global-solve
+    # rows; the CSV recomputation below remains the canonical path when rows exist.
+    summary_mean_truth_belief = float(
+        summary.get(
+            'mean_truth_belief_error_after_first_cmd_m',
+            summary.get('mean_truth_belief_error_m', math.nan),
+        ) or math.nan
+    )
     summary_mean_p_vis_eff = float(summary.get('mean_p_vis_plan_eff', math.nan) or math.nan)
 
     if not rows:
@@ -298,14 +307,32 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
             'n_rows': 0,
         }
 
-    # --- From CSV ---
+    # Runtime means are defined only after the first non-trivial command.
+    # Pre-command rows include launch, global-solve, and estimator warm-up time;
+    # mixing them into localization/control metrics makes route comparisons
+    # look cleaner or worse for the wrong reason.
+    first_cmd_stamp = math.nan
+    for row in rows:
+        cv = _pf(row, 'cmd_v')
+        cw = _pf(row, 'cmd_w')
+        if (math.isfinite(cv) and abs(cv) > 0.01) or (math.isfinite(cw) and abs(cw) > 0.05):
+            first_cmd_stamp = _pf(row, 'stamp')
+            break
+    runtime_rows = rows
+    if math.isfinite(first_cmd_stamp):
+        runtime_rows = [
+            row for row in rows
+            if math.isfinite(_pf(row, 'stamp')) and _pf(row, 'stamp') >= first_cmd_stamp
+        ]
+
+    # --- From CSV after first command ---
     loc_errors = []
     overconf_values = []
     rho_values = []
     cov_traces = []
     solve_times_ms = []
 
-    for row in rows:
+    for row in runtime_rows:
         # Use planner belief as the estimator (that's what drives control)
         truth_x = _pf(row, 'truth_x')
         truth_y = _pf(row, 'truth_y')
@@ -359,18 +386,61 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
         float(np.percentile(solve_times_ms, 90)) if solve_times_ms else math.nan
     )
 
-    # Empirical YOLO detection rate from perception.csv
+    # Empirical YOLO detection rate from perception.csv after first command.
     yolo_detection_rate = math.nan
+    yolo_pixel_fresh_rate = math.nan
+    mean_state_error_fresh_m = math.nan
     if perception_rows:
+        runtime_perception_rows = perception_rows
+        if math.isfinite(first_cmd_stamp):
+            runtime_perception_rows = [
+                r for r in perception_rows
+                if math.isfinite(_pf(r, 'log_stamp')) and _pf(r, 'log_stamp') >= first_cmd_stamp
+            ]
         n_detected = sum(
-            1 for r in perception_rows
+            1 for r in runtime_perception_rows
             if _pf(r, 'yolo_detected_after_threshold') >= 0.5
         )
-        yolo_detection_rate = n_detected / len(perception_rows)
+        yolo_detection_rate = n_detected / len(runtime_perception_rows) if runtime_perception_rows else math.nan
+        fresh_flags = []
+        state_fresh_errors = []
+        for r in runtime_perception_rows:
+            fresh = _pf(r, 'pixel_pose_fresh')
+            if not math.isfinite(fresh):
+                age = _pf(r, 'pixel_pose_age_s')
+                # Fallback for old logs: use the campaign's common stale-pixel
+                # threshold where available, otherwise the paper default.
+                timeout = float(manifest.get('pixel_timeout_s', 0.5) or 0.5)
+                fresh = 1.0 if math.isfinite(age) and age <= timeout else 0.0
+            fresh_flags.append(fresh >= 0.5)
+            err = _pf(r, 'state_pos_error')
+            if fresh >= 0.5 and math.isfinite(err):
+                state_fresh_errors.append(err)
+        yolo_pixel_fresh_rate = (
+            float(np.mean(fresh_flags)) if fresh_flags else math.nan
+        )
+        mean_state_error_fresh_m = (
+            float(np.mean(state_fresh_errors)) if state_fresh_errors else math.nan
+        )
 
-    # Prefer summary-level mean for truth-belief error; fall back to CSV mean.
-    if not math.isfinite(summary_mean_truth_belief):
-        summary_mean_truth_belief = mean_loc_error
+    state_fresh_rate = math.nan
+    if runtime_rows:
+        flags = []
+        for row in runtime_rows:
+            fresh = _pf(row, 'state_fresh')
+            if not math.isfinite(fresh):
+                age = _pf(row, 'state_age_s')
+                timeout = float(manifest.get('pixel_timeout_s', 0.5) or 0.5)
+                fresh = 1.0 if math.isfinite(age) and age <= timeout else math.nan
+            if math.isfinite(fresh):
+                flags.append(fresh >= 0.5)
+        state_fresh_rate = float(np.mean(flags)) if flags else math.nan
+
+    # Use the CSV runtime mean for truth-belief error. Summary-level means may
+    # include pre-command launch/global-solve rows and are only a no-CSV fallback.
+    mean_loc_error_out = mean_loc_error
+    if not math.isfinite(mean_loc_error_out):
+        mean_loc_error_out = summary_mean_truth_belief
 
     return {
         'goal_reached': goal_reached,
@@ -380,7 +450,7 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
         'min_goal_distance': min_goal_distance,
         'final_goal_distance': final_goal_distance,
         'elapsed_s': elapsed_s,
-        'mean_loc_error_m': summary_mean_truth_belief,
+        'mean_loc_error_m': mean_loc_error_out,
         'mean_overconf': mean_overconf,
         'f_shadow': f_shadow,
         'mean_rho_plan': mean_rho_plan,
@@ -389,17 +459,22 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
         'mean_solve_time_ms': mean_solve_time_ms,
         'p90_solve_time_ms': p90_solve_time_ms,
         'yolo_detection_rate': yolo_detection_rate,
+        'yolo_pixel_fresh_rate': yolo_pixel_fresh_rate,
+        'state_fresh_rate': state_fresh_rate,
+        'mean_state_error_fresh_m': mean_state_error_fresh_m,
         'n_rows': len(rows),
     }
 
 
 TASK_INFO = {
-    # Paper metrics are intentionally limited to the compact benchmark. AWS
-    # Experiment B remains exploratory until it is registered with a validated
-    # world/detector/GP/config/log/figure chain.
+    # Compact benchmark legacy/core tasks.
     'shadow_tradeoff_a': {'start': (-2.0, 0.5), 'goal': (2.0, -0.5)},
     'shadow_tradeoff_b': {'start': (-2.0, -1.0), 'goal': (2.0, -0.5)},
     'sanity_open':       {'start': (-2.0, -1.5), 'goal': (2.0, -1.5)},
+    # Current AWS candidate task. This entry only enables task-derived metrics
+    # such as path efficiency; evidence status is still controlled by the
+    # experiment registry and artifact chain.
+    'F31_b1_apron_a3_mid': {'start': (3.30, -1.00), 'goal': (1.00, 1.75)},
 }
 
 FIELDNAMES = [

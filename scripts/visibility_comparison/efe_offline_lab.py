@@ -161,6 +161,12 @@ def build_planner(
         use_visibility_model = True
         use_ambiguity = False
         use_obs_risk = True
+    # Diagnostic override: allow exercising a state-space (no observation-risk)
+    # local tracker by setting use_obs_risk/use_ambiguity in cfg.
+    if "use_obs_risk" in cfg:
+        use_obs_risk = _as_bool(cfg["use_obs_risk"])
+    if "use_ambiguity" in cfg:
+        use_ambiguity = _as_bool(cfg["use_ambiguity"])
 
     v_max = float(cfg.get("v_max", 0.22))
     v_min = -v_max
@@ -203,6 +209,10 @@ def build_planner(
         goal_prior_v_std_final=float(cfg.get("goal_prior_v_std_final", 20.0)),
         goal_tightening_power=float(cfg.get("goal_tightening_power", 0.45)),
         goal_progress_n_steps=int(cfg.get("goal_progress_n_steps", 90)),
+        goal_progress_weight=float(cfg.get("goal_progress_weight", 0.0)),
+        ref_weight=float(cfg.get("ref_weight", 0.0)),
+        terminal_ref_weight=float(cfg.get("terminal_ref_weight", 0.0)),
+        du_weight=float(cfg.get("du_weight", 0.0)),
         observation_risk_scale=float(cfg.get("observation_risk_scale", 1.25)),
         ambiguity_term_scale=float(cfg.get("ambiguity_term_scale", 1.0)),
         discount_gamma=float(cfg.get("discount_gamma", 0.98)),

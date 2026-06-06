@@ -70,6 +70,7 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('local_replan_on_waypoint_change', default_value='false'),
         DeclareLaunchArgument('latency_compensate_plan_handoff', default_value='false'),
         DeclareLaunchArgument('use_simple_local_controller', default_value='false'),
+        DeclareLaunchArgument('simple_tracker_yaw_gate_rad', default_value='0.6'),
         DeclareLaunchArgument('local_tracking_use_odom_yaw', default_value='false'),
         DeclareLaunchArgument('cmd_publish_rate', default_value='10.0'),
     ]

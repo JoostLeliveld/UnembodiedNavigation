@@ -57,6 +57,25 @@ covariance. The task, detector, GP availability except for C1 queries, known
 driveable barrier, tracker, noise, seeds, horizons, optimizer budgets, and
 candidate route seeds must be shared.
 
+Runtime metrics must start after the first non-trivial command. Camera-derived
+`/state` must also be interpreted with freshness: `state_available` only means a
+latest state message exists, not that the current frame produced a fresh YOLO
+update. Fresh camera-state error, stale latest-state error, and planner
+truth-belief error should be reported separately when diagnosing perception.
+
+Runtime cleanup note (2026-06-05): planner fallback paths must not silently use
+stale `/state/bev`. When pixel correction is disabled or a camera update is
+stale, planning should use the predicted belief from the last valid state or
+refuse to plan until a fresh state is available. Camera-off/correction-off
+ablations created before this rule are diagnostic only.
+
+Local execution note (2026-06-05): the simple proportional local tracker is
+shared execution plumbing, not the GP contribution. It tracks planner-derived
+waypoints with odometry yaw and a configurable yaw gate, and it has a lightweight
+predicted mean-clearance gate. Do not describe it as a local EFE/belief-tube
+optimizer unless `use_simple_local_controller:false` and the local EFE path is
+actually used.
+
 ## Current AWS Candidate
 
 Primary candidate config:
@@ -78,7 +97,11 @@ goal:  (1.00, 1.75)
 
 Current inspected summaries:
 
-| Condition | Completed seeds | Outcome | Mean path | Mean truth-state error | Mean p95 truth-state error |
+Runtime localization metrics are interpreted as after-first-command quantities.
+Pre-command launch, global-solve, and estimator warm-up rows must not be mixed
+into these means.
+
+| Condition | Completed seeds | Outcome | Mean path | Mean truth-state error after first cmd | Mean p95 truth-state error after first cmd |
 | --- | ---: | --- | ---: | ---: | ---: |
 | C1 constant-R | 5 | 5/5 goal reached | 4.64 m | 0.366 m | 1.66 m |
 | C2 learned-R | 5 | 5/5 goal reached | 6.82 m | 0.195 m | 0.43 m |

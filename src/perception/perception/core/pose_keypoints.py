@@ -53,16 +53,15 @@ class MarkerGeometry:
 
 
 # Default values must match turtlebot3_burger.urdf.xacro pm_* properties.
-# Keypoints are anchored to the existing red base + blue lidar geometry — no
-# extra markers are added to the URDF. Both keypoints sit at the lidar top
-# (z=0.188 in base_link) so the state node can back-project to a single
-# z-plane without bias.
-#   rear_x  = lidar centre x (-0.032 in base_link)
-#   front_x = virtual point ~0.082 m forward of lidar centre
+# v2: explicit small cyan(front)/magenta(rear) marker disks at MAX front-rear
+# separation (baseline 0.140 m vs the old 0.082 m), both at z=0.200 in base_link
+# (above the lidar) so the oblique camera sees both and the state node can
+# back-project to a single z-plane. keypoint_marker_world_z = base_joint_z(0.010)
+# + 0.200 = 0.210 (robot resting on the floor, base_footprint z=0).
 DEFAULT_MARKER_GEOMETRY = MarkerGeometry(
-    front_x=0.050,
-    rear_x=-0.032,
+    front_x=0.040,
+    rear_x=-0.100,
     marker_y=0.0,
-    marker_z_in_base_link=0.188,
+    marker_z_in_base_link=0.200,
     base_joint_z=0.010,
 )

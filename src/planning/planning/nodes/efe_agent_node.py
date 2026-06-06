@@ -61,6 +61,7 @@ class EfeAgentNode(UnicyclePlannerNode):
         self._hier_phase = 'GLOBAL'
         self._waypoints = None
         self._wp_idx = 0
+        self._local_ref_tracking_active = False
         self.global_planner = None
         if self.use_hierarchical:
             local_nogo_penalty_type = self.local_nogo_penalty_type or self.nogo_penalty_type
@@ -92,10 +93,49 @@ class EfeAgentNode(UnicyclePlannerNode):
                 if self.local_goal_prior_v_std_start < 0.0
                 else self.local_goal_prior_v_std_start
             )
+            # Metric (x,y) goal-progress incentive for the local executor. -1.0
+            # inherits the shared weight; >=0.0 uses the local value directly.
+            # This term is condition-neutral (no GP/ambiguity/visibility) and
+            # only rewards reducing distance to the planner-derived target, so it
+            # neither forces a route nor breaks the C1/C2 contract. It exists to
+            # remove the unreachable-target zero-velocity local minimum of the
+            # observation-space risk term.
+            local_goal_progress_weight = (
+                self.goal_progress_weight
+                if self.local_goal_progress_weight < 0.0
+                else self.local_goal_progress_weight
+            )
+            # LOCAL reference-segment tracking weights. -1.0 inherits 0.0 (OFF, so
+            # the local executor falls back to the legacy single-point goal cost);
+            # >=0.0 enables the proper TRACKER objective (reference-segment tracking
+            # + control smoothness). Condition-neutral (no GP/visibility/ambiguity);
+            # identical for C1/C2/C3 and never queries the GP. The reference segment
+            # itself is computed OUTSIDE the solve from the global planner-derived
+            # waypoint polyline (known 2D route), so this is execution plumbing, not
+            # route choice.
+            local_ref_weight = 0.0 if self.local_ref_weight < 0.0 else self.local_ref_weight
+            local_terminal_ref_weight = (
+                0.0 if self.local_terminal_ref_weight < 0.0 else self.local_terminal_ref_weight
+            )
+            local_du_weight = 0.0 if self.local_du_weight < 0.0 else self.local_du_weight
+            # When reference tracking is active it REPLACES the single-point goal
+            # cost: the reference segment already pulls the mean along the route, so
+            # the beyond-horizon single-point goal_progress term (which gives no
+            # heading gradient and caused the spin) is disabled for the local layer.
+            self._local_ref_tracking_active = (
+                local_ref_weight > 0.0 or local_terminal_ref_weight > 0.0
+            )
+            if self._local_ref_tracking_active:
+                local_goal_progress_weight = 0.0
             self.planner = self._construct_planner(
                 horizon=self.local_horizon,
                 use_ambiguity=self.local_use_ambiguity,
+                use_obs_risk=self.local_use_obs_risk,
                 goal_progress_n_steps=self.local_horizon,
+                goal_progress_weight=local_goal_progress_weight,
+                ref_weight=local_ref_weight,
+                terminal_ref_weight=local_terminal_ref_weight,
+                du_weight=local_du_weight,
                 goal_prior_u_std_start=local_goal_u_start,
                 goal_prior_v_std_start=local_goal_v_start,
                 goal_prior_u_std_final=local_goal_u_final,
@@ -132,11 +172,15 @@ class EfeAgentNode(UnicyclePlannerNode):
                 f"belief_nogo={self.local_use_belief_nogo_cost}, "
                 f"nogo={local_nogo_penalty_type}:{local_nogo_weight}, "
                 f"safe={local_nogo_safe_distance}, "
+                f"ref_track={self._local_ref_tracking_active} "
+                f"(ref={local_ref_weight},term={local_terminal_ref_weight},du={local_du_weight}), "
+                f"local_goal_progress={local_goal_progress_weight}, "
                 f"local_goal_std={local_goal_u_start:.2f}->{local_goal_u_final:.2f}/"
                 f"{local_goal_v_start:.2f}->{local_goal_v_final:.2f}, "
                 f"replan_min_remaining={self.local_replan_min_remaining_s:.2f}s, "
                 f"latency_compensate={self.latency_compensate_plan_handoff}, "
                 f"cmd_rate={self.cmd_publish_rate:.1f}Hz, "
+                f"simple_yaw_gate={self.simple_tracker_yaw_gate_rad:.2f}rad, "
                 f"multistart={self.local_optimizer_multistart}, "
                 f"maxiter={self.local_optimizer_maxiter})"
             )
@@ -266,6 +310,17 @@ class EfeAgentNode(UnicyclePlannerNode):
 
         if self.use_simple_local_controller:
             controls = self._simple_local_plan(m_track, target)
+            safe, reason = self._simple_plan_safe_to_execute(controls, m_track)
+            if not safe:
+                self.get_logger().warn(
+                    f"[hierarchical] simple local control rejected: {reason}; safe-stopping"
+                )
+                with self._data_lock:
+                    self._active_controls = None
+                    self._active_plan_started_at = None
+                    self._active_controls_original_len = 0
+                self._publish_command(0.0, 0.0)
+                return
             with self._data_lock:
                 self._active_controls = controls.copy()
                 self._active_plan_started_at = self.get_clock().now()
@@ -276,7 +331,22 @@ class EfeAgentNode(UnicyclePlannerNode):
                 self._publish_command(float(controls[0, 0]), float(controls[0, 1]))
             return
 
-        result = self._call_planner(m_track, S_track, target, 0.0, plan_start=plan_start, now_wall=now_wall)
+        ref_seq = None
+        prev_u = None
+        if self._local_ref_tracking_active:
+            # Reference segment r_1..r_H sampled forward along the global
+            # planner-derived waypoint polyline, computed OUTSIDE the solve so the
+            # optimizer only sees smooth squared tracking errors. prev_u is the last
+            # applied command for the control-smoothness term. Condition-neutral:
+            # the polyline is the known 2D global route, not a GP/visibility cue.
+            ref_seq = self._build_local_reference_segment(m_track)
+            with self._data_lock:
+                prev_u = np.asarray(self.last_cmd, dtype=float).reshape(2).copy()
+
+        result = self._call_planner(
+            m_track, S_track, target, 0.0, plan_start=plan_start, now_wall=now_wall,
+            ref_seq=ref_seq, prev_u=prev_u,
+        )
         if result is None:
             return
         plan_elapsed_ms = max((time.perf_counter() - plan_start) * 1000.0, 0.0)
@@ -300,7 +370,7 @@ class EfeAgentNode(UnicyclePlannerNode):
         # robot creeps forward through a large departure turn and can clip an
         # adjacent obstacle (e.g. C1 swinging into R5L on the initial east->north
         # turn). A standard differential-drive turn-then-go controller.
-        yaw_gate = 0.6  # rad (~34 deg): no forward motion until roughly aligned
+        yaw_gate = float(self.simple_tracker_yaw_gate_rad)
 
         controls = np.zeros((H, 2), dtype=float)
         state = m0[:3].copy().astype(float)
@@ -322,6 +392,108 @@ class EfeAgentNode(UnicyclePlannerNode):
             state = unicycle_step(state, [v, w], dt)
 
         return controls
+
+    def _simple_plan_safe_to_execute(self, controls: np.ndarray, m0: np.ndarray) -> tuple[bool, str]:
+        """Cheap feasibility gate for the non-optimizing local waypoint tracker.
+
+        The simple tracker is deliberately not the scientific route-choice
+        mechanism. Still, it must not publish a command tape whose predicted
+        mean immediately leaves the known driveable region or collision geometry.
+        This mirrors the solver-result hygiene used by the EFE local controller.
+        """
+        controls = np.asarray(controls, dtype=float)
+        if controls.ndim != 2 or controls.shape[0] == 0 or controls.shape[1] != 2:
+            return False, 'empty_or_malformed_controls'
+        if not np.all(np.isfinite(controls)):
+            return False, 'nonfinite_controls'
+
+        state = np.asarray(m0[:3], dtype=float).copy()
+        for i, u in enumerate(controls):
+            state = unicycle_step(state, u, float(self.dt))
+            if self.planner.collision_cost_model is not None:
+                clearance = self.planner.collision_signed_distance_state_np(state)
+                if math.isfinite(clearance) and clearance < 0.0:
+                    return False, f'collision_geometry_violation_step_{i}:{clearance:.3f}'
+            model = self.planner.nogo_cost_model
+            if model is not None and model.enabled:
+                clearance = model.clearance_state_np(state)
+                if math.isfinite(clearance) and clearance < 0.0:
+                    return False, f'driveable_clearance_violation_step_{i}:{clearance:.3f}'
+        return True, ''
+
+    def _build_local_reference_segment(self, m0: np.ndarray) -> np.ndarray:
+        """Sample a (local_horizon, 2) reference segment along the global waypoint
+        polyline, starting from the projection of the current belief (x, y).
+
+        Computed OUTSIDE the optimizer: the optimizer only ever sees fixed numeric
+        per-step targets, so no nonsmooth projection enters the gradient. The
+        polyline is the known 2D global planner-derived route (self._waypoints);
+        this method never queries the GP and is identical for C1/C2/C3.
+
+        Sampling step is ~ v_max * dt (the per-step reach), clamped at the final
+        waypoint so a short horizon does not overshoot the route end.
+        """
+        H = int(self.local_horizon)
+        step = max(float(self.v_max) * float(self.dt), 1e-3)
+        pos = np.asarray(m0[:2], dtype=float).reshape(2)
+
+        pts = [np.asarray(w, dtype=float).reshape(2) for w in (self._waypoints or [])]
+        if not pts:
+            # No route yet: hold position (the ref terms then add nothing useful but
+            # remain well-defined). Should not happen in the LOCAL phase.
+            return np.tile(pos, (H, 1))
+        if len(pts) == 1:
+            return np.tile(pts[0], (H, 1))
+
+        # Project pos onto the polyline: find the closest point across all segments
+        # and record (segment index, fractional position along that segment).
+        best_seg = 0
+        best_t = 0.0
+        best_d2 = float('inf')
+        best_proj = pts[0]
+        for i in range(len(pts) - 1):
+            a = pts[i]
+            b = pts[i + 1]
+            ab = b - a
+            denom = float(ab @ ab)
+            if denom <= 1e-12:
+                t = 0.0
+                proj = a
+            else:
+                t = float(np.clip(((pos - a) @ ab) / denom, 0.0, 1.0))
+                proj = a + t * ab
+            d2 = float(np.sum((pos - proj) ** 2))
+            if d2 < best_d2:
+                best_d2 = d2
+                best_seg = i
+                best_t = t
+                best_proj = proj
+
+        # Walk forward along the polyline from the projection, emitting a reference
+        # point every `step` metres of arc length. Clamp at the final waypoint.
+        ref = np.zeros((H, 2), dtype=float)
+        seg = best_seg
+        cur = best_proj.copy()
+        for k in range(H):
+            remaining = step
+            while remaining > 1e-9 and seg < len(pts) - 1:
+                nxt = pts[seg + 1]
+                seg_vec = nxt - cur
+                seg_len = float(np.linalg.norm(seg_vec))
+                if seg_len <= 1e-9:
+                    seg += 1
+                    cur = pts[seg].copy() if seg < len(pts) else cur
+                    continue
+                if seg_len >= remaining:
+                    cur = cur + (remaining / seg_len) * seg_vec
+                    remaining = 0.0
+                else:
+                    cur = nxt.copy()
+                    remaining -= seg_len
+                    seg += 1
+            ref[k] = cur
+        del best_t
+        return ref
 
     def _publish_command(self, v_cmd: float, w_cmd: float):
         cmd = Twist()
@@ -353,7 +525,16 @@ class EfeAgentNode(UnicyclePlannerNode):
         if self.use_hierarchical and self._hier_phase == 'LOCAL':
             current_dist = float(self._current_wp_dist)
             terminal_dist = float(getattr(result, 'terminal_goal_distance_pred', math.nan))
-            if math.isfinite(current_dist) and math.isfinite(terminal_dist):
+            # A unicycle must rotate to face the waypoint before it can reduce
+            # distance, so a turning (low-translation) plan is legitimate progress,
+            # not a freeze. Only require distance progress once roughly aligned;
+            # while the heading error is large, allow the turn. This mirrors the
+            # simple tracker's rotate-then-go gate (yaw_gate=0.6 rad) and applies
+            # identically to all conditions.
+            yaw_err = abs(float(getattr(self, '_current_yaw_error', 0.0)))
+            require_distance_progress = yaw_err <= 0.6
+            if (require_distance_progress and math.isfinite(current_dist)
+                    and math.isfinite(terminal_dist)):
                 if terminal_dist > current_dist - 1e-3:
                     return False, (
                         f'no_waypoint_progress:{terminal_dist:.3f}>={current_dist:.3f}'

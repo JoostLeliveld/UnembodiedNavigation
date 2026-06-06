@@ -37,6 +37,19 @@ class CasadiEfeParams:
     time_horizon: int
     dt: float
     Du: int
+    # Metric (x,y) goal-progress incentive. Pure function of the mean state and
+    # the current target; no GP / ambiguity / visibility dependence, so it is
+    # identical for C1/C2/C3. Default 0.0 keeps every locked config unchanged.
+    goal_progress_weight: float = 0.0
+    # LOCAL reference-segment tracking. Pure metric (x,y) distance from the
+    # predicted mean to a fixed per-step reference point computed OUTSIDE the
+    # solve, plus a control-smoothness (du) term. No GP / ambiguity / visibility
+    # dependence, so it is identical for C1/C2/C3. All three default to 0.0, so
+    # every existing caller (global planner, locked configs) is numerically
+    # unchanged: the terms vanish from the objective when the weights are 0.0.
+    ref_weight: float = 0.0
+    terminal_ref_weight: float = 0.0
+    du_weight: float = 0.0
 
 
 def _require_casadi():
@@ -290,10 +303,24 @@ def visibility_aware_unicycle_efe_ca(
     p_vis_state=None,
     nogo_cost=None,
     nogo_belief_cost=None,
+    ref_seq=None,
+    prev_u=None,
 ):
     """
     Core Expected Free Energy functional for a unicycle agent.
     Iteratively propagates Gaussian state (m, S) over params.time_horizon.
+
+    LOCAL tracking extension (condition-neutral, default-off):
+      ref_seq: fixed per-step (x, y) reference points, MX of shape (2*H,) laid
+        out [x0, y0, x1, y1, ...]. Computed OUTSIDE the solve so the optimizer
+        sees only smooth squared-distance terms. Used only when ref_weight or
+        terminal_ref_weight is > 0.0.
+      prev_u: last applied control, MX of shape (2,). Used only when du_weight
+        is > 0.0 for a control-smoothness penalty sum_t ||u_t - u_{t-1}||^2 with
+        u_{-1} = prev_u.
+    When ref_weight, terminal_ref_weight, and du_weight are all 0.0 these terms
+    contribute nothing and the returned objective is numerically identical to the
+    pre-extension behaviour (no symbolic terms are added at all).
     """
     m = m0
     S = S0
@@ -301,7 +328,16 @@ def visibility_aware_unicycle_efe_ca(
     total_amb = 0
     total_control = 0
     total_nogo = 0
+    total_progress = 0
+    total_ref = 0
+    total_du = 0
     denom = float(max(params.goal_progress_n_steps, 1))
+    goal_progress_weight = float(getattr(params, 'goal_progress_weight', 0.0))
+    ref_weight = float(getattr(params, 'ref_weight', 0.0))
+    terminal_ref_weight = float(getattr(params, 'terminal_ref_weight', 0.0))
+    du_weight = float(getattr(params, 'du_weight', 0.0))
+    use_ref = (ref_weight > 0.0 or terminal_ref_weight > 0.0) and ref_seq is not None
+    use_du = du_weight > 0.0 and prev_u is not None
 
     for t in range(params.time_horizon):
         u_t = ca.vertcat(u_flat[2 * t], u_flat[2 * t + 1])
@@ -338,13 +374,39 @@ def visibility_aware_unicycle_efe_ca(
             total_nogo += weight_t * nogo_belief_cost(m, S_drive)
         elif nogo_cost is not None:
             total_nogo += weight_t * nogo_cost(m)
+        if goal_progress_weight > 0.0:
+            # Metric squared distance from the predicted mean to the current
+            # target. This is a monotone forward incentive that stays informative
+            # even when the target is beyond the horizon reach, where the
+            # observation-space risk term saturates and can otherwise make
+            # zero-velocity a local minimum. Condition-neutral by construction.
+            dxy = ca.vertcat(m[0] - goal_xy[0], m[1] - goal_xy[1])
+            total_progress += weight_t * goal_progress_weight * ca.sumsqr(dxy)
+        if use_ref:
+            # Fixed per-step reference point r_t = (ref_seq[2t], ref_seq[2t+1]),
+            # computed OUTSIDE the solve. Smooth squared tracking error of the
+            # predicted mean toward the reference segment. Condition-neutral
+            # (no GP / ambiguity / visibility). The final step also carries the
+            # terminal reference weight so the tracker holds the segment endpoint.
+            dref = ca.vertcat(m[0] - ref_seq[2 * t], m[1] - ref_seq[2 * t + 1])
+            total_ref += weight_t * ref_weight * ca.sumsqr(dref)
+            if t == params.time_horizon - 1:
+                total_ref += weight_t * terminal_ref_weight * ca.sumsqr(dref)
+        if use_du:
+            # Control-smoothness: penalise change from the previous control. For
+            # t == 0 the previous control is the last applied command prev_u;
+            # afterwards it is u_{t-1}. Condition-neutral.
+            u_prev = prev_u if t == 0 else ca.vertcat(u_flat[2 * (t - 1)], u_flat[2 * (t - 1) + 1])
+            total_du += weight_t * du_weight * ca.sumsqr(u_t - u_prev)
 
     # Normalise per-step sums by the effective discounted horizon so that changing
     # time_horizon does not rescale the weight balance between terms.
     H_eff = sum(params.discount_gamma ** t for t in range(params.time_horizon))
     inv_H = 1.0 / max(H_eff, 1e-8)
     return (total_risk * inv_H + total_amb * inv_H
-            + total_control * inv_H + total_nogo * inv_H)
+            + total_control * inv_H + total_nogo * inv_H
+            + total_progress * inv_H
+            + total_ref * inv_H + total_du * inv_H)
 
 
 def make_efe_valgrad_fn(
@@ -392,6 +454,12 @@ def make_efe_valgrad_fn(
     goal_obs = ca.MX.sym('goal_obs', 2)
     goal_xy = ca.MX.sym('goal_xy', 2)
     progress_index0 = ca.MX.sym('progress_index0')
+    # New LOCAL-tracking inputs, appended after the existing args so callers that
+    # always pass zeros keep the original behaviour. ref_seq is the flat per-step
+    # reference segment [x0,y0,x1,y1,...] of length 2*H; prev_u is the last applied
+    # control. When ref/du weights are 0.0 the objective ignores both inputs.
+    ref_seq = ca.MX.sym('ref_seq', params.time_horizon * 2)
+    prev_u = ca.MX.sym('prev_u', 2)
 
     objective = visibility_aware_unicycle_efe_ca(
         u_flat,
@@ -408,17 +476,44 @@ def make_efe_valgrad_fn(
         p_vis_state=p_vis_state,
         nogo_cost=nogo_cost,
         nogo_belief_cost=nogo_belief_cost,
+        ref_seq=ref_seq,
+        prev_u=prev_u,
     )
     gradient = ca.gradient(objective, u_flat)
     valgrad = ca.Function(
         'visibility_aware_efe_valgrad',
-        [u_flat, m0, S0, goal_obs, goal_xy, progress_index0],
+        [u_flat, m0, S0, goal_obs, goal_xy, progress_index0, ref_seq, prev_u],
         [objective, gradient],
-        ['u_flat', 'm0', 'S0', 'goal_obs', 'goal_xy', 'progress_index0'],
+        ['u_flat', 'm0', 'S0', 'goal_obs', 'goal_xy', 'progress_index0', 'ref_seq', 'prev_u'],
         ['objective', 'gradient'],
     )
 
-    def _wrapper(u_val, m_val, S_val, goal_obs_val, goal_xy_val, progress_index0_val):
+    H_local = int(params.time_horizon)
+
+    def _wrapper(
+        u_val,
+        m_val,
+        S_val,
+        goal_obs_val,
+        goal_xy_val,
+        progress_index0_val,
+        ref_seq_val=None,
+        prev_u_val=None,
+    ):
+        if ref_seq_val is None:
+            ref_seq_arr = np.zeros(H_local * 2, dtype=float)
+        else:
+            ref_seq_arr = np.asarray(ref_seq_val, dtype=float).reshape(-1)
+            if ref_seq_arr.size != H_local * 2:
+                raise ValueError(
+                    f"ref_seq must have {H_local * 2} entries, got {ref_seq_arr.size}"
+                )
+        if prev_u_val is None:
+            prev_u_arr = np.zeros(2, dtype=float)
+        else:
+            prev_u_arr = np.asarray(prev_u_val, dtype=float).reshape(-1)
+            if prev_u_arr.size != 2:
+                raise ValueError(f"prev_u must have 2 entries, got {prev_u_arr.size}")
         val, grad = valgrad(
             np.asarray(u_val, dtype=float).reshape((-1, 1)),
             np.asarray(m_val, dtype=float).reshape((3, 1)),
@@ -426,6 +521,8 @@ def make_efe_valgrad_fn(
             np.asarray(goal_obs_val, dtype=float).reshape((2, 1)),
             np.asarray(goal_xy_val, dtype=float).reshape((2, 1)),
             np.asarray(float(progress_index0_val), dtype=float),
+            ref_seq_arr.reshape((-1, 1)),
+            prev_u_arr.reshape((2, 1)),
         )
         return float(np.asarray(val, dtype=float).reshape(-1)[0]), np.asarray(grad, dtype=float).reshape(-1)
 

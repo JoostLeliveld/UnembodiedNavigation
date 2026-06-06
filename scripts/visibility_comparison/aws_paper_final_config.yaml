@@ -1,136 +1,12 @@
-# PAPER FINAL config (locked 2026-06-03, Phase 0 complete). AWS benchmark.
-# Hierarchical global EFE H80/dt0.25 + simple proportional local tracker (yaw_gate 0.6),
-# GP-conditioned belief-nogo, imgsz480 + cmd_log forward-prediction, calib 0.05, jump 0.50.
-# C1=constant_R, C2=visibility_aware, C3=risk_only_ablation (ambiguity off). See docs/paper_runtime_contract.yaml.
-# Eliminates the zero-control local-minimum freeze: global EFE chooses the route+waypoints,
-# a boring proportional controller executes them (no GP/ambiguity/EFE in the local layer).
-# Inherits F66: yolo_imgsz=480 (90ms), bev_y_calibration_offset_m=0.05.
-#
-# Purpose:
-#   F57 showed 100% route differentiation (all C1 seeds north, all C2 seeds
-#   south) and near-zero heading error after the odom_heading_timeout fix.
-#   However, C2 crashed in all 3 seeds due to the local EFE tracker entering
-#   non-driveable zones:
-#     - seed0: drifted into R4U rack (x=1.60,y=2.23) near the goal approach
-#     - seed2: cut through shelf_end_box_spot_R4 (x=2.07,y=-1.50) on
-#              the first south leg
-#   Root cause: local_nogo_safe_distance=0.13m < typical truth-belief error
-#   (0.15-0.20m). The local planner thinks it has 0.13m clearance but truth
-#   is already inside the obstacle.
-#
-# Changes vs F58:
-#   local_nogo_safe_distance: 0.13 -> 0.30  (covers 0.20m localisation error)
-#   local_optimizer_maxiter:  45   -> 20    (faster warm-started solves)
-#   local_replan_min_remaining_s: 1.0 -> 0.5  (replan sooner)
-#   seeds: [0,1,2] -> [0,1,2,3,4]             (more statistics)
-#
-# Scientific intent:
-#   Still follows paper contract: external camera (x,y), heading from odom.
-#   No visibility model in local planner. Route choice from global EFE only.
-#
-# Scientific intent:
-#   This still follows the paper-facing contract: the external camera supplies
-#   (x,y) position updates; heading comes from odometry. It does not add IMU,
-#   keypoint heading, waypoint forcing, GP recapture, or task/world changes.
-#
-# F49 outcome:
-#   C1 collided after entering the visibility-poor/risky behavior.
-#   C2 reached the goal with the visibility-aware route.
-#
-# This F55 config keeps the F50 planner, task, detector, GP, and seeds fixed.
-#   The only runtime-method addition is explicit idle no-progress detection, so
-#   safe-stop/no-progress can finish as `stuck` instead of wall-clock invalid.
-#
-# Inherited purpose:
-#   F44 showed that several local-controller/timing params were not recorded or
-#   not passed into the agent. This run keeps the paper-faithful local EFE
-#   tracker, but makes the execution path diagnosable and reduces timing
-#   pressure:
-#
-#   - local tracking yaw uses fresh odometry yaw, matching the paper statement
-#     that visual localization contributes (x,y) while heading comes from odom;
-#   - global multistart remains enabled for route choice;
-#   - local multistart is disabled because waypoint tracking should be a fast
-#     warm-started local control problem, not a second route-choice search;
-#   - local horizon is H12 with maxiter=45;
-#   - the local tracker uses a tighter waypoint prior than the global route
-#     planner, because F48 showed zero-control "successful" local solves when
-#     the local planner inherited the loose global goal prior;
-#   - active plan handoff compensates solver latency;
-#   - local replanning is skipped while >1s of a valid tape remains.
-#
-# The global EFE route-choice problem is unchanged.
-#
-# Run:
-#   python3 scripts/visibility_comparison/run_visibility_campaign.py \
-#     --config scripts/visibility_comparison/aws_f65_calibrated_config.yaml \
-#     --log-root logs/visibility_comparison/f65_calibrated_v1 \
-#     --run-timeout 300
-#
-# ---- inherited notes from F35/F40 lineage ----
-#
-# Purpose:
-#   F34 belief_uncertainty_bands.pdf showed that when YOLO corrections go stale
-#   (C1 in rack shadow), the EKF dead-reckons with process_noise_theta=0.02 rad/step
-#   which is 2.3x smaller than actual angular encoder noise (~0.046 rad/step from
-#   ang_slip_std=0.030 + ang_additive_std=0.035). The belief diverges to x=20m, y=8m
-#   while truth stays at x=3m, y=2m. The 2sigma band grows but tracks the WRONG value.
-#
-#   Fix: set process_noise_theta = 0.046 (= sqrt(0.030^2 + 0.035^2), matches spec).
-#   Expected: during stale corrections, EKF uncertainty grows faster, 2sigma band
-#   widens enough to contain truth, nogo_belief_kappa cost activates sooner.
-#
-# Change vs F34:
-#   process_noise_theta: 0.02 → 0.046
-#
-# Run:
-#   python3 scripts/visibility_comparison/run_visibility_campaign.py #     --config scripts/visibility_comparison/aws_f35_b1_route_choice_config.yaml #     --log-root logs/visibility_comparison/f35_b1_route_choice_v1 #     --run-timeout 400
-#
-# Purpose:
-#   F32 local solves were 2600-3600ms because r_visible_uv=8.0 (R=64px²) and
-#   control_weight=0.05 caused the compiled CasADi function to evaluate ~165ms
-#   per call vs ~43ms with the original r_vis=2.5 parameters. With 3.5s solves
-#   the plan (H=10, dt=0.25 → 2.5s) exhausted before the next arrived, causing
-#   stop-start motion and poor trajectory tracking.
-#
-#   F33 reverts these two parameters to restore ~900ms local solves.
-#   Plan duration (2.5s) > solve time (0.9s) → no exhaustion → smooth motion.
-#
-# Changes vs F32:
-#   r_visible_uv:   8.0  → 2.5   (original value; restores CasADi compilation quality)
-#   control_weight: 0.05 → 0.0   (zero allows CasADi dead-code elimination of ctrl term)
-#
-# Run:
-#   python3 scripts/visibility_comparison/run_visibility_campaign.py \
-#     --config scripts/visibility_comparison/aws_f33_b1_route_choice_config.yaml \
-#     --log-root logs/visibility_comparison/f35_b1_route_choice_v1 \
-#     --run-timeout 400
-#
-# Task and route seeds unchanged from F32:
-#   task: F31_b1_apron_a3_mid (start 3.3,-1.0,yaw=0 → goal 1.0,1.75)
-#   mid_cross_lane:   (3.3,1.5)→(1.5,1.5)→goal  [northern gap, P~0.07, short]
-#   lower_sweep_lane: (3.3,-2.2)→(1.2,-2.2)→goal [south apron, P~0.65, long]
-
-# PLACEHOLDER — replaced below
-#   goal A3-mid (1.0, 1.75). F23 offline showed C2 preferring the southern
-#   sweep route while C1 went direct north. This is the first closed-loop test
-#   where the visibility model has a real route-choice decision to make.
-#
-# Changes vs F30:
-#   - task: F24_R01_a4_lower_to_a3_mid -> F31_b1_apron_a3_mid
-#     start: (3.125,-2.44,yaw=2.036) -> (3.30,-1.00,yaw=0.0) facing east
-#     goal:  (1.075, 1.64)           -> (1.00, 1.75)
-#   - optimizer_initial_routes_json: updated for new start position
-#     mid_cross_lane:   direct north from (3.3,-1.0) through A4/A3 cross-aisle
-#     lower_sweep_lane: south to lower apron then northwest to goal
-#   All F30 runtime safeguards kept unchanged.
-#
-# Run:
-#   python3 scripts/visibility_comparison/run_visibility_campaign.py \
-#     --config scripts/visibility_comparison/aws_f31_b1_route_choice_config.yaml \
-#     --log-root logs/visibility_comparison/f31_b1_route_choice_v1 \
-#     --run-timeout 400
-
+# AWS paper-candidate config (method contract aligned 2026-06-05).
+# World/task: warehouse_aws.world.sdf / F31_b1_apron_a3_mid.
+# Conditions: C1 constant-R EFE, C2 GP-conditioned EFE, C3 GP-risk-only ablation.
+# Runtime: one-shot global EFE route choice (H80/dt0.25, neutral multistart)
+# followed by a shared simple proportional local tracker. The local tracker is
+# execution plumbing, not the GP contribution; it uses odom yaw, bbox-bottom
+# camera (x,y), configurable yaw gate, and a predicted mean-clearance gate.
+# Metrics/plots must use after-first-command runtime rows for driving behavior.
+# See docs/paper_runtime_contract.yaml and docs/active_research_state.md.
 world: warehouse_aws.world.sdf
 launch_file: warehouse_primary_comparison.launch.py
 
@@ -217,6 +93,7 @@ robot_collision_radius_m: 0.125
 
 use_hierarchical: true
 use_simple_local_controller: true
+simple_tracker_yaw_gate_rad: 0.60
 local_tracking_use_odom_yaw: true
 global_horizon: 80
 local_horizon: 6

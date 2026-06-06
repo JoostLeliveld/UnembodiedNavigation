@@ -1,253 +1,370 @@
 tasks:
   warehouse_occ_light.world.sdf:
+  - name: shadow_tradeoff_a
+    description: 'Primary shadow-tradeoff task. Start at y=0.5 (west of shelf). Goal
+      at y=-0.5 (south of shelf, moderate visibility). The direct path crosses the
+      camera shadow zone.
 
-    # Task A — primary shadow-tradeoff task.
-    # Start visible (y=0.5, west of shelf). Goal at y=-0.5, east/south of shelf.
-    # Direct path crosses the reduced camera-update region near the shelf.
-    # Visible detour drops farther below the shelf before returning to the goal.
-    # VERIFY before running: rho_plan(-2,0.5), rho_plan(2,-0.5), shadow on direct path,
-    # and robot clearance along the lower detour.
-    - name: shadow_tradeoff_a
-      description: >
-        Primary shadow-tradeoff task. Start at y=0.5 (west of shelf).
-        Goal at y=-0.5 (south of shelf, moderate visibility).
-        The direct path crosses the camera shadow zone.
-      tier: benchmark
-      claim: shadow_tradeoff
-      focus: visibility_tradeoff
-      start: {x: -2.0, y: 0.5, z: 0.05, yaw: 0.0}
-      goal:  {x: 2.0, y: -0.5}
+      '
+    tier: benchmark
+    claim: shadow_tradeoff
+    focus: visibility_tradeoff
+    start:
+      x: -2.0
+      y: 0.5
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 2.0
+      y: -0.5
+  - name: shadow_tradeoff_a_leftstart
+    description: 'Exploratory Task A variant. Start at x=-2.5, y=0.5, with the same
+      goal as Task A. Used to test whether extra approach distance helps the visibility-aware
+      objective commit to the lower visible route.
 
-    # Task A-left — exploratory start farther west.
-    # This keeps the same shelf/goal geometry as Task A, but gives the planner
-    # more approach distance before the shadow. The lower visible route is less
-    # path-length-expensive relative to the direct route from this start.
-    - name: shadow_tradeoff_a_leftstart
-      description: >
-        Exploratory Task A variant. Start at x=-2.5, y=0.5, with the same
-        goal as Task A. Used to test whether extra approach distance helps the
-        visibility-aware objective commit to the lower visible route.
-      tier: exploratory
-      claim: shadow_tradeoff
-      focus: visibility_tradeoff_start_sensitivity
-      start: {x: -2.5, y: 0.5, z: 0.05, yaw: 0.0}
-      goal:  {x: 2.0, y: -0.5}
+      '
+    tier: exploratory
+    claim: shadow_tradeoff
+    focus: visibility_tradeoff_start_sensitivity
+    start:
+      x: -2.5
+      y: 0.5
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 2.0
+      y: -0.5
+  - name: shadow_tradeoff_a_goalclose
+    description: 'Exploratory Task A variant with the goal moved closer to the shelf
+      on the east side. Intended to preserve the same world and visibility field while
+      making a shadow-cutting route less forgiving.
 
-    # Task A-close-goal — same world / same GP, but the goal sits closer to the
-    # shelf so the robot has less post-shadow distance to recover after a direct
-    # blind crossing. This keeps the environment fixed while strengthening the
-    # consequence of stale updates.
-    - name: shadow_tradeoff_a_goalclose
-      description: >
-        Exploratory Task A variant with the goal moved closer to the shelf on
-        the east side. Intended to preserve the same world and visibility field
-        while making a shadow-cutting route less forgiving.
-      tier: exploratory
-      claim: shadow_tradeoff
-      focus: visibility_tradeoff_goal_sensitivity
-      start: {x: -2.0, y: 0.5, z: 0.05, yaw: 0.0}
-      goal:  {x: 1.7, y: -0.25}
+      '
+    tier: exploratory
+    claim: shadow_tradeoff
+    focus: visibility_tradeoff_goal_sensitivity
+    start:
+      x: -2.0
+      y: 0.5
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 1.7
+      y: -0.25
+  - name: shadow_tradeoff_b
+    description: 'Rotated shadow-tradeoff task. Start south of shelf at y=-1.0. Goal
+      at y=-0.5. The direct diagonal crosses the shadow zone.
 
-    # Task B — rotated shadow-tradeoff task.
-    # Start at y=-1.0 and goal at y=-0.5. Tests the same shelf region from a
-    # different approach angle.
-    # VERIFY before running: rho_plan(-2,-1.0), rho_plan(2,-0.5), shadow on direct path.
-    - name: shadow_tradeoff_b
-      description: >
-        Rotated shadow-tradeoff task. Start south of shelf at y=-1.0.
-        Goal at y=-0.5. The direct diagonal crosses the shadow zone.
-      tier: benchmark
-      claim: shadow_tradeoff
-      focus: visibility_tradeoff
-      start: {x: -2.0, y: -1.0, z: 0.05, yaw: 0.7854}
-      goal:  {x: 2.0, y: -0.5}
+      '
+    tier: benchmark
+    claim: shadow_tradeoff
+    focus: visibility_tradeoff
+    start:
+      x: -2.0
+      y: -1.0
+      z: 0.05
+      yaw: 0.7854
+    goal:
+      x: 2.0
+      y: -0.5
+  - name: sanity_open
+    description: 'Sanity check task. Both start and goal are well below the shelf
+      in the high-reliability visible region. C1 and C2 should behave identically.
 
-    # Task S — sanity check (no shadow involvement).
-    # Entire path stays below the shelf in high-rho_plan territory.
-    # C1 and C2 should produce nearly identical paths. Any significant divergence
-    # indicates a bug or spurious GP signal in the visible region.
-    - name: sanity_open
-      description: >
-        Sanity check task. Both start and goal are well below the shelf in the
-        high-reliability visible region. C1 and C2 should behave identically.
-      tier: sanity
-      claim: null
-      focus: sanity
-      start: {x: -2.0, y: -1.5, z: 0.05, yaw: 0.0}
-      goal:  {x: 2.0, y: -1.5}
-
-    # Legacy task kept for reference. Geometry does NOT produce a forced tradeoff:
-    # the goal is already below the shelf so the visible detour costs no extra distance.
-    # Do NOT use for the IWAI campaign comparison.
-    - name: main_shadow_tradeoff
-      description: >
-        Legacy benchmark task (pre-IWAI geometry). Start on northwest approach,
-        goal at southeast. The goal position at y=-1.0 is already below the shelf,
-        so both routes have similar length — no strong shadow tradeoff is forced.
-        Retained for reference only.
-      tier: legacy
-      claim: null
-      focus: legacy
-      start: {x: -2.0, y: 1.0, z: 0.05, yaw: 0.0}
-      goal:  {x: 2.0, y: -1.0}
-
+      '
+    tier: sanity
+    claim: null
+    focus: sanity
+    start:
+      x: -2.0
+      y: -1.5
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 2.0
+      y: -1.5
+  - name: main_shadow_tradeoff
+    description: "Legacy benchmark task (pre-IWAI geometry). Start on northwest approach,\
+      \ goal at southeast. The goal position at y=-1.0 is already below the shelf,\
+      \ so both routes have similar length \u2014 no strong shadow tradeoff is forced.\
+      \ Retained for reference only.\n"
+    tier: legacy
+    claim: null
+    focus: legacy
+    start:
+      x: -2.0
+      y: 1.0
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 2.0
+      y: -1.0
   warehouse_occ_longshadow.world.sdf:
+  - name: shadow_tradeoff_a_longshadow
+    description: 'Task A variant in the long-shadow world. Same start/goal family
+      as the main benchmark, but an added upper-route obstacle extends the reduced-
+      visibility shortcut and makes stale-update drift more consequential.
 
-    # Long-shadow Task A — proposed follow-up benchmark to make C2 more useful.
-    # The extra upper obstacle keeps the short northern crossover blind for longer
-    # and narrows its clearance. The lower route stays open but moderately longer.
-    - name: shadow_tradeoff_a_longshadow
-      description: >
-        Task A variant in the long-shadow world. Same start/goal family as the
-        main benchmark, but an added upper-route obstacle extends the reduced-
-        visibility shortcut and makes stale-update drift more consequential.
-      tier: exploratory
-      claim: shadow_tradeoff
-      focus: visibility_tradeoff_robustness
-      start: {x: -2.0, y: 0.5, z: 0.05, yaw: 0.0}
-      goal:  {x: 2.0, y: -0.5}
+      '
+    tier: exploratory
+    claim: shadow_tradeoff
+    focus: visibility_tradeoff_robustness
+    start:
+      x: -2.0
+      y: 0.5
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 2.0
+      y: -0.5
+  - name: shadow_tradeoff_a_longshadow_far
+    description: 'Long-shadow Task A variant with a slightly farther goal. Intended
+      to stretch the post-shadow segment so a poor blind-route commitment has longer
+      to hurt before the robot can recover.
 
-    # Slightly farther goal to increase the payoff of committing to the lower
-    # visible corridor instead of trying to squeeze through the blind shortcut.
-    - name: shadow_tradeoff_a_longshadow_far
-      description: >
-        Long-shadow Task A variant with a slightly farther goal. Intended to
-        stretch the post-shadow segment so a poor blind-route commitment has
-        longer to hurt before the robot can recover.
-      tier: exploratory
-      claim: shadow_tradeoff
-      focus: visibility_tradeoff_robustness
-      start: {x: -2.0, y: 0.5, z: 0.05, yaw: 0.0}
-      goal:  {x: 2.35, y: -0.45}
-
+      '
+    tier: exploratory
+    claim: shadow_tradeoff
+    focus: visibility_tradeoff_robustness
+    start:
+      x: -2.0
+      y: 0.5
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 2.35
+      y: -0.45
   warehouse_aws.world.sdf:
+  - name: B1_apron_a4_to_uppermid_a3
+    description: 'Active AWS diagnostic task. Robot starts on the right side of aisle
+      A4 at (3.2, -1.0), facing east toward the R5 shelf (yaw=0), as if it just finished
+      a pick. The goal is the A3-side mid-cross-aisle target at (1.0, 1.75). The task
+      is intended to reveal whether learned observation reliability makes the planner
+      prefer a more observable route without scripted intermediate waypoints.
 
-    # Active AWS route-choice diagnostic.
-    # Start on the right side of A4, facing east toward the R5 shelf as if the
-    # robot has just completed a pick. Goal is visible in A3 near the mid
-    # cross-aisle. Route choice must emerge from the planner objective: no
-    # mission waypoints are used.
-    - name: B1_apron_a4_to_uppermid_a3
-      description: >
-        Active AWS diagnostic task. Robot starts on the right side of aisle A4
-        at (3.2, -1.0), facing east toward the R5 shelf (yaw=0), as if it just
-        finished a pick. The goal is the A3-side mid-cross-aisle target at
-        (1.0, 1.75). The task is intended to reveal whether learned observation
-        reliability makes the planner prefer a more observable route without
-        scripted intermediate waypoints.
-      tier: diagnostic
-      claim: visibility_route_choice
-      focus: shelf_pick_visibility_tradeoff
-      start: {x: 3.20, y: -1.00, z: 0.05, yaw: 0.0}
-      goal:  {x: 1.00, y: 1.75}
+      '
+    tier: diagnostic
+    claim: visibility_route_choice
+    focus: shelf_pick_visibility_tradeoff
+    start:
+      x: 3.2
+      y: -1.0
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 1.0
+      y: 1.75
+  - name: probe_far_east_to_a3top
+    description: 'Diagnostic C1 stress probe. Robot starts farther away on the east-side
+      driveable route at (5.0, -2.0), with the same A3-side mid-cross-aisle goal
+      at (1.0, 1.75). This intentionally gives the weak-update / A4-side segment
+      more time to affect the planner belief before the goal, without adding mission
+      waypoints or changing the GP/world geometry.
 
-    # F31 B1 route-choice task: start (3.3, -1.0) facing east, goal A3 mid (1.0, 1.75).
-    # Identical intent to B1_apron_a4_to_uppermid_a3 but start is 0.1 m east (x=3.3)
-    # to place the robot clearly in the A4 apron pick-pose with the R5 shelf in view.
-    # F23 offline showed C2 preferring the lower-sweep route on this task geometry.
-    - name: F31_b1_apron_a3_mid
-      description: >
-        F31 route-choice smoke: robot at A4 apron pick-pose (3.3, -1.0, yaw=0, facing east)
-        must reach A3 mid-cross-aisle (1.0, 1.75). Both start and goal are in the
-        GP-visible region. The short northward route passes near the R4/R5 rack tops
-        where visibility is lower; the southern sweep stays in the open apron.
-        F23 offline: C2 preferred the lower sweep, C1 went direct north.
-      tier: diagnostic
-      claim: visibility_route_choice
-      focus: shelf_pick_visibility_tradeoff
-      start: {x: 3.30, y: -1.00, z: 0.05, yaw: 0.0}
-      goal:  {x: 1.00, y: 1.75}
+      '
+    tier: diagnostic
+    claim: visibility_route_choice
+    focus: longer_c1_weak_update_failure_probe
+    start:
+      x: 5.0
+      y: -2.0
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 1.0
+      y: 1.75
+  - name: probe_a4_boxside_north_to_a3top
+    description: 'Diagnostic route-choice probe with cleaner initial pose. Robot starts
+      in the A4 driveable lane beside the shelf-end box pads at (3.35, -1.55),
+      facing north (yaw=pi/2) rather than into the shelf. The direct route naturally
+      continues north through A4, while the alternative route first sweeps south
+      through the camera-facing apron before crossing to the same A3-side goal at
+      (1.0, 1.75). This is intended to test C1-direct versus C2-visible behavior
+      without route-forcing mission waypoints.
 
-    # F24 R01 Gazebo smoke: visible endpoint route from lower A4 to mid A3.
-    # This is the first visible-to-visible route selected for closed-loop
-    # execution after the offline F24 battery.
-    - name: F24_R01_a4_lower_to_a3_mid
-      description: >
-        Gazebo smoke task corresponding to F24 route R01. Start and goal are
-        both in GP-visible regions. The robot starts in the lower A4 lane and
-        must reach the A3 mid-cross-aisle target. Used to check whether the
-        planner-derived global route and short-horizon tracker survive noisy
-        closed-loop execution.
-      tier: diagnostic
-      claim: null
-      focus: visible_to_visible_gazebo_smoke
-      start: {x: 3.125, y: -2.44, z: 0.05, yaw: 2.0360}
-      goal:  {x: 1.075, y: 1.64}
+      '
+    tier: diagnostic
+    claim: visibility_route_choice
+    focus: boxside_neutral_route_choice_probe
+    start:
+      x: 3.35
+      y: -1.55
+      z: 0.05
+      yaw: 1.57079632679
+    goal:
+      x: 1.0
+      y: 1.75
+  - name: F31_b1_apron_a3_mid
+    description: 'F31 route-choice smoke: robot at A4 apron pick-pose (3.3, -1.0,
+      yaw=0, facing east) must reach A3 mid-cross-aisle (1.0, 1.75). Both start and
+      goal are in the GP-visible region. The short northward route passes near the
+      R4/R5 rack tops where visibility is lower; the southern sweep stays in the open
+      apron. F23 offline: C2 preferred the lower sweep, C1 went direct north.
 
-    # Sanity check: both planners should behave similarly in the visible south
-    # apron and should not need the hidden aisle.
-    - name: visible_aisle_sanity_aws
-      description: >
-        Southern apron sanity check in the clean AWS/JdeRobot section.
-        Both start (-4.25,-3.15) and goal (3.45,-3.15) lie in the camera-visible
-        open apron. This separates detector/GP readiness from the
-        failure-consequence benchmark.
-      tier: sanity
-      claim: null
-      focus: sanity
-      start: {x: -4.25, y: -3.15, z: 0.05, yaw: 0.0}
-      goal:  {x: 3.45, y: -3.15}
+      '
+    tier: diagnostic
+    claim: visibility_route_choice
+    focus: shelf_pick_visibility_tradeoff
+    start:
+      x: 3.3
+      y: -1.0
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 1.0
+      y: 1.75
+  - name: F24_R01_a4_lower_to_a3_mid
+    description: 'Gazebo smoke task corresponding to F24 route R01. Start and goal
+      are both in GP-visible regions. The robot starts in the lower A4 lane and must
+      reach the A3 mid-cross-aisle target. Used to check whether the planner-derived
+      global route and short-horizon tracker survive noisy closed-loop execution.
 
-    # --- Tier-C generality tasks (added 2026-06-03; coords validated vs GP
-    #     p_vis field + known driveable layer). Showcase method strengths across
-    #     geometry: route choice, longer horizon, and safe-stop. ---
+      '
+    tier: diagnostic
+    claim: null
+    focus: visible_to_visible_gazebo_smoke
+    start:
+      x: 3.125
+      y: -2.44
+      z: 0.05
+      yaw: 2.036
+    goal:
+      x: 1.075
+      y: 1.64
+  - name: visible_aisle_sanity_aws
+    description: 'Southern apron sanity check in the clean AWS/JdeRobot section. Both
+      start (-4.25,-3.15) and goal (3.45,-3.15) lie in the camera-visible open apron.
+      This separates detector/GP readiness from the failure-consequence benchmark.
 
-    - name: b2_a1_apron_to_a2_mid
-      description: >
-        West-side route-choice mirror. Start in the visible A1 apron (-3.0,-1.0,
-        p_vis~0.74), goal in the visible A2 mid-cross aisle (-1.0,1.75,
-        p_vis~0.66). The short northward A1 route dips to p_vis~0.20 mid-aisle;
-        the A2 detour stays visible. Milder visibility contrast than F31_b1.
-      tier: generality
-      claim: visibility_route_choice
-      focus: west_mirror_route_choice
-      start: {x: -3.0, y: -1.0, z: 0.05, yaw: 0.0}
-      goal:  {x: -1.0, y: 1.75}
+      '
+    tier: sanity
+    claim: null
+    focus: sanity
+    start:
+      x: -4.25
+      y: -3.15
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 3.45
+      y: -3.15
+  - name: b2_a1_apron_to_a2_mid
+    description: 'West-side route-choice mirror. Start in the visible A1 apron (-3.0,-1.0,
+      p_vis~0.74), goal in the visible A2 mid-cross aisle (-1.0,1.75, p_vis~0.66).
+      The short northward A1 route dips to p_vis~0.20 mid-aisle; the A2 detour stays
+      visible. Milder visibility contrast than F31_b1.
 
-    - name: b3_lowereast_to_a2_mid
-      description: >
-        Longer-horizon route choice. Start in the visible lower-east aisle
-        (3.3,-2.5, facing west, p_vis~0.8), goal in the visible A2 mid-cross
-        aisle (-1.0,1.75). The visible route runs west along the lower aisle then
-        up A2; shorter cuts pass through the occluded A4/A3-north gaps.
-      tier: generality
-      claim: visibility_route_choice
-      focus: long_horizon_route_choice
-      start: {x: 3.3, y: -2.5, z: 0.05, yaw: 3.14159}
-      goal:  {x: -1.0, y: 1.75}
+      '
+    tier: generality
+    claim: visibility_route_choice
+    focus: west_mirror_route_choice
+    start:
+      x: -3.0
+      y: -1.0
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -1.0
+      y: 1.75
+  - name: b3_lowereast_to_a2_mid
+    description: 'Longer-horizon route choice. Start in the visible lower-east aisle
+      (3.3,-2.5, facing west, p_vis~0.8), goal in the visible A2 mid-cross aisle (-1.0,1.75).
+      The visible route runs west along the lower aisle then up A2; shorter cuts pass
+      through the occluded A4/A3-north gaps.
 
-    - name: b4_a4_apron_to_occluded_upper
-      description: >
-        Safe-stop scenario. Start in the visible A4 apron (3.3,-1.0, p_vis~0.74);
-        goal at the occluded A4-upper aisle (3.1,3.0, p_vis~0.01). Every route to
-        the goal traverses deep occlusion (A4-north and mid-cross-east are both
-        camera-poor). The visibility-aware planner should stop safely with
-        bounded belief error; the constant-R baseline commits and diverges.
-      tier: generality
-      claim: visibility_safe_stop
-      focus: localization_unsafe_goal
-      start: {x: 3.3, y: -1.0, z: 0.05, yaw: 0.0}
-      goal:  {x: 3.1, y: 3.0}
+      '
+    tier: generality
+    claim: visibility_route_choice
+    focus: long_horizon_route_choice
+    start:
+      x: 3.3
+      y: -2.5
+      z: 0.05
+      yaw: 3.14159
+    goal:
+      x: -1.0
+      y: 1.75
+  - name: b4_a4_apron_to_occluded_upper
+    description: 'Safe-stop scenario. Start in the visible A4 apron (3.3,-1.0, p_vis~0.74);
+      goal at the occluded A4-upper aisle (3.1,3.0, p_vis~0.01). Every route to the
+      goal traverses deep occlusion (A4-north and mid-cross-east are both camera-poor).
+      The visibility-aware planner should stop safely with bounded belief error; the
+      constant-R baseline commits and diverges.
 
-    # b5 = stronger 2nd discriminating task (severe occlusion + clear visible
-    # alternative, like F31_b1 but longer occluded short-route and a different
-    # goal one aisle further west). Validated vs GP field 2026-06-03:
-    #   short route (up A4-north -> mid-cross-east -> west to A2): p_vis ~0.01-0.02
-    #   long route  (south apron -> west -> up A2):                 p_vis ~0.60-0.80
-    - name: b5_a4_apron_to_a2_mid
-      description: >
-        Stronger route-choice. Start in the visible A4 apron (3.3,-1.0,
-        p_vis~0.77), goal in the visible A2 mid-cross aisle (-1.0,1.75,
-        p_vis~0.60). The short route up A4-north and across mid-cross-east is
-        deeply occluded (p_vis~0.01-0.02 over a longer stretch than F31_b1); the
-        visible detour runs south through the apron, west, then up A2. Tests
-        whether the localization-safety route choice holds on a longer, more
-        strongly occluded shortcut.
-      tier: paper
-      claim: visibility_route_choice
-      focus: severe_occlusion_long_shortcut
-      start: {x: 3.3, y: -1.0, z: 0.05, yaw: 0.0}
-      goal:  {x: -1.0, y: 1.75}
-  # warehouse_putaway.world.sdf and parcel_sortation.world.sdf task entries
-  # were removed. Their GP artifacts and campaign configs were deleted;
-  # these worlds are no longer active experiment lines.
+      '
+    tier: generality
+    claim: visibility_safe_stop
+    focus: localization_unsafe_goal
+    start:
+      x: 3.3
+      y: -1.0
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 3.1
+      y: 3.0
+  - name: b5_a4_apron_to_a2_mid
+    description: 'Stronger route-choice. Start in the visible A4 apron (3.3,-1.0,
+      p_vis~0.77), goal in the visible A2 mid-cross aisle (-1.0,1.75, p_vis~0.60).
+      The short route up A4-north and across mid-cross-east is deeply occluded (p_vis~0.01-0.02
+      over a longer stretch than F31_b1); the visible detour runs south through the
+      apron, west, then up A2. Tests whether the localization-safety route choice
+      holds on a longer, more strongly occluded shortcut.
+
+      '
+    tier: paper
+    claim: visibility_route_choice
+    focus: severe_occlusion_long_shortcut
+    start:
+      x: 3.3
+      y: -1.0
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -1.0
+      y: 1.75
+  - name: probe_a4bot_to_a3top
+    description: 'Observable-goal route-choice probe: A4 apron (3.2,-1,yaw0) -> A3
+      mid-cross (1.0,1.75, rho~0.52, observable). Short north gap occluded; visible
+      apron detour. C2 plans a real route (goal not blind).'
+    tier: diagnostic
+    claim: visual_probe
+    focus: c1_proportional_probe
+    start:
+      x: 3.2
+      y: -1.0
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 1.0
+      y: 1.75
+  - name: probe_topleft_to_westlow
+    description: 'Failure-mode probe: blind top-left A1 (-3,4.8, rho~0.008) -> visible
+      west-lane (-5,-1, rho~0.82). High actuation noise; C1 dead-reckons through camera-poor
+      top/west.'
+    tier: diagnostic
+    claim: c1_failure_mode
+    focus: camera_poor_drift
+    start:
+      x: -3.0
+      y: 4.8
+      z: 0.05
+      yaw: -1.5708
+    goal:
+      x: -5.0
+      y: -1.0
+  - name: probe_westlow_to_topblind
+    description: 'C1 failure probe: VISIBLE start west-low (-5,-1, rho~0.82, facing
+      north) -> blind top (-2.5,4.5, rho~0.004) via camera-poor west lane (rho~0.001).
+      High noise; C1 starts localized then drifts blind.'
+    tier: diagnostic
+    claim: c1_failure_mode
+    focus: visible_start_drift_blind
+    start:
+      x: -5.0
+      y: -1.0
+      z: 0.05
+      yaw: 1.5708
+    goal:
+      x: -2.5
+      y: 4.5

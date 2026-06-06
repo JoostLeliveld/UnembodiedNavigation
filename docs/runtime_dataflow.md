@@ -1,6 +1,6 @@
 # Runtime Dataflow
 
-This document describes how the offline observability artifact connects to the online ROS/Gazebo runtime. For paper-level protocol and naming, see [`paper_alignment.md`](paper_alignment.md).
+This document describes how the offline observability artifact connects to the online ROS/Gazebo runtime. For paper-level protocol and naming, see [`paper_runtime_contract.yaml`](paper_runtime_contract.yaml).
 
 ## Offline Preparation
 
@@ -11,14 +11,20 @@ world_profiles.yaml
 -> extract_perception_targets.py
 -> build_gp_targets.py
 -> fit_visibility_gps.py
--> logs/visibility_comparison/current_gp/*.npz
+-> logs/visibility_comparison/<world_gp>/*.npz
 -> warehouse_primary_comparison.launch.py
 ```
 
-The paper-facing GP artifact is fitted before navigation trials and then held fixed. The current compact benchmark uses:
+The paper-facing GP artifact is fitted before navigation trials and then held fixed. The compact benchmark uses:
 
 - world: `warehouse_occ_light.world.sdf`
 - artifact: `logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz`
+- planner-facing field: `P_conservative_plan_map`
+
+The current AWS candidate line uses:
+
+- world: `warehouse_aws.world.sdf`
+- artifact: `logs/visibility_comparison/aws_gp_v5/yolo_score_raw_gp.npz`
 - planner-facing field: `P_conservative_plan_map`
 
 Visibility-aware planner runs must pass `visibility_artifact_path` explicitly. The primary launch now fails instead of silently falling back to profile defaults.
@@ -58,6 +64,7 @@ Observability is not a direct reward in the paper path.
 The stable part of the estimator is:
 
 - `x,y`: YOLO-selected pixel projected to the ground plane by camera geometry.
+- selected pixel source in the active AWS runtime: `bbox_bottom` (mask-bottom is logged as a diagnostic, not used for the selected point).
 - GP input: planar `x,y` only.
 
 The heading source is run-config dependent and is recorded in `run_manifest.json`:
@@ -68,7 +75,16 @@ The heading source is run-config dependent and is recorded in `run_manifest.json
 | `use_displacement_heading:=true`, `use_odom_heading_correction:=false` | `pixel_displacement_heading` | diagnostic heading from consecutive camera-derived position updates |
 | `keypoint_marker_world_z > 0` | `keypoint_bev_heading_with_odom_fallback` | visual keypoint heading with odometry fallback |
 
-The current paper-facing configs and Task A figure manifests use odometry heading.
+The current paper-facing AWS configs use odometry heading. If `/state/bev` becomes stale, planner code should either use a predicted belief or refuse planning; stale latest camera states must not be interpreted as fresh localization.
+
+## Metrics
+
+Runtime means for localization, yaw, control, and solve timing start after the
+first non-trivial command. Pre-command rows contain launch waiting, global
+solve time, and estimator warm-up. Use `truth_belief_error_m` for planner
+localization quality, and interpret `truth_state_error_m` as the raw
+camera-state pathway. Fresh `/state/bev` error and stale latest-state error
+should be reported separately when diagnosing perception.
 
 ## Main Entry Points
 

@@ -50,8 +50,11 @@ error and more stable belief.
   fallback should remain locked and logged.
 - Delayed visual corrections are now more defensible because command-log
   replay and pixel correction diagnostics exist.
-- Final runs should report truth-state error, belief error, yaw error, pixel
-  correction accept/reject statistics, and detection availability.
+- Final runs should report planner truth-belief error, yaw error, pixel
+  correction accept/reject statistics, detection availability, and camera-state
+  freshness. `/state` position error is useful for perception audits, but it
+  must be split into fresh camera-state error versus stale latest-state error;
+  `state_available` alone is not evidence of a fresh YOLO update.
 
 ### Driveability And Obstacle Cost
 
@@ -168,12 +171,17 @@ Primary measurements:
 - goal reached, collision, stuck, timeout;
 - route class and path length;
 - elapsed time after first command;
-- mean and p95 truth-state error;
-- mean and p95 belief error;
-- mean and p95 yaw error;
+- mean and p95 truth-state error after first command;
+- mean and p95 belief error after first command;
+- mean and p95 yaw error after first command;
 - min driveable clearance / obstacle distance;
-- detection availability and rejected correction rate;
-- global solve time and local tracker timing.
+- detection availability and rejected correction rate after first command;
+- global solve time and local tracker timing during execution.
+
+Runtime averages must be computed only from samples at or after the first
+non-trivial velocity command. Launch, global-solve, and estimator warm-up rows
+are reported separately when relevant and must not be mixed into localization,
+yaw, tracking, or detection-rate means.
 
 Expected evidence:
 

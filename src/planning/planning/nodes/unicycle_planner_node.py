@@ -100,6 +100,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('goal_prior_v_std_final', 18.0)
         _declare_if_not('goal_tightening_power', 0.45)
         _declare_if_not('goal_progress_n_steps', 90)
+        _declare_if_not('goal_progress_weight', 0.0)
         _declare_if_not('observation_risk_scale', 1.25)
         _declare_if_not('ambiguity_term_scale', 1.00)
         _declare_if_not('discount_gamma', 0.98)
@@ -136,6 +137,12 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('local_optimizer_maxiter', 60)
         _declare_if_not('global_use_ambiguity', True)
         _declare_if_not('local_use_ambiguity', False)
+        # Local executor observation-space goal risk. Default True keeps the locked
+        # config behaviour; the belief-loop config sets this False so the local
+        # layer is a STATE-space waypoint tracker (the observation-space pixel goal
+        # prior is what produced the aisle-transition freeze and the ~0.42 m
+        # final-approach stall). Condition-neutral; visibility stays in the global EFE.
+        _declare_if_not('local_use_obs_risk', True)
         _declare_if_not('global_optimizer_multistart', True)
         _declare_if_not('local_optimizer_multistart', True)
         _declare_if_not('local_use_visibility_model', False)
@@ -147,12 +154,26 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('local_goal_prior_v_std_start', -1.0)
         _declare_if_not('local_goal_prior_u_std_final', -1.0)
         _declare_if_not('local_goal_prior_v_std_final', -1.0)
+        # Metric (x,y) goal-progress incentive for the LOCAL executor only.
+        # -1.0 => inherit the shared goal_progress_weight; >=0.0 => use as-is.
+        # Condition-neutral (no GP/ambiguity); fixes the unreachable-target freeze.
+        _declare_if_not('local_goal_progress_weight', -1.0)
+        # LOCAL reference-segment tracking weights (condition-neutral, no GP).
+        # -1.0 => inherit the shared planner weight (which defaults 0.0, i.e. OFF);
+        # >=0.0 => use the local value directly. These build a proper local TRACKER
+        # objective (reference-segment tracking + control smoothness) so the local
+        # executor follows the global planner-derived waypoint polyline instead of
+        # spinning at a single beyond-horizon goal point. Identical for C1/C2/C3.
+        _declare_if_not('local_ref_weight', -1.0)
+        _declare_if_not('local_terminal_ref_weight', -1.0)
+        _declare_if_not('local_du_weight', -1.0)
         _declare_if_not('waypoint_spacing_m', 1.0)
         _declare_if_not('waypoint_arrival_radius_m', 0.35)
         _declare_if_not('local_replan_min_remaining_s', 0.0)
         _declare_if_not('local_replan_on_waypoint_change', False)
         _declare_if_not('latency_compensate_plan_handoff', False)
         _declare_if_not('use_simple_local_controller', False)
+        _declare_if_not('simple_tracker_yaw_gate_rad', 0.6)
         _declare_if_not('local_tracking_use_odom_yaw', False)
 
         # Pixel correction params
@@ -179,7 +200,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('odom_heading_timeout_s', 0.75)
         _declare_if_not('odom_heading_sigma_rad', 0.08)
         _declare_if_not('odom_yaw_offset_rad', 0.0)
-        _declare_if_not('odom_topic', '/odom')
+        _declare_if_not('odom_topic', '/odom_noisy')
         _declare_if_not('use_odom_for_predict', True)
         _declare_if_not('heading_pixel_noise_sigma', 0.0)
         _declare_if_not('pixel_heading_noise_floor_rad', 0.01)
@@ -241,6 +262,7 @@ class UnicyclePlannerNode(Node):
         self.goal_prior_v_std_final = float(self.get_parameter('goal_prior_v_std_final').value)
         self.goal_tightening_power = float(self.get_parameter('goal_tightening_power').value)
         self.goal_progress_n_steps = int(self.get_parameter('goal_progress_n_steps').value)
+        self.goal_progress_weight = float(self.get_parameter('goal_progress_weight').value)
         self.observation_risk_scale = float(self.get_parameter('observation_risk_scale').value)
         self.ambiguity_term_scale = float(self.get_parameter('ambiguity_term_scale').value)
         self.discount_gamma = float(self.get_parameter('discount_gamma').value)
@@ -281,6 +303,7 @@ class UnicyclePlannerNode(Node):
         self.local_optimizer_maxiter = int(self.get_parameter('local_optimizer_maxiter').value)
         self.global_use_ambiguity = _as_bool(self.get_parameter('global_use_ambiguity').value)
         self.local_use_ambiguity = _as_bool(self.get_parameter('local_use_ambiguity').value)
+        self.local_use_obs_risk = _as_bool(self.get_parameter('local_use_obs_risk').value)
         self.global_optimizer_multistart = _as_bool(
             self.get_parameter('global_optimizer_multistart').value
         )
@@ -312,6 +335,14 @@ class UnicyclePlannerNode(Node):
         self.local_goal_prior_v_std_final = float(
             self.get_parameter('local_goal_prior_v_std_final').value
         )
+        self.local_goal_progress_weight = float(
+            self.get_parameter('local_goal_progress_weight').value
+        )
+        self.local_ref_weight = float(self.get_parameter('local_ref_weight').value)
+        self.local_terminal_ref_weight = float(
+            self.get_parameter('local_terminal_ref_weight').value
+        )
+        self.local_du_weight = float(self.get_parameter('local_du_weight').value)
         self.waypoint_spacing_m = float(self.get_parameter('waypoint_spacing_m').value)
         self.waypoint_arrival_radius_m = float(self.get_parameter('waypoint_arrival_radius_m').value)
         self.local_replan_min_remaining_s = max(
@@ -325,6 +356,9 @@ class UnicyclePlannerNode(Node):
         )
         self.use_simple_local_controller = _as_bool(
             self.get_parameter('use_simple_local_controller').value
+        )
+        self.simple_tracker_yaw_gate_rad = max(
+            0.0, float(self.get_parameter('simple_tracker_yaw_gate_rad').value)
         )
         self.local_tracking_use_odom_yaw = _as_bool(
             self.get_parameter('local_tracking_use_odom_yaw').value
@@ -515,11 +549,12 @@ class UnicyclePlannerNode(Node):
         self.belief_stamp = None
         self.last_cmd = np.array([0.0, 0.0], dtype=float)
         self.odom_vel = np.array([0.0, 0.0], dtype=float)
-        # Ring buffer of (sim_time_s, v, w) for intended pre-noise commands.
-        # Used to replay the actual command sequence when dead-reckoning the
-        # belief forward over a long gap (instead of extrapolating at the
-        # single current velocity, which diverges when the robot turns).
+        # Ring buffers of timestamped motion inputs for dead reckoning.  The
+        # odometry log is preferred when use_odom_for_predict=True because it
+        # represents the encoder/noisy-odometry estimate of what the robot did.
+        # The command log remains as a fallback and for diagnostics.
         self._cmd_log: list[tuple[float, float, float]] = []
+        self._odom_log: list[tuple[float, float, float]] = []
         self._CMD_LOG_MAX_S: float = 60.0
         self._latest_measurement_available = False
         self._latest_belief_age_s = math.nan
@@ -632,6 +667,14 @@ class UnicyclePlannerNode(Node):
         """
         def g(key):
             return ov[key] if key in ov else getattr(self, key)
+
+        def g_default(key, default):
+            # For optional planner kwargs that have no node-level attribute: use
+            # the override if provided, otherwise the supplied default. The global
+            # planner omits these so the LOCAL reference-tracking terms stay OFF
+            # (0.0) for it, leaving the global EFE objective unchanged.
+            return ov[key] if key in ov else default
+
         return self.PLANNER_CLASS(
             horizon=int(g('horizon')),
             dt=self.dt, v_min=self.v_min, v_max=self.v_max, w_min=self.w_min, w_max=self.w_max,
@@ -662,6 +705,10 @@ class UnicyclePlannerNode(Node):
             goal_prior_v_std_final=g('goal_prior_v_std_final'),
             goal_tightening_power=g('goal_tightening_power'),
             goal_progress_n_steps=int(g('goal_progress_n_steps')),
+            goal_progress_weight=float(g('goal_progress_weight')),
+            ref_weight=float(g_default('ref_weight', 0.0)),
+            terminal_ref_weight=float(g_default('terminal_ref_weight', 0.0)),
+            du_weight=float(g_default('du_weight', 0.0)),
             observation_risk_scale=float(g('observation_risk_scale')),
             ambiguity_term_scale=float(g('ambiguity_term_scale')), discount_gamma=float(g('discount_gamma')),
             use_nogo_cost=_as_bool(g('use_nogo_cost')), nogo_penalty_type=str(g('nogo_penalty_type')),
@@ -722,10 +769,18 @@ class UnicyclePlannerNode(Node):
         yaw = self._yaw_from_quaternion(msg.pose.pose.orientation)
         v_odom = float(msg.twist.twist.linear.x)
         w_odom = float(msg.twist.twist.angular.z)
+        try:
+            stamp_s = self._stamp_to_float(msg.header.stamp)
+        except (AttributeError, TypeError, ValueError):
+            stamp_s = self.get_clock().now().nanoseconds * 1e-9
         with self._data_lock:
             self.odom_yaw_meas = wrap_angle(float(yaw + self.odom_yaw_offset_rad))
             self.odom_stamp = msg.header.stamp
             self.odom_vel = np.array([v_odom, w_odom], dtype=float)
+            self._odom_log.append((stamp_s, v_odom, w_odom))
+            cutoff = stamp_s - self._CMD_LOG_MAX_S
+            while self._odom_log and self._odom_log[0][0] < cutoff:
+                self._odom_log.pop(0)
 
     def _truth_odom_cb(self, msg: Odometry):
         """DIAGNOSTIC: transform raw odom (truth) into the plan frame via TF."""
@@ -850,6 +905,17 @@ class UnicyclePlannerNode(Node):
         ]).astype(float)
         return m, self._regularize_state_covariance(S)
 
+    def _state_msg_age_s(self, state_ref: PoseWithCovarianceStamped) -> float:
+        try:
+            return (self.get_clock().now() - Time.from_msg(state_ref.header.stamp)).nanoseconds * 1e-9
+        except (AttributeError, TypeError, ValueError):
+            return math.inf
+
+    def _state_msg_is_fresh(self, state_ref: PoseWithCovarianceStamped) -> bool:
+        age = self._state_msg_age_s(state_ref)
+        future_tolerance_s = max(float(self.pixel_timeout_s), 0.25)
+        return bool(math.isfinite(age) and age <= float(self.pixel_timeout_s) and age >= -future_tolerance_s)
+
     def _regularize_state_covariance(self, S):
         """Keep planner belief covariance positive enough for stable updates."""
         S = np.asarray(S, dtype=float).copy()
@@ -862,6 +928,12 @@ class UnicyclePlannerNode(Node):
     def _init_belief_from_state(self):
         with self._data_lock:
             if self.state_msg is None:
+                return False
+            if self.skip_stale_pixel_correction and not self._state_msg_is_fresh(self.state_msg):
+                age = self._state_msg_age_s(self.state_msg)
+                self._warn_stale_pixel_once(
+                    f"Refusing to initialize planner belief from stale /state/bev (age {age:.2f}s)"
+                )
                 return False
             self.belief_m, self.belief_S = self._state_msg_to_belief(self.state_msg)
             self.belief_stamp = self.state_msg.header.stamp
@@ -1006,10 +1078,14 @@ class UnicyclePlannerNode(Node):
 
     def _replay_cmd_log_interval(self, m0, S0, from_stamp, to_stamp,
                                    fallback_cmd, fallback_dt):
-        """Predict (m0, S0) from from_stamp to to_stamp using _cmd_log replay.
+        """Predict (m0, S0) from from_stamp to to_stamp using motion replay.
 
-        Falls back to single-step prediction with fallback_cmd if the log has
-        no entries in the interval or timestamps are unavailable.
+        When ``use_odom_for_predict`` is enabled, replay the configured odometry
+        topic first (normally ``/odom_noisy``).  This is the paper-facing
+        dead-reckoning path: camera updates correct a belief propagated by
+        onboard odometry, not by the ideal command request.  If odometry samples
+        are unavailable, fall back to command replay and finally to a single
+        fallback prediction.
         """
         try:
             from_s = Time.from_msg(from_stamp).nanoseconds * 1e-9
@@ -1030,9 +1106,15 @@ class UnicyclePlannerNode(Node):
             }
 
         with self._data_lock:
-            entries = list(self._cmd_log)
+            odom_entries = list(self._odom_log)
+            cmd_entries = list(self._cmd_log)
+        entries = odom_entries if self.use_odom_for_predict else cmd_entries
         previous = [(t, v, w) for t, v, w in entries if t <= from_s]
         relevant = [(t, v, w) for t, v, w in entries if from_s < t <= to_s]
+        if self.use_odom_for_predict and not previous and not relevant:
+            entries = cmd_entries
+            previous = [(t, v, w) for t, v, w in entries if t <= from_s]
+            relevant = [(t, v, w) for t, v, w in entries if from_s < t <= to_s]
 
         if previous:
             current_cmd = np.array([previous[-1][1], previous[-1][2]], dtype=float)
@@ -1640,20 +1722,27 @@ class UnicyclePlannerNode(Node):
         if belief_age_s <= 0.0:
             return m0, S0
 
-        # Replay intended pre-noise commands over their true timestamped
-        # intervals.  Do not apply a future command to the past, and do not
-        # apply each logged command for a fixed planner dt; command publication
-        # can be faster than the planner horizon discretization.
+        # Replay timestamped motion over the interval.  For paper-facing runs
+        # use the configured odometry topic (normally /odom_noisy) so dead
+        # reckoning follows the encoder/noisy-odometry estimate rather than the
+        # ideal requested command.  Fall back to command replay if odometry has
+        # no samples for this interval.
         try:
             now_s = Time.from_msg(now_msg).nanoseconds * 1e-9
         except (AttributeError, TypeError, ValueError):
             now_s = self.get_clock().now().nanoseconds * 1e-9
         t_start = now_s - belief_age_s
         with self._data_lock:
-            entries = list(self._cmd_log)
+            odom_entries = list(self._odom_log)
+            cmd_entries = list(self._cmd_log)
 
+        entries = odom_entries if self.use_odom_for_predict else cmd_entries
         previous = [(t, v, w) for t, v, w in entries if t <= t_start]
         relevant = [(t, v, w) for t, v, w in entries if t_start < t <= now_s]
+        if self.use_odom_for_predict and not previous and not relevant:
+            entries = cmd_entries
+            previous = [(t, v, w) for t, v, w in entries if t <= t_start]
+            relevant = [(t, v, w) for t, v, w in entries if t_start < t <= now_s]
         if previous:
             current_cmd = np.array([previous[-1][1], previous[-1][2]], dtype=float)
         elif relevant:
@@ -1751,13 +1840,45 @@ class UnicyclePlannerNode(Node):
         }
 
     def _resolve_state_belief_for_planning(self):
+        now_msg = self.get_clock().now().to_msg()
         with self._data_lock:
             state_ref = self.state_msg
+            belief_m = None if self.belief_m is None else self.belief_m.copy()
+            belief_S = None if self.belief_S is None else self.belief_S.copy()
+            belief_stamp = self.belief_stamp
+            last_cmd = self.last_cmd.copy()
         if state_ref is None:
             return None, None, {}
+        if self.skip_stale_pixel_correction and not self._state_msg_is_fresh(state_ref):
+            if belief_m is None or belief_S is None or belief_stamp is None:
+                return None, None, {
+                    'measurement_available': False,
+                    'belief_age_s': math.inf,
+                }
+            belief_age_s = self._belief_age_for_planning(now_msg, belief_stamp)
+            if belief_age_s is None:
+                return None, None, {}
+            m0, S0 = self._predict_belief_to_now(
+                belief_m, belief_S, last_cmd, belief_age_s, now_msg, mutate=True
+            )
+            m0, S0 = self._anchor_belief_yaw_to_odom_for_planning(
+                m0, S0, now_msg, mutate=True
+            )
+            if belief_age_s > self.pixel_timeout_s:
+                inflate = min((belief_age_s - self.pixel_timeout_s) * 0.3, 1.5)
+                S0[0, 0] += inflate
+                S0[1, 1] += inflate
+            return m0, S0, {
+                'measurement_available': False,
+                'belief_age_s': float(belief_age_s),
+            }
         m0, S0 = self._state_msg_to_belief(state_ref)
+        with self._data_lock:
+            self.belief_m = m0.copy()
+            self.belief_S = S0.copy()
+            self.belief_stamp = state_ref.header.stamp
         return m0, S0, {
-            'measurement_available': False,
+            'measurement_available': True,
             'belief_age_s': 0.0,
         }
 
@@ -2029,7 +2150,8 @@ class UnicyclePlannerNode(Node):
             float(goal_ref.pose.position.y),
         )
 
-    def _call_planner(self, m0, S0, goal_xy, progress_index, *, plan_start, now_wall):
+    def _call_planner(self, m0, S0, goal_xy, progress_index, *, plan_start, now_wall,
+                      ref_seq=None, prev_u=None):
         if self.debug_runtime and (now_wall - self._last_plan_entry_log) > self.debug_log_period_s:
             self.get_logger().info(
                 "Entering planner.plan: "
@@ -2040,7 +2162,10 @@ class UnicyclePlannerNode(Node):
         try:
             # Deliberately broad: any unexpected planner failure should abort the
             # run immediately instead of allowing an invalid experiment to continue.
-            result = self.planner.plan(m0, S0, goal_xy, progress_index=progress_index)
+            result = self.planner.plan(
+                m0, S0, goal_xy, progress_index=progress_index,
+                ref_seq=ref_seq, prev_u=prev_u,
+            )
         except Exception as exc:
             self._fatal_experiment_stop("Planner.solve raised an exception", exc)
             return None

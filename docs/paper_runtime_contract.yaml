@@ -92,6 +92,7 @@ paper_runtime_contract:
       same_across_conditions: true
       covariance_for_tube: expected_posterior_after_planner_facing_camera_update
       hard_validity_gate_required: true
+      simple_local_tracker_gate: predicted_mean_clearance_gate
       safe_stop_fallback_role: execution_hygiene_only
       leaving_driveable_floor_must_not_be_cost_optimal: true
     hierarchical_runtime:
@@ -109,6 +110,13 @@ paper_runtime_contract:
       # rotate-in-place when misaligned. Identical across C1/C2/C3.
       use_simple_local_controller: true
       simple_tracker_yaw_gate_rad: 0.6
+      simple_tracker_role: execution_plumbing_not_route_choice
+      simple_tracker_safety_note: >
+        The simple tracker is shared across C1/C2/C3 and does not query the GP
+        or optimize the EFE objective locally. It tracks planner-derived
+        waypoints using odom yaw and is protected by a lightweight predicted
+        mean-clearance gate; the scientific route choice remains the global EFE
+        solve.
       local_tracking_use_odom_yaw: true
       waypoint_spacing_m: 0.40
       waypoint_arrival_radius_m: 0.20
@@ -130,8 +138,10 @@ paper_runtime_contract:
       perception:
         yolo_imgsz: 480              # ~90ms inference (was 137ms at 640)
         selected_pixel_source: bbox_bottom
+        mask_bottom_role: diagnostic_only
         visual_heading_from_yolo: false
-        pixel_forward_prediction: cmd_log_replay   # delayed-measurement handling
+        pixel_forward_prediction: odom_noisy_replay_preferred
+        command_replay_role: fallback_only         # when odom samples are unavailable
         bev_y_calibration_offset_m: 0.05           # measured static geometric dy bias
         pixel_max_correction_jump_m: 0.50          # near-rack outlier rejection
         pixel_corr_nis_logged: true
@@ -212,6 +222,32 @@ paper_runtime_contract:
     timeout_after_first_cmd_is_success_by_itself: false
     collision_or_penetration_invalidates_success: true
     near_goal_stuck_requires_explicit_label: true
+    runtime_means_start_at_first_nontrivial_command: true
+    pre_command_rows_excluded_from_runtime_plots_and_means: true
+    pre_command_phase_may_be_reported_separately:
+      - launch_wait
+      - global_solve_time
+      - estimator_warmup
+    runtime_metrics_require_after_first_command_filter:
+      - localization_error
+      - planner_belief_error
+      - yaw_error
+      - waypoint_tracking_error
+      - detection_rate
+      - rejected_correction_rate
+      - obstacle_clearance
+      - command_age
+      - local_solve_time
+    camera_state_freshness:
+      state_available_does_not_imply_fresh_measurement: true
+      require_state_age_s_and_state_fresh_when_logging: true
+      require_pixel_pose_age_s_and_pixel_pose_fresh_when_logging: true
+      freshness_threshold_source: pixel_timeout_s
+      paper_tables_should_separate:
+        - fresh_camera_state_error
+        - stale_latest_state_error
+        - planner_truth_belief_error
+      planner_relevant_localization_metric: truth_belief_error_m
 
   artifact_rules:
     gp_artifact_must_record:

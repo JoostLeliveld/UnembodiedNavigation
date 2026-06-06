@@ -195,10 +195,14 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'global_horizon', 'local_horizon', 'local_plan_rate',
         'local_optimizer_maxiter', 'local_nogo_weight',
         'local_nogo_safe_distance',
+        'local_goal_progress_weight',
+        'local_ref_weight', 'local_terminal_ref_weight', 'local_du_weight',
         'local_goal_prior_u_std_start', 'local_goal_prior_v_std_start',
         'local_goal_prior_u_std_final', 'local_goal_prior_v_std_final',
         'waypoint_spacing_m', 'waypoint_arrival_radius_m',
         'local_replan_min_remaining_s', 'cmd_publish_rate',
+        'encoder_noise_angular_slip_std',
+        'encoder_noise_angular_additive_std',
     )
     for key in numeric_keys:
         if key in cfg and (key not in manifest or not _float_close(manifest.get(key), cfg[key])):
@@ -215,6 +219,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'use_hierarchical',
         'global_use_ambiguity',
         'local_use_ambiguity',
+        'local_use_obs_risk',
         'global_optimizer_multistart',
         'local_optimizer_multistart',
         'local_use_visibility_model',
@@ -231,6 +236,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
 
     string_keys = (
         'nogo_penalty_type',
+        'yolo_device',
         'optimizer_multistart_lateral_offsets',
         'optimizer_initial_routes_json',
         'local_nogo_penalty_type',
@@ -313,12 +319,15 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'command_noise_linear_additive_std:={cfg.get("command_noise_linear_additive_std", 0.008)}',
         f'command_noise_angular_additive_std:={cfg.get("command_noise_angular_additive_std", 0.035)}',
         f'command_noise_correlation_alpha:={cfg.get("command_noise_correlation_alpha", 0.85)}',
+        f'encoder_noise_angular_slip_std:={cfg.get("encoder_noise_angular_slip_std", 0.03)}',
+        f'encoder_noise_angular_additive_std:={cfg.get("encoder_noise_angular_additive_std", 0.020)}',
         f'use_odom_heading_correction:={str(cfg.get("use_odom_heading_correction", True)).lower()}',
         f'use_displacement_heading:={str(cfg.get("use_displacement_heading", False)).lower()}',
         f'odom_heading_timeout_s:={cfg.get("odom_heading_timeout_s", 0.75)}',
         f'heading_min_displacement_m:={cfg.get("heading_min_displacement_m", 0.10)}',
         f'heading_bev_noise_sigma_m:={cfg.get("heading_bev_noise_sigma_m", 0.05)}',
         f'yolo_model:={yolo_model}',
+        f'yolo_device:={cfg.get("yolo_device", "")}',
         f'yolo_imgsz:={cfg.get("yolo_imgsz", 640)}',
         f'yolo_conf_threshold:={cfg.get("yolo_conf_threshold", 0.25)}',
         f'yolo_iou_threshold:={cfg.get("yolo_iou_threshold", 0.45)}',
@@ -327,6 +336,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'yolo_use_masks:={str(cfg.get("yolo_use_masks", True)).lower()}',
         f'yolo_min_mask_area_px:={cfg.get("yolo_min_mask_area_px", 12.0)}',
         f'yolo_mask_bottom_band_px:={cfg.get("yolo_mask_bottom_band_px", 3.0)}',
+        f'keypoint_marker_world_z:={cfg.get("keypoint_marker_world_z", 0.0)}',
     ]
 
     # Planner-specific args: pass GP artifact for C2/C3, locked weights
@@ -337,6 +347,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'observation_risk_scale', 'ambiguity_term_scale',
         'risk_weight_obs', 'ambiguity_weight',
         'belief_publish_rate',
+        'use_pixel_correction',
         'pixel_timeout_s', 'skip_stale_pixel_correction',
         'bev_y_calibration_offset_m', 'pixel_max_correction_jump_m',
         'pixel_correction_nis_threshold', 'use_truth_localization',
@@ -346,11 +357,12 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'optimizer_initial_routes_json',
         'use_hierarchical', 'global_horizon', 'local_horizon',
         'local_plan_rate', 'local_optimizer_maxiter',
-        'global_use_ambiguity', 'local_use_ambiguity',
+        'global_use_ambiguity', 'local_use_ambiguity', 'local_use_obs_risk',
         'global_optimizer_multistart', 'local_optimizer_multistart',
         'local_use_visibility_model', 'local_use_belief_nogo_cost',
         'local_nogo_penalty_type', 'local_nogo_weight',
-        'local_nogo_safe_distance',
+        'local_nogo_safe_distance', 'local_goal_progress_weight',
+        'local_ref_weight', 'local_terminal_ref_weight', 'local_du_weight',
         'local_goal_prior_u_std_start', 'local_goal_prior_v_std_start',
         'local_goal_prior_u_std_final', 'local_goal_prior_v_std_final',
         'waypoint_spacing_m', 'waypoint_arrival_radius_m',
@@ -373,6 +385,10 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         if key in cfg and not str(cfg[key]).startswith('[FILL'):
             cmd.append(f'{key}:={cfg[key]}')
 
+    # Drop empty-valued launch args (e.g. yolo_device when unset): ros2 launch
+    # rejects a bare 'name:=', and omitting it lets the launch file use its own
+    # default (the behaviour earlier runs relied on).
+    cmd = [arg for arg in cmd if not arg.endswith(':=')]
     return cmd
 
 

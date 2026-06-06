@@ -606,13 +606,62 @@ def _pick_paired_seed(rows, task='shadow_tradeoff_a') -> int | None:
     return best_seed
 
 
-def plot_paired_mechanism_taskA(rows, gp, out_path, seed=None, task=None):
-    """Fig 4: Constant covariance vs Learned covariance, same seed, Task A.
+def _first_motion_stamp(csv_rows) -> float:
+    """Return the first timestamp where the robot is actually commanded.
 
-    Layout: top row is two paths over rho_plan; bottom row is three shared
-    time series (rho_plan/YOLO score, error vs std, EFE risk/ambiguity)
-    with both conditions overlaid using the COND_COLOR mapping.
+    Paper-facing time-series plots should not include the global-solve idle
+    interval.  The first real command is a more honest t=0 for tracking and
+    localization diagnostics.
     """
+    stamps = np.asarray([_f(r, 'stamp') for r in csv_rows], dtype=float)
+    finite_stamps = stamps[np.isfinite(stamps)]
+    fallback = float(finite_stamps[0]) if finite_stamps.size else 0.0
+    for r in csv_rows:
+        stamp = _f(r, 'stamp')
+        if not np.isfinite(stamp):
+            continue
+        vals = [
+            _f(r, 'cmd_v'), _f(r, 'cmd_w'),
+            _f(r, 'exec_cmd_v'), _f(r, 'exec_cmd_w'),
+            _f(r, 'cmd_raw_v'), _f(r, 'cmd_raw_w'),
+        ]
+        if any(np.isfinite(v) and abs(v) > 1e-2 for v in vals):
+            return float(stamp)
+    return fallback
+
+
+def _driving_localization_series(csv_rows):
+    t0 = _first_motion_stamp(csv_rows)
+    t = np.asarray([_f(r, 'stamp') for r in csv_rows], dtype=float) - t0
+    err = np.asarray([_f(r, 'truth_belief_error_m') for r in csv_rows],
+                     dtype=float)
+    cov_x = np.asarray([_f(r, 'planner_cov_x') for r in csv_rows], dtype=float)
+    cov_y = np.asarray([_f(r, 'planner_cov_y') for r in csv_rows], dtype=float)
+    sigma = np.sqrt(np.clip(0.5 * (cov_x + cov_y), 0.0, None))
+    mask = np.isfinite(t) & np.isfinite(err) & (t >= 0.0)
+    return t[mask], err[mask], sigma[mask], t0
+
+
+def _driving_detection_series(perception_rows, t0):
+    yolo_t, yolo_score, yolo_detected = extract_yolo_scores(perception_rows)
+    if yolo_t.size == 0:
+        return yolo_t, yolo_score, yolo_detected
+    t = yolo_t - t0
+    mask = np.isfinite(t) & (t >= 0.0)
+    return t[mask], yolo_score[mask], yolo_detected[mask]
+
+
+def _localization_summary_label(condition, t, err, color_label):
+    if err.size == 0:
+        return f'{condition}: no driving samples'
+    mean = float(np.nanmean(err))
+    p95 = float(np.nanpercentile(err, 95))
+    max_e = float(np.nanmax(err))
+    return f'{color_label}: mean {mean:.2f} m, p95 {p95:.2f} m, max {max_e:.2f} m'
+
+
+def plot_paired_mechanism_taskA(rows, gp, out_path, seed=None, task=None):
+    """Fig 4: paired C1/C2 run with localization contrast emphasized."""
     task = task or (TASKS[0] if TASKS else "shadow_tradeoff_a")
     if seed is None:
         seed = _pick_paired_seed(rows, task=task)
@@ -634,14 +683,13 @@ def plot_paired_mechanism_taskA(rows, gp, out_path, seed=None, task=None):
     if 'C1' not in runs or 'C2' not in runs:
         return
 
-    fig = plt.figure(figsize=(12.4, 8.8))
-    gs = fig.add_gridspec(4, 2, height_ratios=[1.6, 0.7, 0.7, 0.7],
-                          hspace=0.42, wspace=0.18)
+    fig = plt.figure(figsize=(11.8, 6.9))
+    gs = fig.add_gridspec(2, 2, height_ratios=[1.35, 1.0],
+                          hspace=0.34, wspace=0.18)
     ax_c1 = fig.add_subplot(gs[0, 0])
     ax_c2 = fig.add_subplot(gs[0, 1], sharey=ax_c1)
-    ax_pvis = fig.add_subplot(gs[1, :])
-    ax_err = fig.add_subplot(gs[2, :], sharex=ax_pvis)
-    ax_efe = fig.add_subplot(gs[3, :], sharex=ax_pvis)
+    ax_err = fig.add_subplot(gs[1, 0])
+    ax_det = fig.add_subplot(gs[1, 1], sharex=ax_err)
 
     csv_c1 = _draw_path_panel(ax_c1, gp, task, 'C1', runs['C1'], seed,
                               fig=fig, show_colorbar=False)
@@ -650,34 +698,75 @@ def plot_paired_mechanism_taskA(rows, gp, out_path, seed=None, task=None):
     ax_c1.set_title(f'(a) {COND_LABEL["C1"]} — seed {seed}', fontsize=10)
     ax_c2.set_title(f'(b) {COND_LABEL["C2"]} — seed {seed}', fontsize=10)
     ax_c1.set_ylabel(r'$y$ (m)')
-    ax_c1.legend(loc='upper left', fontsize=7.5, frameon=True)
+    handles, labels = ax_c1.get_legend_handles_labels()
+    keep_labels = {'camera', 'start', 'goal', 'truth', 'belief mean'}
+    compact = [(h, l) for h, l in zip(handles, labels) if l in keep_labels]
+    if compact:
+        ax_c1.legend([h for h, _ in compact], [l for _, l in compact],
+                     loc='upper left', fontsize=6.8, frameon=True, ncol=2,
+                     columnspacing=0.8, handlelength=1.5)
 
     perc_c1 = load_perception_csv(runs['C1'])
     perc_c2 = load_perception_csv(runs['C2'])
     man_c1 = load_run_manifest(runs['C1'])
     man_c2 = load_run_manifest(runs['C2'])
 
-    _draw_time_series_row(ax_pvis, ax_err, ax_efe, csv_c1, perc_c1, man_c1,
-                          color=COND_COLOR['C1'], label=COND_LABEL['C1'])
-    yolo_thr = _draw_time_series_row(
-        ax_pvis, ax_err, ax_efe, csv_c2, perc_c2, man_c2,
-        color=COND_COLOR['C2'], label=COND_LABEL['C2'])
-    ax_pvis.axhline(yolo_thr, color='orange', linestyle=':', linewidth=0.8,
-                    alpha=0.6, label=f'YOLO threshold {yolo_thr:.2f}')
-
-    ax_pvis.set_ylabel(r'$\rho_{\mathrm{plan}}$ / YOLO score', fontsize=9)
-    ax_pvis.legend(fontsize=7.5, loc='upper right', frameon=False, ncol=3)
-    ax_pvis.grid(alpha=0.3, linestyle=':')
-    ax_err.set_ylabel(r'error / $\sigma$ (m)', fontsize=9)
+    t1, e1, s1, t0_c1 = _driving_localization_series(csv_c1)
+    t2, e2, s2, t0_c2 = _driving_localization_series(csv_c2)
+    c1_label = _localization_summary_label(
+        'C1', t1, e1, COND_LABEL['C1'])
+    c2_label = _localization_summary_label(
+        'C2', t2, e2, COND_LABEL['C2'])
+    if e1.size:
+        ax_err.plot(t1, e1, color=COND_COLOR['C1'], linewidth=2.2,
+                    label=c1_label)
+        if s1.size == t1.size and np.any(np.isfinite(s1)):
+            ax_err.plot(t1, 2.0 * s1, color=COND_COLOR['C1'], linewidth=1.0,
+                        linestyle='--', alpha=0.45)
+    if e2.size:
+        ax_err.plot(t2, e2, color=COND_COLOR['C2'], linewidth=2.2,
+                    label=c2_label)
+        if s2.size == t2.size and np.any(np.isfinite(s2)):
+            ax_err.plot(t2, 2.0 * s2, color=COND_COLOR['C2'], linewidth=1.0,
+                        linestyle='--', alpha=0.45)
+    ax_err.axhline(0.5, color='0.35', linewidth=0.9, linestyle=':',
+                   label='0.5 m reference')
+    ax_err.set_title('(c) Localization error after first command', fontsize=10)
+    ax_err.set_xlabel('time after first command (s)', fontsize=9)
+    ax_err.set_ylabel('truth-belief error (m)', fontsize=9)
     ax_err.grid(alpha=0.3, linestyle=':')
-    ax_efe.set_ylabel('EFE risk (solid) / amb. (dot.)', fontsize=9)
-    ax_efe.set_xlabel('time (s)', fontsize=9)
-    ax_efe.grid(alpha=0.3, linestyle=':')
+    ax_err.legend(fontsize=7.2, loc='upper left', frameon=True)
+
+    yt1, ys1, yd1 = _driving_detection_series(perc_c1, t0_c1)
+    yt2, ys2, yd2 = _driving_detection_series(perc_c2, t0_c2)
+    yolo_thr = float(man_c1.get('yolo_conf_threshold',
+                                man_c2.get('yolo_conf_threshold', 0.25)))
+    for yt, ys, yd, cond in [
+            (yt1, ys1, yd1, 'C1'),
+            (yt2, ys2, yd2, 'C2')]:
+        if yt.size == 0:
+            continue
+        det = yd >= 0.5
+        color = COND_COLOR[cond]
+        if np.any(det):
+            ax_det.scatter(yt[det], ys[det], s=16, color=color,
+                           alpha=0.65, label=f'{COND_LABEL[cond]} detected')
+        if np.any(~det):
+            ax_det.scatter(yt[~det], np.zeros(np.count_nonzero(~det)),
+                           s=14, facecolors='none', edgecolors=color,
+                           alpha=0.55, label=f'{COND_LABEL[cond]} miss')
+    ax_det.axhline(yolo_thr, color='orange', linestyle=':', linewidth=1.0,
+                   alpha=0.8, label=f'detector threshold {yolo_thr:.2f}')
+    ax_det.set_ylim(-0.05, 1.05)
+    ax_det.set_title('(d) Detector updates while driving', fontsize=10)
+    ax_det.set_xlabel('time after first command (s)', fontsize=9)
+    ax_det.set_ylabel('YOLO score / missed update', fontsize=9)
+    ax_det.grid(alpha=0.3, linestyle=':')
+    ax_det.legend(fontsize=7.0, loc='lower right', frameon=True, ncol=1)
 
     fig.suptitle(
-        f'Paired representative run on the main shadow-tradeoff task '
-        f'(seed {seed}). Only the predictive detector-observation '
-        f'covariance differs.',
+        f'Paired representative run on the route-choice task '
+        f'(seed {seed}); only the planner-facing camera covariance differs.',
         fontsize=10, y=0.995)
     fig.savefig(out_path, bbox_inches='tight', dpi=200)
     plt.close(fig)

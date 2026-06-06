@@ -170,8 +170,8 @@ paper-eligible when these diagnostics are available:
 - image, YOLO receive/start/finish/publish, and frame-age timestamps;
 - pixel-correction target/apply stamps, innovation, NIS, accept/reject flag, and
   reject reason;
-- belief input stamp, command-replay count/duration, and whether replay fell
-  back to a single command;
+- belief input stamp, odometry/command replay count/duration, and whether
+  replay fell back to a single prediction;
 - raw command, command after noise, command age, active control index, and active
   plan age;
 - `/odom` and `/odom_noisy` pose/twist records for dead-reckoning comparison;
@@ -193,10 +193,12 @@ Large corrections are diagnostic failures unless explicitly accepted by the
 gate. Extreme updates should be rejected by configured jump/NIS thresholds, and
 detection gaps should grow covariance rather than yanking the belief.
 
-Belief prediction must replay commands over their real timestamped intervals.
-Command logs are not horizon samples: a 10 Hz command stream must not be
-replayed as if every command lasted the planner `dt`, and a command published
-after an image stamp must not be applied before that image existed.
+Belief prediction must replay the configured odometry topic over real
+timestamped intervals. For paper-facing runs this is `/odom_noisy`, so
+dead-reckoning follows the noisy encoder-style estimate rather than ideal
+requested commands. Command logs are a fallback only: a 10 Hz command stream
+must not be replayed as if every command lasted the planner `dt`, and a command
+published after an image stamp must not be applied before that image existed.
 
 Local execution is route tracking, not route choice. The long/global EFE solve
 selects the route; the local controller tracks planner-derived waypoints with no
