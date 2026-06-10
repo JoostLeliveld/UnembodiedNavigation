@@ -68,6 +68,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cov-run", type=Path, default=DEFAULT_COV_RUN)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--preview", type=Path, default=DEFAULT_PREVIEW)
+    parser.add_argument(
+        "--split",
+        action="store_true",
+        help="Emit two figures instead of the combined 3-panel PDF: "
+        "problem_setup_camera.pdf (panel a, for the Introduction) and "
+        "problem_setup_snapshots.pdf (panels b+c, for the Problem Statement).",
+    )
     return parser.parse_args()
 
 
@@ -378,6 +385,45 @@ def main() -> int:
             "ps.fonttype": 42,
         }
     )
+    if args.split:
+        # Panel (a) standalone -> Introduction figure.
+        cam_out = args.out.with_name("problem_setup_camera.pdf")
+        cam_prev = args.preview.with_name("problem_setup_camera.png")
+        fig_cam, ax_cam = plt.subplots(1, 1, figsize=(5.2, 4.9), constrained_layout=True)
+        draw_camera_view(ax_cam, args.image)
+        cam_out.parent.mkdir(parents=True, exist_ok=True)
+        cam_prev.parent.mkdir(parents=True, exist_ok=True)
+        fig_cam.savefig(cam_out, bbox_inches="tight")
+        fig_cam.savefig(cam_prev, dpi=260, bbox_inches="tight")
+        plt.close(fig_cam)
+
+        # Panels (b)+(c) -> Problem Statement figure, re-lettered (a),(b).
+        snap_out = args.out.with_name("problem_setup_snapshots.pdf")
+        snap_prev = args.preview.with_name("problem_setup_snapshots.png")
+        fig_s, axes_s = plt.subplots(1, 2, figsize=(9.4, 4.9), constrained_layout=True)
+        draw_snapshot_panel(
+            axes_s[0], profile, start, goal, exp, plan, early_idx,
+            f"(a) initial rollout\n$t={early_time:.1f}\\,$s", annotate=False,
+        )
+        draw_snapshot_panel(
+            axes_s[1], profile, start, goal, exp, plan, late_idx,
+            f"(b) near reduced camera-update reliability\n$t={late_time:.1f}\\,$s", annotate=True,
+        )
+        fig_s.legend(
+            handles=legend_handles(), loc="lower center", ncol=7, fontsize=8,
+            frameon=False, bbox_to_anchor=(0.5, -0.02),
+        )
+        snap_out.parent.mkdir(parents=True, exist_ok=True)
+        fig_s.savefig(snap_out, bbox_inches="tight")
+        fig_s.savefig(snap_prev, dpi=260, bbox_inches="tight")
+        plt.close(fig_s)
+
+        print(f"wrote {cam_out}")
+        print(f"wrote {snap_out}")
+        print(f"wrote {cam_prev}")
+        print(f"wrote {snap_prev}")
+        return 0
+
     fig, axes = plt.subplots(
         1,
         3,

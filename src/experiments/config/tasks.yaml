@@ -17,6 +17,7 @@ tasks:
     goal:
       x: 2.0
       y: -0.5
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
   - name: shadow_tradeoff_a_leftstart
     description: 'Exploratory Task A variant. Start at x=-2.5, y=0.5, with the same
       goal as Task A. Used to test whether extra approach distance helps the visibility-aware
@@ -34,6 +35,7 @@ tasks:
     goal:
       x: 2.0
       y: -0.5
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
   - name: shadow_tradeoff_a_goalclose
     description: 'Exploratory Task A variant with the goal moved closer to the shelf
       on the east side. Intended to preserve the same world and visibility field while
@@ -83,6 +85,7 @@ tasks:
     goal:
       x: 2.0
       y: -1.5
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
   - name: main_shadow_tradeoff
     description: "Legacy benchmark task (pre-IWAI geometry). Start on northwest approach,\
       \ goal at southeast. The goal position at y=-1.0 is already below the shelf,\
@@ -100,6 +103,7 @@ tasks:
       x: 2.0
       y: -1.0
   warehouse_occ_longshadow.world.sdf:
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
   - name: shadow_tradeoff_a_longshadow
     description: 'Task A variant in the long-shadow world. Same start/goal family
       as the main benchmark, but an added upper-route obstacle extends the reduced-
@@ -117,6 +121,7 @@ tasks:
     goal:
       x: 2.0
       y: -0.5
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
   - name: shadow_tradeoff_a_longshadow_far
     description: 'Long-shadow Task A variant with a slightly farther goal. Intended
       to stretch the post-shadow segment so a poor blind-route commitment has longer
@@ -154,6 +159,7 @@ tasks:
     goal:
       x: 1.0
       y: 1.75
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
   - name: probe_far_east_to_a3top
     description: 'Diagnostic C1 stress probe. Robot starts farther away on the east-side
       driveable route at (5.0, -2.0), with the same A3-side mid-cross-aisle goal
@@ -173,6 +179,7 @@ tasks:
     goal:
       x: 1.0
       y: 1.75
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
   - name: probe_a4_boxside_north_to_a3top
     description: 'Diagnostic route-choice probe with cleaner initial pose. Robot starts
       in the A4 driveable lane beside the shelf-end box pads at (3.35, -1.55),
@@ -266,6 +273,61 @@ tasks:
     goal:
       x: -1.0
       y: 1.75
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
+  - name: a1_visible_to_a2_upper_blocked_mid
+    description: 'Exploratory long-blind AWS route-choice benchmark. Robot starts
+      in the visible lower part of A1 at (-3.02,-1.85), facing east (yaw=0),
+      and must reach the far-north visible A2/upper-cross target at (-0.975,4.55).
+      The campaign config supplies a task-specific known driveable layer where
+      the rack aisles remain clear, but the middle shelf-gap connector between
+      rows is omitted as if the shelves were long continuous rows. The SDF is not
+      changed. The shorter route is therefore a long weak-update traversal north
+      through A1 and across the upper cross-aisle; the alternative runs through
+      the lower/front lane and then north through A2. This task is exploratory
+      until detector, GP, config, logs, figures, and paper wording are all
+      aligned.
+
+      '
+    tier: exploratory
+    claim: visibility_route_choice
+    focus: long_blind_a1_vs_visible_a2_detour
+    start:
+      x: -3.02
+      y: -1.85
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -0.975
+      y: 4.55
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
+  - name: a0_west_to_a1_upper_blocked_mid
+    description: 'Exploratory long-blind AWS route-choice benchmark (A0->A1 variant).
+      Robot starts in the widened west service lane A0 at (-5.25,-0.75), facing east (yaw=0),
+      and must reach the visible upper-A1 target at (-3.02,3.20). The campaign
+      config supplies a task-specific known driveable layer where the rack aisles
+      remain clear but the middle shelf-gap connector between rows is omitted, so
+      the shelf rows behave like long continuous shelves. The SDF is not changed.
+      A0 and A1 are separated by rack row R1, so reaching A1 requires either the
+      short blind north-west-corner traversal (up A0, across the upper cross-aisle,
+      then down into upper A1) or the longer south-visible detour (down to the lower/front
+      lane, east past R1, then north up A1). The intent is that the constant-R
+      baseline favours the short NW-corner route through camera-poor space while
+      the visibility-aware planner prefers the south-visible detour. Route choice
+      must emerge from the planner objective, not from these seeds. Exploratory
+      until detector, GP, config, logs, figures, and paper wording are aligned.
+
+      '
+    tier: exploratory
+    claim: visibility_route_choice
+    focus: a0_nw_blind_vs_south_visible_a1
+    start:
+      x: -5.25
+      y: -0.75
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -3.02
+      y: 3.2
   - name: b3_lowereast_to_a2_mid
     description: 'Longer-horizon route choice. Start in the visible lower-east aisle
       (3.3,-2.5, facing west, p_vis~0.8), goal in the visible A2 mid-cross aisle (-1.0,1.75).
@@ -323,6 +385,7 @@ tasks:
     goal:
       x: -1.0
       y: 1.75
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
   - name: probe_a4bot_to_a3top
     description: 'Observable-goal route-choice probe: A4 apron (3.2,-1,yaw0) -> A3
       mid-cross (1.0,1.75, rho~0.52, observable). Short north gap occluded; visible
@@ -338,6 +401,7 @@ tasks:
     goal:
       x: 1.0
       y: 1.75
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
   - name: probe_topleft_to_westlow
     description: 'Failure-mode probe: blind top-left A1 (-3,4.8, rho~0.008) -> visible
       west-lane (-5,-1, rho~0.82). High actuation noise; C1 dead-reckons through camera-poor
@@ -353,6 +417,7 @@ tasks:
     goal:
       x: -5.0
       y: -1.0
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
   - name: probe_westlow_to_topblind
     description: 'C1 failure probe: VISIBLE start west-low (-5,-1, rho~0.82, facing
       north) -> blind top (-2.5,4.5, rho~0.004) via camera-poor west lane (rho~0.001).

@@ -190,6 +190,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('heading_bev_noise_sigma_m', 0.05)
         self.declare_parameter('odom_heading_correction_mode', 'kalman')
         self.declare_parameter('clamp_pixel_uv_theta_without_yaw', False)
+        self.declare_parameter('heading_update_mode', 'odom_overwrite')
         self.declare_parameter('use_nogo_cost', False)
         self.declare_parameter('nogo_penalty_type', 'softplus')
         self.declare_parameter('nogo_weight', 0.0)
@@ -198,6 +199,8 @@ class ExperimentLogger(Node):
         self.declare_parameter('nogo_softplus_scale', 0.08)
         self.declare_parameter('nogo_logbarrier_scale', 0.25)
         self.declare_parameter('nogo_logbarrier_eps', 1e-3)
+        self.declare_parameter('nogo_warning_band', 0.05)
+        self.declare_parameter('nogo_near_weight', 50.0)
         self.declare_parameter('use_belief_nogo_cost', False)
         self.declare_parameter('nogo_belief_kappa', 1.0)
         self.declare_parameter('nogo_mode', 'keep_out')
@@ -211,13 +214,14 @@ class ExperimentLogger(Node):
         self.declare_parameter('yolo_use_masks', True)
         self.declare_parameter('yolo_min_mask_area_px', 12.0)
         self.declare_parameter('yolo_mask_bottom_band_px', 3.0)
+        # [DEPRECATED_LEGACY_CLEANUP] keypoint heading parameters are legacy
         self.declare_parameter('yolo_min_keypoint_conf', 0.5)
         self.declare_parameter('keypoint_marker_world_z', 0.0)
         self.declare_parameter('keypoint_heading_sigma_rad', 0.05)
         self.declare_parameter('diagnostics_match_tolerance_s', 1e-3)
         self.declare_parameter('bev_y_calibration_offset_m', 0.0)
         self.declare_parameter('pixel_correction_nis_threshold', 0.0)
-        self.declare_parameter('odom_topic', '/odom')
+        self.declare_parameter('odom_topic', '/odom_noisy')
         self.declare_parameter('run_dir_topic', '/experiment/run_dir')
         self.declare_parameter('run_timeout_after_first_cmd_s', 75.0)
         self.declare_parameter('first_cmd_linear_eps', 0.02)
@@ -244,6 +248,7 @@ class ExperimentLogger(Node):
         self.state_source_y = str(self.get_parameter('state_source_y').value)
         self.state_source_theta = str(self.get_parameter('state_source_theta').value)
         self.state_estimator_mode = str(self.get_parameter('state_estimator_mode').value)
+        self.heading_update_mode = str(self.get_parameter('heading_update_mode').value)
         self.use_pixel_correction = bool(self.get_parameter('use_pixel_correction').value)
         self.pixel_timeout_s = float(self.get_parameter('pixel_timeout_s').value)
         self.use_ambiguity = bool(self.get_parameter('use_ambiguity').value)
@@ -401,6 +406,8 @@ class ExperimentLogger(Node):
         self.nogo_softplus_scale = float(self.get_parameter('nogo_softplus_scale').value)
         self.nogo_logbarrier_scale = float(self.get_parameter('nogo_logbarrier_scale').value)
         self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
+        self.nogo_warning_band = float(self.get_parameter('nogo_warning_band').value)
+        self.nogo_near_weight = float(self.get_parameter('nogo_near_weight').value)
         self.use_belief_nogo_cost = bool(self.get_parameter('use_belief_nogo_cost').value)
         self.nogo_belief_kappa = float(self.get_parameter('nogo_belief_kappa').value)
         self.nogo_mode = str(self.get_parameter('nogo_mode').value or 'keep_out')
@@ -414,6 +421,7 @@ class ExperimentLogger(Node):
         self.yolo_use_masks = bool(self.get_parameter('yolo_use_masks').value)
         self.yolo_min_mask_area_px = float(self.get_parameter('yolo_min_mask_area_px').value)
         self.yolo_mask_bottom_band_px = float(self.get_parameter('yolo_mask_bottom_band_px').value)
+        # [DEPRECATED_LEGACY_CLEANUP] keypoint heading parameters are legacy
         self.yolo_min_keypoint_conf = float(self.get_parameter('yolo_min_keypoint_conf').value)
         self.keypoint_marker_world_z = float(self.get_parameter('keypoint_marker_world_z').value)
         self.keypoint_heading_sigma_rad = float(self.get_parameter('keypoint_heading_sigma_rad').value)
@@ -426,7 +434,7 @@ class ExperimentLogger(Node):
         self.pixel_correction_nis_threshold = float(
             self.get_parameter('pixel_correction_nis_threshold').value
         )
-        self.odom_topic = str(self.get_parameter('odom_topic').value or '/odom')
+        self.odom_topic = str(self.get_parameter('odom_topic').value or '/odom_noisy')
         self.run_dir_topic = str(self.get_parameter('run_dir_topic').value).strip() or '/experiment/run_dir'
         self.run_timeout_after_first_cmd_s = float(self.get_parameter('run_timeout_after_first_cmd_s').value)
         self.first_cmd_linear_eps = float(self.get_parameter('first_cmd_linear_eps').value)
@@ -489,6 +497,7 @@ class ExperimentLogger(Node):
             'state_source_y': self.state_source_y,
             'state_source_theta': self.state_source_theta,
             'state_estimator_mode': self.state_estimator_mode,
+            'heading_update_mode': self.heading_update_mode,
             'use_pixel_correction': self.use_pixel_correction,
             'pixel_timeout_s': self.pixel_timeout_s,
             'use_ambiguity': self.use_ambiguity,
@@ -535,6 +544,8 @@ class ExperimentLogger(Node):
             'nogo_softplus_scale': self.nogo_softplus_scale,
             'nogo_logbarrier_scale': self.nogo_logbarrier_scale,
             'nogo_logbarrier_eps': self.nogo_logbarrier_eps,
+            'nogo_warning_band': self.nogo_warning_band,
+            'nogo_near_weight': self.nogo_near_weight,
             'use_belief_nogo_cost': self.use_belief_nogo_cost,
             'nogo_belief_kappa': self.nogo_belief_kappa,
             'nogo_mode': self.nogo_mode,
@@ -548,6 +559,7 @@ class ExperimentLogger(Node):
             'yolo_use_masks': self.yolo_use_masks,
             'yolo_min_mask_area_px': self.yolo_min_mask_area_px,
             'yolo_mask_bottom_band_px': self.yolo_mask_bottom_band_px,
+            # [DEPRECATED_LEGACY_CLEANUP] keypoint heading parameters are legacy
             'yolo_min_keypoint_conf': self.yolo_min_keypoint_conf,
             'keypoint_marker_world_z': self.keypoint_marker_world_z,
             'keypoint_heading_sigma_rad': self.keypoint_heading_sigma_rad,
@@ -818,7 +830,9 @@ class ExperimentLogger(Node):
             'pixel_corr_accepted', 'pixel_corr_reject_reason_code', 'pixel_corr_reject_reason',
             'pixel_corr_apply_stamp', 'pixel_corr_belief_input_stamp',
             'pixel_corr_cmd_replay_count', 'pixel_corr_cmd_replay_duration_s',
-            'pixel_corr_cmd_replay_used_fallback', 'pixel_corr_nis_threshold',
+            'pixel_corr_cmd_replay_used_fallback',
+            'pixel_corr_motion_replay_source_code', 'pixel_corr_motion_replay_source',
+            'pixel_corr_nis_threshold',
             'pixel_heading_correction_applied', 'pixel_heading_meas_source',
             'pixel_heading_innov_rad',
             'pixel_heading_gain_theta', 'pixel_corr_theta_update_total_rad',
@@ -862,6 +876,16 @@ class ExperimentLogger(Node):
             'min_wall_distance_m', 'min_obstacle_distance_m',
             'wall_penetration_m', 'obstacle_penetration_m',
             'off_map', 'inside_no_go', 'valid_run', 'invalid_reason',
+            'heading_update_mode',
+            'pixel_corr_K_theta_u', 'pixel_corr_K_theta_v',
+            'yaw_error_odom_noisy_truth_rad',
+            'state_bev_yaw_latest',
+            'state_bev_cov_theta_theta', 'state_bev_cov_x_theta', 'state_bev_cov_y_theta',
+            'planner_belief_cov_theta_theta', 'planner_belief_cov_x_theta', 'planner_belief_cov_y_theta',
+            'planner_diag_prediction_source', 'planner_diag_prediction_dt',
+            'planner_diag_u_pred_v', 'planner_diag_u_pred_omega', 'planner_diag_Q_theta_theta',
+            'planner_diag_odom_delta_theta', 'planner_diag_cmd_delta_theta',
+            'planner_diag_heading_anchor_applied', 'planner_diag_state_bev_yaw_ignored',
             'seed'
         ])
 
@@ -1272,6 +1296,18 @@ class ExperimentLogger(Node):
         self.pixel_correction_diag = msg
 
     @staticmethod
+    def extract_planar_covariances(cov):
+        if cov is None or len(cov) < 36:
+            return math.nan, math.nan, math.nan, math.nan, math.nan, math.nan
+        cov_xx = float(cov[0])
+        cov_xy = float(cov[1])
+        cov_yy = float(cov[7])
+        cov_x_theta = float(cov[30])
+        cov_y_theta = float(cov[31])
+        cov_theta_theta = float(cov[35])
+        return cov_xx, cov_xy, cov_yy, cov_x_theta, cov_y_theta, cov_theta_theta
+
+    @staticmethod
     def _heading_source_name(code: float) -> str:
         try:
             value = int(round(float(code)))
@@ -1299,6 +1335,19 @@ class ExperimentLogger(Node):
             4: 'update_failed',
             5: 'jump_too_large',
             6: 'nis_too_large',
+        }.get(value, 'unknown')
+
+    @staticmethod
+    def _pixel_correction_motion_replay_source_name(code: float) -> str:
+        try:
+            value = int(round(float(code)))
+        except (TypeError, ValueError):
+            value = -1
+        return {
+            0: 'none',
+            1: 'odom_noisy',
+            2: 'command_log',
+            3: 'single_fallback',
         }.get(value, 'unknown')
 
     def _record_invalid(self, reason: str) -> None:
@@ -1871,6 +1920,28 @@ class ExperimentLogger(Node):
             odom_noisy_v,
             odom_noisy_w,
         ) = self._odom_record(self.odom_noisy_msg)
+        yaw_error_odom_noisy_truth_rad = math.nan
+        if true_ok and odom_noisy_ok and math.isfinite(odom_noisy_yaw):
+            yaw_error_odom_noisy_truth_rad = float(self._wrap_angle(odom_noisy_yaw - true_yaw))
+
+        state_bev_yaw_latest = math.nan
+        state_bev_cov_theta_theta = math.nan
+        state_bev_cov_x_theta = math.nan
+        state_bev_cov_y_theta = math.nan
+        if self.state_msg is not None:
+            state_bev_yaw_latest = self._yaw_from_quaternion(self.state_msg.pose.pose.orientation)
+            _, _, _, state_bev_cov_x_theta, state_bev_cov_y_theta, state_bev_cov_theta_theta = (
+                self.extract_planar_covariances(self.state_msg.pose.covariance)
+            )
+
+        planner_belief_cov_theta_theta = math.nan
+        planner_belief_cov_x_theta = math.nan
+        planner_belief_cov_y_theta = math.nan
+        if self.planner_belief_msg is not None:
+            _, _, _, planner_belief_cov_x_theta, planner_belief_cov_y_theta, planner_belief_cov_theta_theta = (
+                self.extract_planar_covariances(self.planner_belief_msg.pose.covariance)
+            )
+
         yaw_error_truth_odom_rad = math.nan
         yaw_error_truth_state_rad = math.nan
         yaw_error_truth_belief_rad = math.nan
@@ -1930,6 +2001,8 @@ class ExperimentLogger(Node):
         pixel_corr_cmd_replay_count = math.nan
         pixel_corr_cmd_replay_duration_s = math.nan
         pixel_corr_cmd_replay_used_fallback = math.nan
+        pixel_corr_motion_replay_source_code = math.nan
+        pixel_corr_motion_replay_source = 'unknown'
         pixel_corr_nis_threshold = math.nan
         pixel_heading_correction_applied = math.nan
         pixel_heading_meas_source = math.nan
@@ -1945,6 +2018,8 @@ class ExperimentLogger(Node):
         pixel_corr_expected_after_u = math.nan
         pixel_corr_expected_after_v = math.nan
         pixel_corr_expected_after_visible = math.nan
+        pixel_corr_K_theta_u = math.nan
+        pixel_corr_K_theta_v = math.nan
         if (
             self.pixel_correction_diag is not None
             and self.pixel_correction_diag.data
@@ -1989,6 +2064,14 @@ class ExperimentLogger(Node):
                 pixel_corr_expected_after_u = float(cdata[38])
                 pixel_corr_expected_after_v = float(cdata[39])
                 pixel_corr_expected_after_visible = float(cdata[40])
+            if len(cdata) >= 42:
+                pixel_corr_motion_replay_source_code = float(cdata[41])
+                pixel_corr_motion_replay_source = self._pixel_correction_motion_replay_source_name(
+                    pixel_corr_motion_replay_source_code
+                )
+            if len(cdata) >= 44:
+                pixel_corr_K_theta_u = float(cdata[42])
+                pixel_corr_K_theta_v = float(cdata[43])
 
         cmd_v = self.cmd_msg.linear.x if self.cmd_msg else 0.0
         cmd_w = self.cmd_msg.angular.z if self.cmd_msg else 0.0
@@ -2094,6 +2177,15 @@ class ExperimentLogger(Node):
         optimizer_nit = 0.0
         optimizer_nfev = 0.0
         optimizer_message = self.planner_diag_text
+        planner_diag_prediction_source = math.nan
+        planner_diag_prediction_dt = math.nan
+        planner_diag_u_pred_v = math.nan
+        planner_diag_u_pred_omega = math.nan
+        planner_diag_Q_theta_theta = math.nan
+        planner_diag_odom_delta_theta = math.nan
+        planner_diag_cmd_delta_theta = math.nan
+        planner_diag_heading_anchor_applied = math.nan
+        planner_diag_state_bev_yaw_ignored = math.nan
         plan_time_ms = 0.0
         solve_time_ms = 0.0
         measurement_available = math.nan
@@ -2147,6 +2239,16 @@ class ExperimentLogger(Node):
                 command_timer_period_s = float(self.planner_diag.data[30])
                 planner_timer_period_s = float(self.planner_diag.data[31])
                 pending_plan_started_active_remaining_s = float(self.planner_diag.data[32])
+            if len(self.planner_diag.data) >= 42:
+                planner_diag_prediction_source = float(self.planner_diag.data[33])
+                planner_diag_prediction_dt = float(self.planner_diag.data[34])
+                planner_diag_u_pred_v = float(self.planner_diag.data[35])
+                planner_diag_u_pred_omega = float(self.planner_diag.data[36])
+                planner_diag_Q_theta_theta = float(self.planner_diag.data[37])
+                planner_diag_odom_delta_theta = float(self.planner_diag.data[38])
+                planner_diag_cmd_delta_theta = float(self.planner_diag.data[39])
+                planner_diag_heading_anchor_applied = float(self.planner_diag.data[40])
+                planner_diag_state_bev_yaw_ignored = float(self.planner_diag.data[41])
 
         if (
             self.active_execution_diag
@@ -2267,7 +2369,9 @@ class ExperimentLogger(Node):
             pixel_corr_accepted, pixel_corr_reject_reason_code, pixel_corr_reject_reason,
             pixel_corr_apply_stamp, pixel_corr_belief_input_stamp,
             pixel_corr_cmd_replay_count, pixel_corr_cmd_replay_duration_s,
-            pixel_corr_cmd_replay_used_fallback, pixel_corr_nis_threshold,
+            pixel_corr_cmd_replay_used_fallback,
+            pixel_corr_motion_replay_source_code, pixel_corr_motion_replay_source,
+            pixel_corr_nis_threshold,
             pixel_heading_correction_applied, pixel_heading_meas_source,
             pixel_heading_innov_rad,
             pixel_heading_gain_theta, pixel_corr_theta_update_total_rad,
@@ -2311,6 +2415,16 @@ class ExperimentLogger(Node):
             min_wall_distance_m, min_obstacle_distance_m,
             wall_penetration_m, obstacle_penetration_m,
             off_map, inside_no_go, valid_run, invalid_reason,
+            self.heading_update_mode,
+            pixel_corr_K_theta_u, pixel_corr_K_theta_v,
+            yaw_error_odom_noisy_truth_rad,
+            state_bev_yaw_latest,
+            state_bev_cov_theta_theta, state_bev_cov_x_theta, state_bev_cov_y_theta,
+            planner_belief_cov_theta_theta, planner_belief_cov_x_theta, planner_belief_cov_y_theta,
+            planner_diag_prediction_source, planner_diag_prediction_dt,
+            planner_diag_u_pred_v, planner_diag_u_pred_omega, planner_diag_Q_theta_theta,
+            planner_diag_odom_delta_theta, planner_diag_cmd_delta_theta,
+            planner_diag_heading_anchor_applied, planner_diag_state_bev_yaw_ignored,
             self.seed,
         ])
         self.file.flush()

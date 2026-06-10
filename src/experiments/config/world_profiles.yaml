@@ -24,6 +24,7 @@ worlds:
       visibility_beta: 1.0
       visibility_target_height_m: 0.0
 
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory world profile
   warehouse_occ_longshadow.world.sdf:
     world_name: warehouse_occ_longshadow
     investigation_focus: Warehouse scene with the original central shelf plus an extra upper-route obstacle that extends the shadowed shortcut and narrows its clearance. Designed to make stale-update intervals on the short route more consequential while keeping the lower route open.
@@ -127,6 +128,7 @@ worlds:
       low:    {height_m: 1.20, width_m: 0.24, expected_regime: weak_occlusion}
       medium: {height_m: 1.90, width_m: 0.32, expected_regime: main_partial_occlusion}
       high:   {height_m: 2.60, width_m: 0.38, expected_regime: main_partial_to_strong_occlusion}
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory world profile
   warehouse_putaway.world.sdf:
     world_name: warehouse_putaway
     investigation_focus: >
@@ -199,6 +201,7 @@ worlds:
           approximately x = -2.7 and x = 2.7. East-end of the rear lane (x > 2.8) and
           west-end (x < -2.8) remain visible from the central camera.
         approx_region: {xmin: -2.80, xmax: 2.80, ymin: 0.85, ymax: 2.10}
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory world profile
   parcel_sortation.world.sdf:
     world_name: parcel_sortation_visibility_cell
     investigation_focus: >

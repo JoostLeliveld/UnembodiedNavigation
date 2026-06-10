@@ -10,7 +10,7 @@ import numpy as np
 from unav_common.occlusion_geometry import scene_from_json, signed_distance_to_union_xy
 
 
-VALID_NOGO_PENALTIES = ('gaussian', 'softplus', 'log_barrier')
+VALID_NOGO_PENALTIES = ('gaussian', 'softplus', 'log_barrier', 'warning_band')
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,15 @@ class NogoCostConfig:
     softplus_scale: float = 0.08
     logbarrier_scale: float = 0.25
     logbarrier_eps: float = 1e-3
+    # warning_band: hinged-log warning penalty parameters (penalty_type ==
+    # 'warning_band'). `warning_band` (b) is the clearance width over which the
+    # soft warning ramps in; `near_weight` (w_near) scales the warning term. The
+    # violation term reuses `weight` (w_viol) and `logbarrier_eps` (eps). The
+    # penalty is exactly zero for valid interior states with clearance >= b, so
+    # raising `weight` to crush violations does not bias the choice between two
+    # fully valid routes (e.g. a narrow vs a wide aisle).
+    warning_band: float = 0.05
+    near_weight: float = 50.0
     geometry_json: str = ''
     # 'keep_out': penalise being inside/near the prisms (obstacle footprints).
     # 'keep_in':  penalise leaving the prism union (driveable region);
@@ -51,6 +60,8 @@ class NogoZoneCostModel:
         self.softplus_scale = float(max(cfg.softplus_scale, 1e-6))
         self.logbarrier_scale = float(max(cfg.logbarrier_scale, 1e-6))
         self.logbarrier_eps = float(max(cfg.logbarrier_eps, 1e-6))
+        self.warning_band = float(max(getattr(cfg, 'warning_band', 0.05), 1e-6))
+        self.near_weight = float(max(getattr(cfg, 'near_weight', 50.0), 0.0))
 
         self.scene = scene_from_json(cfg.geometry_json)
         self.prisms = tuple(self.scene.prisms)
@@ -86,6 +97,8 @@ class NogoZoneCostModel:
             round(self.softplus_scale, 6),
             round(self.logbarrier_scale, 6),
             round(self.logbarrier_eps, 8),
+            round(self.warning_band, 6),
+            round(self.near_weight, 6),
             len(self.prisms),
             *scene_sig,
         )
@@ -159,6 +172,17 @@ class NogoZoneCostModel:
             z = float(np.clip(-clearance / self.softplus_scale, -60.0, 60.0))
             return self.weight * float(np.log1p(np.exp(z)))
 
+        if self.penalty_type == 'warning_band':
+            # Hinged-log warning + quadratic violation. Exactly zero for valid
+            # interior states (clearance >= warning_band), so raising `weight`
+            # crushes violations without biasing the choice between two valid
+            # routes (e.g. narrow vs wide aisle). Keeps a log-like shape inside
+            # the thin warning band near the boundary.
+            band_excess = max(self.warning_band - clearance, 0.0) / self.warning_band
+            warn = self.near_weight * float(np.log1p(band_excess * band_excess))
+            viol = max(-clearance, 0.0) / self.logbarrier_eps
+            return warn + self.weight * float(viol * viol)
+
         denom = max(clearance, self.logbarrier_eps)
         violation = max(self.logbarrier_eps - clearance, 0.0) / self.logbarrier_eps
         return self.weight * float(
@@ -227,6 +251,8 @@ class NogoZoneCostModel:
         softplus_scale = float(self.softplus_scale)
         logbarrier_scale = float(self.logbarrier_scale)
         logbarrier_eps = float(self.logbarrier_eps)
+        warning_band = float(self.warning_band)
+        near_weight = float(self.near_weight)
         penalty_type = self.penalty_type
 
         def signed_distance_xy(x, y):
@@ -257,6 +283,11 @@ class NogoZoneCostModel:
             elif penalty_type == 'softplus':
                 z = ca.fmin(ca.fmax(-clearance / softplus_scale, -60.0), 60.0)
                 base = ca.log(1.0 + ca.exp(z))
+            elif penalty_type == 'warning_band':
+                band_excess = ca.fmax(warning_band - clearance, 0.0) / warning_band
+                warn = near_weight * ca.log(1.0 + ca.power(band_excess, 2))
+                viol = ca.fmax(-clearance, 0.0) / logbarrier_eps
+                return warn + weight * ca.power(viol, 2)
             else:
                 denom = ca.fmax(clearance, logbarrier_eps)
                 violation = ca.fmax(logbarrier_eps - clearance, 0.0) / logbarrier_eps
@@ -286,6 +317,8 @@ class NogoZoneCostModel:
         softplus_scale = float(self.softplus_scale)
         logbarrier_scale = float(self.logbarrier_scale)
         logbarrier_eps = float(self.logbarrier_eps)
+        warning_band = float(self.warning_band)
+        near_weight = float(self.near_weight)
         penalty_type = self.penalty_type
         kappa = max(float(kappa), 1e-6)
 
@@ -329,6 +362,11 @@ class NogoZoneCostModel:
             elif penalty_type == 'softplus':
                 z = ca.fmin(ca.fmax(-clearance / softplus_scale, -60.0), 60.0)
                 base = ca.log(1.0 + ca.exp(z))
+            elif penalty_type == 'warning_band':
+                band_excess = ca.fmax(warning_band - clearance, 0.0) / warning_band
+                warn = near_weight * ca.log(1.0 + ca.power(band_excess, 2))
+                viol = ca.fmax(-clearance, 0.0) / logbarrier_eps
+                return warn + weight * ca.power(viol, 2)
             else:
                 denom = ca.fmax(clearance, logbarrier_eps)
                 violation = ca.fmax(logbarrier_eps - clearance, 0.0) / logbarrier_eps
@@ -352,6 +390,11 @@ class NogoZoneCostModel:
                 if penalty_type == 'softplus':
                     z = ca.fmin(ca.fmax(-clearance / softplus_scale, -60.0), 60.0)
                     return weight * ca.log(1.0 + ca.exp(z))
+                if penalty_type == 'warning_band':
+                    band_excess = ca.fmax(warning_band - clearance, 0.0) / warning_band
+                    warn = near_weight * ca.log(1.0 + ca.power(band_excess, 2))
+                    viol = ca.fmax(-clearance, 0.0) / logbarrier_eps
+                    return warn + weight * ca.power(viol, 2)
                 denom = ca.fmax(clearance, logbarrier_eps)
                 violation = ca.fmax(logbarrier_eps - clearance, 0.0) / logbarrier_eps
                 return weight * (

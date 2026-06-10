@@ -121,9 +121,10 @@ paper_runtime_contract:
       waypoint_spacing_m: 0.40
       waypoint_arrival_radius_m: 0.20
       v_max: 0.60
-      optimizer_multistart_include_direct: false
+      optimizer_multistart_include_direct: true
       optimizer_multistart_lateral_offsets: "-1.0,1.0"
       optimizer_initial_routes:        # warehouse domain-prior lanes (known aisles)
+        - direct
         - mid_cross_lane
         - lower_sweep_lane
       nogo_weight: 200.0

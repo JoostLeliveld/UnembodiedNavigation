@@ -83,21 +83,23 @@ error and more stable belief.
 
 ## Latest Evidence Snapshot
 
-Current log root inspected:
+Archived log root inspected:
 
-`logs/visibility_comparison/paper_final_v1`
+`logs/visibility_comparison/_archive_simple_tracker_2026-06-03/paper_final_v1`
 
-Current config inspected:
+Current candidate config:
 
 `scripts/visibility_comparison/aws_paper_final_config.yaml`
 
-The latest completed summaries show:
+The latest archived completed summaries show the mechanism, but they predate
+the direct-warm-start cleanup in the current candidate config. Rerun the final
+campaign before treating these values as final paper evidence:
 
-| Condition | Completed seeds | Outcome | Mean path | Mean min-goal | Mean truth-state error | Mean p95 truth-state error |
+| Condition | Completed seeds | Outcome | Mean path | Mean min-goal | Mean truth-belief error | Mean p95 truth-belief error |
 | --- | ---: | --- | ---: | ---: | ---: | ---: |
-| C1 constant-R | 5 | 5/5 goal reached | 4.64 m | 0.060 m | 0.366 m | 1.66 m |
-| C2 learned-R | 5 | 5/5 goal reached | 6.82 m | 0.118 m | 0.195 m | 0.43 m |
-| C3 GP risk-only | 5 | 5/5 goal reached | 6.89 m | 0.091 m | 0.196 m | 0.45 m |
+| C1 constant-R | 5 | 5/5 goal reached | 4.64 m | 0.060 m | 0.402 m | 1.90 m |
+| C2 learned-R | 5 | 5/5 goal reached | 6.81 m | 0.119 m | 0.100 m | 0.17 m |
+| C3 GP risk-only | 5 | 5/5 goal reached | 6.89 m | 0.092 m | 0.101 m | 0.16 m |
 
 This supports the following paper-safe interpretation:
 
@@ -171,8 +173,8 @@ Primary measurements:
 - goal reached, collision, stuck, timeout;
 - route class and path length;
 - elapsed time after first command;
-- mean and p95 truth-state error after first command;
-- mean and p95 belief error after first command;
+- mean and p95 truth-belief error after first command;
+- raw `/state/bev` truth-state error after first command as a perception-path diagnostic;
 - mean and p95 yaw error after first command;
 - min driveable clearance / obstacle distance;
 - detection availability and rejected correction rate after first command;

@@ -196,6 +196,8 @@ def _validate_visibility_defaults(visibility_defaults: Dict[str, Any]) -> None:
         "nogo_softplus_scale",
         "nogo_logbarrier_scale",
         "nogo_logbarrier_eps",
+        "nogo_warning_band",
+        "nogo_near_weight",
     )
     for key in numeric_keys:
         if key in visibility_defaults:

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory/diagnostic script or module. Distracting from paper-facing F85-F88 runtime.
 """Summarize logged runs for the thesis comparison pipeline."""
 
 from __future__ import annotations

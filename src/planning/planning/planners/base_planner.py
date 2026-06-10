@@ -146,6 +146,8 @@ class UnicyclePlannerBase:
         nogo_softplus_scale=0.08,
         nogo_logbarrier_scale=0.25,
         nogo_logbarrier_eps=1e-3,
+        nogo_warning_band=0.05,
+        nogo_near_weight=50.0,
         use_belief_nogo_cost=False,
         nogo_belief_kappa=1.0,
         nogo_mode='keep_out',
@@ -246,6 +248,8 @@ class UnicyclePlannerBase:
         self.nogo_softplus_scale = float(max(nogo_softplus_scale, 1e-6))
         self.nogo_logbarrier_scale = float(max(nogo_logbarrier_scale, 1e-6))
         self.nogo_logbarrier_eps = float(max(nogo_logbarrier_eps, 1e-6))
+        self.nogo_warning_band = float(max(nogo_warning_band, 1e-6))
+        self.nogo_near_weight = float(max(nogo_near_weight, 0.0))
         self.use_belief_nogo_cost = bool(use_belief_nogo_cost)
         self.nogo_belief_kappa = float(max(nogo_belief_kappa, 1e-6))
         self.nogo_mode = str(nogo_mode or 'keep_out').strip().lower()
@@ -289,6 +293,8 @@ class UnicyclePlannerBase:
                 softplus_scale=self.nogo_softplus_scale,
                 logbarrier_scale=self.nogo_logbarrier_scale,
                 logbarrier_eps=self.nogo_logbarrier_eps,
+                warning_band=self.nogo_warning_band,
+                near_weight=self.nogo_near_weight,
                 geometry_json=nogo_geometry,
                 mode=self.nogo_mode,
             )
@@ -581,33 +587,43 @@ class UnicyclePlannerBase:
         min_nogo_clearance = float('inf')
 
         for u in controls:
+            m_prev = np.asarray(m, dtype=float).copy()
             m, S = self.predict(m, S, u)
             vis_diag = self.planning_visibility_diagnostics(m, S)
             p_vis_values.append(float(vis_diag['p_vis']))
             ambiguity_std_values.append(
                 float(max(vis_diag['r_plan_u_std'], vis_diag['r_plan_v_std']))
             )
-            min_collision_clearance = min(
-                min_collision_clearance,
-                self.collision_clearance_state_np(m),
-            )
-            if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
-                if self.use_belief_nogo_cost:
-                    _mu_y, Sigma_y, Gamma = self.approx_observation(
-                        m,
-                        S,
-                        method=self.approx_method,
-                        R_override=vis_diag['R_plan'],
-                    )
-                    S_nogo = self._expected_state_posterior_covariance(S, Sigma_y, Gamma)
-                    nogo_clearance = self.nogo_cost_model.clearance_belief_tube_np(
-                        m,
-                        S_nogo,
-                        kappa=self.nogo_belief_kappa,
-                    )
-                else:
-                    nogo_clearance = self.nogo_cost_model.clearance_state_np(m)
-                min_nogo_clearance = min(min_nogo_clearance, float(nogo_clearance))
+
+            # Validate not only the discrete rollout states, but also the
+            # straight segment between successive states. Without this, a plan
+            # can "corner cut" through forbidden floor between two valid samples
+            # and still be selected.
+            seg_len = float(np.linalg.norm(np.asarray(m[:2], dtype=float) - np.asarray(m_prev[:2], dtype=float)))
+            n_seg = max(1, int(math.ceil(seg_len / 0.05)))
+            for alpha in np.linspace(1.0 / n_seg, 1.0, n_seg):
+                m_seg = (1.0 - float(alpha)) * m_prev + float(alpha) * m
+                min_collision_clearance = min(
+                    min_collision_clearance,
+                    self.collision_clearance_state_np(m_seg),
+                )
+                if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
+                    if self.use_belief_nogo_cost:
+                        _mu_y, Sigma_y, Gamma = self.approx_observation(
+                            m_seg,
+                            S,
+                            method=self.approx_method,
+                            R_override=vis_diag['R_plan'],
+                        )
+                        S_nogo = self._expected_state_posterior_covariance(S, Sigma_y, Gamma)
+                        nogo_clearance = self.nogo_cost_model.clearance_belief_tube_np(
+                            m_seg,
+                            S_nogo,
+                            kappa=self.nogo_belief_kappa,
+                        )
+                    else:
+                        nogo_clearance = self.nogo_cost_model.clearance_state_np(m_seg)
+                    min_nogo_clearance = min(min_nogo_clearance, float(nogo_clearance))
 
         current_goal_distance = self._goal_distance_xy(np.asarray(m0[:2], dtype=float), goal_xy)
         terminal_goal_distance = self._goal_distance_xy(np.asarray(m[:2], dtype=float), goal_xy)
@@ -1298,8 +1314,9 @@ class UnicyclePlannerBase:
                         f"[planner_debug] init={init_name!s} returned non-finite solution; skip"
                     )
                     continue
+                x_opt = np.asarray(result.x, dtype=float)
                 candidate = self._evaluate_candidate_controls(
-                    np.asarray(result.x, dtype=float),
+                    x_opt,
                     m0,
                     S0,
                     goal_state,
@@ -1310,8 +1327,54 @@ class UnicyclePlannerBase:
                     ref_seq=ref_seq_flat,
                     prev_u=prev_u_arr,
                 )
+                seed_candidate = self._evaluate_candidate_controls(
+                    np.asarray(x_init, dtype=float),
+                    m0,
+                    S0,
+                    goal_state,
+                    goal_obs,
+                    goal_obs_cov,
+                    objective_scales,
+                    progress_index=progress_index,
+                    ref_seq=ref_seq_flat,
+                    prev_u=prev_u_arr,
+                )
+                opt_diag = self._trajectory_plan_diagnostics(
+                    m0,
+                    S0,
+                    np.asarray(x_opt, dtype=float).reshape(self.horizon, 2),
+                    goal_xy,
+                )
+                seed_diag = self._trajectory_plan_diagnostics(
+                    m0,
+                    S0,
+                    np.asarray(x_init, dtype=float).reshape(self.horizon, 2),
+                    goal_xy,
+                )
+                opt_valid = bool(opt_diag['rollout_valid'])
+                seed_valid = bool(seed_diag['rollout_valid'])
+                # The optimizer is allowed to improve a neutral route seed, but
+                # it must not replace a valid seed with a cheaper corner-cutting
+                # trajectory through forbidden floor.
+                if seed_valid and not opt_valid:
+                    candidate = seed_candidate
+                    candidate['controls_flat'] = np.asarray(x_init, dtype=float)
+                    candidate['optimizer_seed_fallback'] = True
+                    diag_attempt = seed_diag
+                elif opt_valid and not seed_valid:
+                    candidate['controls_flat'] = x_opt
+                    candidate['optimizer_seed_fallback'] = False
+                    diag_attempt = opt_diag
+                elif float(seed_candidate['total_cost']) < float(candidate['total_cost']):
+                    candidate = seed_candidate
+                    candidate['controls_flat'] = np.asarray(x_init, dtype=float)
+                    candidate['optimizer_seed_fallback'] = True
+                    diag_attempt = seed_diag
+                else:
+                    candidate['controls_flat'] = x_opt
+                    candidate['optimizer_seed_fallback'] = False
+                    diag_attempt = opt_diag
                 ctrls_attempt = np.asarray(candidate['controls_flat'], dtype=float).reshape(self.horizon, 2)
-                diag_attempt = self._trajectory_plan_diagnostics(m0, S0, ctrls_attempt, goal_xy)
                 cand_valid = bool(diag_attempt['rollout_valid'])
                 source_label = (
                     f'solver:shifted_warm_start' if (init_name == 'warm_or_cold' and self.prev_controls_flat is not None)
@@ -1325,7 +1388,10 @@ class UnicyclePlannerBase:
                 self._runtime_debug_print(
                     f"[planner_debug] init={init_name!s} solver finished "
                     f"J={candidate['total_cost']:.3f}, valid={cand_valid}, "
+                    f"min_clear={float(diag_attempt.get('min_predicted_obstacle_distance_m', math.nan)):.3f}, "
+                    f"invalid={str(diag_attempt.get('invalid_reason', '')) or '-'}, "
                     f"success={bool(result.success)}, status={int(result.status)}, "
+                    f"seed_fallback={bool(candidate.get('optimizer_seed_fallback', False))}, "
                     f"nit={int(getattr(result, 'nit', 0) or 0)}, "
                     f"nfev={int(getattr(result, 'nfev', 0) or 0)}, "
                     f"dt={(time.perf_counter() - attempt_start) * 1000.0:.0f}ms"

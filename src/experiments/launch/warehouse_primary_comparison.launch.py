@@ -1,3 +1,4 @@
+# [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory/diagnostic script or module. Distracting from paper-facing F85-F88 runtime.
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import PathJoinSubstitution
@@ -32,6 +33,7 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('robot_collision_radius_m', default_value='0.125'),
         DeclareLaunchArgument('odom_heading_correction_mode', default_value='kalman'),
         DeclareLaunchArgument('clamp_pixel_uv_theta_without_yaw', default_value='false'),
+        DeclareLaunchArgument('heading_update_mode', default_value='odom_overwrite'),
         DeclareLaunchArgument('use_nogo_cost', default_value='auto'),
         DeclareLaunchArgument('nogo_penalty_type', default_value='softplus'),
         DeclareLaunchArgument('nogo_weight', default_value='40.0'),
@@ -40,6 +42,8 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('nogo_softplus_scale', default_value='0.08'),
         DeclareLaunchArgument('nogo_logbarrier_scale', default_value='0.25'),
         DeclareLaunchArgument('nogo_logbarrier_eps', default_value='0.001'),
+        DeclareLaunchArgument('nogo_warning_band', default_value='0.05'),
+        DeclareLaunchArgument('nogo_near_weight', default_value='50.0'),
         DeclareLaunchArgument('use_belief_nogo_cost', default_value='false'),
         DeclareLaunchArgument('nogo_belief_kappa', default_value='1.0'),
         DeclareLaunchArgument('use_odom_for_predict', default_value='true'),
@@ -84,6 +88,10 @@ def _planner_precision_arguments():
                               description='Rotate-in-place threshold for the simple local tracker.'),
         DeclareLaunchArgument('local_tracking_use_odom_yaw', default_value='false',
                               description='Use fresh odometry yaw as the local tracking/control yaw in hierarchical mode.'),
+        DeclareLaunchArgument('use_state_bev_yaw', default_value='false',
+                              description='Use the camera keypoint BEV heading (/state/bev) as the local tracking/control yaw (falls back to odom).'),
+        DeclareLaunchArgument('use_state_bev_heading_correction', default_value='false',
+                              description='Fuse fresh /state/bev keypoint yaw into the planner belief before odom fallback.'),
         DeclareLaunchArgument('cmd_publish_rate', default_value='10.0'),
     ]
 

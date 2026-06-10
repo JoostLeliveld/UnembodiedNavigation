@@ -22,6 +22,7 @@ HEADING_SOURCE_CODES = {
     'odom_heading_fallback': 2.0,
     'motion_heading_fallback': 3.0,
     'held_previous_heading': 4.0,
+    # [DEPRECATED_LEGACY_CLEANUP] keypoint heading is legacy (odom yaw is active source)
     'keypoint_bev_heading': 5.0,
 }
 
@@ -42,7 +43,7 @@ class PixelToBevStateNode(Node):
         self.declare_parameter('heading_pixel_noise_sigma', 0.0)
         self.declare_parameter('yaw_noise_floor_rad', 0.01)
         self.declare_parameter('use_odom_heading_fallback', True)
-        self.declare_parameter('odom_topic', '/odom')
+        self.declare_parameter('odom_topic', '/odom_noisy')
         self.declare_parameter('odom_heading_timeout_s', 0.5)
         self.declare_parameter('odom_heading_sigma_rad', 0.08)
         self.declare_parameter('odom_yaw_offset_rad', 0.0)
@@ -50,6 +51,7 @@ class PixelToBevStateNode(Node):
         self.declare_parameter('motion_yaw_min_displacement_m', 0.03)
         self.declare_parameter('motion_yaw_sigma_rad', 0.35)
         self.declare_parameter('seed', 0)
+        # [DEPRECATED_LEGACY_CLEANUP] keypoint yaw parameters are legacy
         self.declare_parameter('keypoint_marker_world_z', 0.0)
         self.declare_parameter('keypoint_heading_sigma_rad', 0.05)
         self.declare_parameter('diagnostics_match_tolerance_s', 1e-3)
@@ -73,7 +75,7 @@ class PixelToBevStateNode(Node):
         self.heading_pixel_noise_sigma = float(self.get_parameter('heading_pixel_noise_sigma').value)
         self.yaw_noise_floor_rad = float(self.get_parameter('yaw_noise_floor_rad').value)
         self.use_odom_heading_fallback = bool(self.get_parameter('use_odom_heading_fallback').value)
-        self.odom_topic = str(self.get_parameter('odom_topic').value or '/odom')
+        self.odom_topic = str(self.get_parameter('odom_topic').value or '/odom_noisy')
         self.odom_heading_timeout_s = float(self.get_parameter('odom_heading_timeout_s').value)
         self.odom_heading_sigma_rad = float(self.get_parameter('odom_heading_sigma_rad').value)
         self.odom_yaw_offset_rad = float(self.get_parameter('odom_yaw_offset_rad').value)
@@ -81,6 +83,7 @@ class PixelToBevStateNode(Node):
         self.motion_yaw_min_displacement_m = float(self.get_parameter('motion_yaw_min_displacement_m').value)
         self.motion_yaw_sigma_rad = float(self.get_parameter('motion_yaw_sigma_rad').value)
         self.seed = int(self.get_parameter('seed').value)
+        # [DEPRECATED_LEGACY_CLEANUP] keypoint yaw parameters are legacy
         self.keypoint_marker_world_z = float(self.get_parameter('keypoint_marker_world_z').value)
         self.keypoint_heading_sigma_rad = float(self.get_parameter('keypoint_heading_sigma_rad').value)
         self.diagnostics_match_tolerance_s = float(
@@ -133,6 +136,7 @@ class PixelToBevStateNode(Node):
             f'state sources: x,y=camera homography, theta={" -> ".join(theta_sources)}, '
             f'odom_topic={self.odom_topic}, '
             f'odom_yaw_offset_rad={self.odom_yaw_offset_rad:.3f}, '
+            # [DEPRECATED_LEGACY_CLEANUP] keypoint yaw is legacy
             f'keypoint_marker_world_z={self.keypoint_marker_world_z:.3f}, '
             f'diag_match_tol_s={self.diagnostics_match_tolerance_s:.3f})'
         )
@@ -202,6 +206,7 @@ class PixelToBevStateNode(Node):
         except (AttributeError, TypeError, ValueError):
             return math.nan
 
+    # [DEPRECATED_LEGACY_CLEANUP] keypoint yaw calculation is legacy. Heading comes from odometry.
     def _yaw_from_keypoints(self, diag):
         """Compute BEV heading from front/rear marker pixels.
 
@@ -332,6 +337,7 @@ class PixelToBevStateNode(Node):
         motion_yaw_meas = math.nan
         diag_yaw_est = float(diag.get('yaw_est', math.nan)) if diag else math.nan
         diag_detected = 1.0 if (diag and bool(diag.get('detected', False))) else 0.0
+        # [DEPRECATED_LEGACY_CLEANUP] keypoint yaw fallback is legacy
         keypoint_yaw = self._yaw_from_keypoints(diag) if diag else None
         if keypoint_yaw is not None:
             yaw_out, sigma_yaw = keypoint_yaw

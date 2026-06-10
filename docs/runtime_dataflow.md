@@ -86,6 +86,15 @@ localization quality, and interpret `truth_state_error_m` as the raw
 camera-state pathway. Fresh `/state/bev` error and stale latest-state error
 should be reported separately when diagnosing perception.
 
+For delayed pixel corrections, inspect
+`pixel_corr_motion_replay_source` in `experiment.csv`. Paper-facing runs should
+normally report `odom_noisy`; `command_log` is an allowed fallback only when no
+odom samples exist for the measurement interval, and `single_fallback` should be
+rare enough to treat as a timing diagnostic. The older
+`pixel_corr_cmd_replay_*` columns are retained for backward-compatible plotting;
+interpret them as selected motion-replay sample counts/duration together with
+`pixel_corr_motion_replay_source`, not necessarily as command-only replay.
+
 ## Main Entry Points
 
 | Purpose | File |

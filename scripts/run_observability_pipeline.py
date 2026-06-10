@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory/diagnostic script or module. Distracting from paper-facing F85-F88 runtime.
 """Entry point: full observability GP capture pipeline.
 
 Steps (run each script directly):

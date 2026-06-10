@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory/diagnostic script or module. Distracting from paper-facing F85-F88 runtime.
 """Offline EFE lab — evaluate the visibility-aware EFE planner without Gazebo.
 
 This diagnostic script loads the planner with the exact parameters from a YAML
@@ -232,6 +233,8 @@ def build_planner(
         nogo_softplus_scale=float(cfg.get("nogo_softplus_scale", 0.08)),
         nogo_logbarrier_scale=float(cfg.get("nogo_logbarrier_scale", 0.25)),
         nogo_logbarrier_eps=float(cfg.get("nogo_logbarrier_eps", 1e-3)),
+        nogo_warning_band=float(cfg.get("nogo_warning_band", 0.05)),
+        nogo_near_weight=float(cfg.get("nogo_near_weight", 50.0)),
         use_belief_nogo_cost=_as_bool(cfg.get("use_belief_nogo_cost", False)),
         nogo_belief_kappa=float(cfg.get("nogo_belief_kappa", 1.0)),
         nogo_mode=str(cfg.get("nogo_mode", "keep_out")),
@@ -266,7 +269,9 @@ def load_setup(
     world_path = resolve_world_path(world)
     current_visibility_geometry_json = serialize_occlusion_geometry_from_world(world_path)
     current_collision_geometry_json = serialize_collision_geometry_from_world(world_path)
-    current_driveable_geometry_json = serialize_driveable_geometry_from_profile(profile)
+    current_driveable_geometry_json = str(cfg.get("driveable_geometry_json", "") or "").strip()
+    if not current_driveable_geometry_json:
+        current_driveable_geometry_json = serialize_driveable_geometry_from_profile(profile)
     cfg = dict(cfg)
     cfg["driveable_geometry_json"] = current_driveable_geometry_json
 

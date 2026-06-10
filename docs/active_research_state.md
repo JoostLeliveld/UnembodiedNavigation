@@ -95,17 +95,20 @@ start: (3.30, -1.00, yaw=0.0)
 goal:  (1.00, 1.75)
 ```
 
-Current inspected summaries:
+Current inspected archived summaries:
 
 Runtime localization metrics are interpreted as after-first-command quantities.
 Pre-command launch, global-solve, and estimator warm-up rows must not be mixed
 into these means.
+These values predate the direct-warm-start cleanup in the current candidate
+config, so they are mechanism evidence to regenerate rather than final locked
+paper evidence.
 
-| Condition | Completed seeds | Outcome | Mean path | Mean truth-state error after first cmd | Mean p95 truth-state error after first cmd |
+| Condition | Completed seeds | Outcome | Mean path | Mean truth-belief error after first cmd | Mean p95 truth-belief error after first cmd |
 | --- | ---: | --- | ---: | ---: | ---: |
-| C1 constant-R | 5 | 5/5 goal reached | 4.64 m | 0.366 m | 1.66 m |
-| C2 learned-R | 5 | 5/5 goal reached | 6.82 m | 0.195 m | 0.43 m |
-| C3 risk-only | 5 | 5/5 goal reached | 6.89 m | 0.196 m | 0.45 m |
+| C1 constant-R | 5 | 5/5 goal reached | 4.64 m | 0.402 m | 1.90 m |
+| C2 learned-R | 5 | 5/5 goal reached | 6.81 m | 0.100 m | 0.17 m |
+| C3 risk-only | 5 | 5/5 goal reached | 6.89 m | 0.101 m | 0.16 m |
 
 Current interpretation:
 

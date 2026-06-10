@@ -104,9 +104,12 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'use_simple_local_controller': 'false',
     'simple_tracker_yaw_gate_rad': '0.6',
     'local_tracking_use_odom_yaw': 'false',
+    'use_state_bev_yaw': 'false',
+    'use_state_bev_heading_correction': 'false',
     'odom_heading_timeout_s': '0.75',
     'odom_heading_correction_mode': 'kalman',
     'clamp_pixel_uv_theta_without_yaw': 'false',
+    'heading_update_mode': 'odom_overwrite',
     'debug_runtime': 'false',
     'auto_stop_on_goal': 'true',
     'goal_success_radius': '0.20',
@@ -172,6 +175,8 @@ VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
     'nogo_softplus_scale': 0.08,
     'nogo_logbarrier_scale': 0.25,
     'nogo_logbarrier_eps': 1e-3,
+    'nogo_warning_band': 0.05,
+    'nogo_near_weight': 50.0,
     'use_belief_nogo_cost': 'false',
     'nogo_belief_kappa': 1.0,
     'nogo_mode': 'keep_out',
@@ -236,6 +241,14 @@ def _state_estimator_metadata(cfg: Dict[str, object] | None = None) -> Dict[str,
         'state_source_theta': 'odometry_heading',
         'state_estimator_mode': 'yolo_mask_or_bbox_camera_xy_odom_theta',
     }
+
+    heading_update_mode = str(cfg.get('heading_update_mode', 'odom_overwrite')).strip().lower()
+    if heading_update_mode == 'camera_xy_only':
+        metadata.update({
+            'state_source_theta': 'none',
+            'state_estimator_mode': 'yolo_camera_xy_only_no_direct_theta',
+        })
+        return metadata
 
     keypoint_marker_world_z = float(cfg.get('keypoint_marker_world_z', 0.0) or 0.0)
     if keypoint_marker_world_z > 0.0:
@@ -434,6 +447,16 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             'local_tracking_use_odom_yaw',
             PAPER_LAUNCH_DEFAULTS['local_tracking_use_odom_yaw'],
         )),
+        'use_state_bev_yaw': _as_bool(_launch_value(
+            context,
+            'use_state_bev_yaw',
+            PAPER_LAUNCH_DEFAULTS['use_state_bev_yaw'],
+        )),
+        'use_state_bev_heading_correction': _as_bool(_launch_value(
+            context,
+            'use_state_bev_heading_correction',
+            PAPER_LAUNCH_DEFAULTS['use_state_bev_heading_correction'],
+        )),
         'odom_heading_timeout_s': float(_launch_value(
             context,
             'odom_heading_timeout_s',
@@ -457,6 +480,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'clamp_pixel_uv_theta_without_yaw': _as_bool(
             _launch_value(context, 'clamp_pixel_uv_theta_without_yaw', PAPER_LAUNCH_DEFAULTS['clamp_pixel_uv_theta_without_yaw'])
         ),
+        'heading_update_mode': _launch_value(
+            context, 'heading_update_mode', PAPER_LAUNCH_DEFAULTS['heading_update_mode']
+        ).strip().lower(),
         'plan_rate': float(_launch_value(context, 'plan_rate', PAPER_LAUNCH_DEFAULTS['plan_rate'])),
         'cmd_publish_rate': float(_launch_value(
             context, 'cmd_publish_rate', PAPER_LAUNCH_DEFAULTS['cmd_publish_rate']
@@ -498,6 +524,8 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'nogo_softplus_scale': float(_launch_value(context, 'nogo_softplus_scale', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_softplus_scale']))),
         'nogo_logbarrier_scale': float(_launch_value(context, 'nogo_logbarrier_scale', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_logbarrier_scale']))),
         'nogo_logbarrier_eps': float(_launch_value(context, 'nogo_logbarrier_eps', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_logbarrier_eps']))),
+        'nogo_warning_band': float(_launch_value(context, 'nogo_warning_band', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_warning_band']))),
+        'nogo_near_weight': float(_launch_value(context, 'nogo_near_weight', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_near_weight']))),
         'use_belief_nogo_cost': _as_bool(_launch_value(context, 'use_belief_nogo_cost', str(VISIBILITY_FALLBACK_DEFAULTS['use_belief_nogo_cost']))),
         'nogo_belief_kappa': float(_launch_value(context, 'nogo_belief_kappa', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_belief_kappa']))),
         'nogo_mode': _launch_value(context, 'nogo_mode', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_mode'])).strip().lower(),
@@ -985,6 +1013,8 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'nogo_softplus_scale': cfg['nogo_softplus_scale'],
                 'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
                 'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
+                'nogo_warning_band': cfg['nogo_warning_band'],
+                'nogo_near_weight': cfg['nogo_near_weight'],
                 'use_belief_nogo_cost': cfg['use_belief_nogo_cost'],
                 'nogo_belief_kappa': cfg['nogo_belief_kappa'],
                 'nogo_mode': cfg.get('nogo_mode', 'keep_out'),
@@ -1056,12 +1086,15 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'use_simple_local_controller': cfg.get('use_simple_local_controller', False),
                 'simple_tracker_yaw_gate_rad': cfg.get('simple_tracker_yaw_gate_rad', 0.6),
                 'local_tracking_use_odom_yaw': cfg.get('local_tracking_use_odom_yaw', False),
+                'use_state_bev_yaw': cfg.get('use_state_bev_yaw', False),
+                'use_state_bev_heading_correction': cfg.get('use_state_bev_heading_correction', False),
                 'use_odom_heading_correction': cfg['use_odom_heading_correction'],
                 'use_displacement_heading': cfg['use_displacement_heading'],
                 'heading_min_displacement_m': cfg['heading_min_displacement_m'],
                 'heading_bev_noise_sigma_m': cfg['heading_bev_noise_sigma_m'],
                 'odom_heading_correction_mode': cfg['odom_heading_correction_mode'],
                 'clamp_pixel_uv_theta_without_yaw': cfg['clamp_pixel_uv_theta_without_yaw'],
+                'heading_update_mode': cfg['heading_update_mode'],
                 'run_timeout_after_first_cmd_s': cfg['run_timeout_after_first_cmd_s'],
                 'first_cmd_linear_eps': cfg['first_cmd_linear_eps'],
                 'first_cmd_angular_eps': cfg['first_cmd_angular_eps'],
@@ -1184,6 +1217,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'use_truth_localization': cfg['use_truth_localization'],
             'heading_pixel_noise_sigma': _SENSOR_PIXEL_NOISE_SIGMA,
             'use_odom_heading_correction': cfg['use_odom_heading_correction'],
+            'use_state_bev_heading_correction': cfg.get('use_state_bev_heading_correction', False),
             'odom_heading_correction_mode': cfg['odom_heading_correction_mode'],
             'odom_heading_timeout_s': cfg['odom_heading_timeout_s'],
             'odom_heading_sigma_rad': 0.08,
@@ -1194,6 +1228,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'heading_bev_noise_sigma_m': cfg['heading_bev_noise_sigma_m'],
             'odom_yaw_offset_rad': float(cfg['spawn']['yaw']),
             'clamp_pixel_uv_theta_without_yaw': cfg['clamp_pixel_uv_theta_without_yaw'],
+            'heading_update_mode': cfg['heading_update_mode'],
             'min_state_cov': cfg['min_state_cov'],
             'debug_runtime': cfg['debug_runtime'],
             'process_noise_xy': cfg['process_noise_xy'],
@@ -1229,6 +1264,8 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'nogo_softplus_scale': cfg['nogo_softplus_scale'],
             'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
             'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
+            'nogo_warning_band': cfg['nogo_warning_band'],
+            'nogo_near_weight': cfg['nogo_near_weight'],
             'use_belief_nogo_cost': cfg['use_belief_nogo_cost'],
             'nogo_belief_kappa': cfg['nogo_belief_kappa'],
             'robot_collision_radius_m': cfg['robot_collision_radius_m'],
@@ -1272,6 +1309,8 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'use_simple_local_controller': cfg.get('use_simple_local_controller', False),
             'simple_tracker_yaw_gate_rad': cfg.get('simple_tracker_yaw_gate_rad', 0.6),
             'local_tracking_use_odom_yaw': cfg.get('local_tracking_use_odom_yaw', False),
+            'use_state_bev_yaw': cfg.get('use_state_bev_yaw', False),
+            'use_state_bev_heading_correction': cfg.get('use_state_bev_heading_correction', False),
             **cfg['camera_params'],
             **planner_params[planner],
         }],

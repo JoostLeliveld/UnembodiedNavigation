@@ -91,15 +91,18 @@ def draw_regions(ax, profile: dict, *, alpha: float = 0.35, edge_alpha: float = 
         h = float(region["ymax"]) - y0
         if typ == "traversable":
             ax.add_patch(Rectangle((x0, y0), w, h, facecolor=COL["drive"], edgecolor=COL["drive_edge"], lw=0.55, alpha=alpha, zorder=2))
-        elif typ == "non_driveable_staging":
-            ax.add_patch(Rectangle((x0, y0), w, h, facecolor=COL["non"], edgecolor=COL["non_edge"], lw=0.45, alpha=0.34, hatch="///", zorder=3))
+        # non_driveable_staging (red) markings are intentionally NOT drawn: they sit
+        # outside the driveable zone and are not relevant to the GP pipeline figure.
 
 
 def draw_racks(ax) -> None:
     rack_xs = [-4.05, -2.00, 0.05, 2.00, 4.15]
     rack_w = 0.55
-    segments = [(-0.82, 1.20), (2.20, 4.25)]
+    # R1 (x=-4.05) is one CONTINUOUS shelf (its mid gap is filled); R2..R5 keep the
+    # open mid gap. Match the actual world geometry.
+    split_segments = [(-0.82, 1.20), (2.20, 4.25)]
     for x in rack_xs:
+        segments = [(-0.82, 4.25)] if abs(x - (-4.05)) < 1e-6 else split_segments
         for y0, y1 in segments:
             ax.add_patch(Rectangle((x - rack_w / 2.0, y0), rack_w, y1 - y0, facecolor=COL["rack"], edgecolor=COL["rack_edge"], lw=0.65, zorder=6))
 
@@ -187,11 +190,10 @@ def main() -> int:
 
     handles = [
         Rectangle((0, 0), 1, 1, facecolor=COL["drive"], edgecolor=COL["drive_edge"], alpha=0.35, label="known driveable floor"),
-        Rectangle((0, 0), 1, 1, facecolor=COL["non"], edgecolor=COL["non_edge"], alpha=0.34, hatch="///", label="known forbidden/staging zone"),
         Rectangle((0, 0), 1, 1, facecolor=COL["rack"], edgecolor=COL["rack_edge"], label="rack geometry"),
         Line2D([0], [0], marker="o", color="none", markerfacecolor="#440154", markeredgecolor="black", markersize=5, label="training sample"),
     ]
-    fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=7.5, frameon=False, bbox_to_anchor=(0.5, 0.02))
+    fig.legend(handles=handles, loc="lower center", ncol=3, fontsize=7.5, frameon=False, bbox_to_anchor=(0.5, 0.02))
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.preview.parent.mkdir(parents=True, exist_ok=True)

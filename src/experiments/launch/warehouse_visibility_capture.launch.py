@@ -42,6 +42,7 @@ def _launch_setup(context, *args, **kwargs):
             'use_sim_time': 'true' if use_sim_time else 'false',
             'use_lidar': 'false',
             'bridge_scan': 'false',
+            'headless': LaunchConfiguration('headless').perform(context),
             'world': world,
             'world_name': profile['world_name'],
             'spawn_x': str(float(spawn['x'])),
@@ -118,6 +119,7 @@ def _launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
+        DeclareLaunchArgument('headless', default_value='true', description='Run Gazebo server-only (batch capture default)'),
         DeclareLaunchArgument('world', default_value='warehouse_occ_light.world.sdf'),
         DeclareLaunchArgument(
             'world_profiles',

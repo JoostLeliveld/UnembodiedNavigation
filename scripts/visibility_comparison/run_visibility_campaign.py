@@ -228,6 +228,8 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'latency_compensate_plan_handoff',
         'use_simple_local_controller',
         'local_tracking_use_odom_yaw',
+        'use_state_bev_yaw',
+        'use_state_bev_heading_correction',
         'use_truth_localization',
     )
     for key in bool_keys:
@@ -240,6 +242,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'optimizer_multistart_lateral_offsets',
         'optimizer_initial_routes_json',
         'local_nogo_penalty_type',
+        'heading_update_mode',
     )
     for key in string_keys:
         if key in cfg and str(manifest.get(key, '')) != str(cfg[key]):
@@ -347,6 +350,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'observation_risk_scale', 'ambiguity_term_scale',
         'risk_weight_obs', 'ambiguity_weight',
         'belief_publish_rate',
+        'heading_update_mode',
         'use_pixel_correction',
         'pixel_timeout_s', 'skip_stale_pixel_correction',
         'bev_y_calibration_offset_m', 'pixel_max_correction_jump_m',
@@ -368,7 +372,8 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'waypoint_spacing_m', 'waypoint_arrival_radius_m',
         'local_replan_min_remaining_s', 'local_replan_on_waypoint_change',
         'latency_compensate_plan_handoff', 'use_simple_local_controller',
-        'local_tracking_use_odom_yaw', 'cmd_publish_rate',
+        'local_tracking_use_odom_yaw', 'use_state_bev_yaw',
+        'use_state_bev_heading_correction', 'cmd_publish_rate',
         'goal_prior_u_std_start', 'goal_prior_v_std_start',
         'goal_prior_u_std_final', 'goal_prior_v_std_final',
         'goal_tightening_power',

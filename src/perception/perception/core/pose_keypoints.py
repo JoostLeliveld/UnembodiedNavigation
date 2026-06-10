@@ -1,3 +1,4 @@
+# [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory/diagnostic script or module. Distracting from paper-facing F85-F88 runtime.
 """Shared geometry and label conventions for the front/rear pose-keypoint pipeline.
 
 These offsets must match the `pose_markers` block in

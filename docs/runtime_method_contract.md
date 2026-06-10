@@ -239,10 +239,11 @@ local_use_ambiguity: false
 global_optimizer_multistart: true
 local_optimizer_multistart: false
 local_use_visibility_model: false
-optimizer_multistart_include_direct: false
+optimizer_multistart_include_direct: true
 optimizer_multistart_lateral_offsets: -1.0,1.0
 optimizer_initial_routes_json: mid_cross_lane + lower_sweep_lane, generated
-  from known driveable-floor geometry only
+  from known driveable-floor geometry only; the direct warm start remains
+  enabled so lane candidates cannot silently exclude the short route
 nogo_weight: 200.0
 nogo_safe_distance: 0.30
 use_belief_nogo_cost: true

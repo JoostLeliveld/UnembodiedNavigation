@@ -105,6 +105,7 @@ class EfeAgentNode(UnicyclePlannerNode):
                 if self.local_goal_progress_weight < 0.0
                 else self.local_goal_progress_weight
             )
+            # [DEPRECATED_LEGACY_CLEANUP] LOCAL reference-segment tracking weights are legacy (simple tracker active)
             # LOCAL reference-segment tracking weights. -1.0 inherits 0.0 (OFF, so
             # the local executor falls back to the legacy single-point goal cost);
             # >=0.0 enables the proper TRACKER objective (reference-segment tracking
@@ -284,8 +285,24 @@ class EfeAgentNode(UnicyclePlannerNode):
         m_track = m0.copy()
         S_track = S0.copy()
         tracking_yaw_source = 0.0
-        if self.local_tracking_use_odom_yaw:
-            now_msg = self.get_clock().now().to_msg()
+        # Heading source for the local executor, in priority order:
+        #   3.0 = camera keypoint BEV heading (/state/bev) when use_state_bev_yaw
+        #         and a fresh state estimate is available;
+        #   1.0 = raw odom yaw fallback (when use_state_bev_yaw misses, or when
+        #         only local_tracking_use_odom_yaw is set);
+        #   0.0 = leave the filtered belief theta (m0[2]).
+        now_msg = self.get_clock().now().to_msg()
+        state_bev_yaw = None
+        if self.use_state_bev_yaw and self.heading_update_mode != 'camera_xy_only':
+            with self._data_lock:
+                state_bev_yaw, state_bev_sigma = self._fresh_state_bev_heading_locked(now_msg)
+        if state_bev_yaw is not None:
+            m_track[2] = float(state_bev_yaw)
+            S_track[2, :] = 0.0
+            S_track[:, 2] = 0.0
+            S_track[2, 2] = float(max(state_bev_sigma ** 2, 1e-6))
+            tracking_yaw_source = 3.0
+        elif self.local_tracking_use_odom_yaw and self.heading_update_mode != 'camera_xy_only':
             with self._data_lock:
                 odom_yaw, _odom_age = self._fresh_odom_heading_locked(now_msg)
             if odom_yaw is not None:
@@ -331,6 +348,7 @@ class EfeAgentNode(UnicyclePlannerNode):
                 self._publish_command(float(controls[0, 0]), float(controls[0, 1]))
             return
 
+        # [DEPRECATED_LEGACY_CLEANUP] local EFE reference segment tracking is legacy (simple tracker active)
         ref_seq = None
         prev_u = None
         if self._local_ref_tracking_active:
@@ -421,6 +439,7 @@ class EfeAgentNode(UnicyclePlannerNode):
                     return False, f'driveable_clearance_violation_step_{i}:{clearance:.3f}'
         return True, ''
 
+    # [DEPRECATED_LEGACY_CLEANUP] local reference segment sampling is legacy (simple tracker active)
     def _build_local_reference_segment(self, m0: np.ndarray) -> np.ndarray:
         """Sample a (local_horizon, 2) reference segment along the global waypoint
         polyline, starting from the projection of the current belief (x, y).
