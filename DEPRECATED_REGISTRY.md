@@ -25,15 +25,33 @@ the active pipeline + F88 engine `efe_offline_lab.py`, `scripts/paper_figures/`,
 GP/detector capture+fit pipeline, the whole `src/` tree, `docs/`, `tests/`. Verified after
 the move: KEEP-set intact, F88 offline smoke (C1+C2) PASS, figure-generator smoke PASS.
 
-## DEFERRED — surgical pass NOT yet done (needs `colcon build` + retest)
+## Cleanup pass 2 (2026-06-10) — REMOVED / DONE
 
-These are in-place edits to ACTIVE files, intentionally left for a separate pass:
-- **Section 4** dead code blocks inside active nodes (`pixel_to_bev_state_node.py`,
-  `efe_agent_node.py`, `unicycle_planner_node.py`, `experiment_logger.py`): keypoint-heading,
-  local-EFE reference-segment tracking, and `odom_measurement`/`visual_heading` validation modes.
-- **Section 5** legacy ENTRIES inside `tasks.yaml` and `world_profiles.yaml` (keep F31_b1, a0,
-  b5, warehouse_aws; drop occ_light/longshadow/putaway/parcel + exploratory AWS tasks).
-- `src/perception/.../pose_keypoints.py` (+ its test) — archive once heading surgery lands.
+- **Section 5 config entries REMOVED.** `tasks.yaml` now keeps only the
+  `warehouse_aws.world.sdf` block with tasks {F31_b1_apron_a3_mid, a0_west_to_a1_upper_blocked_mid,
+  b2/b3/b4 generality, b5_a4_apron_to_a2_mid, visible_aisle_sanity_aws}; the occ_light/longshadow
+  task blocks + exploratory AWS probe/F24/B1 tasks are deleted. `world_profiles.yaml` keeps only
+  `warehouse_aws.world.sdf` (occ_light/longshadow/putaway/parcel profiles deleted). Verified:
+  `colcon build experiments` passes, F88 offline smoke (C1+C2) PASS, a0 load PASS.
+- **Docs consolidated**: 3 runtime contracts → `paper_runtime_contract.yaml` v0.5; stale v5/compact
+  docs deleted; survivors realigned to v7/F31_b1/warning_band with honest OPEN F31_b1 status.
+- **logs/ trimmed** to the functional floor (aws_gp_v7 + aws_yolo_simseg_v2 + a0 logs); handoff folder deleted.
+- Build note: `experiments/setup.py` globs `data/visibility_gp/*` (now just README.md after the
+  pass-1 npz archival); a stale `build/experiments` tree had to be cleaned once.
+
+## DEFERRED — ROS-node dead code (audited safe, NOT yet removed)
+
+**Section 4** dead code blocks inside active nodes — confirmed off the active path
+(`camera_xy_only` + `use_simple_local_controller:true`) by audit, but **deferred** because the
+available offline smoke (`build_planner`) does NOT exercise the ROS nodes; only a Gazebo campaign
+would validate their removal, and the user is mid-F88. Remove these once a Gazebo smoke is approved:
+- `pixel_to_bev_state_node.py`: `_yaw_from_keypoints()` + keypoint-yaw fallback (KEEP the
+  `keypoint_marker_world_z` param declaration — the active config still passes it).
+- `efe_agent_node.py`: `_build_local_reference_segment()` + local-ref-tracking branch/params.
+- `unicycle_planner_node.py`: `odom_measurement`/`visual_heading` from heading-mode validation.
+- `experiment_logger.py`: keypoint heading params (KEEP any still passed by active configs).
+- `src/perception/.../pose_keypoints.py` + `pose_extraction.py` — still imported by the live
+  detector node; remove only with a detector refactor.
 
 ---
 

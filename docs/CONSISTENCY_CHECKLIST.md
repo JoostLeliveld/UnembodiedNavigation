@@ -44,7 +44,7 @@ captured, every plan against this GP plans against a phantom.
 ```bash
 python3 - <<'PY'
 import json, re, numpy as np
-gp = np.load('logs/visibility_comparison/aws_gp_v5/yolo_score_raw_gp.npz')
+gp = np.load('logs/visibility_comparison/aws_gp_v7/yolo_score_raw_gp.npz')
 geom = json.loads(str(gp['geometry_json']).strip("[]'"))
 sdf = open('src/sim/gazebo_worlds/worlds/warehouse_aws.world.sdf').read()
 
@@ -69,8 +69,9 @@ PY
 recaptured before any new campaign.
 
 **Historical stale case**: older AWS GP artifacts were captured against earlier
-R4/high-stack geometries. The retained exploratory AWS artifact is now
-`aws_gp_v5`; any future AWS geometry change requires a fresh capture and GP fit.
+R4/high-stack geometries and earlier camera poses. The current paper GP is
+`aws_gp_v7` (camera z=4.8, y=-5.5); v5/v6/v6b are superseded. Any future AWS
+geometry or camera change requires a fresh capture and GP fit.
 
 ### C2 — GP camera_pos equals World SDF camera pose
 
@@ -81,7 +82,7 @@ moved the camera, the GP is no longer valid.
 ```bash
 python3 - <<'PY'
 import numpy as np
-gp = np.load('logs/visibility_comparison/aws_gp_v5/yolo_score_raw_gp.npz')
+gp = np.load('logs/visibility_comparison/aws_gp_v7/yolo_score_raw_gp.npz')
 print('GP camera_pos:', gp['camera_pos'])
 print('GP camera_pose (full RPY):', gp['camera_pose'])
 PY
@@ -211,7 +212,7 @@ python3 scripts/visibility_comparison/build_gp_targets.py \
 python3 scripts/visibility_comparison/fit_visibility_gps.py \
   --gp-targets logs/visibility_comparison/aws_gp_targets_v5/gp_targets_xy_aggregated.csv \
   --capture-manifest logs/visibility_comparison/aws_capture_v5/capture_manifest.json \
-  --out logs/visibility_comparison/aws_gp_v5 \
+  --out logs/visibility_comparison/aws_gp_v7 \
   --grid-nx 220 --grid-ny 200 --gp-length-scale 1.20 --gp-noise-var 0.10 --beta 1.0
 
 # 5. Point the configs at the new artifact

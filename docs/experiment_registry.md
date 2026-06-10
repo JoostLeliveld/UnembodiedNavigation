@@ -1,7 +1,11 @@
 # Experiment Registry
 
-This registry separates paper evidence from exploratory diagnostics. A run is
-not paper evidence unless the full artifact chain is present.
+Separates paper evidence from exploratory diagnostics. A run is not paper
+evidence unless the full artifact chain is present. Aligned 2026-06-10.
+
+NOTE: pass-1/2 cleanup moved most historical run families to the sibling archive
+`/home/joostleliveld/Thesis/_archive_nonpaper/` (see its `ARCHIVE_MANIFEST.md`).
+Only the paper KEEP set lives in the repo now.
 
 ## Evidence Chain
 
@@ -15,51 +19,48 @@ not paper evidence unless the full artifact chain is present.
 | Logs | seeded run directories with manifests and summaries |
 | Figures | generated from logs, not hand-drawn behavior claims |
 
-## Paper-Core Runs
+## Current Paper-Facing Artifacts (in repo, KEEP)
 
-| Status | Asset / Run Family | Notes |
+| Status | Asset | Notes |
 | --- | --- | --- |
-| valid | `logs/visibility_comparison/current_capture` | compact benchmark visibility capture |
-| valid | `logs/visibility_comparison/current_targets` | compact benchmark detector targets |
-| valid | `logs/visibility_comparison/current_gp` | compact benchmark planner-facing GP |
-| archived (pre-code-fix) | `logs/visibility_comparison/paper_taskA_model_selection_c2_v1` | model-selection evidence |
-| archived (pre-code-fix) | `logs/visibility_comparison/paper_taskA_mc_nominal_c1_vs_c2_v1` | nominal C1/C2 comparison |
-| archived (pre-code-fix) | `logs/visibility_comparison/paper_taskA_mc_highnoise_c1_vs_c2_v1` | high-noise C1/C2 comparison |
+| CURRENT | `logs/visibility_comparison/aws_gp_v7/yolo_score_raw_gp.npz` | Paper GP on the LOCKED camera (z=4.8, y=-5.5). 912 frames, 647/912 detected (71%), driveable-only sample filter, length_scale 0.90 / noise_var 0.05 / beta 0.5. A1 made observable by camera move + length-scale (not de-occlusion); A4 rack-shadow stays low (~0.005). Config `gp_artifact` points here. |
+| CURRENT | `logs/perception_models/aws_yolo_simseg_v2/model.pt` | Paper detector (sim seg). Used for both capture and runtime. |
+| world | `src/sim/gazebo_worlds/worlds/warehouse_aws.world.sdf` | Locked geometry + camera pose. |
+| config | `scripts/visibility_comparison/aws_f31b1_final_config.yaml` | MAIN F31_b1 comparison runtime (v7 GP, camera_xy_only, warning_band). |
+| saved a0 line | `scripts/visibility_comparison/aws_f86a_camera_xy_config.yaml` + `logs/visibility_comparison/f86a_camera_xy_v1/2/3` | Saved secondary `a0_west_to_a1_upper_blocked_mid` line for a future multi-task run. |
 
-## Exploratory AWS Line
+## Evidence Status
 
-| Status | Asset / Run Family | Notes |
-| --- | --- | --- |
-| exploratory | `logs/perception_datasets/aws_simseg_v2` | AWS detector data line |
-| exploratory | `logs/perception_models/aws_yolo_simseg_v2` | AWS detector line |
-| exploratory | `logs/visibility_comparison/aws_gp_v5` | Prior AWS GP line. NOTE: fit WITHOUT the R4 occluder ("C1-ONLY diagnostic" per old SDF comment) — not a C2-valid GP. Superseded by aws_gp_v6. |
-| exploratory (CURRENT) | `logs/visibility_comparison/aws_capture_v7` + `aws_targets_v7` + `aws_gp_targets_v7` + `aws_gp_v7` | F87 GP line on the LOCKED raised+back camera (z=4.8, y=−5.5; south/side walls moved with it). 912 frames, 647/912 detected (71%), driveable-only sample filter, tuned length_scale=0.90 / noise_var=0.05 / beta=0.5. A1 made observable by the camera move + length-scale (A1-west raw YOLO 0.74–0.83; ρ_plan ~0.55) WITHOUT de-occlusion; A4 rack-shadow stays low (~0.005). **F87 offline gate PASS: C1→NW-blind (d=0.19), C2→south-visible through A1 (d=0.35, clear).** Config `gp_artifact` points here. Figures: `gp_pipeline_aws_v7.pdf`, `F87_offline_rollout_v7.png`, `problem_setup_camera.pdf`. v6/v6b are STALE (old camera z=4.5, y=−4.9). |
-| stale (old camera) | `logs/visibility_comparison/aws_capture_v6` + `aws_targets_v6` + `aws_gp_targets_v6` + `aws_gp_v6` (+ `aws_gp_v6b`) | F86a v4 GP line: first C2-VALID GP on the cleaned geometry (R4 occluding crate stack, continuous R1 left shelf). 912 frames (24x20x4), 622/912 detected, camera [0,-4.9,4.5], 18-prism geometry embedded. Strong discriminating field: NW-blind band 0.013 vs south-visible 0.589 (`aws_gp_v6/Pmap_sanity.png`). FINDING: A1-upper goal is camera-poor with no observable approach → visibility-aware C2 stops safely before the blind mid-A1 band (principled; confirmed robust to 4x tighter goal prior), constant-R C1 commits. Offline route-split gate FAILs by design (C2 does not traverse a distinct both-reach route) — this is the stability/safe-stop regime, not a both-reach route-split. Config `aws_f86a_camera_xy_config.yaml` (`nogo_penalty_type: warning_band`, `nogo_weight: 2000`). DECISION (user): restore a both-reach route-split → needs world/goal adjustment so an observable approach to the goal exists, then GP re-recapture + Gazebo v4 campaign (DEFERRED). |
-| candidate (IN PROGRESS) | `logs/visibility_comparison/paper_final_v1` | Current AWS candidate runtime: one-shot global EFE route choice (H80/dt0.25, neutral multistart) followed by a shared simple proportional local tracker (`use_simple_local_controller:true`). The local tracker is execution plumbing, not the GP contribution; it uses odom yaw, configurable yaw gate, and a predicted mean-clearance gate. Config `aws_paper_final_config.yaml`. Evidence status remains candidate until the full artifact chain and final figures/tables are complete. |
-| diagnostic | `logs/visibility_comparison/localEFE_paper_v1` | Low-rate local belief-space EFE variant (`use_simple_local_controller:false`). Useful for diagnosing local solver behavior and belief-closed control, but not the active AWS candidate unless explicitly re-registered with a complete artifact chain. |
-| diagnostic | `logs/visibility_comparison/f24_r01_gazebo_smoke_v2` | F25 Gazebo smoke: both conditions crashed (geometry penetration); config aws_f24_r01_gazebo_smoke_config.yaml |
-| diagnostic | `logs/visibility_comparison/initial_rollout_diagnostics/` | F26 config (aws_f26_r01_gazebo_smoke_config.yaml) addresses F25 root causes: nogo_safe_distance 0.13→0.30, local_optimizer_maxiter 60→25 |
+- **a0 / F87 (saved secondary, OFFLINE):** offline gate PASS on aws_gp_v7 —
+  C1→NW-blind reaches (d≈0.19), C2→south-visible through A1 (d≈0.35, clear). This is
+  an OFFLINE global-plan result for the a0 task, not a closed-loop campaign.
+- **F31_b1 (MAIN): route-split OPEN.** Under the locked runtime both C1 and C2
+  currently optimize to the lower-sweep; the objective has no path-length term
+  (`control_weight=0`, `goal_progress=0`), so C1 has no incentive to take the shorter
+  occluded route. Connector seam artifact fixed. No closed-loop F31_b1 campaign is
+  valid as route-split evidence yet. See `active_research_state.md`.
 
-## Timing And Initial-Plan Diagnostics
+## Superseded / Archived (moved out of repo)
 
-| Status | Asset / Run Family | Notes |
-| --- | --- | --- |
-| diagnostic | `timing_presentation/figures/` | horizon, runtime, yaw, tracker, and route-choice diagnostic figures (F1+); useful for method development, not evidence unless tied to final logs |
-| diagnostic | `logs/visibility_comparison/initial_rollout_diagnostics/` | initial-plan sweeps showing objective/optimizer behavior before Gazebo validation |
+| Asset family | Reason |
+| --- | --- |
+| `aws_gp_v5`, `aws_gp_v6`, `aws_gp_v6b` | Superseded GPs (no-occluder / old camera z=4.5–4.9). |
+| `aws_capture_v6/v7`, `aws_targets_*`, perception_datasets | Raw capture + training data; fitted v7 GP + detector kept, raw archived. |
+| `current_capture/targets/gp`, `paper_taskA_*`, `paper_final_v1` | Compact-benchmark + pre-v7 candidate runs (old runtime H80/odom-yaw/log_barrier). |
+| `localEFE_paper_v1` | Abandoned local belief-space EFE variant (`use_simple_local_controller:false`). |
+| f24–f85 smokes/route-choice/timing, probes, dry runs | Exploratory tuning history. |
 
-## Invalid Or Rejected Lines
+## Invalid / Rejected Lines (do not revive as evidence)
 
-| Status | Line | Reason |
-| --- | --- | --- |
-| invalid | visible-goal AWS route-choice probe | baseline behavior already used the detour-like route; learned condition stalled at high ambiguity weight |
-| invalid | dark-final-goal AWS route-choice probe | final goal was itself camera-poor, confounding route-choice interpretation |
-| invalid | waypoint-driven mission behavior | route sequence is externally imposed rather than emerging from EFE |
-| invalid | oversized-ambiguity-only demonstration | route difference is not scientifically persuasive if it only appears by overwhelming the rest of the objective |
+| Line | Reason |
+| --- | --- |
+| visible-goal AWS route-choice probe | baseline already took the detour route; learned condition stalled at high ambiguity weight |
+| dark-final-goal AWS route-choice probe | final goal itself camera-poor, confounding route-choice |
+| waypoint-driven mission behavior | route externally imposed, not emergent from EFE |
+| oversized-ambiguity-only demonstration | not persuasive if it only appears by overwhelming the objective |
 
-## Adding A New Evidence Line
+## Adding a new evidence line
 
-Add a row here only after the chain is complete. Until then, mark the run
-`exploratory` or `diagnostic` and avoid paper-result language.
-
-For the current final AWS experiment plan, see
-`docs/final_experiment_definition.md`.
+Add a row only after the chain is complete. Until then mark `exploratory` /
+`diagnostic` and avoid paper-result language. The runtime contract is
+`docs/paper_runtime_contract.yaml`; current status is `docs/active_research_state.md`.

@@ -101,16 +101,23 @@ controller change should be treated as a separate planner variant.
 
 ## No-go / collision
 
-| name | smoke | probe | dark-probe | what it does |
-|---|---|---|---|---|
-| `nogo_weight` | 160 | 160 | 160 | scalar in front of the softplus barrier on rack/stack signed distance |
-| `nogo_safe_distance` | 0.35 | 0.35 | 0.35 | barrier centre — penalty rises sharply inside this m offset from any obstacle |
-| `nogo_softplus_scale` | 0.06 | 0.06 | 0.06 | softplus sharpness; smaller = harder barrier |
-| `nogo_penalty_type` | softplus | softplus | softplus | also supports `gaussian` / `logbarrier`; softplus is the well-tested choice |
-| `robot_collision_radius_m` | 0.125 | 0.125 | 0.125 | radius used for trajectory diagnostics |
+Current paper-facing values are from `aws_f31b1_final_config.yaml` (2026-06-10). The
+no-go is now a hinged-log **`warning_band`** keep-in penalty (replaces the old softplus /
+`log_barrier` interior-biased barrier, which collapsed the C2 route split at weight>200).
 
-To make the planner "more willing" to push through tight spots: lower `nogo_safe_distance`
-(0.35 → 0.25) — but only if the robot footprint actually allows it.
+| name | aws_final | what it does |
+|---|---|---|
+| `nogo_mode` | `keep_in` | penalize leaving the driveable prism union (vs `keep_out` obstacle distance) |
+| `nogo_penalty_type` | `warning_band` | hinged-log: `near_weight*log(1+(max(b-c,0)/b)^2) + weight*(max(-c,0)/eps)^2`; exactly 0 for valid interior (clearance c ≥ b) |
+| `nogo_weight` | 2000.0 | scalar on the violation term; high weight crushes violations without biasing valid-route choice |
+| `nogo_warning_band` (b) | 0.05 | width of the soft warning band inside the boundary |
+| `nogo_near_weight` | 50.0 | weight on the in-band log term |
+| `nogo_safe_distance` | 0.15 | clearance offset baked into the signed distance |
+| `robot_collision_radius_m` | 0.125 | radius used for trajectory diagnostics |
+
+`use_belief_nogo_cost: false` for the global solve (the belief-nogo route mechanism is
+retired). To make the planner "more willing" to push through tight spots, reduce
+`nogo_safe_distance` — but only if the footprint allows it.
 
 ---
 
@@ -214,8 +221,8 @@ push through rather than stall.
 
 - First raise `optimizer_maxfun` (1200 → 1800).
 - If still pinned, raise `optimizer_maxiter` (180 → 300).
-- If still pinned, the EFE landscape is too non-convex — softening `r_miss_uv` (15 → 10) or
-  `nogo_softplus_scale` (0.06 → 0.08) helps gradient stability.
+- If still pinned, the EFE landscape is too non-convex — softening `r_miss_uv` (15 → 10)
+  helps gradient stability.
 
 ### "Look-ahead is too short to see the decision-relevant feature"
 

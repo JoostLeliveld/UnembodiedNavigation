@@ -8,35 +8,31 @@ claim narrow enough that the implementation, figures, and text can stay aligned.
 The primary runtime entry point is:
 
 ```bash
-ros2 launch experiments warehouse_primary_comparison.launch.py \
-  world:=warehouse_occ_light.world.sdf \
-  task:=shadow_tradeoff_a \
-  planner:=visibility_aware_efe \
-  yolo_model:=/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/yolo_simseg_smoke/model.pt \
-  visibility_artifact_path:=/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz
-```
-
-The compact benchmark campaign wrapper is:
-
-```bash
 python3 scripts/visibility_comparison/run_visibility_campaign.py \
-  --config scripts/visibility_comparison/paper_campaign_config.yaml
+  --config scripts/visibility_comparison/aws_f31b1_final_config.yaml \
+  --log-root logs/visibility_comparison/aws_f31b1_final_v1
 ```
+
+That config pins the world (`warehouse_aws.world.sdf`), detector
+(`aws_yolo_simseg_v2/model.pt`), and GP (`aws_gp_v7/yolo_score_raw_gp.npz`).
 
 ## Current Paper Claim Surface
 
 | Role | Code name | Paper meaning |
 | --- | --- | --- |
-| Core world | `warehouse_aws.world.sdf` | AWS route-choice benchmark (B1 task) |
-| Main tasks | `shadow_tradeoff_a`, `shadow_tradeoff_b`, `sanity_open` | compact route-choice and sanity tasks |
-| Baseline | `constant_R_efe` | EFE with spatially uniform detector-observation covariance |
-| Method | `visibility_aware_efe` | EFE with GP-derived state-dependent detector-observation covariance |
-| Optional ablation | `risk_only_ablation` | GP covariance active, ambiguity disabled |
-| GP artifact | `logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz` | compact planner-facing reliability artifact |
+| Core world | `warehouse_aws.world.sdf` | AWS route-choice benchmark |
+| Main task | `F31_b1_apron_a3_mid` | apron → A3-mid route choice (occluded mid vs visible lower-sweep) |
+| Saved secondary | `a0_west_to_a1_upper_blocked_mid` | saved a0 line for a future multi-task run |
+| Baseline (C1) | `constant_R_efe` | EFE with spatially uniform detector-observation covariance |
+| Method (C2) | `visibility_aware_efe` | EFE with GP-derived state-dependent detector-observation covariance |
+| Optional ablation (C3) | `risk_only_ablation` | GP covariance active, ambiguity disabled |
+| GP artifact | `logs/visibility_comparison/aws_gp_v7/yolo_score_raw_gp.npz` | planner-facing reliability artifact (camera z=4.8, y=-5.5) |
 
-`warehouse_aws.world.sdf` is an exploratory Experiment B world. Do not claim AWS
-results as paper evidence until the full chain is complete: final world
-geometry, detector, GP, smoke run, seeded logs, metrics, and figures.
+`warehouse_aws.world.sdf` is the paper-facing candidate world. Do not claim AWS
+results as paper evidence until the full chain is complete (seeded logs, metrics,
+figures). The F31_b1 closed-loop route-split is currently OPEN — see
+`active_research_state.md`. The former compact-benchmark line
+(`warehouse_occ_light`, `shadow_tradeoff_*`, `current_gp`) is retired/archived.
 
 ## Method Layers
 

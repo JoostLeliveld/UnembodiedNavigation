@@ -15,17 +15,13 @@ world_profiles.yaml
 -> warehouse_primary_comparison.launch.py
 ```
 
-The paper-facing GP artifact is fitted before navigation trials and then held fixed. The compact benchmark uses:
+The paper-facing GP artifact is fitted before navigation trials and then held fixed. The current AWS paper-facing line uses:
 
-- world: `warehouse_occ_light.world.sdf`
-- artifact: `logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz`
+- world: `warehouse_aws.world.sdf` (external camera locked at z=4.8, y=-5.5)
+- artifact: `logs/visibility_comparison/aws_gp_v7/yolo_score_raw_gp.npz`
 - planner-facing field: `P_conservative_plan_map`
 
-The current AWS candidate line uses:
-
-- world: `warehouse_aws.world.sdf`
-- artifact: `logs/visibility_comparison/aws_gp_v5/yolo_score_raw_gp.npz`
-- planner-facing field: `P_conservative_plan_map`
+(The former compact-benchmark line — `warehouse_occ_light` + `current_gp` — is retired/archived.)
 
 Visibility-aware planner runs must pass `visibility_artifact_path` explicitly. The primary launch now fails instead of silently falling back to profile defaults.
 
@@ -64,18 +60,16 @@ Observability is not a direct reward in the paper path.
 The stable part of the estimator is:
 
 - `x,y`: YOLO-selected pixel projected to the ground plane by camera geometry.
-- selected pixel source in the active AWS runtime: `bbox_bottom` (mask-bottom is logged as a diagnostic, not used for the selected point).
+- selected pixel source in the active AWS runtime: `mask_bottom` (`yolo_use_masks: true`).
 - GP input: planar `x,y` only.
 
-The heading source is run-config dependent and is recorded in `run_manifest.json`:
-
-| Run setting | Manifest value | Meaning |
-| --- | --- | --- |
-| `use_displacement_heading:=false`, `use_odom_heading_correction:=true` | `odometry_heading` | heading anchored by odometry |
-| `use_displacement_heading:=true`, `use_odom_heading_correction:=false` | `pixel_displacement_heading` | diagnostic heading from consecutive camera-derived position updates |
-| `keypoint_marker_world_z > 0` | `keypoint_bev_heading_with_odom_fallback` | visual keypoint heading with odometry fallback |
-
-The current paper-facing AWS configs use odometry heading. If `/state/bev` becomes stale, planner code should either use a predicted belief or refuse planning; stale latest camera states must not be interpreted as fresh localization.
+The current paper-facing AWS configs use **`heading_update_mode: camera_xy_only`**:
+odometry provides the dead-reckoning prediction, and pixel `(x,y)` updates influence
+heading only indirectly through the unicycle prediction cross-covariance — there is no
+separate odom-yaw anchor and no keypoint/visual heading. (The legacy
+`odom_measurement` / `visual_heading` / `keypoint_bev_heading` modes are retired.)
+If `/state/bev` becomes stale, planner code should use a predicted belief or refuse
+planning; stale latest camera states must not be interpreted as fresh localization.
 
 ## Metrics
 

@@ -1,160 +1,83 @@
 # Active Research State
 
-Last updated: 2026-06-03.
+Last updated: 2026-06-10.
+
+This is the honest current truth. The machine-readable runtime contract is
+`docs/paper_runtime_contract.yaml` (v0.5); evidence-chain status is
+`docs/experiment_registry.md`; dated history is `docs/decision_log.md`.
 
 ## Current Paper Position
 
-The compact benchmark remains the cleanest validated mechanism evidence already
-available in the repository. The AWS-style warehouse line is now the active
-paper-facing candidate, but it should be treated as final paper evidence only
-after the complete artifact chain is present:
+The AWS-style warehouse line is the paper-facing candidate. It is final paper
+evidence only when the complete artifact chain is present (fixed world+camera,
+validated detector, fitted GP, locked config, complete seeded logs, figures from
+those logs, wording matching the runtime). The claim axis is localization
+safety / route observability, NOT deterministic goal-reaching superiority.
 
-- fixed world and camera pose;
-- validated YOLO detector for that world;
-- fitted AWS GP artifact;
-- locked config;
-- complete C1/C2/C3 seeded logs;
-- final figures/tables generated from those logs;
-- paper wording aligned with the actual runtime method.
+## Locked Setup (2026-06-10)
 
-The current AWS claim should be framed as localization-safety and route
-observability, not as deterministic goal-reaching superiority.
+- World `warehouse_aws.world.sdf`; external camera locked at **z=4.8, y=-5.5**.
+- GP **`aws_gp_v7`** (length_scale 0.90, beta 0.5, noise_var 0.05); detector
+  **`aws_yolo_simseg_v2`**. v5/v6/v6b GPs and earlier cameras are superseded.
+- Runtime: global long-horizon EFE (horizon 120, dt 0.25) for route choice +
+  a shared **simple proportional local tracker** (`use_simple_local_controller:true`).
+  Heading = **`camera_xy_only`** (odom dead-reckoning predict; pixel (x,y) updates
+  couple to heading only via the prediction cross-covariance — no odom-yaw anchor,
+  no keypoint/visual heading). No-go = hinged-log **`warning_band`** keep_in,
+  weight 2000, band 0.05 (the old log_barrier / belief-nogo mechanism is retired).
+- Conditions: **C1** constant_R_efe (no GP), **C2** visibility_aware_efe (GP modulates
+  camera (x,y) covariance only — not heading). Optional **C3** GP-risk-only ablation.
+- Main task **`F31_b1_apron_a3_mid`** (start (3.30,-1.00), goal (1.00,1.75)).
+  `a0_west_to_a1_upper_blocked_mid` is the **saved secondary** line
+  (config `aws_f86a_camera_xy_config.yaml`) for a future multi-task run.
+- Active config: `scripts/visibility_comparison/aws_f31b1_final_config.yaml`.
 
 ## Active Hypothesis
 
-Learned observation reliability should make the planner prefer a longer route
-through better-observed floor space when that route keeps the belief more
-localized near the known driveable / forbidden-zone layer. The constant-R
-baseline may still reach the goal, but it is expected to do so with larger
-localization error, larger p95 error, worse yaw consistency, and lower safety
-margin in camera-poor regions.
+Learned observation reliability should make C2 prefer a more-observable route (or
+delay commitment / stop safely) where that keeps the belief localized, while the
+constant-R baseline C1 may take a shorter visually-unreliable route and suffer
+larger localization error or collision risk. The effect must emerge from
+planner-facing covariance, shared driveability handling, horizon, the
+condition-neutral goal-prior schedule, and optimizer basin handling — NOT from
+mission waypoints, GP-dependent route seeds, or an oversized ambiguity weight.
 
-The effect must emerge from planner-facing covariance, shared driveability
-handling, and condition-neutral optimizer basin handling. It must not be
-created by mission waypoints, GP-dependent route seeds, or simply overwhelming
-the objective with an oversized ambiguity weight.
+## OPEN blocker (F88, unresolved)
 
-## Locked Runtime Interpretation
+On F31_b1 under this runtime, **the intended route-split does not yet emerge**:
+across the goal-prior sweep both C1 and C2 optimize to the lower-sweep (visible)
+route. Root cause from offline diagnosis: with `control_weight=0` and
+`goal_progress_cost=0` the objective has **no path-length/effort term**, so C1 has
+no incentive to prefer the shorter occluded mid/connector route — when both routes
+reach, C1 falls back to the marginally-lower-no-go lower-sweep, same as C2. The
+connector seam artifact (false keep-in violation at edge-touching driveable prisms)
+was fixed by overlapping the connector prisms. The split question is therefore an
+objective-design question (whether to add a condition-neutral effort term), not a
+seam/visibility/optimizer bug. No closed-loop F31_b1 campaign is currently valid as
+route-split evidence.
 
-The current AWS runtime is hierarchical:
+## Do NOT claim yet
 
-- a global EFE solve performs route-level planning;
-- neutral multistart seeds may use the known 2D driveable/lane layout;
-- the selected global plan is converted into planner-derived waypoints;
-- a shared local tracker follows those waypoints;
-- local tracking is execution plumbing and is not the GP contribution.
-
-The C1/C2 comparison is:
-
-| Condition | Paper name | GP? | Risk | Ambiguity | Intended difference |
-| --- | --- | --- | --- | --- | --- |
-| C1 | constant-observability EFE | no | active | active | constant camera covariance |
-| C2 | learned-observability EFE | yes | active | active | GP-derived camera covariance |
-| C3 | GP-risk-only ablation | yes | active | off | tests whether ambiguity is needed |
-
-The only intended C1/C2 difference is planner-facing camera observation
-covariance. The task, detector, GP availability except for C1 queries, known
-driveable barrier, tracker, noise, seeds, horizons, optimizer budgets, and
-candidate route seeds must be shared.
-
-Runtime metrics must start after the first non-trivial command. Camera-derived
-`/state` must also be interpreted with freshness: `state_available` only means a
-latest state message exists, not that the current frame produced a fresh YOLO
-update. Fresh camera-state error, stale latest-state error, and planner
-truth-belief error should be reported separately when diagnosing perception.
-
-Runtime cleanup note (2026-06-05): planner fallback paths must not silently use
-stale `/state/bev`. When pixel correction is disabled or a camera update is
-stale, planning should use the predicted belief from the last valid state or
-refuse to plan until a fresh state is available. Camera-off/correction-off
-ablations created before this rule are diagnostic only.
-
-Local execution note (2026-06-05): the simple proportional local tracker is
-shared execution plumbing, not the GP contribution. It tracks planner-derived
-waypoints with odometry yaw and a configurable yaw gate, and it has a lightweight
-predicted mean-clearance gate. Do not describe it as a local EFE/belief-tube
-optimizer unless `use_simple_local_controller:false` and the local EFE path is
-actually used.
-
-## Current AWS Candidate
-
-Primary candidate config:
-
-`scripts/visibility_comparison/aws_paper_final_config.yaml`
-
-Primary candidate log root:
-
-`logs/visibility_comparison/paper_final_v1`
-
-Primary task:
-
-```text
-world: warehouse_aws.world.sdf
-task:  F31_b1_apron_a3_mid
-start: (3.30, -1.00, yaw=0.0)
-goal:  (1.00, 1.75)
-```
-
-Current inspected archived summaries:
-
-Runtime localization metrics are interpreted as after-first-command quantities.
-Pre-command launch, global-solve, and estimator warm-up rows must not be mixed
-into these means.
-These values predate the direct-warm-start cleanup in the current candidate
-config, so they are mechanism evidence to regenerate rather than final locked
-paper evidence.
-
-| Condition | Completed seeds | Outcome | Mean path | Mean truth-belief error after first cmd | Mean p95 truth-belief error after first cmd |
-| --- | ---: | --- | ---: | ---: | ---: |
-| C1 constant-R | 5 | 5/5 goal reached | 4.64 m | 0.402 m | 1.90 m |
-| C2 learned-R | 5 | 5/5 goal reached | 6.81 m | 0.100 m | 0.17 m |
-| C3 risk-only | 5 | 5/5 goal reached | 6.89 m | 0.101 m | 0.16 m |
-
-Current interpretation:
-
-> The constant-observability baseline takes a shorter route and can reach the
-> goal, but with much larger localization error. The learned-observability
-> planner takes a longer route and reaches with lower localization error and a
-> more stable belief.
-
-C3 currently behaves similarly to C2, which suggests the dominant AWS mechanism
-is GP-conditioned belief-risk / driveable-margin behavior rather than an
-ambiguity-only route flip. The paper should present this honestly.
-
-Do not claim yet:
-
-- C1 fails while C2 succeeds;
+- a closed-loop F31_b1 route-split (it is not present in any current log);
+- C1 fails while C2 succeeds on F31_b1;
 - AWS is final paper evidence;
 - the GP directly models physical occlusion geometry;
-- YOLO provides heading;
-- local waypoint tracking is itself the visibility-aware contribution.
+- YOLO/camera provides heading;
+- the simple local tracker is itself the visibility-aware contribution.
 
-## Runtime Details To Keep Paper-Accurate
+## Runtime details to keep paper-accurate
 
-- Current YOLO-selected localization pixel is bounding-box bottom center. Mask
-  diagnostics exist, but mask-bottom is not the selected pixel source.
-- Camera updates provide `(x, y)` through ground-plane projection.
-- Heading comes from odometry.
-- Projection/calibration uncertainty is not separately propagated into EKF or
-  EFE covariance.
-- The known 2D driveable / forbidden-zone layer is shared across conditions.
-- The 2-sigma belief-tube driveable barrier is a feasibility/safety mechanism,
-  not learned occlusion.
-- Command and encoder noise are part of the AWS realism claim and should remain
-  on for final AWS campaigns.
-- Crash/contact ends a run and must be tracked separately from stuck, timeout,
-  and goal reached.
+- Camera updates provide `(x, y)` via ground-plane projection; heading is
+  odometry-backed dead-reckoning (camera_xy_only), not camera-derived.
+- Projection/calibration uncertainty is not separately propagated into EKF/EFE covariance.
+- The known 2D driveable / forbidden-zone layer (keep_in warning_band) is shared across conditions.
+- Command and encoder noise stay ON for final AWS campaigns.
+- Crash/contact ends a run and is tracked separately from stuck/timeout/goal-reached.
+- Runtime means start after the first non-trivial command; launch/global-solve/warm-up are reported separately.
 
-## Immediate Next Decisions
+## Immediate next decisions
 
-1. Run the uniform-visible sanity task with the same locked runtime.
-2. Generate final dashboards, summary tables, and cost-decomposition figures
-   from the completed logs.
-3. Clean stale inherited comments from `aws_paper_final_config.yaml`.
-4. Once the artifact chain is complete, decide whether the thesis/paper presents
-   AWS as the main result or as an Experiment B extension alongside the compact
-   benchmark.
-
-For the detailed final experiment suite, use:
-
-`docs/final_experiment_definition.md`
+1. Resolve the F88 objective-design question (whether a condition-neutral
+   path-length/effort term, or a task/geometry choice, yields the route-split honestly).
+2. Only then run the seeded F31_b1 closed-loop campaign and regenerate figures/tables from those logs.
+3. Decide whether AWS is the main result or an Experiment-B extension once the chain is complete.

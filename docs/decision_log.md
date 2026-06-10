@@ -3,6 +3,18 @@
 Short, dated decisions that prevent the project from re-litigating the same
 scientific choices.
 
+## 2026-06-10 — current state snapshot (read first)
+
+- **Locked setup:** world `warehouse_aws.world.sdf`, camera z=4.8/y=-5.5, GP `aws_gp_v7`,
+  detector `aws_yolo_simseg_v2`, MAIN task `F31_b1_apron_a3_mid` (a0 = saved secondary),
+  runtime = global EFE H120 + simple local tracker, `camera_xy_only` heading, `warning_band`
+  keep-in no-go (w=2000). Single runtime contract = `docs/paper_runtime_contract.yaml` v0.5.
+- **OPEN (F88):** F31_b1 route-split does not yet emerge — objective has no path-length
+  term (`control_weight=0`, `goal_progress=0`), so both C1/C2 prefer the lower-sweep.
+  Connector seam artifact fixed. No closed-loop F31_b1 split evidence exists yet.
+- **Repo cleanup (pass 1+2):** non-paper material moved to `_archive_nonpaper/` and stale
+  logs/docs deleted; docs consolidated (3 runtime contracts → 1). See `DEPRECATED_REGISTRY.md`.
+
 ## 2026-06-10
 
 - Lock the external camera at **z=4.8 (+0.3), y=−5.5 (+0.6 back)** to fix corner/FOV

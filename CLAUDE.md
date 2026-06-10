@@ -22,12 +22,12 @@ Read these before changing experiment logic or paper-facing docs:
 - `docs/active_research_state.md`
 - `docs/decision_log.md`
 - `docs/experiment_registry.md`
+- `docs/paper_runtime_contract.yaml` (the single runtime contract)
 - `docs/paper_alignment.md`
 - `docs/runtime_dataflow.md`
-- `docs/paper_runtime_contract.yaml`
-- `docs/publication_checklist.md`
 - `docs/CONSISTENCY_CHECKLIST.md`
 - `docs/PLANNER_HYPERPARAMETERS.md`
+- `docs/perception_details.md`
 
 ## Repo-Specific Guardrails
 
