@@ -170,6 +170,9 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
     if not manifest:
         return False, f'missing run_manifest.json in {run_dir_str}'
 
+    task_name = entry.get('task')
+    task_cfg = cfg['tasks'].get(task_name, {}) if task_name else {}
+
     expected_yolo_model = str(Path(cfg['yolo_model']).expanduser().resolve(strict=False))
     actual_yolo_model = str(manifest.get('yolo_model', '') or '')
     if _resolve_for_compare(actual_yolo_model) != _resolve_for_compare(expected_yolo_model):
@@ -201,12 +204,18 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'local_goal_prior_u_std_final', 'local_goal_prior_v_std_final',
         'waypoint_spacing_m', 'waypoint_arrival_radius_m',
         'local_replan_min_remaining_s', 'cmd_publish_rate',
+        'encoder_noise_linear_slip_mean',
+        'encoder_noise_linear_slip_std',
+        'encoder_noise_angular_slip_mean',
         'encoder_noise_angular_slip_std',
+        'encoder_noise_linear_additive_std',
         'encoder_noise_angular_additive_std',
+        'encoder_noise_correlation_alpha',
     )
     for key in numeric_keys:
-        if key in cfg and (key not in manifest or not _float_close(manifest.get(key), cfg[key])):
-            return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")}, config expects {cfg[key]}'
+        expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
+        if expected is not None and (key not in manifest or not _float_close(manifest.get(key), expected)):
+            return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")}, config expects {expected}'
 
     bool_keys = (
         'use_nogo_cost',
@@ -233,8 +242,9 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'use_truth_localization',
     )
     for key in bool_keys:
-        if key in cfg and (key not in manifest or bool(manifest.get(key)) != bool(cfg[key])):
-            return False, f'{key} mismatch: run used {manifest.get(key)}, config expects {cfg[key]}'
+        expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
+        if expected is not None and (key not in manifest or bool(manifest.get(key)) != bool(expected)):
+            return False, f'{key} mismatch: run used {manifest.get(key)}, config expects {expected}'
 
     string_keys = (
         'nogo_penalty_type',
@@ -245,8 +255,9 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'heading_update_mode',
     )
     for key in string_keys:
-        if key in cfg and str(manifest.get(key, '')) != str(cfg[key]):
-            return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")!r}, config expects {cfg[key]!r}'
+        expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
+        if expected is not None and str(manifest.get(key, '')) != str(expected):
+            return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")!r}, config expects {expected!r}'
 
     if CONDITION_PLANNER.get(condition_id) != 'constant_R_efe':
         actual = str(manifest.get('visibility_artifact_path', '') or '')
@@ -322,8 +333,13 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'command_noise_linear_additive_std:={cfg.get("command_noise_linear_additive_std", 0.008)}',
         f'command_noise_angular_additive_std:={cfg.get("command_noise_angular_additive_std", 0.035)}',
         f'command_noise_correlation_alpha:={cfg.get("command_noise_correlation_alpha", 0.85)}',
+        f'encoder_noise_linear_slip_mean:={cfg.get("encoder_noise_linear_slip_mean", 0.02)}',
+        f'encoder_noise_linear_slip_std:={cfg.get("encoder_noise_linear_slip_std", 0.05)}',
+        f'encoder_noise_angular_slip_mean:={cfg.get("encoder_noise_angular_slip_mean", 0.0)}',
         f'encoder_noise_angular_slip_std:={cfg.get("encoder_noise_angular_slip_std", 0.03)}',
+        f'encoder_noise_linear_additive_std:={cfg.get("encoder_noise_linear_additive_std", 0.004)}',
         f'encoder_noise_angular_additive_std:={cfg.get("encoder_noise_angular_additive_std", 0.020)}',
+        f'encoder_noise_correlation_alpha:={cfg.get("encoder_noise_correlation_alpha", 0.80)}',
         f'use_odom_heading_correction:={str(cfg.get("use_odom_heading_correction", True)).lower()}',
         f'use_displacement_heading:={str(cfg.get("use_displacement_heading", False)).lower()}',
         f'odom_heading_timeout_s:={cfg.get("odom_heading_timeout_s", 0.75)}',
@@ -346,6 +362,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
     if planner != 'constant_R_efe':
         cmd.append(f'visibility_artifact_path:={gp_artifact}')
 
+    task_cfg = cfg['tasks'].get(task_name, {})
     for key in (
         'observation_risk_scale', 'ambiguity_term_scale',
         'risk_weight_obs', 'ambiguity_weight',
@@ -387,8 +404,9 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'stuck_max_goal_improvement_m', 'stuck_cmd_fraction_min',
         'stuck_idle_cmd_fraction_max',
     ):
-        if key in cfg and not str(cfg[key]).startswith('[FILL'):
-            cmd.append(f'{key}:={cfg[key]}')
+        val = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
+        if val is not None and not str(val).startswith('[FILL'):
+            cmd.append(f'{key}:={val}')
 
     # Drop empty-valued launch args (e.g. yolo_device when unset): ros2 launch
     # rejects a bare 'name:=', and omitting it lets the launch file use its own

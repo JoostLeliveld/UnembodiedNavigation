@@ -1,7 +1,7 @@
 # Planner Hyperparameter Reference
 
-The EFE planner has ~30 tunable knobs. This document explains what each one does, current
-values in the three active campaign configs, and recipes for eliciting specific behaviours.
+The EFE planner has ~30 tunable knobs. This document explains what each one does,
+the current locked AWS/F31 values, and recipes for eliciting specific behaviours.
 
 **The clean-EFE invariant**: do NOT add new cost terms to
 `src/planning/planning/core/casadi_efe.py`. The objective stays
@@ -12,9 +12,8 @@ optimiser), never new terms.
 References:
 - Code: `src/planning/planning/planners/base_planner.py` (constructor signature has the
   full list), `src/planning/planning/core/casadi_efe.py` (math).
-- Active configs: `scripts/visibility_comparison/paper_campaign_config.yaml`,
-  `parcel_sortation_smoke_config.yaml`, `putaway_route_choice_smoke_config.yaml`,
-  and `aws_smoke_config.yaml`.
+- Active paper-facing config: `scripts/visibility_comparison/aws_f31b1_final_config.yaml`.
+  Older smoke/probe configs are historical tuning material, not the locked AWS runtime.
 
 ---
 
@@ -25,12 +24,13 @@ The CasADi objective is
 with `risk_scale = risk_weight_obs · observation_risk_scale` and
 `amb_scale = ambiguity_weight · ambiguity_term_scale`.
 
-| name | smoke | probe | dark-probe | what it does | tune up when | tune down when |
-|---|---|---|---|---|---|---|
-| `ambiguity_weight` | 6 | 10 | 10 | base weight on the entropy of the conditional observation covariance per step | you want C2 to detour around shadow more aggressively | C2 refuses to enter shadow even when shadow is unavoidable |
-| `ambiguity_term_scale` | 1 | 1 | 1 | second multiplier on ambiguity (kept as 1 so we tune only the weight); change only if porting math from another formulation | — | — |
-| `risk_weight_obs` | 1 | 1 | 1 | base weight on KL-to-goal-observation per step | only if goal-attraction is too weak overall | rarely — usually you want to *widen the goal prior* instead |
-| `observation_risk_scale` | 1.25 | 1.25 | 1.25 | second multiplier on risk; kept at 1.25 across configs | only if you want to amplify goal-pull without touching the goal-prior width | — |
+| name | aws_f31b1 | what it does | tune up when | tune down when |
+|---|---:|---|---|---|
+| `ambiguity_weight` | 18.0 | base weight on the entropy of the conditional observation covariance per step | you want C2 to detour around camera-poor regions more aggressively | ambiguity dominates logged route-seed costs or C2 refuses unavoidable camera-poor regions |
+| `ambiguity_term_scale` | 1.0 | second multiplier on ambiguity; kept at 1 so the weight is the main ambiguity knob | — | — |
+| `risk_weight_obs` | 1.0 | base weight on KL-to-goal-observation per step | only if goal-attraction is too weak overall | rarely — usually you want to *widen the goal prior* instead |
+| `observation_risk_scale` | 1.0 | second multiplier on risk; normalized so `risk_scale = risk_weight_obs` | only if you want to amplify goal-pull without touching the goal-prior width | — |
+| `control_weight` | 0.0 | command/effort term | not currently used for the paper-facing F31 comparison | if route choice should not contain a direct path-length/effort preference |
 
 **Practical rule**: keep `goal_prior_u_std_final` and `goal_prior_v_std_final` no smaller
 than the shadow covariance scale unless you intentionally want a very aggressive
@@ -38,59 +38,73 @@ goal-attraction term. A tight final goal prior can make the trace term dominate 
 planner enters shadow, so changes here must be treated as method-level tuning and rerun
 through the same evidence pipeline.
 
+There is deliberately **no direct visibility reward** in the locked config: the code has
+no `visibility_weight` objective term. The GP changes planner-facing camera `(x,y)`
+covariance for C2; it is not added as a reward.
+
 ---
 
 ## Visibility model (R_plan blending)
 
-| name | smoke | probe | dark-probe | what it does |
-|---|---|---|---|---|
-| `r_visible_uv` | 2.5 | 2.5 | 2.5 | observation-noise std (px) when `p_vis_eff ≈ 1`. Lower = sharper sensor where visible. |
-| `r_miss_uv` | 15 | 15 | 15 | observation-noise std (px) when `p_vis_eff ≈ 0`. Higher = fuzzier sensor in shadow. |
-| `visibility_sigma_kappa` | 1.0 | 1.0 | 1.0 | UT spread for the sigma-point expectation `E[p_vis(m, S)]`. Higher = more conservative widening of p_vis under belief uncertainty. |
+| name | aws_f31b1 | what it does |
+|---|---:|---|
+| `r_visible_uv` | 2.5 | observation-noise std (px) when `p_vis_eff ≈ 1`. Lower = sharper sensor where visible. |
+| `r_miss_uv` | 40.0 | observation-noise std (px) when `p_vis_eff ≈ 0`. Higher = fuzzier sensor in shadow. |
+| `visibility_sigma_kappa` | 1.0 | UT spread for the sigma-point expectation `E[p_vis(m, S)]`. Higher = more conservative widening of p_vis under belief uncertainty. |
 
 The precision-blending formula is `1/R_plan = p_vis·(1/R_vis) + (1-p_vis)·(1/R_miss)`, so
 R_plan transitions sharply with p_vis (precisions add linearly; r_plan recovers like
 1/sqrt(prec)). To soften the shadow boundary in the planner without retraining the GP,
-reduce `r_miss_uv` (e.g., 15 → 10) — that compresses the dynamic range of R_plan and the
+reduce `r_miss_uv` — that compresses the dynamic range of R_plan and the
 ambiguity term becomes less aggressive at shadow entries.
+
+Detector-side settings that feed this observation path are also locked in the F31 config:
+`yolo_imgsz=640`, `yolo_conf_threshold=0.10`, `yolo_iou_threshold=0.45`,
+`yolo_target_class=robot`, `yolo_class_id=-1` (class-name filter), `yolo_use_masks=true`,
+`yolo_min_mask_area_px=12`, and `yolo_mask_bottom_band_px=3`. Current code still selects
+the bbox bottom-center as the localization pixel; masks are computed and logged as
+diagnostics.
 
 ---
 
 ## Goal prior (scheduling of the goal observation distribution)
 
-| name | smoke | probe | dark-probe | what it does |
-|---|---|---|---|---|
-| `goal_prior_u_std_start` | 80 | 80 | 80 | goal-pixel std at horizon step 0 (wide) |
-| `goal_prior_u_std_final` | 20 | 20 | **80** | goal-pixel std at horizon step `goal_progress_n_steps` (tight) |
-| `goal_prior_v_std_start` | 80 | 80 | 80 | same as `_u_` but in v-axis |
-| `goal_prior_v_std_final` | 20 | 20 | **80** | same as `_u_` but in v-axis |
-| `goal_tightening_power` | 0.45 | 0.45 | 0.45 | exponent on `progress` before smoothstep — lower = tightens earlier in the horizon |
-| `goal_progress_n_steps` | 90 | 90 | 90 | number of steps over which the schedule interpolates start→final |
+| name | aws_f31b1 | what it does |
+|---|---:|---|
+| `goal_prior_u_std_start` | 50.0 | goal-pixel std at horizon step 0 (wide) |
+| `goal_prior_u_std_final` | 12.0 | goal-pixel std at horizon step `goal_progress_n_steps` (tight) |
+| `goal_prior_v_std_start` | 50.0 | same as `_u_` but in v-axis |
+| `goal_prior_v_std_final` | 12.0 | same as `_u_` but in v-axis |
+| `goal_tightening_power` | 0.45 | exponent on `progress` before smoothstep — lower = tightens earlier in the horizon |
+| `goal_progress_n_steps` | 90 | number of steps over which the schedule interpolates start→final |
+| `discount_gamma` | 0.995 | per-step discount factor |
 
 **The wider the goal prior, the weaker the goal-pull**, because `(μ-μ_goal)^T Σ_goal^{-1}
 (μ-μ_goal)` shrinks quadratically with σ_goal. This is the lever to make C2 willing to
 detour. Re-run `scripts/visibility_comparison/efe_offline_lab.py` when a fresh sweep is
 needed; generated plots are scratch outputs and are not maintained as paper artifacts.
 
-The dark-north probe uses σ_final=80 specifically because offline analysis showed A4 wins
-by ~1500 EFE units at σ_final=20 and only ~30 at σ=80.
+Offline route-split sweeps have explored looser final priors; those are not locked
+paper-facing closed-loop values until the full artifact chain is rerun.
 
 ---
 
 ## Look-ahead and time discretisation
 
-| name | smoke | probe | dark-probe | what it does |
-|---|---|---|---|---|
-| `horizon` | 40 | 60 | 80 | number of optimisation steps |
-| `dt` | 0.25 | 0.25 | 0.25 | seconds per step |
-| `v_max` | 0.15 | 0.15 | 0.22 | max forward speed (m/s) |
-| `w_max` | (default) | (default) | (default) | max angular speed; kept at the launch default |
-| `discount_gamma` | 0.98 | 0.98 | 0.98 | per-step discount factor; `H_eff = Σ γ^t ≈ 27` at h=40 |
+| name | aws_f31b1 | what it does |
+|---|---:|---|
+| `global_horizon` | 120 | route-level EFE horizon used in the hierarchical runtime |
+| `local_horizon` | 6 | local tracker horizon; inert for EFE because `use_simple_local_controller=true` |
+| `horizon` | 20 | legacy/offline-lab default; runtime uses `global_horizon` / `local_horizon` |
+| `dt` | 0.25 | seconds per step |
+| `v_max` | 0.60 | max forward speed (m/s) |
+| `cmd_publish_rate` | 10.0 | command publication rate (Hz) |
+| `local_plan_rate` | 5.0 | local tracking/planning rate (Hz) |
 
-**Effective look-ahead distance = `horizon · dt · v_max`**. This is the single number that
-matters for "can the planner see the decision-relevant feature ahead?". Visible-goal probe
-at (h=60, dt=0.25, v=0.15) reaches 2.25 m; dark-probe at (h=80, dt=0.25, v=0.22) reaches
-4.4 m.
+**Effective global look-ahead distance = `global_horizon · dt · v_max`**. This is
+the single number that matters for "can the planner see the decision-relevant feature
+ahead?". At the locked F31 setting it reaches up to 18 m in the global optimization
+horizon.
 
 **Coarse horizon / sparse-planning** (allowed, not yet tried): increase `dt` (e.g., 0.25 →
 0.5) so the same horizon covers twice the distance. Caveats: process noise grows
@@ -101,7 +115,7 @@ controller change should be treated as a separate planner variant.
 
 ## No-go / collision
 
-Current paper-facing values are from `aws_f31b1_final_config.yaml` (2026-06-10). The
+Current paper-facing values are from `aws_f31b1_final_config.yaml` (2026-06-11). The
 no-go is now a hinged-log **`warning_band`** keep-in penalty (replaces the old softplus /
 `log_barrier` interior-biased barrier, which collapsed the C2 route split at weight>200).
 
@@ -112,7 +126,7 @@ no-go is now a hinged-log **`warning_band`** keep-in penalty (replaces the old s
 | `nogo_weight` | 2000.0 | scalar on the violation term; high weight crushes violations without biasing valid-route choice |
 | `nogo_warning_band` (b) | 0.05 | width of the soft warning band inside the boundary |
 | `nogo_near_weight` | 50.0 | weight on the in-band log term |
-| `nogo_safe_distance` | 0.15 | clearance offset baked into the signed distance |
+| `nogo_safe_distance` | 0.25 | clearance offset baked into the signed distance |
 | `robot_collision_radius_m` | 0.125 | radius used for trajectory diagnostics |
 
 `use_belief_nogo_cost: false` for the global solve (the belief-nogo route mechanism is
@@ -123,13 +137,17 @@ retired). To make the planner "more willing" to push through tight spots, reduce
 
 ## Optimiser
 
-| name | smoke | probe | dark-probe | what it does |
-|---|---|---|---|---|
-| `optimizer_maxiter` | 150 | 180 | 180 | L-BFGS-B iteration cap |
-| `optimizer_maxfun` | 900 | 1200 | 1200 | L-BFGS-B function-evaluation cap |
-| `optimizer_ftol` | 1e-6 | 1e-6 | 1e-6 | relative tolerance |
-| `optimizer_gtol` | 1e-4 | 1e-4 | 1e-4 | gradient infinity-norm tolerance |
-| `optimizer_warm_start` | true | true | true | reuse previous solution shifted by one step |
+| name | aws_f31b1 | what it does |
+|---|---:|---|
+| `optimizer_maxiter` | 120 | L-BFGS-B iteration cap |
+| `optimizer_maxfun` | 720 | L-BFGS-B function-evaluation cap |
+| `optimizer_ftol` | 1e-6 | relative tolerance |
+| `optimizer_gtol` | 1e-4 | gradient infinity-norm tolerance |
+| `optimizer_warm_start` | true | reuse previous solution shifted by one step |
+| `optimizer_multistart` | true | shared condition-neutral basin handling |
+| `optimizer_multistart_include_direct` | false | direct seed omitted; named neutral route-family seeds are used instead |
+| `optimizer_multistart_lateral_offsets` | 0.0 | lateral shifts disabled |
+| `optimizer_initial_routes_json` | `mid_cross_lane`, `lower_sweep_lane` | route-family seeds offered to both C1 and C2 |
 
 When solver wall time is close to `maxfun`, the solver is not converging; raise `maxfun`
 first, then `maxiter`. When solver time is fast but the trajectory looks suboptimal, treat
@@ -164,19 +182,31 @@ and reported as optimizer basin handling.
 
 ## Process and command noise
 
-| name | smoke | probe | dark-probe | what it does |
-|---|---|---|---|---|
-| `process_noise_xy` | 0.01 | 0.01 | 0.01 | σ_v — **forward-velocity** actuation-noise PSD (std per √s), NOT an xy-position noise; integrated over dt inside the analytical Q_d |
-| `process_noise_theta` | 0.046 | 0.046 | 0.046 | σ_ω — yaw-rate actuation-noise PSD (rad/√s); integrated over dt inside Q_d |
-| `command_noise_*` (family) | ON for AWS | ON for AWS | ON for AWS | SIM ground-truth: execution disturbance / slip on issued commands (unmodeled by the planner) |
-| `encoder_noise_*` (family) | ON for AWS | ON for AWS | ON for AWS | SIM ground-truth: dead-reckoning / odometry integration error (unmodeled by the planner) |
+| name | aws_f31b1 | what it does |
+|---|---:|---|
+| `process_noise_xy` | 0.012 | σ_v — **forward-velocity** actuation-noise PSD (std per √s), NOT an xy-position noise; integrated over dt inside the analytical Q_d |
+| `process_noise_theta` | 0.05 | σ_ω — yaw-rate actuation-noise PSD (rad/√s); integrated over dt inside Q_d |
+| `command_noise_linear_slip_mean` | 0.02 | SIM ground-truth: systematic forward command slip |
+| `command_noise_linear_slip_std` | 0.03 | SIM ground-truth: stochastic forward command slip |
+| `command_noise_angular_slip_mean` | 0.0 | SIM ground-truth: systematic angular command slip |
+| `command_noise_angular_slip_std` | 0.02 | SIM ground-truth: stochastic angular command slip |
+| `command_noise_linear_additive_std` | 0.005 | SIM ground-truth: additive forward command disturbance |
+| `command_noise_angular_additive_std` | 0.02 | SIM ground-truth: additive angular command disturbance |
+| `command_noise_correlation_alpha` | 0.85 | AR(1) temporal correlation for command noise |
+| `encoder_noise_linear_slip_mean` | 0.01 | SIM ground-truth: systematic forward odometry slip |
+| `encoder_noise_linear_slip_std` | 0.02 | SIM ground-truth: stochastic forward odometry slip |
+| `encoder_noise_linear_additive_std` | 0.003 | SIM ground-truth: additive forward odometry disturbance |
+| `encoder_noise_angular_slip_mean` | 0.0 | SIM ground-truth: systematic angular odometry slip |
+| `encoder_noise_angular_slip_std` | 0.04 | SIM ground-truth: stochastic angular odometry slip |
+| `encoder_noise_angular_additive_std` | 0.03 | SIM ground-truth: additive angular odometry disturbance |
+| `encoder_noise_correlation_alpha` | 0.80 | AR(1) temporal correlation for encoder noise |
 
 `process_noise_xy/theta` are the planner/filter MODEL noise (family A); they feed the
 exact integrated process covariance `Q_d(θ,v,dt)` (see `docs/uncertainty_propagation.md`
 and appendix `app:heading`), not a frozen diagonal. `command_noise_*` / `encoder_noise_*`
 are the SIMULATION ground-truth corruptions (family B) the planner is deliberately blind
 to — `process_noise_theta` is *commensurate with*, not *equal to*, the encoder angular-slip
-std (0.16). For AWS diagnostics, command and encoder noise are part of the realism claim.
+std (`0.04`) or angular additive std (`0.03`). For AWS diagnostics, command and encoder noise are part of the realism claim.
 Command noise changes the true executed motion; encoder noise changes the dead-reckoning
 estimate used when camera updates are weak or absent.
 
@@ -192,11 +222,13 @@ rollout via `scripts/visibility_comparison/efe_offline_lab.py` before running Ga
 Goal: when traversing a uniform aisle whose left side is more visible to the camera, C2
 should bias to that side; C1 should drift to centre.
 
-- `ambiguity_weight`: increase modestly (6 → 10–12).
-- `goal_prior_u_std_final`: widen (20 → 50) so per-step lateral position matters more than
+- `ambiguity_weight`: increase only with route-seed term logs in hand; the locked value is
+  already high (`18.0`), so a reduction may be more defensible if ambiguity dominates.
+- `goal_prior_u_std_final`: widen from the locked `12.0` only as a condition-neutral
+  schedule change, so per-step lateral position matters more than
   per-step distance to goal.
-- Effective look-ahead: keep modest (h≈60, v≈0.15) so the planner doesn't try to commit to
-  a multi-aisle replan within one horizon.
+- Effective look-ahead: treat `global_horizon · dt · v_max` as a method-level setting;
+  changing it requires rerunning both conditions.
 - Verify offline: sample p_vis along left edge vs centerline vs right edge; the
   per-step ambiguity gradient should point clearly toward the brighter side.
 
@@ -205,9 +237,10 @@ should bias to that side; C1 should drift to centre.
 Goal: stay in visible region throughout the approach; enter the dark cap-region only for
 the last 1–2 m to a dark goal.
 
-- `goal_prior_u_std_final` / `_v_std_final`: widen (20 → 50–80). Tight goal prior pulls the
+- `goal_prior_u_std_final` / `_v_std_final`: widen from the locked `12.0` if the tight
+  goal prior pulls the
   robot into the dark zone too early.
-- `goal_tightening_power`: increase (0.45 → 0.7) so the tight prior kicks in late in the
+- `goal_tightening_power`: increase from `0.45` only after a paired sweep, so the tight prior kicks in late in the
   schedule, not from the start.
 - `goal_progress_n_steps`: match to expected total run length so the schedule's "final"
   state lines up with the actual goal approach.
@@ -219,14 +252,14 @@ the last 1–2 m to a dark goal.
 Goal: when the goal is visible but the approach passes near a brief dark region, C2 should
 push through rather than stall.
 
-- `ambiguity_weight`: lower modestly (10 → 6–8) — at the same time, to keep the safety
+- `ambiguity_weight`: lower modestly from `18.0` if logged route-seed costs show ambiguity dominating — at the same time, to keep the safety
   property on truly dark goals.
 
 ### "Optimiser is too slow / hits maxfun every step"
 
 - First raise `optimizer_maxfun` (1200 → 1800).
 - If still pinned, raise `optimizer_maxiter` (180 → 300).
-- If still pinned, the EFE landscape is too non-convex — softening `r_miss_uv` (15 → 10)
+- If still pinned, the EFE landscape is too non-convex — softening `r_miss_uv` from the locked `40.0`
   helps gradient stability.
 
 ### "Look-ahead is too short to see the decision-relevant feature"

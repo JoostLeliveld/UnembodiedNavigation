@@ -3,6 +3,164 @@
 Short, dated decisions that prevent the project from re-litigating the same
 scientific choices.
 
+## 2026-06-11 — ★ CLOSED-LOOP F31_b1 ROUTE SPLIT IN GAZEBO (locked config, belief-tube, ambiguity=1)
+
+Campaign `logs/visibility_comparison/f31b1_split_gazebo/` (run_visibility_campaign on
+aws_f31b1_final_config.yaml, cleaned aws_gp_v7b, marker-off urdf, rebuilt stack). **2/2 runs
+goal_reached, 0 collisions, 0 infra-invalid.** The route split emerges in CLOSED LOOP:
+
+| cond | route | outcome | L(m) | f_shadow | belief err ē(m) | det_rate | NLL | NEES |
+|---|---|---|---|---|---|---|---|---|
+| C1 constant-R | blind mid-connector (global J=848, min_clear 0.063) | goal d=0.188 | 5.12 | 0.36 | 0.17 | 0.73 | 73 | 157 |
+| C2 visibility-aware | observable lower-sweep (global mid J=6374 vs lower J=1189) | goal d=0.109 | 6.11 | 0.00 | 0.11 | 1.00 | 13 | 38 |
+
+- Both REACH the goal; the difference is OBSERVABILITY/localization quality: C2 trades a longer
+  path (6.11 vs 5.12 m) for staying fully observable (f_shadow 0 vs 0.36, detection 1.0 vs 0.73),
+  achieving lower belief error (0.11 vs 0.17) and far better-calibrated belief (NLL 13 vs 73,
+  NEES 38 vs 157). Exactly the "stay observable" thesis claim, in closed loop.
+- GP-driven via the belief-tube at ambiguity_weight=1 (no inflation); both route seeds offered to
+  both conditions, C1 chose blind, C2 chose observable. No route-forcing.
+- Figures regenerated from this campaign: `logs/paper_figures/f31b1_markeroff_v2/`
+  (paired_mechanism_taskA.pdf, compare_taskA.pdf, paths_per_seed.pdf, paper_metrics.csv, paper_summary.txt).
+- PIPELINE NOTE: `make_thesis_figures.py` READS `--metrics-csv` (precomputed by
+  `compute_paper_metrics.py`); it does NOT recompute. Must run compute_paper_metrics on the new
+  campaign FIRST, else figures silently use a stale metrics CSV (hit this once: the first render
+  showed C2 as a collision from the OLD markeroff campaign before recompute).
+
+## 2026-06-11 — aws_gp_v7b corrected: 2 stale R0-connector training points removed + refit
+
+Deleted 2 training samples at the REMOVED R0 mid-gap connector (row133 (-4.172,1.676) score 0.002,
+row134 (-3.733,1.676) score 0.747) from the fit CSV
+(`aws_gp_targets_v7b_col461/gp_targets_xy_combined.csv`, restored to active from archive), and
+refit with the locked params (ls 0.90, noise 0.05, beta 0.5, grid 220x200). v7b X_train: 240 -> 238.
+These points sampled the old R0 mid-gap which no longer exists (R0 is continuous); they were
+previously only hidden in the plot. Pre-clean npz backed up to /tmp/aws_gp_v7b_preclean.npz.
+- A1 PRESERVED (driveable): A1 (-3.0,-1.0) 0.801->0.799, (-3.0,0.0) 0.753->0.755; A2-mid 0.863->0.857,
+  A3-mid 0.705->0.704, west 0.905->0.904 — all essentially unchanged. Only the NON-driveable R0 body
+  (0.08->0.51) and R0->A1 gap (0.56->0.90) brightened (lost their anchors; GP interpolates from bright
+  surroundings) — planning-irrelevant (keep-in forbids the rack footprint). gp_pipeline_aws_v7.pdf regenerated.
+- OWED: the locked-config splits + f31b1_split figure were computed on the pre-clean v7b; re-verify
+  (quick) on the cleaned GP. A1/A2/A3 rho unchanged so the splits are expected to hold.
+
+## 2026-06-11 — RESULT: LOCKED config (belief-tube mechanism) splits all 3 discriminators at ambiguity_weight=1
+
+Locked baseline (user-specified): `use_belief_nogo_cost: true`, `nogo_belief_kappa: 1.0`,
+`ambiguity_weight: 1.0`, `goal_tightening_power: 0.9`, `goal_prior_*_std_final: 12`,
+`process_noise_xy/theta: 0.012/0.05`, GP `aws_gp_v7b`, moderate command/encoder noise,
+`yolo_use_masks: false` (bbox bottom-centre runtime point), `visibility_weight: 0.0` explicit.
+The route mechanism is now the **belief-tube keep-in** (clearance − κ·σ_max(S_xy)), driven by
+C2's learned covariance — NOT ambiguity-weight inflation.
+
+Offline EFE route choice across the 6-task suite (`diag_route_suite.py --gfs 12`):
+| task | kind | C1 | C2 | |
+|---|---|---|---|---|
+| F31_b1 | discriminator | blind/short (d0.10) | observable/long (d0.05) | **SPLIT** |
+| b5 | discriminator | blind/short (d0.08) | observable/long (d0.26) | **SPLIT** |
+| b2 | discriminator | blind/short (d0.05) | observable/long (d0.11) | **SPLIT** |
+| b3 | control-like (low-band start) | observable (d0.30) | observable (d0.27) | same ✓ |
+| b6 | west control | observable (d0.10) | observable (d0.04) | ctrl-ok ✓ |
+| b7 | west control | observable (d0.16) | observable (d0.11) | ctrl-ok ✓ |
+
+- **All 3 discriminators split; both controls + b3 keep both conditions on the visible route; all reach; NO stalls.**
+  (The κ=2.0 belief-nogo stall recorded earlier does NOT recur at κ=1.0.)
+- **Stronger than the ambiguity=18 version**, which only split F31_b1+b5 and missed b2. The belief-tube
+  catches b2's mildly-camera-poor shortcut (C2 belief covariance grows there → tube clearance reacts)
+  even though the ambiguity contrast was too small to deter it. Defensible: split is from learned
+  covariance + belief-tube feasibility at ambiguity_weight=1, no inflation, no route-forcing.
+- CODE CHECKS (user-requested) all PASS: R_visible/R_miss = diag(std²) with precision-blend on
+  covariances (no rename needed); warning_band interiors = 0, no weight double-multiplication;
+  runtime pixel is always bbox bottom-centre (`use_masks` only diagnostic); NIS gate is
+  `threshold>0 AND nis>threshold` so 0.0 = disabled.
+- Decomposition figure: `logs/paper_figures/suite_decomposition.png` (paths + per-seed cost
+  breakdown). Offline open-loop only; Gazebo closed-loop still owed (approval-gated).
+
+## 2026-06-11 — RESULT: cross-task (6-task) offline route-choice sweep
+
+Tool: `scripts/paper_figures/diag_route_suite.py` (per-task short/long feasible seeds offered
+to BOTH conditions via multistart; goal-prior `*_std_final` sweep; classifier = match realized
+trajectory to nearer seed). Suite (visible start + visible goal): discriminators F31_b1, b5, b2;
+controls b6 (a0→A1-low), b7 (a0→A2); b3 reclassified as control (starts in the visible lower band).
+New tasks b6/b7 added to `src/experiments/config/tasks.yaml`.
+
+| gfs | F31_b1 | b5 | b2 | b3 | b6 | b7 |
+|---|---|---|---|---|---|---|
+| 12 | same(blind) | same | same | both-obs | ok | ok |
+| 18 | same(blind) | same | same | both-obs | ok | ok |
+| 24 | **SPLIT** | **SPLIT** | same(blind) | both-obs | ok | ok |
+| 30 | **SPLIT** | **SPLIT** | same(blind) | both-obs | ok | ok |
+
+- **Split generalizes to F31_b1 + b5** at the same condition-neutral setting (goal_final_std ≥ 24);
+  C2 takes the observable route (reaches d≈0.09/0.36), C1 always the blind shortcut. GP-driven:
+  C1 never takes the observable route on any discriminator at any gfs. Levers = goal-prior schedule
+  (condition-neutral) + feasible multistart seed (offered to both; C1 rejects observable). No
+  ambiguity-weight inflation, no route-forcing.
+- **b2 does NOT split** (A1→A2 shortcut only mildly camera-poor, Δp_vis≈0.09) — honest scope limit:
+  the detour mechanism needs sufficient occlusion contrast.
+- **b3 + controls b6/b7 always take the visible route, both conditions** — no spurious detour.
+- **gfs≈24 is the sweet spot**: gfs=30 starts hurting goal-reach (b3 d=1.52, b7 d=0.99). Current
+  committed `goal_prior_*_std_final` = 12 (no split).
+- CAVEAT: sweep loaded the live config; `process_noise_xy/theta` were edited to 0.012/0.05 during
+  the session, so a confirmation re-run of gfs=24 under the final process-noise values is owed
+  before locking. Offline open-loop only; Gazebo closed-loop still owed (approval-gated).
+
+## 2026-06-11 — RESULT: offline F31_b1 route split emerges (GP-driven, condition-neutral levers)
+
+Tool: `scripts/paper_figures/diag_route_split_probe.py` (multistart over {mid_cross_lane,
+lower_sweep_feasible} offered to BOTH conditions; goal-prior `*_std_final` sweep; F31_b1 / v7b).
+Two condition-neutral levers vs the blocker found earlier: (1) a lane-FEASIBLE lower-sweep
+seed (held nogo 0.0 vs the crude seed's ~134k), (2) a looser goal-prior final std (the
+allowed schedule lever) so the goal-directed risk stops over-penalizing the longer route.
+
+Result (route chosen by the EFE solve):
+| goal_final_std | C1 constant-R | C2 visibility-aware |
+|---|---|---|
+| 18 | mid | mid |
+| 21 | mid | **lower-sweep** |
+| 24 | mid | lower-sweep |
+| 27 | mid | lower-sweep |
+| 30 | mid | lower-sweep |
+| 36 | mid | lower-sweep |
+
+- **C1 never takes the observable route** across 18–36 (even with the lower-sweep seed
+  offered) → the split is NOT created by the goal-prior or the seed; both are condition-neutral.
+- **C2 flips to lower-sweep at ≥21 and stays** (stable regime, not a tie-break); C2's
+  lower-sweep ambiguity ~8360 < mid ~9300 → the GP/visibility drives the choice.
+- At gfs=21 BOTH reach the goal via different routes (C1 d=0.11 blind-short, C2 d=0.15
+  observable-long) — the contract's intended "fair visible-start→visible-goal, route differs
+  only by condition" demonstration. This is OFFLINE/open-loop; the closed-loop drift/collision
+  for C1 on the blind route is the Gazebo validation (still owed, approval-gated).
+- Honesty: no route-forcing waypoints (seeds offered to both; C1 rejects lower-sweep), no
+  ambiguity-weight inflation. Levers = multistart seed (optimizer basin handling) + goal-prior
+  schedule, both condition-neutral. Current config has `goal_prior_*_std_final: 12` (no split);
+  the split regime is ≥21. Proposed committed value not yet applied (methodology change to confirm).
+
+## 2026-06-11 — offline route-split diagnosis under the new Q_d (blocker pinpointed)
+
+Tool: `scripts/paper_figures/diag_route_split.py` (per-route, per-term EFE costs on F31_b1 / v7b;
+single-seed solves + held-trajectory eval). Findings:
+
+- **Visibility mechanism works directionally.** Held on each route, C2 sees the observable
+  lower-sweep as MORE visible and LESS ambiguous than the blind mid-connector
+  (mean_p_vis 0.60 vs 0.48; ambiguity 8412 vs 9719). The GP→ambiguity coupling has the right sign.
+- **Goal-directed risk acts as an implicit length penalty that cancels the gain.** The longer
+  lower-sweep accumulates more goal-prior-mismatch risk over its extra steps (risk 2120 vs 641),
+  so risk penalty (≈+1480) slightly exceeds the ambiguity advantage (≈−1300). Net: the objective
+  marginally prefers mid even on the clean terms. (Held-trajectory `nogo` is a confound — the
+  crude `_controls_for_waypoints` seed is lane-infeasible: 134k lower-sweep vs 17k mid — so only
+  risk/ambiguity/p_vis are clean signals.)
+- **Single optimizer basin.** Both route seeds converge to connector/mid (identical cost, gap 0.0)
+  for C1 and C2; there is no feasible lower-sweep local minimum the optimizer settles in.
+- **Conservative behavior IS present on the shared route.** Converged: C2 stops at d=0.57 with higher
+  risk/ambiguity (866/9312); C1 drives in to d=0.06 (401/7600). This is the "delay commitment / stop
+  short of the blind approach" outcome — a valid thesis result even without a route split.
+
+CONCLUSION: the route SPLIT does not yet emerge; the margin is small (~1300 vs ~1480) and the
+contrast is modest (Δp_vis≈0.12). Non-cheating levers to try next (condition-neutral): (a) reduce
+the goal-prior risk's implicit length penalty via the goal-prior tightening schedule / discount γ;
+(b) give the optimizer a feasible (lane-following) lower-sweep seed so a clean lower-sweep basin can
+be held; (c) widen the mid-vs-lower observability contrast in the GP/world (locked → recapture).
+NOT allowed: route-forcing waypoints, ambiguity-weight inflation.
+
 ## 2026-06-11 — analytical Q_d process noise + union-boundary keep-in + archive sweep
 
 - **Analytical process-noise covariance Q_d is now active.** Belief propagation uses the

@@ -40,7 +40,7 @@ worlds:
       - {name: loading_apron_drive_lane, type: traversable, xmin: -5.10, xmax: 5.10, ymin: -3.45, ymax: -2.85, note: green driveable dispatch/loading lane pulled away from the camera wall; not a visibility reward}
       - {name: lower_main_aisle, type: traversable, xmin: -5.15, xmax: 5.15, ymin: -2.85, ymax: -2.03, note: lower route-choice corridor}
       - {name: mid_cross_aisle, type: traversable, xmin: -4.85, xmax: 4.85, ymin: 1.25, ymax: 2.03, note: open mid cross-aisle through split rack rows}
-      - {name: upper_cross_aisle, type: traversable, xmin: -4.85, xmax: 4.85, ymin: 4.28, ymax: 4.80, note: upper visible detour candidate for B1}
+      - {name: upper_cross_aisle, type: traversable, xmin: -4.85, xmax: 4.85, ymin: 4.25, ymax: 4.90, note: upper visible detour candidate for B1}
       - {name: west_service_lane, type: traversable, xmin: -5.15, xmax: -4.60, ymin: -3.45, ymax: 4.80, note: west-side rack access lane}
       - {name: east_far_corner_route, type: traversable, xmin: 4.65, xmax: 5.15, ymin: -3.45, ymax: 4.80, note: long-horizon east-side route used by B3}
       - {name: rack_aisle_A1, type: traversable, xmin: -3.475, xmax: -2.575, ymin: -2.85, ymax: 4.80, note: 0.90 m marked driveable lane between R1 and R2}

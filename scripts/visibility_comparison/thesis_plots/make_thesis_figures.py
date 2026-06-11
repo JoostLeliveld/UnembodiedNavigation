@@ -72,6 +72,39 @@ AXIS_XLIM = (-2.6, 2.6)        # overwritten at runtime from world profile
 AXIS_YLIM = (-2.4, 2.4)        # overwritten at runtime from world profile
 FRESH_CAMERA_UPDATE_MAX_AGE_S = 1.0
 
+# Logs written before 2026-06-11 omitted state_age_s/state_fresh from the
+# perception.csv header, while the row writer already emitted them. Keep a
+# writer-order schema here so old archived F31 runs parse correctly.
+PERCEPTION_WRITER_FIELDS = [
+    'diag_stamp', 'log_stamp', 'detected', 'true_available',
+    'true_x', 'true_y', 'true_yaw',
+    'state_available', 'state_x', 'state_y', 'state_yaw',
+    'state_age_s', 'state_fresh', 'state_pos_error', 'state_yaw_error_deg',
+    'obs_u', 'obs_v', 'obs_yaw', 'obs_yaw_error_deg',
+    'pixel_pose_available', 'pixel_pose_stamp', 'pixel_pose_u', 'pixel_pose_v',
+    'pixel_pose_yaw', 'pixel_pose_age_s', 'pixel_pose_fresh',
+    'pred_world_x', 'pred_world_y', 'localization_error_m',
+    'pred_world_x_calibrated', 'pred_world_y_calibrated',
+    'localization_error_calibrated_m', 'bev_y_calibration_offset_m',
+    'u_red', 'v_red', 'red_area_px', 'u_blue', 'v_blue', 'blue_area_px',
+    'separation_px', 'border_margin_px',
+    'yolo_score_raw', 'yolo_score_selected', 'yolo_detected_after_threshold',
+    'yolo_best_class_id', 'yolo_target_candidate_count',
+    'bbox_area_px', 'bbox_xmin', 'bbox_ymin', 'bbox_xmax', 'bbox_ymax',
+    'logit_margin', 'class_entropy',
+    'mask_area_px', 'mask_bottom_u', 'mask_bottom_v', 'mask_used',
+    'mask_polygon_points', 'confidence_logit', 'mask_compactness',
+    'mask_border_frac', 'mask_score',
+    'selected_pixel_source_code', 'yolo_raw_best_score',
+    'yolo_selected_score', 'yolo_num_target_candidates',
+    'yolo_selected_class_id', 'yolo_selected_pixel_source',
+    'yolo_bbox_area', 'yolo_mask_area', 'yolo_inference_ms',
+    'detector_callback_ms', 'yolo_receive_stamp', 'yolo_start_stamp',
+    'yolo_finish_stamp', 'yolo_publish_stamp', 'yolo_latency_s',
+    'frame_age_at_publish_s', 'detector_total_latency_s',
+    'camera_relative_bearing_deg', 'seed',
+]
+
 
 def _label_to_condition(label: str) -> str:
     s = (label or '').strip()
@@ -105,15 +138,22 @@ def load_campaign(log_path: Path) -> dict:
         run_dir = Path(run_dir_str) if run_dir_str else None
         if (run_dir is None or not run_dir.is_dir()) and seed != '':
             axis = entry.get('axis', 'monte_carlo_compare')
-            parent = campaign_root / axis / raw_label / f'seed{seed}'
-            if parent.is_dir():
-                exp_id = run_dir.name if run_dir is not None else ''
+            parents = [
+                campaign_root / task / condition / f'seed{seed}',
+                campaign_root / task / raw_label / f'seed{seed}',
+                campaign_root / axis / raw_label / f'seed{seed}',
+            ]
+            exp_id = run_dir.name if run_dir is not None else ''
+            for parent in parents:
+                if not parent.is_dir():
+                    continue
                 cand = (parent / exp_id) if exp_id else None
                 if cand is None or not cand.is_dir():
                     matches = sorted(parent.glob('experiment_*'))
                     cand = matches[-1] if matches else None
                 if cand is not None and cand.is_dir():
                     run_dir = cand
+                    break
         key = f'{task}__{condition}__seed{seed}'
         out[key] = {
             'task': task,
@@ -164,7 +204,18 @@ def load_perception_csv(run_dir: Path) -> list[dict]:
     if not p.is_file():
         return []
     with p.open('r', newline='', encoding='utf-8') as f:
-        return list(csv.DictReader(f))
+        reader = csv.reader(f)
+        try:
+            header = next(reader)
+        except StopIteration:
+            return []
+        rows: list[dict] = []
+        for values in reader:
+            if len(values) == len(header):
+                rows.append(dict(zip(header, values)))
+            elif len(values) == len(PERCEPTION_WRITER_FIELDS):
+                rows.append(dict(zip(PERCEPTION_WRITER_FIELDS, values)))
+        return rows
 
 
 def load_run_manifest(run_dir: Path) -> dict:
@@ -179,6 +230,20 @@ def load_run_manifest(run_dir: Path) -> dict:
 
 def _resolve_for_compare(path_str: str) -> Path:
     return Path(path_str).expanduser().resolve(strict=False)
+
+
+def _visibility_artifact_suffix(path: Path) -> Path:
+    parts = path.parts
+    if 'visibility_comparison' in parts:
+        idx = parts.index('visibility_comparison')
+        return Path(*parts[idx + 1:])
+    return Path(path.name)
+
+
+def _same_visibility_artifact(actual: Path | None, expected: Path) -> bool:
+    if actual is None:
+        return False
+    return actual == expected or _visibility_artifact_suffix(actual) == _visibility_artifact_suffix(expected)
 
 
 def validate_campaign_gp_artifact(rows: list[dict], gp_path: Path) -> None:
@@ -196,7 +261,7 @@ def validate_campaign_gp_artifact(rows: list[dict], gp_path: Path) -> None:
         manifest = load_run_manifest(run_dir)
         actual_str = str(manifest.get('visibility_artifact_path', '') or '')
         actual = _resolve_for_compare(actual_str) if actual_str else None
-        if actual != expected:
+        if not _same_visibility_artifact(actual, expected):
             mismatches.append((condition, r.get('task', ''), r.get('seed', ''),
                                run_dir, actual_str or '<missing>'))
     if mismatches:
@@ -373,6 +438,18 @@ def _cov_eig(sxx, sxy, syy):
     lam2 = max(a - d, 1e-12)
     theta = 0.5 * math.atan2(2.0 * sxy, sxx - syy)
     return lam1, lam2, theta
+
+
+def _belief_r2sigma_radius(cov_x, cov_xy, cov_y):
+    radii = []
+    for cxx, cxy, cyy in zip(cov_x, cov_xy, cov_y):
+        if not (math.isfinite(cxx) and math.isfinite(cyy)):
+            radii.append(math.nan)
+            continue
+        cxy = float(cxy) if math.isfinite(cxy) else 0.0
+        lam_max, _lam_min, _theta = _cov_eig(float(cxx), cxy, float(cyy))
+        radii.append(2.0 * math.sqrt(max(lam_max, 0.0)))
+    return np.asarray(radii, dtype=float)
 
 
 def _draw_cov_ellipses(ax, x_arr, y_arr, sxx, sxy, syy, n_ellipses=10,
@@ -602,7 +679,10 @@ def _draw_time_series_row(ax_pvis, ax_err, ax_efe, csv_rows, perception_rows,
     t_p = np.asarray([_f(r, 'stamp') for r in csv_rows])
     pvis = np.asarray([_f(r, 'p_vis_plan_eff') for r in csv_rows])
     err = np.asarray([_f(r, 'truth_belief_error_m') for r in csv_rows])
-    cov_tr = np.asarray([_f(r, 'state_cov_trace') for r in csv_rows])
+    cov_x = np.asarray([_f(r, 'planner_cov_x') for r in csv_rows])
+    cov_xy = np.asarray([_f(r, 'planner_cov_xy') for r in csv_rows])
+    cov_y = np.asarray([_f(r, 'planner_cov_y') for r in csv_rows])
+    r2sigma = _belief_r2sigma_radius(cov_x, cov_xy, cov_y)
     efe_risk = np.asarray([_f(r, 'efe_risk') for r in csv_rows])
     efe_amb = np.asarray([_f(r, 'efe_ambiguity') for r in csv_rows])
     yolo_t, yolo_score, yolo_detected = extract_yolo_scores(perception_rows)
@@ -622,10 +702,9 @@ def _draw_time_series_row(ax_pvis, ax_err, ax_efe, csv_rows, perception_rows,
     if np.any(finite_e):
         ax_err.plot(t_p[finite_e], err[finite_e], color=color, linewidth=1.2,
                     label=label)
-    finite_c = np.isfinite(cov_tr)
+    finite_c = np.isfinite(r2sigma)
     if np.any(finite_c):
-        sigma_pos = np.sqrt(np.clip(cov_tr / 2.0, 1e-9, None))
-        ax_err.plot(t_p[finite_c], sigma_pos[finite_c], color=color,
+        ax_err.plot(t_p[finite_c], r2sigma[finite_c], color=color,
                     linewidth=0.9, linestyle='--', alpha=0.7)
 
     finite_r = np.isfinite(efe_risk)
@@ -706,21 +785,70 @@ def _first_motion_stamp(csv_rows) -> float:
     return fallback
 
 
+def _truth_series(csv_rows):
+    ts, xs, ys = [], [], []
+    for r in csv_rows:
+        if _f(r, 'truth_available') < 0.5:
+            continue
+        t = _f(r, 'stamp')
+        x = _f(r, 'truth_x')
+        y = _f(r, 'truth_y')
+        if np.isfinite(t) and np.isfinite(x) and np.isfinite(y):
+            ts.append(t); xs.append(x); ys.append(y)
+    order = np.argsort(ts)
+    return np.asarray(ts, dtype=float)[order], np.asarray(xs, dtype=float)[order], np.asarray(ys, dtype=float)[order]
+
+
+def _interp_truth_xy(t, truth_t, truth_x, truth_y):
+    if not np.isfinite(t) or truth_t.size == 0:
+        return math.nan, math.nan
+    if truth_t.size == 1:
+        return float(truth_x[0]), float(truth_y[0])
+    t_clamped = float(np.clip(t, truth_t[0], truth_t[-1]))
+    return (
+        float(np.interp(t_clamped, truth_t, truth_x)),
+        float(np.interp(t_clamped, truth_t, truth_y)),
+    )
+
+
 def _driving_localization_series(csv_rows):
     t0 = _first_motion_stamp(csv_rows)
     t = np.asarray([_f(r, 'stamp') for r in csv_rows], dtype=float) - t0
     # PRIMARY metric = the ACTUAL fused planner belief error vs truth (EKF: camera (x,y)
     # updates + odom prediction). This is the localization the controller actually uses.
     err = np.asarray([_f(r, 'truth_belief_error_m') for r in csv_rows], dtype=float)
-    # Secondary (faint) = raw external-camera /state measurement error. It diverges when
-    # YOLO loses the robot in shadow (camera detection lost); the EKF then dead-reckons on
-    # odom, so the fused belief above stays bounded short-term. Shown for context only.
-    camera = np.asarray([_f(r, 'truth_state_error_m') for r in csv_rows], dtype=float)
     cov_x = np.asarray([_f(r, 'planner_cov_x') for r in csv_rows], dtype=float)
+    cov_xy = np.asarray([_f(r, 'planner_cov_xy') for r in csv_rows], dtype=float)
     cov_y = np.asarray([_f(r, 'planner_cov_y') for r in csv_rows], dtype=float)
-    sigma = np.sqrt(np.clip(0.5 * (cov_x + cov_y), 0.0, None))
+    r2sigma = _belief_r2sigma_radius(cov_x, cov_xy, cov_y)
     mask = np.isfinite(t) & np.isfinite(err) & (t >= 0.0)
-    return t[mask], err[mask], camera[mask], sigma[mask], t0
+    return t[mask], err[mask], r2sigma[mask], t0
+
+
+def _accepted_camera_update_error_series(csv_rows, perception_rows, t0):
+    """Camera-update error only at accepted detections, aligned to image time."""
+    truth_t, truth_x, truth_y = _truth_series(csv_rows)
+    t_vals, err_vals = [], []
+    for r in perception_rows:
+        detected = _f(r, 'detected') >= 0.5
+        accepted = _f(r, 'yolo_detected_after_threshold') >= 0.5
+        pixel_ok = _f(r, 'pixel_pose_available') >= 0.5
+        if not (detected and accepted and pixel_ok):
+            continue
+        pixel_stamp = _f(r, 'pixel_pose_stamp')
+        pred_x = _f(r, 'pred_world_x_calibrated')
+        pred_y = _f(r, 'pred_world_y_calibrated')
+        if not (np.isfinite(pixel_stamp) and np.isfinite(pred_x) and np.isfinite(pred_y)):
+            continue
+        tx, ty = _interp_truth_xy(pixel_stamp, truth_t, truth_x, truth_y)
+        if not (np.isfinite(tx) and np.isfinite(ty)):
+            continue
+        t_rel = pixel_stamp - t0
+        if t_rel < 0.0:
+            continue
+        t_vals.append(t_rel)
+        err_vals.append(float(math.hypot(pred_x - tx, pred_y - ty)))
+    return np.asarray(t_vals, dtype=float), np.asarray(err_vals, dtype=float)
 
 
 def _driving_detection_series(perception_rows, t0):
@@ -734,10 +862,9 @@ def _driving_detection_series(perception_rows, t0):
 
 def _localization_summary_label(condition, t, err, color_label):
     if err.size == 0:
-        return f'{condition}: no driving samples'
+        return f'{condition} $e_p$'
     mean = float(np.nanmean(err))
-    p95 = float(np.nanpercentile(err, 95))
-    return f'{condition} belief: mean {mean:.2f} m, p95 {p95:.2f} m'
+    return f'{condition} $e_p$ (mean {mean:.2f} m)'
 
 
 def lookup_gp_bilinear(gp, x_arr, y_arr):
@@ -851,10 +978,12 @@ def plot_paired_mechanism_taskA(rows, gp, out_path, seed=None, task=None):
     perc_c1 = load_perception_csv(runs['C1'])
     perc_c2 = load_perception_csv(runs['C2'])
 
-    t1, e1, b1, s1, t0_c1 = _driving_localization_series(csv_c1)
-    t2, e2, b2, s2, t0_c2 = _driving_localization_series(csv_c2)
+    t1, e1, r1, t0_c1 = _driving_localization_series(csv_c1)
+    t2, e2, r2, t0_c2 = _driving_localization_series(csv_c2)
     c1_label = _localization_summary_label('C1', t1, e1, COND_LABEL['C1'])
     c2_label = _localization_summary_label('C2', t2, e2, COND_LABEL['C2'])
+    cam_t1, cam_e1 = _accepted_camera_update_error_series(csv_c1, perc_c1, t0_c1)
+    cam_t2, cam_e2 = _accepted_camera_update_error_series(csv_c2, perc_c2, t0_c2)
 
     # Panel c: along-path GP signals (Effective visibility & Obs std)
     t_gp1, pvis1, rstd1 = _compute_along_path_gp_signals(csv_c1, gp, is_c1=True)
@@ -902,28 +1031,28 @@ def plot_paired_mechanism_taskA(rows, gp, out_path, seed=None, task=None):
                   frameon=False, ncol=3, columnspacing=0.8,
                   handlelength=1.6)
 
-    # Panel d: fused planner BELIEF error (solid, primary) + raw camera-fix error (faint) + 2sigma envelope
+    # Panel d: fused planner BELIEF error (solid) + 2sigma radius + accepted camera updates.
     if e1.size:
         ax_err.plot(t1, e1, color=COND_COLOR['C1'], linewidth=2.0, label=c1_label)
-        if b1.size == t1.size:
-            ax_err.plot(t1, b1, color=COND_COLOR['C1'], linewidth=1.0, linestyle=':', alpha=0.5,
-                        label='C1 camera fix')
-        if s1.size == t1.size:
-            ax_err.plot(t1, 2.0 * s1, color=COND_COLOR['C1'], linewidth=1.0, linestyle='--', alpha=0.4,
-                        label=r'C1 2$\sigma$')
+        if r1.size == t1.size:
+            ax_err.plot(t1, r1, color=COND_COLOR['C1'], linewidth=1.0, linestyle='--', alpha=0.55,
+                        label=r'C1 $r_{2\sigma}$')
+    if cam_e1.size:
+        ax_err.scatter(cam_t1, cam_e1, color=COND_COLOR['C1'], s=9, marker='o',
+                       alpha=0.45, edgecolors='none', label='C1 camera update')
     if e2.size:
         ax_err.plot(t2, e2, color=COND_COLOR['C2'], linewidth=2.0, label=c2_label)
-        if b2.size == t2.size:
-            ax_err.plot(t2, b2, color=COND_COLOR['C2'], linewidth=1.0, linestyle=':', alpha=0.5,
-                        label='C2 camera fix')
-        if s2.size == t2.size:
-            ax_err.plot(t2, 2.0 * s2, color=COND_COLOR['C2'], linewidth=1.0, linestyle='--', alpha=0.4,
-                        label=r'C2 2$\sigma$')
+        if r2.size == t2.size:
+            ax_err.plot(t2, r2, color=COND_COLOR['C2'], linewidth=1.0, linestyle='--', alpha=0.55,
+                        label=r'C2 $r_{2\sigma}$')
+    if cam_e2.size:
+        ax_err.scatter(cam_t2, cam_e2, color=COND_COLOR['C2'], s=9, marker='o',
+                       alpha=0.45, edgecolors='none', label='C2 camera update')
 
     ax_err.axhline(0.5, color='0.35', linewidth=0.9, linestyle=':', label='0.5 m ref')
-    ax_err.set_title('(d) Truth--belief error after first command', fontsize=10)
+    ax_err.set_title(r'(d) Truth--belief error with $2\sigma$ belief radius', fontsize=10)
     ax_err.set_xlabel('time after first command (s)', fontsize=9)
-    ax_err.set_ylabel('localization error (m)', fontsize=9)
+    ax_err.set_ylabel('position error / radius (m)', fontsize=9)
     ax_err.grid(alpha=0.3, linestyle=':')
     ax_err.legend(fontsize=7.0, loc='upper center',
                   bbox_to_anchor=(0.5, -0.28), frameon=False, ncol=2,
@@ -959,7 +1088,10 @@ def plot_mechanism_taskA(rows, gp, out_path, cond='C2', seed=0, task=None):
     t_p = np.asarray([_f(r, 'stamp') for r in csv_rows])
     pvis = np.asarray([_f(r, 'p_vis_plan_eff') for r in csv_rows])
     err = np.asarray([_f(r, 'truth_belief_error_m') for r in csv_rows])
-    cov_tr = np.asarray([_f(r, 'state_cov_trace') for r in csv_rows])
+    cov_x = np.asarray([_f(r, 'planner_cov_x') for r in csv_rows])
+    cov_xy = np.asarray([_f(r, 'planner_cov_xy') for r in csv_rows])
+    cov_y = np.asarray([_f(r, 'planner_cov_y') for r in csv_rows])
+    r2sigma = _belief_r2sigma_radius(cov_x, cov_xy, cov_y)
     efe_risk = np.asarray([_f(r, 'efe_risk') for r in csv_rows])
     efe_amb = np.asarray([_f(r, 'efe_ambiguity') for r in csv_rows])
 
@@ -1054,10 +1186,9 @@ def plot_mechanism_taskA(rows, gp, out_path, cond='C2', seed=0, task=None):
     if np.any(finite_err):
         ax_err.plot(t_p[finite_err], err[finite_err], color='black',
                     linewidth=1.2, label=r'$\|p_{\mathrm{truth}}-\hat p\|$')
-    if np.any(np.isfinite(cov_tr)):
-        sigma_pos = np.sqrt(np.clip(cov_tr / 2.0, 1e-9, None))
-        ax_err.plot(t_p, sigma_pos, color='purple', linewidth=1.0,
-                    linestyle='--', label=r'$\sqrt{\mathrm{tr}\,\Sigma_{xy}/2}$')
+    if np.any(np.isfinite(r2sigma)):
+        ax_err.plot(t_p, r2sigma, color='purple', linewidth=1.0,
+                    linestyle='--', label=r'$r_{2\sigma}=2\sqrt{\lambda_{\max}(S_{xy})}$')
     upd_available = np.asarray([_f(r, 'planner_pixel_correction_available')
                                 for r in csv_rows])
     upd_age = np.asarray([_f(r, 'planner_pixel_correction_age_s')
@@ -1304,9 +1435,10 @@ def plot_metrics_box(rows, out_path):
     metrics = [
         ('path_length_m', r'path length $L$ (m)', (0, 8)),
         ('mean_loc_error_m', r'mean localization error $\bar e$ (m)', (0, 0.3)),
-        ('mean_overconf', r'mean overconfidence $\bar c$', (0, 6)),
+        ('mean_loc_nll', r'mean localization NLL', None),
+        ('mean_loc_nees', r'mean NEES', None),
     ]
-    fig, axes = plt.subplots(1, 3, figsize=(11.0, 3.4))
+    fig, axes = plt.subplots(1, 4, figsize=(13.2, 3.4))
     for ax, (mkey, mlabel, ylim) in zip(axes, metrics):
         data_per_cond = {c: [] for c in CONDS}
         for r in rows:
@@ -1333,7 +1465,9 @@ def plot_metrics_box(rows, out_path):
             ax.scatter(xs, data_per_cond[c], s=12, color='black',
                        alpha=0.55, zorder=5)
         ax.set_xticks(positions); ax.set_xticklabels(CONDS, fontsize=10)
-        ax.set_ylabel(mlabel); ax.set_ylim(ylim)
+        ax.set_ylabel(mlabel)
+        if ylim is not None:
+            ax.set_ylim(ylim)
         ax.grid(axis='y', alpha=0.3, linestyle=':')
     fig.suptitle('(only successful runs are pooled across tasks)',
                  fontsize=8, y=0.02)

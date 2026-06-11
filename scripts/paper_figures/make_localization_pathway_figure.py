@@ -278,43 +278,29 @@ def draw_ground_panel(ax, profile_path: Path, world: str, gp_path: Path, x_hat: 
         spine.set_color("black")
     ax.set_title("(c) planner-facing update", fontsize=13, fontweight="bold", pad=6)
 
-    # Plot-only: the profile's mid_cross_aisle is stored as one full-width band, but the
-    # R0 (leftmost) shelf is CONTINUOUS (no mid gap), so it blocks that band over its
-    # footprint. Subtract the R0 footprint when drawing so no driveable "cross" is shown
-    # over R0. Only mid_cross_aisle overlaps R0's footprint; other lanes are unchanged.
-    _R0 = (-4.325, -3.775, -0.82, 4.25)  # leftmost continuous shelf footprint
-
-    def _rects_minus_r0(rx0, rx1, ry0, ry1):
-        bx0, bx1, by0, by1 = _R0
-        oy0, oy1 = max(ry0, by0), min(ry1, by1)
-        ox0, ox1 = max(rx0, bx0), min(rx1, bx1)
-        if oy1 <= oy0 or ox1 <= ox0:
-            yield (rx0, rx1, ry0, ry1)
-            return
-        if ry0 < oy0:
-            yield (rx0, rx1, ry0, oy0)
-        if ry1 > oy1:
-            yield (rx0, rx1, oy1, ry1)
-        if rx0 < bx0:
-            yield (rx0, bx0, oy0, oy1)
-        if rx1 > bx1:
-            yield (bx1, rx1, oy0, oy1)
-
+    # The profile's mid_cross_aisle is stored as one full-width band, but the connector
+    # only exists in the R2..R5 gaps EAST of the A1 aisle — R0/R1 (leftmost) is a continuous
+    # shelf with no mid gap. Clip the mid cross-aisle to start at the A1 aisle so it neither
+    # crosses R0 nor leaves orphaned connector stubs west of A1 (the planner config already
+    # uses discrete per-gap connectors and has none of these west pieces).
+    _A1_WEST = -3.48  # west edge of the A1 aisle; mid cross-aisle starts here
     for rect in traversable_rects(profile_path, world):
-        for sx0, sx1, sy0, sy1 in _rects_minus_r0(
-            rect["xmin"], rect["xmax"], rect["ymin"], rect["ymax"]
-        ):
-            ax.add_patch(
-                Rectangle(
-                    (sx0, sy0),
-                    sx1 - sx0,
-                    sy1 - sy0,
-                    facecolor="#d8ead5",
-                    edgecolor=GREEN,
-                    lw=1.0,
-                    zorder=1,
-                )
+        rx0, rx1, ry0, ry1 = rect["xmin"], rect["xmax"], rect["ymin"], rect["ymax"]
+        if str(rect.get("name", "")) == "mid_cross_aisle":
+            rx0 = max(rx0, _A1_WEST)
+            if rx1 <= rx0:
+                continue
+        ax.add_patch(
+            Rectangle(
+                (rx0, ry0),
+                rx1 - rx0,
+                ry1 - ry0,
+                facecolor="#d8ead5",
+                edgecolor=GREEN,
+                lw=1.0,
+                zorder=1,
             )
+        )
 
     ax.plot(cam_xy[0], cam_xy[1], "s", ms=9, color="#444444", zorder=5)
     ax.text(cam_xy[0] + 0.16, cam_xy[1] - 0.22, "camera", fontsize=10.5, color="#444444", va="top")
@@ -330,9 +316,7 @@ def draw_ground_panel(ax, profile_path: Path, world: str, gp_path: Path, x_hat: 
         ha="left",
         arrowprops={"arrowstyle": "->", "color": PINK, "lw": 1.6},
     )
-    # Show heading as an odometry-derived orientation at the same state.
-    ax.add_patch(FancyArrowPatch((x_hat, y_hat), (x_hat + 0.62, y_hat), arrowstyle="-|>", mutation_scale=15, lw=1.8, color="#444444", zorder=7))
-    ax.text(x_hat - 0.15, y_hat - 0.62, r"$\hat{\theta}$ from odometry", ha="right", va="center", fontsize=10.5, color="#444444")
+    # (Heading-from-odometry arrow/label removed: panel (c) shows the camera (x,y) update only.)
 
     origin = (-5.15, -5.05)
     ax.annotate("", xy=(origin[0] + 0.75, origin[1]), xytext=origin, arrowprops={"arrowstyle": "-|>", "color": GRAY, "lw": 1.1})

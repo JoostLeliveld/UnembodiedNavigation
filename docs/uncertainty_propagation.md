@@ -26,7 +26,7 @@ notes in `runtime_dataflow.md` / `perception_details.md` on these points.
 
 | family | config keys (`aws_f31b1_final_config.yaml`) | value | where it lives | what it is |
 |---|---|---|---|---|
-| **A. Model / process noise** (filter + planner) | `process_noise_xy`, `process_noise_theta` | 0.01, 0.046 | `dynamics.py` / `casadi_efe.py` → `Q_d` | the **assumed** actuation-noise spectral densities the belief uses to grow covariance during prediction |
+| **A. Model / process noise** (filter + planner) | `process_noise_xy`, `process_noise_theta` | 0.012, 0.05 | `dynamics.py` / `casadi_efe.py` → `Q_d` | the **assumed** actuation-noise spectral densities the belief uses to grow covariance during prediction |
 | **B. Simulation corruptions** (ground truth) | `command_noise_*`, `encoder_noise_*` | see config L167–177 | `src/sim/sim/actuation_noise_node.py` (`/cmd_vel`), `src/sim/sim/encoder_noise_node.py` (`/odom_noisy`) | the **real** disturbances injected into the simulated robot; the planner does **not** know them |
 | **C. Measurement noise** | `r_visible_uv`, `r_miss_uv` | 2.5, 40.0 (px) | `casadi_efe._blend_observation_covariance_ca` | image-space camera `(x,y)` measurement covariance, blended by GP visibility |
 
@@ -122,10 +122,10 @@ means *the camera (x,y) covariance is state-dependent*, nothing more.
   the **actuation** PSDs `σ_v` (forward-speed) and `σ_ω` (yaw-rate). `process_noise_xy`
   is a misleading name; it is *not* an xy-position noise. (Kept as-is in config for
   stability, but read it as `σ_v`.)
-- **"σ_θ = 0.046 matches the encoder noise specification"** → false equivalence.
-  `process_noise_theta = 0.046` is a **modeled** PSD (family A); the encoder angular
-  slip std is `0.16` (family B). They are different objects; one models the other,
-  they are not equal. (Flagged for a later TeX fix in §8.)
+- **"`process_noise_theta` matches the encoder noise specification"** → false
+  equivalence. `process_noise_theta = 0.05` is a **modeled** PSD (family A); the
+  encoder angular slip std is `0.04` and angular additive std is `0.03` (family B).
+  They are different objects; one models the other, they are not equal.
 - **"odometry fallback" for heading** → heading-from-odometry is the **primary**
   architecture under `camera_xy_only`, not a degraded fallback.
 - **"the camera measures pose / heading"** → the camera measures image-space `(u,v)`
@@ -179,9 +179,10 @@ predicted mean (expected over the `(x,y)` belief). Therefore:
   implemented `Q_d` exactly (nilpotent `F`, 3-term closed form). ✔
 - **Appendix `app:state_estimation`**: "the heading column of `G_k` is zero" matches
   `camera_xy_only` (no heading measurement). ✔
-- **`PLANNER_HYPERPARAMETERS.md`** lists `process_noise_theta = 0.02`; the active
-  config is **0.046**. Reconcile the doc to 0.046 and describe the parameters as PSDs
+- **`PLANNER_HYPERPARAMETERS.md`** has been reconciled to the active F31 values:
+  `process_noise_xy = 0.012`, `process_noise_theta = 0.05`, described as PSDs
   (std/√s) integrated over `Δt`.
-- **Experimental-setup section** states σ_θ "matches the encoder noise specification".
-  Reword: σ_θ is a *modeled* process PSD (family A), commensurate with — not equal to —
-  the simulation's encoder angular-slip std 0.16 (family B). (TeX fix deferred.)
+- **Experimental-setup section** must not say σ_θ "matches the encoder noise
+  specification". Reword: σ_θ is a *modeled* process PSD (family A), commensurate
+  with — not equal to — the simulation's encoder angular-slip std `0.04` and angular
+  additive std `0.03` (family B). (TeX fix deferred.)

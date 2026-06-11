@@ -41,6 +41,36 @@ from scipy.interpolate import RegularGridInterpolator
 
 RHO_SHADOW_THRESHOLD = 0.35
 
+PERCEPTION_WRITER_FIELDS = [
+    'diag_stamp', 'log_stamp', 'detected', 'true_available',
+    'true_x', 'true_y', 'true_yaw',
+    'state_available', 'state_x', 'state_y', 'state_yaw',
+    'state_age_s', 'state_fresh', 'state_pos_error', 'state_yaw_error_deg',
+    'obs_u', 'obs_v', 'obs_yaw', 'obs_yaw_error_deg',
+    'pixel_pose_available', 'pixel_pose_stamp', 'pixel_pose_u', 'pixel_pose_v',
+    'pixel_pose_yaw', 'pixel_pose_age_s', 'pixel_pose_fresh',
+    'pred_world_x', 'pred_world_y', 'localization_error_m',
+    'pred_world_x_calibrated', 'pred_world_y_calibrated',
+    'localization_error_calibrated_m', 'bev_y_calibration_offset_m',
+    'u_red', 'v_red', 'red_area_px', 'u_blue', 'v_blue', 'blue_area_px',
+    'separation_px', 'border_margin_px',
+    'yolo_score_raw', 'yolo_score_selected', 'yolo_detected_after_threshold',
+    'yolo_best_class_id', 'yolo_target_candidate_count',
+    'bbox_area_px', 'bbox_xmin', 'bbox_ymin', 'bbox_xmax', 'bbox_ymax',
+    'logit_margin', 'class_entropy',
+    'mask_area_px', 'mask_bottom_u', 'mask_bottom_v', 'mask_used',
+    'mask_polygon_points', 'confidence_logit', 'mask_compactness',
+    'mask_border_frac', 'mask_score',
+    'selected_pixel_source_code', 'yolo_raw_best_score',
+    'yolo_selected_score', 'yolo_num_target_candidates',
+    'yolo_selected_class_id', 'yolo_selected_pixel_source',
+    'yolo_bbox_area', 'yolo_mask_area', 'yolo_inference_ms',
+    'detector_callback_ms', 'yolo_receive_stamp', 'yolo_start_stamp',
+    'yolo_finish_stamp', 'yolo_publish_stamp', 'yolo_latency_s',
+    'frame_age_at_publish_s', 'detector_total_latency_s',
+    'camera_relative_bearing_deg', 'seed',
+]
+
 
 def _load_gp(artifact_path: Path):
     with np.load(artifact_path, allow_pickle=False) as data:
@@ -57,6 +87,20 @@ def _load_gp(artifact_path: Path):
 
 def _resolve_for_compare(path_str: str) -> Path:
     return Path(path_str).expanduser().resolve(strict=False)
+
+
+def _visibility_artifact_suffix(path: Path) -> Path:
+    parts = path.parts
+    if 'visibility_comparison' in parts:
+        idx = parts.index('visibility_comparison')
+        return Path(*parts[idx + 1:])
+    return Path(path.name)
+
+
+def _same_visibility_artifact(actual: Path | None, expected: Path) -> bool:
+    if actual is None:
+        return False
+    return actual == expected or _visibility_artifact_suffix(actual) == _visibility_artifact_suffix(expected)
 
 
 def _load_run_manifest(run_dir: Path) -> dict:
@@ -108,11 +152,15 @@ def _normalize_entry(key: str, entry: dict, campaign_root: Path) -> dict:
     run_dir = Path(run_dir_str) if run_dir_str else None
     if (run_dir is None or not run_dir.is_dir()) and campaign_root and seed != '':
         axis = str(entry.get('axis', 'monte_carlo_compare'))
-        candidate_parent = campaign_root / axis / raw_label / f'seed{seed}'
-        if candidate_parent.is_dir():
-            # Prefer the experiment_id from the original run_dir if we can
-            # match it, else take the most recent experiment_*.
-            exp_id = run_dir.name if run_dir is not None else ''
+        candidate_parents = [
+            campaign_root / task / condition / f'seed{seed}',
+            campaign_root / task / raw_label / f'seed{seed}',
+            campaign_root / axis / raw_label / f'seed{seed}',
+        ]
+        exp_id = run_dir.name if run_dir is not None else ''
+        for candidate_parent in candidate_parents:
+            if not candidate_parent.is_dir():
+                continue
             picked = (candidate_parent / exp_id) if exp_id else None
             if picked is None or not picked.is_dir():
                 experiments = sorted(candidate_parent.glob('experiment_*'))
@@ -120,6 +168,7 @@ def _normalize_entry(key: str, entry: dict, campaign_root: Path) -> dict:
                     picked = experiments[-1]
             if picked is not None and picked.is_dir():
                 run_dir = picked
+                break
 
     return {
         'task': task,
@@ -146,7 +195,7 @@ def _validate_campaign_gp_artifact(records: list[dict], gp_artifact: Path) -> No
         manifest = _load_run_manifest(run_dir)
         actual_str = str(manifest.get('visibility_artifact_path', '') or '')
         actual = _resolve_for_compare(actual_str) if actual_str else None
-        if actual != expected:
+        if not _same_visibility_artifact(actual, expected):
             mismatches.append((r.get('task', ''), r['condition'],
                                r.get('seed', ''), run_dir,
                                actual_str or '<missing>'))
@@ -171,11 +220,19 @@ def _load_experiment_csv(run_dir: Path) -> list[dict]:
     csv_path = run_dir / 'experiment.csv'
     if not csv_path.is_file():
         return []
-    rows = []
     with csv_path.open('r', newline='', encoding='utf-8') as f:
-        for row in csv.DictReader(f):
-            rows.append(row)
-    return rows
+        reader = csv.reader(f)
+        try:
+            header = next(reader)
+        except StopIteration:
+            return []
+        rows = []
+        for values in reader:
+            if len(values) == len(header):
+                rows.append(dict(zip(header, values)))
+            elif len(values) == len(PERCEPTION_WRITER_FIELDS):
+                rows.append(dict(zip(PERCEPTION_WRITER_FIELDS, values)))
+        return rows
 
 
 def _load_perception_csv(run_dir: Path) -> list[dict]:
@@ -204,6 +261,30 @@ def _pf(row: dict, key: str) -> float:
 
 
 NEAR_SUCCESS_RADIUS_M = 0.40  # entered goal region but did not satisfy hold
+
+
+def _loc_nll_nees(dx: float, dy: float, cov_x: float, cov_xy: float, cov_y: float) -> tuple[float, float]:
+    """Return Gaussian position NLL and NEES for the 2D planner belief."""
+    if not all(math.isfinite(v) for v in (dx, dy, cov_x, cov_y)):
+        return math.nan, math.nan
+    cov_xy = float(cov_xy) if math.isfinite(cov_xy) else 0.0
+    S = np.array([[float(cov_x), cov_xy], [cov_xy, float(cov_y)]], dtype=float)
+    S = 0.5 * (S + S.T)
+    try:
+        vals, vecs = np.linalg.eigh(S)
+    except np.linalg.LinAlgError:
+        return math.nan, math.nan
+    vals = np.clip(vals, 1e-9, None)
+    S_pd = (vecs * vals) @ vecs.T
+    e = np.array([float(dx), float(dy)], dtype=float)
+    try:
+        solved = np.linalg.solve(S_pd, e)
+    except np.linalg.LinAlgError:
+        return math.nan, math.nan
+    nees = float(e @ solved)
+    logdet = float(np.log(vals[0]) + np.log(vals[1]))
+    nll = 0.5 * (nees + logdet + 2.0 * math.log(2.0 * math.pi))
+    return nll, nees
 
 
 def _classify_outcome(summary: dict, completed_externally: bool = True) -> dict:
@@ -299,6 +380,7 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
             'final_goal_distance': final_goal_distance,
             'elapsed_s': elapsed_s,
             'mean_loc_error_m': summary_mean_truth_belief, 'mean_overconf': math.nan,
+            'mean_loc_nll': math.nan, 'mean_loc_nees': math.nan,
             'f_shadow': math.nan, 'mean_rho_plan': summary_mean_p_vis_eff,
             'path_efficiency': math.nan, 'mean_cov_trace': math.nan,
             'mean_solve_time_ms': mean_solve_time_ms,
@@ -328,6 +410,8 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
     # --- From CSV after first command ---
     loc_errors = []
     overconf_values = []
+    loc_nll_values = []
+    loc_nees_values = []
     rho_values = []
     cov_traces = []
     solve_times_ms = []
@@ -342,10 +426,13 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
         belief_y = _pf(row, 'planner_belief_y')
         belief_ok = _pf(row, 'planner_belief_available') >= 0.5 if math.isfinite(_pf(row, 'planner_belief_available')) else False
         cov_x = _pf(row, 'planner_cov_x')
+        cov_xy = _pf(row, 'planner_cov_xy')
         cov_y = _pf(row, 'planner_cov_y')
 
         if truth_ok and belief_ok and math.isfinite(belief_x) and math.isfinite(belief_y):
-            err = math.hypot(truth_x - belief_x, truth_y - belief_y)
+            dx = truth_x - belief_x
+            dy = truth_y - belief_y
+            err = math.hypot(dx, dy)
             loc_errors.append(err)
 
             if math.isfinite(cov_x) and math.isfinite(cov_y) and (cov_x + cov_y) > 0:
@@ -353,6 +440,11 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
                 cov_traces.append(cov_trace)
                 overconf = err / math.sqrt(cov_trace)
                 overconf_values.append(overconf)
+                nll, nees = _loc_nll_nees(dx, dy, cov_x, cov_xy, cov_y)
+                if math.isfinite(nll):
+                    loc_nll_values.append(nll)
+                if math.isfinite(nees):
+                    loc_nees_values.append(nees)
 
         if truth_ok and math.isfinite(truth_x) and math.isfinite(truth_y) and gp_interp is not None:
             rho = _query_rho(gp_interp, truth_x, truth_y)
@@ -365,6 +457,8 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
 
     mean_loc_error = float(np.mean(loc_errors)) if loc_errors else math.nan
     mean_overconf = float(np.mean(overconf_values)) if overconf_values else math.nan
+    mean_loc_nll = float(np.mean(loc_nll_values)) if loc_nll_values else math.nan
+    mean_loc_nees = float(np.mean(loc_nees_values)) if loc_nees_values else math.nan
     mean_cov_trace = float(np.mean(cov_traces)) if cov_traces else math.nan
 
     f_shadow = math.nan
@@ -452,6 +546,8 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
         'elapsed_s': elapsed_s,
         'mean_loc_error_m': mean_loc_error_out,
         'mean_overconf': mean_overconf,
+        'mean_loc_nll': mean_loc_nll,
+        'mean_loc_nees': mean_loc_nees,
         'f_shadow': f_shadow,
         'mean_rho_plan': mean_rho_plan,
         'path_efficiency': path_efficiency,
@@ -481,7 +577,8 @@ FIELDNAMES = [
     'task', 'condition', 'label', 'seed', 'planner', 'run_dir',
     'goal_reached', 'collision', 'completion_reason',
     'path_length_m', 'min_goal_distance', 'final_goal_distance', 'elapsed_s',
-    'mean_loc_error_m', 'mean_overconf', 'f_shadow', 'mean_rho_plan',
+    'mean_loc_error_m', 'mean_loc_nll', 'mean_loc_nees', 'mean_overconf',
+    'f_shadow', 'mean_rho_plan',
     'path_efficiency', 'mean_cov_trace',
     'yolo_detection_rate',
     'mean_solve_time_ms', 'p90_solve_time_ms',
@@ -514,7 +611,8 @@ def _print_summary(rows: list[dict]) -> str:
     lines = []
     header = (f'{"Task":<22} {"Cond":<22} {"N":>3} {"Clean%":>7} {"Near%":>6} '
               f'{"Coll%":>6} {"Pen%":>5} {"Inv%":>5} '
-              f'{"L(m)":>10} {"ē(m)":>10} {"c̄":>9} '
+              f'{"L(m)":>10} {"ē(m)":>10} {"NLL":>9} {"NEES":>9} '
+              f'{"c̄":>9} '
               f'{"f_shad":>8} {"det_rate":>9} {"η":>8} {"solve(ms)":>10}')
     lines.append(header)
     lines.append('-' * len(header))
@@ -556,6 +654,7 @@ def _print_summary(rows: list[dict]) -> str:
                 f'{clean_pct:>6.0f}% {near_pct:>5.0f}% '
                 f'{coll_pct:>5.0f}% {pen_pct:>4.0f}% {inv_pct:>4.0f}% '
                 f'{_mean_std("path_length_m"):>10} {_mean_std("mean_loc_error_m"):>10} '
+                f'{_mean_std("mean_loc_nll"):>9} {_mean_std("mean_loc_nees"):>9} '
                 f'{_mean_std("mean_overconf"):>9} {_mean_std("f_shadow"):>8} '
                 f'{_mean_std("yolo_detection_rate"):>9} '
                 f'{_mean_std("path_efficiency"):>8} {_mean_std("mean_solve_time_ms"):>10}'

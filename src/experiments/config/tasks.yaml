@@ -36,24 +36,21 @@ tasks:
     goal:
       x: 3.45
       y: -3.15
-  - name: b2_a1_apron_to_a2_mid
-    description: 'West-side route-choice mirror. Start in the visible A1 apron (-3.0,-1.0,
-      p_vis~0.74), goal in the visible A2 mid-cross aisle (-1.0,1.75, p_vis~0.66).
-      The short northward A1 route dips to p_vis~0.20 mid-aisle; the A2 detour stays
-      visible. Milder visibility contrast than F31_b1.
+  - name: b2_a0_west_to_a1_upper
+    description: 'West-side route-choice discriminator. Start in the visible west service lane A0 (-5.25,-0.75, p_vis~0.93), goal in the visible upper A1 aisle (-3.0,3.5, p_vis~0.65). The short northward A0 route traverses camera-poor space; the southern detour stays visible.
 
       '
     tier: generality
     claim: visibility_route_choice
-    focus: west_mirror_route_choice
+    focus: west_side_route_choice
     start:
-      x: -3.0
-      y: -1.0
+      x: -5.25
+      y: -0.75
       z: 0.05
       yaw: 0.0
     goal:
-      x: -1.0
-      y: 1.75
+      x: -3.0
+      y: 3.5
   # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
   - name: a0_west_to_a1_upper_blocked_mid
     description: 'Exploratory long-blind AWS route-choice benchmark (A0->A1 variant).
@@ -135,6 +132,47 @@ tasks:
     start:
       x: 3.3
       y: -1.0
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -1.0
+      y: 1.75
+  - name: b6_a0_west_to_a1_low_control
+    description: 'CONTROL task (visible start + visible goal). Start in the visible
+      west service lane (-5.25,-0.75, p_vis~0.93), goal in the visible A1 aisle low
+      (-3.0,-0.75, p_vis~0.83). Because R1 is a continuous shelf (no mid gap) and all
+      of A1-upper/west-upper is occluded, the only sensible route is the visible
+      lower path (down to the lower main aisle, east, up A1). There is no short-blind
+      shortcut, so BOTH C1 and C2 should agree on the visible route and reach. Tests
+      that the method does not invent spurious detours on easy/visible tasks.
+
+      '
+    tier: control
+    claim: no_spurious_detour
+    focus: visible_control
+    start:
+      x: -5.25
+      y: -0.75
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -3.0
+      y: -0.75
+  - name: b7_a0_west_to_a2_mid
+    description: 'West-side route-choice (visible start + visible goal). Start in the
+      visible west service lane (-5.25,-0.75, p_vis~0.93), goal in the visible A2 mid
+      cross-aisle (-1.0,1.75, p_vis~0.86). The short route climbs the occluded
+      west-upper / A1-upper region and crosses near the upper cross-aisle (camera-poor);
+      the visible detour runs south to the lower main aisle, east, then up the visible
+      A2 aisle. West-side analogue of F31_b1.
+
+      '
+    tier: paper
+    claim: visibility_route_choice
+    focus: west_side_long_shortcut
+    start:
+      x: -5.25
+      y: -0.75
       z: 0.05
       yaw: 0.0
     goal:

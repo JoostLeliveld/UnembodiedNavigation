@@ -1,4 +1,5 @@
 import math
+import threading
 import time
 from pathlib import Path
 
@@ -89,6 +90,12 @@ class YoloRobotDetectorNode(Node):
         self._last_receive_stamp_s = math.nan
         self._last_predict_start_stamp_s = math.nan
         self._last_predict_finish_stamp_s = math.nan
+        self._latest_image_shape = (0, 0)
+        self._pending_image = None
+        self._pending_receive_stamp_s = math.nan
+        self._image_lock = threading.Lock()
+        self._image_event = threading.Event()
+        self._worker_stop = threading.Event()
 
         self.model = YOLO(str(self.model_path))
         self.target_ids = target_class_ids(getattr(self.model, 'names', {}), self.class_name, self.class_id)
@@ -102,12 +109,15 @@ class YoloRobotDetectorNode(Node):
 
         self.pixel_pub = self.create_publisher(PoseStamped, '/perception/pixel_pose', 10)
         self.diag_pub = self.create_publisher(Float64MultiArray, DETECTION_DIAGNOSTICS_TOPIC, 10)
-        self.create_subscription(Image, '/external_camera/image_raw', self._image_cb, 10)
+        self.create_subscription(Image, '/external_camera/image_raw', self._image_cb, 1)
+        self._worker = threading.Thread(target=self._inference_worker, daemon=True)
+        self._worker.start()
 
         self.get_logger().info(
             f'YOLO runtime detector started (model={self.model_path}, conf={self.confidence_threshold:.2f}, '
             f'iou={self.iou_threshold:.2f}, use_masks={self.use_masks}, '
-            f'task={"pose" if self.is_pose_model else "seg/det"}, device={self.device or "auto"})'
+            f'task={"pose" if self.is_pose_model else "seg/det"}, device={self.device or "auto"}, '
+            'input_policy=latest-frame-only)'
         )
 
     def _predict(self, image_bgr: np.ndarray):
@@ -224,8 +234,38 @@ class YoloRobotDetectorNode(Node):
         )
 
     def _image_cb(self, msg: Image):
+        receive_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9
+        with self._image_lock:
+            self._pending_image = msg
+            self._pending_receive_stamp_s = receive_stamp_s
+        self._image_event.set()
+
+    def _take_latest_image(self):
+        with self._image_lock:
+            msg = self._pending_image
+            receive_stamp_s = self._pending_receive_stamp_s
+            self._pending_image = None
+            self._pending_receive_stamp_s = math.nan
+        return msg, receive_stamp_s
+
+    def _inference_worker(self):
+        while not self._worker_stop.is_set():
+            self._image_event.wait(timeout=0.1)
+            if self._worker_stop.is_set():
+                break
+            self._image_event.clear()
+            msg, receive_stamp_s = self._take_latest_image()
+            if msg is None:
+                continue
+            self._process_image(msg, receive_stamp_s)
+            with self._image_lock:
+                has_newer_image = self._pending_image is not None
+            if has_newer_image:
+                self._image_event.set()
+
+    def _process_image(self, msg: Image, receive_stamp_s: float):
         callback_start = time.perf_counter()
-        self._last_receive_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9
+        self._last_receive_stamp_s = receive_stamp_s
         image_bgr = image_msg_to_bgr8(msg)
         self._latest_image_shape = image_bgr.shape[:2]
         predict_start = time.perf_counter()
@@ -242,6 +282,14 @@ class YoloRobotDetectorNode(Node):
             self._handle_pose_result(msg, results[0])
         else:
             self._handle_seg_result(msg, results[0])
+
+    def destroy_node(self):
+        self._worker_stop.set()
+        self._image_event.set()
+        worker = getattr(self, '_worker', None)
+        if worker is not None and worker.is_alive():
+            worker.join(timeout=2.0)
+        return super().destroy_node()
 
     def _handle_seg_result(self, msg: Image, result) -> None:
         selection = select_best_detection(

@@ -577,11 +577,26 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'command_noise_correlation_alpha': float(
             _launch_value(context, 'command_noise_correlation_alpha', _COMMAND_NOISE_CORRELATION_ALPHA)
         ),
+        'encoder_noise_linear_slip_mean': float(
+            _launch_value(context, 'encoder_noise_linear_slip_mean', _ENCODER_NOISE_LINEAR_SLIP_MEAN)
+        ),
+        'encoder_noise_linear_slip_std': float(
+            _launch_value(context, 'encoder_noise_linear_slip_std', _ENCODER_NOISE_LINEAR_SLIP_STD)
+        ),
+        'encoder_noise_angular_slip_mean': float(
+            _launch_value(context, 'encoder_noise_angular_slip_mean', _ENCODER_NOISE_ANGULAR_SLIP_MEAN)
+        ),
         'encoder_noise_angular_slip_std': float(
             _launch_value(context, 'encoder_noise_angular_slip_std', _ENCODER_NOISE_ANGULAR_SLIP_STD)
         ),
+        'encoder_noise_linear_additive_std': float(
+            _launch_value(context, 'encoder_noise_linear_additive_std', _ENCODER_NOISE_LINEAR_ADDITIVE_STD)
+        ),
         'encoder_noise_angular_additive_std': float(
             _launch_value(context, 'encoder_noise_angular_additive_std', _ENCODER_NOISE_ANGULAR_ADDITIVE_STD)
+        ),
+        'encoder_noise_correlation_alpha': float(
+            _launch_value(context, 'encoder_noise_correlation_alpha', _ENCODER_NOISE_CORRELATION_ALPHA)
         ),
         'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
         'debug_runtime': _as_bool(_launch_value(context, 'debug_runtime', 'false')),
@@ -863,16 +878,19 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'input_topic': '/odom',
             'output_topic': '/odom_noisy',
             'seed': cfg['seed'],
-            'linear_slip_mean': _ENCODER_NOISE_LINEAR_SLIP_MEAN,
-            'linear_slip_std': _ENCODER_NOISE_LINEAR_SLIP_STD,
-            'angular_slip_mean': _ENCODER_NOISE_ANGULAR_SLIP_MEAN,
+            'linear_slip_mean': cfg.get('encoder_noise_linear_slip_mean', _ENCODER_NOISE_LINEAR_SLIP_MEAN),
+            'linear_slip_std': cfg.get('encoder_noise_linear_slip_std', _ENCODER_NOISE_LINEAR_SLIP_STD),
+            'angular_slip_mean': cfg.get('encoder_noise_angular_slip_mean', _ENCODER_NOISE_ANGULAR_SLIP_MEAN),
             'angular_slip_std': cfg.get('encoder_noise_angular_slip_std', _ENCODER_NOISE_ANGULAR_SLIP_STD),
-            'linear_additive_std': _ENCODER_NOISE_LINEAR_ADDITIVE_STD,
+            'linear_additive_std': cfg.get(
+                'encoder_noise_linear_additive_std',
+                _ENCODER_NOISE_LINEAR_ADDITIVE_STD,
+            ),
             'angular_additive_std': cfg.get(
                 'encoder_noise_angular_additive_std',
                 _ENCODER_NOISE_ANGULAR_ADDITIVE_STD,
             ),
-            'correlation_alpha': _ENCODER_NOISE_CORRELATION_ALPHA,
+            'correlation_alpha': cfg.get('encoder_noise_correlation_alpha', _ENCODER_NOISE_CORRELATION_ALPHA),
         }],
     )
 
@@ -1117,13 +1135,33 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'command_noise_linear_additive_std': cfg['command_noise_linear_additive_std'],
                 'command_noise_angular_additive_std': cfg['command_noise_angular_additive_std'],
                 'command_noise_correlation_alpha': cfg['command_noise_correlation_alpha'],
+                'encoder_noise_linear_slip_mean': cfg.get(
+                    'encoder_noise_linear_slip_mean',
+                    _ENCODER_NOISE_LINEAR_SLIP_MEAN,
+                ),
+                'encoder_noise_linear_slip_std': cfg.get(
+                    'encoder_noise_linear_slip_std',
+                    _ENCODER_NOISE_LINEAR_SLIP_STD,
+                ),
+                'encoder_noise_angular_slip_mean': cfg.get(
+                    'encoder_noise_angular_slip_mean',
+                    _ENCODER_NOISE_ANGULAR_SLIP_MEAN,
+                ),
                 'encoder_noise_angular_slip_std': cfg.get(
                     'encoder_noise_angular_slip_std',
                     _ENCODER_NOISE_ANGULAR_SLIP_STD,
                 ),
+                'encoder_noise_linear_additive_std': cfg.get(
+                    'encoder_noise_linear_additive_std',
+                    _ENCODER_NOISE_LINEAR_ADDITIVE_STD,
+                ),
                 'encoder_noise_angular_additive_std': cfg.get(
                     'encoder_noise_angular_additive_std',
                     _ENCODER_NOISE_ANGULAR_ADDITIVE_STD,
+                ),
+                'encoder_noise_correlation_alpha': cfg.get(
+                    'encoder_noise_correlation_alpha',
+                    _ENCODER_NOISE_CORRELATION_ALPHA,
                 ),
                 **cfg['camera_params'],
             }],

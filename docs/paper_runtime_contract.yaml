@@ -49,7 +49,7 @@ paper_runtime_contract:
     gp_artifact: logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz
     gp_params: {kernel: rbf, length_scale: 0.90, beta: 0.5, noise_var: 0.05}
     detector: logs/perception_models/aws_yolo_simseg_v2/model.pt
-    process_noise: {model: analytical_Qd, process_noise_xy: 0.01, process_noise_theta: 0.046,
+    process_noise: {model: analytical_Qd, process_noise_xy: 0.012, process_noise_theta: 0.05,
                     note: "sigma_v / sigma_omega actuation PSDs (std per sqrt s), integrated over dt; see uncertainty_propagation.md"}
     superseded: {gps: [aws_gp_v5, aws_gp_v6, aws_gp_v6b, aws_gp_v7], cameras: ["z=4.5/y=-4.9", "z=4.9/y=-5.5"]}
 
@@ -100,7 +100,7 @@ paper_runtime_contract:
       connectors); driveable = inside any prism. Connectors overlap adjacent aisles so
       the union signed-distance has no false-violation seam at edge boundaries.
 
-  locked_runtime:   # mirrors scripts/visibility_comparison/aws_f31b1_final_config.yaml (2026-06-10)
+  locked_runtime:   # mirrors scripts/visibility_comparison/aws_f31b1_final_config.yaml (2026-06-11)
     hierarchical: true
     global_solve_role: route_level_EFE_choice
     global_horizon: 120
@@ -117,23 +117,25 @@ paper_runtime_contract:
     use_odom_heading_correction: false
     no_keypoint_or_visual_heading: true
     nogo_weight: 2000.0
-    nogo_safe_distance: 0.15
+    nogo_safe_distance: 0.25
     nogo_warning_band: 0.05
     nogo_near_weight: 50.0
     use_belief_nogo_cost: false           # global; belief-nogo route mechanism retired
     ambiguity_weight: 18.0
     risk_weight_obs: 1.0
     control_weight: 0.0                    # NOTE: no path-length/effort term (see open_status_2026_06_10)
+    direct_visibility_reward: false         # GP affects camera (x,y) covariance only; no visibility_weight cost term exists
     goal_prior_u_std: {start: 50.0, final: 12.0}
     goal_prior_v_std: {start: 50.0, final: 12.0}
     optimizer_multistart: true
     optimizer_multistart_include_direct: false
     optimizer_multistart_lateral_offsets: 0.0   # removed: +/-1m shift hit a non-driveable corner
     optimizer_initial_routes: [mid_cross_lane, lower_sweep_lane]
-    perception: {yolo_imgsz: 640, conf_threshold: 0.10, use_masks: true, selected_pixel_source: bbox_bottom}
+    perception: {yolo_imgsz: 640, conf_threshold: 0.10, class_filter: "name=robot (class_id=-1)", use_masks: true, selected_pixel_source: bbox_bottom}
     # selected_pixel_source is bbox_bottom (most stable ground-plane proxy); masks are
     # computed for diagnostics only (mask_area/mask_bottom) and the state node ignores
-    # the source code. The NIS pixel-correction gate is OFF (threshold 0) in paper runs.
+    # the source code. The NIS pixel-correction gate is OFF (threshold 0; code rejects
+    # by NIS only when the threshold is >0) in paper runs.
     use_command_noise: true
     use_encoder_noise: true
 

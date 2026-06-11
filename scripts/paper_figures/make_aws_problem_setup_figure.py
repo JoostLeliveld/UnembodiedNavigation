@@ -408,11 +408,11 @@ def main() -> int:
         fig_s, axes_s = plt.subplots(1, 2, figsize=(9.4, 4.9), constrained_layout=True)
         draw_snapshot_panel(
             axes_s[0], profile, start, goal, exp, plan, early_idx,
-            f"(b) initial rollout\n$t={early_time:.1f}\\,$s", annotate=False,
+            f"(a) initial rollout\n$t={early_time:.1f}\\,$s", annotate=False,
         )
         draw_snapshot_panel(
             axes_s[1], profile, start, goal, exp, plan, late_idx,
-            f"(c) near reduced camera-update reliability\n$t={late_time:.1f}\\,$s", annotate=True,
+            f"(b) near reduced camera-update reliability\n$t={late_time:.1f}\\,$s", annotate=True,
         )
         fig_s.legend(
             handles=legend_handles(), loc="lower center", ncol=7, fontsize=8,
