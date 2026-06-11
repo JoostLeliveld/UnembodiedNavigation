@@ -20,6 +20,12 @@ def generate_launch_description():
         description="Enable LiDAR sensor plugin in the URDF",
     )
     use_lidar = LaunchConfiguration("use_lidar")
+    show_pose_markers_arg = DeclareLaunchArgument(
+        "show_pose_markers",
+        default_value="false",
+        description="Render the opt-in cyan/magenta pose-keypoint marker disks",
+    )
+    show_pose_markers = LaunchConfiguration("show_pose_markers")
 
     robot_description = Command([
         "xacro ",
@@ -32,6 +38,9 @@ def generate_launch_description():
         " ",
         "use_lidar:=",
         use_lidar,
+        " ",
+        "show_pose_markers:=",
+        show_pose_markers,
     ])
 
 
@@ -50,5 +59,6 @@ def generate_launch_description():
     return LaunchDescription([
         use_sim_time_arg,
         use_lidar_arg,
+        show_pose_markers_arg,
         robot_state_publisher,
     ])

@@ -8,8 +8,8 @@ These offsets must match the `pose_markers` block in
 Two keypoint indices are used by both the dataset capture script, the YOLO
 training YAML, the perception node, and the state node:
 
-  KEYPOINT_FRONT = 0   # red disk, +x in robot frame
-  KEYPOINT_REAR  = 1   # blue disk, -x in robot frame
+  KEYPOINT_FRONT = 0   # cyan marker disk, +x in robot frame
+  KEYPOINT_REAR  = 1   # magenta marker disk, -x in robot frame
 """
 
 from __future__ import annotations

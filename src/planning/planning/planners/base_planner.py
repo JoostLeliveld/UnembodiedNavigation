@@ -396,17 +396,18 @@ class UnicyclePlannerBase:
             # Launch wrappers can close stdout while planner work is still running.
             pass
 
-    def process_noise(self, dt=None):
+    def process_noise(self, dt=None, theta=None, v=None):
         step_dt = self.dt if dt is None else float(dt)
         return unicycle_process_noise(
-            self.process_noise_xy, self.process_noise_theta, step_dt, base_dt=self.dt
+            self.process_noise_xy, self.process_noise_theta, step_dt,
+            theta=theta, v=v, base_dt=self.dt
         )
 
     def predict(self, m, S, u, dt=None):
         step_dt = self.dt if dt is None else float(dt)
         m_next = unicycle_step(m, u, step_dt)
         F = unicycle_jacobian(m, u, step_dt)
-        Q = self.process_noise(step_dt)
+        Q = self.process_noise(step_dt, theta=float(m[2]), v=float(u[0]))
         S_next = F @ S @ F.T + Q
         return m_next, S_next
 
@@ -972,13 +973,16 @@ class UnicyclePlannerBase:
                 else:
                     nogo_cost_ca = self.nogo_cost_model.make_penalty_state_casadi()
             params_ca = casadi_efe.CasadiEfeParams(
-                Q=np.array(self.process_noise(self.dt), dtype=float),
+                # No static Q: the EFE loop rebuilds the exact Q_d(theta, v, dt) per step
+                # from process_noise_xy/theta (see unicycle_process_noise_ca).
                 R_visible=np.array(self.R_visible, dtype=float),
                 R_miss=np.array(self.R_miss, dtype=float),
                 control_weight=float(self.control_weight),
                 risk_scale=float(self.risk_weight_obs * self.observation_risk_scale if use_observation_risk else 0.0),
                 ambiguity_scale=float(self.ambiguity_weight * self.ambiguity_term_scale if use_ambiguity_term else 0.0),
                 discount_gamma=float(self.discount_gamma),
+                process_noise_xy=float(self.process_noise_xy),
+                process_noise_theta=float(self.process_noise_theta),
                 visibility_sigma_kappa=float(self.visibility_sigma_kappa),
                 goal_prior_u_std_start=float(self.goal_prior_u_std_start),
                 goal_prior_v_std_start=float(self.goal_prior_v_std_start),
@@ -1149,9 +1153,9 @@ class UnicyclePlannerBase:
                 S_nogo = self._expected_state_posterior_covariance(S, Sigma_y, Gamma)
             total_obstacle += weight_t * self.obstacle_penalty(m, S_nogo)
             total_control += weight_t * self.control_weight * float(u[0] ** 2 + u[1] ** 2)
-            if self.goal_progress_weight > 0.0:
-                dxy = np.asarray(m[:2], dtype=float).reshape(2) - goal_xy
-                total_progress += weight_t * self.goal_progress_weight * float(dxy @ dxy)
+            # Metric goal-distance reward REMOVED (2026-06-10): non-EFE goal attractor;
+            # goal-seeking must emerge from the EFE goal-prior in the risk term, not a
+            # hand-added ||mean-goal||^2 penalty. total_progress stays 0.
             if use_ref:
                 dref = np.asarray(m[:2], dtype=float).reshape(2) - ref_xy[t]
                 total_ref += weight_t * ref_weight * float(dref @ dref)

@@ -30,7 +30,7 @@ REPO = Path(__file__).resolve().parents[2]
 THESIS = REPO.parent / "thesis-report"
 
 WORLD = "warehouse_aws.world.sdf"
-DEFAULT_GP = REPO / "logs/visibility_comparison/aws_gp_v5/yolo_score_raw_gp.npz"
+DEFAULT_GP = REPO / "logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz"
 DEFAULT_PROFILE = REPO / "src/experiments/config/world_profiles.yaml"
 DEFAULT_OUT = THESIS / "figures/campaign/gp_pipeline_aws.pdf"
 DEFAULT_PREVIEW = REPO / "logs/paper_figures/gp_pipeline_aws.png"
@@ -159,10 +159,23 @@ def main() -> int:
     ax = axes[0]
     draw_regions(ax, profile, alpha=0.20)
     draw_racks(ax)
+    # Plot-only cleanup (no GP refit): hide the two aggregated training dots that render
+    # inside/on the R0 (leftmost) shelf footprint so the obstacle reads cleanly. The GP fit
+    # and all downstream panels are unchanged — only these markers are not drawn.
+    _X = gp["X_train"]
+    _p = gp["p_train"]
+    _r0_x0, _r0_x1, _r0_y0, _r0_y1 = -4.325, -3.775, -0.82, 4.25
+    _on_r0 = (
+        (_X[:, 0] >= _r0_x0 - 0.02)
+        & (_X[:, 0] <= _r0_x1 + 0.08)
+        & (_X[:, 1] >= _r0_y0)
+        & (_X[:, 1] <= _r0_y1)
+    )
+    _keep = ~_on_r0
     sc = ax.scatter(
-        gp["X_train"][:, 0],
-        gp["X_train"][:, 1],
-        c=gp["p_train"],
+        _X[_keep, 0],
+        _X[_keep, 1],
+        c=_p[_keep],
         cmap="viridis",
         vmin=0.0,
         vmax=1.0,

@@ -368,16 +368,120 @@ def top_height_at_xy(prisms: tuple[AxisAlignedPrism, ...] | list[AxisAlignedPris
     return float(top_heights_for_xy(prisms, np.array([[x, y]], dtype=float))[0])
 
 
-def signed_distance_to_union_xy(prisms: tuple[AxisAlignedPrism, ...] | list[AxisAlignedPrism], xy: np.ndarray) -> np.ndarray:
+import functools
+
+@functools.lru_cache(maxsize=16)
+def _get_union_boundary_segments(prisms: tuple[AxisAlignedPrism, ...]) -> list[tuple[np.ndarray, np.ndarray]]:
+    if not prisms:
+        return []
+    
+    prisms_list = list(prisms)
+    
+    def is_inside_interior_of_any_other(x, y, ignore_idx):
+        for idx, p in enumerate(prisms_list):
+            if idx == ignore_idx:
+                continue
+            if (p.xmin + 1e-5 < x < p.xmax - 1e-5) and (p.ymin + 1e-5 < y < p.ymax - 1e-5):
+                return True
+        return False
+
+    boundary_segments = []
+    for idx, p in enumerate(prisms_list):
+        edges = [
+            (np.array([p.xmin, p.ymin]), np.array([p.xmin, p.ymax]), 'vertical'),
+            (np.array([p.xmax, p.ymin]), np.array([p.xmax, p.ymax]), 'vertical'),
+            (np.array([p.xmin, p.ymin]), np.array([p.xmax, p.ymin]), 'horizontal'),
+            (np.array([p.xmin, p.ymax]), np.array([p.xmax, p.ymax]), 'horizontal'),
+        ]
+        for p1, p2, orient in edges:
+            splits = [0.0, 1.0]
+            if orient == 'vertical':
+                x_val = p1[0]
+                y_start, y_end = p1[1], p2[1]
+                for o_idx, op in enumerate(prisms_list):
+                    if o_idx == idx:
+                        continue
+                    if op.xmin - 1e-5 < x_val < op.xmax + 1e-5:
+                        y_min_clip = max(y_start, op.ymin)
+                        y_max_clip = min(y_end, op.ymax)
+                        if y_min_clip < y_max_clip:
+                            splits.append((y_min_clip - y_start) / (y_end - y_start))
+                            splits.append((y_max_clip - y_start) / (y_end - y_start))
+            else:
+                y_val = p1[1]
+                x_start, x_end = p1[0], p2[0]
+                for o_idx, op in enumerate(prisms_list):
+                    if o_idx == idx:
+                        continue
+                    if op.ymin - 1e-5 < y_val < op.ymax + 1e-5:
+                        x_min_clip = max(x_start, op.xmin)
+                        x_max_clip = min(x_end, op.xmax)
+                        if x_min_clip < x_max_clip:
+                            splits.append((x_min_clip - x_start) / (x_end - x_start))
+                            splits.append((x_max_clip - x_start) / (x_end - x_start))
+            
+            splits = sorted(list(set([float(np.clip(s, 0.0, 1.0)) for s in splits])))
+            for i in range(len(splits) - 1):
+                s1, s2 = splits[i], splits[i+1]
+                if s2 - s1 < 1e-5:
+                    continue
+                smid = 0.5 * (s1 + s2)
+                pt_mid = p1 + smid * (p2 - p1)
+                if not is_inside_interior_of_any_other(pt_mid[0], pt_mid[1], idx):
+                    boundary_segments.append((
+                        p1 + s1 * (p2 - p1),
+                        p1 + s2 * (p2 - p1)
+                    ))
+    return boundary_segments
+
+
+def signed_distance_to_union_xy(
+    prisms: tuple[AxisAlignedPrism, ...] | list[AxisAlignedPrism],
+    xy: np.ndarray,
+    *,
+    keep_in: bool = True,
+) -> np.ndarray:
     pts = np.asarray(xy, dtype=float)
-    if pts.ndim == 1:
+    is_1d = (pts.ndim == 1)
+    if is_1d:
         pts = pts.reshape(1, 2)
     if not prisms:
         return np.full(pts.shape[0], np.inf, dtype=float)
-    signed = np.full(pts.shape[0], np.inf, dtype=float)
-    for prism in prisms:
-        signed = np.minimum(signed, prism.signed_distance_xy(pts))
+    
+    if not keep_in:
+        signed = np.full(pts.shape[0], np.inf, dtype=float)
+        for prism in prisms:
+            signed = np.minimum(signed, prism.signed_distance_xy(pts))
+        return signed
+        
+    segs = _get_union_boundary_segments(tuple(prisms))
+    if not segs:
+        return np.full(pts.shape[0], np.inf, dtype=float)
+        
+    n_pts = pts.shape[0]
+    min_dists = np.full(n_pts, np.inf, dtype=float)
+    
+    for p1, p2 in segs:
+        v = p2 - p1
+        v_len_sq = np.sum(v**2)
+        if v_len_sq < 1e-9:
+            d = np.linalg.norm(pts - p1, axis=1)
+        else:
+            w = pts - p1
+            t = np.clip(np.dot(w, v) / v_len_sq, 0.0, 1.0)
+            closest = p1 + t[:, np.newaxis] * v
+            d = np.linalg.norm(pts - closest, axis=1)
+        min_dists = np.minimum(min_dists, d)
+        
+    is_inside = np.zeros(n_pts, dtype=bool)
+    for p in prisms:
+        dx = np.maximum(np.maximum(p.xmin - pts[:, 0], 0.0), pts[:, 0] - p.xmax)
+        dy = np.maximum(np.maximum(p.ymin - pts[:, 1], 0.0), pts[:, 1] - p.ymax)
+        is_inside |= (dx <= 0.0) & (dy <= 0.0)
+        
+    signed = np.where(is_inside, -min_dists, min_dists)
     return signed
+
 
 
 def segment_intersects_prism(start_xyz: np.ndarray, end_xyz: np.ndarray, prism: AxisAlignedPrism, *, eps: float = 1e-9) -> bool:

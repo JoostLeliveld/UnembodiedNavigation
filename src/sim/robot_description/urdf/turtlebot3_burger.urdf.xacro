@@ -4,6 +4,7 @@
   <!-- Arguments -->
   <xacro:arg name="namespace" default=""/>
   <xacro:arg name="use_lidar" default="true"/>
+  <xacro:arg name="show_pose_markers" default="false"/>
   <xacro:property name="ns" value="$(arg namespace)"/>
 
   <!-- Pose-keypoint definitions (in base_link frame). No extra geometry is
@@ -191,39 +192,43 @@
   <!-- ===================== -->
   <!-- Heading marker disks (v2): small distinct top markers at max front-rear
        separation. front=cyan @ pm_front_x, rear=magenta @ pm_rear_x, both at
-       pm_marker_z (above the lidar so the oblique camera sees both). -->
+       pm_marker_z (above the lidar so the oblique camera sees both).
+       They are opt-in so segmentation-detector runs keep the visual domain used
+       to train aws_yolo_simseg_v2. -->
   <!-- ===================== -->
-  <joint name="${ns}front_marker_joint" type="fixed">
-    <parent link="${ns}base_link"/>
-    <child link="${ns}front_marker"/>
-    <origin xyz="${pm_front_x} ${pm_marker_y} ${pm_marker_z}"/>
-  </joint>
-  <link name="${ns}front_marker">
-    <visual>
-      <geometry><cylinder length="0.008" radius="0.025"/></geometry>
-      <material name="marker_cyan"/>
-    </visual>
-    <inertial>
-      <mass value="0.001"/>
-      <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/>
-    </inertial>
-  </link>
+  <xacro:if value="$(arg show_pose_markers)">
+    <joint name="${ns}front_marker_joint" type="fixed">
+      <parent link="${ns}base_link"/>
+      <child link="${ns}front_marker"/>
+      <origin xyz="${pm_front_x} ${pm_marker_y} ${pm_marker_z}"/>
+    </joint>
+    <link name="${ns}front_marker">
+      <visual>
+        <geometry><cylinder length="0.008" radius="0.025"/></geometry>
+        <material name="marker_cyan"/>
+      </visual>
+      <inertial>
+        <mass value="0.001"/>
+        <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/>
+      </inertial>
+    </link>
 
-  <joint name="${ns}rear_marker_joint" type="fixed">
-    <parent link="${ns}base_link"/>
-    <child link="${ns}rear_marker"/>
-    <origin xyz="${pm_rear_x} ${pm_marker_y} ${pm_marker_z}"/>
-  </joint>
-  <link name="${ns}rear_marker">
-    <visual>
-      <geometry><cylinder length="0.008" radius="0.025"/></geometry>
-      <material name="marker_magenta"/>
-    </visual>
-    <inertial>
-      <mass value="0.001"/>
-      <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/>
-    </inertial>
-  </link>
+    <joint name="${ns}rear_marker_joint" type="fixed">
+      <parent link="${ns}base_link"/>
+      <child link="${ns}rear_marker"/>
+      <origin xyz="${pm_rear_x} ${pm_marker_y} ${pm_marker_z}"/>
+    </joint>
+    <link name="${ns}rear_marker">
+      <visual>
+        <geometry><cylinder length="0.008" radius="0.025"/></geometry>
+        <material name="marker_magenta"/>
+      </visual>
+      <inertial>
+        <mass value="0.001"/>
+        <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/>
+      </inertial>
+    </link>
+  </xacro:if>
 
     <!-- ============================================================= -->
     <!-- Gazebo Sensor Plugins -->

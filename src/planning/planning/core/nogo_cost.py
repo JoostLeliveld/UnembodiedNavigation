@@ -7,7 +7,7 @@ import math
 
 import numpy as np
 
-from unav_common.occlusion_geometry import scene_from_json, signed_distance_to_union_xy
+from unav_common.occlusion_geometry import scene_from_json, signed_distance_to_union_xy, _get_union_boundary_segments
 
 
 VALID_NOGO_PENALTIES = ('gaussian', 'softplus', 'log_barrier', 'warning_band')
@@ -70,6 +70,7 @@ class NogoZoneCostModel:
         self._xmaxs = np.asarray([float(p.xmax) for p in self.prisms], dtype=float)
         self._ymins = np.asarray([float(p.ymin) for p in self.prisms], dtype=float)
         self._ymaxs = np.asarray([float(p.ymax) for p in self.prisms], dtype=float)
+        self.union_boundary_segments = _get_union_boundary_segments(self.prisms)
 
     @property
     def enabled(self) -> bool:
@@ -104,7 +105,8 @@ class NogoZoneCostModel:
         )
 
     def _clearance_np(self, xy: np.ndarray) -> float:
-        signed_d = float(signed_distance_to_union_xy(self.prisms, np.asarray(xy, dtype=float))[0])
+        keep_in_flag = (self.mode == 'keep_in')
+        signed_d = float(signed_distance_to_union_xy(self.prisms, np.asarray(xy, dtype=float), keep_in=keep_in_flag)[0])
         if self.mode == 'keep_in':
             # signed_d <= 0 inside the driveable union. Positive clearance
             # means the mean state is safely inside the known driveable floor.
@@ -115,7 +117,8 @@ class NogoZoneCostModel:
         if not self.prisms:
             return float('inf')
         xy = np.array([float(m[0]), float(m[1])], dtype=float)
-        signed_d = float(signed_distance_to_union_xy(self.prisms, xy)[0])
+        keep_in_flag = (self.mode == 'keep_in')
+        signed_d = float(signed_distance_to_union_xy(self.prisms, xy, keep_in=keep_in_flag)[0])
         if self.mode == 'keep_in':
             # Positive means inside the known driveable union; negative means
             # outside it. This keeps penetration/inside diagnostics aligned with
@@ -254,20 +257,40 @@ class NogoZoneCostModel:
         warning_band = float(self.warning_band)
         near_weight = float(self.near_weight)
         penalty_type = self.penalty_type
+        mode = self.mode
 
         def signed_distance_xy(x, y):
-            dx = ca.fmax(ca.fmax(xmins - x, 0.0), x - xmaxs)
-            dy = ca.fmax(ca.fmax(ymins - y, 0.0), y - ymaxs)
-            outside = ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
+            if mode == 'keep_in' and self.union_boundary_segments:
+                q = ca.vertcat(x, y)
+                dists = []
+                for p1, p2 in self.union_boundary_segments:
+                    p1_dm = ca.DM(p1)
+                    p2_dm = ca.DM(p2)
+                    v = p2_dm - p1_dm
+                    w = q - p1_dm
+                    v_len_sq = ca.sumsqr(v)
+                    t = ca.if_else(v_len_sq < 1e-9, 0.0, ca.fmin(ca.fmax(ca.dot(w, v) / v_len_sq, 0.0), 1.0))
+                    closest = p1_dm + t * v
+                    dists.append(ca.norm_2(q - closest))
+                min_dist = ca.mmin(ca.vertcat(*dists))
+                
+                is_inside = False
+                for p in self.prisms:
+                    dx = ca.fmax(ca.fmax(p.xmin - x, 0.0), x - p.xmax)
+                    dy = ca.fmax(ca.fmax(p.ymin - y, 0.0), y - p.ymax)
+                    is_inside = ca.logic_or(is_inside, ca.logic_and(dx <= 0.0, dy <= 0.0))
+                return ca.if_else(is_inside, -min_dist, min_dist)
+            else:
+                dx = ca.fmax(ca.fmax(xmins - x, 0.0), x - xmaxs)
+                dy = ca.fmax(ca.fmax(ymins - y, 0.0), y - ymaxs)
+                outside = ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
 
-            inside_x = ca.fmin(x - xmins, xmaxs - x)
-            inside_y = ca.fmin(y - ymins, ymaxs - y)
-            inside_depth = ca.fmin(inside_x, inside_y)
-            inside = ca.logic_and(dx <= 0.0, dy <= 0.0)
-            signed = ca.if_else(inside, -inside_depth, outside)
-            return ca.mmin(signed)
-
-        mode = self.mode
+                inside_x = ca.fmin(x - xmins, xmaxs - x)
+                inside_y = ca.fmin(y - ymins, ymaxs - y)
+                inside_depth = ca.fmin(inside_x, inside_y)
+                inside = ca.logic_and(dx <= 0.0, dy <= 0.0)
+                signed = ca.if_else(inside, -inside_depth, outside)
+                return ca.mmin(signed)
 
         def penalty_state_casadi(m):
             signed_d = signed_distance_xy(m[0], m[1])
@@ -321,6 +344,7 @@ class NogoZoneCostModel:
         near_weight = float(self.near_weight)
         penalty_type = self.penalty_type
         kappa = max(float(kappa), 1e-6)
+        mode = self.mode
 
         def chol_2x2(M, eps=1e-9):
             M = 0.5 * (M + M.T)
@@ -335,18 +359,37 @@ class NogoZoneCostModel:
             )
 
         def signed_distance_xy(x, y):
-            dx = ca.fmax(ca.fmax(xmins - x, 0.0), x - xmaxs)
-            dy = ca.fmax(ca.fmax(ymins - y, 0.0), y - ymaxs)
-            outside = ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
+            if mode == 'keep_in' and self.union_boundary_segments:
+                q = ca.vertcat(x, y)
+                dists = []
+                for p1, p2 in self.union_boundary_segments:
+                    p1_dm = ca.DM(p1)
+                    p2_dm = ca.DM(p2)
+                    v = p2_dm - p1_dm
+                    w = q - p1_dm
+                    v_len_sq = ca.sumsqr(v)
+                    t = ca.if_else(v_len_sq < 1e-9, 0.0, ca.fmin(ca.fmax(ca.dot(w, v) / v_len_sq, 0.0), 1.0))
+                    closest = p1_dm + t * v
+                    dists.append(ca.norm_2(q - closest))
+                min_dist = ca.mmin(ca.vertcat(*dists))
+                
+                is_inside = False
+                for p in self.prisms:
+                    dx = ca.fmax(ca.fmax(p.xmin - x, 0.0), x - p.xmax)
+                    dy = ca.fmax(ca.fmax(p.ymin - y, 0.0), y - p.ymax)
+                    is_inside = ca.logic_or(is_inside, ca.logic_and(dx <= 0.0, dy <= 0.0))
+                return ca.if_else(is_inside, -min_dist, min_dist)
+            else:
+                dx = ca.fmax(ca.fmax(xmins - x, 0.0), x - xmaxs)
+                dy = ca.fmax(ca.fmax(ymins - y, 0.0), y - ymaxs)
+                outside = ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
 
-            inside_x = ca.fmin(x - xmins, xmaxs - x)
-            inside_y = ca.fmin(y - ymins, ymaxs - y)
-            inside_depth = ca.fmin(inside_x, inside_y)
-            inside = ca.logic_and(dx <= 0.0, dy <= 0.0)
-            signed = ca.if_else(inside, -inside_depth, outside)
-            return ca.mmin(signed)
-
-        mode = self.mode
+                inside_x = ca.fmin(x - xmins, xmaxs - x)
+                inside_y = ca.fmin(y - ymins, ymaxs - y)
+                inside_depth = ca.fmin(inside_x, inside_y)
+                inside = ca.logic_and(dx <= 0.0, dy <= 0.0)
+                signed = ca.if_else(inside, -inside_depth, outside)
+                return ca.mmin(signed)
 
         def penalty_xy(x, y):
             signed_d = signed_distance_xy(x, y)
@@ -441,22 +484,45 @@ class NogoZoneCostModel:
         xmaxs = ca.DM(self._xmaxs)
         ymins = ca.DM(self._ymins)
         ymaxs = ca.DM(self._ymaxs)
+        mode = self.mode
+
+        def signed_distance_xy(x, y):
+            if mode == 'keep_in' and self.union_boundary_segments:
+                q = ca.vertcat(x, y)
+                dists = []
+                for p1, p2 in self.union_boundary_segments:
+                    p1_dm = ca.DM(p1)
+                    p2_dm = ca.DM(p2)
+                    v = p2_dm - p1_dm
+                    w = q - p1_dm
+                    v_len_sq = ca.sumsqr(v)
+                    t = ca.if_else(v_len_sq < 1e-9, 0.0, ca.fmin(ca.fmax(ca.dot(w, v) / v_len_sq, 0.0), 1.0))
+                    closest = p1_dm + t * v
+                    dists.append(ca.norm_2(q - closest))
+                min_dist = ca.mmin(ca.vertcat(*dists))
+                
+                is_inside = False
+                for p in self.prisms:
+                    dx = ca.fmax(ca.fmax(p.xmin - x, 0.0), x - p.xmax)
+                    dy = ca.fmax(ca.fmax(p.ymin - y, 0.0), y - p.ymax)
+                    is_inside = ca.logic_or(is_inside, ca.logic_and(dx <= 0.0, dy <= 0.0))
+                return ca.if_else(is_inside, -min_dist, min_dist)
+            else:
+                dx = ca.fmax(ca.fmax(xmins - x, 0.0), x - xmaxs)
+                dy = ca.fmax(ca.fmax(ymins - y, 0.0), y - ymaxs)
+                outside = ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
+
+                inside_x = ca.fmin(x - xmins, xmaxs - x)
+                inside_y = ca.fmin(y - ymins, ymaxs - y)
+                inside_depth = ca.fmin(inside_x, inside_y)
+                inside = ca.logic_and(dx <= 0.0, dy <= 0.0)
+                signed = ca.if_else(inside, -inside_depth, outside)
+                return ca.mmin(signed)
 
         def signed_distance_state_casadi(m):
-            x = m[0]
-            y = m[1]
-            dx = ca.fmax(ca.fmax(xmins - x, 0.0), x - xmaxs)
-            dy = ca.fmax(ca.fmax(ymins - y, 0.0), y - ymaxs)
-            outside = ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
-
-            inside_x = ca.fmin(x - xmins, xmaxs - x)
-            inside_y = ca.fmin(y - ymins, ymaxs - y)
-            inside_depth = ca.fmin(inside_x, inside_y)
-            inside = ca.logic_and(dx <= 0.0, dy <= 0.0)
-            signed = ca.if_else(inside, -inside_depth, outside)
-            signed_min = ca.mmin(signed)
-            if self.mode == 'keep_in':
-                return -signed_min
-            return signed_min
+            signed_d = signed_distance_xy(m[0], m[1])
+            if mode == 'keep_in':
+                return -signed_d
+            return signed_d
 
         return signed_distance_state_casadi

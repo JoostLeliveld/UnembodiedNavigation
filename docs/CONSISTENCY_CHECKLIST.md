@@ -44,7 +44,7 @@ captured, every plan against this GP plans against a phantom.
 ```bash
 python3 - <<'PY'
 import json, re, numpy as np
-gp = np.load('logs/visibility_comparison/aws_gp_v7/yolo_score_raw_gp.npz')
+gp = np.load('logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz')
 geom = json.loads(str(gp['geometry_json']).strip("[]'"))
 sdf = open('src/sim/gazebo_worlds/worlds/warehouse_aws.world.sdf').read()
 
@@ -70,7 +70,7 @@ recaptured before any new campaign.
 
 **Historical stale case**: older AWS GP artifacts were captured against earlier
 R4/high-stack geometries and earlier camera poses. The current paper GP is
-`aws_gp_v7` (camera z=4.8, y=-5.5); v5/v6/v6b are superseded. Any future AWS
+`aws_gp_v7b` (camera z=4.8, y=-5.5); v5/v6/v6b are superseded. Any future AWS
 geometry or camera change requires a fresh capture and GP fit.
 
 ### C2 — GP camera_pos equals World SDF camera pose
@@ -82,7 +82,7 @@ moved the camera, the GP is no longer valid.
 ```bash
 python3 - <<'PY'
 import numpy as np
-gp = np.load('logs/visibility_comparison/aws_gp_v7/yolo_score_raw_gp.npz')
+gp = np.load('logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz')
 print('GP camera_pos:', gp['camera_pos'])
 print('GP camera_pose (full RPY):', gp['camera_pose'])
 PY
@@ -208,12 +208,16 @@ python3 scripts/visibility_comparison/build_gp_targets.py \
   --perception-targets logs/visibility_comparison/aws_targets_v5/perception_targets.csv \
   --out logs/visibility_comparison/aws_gp_targets_v5
 
-# 4. Fit the GP and write the .npz with embedded geometry_json
+# 4. Fit the GP and write the .npz with embedded geometry_json.
+#    Use the LOCKED params (length_scale 0.90, noise_var 0.05, beta 0.5) and that world's
+#    own targets/capture. The active artifact aws_gp_v7b was fitted from the v7 aggregated
+#    targets PLUS an added A0 west-corridor column (x=-4.61); see docs/decision_log.md
+#    (2026-06-11). v5/v6/v6b/v7 capture+target dirs are archived under _archive_nonpaper/.
 python3 scripts/visibility_comparison/fit_visibility_gps.py \
-  --gp-targets logs/visibility_comparison/aws_gp_targets_v5/gp_targets_xy_aggregated.csv \
-  --capture-manifest logs/visibility_comparison/aws_capture_v5/capture_manifest.json \
-  --out logs/visibility_comparison/aws_gp_v7 \
-  --grid-nx 220 --grid-ny 200 --gp-length-scale 1.20 --gp-noise-var 0.10 --beta 1.0
+  --gp-targets logs/visibility_comparison/<world>_gp_targets/gp_targets_xy_aggregated.csv \
+  --capture-manifest logs/visibility_comparison/<world>_capture/capture_manifest.json \
+  --out logs/visibility_comparison/aws_gp_v7b \
+  --grid-nx 220 --grid-ny 200 --gp-length-scale 0.90 --gp-noise-var 0.05 --beta 0.5
 
 # 5. Point the configs at the new artifact
 sed -i 's|OLD_AWS_GP_DIR|NEW_AWS_GP_DIR|g' \

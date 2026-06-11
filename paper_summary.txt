@@ -1,0 +1,6 @@
+Task                   Cond                     N  Clean%  Near%  Coll%  Pen%  Inv%       L(m)       ē(m)        c̄   f_shad  det_rate        η  solve(ms)
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+F31_b1_apron_a3_mid    Constant cov.            1      0%     0%   100%  100%    0%        n/a        n/a       n/a      n/a       n/a      n/a        n/a
+F31_b1_apron_a3_mid    Learned cov.             1      0%   100%     0%    0%    0%        n/a        n/a       n/a      n/a       n/a      n/a        n/a
+
+Outcome counts pool every attempted run; continuous metrics are pooled over clean successes only.

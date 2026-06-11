@@ -166,14 +166,19 @@ and reported as optimizer basin handling.
 
 | name | smoke | probe | dark-probe | what it does |
 |---|---|---|---|---|
-| `process_noise_xy` | 0.01 | 0.01 | 0.01 | XY process-noise std rate (m/√s); scales correctly with dt |
-| `process_noise_theta` | 0.02 | 0.02 | 0.02 | heading process-noise std rate (rad/√s) |
-| `command_noise_*` (family) | ON for AWS | ON for AWS | ON for AWS | execution disturbance / slip on issued commands |
-| `encoder_noise_*` (family) | ON for AWS | ON for AWS | ON for AWS | dead-reckoning / odometry integration error |
+| `process_noise_xy` | 0.01 | 0.01 | 0.01 | σ_v — **forward-velocity** actuation-noise PSD (std per √s), NOT an xy-position noise; integrated over dt inside the analytical Q_d |
+| `process_noise_theta` | 0.046 | 0.046 | 0.046 | σ_ω — yaw-rate actuation-noise PSD (rad/√s); integrated over dt inside Q_d |
+| `command_noise_*` (family) | ON for AWS | ON for AWS | ON for AWS | SIM ground-truth: execution disturbance / slip on issued commands (unmodeled by the planner) |
+| `encoder_noise_*` (family) | ON for AWS | ON for AWS | ON for AWS | SIM ground-truth: dead-reckoning / odometry integration error (unmodeled by the planner) |
 
-For AWS diagnostics, command and encoder noise are part of the realism claim.
-Command noise changes the true executed motion; encoder noise changes the
-dead-reckoning estimate used when camera updates are weak or absent.
+`process_noise_xy/theta` are the planner/filter MODEL noise (family A); they feed the
+exact integrated process covariance `Q_d(θ,v,dt)` (see `docs/uncertainty_propagation.md`
+and appendix `app:heading`), not a frozen diagonal. `command_noise_*` / `encoder_noise_*`
+are the SIMULATION ground-truth corruptions (family B) the planner is deliberately blind
+to — `process_noise_theta` is *commensurate with*, not *equal to*, the encoder angular-slip
+std (0.16). For AWS diagnostics, command and encoder noise are part of the realism claim.
+Command noise changes the true executed motion; encoder noise changes the dead-reckoning
+estimate used when camera updates are weak or absent.
 
 ---
 

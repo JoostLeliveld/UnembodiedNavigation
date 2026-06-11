@@ -14,7 +14,7 @@ python3 scripts/visibility_comparison/run_visibility_campaign.py \
 ```
 
 That config pins the world (`warehouse_aws.world.sdf`), detector
-(`aws_yolo_simseg_v2/model.pt`), and GP (`aws_gp_v7/yolo_score_raw_gp.npz`).
+(`aws_yolo_simseg_v2/model.pt`), and GP (`aws_gp_v7b/yolo_score_raw_gp.npz`).
 
 ## Current Paper Claim Surface
 
@@ -26,7 +26,7 @@ That config pins the world (`warehouse_aws.world.sdf`), detector
 | Baseline (C1) | `constant_R_efe` | EFE with spatially uniform detector-observation covariance |
 | Method (C2) | `visibility_aware_efe` | EFE with GP-derived state-dependent detector-observation covariance |
 | Optional ablation (C3) | `risk_only_ablation` | GP covariance active, ambiguity disabled |
-| GP artifact | `logs/visibility_comparison/aws_gp_v7/yolo_score_raw_gp.npz` | planner-facing reliability artifact (camera z=4.8, y=-5.5) |
+| GP artifact | `logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz` | planner-facing reliability artifact (camera z=4.8, y=-5.5) |
 
 `warehouse_aws.world.sdf` is the paper-facing candidate world. Do not claim AWS
 results as paper evidence until the full chain is complete (seeded logs, metrics,

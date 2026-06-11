@@ -20,7 +20,7 @@ from std_msgs.msg import Float64MultiArray, String
 from tf2_geometry_msgs import do_transform_pose
 
 from experiments.core.manifest import create_run_dir, snapshot_configs, write_manifest
-from experiments.core.world_profiles import load_profile
+from experiments.core.world_profiles import load_profile, compute_look_at_from_pose
 from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
     diagnostics_from_message,
@@ -217,6 +217,7 @@ class ExperimentLogger(Node):
         # [DEPRECATED_LEGACY_CLEANUP] keypoint heading parameters are legacy
         self.declare_parameter('yolo_min_keypoint_conf', 0.5)
         self.declare_parameter('keypoint_marker_world_z', 0.0)
+        self.declare_parameter('show_pose_markers', False)
         self.declare_parameter('keypoint_heading_sigma_rad', 0.05)
         self.declare_parameter('diagnostics_match_tolerance_s', 1e-3)
         self.declare_parameter('bev_y_calibration_offset_m', 0.0)
@@ -424,6 +425,7 @@ class ExperimentLogger(Node):
         # [DEPRECATED_LEGACY_CLEANUP] keypoint heading parameters are legacy
         self.yolo_min_keypoint_conf = float(self.get_parameter('yolo_min_keypoint_conf').value)
         self.keypoint_marker_world_z = float(self.get_parameter('keypoint_marker_world_z').value)
+        self.show_pose_markers = bool(self.get_parameter('show_pose_markers').value)
         self.keypoint_heading_sigma_rad = float(self.get_parameter('keypoint_heading_sigma_rad').value)
         self.diagnostics_match_tolerance_s = float(
             self.get_parameter('diagnostics_match_tolerance_s').value
@@ -447,21 +449,11 @@ class ExperimentLogger(Node):
             self.get_parameter('stuck_idle_cmd_fraction_max').value
         )
 
-        # Camera model for homography projection (pixel to world)
-        from unav_common.camera_model import ObliqueCameraModel
-        cam_pos = np.array(self.get_parameter('cam_pos').value, dtype=float)
-        look_at = np.array(self.get_parameter('look_at').value, dtype=float)
-        img_width = int(self.get_parameter('img_width').value)
-        img_height = int(self.get_parameter('img_height').value)
-        fov_h_rad = float(self.get_parameter('fov_h_rad').value)
-        self.camera_model = ObliqueCameraModel(
-            cam_pos=cam_pos,
-            look_at=look_at,
-            img_width=img_width,
-            img_height=img_height,
-            fov_h_rad=fov_h_rad,
-        )
-        self.camera_pos_xy = np.asarray(cam_pos[:2], dtype=float).reshape(2)
+        # Camera model is built below from the world profile (the single source of
+        # truth shared with the state/planner nodes), NOT from the cam_pos/look_at
+        # node parameters — those are never passed by the launch, so reading them
+        # silently selected stale defaults ([-3,-3,6]/[1.5,1.5,0]) and corrupted the
+        # pred_world homography diagnostic. See profile-based build after load_profile.
 
         run_info = create_run_dir(log_dir)
         self.run_id = run_info['run_id']
@@ -473,6 +465,29 @@ class ExperimentLogger(Node):
         self.repo_root = repo_root
         self.task_start_pose = _load_task_start_pose(self.tasks_yaml, self.world, self.task)
         profile, _intrinsics, _world_path, _camera_pose = load_profile(self.world_profiles_path, self.world)
+
+        # Build the homography camera from the profile (same source the state/planner
+        # nodes use) so pred_world_x/y match the true Gazebo camera. _camera_pose is
+        # [x, y, z, roll, pitch, yaw]; look_at is derived exactly as the launch does.
+        from unav_common.camera_model import ObliqueCameraModel
+        _cam_pos = [float(_camera_pose[0]), float(_camera_pose[1]), float(_camera_pose[2])]
+        _look_at = compute_look_at_from_pose(
+            _cam_pos, float(_camera_pose[3]), float(_camera_pose[4]), float(_camera_pose[5])
+        )
+        self.camera_model = ObliqueCameraModel(
+            cam_pos=np.array(_cam_pos, dtype=float),
+            look_at=np.array(_look_at, dtype=float),
+            img_width=int(_intrinsics['img_width']),
+            img_height=int(_intrinsics['img_height']),
+            fov_h_rad=float(_intrinsics['fov_h_rad']),
+        )
+        self.camera_pos_xy = np.asarray(_cam_pos[:2], dtype=float).reshape(2)
+        self.get_logger().info(
+            f"[camera_model] profile-built cam_pos={_cam_pos} look_at={_look_at} "
+            f"img=({int(_intrinsics['img_width'])}x{int(_intrinsics['img_height'])}) "
+            f"fov_h={float(_intrinsics['fov_h_rad']):.4f}"
+        )
+
         visibility_defaults = dict(profile.get('visibility_defaults') or {})
         self.world_bounds = {
             'xmin': float(visibility_defaults.get('visibility_map_min_x', math.nan)),
@@ -562,6 +577,7 @@ class ExperimentLogger(Node):
             # [DEPRECATED_LEGACY_CLEANUP] keypoint heading parameters are legacy
             'yolo_min_keypoint_conf': self.yolo_min_keypoint_conf,
             'keypoint_marker_world_z': self.keypoint_marker_world_z,
+            'show_pose_markers': self.show_pose_markers,
             'keypoint_heading_sigma_rad': self.keypoint_heading_sigma_rad,
             'diagnostics_match_tolerance_s': self.diagnostics_match_tolerance_s,
             'bev_y_calibration_offset_m': self.bev_y_calibration_offset_m,
@@ -915,6 +931,8 @@ class ExperimentLogger(Node):
                 'state_x',
                 'state_y',
                 'state_yaw',
+                'state_age_s',
+                'state_fresh',
                 'state_pos_error',
                 'state_yaw_error_deg',
                 'obs_u',

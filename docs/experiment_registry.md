@@ -23,7 +23,7 @@ Only the paper KEEP set lives in the repo now.
 
 | Status | Asset | Notes |
 | --- | --- | --- |
-| CURRENT | `logs/visibility_comparison/aws_gp_v7/yolo_score_raw_gp.npz` | Paper GP on the LOCKED camera (z=4.8, y=-5.5). 912 frames, 647/912 detected (71%), driveable-only sample filter, length_scale 0.90 / noise_var 0.05 / beta 0.5. A1 made observable by camera move + length-scale (not de-occlusion); A4 rack-shadow stays low (~0.005). Config `gp_artifact` points here. |
+| CURRENT | `logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz` | Paper GP on the LOCKED camera (z=4.8, y=-5.5). = the v7 capture (912 frames, 647/912 detected, 71%) **plus an added A0 west-corridor column at x=-4.61**; same fit params length_scale 0.90 / noise_var 0.05 / beta 0.5; driveable-only sample filter. A1 made observable by camera move + length-scale (not de-occlusion); A4 rack-shadow stays low (~0.005). Config `gp_artifact` points here. (`aws_gp_v7` archived to `_archive_nonpaper/` 2026-06-11.) |
 | CURRENT | `logs/perception_models/aws_yolo_simseg_v2/model.pt` | Paper detector (sim seg). Used for both capture and runtime. |
 | world | `src/sim/gazebo_worlds/worlds/warehouse_aws.world.sdf` | Locked geometry + camera pose. |
 | config | `scripts/visibility_comparison/aws_f31b1_final_config.yaml` | MAIN F31_b1 comparison runtime (v7 GP, camera_xy_only, warning_band). |

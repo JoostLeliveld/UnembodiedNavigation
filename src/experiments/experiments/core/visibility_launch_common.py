@@ -770,6 +770,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     state_sources = _state_estimator_metadata(cfg)
     keypoint_marker_world_z = float(cfg.get('keypoint_marker_world_z', 0.0))
     keypoint_heading_enabled = keypoint_marker_world_z > 0.0
+    show_pose_markers = bool(cfg.get('show_pose_markers', keypoint_heading_enabled))
     diagnostics_match_tolerance_s = 0.05 if keypoint_heading_enabled else 1e-3
     odom_topic = str(cfg.get('odom_topic') or '/odom_noisy')
     use_encoder_noise = bool(cfg.get('use_encoder_noise', True))
@@ -783,6 +784,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         launch_arguments={
             'use_sim_time': 'true',
             'use_lidar': 'false',
+            'show_pose_markers': 'true' if show_pose_markers else 'false',
             'bridge_scan': 'false',
             'headless': 'true' if cfg.get('headless', False) else 'false',
             'world': cfg['world'],
@@ -1030,6 +1032,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'yolo_mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
                 'yolo_min_keypoint_conf': cfg.get('yolo_min_keypoint_conf', 0.5),
                 'keypoint_marker_world_z': keypoint_marker_world_z,
+                'show_pose_markers': show_pose_markers,
                 'keypoint_heading_sigma_rad': cfg.get('keypoint_heading_sigma_rad', 0.05),
                 'diagnostics_match_tolerance_s': diagnostics_match_tolerance_s,
                 'bev_y_calibration_offset_m': cfg['bev_y_calibration_offset_m'],

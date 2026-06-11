@@ -41,13 +41,13 @@ def test_python_marker_offsets_match_urdf() -> None:
     assert g.marker_z_in_base_link == _read_xacro_property('pm_marker_z')
 
 
-def test_rear_keypoint_at_lidar_centre() -> None:
-    """Rear keypoint must sit at the lidar centre (visible blue feature) so
-    YOLO has a crisp visual anchor. Lidar joint origin is (-0.032, 0, 0.172),
-    cylinder length 0.0315, so its top is at z = 0.18775. We round to 0.188."""
+def test_v2_marker_disk_geometry() -> None:
+    """The v2 pose-marker anchors are explicit disks, not the old lidar-centre
+    virtual feature. Keep this aligned with the xacro pm_* source of truth."""
     g = DEFAULT_MARKER_GEOMETRY
-    assert abs(g.rear_x - (-0.032)) < 1e-9
-    assert abs(g.marker_z_in_base_link - 0.188) < 1e-3
+    assert abs(g.front_x - 0.040) < 1e-9
+    assert abs(g.rear_x - (-0.100)) < 1e-9
+    assert abs(g.marker_z_in_base_link - 0.200) < 1e-9
 
 
 def test_keypoint_separation_at_least_8cm() -> None:

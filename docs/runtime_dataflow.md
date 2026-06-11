@@ -1,6 +1,6 @@
 # Runtime Dataflow
 
-This document describes how the offline observability artifact connects to the online ROS/Gazebo runtime. For paper-level protocol and naming, see [`paper_runtime_contract.yaml`](paper_runtime_contract.yaml).
+This document describes how the offline observability artifact connects to the online ROS/Gazebo runtime. For paper-level protocol and naming, see [`paper_runtime_contract.yaml`](paper_runtime_contract.yaml). For how odometry/encoder/heading/process/measurement uncertainty is propagated (the three noise families, the analytical process-noise covariance `Q_d`, and how covariance couples to the obstacle cost and global plan), see [`uncertainty_propagation.md`](uncertainty_propagation.md).
 
 ## Offline Preparation
 
@@ -18,7 +18,7 @@ world_profiles.yaml
 The paper-facing GP artifact is fitted before navigation trials and then held fixed. The current AWS paper-facing line uses:
 
 - world: `warehouse_aws.world.sdf` (external camera locked at z=4.8, y=-5.5)
-- artifact: `logs/visibility_comparison/aws_gp_v7/yolo_score_raw_gp.npz`
+- artifact: `logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz`
 - planner-facing field: `P_conservative_plan_map`
 
 (The former compact-benchmark line — `warehouse_occ_light` + `current_gp` — is retired/archived.)
@@ -60,7 +60,9 @@ Observability is not a direct reward in the paper path.
 The stable part of the estimator is:
 
 - `x,y`: YOLO-selected pixel projected to the ground plane by camera geometry.
-- selected pixel source in the active AWS runtime: `mask_bottom` (`yolo_use_masks: true`).
+- selected pixel source in the active AWS runtime: `bbox_bottom` (the most stable ground-plane
+  proxy). `yolo_use_masks: true` computes the mask only for diagnostics (`mask_area`,
+  `mask_bottom`); it is NOT the selected localization pixel.
 - GP input: planar `x,y` only.
 
 The current paper-facing AWS configs use **`heading_update_mode: camera_xy_only`**:

@@ -17,7 +17,7 @@ safety / route observability, NOT deterministic goal-reaching superiority.
 ## Locked Setup (2026-06-10)
 
 - World `warehouse_aws.world.sdf`; external camera locked at **z=4.8, y=-5.5**.
-- GP **`aws_gp_v7`** (length_scale 0.90, beta 0.5, noise_var 0.05); detector
+- GP **`aws_gp_v7b`** (length_scale 0.90, beta 0.5, noise_var 0.05); detector
   **`aws_yolo_simseg_v2`**. v5/v6/v6b GPs and earlier cameras are superseded.
 - Runtime: global long-horizon EFE (horizon 120, dt 0.25) for route choice +
   a shared **simple proportional local tracker** (`use_simple_local_controller:true`).

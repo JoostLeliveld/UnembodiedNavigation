@@ -19,13 +19,17 @@ def casadi_available() -> bool:
 
 @dataclass
 class CasadiEfeParams:
-    Q: object
+    # NOTE: there is no static `Q` field. Process noise is rebuilt per step inside the
+    # EFE loop via unicycle_process_noise_ca(process_noise_xy, process_noise_theta, dt,
+    # theta, v) — the exact integrated Q_d(theta, v, dt) — so a frozen Q would be unused.
     R_visible: object
     R_miss: object
     control_weight: float
     risk_scale: float
     ambiguity_scale: float
     discount_gamma: float
+    process_noise_xy: float
+    process_noise_theta: float
     visibility_sigma_kappa: float
     goal_prior_u_std_start: float
     goal_prior_v_std_start: float
@@ -93,6 +97,35 @@ def unicycle_jacobian_ca(state, control, dt):
         ca.horzcat(1.0, 0.0, -v * dt * ca.sin(theta)),
         ca.horzcat(0.0, 1.0, v * dt * ca.cos(theta)),
         ca.horzcat(0.0, 0.0, 1.0),
+    )
+
+
+def unicycle_process_noise_ca(process_noise_xy, process_noise_theta, dt, theta, v):
+    c = ca.cos(theta)
+    s = ca.sin(theta)
+    sig_v2 = process_noise_xy ** 2
+    sig_w2 = process_noise_theta ** 2
+
+    # Q_d matrix elements
+    # Row 0
+    q00 = sig_v2 * (c ** 2) * dt + (1.0 / 3.0) * (v ** 2) * (s ** 2) * sig_w2 * (dt ** 3)
+    q01 = sig_v2 * c * s * dt - (1.0 / 3.0) * (v ** 2) * c * s * sig_w2 * (dt ** 3)
+    q02 = -0.5 * v * s * sig_w2 * (dt ** 2)
+
+    # Row 1
+    q10 = q01
+    q11 = sig_v2 * (s ** 2) * dt + (1.0 / 3.0) * (v ** 2) * (c ** 2) * sig_w2 * (dt ** 3)
+    q12 = 0.5 * v * c * sig_w2 * (dt ** 2)
+
+    # Row 2
+    q20 = q02
+    q21 = q12
+    q22 = sig_w2 * dt
+
+    return ca.vertcat(
+        ca.horzcat(q00, q01, q02),
+        ca.horzcat(q10, q11, q12),
+        ca.horzcat(q20, q21, q22)
     )
 
 
@@ -331,8 +364,7 @@ def visibility_aware_unicycle_efe_ca(
     total_progress = 0
     total_ref = 0
     total_du = 0
-    denom = float(max(params.goal_progress_n_steps, 1))
-    goal_progress_weight = float(getattr(params, 'goal_progress_weight', 0.0))
+    denom = float(max(params.goal_progress_n_steps, 1))  # goal-prior anneal schedule length (legit)
     ref_weight = float(getattr(params, 'ref_weight', 0.0))
     terminal_ref_weight = float(getattr(params, 'terminal_ref_weight', 0.0))
     du_weight = float(getattr(params, 'du_weight', 0.0))
@@ -344,7 +376,14 @@ def visibility_aware_unicycle_efe_ca(
         m_prev = m
         m = unicycle_step_ca(m_prev, u_t, params.dt)
         F = unicycle_jacobian_ca(m_prev, u_t, params.dt)
-        S = ca.mtimes([F, S, F.T]) + params.Q
+        Q_t = unicycle_process_noise_ca(
+            params.process_noise_xy,
+            params.process_noise_theta,
+            params.dt,
+            m_prev[2],
+            u_t[0]
+        )
+        S = ca.mtimes([F, S, F.T]) + Q_t
 
         p_vis = 1.0
         if p_vis_state is not None:
@@ -374,14 +413,12 @@ def visibility_aware_unicycle_efe_ca(
             total_nogo += weight_t * nogo_belief_cost(m, S_drive)
         elif nogo_cost is not None:
             total_nogo += weight_t * nogo_cost(m)
-        if goal_progress_weight > 0.0:
-            # Metric squared distance from the predicted mean to the current
-            # target. This is a monotone forward incentive that stays informative
-            # even when the target is beyond the horizon reach, where the
-            # observation-space risk term saturates and can otherwise make
-            # zero-velocity a local minimum. Condition-neutral by construction.
-            dxy = ca.vertcat(m[0] - goal_xy[0], m[1] - goal_xy[1])
-            total_progress += weight_t * goal_progress_weight * ca.sumsqr(dxy)
+        # NOTE: the metric goal-distance reward (goal_progress_weight * ||mean-goal||^2)
+        # was REMOVED (2026-06-10). It is a non-EFE goal attractor that imposes
+        # goal-seeking externally instead of letting it emerge from the goal-prior
+        # in the risk term; it had been added to mask the zero-velocity/stop-short
+        # local minimum. Goal-seeking is now the EFE goal-prior only. (total_progress
+        # stays 0; goal_progress_n_steps still drives the legit goal-prior anneal.)
         if use_ref:
             # Fixed per-step reference point r_t = (ref_seq[2t], ref_seq[2t+1]),
             # computed OUTSIDE the solve. Smooth squared tracking error of the

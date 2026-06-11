@@ -30,9 +30,12 @@ import yaml
 REPO = Path(__file__).resolve().parents[2]
 THESIS = REPO.parent / "thesis-report"
 
-DEFAULT_IMAGE = REPO / "logs/perception_datasets/aws_simseg_v2/images/train/000095.jpg"
+# Current-world (camera z=4.8/y=-5.5) capture frame at true (-4.61,-1.67), robot visible;
+# oracle bottom pixel (159.2,345.8) matches world_to_pixel for the profile camera. The
+# previous aws_simseg_v2 training image was removed during repo cleanup.
+DEFAULT_IMAGE = REPO / "logs/visibility_comparison/aws_capture_v7b_col461/images/000012_xy0003_h00.jpg"
 DEFAULT_MODEL = REPO / "logs/perception_models/aws_yolo_simseg_v2/model.pt"
-DEFAULT_GP = REPO / "logs/visibility_comparison/aws_gp_v5/yolo_score_raw_gp.npz"
+DEFAULT_GP = REPO / "logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz"
 DEFAULT_PROFILE = REPO / "src/experiments/config/world_profiles.yaml"
 DEFAULT_OUT = THESIS / "figures/localization_pathway.pdf"
 DEFAULT_PREVIEW = REPO / "logs/paper_figures/localization_pathway.png"
@@ -252,19 +255,8 @@ def draw_middle_panel(ax) -> None:
         color=TEXT,
     )
 
-    ax.add_patch(
-        FancyBboxPatch(
-            (0.10, 0.10),
-            0.80,
-            0.18,
-            boxstyle="round,pad=0.025",
-            facecolor="#f4f4f4",
-            edgecolor="#bdbdbd",
-            lw=0.9,
-        )
-    )
-    ax.text(0.50, 0.20, "separate heading branch", ha="center", va="center", fontsize=9.7, color="#444444", fontweight="bold")
-    ax.text(0.50, 0.13, r"$\hat{\theta}\leftarrow$ odometry fallback", ha="center", va="center", fontsize=9.7, color="#444444")
+    # (Removed the "separate heading branch / odometry fallback" box: heading is supplied
+    # by odometry in the paper-facing runtime — it is the architecture, not a fallback.)
 
 
 def draw_ground_panel(ax, profile_path: Path, world: str, gp_path: Path, x_hat: float, y_hat: float) -> None:
@@ -286,18 +278,43 @@ def draw_ground_panel(ax, profile_path: Path, world: str, gp_path: Path, x_hat: 
         spine.set_color("black")
     ax.set_title("(c) planner-facing update", fontsize=13, fontweight="bold", pad=6)
 
+    # Plot-only: the profile's mid_cross_aisle is stored as one full-width band, but the
+    # R0 (leftmost) shelf is CONTINUOUS (no mid gap), so it blocks that band over its
+    # footprint. Subtract the R0 footprint when drawing so no driveable "cross" is shown
+    # over R0. Only mid_cross_aisle overlaps R0's footprint; other lanes are unchanged.
+    _R0 = (-4.325, -3.775, -0.82, 4.25)  # leftmost continuous shelf footprint
+
+    def _rects_minus_r0(rx0, rx1, ry0, ry1):
+        bx0, bx1, by0, by1 = _R0
+        oy0, oy1 = max(ry0, by0), min(ry1, by1)
+        ox0, ox1 = max(rx0, bx0), min(rx1, bx1)
+        if oy1 <= oy0 or ox1 <= ox0:
+            yield (rx0, rx1, ry0, ry1)
+            return
+        if ry0 < oy0:
+            yield (rx0, rx1, ry0, oy0)
+        if ry1 > oy1:
+            yield (rx0, rx1, oy1, ry1)
+        if rx0 < bx0:
+            yield (rx0, bx0, oy0, oy1)
+        if rx1 > bx1:
+            yield (bx1, rx1, oy0, oy1)
+
     for rect in traversable_rects(profile_path, world):
-        ax.add_patch(
-            Rectangle(
-                (rect["xmin"], rect["ymin"]),
-                rect["xmax"] - rect["xmin"],
-                rect["ymax"] - rect["ymin"],
-                facecolor="#d8ead5",
-                edgecolor=GREEN,
-                lw=1.0,
-                zorder=1,
+        for sx0, sx1, sy0, sy1 in _rects_minus_r0(
+            rect["xmin"], rect["xmax"], rect["ymin"], rect["ymax"]
+        ):
+            ax.add_patch(
+                Rectangle(
+                    (sx0, sy0),
+                    sx1 - sx0,
+                    sy1 - sy0,
+                    facecolor="#d8ead5",
+                    edgecolor=GREEN,
+                    lw=1.0,
+                    zorder=1,
+                )
             )
-        )
 
     ax.plot(cam_xy[0], cam_xy[1], "s", ms=9, color="#444444", zorder=5)
     ax.text(cam_xy[0] + 0.16, cam_xy[1] - 0.22, "camera", fontsize=10.5, color="#444444", va="top")
@@ -386,7 +403,7 @@ def main() -> int:
         "Image-space YOLO detection is reduced to a selected bottom pixel, "
         "which is projected to a planar ground point with the calibrated "
         "homography/camera model. The external camera contributes (x,y) "
-        "position updates; heading is supplied by odometry fallback. The GP "
+        "position updates; heading is supplied by odometry. The GP "
         "modulates the planner-facing camera (x,y) covariance and does not "
         "directly estimate heading."
     )

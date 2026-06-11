@@ -4,11 +4,18 @@
 # active config scripts/visibility_comparison/aws_f31b1_final_config.yaml.
 
 paper_runtime_contract:
-  version: 0.5
-  updated: 2026-06-10
+  version: 0.6
+  updated: 2026-06-11
   purpose: >
     Define the behavior that counts as paper-facing execution for the
     external-camera visibility-aware EFE experiments.
+  changelog_0_6: >
+    GP promoted to aws_gp_v7b (= v7 capture + added A0 west-corridor column at x=-4.61;
+    same fit params; aws_gp_v7 archived). Process noise now uses the EXACT integrated
+    Q_d(theta, v, dt) per step (analytical, state-dependent; PSD x dt; matches appendix
+    app:heading) instead of a frozen diagonal — prior single-version EFE numbers are
+    superseded. Keep-in no-go now measures clearance to the TRUE driveable-union boundary
+    (no phantom seam penalty). See docs/uncertainty_propagation.md.
   changelog_0_5: >
     Reconcile to the locked 2026-06-10 runtime. Camera raised+back (z=4.8, y=-5.5);
     GP = aws_gp_v7 (length_scale 0.90, beta 0.5, noise_var 0.05). Heading =
@@ -39,10 +46,12 @@ paper_runtime_contract:
   locked_artifacts:
     world: warehouse_aws.world.sdf
     camera_pose: {x: 0.0, y: -5.5, z: 4.8}     # raised+back, locked 2026-06-10
-    gp_artifact: logs/visibility_comparison/aws_gp_v7/yolo_score_raw_gp.npz
+    gp_artifact: logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz
     gp_params: {kernel: rbf, length_scale: 0.90, beta: 0.5, noise_var: 0.05}
     detector: logs/perception_models/aws_yolo_simseg_v2/model.pt
-    superseded: {gps: [aws_gp_v5, aws_gp_v6, aws_gp_v6b], cameras: ["z=4.5/y=-4.9", "z=4.9/y=-5.5"]}
+    process_noise: {model: analytical_Qd, process_noise_xy: 0.01, process_noise_theta: 0.046,
+                    note: "sigma_v / sigma_omega actuation PSDs (std per sqrt s), integrated over dt; see uncertainty_propagation.md"}
+    superseded: {gps: [aws_gp_v5, aws_gp_v6, aws_gp_v6b, aws_gp_v7], cameras: ["z=4.5/y=-4.9", "z=4.9/y=-5.5"]}
 
   allowed_planner_conditions:
     constant_R_efe:        # C1
@@ -121,7 +130,10 @@ paper_runtime_contract:
     optimizer_multistart_include_direct: false
     optimizer_multistart_lateral_offsets: 0.0   # removed: +/-1m shift hit a non-driveable corner
     optimizer_initial_routes: [mid_cross_lane, lower_sweep_lane]
-    perception: {yolo_imgsz: 640, conf_threshold: 0.10, use_masks: true, selected_pixel_source: mask_bottom}
+    perception: {yolo_imgsz: 640, conf_threshold: 0.10, use_masks: true, selected_pixel_source: bbox_bottom}
+    # selected_pixel_source is bbox_bottom (most stable ground-plane proxy); masks are
+    # computed for diagnostics only (mask_area/mask_bottom) and the state node ignores
+    # the source code. The NIS pixel-correction gate is OFF (threshold 0) in paper runs.
     use_command_noise: true
     use_encoder_noise: true
 
@@ -177,6 +189,9 @@ paper_runtime_contract:
       - command_age
       - local_solve_time
     planner_relevant_localization_metric: truth_belief_error_m
+    detection_metric_must_use: yolo_detected_after_threshold   # NOT pixel_corr_accepted
+    nis_gate_disabled_in_paper_runs: true   # threshold 0 => pixel_corr_accepted ~ always 1;
+                                            # do not present it as a rejection/filter rate.
 
   artifact_rules:
     gp_artifact_must_record: [schema_version, source_samples, source_targets, world, camera_setup, kernel, length_scale, noise_variance, beta, grid_shape]
@@ -192,3 +207,10 @@ paper_runtime_contract:
     - constant_R_efe_without_ambiguity
     - visibility_dependent_multistart_candidates
     - claiming_a_route_split_not_present_in_logs
+    - presenting_pixel_corr_accepted_as_a_rejection_rate   # NIS gate is OFF (threshold 0)
+    - metric_goal_distance_reward   # goal-seeking must emerge from the EFE goal-prior in
+                                    # the risk term, NOT a hand-added ||mean-goal||^2 penalty.
+                                    # The goal_progress_weight term was REMOVED 2026-06-10
+                                    # (it had masked the zero-velocity/stop-short local minimum).
+                                    # goal_progress_n_steps is retained — it is the legit
+                                    # goal-prior covariance anneal schedule, not a goal reward.

@@ -32,14 +32,17 @@ THESIS = REPO.parent / "thesis-report"
 WORLD = "warehouse_aws.world.sdf"
 TASK = "F31_b1_apron_a3_mid"
 
-DEFAULT_IMAGE = REPO / "logs/perception_datasets/aws_simseg_v2/images/train/000095.jpg"
+# Panel (a): current-world (camera z=4.8/y=-5.5) external-camera frame, robot near the
+# F31_b1 start (3.3,-1.0); copied to a stable paper-input path from the v7 capture so the
+# figure does not depend on archived capture data. (Old aws_simseg_v2 image was removed.)
+DEFAULT_IMAGE = REPO / "logs/paper_figures/inputs/problem_setup_panel_a_aws.jpg"
 DEFAULT_PROFILE = REPO / "src/experiments/config/world_profiles.yaml"
 DEFAULT_TASKS = REPO / "src/experiments/config/tasks.yaml"
-DEFAULT_COV_RUN = (
-    REPO
-    / "logs/visibility_comparison/_archive_simple_tracker_2026-06-03"
-    / "paper_final_v1/F31_b1_apron_a3_mid/C1/seed1/experiment_20260603_091302"
-)
+# Snapshot panels (b,c): the ORIGINAL constant-R (C1) rollout used by the first
+# problem_setup figure. The source run was moved to _archive_nonpaper during cleanup, so its
+# two needed CSVs (experiment.csv, plan_samples.csv) were copied to a stable paper-input dir
+# — the figure no longer depends on the archive. Panel (a) is the separate current-world view.
+DEFAULT_COV_RUN = REPO / "logs/paper_figures/inputs/problem_setup_cov_run_2026-06-03"
 DEFAULT_OUT = THESIS / "figures/problem_setup_aws.pdf"
 DEFAULT_PREVIEW = REPO / "logs/paper_figures/problem_setup_aws.png"
 
@@ -397,17 +400,19 @@ def main() -> int:
         fig_cam.savefig(cam_prev, dpi=260, bbox_inches="tight")
         plt.close(fig_cam)
 
-        # Panels (b)+(c) -> Problem Statement figure, re-lettered (a),(b).
+        # Panels (b)+(c) -> Problem Statement figure. Lettering is kept as (b),(c) so the
+        # camera view (panel a, moved to the Introduction) and these two panels still read
+        # as one conceptual figure across the two sections.
         snap_out = args.out.with_name("problem_setup_snapshots.pdf")
         snap_prev = args.preview.with_name("problem_setup_snapshots.png")
         fig_s, axes_s = plt.subplots(1, 2, figsize=(9.4, 4.9), constrained_layout=True)
         draw_snapshot_panel(
             axes_s[0], profile, start, goal, exp, plan, early_idx,
-            f"(a) initial rollout\n$t={early_time:.1f}\\,$s", annotate=False,
+            f"(b) initial rollout\n$t={early_time:.1f}\\,$s", annotate=False,
         )
         draw_snapshot_panel(
             axes_s[1], profile, start, goal, exp, plan, late_idx,
-            f"(b) near reduced camera-update reliability\n$t={late_time:.1f}\\,$s", annotate=True,
+            f"(c) near reduced camera-update reliability\n$t={late_time:.1f}\\,$s", annotate=True,
         )
         fig_s.legend(
             handles=legend_handles(), loc="lower center", ncol=7, fontsize=8,

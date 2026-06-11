@@ -26,8 +26,35 @@ def unicycle_jacobian(state, control, dt):
     return F
 
 
-def unicycle_process_noise(process_noise_xy, process_noise_theta, dt, base_dt=None):
-    """Process noise matrix for unicycle; scaled by dt/base_dt if provided."""
+def unicycle_process_noise(process_noise_xy, process_noise_theta, dt, theta=None, v=None, base_dt=None):
+    """Process noise matrix for unicycle.
+
+    If theta and v are provided, uses the exact integrated analytical process noise covariance.
+    Otherwise, falls back to the simplified diagonal covariance scaled by dt/base_dt.
+    """
+    if theta is not None and v is not None:
+        c = math.cos(float(theta))
+        s = math.sin(float(theta))
+        v = float(v)
+        dt = float(dt)
+        sig_v2 = float(process_noise_xy) ** 2
+        sig_w2 = float(process_noise_theta) ** 2
+
+        q00 = sig_v2 * (c ** 2) * dt + (1.0 / 3.0) * (v ** 2) * (s ** 2) * sig_w2 * (dt ** 3)
+        q01 = sig_v2 * c * s * dt - (1.0 / 3.0) * (v ** 2) * c * s * sig_w2 * (dt ** 3)
+        q02 = -0.5 * v * s * sig_w2 * (dt ** 2)
+
+        q11 = sig_v2 * (s ** 2) * dt + (1.0 / 3.0) * (v ** 2) * (c ** 2) * sig_w2 * (dt ** 3)
+        q12 = 0.5 * v * c * sig_w2 * (dt ** 2)
+
+        q22 = sig_w2 * dt
+
+        return np.array([
+            [q00, q01, q02],
+            [q01, q11, q12],
+            [q02, q12, q22]
+        ], dtype=float)
+
     Q = np.diag([
         process_noise_xy ** 2,
         process_noise_xy ** 2,

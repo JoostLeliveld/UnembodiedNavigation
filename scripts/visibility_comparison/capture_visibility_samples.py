@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import math
 import time
 from pathlib import Path
@@ -259,6 +260,9 @@ def main() -> int:
     parser.add_argument('--warn-on-odom-mismatch', action='store_true', help='With --verify-with-odom, warn and continue instead of aborting if /odom does not match the commanded world pose.')
     parser.add_argument('--min-new-frames', type=int, default=1, help='Minimum number of fresh camera frames to wait for after each teleport.')
     parser.add_argument('--target-height-m', type=float, default=0.0)
+    parser.add_argument('--position-list-json', default='',
+                        help='Optional explicit JSON list of [x,y] positions to capture '
+                             '(overrides the grid sampler). For targeted column infill without a full recapture.')
     args = parser.parse_args()
 
     profile, intrinsics, world_path, camera_pose = load_profile(str(args.world_profiles), str(args.world))
@@ -269,14 +273,18 @@ def main() -> int:
         traversable_regions = [r for r in known_regions if str(r.get('type', '')) == 'traversable']
         if not traversable_regions:
             traversable_regions = None
-    positions = _sample_positions(
-        vis,
-        sample_nx=int(args.sample_nx),
-        sample_ny=int(args.sample_ny),
-        wall_margin_m=float(args.wall_margin_m),
-        traversable_regions=traversable_regions,
-        region_shrink_m=float(args.region_shrink_m),
-    )
+    if str(args.position_list_json or '').strip():
+        positions = [(float(p[0]), float(p[1])) for p in json.loads(args.position_list_json)]
+        print(f'[capture] using explicit position list: {len(positions)} positions (grid sampler bypassed)')
+    else:
+        positions = _sample_positions(
+            vis,
+            sample_nx=int(args.sample_nx),
+            sample_ny=int(args.sample_ny),
+            wall_margin_m=float(args.wall_margin_m),
+            traversable_regions=traversable_regions,
+            region_shrink_m=float(args.region_shrink_m),
+        )
     yaws = _sample_yaws(
         yaw_rad=float(args.yaw_rad),
         yaw_samples=int(args.yaw_samples),

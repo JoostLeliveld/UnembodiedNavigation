@@ -25,6 +25,63 @@ the active pipeline + F88 engine `efe_offline_lab.py`, `scripts/paper_figures/`,
 GP/detector capture+fit pipeline, the whole `src/` tree, `docs/`, `tests/`. Verified after
 the move: KEEP-set intact, F88 offline smoke (C1+C2) PASS, figure-generator smoke PASS.
 
+## Archive sweep + method update (2026-06-11)
+
+Moved to `_archive_nonpaper/logs/visibility_comparison/` (reversible, path-preserving):
+`aws_gp_v7` (superseded by **aws_gp_v7b** = v7 targets + added A0 west-corridor column),
+`aws_gp_targets_v7b_col461` (intermediate), `aws_f31b1_final_v2`, and the column-shift-tainted
+`aws_f31b1_final_v3`. The active paper GP is now **aws_gp_v7b**; the KEEP-set GP reference
+above (`aws_gp_v7`) is historical — read it as v7b.
+
+Source/dead-logic changes (offline-verified, build + tests green):
+- Removed the dead `Q` field from `CasadiEfeParams` (process noise is rebuilt per step as the
+  exact `Q_d` — see `docs/uncertainty_propagation.md`).
+- `nogo_cost.py` keep-in clearance switched to the true union-boundary signed distance.
+
+STILL DEFERRED (Gazebo-gated, not yet removed): keypoint-heading code in
+`pixel_to_bev_state_node.py`, local-EFE reference-segment branch in `efe_agent_node.py`,
+belief-nogo + NIS-gate code paths, and the `odom_measurement`/`visual_heading` heading-mode
+validation strings in `unicycle_planner_node.py`. These are inert under the locked config but
+live in ROS nodes the offline smoke cannot exercise; remove only with a Gazebo smoke.
+
+## Honesty/dead-logic audit pass 3 (2026-06-10)
+
+Findings from a 3-way audit (objective terms / config knobs / old-logic+story). Most of the
+codebase is already clean (project_to_driveable gone; no visibility_weight reward; belief-nogo,
+NIS gate, keypoint/visual/displacement heading, lateral offsets all disabled-by-flag; GP never
+touches heading; simple tracker never queries GP; no silent stale/profile-GP fallback). Actions:
+
+- **Docs corrected (story ↔ code):** selected pixel source is `bbox_bottom` (not `mask_bottom`
+  — that was a pass-2 error); fixed in `paper_runtime_contract.yaml` + `runtime_dataflow.md`.
+  Added caveat: NIS pixel-gate is OFF (threshold 0) ⇒ use `yolo_detected_after_threshold`, never
+  `pixel_corr_accepted`, for availability/rejection metrics.
+- **Config de-misled (behavior-neutral):** in `aws_f31b1_final_config.yaml` — fixed the
+  "a0/F87 VERBATIM" header and the copy-pasted `nw_blind/south_visible` route comment
+  (real seeds: mid_cross_lane/lower_sweep_lane); `local_nogo_penalty_type: log_barrier → warning_band`
+  (inert; local-EFE not called); annotated `horizon: 20` as legacy/offline-default; added
+  `[DEAD under <mode>]` markers to the local-EFE / softplus-logbarrier / camera_xy_only heading
+  knob groups; deleted 2 truly-unread keys (`heading_min_displacement_m`, `heading_bev_noise_sigma_m`).
+- **OPEN DECISION — `observation_risk_scale = 1.25`:** an unexplained 25% amplifier on the risk
+  term (not from EFE; applied equally to C1/C2). Recommend → 1.0 (or justify in paper). NOT changed
+  (behavior-changing; awaiting user decision).
+- **DEFERRED (ROS-node, Gazebo-gated):** legacy heading-mode strings (`odom_measurement`/
+  `visual_heading`) in `unicycle_planner_node.py`; keypoint code in `pixel_to_bev_state_node.py`;
+  belief-nogo + NIS-gate code; the now-dead `goal_progress_weight` param plumbing. All inert; remove
+  with a Gazebo smoke.
+
+## Objective cleanup (2026-06-10) — goal_progress reward REMOVED
+
+- The metric goal-distance reward `goal_progress_weight * ||mean-goal||^2` was removed from
+  both objective implementations (`casadi_efe.py`, `base_planner.py::_evaluate_controls`). It is
+  a non-EFE goal attractor (goal-seeking must emerge from the EFE goal-prior in the risk term),
+  and its own code comment showed it had been added to mask the zero-velocity/stop-short local
+  minimum. Verified behavior-neutral: it was weight 0 in every active config; offline C1/C2
+  solves are byte-identical after removal (`goal_progress_cost=0`). `goal_progress_n_steps` is
+  KEPT (it is the legit goal-prior covariance anneal schedule, not a goal reward).
+- DEFERRED (inert plumbing, needs build+Gazebo to remove safely): the `goal_progress_weight`
+  param declarations in `unicycle_planner_node.py`, launch defaults in `visibility_launch_common.py`,
+  the EFEParams dataclass field, and the logged `terminal_goal_progress_m` column — all now dead.
+
 ## Cleanup pass 2 (2026-06-10) — REMOVED / DONE
 
 - **Section 5 config entries REMOVED.** `tasks.yaml` now keeps only the

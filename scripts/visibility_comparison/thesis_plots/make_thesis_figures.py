@@ -293,7 +293,24 @@ def extract_yolo_scores(rows: list[dict]):
 
 
 def load_gp(path: Path):
-    d = np.load(path)
+    d = np.load(path, allow_pickle=True)
+    # Rack boxes from the GP's EMBEDDED collision geometry (the real world prisms:
+    # R1 = lower+mid+upper -> continuous; R2-R5 = lower+upper -> mid gap; + crates).
+    # This guarantees the path-panel racks match gp_pipeline / the actual world.
+    rack_boxes = []
+    if 'geometry_json' in d.files:
+        try:
+            s = str(d['geometry_json'])
+            try:
+                g = json.loads(s)
+            except json.JSONDecodeError:
+                g = json.loads(s.strip("[]'"))
+            prisms = g.get('prisms', g) if isinstance(g, dict) else g
+            for p in prisms:
+                rack_boxes.append({'xmin': float(p['xmin']), 'xmax': float(p['xmax']),
+                                   'ymin': float(p['ymin']), 'ymax': float(p['ymax'])})
+        except Exception:
+            rack_boxes = []
     return {
         'xs': d['xs'].astype(float),
         'ys': d['ys'].astype(float),
@@ -304,6 +321,7 @@ def load_gp(path: Path):
         'p_train': d['p_train'].astype(float),
         'cam': d['camera_pos'].astype(float),
         'beta': float(np.asarray(d['beta']).reshape(-1)[0]),
+        'rack_boxes': rack_boxes,
     }
 
 
@@ -491,15 +509,17 @@ def _draw_yolo_bev_detections(ax, perception_rows):
             
         if not math.isfinite(tx) or not math.isfinite(ty):
             continue
-            
+
+        # Plot detection/miss markers at the TRUE robot position (where the robot
+        # actually was when the detector fired/missed). The runtime pred_world_*
+        # back-projection diagnostic is unreliable (gross homography error), so we do
+        # NOT use it for placement — markers must lie on the executed path.
         if detected >= 0.5 and after_thr >= 0.5:
-            if math.isfinite(px) and math.isfinite(py):
-                s_val = score if math.isfinite(score) else 0.5
-                det_x.append(px)
-                det_y.append(py)
-                det_scores.append(s_val)
+            s_val = score if math.isfinite(score) else 0.5
+            det_x.append(tx)
+            det_y.append(ty)
+            det_scores.append(s_val)
         else:
-            # Missed frame: plot red x at the true position
             miss_x.append(tx)
             miss_y.append(ty)
             
@@ -525,8 +545,8 @@ def _draw_path_panel(ax, gp, task, cond, run_dir, seed, fig=None,
     extent = (gp['xs'][0], gp['xs'][-1], gp['ys'][0], gp['ys'][-1])
     cmap_bg = 'gray' if gray_bg else 'viridis'
     im = ax.imshow(gp['P_plan'], extent=extent, origin='lower',
-                   cmap=cmap_bg, vmin=0.0, vmax=0.62, aspect='equal',
-                   alpha=0.85, zorder=1)
+                   cmap=cmap_bg, vmin=0.0, vmax=0.9, aspect='equal',
+                   alpha=0.85, zorder=1)  # vmax matches gp_pipeline_aws_v7
     
     if gray_bg:
         ax.text(0.30, 0.32, "GP map not used\nby planner",
@@ -689,13 +709,18 @@ def _first_motion_stamp(csv_rows) -> float:
 def _driving_localization_series(csv_rows):
     t0 = _first_motion_stamp(csv_rows)
     t = np.asarray([_f(r, 'stamp') for r in csv_rows], dtype=float) - t0
-    err = np.asarray([_f(r, 'truth_belief_error_m') for r in csv_rows],
-                     dtype=float)
+    # PRIMARY metric = the ACTUAL fused planner belief error vs truth (EKF: camera (x,y)
+    # updates + odom prediction). This is the localization the controller actually uses.
+    err = np.asarray([_f(r, 'truth_belief_error_m') for r in csv_rows], dtype=float)
+    # Secondary (faint) = raw external-camera /state measurement error. It diverges when
+    # YOLO loses the robot in shadow (camera detection lost); the EKF then dead-reckons on
+    # odom, so the fused belief above stays bounded short-term. Shown for context only.
+    camera = np.asarray([_f(r, 'truth_state_error_m') for r in csv_rows], dtype=float)
     cov_x = np.asarray([_f(r, 'planner_cov_x') for r in csv_rows], dtype=float)
     cov_y = np.asarray([_f(r, 'planner_cov_y') for r in csv_rows], dtype=float)
     sigma = np.sqrt(np.clip(0.5 * (cov_x + cov_y), 0.0, None))
     mask = np.isfinite(t) & np.isfinite(err) & (t >= 0.0)
-    return t[mask], err[mask], sigma[mask], t0
+    return t[mask], err[mask], camera[mask], sigma[mask], t0
 
 
 def _driving_detection_series(perception_rows, t0):
@@ -712,8 +737,7 @@ def _localization_summary_label(condition, t, err, color_label):
         return f'{condition}: no driving samples'
     mean = float(np.nanmean(err))
     p95 = float(np.nanpercentile(err, 95))
-    max_e = float(np.nanmax(err))
-    return f'{color_label}: mean {mean:.2f} m, p95 {p95:.2f} m, max {max_e:.2f} m'
+    return f'{condition} belief: mean {mean:.2f} m, p95 {p95:.2f} m'
 
 
 def lookup_gp_bilinear(gp, x_arr, y_arr):
@@ -796,9 +820,9 @@ def plot_paired_mechanism_taskA(rows, gp, out_path, seed=None, task=None):
     if 'C1' not in runs or 'C2' not in runs:
         return
 
-    fig = plt.figure(figsize=(11.8, 7.2))
+    fig = plt.figure(figsize=(11.8, 7.8))
     gs = fig.add_gridspec(2, 2, height_ratios=[1.35, 1.0],
-                          hspace=0.34, wspace=0.30)
+                          hspace=0.42, wspace=0.30)
     ax_c1 = fig.add_subplot(gs[0, 0])
     ax_c2 = fig.add_subplot(gs[0, 1], sharey=ax_c1)
     ax_sig = fig.add_subplot(gs[1, 0])
@@ -819,15 +843,16 @@ def plot_paired_mechanism_taskA(rows, gp, out_path, seed=None, task=None):
     label_to_h = {l: h for h, l in zip(handles, labels) if l in keep_labels}
     compact = [(label_to_h[l], l) for l in order if l in label_to_h]
     if compact:
-        ax_c1.legend([h for h, _ in compact], [l for _, l in compact],
-                     loc='upper left', fontsize=7.2, frameon=True, ncol=2,
-                     columnspacing=0.8, handlelength=1.5)
+        fig.legend([h for h, _ in compact], [l for _, l in compact],
+                   loc='upper center', bbox_to_anchor=(0.5, 0.945),
+                   fontsize=7.4, frameon=False, ncol=len(compact),
+                   columnspacing=1.0, handlelength=1.5)
 
     perc_c1 = load_perception_csv(runs['C1'])
     perc_c2 = load_perception_csv(runs['C2'])
 
-    t1, e1, s1, t0_c1 = _driving_localization_series(csv_c1)
-    t2, e2, s2, t0_c2 = _driving_localization_series(csv_c2)
+    t1, e1, b1, s1, t0_c1 = _driving_localization_series(csv_c1)
+    t2, e2, b2, s2, t0_c2 = _driving_localization_series(csv_c2)
     c1_label = _localization_summary_label('C1', t1, e1, COND_LABEL['C1'])
     c2_label = _localization_summary_label('C2', t2, e2, COND_LABEL['C2'])
 
@@ -840,31 +865,31 @@ def plot_paired_mechanism_taskA(rows, gp, out_path, seed=None, task=None):
     # Plot effective visibility on left axis
     if t_gp1.size:
         ax_sig.plot(t_gp1, pvis1, color=COND_COLOR['C1'], linestyle='-', linewidth=2.0,
-                    label='C1: Eff. visibility')
+                    label=r'C1 $\rho_{\mathrm{plan}}$')
     if t_gp2.size:
         ax_sig.plot(t_gp2, pvis2, color=COND_COLOR['C2'], linestyle='-', linewidth=2.0,
-                    label='C2: Eff. visibility')
+                    label=r'C2 $\rho_{\mathrm{plan}}$')
 
     # Plot observation std on right axis
     if t_gp1.size:
         ax_sig_twin.plot(t_gp1, rstd1, color=COND_COLOR['C1'], linestyle='--', linewidth=1.4,
-                         alpha=0.75, label='C1: Obs std')
+                         alpha=0.75, label=r'C1 $R_{uu}^{1/2}$')
     if t_gp2.size:
         ax_sig_twin.plot(t_gp2, rstd2, color=COND_COLOR['C2'], linestyle='--', linewidth=1.4,
-                         alpha=0.75, label='C2: Obs std')
+                         alpha=0.75, label=r'C2 $R_{uu}^{1/2}$')
 
     # Scatter raw YOLO score points
     t_det1, yolo_sc1, _ = _driving_detection_series(perc_c1, t0_c1)
     t_det2, yolo_sc2, _ = _driving_detection_series(perc_c2, t0_c2)
     if t_det1.size:
-        ax_sig.scatter(t_det1, yolo_sc1, s=4, color=COND_COLOR['C1'], alpha=0.3, marker='o', label='C1 YOLO scores')
+        ax_sig.scatter(t_det1, yolo_sc1, s=4, color=COND_COLOR['C1'], alpha=0.3, marker='o', label='C1 YOLO')
     if t_det2.size:
-        ax_sig.scatter(t_det2, yolo_sc2, s=4, color=COND_COLOR['C2'], alpha=0.3, marker='o', label='C2 YOLO scores')
+        ax_sig.scatter(t_det2, yolo_sc2, s=4, color=COND_COLOR['C2'], alpha=0.3, marker='o', label='C2 YOLO')
 
     ax_sig.set_title('(c) Along-path observation model signal', fontsize=10)
     ax_sig.set_xlabel('time after first command (s)', fontsize=9)
     ax_sig.set_ylabel(r'Effective visibility $\rho_{\mathrm{plan}}$ / YOLO score', fontsize=9)
-    ax_sig_twin.set_ylabel(r'Observation std $R_{uu}^{1/2}$ (m)', fontsize=9)
+    ax_sig_twin.set_ylabel(r'Observation std $R_{uu}^{1/2}$ (px)', fontsize=9)
     ax_sig.grid(alpha=0.3, linestyle=':')
     ax_sig.set_ylim(-0.05, 1.05)
     ax_sig_twin.set_ylim(0.0, 42.0)
@@ -872,28 +897,40 @@ def plot_paired_mechanism_taskA(rows, gp, out_path, seed=None, task=None):
     # Combine legends for left and twin axes
     h1, l1 = ax_sig.get_legend_handles_labels()
     h2, l2 = ax_sig_twin.get_legend_handles_labels()
-    ax_sig.legend(h1 + h2, l1 + l2, loc='upper left', fontsize=7.2, frameon=True, ncol=2, columnspacing=0.8)
+    ax_sig.legend(h1 + h2, l1 + l2, loc='upper center',
+                  bbox_to_anchor=(0.5, -0.28), fontsize=7.0,
+                  frameon=False, ncol=3, columnspacing=0.8,
+                  handlelength=1.6)
 
-    # Panel d: localization error & uncertainty envelope
+    # Panel d: fused planner BELIEF error (solid, primary) + raw camera-fix error (faint) + 2sigma envelope
     if e1.size:
         ax_err.plot(t1, e1, color=COND_COLOR['C1'], linewidth=2.0, label=c1_label)
+        if b1.size == t1.size:
+            ax_err.plot(t1, b1, color=COND_COLOR['C1'], linewidth=1.0, linestyle=':', alpha=0.5,
+                        label='C1 camera fix')
         if s1.size == t1.size:
-            ax_err.plot(t1, 2.0 * s1, color=COND_COLOR['C1'], linewidth=1.2, linestyle='--', alpha=0.6,
-                        label=r'C1: 2$\sigma$ envelope')
+            ax_err.plot(t1, 2.0 * s1, color=COND_COLOR['C1'], linewidth=1.0, linestyle='--', alpha=0.4,
+                        label=r'C1 2$\sigma$')
     if e2.size:
         ax_err.plot(t2, e2, color=COND_COLOR['C2'], linewidth=2.0, label=c2_label)
+        if b2.size == t2.size:
+            ax_err.plot(t2, b2, color=COND_COLOR['C2'], linewidth=1.0, linestyle=':', alpha=0.5,
+                        label='C2 camera fix')
         if s2.size == t2.size:
-            ax_err.plot(t2, 2.0 * s2, color=COND_COLOR['C2'], linewidth=1.2, linestyle='--', alpha=0.6,
-                        label=r'C2: 2$\sigma$ envelope')
+            ax_err.plot(t2, 2.0 * s2, color=COND_COLOR['C2'], linewidth=1.0, linestyle='--', alpha=0.4,
+                        label=r'C2 2$\sigma$')
 
-    ax_err.axhline(0.5, color='0.35', linewidth=0.9, linestyle=':', label='0.5 m reference')
-    ax_err.set_title('(d) Belief quality and uncertainty', fontsize=10)
+    ax_err.axhline(0.5, color='0.35', linewidth=0.9, linestyle=':', label='0.5 m ref')
+    ax_err.set_title('(d) Truth--belief error after first command', fontsize=10)
     ax_err.set_xlabel('time after first command (s)', fontsize=9)
-    ax_err.set_ylabel('localization error / uncertainty (m)', fontsize=9)
+    ax_err.set_ylabel('localization error (m)', fontsize=9)
     ax_err.grid(alpha=0.3, linestyle=':')
-    ax_err.legend(fontsize=7.2, loc='upper left', frameon=True)
+    ax_err.legend(fontsize=7.0, loc='upper center',
+                  bbox_to_anchor=(0.5, -0.28), frameon=False, ncol=2,
+                  columnspacing=0.8, handlelength=1.6)
 
     fig.suptitle(f'Paired representative run on the route-choice task (seed {seed})', fontsize=11, y=0.99)
+    fig.subplots_adjust(top=0.88, bottom=0.20)
     fig.savefig(out_path, bbox_inches='tight', dpi=200)
     plt.close(fig)
 
@@ -1483,27 +1520,10 @@ def main():
     if cam is not None and len(cam) >= 2:
         CAM_XY = (float(cam[0]), float(cam[1]))
 
-    # Build shelf boxes for warehouse_aws
-    if 'warehouse_aws' in args.world:
-        SHELF_BOXES = []
-        dx = 0.55
-        dy = 2.05
-        centers = [
-            (-4.050, 0.225), (-4.050, 3.225),
-            (-2.000, 0.225), (-2.000, 3.225),
-            ( 0.050, 0.225), ( 0.050, 3.225),
-            ( 2.000, 0.225), ( 2.000, 3.225),
-            ( 4.150, 0.225), ( 4.150, 3.225),
-        ]
-        for cx, cy in centers:
-            SHELF_BOXES.append({
-                'xmin': cx - dx/2,
-                'xmax': cx + dx/2,
-                'ymin': cy - dy/2,
-                'ymax': cy + dy/2,
-            })
-    else:
-        SHELF_BOXES = []
+    # Rack/obstacle boxes from the GP's embedded collision geometry (real world prisms):
+    # R1 is continuous (lower+mid+upper), R2-R5 are split (mid gap), plus crate stacks.
+    # Matches gp_pipeline_aws_v7 and the Gazebo view exactly.
+    SHELF_BOXES = list(gp.get('rack_boxes', []))
 
     # ---- Load campaign log ----
     campaign_log_path = Path(args.campaign_log).expanduser().resolve()

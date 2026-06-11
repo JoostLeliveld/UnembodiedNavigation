@@ -3,6 +3,99 @@
 Short, dated decisions that prevent the project from re-litigating the same
 scientific choices.
 
+## 2026-06-11 — analytical Q_d process noise + union-boundary keep-in + archive sweep
+
+- **Analytical process-noise covariance Q_d is now active.** Belief propagation uses the
+  exact integrated `Q_d(θ,v,Δt)` (nilpotent unicycle Jacobian → 3-term closed form, matches
+  appendix `app:heading`) in both the NumPy EKF predict and per-step in the CasADi EFE loop.
+  `process_noise_xy/theta` are now read as the actuation PSDs σ_v/σ_ω (std per √s), integrated
+  over Δt — the retired diagonal treated them as per-step std (no Δt, no cross-terms).
+  **All single-version EFE results predating this change are superseded.** Offline F31_b1
+  (v7b) delta: C1 d=0.06/total≈8001, C2 d=0.34/total≈9886 vs prior diagonal baseline
+  C1 0.09/11179, C2 0.09/11823 (totals drop from the ×Δt PSD scaling; C2 stays the more
+  conservative). Removed the now-dead `Q` field from `CasadiEfeParams` (+ its kwarg).
+- **Test fix**: `test_unicycle_process_noise_analytical` passed `ca.MX` (symbolic) to
+  `np.asarray` → crash; switched to `ca.DM` and added a `ca.Function` symbolic round-trip so
+  the MX path the EFE actually uses is verified. 3/3 green; `colcon build planning unav_common` clean.
+- **Keep-in obstacle cost** now measures clearance to the TRUE driveable-union boundary
+  (`occlusion_geometry._get_union_boundary_segments` + `signed_distance_to_union_xy(keep_in=True)`),
+  not the nearest single prism — removes phantom seam penalties. Verified on real F31_b1
+  geometry (connector seam reads deep-inside, no zero). Belief-inflated clearance
+  (κ·σ_max) remains OFF (`use_belief_nogo_cost: false`) → mean-only clearance today.
+- **Archive sweep (newest-version-only):** moved to `_archive_nonpaper/` (reversible) —
+  `aws_gp_v7` (superseded by v7b), `aws_gp_targets_v7b_col461` (intermediate),
+  `aws_f31b1_final_v2`, and the tainted `aws_f31b1_final_v3`. v7b + `aws_capture_v7b_col461`
+  remain. Docs reconciled to v7b: `paper_runtime_contract.yaml` (now v0.6),
+  `paper_alignment.md`, `runtime_dataflow.md`, `active_research_state.md`,
+  `experiment_registry.md`, `CONSISTENCY_CHECKLIST.md`. `PLANNER_HYPERPARAMETERS.md`
+  process-noise rows corrected (θ 0.02→0.046; PSD-unit + family-A/B clarification).
+- **New canonical doc** `docs/uncertainty_propagation.md`: three noise families
+  (model vs sim-corruption vs measurement), Q_d, heading=odometry dead-reckoning (camera_xy_only
+  fuses no explicit yaw; correction only via cross-covariance), GP scope (camera x,y cov only),
+  and the obstacle-cost / global-planning coupling. Also lists the mis-used terms.
+- Unrelated WIP (`src/sim/launch/*`, urdf, `pose_keypoints.py`, `tests/perception/*`) left untouched.
+
+## 2026-06-11 — aws_gp_v7b promoted + Figure 2 split (current world)
+
+- **v7b promotion complete.** All active configs (`aws_f31b1_final_config.yaml`,
+  `aws_f86a_camera_xy_config.yaml`) and figure-script defaults now point to
+  `aws_gp_v7b` (the v7 GP + the added A0 west-corridor column at x=-4.61):
+  `make_aws_gp_pipeline_figure.py` (v5→v7b), `make_f88_stepwise.py` (v7→v7b + suptitle),
+  `make_localization_pathway_figure.py` (already v7b). Regenerated
+  `figures/campaign/gp_pipeline_aws_v7.pdf` and `figures/localization_pathway.pdf`
+  (projected (-4.70,-1.72) vs true (-4.61,-1.67), ≈0.10 m). Filenames kept to avoid TeX breaks.
+- **localization_pathway DEFAULT_IMAGE repointed** to a current-world v7b capture frame
+  (`aws_capture_v7b_col461/.../000012_xy0003_h00.jpg`, true (-4.61,-1.67)); the old
+  aws_simseg_v2 training image was removed in cleanup.
+- **Figure 2 split (combined → two figures), both from the current world.**
+  `make_aws_problem_setup_figure.py --split` now emits:
+  `problem_setup_camera.pdf` (panel a, external-camera view) for the **Introduction**, and
+  `problem_setup_snapshots.pdf` (panels **b,c**, top-down constant-$R_0$ rollout) for the
+  **Problem Statement**. Panel (a) image = current-world v7 frame near the F31_b1 start
+  (camera z=4.8; copied to `logs/paper_figures/inputs/problem_setup_panel_a_aws.jpg` so the
+  figure does not depend on archived capture data — the prior panel (a) used a 2026-05-13
+  pre-camera-move detector image, which is why its map did not match). Spawned
+  driveable-region markers in panel (a) are acceptable (user confirmed). Lettering kept as
+  (b),(c). Suggested (un-applied) TeX edits in
+  `thesis-report/figure2_split_tex_suggestions.md` (no-TeX-by-default).
+- **Snapshot run reverted to the ORIGINAL** (user request): panels (b,c) use the original
+  constant-R C1 rollout `_archive_nonpaper/.../paper_final_v1/.../C1/seed1/experiment_20260603_091302`
+  (fuller start→goal route) rather than the v3 C1 run. NOTE: this run lives under
+  `_archive_nonpaper`; `make_aws_problem_setup_figure.py` DEFAULT_COV_RUN now points there.
+- **Figure micro-edits (plot-only, no data/GP change):**
+  - `gp_pipeline_aws_v7.pdf` panel (a): the two aggregated training dots that rendered
+    inside/on the continuous R0 (leftmost) shelf are masked out of the scatter (GP fit
+    untouched; downstream panels identical).
+  - `localization_pathway.pdf`: removed the "separate heading branch / odometry fallback"
+    box from panel (b) (heading is odometry-supplied by architecture, not a fallback;
+    "$\hat\theta$ from odometry" label in panel (c) kept); and the profile `mid_cross_aisle`
+    band is no longer drawn across the continuous R0 footprint (R0 has no mid gap, so no
+    driveable "cross" is shown there). Caption "odometry fallback"→"odometry".
+
+## 2026-06-11 — pred_world homography diagnostic fixed (two defects)
+
+- **Bug A (wrong camera):** `experiment_logger` built its `ObliqueCameraModel` from
+  `cam_pos`/`look_at` node parameters that the launch never passes, so it silently used
+  the declared defaults `[-3,-3,6]`/`[1.5,1.5,0]`. The real camera is `[0,-5.5,4.8]` /
+  look_at `[0,-1.845,0]`. **Fix:** the logger now builds the camera from the world profile
+  it already loads (`load_profile` + `compute_look_at_from_pose`), the same source the
+  state/planner nodes use. Offline-validated: round-trip world→pixel→world err = 0.0000;
+  real detector pixel (961.46,299.23) → (3.267,-1.069), err **0.077 m** (matches the
+  ~0.06 m static detector accuracy). Old default camera projected the same pixel to
+  (5.906,-1.002) — the garbage that filled v3 `pred_world`.
+- **Bug B (stale-install column shift):** the `aws_f31b1_final_v3` campaign ran an
+  installed logger whose perception-CSV **header had 79 cols** while the data row wrote
+  **81** (`state_age_s`/`state_fresh` were in the row but missing from the header),
+  shifting every field after `state_yaw` by +2. That is why the real pixel `961.46`
+  appeared under the `obs_yaw` column. Current src AND build are aligned 81/81 (AST-checked).
+- **Consequence:** `pred_world_x/y` / `localization_error_m` in the **v3 perception CSVs are
+  tainted** (wrong camera + shifted columns) and must NOT be used. No current figure depends
+  on them — `make_thesis_figures` plots YOLO det/miss at the TRUE position and panel (d) uses
+  `truth_belief_error_m` / `truth_state_error_m`, not `pred_world`. Runs themselves were
+  unaffected (the `/state` localizer projects independently and worked, error ~0.08 m).
+- Rebuilt `experiments` (symlink-install; egg-link → `build/experiments`, refreshed). Next
+  Gazebo run logs correct, aligned, profile-projected `pred_world`.
+
 ## 2026-06-10 — current state snapshot (read first)
 
 - **Locked setup:** world `warehouse_aws.world.sdf`, camera z=4.8/y=-5.5, GP `aws_gp_v7`,
