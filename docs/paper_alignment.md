@@ -21,17 +21,20 @@ That config pins the world (`warehouse_aws.world.sdf`), detector
 | Role | Code name | Paper meaning |
 | --- | --- | --- |
 | Core world | `warehouse_aws.world.sdf` | AWS route-choice benchmark |
-| Main task | `F31_b1_apron_a3_mid` | apron → A3-mid route choice (occluded mid vs visible lower-sweep) |
-| Saved secondary | `a0_west_to_a1_upper_blocked_mid` | saved a0 line for a future multi-task run |
+| Main task | `F31_b1_apron_a3_mid` | apron to A3-mid route choice |
+| Additional discriminators | `b5_a4_apron_to_a2_mid`, `b2_a0_west_to_a1_upper` | robustness tasks |
+| Control task | `b6_a0_west_to_a1_low_control` | control where both methods should reach |
 | Baseline (C1) | `constant_R_efe` | EFE with spatially uniform detector-observation covariance |
 | Method (C2) | `visibility_aware_efe` | EFE with GP-derived state-dependent detector-observation covariance |
 | Optional ablation (C3) | `risk_only_ablation` | GP covariance active, ambiguity disabled |
 | GP artifact | `logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz` | planner-facing reliability artifact (camera z=4.8, y=-5.5) |
 
-`warehouse_aws.world.sdf` is the paper-facing candidate world. Do not claim AWS
-results as paper evidence until the full chain is complete (seeded logs, metrics,
-figures). The F31_b1 closed-loop route-split is currently OPEN — see
-`active_research_state.md`. The former compact-benchmark line
+`warehouse_aws.world.sdf` is the paper-facing world. The current evidence is the
+four-task robustness campaign summarized in `active_research_state.md` and
+`experiment_registry.md`: C2 reaches `18/20` runs with `2/20` collisions; C1
+reaches `12/20` with one near-success and `7/20` collisions. The claim should be
+framed as improved robustness and observability, not a clean sweep or uniformly
+lower localization error. The former compact-benchmark line
 (`warehouse_occ_light`, `shadow_tradeoff_*`, `current_gp`) is retired/archived.
 
 ## Method Layers
@@ -44,7 +47,7 @@ Keep these layers separate in wording, figures, and code comments:
   objects.
 - Learned observation reliability: GP-derived reliability that changes
   planner-facing camera `(x, y)` covariance.
-- Planner costs: risk, ambiguity, feasibility/no-go, and total EFE.
+- Planner costs: risk, ambiguity, belief-tube feasibility/no-go, and total EFE.
 
 Low learned reliability is not a physical obstacle. A floor region may be
 driveable but visually unreliable.
@@ -81,7 +84,7 @@ image edges and oblique viewpoints.
 
 The GP represents learned observation reliability for camera-derived `(x, y)`
 updates. It does not model traversability, does not directly improve heading,
-and is not itself the planner objective.
+and is not itself a direct visibility reward.
 
 For paper figures, the GP field is useful as setup context, but the main
 explanatory result should show planner-facing quantities: ambiguity and total

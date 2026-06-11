@@ -149,10 +149,10 @@ bodies and out-of-lane points read as outside.
 
 Coupling to covariance: the model also supports a **belief-inflated** clearance
 `clearance − κ·σ_max(S_xy)` (`penalty_belief_np` / `nogo_belief_kappa`), which is
-where the propagated `Q_d`-driven covariance *would* tighten clearance in uncertain
-regions. **In the locked paper config this is OFF** (`use_belief_nogo_cost: false`),
-so today the global solve uses **mean-only** clearance; `Q_d` affects the obstacle
-term only if belief-nogo is later enabled.
+where the propagated `Q_d`-driven covariance tightens clearance in uncertain
+regions. **In the locked paper config this is ON** (`use_belief_nogo_cost: true`,
+`nogo_belief_kappa: 1.0`), so the global solve uses a belief tube rather than
+mean-only clearance.
 
 ---
 
@@ -166,10 +166,10 @@ predicted mean (expected over the `(x,y)` belief). Therefore:
 - `Q_d` **shapes the route-choice landscape**: more realistic covariance growth in
   camera-poor stretches raises predicted ambiguity/risk there, which is the lever the
   visibility-aware condition (C2) uses to prefer observable behaviour.
-- **Obstacle clearance does not depend on `Q_d`** under the locked config (mean-only
-  keep-in, §6). Route choice and obstacle feasibility are thus decoupled today: the
-  covariance influences *where the plan wants to go* (risk/ambiguity), while the
-  keep-in term enforces *staying on driveable floor* using the mean.
+- **Obstacle clearance also depends on `Q_d`** under the locked config through
+  the belief-tube keep-in term (§6). Route choice is therefore shaped by both
+  risk/ambiguity and covariance-inflated feasibility, while the known driveable
+  layer remains shared across C1/C2.
 
 ---
 

@@ -4,15 +4,15 @@ ROS 2 / Gazebo experiments for visibility-aware navigation with an external
 camera. The repository is being prepared as the code companion to a thesis /
 paper, so the public surface is intentionally narrow:
 
-- compact reported benchmark: `warehouse_occ_light.world.sdf`
-- main paper task: `shadow_tradeoff_a`
+- paper-facing world: `warehouse_aws.world.sdf`
+- paper-facing campaign: four AWS route-choice tasks with five seeds per condition
 - main comparison: `constant_R_efe` vs `visibility_aware_efe`
-- exploratory extension: `warehouse_aws.world.sdf` for Experiment B
 
 The method uses a learned, state-dependent detector reliability field to choose
 the observation covariance used inside the EFE planner. This is not a direct
 visibility reward; the known obstacle/no-go map remains a separate feasibility
-layer shared by all compared planners.
+layer shared by all compared planners. In the locked campaign, covariance also
+enters the shared keep-in feasibility term through a belief tube.
 
 ## Repository Map
 
@@ -40,49 +40,39 @@ colcon build
 source install/setup.bash
 ```
 
-Run the locked compact benchmark campaign:
+Run the locked AWS robustness campaign:
 
 ```bash
 python3 scripts/visibility_comparison/run_visibility_campaign.py \
-  --config scripts/visibility_comparison/paper_campaign_config.yaml \
-  --log-root logs/visibility_comparison/paper_campaign_rawgp_v1
+  --config scripts/visibility_comparison/aws_f31b1_final_config.yaml \
+  --log-root logs/visibility_comparison/aws_f31b1_final_v1
 ```
 
 Generate paper metrics from a completed campaign:
 
 ```bash
 python3 scripts/visibility_comparison/compute_paper_metrics.py \
-  --campaign-log logs/visibility_comparison/paper_campaign_rawgp_v1/campaign_log.json \
-  --gp-artifact logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz \
-  --out logs/visibility_comparison/paper_campaign_rawgp_v1/paper_metrics.csv \
-  --summary-out logs/visibility_comparison/paper_campaign_rawgp_v1/paper_summary.txt
+  --campaign-log logs/visibility_comparison/aws_f31b1_final_v1/campaign_log.json \
+  --gp-artifact logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz \
+  --out logs/visibility_comparison/aws_f31b1_final_v1/paper_metrics.csv \
+  --summary-out logs/visibility_comparison/aws_f31b1_final_v1/paper_summary.txt
 ```
 
-Generate thesis/paper figures:
+Paper-packaged figures and metrics are kept under `logs/paper_figures/`; the
+maintained figure scripts live in `scripts/paper_figures/`.
 
-```bash
-python3 scripts/visibility_comparison/thesis_plots/make_thesis_figures.py \
-  --campaign-log logs/visibility_comparison/paper_campaign_rawgp_v1/campaign_log.json \
-  --metrics-csv logs/visibility_comparison/paper_campaign_rawgp_v1/paper_metrics.csv \
-  --gp-artifact logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz
-```
+## Current Evidence Status
 
-## Experiment B Status
+The paper-facing robustness campaign is packaged as:
 
-`warehouse_aws.world.sdf` is the active AWS/JDeRobot-style extension world. It
-is designed to test whether the same visibility-aware mechanism survives in a
-more realistic warehouse with racks, loading apron, staged boxes, and route
-choices.
+- `logs/paper_figures/robustness_metrics.csv`
+- `logs/paper_figures/robustness_summary.txt`
+- `logs/paper_figures/robustness_spread.png`
+- `logs/paper_figures/f31b1_markeroff_v2/paired_mechanism_taskA.pdf`
 
-Treat it as exploratory until these artifacts exist for that world:
-
-- AWS-specific detector
-- AWS-specific visibility capture
-- AWS-specific GP artifact with `P_conservative_plan_map`
-- smoke run on B1
-- seeded C1/C2/C3 campaign logs
-- figures and metrics generated from those logs
-
+Current headline: C2 reaches `18/20` runs with `2/20` collisions; C1 reaches
+`12/20` with one near-success and `7/20` collisions. b2 remains the hard case.
+Continuous localization metrics are pooled over clean successes only.
 ## Publication Notes
 
 - Do not cite generated logs or local weights unless they are included in the

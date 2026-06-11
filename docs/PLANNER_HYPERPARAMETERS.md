@@ -26,7 +26,7 @@ with `risk_scale = risk_weight_obs · observation_risk_scale` and
 
 | name | aws_f31b1 | what it does | tune up when | tune down when |
 |---|---:|---|---|---|
-| `ambiguity_weight` | 18.0 | base weight on the entropy of the conditional observation covariance per step | you want C2 to detour around camera-poor regions more aggressively | ambiguity dominates logged route-seed costs or C2 refuses unavoidable camera-poor regions |
+| `ambiguity_weight` | 1.0 | base weight on the entropy of the conditional observation covariance per step | you want C2 to detour around camera-poor regions more aggressively | ambiguity dominates logged route-seed costs or C2 refuses unavoidable camera-poor regions |
 | `ambiguity_term_scale` | 1.0 | second multiplier on ambiguity; kept at 1 so the weight is the main ambiguity knob | — | — |
 | `risk_weight_obs` | 1.0 | base weight on KL-to-goal-observation per step | only if goal-attraction is too weak overall | rarely — usually you want to *widen the goal prior* instead |
 | `observation_risk_scale` | 1.0 | second multiplier on risk; normalized so `risk_scale = risk_weight_obs` | only if you want to amplify goal-pull without touching the goal-prior width | — |
@@ -60,10 +60,9 @@ ambiguity term becomes less aggressive at shadow entries.
 
 Detector-side settings that feed this observation path are also locked in the F31 config:
 `yolo_imgsz=640`, `yolo_conf_threshold=0.10`, `yolo_iou_threshold=0.45`,
-`yolo_target_class=robot`, `yolo_class_id=-1` (class-name filter), `yolo_use_masks=true`,
-`yolo_min_mask_area_px=12`, and `yolo_mask_bottom_band_px=3`. Current code still selects
-the bbox bottom-center as the localization pixel; masks are computed and logged as
-diagnostics.
+`yolo_target_class=robot`, `yolo_class_id=0`, and `yolo_use_masks=false`. Runtime
+localization selects the bbox bottom-center as the ground-contact proxy; masks are
+training/diagnostic artifacts only.
 
 ---
 
@@ -75,7 +74,7 @@ diagnostics.
 | `goal_prior_u_std_final` | 12.0 | goal-pixel std at horizon step `goal_progress_n_steps` (tight) |
 | `goal_prior_v_std_start` | 50.0 | same as `_u_` but in v-axis |
 | `goal_prior_v_std_final` | 12.0 | same as `_u_` but in v-axis |
-| `goal_tightening_power` | 0.45 | exponent on `progress` before smoothstep — lower = tightens earlier in the horizon |
+| `goal_tightening_power` | 0.9 | exponent on `progress` before smoothstep — lower = tightens earlier in the horizon |
 | `goal_progress_n_steps` | 90 | number of steps over which the schedule interpolates start→final |
 | `discount_gamma` | 0.995 | per-step discount factor |
 
@@ -129,9 +128,13 @@ no-go is now a hinged-log **`warning_band`** keep-in penalty (replaces the old s
 | `nogo_safe_distance` | 0.25 | clearance offset baked into the signed distance |
 | `robot_collision_radius_m` | 0.125 | radius used for trajectory diagnostics |
 
-`use_belief_nogo_cost: false` for the global solve (the belief-nogo route mechanism is
-retired). To make the planner "more willing" to push through tight spots, reduce
-`nogo_safe_distance` — but only if the footprint allows it.
+`use_belief_nogo_cost: true` for the global solve. The signed clearance is tightened
+by `nogo_belief_kappa * sqrt(lambda_max(S_xy))`; the locked campaign uses
+`nogo_belief_kappa=1.0`. This is part of the paper-facing route mechanism: the GP
+changes planner-facing covariance, and the belief tube changes how risky tight
+driveable corridors look. To make the planner "more willing" to push through tight
+spots, reduce `nogo_safe_distance` or `nogo_belief_kappa` — but only if the footprint
+and campaign evidence still support it.
 
 ---
 
@@ -223,7 +226,7 @@ Goal: when traversing a uniform aisle whose left side is more visible to the cam
 should bias to that side; C1 should drift to centre.
 
 - `ambiguity_weight`: increase only with route-seed term logs in hand; the locked value is
-  already high (`18.0`), so a reduction may be more defensible if ambiguity dominates.
+  deliberately low (`1.0`) so the route split is not an ambiguity-weight artifact.
 - `goal_prior_u_std_final`: widen from the locked `12.0` only as a condition-neutral
   schedule change, so per-step lateral position matters more than
   per-step distance to goal.
@@ -240,7 +243,7 @@ the last 1–2 m to a dark goal.
 - `goal_prior_u_std_final` / `_v_std_final`: widen from the locked `12.0` if the tight
   goal prior pulls the
   robot into the dark zone too early.
-- `goal_tightening_power`: increase from `0.45` only after a paired sweep, so the tight prior kicks in late in the
+- `goal_tightening_power`: increase from `0.9` only after a paired sweep, so the tight prior kicks in late in the
   schedule, not from the start.
 - `goal_progress_n_steps`: match to expected total run length so the schedule's "final"
   state lines up with the actual goal approach.
@@ -252,7 +255,7 @@ the last 1–2 m to a dark goal.
 Goal: when the goal is visible but the approach passes near a brief dark region, C2 should
 push through rather than stall.
 
-- `ambiguity_weight`: lower modestly from `18.0` if logged route-seed costs show ambiguity dominating — at the same time, to keep the safety
+- `ambiguity_weight`: keep at `1.0` unless logged route-seed costs show the ambiguity term is too weak — at the same time, to keep the safety
   property on truly dark goals.
 
 ### "Optimiser is too slow / hits maxfun every step"

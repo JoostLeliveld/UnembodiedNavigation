@@ -27,6 +27,27 @@ import numpy as np
 import yaml
 
 
+def _dissolve_driveable(rects):
+    """Plotting-only: merge axis-aligned (xmin,xmax,ymin,ymax) rects into clean polygons,
+    dissolving internal cell seams so the figure shows one logical driveable region."""
+    from shapely.ops import unary_union
+    from shapely.geometry import box
+    u = unary_union([box(x0, y0, x1, y1) for (x0, x1, y0, y1) in rects])
+    return list(u.geoms) if u.geom_type == "MultiPolygon" else [u]
+
+
+def _polygon_patch(poly, **kw):
+    """matplotlib PathPatch from a (possibly holed) shapely polygon."""
+    from matplotlib.path import Path as MplPath
+    from matplotlib.patches import PathPatch
+    verts, codes = [], []
+    for ring in [poly.exterior, *poly.interiors]:
+        cs = list(ring.coords)
+        verts += cs
+        codes += [MplPath.MOVETO] + [MplPath.LINETO] * (len(cs) - 2) + [MplPath.CLOSEPOLY]
+    return PathPatch(MplPath(verts, codes), **kw)
+
+
 REPO = Path(__file__).resolve().parents[2]
 THESIS = REPO.parent / "thesis-report"
 
@@ -278,29 +299,22 @@ def draw_ground_panel(ax, profile_path: Path, world: str, gp_path: Path, x_hat: 
         spine.set_color("black")
     ax.set_title("(c) planner-facing update", fontsize=13, fontweight="bold", pad=6)
 
-    # The profile's mid_cross_aisle is stored as one full-width band, but the connector
-    # only exists in the R2..R5 gaps EAST of the A1 aisle — R0/R1 (leftmost) is a continuous
-    # shelf with no mid gap. Clip the mid cross-aisle to start at the A1 aisle so it neither
-    # crosses R0 nor leaves orphaned connector stubs west of A1 (the planner config already
-    # uses discrete per-gap connectors and has none of these west pieces).
-    _A1_WEST = -3.48  # west edge of the A1 aisle; mid cross-aisle starts here
+    # PLOTTING ONLY (backend traversability logic unchanged): dissolve the driveable prisms
+    # into ONE clean light-green region instead of exposing the internal cell decomposition.
+    # The mid cross-aisle is clipped to the A1 aisle west edge so the displayed region neither
+    # crosses the continuous R0/R1 shelf nor shows orphaned connector stubs west of A1.
+    _A1_WEST = -3.48
+    _drive_rects = []
     for rect in traversable_rects(profile_path, world):
         rx0, rx1, ry0, ry1 = rect["xmin"], rect["xmax"], rect["ymin"], rect["ymax"]
         if str(rect.get("name", "")) == "mid_cross_aisle":
             rx0 = max(rx0, _A1_WEST)
             if rx1 <= rx0:
                 continue
-        ax.add_patch(
-            Rectangle(
-                (rx0, ry0),
-                rx1 - rx0,
-                ry1 - ry0,
-                facecolor="#d8ead5",
-                edgecolor=GREEN,
-                lw=1.0,
-                zorder=1,
-            )
-        )
+        _drive_rects.append((rx0, rx1, ry0, ry1))
+    for poly in _dissolve_driveable(_drive_rects):
+        ax.add_patch(_polygon_patch(poly, facecolor="#d8ead5", edgecolor=GREEN,
+                                    lw=1.1, alpha=0.40, zorder=1))
 
     ax.plot(cam_xy[0], cam_xy[1], "s", ms=9, color="#444444", zorder=5)
     ax.text(cam_xy[0] + 0.16, cam_xy[1] - 0.22, "camera", fontsize=10.5, color="#444444", va="top")

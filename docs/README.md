@@ -6,11 +6,12 @@ contract; these docs are repo-specific references.
 
 | File | Role |
 | --- | --- |
-| `active_research_state.md` | current truth, active hypothesis, OPEN blockers, and next decision |
+| `active_research_state.md` | current truth, locked campaign evidence, caveats, and next cleanup priorities |
 | `decision_log.md` | short dated decisions, including rejected AWS probes |
 | `experiment_registry.md` | current artifacts, evidence status, superseded/archived, and invalid lines |
 | `paper_runtime_contract.yaml` | **the single runtime contract** (machine-readable) for paper-facing runs |
 | `paper_alignment.md` | code-to-paper contract, assumptions, and paper wording boundaries |
+| `paper_codebase_cleanup.md` | cleanup roadmap for the code companion to the paper |
 | `runtime_dataflow.md` | offline artifact flow and online ROS topic flow |
 | `CONSISTENCY_CHECKLIST.md` | world, detector, GP, costmap, and task consistency gates |
 | `PLANNER_HYPERPARAMETERS.md` | planner knobs, intended effects, and tuning cautions |

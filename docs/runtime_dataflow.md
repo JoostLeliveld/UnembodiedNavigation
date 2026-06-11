@@ -61,8 +61,8 @@ The stable part of the estimator is:
 
 - `x,y`: YOLO-selected pixel projected to the ground plane by camera geometry.
 - selected pixel source in the active AWS runtime: `bbox_bottom` (the most stable ground-plane
-  proxy). `yolo_use_masks: true` computes the mask only for diagnostics (`mask_area`,
-  `mask_bottom`); it is NOT the selected localization pixel.
+  proxy). `yolo_use_masks: false` in the locked runtime; masks are training and
+  diagnostic artifacts only, not the selected localization pixel.
 - GP input: planar `x,y` only.
 
 The current paper-facing AWS configs use **`heading_update_mode: camera_xy_only`**:
@@ -96,28 +96,21 @@ interpret them as selected motion-replay sample counts/duration together with
 | Purpose | File |
 | --- | --- |
 | Primary launch | `src/experiments/launch/warehouse_primary_comparison.launch.py` |
-| Compact benchmark campaign | `scripts/visibility_comparison/paper_campaign_config.yaml` |
-| Compact benchmark runner | `scripts/visibility_comparison/run_visibility_campaign.py` |
+| Locked robustness campaign config | `scripts/visibility_comparison/aws_f31b1_final_config.yaml` |
+| Campaign runner | `scripts/visibility_comparison/run_visibility_campaign.py` |
 | Paper metrics | `scripts/visibility_comparison/compute_paper_metrics.py` |
-| Paper figures | `scripts/visibility_comparison/thesis_plots/make_thesis_figures.py` |
+| Paper figures | `scripts/paper_figures/*.py` and selected `scripts/visibility_comparison/*plot*.py` diagnostics |
 
 The primary planner names are `constant_R_efe`, `visibility_aware_efe`, and optional `risk_only_ablation`.
 
-## Failure-Oriented Extension
+## Paper-Facing Campaign
 
-Experiment B has one active world:
-
-- `warehouse_aws.world.sdf`, configured by
-  `scripts/visibility_comparison/aws_campaign_config.yaml` only after an
-  AWS-specific detector and GP are fitted for the final geometry. Use
-  `scripts/visibility_comparison/aws_smoke_config.yaml` first to validate the
-  AWS-style storage racks, green driveable boundaries, loading-apron props,
-  B1/B2/B3 task starts/goals, wall-mounted camera, learned reliability pattern,
-  and detector behavior.
-
-It should be treated as exploratory until it has fitted artifacts, completed
-campaign logs, and figures/tables in the paper. Do not use mission waypoints to
-force the route.
+The paper-facing AWS campaign uses `warehouse_aws.world.sdf`, detector
+`aws_yolo_simseg_v2`, GP `aws_gp_v7b`, and
+`scripts/visibility_comparison/aws_f31b1_final_config.yaml`. The config contains
+four tasks (three discriminators plus one control) and five seeds per condition.
+Do not use mission waypoints to force the route; route families in the optimizer
+are condition-neutral multistart basins from the known driveable floor.
 
 ## Main Topics
 

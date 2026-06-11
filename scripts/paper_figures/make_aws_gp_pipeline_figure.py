@@ -157,7 +157,7 @@ def main() -> int:
     fig.subplots_adjust(left=0.055, right=0.985, top=0.88, bottom=0.20, wspace=0.25)
 
     ax = axes[0]
-    draw_regions(ax, profile, alpha=0.20)
+    # Driveable-floor cells intentionally not drawn: panel (a) focuses on rack geometry + YOLO samples.
     draw_racks(ax)
     # Plot-only cleanup (no GP refit): hide the two aggregated training dots that render
     # inside/on the R0 (leftmost) shelf footprint so the obstacle reads cleanly. The GP fit
@@ -189,20 +189,17 @@ def main() -> int:
 
     ax = axes[1]
     im = ax.imshow(gp["P_plan"], extent=extent, origin="lower", cmap="viridis", vmin=0.0, vmax=0.9, aspect="equal", zorder=0)
-    draw_regions(ax, profile, alpha=0.18)
     draw_racks(ax)
     fig.colorbar(im, ax=ax, fraction=0.045, pad=0.03, label=r"$\rho_{\mathrm{plan}}$")
     style_axis(ax, r"(b) conservative planner reliability $\rho_{\mathrm{plan}}$", show_ylabel=False)
 
     ax = axes[2]
     im = ax.imshow(ambiguity, extent=extent, origin="lower", cmap="magma", aspect="equal", zorder=0)
-    draw_regions(ax, profile, alpha=0.12)
     draw_racks(ax)
     fig.colorbar(im, ax=ax, fraction=0.045, pad=0.03, label=r"$\frac{1}{2}\log|R(\mathbf{p})|$")
     style_axis(ax, "(c) induced observation ambiguity", show_ylabel=False)
 
     handles = [
-        Rectangle((0, 0), 1, 1, facecolor=COL["drive"], edgecolor=COL["drive_edge"], alpha=0.35, label="known driveable floor"),
         Rectangle((0, 0), 1, 1, facecolor=COL["rack"], edgecolor=COL["rack_edge"], label="rack geometry"),
         Line2D([0], [0], marker="o", color="none", markerfacecolor="#440154", markeredgecolor="black", markersize=5, label="training sample"),
     ]

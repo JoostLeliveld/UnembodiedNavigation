@@ -4,11 +4,19 @@
 # active config scripts/visibility_comparison/aws_f31b1_final_config.yaml.
 
 paper_runtime_contract:
-  version: 0.6
-  updated: 2026-06-11
+  version: 0.7
+  updated: 2026-06-12
   purpose: >
     Define the behavior that counts as paper-facing execution for the
     external-camera visibility-aware EFE experiments.
+  changelog_0_7: >
+    Reconcile to the locked robustness campaign. Paper-facing evidence now uses four
+    tasks (F31_b1, b5, b2, b6 control) with five seeds per condition. Belief-tube
+    no-go is active in the global solve (use_belief_nogo_cost=true,
+    nogo_belief_kappa=1.0); route difference is learned covariance plus belief-tube
+    feasibility, not ambiguity inflation or direct visibility reward. Runtime YOLO
+    localization uses bbox bottom-centre (yolo_use_masks=false). The Results section
+    is not used in the paper draft; campaign outcomes live in Experiments.
   changelog_0_6: >
     GP promoted to aws_gp_v7b (= v7 capture + added A0 west-corridor column at x=-4.61;
     same fit params; aws_gp_v7 archived). Process noise now uses the EXACT integrated
@@ -25,21 +33,23 @@ paper_runtime_contract:
     proportional local tracker. Main task = F31_b1_apron_a3_mid (a0 = saved secondary).
     Absorbed the C1/C2 + multistart + driveability rules from the two retired .md contracts.
 
-  evidence_status: candidate_until_complete_artifact_chain
+  evidence_status: paper_ready_with_caveats
 
-  open_status_2026_06_10: >
-    HONEST OPEN ITEM: with control_weight=0 and goal_progress_cost=0 the objective has
-    no path-length/effort term, so on F31_b1 both C1 and C2 currently prefer the
-    lower-sweep — the intended C1-short-blind vs C2-long-observable route-split does NOT
-    yet emerge under this runtime. The connector seam artifact was fixed (driveable
-    prisms overlap). No surviving doc may claim a closed-loop F31_b1 route-split until
-    it is actually produced and logged. (F88 offline diagnosis in progress.)
+  campaign_status_2026_06_12: >
+    LOCKED ROBUSTNESS CAMPAIGN: C2 reaches 18/20 runs with 2/20 collisions; C1 reaches
+    12/20 with one near-success and 7/20 collisions. C2 is at least as good on every
+    discriminator by clean-reach/collision outcome, and b6 acts as a control where both
+    conditions reach. b2 remains hard: C2 improves over C1 but still collides in 2/5
+    seeds. Continuous localization metrics are pooled over clean successes only.
 
   reported_worlds:
     - warehouse_aws.world.sdf
 
   reported_tasks:
     - F31_b1_apron_a3_mid        # MAIN route-choice (occluded mid vs visible lower-sweep)
+    - b5_a4_apron_to_a2_mid      # discriminator
+    - b2_a0_west_to_a1_upper     # hard discriminator
+    - b6_a0_west_to_a1_low_control # control
   saved_secondary_tasks:
     - a0_west_to_a1_upper_blocked_mid   # saved a0 line for a future multi-task run
 
@@ -120,21 +130,22 @@ paper_runtime_contract:
     nogo_safe_distance: 0.25
     nogo_warning_band: 0.05
     nogo_near_weight: 50.0
-    use_belief_nogo_cost: false           # global; belief-nogo route mechanism retired
-    ambiguity_weight: 18.0
+    use_belief_nogo_cost: true            # global; belief-tube keep-in is active in the locked campaign
+    nogo_belief_kappa: 1.0
+    ambiguity_weight: 1.0
     risk_weight_obs: 1.0
-    control_weight: 0.0                    # NOTE: no path-length/effort term (see open_status_2026_06_10)
+    control_weight: 0.0                    # no direct path-length/effort term in the locked campaign
     direct_visibility_reward: false         # GP affects camera (x,y) covariance only; no visibility_weight cost term exists
     goal_prior_u_std: {start: 50.0, final: 12.0}
     goal_prior_v_std: {start: 50.0, final: 12.0}
+    goal_tightening_power: 0.9
     optimizer_multistart: true
     optimizer_multistart_include_direct: false
     optimizer_multistart_lateral_offsets: 0.0   # removed: +/-1m shift hit a non-driveable corner
     optimizer_initial_routes: [mid_cross_lane, lower_sweep_lane]
-    perception: {yolo_imgsz: 640, conf_threshold: 0.10, class_filter: "name=robot (class_id=-1)", use_masks: true, selected_pixel_source: bbox_bottom}
+    perception: {yolo_imgsz: 640, conf_threshold: 0.10, iou_threshold: 0.45, class_filter: "robot (class_id=0)", use_masks: false, selected_pixel_source: bbox_bottom}
     # selected_pixel_source is bbox_bottom (most stable ground-plane proxy); masks are
-    # computed for diagnostics only (mask_area/mask_bottom) and the state node ignores
-    # the source code. The NIS pixel-correction gate is OFF (threshold 0; code rejects
+    # training/diagnostic artifacts only in the locked runtime. The NIS pixel-correction gate is OFF (threshold 0; code rejects
     # by NIS only when the threshold is >0) in paper runs.
     use_command_noise: true
     use_encoder_noise: true
