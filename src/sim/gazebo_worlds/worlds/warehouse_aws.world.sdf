@@ -1,10 +1,9 @@
 <?xml version="1.0" ?>
 <sdf version="1.8">
-  <!-- Experiment B: AWS-style exploratory warehouse visibility benchmark.
+  <!-- AWS-style warehouse visibility benchmark.
 
-       This world is NOT a replacement for the compact tested benchmark.
-       See docs/active_research_state.md and docs/experiment_registry.md before
-       treating any AWS run as evidence.
+       See docs/experiment_registry.md and docs/paper_runtime_contract.yaml before
+       treating any run as paper evidence.
 
        Contract: about 11.5 m x 10.0 m footprint, split rack rows, 0.55 m rack
        width, 0.90 m driveable aisles, open mid cross-aisle, separated

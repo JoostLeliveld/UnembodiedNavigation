@@ -2,7 +2,7 @@
 """Run a visibility-comparison campaign from a locked config file.
 
 Usage:
-    python run_visibility_campaign.py --config paper_campaign_config.yaml [--dry-run] [--resume]
+    python run_visibility_campaign.py --config scripts/visibility_comparison/aws_f31b1_final_config.yaml [--dry-run] [--resume]
 
 Each run result is written immediately to campaign_log.json so the campaign
 can be interrupted and resumed with --resume (already-completed runs are skipped).
@@ -138,8 +138,17 @@ def _save_run_log(log_path: Path, log: dict) -> None:
     log_path.write_text(json.dumps(log, indent=2, default=str), encoding='utf-8')
 
 
+def _resolve_repo_path(path_str: str, *, strict: bool = False) -> Path:
+    """Resolve config paths, treating relative paths as repo-root relative."""
+    expanded = os.path.expandvars(str(path_str))
+    path = Path(expanded).expanduser()
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    return path.resolve(strict=strict)
+
+
 def _resolve_for_compare(path_str: str) -> Path:
-    return Path(path_str).expanduser().resolve(strict=False)
+    return _resolve_repo_path(path_str, strict=False)
 
 
 def _float_close(a, b, *, tol: float = 1e-8) -> bool:
@@ -173,7 +182,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
     task_name = entry.get('task')
     task_cfg = cfg['tasks'].get(task_name, {}) if task_name else {}
 
-    expected_yolo_model = str(Path(cfg['yolo_model']).expanduser().resolve(strict=False))
+    expected_yolo_model = str(_resolve_repo_path(cfg['yolo_model'], strict=False))
     actual_yolo_model = str(manifest.get('yolo_model', '') or '')
     if _resolve_for_compare(actual_yolo_model) != _resolve_for_compare(expected_yolo_model):
         return False, f'yolo_model mismatch: run used {actual_yolo_model or "<missing>"}, config expects {expected_yolo_model}'
@@ -247,10 +256,12 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
             return False, f'{key} mismatch: run used {manifest.get(key)}, config expects {expected}'
 
     string_keys = (
+        'nogo_mode',
         'nogo_penalty_type',
         'yolo_device',
         'optimizer_multistart_lateral_offsets',
         'optimizer_initial_routes_json',
+        'optimizer_route_seed_mode',
         'local_nogo_penalty_type',
         'heading_update_mode',
     )
@@ -261,7 +272,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
 
     if CONDITION_PLANNER.get(condition_id) != 'constant_R_efe':
         actual = str(manifest.get('visibility_artifact_path', '') or '')
-        expected = str(Path(cfg['gp_artifact']).expanduser().resolve(strict=False))
+        expected = str(_resolve_repo_path(cfg['gp_artifact'], strict=False))
         if _resolve_for_compare(actual) != _resolve_for_compare(expected):
             return (
                 False,
@@ -289,8 +300,8 @@ def _ros_domain_for_run(cfg: dict, run_idx: int) -> str | None:
 
 def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, log_dir: Path) -> list[str]:
     planner = CONDITION_PLANNER[condition_id]
-    gp_artifact = str(Path(cfg['gp_artifact']).expanduser().resolve())
-    yolo_model = str(Path(cfg['yolo_model']).expanduser().resolve())
+    gp_artifact = str(_resolve_repo_path(cfg['gp_artifact'], strict=True))
+    yolo_model = str(_resolve_repo_path(cfg['yolo_model'], strict=True))
     odom_topic = str(cfg.get('odom_topic', '/odom_noisy'))
     if not bool(cfg.get('use_encoder_noise', True)) and odom_topic == '/odom_noisy':
         odom_topic = '/odom'
@@ -376,6 +387,8 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'optimizer_ftol', 'optimizer_gtol', 'optimizer_warm_start',
         'optimizer_multistart_lateral_offsets',
         'optimizer_initial_routes_json',
+        'optimizer_route_seed_mode',
+        'driveable_geometry_json',
         'use_hierarchical', 'global_horizon', 'local_horizon',
         'local_plan_rate', 'local_optimizer_maxiter',
         'global_use_ambiguity', 'local_use_ambiguity', 'local_use_obs_risk',
@@ -394,10 +407,11 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'goal_prior_u_std_start', 'goal_prior_v_std_start',
         'goal_prior_u_std_final', 'goal_prior_v_std_final',
         'goal_tightening_power',
-        'use_nogo_cost', 'nogo_penalty_type', 'nogo_weight',
+        'use_nogo_cost', 'nogo_mode', 'nogo_penalty_type', 'nogo_weight',
         'nogo_safe_distance', 'nogo_gaussian_sigma',
         'nogo_softplus_scale', 'nogo_logbarrier_scale',
-        'nogo_logbarrier_eps', 'use_belief_nogo_cost',
+        'nogo_logbarrier_eps', 'nogo_warning_band', 'nogo_near_weight',
+        'use_belief_nogo_cost',
         'nogo_belief_kappa',
         'robot_collision_radius_m',
         'stuck_window_s', 'stuck_max_displacement_m',
@@ -437,9 +451,9 @@ def _find_latest_run_dir(log_dir: Path) -> Path | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Run a locked visibility-comparison campaign.')
-    parser.add_argument('--config', default='paper_campaign_config.yaml',
+    parser.add_argument('--config', default='scripts/visibility_comparison/aws_f31b1_final_config.yaml',
                         help='Path to the locked campaign config YAML.')
-    parser.add_argument('--log-root', default=str(LOGS_ROOT / 'paper_campaign_rawgp_v1'),
+    parser.add_argument('--log-root', default=str(LOGS_ROOT / 'aws_f31b1_final_v1'),
                         help='Root directory for all run logs.')
     parser.add_argument('--dry-run', action='store_true',
                         help='Print what would be run without executing.')
@@ -451,7 +465,7 @@ def main() -> int:
                         help='Sleep between runs for process cleanup (seconds).')
     args = parser.parse_args()
 
-    config_path = Path(args.config).expanduser().resolve()
+    config_path = _resolve_repo_path(args.config, strict=False)
     if not config_path.is_file():
         print(f'ERROR: config file not found: {config_path}', file=sys.stderr)
         return 1

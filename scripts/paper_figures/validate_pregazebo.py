@@ -28,7 +28,7 @@ sys.path.insert(0, str(ROOT/"src/planning"))
 from diag_route_suite import make_planner, realized
 from efe_offline_lab import load_setup
 
-GPZ = ROOT/"logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz"
+GPZ = ROOT/"paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz"
 CONFIG = ROOT/"scripts/visibility_comparison/aws_f31b1_final_config.yaml"
 OUT_SEEDS = ROOT/"logs/paper_figures/pregazebo_seeds.png"
 OUT_CONV  = ROOT/"logs/paper_figures/pregazebo_converged.png"

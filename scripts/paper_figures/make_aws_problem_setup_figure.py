@@ -35,16 +35,16 @@ TASK = "F31_b1_apron_a3_mid"
 # Panel (a): current-world (camera z=4.8/y=-5.5) external-camera frame, robot near the
 # F31_b1 start (3.3,-1.0); copied to a stable paper-input path from the v7 capture so the
 # figure does not depend on archived capture data. (Old aws_simseg_v2 image was removed.)
-DEFAULT_IMAGE = REPO / "logs/paper_figures/inputs/problem_setup_panel_a_aws.jpg"
+DEFAULT_IMAGE = REPO / "paper_artifacts/figures/inputs/problem_setup_panel_a_aws.jpg"
 DEFAULT_PROFILE = REPO / "src/experiments/config/world_profiles.yaml"
 DEFAULT_TASKS = REPO / "src/experiments/config/tasks.yaml"
 # Snapshot panels (b,c): the ORIGINAL constant-R (C1) rollout used by the first
 # problem_setup figure. The source run was moved to _archive_nonpaper during cleanup, so its
 # two needed CSVs (experiment.csv, plan_samples.csv) were copied to a stable paper-input dir
 # — the figure no longer depends on the archive. Panel (a) is the separate current-world view.
-DEFAULT_COV_RUN = REPO / "logs/paper_figures/inputs/problem_setup_cov_run_2026-06-03"
+DEFAULT_COV_RUN = REPO / "paper_artifacts/figures/inputs/problem_setup_cov_run_2026-06-03"
 DEFAULT_OUT = THESIS / "figures/problem_setup_aws.pdf"
-DEFAULT_PREVIEW = REPO / "logs/paper_figures/problem_setup_aws.png"
+DEFAULT_PREVIEW = REPO / "paper_artifacts/figures/problem_setup_aws.png"
 
 
 COL = {

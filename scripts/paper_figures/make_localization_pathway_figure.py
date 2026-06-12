@@ -54,12 +54,12 @@ THESIS = REPO.parent / "thesis-report"
 # Current-world (camera z=4.8/y=-5.5) capture frame at true (-4.61,-1.67), robot visible;
 # oracle bottom pixel (159.2,345.8) matches world_to_pixel for the profile camera. The
 # previous aws_simseg_v2 training image was removed during repo cleanup.
-DEFAULT_IMAGE = REPO / "logs/visibility_comparison/aws_capture_v7b_col461/images/000012_xy0003_h00.jpg"
-DEFAULT_MODEL = REPO / "logs/perception_models/aws_yolo_simseg_v2/model.pt"
-DEFAULT_GP = REPO / "logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz"
+DEFAULT_IMAGE = REPO / "paper_artifacts/figures/inputs/loc_pathway_frame_v7b.jpg"
+DEFAULT_MODEL = REPO / "local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt"
+DEFAULT_GP = REPO / "paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz"
 DEFAULT_PROFILE = REPO / "src/experiments/config/world_profiles.yaml"
 DEFAULT_OUT = THESIS / "figures/localization_pathway.pdf"
-DEFAULT_PREVIEW = REPO / "logs/paper_figures/localization_pathway.png"
+DEFAULT_PREVIEW = REPO / "paper_artifacts/figures/localization_pathway.png"
 
 sys.path.insert(0, str(REPO / "src/unav_common"))
 sys.path.insert(0, str(REPO / "src/perception"))

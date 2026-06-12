@@ -4,7 +4,7 @@
 Usage:
     # While the sim is running and the bridge is up:
     python3 scripts/paper_figures/capture_external_camera_frame.py \
-        --out /home/joostleliveld/Thesis/thesis-report/figures/external_camera.png
+        --out ../thesis-report/figures/external_camera.png
 """
 
 from __future__ import annotations

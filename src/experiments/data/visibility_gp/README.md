@@ -4,13 +4,9 @@ This folder stores older packaged empirical GP visibility artifacts. They are us
 
 ## Active Paper Artifact Location
 
-Current paper-facing GP artifacts are generated under:
+The current paper-facing GP artifact is:
 
-- `logs/visibility_comparison/current_gp/`
-
-The compact benchmark currently uses:
-
-- `logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz`
+- `paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz`
 
 ## Packaged Artifacts
 

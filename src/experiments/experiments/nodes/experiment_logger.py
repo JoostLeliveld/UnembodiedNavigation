@@ -158,6 +158,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('optimizer_multistart_include_direct', True)
         self.declare_parameter('optimizer_multistart_lateral_offsets', '')
         self.declare_parameter('optimizer_initial_routes_json', '')
+        self.declare_parameter('optimizer_route_seed_mode', 'explicit')
         self.declare_parameter('use_hierarchical', False)
         self.declare_parameter('global_horizon', 60)
         self.declare_parameter('local_horizon', 12)
@@ -324,6 +325,9 @@ class ExperimentLogger(Node):
         )
         self.optimizer_initial_routes_json = str(
             self.get_parameter('optimizer_initial_routes_json').value
+        )
+        self.optimizer_route_seed_mode = str(
+            self.get_parameter('optimizer_route_seed_mode').value or 'explicit'
         )
         self.use_hierarchical = bool(self.get_parameter('use_hierarchical').value)
         self.global_horizon = int(self.get_parameter('global_horizon').value)
@@ -610,6 +614,7 @@ class ExperimentLogger(Node):
             'optimizer_multistart_include_direct': self.optimizer_multistart_include_direct,
             'optimizer_multistart_lateral_offsets': self.optimizer_multistart_lateral_offsets,
             'optimizer_initial_routes_json': self.optimizer_initial_routes_json,
+            'optimizer_route_seed_mode': self.optimizer_route_seed_mode,
             'use_hierarchical': self.use_hierarchical,
             'global_horizon': self.global_horizon,
             'local_horizon': self.local_horizon,

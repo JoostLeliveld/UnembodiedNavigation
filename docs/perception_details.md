@@ -6,12 +6,13 @@ This document provides a comprehensive log of the YOLOv11 instance segmentation 
 
 ## 1. Detector Model Details
 - **Architecture:** YOLOv11 instance segmentation network (nano variant).
-- **Fine-Tuning Checkpoint:** `logs/perception_models/aws_yolo_simseg_v2/model.pt`
-- **Base Model:** `logs/perception_models/yolo_simseg_smoke/model.pt`
+- **Fine-Tuning Checkpoint:** `local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt` (local, not tracked in git).
+- **Public Metadata:** `paper_artifacts/perception/aws_yolo_simseg_v2/`
+- **Base Model:** YOLOv11n-seg.
 - **Target Class:** `robot` (mapped to Class ID `0` at inference; mapped from Gazebo semantic segmentation index `23`).
 - **Input Image Size:** 
   - **Training:** $640 \times 640$ pixels
-  - **Inference:** $imgsz = 480$ ($480 \times 270$ pixels scaled proportionally)
+  - **Inference:** `imgsz = 640`
 
 ---
 
@@ -51,7 +52,7 @@ This document provides a comprehensive log of the YOLOv11 instance segmentation 
 - **Confidence Threshold:** $\tau_{\mathrm{conf}} = 0.10$
 - **IoU Threshold:** 0.45
 - **Centroid Selection:** Bounding-box bottom-centre projected to the planar ground coordinates $(x, y)$ using a calibrated projection model.
-- **Missed Detection Handling:** Missing detections (scores $< \tau_{\mathrm{conf}}$ or missing masks) are recorded as a zero-score ($c_i = 0$), and no camera-based EKF correction is applied.
+- **Missed Detection Handling:** Missing detections (scores $< \tau_{\mathrm{conf}}$ or no selected detection) are recorded as a zero-score ($c_i = 0$), and no camera-based EKF correction is applied.
 - **Runtime Signals:** Figure availability plots use the raw YOLO detection flag and score. The Normalized Innovation Squared (NIS) gate status (`pixel_corr_accepted`) is disabled and not used as a visibility indicator.
 
 ---
@@ -59,7 +60,4 @@ This document provides a comprehensive log of the YOLOv11 instance segmentation 
 ## 5. Training Performance Plots
 
 ### Training Metrics over 30 Epochs
-![YOLO Training Results](yolo_results.png)
-
-### Normalized Confusion Matrix
-![YOLO Confusion Matrix](yolo_confusion_matrix.png)
+![YOLO Training Results](../paper_artifacts/perception/aws_yolo_simseg_v2/results.png)

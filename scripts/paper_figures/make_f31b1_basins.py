@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT/"scripts/visibility_comparison"))
 sys.path.insert(0, str(ROOT/"src/planning"))
 from diag_route_suite import TASKS, make_planner
 TASK = "F31_b1_apron_a3_mid"
-GPZ = ROOT/"logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz"
+GPZ = ROOT/"paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz"
 OUT = ROOT/"logs/paper_figures/f31b1_basins_decomposition.png"
 CACHE = ROOT/"logs/paper_figures/f31b1_basins_cache.json"
 CONFIG = ROOT/"scripts/visibility_comparison/aws_f31b1_final_config.yaml"

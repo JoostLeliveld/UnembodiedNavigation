@@ -278,7 +278,8 @@ push through rather than stall.
 ## What this doc deliberately does NOT cover
 
 - New cost terms (forbidden by the clean-EFE invariant).
-- World, GP, or YOLO retraining — see `docs/CONSISTENCY_CHECKLIST.md` for that.
+- World, GP, or YOLO retraining; see the artifact-generation scripts and
+  `docs/experiment_registry.md` before regenerating paper-facing assets.
 
 ---
 
@@ -306,7 +307,7 @@ question — if it breaks that chain, it is forbidden.
 - Adding a per-step term that overrides the ambiguity gradient (e.g., a hard "stay
   on centerline" penalty that ignores visibility).
 
-Each of these math-level interventions is a **proposal** that flows through the
-root agent loop: `planner-diagnostician` recommends it after a diagnosed failure
-mode, the main session implements the code edit, `rollout-runner` re-runs, and
-`figure-analyst` verifies.
+Each of these math-level interventions is a **method change**, not a simple
+hyperparameter edit. Record the diagnosed failure mode, implement the smallest
+code change, rerun the same offline and Gazebo checks, and regenerate the
+affected figures before using the result in the paper.

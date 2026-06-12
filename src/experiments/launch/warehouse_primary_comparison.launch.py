@@ -7,7 +7,7 @@ from launch_ros.substitutions import FindPackageShare
 # Quick launch:
 # ros2 launch experiments warehouse_primary_comparison.launch.py \
 #     planner:=visibility_aware_efe task:=shadow_tradeoff_a seed:=0 \
-#     yolo_model:=/home/joostleliveld/Thesis/UnembodiedNavigation/yolo11n-seg.pt \
+#     yolo_model:=local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt \
 #     comparison_method_id:=efe_main
 
 DEFAULT_PLANNER = 'visibility_aware_efe'
@@ -56,6 +56,8 @@ def _planner_precision_arguments():
                               description='Comma/JSON list of perpendicular bulge offsets (m) for L-shaped detour seeds, e.g. "-1.5,1.5".'),
         DeclareLaunchArgument('optimizer_initial_routes_json', default_value='',
                               description='Optional JSON list of named waypoint routes used only as optimizer seeds (not mission waypoints).'),
+        DeclareLaunchArgument('optimizer_route_seed_mode', default_value='explicit',
+                              description="Multistart route-seed source: 'explicit' uses optimizer_initial_routes_json; 'lane_graph' generates condition-neutral lane-centre Manhattan seeds from the driveable map."),
         DeclareLaunchArgument('use_hierarchical', default_value='false'),
         DeclareLaunchArgument('global_horizon', default_value='60'),
         DeclareLaunchArgument('local_horizon', default_value='12'),

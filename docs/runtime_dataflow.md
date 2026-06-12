@@ -18,7 +18,7 @@ world_profiles.yaml
 The paper-facing GP artifact is fitted before navigation trials and then held fixed. The current AWS paper-facing line uses:
 
 - world: `warehouse_aws.world.sdf` (external camera locked at z=4.8, y=-5.5)
-- artifact: `logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz`
+- artifact: `paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz`
 - planner-facing field: `P_conservative_plan_map`
 
 (The former compact-benchmark line — `warehouse_occ_light` + `current_gp` — is retired/archived.)

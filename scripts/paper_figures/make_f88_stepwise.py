@@ -22,7 +22,7 @@ from generate_driveable_overlay_sdf import build_overlay, _load_prisms, load_obs
 
 CONFIG = ROOT/"scripts/visibility_comparison/aws_f31b1_final_config.yaml"
 WORLD  = ROOT/"src/sim/gazebo_worlds/worlds/warehouse_aws.world.sdf"
-GPZ    = ROOT/"logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz"
+GPZ    = ROOT/"paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz"
 TASK   = "F31_b1_apron_a3_mid"
 OUT    = ROOT/"logs/paper_figures/F88_stepwise.png"
 

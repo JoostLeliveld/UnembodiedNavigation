@@ -26,10 +26,11 @@ def _polygon_patch(poly, **kw):
     return PathPatch(MplPath(verts, codes), **kw)
 
 ROOT = Path(__file__).resolve().parents[2]
-CAMP = ROOT/"logs/visibility_comparison/paper_campaign_rawgp_v1"
-GPZ  = ROOT/"logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz"
+CAMP = ROOT/"logs/visibility_comparison/paper_campaign_lanegraph_v1"
+GPZ  = ROOT/"paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz"
 CONFIG = ROOT/"scripts/visibility_comparison/aws_f31b1_final_config.yaml"
-OUT  = ROOT/"logs/paper_figures/robustness_spread.png"
+OUT  = ROOT/"paper_artifacts/figures/robustness_spread.png"
+PROV = OUT.with_suffix(".provenance.json")
 TASKS = ["F31_b1_apron_a3_mid","b5_a4_apron_to_a2_mid","b2_a0_west_to_a1_upper","b6_a0_west_to_a1_low_control"]
 SHORT = {"F31_b1_apron_a3_mid":"F31_b1","b5_a4_apron_to_a2_mid":"b5","b2_a0_west_to_a1_upper":"b2 (west)","b6_a0_west_to_a1_low_control":"b6 (control)"}
 
@@ -94,4 +95,14 @@ handles=[Line2D([0],[0],color="#ff2d2d",lw=2,label="C1 constant-R (per seed)"),
 fig.legend(handles=handles,loc="lower center",ncol=4,fontsize=10,frameon=False,bbox_to_anchor=(0.5,-0.02))
 fig.suptitle("Robustness spread: per-seed truth trajectories (5 seeds/condition) under the locked config (belief-tube, ambiguity=1, aws_gp_v7b)",fontsize=13,fontweight="bold")
 fig.tight_layout(rect=[0,0.03,1,0.96]); OUT.parent.mkdir(parents=True,exist_ok=True); fig.savefig(OUT,dpi=150,bbox_inches="tight")
+PROV.write_text(json.dumps({
+    "figure": "robustness_spread",
+    "campaign_log_root": str(CAMP.relative_to(ROOT)),
+    "gp": str(GPZ.relative_to(ROOT)),
+    "config": str(CONFIG.relative_to(ROOT)),
+    "tasks": TASKS,
+    "conditions": ["C1", "C2"],
+    "seeds_per_condition": 5,
+    "output": str(OUT.relative_to(ROOT)),
+}, indent=2), encoding="utf-8")
 print(f"wrote {OUT}")

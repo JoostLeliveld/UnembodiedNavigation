@@ -16,7 +16,9 @@ This package defines the experiment surface: world, task, planner condition, lau
 
 ## Paper-Facing Use
 
-The compact paper benchmark is configured by `scripts/visibility_comparison/paper_campaign_config.yaml` and run through `scripts/visibility_comparison/run_visibility_campaign.py`.
+The paper-facing AWS robustness campaign is configured by
+`scripts/visibility_comparison/aws_f31b1_final_config.yaml` and run through
+`scripts/visibility_comparison/run_visibility_campaign.py`.
 
 The primary launch enforces the important paper assumptions:
 
@@ -26,12 +28,14 @@ The primary launch enforces the important paper assumptions:
 - shared world/task/obstacle geometry across compared planners
 - run manifests that record planner, artifact, estimator, noise, and safety settings
 
-## Current Extension Work
+## Current Paper Benchmark
 
-The AWS/JdeRobot-style warehouse is the single active exploratory Experiment B benchmark. Keep it labeled exploratory in docs and paper text until it has a trained detector, fitted GP, completed campaign logs, and generated result figures.
+The AWS-style warehouse is the current paper-facing benchmark. It uses the
+curated artifacts under `paper_artifacts/` plus a local YOLO checkpoint under
+`local_artifacts/`.
 
 See also:
 
-- [`../../docs/paper_alignment.md`](../../docs/paper_alignment.md)
+- [`../../docs/experiment_registry.md`](../../docs/experiment_registry.md)
 - [`../../docs/runtime_dataflow.md`](../../docs/runtime_dataflow.md)
 - [`config/README.md`](config/README.md)

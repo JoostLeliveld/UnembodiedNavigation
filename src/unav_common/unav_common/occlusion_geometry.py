@@ -376,24 +376,31 @@ def _get_union_boundary_segments(prisms: tuple[AxisAlignedPrism, ...]) -> list[t
         return []
     
     prisms_list = list(prisms)
-    
-    def is_inside_interior_of_any_other(x, y, ignore_idx):
-        for idx, p in enumerate(prisms_list):
-            if idx == ignore_idx:
+
+    def covered_outside(px, py, ignore_idx):
+        """True if the point (just outside one prism's edge) lies inside ANY other prism.
+        Used to drop INTERNAL union seams: an edge of prism P is part of the true union
+        boundary only if the space immediately on its OUTWARD side is free. This correctly
+        dissolves both overlapping prisms AND exactly-abutting prisms (whose shared edge the
+        old midpoint-interior test missed, leaving phantom internal boundary segments)."""
+        for idx2, q in enumerate(prisms_list):
+            if idx2 == ignore_idx:
                 continue
-            if (p.xmin + 1e-5 < x < p.xmax - 1e-5) and (p.ymin + 1e-5 < y < p.ymax - 1e-5):
+            if (q.xmin - 1e-6 <= px <= q.xmax + 1e-6) and (q.ymin - 1e-6 <= py <= q.ymax + 1e-6):
                 return True
         return False
 
+    probe = 1e-3  # outward offset (smaller than any lane width, larger than float noise)
     boundary_segments = []
     for idx, p in enumerate(prisms_list):
+        # each edge carries its OUTWARD normal (pointing away from this prism's interior)
         edges = [
-            (np.array([p.xmin, p.ymin]), np.array([p.xmin, p.ymax]), 'vertical'),
-            (np.array([p.xmax, p.ymin]), np.array([p.xmax, p.ymax]), 'vertical'),
-            (np.array([p.xmin, p.ymin]), np.array([p.xmax, p.ymin]), 'horizontal'),
-            (np.array([p.xmin, p.ymax]), np.array([p.xmax, p.ymax]), 'horizontal'),
+            (np.array([p.xmin, p.ymin]), np.array([p.xmin, p.ymax]), 'vertical', np.array([-1.0, 0.0])),
+            (np.array([p.xmax, p.ymin]), np.array([p.xmax, p.ymax]), 'vertical', np.array([1.0, 0.0])),
+            (np.array([p.xmin, p.ymin]), np.array([p.xmax, p.ymin]), 'horizontal', np.array([0.0, -1.0])),
+            (np.array([p.xmin, p.ymax]), np.array([p.xmax, p.ymax]), 'horizontal', np.array([0.0, 1.0])),
         ]
-        for p1, p2, orient in edges:
+        for p1, p2, orient, outward in edges:
             splits = [0.0, 1.0]
             if orient == 'vertical':
                 x_val = p1[0]
@@ -419,7 +426,7 @@ def _get_union_boundary_segments(prisms: tuple[AxisAlignedPrism, ...]) -> list[t
                         if x_min_clip < x_max_clip:
                             splits.append((x_min_clip - x_start) / (x_end - x_start))
                             splits.append((x_max_clip - x_start) / (x_end - x_start))
-            
+
             splits = sorted(list(set([float(np.clip(s, 0.0, 1.0)) for s in splits])))
             for i in range(len(splits) - 1):
                 s1, s2 = splits[i], splits[i+1]
@@ -427,7 +434,10 @@ def _get_union_boundary_segments(prisms: tuple[AxisAlignedPrism, ...]) -> list[t
                     continue
                 smid = 0.5 * (s1 + s2)
                 pt_mid = p1 + smid * (p2 - p1)
-                if not is_inside_interior_of_any_other(pt_mid[0], pt_mid[1], idx):
+                # keep only TRUE boundary: the outward side of this sub-edge is free space
+                # (not covered by an overlapping OR abutting prism)
+                if not covered_outside(pt_mid[0] + probe * outward[0],
+                                       pt_mid[1] + probe * outward[1], idx):
                     boundary_segments.append((
                         p1 + s1 * (p2 - p1),
                         p1 + s2 * (p2 - p1)

@@ -1,0 +1,1 @@
+Image-space YOLO detection is reduced to a selected bottom pixel, which is projected to a planar ground point with the calibrated homography/camera model. The external camera contributes (x,y) position updates; heading is supplied by odometry. The GP modulates the planner-facing camera (x,y) covariance and does not directly estimate heading.

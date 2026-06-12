@@ -9,4 +9,4 @@ Expected layout:
 - `<model_name>/metrics.json`
 - `<model_name>/previews/`
 
-Training is managed through [`scripts/perception/train_yolo_seg.py`](/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/perception/train_yolo_seg.py).
+Training is managed through `scripts/perception/train_yolo_seg.py`.

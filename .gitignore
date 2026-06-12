@@ -26,6 +26,8 @@ __pycache__/
 .agents/
 .claude/
 .codex/
+_private_ai_notes/
+local_artifacts/
 
 # Debug output
 *.gv
@@ -38,6 +40,8 @@ __pycache__/
 # Local notes and scratch artifacts not part of the active thesis repo story
 src/docs/
 scripts/artifacts/
+paper_artifacts/perception/**/model.pt
+paper_artifacts/perception/**/weights/
 
 core_tue4tm00_humble/
 ICRA2026-WUnEmbodied-main/

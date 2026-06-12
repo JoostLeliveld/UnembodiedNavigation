@@ -14,12 +14,12 @@ Outcome classifier (added 2026-05): each row also gets boolean flags
   is_clean_success / is_near_success / is_collision / is_penetration
   / is_timeout / is_interrupted / is_invalid
 plus the underlying `valid_run` and penetration depths from run_summary.json.
-This mirrors the paper categories defined in 07_results.
+This mirrors the paper categories defined in the Experiments section.
 
 Usage (current data):
     python compute_paper_metrics.py \\
-        --campaign-log logs/visibility_comparison/paper_taskA_mc_nominal_c1_vs_c2_v1/grid_log.json \\
-        --gp-artifact logs/visibility_comparison/current_gp/yolo_score_raw_gp.npz \\
+        --campaign-log logs/visibility_comparison/aws_f31b1_final_v1/campaign_log.json \\
+        --gp-artifact paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz \\
         --out paper_metrics.csv
 
 Outputs:

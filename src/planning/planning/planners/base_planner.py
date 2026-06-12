@@ -586,6 +586,10 @@ class UnicyclePlannerBase:
         ambiguity_std_values = []
         min_collision_clearance = float('inf')
         min_nogo_clearance = float('inf')
+        # keep_in: raw mean inside-distance (positive = mean is inside the lane union),
+        # WITHOUT safe_distance / belief-tube. Used for the hard validity gate so that a
+        # feasible in-lane route is not rejected merely for grazing the soft standoff band.
+        min_nogo_mean_inside = float('inf')
 
         for u in controls:
             m_prev = np.asarray(m, dtype=float).copy()
@@ -625,6 +629,11 @@ class UnicyclePlannerBase:
                     else:
                         nogo_clearance = self.nogo_cost_model.clearance_state_np(m_seg)
                     min_nogo_clearance = min(min_nogo_clearance, float(nogo_clearance))
+                    if self.nogo_mode == 'keep_in':
+                        min_nogo_mean_inside = min(
+                            min_nogo_mean_inside,
+                            float(self.nogo_cost_model.signed_distance_state_np(m_seg)),
+                        )
 
         current_goal_distance = self._goal_distance_xy(np.asarray(m0[:2], dtype=float), goal_xy)
         terminal_goal_distance = self._goal_distance_xy(np.asarray(m[:2], dtype=float), goal_xy)
@@ -639,13 +648,27 @@ class UnicyclePlannerBase:
             if ambiguity_std_values else math.nan
         )
         min_clearance = min(min_collision_clearance, min_nogo_clearance)
-        rollout_valid = bool((not math.isfinite(min_clearance)) or min_clearance >= 0.0)
+        # Hard validity: the MEAN trajectory must not collide and, under keep_in, must
+        # stay inside the driveable lane union (a small tolerance absorbs the discrete
+        # segment sampling). The belief-tube + safe_distance clearance (min_nogo_clearance)
+        # shapes the COST -- the soft wider-turn standoff -- but is deliberately NOT the
+        # hard gate: using it as the gate spuriously rejects feasible in-lane routes whose
+        # tube merely grazes the standoff band, collapsing the global solve to a degenerate
+        # stop. A plan whose mean leaves the lane (e.g. a corner-cut through forbidden
+        # floor) still fails the keep_in gate.
+        KEEP_IN_MEAN_TOL = 0.05
+        collision_ok = (not math.isfinite(min_collision_clearance)) or min_collision_clearance >= 0.0
+        if self.nogo_mode == 'keep_in':
+            nogo_ok = (not math.isfinite(min_nogo_mean_inside)) or min_nogo_mean_inside >= -KEEP_IN_MEAN_TOL
+        else:
+            nogo_ok = (not math.isfinite(min_nogo_clearance)) or min_nogo_clearance >= 0.0
+        rollout_valid = bool(collision_ok and nogo_ok)
         invalid_reason = ''
         if not rollout_valid:
             invalid_reason = (
-                'predicted_driveable_region_violation'
-                if min_nogo_clearance <= min_collision_clearance
-                else 'predicted_collision_geometry'
+                'predicted_collision_geometry'
+                if not collision_ok
+                else 'predicted_driveable_region_violation'
             )
         return {
             'terminal_goal_distance_pred': float(terminal_goal_distance),

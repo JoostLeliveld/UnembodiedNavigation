@@ -3,9 +3,9 @@
 Separates paper evidence from exploratory diagnostics. A run is not paper
 evidence unless the full artifact chain is present. Aligned 2026-06-12.
 
-NOTE: pass-1/2 cleanup moved most historical run families to the sibling archive
-`/home/joostleliveld/Thesis/_archive_nonpaper/` (see its `ARCHIVE_MANIFEST.md`).
-Only the paper KEEP set lives in the repo now.
+Only the current paper-ready artifact bundle is kept in the public tree. Raw
+campaign logs, training runs, and historical diagnostics are local/private
+material unless explicitly packaged under `paper_artifacts/`.
 
 ## Evidence Chain
 
@@ -25,12 +25,13 @@ Only the paper KEEP set lives in the repo now.
 | Status | Asset | Notes |
 | --- | --- | --- |
 | CURRENT | `src/sim/gazebo_worlds/worlds/warehouse_aws.world.sdf` | Locked AWS warehouse geometry and external-camera pose `(0.0, -5.5, 4.8)`. |
-| CURRENT | `logs/perception_models/aws_yolo_simseg_v2/model.pt` | Paper detector trained from simulator semantic-segmentation labels. Runtime localization uses the selected bounding-box bottom centre; masks are training/diagnostics only. |
-| CURRENT | `logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz` | Paper GP on the locked camera. v7b = v7 capture plus final target-table cleanup/augmentation, fitted with length scale `0.90`, noise variance `0.05`, beta `0.5`, grid `220 x 200`, `P_conservative_plan_map`. |
+| LOCAL | `local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt` | Paper detector checkpoint trained from simulator semantic-segmentation labels. Not tracked in git; runtime localization uses the selected bounding-box bottom centre. |
+| CURRENT | `paper_artifacts/perception/aws_yolo_simseg_v2/` | Public detector metadata: manifest, validation metrics, training plot, and representative validation image. |
+| CURRENT | `paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz` | Paper GP on the locked camera. v7b = v7 capture plus final target-table cleanup/augmentation, fitted with length scale `0.90`, noise variance `0.05`, beta `0.5`, grid `220 x 200`, `P_conservative_plan_map`. |
 | CURRENT | `scripts/visibility_comparison/aws_f31b1_final_config.yaml` | Locked robustness-campaign config: four tasks, five seeds, C1/C2, `ambiguity_weight=1.0`, `visibility_weight=0.0`, `use_belief_nogo_cost=true`, `nogo_belief_kappa=1.0`, `yolo_use_masks=false`. |
-| CURRENT | `logs/paper_figures/robustness_metrics.csv` | Per-task/condition campaign metrics used for the paper table. Continuous localization metrics are clean-success pooled. |
-| CURRENT | `logs/paper_figures/robustness_spread.png` | Robustness spread map generated from seeded runs. |
-| CURRENT | `logs/paper_figures/f31b1_markeroff_v2/paired_mechanism_taskA.pdf` | Single-run mechanism figure. Use as mechanism illustration, not as the whole robustness claim. |
+| CURRENT | `paper_artifacts/metrics/robustness_metrics.csv` | Per-task/condition campaign metrics used for the paper table. Continuous localization metrics are clean-success pooled. |
+| CURRENT | `paper_artifacts/figures/robustness_spread.png` | Robustness spread map generated from seeded runs. |
+| CURRENT | `paper_artifacts/figures/f31b1_markeroff_v2/paired_mechanism_taskA.pdf` | Single-run mechanism figure. Use as mechanism illustration, not as the whole robustness claim. |
 
 ## Current Paper Evidence Status
 
@@ -79,6 +80,5 @@ tasks. The result should be framed as improved robustness, not a clean sweep.
 ## Adding A New Evidence Line
 
 Add a row only after the chain is complete. Until then mark `exploratory` or
-`diagnostic` and avoid paper-result language. The runtime contract is
-`docs/paper_runtime_contract.yaml`; current status is
-`docs/active_research_state.md`.
+`diagnostic` and avoid paper-result language. Update this registry and
+`docs/paper_runtime_contract.yaml` together.

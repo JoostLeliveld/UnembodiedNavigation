@@ -134,6 +134,11 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('optimizer_multistart_include_direct', True)
         _declare_if_not('optimizer_multistart_lateral_offsets', '')
         _declare_if_not('optimizer_initial_routes_json', '')
+        # Route-seed source for the multistart: 'explicit' uses
+        # optimizer_initial_routes_json as-is; 'lane_graph' generates condition-
+        # neutral lane-centre Manhattan seeds from the driveable map at the (one-shot)
+        # global solve. See unav_common.lane_graph_routes.
+        _declare_if_not('optimizer_route_seed_mode', 'explicit')
         # Two-stage (global-then-local) hierarchical planning
         _declare_if_not('use_hierarchical', False)
         _declare_if_not('global_horizon', 60)
@@ -311,6 +316,9 @@ class UnicyclePlannerNode(Node):
         )
         self.optimizer_initial_routes_json = str(
             self.get_parameter('optimizer_initial_routes_json').value
+        )
+        self.optimizer_route_seed_mode = str(
+            self.get_parameter('optimizer_route_seed_mode').value or 'explicit'
         )
         self.use_hierarchical = _as_bool(self.get_parameter('use_hierarchical').value)
         self.global_horizon = int(self.get_parameter('global_horizon').value)

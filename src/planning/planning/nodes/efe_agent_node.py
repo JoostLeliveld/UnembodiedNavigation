@@ -1,16 +1,20 @@
 """ROS 2 node for EFE agent that publishes cmd_vel directly (unicycle dynamics)."""
 
+import json
 import math
 import time
 
 import numpy as np
 
+import os
+
 import rclpy
 from rclpy.duration import Duration
 from rclpy.executors import MultiThreadedExecutor
+from rclpy.qos import QoSProfile, DurabilityPolicy
 
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, String
 
 from planning.nodes.unicycle_planner_node import UnicyclePlannerNode
 from planning.planners.base_planner import UnicyclePlannerBase, extract_waypoints
@@ -61,6 +65,14 @@ class EfeAgentNode(UnicyclePlannerNode):
         self._hier_phase = 'GLOBAL'
         self._waypoints = None
         self._wp_idx = 0
+        # Persist the one-shot global route artifacts (solved plan + waypoints +
+        # which seed won + costs). The global route is chosen ONCE and never
+        # replanned, so it is the route-choice evidence for the campaign.
+        self._run_dir = None
+        self._pending_global_artifact = None
+        self._global_artifact_saved = False
+        run_dir_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.create_subscription(String, '/experiment/run_dir', self._run_dir_cb, run_dir_qos)
         self._local_ref_tracking_active = False
         self.global_planner = None
         if self.use_hierarchical:
@@ -186,6 +198,76 @@ class EfeAgentNode(UnicyclePlannerNode):
                 f"maxiter={self.local_optimizer_maxiter})"
             )
 
+    def _run_dir_cb(self, msg: String):
+        self._run_dir = str(msg.data or '').strip() or None
+        # Flush any global-route artifact captured before the run dir was known.
+        if self._run_dir and self._pending_global_artifact is not None:
+            self._write_global_artifact(self._pending_global_artifact)
+
+    def _save_global_plan_artifacts(self, rg, m0, final_goal):
+        """Capture the one-shot solved global route and persist it (or defer until
+        the run directory is known)."""
+        if self._global_artifact_saved:
+            return
+        try:
+            states = np.asarray(rg.states, dtype=float)
+            waypoints = [(float(w[0]), float(w[1])) for w in (self._waypoints or [])]
+            seeds = [
+                {'name': str(r.get('name', '')), 'waypoints': [[float(a), float(b)] for a, b in r.get('waypoints', [])]}
+                for r in getattr(self.global_planner, 'optimizer_initial_routes', []) or []
+            ]
+            meta = {
+                'selected_source': str(getattr(rg, 'selected_source', '')),
+                'route_seed_mode': str(getattr(self, 'optimizer_route_seed_mode', 'explicit')),
+                'route_seeds': seeds,
+                'total_cost': float(getattr(rg, 'total_cost', float('nan'))),
+                'risk_cost': float(getattr(rg, 'risk_cost', float('nan'))),
+                'ambiguity_cost': float(getattr(rg, 'ambiguity_cost', float('nan'))),
+                'obstacle_cost': float(getattr(rg, 'obstacle_cost', float('nan'))),
+                'rollout_valid': bool(getattr(rg, 'rollout_valid', True)),
+                'terminal_goal_distance_pred': float(getattr(rg, 'terminal_goal_distance_pred', float('nan'))),
+                'global_horizon': int(self.global_horizon),
+                'start_xy_yaw': [float(m0[0]), float(m0[1]), float(m0[2])],
+                'goal_xy': [float(final_goal[0]), float(final_goal[1])],
+                'n_states': int(states.shape[0]),
+                'n_waypoints': int(len(waypoints)),
+            }
+            artifact = {'states': states, 'waypoints': waypoints, 'meta': meta}
+        except Exception as exc:  # noqa: BLE001
+            self.get_logger().warn(f"failed to capture global route artifact: {exc}")
+            return
+        if self._run_dir:
+            self._write_global_artifact(artifact)
+        else:
+            self._pending_global_artifact = artifact
+
+    def _write_global_artifact(self, artifact):
+        try:
+            run_dir = self._run_dir
+            states = artifact['states']
+            waypoints = artifact['waypoints']
+            meta = artifact['meta']
+            with open(os.path.join(run_dir, 'global_plan.csv'), 'w', encoding='utf-8') as f:
+                f.write('point_idx,x,y,theta\n')
+                for i, s in enumerate(states):
+                    th = float(s[2]) if states.shape[1] > 2 else float('nan')
+                    f.write(f'{i},{float(s[0]):.6f},{float(s[1]):.6f},{th:.6f}\n')
+            with open(os.path.join(run_dir, 'global_waypoints.csv'), 'w', encoding='utf-8') as f:
+                f.write('wp_idx,x,y\n')
+                for i, w in enumerate(waypoints):
+                    f.write(f'{i},{float(w[0]):.6f},{float(w[1]):.6f}\n')
+            with open(os.path.join(run_dir, 'global_plan_meta.json'), 'w', encoding='utf-8') as f:
+                json.dump(meta, f, indent=2)
+            self._global_artifact_saved = True
+            self._pending_global_artifact = None
+            self.get_logger().info(
+                f"[hierarchical] saved global route artifacts -> global_plan.csv "
+                f"({meta['n_states']} states), global_waypoints.csv ({meta['n_waypoints']} wp), "
+                f"global_plan_meta.json (chose {meta['selected_source']})"
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.get_logger().warn(f"failed to write global route artifact: {exc}")
+
     def _active_plan_remaining_s(self) -> float:
         with self._data_lock:
             controls = None if self._active_controls is None else self._active_controls
@@ -210,6 +292,35 @@ class EfeAgentNode(UnicyclePlannerNode):
         final_goal = self._goal_xy_from_msg(goal_ref)
 
         if self._hier_phase == 'GLOBAL':
+            # Generate condition-neutral lane-graph route seeds from the driveable
+            # map for this (one-shot) global solve. The global route is chosen once
+            # and never replanned, so these seeds provide the nonconvex optimizer's
+            # route-basin coverage. Generated from geometry + actual start + goal;
+            # identical across conditions; no GP/visibility input.
+            if (str(getattr(self, 'optimizer_route_seed_mode', 'explicit')) == 'lane_graph'
+                    and str(getattr(self, 'driveable_geometry_json', '') or '')):
+                try:
+                    from unav_common.lane_graph_routes import generate_route_seeds
+                    seeds = generate_route_seeds(
+                        self.driveable_geometry_json,
+                        (float(m0[0]), float(m0[1])),
+                        (float(final_goal[0]), float(final_goal[1])),
+                    )
+                    if seeds:
+                        self.global_planner.optimizer_initial_routes = (
+                            self.global_planner._parse_initial_routes(json.dumps(seeds))
+                        )
+                        self.get_logger().info(
+                            f"[hierarchical] lane-graph route seeds: "
+                            f"{[s['name'] for s in seeds]}"
+                        )
+                    else:
+                        self.get_logger().warn(
+                            "lane-graph generated 0 seeds; keeping explicit "
+                            "optimizer_initial_routes (check driveable_geometry_json covers start/goal)"
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    self.get_logger().warn(f"lane-graph seed generation failed ({exc}); using explicit seeds")
             plan_start = time.perf_counter()
             try:
                 rg = self.global_planner.plan(m0, S0, final_goal)
@@ -248,6 +359,9 @@ class EfeAgentNode(UnicyclePlannerNode):
             )
             # Publish the global plan for visualization; do NOT follow it.
             self._publish_plan_and_metrics(rg, final_goal, m0, S0, belief_meta=belief_meta)
+            # Persist the solved global route (plan states + waypoints + winning
+            # seed + costs) to the run directory -- this is the one-shot route choice.
+            self._save_global_plan_artifacts(rg, m0, final_goal)
             return
 
         # LOCAL phase: track the current planner-derived waypoint.

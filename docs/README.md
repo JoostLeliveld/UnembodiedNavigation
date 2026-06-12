@@ -1,30 +1,16 @@
 # Documentation Index
 
-This folder is the maintained bridge between the codebase and the paper. Root
-`/home/joostleliveld/Thesis/CLAUDE.md` is the authoritative AI operating
-contract; these docs are repo-specific references.
+This folder is the public bridge between the codebase, curated paper artifacts,
+and the paper-facing experiment.
 
 | File | Role |
 | --- | --- |
-| `active_research_state.md` | current truth, locked campaign evidence, caveats, and next cleanup priorities |
-| `decision_log.md` | short dated decisions, including rejected AWS probes |
-| `experiment_registry.md` | current artifacts, evidence status, superseded/archived, and invalid lines |
-| `paper_runtime_contract.yaml` | **the single runtime contract** (machine-readable) for paper-facing runs |
-| `paper_alignment.md` | code-to-paper contract, assumptions, and paper wording boundaries |
-| `paper_codebase_cleanup.md` | cleanup roadmap for the code companion to the paper |
+| `experiment_registry.md` | paper-facing artifacts, evidence status, superseded lines, and caveats |
+| `paper_runtime_contract.yaml` | machine-readable contract for paper-facing runs |
 | `runtime_dataflow.md` | offline artifact flow and online ROS topic flow |
-| `CONSISTENCY_CHECKLIST.md` | world, detector, GP, costmap, and task consistency gates |
-| `PLANNER_HYPERPARAMETERS.md` | planner knobs, intended effects, and tuning cautions |
 | `perception_details.md` | YOLO detector architecture, dataset, and inference settings |
+| `PLANNER_HYPERPARAMETERS.md` | planner knobs, intended effects, and tuning cautions |
+| `uncertainty_propagation.md` | process, command, encoder, and belief-covariance conventions |
 
-(The former three runtime contracts were consolidated into
-`paper_runtime_contract.yaml`; stale v5/compact-benchmark docs were removed in the
-2026-06-10 cleanup.)
-
-For the current state, start with `active_research_state.md`. For code entry
-points, start with the repository `README.md`.
-
-For AI/agent workflow, start with the root files:
-
-- `/home/joostleliveld/Thesis/CLAUDE.md`
-- `/home/joostleliveld/Thesis/.claude/README.md`
+For the shortest entry point, start with the repository `README.md`, then inspect
+`experiment_registry.md` and `paper_runtime_contract.yaml`.

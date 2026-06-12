@@ -1,6 +1,6 @@
 # Machine-readable contract for paper-facing runs — the SINGLE runtime contract.
 # (Consolidates the former runtime_method_contract.md + F86_method_and_runtime_contract.md.)
-# Keep aligned with docs/paper_alignment.md, docs/experiment_registry.md, and the
+# Keep aligned with docs/experiment_registry.md and the
 # active config scripts/visibility_comparison/aws_f31b1_final_config.yaml.
 
 paper_runtime_contract:
@@ -56,9 +56,9 @@ paper_runtime_contract:
   locked_artifacts:
     world: warehouse_aws.world.sdf
     camera_pose: {x: 0.0, y: -5.5, z: 4.8}     # raised+back, locked 2026-06-10
-    gp_artifact: logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz
+    gp_artifact: paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz
     gp_params: {kernel: rbf, length_scale: 0.90, beta: 0.5, noise_var: 0.05}
-    detector: logs/perception_models/aws_yolo_simseg_v2/model.pt
+    detector: local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt
     process_noise: {model: analytical_Qd, process_noise_xy: 0.012, process_noise_theta: 0.05,
                     note: "sigma_v / sigma_omega actuation PSDs (std per sqrt s), integrated over dt; see uncertainty_propagation.md"}
     superseded: {gps: [aws_gp_v5, aws_gp_v6, aws_gp_v6b, aws_gp_v7], cameras: ["z=4.5/y=-4.9", "z=4.9/y=-5.5"]}
@@ -107,8 +107,12 @@ paper_runtime_contract:
     leaving_driveable_floor_must_not_be_cost_optimal: true
     note: >
       driveable_geometry_json = union of axis-aligned prisms (aisles + R2-R5 mid-gap
-      connectors); driveable = inside any prism. Connectors overlap adjacent aisles so
-      the union signed-distance has no false-violation seam at edge boundaries.
+      connectors); driveable = inside any prism. The union-boundary builder dissolves
+      shared edges between adjacent prisms (both overlapping AND exactly-abutting, e.g.
+      the apron/lower-main/aisle junction at y=-2.85): a sub-edge is kept only if a point
+      probed just OUTWARD of it is not covered by another prism. This removes the phantom
+      internal seams (was 22/79 segments) that distorted keep-in clearance; verified
+      0 phantom seams and plans 0.0% outside the lane union on all 6 route-choice tasks.
 
   locked_runtime:   # mirrors scripts/visibility_comparison/aws_f31b1_final_config.yaml (2026-06-11)
     hierarchical: true

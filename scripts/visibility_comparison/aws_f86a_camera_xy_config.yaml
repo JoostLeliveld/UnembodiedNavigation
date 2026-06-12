@@ -14,7 +14,7 @@ tasks:
     seeds: [0]
 
 perception_backend: yolo
-yolo_model: "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/aws_yolo_simseg_v2/model.pt"
+yolo_model: "local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt"
 yolo_device: "0"
 yolo_imgsz: 640
 yolo_conf_threshold: 0.10
@@ -26,7 +26,7 @@ yolo_min_mask_area_px: 12.0
 yolo_mask_bottom_band_px: 3.0
 keypoint_marker_world_z: 0.0
 
-gp_artifact: "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/aws_gp_v7b/yolo_score_raw_gp.npz"
+gp_artifact: "paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz"
 headless: true
 use_rviz: false
 reset_world: false
