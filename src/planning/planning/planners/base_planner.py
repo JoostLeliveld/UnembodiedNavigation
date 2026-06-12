@@ -953,6 +953,65 @@ class UnicyclePlannerBase:
             tuple(self.visibility_model.signature) if self.visibility_model is not None else (),
         )
 
+    def _valgrad_disk_cache_path(self, params_ca):
+        """Stable on-disk cache path for the built valgrad ca.Function.
+
+        The digest hashes EVERYTHING baked into the symbolic graph: a manual
+        code-version tag, the EFE-approximation order, every CasadiEfeParams
+        field (exact float reprs, no rounding), the camera homography, the GP
+        visibility artifact's content signature, and the no-go cost config +
+        geometry + belief settings. If any differ, the digest differs and a
+        fresh build is forced, so a stale function can never be loaded. Returns
+        None (=> always build fresh) unless explicitly enabled with
+        EFE_VALGRAD_DISK_CACHE=1. Default OFF: benchmarking showed the serialized
+        graph is ~70 MB and deserializes as slowly as it rebuilds (no runtime
+        win), so it is opt-in only. When enabled, CasADi serializes the full
+        graph, so a reload evaluates bit-identically -- only the build is skipped.
+        """
+        import os
+        import hashlib
+        from dataclasses import asdict
+
+        if os.environ.get('EFE_VALGRAD_DISK_CACHE', '0') != '1':
+            return None
+        try:
+            cache_version = 'v1'
+
+            def _norm(v):
+                if isinstance(v, np.ndarray):
+                    return v.astype(float).tolist()
+                return v
+
+            params_items = sorted((k, _norm(v)) for k, v in asdict(params_ca).items())
+
+            gp_sig = None
+            if self.use_visibility_model and self.visibility_model is not None:
+                gp_sig = tuple(self.visibility_model.signature)
+
+            nogo_sig = None
+            if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
+                nogo_sig = (
+                    repr(self.nogo_cost_model.cfg),
+                    str(self.nogo_cost_model.mode),
+                    bool(self.use_belief_nogo_cost),
+                    repr(float(self.nogo_belief_kappa)),
+                )
+
+            ident = repr((
+                cache_version,
+                str(self.approx_method).upper(),
+                params_items,
+                np.asarray(self.camera.H, dtype=float).tolist(),
+                gp_sig,
+                nogo_sig,
+            ))
+            digest = hashlib.sha256(ident.encode('utf-8')).hexdigest()[:32]
+            cache_dir = os.environ.get('EFE_VALGRAD_CACHE_DIR') or os.path.join(
+                os.path.expanduser('~'), '.cache', 'efe_valgrad')
+            return os.path.join(cache_dir, f'valgrad_{digest}.casadi')
+        except Exception:
+            return None
+
     def _get_casadi_valgrad(
         self,
         goal_state,
@@ -1029,6 +1088,7 @@ class UnicyclePlannerBase:
                 p_vis_state=p_vis_ca,
                 nogo_cost=nogo_cost_ca,
                 nogo_belief_cost=nogo_belief_cost_ca,
+                cache_path=self._valgrad_disk_cache_path(params_ca),
             )
             self._casadi_valgrad_cache[cache_key] = valgrad
             self._runtime_debug_print(

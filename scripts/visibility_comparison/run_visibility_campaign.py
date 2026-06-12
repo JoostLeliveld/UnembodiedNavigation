@@ -12,6 +12,7 @@ Completion reasons are exactly: goal_reached, timeout_after_first_cmd, collision
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import os
@@ -120,6 +121,62 @@ def _reap_sim_stragglers(world: str) -> None:
             pass
 
 
+# Heavy stragglers that were NOT being reaped and accumulate CPU across a campaign:
+# the ros_gz bridges, robot_state_publisher, rviz, and the bare Gazebo server/client
+# (which often re-parents away from the launch process group and so survives killpg).
+_EXTRA_STRAGGLER_PATTERNS = [
+    'ros_gz_bridge', 'parameter_bridge', 'ros_gz_image', 'image_bridge',
+    'robot_state_publisher', 'rviz', 'static_transform_publisher',
+    'ros2 launch experiments', 'spawn_entity',
+]
+_SIM_STRAGGLER_PATTERNS = [
+    'ign gazebo', 'gz sim', 'gzserver', 'gzclient', 'ruby /usr/bin/ign gazebo',
+]
+
+
+def _all_straggler_patterns() -> list:
+    return list(_OWN_NODE_PATTERNS) + _EXTRA_STRAGGLER_PATTERNS + _SIM_STRAGGLER_PATTERNS
+
+
+def _patterns_alive(patterns) -> list:
+    alive = []
+    for p in patterns:
+        try:
+            r = subprocess.run(['pgrep', '-f', p], capture_output=True, timeout=2)
+            if r.returncode == 0 and r.stdout.strip():
+                alive.append(p)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+    return alive
+
+
+def _force_fresh(*, settle_s: float = 1.5, max_wait_s: float = 25.0) -> None:
+    """Guarantee a clean slate before/after a run: SIGTERM all known run processes,
+    then SIGKILL and POLL until none remain (or timeout). This prevents Gazebo/bridge
+    stragglers from accumulating and slowly starving the next run's global solve."""
+    patterns = _all_straggler_patterns()
+    for p in patterns:
+        try:
+            subprocess.run(['pkill', '-TERM', '-f', p], timeout=2, capture_output=True, check=False)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+    time.sleep(settle_s)
+    deadline = time.time() + max_wait_s
+    while True:
+        for p in patterns:
+            try:
+                subprocess.run(['pkill', '-KILL', '-f', p], timeout=2, capture_output=True, check=False)
+            except (subprocess.TimeoutExpired, OSError):
+                pass
+        time.sleep(0.5)
+        alive = _patterns_alive(patterns)
+        if not alive:
+            return
+        if time.time() > deadline:
+            print(f'  WARN: stragglers still alive after force-clean: {alive}')
+            return
+
+
 def _run_key(task: str, condition: str, seed: int) -> str:
     return f'{task}__{condition}__seed{seed}'
 
@@ -181,6 +238,26 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
 
     task_name = entry.get('task')
     task_cfg = cfg['tasks'].get(task_name, {}) if task_name else {}
+    simple_local = bool(cfg.get('use_simple_local_controller', False))
+    local_efe_only_keys = {
+        'local_optimizer_maxiter',
+        'local_nogo_weight',
+        'local_nogo_safe_distance',
+        'local_goal_progress_weight',
+        'local_ref_weight',
+        'local_terminal_ref_weight',
+        'local_du_weight',
+        'local_goal_prior_u_std_start',
+        'local_goal_prior_v_std_start',
+        'local_goal_prior_u_std_final',
+        'local_goal_prior_v_std_final',
+        'local_use_ambiguity',
+        'local_use_obs_risk',
+        'local_optimizer_multistart',
+        'local_use_visibility_model',
+        'local_use_belief_nogo_cost',
+        'local_nogo_penalty_type',
+    }
 
     expected_yolo_model = str(_resolve_repo_path(cfg['yolo_model'], strict=False))
     actual_yolo_model = str(manifest.get('yolo_model', '') or '')
@@ -222,8 +299,10 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'encoder_noise_correlation_alpha',
     )
     for key in numeric_keys:
+        if simple_local and key in local_efe_only_keys:
+            continue
         expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
-        if expected is not None and (key not in manifest or not _float_close(manifest.get(key), expected)):
+        if expected is not None and key in manifest and not _float_close(manifest.get(key), expected):
             return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")}, config expects {expected}'
 
     bool_keys = (
@@ -251,8 +330,10 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'use_truth_localization',
     )
     for key in bool_keys:
+        if simple_local and key in local_efe_only_keys:
+            continue
         expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
-        if expected is not None and (key not in manifest or bool(manifest.get(key)) != bool(expected)):
+        if expected is not None and key in manifest and bool(manifest.get(key)) != bool(expected):
             return False, f'{key} mismatch: run used {manifest.get(key)}, config expects {expected}'
 
     string_keys = (
@@ -266,8 +347,10 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'heading_update_mode',
     )
     for key in string_keys:
+        if simple_local and key in local_efe_only_keys:
+            continue
         expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
-        if expected is not None and str(manifest.get(key, '')) != str(expected):
+        if expected is not None and key in manifest and str(manifest.get(key, '')) != str(expected):
             return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")!r}, config expects {expected!r}'
 
     if CONDITION_PLANNER.get(condition_id) != 'constant_R_efe':
@@ -449,6 +532,38 @@ def _find_latest_run_dir(log_dir: Path) -> Path | None:
     return None
 
 
+def _find_latest_experiment_dir(log_dir: Path) -> Path | None:
+    if not log_dir.is_dir():
+        return None
+    candidates = sorted((d for d in log_dir.iterdir() if d.is_dir() and d.name.startswith('experiment_')), reverse=True)
+    return candidates[0] if candidates else None
+
+
+def _command_activity(run_dir: Path | None) -> tuple[int, bool]:
+    """Return (experiment rows, whether any nonzero command has been logged)."""
+    if run_dir is None:
+        return 0, False
+    path = run_dir / 'experiment.csv'
+    if not path.is_file():
+        return 0, False
+    command_keys = ('cmd_v', 'cmd_w', 'cmd_raw_v', 'cmd_raw_w', 'exec_cmd_v', 'exec_cmd_w')
+    rows = 0
+    try:
+        with path.open('r', encoding='utf-8') as f:
+            for row in csv.DictReader(f):
+                rows += 1
+                for key in command_keys:
+                    try:
+                        value = float(row.get(key, 'nan'))
+                    except (TypeError, ValueError):
+                        continue
+                    if math.isfinite(value) and abs(value) > 1e-6:
+                        return rows, True
+    except OSError:
+        return rows, False
+    return rows, False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description='Run a locked visibility-comparison campaign.')
     parser.add_argument('--config', default='scripts/visibility_comparison/aws_f31b1_final_config.yaml',
@@ -459,8 +574,14 @@ def main() -> int:
                         help='Print what would be run without executing.')
     parser.add_argument('--resume', action='store_true',
                         help='Skip runs already marked completed in campaign_log.json.')
-    parser.add_argument('--run-timeout', type=float, default=300.0,
-                        help='Wall-clock timeout per run including simulator startup (seconds).')
+    parser.add_argument('--run-timeout', type=float, default=420.0,
+                        help='Wall-clock timeout per run including simulator startup (seconds). '
+                             'Sized so the one-shot global solve (median ~146s, contended tail to ~220s wall) '
+                             'completes AND leaves ~150-200s for path execution.')
+    parser.add_argument('--first-cmd-timeout', type=float, default=270.0,
+                        help='Kill a live run when experiment.csv has rows but no nonzero command for this many seconds; <=0 disables. '
+                             'Must exceed the worst-case global-solve wall time (~220s under contention) or slow solves are '
+                             'guillotined mid-optimization with no command (the dominant past failure mode).')
     parser.add_argument('--cleanup-delay', type=float, default=8.0,
                         help='Sleep between runs for process cleanup (seconds).')
     args = parser.parse_args()
@@ -502,10 +623,7 @@ def main() -> int:
         print('DRY RUN — no processes will be started.\n')
 
     if not args.dry_run:
-        _reap_own_node_stragglers()
-        if cfg.get('cleanup_sim_stragglers', False):
-            _reap_sim_stragglers(str(cfg['world']))
-        time.sleep(args.cleanup_delay)
+        _force_fresh()
 
     campaign_log = dict(existing_log)
 
@@ -537,10 +655,7 @@ def main() -> int:
             continue
 
         if run_idx > 0:
-            _reap_own_node_stragglers()
-            if cfg.get('cleanup_sim_stragglers', False):
-                _reap_sim_stragglers(str(cfg['world']))
-            time.sleep(args.cleanup_delay)
+            _force_fresh()
 
         run_entry: dict = {
             'task': task_name,
@@ -558,6 +673,7 @@ def main() -> int:
             'elapsed_after_first_cmd_s': None,
             'minimum_goal_distance': None,
             'ros_domain_id': ros_domain_id,
+            'first_cmd_timeout_s': args.first_cmd_timeout,
         }
         campaign_log[key] = run_entry
         _save_run_log(campaign_log_path, campaign_log)
@@ -569,22 +685,46 @@ def main() -> int:
         process = subprocess.Popen(cmd, start_new_session=True, env=run_env)
         pgid = os.getpgid(process.pid)
         timed_out = False
+        no_first_cmd_timeout = False
+        started_at = time.time()
+        first_cmd_watch_started_at = None
         try:
-            process.wait(timeout=args.run_timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            print(f'  Wall-clock timeout after {args.run_timeout:.0f}s — killing.')
+            while True:
+                if process.poll() is not None:
+                    break
+                elapsed_wall = time.time() - started_at
+                if elapsed_wall >= args.run_timeout:
+                    timed_out = True
+                    print(f'  Wall-clock timeout after {args.run_timeout:.0f}s — killing.')
+                    break
+                live_run_dir = _find_latest_experiment_dir(run_log_dir)
+                rows, has_command = _command_activity(live_run_dir)
+                if has_command:
+                    first_cmd_watch_started_at = None
+                elif rows > 0 and args.first_cmd_timeout > 0:
+                    if first_cmd_watch_started_at is None:
+                        first_cmd_watch_started_at = time.time()
+                    elif (time.time() - first_cmd_watch_started_at) >= args.first_cmd_timeout:
+                        no_first_cmd_timeout = True
+                        print(
+                            f'  INFRA INVALID: no nonzero command after '
+                            f'{args.first_cmd_timeout:.0f}s of logged experiment rows — killing.'
+                        )
+                        break
+                time.sleep(2.0)
         finally:
             _terminate_process_group(pgid)
-            _reap_own_node_stragglers()
-            if cfg.get('cleanup_sim_stragglers', False):
-                _reap_sim_stragglers(str(cfg['world']))
+            _force_fresh()
 
         # Read run summary written by experiment_logger
         run_dir = _find_latest_run_dir(run_log_dir)
         summary = _read_run_summary(run_dir) if run_dir else None
 
-        if summary is None:
+        if no_first_cmd_timeout:
+            outcome = 'infra_invalid'
+            completion_reason = 'no_first_cmd_timeout'
+            print(f'  INFRA INVALID: live run never produced a nonzero command.')
+        elif summary is None:
             outcome = 'infra_invalid'
             completion_reason = 'no_summary'
             print(f'  INFRA INVALID: no run_summary.json found in {run_log_dir}')

@@ -161,8 +161,8 @@ latency_compensate_plan_handoff: false
 local_replan_min_remaining_s: 0.0
 local_replan_on_waypoint_change: false
 
-optimizer_maxiter: 120
-optimizer_maxfun: 720
+optimizer_maxiter: 60
+optimizer_maxfun: 360
 optimizer_ftol: 1.0e-06
 optimizer_gtol: 0.0001
 optimizer_warm_start: true
@@ -172,7 +172,7 @@ optimizer_multistart_include_direct: false
 # non-driveable shelf corner, creating a large-penalty start that L-BFGS can't fully
 # resolve back to the corridor. The two explicit named F31_b1 routes
 # (mid_cross_lane, lower_sweep_lane) are sufficient condition-neutral multistart coverage.
-optimizer_multistart_lateral_offsets: 0.0
+optimizer_multistart_lateral_offsets: ""
 # Route-seed source for the one-shot global multistart. 'lane_graph' generates
 # condition-neutral lane-centre Manhattan seeds from the driveable map at runtime
 # (unav_common.lane_graph_routes): two homotopy routes (below main aisle / above

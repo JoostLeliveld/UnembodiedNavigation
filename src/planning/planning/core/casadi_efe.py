@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import os
 
 import numpy as np
 
@@ -446,6 +447,90 @@ def visibility_aware_unicycle_efe_ca(
             + total_ref * inv_H + total_du * inv_H)
 
 
+def _load_cached_valgrad(cache_path):
+    """Best-effort load of a previously serialized valgrad ca.Function.
+
+    Returns the loaded Function only if it round-trips with the exact I/O arity
+    of the live build (8 inputs, 2 outputs); on ANY failure (missing file,
+    corrupt blob, CasADi-version mismatch) it returns None so the caller falls
+    back to a fresh symbolic build. CasADi serializes the full computational
+    graph, so a successfully loaded function evaluates bit-identically to a
+    freshly built one -- no numerical change, only the build cost is skipped.
+    """
+    if not cache_path:
+        return None
+    try:
+        if not os.path.exists(cache_path):
+            return None
+        fn = ca.Function.load(cache_path)
+        if int(fn.n_in()) == 8 and int(fn.n_out()) == 2:
+            return fn
+    except Exception:
+        return None
+    return None
+
+
+def _save_cached_valgrad(valgrad, cache_path):
+    """Atomically persist the built valgrad Function; never raises."""
+    if not cache_path:
+        return
+    try:
+        cache_dir = os.path.dirname(cache_path)
+        if cache_dir:
+            os.makedirs(cache_dir, exist_ok=True)
+        tmp_path = f"{cache_path}.{os.getpid()}.tmp"
+        valgrad.save(tmp_path)
+        os.replace(tmp_path, cache_path)  # atomic on POSIX
+    except Exception:
+        try:
+            if 'tmp_path' in dir() and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+
+
+def _make_valgrad_wrapper(valgrad, H_local):
+    """Wrap a (built or loaded) valgrad ca.Function as a numpy-in/out callable."""
+
+    def _wrapper(
+        u_val,
+        m_val,
+        S_val,
+        goal_obs_val,
+        goal_xy_val,
+        progress_index0_val,
+        ref_seq_val=None,
+        prev_u_val=None,
+    ):
+        if ref_seq_val is None:
+            ref_seq_arr = np.zeros(H_local * 2, dtype=float)
+        else:
+            ref_seq_arr = np.asarray(ref_seq_val, dtype=float).reshape(-1)
+            if ref_seq_arr.size != H_local * 2:
+                raise ValueError(
+                    f"ref_seq must have {H_local * 2} entries, got {ref_seq_arr.size}"
+                )
+        if prev_u_val is None:
+            prev_u_arr = np.zeros(2, dtype=float)
+        else:
+            prev_u_arr = np.asarray(prev_u_val, dtype=float).reshape(-1)
+            if prev_u_arr.size != 2:
+                raise ValueError(f"prev_u must have 2 entries, got {prev_u_arr.size}")
+        val, grad = valgrad(
+            np.asarray(u_val, dtype=float).reshape((-1, 1)),
+            np.asarray(m_val, dtype=float).reshape((3, 1)),
+            np.asarray(S_val, dtype=float).reshape((3, 3)),
+            np.asarray(goal_obs_val, dtype=float).reshape((2, 1)),
+            np.asarray(goal_xy_val, dtype=float).reshape((2, 1)),
+            np.asarray(float(progress_index0_val), dtype=float),
+            ref_seq_arr.reshape((-1, 1)),
+            prev_u_arr.reshape((2, 1)),
+        )
+        return float(np.asarray(val, dtype=float).reshape(-1)[0]), np.asarray(grad, dtype=float).reshape(-1)
+
+    return _wrapper
+
+
 def make_efe_valgrad_fn(
     params: CasadiEfeParams,
     H,
@@ -454,11 +539,21 @@ def make_efe_valgrad_fn(
     p_vis_state=None,
     nogo_cost=None,
     nogo_belief_cost=None,
+    cache_path=None,
 ):
     _require_casadi()
     approx = str(approx or 'ET1').upper()
     if approx not in ('ET1', 'ET2'):
         raise RuntimeError("CasADi EFE path supports only ET1 or ET2")
+
+    # Disk cache: the symbolic graph below is identical for a fixed config, so a
+    # previously serialized build can be reloaded (bit-identical evaluation) to
+    # skip the multi-second assembly on each fresh-process run. Any cache miss or
+    # load failure falls through to a normal build.
+    cached = _load_cached_valgrad(cache_path)
+    if cached is not None:
+        return _make_valgrad_wrapper(cached, int(params.time_horizon))
+
     g = make_g_from_homography(H)
 
     state_sym = ca.MX.sym('state_for_jac', 3)
@@ -525,42 +620,6 @@ def make_efe_valgrad_fn(
         ['objective', 'gradient'],
     )
 
-    H_local = int(params.time_horizon)
+    _save_cached_valgrad(valgrad, cache_path)
 
-    def _wrapper(
-        u_val,
-        m_val,
-        S_val,
-        goal_obs_val,
-        goal_xy_val,
-        progress_index0_val,
-        ref_seq_val=None,
-        prev_u_val=None,
-    ):
-        if ref_seq_val is None:
-            ref_seq_arr = np.zeros(H_local * 2, dtype=float)
-        else:
-            ref_seq_arr = np.asarray(ref_seq_val, dtype=float).reshape(-1)
-            if ref_seq_arr.size != H_local * 2:
-                raise ValueError(
-                    f"ref_seq must have {H_local * 2} entries, got {ref_seq_arr.size}"
-                )
-        if prev_u_val is None:
-            prev_u_arr = np.zeros(2, dtype=float)
-        else:
-            prev_u_arr = np.asarray(prev_u_val, dtype=float).reshape(-1)
-            if prev_u_arr.size != 2:
-                raise ValueError(f"prev_u must have 2 entries, got {prev_u_arr.size}")
-        val, grad = valgrad(
-            np.asarray(u_val, dtype=float).reshape((-1, 1)),
-            np.asarray(m_val, dtype=float).reshape((3, 1)),
-            np.asarray(S_val, dtype=float).reshape((3, 3)),
-            np.asarray(goal_obs_val, dtype=float).reshape((2, 1)),
-            np.asarray(goal_xy_val, dtype=float).reshape((2, 1)),
-            np.asarray(float(progress_index0_val), dtype=float),
-            ref_seq_arr.reshape((-1, 1)),
-            prev_u_arr.reshape((2, 1)),
-        )
-        return float(np.asarray(val, dtype=float).reshape(-1)[0]), np.asarray(grad, dtype=float).reshape(-1)
-
-    return _wrapper
+    return _make_valgrad_wrapper(valgrad, int(params.time_horizon))
