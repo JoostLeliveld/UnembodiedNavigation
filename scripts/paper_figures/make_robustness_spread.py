@@ -117,17 +117,22 @@ handles = [Line2D([0], [0], color="#ff2d2d", lw=2.2, label="C1 constant-$R$ (per
 fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=11, frameon=False, bbox_to_anchor=(0.5, -0.01))
 fig.tight_layout(rect=[0, 0.035, 1, 1.0]); OUT.parent.mkdir(parents=True, exist_ok=True)
 fig.savefig(OUT, dpi=170, bbox_inches="tight")
+def _rel(p):
+    try:
+        return str(Path(p).relative_to(ROOT))
+    except ValueError:
+        return str(p)
 PROV.write_text(json.dumps({
     "figure": "robustness_spread",
     "layout": "2x2",
-    "trajectory_source": str(CAMP.relative_to(ROOT)),
-    "counts_source": str(METRICS.relative_to(ROOT)),
-    "gp": str(GPZ.relative_to(ROOT)),
-    "config": str(CONFIG.relative_to(ROOT)),
+    "trajectory_source": _rel(CAMP),
+    "counts_source": _rel(METRICS),
+    "gp": _rel(GPZ),
+    "config": _rel(CONFIG),
     "tasks": TASKS,
     "conditions": ["C1", "C2"],
     "seeds_per_condition": 5,
-    "output": str(OUT.relative_to(ROOT)),
+    "output": _rel(OUT),
 }, indent=2), encoding="utf-8")
 print(f"wrote {OUT}")
 for t in TASKS:
