@@ -1,21 +1,21 @@
 {
   "figure": "gp_pipeline_aws",
   "world": "warehouse_aws.world.sdf",
-  "gp": "paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz",
-  "world_profile": "src/experiments/config/world_profiles.yaml",
-  "out": "../thesis-report/figures/campaign/gp_pipeline_aws_v7.pdf",
-  "preview": "paper_artifacts/figures/gp_pipeline_aws.png",
+  "gp": "/home/joostleliveld/Thesis/UnembodiedNavigation/paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz",
+  "world_profile": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/config/world_profiles.yaml",
+  "out": "/home/joostleliveld/Thesis/thesis-report/figures/campaign/gp_pipeline_aws_v7.pdf",
+  "preview": "/home/joostleliveld/Thesis/UnembodiedNavigation/paper_artifacts/figures/gp_pipeline_aws.png",
   "r_visible_uv": 2.5,
   "r_miss_uv": 40.0,
   "num_training_points": 238,
   "rho_plan_min": 0.00011782610159105132,
   "rho_plan_max": 0.964773410192713,
   "rho_plan_mean": 0.3840110546053919,
-  "ambiguity_min": 1.8683008590535888,
-  "ambiguity_max": 7.348155780846645,
+  "log_camera_covariance_min": 1.8683008590535888,
+  "log_camera_covariance_max": 7.348155780846645,
   "notes": [
-    "Saved as gp_pipeline_aws.*; does not replace figures/campaign/gp_pipeline.pdf.",
-    "rho_plan is P_conservative_plan_map from the AWS v7b GP artifact.",
+    "Saved as gp_pipeline_aws_v7.pdf for the paper and gp_pipeline_aws.png as a preview.",
+    "rho_plan is P_conservative_plan_map from the v7b GP artifact.",
     "Forbidden/staging zones are drawn only as floor-layer context; they are not the GP."
   ]
 }

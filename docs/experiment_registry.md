@@ -31,7 +31,7 @@ material unless explicitly packaged under `paper_artifacts/`.
 | CURRENT | `scripts/visibility_comparison/aws_f31b1_final_config.yaml` | Locked robustness-campaign config: four tasks, five seeds, C1/C2, `ambiguity_weight=1.0`, `visibility_weight=0.0`, `use_belief_nogo_cost=true`, `nogo_belief_kappa=1.0`, `yolo_use_masks=false`. |
 | CURRENT | `paper_artifacts/metrics/robustness_metrics.csv` | Per-task/condition campaign metrics used for the paper table. Continuous localization metrics are clean-success pooled. |
 | CURRENT | `paper_artifacts/figures/robustness_spread.png` | Robustness spread map generated from seeded runs. |
-| CURRENT | `paper_artifacts/figures/f31b1_markeroff_v2/paired_mechanism_taskA.pdf` | Single-run mechanism figure. Use as mechanism illustration, not as the whole robustness claim. |
+| CURRENT | `paper_artifacts/figures/paired_mechanism_taskA.pdf` | Single-run mechanism figure. Source data and provenance live beside the figure in `paper_artifacts/figures/paired_mechanism_taskA_data/` and `paired_mechanism_taskA.provenance.json`. Use as mechanism illustration, not as the whole robustness claim. |
 
 ## Current Paper Evidence Status
 

@@ -960,7 +960,7 @@ def _problem_legend_handles() -> list:
     return [
         Line2D([0], [0], color="#222222", linewidth=1.7, label="truth path"),
         Line2D([0], [0], color=COLORS["belief"], linewidth=1.4, linestyle=(0, (4, 2)), label="belief mean"),
-        Line2D([0], [0], color=COLORS["fail"], linewidth=1.4, alpha=0.85, label="current horizon"),
+        Line2D([0], [0], color=COLORS["fail"], linewidth=1.4, alpha=0.85, label="planned horizon"),
         Ellipse((0, 0), 0.18, 0.10, facecolor=COLORS["belief"], edgecolor=COLORS["belief"], alpha=0.35, label=r"3$\sigma$ posterior covariance"),
         Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["start"], markeredgecolor="black", markersize=7, label="start"),
         Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["goal"], markeredgecolor="black", markersize=7, label="goal"),
@@ -1393,7 +1393,7 @@ def main() -> int:
         ),
         "panel_a_image": str(panel_a_image) if panel_a_image is not None else None,
         "notes": [
-            "The current horizon is loaded from plan_samples.csv at the nearest available plan_stamp.",
+            "The planned horizon is loaded from plan_samples.csv at the nearest available plan_stamp.",
             "Truth and belief paths are loaded from experiment.csv up to the selected snapshot row.",
             "The script refuses to generate paper snapshots without real run traces.",
         ],

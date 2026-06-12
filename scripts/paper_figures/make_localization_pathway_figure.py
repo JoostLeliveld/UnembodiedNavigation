@@ -2,10 +2,11 @@
 """Create the paper localization-pathway figure.
 
 The figure is intentionally mechanism-focused. It shows that the external
-camera supplies an image-space detection, that the runtime selects the bottom
-pixel of the YOLO box/mask as the ground-contact point, and that homography
-projection yields a planar `(x, y)` update. Heading is shown as a separate
-odometry branch, because the paper-facing runtime does not use YOLO heading.
+camera supplies an image-space detection, that the runtime selects the
+bounding-box bottom centre as the ground-contact proxy, and that the calibrated
+homography relates the detector pixel to a BEV position estimate. The planner
+correction is evaluated as an image-space innovation; heading is not directly
+measured by the camera in the paper-facing runtime.
 """
 
 from __future__ import annotations
@@ -52,7 +53,7 @@ REPO = Path(__file__).resolve().parents[2]
 THESIS = REPO.parent / "thesis-report"
 
 # Current-world (camera z=4.8/y=-5.5) capture frame at true (-4.61,-1.67), robot visible;
-# oracle bottom pixel (159.2,345.8) matches world_to_pixel for the profile camera. The
+# oracle bottom-centre pixel (159.2,345.8) matches world_to_pixel for the profile camera. The
 # previous aws_simseg_v2 training image was removed during repo cleanup.
 DEFAULT_IMAGE = REPO / "paper_artifacts/figures/inputs/loc_pathway_frame_v7b.jpg"
 DEFAULT_MODEL = REPO / "local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt"
@@ -120,7 +121,7 @@ def detect_robot(img_bgr: np.ndarray, model_path: Path, conf: float) -> dict:
         result,
         target_ids=target_ids,
         confidence_threshold=conf,
-        use_masks=True,
+        use_masks=False,
         mask_min_area=12.0,
         mask_bottom_band_px=3.0,
     )
@@ -218,7 +219,7 @@ def draw_left_panel(ax, image_rgb: np.ndarray, selected: dict) -> tuple[float, f
         ax.text(
             bbox_s[:, 0].mean() - 0.25,
             bbox_s[:, 1].max() + 0.34,
-            "YOLO\nbox/mask",
+            "YOLO\nbounding box",
             ha="center",
             va="bottom",
             fontsize=9.4,
@@ -234,7 +235,7 @@ def draw_left_panel(ax, image_rgb: np.ndarray, selected: dict) -> tuple[float, f
     point_s = to_affine(np.array([[u / w, 1.0 - v / h]], dtype=float))[0]
     ax.plot(*point_s, "*", color=PINK, ms=20, mec="black", mew=0.8, zorder=8)
     ax.annotate(
-        f"selected bottom pixel\n({selected_source})",
+        f"selected bottom-centre pixel\n({selected_source})",
         xy=point_s,
         xytext=(point_s[0] + 0.72, point_s[1] + 1.55),
         color=PINK,
@@ -297,7 +298,7 @@ def draw_ground_panel(ax, profile_path: Path, world: str, gp_path: Path, x_hat: 
     for spine in ax.spines.values():
         spine.set_linewidth(2.0)
         spine.set_color("black")
-    ax.set_title("(c) planner-facing update", fontsize=13, fontweight="bold", pad=6)
+    ax.set_title("(c) ground-plane estimate", fontsize=13, fontweight="bold", pad=6)
 
     # PLOTTING ONLY (backend traversability logic unchanged): dissolve the driveable prisms
     # into ONE clean light-green region instead of exposing the internal cell decomposition.
@@ -321,7 +322,7 @@ def draw_ground_panel(ax, profile_path: Path, world: str, gp_path: Path, x_hat: 
     ax.plot([cam_xy[0], x_hat], [cam_xy[1], y_hat], ":", color="#8a8a8a", lw=1.6, zorder=2)
     ax.plot(x_hat, y_hat, "*", color=PINK, ms=25, mec="black", mew=0.9, zorder=6)
     ax.annotate(
-        r"camera update: $(\hat{x},\hat{y})$",
+        r"back-projected point: $(\hat{x},\hat{y})$",
         xy=(x_hat, y_hat),
         xytext=(x_hat - 2.75, y_hat + 0.88),
         color=PINK,
@@ -330,7 +331,8 @@ def draw_ground_panel(ax, profile_path: Path, world: str, gp_path: Path, x_hat: 
         ha="left",
         arrowprops={"arrowstyle": "->", "color": PINK, "lw": 1.6},
     )
-    # (Heading-from-odometry arrow/label removed: panel (c) shows the camera (x,y) update only.)
+    # Heading-from-odometry arrow/label removed: the camera measurement constrains
+    # position through the homography but does not directly measure heading.
 
     origin = (-5.15, -5.05)
     ax.annotate("", xy=(origin[0] + 0.75, origin[1]), xytext=origin, arrowprops={"arrowstyle": "-|>", "color": GRAY, "lw": 1.1})
@@ -338,17 +340,6 @@ def draw_ground_panel(ax, profile_path: Path, world: str, gp_path: Path, x_hat: 
     ax.text(origin[0] + 0.92, origin[1] - 0.03, "$x$", color=GRAY, fontsize=9, va="top")
     ax.text(origin[0] - 0.05, origin[1] + 0.90, "$y$", color=GRAY, fontsize=9, ha="right")
 
-    ax.text(
-        0.03,
-        0.96,
-        "camera contributes position only\nGP changes camera $(x,y)$ covariance",
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
-        fontsize=8.6,
-        color="#333333",
-        bbox={"boxstyle": "round,pad=0.25", "facecolor": "white", "edgecolor": "#cccccc", "alpha": 0.92},
-    )
     ax.set_xlim(-5.8, 5.8)
     ax.set_ylim(-5.6, 5.2)
 
@@ -398,12 +389,11 @@ def main() -> int:
     plt.close(fig)
 
     caption = (
-        "Image-space YOLO detection is reduced to a selected bottom pixel, "
-        "which is projected to a planar ground point with the calibrated "
-        "homography/camera model. The external camera contributes (x,y) "
-        "position updates; heading is supplied by odometry. The GP "
-        "modulates the planner-facing camera (x,y) covariance and does not "
-        "directly estimate heading."
+        "Image-space YOLO detection is reduced to the bounding-box bottom centre, "
+        "which is related to a BEV position estimate by the calibrated "
+        "homography/camera model. The planner correction compares the detector "
+        "pixel with the forward projection of the belief, so the camera "
+        "constrains ground-plane position but does not directly measure heading."
     )
     caption_path = args.preview.with_name("localization_pathway_caption.txt")
     caption_path.write_text(caption + "\n", encoding="utf-8")

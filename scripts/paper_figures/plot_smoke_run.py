@@ -13,7 +13,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 RUN = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(
-    sorted(glob.glob(str(ROOT/"logs/visibility_comparison/_smoke_lanegraph/*/*/*/experiment_*")))[-1])
+    sorted(glob.glob(str(ROOT/"logs/visibility_comparison/_archive_nonpaper_20260612/smoke_lanegraph/*/*/*/experiment_*")))[-1])
 OUT = ROOT / "logs/paper_figures/smoke_run_sanity.png"
 GPZ = ROOT / "paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz"
 CONFIG = ROOT / "scripts/visibility_comparison/aws_f31b1_final_config.yaml"

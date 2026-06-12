@@ -147,7 +147,7 @@ def covariance_matrix(row: pd.Series) -> np.ndarray:
     )
 
 
-def sigma_major(row: pd.Series, sigma: float = 3.0) -> float:
+def sigma_major(row: pd.Series, sigma: float = 2.0) -> float:
     vals = np.linalg.eigvalsh(covariance_matrix(row))
     return float(sigma * math.sqrt(max(float(vals[-1]), 0.0)))
 
@@ -172,7 +172,7 @@ def weak_region_row(exp: pd.DataFrame) -> int:
     ].copy()
     if weak.empty:
         return min(first_motion_row(exp) + 40, len(exp) - 1)
-    majors = [sigma_major(r, sigma=3.0) for _, r in weak.iterrows()]
+    majors = [sigma_major(r, sigma=2.0) for _, r in weak.iterrows()]
     return int(weak.index[int(np.argmax(majors))])
 
 
@@ -269,7 +269,7 @@ def draw_covariance(ax, xy: tuple[float, float], cov: np.ndarray) -> None:
     vecs = vecs[:, order]
     angle = math.degrees(math.atan2(float(vecs[1, 0]), float(vecs[0, 0])))
     # Matplotlib ellipse width/height are full diameters: 2*sigma*sqrt(lambda).
-    width, height = 2.0 * 3.0 * np.sqrt(vals)
+    width, height = 2.0 * 2.0 * np.sqrt(vals)
     ax.add_patch(
         Ellipse(
             xy,
@@ -357,8 +357,8 @@ def legend_handles() -> list:
     return [
         Line2D([0], [0], color=COL["truth"], linewidth=1.6, label="truth path"),
         Line2D([0], [0], color=COL["belief"], linewidth=1.3, linestyle=(0, (4, 2)), label="belief mean"),
-        Line2D([0], [0], color=COL["horizon"], linewidth=1.45, label="current horizon"),
-        Ellipse((0, 0), 0.18, 0.10, facecolor=COL["cov"], edgecolor=COL["cov"], alpha=0.26, label=r"3$\sigma$ posterior covariance"),
+        Line2D([0], [0], color=COL["horizon"], linewidth=1.45, label="planned horizon"),
+        Ellipse((0, 0), 0.18, 0.10, facecolor=COL["cov"], edgecolor=COL["cov"], alpha=0.26, label=r"2$\sigma$ posterior covariance"),
         Line2D([0], [0], marker="o", color="none", markerfacecolor=COL["start"], markeredgecolor="black", markersize=7, label="start"),
         Line2D([0], [0], marker="o", color="none", markerfacecolor=COL["goal"], markeredgecolor="black", markersize=7, label="goal"),
         Rectangle((0, 0), 1, 1, facecolor=COL["weak"], edgecolor="none", alpha=0.25, label="reduced camera-update reliability"),
@@ -482,7 +482,7 @@ def main() -> int:
         "in the external-camera localization pathway. It is a problem-statement "
         "annotation, not a GP map, reward, cost field, or traversability layer. "
         "Panels (b) and (c) use the same zoomed A3/A4 coordinate frame. The "
-        "truth path, belief mean, current horizon, and 3-sigma posterior "
+        "truth path, belief mean, planned horizon, and 2-sigma posterior "
         "covariance are drawn from an existing logged AWS run."
     )
     caption_path = args.preview.with_name("problem_setup_aws_caption.txt")
@@ -501,13 +501,13 @@ def main() -> int:
             "row": int(early_idx),
             "stamp": float(exp.iloc[early_idx].stamp),
             "relative_s": early_time,
-            "sigma3_major_m": sigma_major(exp.iloc[early_idx], sigma=3.0),
+            "sigma2_major_m": sigma_major(exp.iloc[early_idx], sigma=2.0),
         },
         "late_snapshot": {
             "row": int(late_idx),
             "stamp": float(exp.iloc[late_idx].stamp),
             "relative_s": late_time,
-            "sigma3_major_m": sigma_major(exp.iloc[late_idx], sigma=3.0),
+            "sigma2_major_m": sigma_major(exp.iloc[late_idx], sigma=2.0),
         },
         "time_reference_stamp": time_reference,
         "notes": [

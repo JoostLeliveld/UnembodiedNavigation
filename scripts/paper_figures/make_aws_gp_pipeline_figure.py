@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Create an AWS-world GP pipeline figure without replacing the compact one.
+"""Create the warehouse GP pipeline figure without replacing the compact one.
 
 Panels:
   (a) heading-aggregated YOLO-score training samples,
   (b) planner-facing conservative reliability rho_plan,
-  (c) induced ambiguity from the planner-facing covariance mapping.
+  (c) induced image-space covariance from the planner-facing covariance mapping.
 
 This is a setup/method figure. The GP is not a traversability map, not a
 visibility reward, and not a physical occlusion geometry estimate.
@@ -32,7 +32,7 @@ THESIS = REPO.parent / "thesis-report"
 WORLD = "warehouse_aws.world.sdf"
 DEFAULT_GP = REPO / "paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz"
 DEFAULT_PROFILE = REPO / "src/experiments/config/world_profiles.yaml"
-DEFAULT_OUT = THESIS / "figures/campaign/gp_pipeline_aws.pdf"
+DEFAULT_OUT = THESIS / "figures/campaign/gp_pipeline_aws_v7.pdf"
 DEFAULT_PREVIEW = REPO / "paper_artifacts/figures/gp_pipeline_aws.png"
 
 
@@ -108,22 +108,22 @@ def draw_racks(ax) -> None:
 
 
 def style_axis(ax, title: str, *, show_ylabel: bool) -> None:
-    ax.set_title(title, fontsize=10.2, fontweight="bold", pad=6)
+    ax.set_title(title, fontsize=12.5, fontweight="bold", pad=6)
     ax.set_xlim(-5.55, 5.55)
     ax.set_ylim(-5.05, 5.05)
     ax.set_aspect("equal")
-    ax.set_xlabel(r"$x$ [m]", fontsize=8.5)
+    ax.set_xlabel(r"$x$ [m]", fontsize=11.0)
     if show_ylabel:
-        ax.set_ylabel(r"$y$ [m]", fontsize=8.5)
+        ax.set_ylabel(r"$y$ [m]", fontsize=11.0)
     else:
         ax.tick_params(labelleft=False)
     ax.set_xticks([-5, -3, -1, 1, 3, 5])
     ax.set_yticks([-5, -3, -1, 1, 3, 5])
     ax.grid(True, color="#d0d0d0", lw=0.32, alpha=0.42, zorder=1)
-    ax.tick_params(labelsize=7.5, length=2)
+    ax.tick_params(labelsize=9.5, length=2)
 
 
-def induced_ambiguity(p_plan: np.ndarray, *, r_visible_uv: float, r_miss_uv: float, min_prob: float) -> np.ndarray:
+def induced_log_camera_covariance(p_plan: np.ndarray, *, r_visible_uv: float, r_miss_uv: float, min_prob: float) -> np.ndarray:
     p_eff = np.clip(np.asarray(p_plan, dtype=float), min_prob, 1.0 - min_prob)
     visible_var = float(r_visible_uv) ** 2
     miss_var = float(r_miss_uv) ** 2
@@ -138,7 +138,7 @@ def main() -> int:
     xs = gp["xs"]
     ys = gp["ys"]
     extent = (float(xs[0]), float(xs[-1]), float(ys[0]), float(ys[-1]))
-    ambiguity = induced_ambiguity(
+    log_camera_covariance = induced_log_camera_covariance(
         gp["P_plan"],
         r_visible_uv=args.r_visible_uv,
         r_miss_uv=args.r_miss_uv,
@@ -148,13 +148,13 @@ def main() -> int:
     plt.rcParams.update(
         {
             "font.family": "DejaVu Sans",
-            "font.size": 8.5,
+            "font.size": 10.5,
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
         }
     )
-    fig, axes = plt.subplots(1, 3, figsize=(13.6, 4.2), constrained_layout=False)
-    fig.subplots_adjust(left=0.055, right=0.985, top=0.88, bottom=0.20, wspace=0.25)
+    fig, axes = plt.subplots(1, 3, figsize=(13.6, 5.4), constrained_layout=False)
+    fig.subplots_adjust(left=0.055, right=0.985, top=0.90, bottom=0.17, wspace=0.25)
 
     ax = axes[0]
     # Driveable-floor cells intentionally not drawn: panel (a) focuses on rack geometry + YOLO samples.
@@ -185,7 +185,7 @@ def main() -> int:
         zorder=8,
     )
     fig.colorbar(sc, ax=ax, fraction=0.045, pad=0.03, label="YOLO score")
-    style_axis(ax, "(a) AWS YOLO-score samples", show_ylabel=True)
+    style_axis(ax, "(a) YOLO-score samples", show_ylabel=True)
 
     ax = axes[1]
     im = ax.imshow(gp["P_plan"], extent=extent, origin="lower", cmap="viridis", vmin=0.0, vmax=0.9, aspect="equal", zorder=0)
@@ -194,16 +194,16 @@ def main() -> int:
     style_axis(ax, r"(b) conservative planner reliability $\rho_{\mathrm{plan}}$", show_ylabel=False)
 
     ax = axes[2]
-    im = ax.imshow(ambiguity, extent=extent, origin="lower", cmap="magma", aspect="equal", zorder=0)
+    im = ax.imshow(log_camera_covariance, extent=extent, origin="lower", cmap="magma", aspect="equal", zorder=0)
     draw_racks(ax)
     fig.colorbar(im, ax=ax, fraction=0.045, pad=0.03, label=r"$\frac{1}{2}\log|R(\mathbf{p})|$")
-    style_axis(ax, "(c) induced observation ambiguity", show_ylabel=False)
+    style_axis(ax, "(c) induced image-space covariance", show_ylabel=False)
 
     handles = [
         Rectangle((0, 0), 1, 1, facecolor=COL["rack"], edgecolor=COL["rack_edge"], label="rack geometry"),
         Line2D([0], [0], marker="o", color="none", markerfacecolor="#440154", markeredgecolor="black", markersize=5, label="training sample"),
     ]
-    fig.legend(handles=handles, loc="lower center", ncol=3, fontsize=7.5, frameon=False, bbox_to_anchor=(0.5, 0.02))
+    fig.legend(handles=handles, loc="lower center", ncol=3, fontsize=10.0, frameon=False, bbox_to_anchor=(0.5, 0.02))
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.preview.parent.mkdir(parents=True, exist_ok=True)
@@ -212,13 +212,13 @@ def main() -> int:
     plt.close(fig)
 
     caption = (
-        "AWS-world learned-observation-reliability pipeline. Raw YOLO scores are "
+        "Warehouse learned-observation-reliability pipeline. Raw YOLO scores are "
         "aggregated by sampled ground-plane position, fit with a GP, and converted "
         "to conservative planner-facing reliability rho_plan. The final panel shows "
-        "the ambiguity induced by mapping rho_plan to camera-observation covariance "
+        "the log image-space covariance induced by mapping rho_plan to observation covariance "
         f"with r_visible={args.r_visible_uv:g}px and r_miss={args.r_miss_uv:g}px. "
-        "The GP affects camera (x,y) covariance only; the floor layer remains a "
-        "separate known traversability/forbidden-zone layer."
+        "The GP affects the planner-facing image-space observation covariance; "
+        "the floor layer remains a separate known traversability/forbidden-zone layer."
     )
     caption_path = args.preview.with_name("gp_pipeline_aws_caption.txt")
     caption_path.write_text(caption + "\n", encoding="utf-8")
@@ -236,11 +236,11 @@ def main() -> int:
         "rho_plan_min": float(np.nanmin(gp["P_plan"])),
         "rho_plan_max": float(np.nanmax(gp["P_plan"])),
         "rho_plan_mean": float(np.nanmean(gp["P_plan"])),
-        "ambiguity_min": float(np.nanmin(ambiguity)),
-        "ambiguity_max": float(np.nanmax(ambiguity)),
+        "log_camera_covariance_min": float(np.nanmin(log_camera_covariance)),
+        "log_camera_covariance_max": float(np.nanmax(log_camera_covariance)),
         "notes": [
-            "Saved as gp_pipeline_aws.*; does not replace figures/campaign/gp_pipeline.pdf.",
-            "rho_plan is P_conservative_plan_map from the AWS v5 GP artifact.",
+            "Saved as gp_pipeline_aws_v7.pdf for the paper and gp_pipeline_aws.png as a preview.",
+            "rho_plan is P_conservative_plan_map from the v7b GP artifact.",
             "Forbidden/staging zones are drawn only as floor-layer context; they are not the GP.",
         ],
     }
