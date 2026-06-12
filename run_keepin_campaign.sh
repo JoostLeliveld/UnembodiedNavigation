@@ -9,7 +9,8 @@
 # single-threaded and gets starved by background CPU load, which stretches it 6-10x.
 #
 # Usage:   ./run_keepin_campaign.sh [LOG_ROOT_NAME]
-set -u
+# NOTE: no 'set -u' / 'set -e' here — ROS/colcon setup.bash reference unbound vars
+# (AMENT_TRACE_SETUP_FILES, COLCON_TRACE) which would abort the script before exec.
 cd "$(dirname "$0")"
 LOG_NAME="${1:-robustness_campaign_v2}"
 LOG_ROOT="logs/visibility_comparison/${LOG_NAME}"
