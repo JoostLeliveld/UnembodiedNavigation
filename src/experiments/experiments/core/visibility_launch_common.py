@@ -27,6 +27,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'pixel_correction_approx': 'AUTO',
     'skip_stale_pixel_correction': 'true',
     'bev_y_calibration_offset_m': '0.127',
+    'bbox_contact_z_m': '0.0',
     'pixel_max_correction_jump_m': '0.0',
     'pixel_correction_nis_threshold': '0.0',
     'use_truth_localization': 'false',
@@ -137,6 +138,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'yolo_use_masks': 'true',
     'yolo_min_mask_area_px': '12.0',
     'yolo_mask_bottom_band_px': '3.0',
+    'yolo_min_bbox_area_px': '0.0',
     'log_dir': 'logs/experiments',
 }
 
@@ -310,6 +312,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'pixel_timeout_s': float(_launch_value(context, 'pixel_timeout_s', PAPER_LAUNCH_DEFAULTS['pixel_timeout_s'])),
         'pixel_correction_min_interval_s': float(_launch_value(context, 'pixel_correction_min_interval_s', '0.0')),
         'bev_y_calibration_offset_m': float(_launch_value(context, 'bev_y_calibration_offset_m', PAPER_LAUNCH_DEFAULTS['bev_y_calibration_offset_m'])),
+        'bbox_contact_z_m': float(_launch_value(context, 'bbox_contact_z_m', PAPER_LAUNCH_DEFAULTS['bbox_contact_z_m'])),
         'pixel_max_correction_jump_m': float(_launch_value(context, 'pixel_max_correction_jump_m', PAPER_LAUNCH_DEFAULTS['pixel_max_correction_jump_m'])),
         'pixel_correction_nis_threshold': float(_launch_value(context, 'pixel_correction_nis_threshold', PAPER_LAUNCH_DEFAULTS['pixel_correction_nis_threshold'])),
         'use_truth_localization': _as_bool(_launch_value(context, 'use_truth_localization', PAPER_LAUNCH_DEFAULTS['use_truth_localization'])),
@@ -616,6 +619,8 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'yolo_use_masks': _as_bool(_launch_value(context, 'yolo_use_masks', PAPER_LAUNCH_DEFAULTS['yolo_use_masks'])),
         'yolo_min_mask_area_px': float(_launch_value(context, 'yolo_min_mask_area_px', PAPER_LAUNCH_DEFAULTS['yolo_min_mask_area_px'])),
         'yolo_mask_bottom_band_px': float(_launch_value(context, 'yolo_mask_bottom_band_px', PAPER_LAUNCH_DEFAULTS['yolo_mask_bottom_band_px'])),
+        'yolo_min_bbox_area_px': float(_launch_value(context, 'yolo_min_bbox_area_px', PAPER_LAUNCH_DEFAULTS['yolo_min_bbox_area_px'])),
+        'yolo_debug_frame_dir': _launch_value(context, 'yolo_debug_frame_dir', ''),
         'yolo_min_keypoint_conf': float(_launch_value(context, 'yolo_min_keypoint_conf', '0.5')),
         'keypoint_marker_world_z': float(_launch_value(context, 'keypoint_marker_world_z', '0.0')),
         'keypoint_heading_sigma_rad': float(_launch_value(context, 'keypoint_heading_sigma_rad', '0.05')),
@@ -910,6 +915,8 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'use_masks': cfg['yolo_use_masks'],
         'mask_min_area': cfg['yolo_min_mask_area_px'],
         'mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
+        'min_bbox_area_px': cfg['yolo_min_bbox_area_px'],
+        'debug_frame_dir': cfg.get('yolo_debug_frame_dir', ''),
         'min_keypoint_conf': float(cfg.get('yolo_min_keypoint_conf', 0.5)),
     }
     perception_node = Node(
@@ -1057,6 +1064,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'keypoint_heading_sigma_rad': cfg.get('keypoint_heading_sigma_rad', 0.05),
                 'diagnostics_match_tolerance_s': diagnostics_match_tolerance_s,
                 'bev_y_calibration_offset_m': cfg['bev_y_calibration_offset_m'],
+                'bbox_contact_z_m': cfg['bbox_contact_z_m'],
                 'pixel_correction_nis_threshold': cfg['pixel_correction_nis_threshold'],
                 'world_profiles_path': cfg['world_profiles_path'],
                 'tasks_yaml': cfg['tasks_yaml'],
@@ -1257,6 +1265,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'pixel_correction_approx': cfg['pixel_correction_approx'],
             'skip_stale_pixel_correction': cfg['skip_stale_pixel_correction'],
             'bev_y_calibration_offset_m': cfg['bev_y_calibration_offset_m'],
+            'bbox_contact_z_m': cfg['bbox_contact_z_m'],
             'pixel_max_correction_jump_m': cfg['pixel_max_correction_jump_m'],
             'pixel_correction_nis_threshold': cfg['pixel_correction_nis_threshold'],
             'use_truth_localization': cfg['use_truth_localization'],
