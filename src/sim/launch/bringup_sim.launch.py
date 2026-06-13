@@ -221,7 +221,10 @@ def generate_launch_description():
             # YOLO uses its own internal mask from the plain RGB image; these
             # semantic segmentation topics are never consumed at runtime.
             # "/external_camera/segmentation/colored_map@sensor_msgs/msg/Image[gz.msgs.Image",
-            # "/external_camera/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
+            # Re-enabled for dataset capture (seg camera is now 1 Hz, so not a
+            # bottleneck). Only bringup_sim (capture/debug) carries this; the
+            # campaign launch does not.
+            "/external_camera/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
             clock_arg,
             set_pose_service_arg,
             control_service_arg,

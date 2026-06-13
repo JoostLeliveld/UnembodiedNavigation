@@ -284,6 +284,13 @@ class YoloRobotDetectorNode(Node):
         self._latest_image_shape = image_bgr.shape[:2]
         if self.debug_frame_dir:
             self._latest_image_bgr = image_bgr
+            try:
+                import cv2 as _cv2, os as _os
+                _raw = _os.path.join(self.debug_frame_dir, 'raw'); _os.makedirs(_raw, exist_ok=True)
+                _st = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
+                _cv2.imwrite(_os.path.join(_raw, f'frame_{_os.getpid()}_{_st:.3f}.png'), image_bgr)
+            except Exception:
+                pass
         predict_start = time.perf_counter()
         self._last_predict_start_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9
         results = self._predict(image_bgr)
@@ -347,7 +354,7 @@ class YoloRobotDetectorNode(Node):
                 if math.isfinite(selected_u) and math.isfinite(selected_v):
                     cv2.circle(im, (int(selected_u), int(selected_v)), 2, (0, 255, 255), -1)
                 st = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
-                cv2.imwrite(_os.path.join(self.debug_frame_dir, f'frame_{st:.3f}.png'), im)
+                cv2.imwrite(_os.path.join(self.debug_frame_dir, f'frame_{_os.getpid()}_{st:.3f}.png'), im)
             except Exception:
                 pass
         self._publish_diagnostics(msg.header.stamp, selection)
