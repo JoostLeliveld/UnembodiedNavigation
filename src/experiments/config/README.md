@@ -1,31 +1,32 @@
 # `experiments/config`
 
-This folder defines the experiment before anything is launched.
+This folder defines reusable experiment metadata before anything is launched:
+world profiles, camera/profile defaults, and task definitions.
 
 ## Main Files
 
 | File | Role |
 | --- | --- |
-| [`world_profiles.yaml`](world_profiles.yaml) | world registry, camera intrinsics, planner defaults, map bounds, and legacy packaged artifact paths |
-| [`tasks.yaml`](tasks.yaml) | start/goal definitions, with each task labeled as benchmark, exploratory, sanity, or legacy |
-| `../../archive/experiments/tasks_legacy.yaml` | archived aliases for older task names |
+| [`world_profiles.yaml`](world_profiles.yaml) | World registry, camera intrinsics, planner defaults, map bounds, and compatibility artifact paths. |
+| [`tasks.yaml`](tasks.yaml) | Start/goal definitions, with tasks labeled as benchmark, exploratory, sanity, or legacy. |
 
 ## Current Paper Surface
 
-The compact benchmark currently reported by the paper uses:
+The current paper-facing benchmark is the AWS-style warehouse campaign:
 
-- `warehouse_occ_light.world.sdf`
-- `shadow_tradeoff_a` as the main task
-- `shadow_tradeoff_b` and `sanity_open` as support tasks
+- world: `warehouse_aws.world.sdf`
+- campaign config: `../../../scripts/visibility_comparison/aws_f31b1_final_config.yaml`
+- detector metadata: `../../../paper_artifacts/perception/aws_yolo_simseg_v2/`
+- GP artifact: `../../../paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz`
+- tasks: `F31_b1_apron_a3_mid`, `b5_a4_apron_to_a2_mid`,
+  `b2_a0_west_to_a1_upper`, and `b6_a0_west_to_a1_low_control`
 
-`main_shadow_tradeoff` is legacy and must not be used as current paper evidence.
-
-## Failure-Oriented Extensions
-
-The following worlds/tasks are implemented for the next benchmark step, but they need completed runs and paper figures before they can support result claims:
-
-- `warehouse_aws.world.sdf`: `B1_apron_a4_to_uppermid_a3` (active shelf-pick visibility diagnostic), `visible_aisle_sanity_aws`
+The campaign config is the source of truth for paper-facing runs. It pins the
+planner conditions, route seeds, detector checkpoint path, GP path, driveable
+geometry, process/noise settings, and success/collision criteria.
 
 ## Important Rule
 
-Visibility-aware paper runs must pass an explicit `visibility_artifact_path`. The profile-level `visibility_artifact` entries are compatibility metadata, not permission to silently choose an artifact for a paper run.
+Visibility-aware paper runs must pass an explicit `visibility_artifact_path` or
+config-level GP artifact. Profile-level `visibility_artifact` entries are
+compatibility metadata, not permission to silently choose a GP for a paper run.

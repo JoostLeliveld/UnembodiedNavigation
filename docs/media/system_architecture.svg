@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="300" viewBox="0 0 1280 300" role="img" aria-labelledby="title desc">
+  <title id="title">External-camera navigation architecture</title>
+  <desc id="desc">Pipeline from Gazebo warehouse to YOLO detection, BEV state, GP covariance, EFE planning, and campaign metrics.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#4b5563" />
+    </marker>
+    <style>
+      .bg { fill: #f8fafc; }
+      .box { fill: #ffffff; stroke: #334155; stroke-width: 2; rx: 12; }
+      .box-accent { fill: #eff6ff; stroke: #2563eb; stroke-width: 2; rx: 12; }
+      .box-result { fill: #f0fdf4; stroke: #16a34a; stroke-width: 2; rx: 12; }
+      .title { font: 700 20px sans-serif; fill: #111827; }
+      .body { font: 15px sans-serif; fill: #374151; }
+      .small { font: 13px sans-serif; fill: #475569; }
+      .arrow { stroke: #4b5563; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1280" height="300" />
+  <text class="title" x="40" y="42">Visibility-aware external-camera navigation</text>
+  <text class="body" x="40" y="70">The GP is not a direct reward; it changes predicted camera measurement covariance used by the planner.</text>
+
+  <rect class="box" x="40" y="120" width="150" height="96" rx="12" />
+  <text class="title" x="64" y="153">Gazebo</text>
+  <text class="body" x="64" y="179">warehouse +</text>
+  <text class="body" x="64" y="199">fixed camera</text>
+
+  <rect class="box-accent" x="240" y="120" width="150" height="96" rx="12" />
+  <text class="title" x="268" y="153">YOLO</text>
+  <text class="body" x="268" y="179">box score +</text>
+  <text class="body" x="268" y="199">bottom centre</text>
+
+  <rect class="box" x="440" y="120" width="150" height="96" rx="12" />
+  <text class="title" x="468" y="153">BEV state</text>
+  <text class="body" x="468" y="179">image point to</text>
+  <text class="body" x="468" y="199">ground plane</text>
+
+  <rect class="box-accent" x="640" y="120" width="150" height="96" rx="12" />
+  <text class="title" x="681" y="153">GP</text>
+  <text class="body" x="668" y="179">reliability to</text>
+  <text class="body" x="668" y="199">covariance</text>
+
+  <rect class="box" x="840" y="120" width="150" height="96" rx="12" />
+  <text class="title" x="874" y="153">EFE</text>
+  <text class="body" x="868" y="179">predict belief</text>
+  <text class="body" x="868" y="199">choose route</text>
+
+  <rect class="box-result" x="1040" y="120" width="180" height="96" rx="12" />
+  <text class="title" x="1074" y="153">Campaign</text>
+  <text class="body" x="1074" y="179">matched seeds</text>
+  <text class="body" x="1074" y="199">C1 vs C2</text>
+
+  <path class="arrow" d="M190 168 H230" />
+  <path class="arrow" d="M390 168 H430" />
+  <path class="arrow" d="M590 168 H630" />
+  <path class="arrow" d="M790 168 H830" />
+  <path class="arrow" d="M990 168 H1030" />
+
+  <text class="small" x="247" y="244">Perception</text>
+  <text class="small" x="448" y="244">Estimation</text>
+  <text class="small" x="655" y="244">Learned observation model</text>
+  <text class="small" x="850" y="244">Planning</text>
+  <text class="small" x="1045" y="244">Evidence</text>
+</svg>

@@ -1,16 +1,22 @@
 # Documentation Index
 
-This folder is the public bridge between the codebase, curated paper artifacts,
-and the paper-facing experiment.
+This folder is the deeper reference layer behind the demonstration modules.
+Start with the repository [`README.md`](../README.md), then click into the
+module landing pages:
+[`yolo`](../yolo/), [`gp`](../gp/), [`estimation`](../estimation/),
+[`planning`](../planning/), and [`experiments`](../experiments/).
 
 | File | Role |
 | --- | --- |
-| `experiment_registry.md` | paper-facing artifacts, evidence status, superseded lines, and caveats |
-| `paper_runtime_contract.yaml` | machine-readable contract for paper-facing runs |
-| `runtime_dataflow.md` | offline artifact flow and online ROS topic flow |
-| `perception_details.md` | YOLO detector architecture, dataset, and inference settings |
-| `PLANNER_HYPERPARAMETERS.md` | planner knobs, intended effects, and tuning cautions |
-| `uncertainty_propagation.md` | process, command, encoder, and belief-covariance conventions |
+| [`demo_media.md`](demo_media.md) | Visual gallery, README media map, and planned video storyboard. |
+| [`experiment_registry.md`](experiment_registry.md) | Paper-facing artifacts, evidence status, superseded lines, and caveats. |
+| [`paper_runtime_contract.yaml`](paper_runtime_contract.yaml) | Machine-readable contract for paper-facing runs. |
+| [`runtime_dataflow.md`](runtime_dataflow.md) | Offline artifact flow and online ROS topic flow. |
+| [`perception_details.md`](perception_details.md) | YOLO detector architecture, dataset, inference settings, and training performance. |
+| [`PLANNER_HYPERPARAMETERS.md`](PLANNER_HYPERPARAMETERS.md) | Planner knobs, intended effects, and tuning cautions. |
+| [`uncertainty_propagation.md`](uncertainty_propagation.md) | Process, command, encoder, and belief-covariance conventions. |
 
-For the shortest entry point, start with the repository `README.md`, then inspect
-`experiment_registry.md` and `paper_runtime_contract.yaml`.
+For implementation details, use the package READMEs under `src/`:
+[`sim`](../src/sim/README.md), [`perception`](../src/perception/README.md),
+[`state`](../src/state/README.md), [`planning`](../src/planning/README.md), and
+[`experiments`](../src/experiments/README.md).

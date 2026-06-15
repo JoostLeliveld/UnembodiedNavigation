@@ -2,6 +2,12 @@
 
 This package defines the experiment surface: world, task, planner condition, launch wiring, logging, and campaign reproducibility.
 
+It is the folder that turns the method into a repeatable benchmark: same world,
+same route tasks, same seeds, same local detector checkpoint path, and explicit
+GP artifact paths.
+
+![Robustness campaign spread](../../paper_artifacts/figures/robustness_spread.png)
+
 ## Central Files
 
 | File | Role |
@@ -33,6 +39,13 @@ The primary launch enforces the important paper assumptions:
 The AWS-style warehouse is the current paper-facing benchmark. It uses the
 curated artifacts under `paper_artifacts/` plus a local YOLO checkpoint under
 `local_artifacts/`.
+
+Current packaged outcome across four tasks and five seeds per condition:
+
+| Condition | Planner | Clean reaches | Collisions | Other outcomes |
+| --- | --- | ---: | ---: | --- |
+| C1 | `constant_R_efe` | 12/20 | 8/20 | none |
+| C2 | `visibility_aware_efe` | 16/20 | 2/20 | 1 near-success, 1 infrastructure-invalid |
 
 See also:
 

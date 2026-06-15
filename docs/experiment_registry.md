@@ -38,20 +38,22 @@ material unless explicitly packaged under `paper_artifacts/`.
 **Robustness campaign:** paper-ready with caveats.
 
 Five seeds were run for each condition on four tasks: three discriminating
-route-choice tasks and one control. Aggregate outcome:
+route-choice tasks and one control. Aggregate outcome from
+`paper_artifacts/metrics/robustness_metrics.csv`:
 
-- C2 (`visibility_aware_efe`): `18/20` clean goal reaches, `2/20` collisions.
-- C1 (`constant_R_efe`): `12/20` clean goal reaches, one near-success,
-  `7/20` collisions.
+- C2 (`visibility_aware_efe`): `16/20` clean goal reaches,
+  `1/20` near-success, `2/20` collisions, and `1/20`
+  infrastructure-invalid run.
+- C1 (`constant_R_efe`): `12/20` clean goal reaches and `8/20` collisions.
 
 Per task:
 
 | Task | C1 | C2 | Interpretation |
 | --- | --- | --- | --- |
-| `F31_b1_apron_a3_mid` | `4/5` clean, `1/5` collision | `5/5` clean | discriminator |
-| `b5_a4_apron_to_a2_mid` | `3/5` clean, `2/5` collision | `5/5` clean | discriminator |
-| `b2_a0_west_to_a1_upper` | `1/5` clean, `4/5` collision | `3/5` clean, `2/5` collision | hard discriminator |
-| `b6_a0_west_to_a1_low_control` | `4/5` clean + one near-success, `0/5` collision | `5/5` clean | control |
+| `F31_b1_apron_a3_mid` | `3/5` clean, `2/5` collisions | `3/5` clean, `1/5` near-success, `1/5` collision | discriminator |
+| `b5_a4_apron_to_a2_mid` | `4/5` clean, `1/5` collision | `4/5` clean, `1/5` collision | discriminator |
+| `b2_a0_west_to_a1_upper` | `0/5` clean, `5/5` collisions | `4/5` clean, `1/5` infrastructure-invalid | hard discriminator |
+| `b6_a0_west_to_a1_low_control` | `5/5` clean | `5/5` clean | control |
 
 The mechanism evidence is route observability: C2 spends less time in low
 reliability regions and has higher detection fraction on the discriminating

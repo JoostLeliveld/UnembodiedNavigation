@@ -2,6 +2,10 @@
 
 This folder contains offline tooling around the ROS/Gazebo runtime.
 
+It is the reproducibility workshop for the demo: capture data, train the
+detector, build GP targets, fit the planner-facing artifact, run campaigns, and
+generate figures.
+
 ## Paper-Facing Pipeline
 
 | Purpose | File |
@@ -20,6 +24,27 @@ This folder contains offline tooling around the ROS/Gazebo runtime.
 Detector dataset capture, pseudo-labeling, and training utilities live in
 `perception/`. These scripts support detector provenance; trained YOLO weights
 are local artifacts and are not tracked in git.
+
+Representative output:
+
+![YOLO training curves](../paper_artifacts/perception/aws_yolo_simseg_v2/results.png)
+
+## GP And Figure Support
+
+The visibility-comparison scripts produce the artifact consumed by the planner:
+
+```text
+capture_visibility_samples.py
+-> extract_perception_targets.py
+-> build_gp_targets.py
+-> fit_visibility_gps.py
+-> run_visibility_campaign.py
+-> compute_paper_metrics.py
+```
+
+The paper figure scripts turn the curated outputs into the public visual story:
+
+![GP pipeline](../paper_artifacts/figures/gp_pipeline_aws.png)
 
 ## Diagnostic Material
 
