@@ -2,6 +2,9 @@
 
 This package contains the planner runtime and the planner math. It is the core method package for the thesis milestone.
 
+The demo role of this folder is to show how a learned observation-quality field
+changes route choice without changing the known obstacle map.
+
 For the current thesis-facing implementation, the planning question is:
 
 \[
@@ -11,6 +14,8 @@ For the current thesis-facing implementation, the planning question is:
 For the current implementation, `R_{\mathrm{plan}}` is built through
 visibility-aware precision blending rather than a simple linear covariance mix.
 That is the central mechanism implemented in this package.
+
+![GP reliability and induced covariance](../../paper_artifacts/figures/gp_pipeline_aws.png)
 
 ## Why This Folder Exists
 
@@ -62,6 +67,18 @@ This package answers the main research question: how does planning change when f
 - ET1-based `visibility_aware_efe` as the main thesis path
 - `constant_R_efe` under the same planner wrapper
 - planner-side loading of a fixed empirical visibility field
+
+## Demonstrated Artifact
+
+The paper-facing GP artifact is
+[`../../paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz`](../../paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz).
+Its fit summary records 238 training targets with raw detector-score targets
+from `0.0016` to `0.9232` and mean target `0.5498`.
+
+In the locked comparison, C1 uses a constant observation covariance. C2 uses the
+GP-derived reliability to build state-dependent camera covariance inside the EFE
+horizon. The route-choice summary is visualized in
+[`../../paper_artifacts/figures/robustness_spread.png`](../../paper_artifacts/figures/robustness_spread.png).
 
 ## Caveats
 

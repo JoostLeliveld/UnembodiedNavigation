@@ -36,11 +36,12 @@ paper_runtime_contract:
   evidence_status: paper_ready_with_caveats
 
   campaign_status_2026_06_12: >
-    LOCKED ROBUSTNESS CAMPAIGN: C2 reaches 18/20 runs with 2/20 collisions; C1 reaches
-    12/20 with one near-success and 7/20 collisions. C2 is at least as good on every
-    discriminator by clean-reach/collision outcome, and b6 acts as a control where both
-    conditions reach. b2 remains hard: C2 improves over C1 but still collides in 2/5
-    seeds. Continuous localization metrics are pooled over clean successes only.
+    LOCKED ROBUSTNESS CAMPAIGN: C2 reaches 16/20 runs with 2/20 collisions,
+    1/20 near-success, and 1/20 infrastructure-invalid run; C1 reaches 12/20
+    with 8/20 collisions. b6 acts as a control where both conditions reach.
+    b2 remains hard for the baseline: C1 collides in 5/5 seeds, while C2 reaches
+    4/5 and has one infrastructure-invalid run. Continuous localization metrics
+    are pooled over clean successes only.
 
   reported_worlds:
     - warehouse_aws.world.sdf

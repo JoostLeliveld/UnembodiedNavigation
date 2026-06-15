@@ -449,6 +449,8 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'yolo_use_masks:={str(cfg.get("yolo_use_masks", True)).lower()}',
         f'yolo_min_mask_area_px:={cfg.get("yolo_min_mask_area_px", 12.0)}',
         f'yolo_mask_bottom_band_px:={cfg.get("yolo_mask_bottom_band_px", 3.0)}',
+        f'yolo_min_bbox_area_px:={cfg.get("yolo_min_bbox_area_px", 0.0)}',
+        f'yolo_debug_frame_dir:={cfg.get("yolo_debug_frame_dir", "")}',
         f'keypoint_marker_world_z:={cfg.get("keypoint_marker_world_z", 0.0)}',
     ]
 
@@ -464,7 +466,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'heading_update_mode',
         'use_pixel_correction',
         'pixel_timeout_s', 'skip_stale_pixel_correction',
-        'bev_y_calibration_offset_m', 'pixel_max_correction_jump_m',
+        'bev_y_calibration_offset_m', 'bbox_contact_z_m', 'pixel_max_correction_jump_m',
         'pixel_correction_nis_threshold', 'use_truth_localization',
         'debug_runtime',
         'optimizer_ftol', 'optimizer_gtol', 'optimizer_warm_start',

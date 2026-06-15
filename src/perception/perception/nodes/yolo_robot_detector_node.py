@@ -62,6 +62,15 @@ class YoloRobotDetectorNode(Node):
         self.declare_parameter('use_masks', True)
         self.declare_parameter('mask_min_area', 12.0)
         self.declare_parameter('mask_bottom_band_px', 3.0)
+        # Occlusion gate: reject a detection whose bbox area (px^2) is below this,
+        # i.e. the robot is partially occluded / too small to localize reliably.
+        # An occlusion-truncated box gives a confidently-WRONG bottom-centre that
+        # poisons the EKF (no recovery); rejecting it yields no update -> belief
+        # grows honestly and recovers on the next clean detection. 0 disables.
+        self.declare_parameter('min_bbox_area_px', 0.0)
+        # Debug: if set, save each frame with the detected box + selected point
+        # drawn, named by header stamp, so the boxes can be inspected offline.
+        self.declare_parameter('debug_frame_dir', '')
         self.declare_parameter('pixel_noise_sigma', 0.0)
         self.declare_parameter('seed', 0)
         self.declare_parameter('min_keypoint_conf', 0.5)
@@ -82,6 +91,11 @@ class YoloRobotDetectorNode(Node):
         self.use_masks = bool(self.get_parameter('use_masks').value) if isinstance(self.get_parameter('use_masks').value, bool) else _as_bool(self.get_parameter('use_masks').value)
         self.mask_min_area = float(self.get_parameter('mask_min_area').value)
         self.mask_bottom_band_px = float(self.get_parameter('mask_bottom_band_px').value)
+        self.min_bbox_area_px = float(self.get_parameter('min_bbox_area_px').value)
+        self.debug_frame_dir = str(self.get_parameter('debug_frame_dir').value).strip()
+        if self.debug_frame_dir:
+            import os as _os
+            _os.makedirs(self.debug_frame_dir, exist_ok=True)
         self.pixel_noise_sigma = float(self.get_parameter('pixel_noise_sigma').value)
         self.rng = np.random.default_rng(int(self.get_parameter('seed').value))
         self.min_keypoint_conf = float(self.get_parameter('min_keypoint_conf').value)
@@ -268,6 +282,15 @@ class YoloRobotDetectorNode(Node):
         self._last_receive_stamp_s = receive_stamp_s
         image_bgr = image_msg_to_bgr8(msg)
         self._latest_image_shape = image_bgr.shape[:2]
+        if self.debug_frame_dir:
+            self._latest_image_bgr = image_bgr
+            try:
+                import cv2 as _cv2, os as _os
+                _raw = _os.path.join(self.debug_frame_dir, 'raw'); _os.makedirs(_raw, exist_ok=True)
+                _st = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
+                _cv2.imwrite(_os.path.join(_raw, f'frame_{_os.getpid()}_{_st:.3f}.png'), image_bgr)
+            except Exception:
+                pass
         predict_start = time.perf_counter()
         self._last_predict_start_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9
         results = self._predict(image_bgr)
@@ -304,6 +327,16 @@ class YoloRobotDetectorNode(Node):
             self._publish_diagnostics(msg.header.stamp, selection)
             return
 
+        # Occlusion gate: a too-small box = partial occlusion -> biased bottom-centre.
+        # Drop it to a non-detection so the EKF gets no (poisoning) update.
+        if self.min_bbox_area_px > 0.0:
+            _b = np.asarray(selection['bbox_xyxy'], dtype=float).reshape(4)
+            _area = float(max(_b[2] - _b[0], 0.0) * max(_b[3] - _b[1], 0.0))
+            if _area < self.min_bbox_area_px:
+                selection['detected_after_threshold'] = False
+                self._publish_diagnostics(msg.header.stamp, selection)
+                return
+
         selected_u = float(selection.get('selected_u', math.nan))
         selected_v = float(selection.get('selected_v', math.nan))
 
@@ -312,6 +345,18 @@ class YoloRobotDetectorNode(Node):
             selected_v += float(self.rng.normal(0.0, self.pixel_noise_sigma))
         selection['selected_u'] = selected_u
         selection['selected_v'] = selected_v
+        if self.debug_frame_dir and getattr(self, '_latest_image_bgr', None) is not None:
+            try:
+                import cv2, os as _os
+                im = self._latest_image_bgr.copy()
+                b = np.asarray(selection['bbox_xyxy'], dtype=float).reshape(4)
+                cv2.rectangle(im, (int(b[0]), int(b[1])), (int(b[2]), int(b[3])), (0, 0, 255), 1)
+                if math.isfinite(selected_u) and math.isfinite(selected_v):
+                    cv2.circle(im, (int(selected_u), int(selected_v)), 2, (0, 255, 255), -1)
+                st = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
+                cv2.imwrite(_os.path.join(self.debug_frame_dir, f'frame_{_os.getpid()}_{st:.3f}.png'), im)
+            except Exception:
+                pass
         self._publish_diagnostics(msg.header.stamp, selection)
         if not bool(selection.get('detected_after_threshold', False)):
             return

@@ -186,6 +186,8 @@ def generate_launch_description():
         DeclareLaunchArgument('yolo_use_masks', default_value='true', description='Use YOLO segmentation masks for pixel reference when available'),
         DeclareLaunchArgument('yolo_min_mask_area_px', default_value='12.0'),
         DeclareLaunchArgument('yolo_mask_bottom_band_px', default_value='3.0'),
+        DeclareLaunchArgument('yolo_min_bbox_area_px', default_value='0.0'),
+        DeclareLaunchArgument('yolo_debug_frame_dir', default_value=''),
         DeclareLaunchArgument('yolo_min_keypoint_conf', default_value='0.5',
                               description='Pose-keypoint confidence floor; below this the heading is treated as unknown'),
         DeclareLaunchArgument('keypoint_marker_world_z', default_value='0.0',
