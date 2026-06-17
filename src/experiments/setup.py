@@ -7,7 +7,10 @@ here = os.path.abspath(os.path.dirname(__file__))
 
 
 def package_glob(*parts):
-    return glob(os.path.join(*parts), root_dir=here)
+    # Files only: data_files cannot copy directories (e.g. config/archive/), which
+    # otherwise breaks the install step.
+    return [p for p in glob(os.path.join(*parts), root_dir=here)
+            if os.path.isfile(os.path.join(here, p))]
 
 setup(
     name=package_name,

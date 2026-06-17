@@ -129,6 +129,11 @@ skip_stale_pixel_correction: true
 # (NIS > 9.21) that the EKF would otherwise swallow into the belief. Normal
 # detections have NIS<8 (p90 8.16); outlier spikes have NIS median ~13, up to 363.
 pixel_correction_nis_threshold: 9.21
+# NIS self-heal: on consecutive NIS rejections, widen the belief covariance so an
+# accurate measurement is re-admitted once belief has drifted (instead of the hard
+# gate staying "confidently wrong"). Validated mechanismA: rejections C2 15%->1%,
+# C1 9%->3%; C2 published-belief err 0.28->0.05 m; both still reach goal.
+pixel_correction_nis_reject_cov_scale: 3.0
 robot_collision_radius_m: 0.125
 use_hierarchical: true
 use_simple_local_controller: true

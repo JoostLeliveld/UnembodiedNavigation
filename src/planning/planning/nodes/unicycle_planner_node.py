@@ -202,6 +202,18 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('use_truth_localization', False)
         _declare_if_not('truth_odom_topic', '/odom')
         _declare_if_not('pixel_correction_nis_threshold', 0.0)
+        # Self-healing for the NIS innovation gate. When camera corrections are
+        # persistently NIS-rejected the belief is over-confident AND drifted (the
+        # measurements agree with each other, not with the prediction), so it can
+        # never recover -- it stays "confidently wrong" even while the robot is
+        # plainly observed. On each CONSECUTIVE NIS rejection, multiply the belief
+        # position covariance by this factor: that lowers the next innovation's NIS
+        # (so an accurate measurement is finally admitted) and raises its Kalman gain
+        # (so the accepted update actually re-locks onto the camera). The next
+        # accepted update shrinks the covariance again, so the widening is transient.
+        # 1.0 = disabled (legacy hard-gate behaviour).
+        _declare_if_not('pixel_correction_nis_reject_cov_scale', 1.0)
+        _declare_if_not('pixel_correction_nis_reject_cov_max_streak', 8)
         _declare_if_not('pixel_correction_approx', 'AUTO')
         _declare_if_not('skip_stale_pixel_correction', True)
         _declare_if_not('use_pixel_heading_correction', True)
@@ -409,6 +421,13 @@ class UnicyclePlannerNode(Node):
         self.pixel_correction_nis_threshold = float(
             self.get_parameter('pixel_correction_nis_threshold').value
         )
+        self.pixel_correction_nis_reject_cov_scale = float(
+            self.get_parameter('pixel_correction_nis_reject_cov_scale').value
+        )
+        self.pixel_correction_nis_reject_cov_max_streak = int(
+            self.get_parameter('pixel_correction_nis_reject_cov_max_streak').value
+        )
+        self._pixel_nis_reject_streak = 0
         self.pixel_correction_approx = str(
             self.get_parameter('pixel_correction_approx').value
         ).strip().upper()
@@ -1705,9 +1724,23 @@ class UnicyclePlannerNode(Node):
             and math.isfinite(nis)
             and nis > self.pixel_correction_nis_threshold
         ):
+            self._pixel_nis_reject_streak += 1
+            # Over-confidence escape: widen the belief covariance on each consecutive
+            # NIS rejection so a subsequent accurate measurement is admitted (lower NIS)
+            # with enough gain to re-lock onto the camera. The next accepted update
+            # shrinks it again. Capped so a true outlier burst cannot run away.
+            if (self.pixel_correction_nis_reject_cov_scale > 1.0
+                    and self._pixel_nis_reject_streak <= self.pixel_correction_nis_reject_cov_max_streak):
+                with self._data_lock:
+                    if self.belief_S is not None:
+                        self.belief_S[:2, :2] = (
+                            np.asarray(self.belief_S, dtype=float)[:2, :2]
+                            * self.pixel_correction_nis_reject_cov_scale
+                        )
             self._warn_stale_pixel_once(
                 f"Pixel correction NIS {nis:.2f} exceeds "
-                f"threshold {self.pixel_correction_nis_threshold:.2f}; rejecting"
+                f"threshold {self.pixel_correction_nis_threshold:.2f}; rejecting "
+                f"(streak {self._pixel_nis_reject_streak})"
             )
             self._publish_pixel_correction_rejection(
                 stamp_msg,
@@ -1744,6 +1777,7 @@ class UnicyclePlannerNode(Node):
             self.belief_S = next_S
             self.belief_stamp = stamp_msg
             self._last_correction_stamp = stamp_msg
+            self._pixel_nis_reject_streak = 0
             # Update rolling BEV correction cache for velocity estimation.
         K_theta_u = math.nan
         K_theta_v = math.nan

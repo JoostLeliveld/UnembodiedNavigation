@@ -29,6 +29,8 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('r_miss_uv', default_value='120.0'),
         DeclareLaunchArgument('pixel_correction_nis_threshold', default_value='0.0',
                               description='Reject pixel corrections with 2D NIS above this threshold; 0 disables NIS gating.'),
+        DeclareLaunchArgument('pixel_correction_nis_reject_cov_scale', default_value='1.0',
+                              description='Multiply belief covariance on each consecutive NIS rejection so a persistently-rejected accurate measurement is admitted; 1.0 disables.'),
         DeclareLaunchArgument('robot_collision_radius_m', default_value='0.125'),
         DeclareLaunchArgument('odom_heading_correction_mode', default_value='kalman'),
         DeclareLaunchArgument('clamp_pixel_uv_theta_without_yaw', default_value='false'),
