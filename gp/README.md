@@ -26,7 +26,7 @@ walkthrough video.
 
 | Input | Output |
 | --- | --- |
-| Detector score targets over warehouse `(x, y)` | `paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz` |
+| Detector score targets over warehouse `(x, y)` | `paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz` |
 | Locked world/camera geometry | `P_conservative_plan_map` |
 | GP fit parameters | planner-facing reliability and covariance lookup grid |
 
@@ -49,8 +49,8 @@ Fit summary:
 
 Artifact metadata:
 
-- [`../paper_artifacts/gp/aws_gp_v7b/gp_fit_summary.csv`](../paper_artifacts/gp/aws_gp_v7b/gp_fit_summary.csv)
-- [`../paper_artifacts/gp/aws_gp_v7b/gp_manifest.json`](../paper_artifacts/gp/aws_gp_v7b/gp_manifest.json)
+- [`../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_fit_summary.csv`](../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_fit_summary.csv)
+- [`../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_manifest.json`](../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_manifest.json)
 - [`../paper_artifacts/figures/gp_pipeline_aws_provenance.json`](../paper_artifacts/figures/gp_pipeline_aws_provenance.json)
 
 ## Reproduce
@@ -59,9 +59,9 @@ Fit a GP from local capture/target artifacts:
 
 ```bash
 python3 scripts/visibility_comparison/fit_visibility_gps.py \
-  --gp-targets logs/visibility_comparison/aws_targets_v7b/gp_targets_xy_aggregated.csv \
-  --capture-manifest logs/visibility_comparison/aws_capture_v7/capture_manifest.json \
-  --out logs/visibility_comparison/aws_gp_v7b \
+  --gp-targets logs/visibility_comparison/warehouse_visibility_targets_v1/gp_targets_xy_aggregated.csv \
+  --capture-manifest logs/visibility_comparison/warehouse_visibility_capture_v1/capture_manifest.json \
+  --out logs/visibility_comparison/warehouse_visibility_gp_v1 \
   --grid-nx 220 \
   --grid-ny 200 \
   --gp-length-scale 0.90 \

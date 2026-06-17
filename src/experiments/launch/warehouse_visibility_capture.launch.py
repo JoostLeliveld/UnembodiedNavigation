@@ -120,7 +120,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('headless', default_value='true', description='Run Gazebo server-only (batch capture default)'),
-        DeclareLaunchArgument('world', default_value='warehouse_occ_light.world.sdf'),
+        DeclareLaunchArgument('world', default_value='warehouse_aws.world.sdf'),
         DeclareLaunchArgument(
             'world_profiles',
             default_value=PathJoinSubstitution([

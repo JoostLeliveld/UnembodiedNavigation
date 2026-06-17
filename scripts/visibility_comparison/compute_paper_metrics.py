@@ -11,15 +11,15 @@ The figure-side condition vocabulary is fixed: C1 = constant covariance baseline
 C2 = learned-observability EFE (any C2_* label collapses to `C2`).
 
 Outcome classifier (added 2026-05): each row also gets boolean flags
-  is_clean_success / is_near_success / is_collision / is_penetration
-  / is_timeout / is_interrupted / is_invalid
+      is_clean_success / is_near_success / is_collision / is_penetration
+  / is_timeout / is_stuck / is_interrupted / is_invalid
 plus the underlying `valid_run` and penetration depths from run_summary.json.
 This mirrors the paper categories defined in the Experiments section.
 
 Usage (current data):
     python compute_paper_metrics.py \\
-        --campaign-log logs/visibility_comparison/aws_f31b1_final_v1/campaign_log.json \\
-        --gp-artifact paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz \\
+        --campaign-log logs/visibility_comparison/warehouse_visibility_campaign_v1/campaign_log.json \\
+        --gp-artifact paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz \\
         --out paper_metrics.csv
 
 Outputs:
@@ -40,6 +40,13 @@ import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 
 RHO_SHADOW_THRESHOLD = 0.35
+
+LEGACY_TASK_NAMES = {
+    'F31_b1_apron_a3_mid': 'route_apron_to_a3_mid',
+    'b5_a4_apron_to_a2_mid': 'route_apron_to_a2_mid',
+    'b2_a0_west_to_a1_upper': 'route_west_to_a1_upper',
+    'b6_a0_west_to_a1_low_control': 'control_west_to_a1_low',
+}
 
 PERCEPTION_WRITER_FIELDS = [
     'diag_stamp', 'log_stamp', 'detected', 'true_available',
@@ -139,7 +146,8 @@ def _normalize_entry(key: str, entry: dict, campaign_root: Path) -> dict:
     Resolves stale `run_dir` paths by re-locating the experiment_id under
     `<campaign_root>/<axis>/<label>/seed<N>/`.
     """
-    task = str(entry.get('task') or entry.get('merged_config', {}).get('task', ''))
+    task_raw = str(entry.get('task') or entry.get('merged_config', {}).get('task', ''))
+    task = LEGACY_TASK_NAMES.get(task_raw, task_raw)
     raw_label = str(entry.get('condition') or entry.get('label', ''))
     condition = _label_to_condition(raw_label)
     seed = entry.get('seed', '')
@@ -260,7 +268,14 @@ def _pf(row: dict, key: str) -> float:
         return math.nan
 
 
+def _perception_capture_stamp(row: dict) -> float:
+    """Return the frame-capture stamp for perception rows, with log fallback."""
+    stamp = _pf(row, 'diag_stamp')
+    return stamp if math.isfinite(stamp) else _pf(row, 'log_stamp')
+
+
 NEAR_SUCCESS_RADIUS_M = 0.40  # entered goal region but did not satisfy hold
+GOAL_COMPLETION_REASONS = {'goal_reached', 'goal_reached_stable'}
 
 
 def _loc_nll_nees(dx: float, dy: float, cov_x: float, cov_xy: float, cov_y: float) -> tuple[float, float]:
@@ -301,6 +316,7 @@ def _classify_outcome(summary: dict, completed_externally: bool = True) -> dict:
       is_clean_success : completion_reason == 'goal_reached' AND not collision/penetration
       is_near_success  : not clean_success and goal_region_entered or
                           minimum_goal_distance <= NEAR_SUCCESS_RADIUS_M
+      is_stuck         : completion_reason == 'stuck'
     """
     valid_run = summary.get('valid_run')
     completion_reason = str(summary.get('completion_reason', '') or '')
@@ -314,15 +330,17 @@ def _classify_outcome(summary: dict, completed_externally: bool = True) -> dict:
     is_collision = coll_any or completion_reason == 'collision'
     is_penetration = has_penetration  # reported separately, may overlap with collision
     is_timeout = completion_reason == 'timeout_after_first_cmd'
+    is_stuck = completion_reason == 'stuck'
     is_invalid = (
         valid_run is False
         and not is_collision
         and not is_penetration
         and not is_timeout
+        and not is_stuck
     )
     is_interrupted = (not is_invalid) and (not completion_reason) and completed_externally is False
     is_clean_success = (
-        completion_reason == 'goal_reached'
+        (completion_reason in GOAL_COMPLETION_REASONS or bool(summary.get('goal_reached', False)))
         and not coll_any
         and not has_penetration
     )
@@ -339,6 +357,7 @@ def _classify_outcome(summary: dict, completed_externally: bool = True) -> dict:
         'is_collision': is_collision,
         'is_penetration': is_penetration,
         'is_timeout': is_timeout,
+        'is_stuck': is_stuck,
         'is_interrupted': is_interrupted,
         'is_invalid': is_invalid,
         'goal_region_entered': goal_region_entered,
@@ -353,7 +372,10 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
     manifest = _load_run_manifest(run_dir)
 
     # --- From summary ---
-    goal_reached = bool(summary.get('goal_reached', False)) or summary.get('completion_reason') == 'goal_reached'
+    goal_reached = (
+        bool(summary.get('goal_reached', False))
+        or str(summary.get('completion_reason', '')) in GOAL_COMPLETION_REASONS
+    )
     crashed = bool(summary.get('crashed', False))
     completion_reason = str(summary.get('completion_reason', ''))
     path_length_m = float(summary.get('path_length_m', math.nan) or math.nan)
@@ -489,7 +511,8 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
         if math.isfinite(first_cmd_stamp):
             runtime_perception_rows = [
                 r for r in perception_rows
-                if math.isfinite(_pf(r, 'log_stamp')) and _pf(r, 'log_stamp') >= first_cmd_stamp
+                if math.isfinite(_perception_capture_stamp(r))
+                and _perception_capture_stamp(r) >= first_cmd_stamp
             ]
         n_detected = sum(
             1 for r in runtime_perception_rows
@@ -563,14 +586,10 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
 
 
 TASK_INFO = {
-    # Compact benchmark legacy/core tasks.
-    'shadow_tradeoff_a': {'start': (-2.0, 0.5), 'goal': (2.0, -0.5)},
-    'shadow_tradeoff_b': {'start': (-2.0, -1.0), 'goal': (2.0, -0.5)},
-    'sanity_open':       {'start': (-2.0, -1.5), 'goal': (2.0, -1.5)},
-    # Current AWS candidate task. This entry only enables task-derived metrics
-    # such as path efficiency; evidence status is still controlled by the
-    # experiment registry and artifact chain.
-    'F31_b1_apron_a3_mid': {'start': (3.30, -1.00), 'goal': (1.00, 1.75)},
+    'route_apron_to_a3_mid': {'start': (3.30, -1.00), 'goal': (1.00, 1.75)},
+    'route_apron_to_a2_mid': {'start': (3.30, -1.00), 'goal': (-1.00, 1.75)},
+    'route_west_to_a1_upper': {'start': (-5.25, -0.75), 'goal': (-3.00, 3.50)},
+    'control_west_to_a1_low': {'start': (-5.25, -0.75), 'goal': (-3.00, -0.75)},
 }
 
 FIELDNAMES = [
@@ -583,7 +602,7 @@ FIELDNAMES = [
     'yolo_detection_rate',
     'mean_solve_time_ms', 'p90_solve_time_ms',
     'valid_run', 'is_clean_success', 'is_near_success',
-    'is_collision', 'is_penetration', 'is_timeout', 'is_interrupted', 'is_invalid',
+    'is_collision', 'is_penetration', 'is_timeout', 'is_stuck', 'is_interrupted', 'is_invalid',
     'goal_region_entered',
     'max_obstacle_penetration_m', 'max_wall_penetration_m',
     'n_rows', 'outcome',
@@ -610,7 +629,7 @@ CONDITION_DISPLAY = {
 def _print_summary(rows: list[dict]) -> str:
     lines = []
     header = (f'{"Task":<22} {"Cond":<22} {"N":>3} {"Clean%":>7} {"Near%":>6} '
-              f'{"Coll%":>6} {"Pen%":>5} {"Inv%":>5} '
+              f'{"Coll%":>6} {"Pen%":>5} {"Stuck%":>7} {"Inv%":>5} '
               f'{"L(m)":>10} {"ē(m)":>10} {"NLL":>9} {"NEES":>9} '
               f'{"c̄":>9} '
               f'{"f_shad":>8} {"det_rate":>9} {"η":>8} {"solve(ms)":>10}')
@@ -632,6 +651,7 @@ def _print_summary(rows: list[dict]) -> str:
             near_pct = _pct('is_near_success')
             coll_pct = _pct('is_collision')
             pen_pct = _pct('is_penetration')
+            stuck_pct = _pct('is_stuck')
             inv_pct = _pct('is_invalid')
             valid = [r for r in subset if r.get('is_clean_success')]
 
@@ -652,7 +672,7 @@ def _print_summary(rows: list[dict]) -> str:
             lines.append(
                 f'{task:<22} {CONDITION_DISPLAY.get(cond, cond):<22} {n:>3} '
                 f'{clean_pct:>6.0f}% {near_pct:>5.0f}% '
-                f'{coll_pct:>5.0f}% {pen_pct:>4.0f}% {inv_pct:>4.0f}% '
+                f'{coll_pct:>5.0f}% {pen_pct:>4.0f}% {stuck_pct:>6.0f}% {inv_pct:>4.0f}% '
                 f'{_mean_std("path_length_m"):>10} {_mean_std("mean_loc_error_m"):>10} '
                 f'{_mean_std("mean_loc_nll"):>9} {_mean_std("mean_loc_nees"):>9} '
                 f'{_mean_std("mean_overconf"):>9} {_mean_std("f_shadow"):>8} '
@@ -720,7 +740,7 @@ def main() -> int:
             base_row['valid_run'] = False
             base_row['is_invalid'] = True
             for flag in ('is_clean_success', 'is_near_success', 'is_collision',
-                         'is_penetration', 'is_timeout', 'is_interrupted',
+                         'is_penetration', 'is_timeout', 'is_stuck', 'is_interrupted',
                          'goal_region_entered'):
                 base_row[flag] = False
             all_rows.append(base_row)
@@ -755,6 +775,7 @@ def main() -> int:
             else 'near'  if classification['is_near_success']
             else 'coll'  if classification['is_collision']
             else 'pen'   if classification['is_penetration']
+            else 'stuck' if classification['is_stuck']
             else 'time'  if classification['is_timeout']
             else 'inv'   if classification['is_invalid']
             else '?'

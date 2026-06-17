@@ -36,12 +36,24 @@ ROOT = Path(__file__).resolve().parents[2]
 # table inputs until the campaign is deliberately replaced.
 CAMP = ROOT/"logs/visibility_comparison/_paper_runs/robustness_campaign_keepout_lanegraph_v1"
 METRICS = ROOT/"paper_artifacts/metrics/robustness_metrics.csv"
-GPZ  = ROOT/"paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz"
-CONFIG = ROOT/"scripts/visibility_comparison/aws_f31b1_final_config.yaml"
+GPZ  = ROOT/"paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz"
+CONFIG = ROOT/"scripts/visibility_comparison/warehouse_visibility_campaign.yaml"
 OUT  = ROOT/"paper_artifacts/figures/robustness_spread.png"
 PROV = OUT.with_suffix(".provenance.json")
-TASKS = ["F31_b1_apron_a3_mid","b5_a4_apron_to_a2_mid","b2_a0_west_to_a1_upper","b6_a0_west_to_a1_low_control"]
-SHORT = {"F31_b1_apron_a3_mid":"F31_b1","b5_a4_apron_to_a2_mid":"b5","b2_a0_west_to_a1_upper":"b2 (west)","b6_a0_west_to_a1_low_control":"b6 (control)"}
+TASKS = ["route_apron_to_a3_mid","route_apron_to_a2_mid","route_west_to_a1_upper","control_west_to_a1_low"]
+SHORT = {
+    "route_apron_to_a3_mid": "apron to A3",
+    "route_apron_to_a2_mid": "apron to A2",
+    "route_west_to_a1_upper": "west to A1 upper",
+    "control_west_to_a1_low": "visible control",
+}
+LEGACY_TASK_DIRS = {
+    "route_apron_to_a3_mid": "F31_b1_apron_a3_mid",
+    "route_apron_to_a2_mid": "b5_a4_apron_to_a2_mid",
+    "route_west_to_a1_upper": "b2_a0_west_to_a1_upper",
+    "control_west_to_a1_low": "b6_a0_west_to_a1_low_control",
+}
+CANONICAL_TASK = {v: k for k, v in LEGACY_TASK_DIRS.items()}
 
 # Optional CLI overrides so a NEW campaign can be plotted without editing source:
 #   python make_robustness_spread.py --campaign-root logs/visibility_comparison/robustness_campaign_v2
@@ -63,15 +75,25 @@ def _ival(x):
 OUTCOME = {}                       # (task, cond, seed) -> {"collided": bool, "clean": bool}
 COUNTS = {}                        # (task, cond) -> [n_clean, n_coll, n_total]
 for r in csv.DictReader(open(METRICS)):
-    key = (r["task"], r["condition"], str(r["seed"]))
+    task_name = CANONICAL_TASK.get(r["task"], r["task"])
+    key = (task_name, r["condition"], str(r["seed"]))
     OUTCOME[key] = {"collided": bool(_ival(r.get("is_collision"))), "clean": bool(_ival(r.get("is_clean_success")))}
-    ck = (r["task"], r["condition"]); COUNTS.setdefault(ck, [0, 0, 0])
+    ck = (task_name, r["condition"]); COUNTS.setdefault(ck, [0, 0, 0])
     COUNTS[ck][0] += _ival(r.get("is_clean_success")); COUNTS[ck][1] += _ival(r.get("is_collision")); COUNTS[ck][2] += 1
 
 def load_runs(task, cond):
     """Return [(states Nx2, collided)] per seed; trajectory from archive, collided from CSV."""
     out = []
-    for seeddir in sorted(glob.glob(str(CAMP/task/cond/"seed*"))):
+    task_dirs = [task]
+    legacy = LEGACY_TASK_DIRS.get(task)
+    if legacy:
+        task_dirs.append(legacy)
+    seeddirs = []
+    for task_dir in task_dirs:
+        seeddirs = sorted(glob.glob(str(CAMP/task_dir/cond/"seed*")))
+        if seeddirs:
+            break
+    for seeddir in seeddirs:
         seed = Path(seeddir).name.replace("seed", "")
         exps = sorted(glob.glob(seeddir+"/experiment_*/experiment.csv"))
         if not exps: continue

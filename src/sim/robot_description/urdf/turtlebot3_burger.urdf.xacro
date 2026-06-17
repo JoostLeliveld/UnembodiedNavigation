@@ -194,7 +194,7 @@
        separation. front=cyan @ pm_front_x, rear=magenta @ pm_rear_x, both at
        pm_marker_z (above the lidar so the oblique camera sees both).
        They are opt-in so segmentation-detector runs keep the visual domain used
-       to train aws_yolo_simseg_v2. -->
+       to train warehouse_yolo_detector_v1. -->
   <!-- ===================== -->
   <xacro:if value="$(arg show_pose_markers)">
     <joint name="${ns}front_marker_joint" type="fixed">

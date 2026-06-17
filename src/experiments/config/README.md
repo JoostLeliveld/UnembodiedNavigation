@@ -8,18 +8,18 @@ world profiles, camera/profile defaults, and task definitions.
 | File | Role |
 | --- | --- |
 | [`world_profiles.yaml`](world_profiles.yaml) | World registry, camera intrinsics, planner defaults, map bounds, and compatibility artifact paths. |
-| [`tasks.yaml`](tasks.yaml) | Start/goal definitions, with tasks labeled as benchmark, exploratory, sanity, or legacy. |
+| [`tasks.yaml`](tasks.yaml) | Current paper and sanity start/goal definitions. Historical phase-coded tasks live under `archive/`. |
 
 ## Current Paper Surface
 
 The current paper-facing benchmark is the AWS-style warehouse campaign:
 
 - world: `warehouse_aws.world.sdf`
-- campaign config: `../../../scripts/visibility_comparison/aws_f31b1_final_config.yaml`
-- detector metadata: `../../../paper_artifacts/perception/aws_yolo_simseg_v2/`
-- GP artifact: `../../../paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz`
-- tasks: `F31_b1_apron_a3_mid`, `b5_a4_apron_to_a2_mid`,
-  `b2_a0_west_to_a1_upper`, and `b6_a0_west_to_a1_low_control`
+- campaign config: `../../../scripts/visibility_comparison/warehouse_visibility_campaign.yaml`
+- detector metadata: `../../../paper_artifacts/perception/warehouse_yolo_detector_v1/`
+- GP artifact: `../../../paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz`
+- tasks: `route_apron_to_a3_mid`, `route_apron_to_a2_mid`,
+  `route_west_to_a1_upper`, and `control_west_to_a1_low`
 
 The campaign config is the source of truth for paper-facing runs. It pins the
 planner conditions, route seeds, detector checkpoint path, GP path, driveable

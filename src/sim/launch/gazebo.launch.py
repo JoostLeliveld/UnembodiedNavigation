@@ -12,7 +12,7 @@ def generate_launch_description():
     sim_pkg_share = get_package_share_directory("sim")
     world_arg = DeclareLaunchArgument(
         "world",
-        default_value="warehouse_occ_light.world.sdf",
+        default_value="warehouse_aws.world.sdf",
         description="World file under sim/gazebo_worlds/worlds",
     )
     headless_arg = DeclareLaunchArgument(

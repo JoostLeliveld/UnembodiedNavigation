@@ -23,7 +23,7 @@ GP artifact paths.
 ## Paper-Facing Use
 
 The paper-facing AWS robustness campaign is configured by
-`scripts/visibility_comparison/aws_f31b1_final_config.yaml` and run through
+`scripts/visibility_comparison/warehouse_visibility_campaign.yaml` and run through
 `scripts/visibility_comparison/run_visibility_campaign.py`.
 
 The primary launch enforces the important paper assumptions:

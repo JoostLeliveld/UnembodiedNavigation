@@ -233,7 +233,7 @@ class TeleportImageCapture(Node):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Capture a canonical teleport-sampled visibility dataset.')
-    parser.add_argument('--world', default='warehouse_occ_light.world.sdf')
+    parser.add_argument('--world', default='warehouse_aws.world.sdf')
     parser.add_argument('--world-profiles', default=str((Path(__file__).resolve().parents[2] / 'src' / 'experiments' / 'config' / 'world_profiles.yaml').resolve()))
     parser.add_argument('--out', default=str(CURRENT_CAPTURE_DIR))
     parser.add_argument('--sample-nx', type=int, default=15)

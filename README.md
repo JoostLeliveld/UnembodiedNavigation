@@ -52,21 +52,17 @@ Gazebo warehouse
 -> seeded campaign metrics
 ```
 
-## Headline Result
+## Paper-Facing Benchmark
 
-The locked paper-facing benchmark uses four warehouse tasks and five seeds per
-condition. Outcome counts come from
-[`paper_artifacts/metrics/robustness_metrics.csv`](paper_artifacts/metrics/robustness_metrics.csv).
-Continuous localization metrics are pooled over clean successes only.
+The canonical benchmark uses four warehouse tasks and five seeds per condition.
+The current runtime surface is defined by
+[`scripts/visibility_comparison/warehouse_visibility_campaign.yaml`](scripts/visibility_comparison/warehouse_visibility_campaign.yaml).
+Regenerate paper metrics from a completed canonical campaign with
+`scripts/visibility_comparison/build_paper_outputs.sh`.
 
-| Condition | Planner | Clean reaches | Collisions | Other outcomes |
-| --- | --- | ---: | ---: | --- |
-| C1 | `constant_R_efe` | 12/20 | 8/20 | none |
-| C2 | `visibility_aware_efe` | 16/20 | 2/20 | 1 near-success, 1 infrastructure-invalid |
-
-The learned condition tends to spend less of the trajectory in camera-poor
-regions. The known obstacle geometry, driveable region, route seeds, and
-execution plumbing are shared across both conditions.
+The known obstacle geometry, driveable region, route seeds, detector checkpoint,
+GP artifact, and execution plumbing are pinned in the campaign config so C1/C2
+comparisons differ only in the planner-facing camera covariance model.
 
 ## Code And Artifact Map
 
@@ -88,7 +84,7 @@ The trained YOLO checkpoint is intentionally local and not tracked in git. To
 run the Gazebo campaign, place it at:
 
 ```text
-local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt
+logs/perception_models/warehouse_yolo_detector_v1/model.pt
 ```
 
 ## Run The Paper-Facing Campaign
@@ -100,16 +96,16 @@ source install/setup.bash
 
 ```bash
 python3 scripts/visibility_comparison/run_visibility_campaign.py \
-  --config scripts/visibility_comparison/aws_f31b1_final_config.yaml \
-  --log-root logs/visibility_comparison/aws_f31b1_final_v1
+  --config scripts/visibility_comparison/warehouse_visibility_campaign.yaml \
+  --log-root logs/visibility_comparison/warehouse_visibility_campaign_v1
 ```
 
 ```bash
 python3 scripts/visibility_comparison/compute_paper_metrics.py \
-  --campaign-log logs/visibility_comparison/aws_f31b1_final_v1/campaign_log.json \
-  --gp-artifact paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz \
-  --out logs/visibility_comparison/aws_f31b1_final_v1/paper_metrics.csv \
-  --summary-out logs/visibility_comparison/aws_f31b1_final_v1/paper_summary.txt
+  --campaign-log logs/visibility_comparison/warehouse_visibility_campaign_v1/campaign_log.json \
+  --gp-artifact paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz \
+  --out logs/visibility_comparison/warehouse_visibility_campaign_v1/paper_metrics.csv \
+  --summary-out logs/visibility_comparison/warehouse_visibility_campaign_v1/paper_summary.txt
 ```
 
 ## Evidence Discipline

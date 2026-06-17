@@ -1,0 +1,58 @@
+{
+  "selected_source": "solver:route:below_main_aisle",
+  "route_seed_mode": "lane_graph",
+  "route_seeds": [
+    {
+      "name": "below_main_aisle",
+      "waypoints": [
+        [
+          -5.253518991578973,
+          -2.44
+        ],
+        [
+          -3.0,
+          -2.44
+        ],
+        [
+          -3.0,
+          3.5
+        ]
+      ]
+    },
+    {
+      "name": "above_cross_aisle",
+      "waypoints": [
+        [
+          -5.253518991578973,
+          4.575
+        ],
+        [
+          -3.0,
+          4.575
+        ],
+        [
+          -3.0,
+          3.5
+        ]
+      ]
+    }
+  ],
+  "total_cost": 3201.6018622548054,
+  "risk_cost": 2676.7144212645744,
+  "ambiguity_cost": 461.83718979695686,
+  "obstacle_cost": 63.05025119327395,
+  "rollout_valid": true,
+  "terminal_goal_distance_pred": 0.20163664931404768,
+  "global_horizon": 120,
+  "start_xy_yaw": [
+    -5.253518991578973,
+    -0.7378180880513996,
+    8.758115402030107e-44
+  ],
+  "goal_xy": [
+    -3.0,
+    3.5
+  ],
+  "n_states": 121,
+  "n_waypoints": 71
+}

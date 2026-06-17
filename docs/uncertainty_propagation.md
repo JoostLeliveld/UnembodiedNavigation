@@ -24,7 +24,7 @@ notes in `runtime_dataflow.md` / `perception_details.md` on these points.
 
 ## 1. Three distinct noise families
 
-| family | config keys (`aws_f31b1_final_config.yaml`) | value | where it lives | what it is |
+| family | config keys (`warehouse_visibility_campaign.yaml`) | value | where it lives | what it is |
 |---|---|---|---|---|
 | **A. Model / process noise** (filter + planner) | `process_noise_xy`, `process_noise_theta` | 0.012, 0.05 | `dynamics.py` / `casadi_efe.py` → `Q_d` | the **assumed** actuation-noise spectral densities the belief uses to grow covariance during prediction |
 | **B. Simulation corruptions** (ground truth) | `command_noise_*`, `encoder_noise_*` | see config L167–177 | `src/sim/sim/actuation_noise_node.py` (`/cmd_vel`), `src/sim/sim/encoder_noise_node.py` (`/odom_noisy`) | the **real** disturbances injected into the simulated robot; the planner does **not** know them |
@@ -75,7 +75,7 @@ sharpen heading. The retired implementation used a frozen diagonal
 `diag(σ_v², σ_v², σ_ω²)` (treating the parameters as *per-step* std, no `Δt`, no
 cross-terms). Switching to `Q_d` reinterprets the parameters as **PSDs (std per √s)**
 integrated over `Δt`, so both the magnitude and the shape of the propagated
-covariance changed. Offline `F31_b1` EFE totals dropped accordingly (C1 d=0.06/
+covariance changed. Offline `route_apron_to_a3_mid` EFE totals dropped accordingly (C1 d=0.06/
 total≈8001, C2 d=0.34/total≈9886 vs the prior diagonal baseline C1 0.09/11179,
 C2 0.09/11823); **all single-version results predating this change are superseded.**
 
@@ -143,7 +143,7 @@ boundary** (`occlusion_geometry._get_union_boundary_segments` +
 `signed_distance_to_union_xy(..., keep_in=True)`), used by
 `nogo_cost.NogoZoneCostModel`. This replaces the old per-prism `min` distance, which
 falsely penalised interior **seam** points where two driveable rectangles meet.
-Verified on the real `F31_b1` driveable geometry: aisle interiors and the
+Verified on the real `route_apron_to_a3_mid` driveable geometry: aisle interiors and the
 A3↔A4 connector seam read as deep-inside (clearance ≈0.4 m, no phantom zero), rack
 bodies and out-of-lane points read as outside.
 

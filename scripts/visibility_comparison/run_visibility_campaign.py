@@ -2,7 +2,7 @@
 """Run a visibility-comparison campaign from a locked config file.
 
 Usage:
-    python run_visibility_campaign.py --config scripts/visibility_comparison/aws_f31b1_final_config.yaml [--dry-run] [--resume]
+    python run_visibility_campaign.py --config scripts/visibility_comparison/warehouse_visibility_campaign.yaml [--dry-run] [--resume]
 
 Each run result is written immediately to campaign_log.json so the campaign
 can be interrupted and resumed with --resume (already-completed runs are skipped).
@@ -466,7 +466,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'heading_update_mode',
         'use_pixel_correction',
         'pixel_timeout_s', 'skip_stale_pixel_correction',
-        'bev_y_calibration_offset_m', 'bbox_contact_z_m', 'pixel_max_correction_jump_m',
+        'bev_y_calibration_offset_m', 'bev_affine_calibration', 'bbox_contact_z_m', 'pixel_max_correction_jump_m',
         'pixel_correction_nis_threshold', 'use_truth_localization',
         'debug_runtime',
         'optimizer_ftol', 'optimizer_gtol', 'optimizer_warm_start',
@@ -568,9 +568,9 @@ def _command_activity(run_dir: Path | None) -> tuple[int, bool]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Run a locked visibility-comparison campaign.')
-    parser.add_argument('--config', default='scripts/visibility_comparison/aws_f31b1_final_config.yaml',
+    parser.add_argument('--config', default='scripts/visibility_comparison/warehouse_visibility_campaign.yaml',
                         help='Path to the locked campaign config YAML.')
-    parser.add_argument('--log-root', default=str(LOGS_ROOT / 'aws_f31b1_final_v1'),
+    parser.add_argument('--log-root', default=str(LOGS_ROOT / 'warehouse_visibility_campaign_v1'),
                         help='Root directory for all run logs.')
     parser.add_argument('--dry-run', action='store_true',
                         help='Print what would be run without executing.')

@@ -1,0 +1,78 @@
+{
+  "copied_source_files": [
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C1/experiment.csv",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C1/perception.csv",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C1/plan_samples.csv",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C1/global_plan.csv",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C1/global_waypoints.csv",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C1/global_plan_meta.json",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C1/run_manifest.json",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C1/run_summary.json",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C1/tasks.yaml",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C2/experiment.csv",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C2/perception.csv",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C2/plan_samples.csv",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C2/global_plan.csv",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C2/global_waypoints.csv",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C2/global_plan_meta.json",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C2/run_manifest.json",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C2/run_summary.json",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/C2/tasks.yaml",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/campaign_log.json",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/aws_f31b1_final_config.yaml",
+    "paper_artifacts/figures/paired_mechanism_taskB_v3_data/gp_manifest.json"
+  ],
+  "figure_layout": "Two large route maps plus one full-width truth-belief error panel. Map panels show global plan, executed trajectory, belief mean, continuous 2-sigma belief band, and lightly styled YOLO update/miss markers.",
+  "generated_at": "2026-06-17T10:58:00.163705+00:00",
+  "output_pdf": "paper_artifacts/figures/paired_mechanism_taskB_v3.pdf",
+  "script": "scripts/paper_figures/make_paired_mechanism.py",
+  "selected_runs": {
+    "C1": {
+      "completion_reason": "goal_reached",
+      "mean_error_plotted_m": 0.09894368557415793,
+      "mean_truth_belief_error_after_first_cmd_m": 0.09935461154653741,
+      "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/aws_f31b1_v3_fig/b5_a4_apron_to_a2_mid/C1/seed0/experiment_20260616_103921"
+    },
+    "C2": {
+      "completion_reason": "goal_reached",
+      "mean_error_plotted_m": 0.15729952397798821,
+      "mean_truth_belief_error_after_first_cmd_m": 0.1576234624002329,
+      "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/aws_f31b1_v3_fig/b5_a4_apron_to_a2_mid/C2/seed0/experiment_20260616_104252"
+    }
+  },
+  "settings": {
+    "campaign": "aws_f31b1_v3_fig",
+    "dt": 0.25,
+    "git_sha_C1": "790ae7d7a467f5d33305c883b9336520e61fcd73",
+    "git_sha_C2": "790ae7d7a467f5d33305c883b9336520e61fcd73",
+    "global_horizon": 120,
+    "gp_artifact": "paper_artifacts/gp/aws_gp_v3/yolo_score_raw_gp.npz",
+    "map_xlim_m": [
+      -1.988359516875204,
+      3.980312002942753
+    ],
+    "map_ylim_m": [
+      -3.105385255195647,
+      2.6295173714751434
+    ],
+    "nogo_belief_kappa": 1.0,
+    "nogo_mode": "keep_in",
+    "nogo_penalty_type": "warning_band",
+    "nogo_warning_band": 0.05,
+    "nogo_weight": 2000.0,
+    "optimizer_maxfun": 360,
+    "optimizer_maxiter": 60,
+    "optimizer_route_seed_mode": "lane_graph",
+    "seed": 0,
+    "task": "b5_a4_apron_to_a2_mid",
+    "use_belief_nogo_cost": true,
+    "v_max": 0.6,
+    "visibility_artifact_path_C2": "/home/joostleliveld/Thesis/UnembodiedNavigation/paper_artifacts/gp/aws_gp_v3/yolo_score_raw_gp.npz",
+    "world": "warehouse_aws.world.sdf",
+    "yolo_conf_threshold": 0.1,
+    "yolo_iou_threshold": 0.45,
+    "yolo_use_masks": false
+  },
+  "source_campaign_log": "logs/visibility_comparison/aws_f31b1_v3_fig/campaign_log.json",
+  "thesis_pdf": null
+}

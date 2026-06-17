@@ -1,19 +1,13 @@
 # `experiments/data/visibility_gp`
 
-This folder stores older packaged empirical GP visibility artifacts. They are useful for compatibility runs, but they are not the canonical paper outputs.
+This folder is reserved for packaged compatibility GP artifacts. It currently
+does not contain the canonical paper output.
 
 ## Active Paper Artifact Location
 
 The current paper-facing GP artifact is:
 
-- `paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz`
-
-## Packaged Artifacts
-
-| File | Status |
-| --- | --- |
-| `warehouse_occ_light_empirical_visibility_gp.npz` | legacy packaged artifact for compatibility |
-| `warehouse_open_shelves_empirical_visibility_gp.npz` | legacy/support artifact |
+- `paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz`
 
 ## Rule
 

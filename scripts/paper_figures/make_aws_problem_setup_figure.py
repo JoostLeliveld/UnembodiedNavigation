@@ -30,11 +30,11 @@ REPO = Path(__file__).resolve().parents[2]
 THESIS = REPO.parent / "thesis-report"
 
 WORLD = "warehouse_aws.world.sdf"
-TASK = "F31_b1_apron_a3_mid"
+TASK = "route_apron_to_a3_mid"
 
-# Panel (a): current-world (camera z=4.8/y=-5.5) external-camera frame, robot near the
-# F31_b1 start (3.3,-1.0); copied to a stable paper-input path from the v7 capture so the
-# figure does not depend on archived capture data. (Old aws_simseg_v2 image was removed.)
+# Panel (a): current-world external-camera frame with the robot near the
+# route_apron_to_a3_mid start. The image is copied to a stable paper-input path
+# so the figure does not depend on archived capture data.
 DEFAULT_IMAGE = REPO / "paper_artifacts/figures/inputs/problem_setup_panel_a_aws.jpg"
 DEFAULT_PROFILE = REPO / "src/experiments/config/world_profiles.yaml"
 DEFAULT_TASKS = REPO / "src/experiments/config/tasks.yaml"

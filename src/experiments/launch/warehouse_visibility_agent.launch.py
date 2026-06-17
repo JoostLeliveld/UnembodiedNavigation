@@ -118,7 +118,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('planner', default_value=DEFAULT_PLANNER, description=PLANNER_DESCRIPTION),
-        DeclareLaunchArgument('world', default_value='warehouse_occ_light.world.sdf'),
+        DeclareLaunchArgument('world', default_value='warehouse_aws.world.sdf'),
         DeclareLaunchArgument('world_profiles', default_value=world_profiles_default, description='World profile YAML'),
         DeclareLaunchArgument('tasks_yaml', default_value=tasks_default, description='Task YAML'),
         DeclareLaunchArgument('task', default_value='', description='Task name; empty uses the world profile recommended_task'),

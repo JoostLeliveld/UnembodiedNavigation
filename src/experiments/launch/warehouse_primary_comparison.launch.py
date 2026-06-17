@@ -1,4 +1,3 @@
-# [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory/diagnostic script or module. Distracting from paper-facing F85-F88 runtime.
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import PathJoinSubstitution
@@ -6,8 +5,8 @@ from launch_ros.substitutions import FindPackageShare
 
 # Quick launch:
 # ros2 launch experiments warehouse_primary_comparison.launch.py \
-#     planner:=visibility_aware_efe task:=shadow_tradeoff_a seed:=0 \
-#     yolo_model:=local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt \
+#     planner:=visibility_aware_efe task:=route_apron_to_a3_mid seed:=0 \
+#     yolo_model:=logs/perception_models/warehouse_yolo_detector_v1/model.pt \
 #     comparison_method_id:=efe_main
 
 DEFAULT_PLANNER = 'visibility_aware_efe'
@@ -140,7 +139,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('planner', default_value=DEFAULT_PLANNER, description=PLANNER_DESCRIPTION),
-        DeclareLaunchArgument('world', default_value='warehouse_occ_light.world.sdf'),
+        DeclareLaunchArgument('world', default_value='warehouse_aws.world.sdf'),
         DeclareLaunchArgument('world_profiles', default_value=world_profiles_default, description='World profile YAML'),
         DeclareLaunchArgument('tasks_yaml', default_value=tasks_default, description='Task YAML'),
         DeclareLaunchArgument('task', default_value='', description='Task name; empty uses the world profile recommended_task'),

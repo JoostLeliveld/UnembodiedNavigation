@@ -51,17 +51,25 @@ class PixelToBevStateNode(Node):
         self.declare_parameter('motion_yaw_min_displacement_m', 0.03)
         self.declare_parameter('motion_yaw_sigma_rad', 0.35)
         self.declare_parameter('seed', 0)
-        # [DEPRECATED_LEGACY_CLEANUP] keypoint yaw parameters are legacy
+        # Optional pose-keypoint support; paper-facing runs keep camera_xy_only.
         self.declare_parameter('keypoint_marker_world_z', 0.0)
         self.declare_parameter('keypoint_heading_sigma_rad', 0.05)
         self.declare_parameter('diagnostics_match_tolerance_s', 1e-3)
         # Empirical y-axis calibration offset.  The oblique camera geometry
         # causes the YOLO centroid back-projection to land systematically south
         # of the robot's true ground position.  This offset corrects that bias.
-        # Derived from |pred_world_y - truth_y| over N=346 held-out detections
-        # (F37v3 diagnostic run): mean y-bias = -0.127 m.  Apply +0.127 m here.
+        # Derived from held-out detector back-projections: mean y-bias = -0.127 m.
+        # Apply +0.127 m here.
         # Default 0.0 preserves the original behaviour when not set.
         self.declare_parameter('bev_y_calibration_offset_m', 0.0)
+        # Position-dependent affine calibration of the back-projected (x, y), as a
+        # comma-separated 6-tuple "c0,c1,c2,c3,c4,c5" giving
+        #   x' = c0*x + c1*y + c2 ;  y' = c3*x + c4*y + c5
+        # Fit on the teleport-grid capture (detected bbox-bottom -> z=0 homography
+        # vs known pose); it corrects the oblique bbox-bottom-vs-centre bias, whose
+        # magnitude GROWS with position so a single constant offset cannot fix it.
+        # When set it REPLACES bev_y_calibration_offset_m. Empty = legacy constant.
+        self.declare_parameter('bev_affine_calibration', '')
         # Assumed world height (m) of the bbox-bottom point. The robot's box-bottom
         # is its BODY bottom, not the z=0 wheel contact; projecting it via the z=0
         # ground homography biases the BEV position, growing at grazing/peripheral
@@ -98,6 +106,22 @@ class PixelToBevStateNode(Node):
         self.bev_y_calibration_offset_m = float(
             self.get_parameter('bev_y_calibration_offset_m').value
         )
+        self._bev_affine = None
+        _affine_raw = str(self.get_parameter('bev_affine_calibration').value or '').strip()
+        if _affine_raw:
+            try:
+                _vals = [float(v) for v in _affine_raw.replace(';', ',').split(',') if v.strip() != '']
+                if len(_vals) == 6:
+                    self._bev_affine = _vals
+                    self.get_logger().info(
+                        f'BEV affine calibration active: {_vals} (replaces constant y-offset)'
+                    )
+                else:
+                    self.get_logger().warn(
+                        f'bev_affine_calibration needs 6 values, got {len(_vals)}; using constant offset'
+                    )
+            except Exception as exc:  # pragma: no cover
+                self.get_logger().warn(f'bad bev_affine_calibration ({exc}); using constant offset')
         self.bbox_contact_z_m = float(self.get_parameter('bbox_contact_z_m').value)
 
         # Baseline measurement noise (pixels)
@@ -304,9 +328,14 @@ class PixelToBevStateNode(Node):
             return
 
         x, y = world
-        # Apply empirical y-axis calibration offset to correct the systematic
-        # south-bias introduced by oblique camera back-projection.
-        y += self.bev_y_calibration_offset_m
+        # Correct the systematic south-bias from oblique bbox-bottom back-projection.
+        # Prefer the position-dependent affine calibration; fall back to the legacy
+        # constant y-offset when no affine is configured.
+        if self._bev_affine is not None:
+            c = self._bev_affine
+            x, y = (c[0] * x + c[1] * y + c[2], c[3] * x + c[4] * y + c[5])
+        else:
+            y += self.bev_y_calibration_offset_m
         sigma_x = self.transform_noise_sigma
         sigma_y = self.transform_noise_sigma
 

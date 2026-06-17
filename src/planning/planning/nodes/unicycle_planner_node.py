@@ -2236,7 +2236,19 @@ class UnicyclePlannerNode(Node):
             age_s = 0.0
         if age_s > 1e-3:
             try:
-                m, S = self.planner.predict(m, S, predict_vel, dt=age_s)
+                # Replay the timestamped odom log over [belief_stamp, now] -- the
+                # SAME path the planner uses to resolve its control belief -- rather
+                # than a crude single-velocity predict (odom_vel * age). The crude
+                # version froze the PUBLISHED belief at speed changes: at a stop the
+                # latest odom_vel is ~0, so it could not propagate the 0.5-1s-old
+                # belief anchor forward, leaving the logged belief stuck at a stale
+                # pose -> spurious 0.3-0.5m backward jumps in the logged trajectory
+                # (the controller was unaffected; it already used this replay). This
+                # only changes the monitoring/logging belief. read-only: mutate=False.
+                now_msg = self.get_clock().now().to_msg()
+                m, S = self._predict_belief_to_now(
+                    m, S, predict_vel, age_s, now_msg, mutate=False,
+                )
             except Exception:
                 return
         belief_msg = self._build_belief_message(

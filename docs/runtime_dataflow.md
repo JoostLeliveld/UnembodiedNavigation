@@ -18,7 +18,7 @@ world_profiles.yaml
 The paper-facing GP artifact is fitted before navigation trials and then held fixed. The current AWS paper-facing line uses:
 
 - world: `warehouse_aws.world.sdf` (external camera locked at z=4.8, y=-5.5)
-- artifact: `paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz`
+- artifact: `paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz`
 - planner-facing field: `P_conservative_plan_map`
 
 (The former compact-benchmark line — `warehouse_occ_light` + `current_gp` — is retired/archived.)
@@ -96,7 +96,7 @@ interpret them as selected motion-replay sample counts/duration together with
 | Purpose | File |
 | --- | --- |
 | Primary launch | `src/experiments/launch/warehouse_primary_comparison.launch.py` |
-| Locked robustness campaign config | `scripts/visibility_comparison/aws_f31b1_final_config.yaml` |
+| Locked robustness campaign config | `scripts/visibility_comparison/warehouse_visibility_campaign.yaml` |
 | Campaign runner | `scripts/visibility_comparison/run_visibility_campaign.py` |
 | Paper metrics | `scripts/visibility_comparison/compute_paper_metrics.py` |
 | Paper figures | `scripts/paper_figures/*.py` and selected `scripts/visibility_comparison/*plot*.py` diagnostics |
@@ -106,8 +106,8 @@ The primary planner names are `constant_R_efe`, `visibility_aware_efe`, and opti
 ## Paper-Facing Campaign
 
 The paper-facing AWS campaign uses `warehouse_aws.world.sdf`, detector
-`aws_yolo_simseg_v2`, GP `aws_gp_v7b`, and
-`scripts/visibility_comparison/aws_f31b1_final_config.yaml`. The config contains
+`warehouse_yolo_detector_v1`, GP `warehouse_visibility_gp_v1`, and
+`scripts/visibility_comparison/warehouse_visibility_campaign.yaml`. The config contains
 four tasks (three discriminators plus one control) and five seeds per condition.
 Do not use mission waypoints to force the route; route families in the optimizer
 are condition-neutral multistart basins from the known driveable floor.

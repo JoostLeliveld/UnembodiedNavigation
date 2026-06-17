@@ -42,16 +42,14 @@ class ObliqueCameraModel:
         return np.array([x_cam, y_cam, z_cam])
 
     def world_to_pixel(self, x, y, z=0.0):
-        world_pt = np.array([x, y, 1.0])
-        pixel_h = self.H @ world_pt
-        if abs(pixel_h[2]) < 1e-10:
+        world_3d = np.array([x, y, z], dtype=float)
+        cam_pt = self.R @ (world_3d - self.cam_pos)
+        if abs(cam_pt[2]) < 1e-10:
             return 0.0, 0.0, False
+        pixel_h = self.K @ cam_pt
         u = pixel_h[0] / pixel_h[2]
         v = pixel_h[1] / pixel_h[2]
         visible = (0 <= u < self.img_width) and (0 <= v < self.img_height)
-
-        world_3d = np.array([x, y, z])
-        cam_pt = self.R @ (world_3d - self.cam_pos)
         if cam_pt[2] <= 0:
             visible = False
         return float(u), float(v), bool(visible)
@@ -62,6 +60,18 @@ class ObliqueCameraModel:
         if abs(world_h[2]) < 1e-10:
             return None
         return float(world_h[0] / world_h[2]), float(world_h[1] / world_h[2])
+
+    def pixel_to_world_at_z(self, u, v, z_plane):
+        """Back-project a pixel to the world plane z=z_plane."""
+        ray_cam = np.linalg.inv(self.K) @ np.array([float(u), float(v), 1.0], dtype=float)
+        ray_world = self.R.T @ ray_cam
+        if abs(ray_world[2]) < 1e-10:
+            return None
+        t = (float(z_plane) - self.cam_pos[2]) / ray_world[2]
+        if t <= 0.0:
+            return None
+        world = self.cam_pos + t * ray_world
+        return float(world[0]), float(world[1])
 
     def g(self, state):
         x, y, theta = state

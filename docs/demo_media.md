@@ -13,8 +13,8 @@ inside the module folders so each demonstration page owns its own media plan:
 | --- | --- |
 | [`paper_artifacts/figures/problem_setup_camera.png`](../paper_artifacts/figures/problem_setup_camera.png) | First-screen hero: the external-camera warehouse, robot, and driveable regions. |
 | [`paper_artifacts/figures/problem_setup_snapshots.png`](../paper_artifacts/figures/problem_setup_snapshots.png) | Wider problem setup and camera/warehouse context. |
-| [`paper_artifacts/perception/aws_yolo_simseg_v2/val_batch0_pred.jpg`](../paper_artifacts/perception/aws_yolo_simseg_v2/val_batch0_pred.jpg) | Detector demo: robot detections from the external camera. |
-| [`paper_artifacts/perception/aws_yolo_simseg_v2/results.png`](../paper_artifacts/perception/aws_yolo_simseg_v2/results.png) | YOLO training performance over 30 epochs. |
+| [`paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg`](../paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg) | Detector demo: robot detections from the external camera. |
+| [`paper_artifacts/perception/warehouse_yolo_detector_v1/results.png`](../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png) | YOLO training performance over 30 epochs. |
 | [`paper_artifacts/figures/yolo_training_clarification.png`](../paper_artifacts/figures/yolo_training_clarification.png) | Detector training provenance and label-generation explanation. |
 | [`paper_artifacts/figures/gp_pipeline_aws.png`](../paper_artifacts/figures/gp_pipeline_aws.png) | GP story: detector-score samples to reliability field to induced covariance. |
 | [`paper_artifacts/figures/localization_pathway.png`](../paper_artifacts/figures/localization_pathway.png) | Runtime localization path from camera image to planner state. |

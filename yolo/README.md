@@ -12,7 +12,7 @@ raw score becomes the empirical reliability signal used later by the GP page.
 
 ## Visual Demonstration
 
-![YOLO validation predictions](../paper_artifacts/perception/aws_yolo_simseg_v2/val_batch0_pred.jpg)
+![YOLO validation predictions](../paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg)
 
 The trained detector is evaluated from the same external camera viewpoint used
 by the warehouse campaign. Runtime localization uses the selected bounding-box
@@ -26,7 +26,7 @@ warehouse-detection MP4, and a bottom-centre diagnostic still.
 | Input | Output |
 | --- | --- |
 | `/external_camera/image_raw` | `/perception/pixel_pose` |
-| `local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt` | `/perception/detection_diagnostics` |
+| `logs/perception_models/warehouse_yolo_detector_v1/model.pt` | `/perception/detection_diagnostics` |
 | YOLO confidence and class settings | selected pixel `(u, v)`, raw score, detection flag |
 
 ## Method
@@ -41,11 +41,11 @@ warehouse-detection MP4, and a bottom-centre diagnostic still.
 ## Performance And Diagnostics
 
 Detector metadata lives in
-[`../paper_artifacts/perception/aws_yolo_simseg_v2/manifest.json`](../paper_artifacts/perception/aws_yolo_simseg_v2/manifest.json).
+[`../paper_artifacts/perception/warehouse_yolo_detector_v1/manifest.json`](../paper_artifacts/perception/warehouse_yolo_detector_v1/manifest.json).
 The packaged training run used 852 simulator-labeled images, split into 683
 training images and 169 validation images.
 
-![YOLO training curves](../paper_artifacts/perception/aws_yolo_simseg_v2/results.png)
+![YOLO training curves](../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png)
 
 | Metric | Box | Mask |
 | --- | ---: | ---: |
@@ -65,13 +65,13 @@ Train a detector from a prepared dataset:
 
 ```bash
 python3 scripts/perception/train_yolo_seg.py \
-  --data logs/perception_datasets/aws_simseg_v2/data.yaml \
+  --data logs/perception_datasets/warehouse_yolo_dataset_v1/data.yaml \
   --base-model local_artifacts/base_models/yolo11n-seg.pt \
   --epochs 30 \
   --imgsz 640 \
   --batch 8 \
   --device 0 \
-  --out logs/perception_models/aws_yolo_simseg_v2
+  --out logs/perception_models/warehouse_yolo_detector_v1
 ```
 
 Regenerate the detector-training clarification figure:

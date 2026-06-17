@@ -15,7 +15,7 @@ from launch_ros.substitutions import FindPackageShare
 
 PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'planner': 'visibility_aware_efe',
-    'world': 'warehouse_occ_light.world.sdf',
+    'world': 'warehouse_aws.world.sdf',
     'task': '',
     'seed': '0',
     'odom_wait_timeout_s': '60.0',
@@ -27,6 +27,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'pixel_correction_approx': 'AUTO',
     'skip_stale_pixel_correction': 'true',
     'bev_y_calibration_offset_m': '0.127',
+    'bev_affine_calibration': '',
     'bbox_contact_z_m': '0.0',
     'pixel_max_correction_jump_m': '0.0',
     'pixel_correction_nis_threshold': '0.0',
@@ -312,6 +313,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'pixel_timeout_s': float(_launch_value(context, 'pixel_timeout_s', PAPER_LAUNCH_DEFAULTS['pixel_timeout_s'])),
         'pixel_correction_min_interval_s': float(_launch_value(context, 'pixel_correction_min_interval_s', '0.0')),
         'bev_y_calibration_offset_m': float(_launch_value(context, 'bev_y_calibration_offset_m', PAPER_LAUNCH_DEFAULTS['bev_y_calibration_offset_m'])),
+        'bev_affine_calibration': _launch_value(context, 'bev_affine_calibration', PAPER_LAUNCH_DEFAULTS['bev_affine_calibration']),
         'bbox_contact_z_m': float(_launch_value(context, 'bbox_contact_z_m', PAPER_LAUNCH_DEFAULTS['bbox_contact_z_m'])),
         'pixel_max_correction_jump_m': float(_launch_value(context, 'pixel_max_correction_jump_m', PAPER_LAUNCH_DEFAULTS['pixel_max_correction_jump_m'])),
         'pixel_correction_nis_threshold': float(_launch_value(context, 'pixel_correction_nis_threshold', PAPER_LAUNCH_DEFAULTS['pixel_correction_nis_threshold'])),
@@ -903,6 +905,13 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     )
 
     yolo_params = {
+        # The detector was missing use_sim_time, so it ran on the wall clock while
+        # the camera frame header.stamp + planner run on sim time. That made every
+        # detector-side latency stamp (frame_age_at_publish_s, detector_total_latency_s,
+        # yolo_receive/start/finish/publish_stamp) mix clock bases -> garbage ~1.78e9
+        # epoch offsets in the logs. (The EKF was unaffected: it times off the sim
+        # header.stamp, not the detector clock.)
+        'use_sim_time': True,
         'pixel_noise_sigma': _SENSOR_PIXEL_NOISE_SIGMA,
         'seed': cfg['seed'],
         'model_path': cfg['yolo_model'],
@@ -946,6 +955,12 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'keypoint_marker_world_z': keypoint_marker_world_z,
         'keypoint_heading_sigma_rad': float(cfg.get('keypoint_heading_sigma_rad', 0.05)),
         'diagnostics_match_tolerance_s': diagnostics_match_tolerance_s,
+        # BEV calibration MUST be applied at the projection node. These were
+        # previously only passed to the logger/planner, so the state node ran with
+        # the default 0.0 and the south-bias correction never took effect.
+        'bev_y_calibration_offset_m': cfg.get('bev_y_calibration_offset_m', 0.0),
+        'bev_affine_calibration': cfg.get('bev_affine_calibration', ''),
+        'bbox_contact_z_m': cfg.get('bbox_contact_z_m', 0.0),
         **cfg['camera_params'],
     }
     pixel_to_bev = Node(
@@ -1064,6 +1079,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'keypoint_heading_sigma_rad': cfg.get('keypoint_heading_sigma_rad', 0.05),
                 'diagnostics_match_tolerance_s': diagnostics_match_tolerance_s,
                 'bev_y_calibration_offset_m': cfg['bev_y_calibration_offset_m'],
+                'bev_affine_calibration': cfg.get('bev_affine_calibration', ''),
                 'bbox_contact_z_m': cfg['bbox_contact_z_m'],
                 'pixel_correction_nis_threshold': cfg['pixel_correction_nis_threshold'],
                 'world_profiles_path': cfg['world_profiles_path'],

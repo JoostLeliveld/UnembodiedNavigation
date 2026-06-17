@@ -10,8 +10,8 @@ linked from `paper_artifacts/`.
 | Asset | Use |
 | --- | --- |
 | [`../../paper_artifacts/figures/gp_pipeline_aws.png`](../../paper_artifacts/figures/gp_pipeline_aws.png) | Current end-to-end GP pipeline figure. |
-| [`../../paper_artifacts/gp/aws_gp_v7b/gp_fit_summary.csv`](../../paper_artifacts/gp/aws_gp_v7b/gp_fit_summary.csv) | Fit summary. |
-| [`../../paper_artifacts/gp/aws_gp_v7b/gp_manifest.json`](../../paper_artifacts/gp/aws_gp_v7b/gp_manifest.json) | Artifact metadata. |
+| [`../../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_fit_summary.csv`](../../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_fit_summary.csv) | Fit summary. |
+| [`../../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_manifest.json`](../../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_manifest.json) | Artifact metadata. |
 
 ## Planned Media Slots
 
@@ -26,7 +26,7 @@ linked from `paper_artifacts/`.
 
 ## Capture Checklist
 
-1. Load `paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz`.
+1. Load `paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz`.
 2. Render raw samples, mean, conservative reliability, and uncertainty maps with
    consistent axes.
 3. Animate a representative route querying the map.

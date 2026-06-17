@@ -9,8 +9,8 @@ linked from `paper_artifacts/` to avoid duplicated assets.
 
 | Asset | Use |
 | --- | --- |
-| [`../../paper_artifacts/perception/aws_yolo_simseg_v2/val_batch0_pred.jpg`](../../paper_artifacts/perception/aws_yolo_simseg_v2/val_batch0_pred.jpg) | Validation examples with selected robot boxes. |
-| [`../../paper_artifacts/perception/aws_yolo_simseg_v2/results.png`](../../paper_artifacts/perception/aws_yolo_simseg_v2/results.png) | Training curves. |
+| [`../../paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg`](../../paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg) | Validation examples with selected robot boxes. |
+| [`../../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png`](../../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png) | Training curves. |
 | [`../../paper_artifacts/figures/yolo_training_clarification.png`](../../paper_artifacts/figures/yolo_training_clarification.png) | Dataset and label-generation explanation. |
 
 ## Planned Media Slots
@@ -27,6 +27,6 @@ linked from `paper_artifacts/` to avoid duplicated assets.
 
 1. Launch the locked warehouse world with the external camera.
 2. Record `/external_camera/image_raw`.
-3. Run the detector with `aws_yolo_simseg_v2/model.pt`.
+3. Run the detector with `warehouse_yolo_detector_v1/model.pt`.
 4. Overlay selected box, score, and bottom-centre pixel.
 5. Export a small GIF preview and a compressed MP4.

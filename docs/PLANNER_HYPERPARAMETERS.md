@@ -12,7 +12,7 @@ optimiser), never new terms.
 References:
 - Code: `src/planning/planning/planners/base_planner.py` (constructor signature has the
   full list), `src/planning/planning/core/casadi_efe.py` (math).
-- Active paper-facing config: `scripts/visibility_comparison/aws_f31b1_final_config.yaml`.
+- Active paper-facing config: `scripts/visibility_comparison/warehouse_visibility_campaign.yaml`.
   Older smoke/probe configs are historical tuning material, not the locked AWS runtime.
 
 ---
@@ -24,7 +24,7 @@ The CasADi objective is
 with `risk_scale = risk_weight_obs · observation_risk_scale` and
 `amb_scale = ambiguity_weight · ambiguity_term_scale`.
 
-| name | aws_f31b1 | what it does | tune up when | tune down when |
+| name | warehouse_campaign | what it does | tune up when | tune down when |
 |---|---:|---|---|---|
 | `ambiguity_weight` | 1.0 | base weight on the entropy of the conditional observation covariance per step | you want C2 to detour around camera-poor regions more aggressively | ambiguity dominates logged route-seed costs or C2 refuses unavoidable camera-poor regions |
 | `ambiguity_term_scale` | 1.0 | second multiplier on ambiguity; kept at 1 so the weight is the main ambiguity knob | — | — |
@@ -46,7 +46,7 @@ covariance for C2; it is not added as a reward.
 
 ## Visibility model (R_plan blending)
 
-| name | aws_f31b1 | what it does |
+| name | warehouse_campaign | what it does |
 |---|---:|---|
 | `r_visible_uv` | 2.5 | observation-noise std (px) when `p_vis_eff ≈ 1`. Lower = sharper sensor where visible. |
 | `r_miss_uv` | 40.0 | observation-noise std (px) when `p_vis_eff ≈ 0`. Higher = fuzzier sensor in shadow. |
@@ -68,7 +68,7 @@ training/diagnostic artifacts only.
 
 ## Goal prior (scheduling of the goal observation distribution)
 
-| name | aws_f31b1 | what it does |
+| name | warehouse_campaign | what it does |
 |---|---:|---|
 | `goal_prior_u_std_start` | 50.0 | goal-pixel std at horizon step 0 (wide) |
 | `goal_prior_u_std_final` | 12.0 | goal-pixel std at horizon step `goal_progress_n_steps` (tight) |
@@ -90,7 +90,7 @@ paper-facing closed-loop values until the full artifact chain is rerun.
 
 ## Look-ahead and time discretisation
 
-| name | aws_f31b1 | what it does |
+| name | warehouse_campaign | what it does |
 |---|---:|---|
 | `global_horizon` | 120 | route-level EFE horizon used in the hierarchical runtime |
 | `local_horizon` | 6 | local tracker horizon; inert for EFE because `use_simple_local_controller=true` |
@@ -114,7 +114,7 @@ controller change should be treated as a separate planner variant.
 
 ## No-go / collision
 
-Current paper-facing values are from `aws_f31b1_final_config.yaml` (2026-06-11). The
+Current paper-facing values are from `warehouse_visibility_campaign.yaml` (2026-06-11). The
 no-go is now a hinged-log **`warning_band`** keep-in penalty (replaces the old softplus /
 `log_barrier` interior-biased barrier, which collapsed the C2 route split at weight>200).
 
@@ -140,7 +140,7 @@ and campaign evidence still support it.
 
 ## Optimiser
 
-| name | aws_f31b1 | what it does |
+| name | warehouse_campaign | what it does |
 |---|---:|---|
 | `optimizer_maxiter` | 120 | L-BFGS-B iteration cap |
 | `optimizer_maxfun` | 720 | L-BFGS-B function-evaluation cap |
@@ -185,7 +185,7 @@ and reported as optimizer basin handling.
 
 ## Process and command noise
 
-| name | aws_f31b1 | what it does |
+| name | warehouse_campaign | what it does |
 |---|---:|---|
 | `process_noise_xy` | 0.012 | σ_v — **forward-velocity** actuation-noise PSD (std per √s), NOT an xy-position noise; integrated over dt inside the analytical Q_d |
 | `process_noise_theta` | 0.05 | σ_ω — yaw-rate actuation-noise PSD (rad/√s); integrated over dt inside Q_d |

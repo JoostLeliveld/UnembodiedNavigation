@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Paired representative run on the route-choice task (F31_b1, seed 0).
+"""Paired representative run on a route-choice task.
 
 The default source is the clean verification run archived under
 `_paper_runs/paired_mechanism_clean_verify`, generated from the locked campaign
 configuration with the same runtime settings used by the paper campaign: YOLO
-masks off, keep-in warning-band no-go cost, lane-graph route seeds, GP
-aws_gp_v7b, and the same noise/controller parameters.
+masks off, keep-in warning-band no-go cost, lane-graph route seeds, the
+warehouse visibility GP, and the same noise/controller parameters.
 
 Three panels:
   (a) C1 route map: global plan, executed trajectory, belief mean, and uncertainty band,
@@ -26,24 +26,45 @@ import os
 ROOT = Path(__file__).resolve().parents[2]
 CAMP_NAME = os.environ.get("PAIRED_CAMP", "_paper_runs/paired_mechanism_clean_verify")
 CAMP = ROOT/"logs/visibility_comparison"/CAMP_NAME
-TASK = os.environ.get("PAIRED_TASK", "F31_b1_apron_a3_mid")
+TASK = os.environ.get("PAIRED_TASK", "route_apron_to_a3_mid")
 SEED = int(os.environ.get("PAIRED_SEED", "0"))
-GPZ = ROOT/"paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz"
-LOCKED_CONFIG = ROOT/"scripts/visibility_comparison/aws_f31b1_final_config.yaml"
+GPZ = ROOT/os.environ.get("PAIRED_GP", "paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz")
+LOCKED_CONFIG = ROOT/"scripts/visibility_comparison/warehouse_visibility_campaign.yaml"
 _OUTNAME = os.environ.get("PAIRED_OUT", "paired_mechanism_taskA")
 OUT = ROOT/f"paper_artifacts/figures/{_OUTNAME}.pdf"
 COPY_TO_THESIS = os.environ.get("PAIRED_COPY_TO_THESIS", "1") not in ("0", "false", "False") and _OUTNAME == "paired_mechanism_taskA"
 PAPER = ROOT.parent/f"thesis-report/figures/campaign/{_OUTNAME}.pdf"
 DATA_DIR = ROOT/f"paper_artifacts/figures/{_OUTNAME}_data"
-START, GOAL, CAM = (3.3, -1.0), (1.0, 1.75), (0.0, -5.5)
+CAM = (0.0, -5.5)
 C1C, C2C = "#e8000b", "#1a5fd6"
 BELIEF_C = "#7b3294"
-MAP_XLIM = (0.45, 3.75)
-MAP_YLIM = (-2.85, 2.20)
+# START, GOAL and the MAP_XLIM/MAP_YLIM window are derived PER TASK from the run
+# data after the conditions are loaded (see below). They used to be hardcoded to
+# F31 (start (3.3,-1.0), goal (1.0,1.75), window (0.45,3.75)x(-2.85,2.20)) and so
+# were wrong for every other task -- e.g. b2/b6 live around x=-5..-3 and fell
+# entirely outside the old window. Env overrides: PAIRED_START / PAIRED_GOAL
+# ("x,y"), PAIRED_TITLE_A / PAIRED_TITLE_B for the two map-panel titles.
+START = GOAL = (math.nan, math.nan)
+MAP_XLIM = MAP_YLIM = None
+
+LEGACY_TASK_DIRS = {
+    "route_apron_to_a3_mid": "F31_b1_apron_a3_mid",
+    "route_apron_to_a2_mid": "b5_a4_apron_to_a2_mid",
+    "route_west_to_a1_upper": "b2_a0_west_to_a1_upper",
+    "control_west_to_a1_low": "b6_a0_west_to_a1_low_control",
+}
 
 
 def _run_dir(cond):
-    matches = sorted(glob.glob(str(CAMP/TASK/cond/f"seed{SEED}"/"experiment_*")))
+    task_dirs = [TASK]
+    legacy = LEGACY_TASK_DIRS.get(TASK)
+    if legacy:
+        task_dirs.append(legacy)
+    matches = []
+    for task_dir in task_dirs:
+        matches = sorted(glob.glob(str(CAMP/task_dir/cond/f"seed{SEED}"/"experiment_*")))
+        if matches:
+            break
     if not matches:
         raise FileNotFoundError(f"No run directory for {CAMP}/{TASK}/{cond}/seed{SEED}")
     return matches[-1]
@@ -116,7 +137,7 @@ def _copy_source_data(selected_runs, provenance):
         copied.append(_rel(dst))
     locked_config = LOCKED_CONFIG
     if locked_config.exists():
-        dst = DATA_DIR / "aws_f31b1_final_config.yaml"
+        dst = DATA_DIR / "warehouse_visibility_campaign.yaml"
         shutil.copy2(locked_config, dst)
         copied.append(_rel(dst))
     gp_manifest = GPZ.parent / "gp_manifest.json"
@@ -126,9 +147,9 @@ def _copy_source_data(selected_runs, provenance):
         copied.append(_rel(dst))
     provenance["copied_source_files"] = copied
     (DATA_DIR / "README.md").write_text(
-        "# paired_mechanism_taskA source data\n\n"
+        f"# {_OUTNAME} source data\n\n"
         "This directory contains the exact run files used to generate "
-        "`paired_mechanism_taskA.pdf`.\n\n"
+        f"`{_OUTNAME}.pdf`.\n\n"
         "Source campaign: `logs/visibility_comparison/{camp}`\n\n"
         "Task: `{task}`, seed: `{seed}`\n\n"
         "Regenerate the figure with:\n\n"
@@ -138,7 +159,7 @@ def _copy_source_data(selected_runs, provenance):
         "  python3 scripts/paper_figures/make_paired_mechanism.py\n"
         "```\n\n"
         "The selected runs use the locked keep-in warning-band no-go setting, "
-        "YOLO masks disabled, and the aws_gp_v7b reliability artifact. The "
+        "YOLO masks disabled, and the warehouse visibility GP artifact. The "
         "full runtime values are recorded in each condition's `run_manifest.json`.\n"
         .format(camp=CAMP_NAME, task=TASK, seed=SEED),
         encoding="utf-8",
@@ -215,7 +236,11 @@ def load_cond(cond):
     # YOLO detections from perception.csv
     det = []  # (t, score, accepted)
     for r in per:
-        st = _f(r, "log_stamp")
+        # Place detection markers at the camera frame stamp.  Using log_stamp
+        # shifts them along the trajectory by detector/logger latency.
+        st = _f(r, "diag_stamp")
+        if not math.isfinite(st):
+            st = _f(r, "log_stamp")
         sc = _f(r, "yolo_score_selected")
         if not math.isfinite(st) or (st - t0) < -0.05:
             continue
@@ -253,7 +278,12 @@ def load_cond(cond):
     except FileNotFoundError:
         pass
     reached = str(summ.get("completion_reason", "")) == "goal_reached"
-    return dict(tx=np.array(tx), ty=np.array(ty),
+    # Per-task start (first valid truth pose) and goal (logged goal_x/goal_y).
+    start_xy = (float(tx[0]), float(ty[0])) if len(tx) else (math.nan, math.nan)
+    gx = next((_f(r, "goal_x") for r in reversed(exp) if math.isfinite(_f(r, "goal_x"))), math.nan)
+    gy = next((_f(r, "goal_y") for r in reversed(exp) if math.isfinite(_f(r, "goal_y"))), math.nan)
+    return dict(start=start_xy, goal=(gx, gy),
+                tx=np.array(tx), ty=np.array(ty),
                 belief_t=np.array(belief_t), belief_x=np.array(belief_x),
                 belief_y=np.array(belief_y), belief_cov=np.array(belief_cov),
                 belief_r2s=np.array(belief_r2s),
@@ -267,6 +297,48 @@ def load_cond(cond):
 
 
 C1, C2 = load_cond("C1"), load_cond("C2")
+
+
+def _pick_xy(*candidates):
+    for a, b in candidates:
+        if math.isfinite(a) and math.isfinite(b):
+            return (float(a), float(b))
+    return (math.nan, math.nan)
+
+
+def _env_xy(name, default):
+    v = os.environ.get(name)
+    if v:
+        try:
+            a, b = (float(z) for z in v.split(","))
+            return (a, b)
+        except ValueError:
+            pass
+    return default
+
+
+# Per-task geometry from the runs (C1/C2 agree; fall back across them just in case).
+START = _env_xy("PAIRED_START", _pick_xy(C1["start"], C2["start"]))
+GOAL = _env_xy("PAIRED_GOAL", _pick_xy(C1["goal"], C2["goal"]))
+
+# Auto-fit the map window to the union of both trajectories / plans / belief means
+# plus start and goal, padded and clamped to the GP field extent.
+_xs_all, _ys_all = [], []
+for _c in (C1, C2):
+    for _kx, _ky in (("tx", "ty"), ("plan_x", "plan_y"), ("belief_x", "belief_y")):
+        _ax = np.asarray(_c[_kx], float).ravel()
+        _ay = np.asarray(_c[_ky], float).ravel()
+        _m = np.isfinite(_ax) & np.isfinite(_ay)
+        _xs_all += list(_ax[_m]); _ys_all += list(_ay[_m])
+for _p in (START, GOAL):
+    if math.isfinite(_p[0]) and math.isfinite(_p[1]):
+        _xs_all.append(_p[0]); _ys_all.append(_p[1])
+_pad = 0.5
+if _xs_all:
+    MAP_XLIM = (max(extent[0], min(_xs_all) - _pad), min(extent[1], max(_xs_all) + _pad))
+    MAP_YLIM = (max(extent[2], min(_ys_all) - _pad), min(extent[3], max(_ys_all) + _pad))
+else:
+    MAP_XLIM, MAP_YLIM = (extent[0], extent[1]), (extent[2], extent[3])
 
 plt.rcParams.update({"font.size": 10.0, "pdf.fonttype": 42, "ps.fonttype": 42})
 fig = plt.figure(figsize=(11.4, 8.0))
@@ -333,7 +405,9 @@ def draw_map(ax, traj, cmap, title, color, show_cbar=False):
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02, label=r"$\rho_{\mathrm{plan}}$")
 
 
-draw_map(axa, C1, "Greys_r", "(a) C1: short route, weaker camera support", C1C)
+_TITLE_A = os.environ.get("PAIRED_TITLE_A", "(a) C1: short route, weaker camera support")
+_TITLE_B = os.environ.get("PAIRED_TITLE_B", "(b) C2: longer route, stronger camera support")
+draw_map(axa, C1, "Greys_r", _TITLE_A, C1C)
 axa.legend(handles=[
     Line2D([0], [0], marker="o", color="none", markerfacecolor="#16a34a", markeredgecolor="k", markersize=8, label="start"),
     Line2D([0], [0], marker="*", color="none", markerfacecolor="#e41a1c", markeredgecolor="k", markersize=11, label="goal"),
@@ -344,7 +418,7 @@ axa.legend(handles=[
     Line2D([0], [0], marker="o", color="0.4", markerfacecolor="white", markeredgecolor="0.4", lw=0, markersize=6, label="YOLO update"),
     Line2D([0], [0], marker="x", color="0.4", lw=0, markersize=7, label="YOLO miss"),
 ], loc="lower left", fontsize=7.2, framealpha=0.9, ncol=2, columnspacing=0.9, handlelength=2.0)
-draw_map(axb, C2, "viridis", "(b) C2: longer route, stronger camera support", C2C, show_cbar=True)
+draw_map(axb, C2, "viridis", _TITLE_B, C2C, show_cbar=True)
 
 # (c) truth-belief error + 2-sigma radius
 for cond, col, lab in ((C1, C1C, "C1"), (C2, C2C, "C2")):

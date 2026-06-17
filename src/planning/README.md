@@ -71,7 +71,7 @@ This package answers the main research question: how does planning change when f
 ## Demonstrated Artifact
 
 The paper-facing GP artifact is
-[`../../paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz`](../../paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz).
+[`../../paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz`](../../paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz).
 Its fit summary records 238 training targets with raw detector-score targets
 from `0.0016` to `0.9232` and mean target `0.5498`.
 

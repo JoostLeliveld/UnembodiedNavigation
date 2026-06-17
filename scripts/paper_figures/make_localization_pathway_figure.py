@@ -52,12 +52,11 @@ def _polygon_patch(poly, **kw):
 REPO = Path(__file__).resolve().parents[2]
 THESIS = REPO.parent / "thesis-report"
 
-# Current-world (camera z=4.8/y=-5.5) capture frame at true (-4.61,-1.67), robot visible;
-# oracle bottom-centre pixel (159.2,345.8) matches world_to_pixel for the profile camera. The
-# previous aws_simseg_v2 training image was removed during repo cleanup.
+# Current-world capture frame at true (-4.61,-1.67), robot visible;
+# oracle bottom-centre pixel (159.2,345.8) matches world_to_pixel for the profile camera.
 DEFAULT_IMAGE = REPO / "paper_artifacts/figures/inputs/loc_pathway_frame_v7b.jpg"
-DEFAULT_MODEL = REPO / "local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt"
-DEFAULT_GP = REPO / "paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz"
+DEFAULT_MODEL = REPO / "logs/perception_models/warehouse_yolo_detector_v1/model.pt"
+DEFAULT_GP = REPO / "paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz"
 DEFAULT_PROFILE = REPO / "src/experiments/config/world_profiles.yaml"
 DEFAULT_OUT = THESIS / "figures/localization_pathway.pdf"
 DEFAULT_PREVIEW = REPO / "paper_artifacts/figures/localization_pathway.png"

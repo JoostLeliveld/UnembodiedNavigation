@@ -222,6 +222,8 @@ class ExperimentLogger(Node):
         self.declare_parameter('keypoint_heading_sigma_rad', 0.05)
         self.declare_parameter('diagnostics_match_tolerance_s', 1e-3)
         self.declare_parameter('bev_y_calibration_offset_m', 0.0)
+        self.declare_parameter('bev_affine_calibration', '')
+        self.declare_parameter('bbox_contact_z_m', 0.0)
         self.declare_parameter('pixel_correction_nis_threshold', 0.0)
         self.declare_parameter('odom_topic', '/odom_noisy')
         self.declare_parameter('run_dir_topic', '/experiment/run_dir')
@@ -437,6 +439,11 @@ class ExperimentLogger(Node):
         self.bev_y_calibration_offset_m = float(
             self.get_parameter('bev_y_calibration_offset_m').value
         )
+        self.bev_affine_calibration = str(
+            self.get_parameter('bev_affine_calibration').value or ''
+        ).strip()
+        self._bev_affine = self._parse_bev_affine(self.bev_affine_calibration)
+        self.bbox_contact_z_m = float(self.get_parameter('bbox_contact_z_m').value)
         self.pixel_correction_nis_threshold = float(
             self.get_parameter('pixel_correction_nis_threshold').value
         )
@@ -585,6 +592,8 @@ class ExperimentLogger(Node):
             'keypoint_heading_sigma_rad': self.keypoint_heading_sigma_rad,
             'diagnostics_match_tolerance_s': self.diagnostics_match_tolerance_s,
             'bev_y_calibration_offset_m': self.bev_y_calibration_offset_m,
+            'bev_affine_calibration': self.bev_affine_calibration,
+            'bbox_contact_z_m': self.bbox_contact_z_m,
             'pixel_correction_nis_threshold': self.pixel_correction_nis_threshold,
             'odom_topic': self.odom_topic,
             'seed': self.seed,
@@ -1039,6 +1048,28 @@ class ExperimentLogger(Node):
     @staticmethod
     def _stamp_to_float(stamp_msg) -> float:
         return float(stamp_msg.sec) + float(stamp_msg.nanosec) * 1e-9
+
+    @staticmethod
+    def _parse_bev_affine(raw: str):
+        text = str(raw or '').strip()
+        if not text:
+            return None
+        try:
+            vals = [float(v) for v in text.replace(';', ',').split(',') if v.strip()]
+        except ValueError:
+            return None
+        if len(vals) != 6:
+            return None
+        return vals
+
+    def _apply_bev_calibration(self, x: float, y: float) -> tuple[float, float]:
+        if self._bev_affine is not None:
+            c = self._bev_affine
+            return (
+                c[0] * float(x) + c[1] * float(y) + c[2],
+                c[3] * float(x) + c[4] * float(y) + c[5],
+            )
+        return float(x), float(y) + self.bev_y_calibration_offset_m
 
     @staticmethod
     def _yaw_from_quaternion(q) -> float:
@@ -1709,12 +1740,21 @@ class ExperimentLogger(Node):
         pred_world_y_calibrated = math.nan
         localization_error_calibrated_m = math.nan
         if obs_ok and math.isfinite(pixel_pose_u) and math.isfinite(pixel_pose_v):
-            world = self.camera_model.pixel_to_world(float(pixel_pose_u), float(pixel_pose_v))
+            if self.bbox_contact_z_m > 0.0:
+                world = self.camera_model.pixel_to_world_at_z(
+                    float(pixel_pose_u),
+                    float(pixel_pose_v),
+                    self.bbox_contact_z_m,
+                )
+            else:
+                world = self.camera_model.pixel_to_world(float(pixel_pose_u), float(pixel_pose_v))
             if world is not None:
                 pred_world_x = float(world[0])
                 pred_world_y = float(world[1])
-                pred_world_x_calibrated = pred_world_x
-                pred_world_y_calibrated = pred_world_y + self.bev_y_calibration_offset_m
+                pred_world_x_calibrated, pred_world_y_calibrated = self._apply_bev_calibration(
+                    pred_world_x,
+                    pred_world_y,
+                )
                 if true_ok:
                     localization_error_m = math.hypot(pred_world_x - true_x, pred_world_y - true_y)
                     localization_error_calibrated_m = math.hypot(

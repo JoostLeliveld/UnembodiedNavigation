@@ -1,0 +1,272 @@
+{
+  "n": 1865,
+  "support_bins": {
+    "<1%": 214,
+    "1-5%": 14,
+    "5-10%": 17,
+    ">=10%": 1620
+  },
+  "lowest": [
+    {
+      "split": "train",
+      "stem": "53484_47.950",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/53484_47.950.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/53484_47.950.txt",
+      "support": 0.0,
+      "bbox_px": [
+        892,
+        190,
+        912,
+        212
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "53484_48.511",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/53484_48.511.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/53484_48.511.txt",
+      "support": 0.0,
+      "bbox_px": [
+        880,
+        174,
+        899,
+        196
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "53484_48.808",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/53484_48.808.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/53484_48.808.txt",
+      "support": 0.0,
+      "bbox_px": [
+        873,
+        165,
+        891,
+        187
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "53484_49.072",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/53484_49.072.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/53484_49.072.txt",
+      "support": 0.0,
+      "bbox_px": [
+        867,
+        158,
+        885,
+        180
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "53484_49.336",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/53484_49.336.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/53484_49.336.txt",
+      "support": 0.0,
+      "bbox_px": [
+        861,
+        150,
+        879,
+        172
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "53484_49.930",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/53484_49.930.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/53484_49.930.txt",
+      "support": 0.0,
+      "bbox_px": [
+        849,
+        134,
+        866,
+        156
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "53484_51.910",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/53484_51.910.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/53484_51.910.txt",
+      "support": 0.0,
+      "bbox_px": [
+        794,
+        115,
+        810,
+        136
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "53484_52.207",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/53484_52.207.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/53484_52.207.txt",
+      "support": 0.0,
+      "bbox_px": [
+        784,
+        116,
+        799,
+        137
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "54252_67.123",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/54252_67.123.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/54252_67.123.txt",
+      "support": 0.0,
+      "bbox_px": [
+        735,
+        135,
+        750,
+        156
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "54252_67.387",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/54252_67.387.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/54252_67.387.txt",
+      "support": 0.0,
+      "bbox_px": [
+        732,
+        128,
+        747,
+        149
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "54252_67.651",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/54252_67.651.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/54252_67.651.txt",
+      "support": 0.0,
+      "bbox_px": [
+        729,
+        121,
+        744,
+        143
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "54252_67.915",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/54252_67.915.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/54252_67.915.txt",
+      "support": 0.0,
+      "bbox_px": [
+        727,
+        115,
+        741,
+        136
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "54252_68.179",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/54252_68.179.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/54252_68.179.txt",
+      "support": 0.0,
+      "bbox_px": [
+        724,
+        108,
+        739,
+        129
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "54252_68.707",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/54252_68.707.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/54252_68.707.txt",
+      "support": 0.0,
+      "bbox_px": [
+        724,
+        108,
+        739,
+        129
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "54252_68.971",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/54252_68.971.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/54252_68.971.txt",
+      "support": 0.0,
+      "bbox_px": [
+        724,
+        108,
+        739,
+        129
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "54252_69.235",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/54252_69.235.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/54252_69.235.txt",
+      "support": 0.0,
+      "bbox_px": [
+        724,
+        108,
+        739,
+        129
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "54252_69.532",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/54252_69.532.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/54252_69.532.txt",
+      "support": 0.0,
+      "bbox_px": [
+        724,
+        108,
+        739,
+        129
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "54252_69.994",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/54252_69.994.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/54252_69.994.txt",
+      "support": 0.0,
+      "bbox_px": [
+        724,
+        108,
+        739,
+        129
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "54252_70.225",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/54252_70.225.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/54252_70.225.txt",
+      "support": 0.0,
+      "bbox_px": [
+        725,
+        108,
+        739,
+        129
+      ]
+    },
+    {
+      "split": "train",
+      "stem": "54252_70.753",
+      "image": "logs/perception_datasets/aws_simseg_v3_currentcam/images/train/54252_70.753.png",
+      "label": "logs/perception_datasets/aws_simseg_v3_currentcam/labels/train/54252_70.753.txt",
+      "support": 0.0,
+      "bbox_px": [
+        734,
+        111,
+        748,
+        132
+      ]
+    }
+  ],
+  "output": "/home/joostleliveld/Thesis/UnembodiedNavigation/paper_artifacts/figures/diagnostics/yolo_truth_label_low_color_support.png"
+}

@@ -1,36 +1,40 @@
 # Machine-readable contract for paper-facing runs — the SINGLE runtime contract.
-# (Consolidates the former runtime_method_contract.md + F86_method_and_runtime_contract.md.)
+# Single runtime contract for paper-facing warehouse runs.
 # Keep aligned with docs/experiment_registry.md and the
-# active config scripts/visibility_comparison/aws_f31b1_final_config.yaml.
+# active config scripts/visibility_comparison/warehouse_visibility_campaign.yaml.
 
 paper_runtime_contract:
-  version: 0.7
-  updated: 2026-06-12
+  version: 0.8
+  updated: 2026-06-17
   purpose: >
     Define the behavior that counts as paper-facing execution for the
     external-camera visibility-aware EFE experiments.
+  changelog_0_8: >
+    Rename the paper-facing surface to neutral warehouse artifact and task names.
+    The active campaign config is scripts/visibility_comparison/warehouse_visibility_campaign.yaml,
+    the detector is warehouse_yolo_detector_v1, and the GP is warehouse_visibility_gp_v1.
+    Historical phase-coded configs, detector names, and GP names are archived.
   changelog_0_7: >
-    Reconcile to the locked robustness campaign. Paper-facing evidence now uses four
-    tasks (F31_b1, b5, b2, b6 control) with five seeds per condition. Belief-tube
+    Reconcile to the locked robustness campaign. Paper-facing evidence uses four
+    semantic warehouse tasks with five seeds per condition. Belief-tube
     no-go is active in the global solve (use_belief_nogo_cost=true,
     nogo_belief_kappa=1.0); route difference is learned covariance plus belief-tube
     feasibility, not ambiguity inflation or direct visibility reward. Runtime YOLO
     localization uses bbox bottom-centre (yolo_use_masks=false). The Results section
     is not used in the paper draft; campaign outcomes live in Experiments.
   changelog_0_6: >
-    GP promoted to aws_gp_v7b (= v7 capture + added A0 west-corridor column at x=-4.61;
-    same fit params; aws_gp_v7 archived). Process noise now uses the EXACT integrated
+    Process noise now uses the EXACT integrated
     Q_d(theta, v, dt) per step (analytical, state-dependent; PSD x dt; matches appendix
     app:heading) instead of a frozen diagonal — prior single-version EFE numbers are
     superseded. Keep-in no-go now measures clearance to the TRUE driveable-union boundary
     (no phantom seam penalty). See docs/uncertainty_propagation.md.
   changelog_0_5: >
     Reconcile to the locked 2026-06-10 runtime. Camera raised+back (z=4.8, y=-5.5);
-    GP = aws_gp_v7 (length_scale 0.90, beta 0.5, noise_var 0.05). Heading =
+    GP length_scale 0.90, beta 0.5, noise_var 0.05. Heading =
     camera_xy_only (no odom-yaw anchor, no keypoint/visual heading). No-go =
     hinged-log warning_band (keep_in), weight 2000, band 0.05 (replaces log_barrier
     and the belief-nogo route mechanism). Global EFE horizon 120 + shared simple
-    proportional local tracker. Main task = F31_b1_apron_a3_mid (a0 = saved secondary).
+    proportional local tracker. Main task = route_apron_to_a3_mid (a0 = saved secondary).
     Absorbed the C1/C2 + multistart + driveability rules from the two retired .md contracts.
 
   evidence_status: paper_ready_with_caveats
@@ -38,8 +42,9 @@ paper_runtime_contract:
   campaign_status_2026_06_12: >
     LOCKED ROBUSTNESS CAMPAIGN: C2 reaches 16/20 runs with 2/20 collisions,
     1/20 near-success, and 1/20 infrastructure-invalid run; C1 reaches 12/20
-    with 8/20 collisions. b6 acts as a control where both conditions reach.
-    b2 remains hard for the baseline: C1 collides in 5/5 seeds, while C2 reaches
+    with 8/20 collisions. `control_west_to_a1_low` acts as a control where both
+    conditions reach. `route_west_to_a1_upper` remains hard for the baseline:
+    C1 collides in 5/5 seeds, while C2 reaches
     4/5 and has one infrastructure-invalid run. Continuous localization metrics
     are pooled over clean successes only.
 
@@ -47,22 +52,20 @@ paper_runtime_contract:
     - warehouse_aws.world.sdf
 
   reported_tasks:
-    - F31_b1_apron_a3_mid        # MAIN route-choice (occluded mid vs visible lower-sweep)
-    - b5_a4_apron_to_a2_mid      # discriminator
-    - b2_a0_west_to_a1_upper     # hard discriminator
-    - b6_a0_west_to_a1_low_control # control
-  saved_secondary_tasks:
-    - a0_west_to_a1_upper_blocked_mid   # saved a0 line for a future multi-task run
+    - route_apron_to_a3_mid       # route-choice discriminator
+    - route_apron_to_a2_mid       # stronger route-choice discriminator
+    - route_west_to_a1_upper      # hard west-side discriminator
+    - control_west_to_a1_low      # visible-route control
 
   locked_artifacts:
     world: warehouse_aws.world.sdf
     camera_pose: {x: 0.0, y: -5.5, z: 4.8}     # raised+back, locked 2026-06-10
-    gp_artifact: paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz
+    gp_artifact: paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz
     gp_params: {kernel: rbf, length_scale: 0.90, beta: 0.5, noise_var: 0.05}
-    detector: local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt
+    detector: logs/perception_models/warehouse_yolo_detector_v1/model.pt
     process_noise: {model: analytical_Qd, process_noise_xy: 0.012, process_noise_theta: 0.05,
                     note: "sigma_v / sigma_omega actuation PSDs (std per sqrt s), integrated over dt; see uncertainty_propagation.md"}
-    superseded: {gps: [aws_gp_v5, aws_gp_v6, aws_gp_v6b, aws_gp_v7], cameras: ["z=4.5/y=-4.9", "z=4.9/y=-5.5"]}
+    superseded: {gps: [aws_gp_v5, aws_gp_v6, aws_gp_v6b, aws_gp_v7, aws_gp_v7b], cameras: ["z=4.5/y=-4.9", "z=4.9/y=-5.5"]}
 
   allowed_planner_conditions:
     constant_R_efe:        # C1
@@ -112,10 +115,10 @@ paper_runtime_contract:
       shared edges between adjacent prisms (both overlapping AND exactly-abutting, e.g.
       the apron/lower-main/aisle junction at y=-2.85): a sub-edge is kept only if a point
       probed just OUTWARD of it is not covered by another prism. This removes the phantom
-      internal seams (was 22/79 segments) that distorted keep-in clearance; verified
-      0 phantom seams and plans 0.0% outside the lane union on all 6 route-choice tasks.
+      internal seams that distorted keep-in clearance; verified 0 phantom seams
+      and plans 0.0% outside the lane union on the current route-choice tasks.
 
-  locked_runtime:   # mirrors scripts/visibility_comparison/aws_f31b1_final_config.yaml (2026-06-11)
+  locked_runtime:   # mirrors scripts/visibility_comparison/warehouse_visibility_campaign.yaml (2026-06-11)
     hierarchical: true
     global_solve_role: route_level_EFE_choice
     global_horizon: 120

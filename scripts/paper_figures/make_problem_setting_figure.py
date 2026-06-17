@@ -38,8 +38,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 THESIS_REPORT = REPO_ROOT.parent / "thesis-report"
 TASKS_PATH = REPO_ROOT / "src" / "experiments" / "config" / "tasks.yaml"
-WORLD_PATH = REPO_ROOT / "src" / "sim" / "gazebo_worlds" / "worlds" / "warehouse_occ_light.world.sdf"
-DEFAULT_VISIBILITY_ARTIFACT = REPO_ROOT / "paper_artifacts" / "gp" / "aws_gp_v7b" / "yolo_score_raw_gp.npz"
+WORLD_PATH = REPO_ROOT / "src" / "sim" / "gazebo_worlds" / "worlds" / "warehouse_aws.world.sdf"
+DEFAULT_VISIBILITY_ARTIFACT = REPO_ROOT / "paper_artifacts" / "gp" / "warehouse_visibility_gp_v1" / "yolo_score_raw_gp.npz"
 OUT_DIR = THESIS_REPORT / "figures"
 
 
@@ -123,7 +123,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--task-name",
         type=str,
-        default="shadow_tradeoff_a",
+        default="route_apron_to_a3_mid",
         help="Task entry from tasks.yaml whose start/goal define the figure markers.",
     )
     parser.add_argument(
@@ -137,9 +137,9 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_task(task_name: str = "shadow_tradeoff_a") -> tuple[dict, dict]:
+def _load_task(task_name: str = "route_apron_to_a3_mid") -> tuple[dict, dict]:
     payload = yaml.safe_load(TASKS_PATH.read_text(encoding="utf-8"))
-    tasks = payload["tasks"]["warehouse_occ_light.world.sdf"]
+    tasks = payload["tasks"]["warehouse_aws.world.sdf"]
     for task in tasks:
         if task["name"] == task_name:
             return task["start"], task["goal"]

@@ -15,7 +15,7 @@ from PIL import Image
 
 REPO = Path(__file__).resolve().parents[2]
 THESIS = REPO.parent / "thesis-report"
-VAL_GRID = REPO / "paper_artifacts/perception/aws_yolo_simseg_v2/val_batch0_pred.jpg"
+VAL_GRID = REPO / "paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg"
 OUT = THESIS / "figures/appendix/yolo_training_clarification.pdf"
 PREVIEW = REPO / "paper_artifacts/figures/yolo_training_clarification.png"
 

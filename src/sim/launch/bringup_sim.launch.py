@@ -40,9 +40,15 @@ def generate_launch_description():
         description="Bridge Gazebo world contact events to /world_contacts",
     )
     bridge_contacts = LaunchConfiguration("bridge_contacts")
+    bridge_segmentation_arg = DeclareLaunchArgument(
+        "bridge_segmentation",
+        default_value="false",
+        description="Bridge external-camera semantic segmentation labels for offline dataset capture",
+    )
+    bridge_segmentation = LaunchConfiguration("bridge_segmentation")
     world_arg = DeclareLaunchArgument(
         "world",
-        default_value="warehouse_occ_light.world.sdf",
+        default_value="warehouse_aws.world.sdf",
         description="World file under sim/gazebo_worlds/worlds",
     )
     world = LaunchConfiguration("world")
@@ -216,15 +222,17 @@ def generate_launch_description():
             "/model/turtlebot3/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model",
             "/external_camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
             "/external_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
-            # Segmentation bridges removed: Gazebo renders 1280×720 semantic
-            # segmentation at 30 Hz which is a major rendering bottleneck.
+            # Segmentation stays out of the runtime bridge. Dataset capture
+            # enables it through the separate conditional bridge below so a
+            # stalled semantic stream cannot take the RGB bridge down with it.
+            #
+            # Gazebo renders semantic segmentation at 1280x720 and it is a
+            # dataset-only cost. Runtime YOLO consumes only RGB images.
+            #
             # YOLO uses its own internal mask from the plain RGB image; these
             # semantic segmentation topics are never consumed at runtime.
             # "/external_camera/segmentation/colored_map@sensor_msgs/msg/Image[gz.msgs.Image",
-            # Re-enabled for dataset capture (seg camera is now 1 Hz, so not a
-            # bottleneck). Only bringup_sim (capture/debug) carries this; the
-            # campaign launch does not.
-            "/external_camera/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
+            # "/external_camera/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
             clock_arg,
             set_pose_service_arg,
             control_service_arg,
@@ -237,6 +245,15 @@ def generate_launch_description():
             (clock_remap_src, "/clock"),
         ],
         output="screen",
+    )
+    ros_gz_segmentation_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/external_camera/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
+        ],
+        output="screen",
+        condition=IfCondition(bridge_segmentation),
     )
     ros_gz_contact_bridge = Node(
         package="ros_gz_bridge",
@@ -273,6 +290,7 @@ def generate_launch_description():
         world_name_arg,
         headless_arg,
         bridge_contacts_arg,
+        bridge_segmentation_arg,
         reset_world_arg,
         spawn_x_arg,
         spawn_y_arg,
@@ -285,6 +303,7 @@ def generate_launch_description():
         spawn_after_reset,
         spawn_after_clock,
         ros_gz_bridge,
+        ros_gz_segmentation_bridge,
         ros_gz_contact_bridge,
         ros_gz_scan_bridge,
     ])

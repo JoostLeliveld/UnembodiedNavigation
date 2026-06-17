@@ -1,7 +1,7 @@
 {
   "figure": "gp_pipeline_aws",
   "world": "warehouse_aws.world.sdf",
-  "gp": "/home/joostleliveld/Thesis/UnembodiedNavigation/paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz",
+  "gp": "/home/joostleliveld/Thesis/UnembodiedNavigation/paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz",
   "world_profile": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/config/world_profiles.yaml",
   "out": "/home/joostleliveld/Thesis/thesis-report/figures/campaign/gp_pipeline_aws_v7.pdf",
   "preview": "/home/joostleliveld/Thesis/UnembodiedNavigation/paper_artifacts/figures/gp_pipeline_aws.png",

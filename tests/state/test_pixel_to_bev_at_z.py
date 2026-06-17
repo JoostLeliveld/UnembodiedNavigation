@@ -63,6 +63,17 @@ def test_z0_helper_matches_legacy_pixel_to_world() -> None:
     assert math.isclose(legacy[1], new[1], abs_tol=1e-6)
 
 
+def test_camera_world_to_pixel_respects_height() -> None:
+    transformer = _make_transformer()
+    camera = transformer._make_camera(transformer.cam_pos, transformer.look_at)
+    xyz = (0.7, -0.4, 0.215)
+    expected = _project_world(camera, xyz)
+    actual = camera.world_to_pixel(*xyz)
+    assert actual[2] is True
+    assert math.isclose(actual[0], expected[0], abs_tol=1e-6)
+    assert math.isclose(actual[1], expected[1], abs_tol=1e-6)
+
+
 def test_returns_none_for_ray_parallel_to_plane() -> None:
     transformer = _make_transformer()
     # Pick u,v that produce a near-horizontal ray; for our angled camera this

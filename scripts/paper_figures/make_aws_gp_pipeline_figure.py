@@ -30,7 +30,7 @@ REPO = Path(__file__).resolve().parents[2]
 THESIS = REPO.parent / "thesis-report"
 
 WORLD = "warehouse_aws.world.sdf"
-DEFAULT_GP = REPO / "paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz"
+DEFAULT_GP = REPO / "paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz"
 DEFAULT_PROFILE = REPO / "src/experiments/config/world_profiles.yaml"
 DEFAULT_OUT = THESIS / "figures/campaign/gp_pipeline_aws_v7.pdf"
 DEFAULT_PREVIEW = REPO / "paper_artifacts/figures/gp_pipeline_aws.png"

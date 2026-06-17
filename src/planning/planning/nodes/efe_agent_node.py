@@ -441,10 +441,12 @@ class EfeAgentNode(UnicyclePlannerNode):
 
         if self.use_simple_local_controller:
             controls = self._simple_local_plan(m_track, target)
-            safe, reason = self._simple_plan_safe_to_execute(controls, m_track)
-            if not safe:
+            n_safe, reason = self._simple_plan_safe_to_execute(controls, m_track)
+            if n_safe <= 0:
+                # The immediate step itself leaves the region (not a recovery move)
+                # -> genuinely unsafe, safe-stop.
                 self.get_logger().warn(
-                    f"[hierarchical] simple local control rejected: {reason}; safe-stopping"
+                    f"[hierarchical] simple local control rejected at step 0: {reason}; safe-stopping"
                 )
                 with self._data_lock:
                     self._active_controls = None
@@ -452,6 +454,8 @@ class EfeAgentNode(UnicyclePlannerNode):
                     self._active_controls_original_len = 0
                 self._publish_command(0.0, 0.0)
                 return
+            # Execute only the safe leading prefix; the tracker replans next cycle.
+            controls = controls[:n_safe]
             with self._data_lock:
                 self._active_controls = controls.copy()
                 self._active_plan_started_at = self.get_clock().now()
@@ -525,33 +529,53 @@ class EfeAgentNode(UnicyclePlannerNode):
 
         return controls
 
-    def _simple_plan_safe_to_execute(self, controls: np.ndarray, m0: np.ndarray) -> tuple[bool, str]:
-        """Cheap feasibility gate for the non-optimizing local waypoint tracker.
+    def _simple_plan_safe_to_execute(self, controls: np.ndarray, m0: np.ndarray) -> tuple[int, str]:
+        """Recovery-aware feasibility gate for the non-optimizing waypoint tracker.
 
-        The simple tracker is deliberately not the scientific route-choice
-        mechanism. Still, it must not publish a command tape whose predicted
-        mean immediately leaves the known driveable region or collision geometry.
-        This mirrors the solver-result hygiene used by the EFE local controller.
+        Returns the number of LEADING control steps safe to execute (>=1 -> publish
+        that prefix; 0 -> safe-stop). Two reasons it is not a naive `clearance<0`
+        veto: (1) in a narrow keep-in aisle a TRANSIENT belief-prediction excursion
+        (e.g. odom overshoot during a hard turn) can put the predicted mean
+        mm-outside the band even though truth is centred; a hard veto then freezes
+        the tracker at (0,0) forever. So reject a step only if it drives an already
+        negative clearance strictly WORSE than the plan start (the robot is actively
+        leaving the region); holding/recovering a marginal violation is allowed.
+        (2) the rollout is open-loop and we only execute the first step before
+        replanning, so a violation a few steps ahead must not veto the safe
+        immediate step -- we execute the safe prefix and let the next replan re-aim.
         """
         controls = np.asarray(controls, dtype=float)
         if controls.ndim != 2 or controls.shape[0] == 0 or controls.shape[1] != 2:
-            return False, 'empty_or_malformed_controls'
+            return 0, 'empty_or_malformed_controls'
         if not np.all(np.isfinite(controls)):
-            return False, 'nonfinite_controls'
+            return 0, 'nonfinite_controls'
 
-        state = np.asarray(m0[:3], dtype=float).copy()
+        RECOVERY_EPS = 5e-3
+        start = np.asarray(m0[:3], dtype=float)
+        if self.planner.collision_cost_model is not None:
+            start_coll = self.planner.collision_signed_distance_state_np(start)
+        else:
+            start_coll = float('inf')
+        nogo = self.planner.nogo_cost_model
+        if nogo is not None and nogo.enabled:
+            start_nogo = nogo.clearance_state_np(start)
+        else:
+            start_nogo = float('inf')
+        coll_floor = (min(start_coll, 0.0) - RECOVERY_EPS) if math.isfinite(start_coll) else -math.inf
+        nogo_floor = (min(start_nogo, 0.0) - RECOVERY_EPS) if math.isfinite(start_nogo) else -math.inf
+
+        state = start.copy()
         for i, u in enumerate(controls):
             state = unicycle_step(state, u, float(self.dt))
             if self.planner.collision_cost_model is not None:
                 clearance = self.planner.collision_signed_distance_state_np(state)
-                if math.isfinite(clearance) and clearance < 0.0:
-                    return False, f'collision_geometry_violation_step_{i}:{clearance:.3f}'
-            model = self.planner.nogo_cost_model
-            if model is not None and model.enabled:
-                clearance = model.clearance_state_np(state)
-                if math.isfinite(clearance) and clearance < 0.0:
-                    return False, f'driveable_clearance_violation_step_{i}:{clearance:.3f}'
-        return True, ''
+                if math.isfinite(clearance) and clearance < 0.0 and clearance < coll_floor:
+                    return i, f'collision_geometry_violation_step_{i}:{clearance:.3f}'
+            if nogo is not None and nogo.enabled:
+                clearance = nogo.clearance_state_np(state)
+                if math.isfinite(clearance) and clearance < 0.0 and clearance < nogo_floor:
+                    return i, f'driveable_clearance_violation_step_{i}:{clearance:.3f}'
+        return controls.shape[0], ''
 
     # [DEPRECATED_LEGACY_CLEANUP] local reference segment sampling is legacy (simple tracker active)
     def _build_local_reference_segment(self, m0: np.ndarray) -> np.ndarray:

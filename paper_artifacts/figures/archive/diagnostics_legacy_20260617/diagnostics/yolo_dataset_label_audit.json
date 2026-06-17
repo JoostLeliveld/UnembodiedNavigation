@@ -1,0 +1,73 @@
+{
+  "dataset_root": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/aws_simseg_v3_currentcam",
+  "n_records": 1865,
+  "n_prefixes": 8,
+  "prefix_counts_top": [
+    [
+      "59158",
+      346
+    ],
+    [
+      "69637",
+      278
+    ],
+    [
+      "54252",
+      261
+    ],
+    [
+      "79720",
+      217
+    ],
+    [
+      "55985",
+      212
+    ],
+    [
+      "53484",
+      196
+    ],
+    [
+      "94814",
+      193
+    ],
+    [
+      "88073",
+      162
+    ]
+  ],
+  "center_x": {
+    "min": 0.0374655,
+    "max": 0.768648,
+    "mean": 0.4324528289544236,
+    "stdev": 0.2879250580739484
+  },
+  "center_y": {
+    "min": 0.030274500000000003,
+    "max": 0.5774855,
+    "mean": 0.3535912860589812,
+    "stdev": 0.11296416418591602
+  },
+  "box_w": {
+    "min": 0.009419000000000066,
+    "max": 0.027749999999999997,
+    "mean": 0.017835379088471843,
+    "stdev": 0.004129275983833237
+  },
+  "box_h": {
+    "min": 0.023923000000000003,
+    "max": 0.03673900000000008,
+    "mean": 0.03201554155495978,
+    "stdev": 0.0026846590907964383
+  },
+  "unique_label_centers_rounded_3dp": 451,
+  "exact_duplicate_image_groups": 8,
+  "exact_duplicate_images": 1321,
+  "ahash_duplicate_groups": 2,
+  "largest_ahash_group": 1742,
+  "outputs": {
+    "sequence_overlay": "/home/joostleliveld/Thesis/UnembodiedNavigation/paper_artifacts/figures/diagnostics/yolo_truth_labels_53484_sequence.png",
+    "diverse_overlay": "/home/joostleliveld/Thesis/UnembodiedNavigation/paper_artifacts/figures/diagnostics/yolo_truth_labels_diverse.png",
+    "label_center_scatter": "/home/joostleliveld/Thesis/UnembodiedNavigation/paper_artifacts/figures/diagnostics/yolo_label_center_scatter.png"
+  }
+}

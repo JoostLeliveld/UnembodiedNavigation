@@ -11,7 +11,7 @@ generate figures.
 | Purpose | File |
 | --- | --- |
 | Run locked robustness campaign | `visibility_comparison/run_visibility_campaign.py` |
-| Locked campaign config | `visibility_comparison/aws_f31b1_final_config.yaml` |
+| Locked campaign config | `visibility_comparison/warehouse_visibility_campaign.yaml` |
 | Compute campaign metrics | `visibility_comparison/compute_paper_metrics.py` |
 | Fit GP artifacts | `visibility_comparison/fit_visibility_gps.py` |
 | Build GP targets | `visibility_comparison/build_gp_targets.py` |
@@ -27,7 +27,7 @@ are local artifacts and are not tracked in git.
 
 Representative output:
 
-![YOLO training curves](../paper_artifacts/perception/aws_yolo_simseg_v2/results.png)
+![YOLO training curves](../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png)
 
 ## GP And Figure Support
 

@@ -6,8 +6,8 @@ This document provides a comprehensive log of the YOLOv11 instance segmentation 
 
 ## 1. Detector Model Details
 - **Architecture:** YOLOv11 instance segmentation network (nano variant).
-- **Fine-Tuning Checkpoint:** `local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt` (local, not tracked in git).
-- **Public Metadata:** `paper_artifacts/perception/aws_yolo_simseg_v2/`
+- **Fine-Tuning Checkpoint:** `logs/perception_models/warehouse_yolo_detector_v1/model.pt` (local, not tracked in git).
+- **Public Metadata:** `paper_artifacts/perception/warehouse_yolo_detector_v1/`
 - **Base Model:** YOLOv11n-seg.
 - **Target Class:** `robot` (mapped to Class ID `0` at inference; mapped from Gazebo semantic segmentation index `23`).
 - **Input Image Size:** 
@@ -60,4 +60,4 @@ This document provides a comprehensive log of the YOLOv11 instance segmentation 
 ## 5. Training Performance Plots
 
 ### Training Metrics over 30 Epochs
-![YOLO Training Results](../paper_artifacts/perception/aws_yolo_simseg_v2/results.png)
+![YOLO Training Results](../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png)

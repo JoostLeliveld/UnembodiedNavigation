@@ -1,0 +1,35 @@
+{
+  "highErr_west": {
+    "x": -0.9,
+    "y": -0.45,
+    "n": 10,
+    "yolo_world_err_median": 0.12720225865597778,
+    "yolo_world_err_max": 0.20083394514951897,
+    "red_world_err_median": 0.042529154651973246,
+    "marker_orbit_px": 9.719093867768482,
+    "dropped_stale": [
+      0.0,
+      30.0
+    ]
+  },
+  "central_A3": {
+    "x": 1.0,
+    "y": 0.0,
+    "n": 12,
+    "yolo_world_err_median": 0.07180351693765981,
+    "yolo_world_err_max": 0.13333570434267775,
+    "red_world_err_median": 0.039204784132417,
+    "marker_orbit_px": 9.955401719829023,
+    "dropped_stale": []
+  },
+  "start_east": {
+    "x": 3.3,
+    "y": -1.0,
+    "n": 12,
+    "yolo_world_err_median": 0.025520095192588046,
+    "yolo_world_err_max": 0.04721844594426712,
+    "red_world_err_median": 0.037651095557161604,
+    "marker_orbit_px": 11.160166644855478,
+    "dropped_stale": []
+  }
+}

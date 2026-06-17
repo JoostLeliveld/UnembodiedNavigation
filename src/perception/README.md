@@ -6,7 +6,7 @@ It is the first visible piece of the demo: a fixed warehouse camera detects the
 TurtleBot and turns the selected detection into an image-space robot
 observation.
 
-![YOLO validation predictions](../../paper_artifacts/perception/aws_yolo_simseg_v2/val_batch0_pred.jpg)
+![YOLO validation predictions](../../paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg)
 
 ## Active Runtime Node
 
@@ -33,7 +33,7 @@ The current paper-facing campaign uses the segmentation/detection path for
 
 The paper-facing detector is documented in
 [`../../docs/perception_details.md`](../../docs/perception_details.md) and
-summarized by [`../../paper_artifacts/perception/aws_yolo_simseg_v2/manifest.json`](../../paper_artifacts/perception/aws_yolo_simseg_v2/manifest.json).
+summarized by [`../../paper_artifacts/perception/warehouse_yolo_detector_v1/manifest.json`](../../paper_artifacts/perception/warehouse_yolo_detector_v1/manifest.json).
 
 | Item | Value |
 | --- | --- |
@@ -47,7 +47,7 @@ summarized by [`../../paper_artifacts/perception/aws_yolo_simseg_v2/manifest.jso
 
 Training curves:
 
-![YOLO training curves](../../paper_artifacts/perception/aws_yolo_simseg_v2/results.png)
+![YOLO training curves](../../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png)
 
 ## Pose-Keypoint Support
 
@@ -60,4 +60,4 @@ Enable the pose-heading path by using pose-model weights and setting `keypoint_m
 Detector training and dataset generation live under `scripts/perception/`. They are support/provenance tooling, not the runtime method itself.
 
 The trained checkpoint itself is local-only and expected at
-`local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt`.
+`logs/perception_models/warehouse_yolo_detector_v1/model.pt`.

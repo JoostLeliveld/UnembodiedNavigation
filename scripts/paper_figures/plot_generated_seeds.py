@@ -14,8 +14,8 @@ for p in ["src/unav_common"]:
     sys.path.insert(0, str(ROOT / p))
 from unav_common.lane_graph_routes import generate_route_seeds  # noqa: E402
 
-CONFIG = ROOT / "scripts/visibility_comparison/aws_f31b1_final_config.yaml"
-GPZ = ROOT / "paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz"
+CONFIG = ROOT / "scripts/visibility_comparison/warehouse_visibility_campaign.yaml"
+GPZ = ROOT / "paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz"
 OUT = ROOT / "logs/paper_figures/generated_seeds.png"
 CFG = yaml.safe_load(open(CONFIG))
 DJ = CFG["driveable_geometry_json"]
