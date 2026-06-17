@@ -9,6 +9,8 @@ accepted sample must pass all checks:
 * RGB and label headers are synchronized;
 * the semantic mask is visible and not a tiny/truncated sliver;
 * the mask lands near the commanded pose under the configured camera model;
+* the robot is not substantially occluded by a foreground rack/box (the visible
+  silhouette height and ground-contact row must match the projected robot box);
 * the RGB crop under the label contains visible robot-colored pixels;
 * the RGB frame is not an exact duplicate of an already accepted sample.
 
@@ -304,6 +306,8 @@ class LabelQuality:
     rgb_robot_color_fraction: float
     expected_bbox: tuple[float, float, float, float] | None
     expected_center_error_px: float
+    visible_height_fraction: float
+    bottom_occlusion_px: float
     image_sha1: str
     label_sha1: str
 
@@ -330,6 +334,8 @@ def validate_sample_quality(
     box_width: float,
     box_height: float,
     max_expected_center_error_px: float,
+    min_visible_height_fraction: float,
+    max_bottom_occlusion_px: float,
 ) -> LabelQuality:
     raw_mask = (labels == int(robot_label)).astype(np.uint8) * 255
     mask_area = float(cv2.countNonZero(raw_mask))
@@ -353,10 +359,26 @@ def validate_sample_quality(
         box_height=float(box_height),
     )
     expected_center_error = math.nan
+    # Occlusion metrics. gz semantic segmentation is rendering-based, so a robot
+    # hidden behind a foreground rack/box yields a SHORTER visible silhouette than
+    # the full projected bounding prism, and its visible bottom sits ABOVE where the
+    # true ground contact projects. Both are measured in image (pixel) space, so they
+    # are independent of the world-projection accuracy under investigation.
+    #  - visible_height_fraction: visible mask height / expected projected height.
+    #    Drops toward 0 as the robot is occluded.
+    #  - bottom_occlusion_px: expected contact row - visible mask bottom row.
+    #    Positive & large => the ground-contact (box-bottom label) is occluded.
+    visible_height_fraction = math.nan
+    bottom_occlusion_px = math.nan
     if bbox is not None and expected_bbox is not None:
         cx, cy = _bbox_center(bbox)
         ex, ey = _bbox_center(expected_bbox)
         expected_center_error = float(math.hypot(cx - ex, cy - ey))
+        expected_h = float(expected_bbox[3] - expected_bbox[1])
+        if expected_h > 1e-6:
+            visible_height_fraction = float(bbox_h / expected_h)
+        if math.isfinite(mask_bottom_v):
+            bottom_occlusion_px = float(expected_bbox[3] - mask_bottom_v)
 
     reason = ''
     if mask_area < float(min_mask_area):
@@ -373,6 +395,12 @@ def validate_sample_quality(
         reason = 'commanded_pose_not_projectable'
     elif expected_center_error > float(max_expected_center_error_px):
         reason = 'projection_mismatch'
+    elif (math.isfinite(visible_height_fraction)
+          and visible_height_fraction < float(min_visible_height_fraction)):
+        reason = 'occluded_low_visible_height'
+    elif (math.isfinite(bottom_occlusion_px)
+          and bottom_occlusion_px > float(max_bottom_occlusion_px)):
+        reason = 'occluded_bottom_hidden'
     elif (not bool(disable_rgb_color_check)) and rgb_support < float(min_rgb_robot_color_fraction):
         reason = 'rgb_robot_not_visible'
 
@@ -391,6 +419,8 @@ def validate_sample_quality(
         rgb_robot_color_fraction=float(rgb_support),
         expected_bbox=expected_bbox,
         expected_center_error_px=float(expected_center_error),
+        visible_height_fraction=float(visible_height_fraction),
+        bottom_occlusion_px=float(bottom_occlusion_px),
         image_sha1=image_sha1,
         label_sha1=label_sha1,
     )
@@ -654,7 +684,7 @@ def _fixed_fieldnames() -> list[str]:
         'mask_bbox_w', 'mask_bbox_h', 'mask_bottom_u', 'mask_bottom_v',
         'border_fraction', 'rgb_robot_color_fraction',
         'expected_bbox_x0', 'expected_bbox_y0', 'expected_bbox_x1', 'expected_bbox_y1',
-        'expected_center_error_px',
+        'expected_center_error_px', 'visible_height_fraction', 'bottom_occlusion_px',
         'image_sha1', 'label_sha1',
     ]
 
@@ -714,6 +744,8 @@ def _diagnostic_row(
         'expected_bbox_x1': math.nan,
         'expected_bbox_y1': math.nan,
         'expected_center_error_px': math.nan,
+        'visible_height_fraction': math.nan,
+        'bottom_occlusion_px': math.nan,
         'image_sha1': '',
         'label_sha1': '',
     }
@@ -747,6 +779,8 @@ def _diagnostic_row(
             'expected_bbox_x1': float(expected[2]),
             'expected_bbox_y1': float(expected[3]),
             'expected_center_error_px': float(quality.expected_center_error_px),
+            'visible_height_fraction': float(quality.visible_height_fraction),
+            'bottom_occlusion_px': float(quality.bottom_occlusion_px),
             'image_sha1': quality.image_sha1,
             'label_sha1': quality.label_sha1,
         })
@@ -791,6 +825,13 @@ def main() -> int:
     parser.add_argument('--min-rgb-robot-color-fraction', type=float, default=0.015)
     parser.add_argument('--disable-rgb-color-check', action='store_true')
     parser.add_argument('--max-expected-center-error-px', type=float, default=90.0)
+    parser.add_argument('--min-visible-height-fraction', type=float, default=0.55,
+                        help='Reject occluded samples whose visible mask height is below this '
+                             'fraction of the projected robot-box height. Set 0.0 to disable.')
+    parser.add_argument('--max-bottom-occlusion-px', type=float, default=20.0,
+                        help='Reject samples whose visible mask bottom sits more than this many '
+                             'pixels above the projected ground-contact row (bottom occluded by a '
+                             'foreground rack/box). Set a large value to disable.')
     parser.add_argument('--max-final-duplicate-fraction', type=float, default=0.02)
     parser.add_argument('--min-accepted-samples', type=int, default=400)
     parser.add_argument('--min-accept-fraction', type=float, default=0.25)
@@ -915,6 +956,8 @@ def main() -> int:
                         box_width=float(args.robot_box_width),
                         box_height=float(args.robot_box_height),
                         max_expected_center_error_px=float(args.max_expected_center_error_px),
+                        min_visible_height_fraction=float(args.min_visible_height_fraction),
+                        max_bottom_occlusion_px=float(args.max_bottom_occlusion_px),
                     )
                     last_reason = quality.reason
                     if quality.accepted and quality.image_sha1 in seen_image_hashes:
@@ -939,7 +982,8 @@ def main() -> int:
                                 quality,
                                 text=(
                                     f'ok idx={sample_index} try={attempt} area={quality.mask_area_px:.0f} '
-                                    f'err={quality.expected_center_error_px:.1f}px rgb={quality.rgb_robot_color_fraction:.3f}'
+                                    f'err={quality.expected_center_error_px:.1f}px vh={quality.visible_height_fraction:.2f} '
+                                    f'bgap={quality.bottom_occlusion_px:.0f}px rgb={quality.rgb_robot_color_fraction:.3f}'
                                 ),
                             )
                             preview_path = out_dir / 'audit' / 'accepted' / f'{stem}.jpg'
@@ -975,7 +1019,8 @@ def main() -> int:
                             quality,
                             text=(
                                 f'reject={quality.reason} idx={sample_index} try={attempt} '
-                                f'area={quality.mask_area_px:.0f} err={quality.expected_center_error_px:.1f}px'
+                                f'area={quality.mask_area_px:.0f} err={quality.expected_center_error_px:.1f}px '
+                                f'vh={quality.visible_height_fraction:.2f} bgap={quality.bottom_occlusion_px:.0f}px'
                             ),
                         )
                         preview_path = out_dir / 'audit' / 'rejected' / f'sample_{sample_index:06d}_try{attempt}.jpg'
@@ -1055,6 +1100,8 @@ def main() -> int:
         'pair_wait_s': _stats(float(r['pair_wait_s']) for r in accepted_rows),
         'mask_area_px': _stats(float(r['mask_area_px']) for r in accepted_rows),
         'expected_center_error_px': _stats(float(r['expected_center_error_px']) for r in accepted_rows),
+        'visible_height_fraction': _stats(float(r['visible_height_fraction']) for r in accepted_rows),
+        'bottom_occlusion_px': _stats(float(r['bottom_occlusion_px']) for r in accepted_rows),
         'rgb_robot_color_fraction': _stats(float(r['rgb_robot_color_fraction']) for r in accepted_rows),
         'accepted_contact_sheet': accepted_sheet,
         'rejected_contact_sheet': rejected_sheet,
@@ -1086,6 +1133,8 @@ def main() -> int:
             'max_mask_border_fraction': float(args.max_mask_border_fraction),
             'min_rgb_robot_color_fraction': float(args.min_rgb_robot_color_fraction),
             'max_expected_center_error_px': float(args.max_expected_center_error_px),
+            'min_visible_height_fraction': float(args.min_visible_height_fraction),
+            'max_bottom_occlusion_px': float(args.max_bottom_occlusion_px),
             'max_final_duplicate_fraction': float(args.max_final_duplicate_fraction),
             'min_accepted_samples': int(args.min_accepted_samples),
             'min_accept_fraction': float(args.min_accept_fraction),

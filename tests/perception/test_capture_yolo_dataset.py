@@ -50,6 +50,8 @@ def _base_kwargs(camera: ObliqueCameraModel) -> dict:
         'box_width': 0.22,
         'box_height': 0.20,
         'max_expected_center_error_px': 50.0,
+        'min_visible_height_fraction': 0.55,
+        'max_bottom_occlusion_px': 20.0,
     }
 
 
@@ -102,6 +104,34 @@ def test_validate_sample_accepts_visible_synchronized_segmentation() -> None:
     assert result.rgb_robot_color_fraction > 0.01
     assert math.isfinite(result.expected_center_error_px)
     assert result.expected_center_error_px < 10.0
+    # Fully-visible robot: visible silhouette matches the projected box and the
+    # contact row is not occluded.
+    assert result.visible_height_fraction > 0.9
+    assert abs(result.bottom_occlusion_px) < 5.0
+
+
+def test_validate_sample_rejects_bottom_occluded_robot() -> None:
+    camera = _camera()
+    image = np.zeros((360, 640, 3), dtype=np.uint8)
+    labels = np.zeros((360, 640), dtype=np.uint32)
+    bbox = _project_robot_bbox(
+        camera, x=0.0, y=0.0, yaw=0.0, z=0.05,
+        box_length=0.22, box_width=0.22, box_height=0.20,
+    )
+    assert bbox is not None
+    x0, y0, x1, y1 = [int(round(v)) for v in bbox]
+    # A foreground rack hides the bottom ~65%: only the top of the robot is labelled,
+    # so the visible silhouette is short and its bottom sits well above the true
+    # ground-contact row. This is exactly the bad box-bottom label we must drop.
+    y_cut = y0 + int(round(0.35 * (y1 - y0)))
+    labels[y0:y_cut, x0:x1] = 23
+    cv2.rectangle(image, (x0, y0), (x1, y_cut), (40, 45, 220), thickness=-1)
+
+    result = validate_sample_quality(image_bgr=image, labels=labels, **_base_kwargs(camera))
+
+    assert not result.accepted
+    assert result.reason in ('occluded_low_visible_height', 'occluded_bottom_hidden')
+    assert result.visible_height_fraction < 0.55
 
 
 def test_validate_sample_rejects_projection_mismatch() -> None:
