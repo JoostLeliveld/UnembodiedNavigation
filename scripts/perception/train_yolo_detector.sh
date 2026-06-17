@@ -48,7 +48,7 @@ ros2 launch sim bringup_sim.launch.py \
   bridge_scan:=false \
   bridge_contacts:=false \
   bridge_segmentation:=true \
-  headless:=false > "$GZLOG" 2>&1 &
+  headless:=true > "$GZLOG" 2>&1 &
 GZ=$!
 
 echo "[yolo-train] waiting for RGB and semantic label topics (up to 120s)"
