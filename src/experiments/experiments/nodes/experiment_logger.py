@@ -679,6 +679,11 @@ class ExperimentLogger(Node):
         self.planner_belief_msg = None
         self.odom_msg = None
         self.odom_noisy_msg = None
+        # Buffer of (stamp_s, x, y, yaw) ground truth in the map_bev frame, so the
+        # camera measurement / state can be compared to truth AT THEIR OWN capture
+        # time (not the current log time). This separates true detector quality from
+        # the ~0.5 s measurement latency.
+        self._truth_buf = deque(maxlen=600)
         self.obs_msg = None
         self.perception_diag = None
         self.heading_diag = None
@@ -966,6 +971,11 @@ class ExperimentLogger(Node):
                 'pred_world_x_calibrated',
                 'pred_world_y_calibrated',
                 'localization_error_calibrated_m',
+                # vs truth at the measurement's OWN capture time (latency-removed):
+                # true detector quality. The _calibrated_m above is vs log-time truth
+                # (latency-inflated in turns). state_error_captime_m = same for /state.
+                'localization_error_captime_m',
+                'state_error_captime_m',
                 'bev_y_calibration_offset_m',
                 'u_red',
                 'v_red',
@@ -1255,6 +1265,33 @@ class ExperimentLogger(Node):
 
     def _odom_cb(self, msg: Odometry):
         self.odom_msg = msg
+        ok, st, x, y, yaw = self._latest_truth_pose()
+        if ok and math.isfinite(st):
+            self._truth_buf.append((float(st), float(x), float(y), float(yaw)))
+
+    def _truth_at(self, stamp):
+        """Interpolate buffered map_bev-frame truth to `stamp`. Returns (ok,x,y,yaw)."""
+        buf = self._truth_buf
+        if not buf or not math.isfinite(stamp):
+            return False, math.nan, math.nan, math.nan
+        if stamp <= buf[0][0]:
+            return (True,) + buf[0][1:]
+        if stamp >= buf[-1][0]:
+            return (True,) + buf[-1][1:]
+        prev = buf[0]
+        for cur in buf:
+            if cur[0] >= stamp:
+                s0, x0, y0, yaw0 = prev
+                s1, x1, y1, yaw1 = cur
+                a = (stamp - s0) / max(s1 - s0, 1e-9)
+                return (
+                    True,
+                    x0 + a * (x1 - x0),
+                    y0 + a * (y1 - y0),
+                    self._wrap_angle(yaw0 + a * self._wrap_angle(yaw1 - yaw0)),
+                )
+            prev = cur
+        return (True,) + buf[-1][1:]
 
     def _odom_noisy_cb(self, msg: Odometry):
         self.odom_noisy_msg = msg
@@ -1762,6 +1799,24 @@ class ExperimentLogger(Node):
                         pred_world_y_calibrated - true_y,
                     )
 
+        # Capture-time-truth errors: compare the measurement / state to truth AT THEIR
+        # OWN timestamp instead of the current log time. This removes the ~0.5 s
+        # latency inflation, so it reflects the TRUE detector / projection quality
+        # (e.g. ~0.04 m even in turns). The *_calibrated_m and state_pos_error columns
+        # above compare to log-time truth and are therefore LATENCY-INFLATED in turns.
+        localization_error_captime_m = math.nan
+        if (obs_ok and math.isfinite(pred_world_x_calibrated)
+                and math.isfinite(pred_world_y_calibrated) and math.isfinite(pixel_pose_stamp)):
+            cok, ctx, cty, _cyaw = self._truth_at(pixel_pose_stamp)
+            if cok:
+                localization_error_captime_m = math.hypot(
+                    pred_world_x_calibrated - ctx, pred_world_y_calibrated - cty)
+        state_error_captime_m = math.nan
+        if state_ok and math.isfinite(state_x) and math.isfinite(state_stamp):
+            sok, stx, sty, _syaw = self._truth_at(state_stamp)
+            if sok:
+                state_error_captime_m = math.hypot(state_x - stx, state_y - sty)
+
         selected_pixel_source_code = float(diag.get('selected_pixel_source_code', math.nan))
         if selected_pixel_source_code >= 1.5:
             selected_pixel_source = 'mask_bottom'
@@ -1824,6 +1879,8 @@ class ExperimentLogger(Node):
             pred_world_x_calibrated,
             pred_world_y_calibrated,
             localization_error_calibrated_m,
+            localization_error_captime_m,
+            state_error_captime_m,
             self.bev_y_calibration_offset_m,
             diag['u_red'],
             diag['v_red'],
