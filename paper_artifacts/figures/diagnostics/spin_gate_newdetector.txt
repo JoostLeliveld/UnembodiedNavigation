@@ -1,0 +1,14 @@
+
+##### OLD broken detector (archived v4) #####
+  highErr_west   box-bottom med=0.127 max=0.201  (n=10, detrate=0.83)
+  central_A3     box-bottom med=0.072 max=0.133  (n=12, detrate=1.00)
+  start_east     box-bottom med=0.026 max=0.047  (n=12, detrate=1.00)
+  GLOBAL box-bottom->ground  median=0.069  p90=0.158  max=0.201  (n=34)
+  GLOBAL red-seg-bottom (baseline) median=0.038  p90=0.057
+
+##### NEW clean detector (warehouse_yolo_detector_v1) #####
+  highErr_west   box-bottom med=0.027 max=0.066  (n=10, detrate=0.83)
+  central_A3     box-bottom med=0.032 max=0.047  (n=12, detrate=1.00)
+  start_east     box-bottom med=0.037 max=0.056  (n=12, detrate=1.00)
+  GLOBAL box-bottom->ground  median=0.033  p90=0.047  max=0.066  (n=34)
+  GLOBAL red-seg-bottom (baseline) median=0.038  p90=0.057
