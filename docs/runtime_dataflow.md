@@ -77,9 +77,10 @@ planning; stale latest camera states must not be interpreted as fresh localizati
 
 Runtime means for localization, yaw, control, and solve timing start after the
 first non-trivial command. Pre-command rows contain launch waiting, global
-solve time, and estimator warm-up. Use `truth_belief_error_m` for planner
-localization quality, and interpret `truth_state_error_m` as the raw
-camera-state pathway. Fresh `/state/bev` error and stale latest-state error
+solve time, and estimator warm-up. Use `belief_error_gt_m` (planner belief vs ground truth) for localization
+quality; the legacy `belief_error_odom_m` / `state_error_odom_m` (vs `/odom`)
+are diagnostic only and are contaminated by wheel-odometry drift in turns, so
+they must not be treated as truth. See `docs/metric_definitions_and_gt_audit.md`. Fresh `/state/bev` error and stale latest-state error
 should be reported separately when diagnosing perception.
 
 For delayed pixel corrections, inspect

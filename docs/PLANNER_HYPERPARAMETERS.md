@@ -92,15 +92,16 @@ paper-facing closed-loop values until the full artifact chain is rerun.
 
 | name | warehouse_campaign | what it does |
 |---|---:|---|
-| `global_horizon` | 120 | route-level EFE horizon used in the hierarchical runtime |
+| `global_horizon` | 75 | route-level EFE horizon used in the hierarchical runtime (75 × `global_dt` 0.4 = 30 s look-ahead, same coverage as the old 120 × 0.25 s) |
 | `local_horizon` | 6 | local tracker horizon; inert for EFE because `use_simple_local_controller=true` |
 | `horizon` | 20 | legacy/offline-lab default; runtime uses `global_horizon` / `local_horizon` |
-| `dt` | 0.25 | seconds per step |
+| `dt` | 0.25 | seconds per step (legacy/offline-lab and local step) |
+| `global_dt` | 0.4 | seconds per step for the route-level global EFE plan (75 × 0.4 = 30 s look-ahead) |
 | `v_max` | 0.60 | max forward speed (m/s) |
 | `cmd_publish_rate` | 10.0 | command publication rate (Hz) |
 | `local_plan_rate` | 5.0 | local tracking/planning rate (Hz) |
 
-**Effective global look-ahead distance = `global_horizon · dt · v_max`**. This is
+**Effective global look-ahead distance = `global_horizon · global_dt · v_max`**. This is
 the single number that matters for "can the planner see the decision-relevant feature
 ahead?". At the locked F31 setting it reaches up to 18 m in the global optimization
 horizon.
@@ -230,7 +231,7 @@ should bias to that side; C1 should drift to centre.
 - `goal_prior_u_std_final`: widen from the locked `12.0` only as a condition-neutral
   schedule change, so per-step lateral position matters more than
   per-step distance to goal.
-- Effective look-ahead: treat `global_horizon · dt · v_max` as a method-level setting;
+- Effective look-ahead: treat `global_horizon · global_dt · v_max` as a method-level setting;
   changing it requires rerunning both conditions.
 - Verify offline: sample p_vis along left edge vs centerline vs right edge; the
   per-step ambiguity gradient should point clearly toward the brighter side.

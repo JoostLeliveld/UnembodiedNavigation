@@ -86,7 +86,7 @@ Single timing probe after clock cleanup, 2026-06-19.
 | Frame age while driving | median `0.119 s` |
 | Planner pixel correction age | median `0.917 s` |
 
-Run path: `logs/visibility_comparison/_clockthrottle_codex/.../experiment_20260619_133958`
+Run path: archived timing run (`_clockthrottle_codex`, removed in the 2026-07-01 cleanup); see `paper_artifacts/` for figures regenerated from the current campaign.
 
 ---
 
@@ -273,7 +273,7 @@ The compute need is specific and testable: verified GPU-accelerated Gazebo senso
 
 # Sources
 
-- Local timing run: `logs/visibility_comparison/_clockthrottle_codex/route_apron_to_a3_mid/C2/seed0/experiment_20260619_133958`
+- Local timing run: `_clockthrottle_codex` C2 seed0 (route apron→a3_mid), 2026-06-19 — archived/removed in the 2026-07-01 cleanup; timing figures preserved under `paper_artifacts/`.
 - Intel i7-9750H specs: https://www.intel.com/content/www/us/en/products/sku/191045/intel-core-i79750h-processor-12m-cache-up-to-4-50-ghz/specifications.html
 - Gazebo Sensors #332, slow camera update rate: https://github.com/gazebosim/gz-sensors/issues/332
 - Gazebo Sim #2796, camera subscriptions reduce effective FPS: https://github.com/gazebosim/gz-sim/issues/2796

@@ -11,8 +11,8 @@ This document provides a comprehensive log of the YOLOv11 instance segmentation 
 - **Base Model:** YOLOv11n-seg.
 - **Target Class:** `robot` (mapped to Class ID `0` at inference; mapped from Gazebo semantic segmentation index `23`).
 - **Input Image Size:** 
-  - **Training:** $640 \times 640$ pixels
-  - **Inference:** `imgsz = 640`
+  - **Training:** $960 \times 960$ pixels (clean occlusion-gated retrain, `warehouse_yolo_detector_v1`)
+  - **Inference:** `imgsz = 640` (the campaign runs the low-latency arm; the 960-trained model is evaluated at 640 for faster detector callbacks)
 
 ---
 
@@ -49,11 +49,11 @@ This document provides a comprehensive log of the YOLOv11 instance segmentation 
 ---
 
 ## 4. Inference & Runtime Integration
-- **Confidence Threshold:** $\tau_{\mathrm{conf}} = 0.10$
+- **Confidence Threshold:** $\tau_{\mathrm{conf}} = 0.05$
 - **IoU Threshold:** 0.45
 - **Centroid Selection:** Bounding-box bottom-centre projected to the planar ground coordinates $(x, y)$ using a calibrated projection model.
 - **Missed Detection Handling:** Missing detections (scores $< \tau_{\mathrm{conf}}$ or no selected detection) are recorded as a zero-score ($c_i = 0$), and no camera-based EKF correction is applied.
-- **Runtime Signals:** Figure availability plots use the raw YOLO detection flag and score. The Normalized Innovation Squared (NIS) gate status (`pixel_corr_accepted`) is disabled and not used as a visibility indicator.
+- **Runtime Signals:** Figure availability plots use the raw YOLO detection flag and score. The Normalized Innovation Squared (NIS) gate is **active** with threshold $9.21$ ($\chi^2$ at 2 DOF, $0.99$): camera measurements whose innovation NIS $> 9.21$ are rejected so an outlier cannot collapse the belief covariance. The self-heal recovery is **disabled** (`pixel_correction_nis_reject_cov_scale = 1.0`); only the standard gate remains.
 
 ---
 

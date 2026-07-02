@@ -6,6 +6,12 @@ detector reliability into a spatial GP, uses that GP as predictive camera
 covariance inside an expected-free-energy planner, and evaluates the behavior
 in a warehouse route-choice benchmark.
 
+> **Current configuration (2026-07-01 honest re-run).** The locked runtime values
+> differ from the original paper — see [`docs/paper_vs_current/README.md`](docs/paper_vs_current/README.md)
+> for the full diff. Detector `warehouse_yolo_detector_v1` (trained at imgsz 960,
+> inference at 640, conf 0.05); NIS innovation gate active at χ²(2, 0.99) = 9.21 with
+> self-heal disabled; ground-truth-based metrics; global EFE horizon 75 × 0.4 s = 30 s look-ahead.
+
 ![External-camera warehouse setup](paper_artifacts/figures/problem_setup_camera.png)
 
 ## System In One Figure
