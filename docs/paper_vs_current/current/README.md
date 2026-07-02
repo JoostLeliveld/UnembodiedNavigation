@@ -121,7 +121,9 @@ The C2 error panels still show occasional spikes to ~0.2–0.33 m. Using the GT
 columns now logged, these are **real belief lag, not odom artifacts**
 (`belief_error_gt_m` ≈ `truth_belief_error_m`, `odom_truth_drift_gt_m` ≈ 0.003 m
 at the peak). They occur **in turns** (|cmd_w| elevated) while camera corrections
-lag **0.7–1.2 s** and are **accepted** (not gate-rejected): the belief coasts on
+lag **~0.42 s** (the delivered low-latency imgsz-640 arm — these figures run
+`yolo_imgsz: 640`; the ~1.2 s figure in the archived analysis below is the
+pre-low-latency imgsz-960 baseline) and are **accepted** (not gate-rejected): the belief coasts on
 odom prediction through the turn and lags the true pose until the next detection
 lands. This is the residual **correction-latency-in-turns** floor (see
 `docs/archive/why_c2_not_100_definitive_2026-06-30.md`); the detector retrain cut the

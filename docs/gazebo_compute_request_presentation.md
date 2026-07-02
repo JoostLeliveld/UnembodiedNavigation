@@ -88,6 +88,8 @@ Single timing probe after clock cleanup, 2026-06-19.
 
 Run path: archived timing run (`_clockthrottle_codex`, removed in the 2026-07-01 cleanup); see `paper_artifacts/` for figures regenerated from the current campaign.
 
+Note: this 0.917 s is the **pre-low-latency baseline** (imgsz 960, iGPU render). The delivered low-latency arm (imgsz 640 + GPU offload) that `honest_campaign_v1` runs on reaches **~0.42 s** — see the midterm latency fix and `docs/archive/correction_age_timing_findings.md`.
+
 ---
 
 # What The Measurement Shows
