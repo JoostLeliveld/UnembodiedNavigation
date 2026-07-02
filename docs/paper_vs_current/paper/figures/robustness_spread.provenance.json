@@ -1,0 +1,20 @@
+{
+  "figure": "robustness_spread",
+  "layout": "2x2",
+  "trajectory_source": "logs/visibility_comparison/_paper_runs/robustness_campaign_keepout_lanegraph_v1",
+  "counts_source": "paper_artifacts/metrics/robustness_metrics.csv",
+  "gp": "paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz",
+  "config": "scripts/visibility_comparison/aws_f31b1_final_config.yaml",
+  "tasks": [
+    "F31_b1_apron_a3_mid",
+    "b5_a4_apron_to_a2_mid",
+    "b2_a0_west_to_a1_upper",
+    "b6_a0_west_to_a1_low_control"
+  ],
+  "conditions": [
+    "C1",
+    "C2"
+  ],
+  "seeds_per_condition": 5,
+  "output": "paper_artifacts/figures/robustness_spread.png"
+}

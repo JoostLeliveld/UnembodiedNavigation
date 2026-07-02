@@ -1,0 +1,78 @@
+{
+  "copied_source_files": [
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C1/experiment.csv",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C1/perception.csv",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C1/plan_samples.csv",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C1/global_plan.csv",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C1/global_waypoints.csv",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C1/global_plan_meta.json",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C1/run_manifest.json",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C1/run_summary.json",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C1/tasks.yaml",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C2/experiment.csv",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C2/perception.csv",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C2/plan_samples.csv",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C2/global_plan.csv",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C2/global_waypoints.csv",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C2/global_plan_meta.json",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C2/run_manifest.json",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C2/run_summary.json",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/C2/tasks.yaml",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/campaign_log.json",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/warehouse_visibility_campaign.yaml",
+    "paper_artifacts/figures/paired_mechanism_west_current_data/gp_manifest.json"
+  ],
+  "figure_layout": "Two large route maps plus one full-width truth-belief error panel. Map panels show global plan, executed trajectory, belief mean, continuous 2-sigma belief band, and lightly styled YOLO update/miss markers.",
+  "generated_at": "2026-07-01T10:48:35.751752+00:00",
+  "output_pdf": "paper_artifacts/figures/paired_mechanism_west_current.pdf",
+  "script": "scripts/paper_figures/make_paired_mechanism.py",
+  "selected_runs": {
+    "C1": {
+      "completion_reason": "collision",
+      "mean_error_plotted_m": 0.13785110540479584,
+      "mean_truth_belief_error_after_first_cmd_m": 0.13843858890348706,
+      "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/paired_mechanism_current_west/route_west_to_a1_upper/C1/seed0/experiment_20260701_124451"
+    },
+    "C2": {
+      "completion_reason": "goal_reached",
+      "mean_error_plotted_m": 0.11173391557752746,
+      "mean_truth_belief_error_after_first_cmd_m": 0.11148502566377445,
+      "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/paired_mechanism_current_west/route_west_to_a1_upper/C2/seed0/experiment_20260701_124602"
+    }
+  },
+  "settings": {
+    "campaign": "paired_mechanism_current_west",
+    "dt": 0.25,
+    "git_sha_C1": "dcaf1fe25a40add928ea033bdb00f3e72a2024f2",
+    "git_sha_C2": "dcaf1fe25a40add928ea033bdb00f3e72a2024f2",
+    "global_horizon": 75,
+    "gp_artifact": "paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz",
+    "map_xlim_m": [
+      -5.5,
+      -2.3150766107197085
+    ],
+    "map_ylim_m": [
+      -2.9495017287469056,
+      5.0
+    ],
+    "nogo_belief_kappa": 1.0,
+    "nogo_mode": "keep_in",
+    "nogo_penalty_type": "warning_band",
+    "nogo_warning_band": 0.05,
+    "nogo_weight": 2000.0,
+    "optimizer_maxfun": 360,
+    "optimizer_maxiter": 60,
+    "optimizer_route_seed_mode": "lane_graph",
+    "seed": 0,
+    "task": "route_west_to_a1_upper",
+    "use_belief_nogo_cost": true,
+    "v_max": 0.6,
+    "visibility_artifact_path_C2": "/home/joostleliveld/Thesis/UnembodiedNavigation/paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz",
+    "world": "warehouse_aws.world.sdf",
+    "yolo_conf_threshold": 0.05,
+    "yolo_iou_threshold": 0.45,
+    "yolo_use_masks": false
+  },
+  "source_campaign_log": "logs/visibility_comparison/paired_mechanism_current_west/campaign_log.json",
+  "thesis_pdf": null
+}
