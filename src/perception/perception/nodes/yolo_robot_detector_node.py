@@ -74,6 +74,23 @@ class YoloRobotDetectorNode(Node):
         self.declare_parameter('pixel_noise_sigma', 0.0)
         self.declare_parameter('seed', 0)
         self.declare_parameter('min_keypoint_conf', 0.5)
+        # TIMING: load the TorchScript export of the model (forward = one C++
+        # dispatch that holds the GIL once for the whole forward, instead of
+        # per-layer eager dispatch). Pre/post-processing stay identical via the
+        # Ultralytics YOLO() wrapper, so detections are bit-identical. Falls back
+        # to model_path when the sibling .torchscript is missing.
+        self.declare_parameter('use_torchscript', False)
+        # TIMING: run N dummy inferences at startup to pay the one-off lazy CUDA
+        # / cuDNN init + (TorchScript) JIT specialization cost off the hot path,
+        # so the first live frame is not a multi-hundred-ms stall.
+        self.declare_parameter('warmup_iters', 3)
+        # TIMING: run inference synchronously in the image callback (single
+        # python thread) instead of a daemon worker. The worker shared the GIL
+        # with rclpy.spin and PyTorch's per-layer dispatch thrashed against it,
+        # inflating in-run inference ~10x. With queue depth 1, frames that arrive
+        # during inference are dropped by the middleware, preserving the
+        # latest-frame-only policy with zero intra-process GIL contention.
+        self.declare_parameter('inference_in_callback', True)
 
         model_path = Path(str(self.get_parameter('model_path').value).strip()).expanduser()
         if not str(model_path):
@@ -99,6 +116,9 @@ class YoloRobotDetectorNode(Node):
         self.pixel_noise_sigma = float(self.get_parameter('pixel_noise_sigma').value)
         self.rng = np.random.default_rng(int(self.get_parameter('seed').value))
         self.min_keypoint_conf = float(self.get_parameter('min_keypoint_conf').value)
+        self.use_torchscript = bool(self.get_parameter('use_torchscript').value) if isinstance(self.get_parameter('use_torchscript').value, bool) else _as_bool(self.get_parameter('use_torchscript').value)
+        self.warmup_iters = int(self.get_parameter('warmup_iters').value)
+        self.inference_in_callback = bool(self.get_parameter('inference_in_callback').value) if isinstance(self.get_parameter('inference_in_callback').value, bool) else _as_bool(self.get_parameter('inference_in_callback').value)
         self._last_inference_ms = math.nan
         self._last_callback_ms = math.nan
         self._last_receive_stamp_s = math.nan
@@ -111,7 +131,17 @@ class YoloRobotDetectorNode(Node):
         self._image_event = threading.Event()
         self._worker_stop = threading.Event()
 
-        self.model = YOLO(str(self.model_path))
+        load_path = self.model_path
+        if self.use_torchscript:
+            ts_path = self.model_path.with_suffix('.torchscript')
+            if ts_path.is_file():
+                load_path = ts_path
+            else:
+                self.get_logger().warn(
+                    f'use_torchscript=true but {ts_path} is missing; '
+                    f'falling back to eager {self.model_path}'
+                )
+        self.model = YOLO(str(load_path))
         self.target_ids = target_class_ids(getattr(self.model, 'names', {}), self.class_name, self.class_id)
         if self.target_ids == set():
             names = getattr(self.model, 'names', {})
@@ -121,16 +151,37 @@ class YoloRobotDetectorNode(Node):
             )
         self.is_pose_model = model_exposes_keypoints(self.model)
 
+        # Warmup off the hot path (lazy CUDA/cuDNN init, TorchScript JIT specialize).
+        if self.warmup_iters > 0:
+            _dummy = np.zeros((720, 1280, 3), dtype=np.uint8)
+            _wt0 = time.perf_counter()
+            for _ in range(self.warmup_iters):
+                try:
+                    self._predict(_dummy)
+                except Exception as exc:  # pragma: no cover - defensive
+                    self.get_logger().warn(f'warmup predict failed: {exc}')
+                    break
+            self.get_logger().info(
+                f'detector warmup: {self.warmup_iters} iters in '
+                f'{(time.perf_counter() - _wt0) * 1e3:.0f}ms'
+            )
+
         self.pixel_pub = self.create_publisher(PoseStamped, '/perception/pixel_pose', 10)
         self.diag_pub = self.create_publisher(Float64MultiArray, DETECTION_DIAGNOSTICS_TOPIC, 10)
         self.create_subscription(Image, '/external_camera/image_raw', self._image_cb, 1)
-        self._worker = threading.Thread(target=self._inference_worker, daemon=True)
-        self._worker.start()
+        # Worker thread is only started in the legacy (contended) path. Default
+        # is single-threaded inference in the callback (no GIL contention).
+        self._worker = None
+        if not self.inference_in_callback:
+            self._worker = threading.Thread(target=self._inference_worker, daemon=True)
+            self._worker.start()
 
         self.get_logger().info(
-            f'YOLO runtime detector started (model={self.model_path}, conf={self.confidence_threshold:.2f}, '
+            f'YOLO runtime detector started (model={load_path}, conf={self.confidence_threshold:.2f}, '
             f'iou={self.iou_threshold:.2f}, use_masks={self.use_masks}, '
             f'task={"pose" if self.is_pose_model else "seg/det"}, device={self.device or "auto"}, '
+            f'torchscript={self.use_torchscript}, '
+            f'inference_in_callback={self.inference_in_callback}, '
             'input_policy=latest-frame-only)'
         )
 
@@ -249,6 +300,12 @@ class YoloRobotDetectorNode(Node):
 
     def _image_cb(self, msg: Image):
         receive_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9
+        if self.inference_in_callback:
+            # Single-thread: run inference inline. While this blocks, depth-1 QoS
+            # keeps only the newest incoming frame, so the next spin picks up the
+            # latest available image (latest-frame-only, no GIL contender).
+            self._process_image(msg, receive_stamp_s)
+            return
         with self._image_lock:
             self._pending_image = msg
             self._pending_receive_stamp_s = receive_stamp_s
@@ -313,6 +370,9 @@ class YoloRobotDetectorNode(Node):
         if worker is not None and worker.is_alive():
             worker.join(timeout=2.0)
         return super().destroy_node()
+
+    # NOTE: _inference_worker / _take_latest_image below are only used when
+    # inference_in_callback=False (legacy contended path, kept for A/B timing).
 
     def _handle_seg_result(self, msg: Image, result) -> None:
         selection = select_best_detection(

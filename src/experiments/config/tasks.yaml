@@ -83,3 +83,22 @@ tasks:
     goal:
       x: 3.45
       y: -3.15
+
+  - name: occlusion_transit_a4
+    description: >
+      Diagnostic occlusion-transit: drive straight up the A4 rack aisle, whose
+      interior is genuinely occluded by the tall R4 stack (GP rho~0 -> camera
+      cannot detect the robot there). Visible lower apron -> BLIND A4 interior ->
+      upper cross-aisle. Used to demonstrate belief dead-reckoning drift while
+      blind and re-acquisition when the camera regains the robot.
+    tier: diagnostic
+    claim: blind_dead_reckoning
+    focus: genuine_occlusion_transit
+    start:
+      x: 3.3
+      y: -2.4
+      z: 0.05
+      yaw: 1.5708
+    goal:
+      x: 3.1
+      y: 4.6

@@ -12,6 +12,7 @@ import rclpy
 import tf2_ros
 import yaml
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
+from tf2_msgs.msg import TFMessage
 from nav_msgs.msg import Odometry, Path
 from ros_gz_interfaces.msg import Contacts
 from rclpy.node import Node
@@ -161,6 +162,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('optimizer_route_seed_mode', 'explicit')
         self.declare_parameter('use_hierarchical', False)
         self.declare_parameter('global_horizon', 60)
+        self.declare_parameter('global_dt', 0.0)
         self.declare_parameter('local_horizon', 12)
         self.declare_parameter('local_plan_rate', 4.0)
         self.declare_parameter('local_optimizer_maxiter', 60)
@@ -225,6 +227,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('bev_affine_calibration', '')
         self.declare_parameter('bbox_contact_z_m', 0.0)
         self.declare_parameter('pixel_correction_nis_threshold', 0.0)
+        self.declare_parameter('pixel_correction_nis_reject_cov_scale', 1.0)
         self.declare_parameter('odom_topic', '/odom_noisy')
         self.declare_parameter('run_dir_topic', '/experiment/run_dir')
         self.declare_parameter('run_timeout_after_first_cmd_s', 75.0)
@@ -333,6 +336,7 @@ class ExperimentLogger(Node):
         )
         self.use_hierarchical = bool(self.get_parameter('use_hierarchical').value)
         self.global_horizon = int(self.get_parameter('global_horizon').value)
+        self.global_dt = float(self.get_parameter('global_dt').value)
         self.local_horizon = int(self.get_parameter('local_horizon').value)
         self.local_plan_rate = float(self.get_parameter('local_plan_rate').value)
         self.local_optimizer_maxiter = int(self.get_parameter('local_optimizer_maxiter').value)
@@ -446,6 +450,9 @@ class ExperimentLogger(Node):
         self.bbox_contact_z_m = float(self.get_parameter('bbox_contact_z_m').value)
         self.pixel_correction_nis_threshold = float(
             self.get_parameter('pixel_correction_nis_threshold').value
+        )
+        self.pixel_correction_nis_reject_cov_scale = float(
+            self.get_parameter('pixel_correction_nis_reject_cov_scale').value
         )
         self.odom_topic = str(self.get_parameter('odom_topic').value or '/odom_noisy')
         self.run_dir_topic = str(self.get_parameter('run_dir_topic').value).strip() or '/experiment/run_dir'
@@ -595,6 +602,7 @@ class ExperimentLogger(Node):
             'bev_affine_calibration': self.bev_affine_calibration,
             'bbox_contact_z_m': self.bbox_contact_z_m,
             'pixel_correction_nis_threshold': self.pixel_correction_nis_threshold,
+            'pixel_correction_nis_reject_cov_scale': self.pixel_correction_nis_reject_cov_scale,
             'odom_topic': self.odom_topic,
             'seed': self.seed,
             'state_pipeline': 'homography_to_bev',
@@ -626,6 +634,7 @@ class ExperimentLogger(Node):
             'optimizer_route_seed_mode': self.optimizer_route_seed_mode,
             'use_hierarchical': self.use_hierarchical,
             'global_horizon': self.global_horizon,
+            'global_dt': self.global_dt,
             'local_horizon': self.local_horizon,
             'local_plan_rate': self.local_plan_rate,
             'local_optimizer_maxiter': self.local_optimizer_maxiter,
@@ -679,6 +688,11 @@ class ExperimentLogger(Node):
         self.planner_belief_msg = None
         self.odom_msg = None
         self.odom_noisy_msg = None
+        # TRUE Gazebo pose (world frame == map_bev) from /ground_truth_tf, held as
+        # latest (x, y). Lets us measure error vs GROUND TRUTH instead of vs /odom,
+        # which is DiffDrive wheel odometry and itself drifts in turns.
+        self._gt_xy = None
+        self._gt_yaw = None  # TRUE heading from /ground_truth_tf (for GT heading error)
         # Buffer of (stamp_s, x, y, yaw) ground truth in the map_bev frame, so the
         # camera measurement / state can be compared to truth AT THEIR OWN capture
         # time (not the current log time). This separates true detector quality from
@@ -714,19 +728,19 @@ class ExperimentLogger(Node):
             'ok': None,
             'reason': 'pending',
             'source_frame': '',
-            'truth_stamp': math.nan,
+            'odom_map_stamp': math.nan,
             'raw_odom_x': math.nan,
             'raw_odom_y': math.nan,
             'raw_odom_yaw': math.nan,
-            'truth_x': math.nan,
-            'truth_y': math.nan,
-            'truth_yaw': math.nan,
+            'odom_map_x': math.nan,
+            'odom_map_y': math.nan,
+            'odom_map_yaw': math.nan,
             'task_start_x': float(self.task_start_pose[0]) if self.task_start_pose is not None else math.nan,
             'task_start_y': float(self.task_start_pose[1]) if self.task_start_pose is not None else math.nan,
             'task_start_yaw': float(self.task_start_pose[2]) if self.task_start_pose is not None else math.nan,
-            'truth_start_error_m': math.nan,
+            'odom_map_start_error_m': math.nan,
             'raw_start_error_m': math.nan,
-            'truth_start_yaw_error_rad': math.nan,
+            'odom_map_start_yaw_error_rad': math.nan,
             'raw_start_yaw_error_rad': math.nan,
             'tolerance_m': self.frame_sanity_start_tolerance_m,
             'tolerance_yaw_rad': self.frame_sanity_start_tolerance_yaw_rad,
@@ -765,26 +779,36 @@ class ExperimentLogger(Node):
         self._p_vis_plan_below_0_2_count = 0
         self._p_vis_plan_eff_below_0_2_count = 0
         self._max_r_plan_std = 0.0
-        self._truth_state_error_sum = 0.0
-        self._truth_belief_error_sum = 0.0
-        self._truth_state_error_count = 0
-        self._truth_belief_error_count = 0
-        self._truth_state_error_after_first_cmd_sum = 0.0
-        self._truth_belief_error_after_first_cmd_sum = 0.0
-        self._truth_state_error_after_first_cmd_count = 0
-        self._truth_belief_error_after_first_cmd_count = 0
-        self._truth_odom_yaw_error_sum = 0.0
-        self._truth_state_yaw_error_sum = 0.0
-        self._truth_belief_yaw_error_sum = 0.0
+        self._state_error_odom_sum = 0.0
+        self._belief_error_odom_sum = 0.0
+        self._state_error_odom_count = 0
+        self._belief_error_odom_count = 0
+        self._state_error_odom_after_first_cmd_sum = 0.0
+        self._belief_error_odom_after_first_cmd_sum = 0.0
+        self._state_error_odom_after_first_cmd_count = 0
+        self._belief_error_odom_after_first_cmd_count = 0
+        self._odom_map_vs_odom_yaw_error_sum = 0.0
+        self._odom_map_vs_state_yaw_error_sum = 0.0
+        self._odom_map_vs_belief_yaw_error_sum = 0.0
         self._truth_odom_yaw_error_count = 0
         self._truth_state_yaw_error_count = 0
         self._truth_belief_yaw_error_count = 0
-        self._truth_odom_yaw_error_after_first_cmd_sum = 0.0
-        self._truth_state_yaw_error_after_first_cmd_sum = 0.0
-        self._truth_belief_yaw_error_after_first_cmd_sum = 0.0
-        self._truth_odom_yaw_error_after_first_cmd_count = 0
-        self._truth_state_yaw_error_after_first_cmd_count = 0
-        self._truth_belief_yaw_error_after_first_cmd_count = 0
+        self._odom_map_vs_odom_yaw_error_after_first_cmd_sum = 0.0
+        self._odom_map_vs_state_yaw_error_after_first_cmd_sum = 0.0
+        self._odom_map_vs_belief_yaw_error_after_first_cmd_sum = 0.0
+        self._odom_map_vs_odom_yaw_error_after_first_cmd_count = 0
+        self._odom_map_vs_state_yaw_error_after_first_cmd_count = 0
+        self._odom_map_vs_belief_yaw_error_after_first_cmd_count = 0
+        # GROUND-TRUTH error means (vs the real Gazebo pose gt_x/gt_y), the honest
+        # counterpart to the odom-based mean_truth_* means above.
+        self._belief_error_gt_sum = 0.0
+        self._belief_error_gt_count = 0
+        self._state_error_gt_sum = 0.0
+        self._state_error_gt_count = 0
+        self._belief_error_gt_after_first_cmd_sum = 0.0
+        self._belief_error_gt_after_first_cmd_count = 0
+        self._state_error_gt_after_first_cmd_sum = 0.0
+        self._state_error_gt_after_first_cmd_count = 0
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
 
@@ -797,6 +821,7 @@ class ExperimentLogger(Node):
         goal_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
         self.create_subscription(Odometry, '/odom_noisy', self._odom_noisy_cb, 10)
+        self.create_subscription(TFMessage, '/ground_truth_tf', self._ground_truth_cb, 50)
         self.create_subscription(PoseWithCovarianceStamped, '/state/bev', self._state_cb, 10)
         self.create_subscription(Float64MultiArray, '/state/heading_diagnostics', self._heading_diag_cb, 10)
         self.create_subscription(PoseWithCovarianceStamped, '/planner_belief', self._planner_belief_cb, 10)
@@ -833,7 +858,7 @@ class ExperimentLogger(Node):
         self.writer = csv.writer(self.file)
         self.writer.writerow([
             'stamp',
-            'truth_available', 'truth_stamp', 'truth_x', 'truth_y', 'truth_yaw',
+            'odom_map_available', 'odom_map_stamp', 'odom_map_x', 'odom_map_y', 'odom_map_yaw',
             'state_available', 'state_stamp', 'state_x', 'state_y', 'state_yaw',
             'state_age_s', 'state_fresh',
             'state_cov_xx', 'state_cov_xy', 'state_cov_yy', 'state_cov_yaw',
@@ -846,14 +871,14 @@ class ExperimentLogger(Node):
             'state_pos_error_m', 'state_cov_trace', 'state_cov_det',
             'state_sigma_major_m', 'state_sigma_minor_m', 'state_entropy_xy',
             # Explicit unambiguous error columns:
-            # truth_state_error_m  = ||truth - /state/bev||   (perception estimate vs ground truth)
-            # truth_belief_error_m = ||truth - /planner_belief||  (planner internal state vs ground truth)
-            'truth_state_error_m', 'truth_belief_error_m',
+            # state_error_odom_m  = ||truth - /state/bev||   (perception estimate vs ground truth)
+            # belief_error_odom_m = ||truth - /planner_belief||  (planner internal state vs ground truth)
+            'state_error_odom_m', 'belief_error_odom_m',
             'odom_available', 'odom_stamp', 'odom_x', 'odom_y', 'odom_yaw',
             'odom_v', 'odom_w',
             'odom_noisy_available', 'odom_noisy_stamp', 'odom_noisy_x', 'odom_noisy_y',
             'odom_noisy_yaw', 'odom_noisy_v', 'odom_noisy_w',
-            'yaw_error_truth_odom_rad', 'yaw_error_truth_state_rad', 'yaw_error_truth_belief_rad',
+            'yaw_error_odom_map_vs_odom_rad', 'yaw_error_odom_map_vs_state_rad', 'yaw_error_odom_map_vs_belief_rad',
             'pixel_yaw_meas', 'heading_source_code', 'heading_source',
             'heading_diag_stamp', 'heading_diag_age_s',
             'state_heading_yaw_sigma', 'state_heading_odom_age_s',
@@ -913,7 +938,7 @@ class ExperimentLogger(Node):
             'off_map', 'inside_no_go', 'valid_run', 'invalid_reason',
             'heading_update_mode',
             'pixel_corr_K_theta_u', 'pixel_corr_K_theta_v',
-            'yaw_error_odom_noisy_truth_rad',
+            'yaw_error_odom_noisy_vs_odom_map_rad',
             'state_bev_yaw_latest',
             'state_bev_cov_theta_theta', 'state_bev_cov_x_theta', 'state_bev_cov_y_theta',
             'planner_belief_cov_theta_theta', 'planner_belief_cov_x_theta', 'planner_belief_cov_y_theta',
@@ -921,6 +946,10 @@ class ExperimentLogger(Node):
             'planner_diag_u_pred_v', 'planner_diag_u_pred_omega', 'planner_diag_Q_theta_theta',
             'planner_diag_odom_delta_theta', 'planner_diag_cmd_delta_theta',
             'planner_diag_heading_anchor_applied', 'planner_diag_state_bev_yaw_ignored',
+            # Ground-truth (vs TRUE Gazebo pose, not /odom wheel odometry):
+            'gt_available', 'gt_x', 'gt_y', 'gt_yaw',
+            'belief_error_gt_m', 'state_error_gt_m', 'odom_map_gt_drift_m',
+            'belief_yaw_error_gt_rad',
             'seed'
         ])
 
@@ -1128,19 +1157,17 @@ class ExperimentLogger(Node):
         cmd_v: float,
         cmd_w: float,
     ) -> None:
-        if not true_ok:
+        # Stuck / goal-stable detection uses the TRUE Gazebo pose ONLY (no /odom
+        # fallback): drifting wheel-odom would misreport displacement/progress.
+        if self._gt_xy is None:
             return
-        if not (
-            math.isfinite(stamp)
-            and math.isfinite(true_x)
-            and math.isfinite(true_y)
-            and math.isfinite(goal_dist)
-        ):
+        gx, gy = self._gt_xy
+        if not (math.isfinite(stamp) and math.isfinite(gx) and math.isfinite(gy) and math.isfinite(goal_dist)):
             return
         self._motion_history.append((
             float(stamp),
-            float(true_x),
-            float(true_y),
+            float(gx),
+            float(gy),
             float(goal_dist),
             1.0 if self._command_active(cmd_v, cmd_w) else 0.0,
         ))
@@ -1295,6 +1322,18 @@ class ExperimentLogger(Node):
 
     def _odom_noisy_cb(self, msg: Odometry):
         self.odom_noisy_msg = msg
+
+    def _ground_truth_cb(self, msg: TFMessage):
+        # /world/<name>/dynamic_pose/info publishes every moving entity's world
+        # pose. Keep the robot's. Holds last value while stationary (true pose
+        # is constant then anyway).
+        for tr in msg.transforms:
+            if tr.child_frame_id == 'turtlebot3':
+                self._gt_xy = (
+                    float(tr.transform.translation.x),
+                    float(tr.transform.translation.y),
+                )
+                self._gt_yaw = self._yaw_from_quaternion(tr.transform.rotation)
 
     def _state_cb(self, msg: PoseWithCovarianceStamped):
         self.state_msg = msg
@@ -1493,9 +1532,9 @@ class ExperimentLogger(Node):
             return float('inf')
         return float(signed_distance_to_union_xy(prisms, np.array([float(x), float(y)], dtype=float))[0])
 
-    def _geometry_safety_at_truth(self, truth_x: float, truth_y: float):
-        wall_signed = self._signed_distance_from_prisms(self._wall_prisms, truth_x, truth_y)
-        obstacle_signed = self._signed_distance_from_prisms(self._obstacle_prisms, truth_x, truth_y)
+    def _geometry_safety_at_truth(self, odom_map_x: float, odom_map_y: float):
+        wall_signed = self._signed_distance_from_prisms(self._wall_prisms, odom_map_x, odom_map_y)
+        obstacle_signed = self._signed_distance_from_prisms(self._obstacle_prisms, odom_map_x, odom_map_y)
         wall_clearance = wall_signed - self.robot_collision_radius_m if math.isfinite(wall_signed) else math.inf
         obstacle_clearance = obstacle_signed - self.robot_collision_radius_m if math.isfinite(obstacle_signed) else math.inf
         wall_penetration = max(-wall_clearance, 0.0) if math.isfinite(wall_clearance) else 0.0
@@ -1505,10 +1544,10 @@ class ExperimentLogger(Node):
         off_map = False
         if all(math.isfinite(float(bounds.get(key, math.nan))) for key in ('xmin', 'xmax', 'ymin', 'ymax')):
             off_map = bool(
-                float(truth_x) < float(bounds['xmin'])
-                or float(truth_x) > float(bounds['xmax'])
-                or float(truth_y) < float(bounds['ymin'])
-                or float(truth_y) > float(bounds['ymax'])
+                float(odom_map_x) < float(bounds['xmin'])
+                or float(odom_map_x) > float(bounds['xmax'])
+                or float(odom_map_y) < float(bounds['ymin'])
+                or float(odom_map_y) > float(bounds['ymax'])
             )
         inside_no_go = bool(obstacle_penetration > 0.0)
         return {
@@ -1520,12 +1559,12 @@ class ExperimentLogger(Node):
             'inside_no_go': inside_no_go,
         }
 
-    def _camera_relative_bearing_deg(self, truth_x: float, truth_y: float, truth_yaw: float) -> float:
-        vec = np.asarray(self.camera_pos_xy, dtype=float) - np.array([float(truth_x), float(truth_y)], dtype=float)
+    def _camera_relative_bearing_deg(self, odom_map_x: float, odom_map_y: float, odom_map_yaw: float) -> float:
+        vec = np.asarray(self.camera_pos_xy, dtype=float) - np.array([float(odom_map_x), float(odom_map_y)], dtype=float)
         if np.linalg.norm(vec) <= 1e-9:
             return math.nan
         bearing_world = math.atan2(float(vec[1]), float(vec[0]))
-        rel = self._wrap_angle(bearing_world - float(truth_yaw))
+        rel = self._wrap_angle(bearing_world - float(odom_map_yaw))
         return float(abs(math.degrees(rel)))
 
     def _latest_truth_pose(self):
@@ -1627,14 +1666,14 @@ class ExperimentLogger(Node):
             return
 
         raw_ok, _raw_stamp, raw_x, raw_y, raw_yaw, source_frame = self._latest_raw_odom_pose()
-        true_ok, truth_stamp, truth_x, truth_y, truth_yaw = self._latest_truth_pose()
+        true_ok, odom_map_stamp, odom_map_x, odom_map_y, odom_map_yaw = self._latest_truth_pose()
         if not (raw_ok and true_ok):
             return
 
         start_x, start_y, start_yaw = self.task_start_pose
-        truth_start_error = float(math.hypot(truth_x - start_x, truth_y - start_y))
+        truth_start_error = float(math.hypot(odom_map_x - start_x, odom_map_y - start_y))
         raw_start_error = float(math.hypot(raw_x - start_x, raw_y - start_y))
-        truth_start_yaw_error = abs(self._wrap_angle(truth_yaw - start_yaw))
+        truth_start_yaw_error = abs(self._wrap_angle(odom_map_yaw - start_yaw))
         raw_start_yaw_error = abs(self._wrap_angle(raw_yaw - start_yaw))
         ok = bool(
             truth_start_error <= self.frame_sanity_start_tolerance_m
@@ -1645,21 +1684,21 @@ class ExperimentLogger(Node):
         self._frame_sanity.update({
             'recorded': True,
             'ok': ok,
-            'reason': 'ok' if ok else 'truth_start_mismatch',
+            'reason': 'ok' if ok else 'odom_map_start_mismatch',
             'source_frame': source_frame,
-            'truth_stamp': truth_stamp,
+            'odom_map_stamp': odom_map_stamp,
             'raw_odom_x': raw_x,
             'raw_odom_y': raw_y,
             'raw_odom_yaw': raw_yaw,
-            'truth_x': truth_x,
-            'truth_y': truth_y,
-            'truth_yaw': truth_yaw,
+            'odom_map_x': odom_map_x,
+            'odom_map_y': odom_map_y,
+            'odom_map_yaw': odom_map_yaw,
             'task_start_x': start_x,
             'task_start_y': start_y,
             'task_start_yaw': start_yaw,
-            'truth_start_error_m': truth_start_error,
+            'odom_map_start_error_m': truth_start_error,
             'raw_start_error_m': raw_start_error,
-            'truth_start_yaw_error_rad': truth_start_yaw_error,
+            'odom_map_start_yaw_error_rad': truth_start_yaw_error,
             'raw_start_yaw_error_rad': raw_start_yaw_error,
             'tolerance_m': self.frame_sanity_start_tolerance_m,
             'tolerance_yaw_rad': self.frame_sanity_start_tolerance_yaw_rad,
@@ -1670,7 +1709,7 @@ class ExperimentLogger(Node):
         message = (
             'Frame sanity check '
             f'({source_frame} -> {self.frame_id}): raw odom=({raw_x:.3f}, {raw_y:.3f}), '
-            f'transformed truth=({truth_x:.3f}, {truth_y:.3f}), '
+            f'transformed truth=({odom_map_x:.3f}, {odom_map_y:.3f}), '
             f'task start=({start_x:.3f}, {start_y:.3f}), '
             f'truth_start_error={truth_start_error:.3f} m, '
             f'truth_start_yaw_error={truth_start_yaw_error:.3f} rad'
@@ -1954,7 +1993,7 @@ class ExperimentLogger(Node):
         else:
             cov_x = cov_xy = cov_y = cov_yaw = math.nan
 
-        true_ok, truth_stamp, true_x, true_y, true_yaw = self._latest_truth_pose()
+        true_ok, odom_map_stamp, true_x, true_y, true_yaw = self._latest_truth_pose()
         (
             planner_belief_ok,
             planner_belief_stamp,
@@ -2007,28 +2046,30 @@ class ExperimentLogger(Node):
             state_entropy_xy,
         ) = self._covariance_metrics_2d(est_cov_xx, est_cov_xy, est_cov_yy)
 
-        # Explicit unambiguous error signals:
-        # truth_state_error_m:  ground truth vs /state/bev (perception output)
-        # truth_belief_error_m: ground truth vs /planner_belief (planner's internal belief)
-        truth_state_error_m = math.nan
+        # ODOM-as-reference error signals (NOT ground truth — true_x/y = /odom,
+        # which drifts from the real pose). Kept only for odom-drift diagnostics;
+        # the honest errors are belief_error_gt_m / state_error_gt_m (vs gt_x/gt_y).
+        # state_error_odom_m:  /odom vs /state/bev (perception output)
+        # belief_error_odom_m: /odom vs /planner_belief (planner's internal belief)
+        state_error_odom_m = math.nan
         after_first_cmd = bool(self._first_cmd_stamp is not None and now_stamp >= self._first_cmd_stamp)
         if true_ok and state_ok and math.isfinite(state_x) and math.isfinite(state_y):
-            truth_state_error_m = float(math.hypot(true_x - state_x, true_y - state_y))
-            self._truth_state_error_sum += truth_state_error_m
-            if math.isfinite(truth_state_error_m):
-                self._truth_state_error_count += 1
+            state_error_odom_m = float(math.hypot(true_x - state_x, true_y - state_y))
+            self._state_error_odom_sum += state_error_odom_m
+            if math.isfinite(state_error_odom_m):
+                self._state_error_odom_count += 1
                 if after_first_cmd:
-                    self._truth_state_error_after_first_cmd_sum += truth_state_error_m
-                    self._truth_state_error_after_first_cmd_count += 1
-        truth_belief_error_m = math.nan
+                    self._state_error_odom_after_first_cmd_sum += state_error_odom_m
+                    self._state_error_odom_after_first_cmd_count += 1
+        belief_error_odom_m = math.nan
         if true_ok and planner_belief_ok and math.isfinite(planner_belief_x) and math.isfinite(planner_belief_y):
-            truth_belief_error_m = float(math.hypot(true_x - planner_belief_x, true_y - planner_belief_y))
-            self._truth_belief_error_sum += truth_belief_error_m
-            if math.isfinite(truth_belief_error_m):
-                self._truth_belief_error_count += 1
+            belief_error_odom_m = float(math.hypot(true_x - planner_belief_x, true_y - planner_belief_y))
+            self._belief_error_odom_sum += belief_error_odom_m
+            if math.isfinite(belief_error_odom_m):
+                self._belief_error_odom_count += 1
                 if after_first_cmd:
-                    self._truth_belief_error_after_first_cmd_sum += truth_belief_error_m
-                    self._truth_belief_error_after_first_cmd_count += 1
+                    self._belief_error_odom_after_first_cmd_sum += belief_error_odom_m
+                    self._belief_error_odom_after_first_cmd_count += 1
 
         odom_ok, odom_stamp, odom_x, odom_y, odom_yaw, odom_v, odom_w = self._odom_record(self.odom_msg)
         (
@@ -2040,9 +2081,9 @@ class ExperimentLogger(Node):
             odom_noisy_v,
             odom_noisy_w,
         ) = self._odom_record(self.odom_noisy_msg)
-        yaw_error_odom_noisy_truth_rad = math.nan
+        yaw_error_odom_noisy_vs_odom_map_rad = math.nan
         if true_ok and odom_noisy_ok and math.isfinite(odom_noisy_yaw):
-            yaw_error_odom_noisy_truth_rad = float(self._wrap_angle(odom_noisy_yaw - true_yaw))
+            yaw_error_odom_noisy_vs_odom_map_rad = float(self._wrap_angle(odom_noisy_yaw - true_yaw))
 
         state_bev_yaw_latest = math.nan
         state_bev_cov_theta_theta = math.nan
@@ -2062,30 +2103,30 @@ class ExperimentLogger(Node):
                 self.extract_planar_covariances(self.planner_belief_msg.pose.covariance)
             )
 
-        yaw_error_truth_odom_rad = math.nan
-        yaw_error_truth_state_rad = math.nan
-        yaw_error_truth_belief_rad = math.nan
+        yaw_error_odom_map_vs_odom_rad = math.nan
+        yaw_error_odom_map_vs_state_rad = math.nan
+        yaw_error_odom_map_vs_belief_rad = math.nan
         if true_ok and odom_ok and math.isfinite(odom_yaw):
-            yaw_error_truth_odom_rad = float(self._wrap_angle(odom_yaw - true_yaw))
-            self._truth_odom_yaw_error_sum += abs(yaw_error_truth_odom_rad)
+            yaw_error_odom_map_vs_odom_rad = float(self._wrap_angle(odom_yaw - true_yaw))
+            self._odom_map_vs_odom_yaw_error_sum += abs(yaw_error_odom_map_vs_odom_rad)
             self._truth_odom_yaw_error_count += 1
             if after_first_cmd:
-                self._truth_odom_yaw_error_after_first_cmd_sum += abs(yaw_error_truth_odom_rad)
-                self._truth_odom_yaw_error_after_first_cmd_count += 1
+                self._odom_map_vs_odom_yaw_error_after_first_cmd_sum += abs(yaw_error_odom_map_vs_odom_rad)
+                self._odom_map_vs_odom_yaw_error_after_first_cmd_count += 1
         if true_ok and state_ok and math.isfinite(state_yaw):
-            yaw_error_truth_state_rad = float(self._wrap_angle(state_yaw - true_yaw))
-            self._truth_state_yaw_error_sum += abs(yaw_error_truth_state_rad)
+            yaw_error_odom_map_vs_state_rad = float(self._wrap_angle(state_yaw - true_yaw))
+            self._odom_map_vs_state_yaw_error_sum += abs(yaw_error_odom_map_vs_state_rad)
             self._truth_state_yaw_error_count += 1
             if after_first_cmd:
-                self._truth_state_yaw_error_after_first_cmd_sum += abs(yaw_error_truth_state_rad)
-                self._truth_state_yaw_error_after_first_cmd_count += 1
+                self._odom_map_vs_state_yaw_error_after_first_cmd_sum += abs(yaw_error_odom_map_vs_state_rad)
+                self._odom_map_vs_state_yaw_error_after_first_cmd_count += 1
         if true_ok and planner_belief_ok and math.isfinite(planner_belief_yaw):
-            yaw_error_truth_belief_rad = float(self._wrap_angle(planner_belief_yaw - true_yaw))
-            self._truth_belief_yaw_error_sum += abs(yaw_error_truth_belief_rad)
+            yaw_error_odom_map_vs_belief_rad = float(self._wrap_angle(planner_belief_yaw - true_yaw))
+            self._odom_map_vs_belief_yaw_error_sum += abs(yaw_error_odom_map_vs_belief_rad)
             self._truth_belief_yaw_error_count += 1
             if after_first_cmd:
-                self._truth_belief_yaw_error_after_first_cmd_sum += abs(yaw_error_truth_belief_rad)
-                self._truth_belief_yaw_error_after_first_cmd_count += 1
+                self._odom_map_vs_belief_yaw_error_after_first_cmd_sum += abs(yaw_error_odom_map_vs_belief_rad)
+                self._odom_map_vs_belief_yaw_error_after_first_cmd_count += 1
 
         heading_diag_stamp = math.nan
         heading_diag_age_s = math.nan
@@ -2221,18 +2262,19 @@ class ExperimentLogger(Node):
 
         goal_x = math.nan
         goal_y = math.nan
+        # Goal distance & executed path from the TRUE Gazebo pose ONLY (no /odom
+        # fallback). goal_reached / min_goal_distance are outcome metrics; scoring
+        # them on drifting wheel-odom would (like the collision metric) misreport
+        # whether the TRUE robot reached the goal. If gt is unavailable -> NaN.
         goal_dist = math.nan
-        if self.goal_msg:
+        if self.goal_msg and self._gt_xy is not None:
             goal_x = float(self.goal_msg.pose.position.x)
             goal_y = float(self.goal_msg.pose.position.y)
-            if true_ok:
-                dx = goal_x - true_x
-                dy = goal_y - true_y
-                goal_dist = math.hypot(dx, dy)
+            goal_dist = math.hypot(goal_x - self._gt_xy[0], goal_y - self._gt_xy[1])
 
         current_pose = None
-        if true_ok and math.isfinite(true_x) and math.isfinite(true_y):
-            current_pose = (true_x, true_y)
+        if self._gt_xy is not None:
+            current_pose = (float(self._gt_xy[0]), float(self._gt_xy[1]))
             if self._last_path_pose is not None:
                 self._cumulative_path_length += math.hypot(current_pose[0] - self._last_path_pose[0], current_pose[1] - self._last_path_pose[1])
             self._last_path_pose = current_pose
@@ -2414,8 +2456,15 @@ class ExperimentLogger(Node):
         obstacle_penetration_m = 0.0
         off_map = 0.0
         inside_no_go = 0.0
-        if true_ok:
-            safety = self._geometry_safety_at_truth(true_x, true_y)
+        # Collision / clearance from the TRUE Gazebo pose ONLY. The /odom 'truth' is
+        # wheel odometry and drifts (esp. in turns), which produced FALSE geometry-
+        # collisions (odom penetrates a rack while the true robot is clear). NO odom
+        # fallback: if ground truth is unavailable, these stay NaN (explicit), never
+        # silently computed against odom. If gt is never available the run has no
+        # geometry-collision metric at all -- that is obvious, not confusing.
+        _gt = self._gt_xy
+        if _gt is not None:
+            safety = self._geometry_safety_at_truth(_gt[0], _gt[1])
             min_wall_distance_m = float(safety['min_wall_distance_m'])
             min_obstacle_distance_m = float(safety['min_obstacle_distance_m'])
             wall_penetration_m = float(safety['wall_penetration_m'])
@@ -2443,7 +2492,7 @@ class ExperimentLogger(Node):
                 self._record_invalid('inside_no_go')
             if geom_reason:
                 self._record_collision_event(
-                    stamp=truth_stamp if math.isfinite(truth_stamp) else now_stamp,
+                    stamp=odom_map_stamp if math.isfinite(odom_map_stamp) else now_stamp,
                     reason='|'.join(geom_reason),
                     contact=False,
                     geom=True,
@@ -2458,9 +2507,42 @@ class ExperimentLogger(Node):
         valid_run = 1.0 if self._valid_run else 0.0
         invalid_reason = self._invalid_reason
 
+        # --- GROUND-TRUTH errors (vs TRUE Gazebo pose, not /odom) ---
+        # /odom ("truth_*") is DiffDrive wheel odometry and drifts in turns;
+        # these *_gt columns are the honest errors against the real pose.
+        gt_ok = self._gt_xy is not None
+        gt_x = self._gt_xy[0] if gt_ok else math.nan
+        gt_y = self._gt_xy[1] if gt_ok else math.nan
+        gt_yaw = self._gt_yaw if (gt_ok and self._gt_yaw is not None) else math.nan
+        belief_error_gt_m = math.nan
+        state_error_gt_m = math.nan
+        odom_map_gt_drift_m = math.nan
+        belief_yaw_error_gt_rad = math.nan
+        if gt_ok:
+            if math.isfinite(gt_yaw) and planner_belief_ok and math.isfinite(planner_belief_yaw):
+                belief_yaw_error_gt_rad = self._wrap_angle(planner_belief_yaw - gt_yaw)
+            if planner_belief_ok and math.isfinite(planner_belief_x):
+                belief_error_gt_m = math.hypot(planner_belief_x - gt_x, planner_belief_y - gt_y)
+            if state_ok and math.isfinite(state_x):
+                state_error_gt_m = math.hypot(state_x - gt_x, state_y - gt_y)
+            if true_ok and math.isfinite(true_x):
+                odom_map_gt_drift_m = math.hypot(true_x - gt_x, true_y - gt_y)
+            if math.isfinite(belief_error_gt_m):
+                self._belief_error_gt_sum += belief_error_gt_m
+                self._belief_error_gt_count += 1
+                if after_first_cmd:
+                    self._belief_error_gt_after_first_cmd_sum += belief_error_gt_m
+                    self._belief_error_gt_after_first_cmd_count += 1
+            if math.isfinite(state_error_gt_m):
+                self._state_error_gt_sum += state_error_gt_m
+                self._state_error_gt_count += 1
+                if after_first_cmd:
+                    self._state_error_gt_after_first_cmd_sum += state_error_gt_m
+                    self._state_error_gt_after_first_cmd_count += 1
+
         self.writer.writerow([
             stamp,
-            1.0 if true_ok else 0.0, truth_stamp, true_x, true_y, true_yaw,
+            1.0 if true_ok else 0.0, odom_map_stamp, true_x, true_y, true_yaw,
             1.0 if state_ok else 0.0, state_stamp, state_x, state_y, state_yaw,
             state_age_s, 1.0 if state_fresh else 0.0,
             cov_x, cov_xy, cov_y, cov_yaw,
@@ -2472,12 +2554,12 @@ class ExperimentLogger(Node):
             est_cov_xx, est_cov_xy, est_cov_yy,
             state_pos_error_m, state_cov_trace, state_cov_det,
             state_sigma_major_m, state_sigma_minor_m, state_entropy_xy,
-            truth_state_error_m, truth_belief_error_m,
+            state_error_odom_m, belief_error_odom_m,
             1.0 if odom_ok else 0.0, odom_stamp, odom_x, odom_y, odom_yaw,
             odom_v, odom_w,
             1.0 if odom_noisy_ok else 0.0, odom_noisy_stamp, odom_noisy_x, odom_noisy_y,
             odom_noisy_yaw, odom_noisy_v, odom_noisy_w,
-            yaw_error_truth_odom_rad, yaw_error_truth_state_rad, yaw_error_truth_belief_rad,
+            yaw_error_odom_map_vs_odom_rad, yaw_error_odom_map_vs_state_rad, yaw_error_odom_map_vs_belief_rad,
             pixel_yaw_meas, heading_source_code, heading_source,
             heading_diag_stamp, heading_diag_age_s,
             state_heading_yaw_sigma, state_heading_odom_age_s,
@@ -2537,7 +2619,7 @@ class ExperimentLogger(Node):
             off_map, inside_no_go, valid_run, invalid_reason,
             self.heading_update_mode,
             pixel_corr_K_theta_u, pixel_corr_K_theta_v,
-            yaw_error_odom_noisy_truth_rad,
+            yaw_error_odom_noisy_vs_odom_map_rad,
             state_bev_yaw_latest,
             state_bev_cov_theta_theta, state_bev_cov_x_theta, state_bev_cov_y_theta,
             planner_belief_cov_theta_theta, planner_belief_cov_x_theta, planner_belief_cov_y_theta,
@@ -2545,6 +2627,9 @@ class ExperimentLogger(Node):
             planner_diag_u_pred_v, planner_diag_u_pred_omega, planner_diag_Q_theta_theta,
             planner_diag_odom_delta_theta, planner_diag_cmd_delta_theta,
             planner_diag_heading_anchor_applied, planner_diag_state_bev_yaw_ignored,
+            1.0 if gt_ok else 0.0, gt_x, gt_y, gt_yaw,
+            belief_error_gt_m, state_error_gt_m, odom_map_gt_drift_m,
+            belief_yaw_error_gt_rad,
             self.seed,
         ])
         self.file.flush()
@@ -2595,50 +2680,69 @@ class ExperimentLogger(Node):
         fraction_time_p_vis_below_0_2 = self._p_vis_plan_below_0_2_count / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
         fraction_time_p_vis_eff_below_0_2 = self._p_vis_plan_eff_below_0_2_count / max(self._p_vis_count, 1) if self._p_vis_count > 0 else math.nan
         max_r_plan_std = self._max_r_plan_std if self._p_vis_count > 0 else math.nan
-        mean_truth_state_error_m = (
-            self._truth_state_error_sum / self._truth_state_error_count
-            if self._truth_state_error_count > 0 else math.nan
+        mean_state_error_odom_m = (
+            self._state_error_odom_sum / self._state_error_odom_count
+            if self._state_error_odom_count > 0 else math.nan
         )
-        mean_truth_belief_error_m = (
-            self._truth_belief_error_sum / self._truth_belief_error_count
-            if self._truth_belief_error_count > 0 else math.nan
+        mean_belief_error_odom_m = (
+            self._belief_error_odom_sum / self._belief_error_odom_count
+            if self._belief_error_odom_count > 0 else math.nan
         )
-        mean_truth_state_error_after_first_cmd_m = (
-            self._truth_state_error_after_first_cmd_sum
-            / self._truth_state_error_after_first_cmd_count
-            if self._truth_state_error_after_first_cmd_count > 0 else math.nan
+        mean_state_error_odom_after_first_cmd_m = (
+            self._state_error_odom_after_first_cmd_sum
+            / self._state_error_odom_after_first_cmd_count
+            if self._state_error_odom_after_first_cmd_count > 0 else math.nan
         )
-        mean_truth_belief_error_after_first_cmd_m = (
-            self._truth_belief_error_after_first_cmd_sum
-            / self._truth_belief_error_after_first_cmd_count
-            if self._truth_belief_error_after_first_cmd_count > 0 else math.nan
+        mean_belief_error_odom_after_first_cmd_m = (
+            self._belief_error_odom_after_first_cmd_sum
+            / self._belief_error_odom_after_first_cmd_count
+            if self._belief_error_odom_after_first_cmd_count > 0 else math.nan
         )
-        mean_abs_truth_odom_yaw_error_rad = (
-            self._truth_odom_yaw_error_sum / self._truth_odom_yaw_error_count
+        # GROUND-TRUTH error means (the honest localization metric)
+        mean_belief_error_gt_m = (
+            self._belief_error_gt_sum / self._belief_error_gt_count
+            if self._belief_error_gt_count > 0 else math.nan
+        )
+        mean_state_error_gt_m = (
+            self._state_error_gt_sum / self._state_error_gt_count
+            if self._state_error_gt_count > 0 else math.nan
+        )
+        mean_belief_error_gt_after_first_cmd_m = (
+            self._belief_error_gt_after_first_cmd_sum
+            / self._belief_error_gt_after_first_cmd_count
+            if self._belief_error_gt_after_first_cmd_count > 0 else math.nan
+        )
+        mean_state_error_gt_after_first_cmd_m = (
+            self._state_error_gt_after_first_cmd_sum
+            / self._state_error_gt_after_first_cmd_count
+            if self._state_error_gt_after_first_cmd_count > 0 else math.nan
+        )
+        mean_abs_odom_map_vs_odom_yaw_error_rad = (
+            self._odom_map_vs_odom_yaw_error_sum / self._truth_odom_yaw_error_count
             if self._truth_odom_yaw_error_count > 0 else math.nan
         )
-        mean_abs_truth_state_yaw_error_rad = (
-            self._truth_state_yaw_error_sum / self._truth_state_yaw_error_count
+        mean_abs_odom_map_vs_state_yaw_error_rad = (
+            self._odom_map_vs_state_yaw_error_sum / self._truth_state_yaw_error_count
             if self._truth_state_yaw_error_count > 0 else math.nan
         )
-        mean_abs_truth_belief_yaw_error_rad = (
-            self._truth_belief_yaw_error_sum / self._truth_belief_yaw_error_count
+        mean_abs_odom_map_vs_belief_yaw_error_rad = (
+            self._odom_map_vs_belief_yaw_error_sum / self._truth_belief_yaw_error_count
             if self._truth_belief_yaw_error_count > 0 else math.nan
         )
-        mean_abs_truth_odom_yaw_error_after_first_cmd_rad = (
-            self._truth_odom_yaw_error_after_first_cmd_sum
-            / self._truth_odom_yaw_error_after_first_cmd_count
-            if self._truth_odom_yaw_error_after_first_cmd_count > 0 else math.nan
+        mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad = (
+            self._odom_map_vs_odom_yaw_error_after_first_cmd_sum
+            / self._odom_map_vs_odom_yaw_error_after_first_cmd_count
+            if self._odom_map_vs_odom_yaw_error_after_first_cmd_count > 0 else math.nan
         )
-        mean_abs_truth_state_yaw_error_after_first_cmd_rad = (
-            self._truth_state_yaw_error_after_first_cmd_sum
-            / self._truth_state_yaw_error_after_first_cmd_count
-            if self._truth_state_yaw_error_after_first_cmd_count > 0 else math.nan
+        mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad = (
+            self._odom_map_vs_state_yaw_error_after_first_cmd_sum
+            / self._odom_map_vs_state_yaw_error_after_first_cmd_count
+            if self._odom_map_vs_state_yaw_error_after_first_cmd_count > 0 else math.nan
         )
-        mean_abs_truth_belief_yaw_error_after_first_cmd_rad = (
-            self._truth_belief_yaw_error_after_first_cmd_sum
-            / self._truth_belief_yaw_error_after_first_cmd_count
-            if self._truth_belief_yaw_error_after_first_cmd_count > 0 else math.nan
+        mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad = (
+            self._odom_map_vs_belief_yaw_error_after_first_cmd_sum
+            / self._odom_map_vs_belief_yaw_error_after_first_cmd_count
+            if self._odom_map_vs_belief_yaw_error_after_first_cmd_count > 0 else math.nan
         )
 
         if stamp is None:
@@ -2708,16 +2812,21 @@ class ExperimentLogger(Node):
             'mean_r_plan_v_std': mean_r_plan_v_std,
             'max_r_plan_std': max_r_plan_std,
             # Explicit truth vs perception / planner belief errors
-            'mean_truth_state_error_m': mean_truth_state_error_m,
-            'mean_truth_belief_error_m': mean_truth_belief_error_m,
-            'mean_truth_state_error_after_first_cmd_m': mean_truth_state_error_after_first_cmd_m,
-            'mean_truth_belief_error_after_first_cmd_m': mean_truth_belief_error_after_first_cmd_m,
-            'mean_abs_truth_odom_yaw_error_rad': mean_abs_truth_odom_yaw_error_rad,
-            'mean_abs_truth_state_yaw_error_rad': mean_abs_truth_state_yaw_error_rad,
-            'mean_abs_truth_belief_yaw_error_rad': mean_abs_truth_belief_yaw_error_rad,
-            'mean_abs_truth_odom_yaw_error_after_first_cmd_rad': mean_abs_truth_odom_yaw_error_after_first_cmd_rad,
-            'mean_abs_truth_state_yaw_error_after_first_cmd_rad': mean_abs_truth_state_yaw_error_after_first_cmd_rad,
-            'mean_abs_truth_belief_yaw_error_after_first_cmd_rad': mean_abs_truth_belief_yaw_error_after_first_cmd_rad,
+            'mean_state_error_odom_m': mean_state_error_odom_m,
+            'mean_belief_error_odom_m': mean_belief_error_odom_m,
+            'mean_state_error_odom_after_first_cmd_m': mean_state_error_odom_after_first_cmd_m,
+            'mean_belief_error_odom_after_first_cmd_m': mean_belief_error_odom_after_first_cmd_m,
+            # GROUND-TRUTH error means (honest; use these, not the mean_truth_* above)
+            'mean_belief_error_gt_m': mean_belief_error_gt_m,
+            'mean_state_error_gt_m': mean_state_error_gt_m,
+            'mean_belief_error_gt_after_first_cmd_m': mean_belief_error_gt_after_first_cmd_m,
+            'mean_state_error_gt_after_first_cmd_m': mean_state_error_gt_after_first_cmd_m,
+            'mean_abs_odom_map_vs_odom_yaw_error_rad': mean_abs_odom_map_vs_odom_yaw_error_rad,
+            'mean_abs_odom_map_vs_state_yaw_error_rad': mean_abs_odom_map_vs_state_yaw_error_rad,
+            'mean_abs_odom_map_vs_belief_yaw_error_rad': mean_abs_odom_map_vs_belief_yaw_error_rad,
+            'mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad': mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad,
+            'mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad': mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad,
+            'mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad': mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad,
             'crashed': crashed,
             'collision_any': crashed,
             'collision_contact': bool(self._contact_collision_seen),

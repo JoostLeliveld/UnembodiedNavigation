@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Dict, List
 
@@ -79,6 +80,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'optimizer_route_seed_mode': 'explicit',
     'use_hierarchical': 'false',
     'global_horizon': '60',
+    'global_dt': '0.0',
     'local_horizon': '12',
     'local_plan_rate': '4.0',
     'local_optimizer_maxiter': '60',
@@ -114,6 +116,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'odom_heading_correction_mode': 'kalman',
     'clamp_pixel_uv_theta_without_yaw': 'false',
     'heading_update_mode': 'odom_overwrite',
+    'local_controller_type': 'turn_then_go',
     'debug_runtime': 'false',
     'auto_stop_on_goal': 'true',
     'goal_success_radius': '0.20',
@@ -365,6 +368,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'optimizer_route_seed_mode': _launch_value(context, 'optimizer_route_seed_mode', PAPER_LAUNCH_DEFAULTS['optimizer_route_seed_mode']),
         'use_hierarchical': _as_bool(_launch_value(context, 'use_hierarchical', PAPER_LAUNCH_DEFAULTS['use_hierarchical'])),
         'global_horizon': int(_launch_value(context, 'global_horizon', PAPER_LAUNCH_DEFAULTS['global_horizon'])),
+        'global_dt': float(_launch_value(context, 'global_dt', PAPER_LAUNCH_DEFAULTS['global_dt'])),
         'local_horizon': int(_launch_value(context, 'local_horizon', PAPER_LAUNCH_DEFAULTS['local_horizon'])),
         'local_plan_rate': float(_launch_value(context, 'local_plan_rate', PAPER_LAUNCH_DEFAULTS['local_plan_rate'])),
         'local_optimizer_maxiter': int(_launch_value(context, 'local_optimizer_maxiter', PAPER_LAUNCH_DEFAULTS['local_optimizer_maxiter'])),
@@ -491,6 +495,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         ),
         'heading_update_mode': _launch_value(
             context, 'heading_update_mode', PAPER_LAUNCH_DEFAULTS['heading_update_mode']
+        ).strip().lower(),
+        'local_controller_type': _launch_value(
+            context, 'local_controller_type', PAPER_LAUNCH_DEFAULTS['local_controller_type']
         ).strip().lower(),
         'plan_rate': float(_launch_value(context, 'plan_rate', PAPER_LAUNCH_DEFAULTS['plan_rate'])),
         'cmd_publish_rate': float(_launch_value(
@@ -626,6 +633,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'yolo_min_bbox_area_px': float(_launch_value(context, 'yolo_min_bbox_area_px', PAPER_LAUNCH_DEFAULTS['yolo_min_bbox_area_px'])),
         'yolo_debug_frame_dir': _launch_value(context, 'yolo_debug_frame_dir', ''),
         'yolo_min_keypoint_conf': float(_launch_value(context, 'yolo_min_keypoint_conf', '0.5')),
+        'yolo_use_torchscript': _as_bool(_launch_value(context, 'yolo_use_torchscript', 'false')),
+        'yolo_warmup_iters': int(_launch_value(context, 'yolo_warmup_iters', '3')),
+        'yolo_inference_in_callback': _as_bool(_launch_value(context, 'yolo_inference_in_callback', 'true')),
         'keypoint_marker_world_z': float(_launch_value(context, 'keypoint_marker_world_z', '0.0')),
         'keypoint_heading_sigma_rad': float(_launch_value(context, 'keypoint_heading_sigma_rad', '0.05')),
     }
@@ -929,13 +939,26 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'min_bbox_area_px': cfg['yolo_min_bbox_area_px'],
         'debug_frame_dir': cfg.get('yolo_debug_frame_dir', ''),
         'min_keypoint_conf': float(cfg.get('yolo_min_keypoint_conf', 0.5)),
+        # TIMING fix knobs (see yolo_robot_detector_node).
+        'use_torchscript': cfg.get('yolo_use_torchscript', False),
+        'warmup_iters': int(cfg.get('yolo_warmup_iters', 3)),
+        'inference_in_callback': cfg.get('yolo_inference_in_callback', True),
     }
+    # CPU-affinity isolation for the detector. In-run the YOLO forward inflates
+    # 17ms(idle) -> ~168ms because the CUDA kernel-launch thread gets starved by
+    # the EFE solver's BLAS threads (GPU util stays ~0% -> launch-bound, not
+    # compute-bound). Pinning the detector to dedicated cores (e.g. "10,11") while
+    # the rest of the run is confined elsewhere keeps the launch thread on-core.
+    # Env-gated so it is a no-op unless DETECTOR_CPU_AFFINITY is set.
+    _det_affinity = os.environ.get('DETECTOR_CPU_AFFINITY', '').strip()
+    _det_prefix = f'taskset -c {_det_affinity}' if _det_affinity else None
     perception_node = Node(
         package='perception',
         executable='yolo_robot_detector_node',
         name='yolo_robot_detector_node',
         output='screen',
         parameters=[yolo_params],
+        prefix=_det_prefix,
     )
 
     pixel_params = {
@@ -1113,6 +1136,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'optimizer_route_seed_mode': cfg['optimizer_route_seed_mode'],
                 'use_hierarchical': cfg.get('use_hierarchical', False),
                 'global_horizon': cfg.get('global_horizon', 60),
+                'global_dt': cfg.get('global_dt', 0.0),
                 'local_horizon': cfg.get('local_horizon', 12),
                 'local_plan_rate': cfg.get('local_plan_rate', 4.0),
                 'local_optimizer_maxiter': cfg.get('local_optimizer_maxiter', 60),
@@ -1147,6 +1171,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'odom_heading_correction_mode': cfg['odom_heading_correction_mode'],
                 'clamp_pixel_uv_theta_without_yaw': cfg['clamp_pixel_uv_theta_without_yaw'],
                 'heading_update_mode': cfg['heading_update_mode'],
+                'local_controller_type': cfg['local_controller_type'],
                 'run_timeout_after_first_cmd_s': cfg['run_timeout_after_first_cmd_s'],
                 'first_cmd_linear_eps': cfg['first_cmd_linear_eps'],
                 'first_cmd_angular_eps': cfg['first_cmd_angular_eps'],
@@ -1303,6 +1328,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'odom_yaw_offset_rad': float(cfg['spawn']['yaw']),
             'clamp_pixel_uv_theta_without_yaw': cfg['clamp_pixel_uv_theta_without_yaw'],
             'heading_update_mode': cfg['heading_update_mode'],
+            'local_controller_type': cfg['local_controller_type'],
             'min_state_cov': cfg['min_state_cov'],
             'debug_runtime': cfg['debug_runtime'],
             'process_noise_xy': cfg['process_noise_xy'],
@@ -1355,6 +1381,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'optimizer_route_seed_mode': cfg['optimizer_route_seed_mode'],
             'use_hierarchical': cfg.get('use_hierarchical', False),
             'global_horizon': cfg.get('global_horizon', 60),
+            'global_dt': cfg.get('global_dt', 0.0),
             'local_horizon': cfg.get('local_horizon', 12),
             'local_plan_rate': cfg.get('local_plan_rate', 4.0),
             'local_optimizer_maxiter': cfg.get('local_optimizer_maxiter', 60),

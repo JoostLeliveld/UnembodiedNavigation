@@ -235,8 +235,8 @@ def truth_trajectory(exp_rows: list[dict]) -> np.ndarray:
     values = []
     for row in exp_rows:
         stamp = finite_float(row, "stamp")
-        x = finite_float(row, "truth_x")
-        y = finite_float(row, "truth_y")
+        x = finite_float(row, "odom_map_x")
+        y = finite_float(row, "odom_map_y")
         if math.isfinite(stamp) and math.isfinite(x) and math.isfinite(y):
             values.append((stamp, x, y))
     if not values:
@@ -292,8 +292,8 @@ def build_candidates(
         det_world = pixel_to_world_for_detection(camera, obs_u, obs_v, calibration)
         if det_world is None:
             continue
-        truth_x, truth_y, truth_clipped = truth_at(truth, diag_stamp)
-        detector_capture_error_m = math.hypot(det_world[0] - truth_x, det_world[1] - truth_y)
+        odom_map_x, odom_map_y, truth_clipped = truth_at(truth, diag_stamp)
+        detector_capture_error_m = math.hypot(det_world[0] - odom_map_x, det_world[1] - odom_map_y)
 
         log_stamp = finite_float(row, "log_stamp")
         pixel_pose_stamp = finite_float(row, "pixel_pose_stamp")
@@ -331,8 +331,8 @@ def build_candidates(
             "bbox_ymax": finite_float(row, "bbox_ymax"),
             "det_world_x": float(det_world[0]),
             "det_world_y": float(det_world[1]),
-            "truth_capture_x": truth_x,
-            "truth_capture_y": truth_y,
+            "truth_capture_x": odom_map_x,
+            "truth_capture_y": odom_map_y,
             "truth_capture_extrapolated": truth_clipped,
             "detector_capture_error_m": detector_capture_error_m,
             "logger_localization_error_calibrated_m": finite_float(

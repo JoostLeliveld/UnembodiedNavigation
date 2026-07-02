@@ -142,6 +142,16 @@ class UnicyclePlannerNode(Node):
         # Two-stage (global-then-local) hierarchical planning
         _declare_if_not('use_hierarchical', False)
         _declare_if_not('global_horizon', 60)
+        # Global-solve step size. 0.0 => use dt; a larger value coarsens the
+        # one-shot global route solve (cost is linear in the number of steps),
+        # trading discretization fidelity for a faster solve. The global plan is
+        # reduced to spatial waypoints, so coarser steps mostly affect route
+        # shape resolution, not the tracked path.
+        _declare_if_not('global_dt', 0.0)
+        # JIT-compile the global EFE value+gradient function to native code.
+        # Big win for the one-shot global solve (evaluated tens of thousands of
+        # times); falls back to interpreted evaluation if no C compiler.
+        _declare_if_not('optimizer_jit', False)
         _declare_if_not('local_horizon', 12)
         _declare_if_not('local_plan_rate', 4.0)
         _declare_if_not('local_optimizer_maxiter', 60)
@@ -184,6 +194,13 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('latency_compensate_plan_handoff', False)
         _declare_if_not('use_simple_local_controller', False)
         _declare_if_not('simple_tracker_yaw_gate_rad', 0.6)
+        # Which waypoint-tracking law the simple local controller uses. All are
+        # "execution plumbing" (track the global plan, no local EFE); they differ
+        # only in HOW they track, to avoid the turn-then-go limit-cycle on sharp
+        # turns. 'turn_then_go' = legacy. 'hyst_damp' = +hysteresis/damped-w/creep.
+        # 'pure_pursuit' = lookahead. 'ff_fb' = path tangent/curvature feedforward
+        # + cross-track feedback on belief.
+        _declare_if_not('local_controller_type', 'turn_then_go')
         _declare_if_not('local_tracking_use_odom_yaw', False)
 
         # Pixel correction params
@@ -334,6 +351,9 @@ class UnicyclePlannerNode(Node):
         )
         self.use_hierarchical = _as_bool(self.get_parameter('use_hierarchical').value)
         self.global_horizon = int(self.get_parameter('global_horizon').value)
+        _global_dt = float(self.get_parameter('global_dt').value)
+        self.global_dt = _global_dt if _global_dt > 0.0 else float(self.get_parameter('dt').value)
+        self.optimizer_jit = _as_bool(self.get_parameter('optimizer_jit').value)
         self.local_horizon = int(self.get_parameter('local_horizon').value)
         self.local_plan_rate = float(self.get_parameter('local_plan_rate').value)
         self.local_optimizer_maxiter = int(self.get_parameter('local_optimizer_maxiter').value)
@@ -396,6 +416,9 @@ class UnicyclePlannerNode(Node):
         self.simple_tracker_yaw_gate_rad = max(
             0.0, float(self.get_parameter('simple_tracker_yaw_gate_rad').value)
         )
+        self.local_controller_type = str(
+            self.get_parameter('local_controller_type').value
+        ).strip().lower()
         self.local_tracking_use_odom_yaw = _as_bool(
             self.get_parameter('local_tracking_use_odom_yaw').value
         )
@@ -739,7 +762,7 @@ class UnicyclePlannerNode(Node):
 
         return self.PLANNER_CLASS(
             horizon=int(g('horizon')),
-            dt=self.dt, v_min=self.v_min, v_max=self.v_max, w_min=self.w_min, w_max=self.w_max,
+            dt=float(g_default('dt', self.dt)), v_min=self.v_min, v_max=self.v_max, w_min=self.w_min, w_max=self.w_max,
             control_weight=self.control_weight,
             process_noise_xy=self.process_noise_xy, process_noise_theta=self.process_noise_theta,
             obs_noise_uv=self.obs_noise_uv, goal_sigma_uv=self.goal_sigma_uv,
@@ -785,6 +808,7 @@ class UnicyclePlannerNode(Node):
             nogo_belief_kappa=float(g('nogo_belief_kappa')),
             nogo_mode=str(g('nogo_mode')), driveable_geometry_json=g('driveable_geometry_json'),
             robot_collision_radius_m=self.robot_collision_radius_m, runtime_debug=self.debug_runtime,
+            optimizer_jit=_as_bool(g_default('optimizer_jit', False)),
         )
 
     def _current_goal_progress_index(self, m0, goal_xy) -> float:

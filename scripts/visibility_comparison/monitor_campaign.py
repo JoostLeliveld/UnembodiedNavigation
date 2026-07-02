@@ -61,7 +61,7 @@ def collect(log_root: Path):
             crashed=bool(rs.get("crashed")), collision=bool(rs.get("collision_any")),
             fgoal=_num(rs.get("final_goal_distance")),
             valid=rs.get("valid_run"), invalid=(rs.get("invalid_reason") or "")[:18],
-            tbe=_num(rs.get("mean_truth_belief_error_after_first_cmd_m"), 3),
+            tbe=_num(rs.get("mean_belief_error_odom_after_first_cmd_m"), 3),
         ))
     return rows, off
 

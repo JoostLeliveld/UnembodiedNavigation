@@ -154,6 +154,7 @@ class UnicyclePlannerBase:
         driveable_geometry_json='',
         robot_collision_radius_m=0.125,
         runtime_debug=False,
+        optimizer_jit=False,
     ):
         self.horizon = int(horizon)
         self.dt = float(dt)
@@ -237,6 +238,7 @@ class UnicyclePlannerBase:
         )
 
         self.runtime_debug = bool(runtime_debug)
+        self.optimizer_jit = bool(optimizer_jit)
         self.use_visibility_model = bool(use_visibility_model)
         self._visibility_min_prob = 1e-4
         self.visibility_model = None
@@ -1081,6 +1083,23 @@ class UnicyclePlannerBase:
                 dt=float(self.dt),
                 Du=2,
             )
+            jit_opts = None
+            if self.optimizer_jit:
+                # JIT-compile the value+gradient function to native code (~5.9x
+                # faster per eval at H=60). NOTE: measured break-even is ~15k
+                # evals, but a one-shot global solve runs only ~1.5k (3 seeds x
+                # ~500), and the compile costs ~29s at H=60 (~9s at H=30) -- so
+                # per-run JIT is a NET LOSS for the one-shot solve. Only worth it
+                # if the compiled artifact is persisted and reused across many
+                # solves (e.g. a whole campaign). Default OFF; prefer coarsening
+                # global_dt to shrink the per-eval cost instead. -O1 bounds the
+                # compile of the large generated C; falls back to interpreted
+                # evaluation if no compiler is available.
+                jit_opts = {
+                    'jit': True,
+                    'compiler': 'shell',
+                    'jit_options': {'flags': ['-O1'], 'compiler': 'gcc'},
+                }
             valgrad = casadi_efe.make_efe_valgrad_fn(
                 params_ca,
                 self.camera.H,
@@ -1089,11 +1108,13 @@ class UnicyclePlannerBase:
                 nogo_cost=nogo_cost_ca,
                 nogo_belief_cost=nogo_belief_cost_ca,
                 cache_path=self._valgrad_disk_cache_path(params_ca),
+                jit_opts=jit_opts,
             )
             self._casadi_valgrad_cache[cache_key] = valgrad
             self._runtime_debug_print(
                 "[planner_debug] CasADi valgrad function prepared in "
-                f"{(time.perf_counter() - build_start) * 1000.0:.1f} ms"
+                f"{(time.perf_counter() - build_start) * 1000.0:.1f} ms "
+                f"(jit={'on' if self.optimizer_jit else 'off'})"
             )
 
         return valgrad

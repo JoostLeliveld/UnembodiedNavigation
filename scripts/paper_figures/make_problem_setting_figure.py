@@ -360,7 +360,7 @@ def _load_run_trace(run_dir: Path | None, use_raw_state: bool = False) -> dict[s
         # Use state_x/y (raw YOLO-homography position) as the belief trace.
         # This column only updates when YOLO fires; it freezes in shadow, showing
         # camera-based localization failure in the invisible region.
-        required_columns = ("stamp", "truth_x", "truth_y", "state_x", "state_y")
+        required_columns = ("stamp", "gt_x", "gt_y", "state_x", "state_y")
         missing_columns = [name for name in required_columns if name not in df.columns]
         if missing_columns:
             raise RuntimeError(f"experiment.csv is missing required columns: {', '.join(missing_columns)}")
@@ -378,8 +378,8 @@ def _load_run_trace(run_dir: Path | None, use_raw_state: bool = False) -> dict[s
     else:
         required_columns = (
             "stamp",
-            "truth_x",
-            "truth_y",
+            "gt_x",
+            "gt_y",
             "planner_belief_x",
             "planner_belief_y",
             "planner_cov_x",
@@ -631,14 +631,14 @@ def _covariance_ellipse(
 
 def _extract_problem_paths_from_trace(traces: dict[str, np.ndarray], start_xy: tuple[float, float], goal_xy: tuple[float, float]) -> dict[str, np.ndarray]:
     del start_xy, goal_xy
-    if not {"truth_x", "truth_y", "planner_belief_x", "planner_belief_y"}.issubset(traces):
+    if not {"gt_x", "gt_y", "planner_belief_x", "planner_belief_y"}.issubset(traces):
         raise RuntimeError("Problem top-down panel requires truth and planner-belief columns")
-    truth_x, truth_y = _finite_xy(traces["truth_x"], traces["truth_y"])
+    gt_x, gt_y = _finite_xy(traces["gt_x"], traces["gt_y"])
     belief_x, belief_y = _finite_xy(traces["planner_belief_x"], traces["planner_belief_y"])
-    if truth_x.size < 4 or belief_x.size < 4:
+    if gt_x.size < 4 or belief_x.size < 4:
         raise RuntimeError("Problem top-down panel requires at least four valid truth/belief samples")
-    n = min(truth_x.size, belief_x.size)
-    truth = np.column_stack([truth_x[:n], truth_y[:n]])
+    n = min(gt_x.size, belief_x.size)
+    truth = np.column_stack([gt_x[:n], gt_y[:n]])
     belief = np.column_stack([belief_x[:n], belief_y[:n]])
     if "plan_x" in traces and "plan_y" in traces:
         plan_x, plan_y = _finite_xy(traces["plan_x"], traces["plan_y"])
@@ -704,14 +704,14 @@ def _draw_problem_statement_topdown(ax, geom: dict, start: dict, goal: dict, tra
 
     for k, idx in enumerate(marker_indices):
         idx = int(np.clip(idx, 0, min(len(truth), len(belief)) - 1))
-        truth_xy = truth[idx]
+        gt_xy = truth[idx]
         belief_xy = belief[idx]
-        ax.scatter([truth_xy[0]], [truth_xy[1]], color="#222222", s=12, zorder=10)
+        ax.scatter([gt_xy[0]], [gt_xy[1]], color="#222222", s=12, zorder=10)
         ax.scatter([belief_xy[0]], [belief_xy[1]], color=COLORS["belief"], s=14, zorder=10)
-        ax.plot([truth_xy[0], belief_xy[0]], [truth_xy[1], belief_xy[1]], color="#777777", linewidth=0.55, linestyle=":", zorder=6)
+        ax.plot([gt_xy[0], belief_xy[0]], [gt_xy[1], belief_xy[1]], color="#777777", linewidth=0.55, linestyle=":", zorder=6)
         cov = covs[min(k, len(covs) - 1)]
         _covariance_ellipse(ax, (float(belief_xy[0]), float(belief_xy[1])), cov, color=COLORS["belief"], alpha=0.14, zorder=4)
-        ax.text(float(truth_xy[0]) + 0.05, float(truth_xy[1]) + 0.07, rf"$t_{k}$", fontsize=5.8, color="#333333", zorder=12)
+        ax.text(float(gt_xy[0]) + 0.05, float(gt_xy[1]) + 0.07, rf"$t_{k}$", fontsize=5.8, color="#333333", zorder=12)
 
     ax.scatter([start_xy[0]], [start_xy[1]], s=32, color=COLORS["start"], edgecolor="black", linewidth=0.5, zorder=11)
     ax.scatter([goal_xy[0]], [goal_xy[1]], s=36, color=COLORS["goal"], edgecolor="black", linewidth=0.5, zorder=11)
@@ -752,7 +752,7 @@ def _nearest_experiment_index(traces: dict[str, np.ndarray], target_stamp: float
     stamps = np.asarray(traces["stamp"], dtype=float)
     if not stamps.size:
         return None
-    required = ("truth_x", "truth_y", "planner_belief_x", "planner_belief_y")
+    required = ("gt_x", "gt_y", "planner_belief_x", "planner_belief_y")
     valid = np.isfinite(stamps)
     for key in required:
         if key not in traces:
@@ -810,14 +810,14 @@ def _snapshot_from_trace(
         np.isfinite(stamps)
         & (stamps >= float(first_cmd) - 1e-6)
         & (stamps <= current_stamp + 1e-6)
-        & np.isfinite(np.asarray(traces["truth_x"], dtype=float))
-        & np.isfinite(np.asarray(traces["truth_y"], dtype=float))
+        & np.isfinite(np.asarray(traces["gt_x"], dtype=float))
+        & np.isfinite(np.asarray(traces["gt_y"], dtype=float))
         & np.isfinite(np.asarray(traces["planner_belief_x"], dtype=float))
         & np.isfinite(np.asarray(traces["planner_belief_y"], dtype=float))
     )
     truth_history = np.column_stack([
-        np.asarray(traces["truth_x"], dtype=float)[history_mask],
-        np.asarray(traces["truth_y"], dtype=float)[history_mask],
+        np.asarray(traces["gt_x"], dtype=float)[history_mask],
+        np.asarray(traces["gt_y"], dtype=float)[history_mask],
     ])
     belief_history = np.column_stack([
         np.asarray(traces["planner_belief_x"], dtype=float)[history_mask],
@@ -847,7 +847,7 @@ def _snapshot_from_trace(
     return {
         "truth_history": truth_history,
         "belief_history": belief_history,
-        "truth_xy": truth_history[-1],
+        "gt_xy": truth_history[-1],
         "belief_xy": belief_history[-1],
         "plan": plan,
         "cov": cov,
@@ -897,11 +897,11 @@ def _draw_snapshot_topdown(
     belief = np.asarray(snap["belief_history"], dtype=float)
     ax.plot(truth[:, 0], truth[:, 1], color="#222222", linewidth=1.7, zorder=8)
     ax.plot(belief[:, 0], belief[:, 1], color=COLORS["belief"], linewidth=1.4, linestyle=(0, (4, 2)), zorder=8)
-    ax.scatter([snap["truth_xy"][0]], [snap["truth_xy"][1]], color="#222222", s=34, zorder=10)
+    ax.scatter([snap["gt_xy"][0]], [snap["gt_xy"][1]], color="#222222", s=34, zorder=10)
     ax.scatter([snap["belief_xy"][0]], [snap["belief_xy"][1]], color=COLORS["belief"], s=38, zorder=10)
     ax.plot(
-        [snap["truth_xy"][0], snap["belief_xy"][0]],
-        [snap["truth_xy"][1], snap["belief_xy"][1]],
+        [snap["gt_xy"][0], snap["belief_xy"][0]],
+        [snap["gt_xy"][1], snap["belief_xy"][1]],
         color="#777777",
         linewidth=0.7,
         linestyle=":",
@@ -1006,8 +1006,8 @@ def _finite_xy(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _draw_trace_or_route(ax, traces: dict[str, np.ndarray], start_xy: tuple[float, float], goal_xy: tuple[float, float]) -> None:
-    if "truth_x" in traces and "truth_y" in traces:
-        tx, ty = _finite_xy(traces["truth_x"], traces["truth_y"])
+    if "gt_x" in traces and "gt_y" in traces:
+        tx, ty = _finite_xy(traces["gt_x"], traces["gt_y"])
         if len(tx) > 1:
             ax.plot(tx, ty, color=COLORS["truth"], linewidth=1.7, marker="o", markersize=2.0, markevery=max(1, len(tx) // 12), zorder=8)
     else:
@@ -1218,7 +1218,7 @@ def _snapshot_provenance(
                 "plan_stamp": snap.get("plan_stamp"),
                 "plan_points": snap.get("plan_points"),
                 "has_run": bool(snap.get("has_run", False)),
-                "truth_xy": [float(v) for v in np.asarray(snap["truth_xy"], dtype=float).reshape(2)],
+                "gt_xy": [float(v) for v in np.asarray(snap["gt_xy"], dtype=float).reshape(2)],
                 "belief_xy": [float(v) for v in np.asarray(snap["belief_xy"], dtype=float).reshape(2)],
                 "covariance_xy": np.asarray(snap["cov"], dtype=float).tolist(),
             }

@@ -4,6 +4,8 @@ import time
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
 from rosgraph_msgs.msg import Clock
 
 
@@ -17,7 +19,8 @@ class WaitForClock(Node):
         self.timeout_s = float(self.get_parameter('timeout_s').value)
         self.received = False
 
-        self.create_subscription(Clock, self.topic, self._cb, 10)
+        clock_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
+        self.create_subscription(Clock, self.topic, self._cb, clock_qos)
         if self.timeout_s > 0.0:
             self.get_logger().info(f"Waiting for first message on {self.topic} (timeout {self.timeout_s:.1f}s)")
         else:

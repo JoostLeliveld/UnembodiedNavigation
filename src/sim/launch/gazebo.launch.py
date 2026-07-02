@@ -4,6 +4,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import PathJoinSubstitution, LaunchConfiguration, PythonExpression
 from launch.actions import SetEnvironmentVariable
+from launch.conditions import IfCondition
 from ament_index_python.packages import get_package_share_directory
 import os
 
@@ -19,6 +20,17 @@ def generate_launch_description():
         "headless",
         default_value="false",
         description="Run Gazebo server-only if true",
+    )
+    nvidia_offload_arg = DeclareLaunchArgument(
+        "nvidia_offload",
+        default_value="true",
+        description=(
+            "Route Gazebo's OGRE rendering (camera sensor) to the discrete "
+            "NVIDIA GPU via PRIME render offload. On hybrid Intel+NVIDIA "
+            "systems the gz server otherwise renders on the integrated GPU, "
+            "capping the camera sensor rate. Set false on machines without an "
+            "NVIDIA GPU."
+        ),
     )
     world_path = PathJoinSubstitution([
         FindPackageShare("sim"),
@@ -40,6 +52,24 @@ def generate_launch_description():
     set_gz_resource_path = SetEnvironmentVariable(
         name="GZ_SIM_RESOURCE_PATH",
         value=":".join(gz_resource_paths)
+    )
+
+    # PRIME render offload: make the gz server's OGRE (camera sensor) GL context
+    # bind to the discrete NVIDIA GPU instead of the integrated Intel GPU. On
+    # this hybrid laptop the discrete Quadro sits idle while the iGPU renders the
+    # camera, which is the binding limiter on the camera-sensor update rate. The
+    # gz server (started by the included gz_sim.launch.py) inherits these because
+    # they are set before the include in this scope. Verified: with both set,
+    # `glxinfo` reports the Quadro instead of the Intel iGPU.
+    set_prime_offload = SetEnvironmentVariable(
+        name="__NV_PRIME_RENDER_OFFLOAD",
+        value="1",
+        condition=IfCondition(LaunchConfiguration("nvidia_offload")),
+    )
+    set_glx_vendor = SetEnvironmentVariable(
+        name="__GLX_VENDOR_LIBRARY_NAME",
+        value="nvidia",
+        condition=IfCondition(LaunchConfiguration("nvidia_offload")),
     )
 
 
@@ -66,6 +96,9 @@ def generate_launch_description():
     return LaunchDescription([
         world_arg,
         headless_arg,
+        nvidia_offload_arg,
         set_gz_resource_path,
+        set_prime_offload,
+        set_glx_vendor,
         gazebo,
     ])

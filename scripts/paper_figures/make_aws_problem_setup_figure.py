@@ -104,8 +104,8 @@ def load_run(run_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     exp = pd.read_csv(exp_path)
     required = [
         "stamp",
-        "truth_x",
-        "truth_y",
+        "gt_x",
+        "gt_y",
         "state_x",
         "state_y",
         "state_cov_xx",
@@ -153,9 +153,9 @@ def sigma_major(row: pd.Series, sigma: float = 2.0) -> float:
 
 
 def first_motion_row(exp: pd.DataFrame, threshold_m: float = 0.12) -> int:
-    x0 = float(exp.iloc[0].truth_x)
-    y0 = float(exp.iloc[0].truth_y)
-    disp = np.hypot(exp["truth_x"].to_numpy() - x0, exp["truth_y"].to_numpy() - y0)
+    x0 = float(exp.iloc[0].gt_x)
+    y0 = float(exp.iloc[0].gt_y)
+    disp = np.hypot(exp["gt_x"].to_numpy() - x0, exp["gt_y"].to_numpy() - y0)
     idx = np.flatnonzero(disp >= threshold_m)
     return int(idx[0]) if idx.size else 0
 
@@ -165,10 +165,10 @@ def weak_region_row(exp: pd.DataFrame) -> int:
     # weak-update corridor. This keeps the ellipse real without plotting the
     # whole jagged failure trace.
     weak = exp[
-        (exp["truth_x"] > 2.0)
-        & (exp["truth_x"] < 3.6)
-        & (exp["truth_y"] > -0.4)
-        & (exp["truth_y"] < 1.5)
+        (exp["gt_x"] > 2.0)
+        & (exp["gt_x"] < 3.6)
+        & (exp["gt_y"] > -0.4)
+        & (exp["gt_y"] < 1.5)
     ].copy()
     if weak.empty:
         return min(first_motion_row(exp) + 40, len(exp) - 1)
@@ -310,7 +310,7 @@ def draw_snapshot_panel(
         ax.plot(horizon[:, 0], horizon[:, 1], color=COL["horizon"], linewidth=1.45, zorder=8)
 
     hist = exp.iloc[: row_idx + 1]
-    ax.plot(hist["truth_x"], hist["truth_y"], color=COL["truth"], linewidth=1.55, zorder=10)
+    ax.plot(hist["gt_x"], hist["gt_y"], color=COL["truth"], linewidth=1.55, zorder=10)
     ax.plot(
         hist["state_x"],
         hist["state_y"],
@@ -319,7 +319,7 @@ def draw_snapshot_panel(
         linestyle=(0, (4, 2)),
         zorder=10,
     )
-    ax.scatter([float(row.truth_x)], [float(row.truth_y)], color=COL["truth"], s=30, zorder=12)
+    ax.scatter([float(row.gt_x)], [float(row.gt_y)], color=COL["truth"], s=30, zorder=12)
     ax.scatter([float(row.state_x)], [float(row.state_y)], color=COL["belief"], s=34, zorder=12)
     draw_covariance(ax, current_xy, covariance_matrix(row))
 

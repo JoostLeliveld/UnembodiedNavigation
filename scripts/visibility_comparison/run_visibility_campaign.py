@@ -282,7 +282,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'pixel_correction_nis_threshold',
         'pixel_correction_nis_reject_cov_scale',
         'robot_collision_radius_m',
-        'global_horizon', 'local_horizon', 'local_plan_rate',
+        'global_horizon', 'global_dt', 'local_horizon', 'local_plan_rate',
         'local_optimizer_maxiter', 'local_nogo_weight',
         'local_nogo_safe_distance',
         'local_goal_progress_weight',
@@ -346,6 +346,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'optimizer_route_seed_mode',
         'local_nogo_penalty_type',
         'heading_update_mode',
+        'local_controller_type',
     )
     for key in string_keys:
         if simple_local and key in local_efe_only_keys:
@@ -452,6 +453,9 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'yolo_mask_bottom_band_px:={cfg.get("yolo_mask_bottom_band_px", 3.0)}',
         f'yolo_min_bbox_area_px:={cfg.get("yolo_min_bbox_area_px", 0.0)}',
         f'yolo_debug_frame_dir:={cfg.get("yolo_debug_frame_dir", "")}',
+        f'yolo_use_torchscript:={str(cfg.get("yolo_use_torchscript", False)).lower()}',
+        f'yolo_warmup_iters:={cfg.get("yolo_warmup_iters", 3)}',
+        f'yolo_inference_in_callback:={str(cfg.get("yolo_inference_in_callback", True)).lower()}',
         f'keypoint_marker_world_z:={cfg.get("keypoint_marker_world_z", 0.0)}',
     ]
 
@@ -475,7 +479,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'optimizer_initial_routes_json',
         'optimizer_route_seed_mode',
         'driveable_geometry_json',
-        'use_hierarchical', 'global_horizon', 'local_horizon',
+        'use_hierarchical', 'global_horizon', 'global_dt', 'local_horizon',
         'local_plan_rate', 'local_optimizer_maxiter',
         'global_use_ambiguity', 'local_use_ambiguity', 'local_use_obs_risk',
         'global_optimizer_multistart', 'local_optimizer_multistart',
@@ -672,7 +676,7 @@ def main() -> int:
             'goal_reached': None,
             'crashed': None,
             'path_length_m': None,
-            'mean_truth_state_error_m': None,
+            'mean_belief_error_gt_m': None,
             'elapsed_after_first_cmd_s': None,
             'minimum_goal_distance': None,
             'ros_domain_id': ros_domain_id,
@@ -754,7 +758,8 @@ def main() -> int:
             'goal_reached': outcome == 'goal_reached',
             'crashed': bool(summary.get('crashed', False)) if summary else None,
             'path_length_m': summary.get('path_length_m') if summary else None,
-            'mean_truth_state_error_m': summary.get('mean_truth_state_error_m') if summary else None,
+            'mean_belief_error_gt_m': (summary.get('mean_belief_error_gt_after_first_cmd_m',
+                                                    summary.get('mean_belief_error_gt_m')) if summary else None),
             'elapsed_after_first_cmd_s': summary.get('elapsed_after_first_cmd_s') if summary else None,
             'minimum_goal_distance': summary.get('minimum_goal_distance') if summary else None,
             'run_dir': str(run_dir) if run_dir else None,

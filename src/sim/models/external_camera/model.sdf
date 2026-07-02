@@ -25,7 +25,17 @@
           </clip>
         </camera>
         <always_on>1</always_on>
-        <update_rate>30</update_rate>
+        <!-- update_rate 5 Hz. After the detector was made single-threaded
+             (inference in the image callback, no GIL contention), in-run inference
+             settled at ~140ms and STALENESS dropped 0.9s -> 0.14s. The effective
+             camera->belief UPDATE rate is ~2.2 Hz and is bound UPSTREAM of the
+             detector: Gazebo cannot render this 1280x720 oblique camera faster
+             than ~2-3 Hz on the P2000 while also doing physics + YOLO. Tested
+             10 Hz here -> identical ~2.2 Hz effective (render-bound), so 10 Hz only
+             wastes renders. 5 Hz gives the ~2 Hz consumer headroom with fresh
+             frames. Resolution/FOV/focal length unchanged so detector accuracy +
+             projection + r_vis/r_miss hold. (Previously 30 Hz flooded the bridge.) -->
+        <update_rate>5</update_rate>
         <visualize>false</visualize>
         <topic>external_camera/image_raw</topic>
       </sensor>
@@ -47,7 +57,7 @@
             <far>100</far>
           </clip>
         </camera>
-        <always_on>1</always_on>
+        <always_on>0</always_on>
         <update_rate>1</update_rate>
         <visualize>false</visualize>
         <topic>external_camera/segmentation</topic>

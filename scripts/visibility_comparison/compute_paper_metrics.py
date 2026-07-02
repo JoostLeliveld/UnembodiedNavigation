@@ -383,13 +383,13 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
     final_goal_distance = float(summary.get('final_goal_distance', math.nan) or math.nan)
     elapsed_s = float(summary.get('elapsed_after_first_cmd_s', math.nan) or math.nan)
     mean_solve_time_ms = float(summary.get('mean_solve_time_ms', math.nan) or math.nan)
-    # Prefer explicit driving-only summary fields when available. Older logs
-    # only have mean_truth_belief_error_m, which can include launch/global-solve
-    # rows; the CSV recomputation below remains the canonical path when rows exist.
-    summary_mean_truth_belief = float(
+    # GROUND-TRUTH belief error only (mean_belief_error_gt_*). NEVER the odom-based
+    # mean_truth_belief_error_* (those are /odom vs belief and drift-contaminated).
+    # The CSV recomputation below (also GT) remains the canonical path when rows exist.
+    summary_mean_gt_belief = float(
         summary.get(
-            'mean_truth_belief_error_after_first_cmd_m',
-            summary.get('mean_truth_belief_error_m', math.nan),
+            'mean_belief_error_gt_after_first_cmd_m',
+            summary.get('mean_belief_error_gt_m', math.nan),
         ) or math.nan
     )
     summary_mean_p_vis_eff = float(summary.get('mean_p_vis_plan_eff', math.nan) or math.nan)
@@ -401,7 +401,7 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
             'path_length_m': path_length_m, 'min_goal_distance': min_goal_distance,
             'final_goal_distance': final_goal_distance,
             'elapsed_s': elapsed_s,
-            'mean_loc_error_m': summary_mean_truth_belief, 'mean_overconf': math.nan,
+            'mean_loc_error_m': summary_mean_gt_belief, 'mean_overconf': math.nan,
             'mean_loc_nll': math.nan, 'mean_loc_nees': math.nan,
             'f_shadow': math.nan, 'mean_rho_plan': summary_mean_p_vis_eff,
             'path_efficiency': math.nan, 'mean_cov_trace': math.nan,
@@ -439,10 +439,13 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
     solve_times_ms = []
 
     for row in runtime_rows:
-        # Use planner belief as the estimator (that's what drives control)
-        truth_x = _pf(row, 'truth_x')
-        truth_y = _pf(row, 'truth_y')
-        truth_ok = _pf(row, 'truth_available') >= 0.5 if math.isfinite(_pf(row, 'truth_available')) else False
+        # Use planner belief as the estimator (that's what drives control), and
+        # GROUND TRUTH (gt_x/gt_y) as the reference. NEVER odom-as-truth
+        # (odom_map_x/y = /odom, which drifts from the true pose and contaminates
+        # localization error, NLL/NEES, overconfidence and rho-along-path).
+        gt_x = _pf(row, 'gt_x')
+        gt_y = _pf(row, 'gt_y')
+        gt_ok = _pf(row, 'gt_available') >= 0.5 if math.isfinite(_pf(row, 'gt_available')) else False
 
         belief_x = _pf(row, 'planner_belief_x')
         belief_y = _pf(row, 'planner_belief_y')
@@ -451,9 +454,9 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
         cov_xy = _pf(row, 'planner_cov_xy')
         cov_y = _pf(row, 'planner_cov_y')
 
-        if truth_ok and belief_ok and math.isfinite(belief_x) and math.isfinite(belief_y):
-            dx = truth_x - belief_x
-            dy = truth_y - belief_y
+        if gt_ok and belief_ok and math.isfinite(belief_x) and math.isfinite(belief_y):
+            dx = gt_x - belief_x
+            dy = gt_y - belief_y
             err = math.hypot(dx, dy)
             loc_errors.append(err)
 
@@ -468,8 +471,8 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
                 if math.isfinite(nees):
                     loc_nees_values.append(nees)
 
-        if truth_ok and math.isfinite(truth_x) and math.isfinite(truth_y) and gp_interp is not None:
-            rho = _query_rho(gp_interp, truth_x, truth_y)
+        if gt_ok and math.isfinite(gt_x) and math.isfinite(gt_y) and gp_interp is not None:
+            rho = _query_rho(gp_interp, gt_x, gt_y)
             if math.isfinite(rho):
                 rho_values.append(rho)
 
@@ -557,7 +560,7 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
     # include pre-command launch/global-solve rows and are only a no-CSV fallback.
     mean_loc_error_out = mean_loc_error
     if not math.isfinite(mean_loc_error_out):
-        mean_loc_error_out = summary_mean_truth_belief
+        mean_loc_error_out = summary_mean_gt_belief
 
     return {
         'goal_reached': goal_reached,

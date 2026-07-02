@@ -78,7 +78,7 @@ def test_yolo_detection_rate_uses_capture_stamp_for_runtime_filter(tmp_path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     (run_dir / "experiment.csv").write_text(
-        "stamp,cmd_v,cmd_w,truth_available,truth_x,truth_y,planner_belief_available,planner_belief_x,planner_belief_y,planner_cov_x,planner_cov_xy,planner_cov_y\n"
+        "stamp,cmd_v,cmd_w,odom_map_available,odom_map_x,odom_map_y,planner_belief_available,planner_belief_x,planner_belief_y,planner_cov_x,planner_cov_xy,planner_cov_y\n"
         "9.9,0.0,0.0,1,0,0,1,0,0,0.01,0,0.01\n"
         "10.0,0.2,0.0,1,0,0,1,0,0,0.01,0,0.01\n",
         encoding="utf-8",

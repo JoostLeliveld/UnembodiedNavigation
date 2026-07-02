@@ -55,7 +55,7 @@ tasks:
 perception_backend: yolo
 yolo_model: logs/perception_models/warehouse_yolo_detector_v1/model.pt
 yolo_device: '0'
-yolo_imgsz: 960
+yolo_imgsz: 640
 yolo_conf_threshold: 0.05
 yolo_iou_threshold: 0.45
 yolo_target_class: robot
@@ -133,11 +133,17 @@ pixel_correction_nis_threshold: 9.21
 # accurate measurement is re-admitted once belief has drifted (instead of the hard
 # gate staying "confidently wrong"). Validated mechanismA: rejections C2 15%->1%,
 # C1 9%->3%; C2 published-belief err 0.28->0.05 m; both still reach goal.
-pixel_correction_nis_reject_cov_scale: 3.0
+pixel_correction_nis_reject_cov_scale: 1.0   # self-heal DISABLED 2026-07-01: custom band-aid, its "validation" was vs odom-truth artifact; belief is accurate vs GT without it. Keep only the standard chi2(2,0.99)=9.21 gate.
 robot_collision_radius_m: 0.125
 use_hierarchical: true
 use_simple_local_controller: true
-global_horizon: 120
+global_horizon: 75
+global_dt: 0.4   # 75 x 0.4 = 30s lookahead. The global plan is ONE-SHOT/frozen (efe_agent_node:
+                 # "chosen once and never replanned"); if it stops short of goal the local tracker
+                 # drives a STRAIGHT LINE to the goal (corner-cut). So the horizon MUST cover the full
+                 # route. Offline test (diag/offline_horizon_check.py) 2026-07-01: 30x0.4 (12s) left
+                 # a3/a2 C2 2.7-2.8m short; 75x0.4 (30s) reproduces the paper 120x0.25 reach
+                 # (a3 C2 0.08m, a2 C2 0.28m) at ~27% faster solve (75 vs 120 steps, dt 0.4 vs 0.25).
 local_horizon: 6
 local_plan_rate: 5.0
 cmd_publish_rate: 10.0

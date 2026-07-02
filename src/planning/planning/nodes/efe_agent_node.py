@@ -65,6 +65,9 @@ class EfeAgentNode(UnicyclePlannerNode):
         self._hier_phase = 'GLOBAL'
         self._waypoints = None
         self._wp_idx = 0
+        # persistent state for the alternative trackers (hyst_damp damping/hysteresis)
+        self._ctrl_prev_w = 0.0
+        self._ctrl_spin = False
         # Persist the one-shot global route artifacts (solved plan + waypoints +
         # which seed won + costs). The global route is chosen ONCE and never
         # replanned, so it is the route-choice evidence for the campaign.
@@ -170,6 +173,8 @@ class EfeAgentNode(UnicyclePlannerNode):
             )
             self.global_planner = self._construct_planner(
                 horizon=self.global_horizon,
+                dt=self.global_dt,
+                optimizer_jit=self.optimizer_jit,
                 use_ambiguity=self.global_use_ambiguity,
                 optimizer_multistart=self.global_optimizer_multistart,
                 optimizer_warm_start_shift_steps=self._warm_start_shift_steps_for_rate(
@@ -177,7 +182,9 @@ class EfeAgentNode(UnicyclePlannerNode):
                 ),
             )
             self.get_logger().info(
-                f"[hierarchical] global H={self.global_horizon} (ambiguity={self.global_use_ambiguity}, "
+                f"[hierarchical] global H={self.global_horizon} (dt={self.global_dt:.3f}s, "
+                f"lookahead={self.global_horizon * self.global_dt:.1f}s, jit={self.optimizer_jit}, "
+                f"ambiguity={self.global_use_ambiguity}, "
                 f"multistart={self.global_optimizer_multistart}) -> waypoints "
                 f"(spacing {self.waypoint_spacing_m} m) -> local H={self.local_horizon} "
                 f"(rate={self.local_plan_rate} Hz, ambiguity={self.local_use_ambiguity}, "
@@ -354,7 +361,10 @@ class EfeAgentNode(UnicyclePlannerNode):
                 except Exception:
                     pass
             self.get_logger().info(
-                f"[hierarchical] global plan solved in {(time.perf_counter()-plan_start):.1f}s -> "
+                f"[hierarchical] global plan solved in {(time.perf_counter()-plan_start):.1f}s "
+                f"(backend={getattr(rg, 'backend', '?')}, "
+                f"nit={getattr(rg, 'optimizer_nit', 0)}, nfev={getattr(rg, 'optimizer_nfev', 0)}, "
+                f"solve={getattr(rg, 'solve_time_s', 0.0):.1f}s, jit={self.optimizer_jit}) -> "
                 f"{len(self._waypoints)} waypoints; switching to local tracking"
             )
             # Publish the global plan for visualization; do NOT follow it.
@@ -440,7 +450,7 @@ class EfeAgentNode(UnicyclePlannerNode):
         self._current_tracking_yaw_source = float(tracking_yaw_source)
 
         if self.use_simple_local_controller:
-            controls = self._simple_local_plan(m_track, target)
+            controls = self._dispatch_local_controller(m_track, target)
             n_safe, reason = self._simple_plan_safe_to_execute(controls, m_track)
             if n_safe <= 0:
                 # The immediate step itself leaves the region (not a recovery move)
@@ -527,6 +537,98 @@ class EfeAgentNode(UnicyclePlannerNode):
             controls[i] = [v, w]
             state = unicycle_step(state, [v, w], dt)
 
+        return controls
+
+    def _dispatch_local_controller(self, m0: np.ndarray, target: np.ndarray) -> np.ndarray:
+        ct = getattr(self, 'local_controller_type', 'turn_then_go')
+        if ct == 'hyst_damp':
+            return self._hyst_damp_plan(m0, target)
+        if ct == 'pure_pursuit':
+            return self._pure_pursuit_plan(m0)
+        if ct == 'ff_fb':
+            return self._ff_fb_plan(m0)
+        return self._simple_local_plan(m0, target)
+
+    def _waypoint_array(self) -> np.ndarray | None:
+        wps = self._waypoints
+        if not wps:
+            return None
+        return np.asarray([(float(w[0]), float(w[1])) for w in wps], dtype=float)
+
+    def _hyst_damp_plan(self, m0: np.ndarray, target: np.ndarray) -> np.ndarray:
+        """Turn-then-go + hysteresis on the spin gate, rate-limited (damped) w, and a
+        small forward creep instead of a full stop -- kills the sharp-turn limit-cycle."""
+        H = int(self.local_horizon); dt = float(self.dt); v_max = float(self.v_max)
+        gate = float(self.simple_tracker_yaw_gate_rad)
+        controls = np.zeros((H, 2), dtype=float)
+        state = m0[:3].copy().astype(float)
+        tx, ty = float(target[0]), float(target[1])
+        spin = bool(self._ctrl_spin); w_prev = float(self._ctrl_prev_w)
+        for i in range(H):
+            dx, dy = tx - state[0], ty - state[1]
+            if math.hypot(dx, dy) < 0.05:
+                break
+            yaw_err = wrap_angle(math.atan2(dy, dx) - state[2])
+            # hysteresis: enter spin above the gate, only leave below 0.30 rad
+            spin = (abs(yaw_err) > gate) or (spin and abs(yaw_err) > 0.30)
+            w_des = float(np.clip(1.0 * yaw_err, -1.0, 1.0))
+            w = w_prev + float(np.clip(w_des - w_prev, -0.15, 0.15))  # damp / rate-limit
+            v = 0.08 if spin else float(v_max * math.exp(-abs(yaw_err)))
+            controls[i] = [v, w]
+            state = unicycle_step(state, [v, w], dt)
+            w_prev = w
+            if i == 0:
+                self._ctrl_spin = spin; self._ctrl_prev_w = w
+        return controls
+
+    def _pure_pursuit_plan(self, m0: np.ndarray) -> np.ndarray:
+        """Lookahead path tracker over the global waypoint polyline (always moving)."""
+        H = int(self.local_horizon); dt = float(self.dt); v_max = float(self.v_max)
+        wps = self._waypoint_array()
+        controls = np.zeros((H, 2), dtype=float)
+        if wps is None:
+            return controls
+        Ld = max(3.0 * float(self.waypoint_spacing_m), 0.30)
+        state = m0[:3].copy().astype(float)
+        for i in range(H):
+            j = int(np.argmin(np.hypot(wps[:, 0] - state[0], wps[:, 1] - state[1])))
+            while j < len(wps) - 1 and np.hypot(*(wps[j] - state[:2])) < Ld:
+                j += 1
+            dx, dy = wps[j] - state[:2]
+            if np.hypot(dx, dy) < 0.05:
+                break
+            alpha = wrap_angle(math.atan2(dy, dx) - state[2])
+            L = max(float(np.hypot(dx, dy)), 1e-3)
+            w = float(np.clip(2.0 * v_max * math.sin(alpha) / L, -1.5, 1.5))
+            v = float(v_max * max(0.2, 1.0 - abs(alpha) / 1.2))
+            controls[i] = [v, w]
+            state = unicycle_step(state, [v, w], dt)
+        return controls
+
+    def _ff_fb_plan(self, m0: np.ndarray) -> np.ndarray:
+        """Path tangent feed-forward + cross-track/heading feedback on the belief."""
+        H = int(self.local_horizon); dt = float(self.dt); v_max = float(self.v_max)
+        wps = self._waypoint_array()
+        controls = np.zeros((H, 2), dtype=float)
+        if wps is None or len(wps) < 2:
+            return controls
+        state = m0[:3].copy().astype(float)
+        for i in range(H):
+            j = int(np.argmin(np.hypot(wps[:, 0] - state[0], wps[:, 1] - state[1])))
+            j2 = min(j + 1, len(wps) - 1)
+            seg = wps[j2] - wps[j]; seglen = float(np.hypot(*seg))
+            if seglen < 1e-4:
+                break
+            tang = math.atan2(seg[1], seg[0])
+            nh = np.array([-math.sin(tang), math.cos(tang)])
+            ct = float((state[:2] - wps[j]) @ nh)        # + = left of path
+            he = wrap_angle(tang - state[2])
+            v = float(np.clip(v_max * max(0.25, 1.0 - 1.2 * abs(he) - 1.5 * abs(ct)), 0.05, v_max))
+            w = float(np.clip(1.5 * he - 3.0 * ct, -1.5, 1.5))
+            controls[i] = [v, w]
+            state = unicycle_step(state, [v, w], dt)
+            if np.hypot(*(wps[-1] - state[:2])) < 0.05:
+                break
         return controls
 
     def _simple_plan_safe_to_execute(self, controls: np.ndarray, m0: np.ndarray) -> tuple[int, str]:

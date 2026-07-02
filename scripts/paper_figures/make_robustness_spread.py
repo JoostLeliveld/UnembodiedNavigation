@@ -99,7 +99,9 @@ def load_runs(task, cond):
         if not exps: continue
         tx, ty = [], []
         for row in csv.DictReader(open(exps[-1])):
-            try: x = float(row["truth_x"]); y = float(row["truth_y"])
+            # GROUND-TRUTH path only (gt_x/gt_y). odom_map_x/y = /odom drifts from
+            # the true pose and would misplace the plotted trajectory.
+            try: x = float(row["gt_x"]); y = float(row["gt_y"])
             except (KeyError, ValueError): continue
             if math.isfinite(x) and math.isfinite(y): tx.append(x); ty.append(y)
         if not tx: continue

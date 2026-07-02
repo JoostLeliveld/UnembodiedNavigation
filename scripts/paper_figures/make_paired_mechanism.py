@@ -10,7 +10,7 @@ warehouse visibility GP, and the same noise/controller parameters.
 Three panels:
   (a) C1 route map: global plan, executed trajectory, belief mean, and uncertainty band,
   (b) C2 route map: global plan, executed trajectory, belief mean, and uncertainty band,
-  (c) truth-belief position error with the 2-sigma belief radius.
+  (c) ground-truth belief position error with the 2-sigma belief radius.
 """
 import sys, json, glob, math, csv, shutil
 from pathlib import Path
@@ -197,8 +197,24 @@ def load_cond(cond):
     tx, ty, traj_t, traj_x, traj_y = [], [], [], [], []
     belief_t, belief_x, belief_y, belief_cov, belief_r2s = [], [], [], [], []
     ep, r2s, rho, cam_t, cam_e = [], [], [], [], []
+    # ALWAYS plot against ground truth (gt_x/gt_y, belief_error_gt_m). The
+    # odom-as-truth columns (odom_map_x/y, belief_error_odom_m) are NEVER a valid
+    # reference: /odom drifts from the true pose (up to ~0.4 m here), so plotting
+    # it inflates both the executed path and the error panel with odom drift that
+    # is not real localization error. No fallback — refuse to plot rather than
+    # silently show the wrong comparison.
+    use_gt = any(math.isfinite(_f(r, "gt_x")) for r in exp)
+    if not use_gt:
+        raise SystemExit(
+            f"[{cond}] {rd}/experiment.csv has no ground-truth (gt_x) column — "
+            f"refusing to plot odom-as-truth. Re-run this campaign with the "
+            f"ground-truth bridge enabled (bringup_sim bridges /ground_truth_tf)."
+        )
+    xkey, ykey = "gt_x", "gt_y"
+    ekey = "belief_error_gt_m"
+    print(f"    [{cond}] error/trajectory source: GROUND TRUTH (gt_x/gt_y, belief_error_gt_m)")
     for r in exp:
-        x, y = _f(r, "truth_x"), _f(r, "truth_y")
+        x, y = _f(r, xkey), _f(r, ykey)
         st = _f(r, "stamp")
         if math.isfinite(x) and math.isfinite(y):
             tx.append(x); ty.append(y)
@@ -209,7 +225,7 @@ def load_cond(cond):
         tt = st - t0
         if tt < -0.05:   # only show time series after the first command
             continue
-        e = _f(r, "truth_belief_error_m")
+        e = _f(r, ekey)
         bx, by = _f(r, "planner_belief_x"), _f(r, "planner_belief_y")
         cxx, cxy, cyy = _f(r, "planner_cov_x"), _f(r, "planner_cov_xy"), _f(r, "planner_cov_y")
         if math.isfinite(cxx) and math.isfinite(cyy):
@@ -278,7 +294,7 @@ def load_cond(cond):
     except FileNotFoundError:
         pass
     reached = str(summ.get("completion_reason", "")) == "goal_reached"
-    # Per-task start (first valid truth pose) and goal (logged goal_x/goal_y).
+    # Per-task start (first valid ground-truth pose) and goal (logged goal_x/goal_y).
     start_xy = (float(tx[0]), float(ty[0])) if len(tx) else (math.nan, math.nan)
     gx = next((_f(r, "goal_x") for r in reversed(exp) if math.isfinite(_f(r, "goal_x"))), math.nan)
     gy = next((_f(r, "goal_y") for r in reversed(exp) if math.isfinite(_f(r, "goal_y"))), math.nan)
@@ -420,7 +436,7 @@ axa.legend(handles=[
 ], loc="lower left", fontsize=7.2, framealpha=0.9, ncol=2, columnspacing=0.9, handlelength=2.0)
 draw_map(axb, C2, "viridis", _TITLE_B, C2C, show_cbar=True)
 
-# (c) truth-belief error + 2-sigma radius
+# (c) ground-truth belief error + 2-sigma radius
 for cond, col, lab in ((C1, C1C, "C1"), (C2, C2C, "C2")):
     axd.plot(cond["ep"][:, 0], cond["ep"][:, 1], "-", color=col, lw=2.0,
              label=f"{lab} $e_p$ (mean {cond['mean_e']:.2f} m)")
@@ -431,7 +447,7 @@ if C1["crash"] is not None:
     axd.axvline(C1["crash"], color=C1C, ls=":", lw=1.4, alpha=0.8)
     axd.text(C1["crash"], 0.51, "C1 collision", color=C1C, fontsize=7.5, ha="center", va="bottom")
 axd.axhline(0.5, color="0.4", ls=":", lw=1.0)
-axd.set_title(r"(c) Truth--belief error with $2\sigma$ belief radius", fontsize=11.5, fontweight="bold")
+axd.set_title(r"(c) Ground-truth belief error with $2\sigma$ belief radius", fontsize=11.5, fontweight="bold")
 axd.set_xlabel("time after first command (s)"); axd.set_ylabel("position error / radius (m)")
 err_max = max(float(np.nanmax(C1["ep"][:, 1])), float(np.nanmax(C2["ep"][:, 1])), 0.5)
 axd.set_ylim(0.0, min(0.75, max(0.55, 1.08 * err_max)))
@@ -450,14 +466,14 @@ selected_runs = {
     "C1": {
         "run_dir": C1["run_dir"],
         "completion_reason": C1["summary"].get("completion_reason"),
-        "mean_truth_belief_error_after_first_cmd_m": C1["summary"].get("mean_truth_belief_error_after_first_cmd_m"),
-        "mean_error_plotted_m": C1["mean_e"],
+        "mean_belief_error_gt_after_first_cmd_m": C1["summary"].get("mean_belief_error_gt_after_first_cmd_m"),
+        "mean_error_plotted_m": C1["mean_e"],  # GT belief error (gt_x/gt_y)
     },
     "C2": {
         "run_dir": C2["run_dir"],
         "completion_reason": C2["summary"].get("completion_reason"),
-        "mean_truth_belief_error_after_first_cmd_m": C2["summary"].get("mean_truth_belief_error_after_first_cmd_m"),
-        "mean_error_plotted_m": C2["mean_e"],
+        "mean_belief_error_gt_after_first_cmd_m": C2["summary"].get("mean_belief_error_gt_after_first_cmd_m"),
+        "mean_error_plotted_m": C2["mean_e"],  # GT belief error (gt_x/gt_y)
     },
 }
 settings = {
@@ -490,7 +506,7 @@ settings = {
 provenance = {
     "generated_at": datetime.now(timezone.utc).isoformat(),
     "script": _rel(Path(__file__)),
-    "figure_layout": "Two large route maps plus one full-width truth-belief error panel. Map panels show global plan, executed trajectory, belief mean, continuous 2-sigma belief band, and lightly styled YOLO update/miss markers.",
+    "figure_layout": "Two large route maps plus one full-width ground-truth belief error panel. Map panels show global plan, executed trajectory, belief mean, continuous 2-sigma belief band, and lightly styled YOLO update/miss markers.",
     "output_pdf": _rel(OUT),
     "thesis_pdf": _rel(PAPER) if COPY_TO_THESIS else None,
     "source_campaign_log": _rel(CAMP / "campaign_log.json"),
