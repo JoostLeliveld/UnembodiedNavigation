@@ -1,0 +1,27 @@
+{
+  "gp_targets_csv": "logs/visibility_comparison/warehouse_visibility_targets_v1/gp_targets_xy_aggregated.csv",
+  "capture_manifest": "logs/visibility_comparison/warehouse_visibility_capture_v1/capture_manifest.json",
+  "grid": {
+    "nx": 220,
+    "ny": 200,
+    "xmin": -5.5,
+    "xmax": 5.5,
+    "ymin": -5.0,
+    "ymax": 5.0
+  },
+  "gp_length_scale": 0.9,
+  "gp_noise_var": 0.05,
+  "beta": 0.5,
+  "min_prob": 0.0001,
+  "max_train_points": 0,
+  "subsample_seed": 0,
+  "available_methods": [
+    "yolo_score_raw"
+  ],
+  "missing_methods": [],
+  "notes": [
+    "Paper GP fitting uses the heading-aggregated yolo_score_raw target table.",
+    "GP artifacts are planner-compatible via xs, ys, and P_conservative_plan_map. Extra metadata is stored for plotting and reporting.",
+    "Strict schema cutover: legacy artifacts with P_map or P_conservative_map are no longer accepted by the planner."
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "route_apron_to_a3_mid__C1__seed0": {
+    "task": "route_apron_to_a3_mid",
+    "condition": "C1",
+    "seed": 0,
+    "planner": "constant_R_efe",
+    "run_log_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/_fixtest_mechanismA/route_apron_to_a3_mid/C1/seed0",
+    "started_at": "2026-06-17T22:41:09.452651",
+    "outcome": "goal_reached",
+    "completion_reason": "goal_reached",
+    "goal_reached": true,
+    "crashed": false,
+    "path_length_m": 5.672464541944052,
+    "mean_truth_state_error_m": 0.2984606757592148,
+    "elapsed_after_first_cmd_s": 22.599000000000004,
+    "minimum_goal_distance": 0.2278568989953444,
+    "ros_domain_id": "183",
+    "first_cmd_timeout_s": 270.0,
+    "finished_at": "2026-06-17T22:45:24.288428",
+    "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/_fixtest_mechanismA/route_apron_to_a3_mid/C1/seed0/experiment_20260617_224117"
+  },
+  "route_apron_to_a3_mid__C2__seed0": {
+    "task": "route_apron_to_a3_mid",
+    "condition": "C2",
+    "seed": 0,
+    "planner": "visibility_aware_efe",
+    "run_log_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/_fixtest_mechanismA/route_apron_to_a3_mid/C2/seed0",
+    "started_at": "2026-06-17T22:45:28.746461",
+    "outcome": "goal_reached",
+    "completion_reason": "goal_reached",
+    "goal_reached": true,
+    "crashed": false,
+    "path_length_m": 7.381055226728607,
+    "mean_truth_state_error_m": 0.1371037476406818,
+    "elapsed_after_first_cmd_s": 20.10000000000001,
+    "minimum_goal_distance": 0.10517288297376597,
+    "ros_domain_id": "184",
+    "first_cmd_timeout_s": 270.0,
+    "finished_at": "2026-06-17T22:51:29.822090",
+    "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/_fixtest_mechanismA/route_apron_to_a3_mid/C2/seed0/experiment_20260617_224539"
+  }
+}
