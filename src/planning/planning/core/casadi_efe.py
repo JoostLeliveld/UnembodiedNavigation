@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-import os
-import warnings
 
 import numpy as np
 
@@ -448,74 +446,6 @@ def visibility_aware_unicycle_efe_ca(
             + total_ref * inv_H + total_du * inv_H)
 
 
-def _load_cached_valgrad(cache_path):
-    """Best-effort load of a previously serialized valgrad ca.Function.
-
-    Returns the loaded Function only if it round-trips with the exact I/O arity
-    of the live build (8 inputs, 2 outputs); on ANY failure (missing file,
-    corrupt blob, CasADi-version mismatch) it returns None so the caller falls
-    back to a fresh symbolic build. CasADi serializes the full computational
-    graph, so a successfully loaded function evaluates bit-identically to a
-    freshly built one -- no numerical change, only the build cost is skipped.
-    """
-    if not cache_path:
-        return None
-    try:
-        if not os.path.exists(cache_path):
-            return None
-        fn = ca.Function.load(cache_path)
-        if int(fn.n_in()) == 8 and int(fn.n_out()) == 2:
-            return fn
-    except Exception:
-        return None
-    return None
-
-
-def _save_cached_valgrad(valgrad, cache_path):
-    """Atomically persist the built valgrad Function; never raises."""
-    if not cache_path:
-        return
-    try:
-        cache_dir = os.path.dirname(cache_path)
-        if cache_dir:
-            os.makedirs(cache_dir, exist_ok=True)
-        tmp_path = f"{cache_path}.{os.getpid()}.tmp"
-        valgrad.save(tmp_path)
-        os.replace(tmp_path, cache_path)  # atomic on POSIX
-    except Exception:
-        try:
-            if 'tmp_path' in dir() and os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except Exception:
-            pass
-
-
-def _build_valgrad_function(fn_args, jit_opts):
-    """Construct the valgrad ca.Function, optionally JIT-compiling it to native
-    code.
-
-    ``jit_opts`` (when given) is the CasADi options dict passed straight to
-    ``ca.Function`` -- e.g. ``{'jit': True, 'compiler': 'shell',
-    'jit_options': {'flags': ['-O1'], 'compiler': 'gcc'}}``. JIT trades a
-    one-time C-codegen+compile cost (paid once per run, since the built function
-    is cached in-process) for much faster repeated evaluation: the global EFE
-    solve calls this function tens of thousands of times, so the per-eval VM
-    overhead dominates. On ANY JIT failure (no compiler, codegen too large,
-    plugin missing) we fall back to the interpreted build so behaviour never
-    regresses -- only speed does.
-    """
-    if jit_opts:
-        try:
-            return ca.Function(*fn_args, dict(jit_opts))
-        except Exception as exc:  # noqa: BLE001
-            warnings.warn(
-                f"CasADi JIT build failed ({exc}); falling back to interpreted "
-                "evaluation. Ensure a C compiler (gcc/clang) is available to "
-                "enable JIT."
-            )
-    return ca.Function(*fn_args)
-
-
 def _make_valgrad_wrapper(valgrad, H_local):
     """Wrap a (built or loaded) valgrad ca.Function as a numpy-in/out callable."""
 
@@ -566,24 +496,11 @@ def make_efe_valgrad_fn(
     p_vis_state=None,
     nogo_cost=None,
     nogo_belief_cost=None,
-    cache_path=None,
-    jit_opts=None,
 ):
     _require_casadi()
     approx = str(approx or 'ET1').upper()
     if approx not in ('ET1', 'ET2'):
         raise RuntimeError("CasADi EFE path supports only ET1 or ET2")
-
-    # Disk cache: the symbolic graph below is identical for a fixed config, so a
-    # previously serialized build can be reloaded (bit-identical evaluation) to
-    # skip the multi-second assembly on each fresh-process run. Any cache miss or
-    # load failure falls through to a normal build. Skipped when JIT is
-    # requested: a serialized Function reloads as an interpreted graph, so honour
-    # the JIT request by building (and compiling) fresh instead.
-    if not jit_opts:
-        cached = _load_cached_valgrad(cache_path)
-        if cached is not None:
-            return _make_valgrad_wrapper(cached, int(params.time_horizon))
 
     g = make_g_from_homography(H)
 
@@ -643,21 +560,12 @@ def make_efe_valgrad_fn(
         prev_u=prev_u,
     )
     gradient = ca.gradient(objective, u_flat)
-    valgrad = _build_valgrad_function(
-        (
-            'visibility_aware_efe_valgrad',
-            [u_flat, m0, S0, goal_obs, goal_xy, progress_index0, ref_seq, prev_u],
-            [objective, gradient],
-            ['u_flat', 'm0', 'S0', 'goal_obs', 'goal_xy', 'progress_index0', 'ref_seq', 'prev_u'],
-            ['objective', 'gradient'],
-        ),
-        jit_opts,
+    valgrad = ca.Function(
+        'visibility_aware_efe_valgrad',
+        [u_flat, m0, S0, goal_obs, goal_xy, progress_index0, ref_seq, prev_u],
+        [objective, gradient],
+        ['u_flat', 'm0', 'S0', 'goal_obs', 'goal_xy', 'progress_index0', 'ref_seq', 'prev_u'],
+        ['objective', 'gradient'],
     )
-
-    # Only persist the interpreted build; a JIT function's value is its compiled
-    # code, which Function.save/load does not carry, so caching it to disk would
-    # silently drop back to interpreted evaluation on reload.
-    if not jit_opts:
-        _save_cached_valgrad(valgrad, cache_path)
 
     return _make_valgrad_wrapper(valgrad, int(params.time_horizon))

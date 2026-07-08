@@ -174,7 +174,6 @@ class EfeAgentNode(UnicyclePlannerNode):
             self.global_planner = self._construct_planner(
                 horizon=self.global_horizon,
                 dt=self.global_dt,
-                optimizer_jit=self.optimizer_jit,
                 use_ambiguity=self.global_use_ambiguity,
                 optimizer_multistart=self.global_optimizer_multistart,
                 optimizer_warm_start_shift_steps=self._warm_start_shift_steps_for_rate(
@@ -183,7 +182,7 @@ class EfeAgentNode(UnicyclePlannerNode):
             )
             self.get_logger().info(
                 f"[hierarchical] global H={self.global_horizon} (dt={self.global_dt:.3f}s, "
-                f"lookahead={self.global_horizon * self.global_dt:.1f}s, jit={self.optimizer_jit}, "
+                f"lookahead={self.global_horizon * self.global_dt:.1f}s, "
                 f"ambiguity={self.global_use_ambiguity}, "
                 f"multistart={self.global_optimizer_multistart}) -> waypoints "
                 f"(spacing {self.waypoint_spacing_m} m) -> local H={self.local_horizon} "
@@ -364,7 +363,7 @@ class EfeAgentNode(UnicyclePlannerNode):
                 f"[hierarchical] global plan solved in {(time.perf_counter()-plan_start):.1f}s "
                 f"(backend={getattr(rg, 'backend', '?')}, "
                 f"nit={getattr(rg, 'optimizer_nit', 0)}, nfev={getattr(rg, 'optimizer_nfev', 0)}, "
-                f"solve={getattr(rg, 'solve_time_s', 0.0):.1f}s, jit={self.optimizer_jit}) -> "
+                f"solve={getattr(rg, 'solve_time_s', 0.0):.1f}s) -> "
                 f"{len(self._waypoints)} waypoints; switching to local tracking"
             )
             # Publish the global plan for visualization; do NOT follow it.

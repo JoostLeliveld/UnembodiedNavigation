@@ -148,10 +148,6 @@ class UnicyclePlannerNode(Node):
         # reduced to spatial waypoints, so coarser steps mostly affect route
         # shape resolution, not the tracked path.
         _declare_if_not('global_dt', 0.0)
-        # JIT-compile the global EFE value+gradient function to native code.
-        # Big win for the one-shot global solve (evaluated tens of thousands of
-        # times); falls back to interpreted evaluation if no C compiler.
-        _declare_if_not('optimizer_jit', False)
         _declare_if_not('local_horizon', 12)
         _declare_if_not('local_plan_rate', 4.0)
         _declare_if_not('local_optimizer_maxiter', 60)
@@ -331,7 +327,6 @@ class UnicyclePlannerNode(Node):
         self.global_horizon = int(self.get_parameter('global_horizon').value)
         _global_dt = float(self.get_parameter('global_dt').value)
         self.global_dt = _global_dt if _global_dt > 0.0 else float(self.get_parameter('dt').value)
-        self.optimizer_jit = _as_bool(self.get_parameter('optimizer_jit').value)
         self.local_horizon = int(self.get_parameter('local_horizon').value)
         self.local_plan_rate = float(self.get_parameter('local_plan_rate').value)
         self.local_optimizer_maxiter = int(self.get_parameter('local_optimizer_maxiter').value)
@@ -733,7 +728,6 @@ class UnicyclePlannerNode(Node):
             nogo_belief_kappa=float(g('nogo_belief_kappa')),
             nogo_mode=str(g('nogo_mode')), driveable_geometry_json=g('driveable_geometry_json'),
             robot_collision_radius_m=self.robot_collision_radius_m, runtime_debug=self.debug_runtime,
-            optimizer_jit=_as_bool(g_default('optimizer_jit', False)),
         )
 
     def _current_goal_progress_index(self, m0, goal_xy) -> float:
