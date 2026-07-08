@@ -68,8 +68,8 @@ python3 scripts/paper_figures/make_paired_mechanism.py   # see its header for th
 ```
 
 ## 4. Update the paper with the new numbers
-See `PAPER_UPDATE_PLAN.md` (same directory) for the exact sentences/files that
-take the new counts. In short: the abstract counts, `tab:results`, the Experiments
+(The historical `PAPER_UPDATE_PLAN.md` was moved to `_archive/docs/` in the
+2026-07-08 cleanup.) In short: the abstract counts, `tab:results`, the Experiments
 multi-task paragraph, the conclusion, and `robustness_spread.png` are the only
 places the campaign numbers appear; everything else (mechanism, method, appendix
 config) is number-independent.

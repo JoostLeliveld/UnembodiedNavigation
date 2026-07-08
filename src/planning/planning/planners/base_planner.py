@@ -30,9 +30,6 @@ class PlanResult:
     delta_risk_visibility: float = 0.0
     delta_ambiguity_visibility: float = 0.0
     obstacle_cost: float = 0.0
-    goal_progress_cost: float = 0.0
-    ref_cost: float = 0.0
-    du_cost: float = 0.0
     backend: str = "unknown"
     optimizer_success: bool = False
     optimizer_status: int = 0
@@ -125,10 +122,6 @@ class UnicyclePlannerBase:
         goal_prior_v_std_final=18.0,
         goal_tightening_power=0.45,
         goal_progress_n_steps=90,
-        goal_progress_weight=0.0,
-        ref_weight=0.0,
-        terminal_ref_weight=0.0,
-        du_weight=0.0,
         observation_risk_scale=1.25,
         ambiguity_term_scale=1.00,
         discount_gamma=0.98,
@@ -136,15 +129,11 @@ class UnicyclePlannerBase:
         optimizer_ftol=1e-6,
         optimizer_multistart=False,
         optimizer_multistart_include_direct=True,
-        optimizer_multistart_lateral_offsets='',
         optimizer_initial_routes_json='',
         use_nogo_cost=False,
-        nogo_penalty_type='softplus',
+        nogo_penalty_type='warning_band',
         nogo_weight=0.0,
         nogo_safe_distance=0.35,
-        nogo_gaussian_sigma=0.25,
-        nogo_softplus_scale=0.08,
-        nogo_logbarrier_scale=0.25,
         nogo_logbarrier_eps=1e-3,
         nogo_warning_band=0.05,
         nogo_near_weight=50.0,
@@ -154,7 +143,6 @@ class UnicyclePlannerBase:
         driveable_geometry_json='',
         robot_collision_radius_m=0.125,
         runtime_debug=False,
-        optimizer_jit=False,
     ):
         self.horizon = int(horizon)
         self.dt = float(dt)
@@ -183,14 +171,6 @@ class UnicyclePlannerBase:
         self.goal_prior_v_std_final = float(goal_prior_v_std_final)
         self.goal_tightening_power = float(max(goal_tightening_power, 1e-6))
         self.goal_progress_n_steps = int(max(goal_progress_n_steps, 1))
-        self.goal_progress_weight = float(max(goal_progress_weight, 0.0))
-        # LOCAL reference-segment tracking weights. All default 0.0 so the global
-        # planner and every locked config are numerically unchanged (the terms
-        # vanish from the objective). Condition-neutral: no GP / ambiguity /
-        # visibility dependence; identical for C1/C2/C3.
-        self.ref_weight = float(max(ref_weight, 0.0))
-        self.terminal_ref_weight = float(max(terminal_ref_weight, 0.0))
-        self.du_weight = float(max(du_weight, 0.0))
         self.observation_risk_scale = float(observation_risk_scale)
         self.ambiguity_term_scale = float(ambiguity_term_scale)
         self.discount_gamma = float(discount_gamma)
@@ -223,9 +203,6 @@ class UnicyclePlannerBase:
         self.optimizer_multistart_include_direct = self._as_bool_like(
             optimizer_multistart_include_direct
         )
-        self.optimizer_multistart_lateral_offsets = self._parse_float_list(
-            optimizer_multistart_lateral_offsets
-        )
         self.optimizer_initial_routes = self._parse_initial_routes(optimizer_initial_routes_json)
         self.rng = np.random.default_rng(int(seed))
 
@@ -238,17 +215,13 @@ class UnicyclePlannerBase:
         )
 
         self.runtime_debug = bool(runtime_debug)
-        self.optimizer_jit = bool(optimizer_jit)
         self.use_visibility_model = bool(use_visibility_model)
         self._visibility_min_prob = 1e-4
         self.visibility_model = None
         self.use_nogo_cost = bool(use_nogo_cost)
-        self.nogo_penalty_type = str(nogo_penalty_type or 'softplus').strip().lower()
+        self.nogo_penalty_type = str(nogo_penalty_type or 'warning_band').strip().lower()
         self.nogo_weight = float(max(nogo_weight, 0.0))
         self.nogo_safe_distance = float(max(nogo_safe_distance, 0.0))
-        self.nogo_gaussian_sigma = float(max(nogo_gaussian_sigma, 1e-6))
-        self.nogo_softplus_scale = float(max(nogo_softplus_scale, 1e-6))
-        self.nogo_logbarrier_scale = float(max(nogo_logbarrier_scale, 1e-6))
         self.nogo_logbarrier_eps = float(max(nogo_logbarrier_eps, 1e-6))
         self.nogo_warning_band = float(max(nogo_warning_band, 1e-6))
         self.nogo_near_weight = float(max(nogo_near_weight, 0.0))
@@ -291,9 +264,6 @@ class UnicyclePlannerBase:
                 penalty_type=self.nogo_penalty_type,
                 weight=self.nogo_weight,
                 safe_distance=self.nogo_safe_distance,
-                gaussian_sigma=self.nogo_gaussian_sigma,
-                softplus_scale=self.nogo_softplus_scale,
-                logbarrier_scale=self.nogo_logbarrier_scale,
                 logbarrier_eps=self.nogo_logbarrier_eps,
                 warning_band=self.nogo_warning_band,
                 near_weight=self.nogo_near_weight,
@@ -304,12 +274,9 @@ class UnicyclePlannerBase:
 
         if str(collision_geometry_json or '').strip():
             collision_cfg = NogoCostConfig(
-                penalty_type='softplus',
+                penalty_type='warning_band',
                 weight=1.0,
                 safe_distance=0.0,
-                gaussian_sigma=1.0,
-                softplus_scale=1.0,
-                logbarrier_scale=1.0,
                 logbarrier_eps=1e-3,
                 geometry_json=str(collision_geometry_json or ''),
             )
@@ -326,33 +293,6 @@ class UnicyclePlannerBase:
         if isinstance(value, (int, float)):
             return bool(value)
         return str(value).strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on')
-
-    @staticmethod
-    def _parse_float_list(raw):
-        if raw is None:
-            return []
-        if isinstance(raw, (list, tuple)):
-            values = raw
-        else:
-            text = str(raw).strip()
-            if not text:
-                return []
-            if text.startswith('[') and text.endswith(']'):
-                try:
-                    values = json.loads(text)
-                except json.JSONDecodeError:
-                    values = text[1:-1].split(',')
-            else:
-                values = text.split(',')
-        out = []
-        for item in values:
-            try:
-                value = float(item)
-            except (TypeError, ValueError):
-                continue
-            if math.isfinite(value):
-                out.append(value)
-        return out
 
     @staticmethod
     def _parse_initial_routes(raw):
@@ -832,19 +772,6 @@ class UnicyclePlannerBase:
         if self.optimizer_multistart_include_direct:
             candidates.append(('direct_goal', self._controls_for_waypoints(start, [goal])))
 
-        dvec = goal - start[:2]
-        dist = float(np.linalg.norm(dvec))
-        if dist > 1e-3:
-            unit = dvec / dist
-            perp = np.array([-unit[1], unit[0]], dtype=float)
-            mid = start[:2] + 0.5 * dvec
-            for offset in self.optimizer_multistart_lateral_offsets:
-                waypoint = mid + float(offset) * perp
-                candidates.append((
-                    f'lateral_{float(offset):+.2f}',
-                    self._controls_for_waypoints(start, [waypoint, goal]),
-                ))
-
         for route in self.optimizer_initial_routes:
             name = str(route.get('name', 'route'))
             waypoints = list(route.get('waypoints', []))
@@ -870,9 +797,6 @@ class UnicyclePlannerBase:
             + ambiguity_term
             + float(metrics.get('control_cost', 0.0))
             + float(metrics.get('obstacle_cost', 0.0))
-            + float(metrics.get('goal_progress_cost', 0.0))
-            + float(metrics.get('ref_cost', 0.0))
-            + float(metrics.get('du_cost', 0.0))
         )
 
     def _evaluate_candidate_controls(
@@ -886,8 +810,6 @@ class UnicyclePlannerBase:
         objective_scales,
         *,
         progress_index=0.0,
-        ref_seq=None,
-        prev_u=None,
     ):
         controls_flat = np.asarray(controls_flat, dtype=float).reshape(self.horizon * 2)
         controls = controls_flat.reshape(self.horizon, 2)
@@ -900,8 +822,6 @@ class UnicyclePlannerBase:
             goal_obs_cov,
             True,
             progress_index=progress_index,
-            ref_seq=ref_seq,
-            prev_u=prev_u,
         )
         scaled_total = self._scaled_objective_from_metrics(metrics, objective_scales)
         return {
@@ -936,10 +856,6 @@ class UnicyclePlannerBase:
             float(self.goal_prior_v_std_final),
             float(self.goal_tightening_power),
             int(self.goal_progress_n_steps),
-            float(self.goal_progress_weight),
-            float(self.ref_weight),
-            float(self.terminal_ref_weight),
-            float(self.du_weight),
             float(self.observation_risk_scale),
             float(self.ambiguity_term_scale),
             float(self.discount_gamma),
@@ -954,65 +870,6 @@ class UnicyclePlannerBase:
             int(np.asarray(goal_obs, dtype=float).shape[0]),
             tuple(self.visibility_model.signature) if self.visibility_model is not None else (),
         )
-
-    def _valgrad_disk_cache_path(self, params_ca):
-        """Stable on-disk cache path for the built valgrad ca.Function.
-
-        The digest hashes EVERYTHING baked into the symbolic graph: a manual
-        code-version tag, the EFE-approximation order, every CasadiEfeParams
-        field (exact float reprs, no rounding), the camera homography, the GP
-        visibility artifact's content signature, and the no-go cost config +
-        geometry + belief settings. If any differ, the digest differs and a
-        fresh build is forced, so a stale function can never be loaded. Returns
-        None (=> always build fresh) unless explicitly enabled with
-        EFE_VALGRAD_DISK_CACHE=1. Default OFF: benchmarking showed the serialized
-        graph is ~70 MB and deserializes as slowly as it rebuilds (no runtime
-        win), so it is opt-in only. When enabled, CasADi serializes the full
-        graph, so a reload evaluates bit-identically -- only the build is skipped.
-        """
-        import os
-        import hashlib
-        from dataclasses import asdict
-
-        if os.environ.get('EFE_VALGRAD_DISK_CACHE', '0') != '1':
-            return None
-        try:
-            cache_version = 'v1'
-
-            def _norm(v):
-                if isinstance(v, np.ndarray):
-                    return v.astype(float).tolist()
-                return v
-
-            params_items = sorted((k, _norm(v)) for k, v in asdict(params_ca).items())
-
-            gp_sig = None
-            if self.use_visibility_model and self.visibility_model is not None:
-                gp_sig = tuple(self.visibility_model.signature)
-
-            nogo_sig = None
-            if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
-                nogo_sig = (
-                    repr(self.nogo_cost_model.cfg),
-                    str(self.nogo_cost_model.mode),
-                    bool(self.use_belief_nogo_cost),
-                    repr(float(self.nogo_belief_kappa)),
-                )
-
-            ident = repr((
-                cache_version,
-                str(self.approx_method).upper(),
-                params_items,
-                np.asarray(self.camera.H, dtype=float).tolist(),
-                gp_sig,
-                nogo_sig,
-            ))
-            digest = hashlib.sha256(ident.encode('utf-8')).hexdigest()[:32]
-            cache_dir = os.environ.get('EFE_VALGRAD_CACHE_DIR') or os.path.join(
-                os.path.expanduser('~'), '.cache', 'efe_valgrad')
-            return os.path.join(cache_dir, f'valgrad_{digest}.casadi')
-        except Exception:
-            return None
 
     def _get_casadi_valgrad(
         self,
@@ -1074,32 +931,11 @@ class UnicyclePlannerBase:
                 goal_prior_v_std_final=float(self.goal_prior_v_std_final),
                 goal_tightening_power=float(self.goal_tightening_power),
                 goal_progress_n_steps=int(self.goal_progress_n_steps),
-                goal_progress_weight=float(self.goal_progress_weight),
-                ref_weight=float(self.ref_weight),
-                terminal_ref_weight=float(self.terminal_ref_weight),
-                du_weight=float(self.du_weight),
                 use_belief_nogo_cost=bool(self.use_belief_nogo_cost),
                 time_horizon=int(self.horizon),
                 dt=float(self.dt),
                 Du=2,
             )
-            jit_opts = None
-            if self.optimizer_jit:
-                # JIT-compile the value+gradient function to native code (~5.9x
-                # faster per eval at H=60). NOTE: measured break-even is ~15k
-                # evals, but a one-shot global solve runs only ~1.5k (3 seeds x
-                # ~500), and the compile costs ~29s at H=60 (~9s at H=30) -- so
-                # per-run JIT is a NET LOSS for the one-shot solve. Only worth it
-                # if the compiled artifact is persisted and reused across many
-                # solves (e.g. a whole campaign). Default OFF; prefer coarsening
-                # global_dt to shrink the per-eval cost instead. -O1 bounds the
-                # compile of the large generated C; falls back to interpreted
-                # evaluation if no compiler is available.
-                jit_opts = {
-                    'jit': True,
-                    'compiler': 'shell',
-                    'jit_options': {'flags': ['-O1'], 'compiler': 'gcc'},
-                }
             valgrad = casadi_efe.make_efe_valgrad_fn(
                 params_ca,
                 self.camera.H,
@@ -1107,14 +943,11 @@ class UnicyclePlannerBase:
                 p_vis_state=p_vis_ca,
                 nogo_cost=nogo_cost_ca,
                 nogo_belief_cost=nogo_belief_cost_ca,
-                cache_path=self._valgrad_disk_cache_path(params_ca),
-                jit_opts=jit_opts,
             )
             self._casadi_valgrad_cache[cache_key] = valgrad
             self._runtime_debug_print(
                 "[planner_debug] CasADi valgrad function prepared in "
-                f"{(time.perf_counter() - build_start) * 1000.0:.1f} ms "
-                f"(jit={'on' if self.optimizer_jit else 'off'})"
+                f"{(time.perf_counter() - build_start) * 1000.0:.1f} ms"
             )
 
         return valgrad
@@ -1153,24 +986,11 @@ class UnicyclePlannerBase:
         *,
         progress_index=0.0,
         R_baseline_override=None,
-        ref_seq=None,
-        prev_u=None,
     ):
         del goal_obs_cov
         controls_flat = np.asarray(controls_flat, dtype=float)
         assert controls_flat.size == self.horizon * 2, f"controls_flat size {controls_flat.size} != expected {self.horizon * 2}"
         controls = controls_flat.reshape(self.horizon, 2)
-
-        # LOCAL reference-segment tracking mirror (condition-neutral, default-off).
-        ref_weight = float(getattr(self, 'ref_weight', 0.0))
-        terminal_ref_weight = float(getattr(self, 'terminal_ref_weight', 0.0))
-        du_weight = float(getattr(self, 'du_weight', 0.0))
-        use_ref = (ref_weight > 0.0 or terminal_ref_weight > 0.0) and ref_seq is not None
-        use_du = du_weight > 0.0 and prev_u is not None
-        if use_ref:
-            ref_xy = np.asarray(ref_seq, dtype=float).reshape(self.horizon, 2)
-        if use_du:
-            prev_u_arr = np.asarray(prev_u, dtype=float).reshape(2)
 
         m = m0.copy()
         S = S0.copy()
@@ -1178,9 +998,6 @@ class UnicyclePlannerBase:
         total_amb = 0.0
         total_control = 0.0
         total_obstacle = 0.0
-        total_progress = 0.0
-        total_ref = 0.0
-        total_du = 0.0
         total_risk_mean = 0.0
         total_risk_cov_trace = 0.0
         total_risk_cov_logdet = 0.0
@@ -1257,30 +1074,14 @@ class UnicyclePlannerBase:
                 S_nogo = self._expected_state_posterior_covariance(S, Sigma_y, Gamma)
             total_obstacle += weight_t * self.obstacle_penalty(m, S_nogo)
             total_control += weight_t * self.control_weight * float(u[0] ** 2 + u[1] ** 2)
-            # Metric goal-distance reward REMOVED (2026-06-10): non-EFE goal attractor;
-            # goal-seeking must emerge from the EFE goal-prior in the risk term, not a
-            # hand-added ||mean-goal||^2 penalty. total_progress stays 0.
-            if use_ref:
-                dref = np.asarray(m[:2], dtype=float).reshape(2) - ref_xy[t]
-                total_ref += weight_t * ref_weight * float(dref @ dref)
-                if t == self.horizon - 1:
-                    total_ref += weight_t * terminal_ref_weight * float(dref @ dref)
-            if use_du:
-                u_prev = prev_u_arr if t == 0 else controls[t - 1]
-                du = np.asarray(u, dtype=float).reshape(2) - np.asarray(u_prev, dtype=float).reshape(2)
-                total_du += weight_t * du_weight * float(du @ du)
 
-        total = (total_risk + total_amb + total_control + total_obstacle
-                 + total_progress + total_ref + total_du)
+        total = total_risk + total_amb + total_control + total_obstacle
         if return_metrics:
             return total, {
                 'risk_cost': float(total_risk),
                 'ambiguity_cost': float(total_amb),
                 'control_cost': float(total_control),
                 'obstacle_cost': float(total_obstacle),
-                'goal_progress_cost': float(total_progress),
-                'ref_cost': float(total_ref),
-                'du_cost': float(total_du),
                 'risk_mean': float(total_risk_mean),
                 'risk_cov_trace': float(total_risk_cov_trace),
                 'risk_cov_logdet': float(total_risk_cov_logdet),
@@ -1290,31 +1091,9 @@ class UnicyclePlannerBase:
             }
         return total
 
-    def plan(self, m0, S0, goal_xy, *, progress_index=0.0, ref_seq=None, prev_u=None):
+    def plan(self, m0, S0, goal_xy, *, progress_index=0.0):
         t_plan_start = time.perf_counter()
         progress_index = float(max(progress_index, 0.0))
-
-        # LOCAL reference-segment tracking inputs (condition-neutral, default-off).
-        # ref_seq: (horizon, 2) or flat (2*horizon,) fixed per-step (x, y) targets
-        # computed OUTSIDE the solve. prev_u: last applied control (2,). When the
-        # ref/du weights are 0.0 these terms do not enter the objective, so passing
-        # zeros (the default) keeps every existing caller numerically unchanged.
-        if ref_seq is None:
-            ref_seq_flat = np.zeros(self.horizon * 2, dtype=float)
-        else:
-            ref_seq_flat = np.asarray(ref_seq, dtype=float).reshape(-1)
-            if ref_seq_flat.size != self.horizon * 2:
-                raise ValueError(
-                    f"ref_seq must have {self.horizon * 2} entries "
-                    f"(horizon={self.horizon}), got {ref_seq_flat.size}"
-                )
-        prev_u_arr = (
-            np.zeros(2, dtype=float)
-            if prev_u is None
-            else np.asarray(prev_u, dtype=float).reshape(-1)
-        )
-        if prev_u_arr.size != 2:
-            raise ValueError(f"prev_u must have 2 entries, got {prev_u_arr.size}")
 
         # Reset warm start when goal changes by more than 0.5 m to prevent
         # stale plans from creating a stuck local minimum after goal switch.
@@ -1376,8 +1155,6 @@ class UnicyclePlannerBase:
                     goal_obs_eval,
                     np.asarray(goal_xy, dtype=float).reshape(2),
                     progress_index,
-                    ref_seq_flat,
-                    prev_u_arr,
                 )
                 if fg_calls['count'] == 0:
                     self._runtime_debug_print(
@@ -1432,8 +1209,6 @@ class UnicyclePlannerBase:
                     goal_obs_cov,
                     objective_scales,
                     progress_index=progress_index,
-                    ref_seq=ref_seq_flat,
-                    prev_u=prev_u_arr,
                 )
                 seed_candidate = self._evaluate_candidate_controls(
                     np.asarray(x_init, dtype=float),
@@ -1444,8 +1219,6 @@ class UnicyclePlannerBase:
                     goal_obs_cov,
                     objective_scales,
                     progress_index=progress_index,
-                    ref_seq=ref_seq_flat,
-                    prev_u=prev_u_arr,
                 )
                 opt_diag = self._trajectory_plan_diagnostics(
                     m0,
@@ -1541,8 +1314,6 @@ class UnicyclePlannerBase:
                     goal_obs_cov,
                     objective_scales,
                     progress_index=progress_index,
-                    ref_seq=ref_seq_flat,
-                    prev_u=prev_u_arr,
                 )
                 stop_diag = self._trajectory_plan_diagnostics(
                     m0,
@@ -1605,9 +1376,6 @@ class UnicyclePlannerBase:
             ambiguity_cost=float(metrics.get('ambiguity_cost', 0.0)),
             control_cost=float(metrics.get('control_cost', 0.0)),
             obstacle_cost=float(metrics.get('obstacle_cost', 0.0)),
-            goal_progress_cost=float(metrics.get('goal_progress_cost', 0.0)),
-            ref_cost=float(metrics.get('ref_cost', 0.0)),
-            du_cost=float(metrics.get('du_cost', 0.0)),
             risk_mean=float(metrics.get('risk_mean', 0.0)),
             risk_cov_trace=float(metrics.get('risk_cov_trace', 0.0)),
             risk_cov_logdet=float(metrics.get('risk_cov_logdet', 0.0)),

@@ -140,6 +140,11 @@ class ExperimentLogger(Node):
         self.declare_parameter('visibility_geometry_json', '')
         self.declare_parameter('collision_geometry_json', '')
         self.declare_parameter('robot_collision_radius_m', 0.125)
+        # When False, a geometric wall/obstacle penetration is still logged but does
+        # NOT terminate the run (only physical contact does). Lets a run continue past
+        # a boundary graze so its natural outcome (goal / stuck / timeout) and full GT
+        # trajectory are observed. Default True preserves the original behaviour.
+        self.declare_parameter('terminate_on_geom_collision', True)
         self.declare_parameter('use_command_noise', True)
         self.declare_parameter('command_noise_linear_slip_mean', 0.03)
         self.declare_parameter('command_noise_linear_slip_std', 0.06)
@@ -157,7 +162,6 @@ class ExperimentLogger(Node):
         self.declare_parameter('optimizer_warm_start', True)
         self.declare_parameter('optimizer_multistart', False)
         self.declare_parameter('optimizer_multistart_include_direct', True)
-        self.declare_parameter('optimizer_multistart_lateral_offsets', '')
         self.declare_parameter('optimizer_initial_routes_json', '')
         self.declare_parameter('optimizer_route_seed_mode', 'explicit')
         self.declare_parameter('use_hierarchical', False)
@@ -184,23 +188,12 @@ class ExperimentLogger(Node):
         self.declare_parameter('local_replan_min_remaining_s', 0.0)
         self.declare_parameter('local_replan_on_waypoint_change', False)
         self.declare_parameter('latency_compensate_plan_handoff', False)
-        self.declare_parameter('use_simple_local_controller', False)
-        self.declare_parameter('local_tracking_use_odom_yaw', False)
         self.declare_parameter('cmd_publish_rate', 10.0)
-        self.declare_parameter('use_odom_heading_correction', True)
-        self.declare_parameter('use_displacement_heading', False)
-        self.declare_parameter('heading_min_displacement_m', 0.10)
-        self.declare_parameter('heading_bev_noise_sigma_m', 0.05)
-        self.declare_parameter('odom_heading_correction_mode', 'kalman')
-        self.declare_parameter('clamp_pixel_uv_theta_without_yaw', False)
-        self.declare_parameter('heading_update_mode', 'odom_overwrite')
+        self.declare_parameter('heading_update_mode', 'camera_xy_only')
         self.declare_parameter('use_nogo_cost', False)
-        self.declare_parameter('nogo_penalty_type', 'softplus')
+        self.declare_parameter('nogo_penalty_type', 'warning_band')
         self.declare_parameter('nogo_weight', 0.0)
         self.declare_parameter('nogo_safe_distance', 0.35)
-        self.declare_parameter('nogo_gaussian_sigma', 0.25)
-        self.declare_parameter('nogo_softplus_scale', 0.08)
-        self.declare_parameter('nogo_logbarrier_scale', 0.25)
         self.declare_parameter('nogo_logbarrier_eps', 1e-3)
         self.declare_parameter('nogo_warning_band', 0.05)
         self.declare_parameter('nogo_near_weight', 50.0)
@@ -217,17 +210,12 @@ class ExperimentLogger(Node):
         self.declare_parameter('yolo_use_masks', True)
         self.declare_parameter('yolo_min_mask_area_px', 12.0)
         self.declare_parameter('yolo_mask_bottom_band_px', 3.0)
-        # [DEPRECATED_LEGACY_CLEANUP] keypoint heading parameters are legacy
-        self.declare_parameter('yolo_min_keypoint_conf', 0.5)
-        self.declare_parameter('keypoint_marker_world_z', 0.0)
         self.declare_parameter('show_pose_markers', False)
-        self.declare_parameter('keypoint_heading_sigma_rad', 0.05)
         self.declare_parameter('diagnostics_match_tolerance_s', 1e-3)
         self.declare_parameter('bev_y_calibration_offset_m', 0.0)
         self.declare_parameter('bev_affine_calibration', '')
         self.declare_parameter('bbox_contact_z_m', 0.0)
         self.declare_parameter('pixel_correction_nis_threshold', 0.0)
-        self.declare_parameter('pixel_correction_nis_reject_cov_scale', 1.0)
         self.declare_parameter('odom_topic', '/odom_noisy')
         self.declare_parameter('run_dir_topic', '/experiment/run_dir')
         self.declare_parameter('run_timeout_after_first_cmd_s', 75.0)
@@ -306,6 +294,7 @@ class ExperimentLogger(Node):
         self.visibility_geometry_json = str(self.get_parameter('visibility_geometry_json').value)
         self.collision_geometry_json = str(self.get_parameter('collision_geometry_json').value)
         self.robot_collision_radius_m = float(self.get_parameter('robot_collision_radius_m').value)
+        self.terminate_on_geom_collision = bool(self.get_parameter('terminate_on_geom_collision').value)
         self.use_command_noise = bool(self.get_parameter('use_command_noise').value)
         self.command_noise_linear_slip_mean = float(self.get_parameter('command_noise_linear_slip_mean').value)
         self.command_noise_linear_slip_std = float(self.get_parameter('command_noise_linear_slip_std').value)
@@ -324,9 +313,6 @@ class ExperimentLogger(Node):
         self.optimizer_multistart = bool(self.get_parameter('optimizer_multistart').value)
         self.optimizer_multistart_include_direct = bool(
             self.get_parameter('optimizer_multistart_include_direct').value
-        )
-        self.optimizer_multistart_lateral_offsets = str(
-            self.get_parameter('optimizer_multistart_lateral_offsets').value
         )
         self.optimizer_initial_routes_json = str(
             self.get_parameter('optimizer_initial_routes_json').value
@@ -386,36 +372,11 @@ class ExperimentLogger(Node):
         self.latency_compensate_plan_handoff = bool(
             self.get_parameter('latency_compensate_plan_handoff').value
         )
-        self.use_simple_local_controller = bool(
-            self.get_parameter('use_simple_local_controller').value
-        )
-        self.local_tracking_use_odom_yaw = bool(
-            self.get_parameter('local_tracking_use_odom_yaw').value
-        )
         self.cmd_publish_rate = float(self.get_parameter('cmd_publish_rate').value)
-        self.use_odom_heading_correction = bool(
-            self.get_parameter('use_odom_heading_correction').value
-        )
-        self.use_displacement_heading = bool(
-            self.get_parameter('use_displacement_heading').value
-        )
-        self.heading_min_displacement_m = float(
-            self.get_parameter('heading_min_displacement_m').value
-        )
-        self.heading_bev_noise_sigma_m = float(
-            self.get_parameter('heading_bev_noise_sigma_m').value
-        )
-        self.odom_heading_correction_mode = str(self.get_parameter('odom_heading_correction_mode').value)
-        self.clamp_pixel_uv_theta_without_yaw = bool(
-            self.get_parameter('clamp_pixel_uv_theta_without_yaw').value
-        )
         self.use_nogo_cost = bool(self.get_parameter('use_nogo_cost').value)
         self.nogo_penalty_type = str(self.get_parameter('nogo_penalty_type').value)
         self.nogo_weight = float(self.get_parameter('nogo_weight').value)
         self.nogo_safe_distance = float(self.get_parameter('nogo_safe_distance').value)
-        self.nogo_gaussian_sigma = float(self.get_parameter('nogo_gaussian_sigma').value)
-        self.nogo_softplus_scale = float(self.get_parameter('nogo_softplus_scale').value)
-        self.nogo_logbarrier_scale = float(self.get_parameter('nogo_logbarrier_scale').value)
         self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
         self.nogo_warning_band = float(self.get_parameter('nogo_warning_band').value)
         self.nogo_near_weight = float(self.get_parameter('nogo_near_weight').value)
@@ -432,11 +393,7 @@ class ExperimentLogger(Node):
         self.yolo_use_masks = bool(self.get_parameter('yolo_use_masks').value)
         self.yolo_min_mask_area_px = float(self.get_parameter('yolo_min_mask_area_px').value)
         self.yolo_mask_bottom_band_px = float(self.get_parameter('yolo_mask_bottom_band_px').value)
-        # [DEPRECATED_LEGACY_CLEANUP] keypoint heading parameters are legacy
-        self.yolo_min_keypoint_conf = float(self.get_parameter('yolo_min_keypoint_conf').value)
-        self.keypoint_marker_world_z = float(self.get_parameter('keypoint_marker_world_z').value)
         self.show_pose_markers = bool(self.get_parameter('show_pose_markers').value)
-        self.keypoint_heading_sigma_rad = float(self.get_parameter('keypoint_heading_sigma_rad').value)
         self.diagnostics_match_tolerance_s = float(
             self.get_parameter('diagnostics_match_tolerance_s').value
         )
@@ -450,9 +407,6 @@ class ExperimentLogger(Node):
         self.bbox_contact_z_m = float(self.get_parameter('bbox_contact_z_m').value)
         self.pixel_correction_nis_threshold = float(
             self.get_parameter('pixel_correction_nis_threshold').value
-        )
-        self.pixel_correction_nis_reject_cov_scale = float(
-            self.get_parameter('pixel_correction_nis_reject_cov_scale').value
         )
         self.odom_topic = str(self.get_parameter('odom_topic').value or '/odom_noisy')
         self.run_dir_topic = str(self.get_parameter('run_dir_topic').value).strip() or '/experiment/run_dir'
@@ -573,9 +527,6 @@ class ExperimentLogger(Node):
             'nogo_penalty_type': self.nogo_penalty_type,
             'nogo_weight': self.nogo_weight,
             'nogo_safe_distance': self.nogo_safe_distance,
-            'nogo_gaussian_sigma': self.nogo_gaussian_sigma,
-            'nogo_softplus_scale': self.nogo_softplus_scale,
-            'nogo_logbarrier_scale': self.nogo_logbarrier_scale,
             'nogo_logbarrier_eps': self.nogo_logbarrier_eps,
             'nogo_warning_band': self.nogo_warning_band,
             'nogo_near_weight': self.nogo_near_weight,
@@ -592,17 +543,12 @@ class ExperimentLogger(Node):
             'yolo_use_masks': self.yolo_use_masks,
             'yolo_min_mask_area_px': self.yolo_min_mask_area_px,
             'yolo_mask_bottom_band_px': self.yolo_mask_bottom_band_px,
-            # [DEPRECATED_LEGACY_CLEANUP] keypoint heading parameters are legacy
-            'yolo_min_keypoint_conf': self.yolo_min_keypoint_conf,
-            'keypoint_marker_world_z': self.keypoint_marker_world_z,
             'show_pose_markers': self.show_pose_markers,
-            'keypoint_heading_sigma_rad': self.keypoint_heading_sigma_rad,
             'diagnostics_match_tolerance_s': self.diagnostics_match_tolerance_s,
             'bev_y_calibration_offset_m': self.bev_y_calibration_offset_m,
             'bev_affine_calibration': self.bev_affine_calibration,
             'bbox_contact_z_m': self.bbox_contact_z_m,
             'pixel_correction_nis_threshold': self.pixel_correction_nis_threshold,
-            'pixel_correction_nis_reject_cov_scale': self.pixel_correction_nis_reject_cov_scale,
             'odom_topic': self.odom_topic,
             'seed': self.seed,
             'state_pipeline': 'homography_to_bev',
@@ -629,7 +575,6 @@ class ExperimentLogger(Node):
             'optimizer_warm_start': self.optimizer_warm_start,
             'optimizer_multistart': self.optimizer_multistart,
             'optimizer_multistart_include_direct': self.optimizer_multistart_include_direct,
-            'optimizer_multistart_lateral_offsets': self.optimizer_multistart_lateral_offsets,
             'optimizer_initial_routes_json': self.optimizer_initial_routes_json,
             'optimizer_route_seed_mode': self.optimizer_route_seed_mode,
             'use_hierarchical': self.use_hierarchical,
@@ -656,15 +601,7 @@ class ExperimentLogger(Node):
             'local_replan_min_remaining_s': self.local_replan_min_remaining_s,
             'local_replan_on_waypoint_change': self.local_replan_on_waypoint_change,
             'latency_compensate_plan_handoff': self.latency_compensate_plan_handoff,
-            'use_simple_local_controller': self.use_simple_local_controller,
-            'local_tracking_use_odom_yaw': self.local_tracking_use_odom_yaw,
             'cmd_publish_rate': self.cmd_publish_rate,
-            'use_odom_heading_correction': self.use_odom_heading_correction,
-            'use_displacement_heading': self.use_displacement_heading,
-            'heading_min_displacement_m': self.heading_min_displacement_m,
-            'heading_bev_noise_sigma_m': self.heading_bev_noise_sigma_m,
-            'odom_heading_correction_mode': self.odom_heading_correction_mode,
-            'clamp_pixel_uv_theta_without_yaw': self.clamp_pixel_uv_theta_without_yaw,
             'auto_stop_on_goal': self.auto_stop_on_goal,
             'goal_success_radius': self.goal_success_radius,
             'goal_success_hold_s': self.goal_success_hold_s,
@@ -1448,7 +1385,6 @@ class ExperimentLogger(Node):
             2: 'odom_heading_fallback',
             3: 'motion_heading_fallback',
             4: 'held_previous_heading',
-            5: 'keypoint_bev_heading',
         }.get(value, 'unknown')
 
     @staticmethod
@@ -2634,7 +2570,10 @@ class ExperimentLogger(Node):
         ])
         self.file.flush()
 
-        if not self._stop_requested and (self._contact_collision_seen or self._geom_collision_seen):
+        if not self._stop_requested and (
+            self._contact_collision_seen
+            or (self._geom_collision_seen and self.terminate_on_geom_collision)
+        ):
             self._finish_run("collision", now_stamp)
             return
 

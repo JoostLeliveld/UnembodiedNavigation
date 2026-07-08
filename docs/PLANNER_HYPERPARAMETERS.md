@@ -1,7 +1,7 @@
 # Planner Hyperparameter Reference
 
 The EFE planner has ~30 tunable knobs. This document explains what each one does,
-the current locked AWS/F31 values, and recipes for eliciting specific behaviours.
+the current locked AWS values, and recipes for eliciting specific behaviours.
 
 **The clean-EFE invariant**: do NOT add new cost terms to
 `src/planning/planning/core/casadi_efe.py`. The objective stays
@@ -12,7 +12,7 @@ optimiser), never new terms.
 References:
 - Code: `src/planning/planning/planners/base_planner.py` (constructor signature has the
   full list), `src/planning/planning/core/casadi_efe.py` (math).
-- Active paper-facing config: `scripts/visibility_comparison/warehouse_visibility_campaign.yaml`.
+- Active current config: `scripts/visibility_comparison/warehouse_visibility_campaign.yaml`.
   Older smoke/probe configs are historical tuning material, not the locked AWS runtime.
 
 ---
@@ -30,7 +30,7 @@ with `risk_scale = risk_weight_obs · observation_risk_scale` and
 | `ambiguity_term_scale` | 1.0 | second multiplier on ambiguity; kept at 1 so the weight is the main ambiguity knob | — | — |
 | `risk_weight_obs` | 1.0 | base weight on KL-to-goal-observation per step | only if goal-attraction is too weak overall | rarely — usually you want to *widen the goal prior* instead |
 | `observation_risk_scale` | 1.0 | second multiplier on risk; normalized so `risk_scale = risk_weight_obs` | only if you want to amplify goal-pull without touching the goal-prior width | — |
-| `control_weight` | 0.0 | command/effort term | not currently used for the paper-facing F31 comparison | if route choice should not contain a direct path-length/effort preference |
+| `control_weight` | 0.0 | command/effort term | not currently used for the current C1/C2 comparison | if route choice should not contain a direct path-length/effort preference |
 
 **Practical rule**: keep `goal_prior_u_std_final` and `goal_prior_v_std_final` no smaller
 than the shadow covariance scale unless you intentionally want a very aggressive
@@ -58,8 +58,8 @@ R_plan transitions sharply with p_vis (precisions add linearly; r_plan recovers 
 reduce `r_miss_uv` — that compresses the dynamic range of R_plan and the
 ambiguity term becomes less aggressive at shadow entries.
 
-Detector-side settings that feed this observation path are also locked in the F31 config:
-`yolo_imgsz=640`, `yolo_conf_threshold=0.10`, `yolo_iou_threshold=0.45`,
+Detector-side settings that feed this observation path are also locked in the current config:
+`yolo_imgsz=640`, `yolo_conf_threshold=0.05`, `yolo_iou_threshold=0.45`,
 `yolo_target_class=robot`, `yolo_class_id=0`, and `yolo_use_masks=false`. Runtime
 localization selects the bbox bottom-center as the ground-contact proxy; masks are
 training/diagnostic artifacts only.
@@ -84,7 +84,7 @@ detour. Re-run `scripts/visibility_comparison/efe_offline_lab.py` when a fresh s
 needed; generated plots are scratch outputs and are not maintained as paper artifacts.
 
 Offline route-split sweeps have explored looser final priors; those are not locked
-paper-facing closed-loop values until the full artifact chain is rerun.
+current closed-loop values until the full artifact chain is rerun.
 
 ---
 
@@ -103,7 +103,7 @@ paper-facing closed-loop values until the full artifact chain is rerun.
 
 **Effective global look-ahead distance = `global_horizon · global_dt · v_max`**. This is
 the single number that matters for "can the planner see the decision-relevant feature
-ahead?". At the locked F31 setting it reaches up to 18 m in the global optimization
+ahead?". At the locked current setting it reaches up to 18 m in the global optimization
 horizon.
 
 **Coarse horizon / sparse-planning** (allowed, not yet tried): increase `dt` (e.g., 0.25 →
@@ -115,9 +115,10 @@ controller change should be treated as a separate planner variant.
 
 ## No-go / collision
 
-Current paper-facing values are from `warehouse_visibility_campaign.yaml` (2026-06-11). The
-no-go is now a hinged-log **`warning_band`** keep-in penalty (replaces the old softplus /
-`log_barrier` interior-biased barrier, which collapsed the C2 route split at weight>200).
+Current values are from `warehouse_visibility_campaign.yaml`. The
+no-go is a hinged-log **`warning_band`** keep-in penalty. (Earlier softplus / `log_barrier`
+interior-biased variants collapsed the C2 route split at weight>200 and were removed in the
+2026-07-08 cleanup; `warning_band` is now the only supported penalty.)
 
 | name | aws_final | what it does |
 |---|---|---|
@@ -131,7 +132,7 @@ no-go is now a hinged-log **`warning_band`** keep-in penalty (replaces the old s
 
 `use_belief_nogo_cost: true` for the global solve. The signed clearance is tightened
 by `nogo_belief_kappa * sqrt(lambda_max(S_xy))`; the locked campaign uses
-`nogo_belief_kappa=1.0`. This is part of the paper-facing route mechanism: the GP
+`nogo_belief_kappa=1.0`. This is part of the current route mechanism: the GP
 changes planner-facing covariance, and the belief tube changes how risky tight
 driveable corridors look. To make the planner "more willing" to push through tight
 spots, reduce `nogo_safe_distance` or `nogo_belief_kappa` — but only if the footprint
@@ -150,19 +151,18 @@ and campaign evidence still support it.
 | `optimizer_warm_start` | true | reuse previous solution shifted by one step |
 | `optimizer_multistart` | true | shared condition-neutral basin handling |
 | `optimizer_multistart_include_direct` | false | direct seed omitted; named neutral route-family seeds are used instead |
-| `optimizer_multistart_lateral_offsets` | 0.0 | lateral shifts disabled |
 | `optimizer_initial_routes_json` | `mid_cross_lane`, `lower_sweep_lane` | route-family seeds offered to both C1 and C2 |
 
 When solver wall time is close to `maxfun`, the solver is not converging; raise `maxfun`
 first, then `maxiter`. When solver time is fast but the trajectory looks suboptimal, treat
 that as a diagnostic local-minimum issue rather than adding route-specific initial seeds to
-paper-facing runs.
+current C1/C2 runs.
 
 ---
 
 ## Optimizer Initialisation
 
-Paper-facing runs may use neutral optimiser initialisation:
+Current C1/C2 runs may use neutral optimiser initialisation:
 
 - shifted warm-start from the previous optimized control sequence when available;
 - all-zero controls on the first plan or after a goal reset;
@@ -272,7 +272,7 @@ push through rather than stall.
 - Then consider sparse planning: raise `dt` (0.25 → 0.5) and possibly reduce `horizon` to
   keep optimisation variable count manageable.
 - Do not add route-specific cold starts or mission waypoints to compensate for short
-  look-ahead in paper-facing C1/C2 runs.
+  look-ahead in current C1/C2 runs.
 
 ---
 
@@ -280,7 +280,7 @@ push through rather than stall.
 
 - New cost terms (forbidden by the clean-EFE invariant).
 - World, GP, or YOLO retraining; see the artifact-generation scripts and
-  `docs/experiment_registry.md` before regenerating paper-facing assets.
+  `docs/experiment_registry.md` before regenerating current assets.
 
 ---
 

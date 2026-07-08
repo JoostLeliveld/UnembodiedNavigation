@@ -14,7 +14,7 @@ from unav_common.occlusion_geometry import (
 )
 
 
-VALID_PLANNERS = {"visibility_aware_efe", "risk_only_ablation", "constant_R_efe"}
+VALID_PLANNERS = {"visibility_aware_efe", "constant_R_efe"}
 
 
 def load_world_profiles(path: str) -> Dict[str, Any]:
@@ -192,9 +192,6 @@ def _validate_visibility_defaults(visibility_defaults: Dict[str, Any]) -> None:
         "visibility_target_height_m",
         "nogo_weight",
         "nogo_safe_distance",
-        "nogo_gaussian_sigma",
-        "nogo_softplus_scale",
-        "nogo_logbarrier_scale",
         "nogo_logbarrier_eps",
         "nogo_warning_band",
         "nogo_near_weight",

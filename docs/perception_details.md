@@ -53,7 +53,7 @@ This document provides a comprehensive log of the YOLOv11 instance segmentation 
 - **IoU Threshold:** 0.45
 - **Centroid Selection:** Bounding-box bottom-centre projected to the planar ground coordinates $(x, y)$ using a calibrated projection model.
 - **Missed Detection Handling:** Missing detections (scores $< \tau_{\mathrm{conf}}$ or no selected detection) are recorded as a zero-score ($c_i = 0$), and no camera-based EKF correction is applied.
-- **Runtime Signals:** Figure availability plots use the raw YOLO detection flag and score. The Normalized Innovation Squared (NIS) gate is **active** with threshold $9.21$ ($\chi^2$ at 2 DOF, $0.99$): camera measurements whose innovation NIS $> 9.21$ are rejected so an outlier cannot collapse the belief covariance. The self-heal recovery is **disabled** (`pixel_correction_nis_reject_cov_scale = 1.0`); only the standard gate remains.
+- **Runtime Signals:** Figure availability plots use the raw YOLO detection flag and score. The Normalized Innovation Squared (NIS) gate is **active** with threshold $9.21$ ($\chi^2$ at 2 DOF, $0.99$): camera measurements whose innovation NIS $> 9.21$ are rejected so an outlier cannot collapse the belief covariance. The custom self-heal recovery (belief-covariance widening on consecutive rejections) was **removed** in the 2026-07-08 cleanup; only the standard $\chi^2$ gate remains.
 
 ---
 

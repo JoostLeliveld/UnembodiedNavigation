@@ -1,6 +1,6 @@
 # Runtime Dataflow
 
-This document describes how the offline observability artifact connects to the online ROS/Gazebo runtime. For paper-level protocol and naming, see [`paper_runtime_contract.yaml`](paper_runtime_contract.yaml). For how odometry/encoder/heading/process/measurement uncertainty is propagated (the three noise families, the analytical process-noise covariance `Q_d`, and how covariance couples to the obstacle cost and global plan), see [`uncertainty_propagation.md`](uncertainty_propagation.md).
+This document describes how the offline observability artifact connects to the online ROS/Gazebo runtime. For the active protocol and naming, see [`current_runtime_contract.yaml`](current_runtime_contract.yaml). For the submitted-paper snapshot, see [`paper_runtime_contract.yaml`](paper_runtime_contract.yaml). For how odometry/encoder/heading/process/measurement uncertainty is propagated (the three noise families, the analytical process-noise covariance `Q_d`, and how covariance couples to the obstacle cost and global plan), see [`uncertainty_propagation.md`](uncertainty_propagation.md).
 
 ## Offline Preparation
 
@@ -15,7 +15,7 @@ world_profiles.yaml
 -> warehouse_primary_comparison.launch.py
 ```
 
-The paper-facing GP artifact is fitted before navigation trials and then held fixed. The current AWS paper-facing line uses:
+The active current GP artifact is fitted before navigation trials and then held fixed. The current AWS line uses:
 
 - world: `warehouse_aws.world.sdf` (external camera locked at z=4.8, y=-5.5)
 - artifact: `paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz`
@@ -65,7 +65,7 @@ The stable part of the estimator is:
   diagnostic artifacts only, not the selected localization pixel.
 - GP input: planar `x,y` only.
 
-The current paper-facing AWS configs use **`heading_update_mode: camera_xy_only`**:
+The current AWS configs use **`heading_update_mode: camera_xy_only`**:
 odometry provides the dead-reckoning prediction, and pixel `(x,y)` updates influence
 heading only indirectly through the unicycle prediction cross-covariance — there is no
 separate odom-yaw anchor and no keypoint/visual heading. (The legacy
@@ -84,7 +84,7 @@ they must not be treated as truth. See `docs/metric_definitions_and_gt_audit.md`
 should be reported separately when diagnosing perception.
 
 For delayed pixel corrections, inspect
-`pixel_corr_motion_replay_source` in `experiment.csv`. Paper-facing runs should
+`pixel_corr_motion_replay_source` in `experiment.csv`. Current runs should
 normally report `odom_noisy`; `command_log` is an allowed fallback only when no
 odom samples exist for the measurement interval, and `single_fallback` should be
 rare enough to treat as a timing diagnostic. The older
@@ -102,11 +102,11 @@ interpret them as selected motion-replay sample counts/duration together with
 | Paper metrics | `scripts/visibility_comparison/compute_paper_metrics.py` |
 | Paper figures | `scripts/paper_figures/*.py` and selected `scripts/visibility_comparison/*plot*.py` diagnostics |
 
-The primary planner names are `constant_R_efe`, `visibility_aware_efe`, and optional `risk_only_ablation`.
+The active planner names are `constant_R_efe` and `visibility_aware_efe`.
 
-## Paper-Facing Campaign
+## Current Campaign
 
-The paper-facing AWS campaign uses `warehouse_aws.world.sdf`, detector
+The current AWS campaign uses `warehouse_aws.world.sdf`, detector
 `warehouse_yolo_detector_v1`, GP `warehouse_visibility_gp_v1`, and
 `scripts/visibility_comparison/warehouse_visibility_campaign.yaml`. The config contains
 four tasks (three discriminators plus one control) and five seeds per condition.

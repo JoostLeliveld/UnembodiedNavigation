@@ -1,0 +1,21 @@
+{
+  "figure": "gp_pipeline_aws",
+  "world": "warehouse_aws.world.sdf",
+  "gp": "paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz",
+  "world_profile": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/config/world_profiles.yaml",
+  "out": "docs/paper_vs_current/current/figures/gp_pipeline_current.pdf",
+  "preview": "docs/paper_vs_current/current/figures/gp_pipeline_current.png",
+  "r_visible_uv": 2.5,
+  "r_miss_uv": 40.0,
+  "num_training_points": 139,
+  "rho_plan_min": 0.0001,
+  "rho_plan_max": 0.9999,
+  "rho_plan_mean": 0.5727276236451633,
+  "log_camera_covariance_min": 1.8326810780846534,
+  "log_camera_covariance_max": 7.3525786096975745,
+  "notes": [
+    "Saved as gp_pipeline_aws_v7.pdf for the paper and gp_pipeline_aws.png as a preview.",
+    "rho_plan is P_conservative_plan_map from the v7b GP artifact.",
+    "Forbidden/staging zones are drawn only as floor-layer context; they are not the GP."
+  ]
+}

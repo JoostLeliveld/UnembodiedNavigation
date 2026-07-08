@@ -1,20 +1,38 @@
 # Unembodied Navigation
 
 Research code and demonstration pages for visibility-aware robot navigation
-from a fixed external camera. The system trains a detector in Gazebo, turns
-detector reliability into a spatial GP, uses that GP as predictive camera
-covariance inside an expected-free-energy planner, and evaluates the behavior
-in a warehouse route-choice benchmark.
+from a fixed external camera. The project asks how a mobile robot can plan in a
+warehouse when camera localization is reliable in some aisles and brittle in
+others. The system detects the robot, projects the image evidence to the floor,
+learns a spatial camera-reliability model, converts that reliability into
+planner-facing observation covariance, and evaluates the behavior in matched
+warehouse route-choice experiments.
 
 > **Current configuration (2026-07-01 honest re-run).** The locked runtime values
-> differ from the original paper — see [`docs/paper_vs_current/README.md`](docs/paper_vs_current/README.md)
+> are checked in [`docs/current_runtime_contract.yaml`](docs/current_runtime_contract.yaml)
+> and differ from the original paper — see [`docs/paper_vs_current/README.md`](docs/paper_vs_current/README.md)
 > for the full diff. Detector `warehouse_yolo_detector_v1` (trained at imgsz 960,
 > inference at 640, conf 0.05); NIS innovation gate active at χ²(2, 0.99) = 9.21 with
 > self-heal disabled; ground-truth-based metrics; global EFE horizon 75 × 0.4 s = 30 s look-ahead.
 
 ![External-camera warehouse setup](paper_artifacts/figures/problem_setup_camera.png)
 
-## System In One Figure
+## Contribution Story
+
+![Contribution map](docs/media/contribution_map.png)
+
+The central contribution is the modular chain from camera observation to
+planning behavior. The GP does not learn the observation matrix `R` online and
+does not act as a direct visibility reward. It predicts spatial detector trust,
+and that trust scales the planner's observation covariance `R_plan`.
+
+Regenerate the README figures with:
+
+```bash
+python3 scripts/paper_figures/make_readme_visuals.py
+```
+
+## System Architecture
 
 ![External-camera navigation architecture](docs/media/system_architecture.svg)
 
@@ -22,15 +40,15 @@ Planned overview video: `docs/media/videos/system_overview.mp4`. This should be
 a 20-30 second montage using the warehouse still, detector overlay, GP map,
 C1/C2 route contrast, and the final campaign counts once those clips exist.
 
-## Interactive Module Walkthrough
+## Contribution Walkthrough
 
-| Module | Demonstration |
-| --- | --- |
-| [YOLO perception](yolo/) | Robot detection, bottom-centre extraction, training metadata, and validation results. |
-| [GP covariance model](gp/) | Detector-score samples, fitted reliability field, uncertainty discount, and covariance mapping. |
-| [State estimation](estimation/) | Image-space measurement, ground-plane projection, belief update, and heading convention. |
-| [EFE planning](planning/) | Constant vs learned predictive covariance, route behavior, and planner interface. |
-| [Experiments](experiments/) | Representative C1/C2 pair, full campaign results, metrics, and reproduction commands. |
+| Module | Contribution | Visual |
+| --- | --- | --- |
+| [YOLO perception](yolo/) | Detect the robot in the fixed warehouse camera image and export the selected bottom-centre pixel plus raw score. | <img src="yolo/demos/images/bottom_centre_01.png" width="190" alt="YOLO bottom centre visual"> |
+| [State estimation](estimation/) | Turn image-space evidence into a calibrated ground-plane point and keep the belief/noise story explicit. | <img src="estimation/demos/images/image_to_bev_01.png" width="190" alt="Image to BEV visual"> |
+| [GP covariance model](gp/) | Learn a spatial detector-trust field and convert it into planner-facing camera covariance. | <img src="gp/demos/images/r_plan_map_and_ellipses.png" width="190" alt="R plan map visual"> |
+| [Route planning](planning/) | Compare constant `R` against GP-scaled `R_plan` under the same map, tasks, seeds, and no-go geometry. | <img src="planning/demos/images/paired_route_choice.png" width="190" alt="Route choice visual"> |
+| [Experiments](experiments/) | Package the current honest campaign surface, result counts, paired figures, and reproduction commands. | <img src="experiments/demos/images/outcome_counts_by_condition.png" width="190" alt="Outcome counts visual"> |
 
 Each module folder is a mini landing page with visuals, inputs/outputs,
 reproduction commands, implementation links, limitations, and planned media
@@ -58,13 +76,15 @@ Gazebo warehouse
 -> seeded campaign metrics
 ```
 
-## Paper-Facing Benchmark
+## Current Honest-Campaign Benchmark
 
 The canonical benchmark uses four warehouse tasks and five seeds per condition.
 The current runtime surface is defined by
+[`docs/current_runtime_contract.yaml`](docs/current_runtime_contract.yaml) and
 [`scripts/visibility_comparison/warehouse_visibility_campaign.yaml`](scripts/visibility_comparison/warehouse_visibility_campaign.yaml).
-Regenerate paper metrics from a completed canonical campaign with
-`scripts/visibility_comparison/build_paper_outputs.sh`.
+The current packaged result surface lives under
+[`docs/paper_vs_current/current/`](docs/paper_vs_current/current/): C1 reaches
+15/20 clean goals and C2 reaches 20/20.
 
 The known obstacle geometry, driveable region, route seeds, detector checkpoint,
 GP artifact, and execution plumbing are pinned in the campaign config so C1/C2
@@ -83,8 +103,8 @@ ROS and script layout:
 | [`src/planning`](src/planning/README.md) | EFE planner, GP reliability loading, state-dependent covariance, rollout and no-go costs. |
 | [`src/experiments`](src/experiments/README.md) | Task definitions, launch wiring, run manifests, and campaign logging. |
 | [`scripts`](scripts/README.md) | Offline dataset capture, YOLO training, GP fitting, metrics, and figure generation. |
-| [`paper_artifacts`](paper_artifacts/README.md) | Curated figures, metrics, detector metadata, and GP metadata. |
-| [`docs`](docs/README.md) | Evidence registry, runtime contract, dataflow notes, and deeper method caveats. |
+| [`paper_artifacts`](paper_artifacts/README.md) | Curated figures, detector metadata, GP metadata, and archived historical metrics. |
+| [`docs`](docs/README.md) | Active runtime contract, evidence registry, historical paper snapshot, dataflow notes, and deeper method caveats. |
 
 The trained YOLO checkpoint is intentionally local and not tracked in git. To
 run the Gazebo campaign, place it at:
@@ -93,7 +113,7 @@ run the Gazebo campaign, place it at:
 logs/perception_models/warehouse_yolo_detector_v1/model.pt
 ```
 
-## Run The Paper-Facing Campaign
+## Run The Current Campaign
 
 ```bash
 colcon build

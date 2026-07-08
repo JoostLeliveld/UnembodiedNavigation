@@ -10,17 +10,14 @@ import numpy as np
 from unav_common.occlusion_geometry import scene_from_json, signed_distance_to_union_xy, _get_union_boundary_segments
 
 
-VALID_NOGO_PENALTIES = ('gaussian', 'softplus', 'log_barrier', 'warning_band')
+VALID_NOGO_PENALTIES = ('warning_band',)
 
 
 @dataclass(frozen=True)
 class NogoCostConfig:
-    penalty_type: str = 'softplus'
+    penalty_type: str = 'warning_band'
     weight: float = 0.0
     safe_distance: float = 0.35
-    gaussian_sigma: float = 0.25
-    softplus_scale: float = 0.08
-    logbarrier_scale: float = 0.25
     logbarrier_eps: float = 1e-3
     # warning_band: hinged-log warning penalty parameters (penalty_type ==
     # 'warning_band'). `warning_band` (b) is the clearance width over which the
@@ -56,9 +53,6 @@ class NogoZoneCostModel:
             raise ValueError("mode must be 'keep_out' or 'keep_in'")
         self.weight = float(max(cfg.weight, 0.0))
         self.safe_distance = float(max(cfg.safe_distance, 0.0))
-        self.gaussian_sigma = float(max(cfg.gaussian_sigma, 1e-6))
-        self.softplus_scale = float(max(cfg.softplus_scale, 1e-6))
-        self.logbarrier_scale = float(max(cfg.logbarrier_scale, 1e-6))
         self.logbarrier_eps = float(max(cfg.logbarrier_eps, 1e-6))
         self.warning_band = float(max(getattr(cfg, 'warning_band', 0.05), 1e-6))
         self.near_weight = float(max(getattr(cfg, 'near_weight', 50.0), 0.0))
@@ -94,9 +88,6 @@ class NogoZoneCostModel:
             self.penalty_type,
             round(self.weight, 6),
             round(self.safe_distance, 6),
-            round(self.gaussian_sigma, 6),
-            round(self.softplus_scale, 6),
-            round(self.logbarrier_scale, 6),
             round(self.logbarrier_eps, 8),
             round(self.warning_band, 6),
             round(self.near_weight, 6),
@@ -166,31 +157,15 @@ class NogoZoneCostModel:
         if not self.enabled:
             return 0.0
 
-        if self.penalty_type == 'gaussian':
-            outside = float(np.exp(-0.5 * (max(clearance, 0.0) / self.gaussian_sigma) ** 2))
-            inside_extra = max(-clearance, 0.0) / self.gaussian_sigma
-            return self.weight * (outside + inside_extra)
-
-        if self.penalty_type == 'softplus':
-            z = float(np.clip(-clearance / self.softplus_scale, -60.0, 60.0))
-            return self.weight * float(np.log1p(np.exp(z)))
-
-        if self.penalty_type == 'warning_band':
-            # Hinged-log warning + quadratic violation. Exactly zero for valid
-            # interior states (clearance >= warning_band), so raising `weight`
-            # crushes violations without biasing the choice between two valid
-            # routes (e.g. narrow vs wide aisle). Keeps a log-like shape inside
-            # the thin warning band near the boundary.
-            band_excess = max(self.warning_band - clearance, 0.0) / self.warning_band
-            warn = self.near_weight * float(np.log1p(band_excess * band_excess))
-            viol = max(-clearance, 0.0) / self.logbarrier_eps
-            return warn + self.weight * float(viol * viol)
-
-        denom = max(clearance, self.logbarrier_eps)
-        violation = max(self.logbarrier_eps - clearance, 0.0) / self.logbarrier_eps
-        return self.weight * float(
-            np.log1p(self.logbarrier_scale / denom) + 100.0 * violation * violation
-        )
+        # Hinged-log warning + quadratic violation. Exactly zero for valid
+        # interior states (clearance >= warning_band), so raising `weight`
+        # crushes violations without biasing the choice between two valid
+        # routes (e.g. narrow vs wide aisle). Keeps a log-like shape inside
+        # the thin warning band near the boundary.
+        band_excess = max(self.warning_band - clearance, 0.0) / self.warning_band
+        warn = self.near_weight * float(np.log1p(band_excess * band_excess))
+        viol = max(-clearance, 0.0) / self.logbarrier_eps
+        return warn + self.weight * float(viol * viol)
 
     def penalty_state_np(self, m) -> float:
         if not self.enabled:
@@ -250,13 +225,9 @@ class NogoZoneCostModel:
         ymaxs = ca.DM(self._ymaxs)
         weight = float(self.weight)
         safe_distance = float(self.safe_distance)
-        gaussian_sigma = float(self.gaussian_sigma)
-        softplus_scale = float(self.softplus_scale)
-        logbarrier_scale = float(self.logbarrier_scale)
         logbarrier_eps = float(self.logbarrier_eps)
         warning_band = float(self.warning_band)
         near_weight = float(self.near_weight)
-        penalty_type = self.penalty_type
         mode = self.mode
 
         def signed_distance_xy(x, y):
@@ -273,7 +244,7 @@ class NogoZoneCostModel:
                     closest = p1_dm + t * v
                     dists.append(ca.norm_2(q - closest))
                 min_dist = ca.mmin(ca.vertcat(*dists))
-                
+
                 is_inside = False
                 for p in self.prisms:
                     dx = ca.fmax(ca.fmax(p.xmin - x, 0.0), x - p.xmax)
@@ -299,23 +270,10 @@ class NogoZoneCostModel:
             else:
                 clearance = signed_d - safe_distance
 
-            if penalty_type == 'gaussian':
-                outside = ca.exp(-0.5 * ca.power(ca.fmax(clearance, 0.0) / gaussian_sigma, 2))
-                inside_extra = ca.fmax(-clearance, 0.0) / gaussian_sigma
-                base = outside + inside_extra
-            elif penalty_type == 'softplus':
-                z = ca.fmin(ca.fmax(-clearance / softplus_scale, -60.0), 60.0)
-                base = ca.log(1.0 + ca.exp(z))
-            elif penalty_type == 'warning_band':
-                band_excess = ca.fmax(warning_band - clearance, 0.0) / warning_band
-                warn = near_weight * ca.log(1.0 + ca.power(band_excess, 2))
-                viol = ca.fmax(-clearance, 0.0) / logbarrier_eps
-                return warn + weight * ca.power(viol, 2)
-            else:
-                denom = ca.fmax(clearance, logbarrier_eps)
-                violation = ca.fmax(logbarrier_eps - clearance, 0.0) / logbarrier_eps
-                base = ca.log(1.0 + logbarrier_scale / denom) + 100.0 * ca.power(violation, 2)
-            return weight * base
+            band_excess = ca.fmax(warning_band - clearance, 0.0) / warning_band
+            warn = near_weight * ca.log(1.0 + ca.power(band_excess, 2))
+            viol = ca.fmax(-clearance, 0.0) / logbarrier_eps
+            return warn + weight * ca.power(viol, 2)
 
         return penalty_state_casadi
 
@@ -336,13 +294,9 @@ class NogoZoneCostModel:
         ymaxs = ca.DM(self._ymaxs)
         weight = float(self.weight)
         safe_distance = float(self.safe_distance)
-        gaussian_sigma = float(self.gaussian_sigma)
-        softplus_scale = float(self.softplus_scale)
-        logbarrier_scale = float(self.logbarrier_scale)
         logbarrier_eps = float(self.logbarrier_eps)
         warning_band = float(self.warning_band)
         near_weight = float(self.near_weight)
-        penalty_type = self.penalty_type
         kappa = max(float(kappa), 1e-6)
         mode = self.mode
 
@@ -398,23 +352,10 @@ class NogoZoneCostModel:
             else:
                 clearance = signed_d - safe_distance
 
-            if penalty_type == 'gaussian':
-                outside = ca.exp(-0.5 * ca.power(ca.fmax(clearance, 0.0) / gaussian_sigma, 2))
-                inside_extra = ca.fmax(-clearance, 0.0) / gaussian_sigma
-                base = outside + inside_extra
-            elif penalty_type == 'softplus':
-                z = ca.fmin(ca.fmax(-clearance / softplus_scale, -60.0), 60.0)
-                base = ca.log(1.0 + ca.exp(z))
-            elif penalty_type == 'warning_band':
-                band_excess = ca.fmax(warning_band - clearance, 0.0) / warning_band
-                warn = near_weight * ca.log(1.0 + ca.power(band_excess, 2))
-                viol = ca.fmax(-clearance, 0.0) / logbarrier_eps
-                return warn + weight * ca.power(viol, 2)
-            else:
-                denom = ca.fmax(clearance, logbarrier_eps)
-                violation = ca.fmax(logbarrier_eps - clearance, 0.0) / logbarrier_eps
-                base = ca.log(1.0 + logbarrier_scale / denom) + 100.0 * ca.power(violation, 2)
-            return weight * base
+            band_excess = ca.fmax(warning_band - clearance, 0.0) / warning_band
+            warn = near_weight * ca.log(1.0 + ca.power(band_excess, 2))
+            viol = ca.fmax(-clearance, 0.0) / logbarrier_eps
+            return warn + weight * ca.power(viol, 2)
 
         def penalty_belief_casadi(m, S):
             if mode == 'keep_in':
@@ -426,24 +367,10 @@ class NogoZoneCostModel:
                 lambda_max = ca.fmax(0.5 * (trace + disc), 0.0)
                 sigma_margin = kappa * ca.sqrt(lambda_max + 1e-9)
                 clearance = -signed_d - safe_distance - sigma_margin
-                if penalty_type == 'gaussian':
-                    outside = ca.exp(-0.5 * ca.power(ca.fmax(clearance, 0.0) / gaussian_sigma, 2))
-                    inside_extra = ca.fmax(-clearance, 0.0) / gaussian_sigma
-                    return weight * (outside + inside_extra)
-                if penalty_type == 'softplus':
-                    z = ca.fmin(ca.fmax(-clearance / softplus_scale, -60.0), 60.0)
-                    return weight * ca.log(1.0 + ca.exp(z))
-                if penalty_type == 'warning_band':
-                    band_excess = ca.fmax(warning_band - clearance, 0.0) / warning_band
-                    warn = near_weight * ca.log(1.0 + ca.power(band_excess, 2))
-                    viol = ca.fmax(-clearance, 0.0) / logbarrier_eps
-                    return warn + weight * ca.power(viol, 2)
-                denom = ca.fmax(clearance, logbarrier_eps)
-                violation = ca.fmax(logbarrier_eps - clearance, 0.0) / logbarrier_eps
-                return weight * (
-                    ca.log(1.0 + logbarrier_scale / denom)
-                    + 100.0 * ca.power(violation, 2)
-                )
+                band_excess = ca.fmax(warning_band - clearance, 0.0) / warning_band
+                warn = near_weight * ca.log(1.0 + ca.power(band_excess, 2))
+                viol = ca.fmax(-clearance, 0.0) / logbarrier_eps
+                return warn + weight * ca.power(viol, 2)
 
             mean_xy = ca.reshape(m[:2], 2, 1)
             cov_xy = 0.5 * (S[:2, :2] + S[:2, :2].T)

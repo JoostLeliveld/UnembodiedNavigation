@@ -3,15 +3,19 @@
 Snapshot date: **2026-07-01**
 
 This folder freezes, side by side, **everything that differs** between the
-IWAI-paper campaign and the honest re-run campaign we are about to launch.
+IWAI-paper campaign and the current honest re-run campaign.
 
 ```
 docs/paper_vs_current/
 ├── README.md                                  <- this file (the full diff + artifact provenance)
 ├── paper/
-│   └── aws_f31b1_final_config.yaml            <- the exact paper campaign config
+│   ├── aws_f31b1_final_config.yaml            <- the exact paper campaign config
+│   ├── figures/                               <- paper GP, paired run, robustness spread, GIF
+│   └── data/                                  <- copied source bundles for paper figures
 └── current/
-    └── warehouse_visibility_campaign.yaml     <- the exact current re-run config
+    ├── warehouse_visibility_campaign.yaml     <- the exact current re-run config
+    ├── figures/                               <- current GP, paired runs, robustness spread, GIFs
+    └── data/                                  <- copied source bundles for current figures
 ```
 
 The two config files are **~95 % identical** — same world
@@ -20,6 +24,13 @@ model, same no-go mechanism (`warning_band` belief-tube keep-in, weight 2000,
 κ=1.0), same heading mode (`camera_xy_only`), and the **same four routes / five
 seeds** (the tasks were only *renamed*, waypoints are byte-identical). Everything
 that actually changed is listed below.
+
+Regenerate all comparison plots, PNG fallbacks, GIFs, and provenance bundles:
+
+```bash
+cd /home/joostleliveld/Thesis/UnembodiedNavigation
+python3 scripts/paper_figures/remake_paper_vs_current.py
+```
 
 ---
 
@@ -33,7 +44,8 @@ that actually changed is listed below.
 | md5 | *(file deleted — superseded; config path still references it)* | `61d425867c1a7cb7800e50356e4bb466` |
 | Base model | — | `yolo11n-seg.pt` |
 | Training dataset | (contaminated: ~70 % duplicate frames, ~252 floor/rack mislabels) | `logs/perception_datasets/warehouse_yolo_dataset_v1` (541 samples, 0 dup, 268 occluded frames rejected by occlusion gate) |
-| Image size | **640** | **960** |
+| Training image size | **640** | **960** |
+| Runtime inference image size | **640** | **640** |
 | Runtime conf threshold | **0.10** | **0.05** |
 | Epochs | — | 30 |
 | Trained | (paper era) | 2026-06-17 18:40 |
@@ -79,7 +91,7 @@ near-camera 0.99.
 
 | Key | Paper | Current | Reason |
 |---|---|---|---|
-| `yolo_imgsz` | 640 | **960** | clean retrain trained at 960 |
+| `yolo_imgsz` | 640 | **640** | the current detector was trained at 960 but inferred at 640 for the low-latency campaign |
 | `yolo_conf_threshold` | 0.10 | **0.05** | matched to the clean, low-confidence-calibrated detector |
 | `yolo_model` | `aws_yolo_simseg_v2` | `warehouse_yolo_detector_v1` | §1a |
 | `gp_artifact` | `aws_gp_v7b` | `warehouse_visibility_gp_v1` | §1b |
@@ -144,8 +156,9 @@ These matter for honesty of the results but do not live in the config file:
 ## 4. One-line summary
 
 Same world, same routes, same noise, same navigation method. What changed since
-the paper: **(a)** a clean-retrained YOLO detector (imgsz 960, uncontaminated
-dataset), **(b)** a GP refitted on detection-*rate* instead of confidence,
+the paper: **(a)** a clean-retrained YOLO detector (trained at imgsz 960,
+inferred at 640 on the current low-latency campaign, uncontaminated dataset),
+**(b)** a GP refitted on detection-*rate* instead of confidence,
 **(c)** a standard χ² NIS gate replacing the disabled gate + custom self-heal,
 **(d)** a lighter 30 s planning horizon (75×0.4 = same coverage as the paper's
 120×0.25, ~27 % faster), and

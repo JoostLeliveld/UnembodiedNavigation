@@ -29,10 +29,11 @@ CAMP = ROOT/"logs/visibility_comparison"/CAMP_NAME
 TASK = os.environ.get("PAIRED_TASK", "route_apron_to_a3_mid")
 SEED = int(os.environ.get("PAIRED_SEED", "0"))
 GPZ = ROOT/os.environ.get("PAIRED_GP", "paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz")
-LOCKED_CONFIG = ROOT/"scripts/visibility_comparison/warehouse_visibility_campaign.yaml"
+LOCKED_CONFIG = ROOT/os.environ.get("PAIRED_CONFIG", "scripts/visibility_comparison/warehouse_visibility_campaign.yaml")
 _OUTNAME = os.environ.get("PAIRED_OUT", "paired_mechanism_taskA")
 OUT = ROOT/f"paper_artifacts/figures/{_OUTNAME}.pdf"
 COPY_TO_THESIS = os.environ.get("PAIRED_COPY_TO_THESIS", "1") not in ("0", "false", "False") and _OUTNAME == "paired_mechanism_taskA"
+ALLOW_LEGACY_TRUTH = os.environ.get("PAIRED_ALLOW_LEGACY_TRUTH", "0") in ("1", "true", "True", "yes")
 PAPER = ROOT.parent/f"thesis-report/figures/campaign/{_OUTNAME}.pdf"
 DATA_DIR = ROOT/f"paper_artifacts/figures/{_OUTNAME}_data"
 CAM = (0.0, -5.5)
@@ -118,6 +119,7 @@ def _copy_source_data(selected_runs, provenance):
         "run_manifest.json",
         "run_summary.json",
         "tasks.yaml",
+        "world_profiles.yaml",
     )
     copied = []
     for cond, run in selected_runs.items():
@@ -197,22 +199,29 @@ def load_cond(cond):
     tx, ty, traj_t, traj_x, traj_y = [], [], [], [], []
     belief_t, belief_x, belief_y, belief_cov, belief_r2s = [], [], [], [], []
     ep, r2s, rho, cam_t, cam_e = [], [], [], [], []
-    # ALWAYS plot against ground truth (gt_x/gt_y, belief_error_gt_m). The
-    # odom-as-truth columns (odom_map_x/y, belief_error_odom_m) are NEVER a valid
-    # reference: /odom drifts from the true pose (up to ~0.4 m here), so plotting
-    # it inflates both the executed path and the error panel with odom drift that
-    # is not real localization error. No fallback — refuse to plot rather than
-    # silently show the wrong comparison.
+    # Prefer the new ground-truth bridge columns. Frozen paper logs predate that
+    # schema and use `truth_x/truth_y` for their paper-facing reference; allow
+    # those only when explicitly requested so current figures never silently fall
+    # back to legacy odom-derived truth.
     use_gt = any(math.isfinite(_f(r, "gt_x")) for r in exp)
-    if not use_gt:
+    use_legacy_truth = (not use_gt) and ALLOW_LEGACY_TRUTH and any(math.isfinite(_f(r, "truth_x")) for r in exp)
+    if not use_gt and not use_legacy_truth:
         raise SystemExit(
-            f"[{cond}] {rd}/experiment.csv has no ground-truth (gt_x) column — "
-            f"refusing to plot odom-as-truth. Re-run this campaign with the "
-            f"ground-truth bridge enabled (bringup_sim bridges /ground_truth_tf)."
+            f"[{cond}] {rd}/experiment.csv has no ground-truth (gt_x) column. "
+            f"Set PAIRED_ALLOW_LEGACY_TRUTH=1 only for frozen paper-baseline "
+            f"logs that intentionally use truth_x/truth_y."
         )
-    xkey, ykey = "gt_x", "gt_y"
-    ekey = "belief_error_gt_m"
-    print(f"    [{cond}] error/trajectory source: GROUND TRUTH (gt_x/gt_y, belief_error_gt_m)")
+    if use_gt:
+        xkey, ykey = "gt_x", "gt_y"
+        ekey = "belief_error_gt_m"
+        truth_label = "GROUND TRUTH (gt_x/gt_y, belief_error_gt_m)"
+        panel_label = "ground-truth"
+    else:
+        xkey, ykey = "truth_x", "truth_y"
+        ekey = "truth_belief_error_m"
+        truth_label = "LEGACY PAPER TRUTH (truth_x/truth_y, truth_belief_error_m)"
+        panel_label = "legacy paper truth"
+    print(f"    [{cond}] error/trajectory source: {truth_label}")
     for r in exp:
         x, y = _f(r, xkey), _f(r, ykey)
         st = _f(r, "stamp")
@@ -309,7 +318,9 @@ def load_cond(cond):
                 plan_x=np.array(px), plan_y=np.array(py),
                 crash=crash, reached=reached,
                 mean_e=float(np.nanmean([e for _, e in ep])) if ep else math.nan,
-                run_dir=rd, summary=summ, manifest=manifest)
+                run_dir=rd, summary=summ, manifest=manifest,
+                truth_source_label=truth_label,
+                panel_truth_label=panel_label)
 
 
 C1, C2 = load_cond("C1"), load_cond("C2")
@@ -447,7 +458,10 @@ if C1["crash"] is not None:
     axd.axvline(C1["crash"], color=C1C, ls=":", lw=1.4, alpha=0.8)
     axd.text(C1["crash"], 0.51, "C1 collision", color=C1C, fontsize=7.5, ha="center", va="bottom")
 axd.axhline(0.5, color="0.4", ls=":", lw=1.0)
-axd.set_title(r"(c) Ground-truth belief error with $2\sigma$ belief radius", fontsize=11.5, fontweight="bold")
+_panel_truth_label = C1.get("panel_truth_label", "ground-truth")
+if C2.get("panel_truth_label") != _panel_truth_label:
+    _panel_truth_label = "truth"
+axd.set_title(rf"(c) {_panel_truth_label.capitalize()} belief error with $2\sigma$ belief radius", fontsize=11.5, fontweight="bold")
 axd.set_xlabel("time after first command (s)"); axd.set_ylabel("position error / radius (m)")
 err_max = max(float(np.nanmax(C1["ep"][:, 1])), float(np.nanmax(C2["ep"][:, 1])), 0.5)
 axd.set_ylim(0.0, min(0.75, max(0.55, 1.08 * err_max)))
@@ -467,13 +481,15 @@ selected_runs = {
         "run_dir": C1["run_dir"],
         "completion_reason": C1["summary"].get("completion_reason"),
         "mean_belief_error_gt_after_first_cmd_m": C1["summary"].get("mean_belief_error_gt_after_first_cmd_m"),
-        "mean_error_plotted_m": C1["mean_e"],  # GT belief error (gt_x/gt_y)
+        "mean_error_plotted_m": C1["mean_e"],
+        "truth_source": C1.get("truth_source_label"),
     },
     "C2": {
         "run_dir": C2["run_dir"],
         "completion_reason": C2["summary"].get("completion_reason"),
         "mean_belief_error_gt_after_first_cmd_m": C2["summary"].get("mean_belief_error_gt_after_first_cmd_m"),
-        "mean_error_plotted_m": C2["mean_e"],  # GT belief error (gt_x/gt_y)
+        "mean_error_plotted_m": C2["mean_e"],
+        "truth_source": C2.get("truth_source_label"),
     },
 }
 settings = {
@@ -502,6 +518,8 @@ settings = {
     "map_ylim_m": MAP_YLIM,
     "git_sha_C1": C1["manifest"].get("git_sha"),
     "git_sha_C2": C2["manifest"].get("git_sha"),
+    "plotted_truth_source_C1": C1.get("truth_source_label"),
+    "plotted_truth_source_C2": C2.get("truth_source_label"),
 }
 provenance = {
     "generated_at": datetime.now(timezone.utc).isoformat(),

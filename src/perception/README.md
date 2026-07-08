@@ -49,11 +49,13 @@ Training curves:
 
 ![YOLO training curves](../../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png)
 
-## Pose-Keypoint Support
+## Pose-Keypoint Support (archived)
 
-Pose-keypoint support is implemented but optional. The keypoints are anchored to the TurtleBot3 Burger geometry: the red base mesh for the front anchor and the blue lidar for the rear anchor. The source of truth is [`perception/core/pose_keypoints.py`](perception/core/pose_keypoints.py), with geometry checked by `tests/perception/test_pose_keypoint_geometry.py`.
-
-Enable the pose-heading path by using pose-model weights and setting `keypoint_marker_world_z` to the marker world height. The default `0.0` keeps pose-heading disabled.
+The pose-keypoint heading path was never wired into control for the final method
+(the detector is a segmentation model and heading comes from odometry under
+`camera_xy_only`). It was removed from the live nodes in the 2026-07-08 cleanup;
+`pose_extraction.py` / `pose_keypoints.py` and their tests are preserved under
+`_archive/code/perception_pose/` in case heading estimation is revived.
 
 ## Training Scripts
 

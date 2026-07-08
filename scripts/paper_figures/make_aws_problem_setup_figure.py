@@ -102,6 +102,10 @@ def load_run(run_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
         raise RuntimeError(f"Missing plan_samples.csv: {plan_path}")
 
     exp = pd.read_csv(exp_path)
+    if "gt_x" not in exp.columns and "truth_x" in exp.columns:
+        exp["gt_x"] = exp["truth_x"]
+    if "gt_y" not in exp.columns and "truth_y" in exp.columns:
+        exp["gt_y"] = exp["truth_y"]
     required = [
         "stamp",
         "gt_x",

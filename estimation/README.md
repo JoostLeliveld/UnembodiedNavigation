@@ -5,22 +5,25 @@
 This module shows how an image-space robot detection becomes a ground-plane
 state estimate and planner correction.
 
-## Story
+## Contribution At A Glance
 
-The detector does not magically provide pose. The system projects a selected
-image point into BEV, predicts belief with odometry, and applies camera `(x,y)`
-updates when fresh detections arrive.
+| Question | Answer |
+| --- | --- |
+| Problem | A detector box in the image is not yet a robot pose in the warehouse map. |
+| Contribution | The state stack projects the selected pixel to BEV, applies a small affine calibration, and keeps heading/noise conventions explicit. |
+| Implementation | Projection and runtime state publishing live in [`../src/state/state/core/pixel_to_bev.py`](../src/state/state/core/pixel_to_bev.py) and [`../src/state/state/nodes/pixel_to_bev_state_node.py`](../src/state/state/nodes/pixel_to_bev_state_node.py). |
 
 ## Visual Demonstration
 
-![Localization pathway](../paper_artifacts/figures/localization_pathway.png)
+![Image to BEV projection](demos/images/image_to_bev_01.png)
 
-The pathway keeps the measurement story explicit: the camera supplies an
-image-space detection, the runtime selects the bottom centre, and the state
-stack projects that point into BEV coordinates.
+The camera contributes image-space `x,y` evidence. Homography plus affine
+calibration turns that evidence into a ground-plane point; heading remains
+odometry-driven in the locked campaign.
 
-Planned media is listed in [`demos/`](demos/): an image-to-BEV still, a belief
-update GIF, a localization-error trace, and an optional topic-pipeline video.
+![Affine calibration before and after](demos/images/affine_calibration_before_after.png)
+
+Additional media is catalogued in [`demos/`](demos/).
 
 ## Inputs And Outputs
 
@@ -34,10 +37,12 @@ update GIF, a localization-error trace, and an optional topic-pipeline video.
 
 1. Convert the selected image pixel to a ground-plane `x,y` estimate with the
    calibrated camera model.
-2. Publish a BEV state message for the planner and logger.
-3. Let odometry drive heading prediction under the locked `camera_xy_only`
+2. Apply the campaign affine correction that compensates residual
+   position-dependent BEV projection bias.
+3. Publish a BEV state message for the planner and logger.
+4. Let odometry drive heading prediction under the locked `camera_xy_only`
    campaign setting.
-4. Let camera `(x, y)` corrections influence heading only indirectly through the
+5. Let camera `(x, y)` corrections influence heading only indirectly through the
    propagated belief cross-covariance.
 
 ## Performance And Diagnostics
@@ -80,4 +85,4 @@ than using already packaged preview inputs.
   through cross-covariance only.
 - Stale camera states must not be interpreted as fresh localization.
 
-See planned visual media in [`demos/`](demos/).
+See available and planned media in [`demos/`](demos/).

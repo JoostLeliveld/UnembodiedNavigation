@@ -44,7 +44,7 @@ pose (correct) · **[EST]** = an estimate (not a reference) · **[PHYS]** = real
 Root cause: the logger's `_latest_truth_pose()` reads `/odom`, so every column
 named `truth_*` (truth_x/y, truth_belief_error_m, truth_state_error_m) is ODOM,
 not ground truth — and `/odom` drifts up to ~0.4 m from the true pose. All
-paper-facing readers now use the GT columns; there is NO odom fallback.
+current readers now use the GT columns; there is NO odom fallback.
 
 FIXED (now ground-truth only):
 - `make_paired_mechanism.py` — error panel AND executed trajectory → gt_x/gt_y,

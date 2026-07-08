@@ -32,7 +32,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'bbox_contact_z_m': '0.0',
     'pixel_max_correction_jump_m': '0.0',
     'pixel_correction_nis_threshold': '0.0',
-    'pixel_correction_nis_reject_cov_scale': '1.0',
     'use_truth_localization': 'false',
     'cmd_publish_rate': '10.0',
     'min_state_cov': '1e-6',
@@ -75,7 +74,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'optimizer_warm_start': 'true',
     'optimizer_multistart': 'false',
     'optimizer_multistart_include_direct': 'true',
-    'optimizer_multistart_lateral_offsets': '',
     'optimizer_initial_routes_json': '',
     'optimizer_route_seed_mode': 'explicit',
     'use_hierarchical': 'false',
@@ -94,10 +92,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'local_nogo_penalty_type': '',
     'local_nogo_weight': '-1.0',
     'local_nogo_safe_distance': '-1.0',
-    'local_goal_progress_weight': '-1.0',
-    'local_ref_weight': '-1.0',
-    'local_terminal_ref_weight': '-1.0',
-    'local_du_weight': '-1.0',
     'local_goal_prior_u_std_start': '-1.0',
     'local_goal_prior_v_std_start': '-1.0',
     'local_goal_prior_u_std_final': '-1.0',
@@ -107,15 +101,9 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'local_replan_min_remaining_s': '0.0',
     'local_replan_on_waypoint_change': 'false',
     'latency_compensate_plan_handoff': 'false',
-    'use_simple_local_controller': 'false',
     'simple_tracker_yaw_gate_rad': '0.6',
-    'local_tracking_use_odom_yaw': 'false',
-    'use_state_bev_yaw': 'false',
-    'use_state_bev_heading_correction': 'false',
     'odom_heading_timeout_s': '0.75',
-    'odom_heading_correction_mode': 'kalman',
-    'clamp_pixel_uv_theta_without_yaw': 'false',
-    'heading_update_mode': 'odom_overwrite',
+    'heading_update_mode': 'camera_xy_only',
     'local_controller_type': 'turn_then_go',
     'debug_runtime': 'false',
     'auto_stop_on_goal': 'true',
@@ -176,12 +164,9 @@ _SENSOR_PIXEL_NOISE_SIGMA: float = 1.0
 VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
     'visibility_target_height_m': 0.0,
     'use_nogo_cost': 'true',
-    'nogo_penalty_type': 'softplus',
+    'nogo_penalty_type': 'warning_band',
     'nogo_weight': 40.0,
     'nogo_safe_distance': 0.35,
-    'nogo_gaussian_sigma': 0.25,
-    'nogo_softplus_scale': 0.08,
-    'nogo_logbarrier_scale': 0.25,
     'nogo_logbarrier_eps': 1e-3,
     'nogo_warning_band': 0.05,
     'nogo_near_weight': 50.0,
@@ -197,33 +182,6 @@ def _as_bool(value: str) -> bool:
 
 def _launch_value(context, name: str, default_value: str) -> str:
     return LaunchConfiguration(name, default=default_value).perform(context)
-
-def _matches_default(current_value: object, default_value: object) -> bool:
-    if isinstance(default_value, bool):
-        return bool(current_value) == default_value
-    if isinstance(default_value, int):
-        return int(current_value) == default_value
-    if isinstance(default_value, str):
-        return str(current_value).strip().lower() == default_value.strip().lower()
-    return abs(float(current_value) - float(default_value)) < 1e-9
-
-
-def _apply_visibility_profile_defaults(cfg: Dict[str, object], profile: Dict[str, object]) -> None:
-    visibility_defaults = profile.get('visibility_defaults')
-    if not isinstance(visibility_defaults, dict):
-        return
-    for key, fallback_value in VISIBILITY_FALLBACK_DEFAULTS.items():
-        if key not in visibility_defaults:
-            continue
-        if key not in cfg or not _matches_default(cfg[key], fallback_value):
-            continue
-        if isinstance(fallback_value, int):
-            cfg[key] = int(visibility_defaults[key])
-        elif isinstance(fallback_value, str):
-            cfg[key] = str(visibility_defaults[key])
-        else:
-            cfg[key] = float(visibility_defaults[key])
-
 
 def _profile_name_tuple(profile: Dict[str, object], plural_key: str, singular_key: str) -> tuple[str, ...]:
     raw = profile.get(plural_key, profile.get(singular_key, ()))
@@ -242,49 +200,12 @@ def _require_task_field(task, key):
 
 
 def _state_estimator_metadata(cfg: Dict[str, object] | None = None) -> Dict[str, str]:
-    cfg = cfg or {}
-    metadata = {
+    return {
         'state_source_x': 'yolo_mask_or_bbox_homography',
         'state_source_y': 'yolo_mask_or_bbox_homography',
-        'state_source_theta': 'odometry_heading',
-        'state_estimator_mode': 'yolo_mask_or_bbox_camera_xy_odom_theta',
+        'state_source_theta': 'none',
+        'state_estimator_mode': 'yolo_camera_xy_only_no_direct_theta',
     }
-
-    heading_update_mode = str(cfg.get('heading_update_mode', 'odom_overwrite')).strip().lower()
-    if heading_update_mode == 'camera_xy_only':
-        metadata.update({
-            'state_source_theta': 'none',
-            'state_estimator_mode': 'yolo_camera_xy_only_no_direct_theta',
-        })
-        return metadata
-
-    keypoint_marker_world_z = float(cfg.get('keypoint_marker_world_z', 0.0) or 0.0)
-    if keypoint_marker_world_z > 0.0:
-        metadata.update({
-            'state_source_theta': 'keypoint_bev_heading_with_odom_fallback',
-            'state_estimator_mode': 'yolo_pose_keypoint_bev_heading',
-        })
-        return metadata
-
-    use_displacement_heading = _as_bool(cfg.get('use_displacement_heading', False))
-    use_odom_heading = _as_bool(cfg.get('use_odom_heading_correction', True))
-    if use_displacement_heading:
-        if use_odom_heading:
-            metadata.update({
-                'state_source_theta': 'pixel_displacement_heading_with_odom_fallback',
-                'state_estimator_mode': 'yolo_mask_or_bbox_camera_xy_displacement_theta_with_odom_fallback',
-            })
-        else:
-            metadata.update({
-                'state_source_theta': 'pixel_displacement_heading',
-                'state_estimator_mode': 'yolo_mask_or_bbox_camera_xy_displacement_theta',
-            })
-    elif not use_odom_heading:
-        metadata.update({
-            'state_source_theta': 'pixel_heading_or_propagated_unicycle_heading',
-            'state_estimator_mode': 'yolo_mask_or_bbox_camera_xy_no_odom_theta_correction',
-        })
-    return metadata
 
 
 def parse_common_launch_config(context) -> Dict[str, object]:
@@ -321,7 +242,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'bbox_contact_z_m': float(_launch_value(context, 'bbox_contact_z_m', PAPER_LAUNCH_DEFAULTS['bbox_contact_z_m'])),
         'pixel_max_correction_jump_m': float(_launch_value(context, 'pixel_max_correction_jump_m', PAPER_LAUNCH_DEFAULTS['pixel_max_correction_jump_m'])),
         'pixel_correction_nis_threshold': float(_launch_value(context, 'pixel_correction_nis_threshold', PAPER_LAUNCH_DEFAULTS['pixel_correction_nis_threshold'])),
-        'pixel_correction_nis_reject_cov_scale': float(_launch_value(context, 'pixel_correction_nis_reject_cov_scale', PAPER_LAUNCH_DEFAULTS['pixel_correction_nis_reject_cov_scale'])),
         'use_truth_localization': _as_bool(_launch_value(context, 'use_truth_localization', PAPER_LAUNCH_DEFAULTS['use_truth_localization'])),
         'pixel_correction_approx': _launch_value(
             context,
@@ -363,7 +283,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'optimizer_warm_start': _as_bool(_launch_value(context, 'optimizer_warm_start', PAPER_LAUNCH_DEFAULTS['optimizer_warm_start'])),
         'optimizer_multistart': _as_bool(_launch_value(context, 'optimizer_multistart', PAPER_LAUNCH_DEFAULTS['optimizer_multistart'])),
         'optimizer_multistart_include_direct': _as_bool(_launch_value(context, 'optimizer_multistart_include_direct', PAPER_LAUNCH_DEFAULTS['optimizer_multistart_include_direct'])),
-        'optimizer_multistart_lateral_offsets': _launch_value(context, 'optimizer_multistart_lateral_offsets', PAPER_LAUNCH_DEFAULTS['optimizer_multistart_lateral_offsets']),
         'optimizer_initial_routes_json': _launch_value(context, 'optimizer_initial_routes_json', PAPER_LAUNCH_DEFAULTS['optimizer_initial_routes_json']),
         'optimizer_route_seed_mode': _launch_value(context, 'optimizer_route_seed_mode', PAPER_LAUNCH_DEFAULTS['optimizer_route_seed_mode']),
         'use_hierarchical': _as_bool(_launch_value(context, 'use_hierarchical', PAPER_LAUNCH_DEFAULTS['use_hierarchical'])),
@@ -395,18 +314,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         )),
         'local_nogo_safe_distance': float(_launch_value(
             context, 'local_nogo_safe_distance', PAPER_LAUNCH_DEFAULTS['local_nogo_safe_distance']
-        )),
-        'local_goal_progress_weight': float(_launch_value(
-            context, 'local_goal_progress_weight', PAPER_LAUNCH_DEFAULTS['local_goal_progress_weight']
-        )),
-        'local_ref_weight': float(_launch_value(
-            context, 'local_ref_weight', PAPER_LAUNCH_DEFAULTS['local_ref_weight']
-        )),
-        'local_terminal_ref_weight': float(_launch_value(
-            context, 'local_terminal_ref_weight', PAPER_LAUNCH_DEFAULTS['local_terminal_ref_weight']
-        )),
-        'local_du_weight': float(_launch_value(
-            context, 'local_du_weight', PAPER_LAUNCH_DEFAULTS['local_du_weight']
         )),
         'local_goal_prior_u_std_start': float(_launch_value(
             context,
@@ -445,54 +352,16 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             'latency_compensate_plan_handoff',
             PAPER_LAUNCH_DEFAULTS['latency_compensate_plan_handoff'],
         )),
-        'use_simple_local_controller': _as_bool(_launch_value(
-            context,
-            'use_simple_local_controller',
-            PAPER_LAUNCH_DEFAULTS['use_simple_local_controller'],
-        )),
         'simple_tracker_yaw_gate_rad': float(_launch_value(
             context,
             'simple_tracker_yaw_gate_rad',
             PAPER_LAUNCH_DEFAULTS['simple_tracker_yaw_gate_rad'],
-        )),
-        'local_tracking_use_odom_yaw': _as_bool(_launch_value(
-            context,
-            'local_tracking_use_odom_yaw',
-            PAPER_LAUNCH_DEFAULTS['local_tracking_use_odom_yaw'],
-        )),
-        'use_state_bev_yaw': _as_bool(_launch_value(
-            context,
-            'use_state_bev_yaw',
-            PAPER_LAUNCH_DEFAULTS['use_state_bev_yaw'],
-        )),
-        'use_state_bev_heading_correction': _as_bool(_launch_value(
-            context,
-            'use_state_bev_heading_correction',
-            PAPER_LAUNCH_DEFAULTS['use_state_bev_heading_correction'],
         )),
         'odom_heading_timeout_s': float(_launch_value(
             context,
             'odom_heading_timeout_s',
             PAPER_LAUNCH_DEFAULTS['odom_heading_timeout_s'],
         )),
-        'odom_heading_correction_mode': _launch_value(
-            context, 'odom_heading_correction_mode', PAPER_LAUNCH_DEFAULTS['odom_heading_correction_mode']
-        ).strip().lower(),
-        'use_odom_heading_correction': _as_bool(
-            _launch_value(context, 'use_odom_heading_correction', 'true')
-        ),
-        'use_displacement_heading': _as_bool(
-            _launch_value(context, 'use_displacement_heading', 'false')
-        ),
-        'heading_min_displacement_m': float(
-            _launch_value(context, 'heading_min_displacement_m', '0.10')
-        ),
-        'heading_bev_noise_sigma_m': float(
-            _launch_value(context, 'heading_bev_noise_sigma_m', '0.05')
-        ),
-        'clamp_pixel_uv_theta_without_yaw': _as_bool(
-            _launch_value(context, 'clamp_pixel_uv_theta_without_yaw', PAPER_LAUNCH_DEFAULTS['clamp_pixel_uv_theta_without_yaw'])
-        ),
         'heading_update_mode': _launch_value(
             context, 'heading_update_mode', PAPER_LAUNCH_DEFAULTS['heading_update_mode']
         ).strip().lower(),
@@ -537,9 +406,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'nogo_penalty_type': _launch_value(context, 'nogo_penalty_type', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_penalty_type'])).strip().lower(),
         'nogo_weight': float(_launch_value(context, 'nogo_weight', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_weight']))),
         'nogo_safe_distance': float(_launch_value(context, 'nogo_safe_distance', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_safe_distance']))),
-        'nogo_gaussian_sigma': float(_launch_value(context, 'nogo_gaussian_sigma', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_gaussian_sigma']))),
-        'nogo_softplus_scale': float(_launch_value(context, 'nogo_softplus_scale', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_softplus_scale']))),
-        'nogo_logbarrier_scale': float(_launch_value(context, 'nogo_logbarrier_scale', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_logbarrier_scale']))),
         'nogo_logbarrier_eps': float(_launch_value(context, 'nogo_logbarrier_eps', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_logbarrier_eps']))),
         'nogo_warning_band': float(_launch_value(context, 'nogo_warning_band', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_warning_band']))),
         'nogo_near_weight': float(_launch_value(context, 'nogo_near_weight', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_near_weight']))),
@@ -553,6 +419,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
                 'robot_collision_radius_m',
                 PAPER_LAUNCH_DEFAULTS['robot_collision_radius_m'],
             )
+        ),
+        'terminate_on_geom_collision': _as_bool(
+            _launch_value(context, 'terminate_on_geom_collision', 'true')
         ),
         'bridge_contacts': _as_bool(
             _launch_value(context, 'bridge_contacts', PAPER_LAUNCH_DEFAULTS['bridge_contacts'])
@@ -632,13 +501,12 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'yolo_mask_bottom_band_px': float(_launch_value(context, 'yolo_mask_bottom_band_px', PAPER_LAUNCH_DEFAULTS['yolo_mask_bottom_band_px'])),
         'yolo_min_bbox_area_px': float(_launch_value(context, 'yolo_min_bbox_area_px', PAPER_LAUNCH_DEFAULTS['yolo_min_bbox_area_px'])),
         'yolo_debug_frame_dir': _launch_value(context, 'yolo_debug_frame_dir', ''),
-        'yolo_min_keypoint_conf': float(_launch_value(context, 'yolo_min_keypoint_conf', '0.5')),
         'yolo_use_torchscript': _as_bool(_launch_value(context, 'yolo_use_torchscript', 'false')),
         'yolo_warmup_iters': int(_launch_value(context, 'yolo_warmup_iters', '3')),
         'yolo_inference_in_callback': _as_bool(_launch_value(context, 'yolo_inference_in_callback', 'true')),
-        'keypoint_marker_world_z': float(_launch_value(context, 'keypoint_marker_world_z', '0.0')),
-        'keypoint_heading_sigma_rad': float(_launch_value(context, 'keypoint_heading_sigma_rad', '0.05')),
     }
+    if cfg['heading_update_mode'] != 'camera_xy_only':
+        raise RuntimeError("heading_update_mode must be 'camera_xy_only' for current active runs")
 
     return cfg
 
@@ -659,7 +527,6 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     profile, _intrinsics, world_path, camera_pose = load_profile(
         cfg['world_profiles_path'], cfg['world']
     )
-    _apply_visibility_profile_defaults(cfg, profile)
     tasks_by_world = load_tasks(cfg['tasks_yaml'])
     task_name = str(cfg.get('task_name', '') or '').strip()
     if not task_name:
@@ -689,7 +556,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
 
     planner = str(cfg['planner'])
     if planner == 'auto':
-        planner = profile['planner_default']
+        raise RuntimeError("planner must be explicit for current active runs; 'auto' was retired")
     if planner == 'constant_R_efe':
         cfg['use_visibility_model'] = False
         # C1 is still an EFE planner. It uses constant observation covariance
@@ -697,11 +564,6 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         # ambiguity term.
         cfg['use_ambiguity'] = True
         cfg['use_obs_risk'] = True
-    elif planner == 'risk_only_ablation':
-        cfg['use_visibility_model'] = True
-        cfg['use_ambiguity'] = False
-        cfg['use_obs_risk'] = True
-
     visibility_artifact_path = str(cfg.get('visibility_artifact_path', '') or '').strip()
     if planner != 'constant_R_efe':
         if not visibility_artifact_path:
@@ -805,10 +667,6 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
 def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     """Create shared nodes/components for the thesis pipeline."""
     state_sources = _state_estimator_metadata(cfg)
-    keypoint_marker_world_z = float(cfg.get('keypoint_marker_world_z', 0.0))
-    keypoint_heading_enabled = keypoint_marker_world_z > 0.0
-    show_pose_markers = bool(cfg.get('show_pose_markers', keypoint_heading_enabled))
-    diagnostics_match_tolerance_s = 0.05 if keypoint_heading_enabled else 1e-3
     odom_topic = str(cfg.get('odom_topic') or '/odom_noisy')
     use_encoder_noise = bool(cfg.get('use_encoder_noise', True))
     if not use_encoder_noise and odom_topic == '/odom_noisy':
@@ -821,7 +679,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         launch_arguments={
             'use_sim_time': 'true',
             'use_lidar': 'false',
-            'show_pose_markers': 'true' if show_pose_markers else 'false',
+            'show_pose_markers': 'false',
             'bridge_scan': 'false',
             'headless': 'true' if cfg.get('headless', False) else 'false',
             'world': cfg['world'],
@@ -938,7 +796,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
         'min_bbox_area_px': cfg['yolo_min_bbox_area_px'],
         'debug_frame_dir': cfg.get('yolo_debug_frame_dir', ''),
-        'min_keypoint_conf': float(cfg.get('yolo_min_keypoint_conf', 0.5)),
         # TIMING fix knobs (see yolo_robot_detector_node).
         'use_torchscript': cfg.get('yolo_use_torchscript', False),
         'warmup_iters': int(cfg.get('yolo_warmup_iters', 3)),
@@ -974,12 +831,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'odom_yaw_offset_rad': float(cfg['spawn']['yaw']),
         'infer_yaw_from_motion': False,
         'seed': cfg['seed'],
-        # Pose-keypoint heading is opt-in. When > 0 the state node back-projects
-        # front/rear marker pixels at this world Z and computes BEV yaw. Default
-        # 0.0 keeps the legacy odom-heading-fallback path active.
-        'keypoint_marker_world_z': keypoint_marker_world_z,
-        'keypoint_heading_sigma_rad': float(cfg.get('keypoint_heading_sigma_rad', 0.05)),
-        'diagnostics_match_tolerance_s': diagnostics_match_tolerance_s,
+        'diagnostics_match_tolerance_s': 1e-3,
         # BEV calibration MUST be applied at the projection node. These were
         # previously only passed to the logger/planner, so the state node ran with
         # the default 0.0 and the south-bias correction never took effect.
@@ -1079,9 +931,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'nogo_penalty_type': cfg['nogo_penalty_type'],
                 'nogo_weight': cfg['nogo_weight'],
                 'nogo_safe_distance': cfg['nogo_safe_distance'],
-                'nogo_gaussian_sigma': cfg['nogo_gaussian_sigma'],
-                'nogo_softplus_scale': cfg['nogo_softplus_scale'],
-                'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
                 'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
                 'nogo_warning_band': cfg['nogo_warning_band'],
                 'nogo_near_weight': cfg['nogo_near_weight'],
@@ -1098,16 +947,12 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'yolo_use_masks': cfg['yolo_use_masks'],
                 'yolo_min_mask_area_px': cfg['yolo_min_mask_area_px'],
                 'yolo_mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
-                'yolo_min_keypoint_conf': cfg.get('yolo_min_keypoint_conf', 0.5),
-                'keypoint_marker_world_z': keypoint_marker_world_z,
-                'show_pose_markers': show_pose_markers,
-                'keypoint_heading_sigma_rad': cfg.get('keypoint_heading_sigma_rad', 0.05),
-                'diagnostics_match_tolerance_s': diagnostics_match_tolerance_s,
+                'show_pose_markers': False,
+                'diagnostics_match_tolerance_s': 1e-3,
                 'bev_y_calibration_offset_m': cfg['bev_y_calibration_offset_m'],
                 'bev_affine_calibration': cfg.get('bev_affine_calibration', ''),
                 'bbox_contact_z_m': cfg['bbox_contact_z_m'],
                 'pixel_correction_nis_threshold': cfg['pixel_correction_nis_threshold'],
-                'pixel_correction_nis_reject_cov_scale': cfg['pixel_correction_nis_reject_cov_scale'],
                 'world_profiles_path': cfg['world_profiles_path'],
                 'tasks_yaml': cfg['tasks_yaml'],
                 'auto_stop_on_goal': cfg['auto_stop_on_goal'],
@@ -1131,7 +976,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'optimizer_warm_start': cfg['optimizer_warm_start'],
                 'optimizer_multistart': cfg['optimizer_multistart'],
                 'optimizer_multistart_include_direct': cfg['optimizer_multistart_include_direct'],
-                'optimizer_multistart_lateral_offsets': cfg['optimizer_multistart_lateral_offsets'],
                 'optimizer_initial_routes_json': cfg['optimizer_initial_routes_json'],
                 'optimizer_route_seed_mode': cfg['optimizer_route_seed_mode'],
                 'use_hierarchical': cfg.get('use_hierarchical', False),
@@ -1150,26 +994,12 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'local_nogo_penalty_type': cfg.get('local_nogo_penalty_type', ''),
                 'local_nogo_weight': cfg.get('local_nogo_weight', -1.0),
                 'local_nogo_safe_distance': cfg.get('local_nogo_safe_distance', -1.0),
-                'local_goal_progress_weight': cfg.get('local_goal_progress_weight', -1.0),
-                'local_ref_weight': cfg.get('local_ref_weight', -1.0),
-                'local_terminal_ref_weight': cfg.get('local_terminal_ref_weight', -1.0),
-                'local_du_weight': cfg.get('local_du_weight', -1.0),
                 'waypoint_spacing_m': cfg.get('waypoint_spacing_m', 1.0),
                 'waypoint_arrival_radius_m': cfg.get('waypoint_arrival_radius_m', 0.35),
                 'local_replan_min_remaining_s': cfg.get('local_replan_min_remaining_s', 0.0),
                 'local_replan_on_waypoint_change': cfg.get('local_replan_on_waypoint_change', False),
                 'latency_compensate_plan_handoff': cfg.get('latency_compensate_plan_handoff', False),
-                'use_simple_local_controller': cfg.get('use_simple_local_controller', False),
                 'simple_tracker_yaw_gate_rad': cfg.get('simple_tracker_yaw_gate_rad', 0.6),
-                'local_tracking_use_odom_yaw': cfg.get('local_tracking_use_odom_yaw', False),
-                'use_state_bev_yaw': cfg.get('use_state_bev_yaw', False),
-                'use_state_bev_heading_correction': cfg.get('use_state_bev_heading_correction', False),
-                'use_odom_heading_correction': cfg['use_odom_heading_correction'],
-                'use_displacement_heading': cfg['use_displacement_heading'],
-                'heading_min_displacement_m': cfg['heading_min_displacement_m'],
-                'heading_bev_noise_sigma_m': cfg['heading_bev_noise_sigma_m'],
-                'odom_heading_correction_mode': cfg['odom_heading_correction_mode'],
-                'clamp_pixel_uv_theta_without_yaw': cfg['clamp_pixel_uv_theta_without_yaw'],
                 'heading_update_mode': cfg['heading_update_mode'],
                 'local_controller_type': cfg['local_controller_type'],
                 'run_timeout_after_first_cmd_s': cfg['run_timeout_after_first_cmd_s'],
@@ -1263,9 +1093,9 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     shared_nodes = build_shared_nodes(cfg)
     planner = cfg['planner']
 
-    if planner not in ('visibility_aware_efe', 'constant_R_efe', 'risk_only_ablation'):
+    if planner not in ('visibility_aware_efe', 'constant_R_efe'):
         raise RuntimeError(
-            "planner must be 'visibility_aware_efe', 'constant_R_efe', or 'risk_only_ablation' for agent launch"
+            "planner must be 'visibility_aware_efe' or 'constant_R_efe' for agent launch"
         )
 
     planner_params = {
@@ -1273,13 +1103,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'approx_method': 'ET1',
             'use_ambiguity': cfg['use_ambiguity'],
             'use_obs_risk': cfg['use_obs_risk'],
-        },
-        # C3: GP-derived R_eff active, ambiguity term disabled.
-        # Isolates whether the risk term alone (through R_eff) drives rerouting.
-        'risk_only_ablation': {
-            'approx_method': 'ET1',
-            'use_ambiguity': False,
-            'use_obs_risk': True,
         },
         'constant_R_efe': {
             'approx_method': 'ET1',
@@ -1312,21 +1135,9 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'bbox_contact_z_m': cfg['bbox_contact_z_m'],
             'pixel_max_correction_jump_m': cfg['pixel_max_correction_jump_m'],
             'pixel_correction_nis_threshold': cfg['pixel_correction_nis_threshold'],
-            'pixel_correction_nis_reject_cov_scale': cfg['pixel_correction_nis_reject_cov_scale'],
             'use_truth_localization': cfg['use_truth_localization'],
-            'heading_pixel_noise_sigma': _SENSOR_PIXEL_NOISE_SIGMA,
-            'use_odom_heading_correction': cfg['use_odom_heading_correction'],
-            'use_state_bev_heading_correction': cfg.get('use_state_bev_heading_correction', False),
-            'odom_heading_correction_mode': cfg['odom_heading_correction_mode'],
-            'odom_heading_timeout_s': cfg['odom_heading_timeout_s'],
-            'odom_heading_sigma_rad': 0.08,
             'odom_topic': odom_topic,
             'use_odom_for_predict': cfg['use_odom_for_predict'],
-            'use_displacement_heading': cfg['use_displacement_heading'],
-            'heading_min_displacement_m': cfg['heading_min_displacement_m'],
-            'heading_bev_noise_sigma_m': cfg['heading_bev_noise_sigma_m'],
-            'odom_yaw_offset_rad': float(cfg['spawn']['yaw']),
-            'clamp_pixel_uv_theta_without_yaw': cfg['clamp_pixel_uv_theta_without_yaw'],
             'heading_update_mode': cfg['heading_update_mode'],
             'local_controller_type': cfg['local_controller_type'],
             'min_state_cov': cfg['min_state_cov'],
@@ -1360,9 +1171,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'nogo_penalty_type': cfg['nogo_penalty_type'],
             'nogo_weight': cfg['nogo_weight'],
             'nogo_safe_distance': cfg['nogo_safe_distance'],
-            'nogo_gaussian_sigma': cfg['nogo_gaussian_sigma'],
-            'nogo_softplus_scale': cfg['nogo_softplus_scale'],
-            'nogo_logbarrier_scale': cfg['nogo_logbarrier_scale'],
             'nogo_logbarrier_eps': cfg['nogo_logbarrier_eps'],
             'nogo_warning_band': cfg['nogo_warning_band'],
             'nogo_near_weight': cfg['nogo_near_weight'],
@@ -1376,7 +1184,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'optimizer_warm_start': cfg['optimizer_warm_start'],
             'optimizer_multistart': cfg['optimizer_multistart'],
             'optimizer_multistart_include_direct': cfg['optimizer_multistart_include_direct'],
-            'optimizer_multistart_lateral_offsets': cfg['optimizer_multistart_lateral_offsets'],
             'optimizer_initial_routes_json': cfg['optimizer_initial_routes_json'],
             'optimizer_route_seed_mode': cfg['optimizer_route_seed_mode'],
             'use_hierarchical': cfg.get('use_hierarchical', False),
@@ -1395,10 +1202,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'local_nogo_penalty_type': cfg.get('local_nogo_penalty_type', ''),
             'local_nogo_weight': cfg.get('local_nogo_weight', -1.0),
             'local_nogo_safe_distance': cfg.get('local_nogo_safe_distance', -1.0),
-            'local_goal_progress_weight': cfg.get('local_goal_progress_weight', -1.0),
-            'local_ref_weight': cfg.get('local_ref_weight', -1.0),
-            'local_terminal_ref_weight': cfg.get('local_terminal_ref_weight', -1.0),
-            'local_du_weight': cfg.get('local_du_weight', -1.0),
             'local_goal_prior_u_std_start': cfg.get('local_goal_prior_u_std_start', -1.0),
             'local_goal_prior_v_std_start': cfg.get('local_goal_prior_v_std_start', -1.0),
             'local_goal_prior_u_std_final': cfg.get('local_goal_prior_u_std_final', -1.0),
@@ -1408,11 +1211,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'local_replan_min_remaining_s': cfg.get('local_replan_min_remaining_s', 0.0),
             'local_replan_on_waypoint_change': cfg.get('local_replan_on_waypoint_change', False),
             'latency_compensate_plan_handoff': cfg.get('latency_compensate_plan_handoff', False),
-            'use_simple_local_controller': cfg.get('use_simple_local_controller', False),
             'simple_tracker_yaw_gate_rad': cfg.get('simple_tracker_yaw_gate_rad', 0.6),
-            'local_tracking_use_odom_yaw': cfg.get('local_tracking_use_odom_yaw', False),
-            'use_state_bev_yaw': cfg.get('use_state_bev_yaw', False),
-            'use_state_bev_heading_correction': cfg.get('use_state_bev_heading_correction', False),
             **cfg['camera_params'],
             **planner_params[planner],
         }],

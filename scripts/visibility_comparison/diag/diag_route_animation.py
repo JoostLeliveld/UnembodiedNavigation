@@ -24,22 +24,38 @@ import imageio
 
 import diag_common as dc
 
-COLORS = {"C1": "#c0392b", "C2": "#e8820c"}
+COLORS = {"C1": "#e8000b", "C2": "#1a5fd6"}
 
 
 def load_series(run_dir):
     perc, exp, summary = dc.load_run(run_dir)
-    e = exp.dropna(subset=["stamp", "odom_map_x", "odom_map_y"]).sort_values("stamp").reset_index(drop=True)
+    if {"gt_x", "gt_y"}.issubset(exp.columns) and exp["gt_x"].notna().any():
+        xkey, ykey = "gt_x", "gt_y"
+        err_key = "belief_error_gt_m" if "belief_error_gt_m" in exp.columns else "belief_error_odom_m"
+        truth_label = "ground-truth"
+    elif {"truth_x", "truth_y"}.issubset(exp.columns) and exp["truth_x"].notna().any():
+        xkey, ykey = "truth_x", "truth_y"
+        err_key = "truth_belief_error_m" if "truth_belief_error_m" in exp.columns else "belief_error_odom_m"
+        truth_label = "legacy paper truth"
+    else:
+        xkey, ykey = "odom_map_x", "odom_map_y"
+        err_key = "belief_error_odom_m"
+        truth_label = "odom-as-truth"
+    e = exp.dropna(subset=["stamp", xkey, ykey]).sort_values("stamp").reset_index(drop=True)
     t0 = dc.first_cmd_time(exp) or float(e["stamp"].iloc[0])
     e = e[e["stamp"] >= t0 - 2.0].copy()
     e["t"] = e["stamp"] - t0
-    rho = dc.sample_rho(e["odom_map_x"].to_numpy(), e["odom_map_y"].to_numpy())
+    rho = dc.sample_rho(e[xkey].to_numpy(), e[ykey].to_numpy())
     return {
         "exp": e, "summary": summary, "rho": rho,
         "tmax": float(e["t"].max()),
         "goal": (float(e["goal_x"].iloc[-1]), float(e["goal_y"].iloc[-1])) if "goal_x" in e else None,
-        "start": (float(e["odom_map_x"].iloc[0]), float(e["odom_map_y"].iloc[0])),
+        "start": (float(e[xkey].iloc[0]), float(e[ykey].iloc[0])),
         "crash_t": (float(summary.get("first_crash_stamp", "nan") or "nan") - t0),
+        "xkey": xkey,
+        "ykey": ykey,
+        "err_key": err_key,
+        "truth_label": truth_label,
     }
 
 
@@ -88,19 +104,20 @@ def main():
         err_ax = fig.add_subplot(gs[1, :])
         for ci, cond in enumerate(conds):
             r = runs[cond]; e = r["exp"]; col = COLORS.get(cond, "#444")
+            xkey, ykey = r["xkey"], r["ykey"]
             ax = fig.add_subplot(gs[0, ci])
             ax.imshow(g["rho"], origin="lower", extent=g["extent"], cmap="viridis",
                       vmin=0, vmax=0.9, alpha=0.9, zorder=0)
             for (xm, xM, ym, yM) in prisms:
                 ax.plot([xm, xM, xM, xm, xm], [ym, ym, yM, yM, ym], color="#cde", lw=0.7, alpha=0.5, zorder=1)
             past = e[e["t"] <= tt]
-            ax.plot(past["odom_map_x"], past["odom_map_y"], "-", color="#111", lw=2.2, zorder=4)
+            ax.plot(past[xkey], past[ykey], "-", color="#111", lw=2.2, zorder=4)
             if "planner_belief_x" in past:
                 pb = past.dropna(subset=["planner_belief_x"])
                 ax.plot(pb["planner_belief_x"], pb["planner_belief_y"], "-", color=col, lw=1.8, alpha=0.9, zorder=5)
             if len(past):
                 row = past.iloc[-1]
-                ax.scatter([row["odom_map_x"]], [row["odom_map_y"]], s=70, c="#111", zorder=8, marker="o", edgecolor="w")
+                ax.scatter([row[xkey]], [row[ykey]], s=70, c="#111", zorder=8, marker="o", edgecolor="w")
                 if np.isfinite(row.get("planner_belief_x", np.nan)):
                     ax.scatter([row["planner_belief_x"]], [row["planner_belief_y"]], s=55, c=col, zorder=8, marker="o", edgecolor="w")
                     ell = covariance_ellipse(row, col)
@@ -111,18 +128,19 @@ def main():
                 ax.scatter(*r["goal"], s=170, marker="*", c="red", edgecolor="k", zorder=7)
             if np.isfinite(r["crash_t"]) and tt >= r["crash_t"]:
                 ci_row = e.iloc[(e["t"] - r["crash_t"]).abs().argmin()]
-                ax.scatter([ci_row["odom_map_x"]], [ci_row["odom_map_y"]], s=220, marker="X", c="red", edgecolor="k", zorder=9)
+                ax.scatter([ci_row[xkey]], [ci_row[ykey]], s=220, marker="X", c="red", edgecolor="k", zorder=9)
             ax.set_title(f"{cond}: {r['summary'].get('completion_reason','?')}", fontsize=11, color=col)
             ax.set_xlabel("x (m)"); ax.set_ylabel("y (m)"); ax.set_aspect("equal")
 
         # error panel
         for cond in conds:
             r = runs[cond]; e = r["exp"]; col = COLORS.get(cond, "#444")
-            err_ax.plot(e["t"], e["belief_error_odom_m"], color=col, lw=1.0, alpha=0.25)
-            past = e[e["t"] <= tt].dropna(subset=["belief_error_odom_m"])
+            err_key = r["err_key"]
+            err_ax.plot(e["t"], e[err_key], color=col, lw=1.0, alpha=0.25)
+            past = e[e["t"] <= tt].dropna(subset=[err_key])
             if len(past):
-                err_ax.plot(past["t"], past["belief_error_odom_m"], color=col, lw=2.4, label=f"{cond} truth-belief err")
-                err_ax.scatter([past["t"].iloc[-1]], [past["belief_error_odom_m"].iloc[-1]], s=40, c=col, zorder=6)
+                err_ax.plot(past["t"], past[err_key], color=col, lw=2.4, label=f"{cond} {r['truth_label']}-belief err")
+                err_ax.scatter([past["t"].iloc[-1]], [past[err_key].iloc[-1]], s=40, c=col, zorder=6)
         # occlusion shading from first run's rho
         r0 = runs[conds[0]]
         shade_occ(err_ax, r0["exp"]["t"].to_numpy(), r0["rho"])
