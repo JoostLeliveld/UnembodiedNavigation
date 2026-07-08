@@ -40,6 +40,13 @@ RETIRED_ACTIVE_SURFACES = (
     "_fresh_odom_heading_locked",
     "_apply_heading_measurement",
     "_select_heading_measurement_locked",
+    # Removed in the 2026-07-08 abandoned-method cleanup:
+    "optimizer_jit",
+    "optimizer_multistart_lateral_offsets",
+    "pixel_correction_nis_reject_cov_scale",
+    "nogo_gaussian_sigma",
+    "nogo_softplus_scale",
+    "nogo_logbarrier_scale",
 )
 
 
