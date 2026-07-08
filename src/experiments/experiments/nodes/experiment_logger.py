@@ -192,12 +192,9 @@ class ExperimentLogger(Node):
         self.declare_parameter('cmd_publish_rate', 10.0)
         self.declare_parameter('heading_update_mode', 'camera_xy_only')
         self.declare_parameter('use_nogo_cost', False)
-        self.declare_parameter('nogo_penalty_type', 'softplus')
+        self.declare_parameter('nogo_penalty_type', 'warning_band')
         self.declare_parameter('nogo_weight', 0.0)
         self.declare_parameter('nogo_safe_distance', 0.35)
-        self.declare_parameter('nogo_gaussian_sigma', 0.25)
-        self.declare_parameter('nogo_softplus_scale', 0.08)
-        self.declare_parameter('nogo_logbarrier_scale', 0.25)
         self.declare_parameter('nogo_logbarrier_eps', 1e-3)
         self.declare_parameter('nogo_warning_band', 0.05)
         self.declare_parameter('nogo_near_weight', 50.0)
@@ -384,9 +381,6 @@ class ExperimentLogger(Node):
         self.nogo_penalty_type = str(self.get_parameter('nogo_penalty_type').value)
         self.nogo_weight = float(self.get_parameter('nogo_weight').value)
         self.nogo_safe_distance = float(self.get_parameter('nogo_safe_distance').value)
-        self.nogo_gaussian_sigma = float(self.get_parameter('nogo_gaussian_sigma').value)
-        self.nogo_softplus_scale = float(self.get_parameter('nogo_softplus_scale').value)
-        self.nogo_logbarrier_scale = float(self.get_parameter('nogo_logbarrier_scale').value)
         self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
         self.nogo_warning_band = float(self.get_parameter('nogo_warning_band').value)
         self.nogo_near_weight = float(self.get_parameter('nogo_near_weight').value)
@@ -537,9 +531,6 @@ class ExperimentLogger(Node):
             'nogo_penalty_type': self.nogo_penalty_type,
             'nogo_weight': self.nogo_weight,
             'nogo_safe_distance': self.nogo_safe_distance,
-            'nogo_gaussian_sigma': self.nogo_gaussian_sigma,
-            'nogo_softplus_scale': self.nogo_softplus_scale,
-            'nogo_logbarrier_scale': self.nogo_logbarrier_scale,
             'nogo_logbarrier_eps': self.nogo_logbarrier_eps,
             'nogo_warning_band': self.nogo_warning_band,
             'nogo_near_weight': self.nogo_near_weight,

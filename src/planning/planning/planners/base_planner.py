@@ -138,12 +138,9 @@ class UnicyclePlannerBase:
         optimizer_multistart_include_direct=True,
         optimizer_initial_routes_json='',
         use_nogo_cost=False,
-        nogo_penalty_type='softplus',
+        nogo_penalty_type='warning_band',
         nogo_weight=0.0,
         nogo_safe_distance=0.35,
-        nogo_gaussian_sigma=0.25,
-        nogo_softplus_scale=0.08,
-        nogo_logbarrier_scale=0.25,
         nogo_logbarrier_eps=1e-3,
         nogo_warning_band=0.05,
         nogo_near_weight=50.0,
@@ -237,12 +234,9 @@ class UnicyclePlannerBase:
         self._visibility_min_prob = 1e-4
         self.visibility_model = None
         self.use_nogo_cost = bool(use_nogo_cost)
-        self.nogo_penalty_type = str(nogo_penalty_type or 'softplus').strip().lower()
+        self.nogo_penalty_type = str(nogo_penalty_type or 'warning_band').strip().lower()
         self.nogo_weight = float(max(nogo_weight, 0.0))
         self.nogo_safe_distance = float(max(nogo_safe_distance, 0.0))
-        self.nogo_gaussian_sigma = float(max(nogo_gaussian_sigma, 1e-6))
-        self.nogo_softplus_scale = float(max(nogo_softplus_scale, 1e-6))
-        self.nogo_logbarrier_scale = float(max(nogo_logbarrier_scale, 1e-6))
         self.nogo_logbarrier_eps = float(max(nogo_logbarrier_eps, 1e-6))
         self.nogo_warning_band = float(max(nogo_warning_band, 1e-6))
         self.nogo_near_weight = float(max(nogo_near_weight, 0.0))
@@ -285,9 +279,6 @@ class UnicyclePlannerBase:
                 penalty_type=self.nogo_penalty_type,
                 weight=self.nogo_weight,
                 safe_distance=self.nogo_safe_distance,
-                gaussian_sigma=self.nogo_gaussian_sigma,
-                softplus_scale=self.nogo_softplus_scale,
-                logbarrier_scale=self.nogo_logbarrier_scale,
                 logbarrier_eps=self.nogo_logbarrier_eps,
                 warning_band=self.nogo_warning_band,
                 near_weight=self.nogo_near_weight,
@@ -298,12 +289,9 @@ class UnicyclePlannerBase:
 
         if str(collision_geometry_json or '').strip():
             collision_cfg = NogoCostConfig(
-                penalty_type='softplus',
+                penalty_type='warning_band',
                 weight=1.0,
                 safe_distance=0.0,
-                gaussian_sigma=1.0,
-                softplus_scale=1.0,
-                logbarrier_scale=1.0,
                 logbarrier_eps=1e-3,
                 geometry_json=str(collision_geometry_json or ''),
             )

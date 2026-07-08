@@ -108,12 +108,9 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('ambiguity_term_scale', 1.00)
         _declare_if_not('discount_gamma', 0.98)
         _declare_if_not('use_nogo_cost', False)
-        _declare_if_not('nogo_penalty_type', 'softplus')
+        _declare_if_not('nogo_penalty_type', 'warning_band')
         _declare_if_not('nogo_weight', 0.0)
         _declare_if_not('nogo_safe_distance', 0.35)
-        _declare_if_not('nogo_gaussian_sigma', 0.25)
-        _declare_if_not('nogo_softplus_scale', 0.08)
-        _declare_if_not('nogo_logbarrier_scale', 0.25)
         _declare_if_not('nogo_logbarrier_eps', 1e-3)
         _declare_if_not('nogo_warning_band', 0.05)
         _declare_if_not('nogo_near_weight', 50.0)
@@ -282,9 +279,6 @@ class UnicyclePlannerNode(Node):
         self.nogo_penalty_type = str(self.get_parameter('nogo_penalty_type').value).strip().lower()
         self.nogo_weight = float(self.get_parameter('nogo_weight').value)
         self.nogo_safe_distance = float(self.get_parameter('nogo_safe_distance').value)
-        self.nogo_gaussian_sigma = float(self.get_parameter('nogo_gaussian_sigma').value)
-        self.nogo_softplus_scale = float(self.get_parameter('nogo_softplus_scale').value)
-        self.nogo_logbarrier_scale = float(self.get_parameter('nogo_logbarrier_scale').value)
         self.nogo_logbarrier_eps = float(self.get_parameter('nogo_logbarrier_eps').value)
         self.nogo_warning_band = float(self.get_parameter('nogo_warning_band').value)
         self.nogo_near_weight = float(self.get_parameter('nogo_near_weight').value)
@@ -697,9 +691,6 @@ class UnicyclePlannerNode(Node):
             ambiguity_term_scale=float(g('ambiguity_term_scale')), discount_gamma=float(g('discount_gamma')),
             use_nogo_cost=_as_bool(g('use_nogo_cost')), nogo_penalty_type=str(g('nogo_penalty_type')),
             nogo_weight=float(g('nogo_weight')), nogo_safe_distance=float(g('nogo_safe_distance')),
-            nogo_gaussian_sigma=float(g('nogo_gaussian_sigma')),
-            nogo_softplus_scale=float(g('nogo_softplus_scale')),
-            nogo_logbarrier_scale=float(g('nogo_logbarrier_scale')),
             nogo_logbarrier_eps=float(g('nogo_logbarrier_eps')),
             nogo_warning_band=float(g('nogo_warning_band')),
             nogo_near_weight=float(g('nogo_near_weight')),

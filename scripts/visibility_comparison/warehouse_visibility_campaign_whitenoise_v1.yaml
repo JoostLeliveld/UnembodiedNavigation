@@ -90,8 +90,6 @@ nogo_safe_distance: 0.25
 nogo_penalty_type: warning_band
 nogo_warning_band: 0.05
 nogo_near_weight: 50.0
-nogo_softplus_scale: 0.08
-nogo_logbarrier_scale: 0.01
 nogo_logbarrier_eps: 0.01
 use_belief_nogo_cost: true
 nogo_belief_kappa: 1.0
