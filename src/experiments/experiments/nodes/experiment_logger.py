@@ -220,7 +220,6 @@ class ExperimentLogger(Node):
         self.declare_parameter('bev_affine_calibration', '')
         self.declare_parameter('bbox_contact_z_m', 0.0)
         self.declare_parameter('pixel_correction_nis_threshold', 0.0)
-        self.declare_parameter('pixel_correction_nis_reject_cov_scale', 1.0)
         self.declare_parameter('odom_topic', '/odom_noisy')
         self.declare_parameter('run_dir_topic', '/experiment/run_dir')
         self.declare_parameter('run_timeout_after_first_cmd_s', 75.0)
@@ -419,9 +418,6 @@ class ExperimentLogger(Node):
         self.pixel_correction_nis_threshold = float(
             self.get_parameter('pixel_correction_nis_threshold').value
         )
-        self.pixel_correction_nis_reject_cov_scale = float(
-            self.get_parameter('pixel_correction_nis_reject_cov_scale').value
-        )
         self.odom_topic = str(self.get_parameter('odom_topic').value or '/odom_noisy')
         self.run_dir_topic = str(self.get_parameter('run_dir_topic').value).strip() or '/experiment/run_dir'
         self.run_timeout_after_first_cmd_s = float(self.get_parameter('run_timeout_after_first_cmd_s').value)
@@ -566,7 +562,6 @@ class ExperimentLogger(Node):
             'bev_affine_calibration': self.bev_affine_calibration,
             'bbox_contact_z_m': self.bbox_contact_z_m,
             'pixel_correction_nis_threshold': self.pixel_correction_nis_threshold,
-            'pixel_correction_nis_reject_cov_scale': self.pixel_correction_nis_reject_cov_scale,
             'odom_topic': self.odom_topic,
             'seed': self.seed,
             'state_pipeline': 'homography_to_bev',

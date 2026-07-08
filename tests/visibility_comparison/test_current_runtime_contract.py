@@ -92,10 +92,6 @@ def test_current_runtime_contract_matches_campaign_config() -> None:
     assert locked["global_dt"] == campaign["global_dt"]
     assert locked["lookahead_s"] == campaign["global_horizon"] * campaign["global_dt"]
     assert locked["pixel_correction_nis_threshold"] == campaign["pixel_correction_nis_threshold"]
-    assert (
-        locked["pixel_correction_nis_reject_cov_scale"]
-        == campaign["pixel_correction_nis_reject_cov_scale"]
-    )
     assert locked["use_belief_nogo_cost"] == campaign["use_belief_nogo_cost"]
     assert locked["nogo_mode"] == campaign["nogo_mode"]
     assert locked["nogo_penalty_type"] == campaign["nogo_penalty_type"]
