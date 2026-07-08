@@ -83,8 +83,6 @@ def _planner_precision_arguments():
                               description='In hierarchical mode, replan local controls only when the waypoint changes or the active tape expires.'),
         DeclareLaunchArgument('latency_compensate_plan_handoff', default_value='false',
                               description='Start executing a solved local plan at the control index matching solver latency.'),
-        DeclareLaunchArgument('use_simple_local_controller', default_value='false',
-                              description='Replace local EFE with a proportional geometric controller (instant, no CasADi).'),
         DeclareLaunchArgument('simple_tracker_yaw_gate_rad', default_value='0.6',
                               description='Rotate-in-place threshold for the simple local tracker.'),
         DeclareLaunchArgument('cmd_publish_rate', default_value='10.0'),

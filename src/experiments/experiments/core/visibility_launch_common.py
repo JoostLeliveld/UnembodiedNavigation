@@ -92,10 +92,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'local_nogo_penalty_type': '',
     'local_nogo_weight': '-1.0',
     'local_nogo_safe_distance': '-1.0',
-    'local_goal_progress_weight': '-1.0',
-    'local_ref_weight': '-1.0',
-    'local_terminal_ref_weight': '-1.0',
-    'local_du_weight': '-1.0',
     'local_goal_prior_u_std_start': '-1.0',
     'local_goal_prior_v_std_start': '-1.0',
     'local_goal_prior_u_std_final': '-1.0',
@@ -105,7 +101,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'local_replan_min_remaining_s': '0.0',
     'local_replan_on_waypoint_change': 'false',
     'latency_compensate_plan_handoff': 'false',
-    'use_simple_local_controller': 'false',
     'simple_tracker_yaw_gate_rad': '0.6',
     'odom_heading_timeout_s': '0.75',
     'heading_update_mode': 'camera_xy_only',
@@ -320,18 +315,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'local_nogo_safe_distance': float(_launch_value(
             context, 'local_nogo_safe_distance', PAPER_LAUNCH_DEFAULTS['local_nogo_safe_distance']
         )),
-        'local_goal_progress_weight': float(_launch_value(
-            context, 'local_goal_progress_weight', PAPER_LAUNCH_DEFAULTS['local_goal_progress_weight']
-        )),
-        'local_ref_weight': float(_launch_value(
-            context, 'local_ref_weight', PAPER_LAUNCH_DEFAULTS['local_ref_weight']
-        )),
-        'local_terminal_ref_weight': float(_launch_value(
-            context, 'local_terminal_ref_weight', PAPER_LAUNCH_DEFAULTS['local_terminal_ref_weight']
-        )),
-        'local_du_weight': float(_launch_value(
-            context, 'local_du_weight', PAPER_LAUNCH_DEFAULTS['local_du_weight']
-        )),
         'local_goal_prior_u_std_start': float(_launch_value(
             context,
             'local_goal_prior_u_std_start',
@@ -368,11 +351,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             context,
             'latency_compensate_plan_handoff',
             PAPER_LAUNCH_DEFAULTS['latency_compensate_plan_handoff'],
-        )),
-        'use_simple_local_controller': _as_bool(_launch_value(
-            context,
-            'use_simple_local_controller',
-            PAPER_LAUNCH_DEFAULTS['use_simple_local_controller'],
         )),
         'simple_tracker_yaw_gate_rad': float(_launch_value(
             context,
@@ -1016,16 +994,11 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'local_nogo_penalty_type': cfg.get('local_nogo_penalty_type', ''),
                 'local_nogo_weight': cfg.get('local_nogo_weight', -1.0),
                 'local_nogo_safe_distance': cfg.get('local_nogo_safe_distance', -1.0),
-                'local_goal_progress_weight': cfg.get('local_goal_progress_weight', -1.0),
-                'local_ref_weight': cfg.get('local_ref_weight', -1.0),
-                'local_terminal_ref_weight': cfg.get('local_terminal_ref_weight', -1.0),
-                'local_du_weight': cfg.get('local_du_weight', -1.0),
                 'waypoint_spacing_m': cfg.get('waypoint_spacing_m', 1.0),
                 'waypoint_arrival_radius_m': cfg.get('waypoint_arrival_radius_m', 0.35),
                 'local_replan_min_remaining_s': cfg.get('local_replan_min_remaining_s', 0.0),
                 'local_replan_on_waypoint_change': cfg.get('local_replan_on_waypoint_change', False),
                 'latency_compensate_plan_handoff': cfg.get('latency_compensate_plan_handoff', False),
-                'use_simple_local_controller': cfg.get('use_simple_local_controller', False),
                 'simple_tracker_yaw_gate_rad': cfg.get('simple_tracker_yaw_gate_rad', 0.6),
                 'heading_update_mode': cfg['heading_update_mode'],
                 'local_controller_type': cfg['local_controller_type'],
@@ -1229,10 +1202,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'local_nogo_penalty_type': cfg.get('local_nogo_penalty_type', ''),
             'local_nogo_weight': cfg.get('local_nogo_weight', -1.0),
             'local_nogo_safe_distance': cfg.get('local_nogo_safe_distance', -1.0),
-            'local_goal_progress_weight': cfg.get('local_goal_progress_weight', -1.0),
-            'local_ref_weight': cfg.get('local_ref_weight', -1.0),
-            'local_terminal_ref_weight': cfg.get('local_terminal_ref_weight', -1.0),
-            'local_du_weight': cfg.get('local_du_weight', -1.0),
             'local_goal_prior_u_std_start': cfg.get('local_goal_prior_u_std_start', -1.0),
             'local_goal_prior_v_std_start': cfg.get('local_goal_prior_v_std_start', -1.0),
             'local_goal_prior_u_std_final': cfg.get('local_goal_prior_u_std_final', -1.0),
@@ -1242,7 +1211,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'local_replan_min_remaining_s': cfg.get('local_replan_min_remaining_s', 0.0),
             'local_replan_on_waypoint_change': cfg.get('local_replan_on_waypoint_change', False),
             'latency_compensate_plan_handoff': cfg.get('latency_compensate_plan_handoff', False),
-            'use_simple_local_controller': cfg.get('use_simple_local_controller', False),
             'simple_tracker_yaw_gate_rad': cfg.get('simple_tracker_yaw_gate_rad', 0.6),
             **cfg['camera_params'],
             **planner_params[planner],

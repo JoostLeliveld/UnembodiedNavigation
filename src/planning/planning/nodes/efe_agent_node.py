@@ -76,7 +76,6 @@ class EfeAgentNode(UnicyclePlannerNode):
         self._global_artifact_saved = False
         run_dir_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(String, '/experiment/run_dir', self._run_dir_cb, run_dir_qos)
-        self._local_ref_tracking_active = False
         self.global_planner = None
         if self.use_hierarchical:
             local_nogo_penalty_type = self.local_nogo_penalty_type or self.nogo_penalty_type
@@ -108,50 +107,14 @@ class EfeAgentNode(UnicyclePlannerNode):
                 if self.local_goal_prior_v_std_start < 0.0
                 else self.local_goal_prior_v_std_start
             )
-            # Metric (x,y) goal-progress incentive for the local executor. -1.0
-            # inherits the shared weight; >=0.0 uses the local value directly.
-            # This term is condition-neutral (no GP/ambiguity/visibility) and
-            # only rewards reducing distance to the planner-derived target, so it
-            # neither forces a route nor breaks the C1/C2 contract. It exists to
-            # remove the unreachable-target zero-velocity local minimum of the
-            # observation-space risk term.
-            local_goal_progress_weight = (
-                self.goal_progress_weight
-                if self.local_goal_progress_weight < 0.0
-                else self.local_goal_progress_weight
-            )
-            # [DEPRECATED_LEGACY_CLEANUP] LOCAL reference-segment tracking weights are legacy (simple tracker active)
-            # LOCAL reference-segment tracking weights. -1.0 inherits 0.0 (OFF, so
-            # the local executor falls back to the legacy single-point goal cost);
-            # >=0.0 enables the proper TRACKER objective (reference-segment tracking
-            # + control smoothness). Condition-neutral (no GP/visibility/ambiguity);
-            # identical for C1/C2/C3 and never queries the GP. The reference segment
-            # itself is computed OUTSIDE the solve from the global planner-derived
-            # waypoint polyline (known 2D route), so this is execution plumbing, not
-            # route choice.
-            local_ref_weight = 0.0 if self.local_ref_weight < 0.0 else self.local_ref_weight
-            local_terminal_ref_weight = (
-                0.0 if self.local_terminal_ref_weight < 0.0 else self.local_terminal_ref_weight
-            )
-            local_du_weight = 0.0 if self.local_du_weight < 0.0 else self.local_du_weight
-            # When reference tracking is active it REPLACES the single-point goal
-            # cost: the reference segment already pulls the mean along the route, so
-            # the beyond-horizon single-point goal_progress term (which gives no
-            # heading gradient and caused the spin) is disabled for the local layer.
-            self._local_ref_tracking_active = (
-                local_ref_weight > 0.0 or local_terminal_ref_weight > 0.0
-            )
-            if self._local_ref_tracking_active:
-                local_goal_progress_weight = 0.0
+            # The local planner object is retained only for the simple tracker's
+            # collision/no-go geometry (safety check) and warm-start seeds; it is
+            # never solved (the simple geometric tracker produces the commands).
             self.planner = self._construct_planner(
                 horizon=self.local_horizon,
                 use_ambiguity=self.local_use_ambiguity,
                 use_obs_risk=self.local_use_obs_risk,
                 goal_progress_n_steps=self.local_horizon,
-                goal_progress_weight=local_goal_progress_weight,
-                ref_weight=local_ref_weight,
-                terminal_ref_weight=local_terminal_ref_weight,
-                du_weight=local_du_weight,
                 goal_prior_u_std_start=local_goal_u_start,
                 goal_prior_v_std_start=local_goal_v_start,
                 goal_prior_u_std_final=local_goal_u_final,
@@ -190,9 +153,6 @@ class EfeAgentNode(UnicyclePlannerNode):
                 f"belief_nogo={self.local_use_belief_nogo_cost}, "
                 f"nogo={local_nogo_penalty_type}:{local_nogo_weight}, "
                 f"safe={local_nogo_safe_distance}, "
-                f"ref_track={self._local_ref_tracking_active} "
-                f"(ref={local_ref_weight},term={local_terminal_ref_weight},du={local_du_weight}), "
-                f"local_goal_progress={local_goal_progress_weight}, "
                 f"local_goal_std={local_goal_u_start:.2f}->{local_goal_u_final:.2f}/"
                 f"{local_goal_v_start:.2f}->{local_goal_v_final:.2f}, "
                 f"replan_min_remaining={self.local_replan_min_remaining_s:.2f}s, "
@@ -421,60 +381,31 @@ class EfeAgentNode(UnicyclePlannerNode):
         self._current_tracking_yaw = float(m_track[2])
         self._current_tracking_yaw_source = float(tracking_yaw_source)
 
-        if self.use_simple_local_controller:
-            controls = self._dispatch_local_controller(m_track, target)
-            n_safe, reason = self._simple_plan_safe_to_execute(controls, m_track)
-            if n_safe <= 0:
-                # The immediate step itself leaves the region (not a recovery move)
-                # -> genuinely unsafe, safe-stop.
-                self.get_logger().warn(
-                    f"[hierarchical] simple local control rejected at step 0: {reason}; safe-stopping"
-                )
-                with self._data_lock:
-                    self._active_controls = None
-                    self._active_plan_started_at = None
-                    self._active_controls_original_len = 0
-                self._publish_command(0.0, 0.0)
-                return
-            # Execute only the safe leading prefix; the tracker replans next cycle.
-            controls = controls[:n_safe]
+        controls = self._dispatch_local_controller(m_track, target)
+        n_safe, reason = self._simple_plan_safe_to_execute(controls, m_track)
+        if n_safe <= 0:
+            # The immediate step itself leaves the region (not a recovery move)
+            # -> genuinely unsafe, safe-stop.
+            self.get_logger().warn(
+                f"[hierarchical] simple local control rejected at step 0: {reason}; safe-stopping"
+            )
             with self._data_lock:
-                self._active_controls = controls.copy()
-                self._active_plan_started_at = self.get_clock().now()
-                self._active_controls_original_len = int(controls.shape[0])
-            self._last_latency_skip_steps = 0
-            self._last_latency_skip_s = 0.0
-            if controls.size > 0:
-                self._publish_command(float(controls[0, 0]), float(controls[0, 1]))
+                self._active_controls = None
+                self._active_plan_started_at = None
+                self._active_controls_original_len = 0
+            self._publish_command(0.0, 0.0)
             return
-
-        # [DEPRECATED_LEGACY_CLEANUP] local EFE reference segment tracking is legacy (simple tracker active)
-        ref_seq = None
-        prev_u = None
-        if self._local_ref_tracking_active:
-            # Reference segment r_1..r_H sampled forward along the global
-            # planner-derived waypoint polyline, computed OUTSIDE the solve so the
-            # optimizer only sees smooth squared tracking errors. prev_u is the last
-            # applied command for the control-smoothness term. Condition-neutral:
-            # the polyline is the known 2D global route, not a GP/visibility cue.
-            ref_seq = self._build_local_reference_segment(m_track)
-            with self._data_lock:
-                prev_u = np.asarray(self.last_cmd, dtype=float).reshape(2).copy()
-
-        result = self._call_planner(
-            m_track, S_track, target, 0.0, plan_start=plan_start, now_wall=now_wall,
-            ref_seq=ref_seq, prev_u=prev_u,
-        )
-        if result is None:
-            return
-        plan_elapsed_ms = max((time.perf_counter() - plan_start) * 1000.0, 0.0)
-        self._publish_plan_result_bundle(
-            result, target, m_track, S_track, belief_meta=belief_meta, plan_elapsed_ms=plan_elapsed_ms
-        )
-        self._warn_on_plan_health(
-            result, plan_elapsed_ms, float(getattr(result, 'solve_time_s', 0.0)) * 1000.0,
-            now_wall=now_wall,
-        )
+        # Execute only the safe leading prefix; the tracker replans next cycle.
+        controls = controls[:n_safe]
+        with self._data_lock:
+            self._active_controls = controls.copy()
+            self._active_plan_started_at = self.get_clock().now()
+            self._active_controls_original_len = int(controls.shape[0])
+        self._last_latency_skip_steps = 0
+        self._last_latency_skip_s = 0.0
+        if controls.size > 0:
+            self._publish_command(float(controls[0, 0]), float(controls[0, 1]))
+        return
 
     def _simple_local_plan(self, m0: np.ndarray, target: np.ndarray) -> np.ndarray:
         """Proportional geometric controller — returns (local_horizon, 2) [v, w] array."""
@@ -650,81 +581,6 @@ class EfeAgentNode(UnicyclePlannerNode):
                 if math.isfinite(clearance) and clearance < 0.0 and clearance < nogo_floor:
                     return i, f'driveable_clearance_violation_step_{i}:{clearance:.3f}'
         return controls.shape[0], ''
-
-    # [DEPRECATED_LEGACY_CLEANUP] local reference segment sampling is legacy (simple tracker active)
-    def _build_local_reference_segment(self, m0: np.ndarray) -> np.ndarray:
-        """Sample a (local_horizon, 2) reference segment along the global waypoint
-        polyline, starting from the projection of the current belief (x, y).
-
-        Computed OUTSIDE the optimizer: the optimizer only ever sees fixed numeric
-        per-step targets, so no nonsmooth projection enters the gradient. The
-        polyline is the known 2D global planner-derived route (self._waypoints);
-        this method never queries the GP and is identical for C1/C2/C3.
-
-        Sampling step is ~ v_max * dt (the per-step reach), clamped at the final
-        waypoint so a short horizon does not overshoot the route end.
-        """
-        H = int(self.local_horizon)
-        step = max(float(self.v_max) * float(self.dt), 1e-3)
-        pos = np.asarray(m0[:2], dtype=float).reshape(2)
-
-        pts = [np.asarray(w, dtype=float).reshape(2) for w in (self._waypoints or [])]
-        if not pts:
-            # No route yet: hold position (the ref terms then add nothing useful but
-            # remain well-defined). Should not happen in the LOCAL phase.
-            return np.tile(pos, (H, 1))
-        if len(pts) == 1:
-            return np.tile(pts[0], (H, 1))
-
-        # Project pos onto the polyline: find the closest point across all segments
-        # and record (segment index, fractional position along that segment).
-        best_seg = 0
-        best_t = 0.0
-        best_d2 = float('inf')
-        best_proj = pts[0]
-        for i in range(len(pts) - 1):
-            a = pts[i]
-            b = pts[i + 1]
-            ab = b - a
-            denom = float(ab @ ab)
-            if denom <= 1e-12:
-                t = 0.0
-                proj = a
-            else:
-                t = float(np.clip(((pos - a) @ ab) / denom, 0.0, 1.0))
-                proj = a + t * ab
-            d2 = float(np.sum((pos - proj) ** 2))
-            if d2 < best_d2:
-                best_d2 = d2
-                best_seg = i
-                best_t = t
-                best_proj = proj
-
-        # Walk forward along the polyline from the projection, emitting a reference
-        # point every `step` metres of arc length. Clamp at the final waypoint.
-        ref = np.zeros((H, 2), dtype=float)
-        seg = best_seg
-        cur = best_proj.copy()
-        for k in range(H):
-            remaining = step
-            while remaining > 1e-9 and seg < len(pts) - 1:
-                nxt = pts[seg + 1]
-                seg_vec = nxt - cur
-                seg_len = float(np.linalg.norm(seg_vec))
-                if seg_len <= 1e-9:
-                    seg += 1
-                    cur = pts[seg].copy() if seg < len(pts) else cur
-                    continue
-                if seg_len >= remaining:
-                    cur = cur + (remaining / seg_len) * seg_vec
-                    remaining = 0.0
-                else:
-                    cur = nxt.copy()
-                    remaining -= seg_len
-                    seg += 1
-            ref[k] = cur
-        del best_t
-        return ref
 
     def _publish_command(self, v_cmd: float, w_cmd: float):
         cmd = Twist()

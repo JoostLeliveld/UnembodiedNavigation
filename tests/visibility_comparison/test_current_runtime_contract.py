@@ -47,6 +47,8 @@ RETIRED_ACTIVE_SURFACES = (
     "nogo_gaussian_sigma",
     "nogo_softplus_scale",
     "nogo_logbarrier_scale",
+    "use_simple_local_controller",
+    "goal_progress_weight",
 )
 
 

@@ -250,26 +250,6 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
 
     task_name = entry.get('task')
     task_cfg = cfg['tasks'].get(task_name, {}) if task_name else {}
-    simple_local = bool(cfg.get('use_simple_local_controller', False))
-    local_efe_only_keys = {
-        'local_optimizer_maxiter',
-        'local_nogo_weight',
-        'local_nogo_safe_distance',
-        'local_goal_progress_weight',
-        'local_ref_weight',
-        'local_terminal_ref_weight',
-        'local_du_weight',
-        'local_goal_prior_u_std_start',
-        'local_goal_prior_v_std_start',
-        'local_goal_prior_u_std_final',
-        'local_goal_prior_v_std_final',
-        'local_use_ambiguity',
-        'local_use_obs_risk',
-        'local_optimizer_multistart',
-        'local_use_visibility_model',
-        'local_use_belief_nogo_cost',
-        'local_nogo_penalty_type',
-    }
 
     expected_yolo_model = str(_resolve_repo_path(cfg['yolo_model'], strict=False))
     actual_yolo_model = str(manifest.get('yolo_model', '') or '')
@@ -294,8 +274,6 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'global_horizon', 'global_dt', 'local_horizon', 'local_plan_rate',
         'local_optimizer_maxiter', 'local_nogo_weight',
         'local_nogo_safe_distance',
-        'local_goal_progress_weight',
-        'local_ref_weight', 'local_terminal_ref_weight', 'local_du_weight',
         'local_goal_prior_u_std_start', 'local_goal_prior_v_std_start',
         'local_goal_prior_u_std_final', 'local_goal_prior_v_std_final',
         'waypoint_spacing_m', 'waypoint_arrival_radius_m',
@@ -309,8 +287,6 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'encoder_noise_correlation_alpha',
     )
     for key in numeric_keys:
-        if simple_local and key in local_efe_only_keys:
-            continue
         expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
         if expected is not None and key in manifest and not _float_close(manifest.get(key), expected):
             return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")}, config expects {expected}'
@@ -333,12 +309,9 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'local_use_belief_nogo_cost',
         'local_replan_on_waypoint_change',
         'latency_compensate_plan_handoff',
-        'use_simple_local_controller',
         'use_truth_localization',
     )
     for key in bool_keys:
-        if simple_local and key in local_efe_only_keys:
-            continue
         expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
         if expected is not None and key in manifest and bool(manifest.get(key)) != bool(expected):
             return False, f'{key} mismatch: run used {manifest.get(key)}, config expects {expected}'
@@ -354,8 +327,6 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'local_controller_type',
     )
     for key in string_keys:
-        if simple_local and key in local_efe_only_keys:
-            continue
         expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
         if expected is not None and key in manifest and str(manifest.get(key, '')) != str(expected):
             return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")!r}, config expects {expected!r}'
@@ -484,13 +455,12 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'global_optimizer_multistart', 'local_optimizer_multistart',
         'local_use_visibility_model', 'local_use_belief_nogo_cost',
         'local_nogo_penalty_type', 'local_nogo_weight',
-        'local_nogo_safe_distance', 'local_goal_progress_weight',
-        'local_ref_weight', 'local_terminal_ref_weight', 'local_du_weight',
+        'local_nogo_safe_distance',
         'local_goal_prior_u_std_start', 'local_goal_prior_v_std_start',
         'local_goal_prior_u_std_final', 'local_goal_prior_v_std_final',
         'waypoint_spacing_m', 'waypoint_arrival_radius_m',
         'local_replan_min_remaining_s', 'local_replan_on_waypoint_change',
-        'latency_compensate_plan_handoff', 'use_simple_local_controller',
+        'latency_compensate_plan_handoff',
         'cmd_publish_rate',
         'goal_prior_u_std_start', 'goal_prior_v_std_start',
         'goal_prior_u_std_final', 'goal_prior_v_std_final',

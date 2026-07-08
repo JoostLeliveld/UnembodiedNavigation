@@ -103,7 +103,6 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('goal_prior_v_std_final', 18.0)
         _declare_if_not('goal_tightening_power', 0.45)
         _declare_if_not('goal_progress_n_steps', 90)
-        _declare_if_not('goal_progress_weight', 0.0)
         _declare_if_not('observation_risk_scale', 1.25)
         _declare_if_not('ambiguity_term_scale', 1.00)
         _declare_if_not('discount_gamma', 0.98)
@@ -166,25 +165,11 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('local_goal_prior_v_std_start', -1.0)
         _declare_if_not('local_goal_prior_u_std_final', -1.0)
         _declare_if_not('local_goal_prior_v_std_final', -1.0)
-        # Metric (x,y) goal-progress incentive for the LOCAL executor only.
-        # -1.0 => inherit the shared goal_progress_weight; >=0.0 => use as-is.
-        # Condition-neutral (no GP/ambiguity); fixes the unreachable-target freeze.
-        _declare_if_not('local_goal_progress_weight', -1.0)
-        # LOCAL reference-segment tracking weights (condition-neutral, no GP).
-        # -1.0 => inherit the shared planner weight (which defaults 0.0, i.e. OFF);
-        # >=0.0 => use the local value directly. These build a proper local TRACKER
-        # objective (reference-segment tracking + control smoothness) so the local
-        # executor follows the global planner-derived waypoint polyline instead of
-        # spinning at a single beyond-horizon goal point. Identical for C1/C2/C3.
-        _declare_if_not('local_ref_weight', -1.0)
-        _declare_if_not('local_terminal_ref_weight', -1.0)
-        _declare_if_not('local_du_weight', -1.0)
         _declare_if_not('waypoint_spacing_m', 1.0)
         _declare_if_not('waypoint_arrival_radius_m', 0.35)
         _declare_if_not('local_replan_min_remaining_s', 0.0)
         _declare_if_not('local_replan_on_waypoint_change', False)
         _declare_if_not('latency_compensate_plan_handoff', False)
-        _declare_if_not('use_simple_local_controller', False)
         _declare_if_not('simple_tracker_yaw_gate_rad', 0.6)
         # Which waypoint-tracking law the simple local controller uses. All are
         # "execution plumbing" (track the global plan, no local EFE); they differ
@@ -271,7 +256,6 @@ class UnicyclePlannerNode(Node):
         self.goal_prior_v_std_final = float(self.get_parameter('goal_prior_v_std_final').value)
         self.goal_tightening_power = float(self.get_parameter('goal_tightening_power').value)
         self.goal_progress_n_steps = int(self.get_parameter('goal_progress_n_steps').value)
-        self.goal_progress_weight = float(self.get_parameter('goal_progress_weight').value)
         self.observation_risk_scale = float(self.get_parameter('observation_risk_scale').value)
         self.ambiguity_term_scale = float(self.get_parameter('ambiguity_term_scale').value)
         self.discount_gamma = float(self.get_parameter('discount_gamma').value)
@@ -345,14 +329,6 @@ class UnicyclePlannerNode(Node):
         self.local_goal_prior_v_std_final = float(
             self.get_parameter('local_goal_prior_v_std_final').value
         )
-        self.local_goal_progress_weight = float(
-            self.get_parameter('local_goal_progress_weight').value
-        )
-        self.local_ref_weight = float(self.get_parameter('local_ref_weight').value)
-        self.local_terminal_ref_weight = float(
-            self.get_parameter('local_terminal_ref_weight').value
-        )
-        self.local_du_weight = float(self.get_parameter('local_du_weight').value)
         self.waypoint_spacing_m = float(self.get_parameter('waypoint_spacing_m').value)
         self.waypoint_arrival_radius_m = float(self.get_parameter('waypoint_arrival_radius_m').value)
         self.local_replan_min_remaining_s = max(
@@ -363,9 +339,6 @@ class UnicyclePlannerNode(Node):
         )
         self.latency_compensate_plan_handoff = _as_bool(
             self.get_parameter('latency_compensate_plan_handoff').value
-        )
-        self.use_simple_local_controller = _as_bool(
-            self.get_parameter('use_simple_local_controller').value
         )
         self.simple_tracker_yaw_gate_rad = max(
             0.0, float(self.get_parameter('simple_tracker_yaw_gate_rad').value)
@@ -683,10 +656,6 @@ class UnicyclePlannerNode(Node):
             goal_prior_v_std_final=g('goal_prior_v_std_final'),
             goal_tightening_power=g('goal_tightening_power'),
             goal_progress_n_steps=int(g('goal_progress_n_steps')),
-            goal_progress_weight=float(g('goal_progress_weight')),
-            ref_weight=float(g_default('ref_weight', 0.0)),
-            terminal_ref_weight=float(g_default('terminal_ref_weight', 0.0)),
-            du_weight=float(g_default('du_weight', 0.0)),
             observation_risk_scale=float(g('observation_risk_scale')),
             ambiguity_term_scale=float(g('ambiguity_term_scale')), discount_gamma=float(g('discount_gamma')),
             use_nogo_cost=_as_bool(g('use_nogo_cost')), nogo_penalty_type=str(g('nogo_penalty_type')),
@@ -2089,8 +2058,7 @@ class UnicyclePlannerNode(Node):
             float(goal_ref.pose.position.y),
         )
 
-    def _call_planner(self, m0, S0, goal_xy, progress_index, *, plan_start, now_wall,
-                      ref_seq=None, prev_u=None):
+    def _call_planner(self, m0, S0, goal_xy, progress_index, *, plan_start, now_wall):
         if self.debug_runtime and (now_wall - self._last_plan_entry_log) > self.debug_log_period_s:
             self.get_logger().info(
                 "Entering planner.plan: "
@@ -2103,7 +2071,6 @@ class UnicyclePlannerNode(Node):
             # run immediately instead of allowing an invalid experiment to continue.
             result = self.planner.plan(
                 m0, S0, goal_xy, progress_index=progress_index,
-                ref_seq=ref_seq, prev_u=prev_u,
             )
         except Exception as exc:
             self._fatal_experiment_stop("Planner.solve raised an exception", exc)

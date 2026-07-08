@@ -188,7 +188,6 @@ class ExperimentLogger(Node):
         self.declare_parameter('local_replan_min_remaining_s', 0.0)
         self.declare_parameter('local_replan_on_waypoint_change', False)
         self.declare_parameter('latency_compensate_plan_handoff', False)
-        self.declare_parameter('use_simple_local_controller', False)
         self.declare_parameter('cmd_publish_rate', 10.0)
         self.declare_parameter('heading_update_mode', 'camera_xy_only')
         self.declare_parameter('use_nogo_cost', False)
@@ -372,9 +371,6 @@ class ExperimentLogger(Node):
         )
         self.latency_compensate_plan_handoff = bool(
             self.get_parameter('latency_compensate_plan_handoff').value
-        )
-        self.use_simple_local_controller = bool(
-            self.get_parameter('use_simple_local_controller').value
         )
         self.cmd_publish_rate = float(self.get_parameter('cmd_publish_rate').value)
         self.use_nogo_cost = bool(self.get_parameter('use_nogo_cost').value)
@@ -605,7 +601,6 @@ class ExperimentLogger(Node):
             'local_replan_min_remaining_s': self.local_replan_min_remaining_s,
             'local_replan_on_waypoint_change': self.local_replan_on_waypoint_change,
             'latency_compensate_plan_handoff': self.latency_compensate_plan_handoff,
-            'use_simple_local_controller': self.use_simple_local_controller,
             'cmd_publish_rate': self.cmd_publish_rate,
             'auto_stop_on_goal': self.auto_stop_on_goal,
             'goal_success_radius': self.goal_success_radius,

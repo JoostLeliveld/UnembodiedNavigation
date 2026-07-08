@@ -123,7 +123,6 @@ skip_stale_pixel_correction: true
 pixel_correction_nis_threshold: 9.21
 robot_collision_radius_m: 0.125
 use_hierarchical: true
-use_simple_local_controller: true
 global_horizon: 75
 global_dt: 0.4   # 75 x 0.4 = 30s lookahead. The global plan is ONE-SHOT/frozen (efe_agent_node:
                  # "chosen once and never replanned"); if it stops short of goal the local tracker
