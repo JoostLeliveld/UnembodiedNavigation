@@ -5,21 +5,23 @@
 This module detects the robot in the fixed external-camera RGB image and
 exports the selected bottom-centre pixel as the runtime localization point.
 
-## Story
+## Contribution At A Glance
 
-The camera sees the robot, the detector selects one image-space point, and the
-raw score becomes the empirical reliability signal used later by the GP page.
+| Question | Answer |
+| --- | --- |
+| Problem | The warehouse camera sees the robot from an oblique external view, so the planner needs a stable image-space localization point. |
+| Contribution | A detector pipeline selects the robot box, exports the bottom-centre pixel, and logs the raw score as a reliability signal for later GP fitting. |
+| Implementation | Runtime selection lives in [`../src/perception/perception/nodes/yolo_robot_detector_node.py`](../src/perception/perception/nodes/yolo_robot_detector_node.py) and [`../src/perception/perception/core/yolo_selection.py`](../src/perception/perception/core/yolo_selection.py). |
 
 ## Visual Demonstration
 
-![YOLO validation predictions](../paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg)
+![Bottom-centre detector output](demos/images/bottom_centre_01.png)
 
-The trained detector is evaluated from the same external camera viewpoint used
-by the warehouse campaign. Runtime localization uses the selected bounding-box
-bottom centre as a ground-contact proxy.
+The detector does not output a full pose. Runtime localization uses one selected
+image point: the bounding-box bottom centre, treated as a ground-contact proxy
+for the BEV projection step.
 
-Planned media is listed in [`demos/`](demos/): a short inference GIF, a 30-45s
-warehouse-detection MP4, and a bottom-centre diagnostic still.
+Additional media is catalogued in [`demos/`](demos/).
 
 ## Inputs And Outputs
 
@@ -97,4 +99,4 @@ python3 scripts/paper_figures/make_yolo_training_clarification.py
 - The detector supplies image-space `x,y` evidence only; heading is handled by
   the state/planning stack.
 
-See planned visual media in [`demos/`](demos/).
+See available and planned media in [`demos/`](demos/).

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="300" viewBox="0 0 1280 300" role="img" aria-labelledby="title desc">
   <title id="title">External-camera navigation architecture</title>
-  <desc id="desc">Pipeline from Gazebo warehouse to YOLO detection, BEV state, GP covariance, EFE planning, and campaign metrics.</desc>
+  <desc id="desc">Pipeline from Gazebo warehouse to YOLO detection, BEV state, GP covariance, route planning, and campaign metrics.</desc>
   <defs>
     <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
       <path d="M2,2 L10,6 L2,10 Z" fill="#4b5563" />
@@ -41,7 +41,7 @@
   <text class="body" x="668" y="199">covariance</text>
 
   <rect class="box" x="840" y="120" width="150" height="96" rx="12" />
-  <text class="title" x="874" y="153">EFE</text>
+  <text class="title" x="864" y="153">Planner</text>
   <text class="body" x="868" y="179">predict belief</text>
   <text class="body" x="868" y="199">choose route</text>
 

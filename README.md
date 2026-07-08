@@ -1,10 +1,12 @@
 # Unembodied Navigation
 
 Research code and demonstration pages for visibility-aware robot navigation
-from a fixed external camera. The system trains a detector in Gazebo, turns
-detector reliability into a spatial GP, uses that GP as predictive camera
-covariance inside an expected-free-energy planner, and evaluates the behavior
-in a warehouse route-choice benchmark.
+from a fixed external camera. The project asks how a mobile robot can plan in a
+warehouse when camera localization is reliable in some aisles and brittle in
+others. The system detects the robot, projects the image evidence to the floor,
+learns a spatial camera-reliability model, converts that reliability into
+planner-facing observation covariance, and evaluates the behavior in matched
+warehouse route-choice experiments.
 
 > **Current configuration (2026-07-01 honest re-run).** The locked runtime values
 > are checked in [`docs/current_runtime_contract.yaml`](docs/current_runtime_contract.yaml)
@@ -15,7 +17,22 @@ in a warehouse route-choice benchmark.
 
 ![External-camera warehouse setup](paper_artifacts/figures/problem_setup_camera.png)
 
-## System In One Figure
+## Contribution Story
+
+![Contribution map](docs/media/contribution_map.png)
+
+The central contribution is the modular chain from camera observation to
+planning behavior. The GP does not learn the observation matrix `R` online and
+does not act as a direct visibility reward. It predicts spatial detector trust,
+and that trust scales the planner's observation covariance `R_plan`.
+
+Regenerate the README figures with:
+
+```bash
+python3 scripts/paper_figures/make_readme_visuals.py
+```
+
+## System Architecture
 
 ![External-camera navigation architecture](docs/media/system_architecture.svg)
 
@@ -23,15 +40,15 @@ Planned overview video: `docs/media/videos/system_overview.mp4`. This should be
 a 20-30 second montage using the warehouse still, detector overlay, GP map,
 C1/C2 route contrast, and the final campaign counts once those clips exist.
 
-## Interactive Module Walkthrough
+## Contribution Walkthrough
 
-| Module | Demonstration |
-| --- | --- |
-| [YOLO perception](yolo/) | Robot detection, bottom-centre extraction, training metadata, and validation results. |
-| [GP covariance model](gp/) | Detector-score samples, fitted reliability field, uncertainty discount, and covariance mapping. |
-| [State estimation](estimation/) | Image-space measurement, ground-plane projection, belief update, and heading convention. |
-| [EFE planning](planning/) | Constant vs learned predictive covariance, route behavior, and planner interface. |
-| [Experiments](experiments/) | Representative C1/C2 pair, full campaign results, metrics, and reproduction commands. |
+| Module | Contribution | Visual |
+| --- | --- | --- |
+| [YOLO perception](yolo/) | Detect the robot in the fixed warehouse camera image and export the selected bottom-centre pixel plus raw score. | <img src="yolo/demos/images/bottom_centre_01.png" width="190" alt="YOLO bottom centre visual"> |
+| [State estimation](estimation/) | Turn image-space evidence into a calibrated ground-plane point and keep the belief/noise story explicit. | <img src="estimation/demos/images/image_to_bev_01.png" width="190" alt="Image to BEV visual"> |
+| [GP covariance model](gp/) | Learn a spatial detector-trust field and convert it into planner-facing camera covariance. | <img src="gp/demos/images/r_plan_map_and_ellipses.png" width="190" alt="R plan map visual"> |
+| [Route planning](planning/) | Compare constant `R` against GP-scaled `R_plan` under the same map, tasks, seeds, and no-go geometry. | <img src="planning/demos/images/paired_route_choice.png" width="190" alt="Route choice visual"> |
+| [Experiments](experiments/) | Package the current honest campaign surface, result counts, paired figures, and reproduction commands. | <img src="experiments/demos/images/outcome_counts_by_condition.png" width="190" alt="Outcome counts visual"> |
 
 Each module folder is a mini landing page with visuals, inputs/outputs,
 reproduction commands, implementation links, limitations, and planned media

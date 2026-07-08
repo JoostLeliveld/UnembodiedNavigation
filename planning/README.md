@@ -1,27 +1,29 @@
-# EFE Route Planning
+# Visibility-Aware Route Planning
 
 [Back to repository overview](../README.md)
 
 This module shows how constant and learned predictive camera covariance change
 route planning under the same warehouse geometry and task seeds.
 
-## Story
+## Contribution At A Glance
 
-Only predictive observation covariance changes. Route behavior changes because
-that covariance changes future belief growth and belief-tube keep-in
-feasibility.
+| Question | Answer |
+| --- | --- |
+| Problem | The shortest route can pass through camera-poor regions where future localization becomes ambiguous. |
+| Contribution | The planner compares a constant camera covariance baseline against GP-scaled `R_plan` while keeping the map, seeds, tracker, and no-go geometry fixed. |
+| Implementation | Planner behavior is in [`../src/planning/planning/planners/base_planner.py`](../src/planning/planning/planners/base_planner.py), with symbolic EFE terms in [`../src/planning/planning/core/casadi_efe.py`](../src/planning/planning/core/casadi_efe.py). |
 
 ## Visual Demonstration
 
-![Robustness spread](../paper_artifacts/figures/robustness_spread.png)
+![Paired route choice](demos/images/paired_route_choice.png)
 
-Red trajectories are C1 constant-covariance runs. Blue trajectories are C2
-visibility-aware runs. The background is the learned conservative reliability
-field used by the planner.
+The figure shows a matched west-route pair. C1 uses constant camera covariance;
+C2 uses GP-scaled `R_plan`. Everything else is held fixed, so the changed route
+comes from how expected future observations shape belief growth and ambiguity.
 
-Planned media is listed in [`demos/`](demos/): paired C1/C2 route stills,
-rollout GIFs, a covariance-along-route plot, and a side-by-side comparison
-video.
+![Covariance along route](demos/images/covariance_along_route.png)
+
+Additional media is catalogued in [`demos/`](demos/).
 
 ## Inputs And Outputs
 
@@ -34,31 +36,33 @@ video.
 
 ## Method
 
-C1 and C2 share the same world, route seeds, driveable layer, execution tracker,
-and optimizer budget. They differ in predictive camera covariance:
+C1 and C2 share the same world, route seeds, driveable layer, no-go geometry,
+execution tracker, and optimizer budget. They differ in predictive camera
+covariance:
 
 ```text
 C1: R_plan = constant camera covariance
-C2: R_plan = GP-derived state-dependent camera covariance
+C2: R_plan = GP-scaled state-dependent camera covariance
 ```
 
 The GP is not a direct visibility reward. It changes the predicted observation
-covariance used in the EFE risk/ambiguity terms and in the belief-tube keep-in
-feasibility term.
+covariance used in the risk/ambiguity terms and in belief-tube keep-in
+feasibility. Ambiguity here means "how uncertain future observations are
+expected to be"; obstacle/no-go costs are a separate map constraint.
 
 ## Performance And Diagnostics
 
-Current packaged campaign outcome:
+Current packaged honest-campaign outcome:
 
-| Condition | Clean reaches | Collisions | Other outcomes |
+| Condition | Clean reaches | Safety breaches | Other outcomes |
 | --- | ---: | ---: | --- |
-| C1 `constant_R_efe` | 12/20 | 8/20 | none |
-| C2 `visibility_aware_efe` | 16/20 | 2/20 | 1 near-success, 1 infrastructure-invalid |
+| C1 `constant_R_efe` | 15/20 | 4/20 GT-geometry breaches, 0/20 physics contacts | none |
+| C2 `visibility_aware_efe` | 20/20 | 0/20 | none |
 
 Single-run mechanism figure:
 
-- [`../paper_artifacts/figures/paired_mechanism_taskA.pdf`](../paper_artifacts/figures/paired_mechanism_taskA.pdf)
-- [`../paper_artifacts/figures/paired_mechanism_taskA_data/`](../paper_artifacts/figures/paired_mechanism_taskA_data/)
+- [`../docs/paper_vs_current/current/figures/paired_mechanism_west_current.png`](../docs/paper_vs_current/current/figures/paired_mechanism_west_current.png)
+- [`../paper_artifacts/figures/paired_mechanism_west_current_data/`](../paper_artifacts/figures/paired_mechanism_west_current_data/)
 
 ## Reproduce
 
@@ -94,4 +98,4 @@ python3 scripts/paper_figures/make_paired_mechanism.py
 - The optimizer is route-seed sensitive, so claims are tied to the locked
   matched-seed campaign protocol.
 
-See planned visual media in [`demos/`](demos/).
+See available and planned media in [`demos/`](demos/).

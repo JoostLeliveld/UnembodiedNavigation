@@ -5,21 +5,24 @@
 This module packages the benchmark surface: tasks, conditions, seeds, metrics,
 representative figures, and reproduction commands.
 
-## Story
+## Contribution At A Glance
 
-The representative planning behavior is tested across a locked multi-task,
-matched-seed campaign. This page shows the aggregate result and keeps caveats
-visible.
+| Question | Answer |
+| --- | --- |
+| Problem | A single representative route is not enough evidence for a planner claim. |
+| Contribution | The campaign runner evaluates matched C1/C2 conditions across four routes and five seeds, with result files and provenance kept together. |
+| Implementation | Launch wiring and logging live in [`../src/experiments`](../src/experiments/README.md), with campaign orchestration in [`../scripts/visibility_comparison/run_visibility_campaign.py`](../scripts/visibility_comparison/run_visibility_campaign.py). |
 
 ## Visual Demonstration
 
-![Robustness spread](../docs/paper_vs_current/current/figures/robustness_spread_current.png)
+![Outcome counts](demos/images/outcome_counts_by_condition.png)
 
-This figure overlays all seeded trajectories for the current four-task campaign
-on the learned reliability map.
+The current honest campaign compares four routes, two conditions, and five
+seeds per route/condition. C1 reaches 15/20 clean goals; C2 reaches 20/20.
 
-Planned media is listed in [`demos/`](demos/): outcome plots, a per-task table
-image, a task-panel GIF, and a campaign montage video.
+![Campaign result table](demos/images/campaign_result_table.png)
+
+Additional media is catalogued in [`demos/`](demos/).
 
 ## Inputs And Outputs
 
@@ -113,4 +116,4 @@ python3 scripts/visibility_comparison/compute_paper_metrics.py \
 - New claims need a full evidence chain: world, detector, visibility data, GP,
   config, logs, metrics, figures, and wording.
 
-See planned visual media in [`demos/`](demos/).
+See available and planned media in [`demos/`](demos/).

@@ -8,6 +8,7 @@ module landing pages:
 
 | File | Role |
 | --- | --- |
+| [`contribution_map.md`](contribution_map.md) | Modular project story from camera observation to reliability-aware route behavior. |
 | [`demo_media.md`](demo_media.md) | Visual gallery, README media map, and planned video storyboard. |
 | [`experiment_registry.md`](experiment_registry.md) | Active evidence chain, current results surface, superseded lines, and caveats. |
 | [`current_runtime_contract.yaml`](current_runtime_contract.yaml) | Machine-readable contract for the active honest-campaign runtime. |

@@ -7,6 +7,7 @@ under `paper_artifacts/` and copied into `thesis-report/figures/` when needed.
 
 | Figure/artifact | Script |
 | --- | --- |
+| README module visuals | `make_readme_visuals.py` |
 | GP reliability pipeline | `make_aws_gp_pipeline_figure.py` |
 | Problem setup panels | `make_aws_problem_setup_figure.py` |
 | Localization pathway | `make_localization_pathway_figure.py` |
