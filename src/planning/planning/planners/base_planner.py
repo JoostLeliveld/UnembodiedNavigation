@@ -136,7 +136,6 @@ class UnicyclePlannerBase:
         optimizer_ftol=1e-6,
         optimizer_multistart=False,
         optimizer_multistart_include_direct=True,
-        optimizer_multistart_lateral_offsets='',
         optimizer_initial_routes_json='',
         use_nogo_cost=False,
         nogo_penalty_type='softplus',
@@ -221,9 +220,6 @@ class UnicyclePlannerBase:
         self.optimizer_multistart = self._as_bool_like(optimizer_multistart)
         self.optimizer_multistart_include_direct = self._as_bool_like(
             optimizer_multistart_include_direct
-        )
-        self.optimizer_multistart_lateral_offsets = self._parse_float_list(
-            optimizer_multistart_lateral_offsets
         )
         self.optimizer_initial_routes = self._parse_initial_routes(optimizer_initial_routes_json)
         self.rng = np.random.default_rng(int(seed))
@@ -324,33 +320,6 @@ class UnicyclePlannerBase:
         if isinstance(value, (int, float)):
             return bool(value)
         return str(value).strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on')
-
-    @staticmethod
-    def _parse_float_list(raw):
-        if raw is None:
-            return []
-        if isinstance(raw, (list, tuple)):
-            values = raw
-        else:
-            text = str(raw).strip()
-            if not text:
-                return []
-            if text.startswith('[') and text.endswith(']'):
-                try:
-                    values = json.loads(text)
-                except json.JSONDecodeError:
-                    values = text[1:-1].split(',')
-            else:
-                values = text.split(',')
-        out = []
-        for item in values:
-            try:
-                value = float(item)
-            except (TypeError, ValueError):
-                continue
-            if math.isfinite(value):
-                out.append(value)
-        return out
 
     @staticmethod
     def _parse_initial_routes(raw):
@@ -829,19 +798,6 @@ class UnicyclePlannerBase:
 
         if self.optimizer_multistart_include_direct:
             candidates.append(('direct_goal', self._controls_for_waypoints(start, [goal])))
-
-        dvec = goal - start[:2]
-        dist = float(np.linalg.norm(dvec))
-        if dist > 1e-3:
-            unit = dvec / dist
-            perp = np.array([-unit[1], unit[0]], dtype=float)
-            mid = start[:2] + 0.5 * dvec
-            for offset in self.optimizer_multistart_lateral_offsets:
-                waypoint = mid + float(offset) * perp
-                candidates.append((
-                    f'lateral_{float(offset):+.2f}',
-                    self._controls_for_waypoints(start, [waypoint, goal]),
-                ))
 
         for route in self.optimizer_initial_routes:
             name = str(route.get('name', 'route'))

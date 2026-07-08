@@ -56,8 +56,6 @@ def _planner_precision_arguments():
                               description='Offer multiple optimizer-init seeds; lowest-EFE candidate wins. Same seeds for all conditions.'),
         DeclareLaunchArgument('optimizer_multistart_include_direct', default_value='true',
                               description='Include a steer-straight-to-goal seed when multistart is on.'),
-        DeclareLaunchArgument('optimizer_multistart_lateral_offsets', default_value='',
-                              description='Comma/JSON list of perpendicular bulge offsets (m) for L-shaped detour seeds, e.g. "-1.5,1.5".'),
         DeclareLaunchArgument('optimizer_initial_routes_json', default_value='',
                               description='Optional JSON list of named waypoint routes used only as optimizer seeds (not mission waypoints).'),
         DeclareLaunchArgument('optimizer_route_seed_mode', default_value='explicit',

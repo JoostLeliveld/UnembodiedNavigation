@@ -158,7 +158,6 @@ class EfeAgentNode(UnicyclePlannerNode):
                 goal_prior_v_std_final=local_goal_v_final,
                 optimizer_multistart=self.local_optimizer_multistart,
                 optimizer_multistart_include_direct=True,
-                optimizer_multistart_lateral_offsets='',
                 optimizer_initial_routes_json='',
                 optimizer_warm_start_shift_steps=self._warm_start_shift_steps_for_rate(
                     self.local_plan_rate

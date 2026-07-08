@@ -132,7 +132,6 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('optimizer_warm_start', True)
         _declare_if_not('optimizer_multistart', False)
         _declare_if_not('optimizer_multistart_include_direct', True)
-        _declare_if_not('optimizer_multistart_lateral_offsets', '')
         _declare_if_not('optimizer_initial_routes_json', '')
         # Route-seed source for the multistart: 'explicit' uses
         # optimizer_initial_routes_json as-is; 'lane_graph' generates condition-
@@ -313,9 +312,6 @@ class UnicyclePlannerNode(Node):
         self.optimizer_multistart = _as_bool(self.get_parameter('optimizer_multistart').value)
         self.optimizer_multistart_include_direct = _as_bool(
             self.get_parameter('optimizer_multistart_include_direct').value
-        )
-        self.optimizer_multistart_lateral_offsets = str(
-            self.get_parameter('optimizer_multistart_lateral_offsets').value
         )
         self.optimizer_initial_routes_json = str(
             self.get_parameter('optimizer_initial_routes_json').value
@@ -693,7 +689,6 @@ class UnicyclePlannerNode(Node):
             optimizer_warm_start_shift_steps=int(g('optimizer_warm_start_shift_steps')),
             optimizer_multistart=_as_bool(g('optimizer_multistart')),
             optimizer_multistart_include_direct=_as_bool(g('optimizer_multistart_include_direct')),
-            optimizer_multistart_lateral_offsets=g('optimizer_multistart_lateral_offsets'),
             optimizer_initial_routes_json=g('optimizer_initial_routes_json'),
             approx_method=self.approx_method, use_obs_risk=_as_bool(g('use_obs_risk')),
             use_ambiguity=_as_bool(g('use_ambiguity')), seed=self.seed, camera_params=self._camera_params,

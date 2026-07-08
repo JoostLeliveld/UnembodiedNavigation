@@ -167,7 +167,6 @@ optimizer_gtol: 0.0001
 optimizer_warm_start: true
 optimizer_multistart: true
 optimizer_multistart_include_direct: false
-optimizer_multistart_lateral_offsets: ''
 optimizer_route_seed_mode: lane_graph
 optimizer_initial_routes_json: '[{"name":"mid_cross_lane","waypoints":[[3.3,1.5],[1.5,1.5],[1.0,1.75]]},{"name":"lower_sweep_lane","waypoints":[[3.3,-2.2],[1.2,-2.2],[1.0,1.75]]}]'
 stuck_window_s: 20.0
