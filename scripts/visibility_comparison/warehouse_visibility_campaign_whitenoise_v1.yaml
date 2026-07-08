@@ -1,0 +1,197 @@
+world: warehouse_aws.world.sdf
+launch_file: warehouse_primary_comparison.launch.py
+conditions:
+  C1:
+    planner: constant_R_efe
+    label: C1_constant_R
+  C2:
+    planner: visibility_aware_efe
+    label: C2_visibility_aware
+tasks:
+  route_apron_to_a3_mid:
+    conditions:
+    - C1
+    - C2
+    seeds:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    optimizer_initial_routes_json: '[{"name":"via_connector","waypoints":[[3.1,1.6],[1.0,1.6],[1.0,1.75]]},{"name":"via_lower","waypoints":[[3.1,-2.4],[1.0,-2.4],[1.0,1.75]]}]'
+  route_apron_to_a2_mid:
+    conditions:
+    - C1
+    - C2
+    seeds:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    optimizer_initial_routes_json: '[{"name":"via_connector","waypoints":[[3.1,1.6],[-1.0,1.6],[-1.0,1.75]]},{"name":"via_lower","waypoints":[[3.1,-2.4],[-1.0,-2.4],[-1.0,1.75]]}]'
+  route_west_to_a1_upper:
+    conditions:
+    - C1
+    - C2
+    seeds:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    optimizer_initial_routes_json: '[{"name":"via_connector","waypoints":[[-5.0,4.58],[-3.0,4.58],[-3.0,3.5]]},{"name":"via_lower","waypoints":[[-5.0,-2.4],[-3.0,-2.4],[-3.0,3.5]]}]'
+  control_west_to_a1_low:
+    conditions:
+    - C1
+    - C2
+    seeds:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    optimizer_initial_routes_json: '[{"name":"via_connector","waypoints":[[-5.0,4.58],[-3.0,4.58],[-3.0,-0.75]]},{"name":"via_lower","waypoints":[[-5.0,-2.4],[-3.0,-2.4],[-3.0,-0.75]]}]'
+perception_backend: yolo
+yolo_model: logs/perception_models/warehouse_yolo_detector_v1/model.pt
+yolo_device: '0'
+yolo_imgsz: 640
+yolo_conf_threshold: 0.05
+yolo_iou_threshold: 0.45
+yolo_target_class: robot
+yolo_class_id: 0
+yolo_use_masks: false
+yolo_min_mask_area_px: 12.0
+yolo_mask_bottom_band_px: 3.0
+gp_artifact: paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz
+headless: true
+use_rviz: false
+reset_world: false
+ros_domain_id_base: 183
+cleanup_sim_stragglers: true
+debug_runtime: true
+debug_log_period_s: 0.25
+driveable_geometry_json: '{"prisms":[{"name":"loading_apron_drive_lane","xmin":-5.6,"xmax":5.1,"ymin":-3.45,"ymax":-2.85,"zmin":0.0,"zmax":0.1},{"name":"lower_main_aisle","xmin":-5.65,"xmax":5.15,"ymin":-2.85,"ymax":-2.03,"zmin":0.0,"zmax":0.1},{"name":"upper_cross_aisle","xmin":-5.65,"xmax":4.85,"ymin":4.25,"ymax":4.9,"zmin":0.0,"zmax":0.1},{"name":"west_service_lane","xmin":-5.65,"xmax":-4.6,"ymin":-3.45,"ymax":4.8,"zmin":0.0,"zmax":0.1},{"name":"east_far_corner_route","xmin":4.65,"xmax":5.15,"ymin":-3.45,"ymax":4.8,"zmin":0.0,"zmax":0.1},{"name":"rack_aisle_A1","xmin":-3.475,"xmax":-2.575,"ymin":-2.85,"ymax":4.8,"zmin":0.0,"zmax":0.1},{"name":"rack_aisle_A2","xmin":-1.425,"xmax":-0.525,"ymin":-2.85,"ymax":4.8,"zmin":0.0,"zmax":0.1},{"name":"rack_aisle_A3","xmin":0.625,"xmax":1.525,"ymin":-2.85,"ymax":4.8,"zmin":0.0,"zmax":0.1},{"name":"rack_aisle_A4","xmin":2.575,"xmax":3.675,"ymin":-2.85,"ymax":4.8,"zmin":0.0,"zmax":0.1},{"name":"connector_A1_A2_R2gap","xmin":-2.8,"xmax":-1.2,"ymin":1.25,"ymax":2.2,"zmin":0.0,"zmax":0.1},{"name":"connector_A2_A3_R3gap","xmin":-0.75,"xmax":0.85,"ymin":1.25,"ymax":2.2,"zmin":0.0,"zmax":0.1},{"name":"connector_A3_A4_R4gap","xmin":1.3,"xmax":2.8,"ymin":1.25,"ymax":2.2,"zmin":0.0,"zmax":0.1},{"name":"connector_A4_east_R5gap","xmin":3.45,"xmax":4.875,"ymin":1.25,"ymax":2.2,"zmin":0.0,"zmax":0.1}],"model_name":"driveable_region_a1_a2_blocked_mid"}'
+heading_update_mode: camera_xy_only
+odom_heading_timeout_s: 2.0
+bev_y_calibration_offset_m: 0.05
+# Position-dependent affine BEV calibration fit on the warehouse visibility capture grid
+# (detected bbox-bottom -> z=0 homography vs known pose). Corrects the oblique
+# bbox-bottom-vs-centre bias (median BEV err 0.099 -> 0.058 m). x'=c0*x+c1*y+c2 ;
+# y'=c3*x+c4*y+c5. Replaces the constant y-offset (which was never reaching the
+# projection node anyway). c = [c0,c1,c2,c3,c4,c5].
+bev_affine_calibration: "0.996142,-0.002705,-0.002021,-0.002609,0.991001,0.066112"
+pixel_max_correction_jump_m: 0.5
+use_odom_for_predict: true
+use_nogo_cost: true
+nogo_mode: keep_in
+nogo_weight: 2000.0
+nogo_safe_distance: 0.25
+nogo_penalty_type: warning_band
+nogo_warning_band: 0.05
+nogo_near_weight: 50.0
+nogo_softplus_scale: 0.08
+nogo_logbarrier_scale: 0.01
+nogo_logbarrier_eps: 0.01
+use_belief_nogo_cost: true
+nogo_belief_kappa: 1.0
+horizon: 20
+dt: 0.25
+v_max: 0.6
+discount_gamma: 0.995
+belief_publish_rate: 10.0
+process_noise_xy: 0.010    # DERIVED: sqrt((enc_lin_slip*0.2)^2 + enc_lin_add^2), white-matched
+process_noise_theta: 0.08   # DERIVED: sqrt((enc_ang_slip*0.7)^2 + enc_ang_add^2), white-matched
+init_belief_sigma_xy: 0.05
+init_belief_sigma_theta: 0.05
+risk_weight_obs: 1.0
+r_visible_uv: 2.5
+r_miss_uv: 40.0
+ambiguity_weight: 1.0
+observation_risk_scale: 1.0
+ambiguity_term_scale: 1.0
+control_weight: 0.0
+visibility_weight: 0.0
+goal_prior_u_std_start: 50.0
+goal_prior_v_std_start: 50.0
+goal_prior_u_std_final: 12.0
+goal_prior_v_std_final: 12.0
+goal_tightening_power: 0.9
+pixel_timeout_s: 1.25
+skip_stale_pixel_correction: true
+# Chi-squared (2-DOF) 99% innovation gate: rejects detector outlier measurements
+# (NIS > 9.21) that the EKF would otherwise swallow into the belief. Normal
+# detections have NIS<8 (p90 8.16); outlier spikes have NIS median ~13, up to 363.
+pixel_correction_nis_threshold: 9.21
+# NIS self-heal: on consecutive NIS rejections, widen the belief covariance so an
+# accurate measurement is re-admitted once belief has drifted (instead of the hard
+# gate staying "confidently wrong"). Validated mechanismA: rejections C2 15%->1%,
+# C1 9%->3%; C2 published-belief err 0.28->0.05 m; both still reach goal.
+pixel_correction_nis_reject_cov_scale: 1.0   # self-heal DISABLED 2026-07-01: custom band-aid, its "validation" was vs odom-truth artifact; belief is accurate vs GT without it. Keep only the standard chi2(2,0.99)=9.21 gate.
+robot_collision_radius_m: 0.125
+use_hierarchical: true
+use_simple_local_controller: true
+global_horizon: 75
+global_dt: 0.4   # 75 x 0.4 = 30s lookahead. The global plan is ONE-SHOT/frozen (efe_agent_node:
+                 # "chosen once and never replanned"); if it stops short of goal the local tracker
+                 # drives a STRAIGHT LINE to the goal (corner-cut). So the horizon MUST cover the full
+                 # route. Offline test (diag/offline_horizon_check.py) 2026-07-01: 30x0.4 (12s) left
+                 # a3/a2 C2 2.7-2.8m short; 75x0.4 (30s) reproduces the paper 120x0.25 reach
+                 # (a3 C2 0.08m, a2 C2 0.28m) at ~27% faster solve (75 vs 120 steps, dt 0.4 vs 0.25).
+local_horizon: 6
+local_plan_rate: 5.0
+cmd_publish_rate: 10.0
+local_optimizer_maxiter: 30
+global_use_ambiguity: true
+local_use_ambiguity: false
+global_optimizer_multistart: true
+local_optimizer_multistart: false
+local_use_visibility_model: false
+local_use_belief_nogo_cost: true
+local_nogo_penalty_type: warning_band
+local_nogo_weight: 1000.0
+local_nogo_safe_distance: 0.2
+local_goal_prior_u_std_start: 4.0
+local_goal_prior_v_std_start: 4.0
+local_goal_prior_u_std_final: 2.0
+local_goal_prior_v_std_final: 2.0
+waypoint_spacing_m: 0.12
+waypoint_arrival_radius_m: 0.1
+latency_compensate_plan_handoff: false
+local_replan_min_remaining_s: 0.0
+local_replan_on_waypoint_change: false
+optimizer_maxiter: 60
+optimizer_maxfun: 360
+optimizer_ftol: 1.0e-06
+optimizer_gtol: 0.0001
+optimizer_warm_start: true
+optimizer_multistart: true
+optimizer_multistart_include_direct: false
+optimizer_multistart_lateral_offsets: ''
+optimizer_route_seed_mode: lane_graph
+optimizer_initial_routes_json: '[{"name":"mid_cross_lane","waypoints":[[3.3,1.5],[1.5,1.5],[1.0,1.75]]},{"name":"lower_sweep_lane","waypoints":[[3.3,-2.2],[1.2,-2.2],[1.0,1.75]]}]'
+stuck_window_s: 20.0
+stuck_max_displacement_m: 0.08
+stuck_max_goal_improvement_m: 0.05
+stuck_cmd_fraction_min: 0.5
+stuck_idle_cmd_fraction_max: 0.1
+goal_success_radius: 0.25
+goal_success_hold_s: 2.0
+run_timeout_after_first_cmd_s: 300.0
+auto_stop_on_goal: true
+use_command_noise: true
+use_encoder_noise: true
+command_noise_linear_slip_mean: 0.0
+command_noise_linear_slip_std: 0.06
+command_noise_angular_slip_mean: 0.0
+command_noise_angular_slip_std: 0.045
+command_noise_linear_additive_std: 0.006
+command_noise_angular_additive_std: 0.03
+command_noise_correlation_alpha: 0.0   # WHITE (was 0.85)
+encoder_noise_linear_slip_mean: 0.0
+encoder_noise_linear_slip_std: 0.045
+encoder_noise_linear_additive_std: 0.004
+encoder_noise_angular_slip_mean: 0.0
+encoder_noise_angular_slip_std: 0.09
+encoder_noise_angular_additive_std: 0.035
+encoder_noise_correlation_alpha: 0.0    # WHITE (was 0.8)

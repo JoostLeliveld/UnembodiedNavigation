@@ -1,237 +1,93 @@
-# Machine-readable contract for paper-facing runs — the SINGLE runtime contract.
-# Single runtime contract for paper-facing warehouse runs.
-# Keep aligned with docs/experiment_registry.md and the
-# active config scripts/visibility_comparison/warehouse_visibility_campaign.yaml.
+# Historical, machine-readable snapshot of the submitted-paper runtime.
+# This is not the active runtime contract. Current runs use:
+# docs/current_runtime_contract.yaml
 
 paper_runtime_contract:
-  version: 0.8
-  updated: 2026-06-17
+  version: 1.0
+  updated: 2026-07-03
+  status: submitted_paper_snapshot
+  active_current_contract: docs/current_runtime_contract.yaml
+
   purpose: >
-    Define the behavior that counts as paper-facing execution for the
-    external-camera visibility-aware EFE experiments.
-  changelog_0_8: >
-    Rename the paper-facing surface to neutral warehouse artifact and task names.
-    The active campaign config is scripts/visibility_comparison/warehouse_visibility_campaign.yaml,
-    the detector is warehouse_yolo_detector_v1, and the GP is warehouse_visibility_gp_v1.
-    Historical phase-coded configs, detector names, and GP names are archived.
-  changelog_0_7: >
-    Reconcile to the locked robustness campaign. Paper-facing evidence uses four
-    semantic warehouse tasks with five seeds per condition. Belief-tube
-    no-go is active in the global solve (use_belief_nogo_cost=true,
-    nogo_belief_kappa=1.0); route difference is learned covariance plus belief-tube
-    feasibility, not ambiguity inflation or direct visibility reward. Runtime YOLO
-    localization uses bbox bottom-centre (yolo_use_masks=false). The Results section
-    is not used in the paper draft; campaign outcomes live in Experiments.
-  changelog_0_6: >
-    Process noise now uses the EXACT integrated
-    Q_d(theta, v, dt) per step (analytical, state-dependent; PSD x dt; matches appendix
-    app:heading) instead of a frozen diagonal — prior single-version EFE numbers are
-    superseded. Keep-in no-go now measures clearance to the TRUE driveable-union boundary
-    (no phantom seam penalty). See docs/uncertainty_propagation.md.
-  changelog_0_5: >
-    Reconcile to the locked 2026-06-10 runtime. Camera raised+back (z=4.8, y=-5.5);
-    GP length_scale 0.90, beta 0.5, noise_var 0.05. Heading =
-    camera_xy_only (no odom-yaw anchor, no keypoint/visual heading). No-go =
-    hinged-log warning_band (keep_in), weight 2000, band 0.05 (replaces log_barrier
-    and the belief-nogo route mechanism). Global EFE horizon 120 + shared simple
-    proportional local tracker. Main task = route_apron_to_a3_mid (a0 = saved secondary).
-    Absorbed the C1/C2 + multistart + driveability rules from the two retired .md contracts.
+    Preserve the runtime assumptions and reported outcomes behind the submitted
+    paper without pretending they are still the executable current campaign. Use
+    this file for paper comparison/provenance only.
 
-  evidence_status: paper_ready_with_caveats
-
-  campaign_status_2026_06_12: >
-    LOCKED ROBUSTNESS CAMPAIGN: C2 reaches 16/20 runs with 2/20 collisions,
-    1/20 near-success, and 1/20 infrastructure-invalid run; C1 reaches 12/20
-    with 8/20 collisions. `control_west_to_a1_low` acts as a control where both
-    conditions reach. `route_west_to_a1_upper` remains hard for the baseline:
-    C1 collides in 5/5 seeds, while C2 reaches
-    4/5 and has one infrastructure-invalid run. Continuous localization metrics
-    are pooled over clean successes only.
+  paper_campaign_status_2026_06_12: >
+    Submitted robustness snapshot: C1 reaches 12/20 with 8/20 reported
+    collisions; C2 reaches 16/20 with 2/20 reported collisions, 1/20
+    near-success, and 1/20 infrastructure-invalid run. Later audit work found
+    that those collision metrics were odom-derived and that the paper contact
+    sensor path was structurally silent. The current honest campaign is recorded
+    separately in docs/current_runtime_contract.yaml.
 
   reported_worlds:
     - warehouse_aws.world.sdf
 
   reported_tasks:
-    - route_apron_to_a3_mid       # route-choice discriminator
-    - route_apron_to_a2_mid       # stronger route-choice discriminator
-    - route_west_to_a1_upper      # hard west-side discriminator
-    - control_west_to_a1_low      # visible-route control
+    - F31_b1_apron_a3_mid
+    - b5_a4_apron_to_a2_mid
+    - b2_a0_west_to_a1_upper
+    - b6_a0_west_to_a1_low_control
 
   locked_artifacts:
     world: warehouse_aws.world.sdf
-    camera_pose: {x: 0.0, y: -5.5, z: 4.8}     # raised+back, locked 2026-06-10
-    gp_artifact: paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz
+    camera_pose: {x: 0.0, y: -5.5, z: 4.8}
+    detector: local_artifacts/perception_models/aws_yolo_simseg_v2/model.pt
+    gp_artifact: paper_artifacts/gp/archive/aws_gp_v7b_superseded/yolo_score_raw_gp.npz
     gp_params: {kernel: rbf, length_scale: 0.90, beta: 0.5, noise_var: 0.05}
-    detector: logs/perception_models/warehouse_yolo_detector_v1/model.pt
-    process_noise: {model: analytical_Qd, process_noise_xy: 0.012, process_noise_theta: 0.05,
-                    note: "sigma_v / sigma_omega actuation PSDs (std per sqrt s), integrated over dt; see uncertainty_propagation.md"}
-    superseded: {gps: [aws_gp_v5, aws_gp_v6, aws_gp_v6b, aws_gp_v7, aws_gp_v7b], cameras: ["z=4.5/y=-4.9", "z=4.9/y=-5.5"]}
+    selected_pixel_source: bbox_bottom
 
   allowed_planner_conditions:
-    constant_R_efe:        # C1
+    C1:
+      planner: constant_R_efe
       paper_name: constant-observability EFE
-      description: EFE planner with spatially uniform detector-observation covariance. Risk and ambiguity both active.
       uses_gp_visibility: false
       use_observation_risk: true
       use_ambiguity: true
-    visibility_aware_efe:  # C2
+    C2:
+      planner: visibility_aware_efe
       paper_name: learned-observability EFE
-      description: EFE planner with learned state-dependent detector-observation covariance (GP affects camera (x,y) covariance only; not heading). Risk and ambiguity both active.
       uses_gp_visibility: true
       use_observation_risk: true
       use_ambiguity: true
-    risk_only_ablation:    # C3 (optional)
-      paper_name: GP-risk-only ablation
-      description: GP covariance active, ambiguity disabled.
-      uses_gp_visibility: true
-      use_observation_risk: true
-      use_ambiguity: false
 
-  c1_c2_difference_allowed:
-    - planner_facing_camera_observation_covariance
-    - gp_query_enabled_only_for_c2
-  c1_c2_difference_forbidden:
-    - different_task
-    - different_driveable_barrier
-    - different_candidate_set
-    - different_horizon_or_optimizer_budget
-    - mission_waypoints
-
-  multistart:
-    allowed: true
-    interpretation: condition-neutral_optimizer_basin_handling
-    candidate_generation_may_use: [known_2d_driveable_floor, known_2d_lane_graph_route_seeds, local_escape_maneuvers, shifted_previous_solution]
-    candidate_generation_must_not_use: [gp_visibility_map, condition_label, hand_authored_visibility_route, mission_waypoints]
-
-  driveable_region_handling:
-    layer_name: known_driveable_forbidden_zone_layer
-    nogo_mode: keep_in
-    penalty_type: warning_band     # hinged-log; zero for valid interior (clearance >= band)
-    same_across_conditions: true
-    leaving_driveable_floor_must_not_be_cost_optimal: true
-    note: >
-      driveable_geometry_json = union of axis-aligned prisms (aisles + R2-R5 mid-gap
-      connectors); driveable = inside any prism. The union-boundary builder dissolves
-      shared edges between adjacent prisms (both overlapping AND exactly-abutting, e.g.
-      the apron/lower-main/aisle junction at y=-2.85): a sub-edge is kept only if a point
-      probed just OUTWARD of it is not covered by another prism. This removes the phantom
-      internal seams that distorted keep-in clearance; verified 0 phantom seams
-      and plans 0.0% outside the lane union on the current route-choice tasks.
-
-  locked_runtime:   # mirrors scripts/visibility_comparison/warehouse_visibility_campaign.yaml (2026-06-11)
+  locked_runtime:
     hierarchical: true
     global_solve_role: route_level_EFE_choice
     global_horizon: 120
     global_dt: 0.25
+    lookahead_s: 30.0
     v_max: 0.60
     local_solve_role: short_horizon_tracking_of_planner_waypoints
     use_simple_local_controller: true
-    simple_tracker_role: execution_plumbing_not_route_choice
-    simple_tracker_note: >
-      Shared across C1/C2/C3; does not query the GP or optimize EFE locally. Tracks
-      planner waypoints, protected by a local keep-in clearance gate. Scientific route
-      choice is the GLOBAL EFE solve only.
-    heading_update_mode: camera_xy_only   # odom dead-reckoning predict; pixel (x,y) update couples to heading via cross-cov only
+    heading_update_mode: camera_xy_only
     use_odom_heading_correction: false
     no_keypoint_or_visual_heading: true
+    nogo_mode: keep_in
+    nogo_penalty_type: warning_band
     nogo_weight: 2000.0
-    nogo_safe_distance: 0.25
     nogo_warning_band: 0.05
-    nogo_near_weight: 50.0
-    use_belief_nogo_cost: true            # global; belief-tube keep-in is active in the locked campaign
+    use_belief_nogo_cost: true
     nogo_belief_kappa: 1.0
-    ambiguity_weight: 1.0
-    risk_weight_obs: 1.0
-    control_weight: 0.0                    # no direct path-length/effort term in the locked campaign
-    direct_visibility_reward: false         # GP affects camera (x,y) covariance only; no visibility_weight cost term exists
-    goal_prior_u_std: {start: 50.0, final: 12.0}
-    goal_prior_v_std: {start: 50.0, final: 12.0}
-    goal_tightening_power: 0.9
-    optimizer_multistart: true
-    optimizer_multistart_include_direct: false
-    optimizer_multistart_lateral_offsets: 0.0   # removed: +/-1m shift hit a non-driveable corner
-    optimizer_initial_routes: [mid_cross_lane, lower_sweep_lane]
-    perception: {yolo_imgsz: 640, conf_threshold: 0.10, iou_threshold: 0.45, class_filter: "robot (class_id=0)", use_masks: false, selected_pixel_source: bbox_bottom}
-    # selected_pixel_source is bbox_bottom (most stable ground-plane proxy); masks are
-    # training/diagnostic artifacts only in the locked runtime. The NIS pixel-correction gate is OFF (threshold 0; code rejects
-    # by NIS only when the threshold is >0) in paper runs.
-    use_command_noise: true
-    use_encoder_noise: true
+    perception:
+      yolo_imgsz: 640
+      conf_threshold: 0.10
+      iou_threshold: 0.45
+      class_filter: robot
+      use_masks: false
+      selected_pixel_source: bbox_bottom
+    pixel_correction_nis_threshold: 0.0
+    nis_gate_disabled_in_paper_runs: true
 
-  required_runtime_settings:
-    perception_backend: yolo
-    direct_visibility_reward_allowed: false
-    known_obstacle_map_required: true
-    known_driveable_region_required: true
-    no_go_barrier_must_match_across_conditions: true
-    command_noise_required_for_aws_diagnostics: true
-    crash_or_contact_ends_run_and_is_tracked: true
-    yolo_model_must_be_explicit: true
-    visibility_artifact_path_must_be_explicit_for_gp_conditions: true
-    process_hygiene_required: true   # reap encoder_noise_node + actuation_noise_node between runs
-    single_odom_noisy_publisher_required: true  # >1 => pi-offset heading corruption
+  known_historical_caveats:
+    - paper_runner_did_not_forward_keep_in_as_intended
+    - metrics_used_odom_as_truth_for_collision_and_clearance_claims
+    - physics_contact_bridge_had_no_real_contact_sensor_events
+    - detector_training_data_was_later_found_contaminated
+    - paper_gp_used_raw_yolo_confidence_instead_of_detection_rate
 
-  hard_fail_on_missing:
-    - yolo_model
-    - visibility_artifact_path_for_visibility_conditions
-    - camera_model
-    - camera_projection_model
-    - world_bounds
-    - obstacle_geometry
-    - obstacle_barrier_parameters
-    - truth_pose_source
-    - run_manifest
-    - experiment_csv
-    - run_summary
-    - collision_fields_for_success_claims
-
-  plotting_rules:
-    require_real_run_dir: true
-    require_real_trace_csv: true
-    allow_schematic_fallback_by_default: false
-    require_panel_a_screenshot_for_problem_figure: true
-
-  metric_rules:
-    separate_completed_protocol_from_success: true
-    timeout_after_first_cmd_is_success_by_itself: false
-    collision_or_penetration_invalidates_success: true
-    near_goal_stuck_requires_explicit_label: true
-    runtime_means_start_at_first_nontrivial_command: true
-    pre_command_rows_excluded_from_runtime_plots_and_means: true
-    pre_command_phase_may_be_reported_separately: [launch_wait, global_solve_time, estimator_warmup]
-    runtime_metrics_require_after_first_command_filter:
-      - localization_error
-      - planner_belief_error
-      - yaw_error
-      - waypoint_tracking_error
-      - detection_rate
-      - rejected_correction_rate
-      - obstacle_clearance
-      - command_age
-      - local_solve_time
-    planner_relevant_localization_metric: truth_belief_error_m
-    detection_metric_must_use: yolo_detected_after_threshold   # NOT pixel_corr_accepted
-    nis_gate_disabled_in_paper_runs: true   # threshold 0 => pixel_corr_accepted ~ always 1;
-                                            # do not present it as a rejection/filter rate.
-
-  artifact_rules:
-    gp_artifact_must_record: [schema_version, source_samples, source_targets, world, camera_setup, kernel, length_scale, noise_variance, beta, grid_shape]
-    yolo_model_must_record: [dataset_path, train_val_split, model_path, inference_threshold]
-
-  forbidden_silent_behaviors:
-    - silently_using_non_yolo_perception_in_paper_launch
-    - silently_falling_back_to_profile_gp_artifact
-    - silently_plotting_schematic_trajectory_when_run_trace_missing
-    - silently_counting_timeout_as_goal_success
-    - silently_clipping_gp_queries_without_diagnostic
-    - mission_waypoints_for_route_choice
-    - constant_R_efe_without_ambiguity
-    - visibility_dependent_multistart_candidates
-    - claiming_a_route_split_not_present_in_logs
-    - presenting_pixel_corr_accepted_as_a_rejection_rate   # NIS gate is OFF (threshold 0)
-    - metric_goal_distance_reward   # goal-seeking must emerge from the EFE goal-prior in
-                                    # the risk term, NOT a hand-added ||mean-goal||^2 penalty.
-                                    # The goal_progress_weight term was REMOVED 2026-06-10
-                                    # (it had masked the zero-velocity/stop-short local minimum).
-                                    # goal_progress_n_steps is retained — it is the legit
-                                    # goal-prior covariance anneal schedule, not a goal reward.
+  compare_against_current:
+    config_diff: docs/paper_vs_current/README.md
+    paper_snapshot: docs/paper_vs_current/paper/
+    current_snapshot: docs/paper_vs_current/current/

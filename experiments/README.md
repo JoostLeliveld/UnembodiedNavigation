@@ -13,7 +13,7 @@ visible.
 
 ## Visual Demonstration
 
-![Robustness spread](../paper_artifacts/figures/robustness_spread.png)
+![Robustness spread](../docs/paper_vs_current/current/figures/robustness_spread_current.png)
 
 This figure overlays all seeded trajectories for the current four-task campaign
 on the learned reliability map.
@@ -25,10 +25,10 @@ image, a task-panel GIF, and a campaign montage video.
 
 | Input | Output |
 | --- | --- |
-| `scripts/visibility_comparison/aws_f31b1_final_config.yaml` | seeded run directories |
+| `scripts/visibility_comparison/warehouse_visibility_campaign.yaml` | seeded run directories |
 | local YOLO checkpoint | `experiment.csv`, `run_manifest.json`, `run_summary.json` |
-| GP artifact `aws_gp_v7b` | `robustness_metrics.csv` and summary tables |
-| `warehouse_aws.world.sdf` | paper figures and provenance files |
+| GP artifact `warehouse_visibility_gp_v1` | current comparison figures and provenance bundles |
+| `warehouse_aws.world.sdf` | current result surface under `docs/paper_vs_current/current/` |
 
 ## Method
 
@@ -48,30 +48,32 @@ Aggregate outcome:
 
 | Condition | Clean reaches | Collisions | Near-success | Invalid |
 | --- | ---: | ---: | ---: | ---: |
-| C1 | 12/20 | 8/20 | 0/20 | 0/20 |
-| C2 | 16/20 | 2/20 | 1/20 | 1/20 |
+| C1 | 15/20 | 4/20 GT geometry breaches, 0/20 physics contacts | 0/20 | 0/20 |
+| C2 | 20/20 | 0/20 | 0/20 | 0/20 |
 
 Per-task outcome:
 
 | Task | C1 | C2 |
 | --- | --- | --- |
-| `F31_b1_apron_a3_mid` | 3/5 clean, 2/5 collisions | 3/5 clean, 1/5 near-success, 1/5 collision |
-| `b5_a4_apron_to_a2_mid` | 4/5 clean, 1/5 collision | 4/5 clean, 1/5 collision |
-| `b2_a0_west_to_a1_upper` | 0/5 clean, 5/5 collisions | 4/5 clean, 1/5 infrastructure-invalid |
-| `b6_a0_west_to_a1_low_control` | 5/5 clean | 5/5 clean |
+| `route_apron_to_a3_mid` | 4/5 clean, 0/5 geometry breaches, 0/5 physics contacts | 5/5 clean, 0 collisions |
+| `route_apron_to_a2_mid` | 5/5 clean, 0/5 geometry breaches, 0/5 physics contacts | 5/5 clean, 0 collisions |
+| `route_west_to_a1_upper` | 1/5 clean, 4/5 geometry breaches, 0/5 physics contacts | 5/5 clean, 0 collisions |
+| `control_west_to_a1_low` | 5/5 clean, 0/5 geometry breaches, 0/5 physics contacts | 5/5 clean, 0 collisions |
 
 Evidence files:
 
-- [`../paper_artifacts/metrics/robustness_metrics.csv`](../paper_artifacts/metrics/robustness_metrics.csv)
-- [`../paper_artifacts/metrics/robustness_summary.txt`](../paper_artifacts/metrics/robustness_summary.txt)
+- [`../docs/current_runtime_contract.yaml`](../docs/current_runtime_contract.yaml)
+- [`../docs/paper_vs_current/current/README.md`](../docs/paper_vs_current/current/README.md)
+- [`../docs/paper_vs_current/current/figures/robustness_spread_current.png`](../docs/paper_vs_current/current/figures/robustness_spread_current.png)
 - [`../docs/experiment_registry.md`](../docs/experiment_registry.md)
+- Historical submitted-paper comparison: [`../docs/paper_vs_current/paper/README.md`](../docs/paper_vs_current/paper/README.md)
 
-Additional packaged campaign diagnostics:
+Additional archived campaign diagnostics from the submitted-paper era:
 
-- [`../paper_artifacts/campaigns/robustness_v2_partialoccl/localization_across_tasks.png`](../paper_artifacts/campaigns/robustness_v2_partialoccl/localization_across_tasks.png)
-- [`../paper_artifacts/campaigns/robustness_v2_partialoccl/localization_error_map.png`](../paper_artifacts/campaigns/robustness_v2_partialoccl/localization_error_map.png)
-- [`../paper_artifacts/campaigns/robustness_v2_partialoccl/localization_recovery_contrast.png`](../paper_artifacts/campaigns/robustness_v2_partialoccl/localization_recovery_contrast.png)
-- [`../paper_artifacts/campaigns/robustness_v2_partialoccl/solve_diagnostics.png`](../paper_artifacts/campaigns/robustness_v2_partialoccl/solve_diagnostics.png)
+- [`../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/localization_across_tasks.png`](../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/localization_across_tasks.png)
+- [`../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/localization_error_map.png`](../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/localization_error_map.png)
+- [`../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/localization_recovery_contrast.png`](../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/localization_recovery_contrast.png)
+- [`../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/solve_diagnostics.png`](../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/solve_diagnostics.png)
 
 ## Reproduce
 
@@ -79,18 +81,18 @@ Run the locked campaign:
 
 ```bash
 python3 scripts/visibility_comparison/run_visibility_campaign.py \
-  --config scripts/visibility_comparison/aws_f31b1_final_config.yaml \
-  --log-root logs/visibility_comparison/aws_f31b1_final_v1
+  --config scripts/visibility_comparison/warehouse_visibility_campaign.yaml \
+  --log-root logs/visibility_comparison/warehouse_visibility_campaign_v1
 ```
 
 Compute metrics from a completed campaign:
 
 ```bash
 python3 scripts/visibility_comparison/compute_paper_metrics.py \
-  --campaign-log logs/visibility_comparison/aws_f31b1_final_v1/campaign_log.json \
-  --gp-artifact paper_artifacts/gp/aws_gp_v7b/yolo_score_raw_gp.npz \
-  --out logs/visibility_comparison/aws_f31b1_final_v1/paper_metrics.csv \
-  --summary-out logs/visibility_comparison/aws_f31b1_final_v1/paper_summary.txt
+  --campaign-log logs/visibility_comparison/warehouse_visibility_campaign_v1/campaign_log.json \
+  --gp-artifact paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz \
+  --out logs/visibility_comparison/warehouse_visibility_campaign_v1/paper_metrics.csv \
+  --summary-out logs/visibility_comparison/warehouse_visibility_campaign_v1/paper_summary.txt
 ```
 
 ## Relevant Implementation Files
@@ -106,8 +108,8 @@ python3 scripts/visibility_comparison/compute_paper_metrics.py \
 
 - Raw logs and model weights are local/private unless packaged under
   `paper_artifacts/` or released externally.
-- One C2 run is infrastructure-invalid and should not be described as a robot
-  outcome.
+- The submitted-paper 12/20 vs 16/20 snapshot is historical and should not be
+  mixed into the current 15/20 vs 20/20 result surface.
 - New claims need a full evidence chain: world, detector, visibility data, GP,
   config, logs, metrics, figures, and wording.
 

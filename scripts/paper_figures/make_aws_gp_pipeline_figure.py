@@ -220,7 +220,7 @@ def main() -> int:
         "The GP affects the planner-facing image-space observation covariance; "
         "the floor layer remains a separate known traversability/forbidden-zone layer."
     )
-    caption_path = args.preview.with_name("gp_pipeline_aws_caption.txt")
+    caption_path = args.preview.with_name(f"{args.preview.stem}_caption.txt")
     caption_path.write_text(caption + "\n", encoding="utf-8")
 
     provenance = {
@@ -244,7 +244,7 @@ def main() -> int:
             "Forbidden/staging zones are drawn only as floor-layer context; they are not the GP.",
         ],
     }
-    provenance_path = args.preview.with_name("gp_pipeline_aws_provenance.json")
+    provenance_path = args.preview.with_name(f"{args.preview.stem}_provenance.json")
     provenance_path.write_text(json.dumps(provenance, indent=2, allow_nan=False), encoding="utf-8")
 
     print(f"wrote {args.out}")

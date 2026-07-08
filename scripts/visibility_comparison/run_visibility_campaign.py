@@ -32,7 +32,6 @@ LOGS_ROOT = REPO_ROOT / 'logs' / 'visibility_comparison'
 CONDITION_PLANNER = {
     'C1': 'constant_R_efe',
     'C2': 'visibility_aware_efe',
-    'C3': 'risk_only_ablation',
 }
 
 
@@ -61,6 +60,19 @@ def _validate_config(cfg: dict, path: Path) -> None:
                 f"Campaign config {path} has unfilled placeholder for '{key}': {cfg[key]!r}\n"
                 f"Verify the lambda mapping against the planner source and fill it in."
             )
+    for condition_id in cfg['conditions']:
+        if condition_id not in CONDITION_PLANNER:
+            raise RuntimeError(
+                f"Campaign config {path} uses unsupported active condition '{condition_id}'. "
+                f"Allowed conditions are: {', '.join(CONDITION_PLANNER)}"
+            )
+    for task_name, task_cfg in cfg['tasks'].items():
+        for condition_id in task_cfg.get('conditions', []):
+            if condition_id not in CONDITION_PLANNER:
+                raise RuntimeError(
+                    f"Task '{task_name}' in {path} uses unsupported active condition "
+                    f"'{condition_id}'. Allowed conditions are: {', '.join(CONDITION_PLANNER)}"
+                )
 
 
 def _terminate_process_group(pgid: int, *, grace_s: float = 3.0) -> None:
@@ -270,8 +282,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'process_noise_xy', 'process_noise_theta', 'risk_weight_obs',
         'ambiguity_weight', 'observation_risk_scale', 'ambiguity_term_scale',
         'control_weight', 'v_max', 'discount_gamma', 'yolo_conf_threshold',
-        'yolo_iou_threshold', 'heading_min_displacement_m',
-        'heading_bev_noise_sigma_m', 'odom_heading_timeout_s', 'optimizer_maxiter',
+        'yolo_iou_threshold', 'odom_heading_timeout_s', 'optimizer_maxiter',
         'optimizer_maxfun', 'optimizer_ftol', 'optimizer_gtol',
         'goal_prior_u_std_start', 'goal_prior_v_std_start',
         'goal_prior_u_std_final', 'goal_prior_v_std_final',
@@ -325,9 +336,6 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'local_replan_on_waypoint_change',
         'latency_compensate_plan_handoff',
         'use_simple_local_controller',
-        'local_tracking_use_odom_yaw',
-        'use_state_bev_yaw',
-        'use_state_bev_heading_correction',
         'use_truth_localization',
     )
     for key in bool_keys:
@@ -436,11 +444,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'encoder_noise_linear_additive_std:={cfg.get("encoder_noise_linear_additive_std", 0.004)}',
         f'encoder_noise_angular_additive_std:={cfg.get("encoder_noise_angular_additive_std", 0.020)}',
         f'encoder_noise_correlation_alpha:={cfg.get("encoder_noise_correlation_alpha", 0.80)}',
-        f'use_odom_heading_correction:={str(cfg.get("use_odom_heading_correction", True)).lower()}',
-        f'use_displacement_heading:={str(cfg.get("use_displacement_heading", False)).lower()}',
         f'odom_heading_timeout_s:={cfg.get("odom_heading_timeout_s", 0.75)}',
-        f'heading_min_displacement_m:={cfg.get("heading_min_displacement_m", 0.10)}',
-        f'heading_bev_noise_sigma_m:={cfg.get("heading_bev_noise_sigma_m", 0.05)}',
         f'yolo_model:={yolo_model}',
         f'yolo_device:={cfg.get("yolo_device", "")}',
         f'yolo_imgsz:={cfg.get("yolo_imgsz", 640)}',
@@ -456,10 +460,9 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'yolo_use_torchscript:={str(cfg.get("yolo_use_torchscript", False)).lower()}',
         f'yolo_warmup_iters:={cfg.get("yolo_warmup_iters", 3)}',
         f'yolo_inference_in_callback:={str(cfg.get("yolo_inference_in_callback", True)).lower()}',
-        f'keypoint_marker_world_z:={cfg.get("keypoint_marker_world_z", 0.0)}',
     ]
 
-    # Planner-specific args: pass GP artifact for C2/C3, locked weights
+    # Planner-specific args: pass GP artifact for C2, plus locked weights.
     if planner != 'constant_R_efe':
         cmd.append(f'visibility_artifact_path:={gp_artifact}')
 
@@ -492,8 +495,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'waypoint_spacing_m', 'waypoint_arrival_radius_m',
         'local_replan_min_remaining_s', 'local_replan_on_waypoint_change',
         'latency_compensate_plan_handoff', 'use_simple_local_controller',
-        'local_tracking_use_odom_yaw', 'use_state_bev_yaw',
-        'use_state_bev_heading_correction', 'cmd_publish_rate',
+        'cmd_publish_rate',
         'goal_prior_u_std_start', 'goal_prior_v_std_start',
         'goal_prior_u_std_final', 'goal_prior_v_std_final',
         'goal_tightening_power',
@@ -504,6 +506,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'use_belief_nogo_cost',
         'nogo_belief_kappa',
         'robot_collision_radius_m',
+        'terminate_on_geom_collision',
         'stuck_window_s', 'stuck_max_displacement_m',
         'stuck_max_goal_improvement_m', 'stuck_cmd_fraction_min',
         'stuck_idle_cmd_fraction_max',
@@ -691,6 +694,21 @@ def main() -> int:
 
         process = subprocess.Popen(cmd, start_new_session=True, env=run_env)
         pgid = os.getpgid(process.pid)
+
+        # Optional: stream-record the external camera for this run (opt-in).
+        recorder_pgid = None
+        if os.environ.get('CAMPAIGN_RECORD_CAMERA'):
+            cam_out = run_log_dir / 'camera_frames'
+            cam_out.mkdir(parents=True, exist_ok=True)
+            rec_proc = subprocess.Popen(
+                ['python3', str(REPO_ROOT / 'scripts/paper_figures/record_camera_stream.py'),
+                 '--out-dir', str(cam_out)],
+                start_new_session=True, env=run_env)
+            try:
+                recorder_pgid = os.getpgid(rec_proc.pid)
+            except Exception:
+                recorder_pgid = None
+
         timed_out = False
         no_first_cmd_timeout = False
         started_at = time.time()
@@ -720,6 +738,8 @@ def main() -> int:
                         break
                 time.sleep(2.0)
         finally:
+            if recorder_pgid is not None:
+                _terminate_process_group(recorder_pgid)
             _terminate_process_group(pgid)
             _force_fresh()
 

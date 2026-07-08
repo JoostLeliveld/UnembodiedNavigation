@@ -1,10 +1,10 @@
 {
   "figure": "gp_pipeline_aws",
   "world": "warehouse_aws.world.sdf",
-  "gp": "/home/joostleliveld/Thesis/UnembodiedNavigation/paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz",
+  "gp": "paper_artifacts/gp/archive/aws_gp_v7b_superseded/yolo_score_raw_gp.npz",
   "world_profile": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/config/world_profiles.yaml",
-  "out": "/home/joostleliveld/Thesis/thesis-report/figures/campaign/gp_pipeline_aws_v7.pdf",
-  "preview": "/home/joostleliveld/Thesis/UnembodiedNavigation/paper_artifacts/figures/gp_pipeline_aws.png",
+  "out": "docs/paper_vs_current/paper/figures/gp_pipeline_aws.pdf",
+  "preview": "docs/paper_vs_current/paper/figures/gp_pipeline_aws.png",
   "r_visible_uv": 2.5,
   "r_miss_uv": 40.0,
   "num_training_points": 238,

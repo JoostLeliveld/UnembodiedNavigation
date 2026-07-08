@@ -1,11 +1,14 @@
 # Experiment Registry
 
-Separates paper evidence from exploratory diagnostics. A run is not paper
-evidence unless the full artifact chain is present. Aligned 2026-06-12.
+Separates active current evidence, the historical submitted-paper snapshot, and
+exploratory diagnostics. A run is not evidence for the current story unless the
+full artifact chain is present. Aligned 2026-07-03.
 
-Only the current paper-ready artifact bundle is kept in the public tree. Raw
+The active runtime surface is `docs/current_runtime_contract.yaml` plus
+`scripts/visibility_comparison/warehouse_visibility_campaign.yaml`. Raw
 campaign logs, training runs, and historical diagnostics are local/private
-material unless explicitly packaged under `paper_artifacts/`.
+material unless explicitly packaged under `paper_artifacts/` or
+`docs/paper_vs_current/`.
 
 ## Evidence Chain
 
@@ -20,26 +23,27 @@ material unless explicitly packaged under `paper_artifacts/`.
 | Figures | generated from logs, not hand-drawn behavior claims |
 | Paper wording | claims match the logs and metrics |
 
-## Current Paper-Facing Artifacts (in repo, KEEP)
+## Current Active Artifacts (in repo, KEEP)
 
 | Status | Asset | Notes |
 | --- | --- | --- |
 | CURRENT | `src/sim/gazebo_worlds/worlds/warehouse_aws.world.sdf` | Locked AWS warehouse geometry and external-camera pose `(0.0, -5.5, 4.8)`. |
-| LOCAL | `logs/perception_models/warehouse_yolo_detector_v1/model.pt` | Paper detector checkpoint trained from simulator semantic-segmentation labels. Not tracked in git; runtime localization uses the selected bounding-box bottom centre. |
+| LOCAL | `logs/perception_models/warehouse_yolo_detector_v1/model.pt` | Current detector checkpoint trained from simulator semantic-segmentation labels. Not tracked in git; runtime localization uses the selected bounding-box bottom centre. |
 | CURRENT | `paper_artifacts/perception/warehouse_yolo_detector_v1/` | Public detector metadata: manifest, validation metrics, training plot, and representative validation image. |
 | CURRENT | `paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz` | Paper GP on the locked camera, fitted with length scale `0.90`, noise variance `0.05`, beta `0.5`, grid `220 x 200`, `P_conservative_plan_map`. |
-| CURRENT | `scripts/visibility_comparison/warehouse_visibility_campaign.yaml` | Locked robustness-campaign config: four tasks, five seeds, C1/C2, `ambiguity_weight=1.0`, `visibility_weight=0.0`, `use_belief_nogo_cost=true`, `nogo_belief_kappa=1.0`, `yolo_use_masks=false`. |
-| TO REGENERATE | `paper_artifacts/metrics/robustness_metrics.csv` | Previous generated metrics were archived with the old campaign bundle. Regenerate from a completed canonical campaign with `scripts/visibility_comparison/build_paper_outputs.sh`. |
-| TO REGENERATE | `paper_artifacts/figures/robustness_spread.png` | Regenerate together with metrics from a completed canonical campaign. |
-| TO REGENERATE | `paper_artifacts/figures/paired_mechanism_taskA.pdf` | Previous generated copies were archived because their provenance used superseded artifact names. Regenerate with `scripts/paper_figures/make_paired_mechanism.py` after the canonical campaign/log source is selected. |
+| CURRENT | `scripts/visibility_comparison/warehouse_visibility_campaign.yaml` | Current honest-campaign config: four tasks, five seeds, C1/C2, `ambiguity_weight=1.0`, `visibility_weight=0.0`, `use_belief_nogo_cost=true`, `nogo_belief_kappa=1.0`, `yolo_use_masks=false`, `yolo_imgsz=640` inference. |
+| CURRENT | `docs/current_runtime_contract.yaml` | Machine-readable active runtime contract checked against the campaign YAML. |
+| CURRENT | `docs/paper_vs_current/current/` | Current result surface from `logs/visibility_comparison/honest_campaign_v1`: C1 15/20 clean goals with 4/20 GT geometry breaches and 0 physics contacts; C2 20/20 clean goals with 0 breaches. |
+| HISTORICAL | `docs/paper_vs_current/paper/` | Submitted-paper comparison snapshot: C1 12/20 and C2 16/20 with the caveats recorded there and in `docs/paper_runtime_contract.yaml`. |
 
-## Current Paper Evidence Status
+## Current Evidence Status
 
-**Robustness campaign:** canonical protocol ready; generated metrics need rerun.
+**Robustness campaign:** current honest-campaign evidence is packaged under
+`docs/paper_vs_current/current/`.
 
-The canonical run matrix is four tasks, two conditions, and five seeds per
-condition. Old generated metrics and partial campaign bundles are archived until
-the canonical detector/GP/config names are used end to end.
+The active run matrix is four tasks, two conditions, and five seeds per
+condition. The current headline is C1 15/20 clean goals and C2 20/20 clean
+goals, with the C1 failures concentrated on `route_west_to_a1_upper`.
 
 ## Superseded / Archived
 
@@ -64,5 +68,7 @@ the canonical detector/GP/config names are used end to end.
 ## Adding A New Evidence Line
 
 Add a row only after the chain is complete. Until then mark `exploratory` or
-`diagnostic` and avoid paper-result language. Update this registry and
-`docs/paper_runtime_contract.yaml` together.
+`diagnostic` and avoid current-result language. Update this registry and
+`docs/current_runtime_contract.yaml` together when the active runtime changes;
+update `docs/paper_runtime_contract.yaml` only for historical paper-provenance
+clarifications.

@@ -3,10 +3,11 @@
 and C2 on the GP reliability map, marking collided runs. Shows route consistency + spread
 + where the constant-R baseline crashes vs the visibility-aware route staying observable.
 
-Single source of truth: per-run outcomes (clean / collision) come from the SAME metrics CSV
-as tab:results (paper_artifacts/metrics/robustness_metrics.csv); trajectories are loaded from
-the frozen campaign archive matched by (task, condition, seed). This keeps the panel counts
-and collision crosses consistent with the results table by construction."""
+For frozen paper figures, per-run outcomes come from the archived metrics CSV
+used by the paper table. For newer campaign snapshots, the same counts can be
+derived from campaign_log.json + run_summary.json so the figure is not tied to
+the old metrics artifact.
+"""
 import sys, json, glob, math, csv
 from pathlib import Path
 import numpy as np
@@ -35,7 +36,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # separated from later rerun attempts so the figure stays consistent with the
 # table inputs until the campaign is deliberately replaced.
 CAMP = ROOT/"logs/visibility_comparison/_paper_runs/robustness_campaign_keepout_lanegraph_v1"
-METRICS = ROOT/"paper_artifacts/metrics/robustness_metrics.csv"
+METRICS = ROOT/"paper_artifacts/metrics/archive/robustness_metrics.csv"
 GPZ  = ROOT/"paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz"
 CONFIG = ROOT/"scripts/visibility_comparison/warehouse_visibility_campaign.yaml"
 OUT  = ROOT/"paper_artifacts/figures/robustness_spread.png"
@@ -61,29 +62,112 @@ import argparse as _argparse  # noqa: E402
 _ap = _argparse.ArgumentParser(add_help=False)
 _ap.add_argument("--campaign-root", default=str(CAMP))
 _ap.add_argument("--metrics", default=str(METRICS))
+_ap.add_argument("--gp", default=str(GPZ))
+_ap.add_argument("--config", default=str(CONFIG))
 _ap.add_argument("--out", default=str(OUT))
 _args, _ = _ap.parse_known_args()
 CAMP = Path(_args.campaign_root) if Path(_args.campaign_root).is_absolute() else ROOT / _args.campaign_root
 METRICS = Path(_args.metrics) if Path(_args.metrics).is_absolute() else ROOT / _args.metrics
+GPZ = Path(_args.gp) if Path(_args.gp).is_absolute() else ROOT / _args.gp
+CONFIG = Path(_args.config) if Path(_args.config).is_absolute() else ROOT / _args.config
 OUT = Path(_args.out) if Path(_args.out).is_absolute() else ROOT / _args.out
 PROV = OUT.with_suffix(".provenance.json")
 
-# ---- outcomes from the metrics CSV (same source as tab:results) ----
 def _ival(x):
     try: return int(float(x))
     except (TypeError, ValueError): return 0
+
+def _bval(x):
+    if isinstance(x, bool):
+        return x
+    if x is None:
+        return False
+    if isinstance(x, (int, float)):
+        return bool(x)
+    return str(x).strip().lower() in ("1", "true", "yes", "y")
+
+def _read_json(path):
+    try:
+        return json.load(open(path))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+def _rel(p):
+    try:
+        return str(Path(p).relative_to(ROOT))
+    except ValueError:
+        return str(p)
+
 OUTCOME = {}                       # (task, cond, seed) -> {"collided": bool, "clean": bool}
 COUNTS = {}                        # (task, cond) -> [n_clean, n_coll, n_total]
-for r in csv.DictReader(open(METRICS)):
-    task_name = CANONICAL_TASK.get(r["task"], r["task"])
-    key = (task_name, r["condition"], str(r["seed"]))
-    OUTCOME[key] = {"collided": bool(_ival(r.get("is_collision"))), "clean": bool(_ival(r.get("is_clean_success")))}
-    ck = (task_name, r["condition"]); COUNTS.setdefault(ck, [0, 0, 0])
-    COUNTS[ck][0] += _ival(r.get("is_clean_success")); COUNTS[ck][1] += _ival(r.get("is_collision")); COUNTS[ck][2] += 1
+COUNT_SOURCE = None
+if METRICS.is_file():
+    # Outcomes from the metrics CSV (same source as the paper table).
+    COUNT_SOURCE = METRICS
+    for r in csv.DictReader(open(METRICS)):
+        task_name = CANONICAL_TASK.get(r["task"], r["task"])
+        cond = r["condition"]
+        seed = str(r["seed"])
+        collided = bool(_ival(r.get("is_collision")))
+        clean = bool(_ival(r.get("is_clean_success")))
+        key = (task_name, cond, seed)
+        OUTCOME[key] = {"collided": collided, "clean": clean}
+        ck = (task_name, cond); COUNTS.setdefault(ck, [0, 0, 0])
+        COUNTS[ck][0] += int(clean); COUNTS[ck][1] += int(collided); COUNTS[ck][2] += 1
+else:
+    # Outcomes from the campaign's selected 40 runs. This path is used for the
+    # current honest campaign, where no separate paper-table CSV is committed.
+    campaign_log = CAMP / "campaign_log.json"
+    COUNT_SOURCE = campaign_log
+    for _key, entry in _read_json(campaign_log).items():
+        task_name = CANONICAL_TASK.get(str(entry.get("task", "")), str(entry.get("task", "")))
+        cond = str(entry.get("condition", ""))
+        seed = str(entry.get("seed", ""))
+        run_dir = Path(str(entry.get("run_dir", "")))
+        if not run_dir.is_absolute():
+            run_dir = ROOT / run_dir
+        summary = _read_json(run_dir / "run_summary.json")
+        completion = str(summary.get("completion_reason") or entry.get("completion_reason") or entry.get("outcome") or "")
+        collided = (
+            _bval(summary.get("collision_any"))
+            or _bval(summary.get("collision_geom"))
+            or completion == "collision"
+        )
+        clean = (
+            (completion in ("goal_reached", "goal_reached_stable") or _bval(summary.get("goal_reached")) or _bval(entry.get("goal_reached")))
+            and not collided
+            and float(summary.get("max_obstacle_penetration_m", 0.0) or 0.0) <= 0.0
+            and float(summary.get("max_wall_penetration_m", 0.0) or 0.0) <= 0.0
+        )
+        key = (task_name, cond, seed)
+        OUTCOME[key] = {"collided": collided, "clean": clean, "run_dir": str(run_dir)}
+        ck = (task_name, cond); COUNTS.setdefault(ck, [0, 0, 0])
+        COUNTS[ck][0] += int(clean); COUNTS[ck][1] += int(collided); COUNTS[ck][2] += 1
 
 def load_runs(task, cond):
     """Return [(states Nx2, collided)] per seed; trajectory from archive, collided from CSV."""
     out = []
+    selected = [
+        (seed, Path(meta["run_dir"]))
+        for (task_name, cond_name, seed), meta in sorted(OUTCOME.items(), key=lambda x: int(x[0][2]) if str(x[0][2]).isdigit() else 999)
+        if task_name == task and cond_name == cond and meta.get("run_dir")
+    ]
+    if selected:
+        for seed, run_dir in selected:
+            csv_path = run_dir / "experiment.csv"
+            if not csv_path.is_file():
+                continue
+            tx, ty = [], []
+            for row in csv.DictReader(open(csv_path)):
+                try: x = float(row["gt_x"]); y = float(row["gt_y"])
+                except (KeyError, ValueError): continue
+                if math.isfinite(x) and math.isfinite(y): tx.append(x); ty.append(y)
+            if not tx:
+                continue
+            collided = OUTCOME.get((task, cond, str(seed)), {}).get("collided", False)
+            out.append((np.column_stack([tx, ty]), collided))
+        return out
+
     task_dirs = [task]
     legacy = LEGACY_TASK_DIRS.get(task)
     if legacy:
@@ -131,26 +215,21 @@ for ax, task in zip(axes.ravel(), TASKS):
         st0 = r0[0][0]; ax.scatter([st0[0, 0]], [st0[0, 1]], s=80, c="#16a34a", edgecolor="k", zorder=10)
     c1 = COUNTS.get((task, "C1"), [0, 0, 0]); c2 = COUNTS.get((task, "C2"), [0, 0, 0])
     ax.set_title(f"{SHORT[task]}\n"
-                 f"C1 {c1[0]}/{c1[2]} goal, {c1[1]} coll  |  C2 {c2[0]}/{c2[2]} goal, {c2[1]} coll",
+                 f"C1 {c1[0]}/{c1[2]} goal, {c1[1]} safe-stall  |  C2 {c2[0]}/{c2[2]} goal, {c2[1]} safe-stall",
                  fontsize=11, fontweight="bold")
     ax.set_xlim(-5.6, 5.4); ax.set_ylim(-3.7, 5.0); ax.set_xticks([]); ax.set_yticks([])
 handles = [Line2D([0], [0], color="#ff2d2d", lw=2.2, label="C1 constant-$R$ (per seed)"),
            Line2D([0], [0], color="#1a1aff", lw=2.2, label="C2 visibility-aware (per seed)"),
-           Line2D([0], [0], marker="x", color="#333", lw=0, markersize=10, label="collision"),
+           Line2D([0], [0], marker="x", color="#333", lw=0, markersize=10, label="safe stall (0 region-exit)"),
            Line2D([0], [0], marker="o", color="none", markerfacecolor="#16a34a", markeredgecolor="k", markersize=10, label="start")]
 fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=11, frameon=False, bbox_to_anchor=(0.5, -0.01))
 fig.tight_layout(rect=[0, 0.035, 1, 1.0]); OUT.parent.mkdir(parents=True, exist_ok=True)
 fig.savefig(OUT, dpi=170, bbox_inches="tight")
-def _rel(p):
-    try:
-        return str(Path(p).relative_to(ROOT))
-    except ValueError:
-        return str(p)
 PROV.write_text(json.dumps({
     "figure": "robustness_spread",
     "layout": "2x2",
     "trajectory_source": _rel(CAMP),
-    "counts_source": _rel(METRICS),
+    "counts_source": _rel(COUNT_SOURCE),
     "gp": _rel(GPZ),
     "config": _rel(CONFIG),
     "tasks": TASKS,

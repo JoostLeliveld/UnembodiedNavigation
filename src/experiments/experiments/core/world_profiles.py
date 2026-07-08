@@ -14,7 +14,7 @@ from unav_common.occlusion_geometry import (
 )
 
 
-VALID_PLANNERS = {"visibility_aware_efe", "risk_only_ablation", "constant_R_efe"}
+VALID_PLANNERS = {"visibility_aware_efe", "constant_R_efe"}
 
 
 def load_world_profiles(path: str) -> Dict[str, Any]:

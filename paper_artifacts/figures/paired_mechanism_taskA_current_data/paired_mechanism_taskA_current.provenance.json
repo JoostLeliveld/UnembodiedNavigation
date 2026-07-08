@@ -9,6 +9,7 @@
     "paper_artifacts/figures/paired_mechanism_taskA_current_data/C1/run_manifest.json",
     "paper_artifacts/figures/paired_mechanism_taskA_current_data/C1/run_summary.json",
     "paper_artifacts/figures/paired_mechanism_taskA_current_data/C1/tasks.yaml",
+    "paper_artifacts/figures/paired_mechanism_taskA_current_data/C1/world_profiles.yaml",
     "paper_artifacts/figures/paired_mechanism_taskA_current_data/C2/experiment.csv",
     "paper_artifacts/figures/paired_mechanism_taskA_current_data/C2/perception.csv",
     "paper_artifacts/figures/paired_mechanism_taskA_current_data/C2/plan_samples.csv",
@@ -18,12 +19,13 @@
     "paper_artifacts/figures/paired_mechanism_taskA_current_data/C2/run_manifest.json",
     "paper_artifacts/figures/paired_mechanism_taskA_current_data/C2/run_summary.json",
     "paper_artifacts/figures/paired_mechanism_taskA_current_data/C2/tasks.yaml",
+    "paper_artifacts/figures/paired_mechanism_taskA_current_data/C2/world_profiles.yaml",
     "paper_artifacts/figures/paired_mechanism_taskA_current_data/campaign_log.json",
     "paper_artifacts/figures/paired_mechanism_taskA_current_data/warehouse_visibility_campaign.yaml",
     "paper_artifacts/figures/paired_mechanism_taskA_current_data/gp_manifest.json"
   ],
   "figure_layout": "Two large route maps plus one full-width ground-truth belief error panel. Map panels show global plan, executed trajectory, belief mean, continuous 2-sigma belief band, and lightly styled YOLO update/miss markers.",
-  "generated_at": "2026-07-01T12:12:30.503976+00:00",
+  "generated_at": "2026-07-02T10:36:55.409021+00:00",
   "output_pdf": "paper_artifacts/figures/paired_mechanism_taskA_current.pdf",
   "script": "scripts/paper_figures/make_paired_mechanism.py",
   "selected_runs": {
@@ -31,13 +33,15 @@
       "completion_reason": "goal_reached",
       "mean_belief_error_gt_after_first_cmd_m": null,
       "mean_error_plotted_m": 0.09256764554319273,
-      "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/paired_mechanism_current_taskA/route_apron_to_a3_mid/C1/seed0/experiment_20260701_123150"
+      "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/paired_mechanism_current_taskA/route_apron_to_a3_mid/C1/seed0/experiment_20260701_123150",
+      "truth_source": "GROUND TRUTH (gt_x/gt_y, belief_error_gt_m)"
     },
     "C2": {
       "completion_reason": "goal_reached",
       "mean_belief_error_gt_after_first_cmd_m": null,
       "mean_error_plotted_m": 0.07619553628873908,
-      "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/paired_mechanism_current_taskA/route_apron_to_a3_mid/C2/seed0/experiment_20260701_123303"
+      "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/paired_mechanism_current_taskA/route_apron_to_a3_mid/C2/seed0/experiment_20260701_123303",
+      "truth_source": "GROUND TRUTH (gt_x/gt_y, belief_error_gt_m)"
     }
   },
   "settings": {
@@ -63,6 +67,8 @@
     "optimizer_maxfun": 360,
     "optimizer_maxiter": 60,
     "optimizer_route_seed_mode": "lane_graph",
+    "plotted_truth_source_C1": "GROUND TRUTH (gt_x/gt_y, belief_error_gt_m)",
+    "plotted_truth_source_C2": "GROUND TRUTH (gt_x/gt_y, belief_error_gt_m)",
     "seed": 0,
     "task": "route_apron_to_a3_mid",
     "use_belief_nogo_cost": true,

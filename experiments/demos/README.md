@@ -2,19 +2,21 @@
 
 [Back to experiments module](../README.md)
 
-Planned media paths are story slots, not tracked files yet. Existing visuals are
-linked from `paper_artifacts/`.
+Planned media paths are story slots, not tracked files yet. Current visuals are
+linked from `docs/paper_vs_current/current/`; submitted-paper-era diagnostics are
+kept under explicit archive paths.
 
 ## Existing Assets
 
 | Asset | Use |
 | --- | --- |
-| [`../../paper_artifacts/figures/robustness_spread.png`](../../paper_artifacts/figures/robustness_spread.png) | Main campaign trajectory map. |
-| [`../../paper_artifacts/metrics/robustness_summary.txt`](../../paper_artifacts/metrics/robustness_summary.txt) | Human-readable metrics table. |
-| [`../../paper_artifacts/campaigns/robustness_v2_partialoccl/localization_across_tasks.png`](../../paper_artifacts/campaigns/robustness_v2_partialoccl/localization_across_tasks.png) | Additional localization campaign diagnostic. |
-| [`../../paper_artifacts/campaigns/robustness_v2_partialoccl/localization_error_map.png`](../../paper_artifacts/campaigns/robustness_v2_partialoccl/localization_error_map.png) | Spatial localization-error diagnostic. |
-| [`../../paper_artifacts/campaigns/robustness_v2_partialoccl/localization_recovery_contrast.png`](../../paper_artifacts/campaigns/robustness_v2_partialoccl/localization_recovery_contrast.png) | Recovery contrast diagnostic. |
-| [`../../paper_artifacts/campaigns/robustness_v2_partialoccl/solve_diagnostics.png`](../../paper_artifacts/campaigns/robustness_v2_partialoccl/solve_diagnostics.png) | Additional solve diagnostic. |
+| [`../../docs/paper_vs_current/current/figures/robustness_spread_current.png`](../../docs/paper_vs_current/current/figures/robustness_spread_current.png) | Current 40-run trajectory map. |
+| [`../../docs/paper_vs_current/current/README.md`](../../docs/paper_vs_current/current/README.md) | Human-readable current metrics table. |
+| [`../../paper_artifacts/metrics/archive/robustness_summary.txt`](../../paper_artifacts/metrics/archive/robustness_summary.txt) | Historical submitted-paper metrics table. |
+| [`../../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/localization_across_tasks.png`](../../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/localization_across_tasks.png) | Archived localization campaign diagnostic. |
+| [`../../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/localization_error_map.png`](../../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/localization_error_map.png) | Archived spatial localization-error diagnostic. |
+| [`../../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/localization_recovery_contrast.png`](../../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/localization_recovery_contrast.png) | Archived recovery contrast diagnostic. |
+| [`../../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/solve_diagnostics.png`](../../paper_artifacts/campaigns/archive/robustness_v2_partialoccl/solve_diagnostics.png) | Archived solve diagnostic. |
 
 ## Planned Media Slots
 
@@ -29,6 +31,6 @@ linked from `paper_artifacts/`.
 ## Capture Checklist
 
 1. Use only runs that match the current campaign metrics CSV.
-2. Label C1 and C2 consistently with the paper-facing names.
+2. Label C1 and C2 consistently with the current names.
 3. Mark collisions, near-success, and infrastructure-invalid runs explicitly.
 4. Keep continuous localization summaries scoped to clean successes only.

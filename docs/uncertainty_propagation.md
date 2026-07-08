@@ -1,6 +1,6 @@
 # Uncertainty propagation in the external-camera EFE navigation system
 
-Canonical, paper-facing description of how odometry, encoder, heading and
+Canonical current description of how odometry, encoder, heading and
 observation uncertainty are propagated, and how that couples to the obstacle cost
 and the global plan. Written 2026-06-11 to fix recurring terminology confusion and
 to document the now-active analytical process-noise model. Supersedes scattered

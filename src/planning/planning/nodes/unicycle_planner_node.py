@@ -201,7 +201,6 @@ class UnicyclePlannerNode(Node):
         # 'pure_pursuit' = lookahead. 'ff_fb' = path tangent/curvature feedforward
         # + cross-track feedback on belief.
         _declare_if_not('local_controller_type', 'turn_then_go')
-        _declare_if_not('local_tracking_use_odom_yaw', False)
 
         # Pixel correction params
         _declare_if_not('use_pixel_correction', False)
@@ -233,30 +232,9 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('pixel_correction_nis_reject_cov_max_streak', 8)
         _declare_if_not('pixel_correction_approx', 'AUTO')
         _declare_if_not('skip_stale_pixel_correction', True)
-        _declare_if_not('use_pixel_heading_correction', True)
-        _declare_if_not('use_odom_heading_correction', True)
-        # When true, the local controller steers on the camera keypoint BEV
-        # heading from /state/bev (when fresh) instead of raw odom yaw. Default
-        # off => no change to existing runs.
-        _declare_if_not('use_state_bev_yaw', False)
-        # When true, the planner belief itself also receives the fresh
-        # /state/bev yaw as an explicit heading measurement. This keeps
-        # planning, safety, and local tracking in the same heading frame.
-        _declare_if_not('use_state_bev_heading_correction', False)
-        _declare_if_not('odom_heading_correction_mode', 'kalman')
-        _declare_if_not('odom_heading_timeout_s', 0.75)
-        _declare_if_not('odom_heading_sigma_rad', 0.08)
-        _declare_if_not('odom_yaw_offset_rad', 0.0)
         _declare_if_not('odom_topic', '/odom_noisy')
         _declare_if_not('use_odom_for_predict', True)
-        _declare_if_not('heading_pixel_noise_sigma', 0.0)
-        _declare_if_not('pixel_heading_noise_floor_rad', 0.01)
-        _declare_if_not('use_displacement_heading', False)
-        _declare_if_not('heading_min_displacement_m', 0.10)
-        _declare_if_not('heading_max_displacement_m', 1.0)
-        _declare_if_not('heading_bev_noise_sigma_m', 0.05)
-        _declare_if_not('clamp_pixel_uv_theta_without_yaw', False)
-        _declare_if_not('heading_update_mode', 'odom_overwrite')
+        _declare_if_not('heading_update_mode', 'camera_xy_only')
         _declare_if_not('min_state_cov', 1e-6)
         _declare_if_not('debug_runtime', False)
         _declare_if_not('debug_log_period_s', 1.0)
@@ -419,9 +397,6 @@ class UnicyclePlannerNode(Node):
         self.local_controller_type = str(
             self.get_parameter('local_controller_type').value
         ).strip().lower()
-        self.local_tracking_use_odom_yaw = _as_bool(
-            self.get_parameter('local_tracking_use_odom_yaw').value
-        )
 
         self.use_pixel_correction = _as_bool(self.get_parameter('use_pixel_correction').value)
         self.pixel_topic = self.get_parameter('pixel_topic').value
@@ -459,51 +434,11 @@ class UnicyclePlannerNode(Node):
         self.skip_stale_pixel_correction = _as_bool(
             self.get_parameter('skip_stale_pixel_correction').value
         )
-        self.use_pixel_heading_correction = _as_bool(
-            self.get_parameter('use_pixel_heading_correction').value
-        )
-        self.use_odom_heading_correction = _as_bool(
-            self.get_parameter('use_odom_heading_correction').value
-        )
-        self.odom_heading_correction_mode = str(
-            self.get_parameter('odom_heading_correction_mode').value
-        ).strip().lower()
         self.odom_topic = str(self.get_parameter('odom_topic').value)
         self.use_odom_for_predict = _as_bool(self.get_parameter('use_odom_for_predict').value)
-        self.use_state_bev_yaw = _as_bool(self.get_parameter('use_state_bev_yaw').value)
-        self.use_state_bev_heading_correction = _as_bool(
-            self.get_parameter('use_state_bev_heading_correction').value
-        )
-        if self.odom_heading_correction_mode not in ('kalman', 'overwrite'):
-            raise RuntimeError("odom_heading_correction_mode must be one of: kalman, overwrite")
-        self.odom_heading_timeout_s = float(self.get_parameter('odom_heading_timeout_s').value)
-        self.odom_heading_sigma_rad = float(self.get_parameter('odom_heading_sigma_rad').value)
-        self.odom_yaw_offset_rad = float(self.get_parameter('odom_yaw_offset_rad').value)
-        self.heading_pixel_noise_sigma = float(
-            self.get_parameter('heading_pixel_noise_sigma').value
-        )
-        self.pixel_heading_noise_floor_rad = float(
-            self.get_parameter('pixel_heading_noise_floor_rad').value
-        )
-        self.use_displacement_heading = _as_bool(
-            self.get_parameter('use_displacement_heading').value
-        )
-        self.heading_min_displacement_m = float(
-            self.get_parameter('heading_min_displacement_m').value
-        )
-        self.heading_max_displacement_m = float(
-            self.get_parameter('heading_max_displacement_m').value
-        )
-        self.heading_bev_noise_sigma_m = float(
-            self.get_parameter('heading_bev_noise_sigma_m').value
-        )
-        self.clamp_pixel_uv_theta_without_yaw = _as_bool(
-            self.get_parameter('clamp_pixel_uv_theta_without_yaw').value
-        )
         self.heading_update_mode = str(self.get_parameter('heading_update_mode').value).strip().lower()
-        # [DEPRECATED_LEGACY_CLEANUP] odom_measurement and visual_heading are legacy heading update modes (not used in paper-facing runs)
-        if self.heading_update_mode not in ('odom_overwrite', 'odom_measurement', 'camera_xy_only', 'visual_heading'):
-            raise RuntimeError("heading_update_mode must be one of: odom_overwrite, odom_measurement, camera_xy_only, visual_heading")
+        if self.heading_update_mode != 'camera_xy_only':
+            raise RuntimeError("heading_update_mode must be 'camera_xy_only' for current active runs")
         self.min_state_cov = float(self.get_parameter('min_state_cov').value)
         self.cov_eig_floor = 1e-9
         self._heading_anchor_applied = False
@@ -609,12 +544,6 @@ class UnicyclePlannerNode(Node):
         self._goal_received_logged = False
         self.pixel_meas = None
         self.pixel_stamp = None
-        self.pixel_yaw_meas = None
-        self.pixel_heading_sigma = math.nan
-        self.odom_yaw_meas = None
-        self.odom_stamp = None
-        self._prev_bev_x = None
-        self._prev_bev_y = None
         self._latest_detection_diag = None
         self._last_correction_log = 0.0
         self._last_correction_stamp = None
@@ -671,11 +600,7 @@ class UnicyclePlannerNode(Node):
             f"use_pixel_correction={self.use_pixel_correction}, "
             f"cmd_topic={self.cmd_topic}, "
             f"pixel_correction_approx={self.pixel_correction_approx}, "
-            f"use_pixel_heading_correction={self.use_pixel_heading_correction}, "
-            f"use_odom_heading_correction={self.use_odom_heading_correction}, "
-            f"use_state_bev_heading_correction={self.use_state_bev_heading_correction}, "
-            f"odom_heading_correction_mode={self.odom_heading_correction_mode}, "
-            f"clamp_pixel_uv_theta_without_yaw={self.clamp_pixel_uv_theta_without_yaw}, "
+            f"heading_update_mode={self.heading_update_mode}, "
             f"debug_runtime={self.debug_runtime})"
         )
 
@@ -862,8 +787,6 @@ class UnicyclePlannerNode(Node):
         except (AttributeError, TypeError, ValueError):
             stamp_s = self.get_clock().now().nanoseconds * 1e-9
         with self._data_lock:
-            self.odom_yaw_meas = wrap_angle(float(yaw + self.odom_yaw_offset_rad))
-            self.odom_stamp = msg.header.stamp
             self.odom_vel = np.array([v_odom, w_odom], dtype=float)
             self._odom_log.append((stamp_s, v_odom, w_odom))
             cutoff = stamp_s - self._CMD_LOG_MAX_S
@@ -888,100 +811,6 @@ class UnicyclePlannerNode(Node):
         with self._data_lock:
             self.truth_pose = (x, y, yaw)
             self.truth_pose_stamp = msg.header.stamp
-
-    def _fresh_odom_heading_locked(self, ref_stamp) -> tuple[float | None, float]:
-        if self.odom_yaw_meas is None or self.odom_stamp is None:
-            return None, math.nan
-        try:
-            age = abs(self._stamp_to_float(ref_stamp) - self._stamp_to_float(self.odom_stamp))
-        except (AttributeError, TypeError, ValueError):
-            return None, math.nan
-        if self.odom_heading_timeout_s > 0.0 and age > self.odom_heading_timeout_s:
-            return None, age
-        return float(self.odom_yaw_meas), float(age)
-
-    def _fresh_state_bev_heading_locked(self, ref_stamp) -> tuple[float | None, float]:
-        """Camera keypoint BEV heading from the latest fresh /state/bev message.
-
-        Returns (yaw_rad, sigma_rad) or (None, nan) if no fresh state estimate.
-        Must be called with _data_lock held.
-        """
-        if self.state_msg is None:
-            return None, math.nan
-        if not self._state_msg_is_fresh(self.state_msg):
-            return None, math.nan
-        yaw = self._yaw_from_quaternion(self.state_msg.pose.pose.orientation)
-        cov = self.state_msg.pose.covariance
-        sigma = (
-            math.sqrt(float(cov[35]))
-            if (cov is not None and len(cov) > 35 and float(cov[35]) > 0.0)
-            else self.odom_heading_sigma_rad
-        )
-        sigma = float(max(sigma, self.pixel_heading_noise_floor_rad, 1e-6))
-        return float(yaw), sigma
-
-    def _heading_sigma_from_diag(self, diag) -> float:
-        sigma_floor = float(max(self.pixel_heading_noise_floor_rad, 1e-6))
-        if not diag:
-            return sigma_floor
-        diag_stamp = float(diag.get('stamp', math.nan))
-        if not math.isfinite(diag_stamp):
-            return sigma_floor
-        sep = float(diag.get('separation_px', math.nan))
-        if not math.isfinite(sep) or sep <= 1e-6:
-            return sigma_floor
-        sigma_sep = math.sqrt(2.0) * max(float(self.heading_pixel_noise_sigma), 1e-6) / max(sep, 1.0)
-        return float(max(sigma_floor, sigma_sep))
-
-    @staticmethod
-    def _fuse_heading_measurement(m, S, yaw_meas: float, yaw_sigma: float):
-        m = np.asarray(m, dtype=float).copy()
-        S = np.asarray(S, dtype=float).copy()
-        if (
-            m.shape[0] < 3
-            or S.shape[0] < 3
-            or S.shape[1] < 3
-            or not math.isfinite(float(yaw_meas))
-            or not math.isfinite(float(yaw_sigma))
-            or float(yaw_sigma) <= 0.0
-        ):
-            return m, S, False, math.nan, math.nan
-        P_theta = S[:, 2].copy()
-        innov_theta = wrap_angle(float(yaw_meas) - float(m[2]))
-        S_theta = float(S[2, 2] + float(yaw_sigma) ** 2)
-        if S_theta <= 1e-12:
-            return m, S, False, innov_theta, math.nan
-        K_theta = P_theta / S_theta
-        m = m + K_theta * innov_theta
-        m[2] = wrap_angle(m[2])
-        S = S - np.outer(P_theta, P_theta) / S_theta
-        S = (S + S.T) / 2.0
-        return m, S, True, innov_theta, float(K_theta[2]) if K_theta.size >= 3 else math.nan
-
-    @staticmethod
-    def _overwrite_heading_measurement(m, S, yaw_meas: float, yaw_sigma: float):
-        m = np.asarray(m, dtype=float).copy()
-        S = np.asarray(S, dtype=float).copy()
-        if (
-            m.shape[0] < 3
-            or S.shape[0] < 3
-            or S.shape[1] < 3
-            or not math.isfinite(float(yaw_meas))
-        ):
-            return m, S, False, math.nan, math.nan
-        innov_theta = wrap_angle(float(yaw_meas) - float(m[2]))
-        m[2] = wrap_angle(float(yaw_meas))
-        if math.isfinite(float(yaw_sigma)) and float(yaw_sigma) > 0.0:
-            S[2, :] = 0.0
-            S[:, 2] = 0.0
-            S[2, 2] = float(yaw_sigma) ** 2
-        S = (S + S.T) / 2.0
-        return m, S, True, innov_theta, 1.0
-
-    def _apply_heading_measurement(self, m, S, yaw_meas: float, yaw_sigma: float, *, source_code: float):
-        if source_code == 2.0 and self.odom_heading_correction_mode == 'overwrite':
-            return self._overwrite_heading_measurement(m, S, yaw_meas, yaw_sigma)
-        return self._fuse_heading_measurement(m, S, yaw_meas, yaw_sigma)
 
     @staticmethod
     def _stamp_to_float(stamp) -> float:
@@ -1061,53 +890,6 @@ class UnicyclePlannerNode(Node):
             return None
         return diag_ref
 
-    def _displacement_heading_locked(self, u: float, v: float):
-        """Estimate heading from displacement between consecutive BEV detections.
-
-        Must be called with _data_lock held. Returns (yaw_rad, sigma_rad) or
-        (None, nan) when the displacement is outside [min, max] thresholds.
-        The BEV transform uses the planar homography (z=0), which is fine for
-        the robot centre projected to the ground plane.
-        """
-        bev = self.planner.camera.pixel_to_world(u, v)
-        if bev is None:
-            return None, math.nan
-        bx, by = bev
-
-        if self._prev_bev_x is None:
-            self._prev_bev_x, self._prev_bev_y = bx, by
-            return None, math.nan
-
-        dx = bx - self._prev_bev_x
-        dy = by - self._prev_bev_y
-        disp = math.hypot(dx, dy)
-
-        if disp > self.heading_max_displacement_m:
-            # Large jump — likely a gap in detections; reset anchor without estimate.
-            self._prev_bev_x, self._prev_bev_y = bx, by
-            return None, math.nan
-
-        if disp < self.heading_min_displacement_m:
-            # Too little movement; keep anchor, wait for more displacement.
-            return None, math.nan
-
-        yaw = math.atan2(dy, dx)
-        sigma = math.sqrt(2.0) * max(self.heading_bev_noise_sigma_m, 1e-3) / disp
-        sigma = float(max(sigma, self.pixel_heading_noise_floor_rad))
-        self._prev_bev_x, self._prev_bev_y = bx, by
-        return float(yaw), sigma
-
-    def _pixel_yaw_measurement_from_msg(self, msg: PoseStamped, diag_ref):
-        """Extract visual yaw only when detector diagnostics explicitly support it."""
-        if not (
-            diag_ref is not None
-            and bool(diag_ref.get('detected', False))
-            and math.isfinite(float(diag_ref.get('yaw_est', math.nan)))
-        ):
-            return None, math.nan
-        yaw_meas = self._yaw_from_quaternion(msg.pose.orientation)
-        return float(yaw_meas), self._heading_sigma_from_diag(diag_ref)
-
     def _pixel_cb(self, msg: PoseStamped):
         u = msg.pose.position.x
         v = msg.pose.position.y
@@ -1125,15 +907,8 @@ class UnicyclePlannerNode(Node):
             except Exception:
                 pass
         with self._data_lock:
-            if self.use_displacement_heading:
-                yaw_meas, yaw_sigma = self._displacement_heading_locked(u, v)
-            else:
-                diag_ref = self._matching_detection_diag_locked(msg.header.stamp)
-                yaw_meas, yaw_sigma = self._pixel_yaw_measurement_from_msg(msg, diag_ref)
             self.pixel_meas = np.array([u, v], dtype=float)
             self.pixel_stamp = msg.header.stamp
-            self.pixel_yaw_meas = yaw_meas
-            self.pixel_heading_sigma = yaw_sigma
 
         if not self.use_pixel_correction:
             return
@@ -1287,39 +1062,6 @@ class UnicyclePlannerNode(Node):
             return None
         return float(dt_s)
 
-    def _select_heading_measurement_locked(self, stamp_msg):
-        """Select the explicit yaw measurement for the planner belief.
-
-        Source codes follow the experiment logger convention:
-        1 = direct pixel heading, 2 = odom fallback, 5 = keypoint BEV heading.
-        """
-        if self.heading_update_mode == 'camera_xy_only':
-            return None, math.nan, 0.0
-        yaw_meas = self.pixel_yaw_meas
-        yaw_sigma = float(self.pixel_heading_sigma)
-        yaw_source = 1.0 if yaw_meas is not None and math.isfinite(float(yaw_meas)) else 0.0
-        if self.use_state_bev_heading_correction:
-            state_yaw, state_sigma = self._fresh_state_bev_heading_locked(stamp_msg)
-            if state_yaw is not None:
-                yaw_meas = float(state_yaw)
-                yaw_sigma = float(max(
-                    state_sigma,
-                    self.pixel_heading_noise_floor_rad,
-                    1e-6,
-                ))
-                yaw_source = 5.0
-        if yaw_source <= 0.0 and self.use_odom_heading_correction:
-            odom_yaw, _odom_age = self._fresh_odom_heading_locked(stamp_msg)
-            if odom_yaw is not None:
-                yaw_meas = float(odom_yaw)
-                yaw_sigma = float(max(
-                    self.odom_heading_sigma_rad,
-                    self.pixel_heading_noise_floor_rad,
-                    1e-6,
-                ))
-                yaw_source = 2.0
-        return yaw_meas, yaw_sigma, yaw_source
-
     def _snapshot_pixel_correction_inputs(self, stamp_msg):
         with self._data_lock:
             belief_m = None if self.belief_m is None else self.belief_m.copy()
@@ -1327,7 +1069,6 @@ class UnicyclePlannerNode(Node):
             belief_stamp = self.belief_stamp
             v_cmd, w_cmd = float(self.last_cmd[0]), float(self.last_cmd[1])
             meas = None if self.pixel_meas is None else self.pixel_meas.copy()
-            yaw_meas, yaw_sigma, yaw_source = self._select_heading_measurement_locked(stamp_msg)
         if belief_m is None or belief_S is None or meas is None:
             return None
         return {
@@ -1336,9 +1077,9 @@ class UnicyclePlannerNode(Node):
             'belief_stamp': belief_stamp,
             'cmd': np.array([v_cmd, w_cmd], dtype=float),
             'meas': meas,
-            'yaw_meas': yaw_meas,
-            'yaw_sigma': yaw_sigma,
-            'yaw_source': yaw_source,
+            'yaw_meas': None,
+            'yaw_sigma': math.nan,
+            'yaw_source': 0.0,
         }
 
     def _log_pixel_shape_error_once(self, message: str):
@@ -1405,55 +1146,16 @@ class UnicyclePlannerNode(Node):
         next_m,
         next_S,
         m_pred,
-        S_pred,
-        yaw_meas,
-        yaw_sigma,
-        yaw_source,
     ):
-        """Keep theta correction explicit: visual yaw or odom yaw, never hidden in u/v."""
+        """Report the theta component induced indirectly by the XY update."""
         theta_update_from_uv_rad = float(wrap_angle(float(next_m[2]) - float(m_pred[2])))
-        # In camera_xy_only mode, do not zero the yaw row of the gain.
-        # Pixel/position observations may update yaw indirectly through
-        # S[theta, x] and S[theta, y] generated by the unicycle prediction.
-        if self.clamp_pixel_uv_theta_without_yaw and yaw_source != 1.0 and self.heading_update_mode != 'camera_xy_only':
-            next_m[2] = float(m_pred[2])
-            theta_update_from_uv_rad = 0.0
-            if next_S.shape[0] >= 3:
-                next_S[2, :] = S_pred[2, :]
-                next_S[:, 2] = S_pred[:, 2]
-                next_S = (next_S + next_S.T) / 2.0
-
-        yaw_correction_applied = False
-        innov_theta = math.nan
-        k_theta_theta = math.nan
-        if (
-            self.heading_update_mode != 'camera_xy_only'
-            and (
-                (yaw_source == 1.0 and self.use_pixel_heading_correction)
-                or (yaw_source == 2.0 and self.use_odom_heading_correction)
-                or (yaw_source == 5.0 and self.use_state_bev_heading_correction)
-            )
-            and yaw_meas is not None
-            and math.isfinite(float(yaw_meas))
-            and math.isfinite(yaw_sigma)
-            and yaw_sigma > 0.0
-            and next_S.shape[0] >= 3
-        ):
-            next_m, next_S, yaw_correction_applied, innov_theta, k_theta_theta = self._apply_heading_measurement(
-                next_m,
-                next_S,
-                float(yaw_meas),
-                float(yaw_sigma),
-                source_code=float(yaw_source),
-            )
-
         return {
             'next_m': next_m,
             'next_S': next_S,
             'theta_update_from_uv_rad': theta_update_from_uv_rad,
-            'yaw_correction_applied': yaw_correction_applied,
-            'innov_theta': innov_theta,
-            'k_theta_theta': k_theta_theta,
+            'yaw_correction_applied': False,
+            'innov_theta': math.nan,
+            'k_theta_theta': math.nan,
             'theta_update_total_rad': float(wrap_angle(float(next_m[2]) - float(m_pred[2]))),
         }
 
@@ -1789,10 +1491,6 @@ class UnicyclePlannerNode(Node):
             next_m,
             next_S,
             m_pred,
-            S_pred,
-            yaw_meas,
-            yaw_sigma,
-            yaw_meas_source,
         )
         next_m = yaw_info['next_m']
         next_S = self._regularize_state_covariance(yaw_info['next_S'])
@@ -2016,47 +1714,9 @@ class UnicyclePlannerNode(Node):
         return m0, S0
 
     def _anchor_belief_yaw_for_planning(self, m0, S0, now_msg, mutate=True):
-        """Apply the same explicit yaw hierarchy used by pixel corrections."""
-        if self.heading_update_mode == 'camera_xy_only':
-            self._heading_anchor_applied = False
-            self._state_bev_yaw_ignored = True
-            return m0, S0
-        yaw_meas = None
-        yaw_sigma = math.nan
-        yaw_source = 0.0
-        if self.use_state_bev_heading_correction:
-            with self._data_lock:
-                state_yaw, state_sigma = self._fresh_state_bev_heading_locked(now_msg)
-            if state_yaw is not None:
-                yaw_meas = float(state_yaw)
-                yaw_sigma = float(max(state_sigma, self.pixel_heading_noise_floor_rad, 1e-6))
-                yaw_source = 5.0
-        if yaw_source <= 0.0 and self.use_odom_heading_correction:
-            with self._data_lock:
-                odom_yaw, _odom_age = self._fresh_odom_heading_locked(now_msg)
-            if odom_yaw is not None:
-                yaw_meas = float(odom_yaw)
-                yaw_sigma = float(max(
-                    self.odom_heading_sigma_rad,
-                    self.pixel_heading_noise_floor_rad,
-                    1e-6,
-                ))
-                yaw_source = 2.0
-        if yaw_source <= 0.0 or yaw_meas is None:
-            return m0, S0
-        m0, S0, applied, _innov_theta, _k_theta = self._apply_heading_measurement(
-            m0,
-            S0,
-            float(yaw_meas),
-            float(yaw_sigma),
-            source_code=float(yaw_source),
-        )
-        self._heading_anchor_applied = bool(applied)
-        if applied and mutate:
-            with self._data_lock:
-                self.belief_m = m0.copy()
-                self.belief_S = S0.copy()
-                self.belief_stamp = now_msg
+        """Current campaign uses camera XY only; never inject explicit yaw."""
+        self._heading_anchor_applied = False
+        self._state_bev_yaw_ignored = True
         return m0, S0
 
     def _resolve_pixel_corrected_belief_for_planning(self, now_msg):
@@ -2158,27 +1818,26 @@ class UnicyclePlannerNode(Node):
                 'belief_age_s': float(belief_age_s),
             }
         m0, S0 = self._state_msg_to_belief(state_ref)
-        if self.heading_update_mode == 'camera_xy_only':
-            self._state_bev_yaw_ignored = True
-            if self.belief_m is not None:
-                m_pred = self.belief_m.copy()
-                S_pred = self.belief_S.copy()
-                if self.belief_stamp is not None:
-                    dt = self._stamp_to_float(state_ref.header.stamp) - self._stamp_to_float(self.belief_stamp)
-                    if dt > 1e-3:
-                        try:
-                            m_pred_new, S_pred_new = self.planner.predict(m_pred, S_pred, last_cmd, dt=dt)
-                            self.get_logger().info(f"[CAMERA_XY_ONLY] state_stamp={self._stamp_to_float(state_ref.header.stamp):.4f} prev_stamp={self._stamp_to_float(self.belief_stamp):.4f} dt={dt:.4f} S_old={S_pred[2,2]:.6f} S_new={S_pred_new[2,2]:.6f}")
-                            m_pred = m_pred_new
-                            S_pred = S_pred_new
-                        except Exception as e:
-                            self.get_logger().error(f"[CAMERA_XY_ONLY] predict failed: {e}")
-                m0[2] = float(m_pred[2])
-                S0[2, 2] = float(S_pred[2, 2])
-                S0[2, 0] = float(S_pred[2, 0])
-                S0[0, 2] = float(S_pred[0, 2])
-                S0[2, 1] = float(S_pred[2, 1])
-                S0[1, 2] = float(S_pred[1, 2])
+        self._state_bev_yaw_ignored = True
+        if self.belief_m is not None:
+            m_pred = self.belief_m.copy()
+            S_pred = self.belief_S.copy()
+            if self.belief_stamp is not None:
+                dt = self._stamp_to_float(state_ref.header.stamp) - self._stamp_to_float(self.belief_stamp)
+                if dt > 1e-3:
+                    try:
+                        m_pred_new, S_pred_new = self.planner.predict(m_pred, S_pred, last_cmd, dt=dt)
+                        self.get_logger().info(f"[CAMERA_XY_ONLY] state_stamp={self._stamp_to_float(state_ref.header.stamp):.4f} prev_stamp={self._stamp_to_float(self.belief_stamp):.4f} dt={dt:.4f} S_old={S_pred[2,2]:.6f} S_new={S_pred_new[2,2]:.6f}")
+                        m_pred = m_pred_new
+                        S_pred = S_pred_new
+                    except Exception as e:
+                        self.get_logger().error(f"[CAMERA_XY_ONLY] predict failed: {e}")
+            m0[2] = float(m_pred[2])
+            S0[2, 2] = float(S_pred[2, 2])
+            S0[2, 0] = float(S_pred[2, 0])
+            S0[0, 2] = float(S_pred[0, 2])
+            S0[2, 1] = float(S_pred[2, 1])
+            S0[1, 2] = float(S_pred[1, 2])
         with self._data_lock:
             self.belief_m = m0.copy()
             self.belief_S = S0.copy()

@@ -409,32 +409,6 @@ class EfeAgentNode(UnicyclePlannerNode):
         m_track = m0.copy()
         S_track = S0.copy()
         tracking_yaw_source = 0.0
-        # Heading source for the local executor, in priority order:
-        #   3.0 = camera keypoint BEV heading (/state/bev) when use_state_bev_yaw
-        #         and a fresh state estimate is available;
-        #   1.0 = raw odom yaw fallback (when use_state_bev_yaw misses, or when
-        #         only local_tracking_use_odom_yaw is set);
-        #   0.0 = leave the filtered belief theta (m0[2]).
-        now_msg = self.get_clock().now().to_msg()
-        state_bev_yaw = None
-        if self.use_state_bev_yaw and self.heading_update_mode != 'camera_xy_only':
-            with self._data_lock:
-                state_bev_yaw, state_bev_sigma = self._fresh_state_bev_heading_locked(now_msg)
-        if state_bev_yaw is not None:
-            m_track[2] = float(state_bev_yaw)
-            S_track[2, :] = 0.0
-            S_track[:, 2] = 0.0
-            S_track[2, 2] = float(max(state_bev_sigma ** 2, 1e-6))
-            tracking_yaw_source = 3.0
-        elif self.local_tracking_use_odom_yaw and self.heading_update_mode != 'camera_xy_only':
-            with self._data_lock:
-                odom_yaw, _odom_age = self._fresh_odom_heading_locked(now_msg)
-            if odom_yaw is not None:
-                m_track[2] = float(odom_yaw)
-                S_track[2, :] = 0.0
-                S_track[:, 2] = 0.0
-                S_track[2, 2] = float(max(self.odom_heading_sigma_rad ** 2, 1e-6))
-                tracking_yaw_source = 1.0
 
         dx = float(target[0] - m_track[0])
         dy = float(target[1] - m_track[1])

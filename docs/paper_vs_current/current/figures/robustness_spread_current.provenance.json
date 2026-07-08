@@ -1,0 +1,20 @@
+{
+  "figure": "robustness_spread",
+  "layout": "2x2",
+  "trajectory_source": "logs/visibility_comparison/honest_campaign_v1",
+  "counts_source": "logs/visibility_comparison/honest_campaign_v1/campaign_log.json",
+  "gp": "paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz",
+  "config": "scripts/visibility_comparison/warehouse_visibility_campaign.yaml",
+  "tasks": [
+    "route_apron_to_a3_mid",
+    "route_apron_to_a2_mid",
+    "route_west_to_a1_upper",
+    "control_west_to_a1_low"
+  ],
+  "conditions": [
+    "C1",
+    "C2"
+  ],
+  "seeds_per_condition": 5,
+  "output": "docs/paper_vs_current/current/figures/robustness_spread_current.png"
+}

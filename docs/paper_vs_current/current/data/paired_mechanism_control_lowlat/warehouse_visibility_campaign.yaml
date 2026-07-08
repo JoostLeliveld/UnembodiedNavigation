@@ -55,7 +55,7 @@ tasks:
 perception_backend: yolo
 yolo_model: logs/perception_models/warehouse_yolo_detector_v1/model.pt
 yolo_device: '0'
-yolo_imgsz: 640
+yolo_imgsz: 960
 yolo_conf_threshold: 0.05
 yolo_iou_threshold: 0.45
 yolo_target_class: robot

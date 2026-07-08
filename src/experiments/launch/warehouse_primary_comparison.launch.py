@@ -10,8 +10,8 @@ from launch_ros.substitutions import FindPackageShare
 #     comparison_method_id:=efe_main
 
 DEFAULT_PLANNER = 'visibility_aware_efe'
-ALLOWED_PLANNERS = ('visibility_aware_efe', 'risk_only_ablation', 'constant_R_efe')
-PLANNER_DESCRIPTION = 'Primary thesis comparison: visibility_aware_efe | risk_only_ablation | constant_R_efe'
+ALLOWED_PLANNERS = ('visibility_aware_efe', 'constant_R_efe')
+PLANNER_DESCRIPTION = 'Primary thesis comparison: visibility_aware_efe | constant_R_efe'
 
 
 def _planner_precision_arguments():
@@ -32,9 +32,10 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('pixel_correction_nis_reject_cov_scale', default_value='1.0',
                               description='Multiply belief covariance on each consecutive NIS rejection so a persistently-rejected accurate measurement is admitted; 1.0 disables.'),
         DeclareLaunchArgument('robot_collision_radius_m', default_value='0.125'),
-        DeclareLaunchArgument('odom_heading_correction_mode', default_value='kalman'),
-        DeclareLaunchArgument('clamp_pixel_uv_theta_without_yaw', default_value='false'),
-        DeclareLaunchArgument('heading_update_mode', default_value='odom_overwrite'),
+        DeclareLaunchArgument('terminate_on_geom_collision', default_value='true'),
+        DeclareLaunchArgument('odom_heading_timeout_s', default_value='0.75',
+                              description='Maximum odometry age used by the pixel-to-BEV state projection orientation field.'),
+        DeclareLaunchArgument('heading_update_mode', default_value='camera_xy_only'),
         DeclareLaunchArgument('local_controller_type', default_value='turn_then_go',
                               description='Waypoint-tracking law: turn_then_go|hyst_damp|pure_pursuit|ff_fb'),
         DeclareLaunchArgument('use_nogo_cost', default_value='auto'),
@@ -93,12 +94,6 @@ def _planner_precision_arguments():
                               description='Replace local EFE with a proportional geometric controller (instant, no CasADi).'),
         DeclareLaunchArgument('simple_tracker_yaw_gate_rad', default_value='0.6',
                               description='Rotate-in-place threshold for the simple local tracker.'),
-        DeclareLaunchArgument('local_tracking_use_odom_yaw', default_value='false',
-                              description='Use fresh odometry yaw as the local tracking/control yaw in hierarchical mode.'),
-        DeclareLaunchArgument('use_state_bev_yaw', default_value='false',
-                              description='Use the camera keypoint BEV heading (/state/bev) as the local tracking/control yaw (falls back to odom).'),
-        DeclareLaunchArgument('use_state_bev_heading_correction', default_value='false',
-                              description='Fuse fresh /state/bev keypoint yaw into the planner belief before odom fallback.'),
         DeclareLaunchArgument('cmd_publish_rate', default_value='10.0'),
     ]
 
@@ -123,10 +118,6 @@ def _launch_setup(context, *args, **kwargs):
         # C1 is constant-observability EFE: risk and ambiguity remain active,
         # but the observation covariance is spatially uniform instead of GP-based.
         cfg['use_ambiguity'] = True
-        cfg['use_obs_risk'] = True
-    elif planner == 'risk_only_ablation':
-        cfg['use_visibility_model'] = True
-        cfg['use_ambiguity'] = False
         cfg['use_obs_risk'] = True
     else:
         cfg['use_visibility_model'] = True
@@ -199,11 +190,6 @@ def generate_launch_description():
                               description='Dummy inferences at startup to pay lazy CUDA/JIT init off the hot path'),
         DeclareLaunchArgument('yolo_inference_in_callback', default_value='true',
                               description='Run inference synchronously in the image callback (single thread, no GIL contention)'),
-        DeclareLaunchArgument('yolo_min_keypoint_conf', default_value='0.5',
-                              description='Pose-keypoint confidence floor; below this the heading is treated as unknown'),
-        DeclareLaunchArgument('keypoint_marker_world_z', default_value='0.0',
-                              description='World Z (m) of the front/rear keypoints for BEV back-projection. 0.0 disables pose-heading.'),
-        DeclareLaunchArgument('keypoint_heading_sigma_rad', default_value='0.05'),
         DeclareLaunchArgument('use_pixel_correction', default_value='true'),
         *_planner_precision_arguments(),
         DeclareLaunchArgument('enable_logging', default_value='true'),
