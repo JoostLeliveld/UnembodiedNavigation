@@ -116,8 +116,9 @@ controller change should be treated as a separate planner variant.
 ## No-go / collision
 
 Current values are from `warehouse_visibility_campaign.yaml`. The
-no-go is now a hinged-log **`warning_band`** keep-in penalty (replaces the old softplus /
-`log_barrier` interior-biased barrier, which collapsed the C2 route split at weight>200).
+no-go is a hinged-log **`warning_band`** keep-in penalty. (Earlier softplus / `log_barrier`
+interior-biased variants collapsed the C2 route split at weight>200 and were removed in the
+2026-07-08 cleanup; `warning_band` is now the only supported penalty.)
 
 | name | aws_final | what it does |
 |---|---|---|
@@ -150,7 +151,6 @@ and campaign evidence still support it.
 | `optimizer_warm_start` | true | reuse previous solution shifted by one step |
 | `optimizer_multistart` | true | shared condition-neutral basin handling |
 | `optimizer_multistart_include_direct` | false | direct seed omitted; named neutral route-family seeds are used instead |
-| `optimizer_multistart_lateral_offsets` | 0.0 | lateral shifts disabled |
 | `optimizer_initial_routes_json` | `mid_cross_lane`, `lower_sweep_lane` | route-family seeds offered to both C1 and C2 |
 
 When solver wall time is close to `maxfun`, the solver is not converging; raise `maxfun`
