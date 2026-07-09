@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Pure, ROS-free functions for the geometry-derived observability prior.
 
+NOTE ON INPUTS: the occluder `prisms` here are the EXACT CAD shelf boxes (footprints
++ heights) parsed from the simulator SDF. That exact geometry is used as an
+EVALUATION / UPPER-BOUND reference only — a deployed system would not have it; it
+would use the camera calibration plus a *sensed* height map (stereo/LiDAR/RGB-D) or
+WMS/CAD. The camera-only terms (FOV / range / boundary) need no shelf knowledge.
+
 The chain is:
 
     warehouse prisms + camera model

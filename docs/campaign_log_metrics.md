@@ -14,7 +14,7 @@ position columns in analysis code.
 | quantity | column(s) | file | notes |
 |---|---|---|---|
 | **belief (pose estimate)** | `planner_belief_x`, `planner_belief_y` | experiment.csv | == `est_x/est_y`; reproduces the GT-error column exactly |
-| **ground truth** | `gt_x`, `gt_y` | experiment.csv | GT-bridge truth (added in the honest re-run) |
+| **ground truth** | `gt_x`, `gt_y` | experiment.csv | GT-bridge truth. **EVALUATION-ONLY** — score/compare against it, never feed it (or exact CAD shelf geometry/heights) to the model as a deployment input |
 | **belief error** | `belief_error_gt_m` | experiment.csv | == \|\|belief − truth\|\|, verified across all 43 runs |
 | **reported uncertainty** | `state_sigma_major_m` | experiment.csv | 1σ major axis; **OVERCONFIDENT** (median 0.017 m vs actual error median 0.051 m) |
 | **detection** | `detected` {0,1}, `yolo_score_raw` | perception.csv | join to experiment by nearest `log_stamp`↔`stamp` |

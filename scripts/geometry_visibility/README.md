@@ -20,6 +20,14 @@ Not all outputs here are empirical evidence. Each artifact is tagged:
 - **[HYPOTHETICAL — NOT EVIDENCE]** — a second camera that does not exist: the multi-camera
   union panel in `operator_dashboard.py` and the `cam2` in the sensing demos.
 
+> **⚠️ Ground truth & CAD are EVALUATION-ONLY.** Ground-truth robot position
+> (`gt_x/gt_y`) and the exact CAD shelf geometry (footprints + heights from the SDF) are
+> used only to *score and compare* models — never as inputs a deployed system would have.
+> Deployment uses the camera calibration (legitimately known) and, for shelf geometry, a
+> *sensed* map (stereo/LiDAR/RGB-D) or WMS/CAD — not this ground truth. In the held-out
+> usability test the camera-only baseline needs no shelf knowledge and already hits AUROC
+> 0.96; exact CAD shelves add only ~0.03, i.e. the CAD is an upper-bound reference.
+
 **Honest headline from the [REAL EXPERIMENT] data (`hard_evidence.png`):**
 Metrics here are computed via the **canonical, self-checking loader**
 `campaign_metrics.py` (see `docs/campaign_log_metrics.md`) — the belief is
