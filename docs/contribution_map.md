@@ -43,6 +43,12 @@ trustworthy.
 
 ## 4. GP Reliability To `R_plan`
 
+The GP part is a data-to-covariance story:
+
+```text
+sample pose -> detector score -> GP trust field -> sigma_plan^2 -> R_plan
+```
+
 The GP learns a spatial trust field from detector performance samples. It does
 not learn `R` online. At planning time, the trust value scales the predictive
 observation covariance through a precision blend:
@@ -52,10 +58,12 @@ observation covariance through a precision blend:
 ```
 
 In the locked setup, `R_plan` is a symmetric image-space covariance matrix with
-equal `u` and `v` variance:
+zero off-diagonal terms and equal `u` and `v` variance:
 
 ```text
-R_plan = diag(r_plan^2, r_plan^2)
+R_plan(x, y) =
+[ sigma_plan^2(rho(x, y))      0                         ]
+[ 0                            sigma_plan^2(rho(x, y))   ]  px^2
 ```
 
 The ellipses in the README visuals are therefore circular glyphs whose size

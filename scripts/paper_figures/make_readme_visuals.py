@@ -561,6 +561,141 @@ def make_induced_covariance(gp: dict[str, np.ndarray | str]) -> None:
     save(fig, REPO / "gp/demos/images/induced_covariance.png")
 
 
+def matrix_text_for_trust(trust: float) -> tuple[str, float, float]:
+    std = float(covariance_std(np.asarray([[trust]], dtype=float))[0, 0])
+    var = std**2
+    text = (
+        "R_plan =\n"
+        f"[[{var:6.1f},    0.0],\n"
+        f" [   0.0, {var:6.1f}]] px^2"
+    )
+    return text, std, var
+
+
+def make_collection_to_covariance_story(gp: dict[str, np.ndarray | str]) -> None:
+    p_plan = np.asarray(gp["p_plan"], dtype=float)
+    trust_curve = np.linspace(0.0, 1.0, 300)
+    std_curve = covariance_std(trust_curve)
+
+    fig, axes = plt.subplots(1, 4, figsize=(16.8, 5.9), gridspec_kw={"width_ratios": [1.08, 1.08, 1.0, 1.18]})
+    fig.subplots_adjust(left=0.045, right=0.985, top=0.82, bottom=0.18, wspace=0.34)
+    fig.suptitle("From detector samples to measurement covariance", fontsize=19, fontweight="bold", color=DARK, y=0.965)
+    fig.text(
+        0.50,
+        0.895,
+        "The GP learns spatial detector trust. The planner then maps trust to a fixed-shape image-space covariance matrix.",
+        ha="center",
+        fontsize=11.5,
+        color=MUTED,
+    )
+
+    ax = axes[0]
+    sc = ax.scatter(
+        np.asarray(gp["x_train"], dtype=float)[:, 0],
+        np.asarray(gp["x_train"], dtype=float)[:, 1],
+        c=np.asarray(gp["p_train"], dtype=float),
+        cmap="viridis",
+        vmin=0.0,
+        vmax=1.0,
+        s=20,
+        edgecolor="black",
+        linewidth=0.12,
+        zorder=8,
+    )
+    draw_driveable(ax, lw=0.8, alpha=0.45)
+    draw_racks(ax, gp)
+    style_map_axis(ax, "1. collect detector scores")
+    fig.colorbar(sc, ax=ax, fraction=0.046, pad=0.03, label="YOLO score")
+    ax.text(
+        0.5,
+        -0.20,
+        "sampled robot pose -> image -> detector score",
+        transform=ax.transAxes,
+        ha="center",
+        va="top",
+        fontsize=9.5,
+        color=MUTED,
+    )
+
+    ax = axes[1]
+    im = ax.imshow(p_plan, origin="lower", extent=gp_extent(gp), cmap="viridis", vmin=0.0, vmax=0.9, zorder=0)
+    draw_driveable(ax, lw=0.8, alpha=0.45)
+    draw_racks(ax, gp)
+    style_map_axis(ax, "2. fit trust field")
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03, label=r"planner trust $\rho$")
+    ax.text(
+        0.5,
+        -0.20,
+        "GP mean discounted by uncertainty -> conservative trust",
+        transform=ax.transAxes,
+        ha="center",
+        va="top",
+        fontsize=9.5,
+        color=MUTED,
+    )
+
+    ax = axes[2]
+    ax.plot(trust_curve, std_curve, color=TUE_BLUE, lw=2.6)
+    highlight = [(0.90, "#16a34a", "visible"), (0.50, "#f59e0b", "uncertain"), (0.02, TUE_RED, "weak")]
+    for trust, color, label in highlight:
+        std = float(covariance_std(np.asarray([[trust]], dtype=float))[0, 0])
+        ax.scatter([trust], [std], s=62, color=color, edgecolor="white", lw=1.0, zorder=5)
+        ax.text(trust, std + 2.4, label, ha="center", va="bottom", fontsize=9.4, color=color, fontweight="bold")
+    ax.set_title("3. precision blend", pad=7)
+    ax.set_xlabel(r"planner trust $\rho$")
+    ax.set_ylabel(r"$r_{plan}$ [px std]")
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(0.0, R_MISS_UV + 4.5)
+    ax.grid(True, color=GRID, lw=0.45)
+    ax.text(
+        0.5,
+        -0.28,
+        r"$1/\sigma^2(\rho)=\rho/\sigma^2_{vis}+(1-\rho)/\sigma^2_{miss}$",
+        transform=ax.transAxes,
+        ha="center",
+        va="top",
+        fontsize=9.6,
+        color=DARK,
+    )
+
+    ax = axes[3]
+    ax.set_title("4. R matrix used by planner", pad=7)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    rows = [(0.90, "#16a34a", 0.70), (0.50, "#f59e0b", 0.40), (0.02, TUE_RED, 0.10)]
+    for trust, color, y in rows:
+        matrix_text, std, _ = matrix_text_for_trust(trust)
+        ax.add_patch(
+            FancyBboxPatch(
+                (0.03, y),
+                0.66,
+                0.23,
+                boxstyle="round,pad=0.012,rounding_size=0.018",
+                facecolor="white",
+                edgecolor="#d9e1ec",
+                lw=1.2,
+                zorder=1,
+            )
+        )
+        ax.add_patch(Rectangle((0.03, y + 0.20), 0.66, 0.03, facecolor=color, edgecolor="none", zorder=2))
+        ax.text(0.07, y + 0.165, rf"$\rho={trust:.2f}$ -> $r_{{plan}}={std:.1f}$ px", ha="left", va="center", fontsize=9.7, color=DARK, fontweight="bold")
+        ax.text(0.08, y + 0.030, matrix_text, ha="left", va="bottom", fontsize=8.8, color=DARK, family="DejaVu Sans Mono", linespacing=1.12)
+        radius = 0.035 + 0.105 * (std - R_VISIBLE_UV) / (R_MISS_UV - R_VISIBLE_UV)
+        ax.add_patch(Ellipse((0.82, y + 0.10), radius, radius, facecolor="none", edgecolor=color, lw=2.4))
+    ax.text(0.82, 0.02, "same matrix as an ellipse", ha="center", va="bottom", fontsize=8.8, color=MUTED)
+
+    fig.text(
+        0.50,
+        0.035,
+        "Collection produces detector-score samples; the GP turns them into trust; the precision blend fills a fixed 2x2 symmetric diagonal R_plan matrix in pixel units.",
+        ha="center",
+        fontsize=11.0,
+        color=DARK,
+    )
+    save(fig, REPO / "gp/demos/images/collection_to_covariance_story.png")
+
+
 def make_r_plan_ellipses(gp: dict[str, np.ndarray | str]) -> None:
     p_plan = np.asarray(gp["p_plan"], dtype=float)
     std = covariance_std(p_plan)
@@ -789,6 +924,7 @@ def main() -> int:
     make_image_to_bev(gp)
     make_affine_calibration(gp)
     make_induced_covariance(gp)
+    make_collection_to_covariance_story(gp)
     make_r_plan_ellipses(gp)
     make_paired_route_choice(gp)
     make_covariance_along_route(gp)

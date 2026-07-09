@@ -146,6 +146,46 @@ def build_height_map(xs: np.ndarray, ys: np.ndarray, prisms: Iterable[Prism]) ->
     }
 
 
+def height_map_from_points(points: np.ndarray, xs: np.ndarray, ys: np.ndarray) -> dict:
+    """Rasterise a sensed 3-D point cloud into a 2.5-D height map.
+
+    This is the *warehouse-implementable* Level-3 entry point: feed it points from
+    infrastructure stereo, a robot LiDAR/RGB-D mapping pass, or any depth sensor —
+    it does not need CAD. ``h_max`` is the tallest return per cell; ``observed`` is
+    True only where the sensor actually returned a point (cells with no returns are
+    unknown and must be handled conservatively downstream).
+    """
+    pts = np.asarray(points, dtype=float)
+    ny, nx = len(ys), len(xs)
+    h_max = np.zeros((ny, nx), dtype=float)
+    observed = np.zeros((ny, nx), dtype=bool)
+    if pts.size == 0:
+        return {"h_max": h_max, "observed": observed}
+    ix = np.clip(np.searchsorted(xs, pts[:, 0]), 0, nx - 1)
+    iy = np.clip(np.searchsorted(ys, pts[:, 1]), 0, ny - 1)
+    np.maximum.at(h_max, (iy, ix), np.maximum(pts[:, 2], 0.0))
+    observed[iy, ix] = True
+    return {"h_max": h_max, "observed": observed}
+
+
+def points_visible_from_camera(cam, points: np.ndarray, prisms: Iterable[Prism],
+                               n_samples: int = 24, near_target_skip: float = 0.12) -> np.ndarray:
+    """Boolean per point: is this 3-D surface point in the camera image AND unoccluded?
+
+    Used to synthesise what an infrastructure stereo / depth sensor at the camera
+    would actually return (occluded surfaces yield no points -> unknown regions).
+    """
+    pts = np.asarray(points, dtype=float)
+    cp = np.asarray(cam.cam_pos, dtype=float)
+    t = np.linspace(0.02, 1.0 - near_target_skip, int(n_samples)).reshape(1, -1, 1)
+    s = cp.reshape(1, 1, 3) + t * (pts[:, None, :] - cp.reshape(1, 1, 3))
+    obst = heights_at(s[..., 0], s[..., 1], prisms)
+    blocked = np.any(s[..., 2] < obst - 1e-6, axis=1)
+    u, v, in_front = project_points(cam, pts)
+    in_img = (u >= 0) & (u < cam.img_width) & (v >= 0) & (v < cam.img_height) & in_front
+    return in_img & ~blocked
+
+
 def world_to_grid(xs: np.ndarray, ys: np.ndarray, x: float, y: float) -> tuple[int, int]:
     """Nearest ``(iy, ix)`` cell index for a world point (row-major, matches maps)."""
     ix = int(np.argmin(np.abs(np.asarray(xs) - x)))

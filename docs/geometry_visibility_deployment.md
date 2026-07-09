@@ -18,10 +18,11 @@ field is *learned* from a dedicated YOLO teleport-capture per world — data-hun
 world-specific, and stale the moment a rack moves.
 
 The fix: derive an **informed prior** for that field from geometry the facility
-already has, so the system works on day one and *refines itself during normal
-operation*. Validated this session: geometry explains the learned field with
-Spearman **0.73**; a driveable-map-only prior (no obstacle CAD) already reaches
-**0.669**; driving cuts residual map error **3×**.
+already has (or can sense), so the system works on day one and *refines itself
+during normal operation*. Validated this session: geometry explains the learned
+field at Spearman **0.73**; a **sensed** height map from infrastructure stereo
+recovers that prior at **0.97** (no CAD needed); the prior predicts a *fresh*
+independent YOLO capture at **0.68**; and driving cuts residual map error **3×**.
 
 ## Phased setup
 
@@ -108,13 +109,21 @@ product should pair it with a secondary encoding or a CVD-safe ramp.
 
 ## What is validated vs open
 
-**Validated (offline, this session):** geometry explains the learned GP (0.73);
-free-space-only prior (0.669); depth-source ranking (RGBD recovers the prior only
-if range covers the scene; stereo robust; monocular OOD-risky); multi-camera union
-(39%→78%); online refinement from real runs (3× error cut) with the
-spread-not-gate update; the overconfident-EKF finding.
+**Validated this session:** geometry explains the learned GP (0.73); a **sensed**
+height map (infrastructure stereo point cloud, no CAD) recovers the prior at 0.97
+with ~18% honestly-unknown mutual blind spots; depth-source ranking (RGBD recovers
+the prior only if range covers the scene; stereo robust; monocular OOD-risky);
+multi-camera union (39%→78%); online refinement from real runs (3× error cut) with
+the spread-not-gate update; the overconfident-EKF finding; and a live Stage-3
+capture where the prior predicts fresh independent YOLO detection at 0.68.
+
+**Deployment ladder (Level 2 footprint-only dropped — weak lift, fragile heuristic):**
+Level 1 camera-only cold start (FOV+range+edge, needs no map) → Level 3 sensed
+height map (infra stereo / robot LiDAR / RGB-D, via `height_map_from_points`) →
+Level 4 empirical YOLO hit/miss refinement online. Geometry is the safe cold start
+that makes online collection possible and the fallback where data is sparse.
 
 **Open (needs a live loop, not done here):** closing Phase-2/3 in the running stack
-(planner consumes the online-refined GP); implementing uncertainty-gated motion;
-zero-shot transfer validated against a fresh capture in an *edited* world; a
-calibrated planner-belief covariance as the trust signal end-to-end.
+(planner consumes the online-refined GP); uncertainty-gated motion; the *layout-change*
+transfer claim specifically (needs a targeted capture in the aisle shadow — the
+teleport grid did not sample it); a calibrated planner-belief covariance end-to-end.

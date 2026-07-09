@@ -17,6 +17,7 @@ inside the module folders so each demonstration page owns its own media plan:
 | [`paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg`](../paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg) | Detector demo: robot detections from the external camera. |
 | [`paper_artifacts/perception/warehouse_yolo_detector_v1/results.png`](../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png) | YOLO training performance over 30 epochs. |
 | [`paper_artifacts/figures/yolo_training_clarification.png`](../paper_artifacts/figures/yolo_training_clarification.png) | Detector training provenance and label-generation explanation. |
+| [`gp/demos/images/collection_to_covariance_story.png`](../gp/demos/images/collection_to_covariance_story.png) | GP story: detector-score collection to explicit `R_plan` matrix. |
 | [`paper_artifacts/figures/gp_pipeline_aws.png`](../paper_artifacts/figures/gp_pipeline_aws.png) | GP story: detector-score samples to reliability field to induced covariance. |
 | [`paper_artifacts/figures/localization_pathway.png`](../paper_artifacts/figures/localization_pathway.png) | Runtime localization path from camera image to planner state. |
 | [`docs/paper_vs_current/current/figures/robustness_spread_current.png`](paper_vs_current/current/figures/robustness_spread_current.png) | Current campaign result and route-choice behavior. |

@@ -13,6 +13,7 @@ python3 scripts/paper_figures/make_readme_visuals.py
 
 | Path | Type | Story beat |
 | --- | --- | --- |
+| [`images/collection_to_covariance_story.png`](images/collection_to_covariance_story.png) | PNG explainer | Detector-score collection to GP trust to explicit `R_plan` matrix. |
 | [`images/induced_covariance.png`](images/induced_covariance.png) | PNG plot | GP planner trust converted into image-space observation covariance. |
 | [`images/r_plan_map_and_ellipses.png`](images/r_plan_map_and_ellipses.png) | PNG diagnostic | How `R_plan` changes across the map; glyph size shows covariance scale. |
 

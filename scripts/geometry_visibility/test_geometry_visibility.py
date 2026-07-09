@@ -138,6 +138,26 @@ def test_r_plan_endpoints():
     assert np.isclose(float(std0), 40.0, atol=1e-6)
 
 
+def test_height_map_from_points():
+    xs, ys = _toy_grid()
+    pts = np.array([[0.0, 0.0, 1.5], [0.0, 0.0, 0.8], [1.0, 1.0, 0.4]])  # tallest wins per cell
+    hm = gv.height_map_from_points(pts, xs, ys)
+    iy0, ix0 = gv.world_to_grid(xs, ys, 0.0, 0.0)
+    iy1, ix1 = gv.world_to_grid(xs, ys, 1.0, 1.0)
+    assert np.isclose(hm["h_max"][iy0, ix0], 1.5)
+    assert hm["observed"][iy0, ix0] and hm["observed"][iy1, ix1]
+    assert not hm["observed"][0, 0]  # a cell with no returns stays unobserved
+
+
+def test_points_visible_from_camera():
+    cam = _toy_camera()
+    wall = gv.Prism("wall", xmin=-1.0, xmax=1.0, ymin=-2.7, ymax=-2.3, zmin=0.0, zmax=3.0)
+    open_pt = np.array([[0.0, 0.0, 0.3]])
+    behind = np.array([[0.0, 0.0, 0.3]])  # same point, but wall between cam and it
+    assert bool(gv.points_visible_from_camera(cam, open_pt, [])[0])
+    assert not bool(gv.points_visible_from_camera(cam, behind, [wall])[0])
+
+
 def main() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

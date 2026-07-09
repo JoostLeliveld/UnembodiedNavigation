@@ -187,6 +187,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('pixel_timeout_s', 0.5)
         _declare_if_not('pixel_correction_min_interval_s', 0.0)
         _declare_if_not('bev_y_calibration_offset_m', 0.0)
+        _declare_if_not('bev_affine_calibration', '')
         _declare_if_not('pixel_max_correction_jump_m', 0.0)
         # DIAGNOSTIC ONLY: feed ground-truth pose (TF odom->plan_frame of raw
         # /odom) as the planner belief, bypassing perception entirely. Used to
@@ -358,6 +359,18 @@ class UnicyclePlannerNode(Node):
         self.bev_y_calibration_offset_m = float(
             self.get_parameter('bev_y_calibration_offset_m').value
         )
+        # Position-dependent affine BEV calibration (6 coeffs). When set it is the
+        # single calibration used by the pixel correction, matching the state node
+        # and experiment logger; the constant y-offset is only a legacy fallback.
+        self._bev_affine = None
+        _affine_raw = str(self.get_parameter('bev_affine_calibration').value or '').strip()
+        if _affine_raw:
+            try:
+                _vals = [float(x) for x in _affine_raw.replace(';', ',').split(',') if x.strip() != '']
+                if len(_vals) == 6:
+                    self._bev_affine = _vals
+            except Exception:
+                self._bev_affine = None
         self.pixel_max_correction_jump_m = float(
             self.get_parameter('pixel_max_correction_jump_m').value
         )
@@ -826,15 +839,22 @@ class UnicyclePlannerNode(Node):
     def _pixel_cb(self, msg: PoseStamped):
         u = msg.pose.position.x
         v = msg.pose.position.y
-        # Apply the same y-calibration offset the state node uses so both
-        # nodes converge to the same world position from the same pixel.
-        if self.bev_y_calibration_offset_m != 0.0:
+        # Apply the same BEV calibration the state node and logger use so all
+        # nodes converge to the same world position from the same pixel: the
+        # position-dependent affine when configured, else the legacy constant
+        # y-offset. Re-project the calibrated world point back to a pixel.
+        if self._bev_affine is not None or self.bev_y_calibration_offset_m != 0.0:
             try:
                 camera = self.planner.camera
                 xy = camera.pixel_to_world(u, v)
                 if xy is not None:
-                    u_cal, v_cal, vis = camera.world_to_pixel(
-                        xy[0], xy[1] + self.bev_y_calibration_offset_m, 0.0)
+                    if self._bev_affine is not None:
+                        c = self._bev_affine
+                        x_cal = c[0] * xy[0] + c[1] * xy[1] + c[2]
+                        y_cal = c[3] * xy[0] + c[4] * xy[1] + c[5]
+                    else:
+                        x_cal, y_cal = xy[0], xy[1] + self.bev_y_calibration_offset_m
+                    u_cal, v_cal, vis = camera.world_to_pixel(x_cal, y_cal, 0.0)
                     if vis:
                         u, v = u_cal, v_cal
             except Exception:
@@ -2067,8 +2087,8 @@ class UnicyclePlannerNode(Node):
             )
             self._last_plan_entry_log = now_wall
         try:
-            # Deliberately broad: any unexpected planner failure should abort the
-            # run immediately instead of allowing an invalid experiment to continue.
+            # Unexpected planner failures should abort the run instead of allowing
+            # an invalid experiment to continue as if it were valid evidence.
             result = self.planner.plan(
                 m0, S0, goal_xy, progress_index=progress_index,
             )

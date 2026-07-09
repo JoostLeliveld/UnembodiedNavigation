@@ -46,7 +46,7 @@ C1/C2 route contrast, and the final campaign counts once those clips exist.
 | --- | --- | --- |
 | [YOLO perception](yolo/) | Detect the robot in the fixed warehouse camera image and export the selected bottom-centre pixel plus raw score. | <img src="yolo/demos/images/bottom_centre_01.png" width="190" alt="YOLO bottom centre visual"> |
 | [State estimation](estimation/) | Turn image-space evidence into a calibrated ground-plane point and keep the belief/noise story explicit. | <img src="estimation/demos/images/image_to_bev_01.png" width="190" alt="Image to BEV visual"> |
-| [GP covariance model](gp/) | Learn a spatial detector-trust field and convert it into planner-facing camera covariance. | <img src="gp/demos/images/r_plan_map_and_ellipses.png" width="190" alt="R plan map visual"> |
+| [GP covariance model](gp/) | Learn a spatial detector-trust field and convert it into the explicit `R_plan` measurement covariance matrix. | <img src="gp/demos/images/collection_to_covariance_story.png" width="190" alt="Collection to covariance visual"> |
 | [Route planning](planning/) | Compare constant `R` against GP-scaled `R_plan` under the same map, tasks, seeds, and no-go geometry. | <img src="planning/demos/images/paired_route_choice.png" width="190" alt="Route choice visual"> |
 | [Experiments](experiments/) | Package the current honest campaign surface, result counts, paired figures, and reproduction commands. | <img src="experiments/demos/images/outcome_counts_by_condition.png" width="190" alt="Outcome counts visual"> |
 
@@ -139,6 +139,10 @@ python3 scripts/visibility_comparison/compute_paper_metrics.py \
 Public claims should trace through the evidence chain in
 [`docs/experiment_registry.md`](docs/experiment_registry.md): world, detector,
 visibility samples, GP, config, logs, metrics, figures, and paper wording.
+Implementation work should follow the validation-first module gates in
+[`docs/modular_validation_workflow.md`](docs/modular_validation_workflow.md):
+validate the true downstream job of a module before depending on it from the
+next one.
 Current release gaps before an archival public release are license, citation
 metadata, artifact/data availability, and externally hosted raw data or videos
 if those are needed beyond the curated artifact bundle.

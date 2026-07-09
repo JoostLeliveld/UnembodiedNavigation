@@ -1132,6 +1132,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'pixel_correction_approx': cfg['pixel_correction_approx'],
             'skip_stale_pixel_correction': cfg['skip_stale_pixel_correction'],
             'bev_y_calibration_offset_m': cfg['bev_y_calibration_offset_m'],
+            'bev_affine_calibration': cfg.get('bev_affine_calibration', ''),
             'bbox_contact_z_m': cfg['bbox_contact_z_m'],
             'pixel_max_correction_jump_m': cfg['pixel_max_correction_jump_m'],
             'pixel_correction_nis_threshold': cfg['pixel_correction_nis_threshold'],

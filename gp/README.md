@@ -15,6 +15,12 @@ covariance used by the visibility-aware planner.
 
 ## Visual Demonstration
 
+![Collection to covariance story](demos/images/collection_to_covariance_story.png)
+
+Read this left to right: sample robot poses, record detector scores, fit a
+spatial trust field, convert trust into a measurement standard deviation, and
+put that variance into the planner's `R_plan` matrix.
+
 ![Induced covariance](demos/images/induced_covariance.png)
 
 The GP predicts spatial detector trust. It does not learn `R` online. The
@@ -23,15 +29,35 @@ sharp visible-camera covariance and a broad missed-camera covariance.
 
 ![R plan map and ellipses](demos/images/r_plan_map_and_ellipses.png)
 
-In the locked model, `R_plan` is a symmetric image-space covariance matrix:
+## Shape Of `R_plan`
+
+For a future robot position `(x, y)`, the GP gives a planner trust value
+`rho(x, y)`. The planner converts that trust into one image-space variance:
 
 ```text
-R_plan = diag(r_plan^2, r_plan^2)
+sigma_plan^2(rho) =
+    1 / (rho / sigma_visible^2 + (1 - rho) / sigma_miss^2)
 ```
 
-The drawn ellipses are therefore circular glyphs whose size changes across the
-map. They visualize how uncertain an expected camera measurement would be, not
-the physical robot footprint.
+In the locked setup:
+
+```text
+sigma_visible = 2.5 px
+sigma_miss    = 40.0 px
+```
+
+That scalar variance is inserted into a 2x2 image-space measurement covariance:
+
+```text
+R_plan(x, y) =
+[ sigma_plan^2(rho(x, y))      0                         ]
+[ 0                            sigma_plan^2(rho(x, y))   ]  px^2
+```
+
+So `R_plan` is symmetric and diagonal. In this campaign the `u` and `v`
+variances are equal, which is why the drawn covariance ellipses are circular. If
+a future model used different `u/v` variances or non-zero off-diagonal terms,
+the ellipses would become stretched or tilted.
 
 Additional media is catalogued in [`demos/`](demos/).
 
@@ -45,12 +71,15 @@ Additional media is catalogued in [`demos/`](demos/).
 
 ## Method
 
-1. Capture detector outcomes at sampled robot poses.
-2. Aggregate raw YOLO scores by planar robot position.
-3. Fit a logit-space GP over `(x, y)`.
-4. Apply an uncertainty discount to create a conservative planner map.
-5. Convert reliability into image-space observation covariance through the
-   planner precision blend.
+1. Place the robot at sampled warehouse poses and record the detector score
+   from the fixed camera.
+2. Aggregate those scores by planar robot position `(x, y)`.
+3. Fit a logit-space GP so unsampled positions also receive a predicted trust
+   value and uncertainty.
+4. Discount the GP mean by its uncertainty to create a conservative planner
+   trust map.
+5. Convert trust to `sigma_plan^2` with the precision blend.
+6. Fill the fixed-shape `R_plan` matrix with that variance.
 
 The locked blend is:
 
@@ -59,7 +88,8 @@ The locked blend is:
 ```
 
 `R_visible` and `R_miss` are fixed covariance settings. The GP supplies the
-trust value that scales between them.
+trust value that scales between them; it does not directly learn the entries of
+`R_plan`.
 
 ## Performance And Diagnostics
 

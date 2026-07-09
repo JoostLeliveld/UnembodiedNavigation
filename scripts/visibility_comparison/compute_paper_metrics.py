@@ -533,9 +533,12 @@ def _compute_run_metrics(run_dir: Path, summary: dict, gp_interp, task_info: dic
                 timeout = float(manifest.get('pixel_timeout_s', 0.5) or 0.5)
                 fresh = 1.0 if math.isfinite(age) and age <= timeout else 0.0
             fresh_flags.append(fresh >= 0.5)
-            err = _pf(r, 'state_pos_error')
-            if fresh >= 0.5 and math.isfinite(err):
-                state_fresh_errors.append(err)
+            # NOTE: state_pos_error is derived from the STALE state_x/state_y field
+            # (frozen for long spans -> p95 1.65 m, max 4.65 m across honest_campaign_v1)
+            # and is NOT a valid localization error. The canonical localization error is
+            # mean_loc_error_m (= ||gt - planner_belief||, p95 0.127 m), computed above.
+            # Leave mean_state_error_fresh_m = nan rather than emit a contaminated number.
+            # See docs/campaign_log_metrics.md and scripts/geometry_visibility/campaign_metrics.py.
         yolo_pixel_fresh_rate = (
             float(np.mean(fresh_flags)) if fresh_flags else math.nan
         )

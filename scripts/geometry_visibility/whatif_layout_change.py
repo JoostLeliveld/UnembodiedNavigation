@@ -29,7 +29,7 @@ Z_MARKER, TAU_OCC = 0.35, 0.10
 REL, CHG, INK, MUTED = "RdYlGn", "RdBu", "#1a1a1a", "#6b6b6b"
 
 # the layout change: a 2.6 m pallet stack dropped mid-aisle A2 (currently open + well-seen)
-NEW_STACK = gv.Prism("dropped_pallet_A2", xmin=-1.25, xmax=-0.70, ymin=-0.35, ymax=0.20, zmin=0.0, zmax=2.6)
+NEW_STACK = gv.Prism("dropped_pallet_A2", xmin=-1.425, xmax=-0.525, ymin=-0.35, ymax=0.20, zmin=0.0, zmax=2.6)
 
 
 def main():
