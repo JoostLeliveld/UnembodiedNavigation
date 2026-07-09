@@ -1,0 +1,133 @@
+# Geometry Visibility Prior (offline, Stage 0–2)
+
+A ROS/Gazebo/YOLO-free module that predicts *where the camera can reliably
+localize the robot* from **known warehouse geometry + the camera model alone**,
+and checks that prediction against the empirically learned YOLO GP.
+
+It answers the question: *point at a driveable cell and explain why its expected
+measurement covariance is low, medium, or high* — from first principles, with no
+detection data.
+
+## Why this exists
+
+The current observability signal (`P_conservative_plan_map`) is **learned**: it
+needs a teleport-sampled YOLO capture per world. This module derives the same
+kind of field from geometry, so it can (a) *explain* the learned GP, (b) *fill*
+its coverage gaps, and (c) later transfer **zero-shot** to a world/camera the
+robot has never sampled.
+
+## Commands
+
+```bash
+# toy-scene unit tests (hermetic, no sim)
+python3 scripts/geometry_visibility/test_geometry_visibility.py
+
+# build the warehouse prior + validation
+python3 scripts/geometry_visibility/build_geometry_visibility_prior.py \
+  --gp-artifact paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz \
+  --campaign-config scripts/visibility_comparison/warehouse_visibility_campaign.yaml \
+  --out logs/geometry_visibility_prior/warehouse_aws_v0
+```
+
+Key knobs: `--z-marker` (robot marker height, default 0.35 m),
+`--tau-clearance` (occlusion softness, 0.10 m), `--ray-samples` (48),
+`--sigma-prior` (Stage-2 prior strength in logit units, 1.5).
+
+## The chain
+
+```
+prisms + camera  ->  2.5D height map
+                 ->  FOV / projection (ObliqueCameraModel)
+                 ->  raycast min-clearance (occlusion)
+                 ->  projection-Jacobian resolution (range/obliquity)
+                 ->  visibility_score = f_fov · f_occ · f_range · f_boundary  ∈ [0,1]
+                 ->  R_plan (pixel² measurement covariance)
+```
+
+**Design note — the range term stays in.** With the camera at z=4.8 m over
+≤1.9 m racks, hard occlusion shadows are short; the dominant reliability driver
+is *range + obliquity*, captured by the smaller singular value of d(u,v)/d(x,y)
+(pixels per metre). Disabling it (as an occlusion-only v0 would) throws away the
+main signal and manufactures disagreement with the empirical GP.
+
+## Outputs (`logs/geometry_visibility_prior/<name>/`)
+
+- `height_map.npz`, `geometry_visibility_prior.npz`, `raycast_visibility.csv`
+- `figures/01..10_*.png` — overlay, height, FOV, clearance, visibility,
+  components, R_plan std, explicit R_plan matrices, **geometry-vs-GP**, **fusion**
+- `VALIDATION.md` — probe points, Stage-1 correlations, agreement/disagreement,
+  Stage-2 gap-fill stats
+
+## Extra analysis scripts (Stage 1B / 3 / 5 exploration)
+
+These write to `logs/geometry_visibility_prior/demo/`:
+
+- `freespace_prior.py` — what the prior recovers from ONLY a driveable-region map
+  (no obstacle CAD): camera terms + free-space "holes" as inferred footprints.
+  → `freespace_vs_true.png`. Result: Spearman 0.625 (camera-only) → 0.669
+  (free-space footprints) → 0.728 (true heights); footprints matter more than heights.
+- `depth_source_comparison.py` — emulates depth sensors as characteristic
+  corruptions of true depth (RGBD range limits, monocular OOD height-compression,
+  stereo range² noise) and scores each as a GP initializer; plus a multi-camera
+  observability *union* demo. → `depth_source_comparison.png`, `multicam_union.png`.
+- `online_update_demo.py` — (1) the GP after different initializations, and
+  (2) a video of the GP updating from REAL driven runs (honest_campaign_v1
+  detections + real EKF covariance), comparing naive / gated-downweight /
+  spread-by-uncertainty. → `gp_after_initializations.png`, `gp_online_update.gif`.
+  Finding: driving cuts map RMSE 3× (0.207→0.064); **use position certainty to
+  widen a datapoint's influence, not to discard it** — hard down-weighting (0.083)
+  underperforms naive (0.064) because it throws away informative uncertain samples;
+  spread/input-noise (0.065) matches naive and is robust. Requires the
+  `logs/visibility_comparison/honest_campaign_v1/` run logs.
+- `stereo_online_showcase.py` — stereo cold-start init + driving, with each
+  datapoint applied AT the belief and shaped by the real EKF covariance. The
+  mechanism figure shows a confident fix depositing sharp/concentrated evidence vs
+  an uncertain fix spreading the *same* evidence over its belief-covariance ellipse.
+  → `stereo_online_mechanism.png`, `stereo_online_showcase.gif`. Uses
+  `planner_cov_*` (honest belief covariance), NOT `state_cov_*` (overconfident EKF).
+- `operator_dashboard.py` — 6-panel operational + commissioning dashboard from real
+  data: reliability, data-confidence, routes, day-one prior, change-vs-prior health,
+  multi-camera coverage. → `operator_dashboard.png`. See
+  [`docs/geometry_visibility_deployment.md`](../../docs/geometry_visibility_deployment.md).
+- `whatif_layout_change.py` — zero-shot what-if: predict the observability impact of
+  a layout change (a tall pallet dropped in an aisle) from geometry alone, no data.
+  → `whatif_layout_change.png`. Offline core of the transfer claim + commissioning tool.
+
+## Validation gates (all currently passing)
+
+1. 9/9 toy tests pass (occlusion, FOV, R_plan endpoints/monotonicity).
+2. Geometry overlay matches the warehouse.
+3. FOV vs occlusion failures are kept separate (distinct components/figures).
+4. R_plan endpoints recover `r_visible_uv=2.5` and `r_miss_uv=40.0` px.
+5. **Stage 1:** geometry explains the learned GP — Spearman ≈ 0.73, affine
+   R² ≈ 0.51 over ~23k driveable in-FOV cells; unchanged (0.728) on the 60%
+   most GP-confident cells, so it is **not** a prior-fallback artifact.
+
+## Known limits / honest caveats
+
+- 2.5D known-geometry height map only (no depth camera; that is Plan 1B).
+- `f_range` is normalised to the 90th-percentile in-FOV resolution — a relative,
+  not absolute, precision scale.
+- The empirical GP's logit-space `F_std` is larger in the saturated near-field,
+  so the Stage-2 blend slightly under-weights data there; the fusion demonstrates
+  the *mechanism* (weight tracks GP uncertainty), not a tuned final field.
+- The residual (fig 09) is **structured, not noise**: the detector saturates
+  high near-field and collapses hard far-field, where geometry is smooth. This is
+  reported, not tuned away.
+
+## Downstream contract
+
+- This is an **observability prior**, not a planner result. **No planner code
+  consumes it yet.**
+- `visibility_score_map` ∈ [0,1]; `r_plan_std_map` is pixel-space σ (2.5→40 px).
+- Consumers may assume the grid matches the GP artifact (`xs`, `ys`) and that
+  `driveable_mask`/`fov_mask` gate valid cells. They may **not** assume the score
+  is a calibrated detection probability — use the Stage-1 affine map for that.
+
+## Next (not done here)
+
+- **Stage 3 (zero-shot transfer):** edit the world (re-add a tall occluder / move
+  the camera), re-run the three capture scripts (`capture_visibility_samples.py`
+  → `build_gp_targets.py` → `fit_visibility_gps.py`; teleport-sampled, so
+  limiter-clean) and show geometry predicts the new field with no new data.
+- **Stage 5 (online):** certainty-gated rolling GP refit while driving.
