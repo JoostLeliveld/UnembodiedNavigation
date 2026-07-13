@@ -113,6 +113,12 @@ def generate_launch_description():
         description="Bridge external-camera semantic segmentation labels for offline dataset capture",
     )
     bridge_segmentation = LaunchConfiguration("bridge_segmentation")
+    bridge_camera_b_arg = DeclareLaunchArgument(
+        "bridge_camera_b",
+        default_value="false",
+        description="Bridge extension-only /external_camera_b RGB and camera_info topics",
+    )
+    bridge_camera_b = LaunchConfiguration("bridge_camera_b")
     world_arg = DeclareLaunchArgument(
         "world",
         default_value="warehouse_aws.world.sdf",
@@ -356,6 +362,16 @@ def generate_launch_description():
         output="screen",
         condition=IfCondition(bridge_segmentation),
     )
+    ros_gz_camera_b_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/external_camera_b/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
+            "/external_camera_b/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
+        ],
+        output="screen",
+        condition=IfCondition(bridge_camera_b),
+    )
     # Contact bridge: gz-sim publishes one topic PER contact sensor (there is no
     # aggregated /physics/contacts topic), and the sensor set depends on the
     # world SDF, so build the bridge at launch time by parsing the world.
@@ -380,6 +396,7 @@ def generate_launch_description():
         headless_arg,
         bridge_contacts_arg,
         bridge_segmentation_arg,
+        bridge_camera_b_arg,
         reset_world_arg,
         spawn_x_arg,
         spawn_y_arg,
@@ -394,6 +411,7 @@ def generate_launch_description():
         spawn_after_clock,
         wait_for_clock,
         ros_gz_segmentation_bridge,
+        ros_gz_camera_b_bridge,
         ros_gz_contact_bridge,
         ros_gz_groundtruth_bridge,
         ros_gz_scan_bridge,
