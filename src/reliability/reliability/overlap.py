@@ -59,6 +59,40 @@ class CameraOverlapValidationSummary:
         }
 
 
+@dataclass(frozen=True)
+class CameraOverlapTrustSummary:
+    camera_a_id: str
+    camera_b_id: str
+    pair_count: int
+    disagreement_gate_m: float
+    mean_disagreement_m: float
+    median_disagreement_m: float
+    p90_disagreement_m: float
+    max_disagreement_m: float
+    outlier_rate: float
+    mean_delta_b_minus_a_m: tuple[float, float]
+    bias_norm_m: float
+    pair_trust_score: float
+    pass_gate: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "camera_a_id": self.camera_a_id,
+            "camera_b_id": self.camera_b_id,
+            "pair_count": self.pair_count,
+            "disagreement_gate_m": self.disagreement_gate_m,
+            "mean_disagreement_m": _none_nan(self.mean_disagreement_m),
+            "median_disagreement_m": _none_nan(self.median_disagreement_m),
+            "p90_disagreement_m": _none_nan(self.p90_disagreement_m),
+            "max_disagreement_m": _none_nan(self.max_disagreement_m),
+            "outlier_rate": _none_nan(self.outlier_rate),
+            "mean_delta_b_minus_a_m": list(self.mean_delta_b_minus_a_m),
+            "bias_norm_m": _none_nan(self.bias_norm_m),
+            "pair_trust_score": _none_nan(self.pair_trust_score),
+            "pass_gate": self.pass_gate,
+        }
+
+
 def overlap_pairs_from_frames(
     frames: Sequence[ReplayFrame],
     *,
@@ -144,6 +178,111 @@ def validate_camera_overlap(
     )
 
 
+def summarize_overlap_trust(
+    pairs: Sequence[CameraOverlapPair],
+    *,
+    camera_a_id: str = "camera_A",
+    camera_b_id: str = "camera_B",
+    disagreement_gate_m: float = 0.30,
+    min_pair_count: int = 1,
+    max_outlier_rate: float = 0.05,
+) -> CameraOverlapTrustSummary:
+    """Summarize overlap pairs as a calibration/trust diagnostic.
+
+    Without an external reference this cannot assign absolute blame to either
+    camera. It estimates the pair's consistency, the systematic B-minus-A bias,
+    and a heuristic pair-trust score for fusion/selection ablations.
+    """
+
+    gate = _nonnegative(disagreement_gate_m, "disagreement_gate_m")
+    if int(min_pair_count) < 0:
+        raise ContractValidationError("min_pair_count must be non-negative")
+    max_outlier_rate = _probability(max_outlier_rate, "max_outlier_rate")
+    selected = [
+        pair
+        for pair in pairs
+        if pair.camera_a_id == camera_a_id and pair.camera_b_id == camera_b_id
+        and math.isfinite(pair.disagreement_m)
+    ]
+    values = [pair.disagreement_m for pair in selected]
+    deltas = [
+        (pair.xy_b_m[0] - pair.xy_a_m[0], pair.xy_b_m[1] - pair.xy_a_m[1])
+        for pair in selected
+    ]
+    if not values:
+        return CameraOverlapTrustSummary(
+            camera_a_id=camera_a_id,
+            camera_b_id=camera_b_id,
+            pair_count=0,
+            disagreement_gate_m=gate,
+            mean_disagreement_m=math.nan,
+            median_disagreement_m=math.nan,
+            p90_disagreement_m=math.nan,
+            max_disagreement_m=math.nan,
+            outlier_rate=math.nan,
+            mean_delta_b_minus_a_m=(math.nan, math.nan),
+            bias_norm_m=math.nan,
+            pair_trust_score=0.0,
+            pass_gate=False,
+        )
+    mean = sum(values) / len(values)
+    median = _quantile(values, 0.50)
+    p90 = _quantile(values, 0.90)
+    max_value = max(values)
+    outlier_rate = sum(1 for value in values if value > gate) / len(values)
+    dx = sum(delta[0] for delta in deltas) / len(deltas)
+    dy = sum(delta[1] for delta in deltas) / len(deltas)
+    bias_norm = math.hypot(dx, dy)
+    scale = max(gate, 1.0e-6)
+    pair_trust = math.exp(-p90 / scale) * max(1.0 - outlier_rate, 0.0)
+    pass_gate = bool(
+        len(values) >= int(min_pair_count)
+        and outlier_rate <= max_outlier_rate
+        and p90 <= gate
+    )
+    return CameraOverlapTrustSummary(
+        camera_a_id=camera_a_id,
+        camera_b_id=camera_b_id,
+        pair_count=len(values),
+        disagreement_gate_m=gate,
+        mean_disagreement_m=float(mean),
+        median_disagreement_m=float(median),
+        p90_disagreement_m=float(p90),
+        max_disagreement_m=float(max_value),
+        outlier_rate=float(outlier_rate),
+        mean_delta_b_minus_a_m=(float(dx), float(dy)),
+        bias_norm_m=float(bias_norm),
+        pair_trust_score=float(pair_trust),
+        pass_gate=pass_gate,
+    )
+
+
+def overlap_trust_from_frames(
+    frames: Sequence[ReplayFrame],
+    *,
+    camera_a_id: str = "camera_A",
+    camera_b_id: str = "camera_B",
+    max_time_delta_s: float = 0.05,
+    disagreement_gate_m: float = 0.30,
+    min_pair_count: int = 1,
+    max_outlier_rate: float = 0.05,
+) -> CameraOverlapTrustSummary:
+    pairs = overlap_pairs_from_frames(
+        frames,
+        camera_a_id=camera_a_id,
+        camera_b_id=camera_b_id,
+        max_time_delta_s=max_time_delta_s,
+    )
+    return summarize_overlap_trust(
+        pairs,
+        camera_a_id=camera_a_id,
+        camera_b_id=camera_b_id,
+        disagreement_gate_m=disagreement_gate_m,
+        min_pair_count=min_pair_count,
+        max_outlier_rate=max_outlier_rate,
+    )
+
+
 def summarize_overlap_pairs(
     pairs: Sequence[CameraOverlapPair],
     *,
@@ -178,6 +317,27 @@ def _nonnegative(value: float, field_name: str) -> float:
     if not math.isfinite(out) or out < 0.0:
         raise ContractValidationError(f"{field_name} must be finite and non-negative")
     return out
+
+
+def _probability(value: float, field_name: str) -> float:
+    out = _nonnegative(value, field_name)
+    if out > 1.0:
+        raise ContractValidationError(f"{field_name} must be in [0, 1]")
+    return out
+
+
+def _quantile(values: Sequence[float], q: float) -> float:
+    vals = sorted(float(value) for value in values)
+    if not vals:
+        return math.nan
+    q = min(max(float(q), 0.0), 1.0)
+    pos = q * (len(vals) - 1)
+    lo = int(math.floor(pos))
+    hi = int(math.ceil(pos))
+    if lo == hi:
+        return vals[lo]
+    frac = pos - lo
+    return vals[lo] * (1.0 - frac) + vals[hi] * frac
 
 
 def _none_nan(value: float) -> float | None:

@@ -192,6 +192,9 @@ def test_cli_multicamera_export_benchmark_and_overlap(tmp_path: Path, capsys) ->
     overlap_stdout = json.loads(capsys.readouterr().out)
     assert overlap_stdout["pass_gate"] is True
     assert overlap_stdout["pair_count"] == 2
+    assert overlap_stdout["trust"]["pass_gate"] is True
+    assert overlap_stdout["trust"]["bias_norm_m"] == pytest.approx(0.02)
 
     direct_overlap = validate_overlap_export_dir(export_dir, max_allowed_disagreement_m=0.05)
     assert direct_overlap["pair_count"] == 2
+    assert direct_overlap["trust"]["pair_count"] == 2

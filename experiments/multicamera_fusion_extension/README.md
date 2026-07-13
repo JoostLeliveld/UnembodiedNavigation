@@ -51,9 +51,11 @@ or a new controller while testing localization robustness.
 | 6. Evaluation-only camera-B feasibility | Implemented offline | `reliability.oracle` labels hypothetical camera availability and dropout coverage as `evaluation_only_oracle`; it is blocked from planner-facing imports. |
 | 7. Per-camera reliability provider interface | Implemented offline | `reliability.providers` supports fixed quality, current-GP-shaped `.npz` grid maps, and multi-camera dispatch. |
 | 8. Extension world and two-detector launch | Implemented, not claimed as result | `warehouse_multicamera_extension.world.sdf` includes `external_camera` and isolated `external_camera_b`; `warehouse_multicamera_extension.launch.py` starts two YOLO detector instances with isolated topics. |
-| 9. Calibration/overlap validation | Implemented offline | `reliability_tools validate-overlap` checks A/B map-estimate disagreement from multicamera replay frames without GT. |
+| 9. Calibration/overlap validation | Implemented offline | `reliability_tools validate-overlap` checks A/B map-estimate disagreement and overlap trust diagnostics from multicamera replay frames without GT. |
 | 10. Real multi-camera replay export | Implemented offline | `reliability_tools export-multicamera` writes split operational/evaluation records and shared replay frames for M5/M6 benchmarking. |
-| 11. Real camera-B GP reliability | Pending | Requires real camera-B logs with operational detector evidence before fitting. |
+| 11. Calibrated multi-camera day-zero prior | Implemented offline | `reliability.prior` builds per-camera known-calibration priors and fuses them with union/best-camera maps. |
+| 12. Per-camera reliability learning | Implemented offline | `reliability.learning` updates one Beta field per camera before fusing posteriors, so camera-specific failures do not contaminate other camera maps. |
+| 13. Real camera-B GP reliability | Pending | Requires real camera-B logs with operational detector evidence before fitting. |
 
 ## Working Commands
 
@@ -117,6 +119,59 @@ reliability_tools validate-overlap \
   --export-dir logs/reliability_exports/run_001_multicamera \
   --max-disagreement-m 0.30
 ```
+
+## Offline Research Steps 1-3
+
+The extension starts as an experiment framework, not a planner replacement.
+
+1. Build a calibrated day-zero prior from known camera intrinsics/extrinsics:
+
+```python
+from reliability import (
+    CameraCalibration,
+    PriorGridSpec,
+    build_multicamera_geometry_prior,
+)
+
+grid = PriorGridSpec.from_bounds(x_min=-5.5, x_max=5.5, y_min=-5.0, y_max=5.0, nx=220, ny=200)
+prior = build_multicamera_geometry_prior([camera_a, camera_b], grid)
+```
+
+This produces per-camera maps plus `union_probability`, `best_probability`, and
+`best_camera_id`. The important claim is not "more cameras are always better";
+it is "known calibration gives a measurable day-zero coverage/reliability prior
+before any detector learning."
+
+2. Learn reliability per camera, then fuse:
+
+```python
+from reliability import LearningConfig, ReliabilityObservation, learn_per_camera_reliability
+
+result = learn_per_camera_reliability(
+    prior,
+    [
+        ReliabilityObservation("camera_A", (1.0, 0.5), 1.0),
+        ReliabilityObservation("camera_B", (1.0, 0.5), 0.0),
+    ],
+    LearningConfig(prior_strength={"camera_A": 3.0, "camera_B": 3.0}),
+)
+```
+
+Camera observations update only their own field. Fusion happens after learning
+through the same union/best-camera maps.
+
+3. Use overlap as a calibration/trust signal:
+
+```python
+from reliability import overlap_trust_from_frames
+
+trust = overlap_trust_from_frames(frames, disagreement_gate_m=0.30)
+```
+
+The overlap summary reports p90 disagreement, outlier rate, systematic
+B-minus-A bias, and a pair-trust score. It does not use ground truth and it does
+not decide which camera is absolutely correct; it quantifies whether the pair is
+consistent enough for fusion ablations.
 
 ## Claim Discipline
 

@@ -11,7 +11,7 @@ from reliability.contracts import CameraQuality
 from reliability.benchmark import run_replay_benchmark
 from reliability.export import export_multicamera_run_files, export_run_directory
 from reliability.fusion import MapObservation
-from reliability.overlap import validate_camera_overlap
+from reliability.overlap import overlap_trust_from_frames, validate_camera_overlap
 from reliability.providers import GridMapReliabilityProvider
 from reliability.replay import EvaluationFrame, ReplayConfig, ReplayFrame, required_replay_configs, run_replay
 
@@ -59,6 +59,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     overlap_parser.add_argument("--camera-b", default="camera_B")
     overlap_parser.add_argument("--max-time-delta-s", type=float, default=0.05)
     overlap_parser.add_argument("--max-disagreement-m", type=float, default=0.30)
+    overlap_parser.add_argument("--min-pairs", type=int, default=1)
+    overlap_parser.add_argument("--max-outlier-rate", type=float, default=0.05)
     overlap_parser.add_argument("--summary-out", default="")
 
     args = parser.parse_args(argv)
@@ -128,6 +130,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             camera_b_id=args.camera_b,
             max_time_delta_s=args.max_time_delta_s,
             max_allowed_disagreement_m=args.max_disagreement_m,
+            min_pair_count=args.min_pairs,
+            max_outlier_rate=args.max_outlier_rate,
         )
         text = json.dumps(summary, indent=2, sort_keys=True)
         if args.summary_out:
@@ -216,6 +220,8 @@ def validate_overlap_export_dir(
     camera_b_id: str = "camera_B",
     max_time_delta_s: float = 0.05,
     max_allowed_disagreement_m: float = 0.30,
+    min_pair_count: int = 1,
+    max_outlier_rate: float = 0.05,
 ) -> dict[str, Any]:
     export_dir = Path(export_dir)
     frames = _load_replay_frames(export_dir / "operational" / "replay_frames.jsonl")
@@ -226,7 +232,17 @@ def validate_overlap_export_dir(
         max_time_delta_s=max_time_delta_s,
         max_allowed_disagreement_m=max_allowed_disagreement_m,
     )
-    return summary.to_dict()
+    out = summary.to_dict()
+    out["trust"] = overlap_trust_from_frames(
+        frames,
+        camera_a_id=camera_a_id,
+        camera_b_id=camera_b_id,
+        max_time_delta_s=max_time_delta_s,
+        disagreement_gate_m=max_allowed_disagreement_m,
+        min_pair_count=min_pair_count,
+        max_outlier_rate=max_outlier_rate,
+    ).to_dict()
+    return out
 
 
 def _quality_providers(

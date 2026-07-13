@@ -79,6 +79,17 @@ quality, and multi-camera dispatch providers. These providers read only runtime
 state such as `belief_xy`; they do not read GT, oracle, clearance, collision, or
 final-outcome labels.
 
+`reliability.prior` builds day-zero per-camera reliability priors from known
+calibration only: FOV, projected pixel location, image-border margin,
+camera-relative range, ground incidence, and projection scale. It fuses multiple
+cameras with union-of-success and best-camera maps while preserving the
+per-camera maps for later learning.
+
+`reliability.learning` updates one Beta-Bernoulli reliability field per camera
+from detector hit/miss evidence. Observations never update another camera's map;
+multi-camera union/best maps are recomputed only after per-camera posteriors are
+formed.
+
 `EvaluationOnlySample` contains labels and audit metrics:
 
 - Gazebo ground-truth pose and projected pixel
@@ -111,7 +122,8 @@ runs the required R0-R4 baselines; when frames contain multiple cameras it can
 also include M5 sequential fusion and M6 conservative best-camera selection.
 
 `reliability.overlap` validates two-camera calibration/overlap agreement from
-operational map estimates. It reports A/B disagreement without consuming GT.
+operational map estimates. It reports A/B disagreement, systematic B-minus-A
+bias, outlier rate, and pair-trust diagnostics without consuming GT.
 
 `reliability.oracle` is evaluation-only feasibility tooling for hypothetical
 second-camera coverage. It consumes truth trajectories or hand-labeled oracle
@@ -176,6 +188,28 @@ reliability_tools export-multicamera \
 reliability_tools validate-overlap \
   --export-dir logs/reliability_exports/run_001_multicamera \
   --max-disagreement-m 0.30
+```
+
+Offline multi-camera initialization and learning can be tested without planner
+integration:
+
+```python
+from reliability import (
+    CameraCalibration,
+    LearningConfig,
+    PriorGridSpec,
+    ReliabilityObservation,
+    build_multicamera_geometry_prior,
+    learn_per_camera_reliability,
+)
+
+grid = PriorGridSpec.from_bounds(x_min=-5.5, x_max=5.5, y_min=-5.0, y_max=5.0, nx=220, ny=200)
+prior = build_multicamera_geometry_prior([camera_a, camera_b], grid)
+learned = learn_per_camera_reliability(
+    prior,
+    [ReliabilityObservation("camera_A", (1.0, 0.5), 1.0)],
+    LearningConfig(prior_strength=3.0),
+)
 ```
 
 ## Baselines

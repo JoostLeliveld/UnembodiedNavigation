@@ -15,6 +15,8 @@ from reliability import (  # noqa: E402
     MapObservation,
     ReplayFrame,
     match_overlap_observations,
+    overlap_trust_from_frames,
+    summarize_overlap_trust,
     validate_camera_overlap,
 )
 
@@ -73,6 +75,52 @@ def test_validate_camera_overlap_reports_gate_result() -> None:
     assert bad.pass_gate is False
     assert ok.to_dict()["pair_count"] == 1
     assert ok.rms_disagreement_m == pytest.approx(0.2)
+
+
+def test_overlap_trust_reports_bias_and_outlier_rate() -> None:
+    pairs = match_overlap_observations(
+        [
+            _obs("camera_A", 1.00, 0.0, 0.0),
+            _obs("camera_B", 1.00, 0.1, 0.0),
+            _obs("camera_A", 2.00, 1.0, 0.0),
+            _obs("camera_B", 2.00, 1.1, 0.0),
+            _obs("camera_A", 3.00, 2.0, 0.0),
+            _obs("camera_B", 3.00, 3.0, 0.0),
+        ],
+        max_time_delta_s=0.01,
+    )
+
+    trust = summarize_overlap_trust(
+        pairs,
+        disagreement_gate_m=0.25,
+        min_pair_count=3,
+        max_outlier_rate=0.40,
+    )
+
+    assert trust.pair_count == 3
+    assert trust.outlier_rate == pytest.approx(1.0 / 3.0)
+    assert trust.mean_delta_b_minus_a_m[0] == pytest.approx(0.4)
+    assert 0.0 < trust.pair_trust_score < 1.0
+    assert trust.pass_gate is False
+    assert trust.to_dict()["bias_norm_m"] == pytest.approx(0.4)
+
+
+def test_overlap_trust_from_frames_uses_replay_frames() -> None:
+    frames = (
+        ReplayFrame(
+            timestamp_s=1.0,
+            odometry_xy_m=(0.0, 0.0),
+            observations=(
+                _obs("camera_A", 1.0, 0.0, 0.0),
+                _obs("camera_B", 1.0, 0.05, 0.0),
+            ),
+        ),
+    )
+
+    trust = overlap_trust_from_frames(frames, disagreement_gate_m=0.10)
+
+    assert trust.pass_gate is True
+    assert trust.p90_disagreement_m == pytest.approx(0.05)
 
 
 def test_validate_camera_overlap_rejects_bad_thresholds() -> None:
