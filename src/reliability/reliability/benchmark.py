@@ -50,6 +50,7 @@ def default_replay_benchmark_conditions(
         for config in required_replay_configs(quality_providers=quality_providers)
     ]
     if include_multicamera:
+        providers = dict(quality_providers or {})
         conditions.extend(
             [
                 ReplayBenchmarkCondition(
@@ -58,7 +59,27 @@ def default_replay_benchmark_conditions(
                 ),
                 ReplayBenchmarkCondition(
                     name=ReplayMode.CONSERVATIVE_SELECTION.value,
-                    config=ReplayConfig(mode=ReplayMode.CONSERVATIVE_SELECTION, nis_gate=9.21),
+                    config=ReplayConfig(
+                        mode=ReplayMode.CONSERVATIVE_SELECTION,
+                        nis_gate=9.21,
+                        quality_providers=providers,
+                    ),
+                ),
+                ReplayBenchmarkCondition(
+                    name=ReplayMode.HANDOVER_AWARE_SELECTION.value,
+                    config=ReplayConfig(
+                        mode=ReplayMode.HANDOVER_AWARE_SELECTION,
+                        nis_gate=9.21,
+                        quality_providers=providers,
+                    ),
+                ),
+                ReplayBenchmarkCondition(
+                    name=ReplayMode.HYSTERETIC_HANDOVER_SELECTION.value,
+                    config=ReplayConfig(
+                        mode=ReplayMode.HYSTERETIC_HANDOVER_SELECTION,
+                        nis_gate=9.21,
+                        quality_providers=providers,
+                    ),
                 ),
             ]
         )

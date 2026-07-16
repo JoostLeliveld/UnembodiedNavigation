@@ -37,7 +37,7 @@ MIDTERM_ASSETS = REPO.parent / "midterm_presentation" / "assets"
 GP_ARTIFACT = REPO / "paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz"
 CAMPAIGN_CONFIG = REPO / "scripts/visibility_comparison/warehouse_visibility_campaign.yaml"
 WEST_PAIR = REPO / "paper_artifacts/figures/paired_mechanism_west_current_data"
-FULL_CAMPAIGN_LOG = REPO / "docs/paper_vs_current/current/data/paired_mechanism_taskA_lowlat/campaign_log.json"
+FULL_CAMPAIGN_LOG = REPO / "paper_artifacts/figures/paired_mechanism_taskA_lowlat_data/campaign_log.json"
 
 R_VISIBLE_UV = 2.5
 R_MISS_UV = 40.0
@@ -349,7 +349,7 @@ def make_contribution_map() -> None:
         color=DARK,
         fontweight="bold",
     )
-    save(fig, REPO / "docs/media/contribution_map.png")
+    save(fig, REPO / "paper_artifacts/figures/explainers/contribution_map.png")
 
 
 def make_yolo_bottom_center() -> None:

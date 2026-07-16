@@ -90,6 +90,19 @@ from detector hit/miss evidence. Observations never update another camera's map;
 multi-camera union/best maps are recomputed only after per-camera posteriors are
 formed.
 
+`reliability.bev_reliability` adds an offline occlusion-aware BEV reliability
+network surface. It turns each calibrated camera into an operational feature
+token, scores those tokens with a small linear model, and fuses the camera set
+with soft attention plus union/best-camera probabilities. It is deliberately not
+a raw-image transformer; it keeps the thesis framing on navigation reliability,
+visibility, and planner-facing covariance.
+
+`reliability.handover` quantifies temporary source-switch uncertainty when a
+selected observation changes from one camera to another. It uses only operational
+signals: previous/selected camera IDs, near-synchronous A/B map disagreement,
+timestamp gap, staleness, and per-camera quality. Its output is a diagnostic plus
+a covariance inflation factor for the selected map observation.
+
 `EvaluationOnlySample` contains labels and audit metrics:
 
 - Gazebo ground-truth pose and projected pixel
@@ -119,11 +132,22 @@ operational/evaluation records.
 
 `reliability.benchmark` wraps replay into deterministic suites. By default it
 runs the required R0-R4 baselines; when frames contain multiple cameras it can
-also include M5 sequential fusion and M6 conservative best-camera selection.
+also include M5 sequential fusion, M6 conservative best-camera selection, and
+M7 handover-aware selection.
 
 `reliability.overlap` validates two-camera calibration/overlap agreement from
 operational map estimates. It reports A/B disagreement, systematic B-minus-A
 bias, outlier rate, and pair-trust diagnostics without consuming GT.
+
+`reliability.handover` bridges overlap diagnostics to estimator behavior. During
+an A-to-B handover it can leave an agreeing, near-synchronous switch almost
+unchanged, or inflate covariance when the switch has no overlap confirmation,
+large disagreement, stale selected data, or a quality drop.
+
+`reliability.bev_reliability` emits `CameraQuality` and BEV grid-provider
+outputs from calibrated priors plus operational detector/overlap features, so it
+can be ablated against the current GP reliability map before runtime planner
+integration.
 
 `reliability.oracle` is evaluation-only feasibility tooling for hypothetical
 second-camera coverage. It consumes truth trajectories or hand-labeled oracle
@@ -190,6 +214,18 @@ reliability_tools validate-overlap \
   --max-disagreement-m 0.30
 ```
 
+Example handover covariance inflation for an offline fusion/replay step:
+
+```python
+from reliability import handover_adjusted_observation
+
+adjusted_observation, diagnostic = handover_adjusted_observation(
+    previous_camera_id="camera_A",
+    selected_observation=camera_b_map_observation,
+    candidate_observations=(camera_a_map_observation, camera_b_map_observation),
+)
+```
+
 Offline multi-camera initialization and learning can be tested without planner
 integration:
 
@@ -210,6 +246,23 @@ learned = learn_per_camera_reliability(
     [ReliabilityObservation("camera_A", (1.0, 0.5), 1.0)],
     LearningConfig(prior_strength=3.0),
 )
+```
+
+A lightweight camera-set attention baseline can score the same calibrated BEV
+state without raw images:
+
+```python
+from reliability import BEVReliabilityModel, bev_tokens_from_prior_maps
+
+tokens = bev_tokens_from_prior_maps(
+    prior,
+    (1.0, 0.5),
+    camera_measurements={
+        "camera_A": {"detector_score": 0.2, "detection_valid": False},
+        "camera_B": {"detector_score": 0.9, "detection_valid": True},
+    },
+)
+prediction = BEVReliabilityModel().predict_set(tokens)
 ```
 
 ## Baselines

@@ -36,11 +36,30 @@ def _detector_params(
         "diagnostics_topic": diagnostics_topic,
         "camera_observation_topic": observation_topic,
         "camera_id": camera_id,
-        "camera_calibration_id": f"warehouse_multicamera_extension_{camera_id}",
+        "camera_calibration_id": f"warehouse_full_4cam_{camera_id}",
         "camera_image_frame_id": camera_id,
         "camera_observation_r_visible_uv": LaunchConfiguration("camera_observation_r_visible_uv"),
         "camera_observation_r_miss_uv": LaunchConfiguration("camera_observation_r_miss_uv"),
     }
+
+
+def _detector_node(camera_letter: str, image_topic: str) -> Node:
+    camera_id = f"camera_{camera_letter}"
+    return Node(
+        package="perception",
+        executable="yolo_robot_detector_node",
+        name=f"yolo_robot_detector_camera_{camera_letter.lower()}",
+        output="screen",
+        parameters=[
+            _detector_params(
+                camera_id,
+                image_topic,
+                f"/perception/{camera_id}/pixel_pose",
+                f"/perception/{camera_id}/detection_diagnostics",
+                f"/perception/camera_observation/{camera_id}",
+            )
+        ],
+    )
 
 
 def generate_launch_description():
@@ -54,13 +73,15 @@ def generate_launch_description():
         ),
         launch_arguments={
             "world": LaunchConfiguration("world"),
-            "world_name": "warehouse_multicamera_extension",
+            "world_name": LaunchConfiguration("world_name"),
             "headless": LaunchConfiguration("headless"),
             "use_sim_time": LaunchConfiguration("use_sim_time"),
             "reset_world": LaunchConfiguration("reset_world"),
             "use_lidar": "false",
             "bridge_scan": "false",
             "bridge_camera_b": "true",
+            "bridge_camera_c": "true",
+            "bridge_camera_d": "true",
             "spawn_x": LaunchConfiguration("spawn_x"),
             "spawn_y": LaunchConfiguration("spawn_y"),
             "spawn_z": LaunchConfiguration("spawn_z"),
@@ -68,46 +89,23 @@ def generate_launch_description():
         }.items(),
     )
 
-    detector_a = Node(
-        package="perception",
-        executable="yolo_robot_detector_node",
-        name="yolo_robot_detector_camera_a",
-        output="screen",
-        parameters=[
-            _detector_params(
-                "camera_A",
-                "/external_camera/image_raw",
-                "/perception/camera_A/pixel_pose",
-                "/perception/camera_A/detection_diagnostics",
-                "/perception/camera_observation/camera_A",
-            )
-        ],
-    )
-    detector_b = Node(
-        package="perception",
-        executable="yolo_robot_detector_node",
-        name="yolo_robot_detector_camera_b",
-        output="screen",
-        parameters=[
-            _detector_params(
-                "camera_B",
-                "/external_camera_b/image_raw",
-                "/perception/camera_B/pixel_pose",
-                "/perception/camera_B/detection_diagnostics",
-                "/perception/camera_observation/camera_B",
-            )
-        ],
-    )
+    detectors = [
+        _detector_node("A", "/external_camera/image_raw"),
+        _detector_node("B", "/external_camera_b/image_raw"),
+        _detector_node("C", "/external_camera_c/image_raw"),
+        _detector_node("D", "/external_camera_d/image_raw"),
+    ]
 
     return LaunchDescription([
-        DeclareLaunchArgument("world", default_value="warehouse_multicamera_extension.world.sdf"),
+        DeclareLaunchArgument("world", default_value="warehouse_full_4cam.world.sdf"),
+        DeclareLaunchArgument("world_name", default_value="warehouse_full_4cam"),
         DeclareLaunchArgument("use_sim_time", default_value="true"),
         DeclareLaunchArgument("headless", default_value="false"),
         DeclareLaunchArgument("reset_world", default_value="false"),
-        DeclareLaunchArgument("spawn_x", default_value="-3.0"),
-        DeclareLaunchArgument("spawn_y", default_value="-3.2"),
+        DeclareLaunchArgument("spawn_x", default_value="-1.0"),
+        DeclareLaunchArgument("spawn_y", default_value="-7.8"),
         DeclareLaunchArgument("spawn_z", default_value="0.05"),
-        DeclareLaunchArgument("spawn_yaw", default_value="0.0"),
+        DeclareLaunchArgument("spawn_yaw", default_value="1.5708"),
         DeclareLaunchArgument("yolo_model", default_value="", description="Local path to the trained YOLO model"),
         DeclareLaunchArgument("yolo_device", default_value=""),
         DeclareLaunchArgument("yolo_imgsz", default_value="640"),
@@ -126,6 +124,5 @@ def generate_launch_description():
         DeclareLaunchArgument("camera_observation_r_visible_uv", default_value="2.5"),
         DeclareLaunchArgument("camera_observation_r_miss_uv", default_value="40.0"),
         sim_bringup,
-        detector_a,
-        detector_b,
+        *detectors,
     ])

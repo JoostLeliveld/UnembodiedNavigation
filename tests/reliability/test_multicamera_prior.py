@@ -74,6 +74,15 @@ def test_single_camera_prior_exports_grid_provider() -> None:
     assert quality.source_model.startswith("calibrated_multicamera_prior")
 
 
+def test_large_prior_keeps_feature_maps_finite_outside_fov() -> None:
+    grid = PriorGridSpec.from_bounds(x_min=-12.0, x_max=12.0, y_min=-8.0, y_max=8.0, nx=17, ny=13)
+    prior = build_camera_geometry_prior(_camera_a(), grid)
+
+    assert not np.all(prior.fov_mask)
+    for values in prior.feature_maps.values():
+        assert np.all(np.isfinite(values))
+
+
 def test_evaluate_probability_grid_reports_blind_exposure() -> None:
     probability = np.asarray([[0.9, 0.8, 0.1], [0.7, 0.2, 0.1]], dtype=float)
     labels = np.asarray([[1.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=float)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from reliability.contracts import CameraQuality
 from reliability.benchmark import run_replay_benchmark
@@ -43,12 +43,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     replay_parser.add_argument("--summary-out", default="")
     replay_parser.add_argument("--gp-artifact", default="")
     replay_parser.add_argument("--camera-id", default="camera_A")
+    replay_parser.add_argument(
+        "--camera-gp",
+        action="append",
+        default=[],
+        help="Repeat camera_id=path/to/posterior.npz to supply one GP per camera.",
+    )
 
     benchmark_parser = sub.add_parser("benchmark", help="Run replay benchmark suite from an exported split directory")
     benchmark_parser.add_argument("--export-dir", required=True)
     benchmark_parser.add_argument("--summary-out", default="")
     benchmark_parser.add_argument("--gp-artifact", default="")
     benchmark_parser.add_argument("--camera-id", default="camera_A")
+    benchmark_parser.add_argument(
+        "--camera-gp",
+        action="append",
+        default=[],
+        help="Repeat camera_id=path/to/posterior.npz to supply one GP per camera.",
+    )
     benchmark_mode = benchmark_parser.add_mutually_exclusive_group()
     benchmark_mode.add_argument("--include-multicamera", action="store_true")
     benchmark_mode.add_argument("--single-camera-only", action="store_true")
@@ -117,6 +129,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.export_dir,
             gp_artifact=args.gp_artifact,
             camera_id=args.camera_id,
+            camera_gp_artifacts=_parse_camera_gp_args(args.camera_gp),
         )
         text = json.dumps(summary, indent=2, sort_keys=True)
         if args.summary_out:
@@ -149,6 +162,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             include_multicamera=include_multicamera,
             gp_artifact=args.gp_artifact,
             camera_id=args.camera_id,
+            camera_gp_artifacts=_parse_camera_gp_args(args.camera_gp),
         )
         text = json.dumps(summary, indent=2, sort_keys=True)
         if args.summary_out:
@@ -164,11 +178,16 @@ def replay_export_dir(
     *,
     gp_artifact: str | Path = "",
     camera_id: str = "camera_A",
+    camera_gp_artifacts: Mapping[str, str | Path] | None = None,
 ) -> dict[str, Any]:
     export_dir = Path(export_dir)
     frames = _load_replay_frames(export_dir / "operational" / "replay_frames.jsonl")
     evaluation = _load_evaluation_frames(export_dir / "evaluation_only" / "evaluation_frames.jsonl")
-    providers = _quality_providers(gp_artifact=gp_artifact, camera_id=camera_id)
+    providers = _quality_providers(
+        gp_artifact=gp_artifact,
+        camera_id=camera_id,
+        camera_gp_artifacts=camera_gp_artifacts,
+    )
     summary: dict[str, Any] = {
         "frames": len(frames),
         "evaluation_frames": len(evaluation),
@@ -196,11 +215,16 @@ def benchmark_export_dir(
     include_multicamera: bool | None = None,
     gp_artifact: str | Path = "",
     camera_id: str = "camera_A",
+    camera_gp_artifacts: Mapping[str, str | Path] | None = None,
 ) -> dict[str, Any]:
     export_dir = Path(export_dir)
     frames = _load_replay_frames(export_dir / "operational" / "replay_frames.jsonl")
     evaluation = _load_evaluation_frames(export_dir / "evaluation_only" / "evaluation_frames.jsonl")
-    providers = _quality_providers(gp_artifact=gp_artifact, camera_id=camera_id)
+    providers = _quality_providers(
+        gp_artifact=gp_artifact,
+        camera_id=camera_id,
+        camera_gp_artifacts=camera_gp_artifacts,
+    )
     suite = run_replay_benchmark(
         frames,
         evaluation_frames=evaluation,
@@ -249,15 +273,23 @@ def _quality_providers(
     *,
     gp_artifact: str | Path = "",
     camera_id: str = "camera_A",
+    camera_gp_artifacts: Mapping[str, str | Path] | None = None,
 ) -> dict[str, GridMapReliabilityProvider]:
-    if not str(gp_artifact or "").strip():
-        return {}
-    provider = GridMapReliabilityProvider.from_npz(
-        gp_artifact,
-        camera_id=camera_id,
-        out_of_bounds_policy="clamp",
-    )
-    return {camera_id: provider}
+    artifacts = {
+        str(key): value
+        for key, value in dict(camera_gp_artifacts or {}).items()
+        if str(key).strip() and str(value or "").strip()
+    }
+    if str(gp_artifact or "").strip():
+        artifacts.setdefault(str(camera_id), gp_artifact)
+    return {
+        source_id: GridMapReliabilityProvider.from_npz(
+            artifact,
+            camera_id=source_id,
+            out_of_bounds_policy="clamp",
+        )
+        for source_id, artifact in artifacts.items()
+    }
 
 
 def _parse_camera_csv_args(values: Sequence[str]) -> dict[str, Path]:
@@ -277,6 +309,23 @@ def _parse_camera_csv_args(values: Sequence[str]) -> dict[str, Path]:
         out[camera_id] = Path(path)
     if len(out) < 2:
         raise SystemExit("export-multicamera requires at least two --camera-csv entries")
+    return out
+
+
+def _parse_camera_gp_args(values: Sequence[str]) -> dict[str, Path]:
+    """Parse repeatable camera-specific GP options without pooling sources."""
+
+    out: dict[str, Path] = {}
+    for value in values:
+        text = str(value)
+        if "=" not in text:
+            raise SystemExit(f"--camera-gp must be camera_id=path, got {text!r}")
+        camera_id, path = (part.strip() for part in text.split("=", 1))
+        if not camera_id or not path:
+            raise SystemExit(f"--camera-gp must be camera_id=path, got {text!r}")
+        if camera_id in out:
+            raise SystemExit(f"--camera-gp supplied more than once for {camera_id!r}")
+        out[camera_id] = Path(path)
     return out
 
 

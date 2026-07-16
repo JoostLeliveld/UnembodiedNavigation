@@ -69,6 +69,8 @@ class CameraProbeResult:
     truth_y_m: float | None
     truth_yaw_rad: float | None
     truth_dt_s: float | None
+    pair_time_delta_s: float | None
+    pair_synchronized: bool
     detected: bool
     score: float | None
     selected_u_px: float | None
@@ -94,6 +96,7 @@ class MultiCameraAccuracyProbe(Node):
         cameras: dict[str, ObliqueCameraModel],
         settle_s: float,
         sample_timeout_s: float,
+        max_pair_time_delta_s: float,
         robot_z_m: float,
         robot_box_length_m: float,
         robot_box_width_m: float,
@@ -106,6 +109,7 @@ class MultiCameraAccuracyProbe(Node):
         self.cameras = dict(cameras)
         self.settle_s = float(settle_s)
         self.sample_timeout_s = float(sample_timeout_s)
+        self.max_pair_time_delta_s = float(max_pair_time_delta_s)
         self.robot_z_m = float(robot_z_m)
         self.robot_box_length_m = float(robot_box_length_m)
         self.robot_box_width_m = float(robot_box_width_m)
@@ -113,6 +117,9 @@ class MultiCameraAccuracyProbe(Node):
         self.clock_s = math.nan
         self.truth_history: list[tuple[float, float, float, float]] = []
         self.last_diag: dict[str, tuple[float, dict[str, float]]] = {}
+        self.diag_history: dict[str, list[tuple[float, dict[str, float]]]] = {
+            camera_id: [] for camera_id in self.cameras
+        }
         clock_qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
             depth=10,
@@ -162,19 +169,34 @@ class MultiCameraAccuracyProbe(Node):
         min_diag_stamp_s = float(self.clock_s) if math.isfinite(self.clock_s) else -math.inf
 
         deadline = time.monotonic() + max(self.sample_timeout_s, 0.1)
+        selected_diags: dict[str, tuple[float, dict[str, float]]] = {}
+        pair_time_delta_s = math.inf
         while rclpy.ok() and time.monotonic() < deadline:
             rclpy.spin_once(self, timeout_sec=0.05)
-            if all(
-                camera_id in self.last_diag
-                and self.last_diag[camera_id][0] > before.get(camera_id, -math.inf)
-                and self.last_diag[camera_id][0] >= min_diag_stamp_s
-                for camera_id in self.cameras
+            selected_diags, pair_time_delta_s = self._closest_new_diagnostic_set(
+                previous_stamps=before,
+                min_stamp_s=min_diag_stamp_s,
+            )
+            if (
+                len(selected_diags) == len(self.cameras)
+                and pair_time_delta_s <= self.max_pair_time_delta_s
             ):
                 break
 
+        if len(selected_diags) != len(self.cameras):
+            selected_diags, pair_time_delta_s = self._closest_new_diagnostic_set(
+                previous_stamps=before,
+                min_stamp_s=min_diag_stamp_s,
+            )
+        pair_synchronized = bool(
+            len(selected_diags) == len(self.cameras)
+            and math.isfinite(pair_time_delta_s)
+            and pair_time_delta_s <= self.max_pair_time_delta_s
+        )
+
         results = []
         for camera_id, camera in sorted(self.cameras.items()):
-            stamp, diag = self.last_diag.get(camera_id, (math.nan, {}))
+            stamp, diag = selected_diags.get(camera_id, (math.nan, {}))
             results.append(
                 self._score_camera(
                     camera_id=camera_id,
@@ -187,6 +209,8 @@ class MultiCameraAccuracyProbe(Node):
                     diag=diag,
                     previous_stamp=before.get(camera_id, -math.inf),
                     min_diag_stamp_s=min_diag_stamp_s,
+                    pair_time_delta_s=(pair_time_delta_s if math.isfinite(pair_time_delta_s) else None),
+                    pair_synchronized=pair_synchronized,
                 )
             )
         return results
@@ -246,6 +270,48 @@ class MultiCameraAccuracyProbe(Node):
         diag = diagnostics_from_message(msg)
         stamp = float(diag.get("stamp", math.nan))
         self.last_diag[camera_id] = (stamp, diag)
+        history = self.diag_history.setdefault(camera_id, [])
+        history.append((stamp, diag))
+        if len(history) > 200:
+            del history[: len(history) - 200]
+
+    def _closest_new_diagnostic_set(
+        self,
+        *,
+        previous_stamps: dict[str, float],
+        min_stamp_s: float,
+    ) -> tuple[dict[str, tuple[float, dict[str, float]]], float]:
+        """Choose one new result per camera with the smallest capture-time span."""
+
+        candidates: dict[str, list[tuple[float, dict[str, float]]]] = {}
+        for camera_id in self.cameras:
+            rows = [
+                row
+                for row in self.diag_history.get(camera_id, [])
+                if math.isfinite(row[0])
+                and row[0] > previous_stamps.get(camera_id, -math.inf)
+                and row[0] >= min_stamp_s
+            ]
+            if not rows:
+                return {}, math.inf
+            candidates[camera_id] = rows[-40:]
+
+        best: dict[str, tuple[float, dict[str, float]]] = {}
+        best_span = math.inf
+        reference_stamps = sorted(
+            {stamp for rows in candidates.values() for stamp, _diag in rows}
+        )
+        for reference_stamp in reference_stamps:
+            selected = {
+                camera_id: min(rows, key=lambda row: abs(row[0] - reference_stamp))
+                for camera_id, rows in candidates.items()
+            }
+            stamps = [row[0] for row in selected.values()]
+            span = max(stamps) - min(stamps)
+            if span < best_span:
+                best = selected
+                best_span = span
+        return best, best_span
 
     def _latest_truth(self) -> tuple[float, float, float, float] | None:
         if not self.truth_history:
@@ -265,6 +331,8 @@ class MultiCameraAccuracyProbe(Node):
         diag: dict[str, float],
         previous_stamp: float,
         min_diag_stamp_s: float,
+        pair_time_delta_s: float | None,
+        pair_synchronized: bool,
     ) -> CameraProbeResult:
         truth = self._latest_truth()
         truth_stamp = truth_x = truth_y = truth_yaw = None
@@ -283,7 +351,12 @@ class MultiCameraAccuracyProbe(Node):
             and diag_stamp > previous_stamp
             and diag_stamp >= min_diag_stamp_s
         )
-        status = "ok" if detected and new_sample and truth is not None else "missing_detection_or_truth"
+        if not pair_synchronized:
+            status = "unsynchronized_camera_results"
+        elif detected and new_sample and truth is not None:
+            status = "ok"
+        else:
+            status = "missing_detection_or_truth"
 
         expected_bbox = None
         selected_error = None
@@ -312,7 +385,7 @@ class MultiCameraAccuracyProbe(Node):
         selected_v = _finite_or_none(diag.get("v_mid")) if diag else None
         if selected_u is not None and selected_v is not None and expected_uv[0] is not None:
             selected_error = math.hypot(selected_u - expected_uv[0], selected_v - expected_uv[1])
-            xy = camera.pixel_to_world(selected_u, selected_v)
+            xy = camera.pixel_to_world_at_z(selected_u, selected_v, self.robot_z_m)
             if xy is not None and truth_x is not None and truth_y is not None:
                 xy_error = math.hypot(xy[0] - float(truth_x), xy[1] - float(truth_y))
 
@@ -330,7 +403,9 @@ class MultiCameraAccuracyProbe(Node):
             truth_y_m=truth_y,
             truth_yaw_rad=truth_yaw,
             truth_dt_s=truth_dt,
-            detected=bool(detected and new_sample),
+            pair_time_delta_s=pair_time_delta_s,
+            pair_synchronized=pair_synchronized,
+            detected=bool(detected and new_sample and pair_synchronized),
             score=_finite_or_none(diag.get("yolo_score_selected")) if diag else None,
             selected_u_px=selected_u,
             selected_v_px=selected_v,
@@ -509,13 +584,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--world-sdf",
-        default=str((REPO_ROOT / "src" / "sim" / "gazebo_worlds" / "worlds" / "warehouse_multicamera_extension.world.sdf").resolve()),
+        default=str((REPO_ROOT / "src" / "sim" / "gazebo_worlds" / "worlds" / "warehouse_full_4cam.world.sdf").resolve()),
     )
-    parser.add_argument("--world-name", default="warehouse_multicamera_extension")
+    parser.add_argument("--world-name", default="warehouse_full_4cam")
     parser.add_argument("--camera", action="append", default=[], help="camera_id=model_name, repeatable")
     parser.add_argument("--pose", action="append", type=_parse_pose, default=[], help="x,y,yaw[,label], repeatable")
     parser.add_argument("--settle-s", type=float, default=1.0)
     parser.add_argument("--sample-timeout-s", type=float, default=10.0)
+    parser.add_argument(
+        "--max-pair-time-delta-s",
+        type=float,
+        default=0.05,
+        help="Maximum capture-time span for treating camera diagnostics as one synchronized sample",
+    )
     parser.add_argument("--ready-timeout-s", type=float, default=20.0)
     parser.add_argument("--robot-z", type=float, default=0.05)
     parser.add_argument("--robot-box-length", type=float, default=0.22)
@@ -524,7 +605,12 @@ def main() -> int:
     parser.add_argument("--out", default="", help="Optional JSON output path")
     args = parser.parse_args()
 
-    camera_specs = args.camera or ["camera_A=external_camera", "camera_B=external_camera_b"]
+    camera_specs = args.camera or [
+        "camera_A=external_camera",
+        "camera_B=external_camera_b",
+        "camera_C=external_camera_c",
+        "camera_D=external_camera_d",
+    ]
     cameras: dict[str, ObliqueCameraModel] = {}
     world_sdf = Path(args.world_sdf).expanduser().resolve()
     for spec in camera_specs:
@@ -540,6 +626,7 @@ def main() -> int:
         cameras=cameras,
         settle_s=float(args.settle_s),
         sample_timeout_s=float(args.sample_timeout_s),
+        max_pair_time_delta_s=float(args.max_pair_time_delta_s),
         robot_z_m=float(args.robot_z),
         robot_box_length_m=float(args.robot_box_length),
         robot_box_width_m=float(args.robot_box_width),

@@ -5,10 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 import math
-from typing import Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
+from reliability.camera_manager import CameraManager, CameraManagerConfig
 from reliability.contracts import CameraQuality, ContractValidationError
 from reliability.fusion import MapObservation, SequentialFusionResult, sequential_kalman_update_2d
+from reliability.handover import HandoverUncertaintyConfig, HandoverUncertaintyDiagnostic, handover_adjusted_observation
 from reliability.providers import CameraReliabilityProvider
 
 
@@ -20,6 +22,8 @@ class ReplayMode(str, Enum):
     CURRENT_GP_R = "R4_current_GP_R"
     SEQUENTIAL_FUSION = "M5_sequential_fusion"
     CONSERVATIVE_SELECTION = "M6_conservative_selection"
+    HANDOVER_AWARE_SELECTION = "M7_handover_aware_selection"
+    HYSTERETIC_HANDOVER_SELECTION = "M8_hysteretic_handover_selection"
 
 
 @dataclass(frozen=True)
@@ -55,6 +59,8 @@ class ReplayConfig:
     detector_score_max_cov_m2: float = 0.40**2
     max_error_divergence_m: float = 1.0
     quality_providers: Mapping[str, CameraReliabilityProvider] = field(default_factory=dict)
+    handover_config: HandoverUncertaintyConfig = field(default_factory=HandoverUncertaintyConfig)
+    camera_manager_config: CameraManagerConfig = field(default_factory=CameraManagerConfig)
 
 
 @dataclass(frozen=True)
@@ -65,6 +71,8 @@ class ReplayStep:
     accepted_camera_ids: tuple[str, ...]
     rejected_camera_ids: tuple[str, ...]
     nis_by_camera: dict[str, float]
+    handover_diagnostics: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    camera_manager_decision: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -115,6 +123,9 @@ def run_replay(
     steps: list[ReplayStep] = []
     accepted_total = 0
     rejected_total = 0
+    previous_selected_camera_id: str | None = None
+    previous_selected_observation: MapObservation | None = None
+    camera_manager = CameraManager(config.camera_manager_config)
 
     for idx, frame in enumerate(ordered):
         if idx > 0:
@@ -124,12 +135,45 @@ def run_replay(
             cov = _mat_add(cov, _matrix(config.process_noise_m2, "process_noise_m2"))
             previous_odom = frame.odometry_xy_m
 
-        replay_obs = _observations_for_config(
-            frame.observations,
-            config,
-            mean_xy=mean,
-            timestamp_s=frame.timestamp_s,
-        )
+        handover_diagnostics: tuple[HandoverUncertaintyDiagnostic, ...] = tuple()
+        selected_handover_observation: MapObservation | None = None
+        camera_manager_decision: dict[str, Any] = {}
+        if config.mode == ReplayMode.HANDOVER_AWARE_SELECTION:
+            replay_obs, handover_diagnostics, selected_handover_observation = _handover_observations_for_config(
+                frame.observations,
+                config,
+                mean_xy=mean,
+                timestamp_s=frame.timestamp_s,
+                previous_camera_id=previous_selected_camera_id,
+                previous_observation=previous_selected_observation,
+            )
+        elif config.mode == ReplayMode.HYSTERETIC_HANDOVER_SELECTION:
+            manager_observations = tuple(
+                _with_provider_quality(item, config, mean, frame.timestamp_s)
+                for item in frame.observations
+            )
+            manager_decision = camera_manager.select(
+                timestamp_s=frame.timestamp_s,
+                observations=manager_observations,
+            )
+            camera_manager_decision = manager_decision.to_dict()
+            selected_handover_observation = manager_decision.selected_observation
+            adjusted, diagnostic = handover_adjusted_observation(
+                previous_camera_id=previous_selected_camera_id,
+                selected_observation=selected_handover_observation,
+                candidate_observations=manager_observations,
+                previous_observation=previous_selected_observation,
+                config=config.handover_config,
+            )
+            replay_obs = (adjusted,) if adjusted is not None else tuple()
+            handover_diagnostics = (diagnostic,)
+        else:
+            replay_obs = _observations_for_config(
+                frame.observations,
+                config,
+                mean_xy=mean,
+                timestamp_s=frame.timestamp_s,
+            )
         if replay_obs:
             fusion = sequential_kalman_update_2d(
                 mean,
@@ -148,6 +192,17 @@ def run_replay(
                 nis_by_camera={},
             )
 
+        if (
+            config.mode in (
+                ReplayMode.HANDOVER_AWARE_SELECTION,
+                ReplayMode.HYSTERETIC_HANDOVER_SELECTION,
+            )
+            and selected_handover_observation is not None
+            and selected_handover_observation.camera_id in fusion.accepted_camera_ids
+        ):
+            previous_selected_camera_id = selected_handover_observation.camera_id
+            previous_selected_observation = selected_handover_observation
+
         accepted_total += len(fusion.accepted_camera_ids)
         rejected_total += len(fusion.rejected_camera_ids)
         steps.append(
@@ -158,6 +213,8 @@ def run_replay(
                 accepted_camera_ids=fusion.accepted_camera_ids,
                 rejected_camera_ids=fusion.rejected_camera_ids,
                 nis_by_camera=fusion.nis_by_camera,
+                handover_diagnostics=tuple(item.to_dict() for item in handover_diagnostics),
+                camera_manager_decision=camera_manager_decision,
             )
         )
 
@@ -236,12 +293,55 @@ def _observations_for_config(
     if config.mode == ReplayMode.CONSERVATIVE_SELECTION:
         if not observations:
             return tuple()
-        selected = max(
-            observations,
-            key=lambda item: item.quality.p_available * item.quality.association_confidence,
+        candidates = tuple(
+            _with_provider_quality(item, config, mean_xy, timestamp_s) for item in observations
         )
+        selected = _select_quality_observation(candidates)
         return (selected,)
     return tuple(observations)
+
+
+def _handover_observations_for_config(
+    observations: Sequence[MapObservation],
+    config: ReplayConfig,
+    *,
+    mean_xy: Sequence[float],
+    timestamp_s: float,
+    previous_camera_id: str | None,
+    previous_observation: MapObservation | None,
+) -> tuple[tuple[MapObservation, ...], tuple[HandoverUncertaintyDiagnostic, ...], MapObservation | None]:
+    if not observations:
+        diagnostic = handover_adjusted_observation(
+            previous_camera_id=previous_camera_id,
+            selected_observation=None,
+            candidate_observations=tuple(),
+            previous_observation=previous_observation,
+            config=config.handover_config,
+        )[1]
+        return tuple(), (diagnostic,), None
+    candidates = tuple(
+        _with_provider_quality(item, config, mean_xy, timestamp_s) for item in observations
+    )
+    selected = _select_quality_observation(candidates)
+    adjusted, diagnostic = handover_adjusted_observation(
+        previous_camera_id=previous_camera_id,
+        selected_observation=selected,
+        candidate_observations=candidates,
+        previous_observation=previous_observation,
+        config=config.handover_config,
+    )
+    return (adjusted,) if adjusted is not None else tuple(), (diagnostic,), selected
+
+
+def _select_quality_observation(observations: Sequence[MapObservation]) -> MapObservation:
+    return max(
+        observations,
+        key=lambda item: (
+            item.quality.p_available * item.quality.association_confidence,
+            -float(item.quality.stale),
+            -float(item.timestamp_s),
+        ),
+    )
 
 
 def _with_cov(obs: MapObservation, cov, source: str) -> MapObservation:

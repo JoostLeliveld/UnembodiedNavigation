@@ -102,3 +102,39 @@ tasks:
     goal:
       x: 3.1
       y: 4.6
+
+  warehouse_full_4cam.world.sdf:
+  - name: full_traverse_handover
+    description: >
+      Flagship four-camera traverse: from the south dock apron through the
+      4.5 m central aisle past the 5.2 m support pillar to the north dock apron.
+      The route crosses regions where wall-mounted north/south cameras hand
+      over through rack occlusion and central overlap.
+    tier: exploratory
+    claim: multicamera_handover_traverse
+    focus: four_camera_wall_handover
+    start:
+      x: -1.00
+      y: -7.80
+      z: 0.05
+      yaw: 1.5708
+    goal:
+      x: 1.00
+      y: 7.80
+  - name: route_tall_shadow_west
+    description: >
+      Route-choice task in the asymmetric tall block: goal deep in
+      west_aisle_2_north behind the 2.61 m W2/W3 north segments. The four
+      inward-looking wall cameras create partial overlap but still disagree
+      around tall shelf occlusions.
+    tier: exploratory
+    claim: multicamera_fusion_value
+    focus: four_camera_asymmetric_tall_shadows
+    start:
+      x: -7.78
+      y: -7.80
+      z: 0.05
+      yaw: 1.5708
+    goal:
+      x: -5.68
+      y: 5.50

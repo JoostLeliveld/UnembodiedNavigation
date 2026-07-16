@@ -472,6 +472,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'nogo_belief_kappa',
         'robot_collision_radius_m',
         'terminate_on_geom_collision',
+        'bridge_camera_b', 'bridge_camera_c', 'bridge_camera_d',
         'stuck_window_s', 'stuck_max_displacement_m',
         'stuck_max_goal_improvement_m', 'stuck_cmd_fraction_min',
         'stuck_idle_cmd_fraction_max',

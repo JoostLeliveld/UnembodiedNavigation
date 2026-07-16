@@ -13,11 +13,13 @@ from reliability import (  # noqa: E402
     CameraHealthConfig,
     CameraHealthMachine,
     CameraHealthState,
+    CameraManagerConfig,
     CameraObservation,
     CameraQuality,
     EvaluationFrame,
     FixedCameraReliabilityProvider,
     FixedZone,
+    HandoverUncertaintyConfig,
     MapObservation,
     ReplayConfig,
     ReplayFrame,
@@ -199,3 +201,96 @@ def test_replay_current_gp_mode_uses_quality_provider_probability() -> None:
     )
 
     assert high.steps[-1].mean_xy_m[0] < low.steps[-1].mean_xy_m[0]
+
+
+def test_replay_handover_aware_selection_inflates_disagreeing_switch() -> None:
+    frames = (
+        ReplayFrame(
+            timestamp_s=0.0,
+            odometry_xy_m=(0.0, 0.0),
+            observations=(_map_obs("camera_A", 0.0, 0.0, p=0.9),),
+        ),
+        ReplayFrame(
+            timestamp_s=1.0,
+            odometry_xy_m=(1.0, 0.0),
+            observations=(
+                _map_obs("camera_A", 1.0, 0.0, p=0.9),
+                _map_obs("camera_B", 1.6, 0.0, p=0.99),
+            ),
+        ),
+    )
+    immediate = run_replay(frames, ReplayConfig(mode=ReplayMode.CONSERVATIVE_SELECTION, nis_gate=None))
+    handover = run_replay(
+        frames,
+        ReplayConfig(
+            mode=ReplayMode.HANDOVER_AWARE_SELECTION,
+            nis_gate=None,
+            handover_config=HandoverUncertaintyConfig(disagreement_gate_m=0.30, max_covariance_inflation=10.0),
+        ),
+    )
+
+    assert immediate.steps[-1].accepted_camera_ids == ("camera_B",)
+    assert handover.steps[-1].accepted_camera_ids == ("camera_B",)
+    assert handover.steps[-1].handover_diagnostics[0]["switched"] is True
+    assert "overlap_disagreement" in handover.steps[-1].handover_diagnostics[0]["reasons"]
+    assert handover.steps[-1].handover_diagnostics[0]["covariance_inflation"] > 1.0
+    assert handover.steps[-1].mean_xy_m[0] < immediate.steps[-1].mean_xy_m[0]
+
+
+def test_replay_hysteretic_handover_holds_then_switches_and_records_manager_decision() -> None:
+    frames = (
+        ReplayFrame(timestamp_s=0.0, odometry_xy_m=(0.0, 0.0), observations=(_map_obs("camera_A", 0.0, 0.0, p=0.80),)),
+        ReplayFrame(
+            timestamp_s=1.0,
+            odometry_xy_m=(1.0, 0.0),
+            observations=(_map_obs("camera_A", 1.0, 0.0, p=0.70), _map_obs("camera_B", 1.02, 0.0, p=0.95)),
+        ),
+        ReplayFrame(
+            timestamp_s=2.0,
+            odometry_xy_m=(2.0, 0.0),
+            observations=(_map_obs("camera_A", 2.0, 0.0, p=0.70), _map_obs("camera_B", 2.02, 0.0, p=0.95)),
+        ),
+    )
+
+    result = run_replay(
+        frames,
+        ReplayConfig(
+            mode=ReplayMode.HYSTERETIC_HANDOVER_SELECTION,
+            nis_gate=None,
+            camera_manager_config=CameraManagerConfig(
+                min_spatial_trust=0.10,
+                candidate_score_margin=0.05,
+                required_consecutive_better_frames=2,
+            ),
+        ),
+    )
+
+    assert result.steps[1].accepted_camera_ids == ("camera_A",)
+    assert result.steps[1].camera_manager_decision["candidate_streak"] == 1
+    assert result.steps[2].accepted_camera_ids == ("camera_B",)
+    assert result.steps[2].camera_manager_decision["switched"] is True
+    assert result.steps[2].handover_diagnostics[0]["switched"] is True
+
+
+def test_replay_hysteretic_selection_uses_camera_specific_reliability_provider() -> None:
+    frame = ReplayFrame(
+        timestamp_s=0.0,
+        odometry_xy_m=(0.0, 0.0),
+        observations=(_map_obs("camera_A", 0.0, 0.0, p=0.50), _map_obs("camera_B", 0.0, 0.0, p=0.99)),
+    )
+
+    result = run_replay(
+        (frame,),
+        ReplayConfig(
+            mode=ReplayMode.HYSTERETIC_HANDOVER_SELECTION,
+            nis_gate=None,
+            quality_providers={
+                "camera_A": FixedCameraReliabilityProvider(camera_id="camera_A", p_available=0.95),
+                "camera_B": FixedCameraReliabilityProvider(camera_id="camera_B", p_available=0.05),
+            },
+            camera_manager_config=CameraManagerConfig(min_spatial_trust=0.10),
+        ),
+    )
+
+    assert result.steps[0].accepted_camera_ids == ("camera_A",)
+    assert result.steps[0].camera_manager_decision["selected_camera_id"] == "camera_A"

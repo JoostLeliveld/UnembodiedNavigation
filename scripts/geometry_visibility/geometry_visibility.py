@@ -413,3 +413,91 @@ def r_plan_matrix(std_px: float) -> np.ndarray:
     """Explicit 2x2 diagonal measurement covariance in px^2."""
     v = float(std_px) ** 2
     return np.array([[v, 0.0], [0.0, v]])
+
+
+# ---------------------------------------------------------------------------
+# Calibrated detection-probability prior (the "perfected" prior mean)
+# ---------------------------------------------------------------------------
+# Diagnosis (diagnose_prior.py, 556 per-sample YOLO labels, leave-block-out CV):
+# the heuristic ``visibility_score`` RANKS reliability well (AUROC ~0.92) but is a
+# badly MIS-CALIBRATED probability (score 0.45 -> observed detect rate 0.87). As a GP
+# prior mean it must be a *calibrated* detection probability. We keep the exact same
+# geometric FEATURES (occlusion clearance + range/obliquity via the projection
+# Jacobian) but fit a tiny logistic link -- a ONE-TIME detector-response
+# characterisation that is a property of the camera+detector, not the layout. The
+# geometry is recomputed per layout; the link transfers. (The image-edge term is
+# dropped: its fitted weight was ~0.)
+DETECTOR_FEATURE_NAMES = ("clearance_m", "log10_px_per_m")
+_PXM_EPS = 1e-3
+
+
+def detector_features(min_clearance: np.ndarray, px_per_m_min: np.ndarray) -> np.ndarray:
+    """Stack the geometric features the detector-response link consumes, in fixed order
+    ``DETECTOR_FEATURE_NAMES``. Shape (..., 2). Occlusion clearance drives the hard
+    line-of-sight cutoff; log px/m carries range AND obliquity (the dominant driver)."""
+    clr = np.asarray(min_clearance, dtype=float)
+    lpm = np.log10(np.asarray(px_per_m_min, dtype=float) + _PXM_EPS)
+    return np.stack([clr, lpm], axis=-1)
+
+
+def fit_detector_response(features: np.ndarray, detected: np.ndarray, l2: float = 1.0,
+                          iters: int = 100) -> dict:
+    """One-time detector-response characterisation: regularised logistic (Newton/IRLS)
+    of ``detected`` (0/1) on geometric ``features`` (fit on IN-FOV samples only; the
+    FOV gate is applied separately). Returns de-standardised ``intercept`` + ``coef``
+    (per-feature, in raw units) so :func:`calibrated_detection_prob` can apply them to
+    any layout's geometry. Deterministic; numpy-only."""
+    X = np.asarray(features, dtype=float).reshape(len(features), -1)
+    y = np.asarray(detected, dtype=float)
+    mu, sd = X.mean(0), X.std(0) + 1e-9
+    Xs = np.hstack([np.ones((len(X), 1)), (X - mu) / sd])
+    w = np.zeros(Xs.shape[1]); R = l2 * np.eye(Xs.shape[1]); R[0, 0] = 0.0
+    for _ in range(int(iters)):
+        p = _sigmoid(Xs @ w)
+        W = p * (1.0 - p) + 1e-9
+        H = Xs.T @ (Xs * W[:, None]) + R
+        w = w - np.linalg.solve(H, Xs.T @ (p - y) + R @ w)
+    coef = w[1:] / sd
+    intercept = float(w[0] - (w[1:] * mu / sd).sum())
+    return {"intercept": intercept, "coef": coef,
+            "feature_names": tuple(DETECTOR_FEATURE_NAMES), "l2": float(l2)}
+
+
+def calibrated_detection_prob(fov_mask: np.ndarray, min_clearance: np.ndarray,
+                              px_per_m_min: np.ndarray, response: dict) -> np.ndarray:
+    """Calibrated per-cell detection probability p_detect in [0,1]:
+    ``p = in_fov * sigmoid(intercept + coef . [clearance, log10 px/m])``.
+    Out-of-FOV cells are a hard 0. ``response`` is a :func:`fit_detector_response` dict."""
+    feats = detector_features(min_clearance, px_per_m_min)
+    z = float(response["intercept"]) + np.tensordot(feats, np.asarray(response["coef"], float), axes=([-1], [0]))
+    p = _sigmoid(z)
+    return np.where(np.asarray(fov_mask, dtype=bool), p, 0.0)
+
+
+def prior_logit_mean(p_detect: np.ndarray, eps: float = 1e-3) -> np.ndarray:
+    """GP prior MEAN in logit space (the F_mean_map role): ``logit(clip(p_detect))``.
+    Out-of-FOV cells (p=0) clip to a strongly-negative logit."""
+    p = np.clip(np.asarray(p_detect, dtype=float), eps, 1.0 - eps)
+    return np.log(p / (1.0 - p))
+
+
+def prior_pseudocount(fov_mask: np.ndarray, min_clearance: np.ndarray, u: np.ndarray,
+                      v: np.ndarray, img_w: int, img_h: int, observed: np.ndarray | None = None,
+                      tau_clearance: float = 0.10, n_floor: float = 1.0, n_max: float = 20.0) -> np.ndarray:
+    """GP prior STRENGTH as an interpretable pseudo-count n0(x): how many observations
+    the geometric prior is worth before driving data should override it.
+
+    High where geometry is UNAMBIGUOUS (clear line of sight or clearly blocked -- i.e.
+    |clearance| >> tau -- well inside the image, and depth actually observed). Low
+    (~n_floor) where geometry is EPISTEMICALLY fragile: grazing an occluder top
+    (clearance ~ 0, a small height error flips visibility), at the image edge, or where
+    a sensed height map returned nothing (``observed`` False). This is exactly where the
+    user's online GP update should let data speak. Range/obliquity is deliberately NOT
+    used here: low px/m makes detection less LIKELY but the prediction is still confident.
+    """
+    conf_occ = 1.0 - np.exp(-(np.asarray(min_clearance, float) / float(tau_clearance)) ** 2)
+    conf_edge = boundary_score(u, v, img_w, img_h)
+    conf = conf_occ * conf_edge * np.asarray(fov_mask, dtype=float)
+    if observed is not None:
+        conf = conf * np.asarray(observed, dtype=float)
+    return float(n_floor) + (float(n_max) - float(n_floor)) * np.clip(conf, 0.0, 1.0)

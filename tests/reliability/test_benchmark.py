@@ -52,8 +52,12 @@ def test_default_benchmark_conditions_include_required_replay_modes() -> None:
         ReplayMode.DETECTOR_SCORE_R,
         ReplayMode.CURRENT_GP_R,
     ]
-    assert multi[-2].config.mode == ReplayMode.SEQUENTIAL_FUSION
-    assert multi[-1].config.mode == ReplayMode.CONSERVATIVE_SELECTION
+    assert [condition.config.mode for condition in multi[-4:]] == [
+        ReplayMode.SEQUENTIAL_FUSION,
+        ReplayMode.CONSERVATIVE_SELECTION,
+        ReplayMode.HANDOVER_AWARE_SELECTION,
+        ReplayMode.HYSTERETIC_HANDOVER_SELECTION,
+    ]
 
 
 def test_run_benchmark_auto_adds_multicamera_fusion_modes() -> None:
@@ -83,6 +87,8 @@ def test_run_benchmark_auto_adds_multicamera_fusion_modes() -> None:
 
     assert ReplayMode.SEQUENTIAL_FUSION.value in summary["results"]
     assert ReplayMode.CONSERVATIVE_SELECTION.value in summary["results"]
+    assert ReplayMode.HANDOVER_AWARE_SELECTION.value in summary["results"]
+    assert ReplayMode.HYSTERETIC_HANDOVER_SELECTION.value in summary["results"]
     assert summary["results"][ReplayMode.ODOM_ONLY.value]["rmse_m"] is not None
     assert summary["results"][ReplayMode.SEQUENTIAL_FUSION.value]["steps"] == 2
 
@@ -100,4 +106,6 @@ def test_run_benchmark_can_force_single_camera_suite() -> None:
     names = [item.condition.name for item in suite.results]
 
     assert ReplayMode.SEQUENTIAL_FUSION.value not in names
+    assert ReplayMode.HANDOVER_AWARE_SELECTION.value not in names
+    assert ReplayMode.HYSTERETIC_HANDOVER_SELECTION.value not in names
     assert ReplayMode.CURRENT_GP_R.value in names

@@ -360,10 +360,10 @@ def build_camera_geometry_prior(
     w = len(grid.xs)
     probability = np.zeros((h, w), dtype=float)
     fov_mask = np.zeros((h, w), dtype=bool)
-    range_map = np.full((h, w), math.nan, dtype=float)
-    border_map = np.full((h, w), math.nan, dtype=float)
-    scale_map = np.full((h, w), math.nan, dtype=float)
-    incidence_map = np.full((h, w), math.nan, dtype=float)
+    range_map = np.zeros((h, w), dtype=float)
+    border_map = np.zeros((h, w), dtype=float)
+    scale_map = np.zeros((h, w), dtype=float)
+    incidence_map = np.zeros((h, w), dtype=float)
 
     for iy, y in enumerate(grid.ys):
         for ix, x in enumerate(grid.xs):
