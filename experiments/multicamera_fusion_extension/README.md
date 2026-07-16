@@ -4,7 +4,7 @@ This namespace is for the focused extension:
 
 ```text
 camera-specific reliability
--> robust two-camera selection/fusion
+-> robust multi-camera selection/fusion
 -> continuity through occlusion and handover
 ```
 
@@ -50,12 +50,14 @@ or a new controller while testing localization robustness.
 | 5. Simple camera selection/fusion | Implemented core | Primary, fixed-zone, detector-score, freshest, static-reliability, conservative-best, and sequential 2D Kalman fusion policies are available in `reliability.fusion`. |
 | 6. Evaluation-only camera-B feasibility | Implemented offline | `reliability.oracle` labels hypothetical camera availability and dropout coverage as `evaluation_only_oracle`; it is blocked from planner-facing imports. |
 | 7. Per-camera reliability provider interface | Implemented offline | `reliability.providers` supports fixed quality, current-GP-shaped `.npz` grid maps, and multi-camera dispatch. |
-| 8. Extension world and two-detector launch | Implemented, not claimed as result | `warehouse_multicamera_extension.world.sdf` includes `external_camera` and isolated `external_camera_b`; `warehouse_multicamera_extension.launch.py` starts two YOLO detector instances with isolated topics. |
+| 8. Canonical 4-camera world and detector launch | Implemented, not claimed as result | `warehouse_full_4cam.world.sdf` is the forward world; `warehouse_multicamera_extension.launch.py` starts four YOLO detector instances with isolated camera topics. |
 | 9. Calibration/overlap validation | Implemented offline | `reliability_tools validate-overlap` checks A/B map-estimate disagreement and overlap trust diagnostics from multicamera replay frames without GT. |
 | 10. Real multi-camera replay export | Implemented offline | `reliability_tools export-multicamera` writes split operational/evaluation records and shared replay frames for M5/M6 benchmarking. |
 | 11. Calibrated multi-camera day-zero prior | Implemented offline | `reliability.prior` builds per-camera known-calibration priors and fuses them with union/best-camera maps. |
 | 12. Per-camera reliability learning | Implemented offline | `reliability.learning` updates one Beta field per camera before fusing posteriors, so camera-specific failures do not contaminate other camera maps. |
-| 13. Real camera-B GP reliability | Pending | Requires real camera-B logs with operational detector evidence before fitting. |
+| 13. Occlusion-aware BEV reliability network | Implemented offline | `reliability.bev_reliability` scores calibrated per-camera BEV tokens and fuses them with camera-set attention, while preserving the navigation/reliability framing. |
+| 14. Handover uncertainty | Implemented offline | `reliability.handover` scores source-switch uncertainty from A/B disagreement, staleness, quality drop, and missing overlap confirmation, then inflates map-observation covariance. |
+| 15. Real camera-B GP reliability | Pending | Requires real camera-B logs with operational detector evidence before fitting. |
 
 ## Working Commands
 
@@ -75,7 +77,7 @@ reliability_tools replay \
   --gp-artifact paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz
 ```
 
-Run the wider benchmark suite. R0-R4 are always included; M5/M6 are included
+Run the wider benchmark suite. R0-R4 are always included; M5/M6/M7 are included
 automatically when replay frames contain multiple camera observations:
 
 ```bash
@@ -94,13 +96,23 @@ camera_id:=camera_A
 This only adds a JSON observation topic. It does not replace the existing
 `/perception/pixel_pose` or EKF/planner correction path.
 
-Launch the extension-only two-camera detector stack:
+Launch the extension-only four-camera detector stack:
 
 ```bash
 ros2 launch experiments warehouse_multicamera_extension.launch.py \
   yolo_model:=logs/perception_models/warehouse_yolo_detector_v1/model.pt \
   headless:=true
 ```
+
+Build the day-zero planner/research prior for the canonical four-camera world:
+
+```bash
+python3 scripts/geometry_visibility/build_full4cam_planner_prior.py
+```
+
+The planner-facing field is camera-A-compatible until a fused runtime
+observation topic replaces `/perception/pixel_pose`; the same artifact stores
+four-camera union/best maps for offline fusion and handover studies.
 
 Export real camera-A/B perception logs into shared replay frames:
 
@@ -118,6 +130,39 @@ Run the A/B overlap calibration gate:
 reliability_tools validate-overlap \
   --export-dir logs/reliability_exports/run_001_multicamera \
   --max-disagreement-m 0.30
+```
+
+Assess source-switch uncertainty before feeding a selected camera observation to
+fusion/replay:
+
+```python
+from reliability import handover_adjusted_observation
+
+adjusted_observation, diagnostic = handover_adjusted_observation(
+    previous_camera_id="camera_A",
+    selected_observation=camera_b_map_observation,
+    candidate_observations=(camera_a_map_observation, camera_b_map_observation),
+)
+```
+
+The diagnostic is operational-only. It asks: did the camera source change, did
+the old and new cameras agree in the overlap, were their timestamps close, did
+quality drop, and was the selected measurement stale? The returned observation
+keeps the same mean but inflates covariance until the handover is well supported.
+
+Record synchronized camera-view clips for a live four-camera Gazebo run:
+
+```bash
+source install/setup.bash
+python3 scripts/reliability/record_multicamera_views.py \
+  --out-dir logs/warehouse_full_4cam/videos/live_camera_views \
+  --camera camera_A=/external_camera/image_raw \
+  --camera camera_B=/external_camera_b/image_raw \
+  --camera camera_C=/external_camera_c/image_raw \
+  --camera camera_D=/external_camera_d/image_raw \
+  --duration-s 30 \
+  --every 2 \
+  --write-mp4
 ```
 
 ## Offline Research Steps 1-3
@@ -172,6 +217,43 @@ The overlap summary reports p90 disagreement, outlier rate, systematic
 B-minus-A bias, and a pair-trust score. It does not use ground truth and it does
 not decide which camera is absolutely correct; it quantifies whether the pair is
 consistent enough for fusion ablations.
+
+4. Score candidate navigation states with a small BEV reliability network:
+
+```python
+from reliability import BEVReliabilityModel, bev_tokens_from_prior_maps
+
+tokens = bev_tokens_from_prior_maps(
+    prior,
+    (1.0, 0.5),
+    camera_measurements={
+        "camera_A": {"detector_score": 0.1, "detection_valid": False},
+        "camera_B": {"detector_score": 0.8, "detection_valid": True},
+    },
+)
+prediction = BEVReliabilityModel().predict_set(tokens)
+```
+
+This is the thesis-sized network baseline: calibration projects each camera into
+the same BEV navigation frame, operational detector features modulate reliability,
+and attention exposes which camera the model trusts. It can produce
+planner-facing `CameraQuality` or a BEV grid provider, but it does not consume
+raw images or evaluation-only labels.
+
+## Handover Uncertainty Question
+
+The next thesis-sized question is narrower than "does multi-camera help?":
+
+> During an A-to-B camera handover, how much temporary covariance inflation is
+> needed to avoid overconfident localization when the two cameras disagree, are
+> asynchronous, or lack an overlap confirmation?
+
+This isolates the new failure mode introduced by multiple cameras. More cameras
+reduce blind regions, but they also create source-switch uncertainty: the robot
+may jump between two biased map estimates exactly at the aisle boundary where
+single-camera reliability was already weak. The first offline answer should
+compare naive immediate switching against handover-inflated switching on replay
+frames, using overlap disagreement and NIS/NEES as the calibration metrics.
 
 ## Claim Discipline
 
