@@ -27,7 +27,6 @@ from pathlib import Path
 import sys
 import time
 from typing import Any
-import xml.etree.ElementTree as ET
 
 
 REPO = Path(__file__).resolve().parents[3]
@@ -37,6 +36,11 @@ for relative in ("src/reliability", "src/unav_common"):
         sys.path.insert(0, source)
 
 from reliability import CameraObservation  # noqa: E402
+from reliability.projection import (  # noqa: E402
+    camera_model_from_world as _library_camera_model_from_world,
+    load_projection_calibration,
+    project_observation_to_world as _library_project_observation_to_world,
+)
 from unav_common.camera_model import ObliqueCameraModel  # noqa: E402
 
 try:  # Keep calibration helpers importable for non-ROS asset tests.
@@ -93,52 +97,11 @@ ODOMETRY_FIELDS = (
 )
 
 
-def camera_model_from_world(world_sdf: str | Path, *, include_name: str) -> ObliqueCameraModel:
-    """Build a ground-plane camera model from an SDF ``<include>`` pose."""
-
-    root = ET.parse(Path(world_sdf)).getroot()
-    pose_text = None
-    for include in root.findall(".//include"):
-        name = (include.findtext("name") or "").strip()
-        uri = (include.findtext("uri") or "").strip()
-        model_name = uri.removeprefix("model://").split("/", 1)[0]
-        if include_name in {name, model_name}:
-            pose_text = include.findtext("pose")
-            break
-    if not pose_text:
-        raise RuntimeError(f"Could not find a posed camera include {include_name!r} in {world_sdf}")
-    values = [float(value) for value in pose_text.split()]
-    if len(values) != 6:
-        raise RuntimeError(f"Camera pose for {include_name!r} must contain six values")
-    x, y, z, _roll, pitch, yaw = values
-    forward = (math.cos(pitch) * math.cos(yaw), math.cos(pitch) * math.sin(yaw), -math.sin(pitch))
-    if forward[2] >= -1.0e-6:
-        raise RuntimeError(f"Camera {include_name!r} does not point down towards the ground")
-    scale = -z / forward[2]
-    look_at = (x + scale * forward[0], y + scale * forward[1], 0.0)
-    return ObliqueCameraModel(
-        cam_pos=(x, y, z),
-        look_at=look_at,
-        img_width=1280,
-        img_height=720,
-        fov_h_rad=1.5708,
-    )
-
-
-def project_observation_to_world(
-    observation: CameraObservation,
-    camera: ObliqueCameraModel,
-    *,
-    contact_z_m: float,
-) -> tuple[float, float] | None:
-    """Project a valid camera observation into the metric warehouse frame."""
-
-    if not observation.detection_valid or observation.pixel_uv is None:
-        return None
-    u, v = observation.pixel_uv
-    if contact_z_m > 0.0:
-        return camera.pixel_to_world_at_z(u, v, contact_z_m)
-    return camera.pixel_to_world(u, v)
+# Projection now lives in reliability.projection (single implementation shared
+# with the live camera manager node); the recorder keeps these names as thin
+# aliases for existing importers/tests.
+camera_model_from_world = _library_camera_model_from_world
+project_observation_to_world = _library_project_observation_to_world
 
 
 class OperationalLogRecorder(Node):
@@ -157,6 +120,7 @@ class OperationalLogRecorder(Node):
         odom_origin_y_m: float,
         odom_origin_yaw_rad: float,
         use_sim_time: bool,
+        projection_calibrations: dict[str, dict[str, float]] | None = None,
     ) -> None:
         super().__init__(
             "bigwarehouse_multicamera_operational_recorder",
@@ -164,6 +128,7 @@ class OperationalLogRecorder(Node):
         )
         self.out_dir = out_dir
         self.camera_models = dict(camera_models)
+        self.projection_calibrations = dict(projection_calibrations or {})
         self.contact_z_m = float(contact_z_m)
         self.fresh_age_s = float(fresh_age_s)
         self.odom_origin_x_m = float(odom_origin_x_m)
@@ -272,6 +237,12 @@ class OperationalLogRecorder(Node):
                 observation,
                 self.camera_models[expected_camera_id],
                 contact_z_m=self.contact_z_m,
+                along_bearing_offset_m=self.projection_calibrations.get(
+                    expected_camera_id, {}
+                ).get("intercept_m", 0.0),
+                along_bearing_slope_per_m=self.projection_calibrations.get(
+                    expected_camera_id, {}
+                ).get("slope_per_m", 0.0),
             )
             fresh = observation.measurement_age_s <= self.fresh_age_s
             u, v = observation.pixel_uv if observation.pixel_uv is not None else (math.nan, math.nan)
@@ -327,6 +298,16 @@ def main() -> int:
     parser.add_argument("--odom-origin-y-m", type=float, required=True)
     parser.add_argument("--odom-origin-yaw-rad", type=float, required=True)
     parser.add_argument("--use-sim-time", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--projection-calibration",
+        type=Path,
+        default=None,
+        help=(
+            "Optional projection_calibration.json with per-camera along-bearing "
+            "offsets (commissioning constants; corrects the near-edge box-bottom "
+            "pull toward the camera)"
+        ),
+    )
     args = parser.parse_args()
     if rclpy is None:
         raise RuntimeError("rclpy is required; source the ROS workspace before running this recorder")
@@ -366,6 +347,13 @@ def main() -> int:
         },
         "contains_ground_truth": False,
     }
+    projection_calibrations: dict[str, dict[str, float]] = {}
+    if args.projection_calibration is not None:
+        projection_calibrations = load_projection_calibration(args.projection_calibration)
+    manifest["projection_calibration"] = {
+        "path": str(args.projection_calibration) if args.projection_calibration else None,
+        "along_bearing_calibrations": projection_calibrations,
+    }
     (args.out_dir / "operational_recording_manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
@@ -382,6 +370,7 @@ def main() -> int:
         odom_origin_y_m=float(args.odom_origin_y_m),
         odom_origin_yaw_rad=float(args.odom_origin_yaw_rad),
         use_sim_time=bool(args.use_sim_time),
+        projection_calibrations=projection_calibrations,
     )
     try:
         if args.duration_s > 0.0:

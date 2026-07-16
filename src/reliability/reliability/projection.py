@@ -53,12 +53,61 @@ def project_observation_to_world(
     camera,
     *,
     contact_z_m: float,
+    along_bearing_offset_m: float = 0.0,
+    along_bearing_slope_per_m: float = 0.0,
 ) -> tuple[float, float] | None:
-    """Project a valid camera observation into the metric warehouse frame."""
+    """Project a valid camera observation into the metric warehouse frame.
+
+    The correction ``along_bearing_offset_m + along_bearing_slope_per_m * d``
+    (``d`` = horizontal camera-to-point ground distance) shifts the projected
+    point along the camera bearing, positive = away from the camera.  It
+    corrects the near-edge/contact-height pull toward the camera: the
+    detector's box-bottom pixel images the robot's nearest silhouette edge, so
+    the raw ground-plane intersection lands between the camera and the robot
+    centre, by an amount that grows with viewing distance.  Values are
+    per-camera commissioning calibration constants (see
+    ``fit_projection_calibration.py``), never fitted during deployment.
+    """
 
     if not observation.detection_valid or observation.pixel_uv is None:
         return None
     u, v = observation.pixel_uv
     if contact_z_m > 0.0:
-        return camera.pixel_to_world_at_z(u, v, contact_z_m)
-    return camera.pixel_to_world(u, v)
+        point = camera.pixel_to_world_at_z(u, v, contact_z_m)
+    else:
+        point = camera.pixel_to_world(u, v)
+    if point is None or (not along_bearing_offset_m and not along_bearing_slope_per_m):
+        return point
+    bearing_x = point[0] - float(camera.cam_pos[0])
+    bearing_y = point[1] - float(camera.cam_pos[1])
+    norm = math.hypot(bearing_x, bearing_y)
+    if norm <= 1.0e-9:
+        return point
+    offset = along_bearing_offset_m + along_bearing_slope_per_m * norm
+    scale = offset / norm
+    return (point[0] + bearing_x * scale, point[1] + bearing_y * scale)
+
+
+def load_projection_calibration(path: str | Path) -> dict[str, dict[str, float]]:
+    """Read per-camera along-bearing calibrations from a JSON file.
+
+    Returns ``{camera_id: {"intercept_m": a, "slope_per_m": b}}`` where the
+    applied correction is ``a + b * ground_distance``.  Accepts legacy entries
+    that are a bare float or carry only ``along_bearing_offset_m`` (treated as
+    intercept-only).
+    """
+
+    import json
+
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    cameras = payload.get("cameras", payload)
+    calibrations: dict[str, dict[str, float]] = {}
+    for camera_id, entry in cameras.items():
+        if isinstance(entry, dict):
+            intercept = float(entry.get("intercept_m", entry.get("along_bearing_offset_m", 0.0)))
+            slope = float(entry.get("slope_per_m", 0.0))
+        else:
+            intercept = float(entry)
+            slope = 0.0
+        calibrations[str(camera_id)] = {"intercept_m": intercept, "slope_per_m": slope}
+    return calibrations

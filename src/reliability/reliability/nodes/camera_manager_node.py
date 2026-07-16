@@ -36,7 +36,11 @@ from reliability.camera_manager import CameraManager, CameraManagerConfig
 from reliability.contracts import CameraObservation, ContractValidationError
 from reliability.fusion import MapObservation
 from reliability.handover import HandoverUncertaintyConfig, handover_adjusted_observation
-from reliability.projection import camera_model_from_world, project_observation_to_world
+from reliability.projection import (
+    camera_model_from_world,
+    load_projection_calibration,
+    project_observation_to_world,
+)
 from reliability.providers import GridMapReliabilityProvider
 from reliability.replay import ReplayConfig, ReplayMode, _with_provider_quality
 
@@ -82,6 +86,9 @@ class CameraManagerNode(Node):
         self.declare_parameter("gp_artifact_template", "")
         self.declare_parameter("decision_rate_hz", 5.0)
         self.declare_parameter("contact_z_m", 0.05)
+        # Optional projection_calibration.json (per-camera along-bearing
+        # offsets, commissioning constants) — same file the recorder consumes.
+        self.declare_parameter("projection_calibration", "")
         self.declare_parameter("frame_id", "map_bev")
         self.declare_parameter("authority", "shadow")
         self.declare_parameter("decision_topic", "/reliability/camera_manager/decision")
@@ -120,6 +127,10 @@ class CameraManagerNode(Node):
             camera_id: camera_model_from_world(world_sdf, include_name=include)
             for camera_id, include in zip(self.camera_ids, includes)
         }
+        calibration_path = str(self.get_parameter("projection_calibration").value)
+        self.projection_calibrations = (
+            load_projection_calibration(calibration_path) if calibration_path else {}
+        )
 
         artifacts = [str(item) for item in self.get_parameter("gp_artifacts").value]
         if artifacts == [""]:
@@ -214,7 +225,15 @@ class CameraManagerNode(Node):
         observations: list[MapObservation] = []
         for camera_id, contract in self._latest.items():
             world_xy = project_observation_to_world(
-                contract, self.camera_models[camera_id], contact_z_m=self.contact_z_m
+                contract,
+                self.camera_models[camera_id],
+                contact_z_m=self.contact_z_m,
+                along_bearing_offset_m=self.projection_calibrations.get(camera_id, {}).get(
+                    "intercept_m", 0.0
+                ),
+                along_bearing_slope_per_m=self.projection_calibrations.get(camera_id, {}).get(
+                    "slope_per_m", 0.0
+                ),
             )
             if world_xy is None:
                 continue

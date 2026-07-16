@@ -32,9 +32,24 @@ import json
 import math
 from pathlib import Path
 import statistics
+import sys
 
+REPO = Path(__file__).resolve().parents[3]
+for relative in ("src/reliability", "src/unav_common"):
+    location = str(REPO / relative)
+    if location not in sys.path:
+        sys.path.insert(0, location)
+
+from reliability.projection import camera_model_from_world  # noqa: E402
 
 TRUTH_COLUMNS = ("true_x", "true_y", "true_yaw")
+DEFAULT_WORLD = REPO / "src/sim/gazebo_worlds/worlds/warehouse_full_4cam.world.sdf"
+DEFAULT_MODEL_INCLUDES = {
+    "camera_A": "external_camera",
+    "camera_B": "external_camera_b",
+    "camera_C": "external_camera_c",
+    "camera_D": "external_camera_d",
+}
 
 
 def _load_truth(path: Path) -> tuple[list[float], list[tuple[float, float, float]]]:
@@ -87,12 +102,14 @@ def attach_camera_csv(
     stamps: list[float],
     poses: list[tuple[float, float, float]],
     tolerance_s: float,
+    camera_ground_xy: tuple[float, float] | None = None,
 ) -> dict[str, object]:
     matched = 0
     total = 0
     error_x: list[float] = []
     error_y: list[float] = []
     error_norm: list[float] = []
+    error_along_bearing: list[float] = []
     with source.open("r", newline="", encoding="utf-8") as in_handle:
         reader = csv.DictReader(in_handle)
         fieldnames = list(reader.fieldnames or [])
@@ -119,11 +136,21 @@ def attach_camera_csv(
                     row["true_y"] = f"{truth[1]:.9f}"
                     row["true_yaw"] = f"{truth[2]:.9f}"
                     if row.get("detected") == "1" and row.get("pred_world_x") and row.get("pred_world_y"):
-                        dx = float(row["pred_world_x"]) - truth[0]
-                        dy = float(row["pred_world_y"]) - truth[1]
+                        px = float(row["pred_world_x"])
+                        py = float(row["pred_world_y"])
+                        dx = px - truth[0]
+                        dy = py - truth[1]
                         error_x.append(dx)
                         error_y.append(dy)
                         error_norm.append(math.hypot(dx, dy))
+                        if camera_ground_xy is not None:
+                            bearing_x = px - camera_ground_xy[0]
+                            bearing_y = py - camera_ground_xy[1]
+                            norm = math.hypot(bearing_x, bearing_y)
+                            if norm > 1.0e-9:
+                                error_along_bearing.append(
+                                    (dx * bearing_x + dy * bearing_y) / norm
+                                )
                 writer.writerow(row)
     audit: dict[str, object] = {
         "rows": total,
@@ -141,6 +168,11 @@ def attach_camera_csv(
                 "max_abs_error_m": max(error_norm),
             }
         )
+    if error_along_bearing:
+        audit["along_bearing_bias_m"] = statistics.fmean(error_along_bearing)
+        audit["along_bearing_std_m"] = (
+            statistics.stdev(error_along_bearing) if len(error_along_bearing) > 1 else 0.0
+        )
     return audit
 
 
@@ -154,6 +186,18 @@ def main() -> int:
         "--camera-glob",
         default="camera_*_perception.csv",
         help="Per-camera CSV pattern inside --raw-dir",
+    )
+    parser.add_argument("--world-sdf", type=Path, default=DEFAULT_WORLD)
+    parser.add_argument(
+        "--emit-projection-calibration",
+        type=Path,
+        default=None,
+        help=(
+            "Write per-camera along-bearing projection offsets (JSON) estimated "
+            "from this run's truth-referenced bias. Commissioning-time "
+            "calibration output; consumed via --projection-calibration on the "
+            "operational recorder and the camera manager node."
+        ),
     )
     args = parser.parse_args()
     if args.out_dir.resolve() == args.raw_dir.resolve():
@@ -172,8 +216,18 @@ def main() -> int:
     for source in sources:
         destination = args.out_dir / source.name
         camera_id = source.name.replace("_perception.csv", "")
+        camera_ground_xy = None
+        include = DEFAULT_MODEL_INCLUDES.get(camera_id)
+        if include is not None and args.world_sdf.exists():
+            model = camera_model_from_world(args.world_sdf, include_name=include)
+            camera_ground_xy = (float(model.cam_pos[0]), float(model.cam_pos[1]))
         audits[camera_id] = attach_camera_csv(
-            source, destination, stamps, poses, args.max_time_delta_s
+            source,
+            destination,
+            stamps,
+            poses,
+            args.max_time_delta_s,
+            camera_ground_xy=camera_ground_xy,
         )
 
     summary = {
@@ -193,6 +247,35 @@ def main() -> int:
     }
     summary_path = args.out_dir / "truth_alignment_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    if args.emit_projection_calibration is not None:
+        cameras = {}
+        for camera_id, audit in sorted(audits.items()):
+            if "along_bearing_bias_m" not in audit:
+                continue
+            cameras[camera_id] = {
+                # The measured bias is toward the camera (negative along the
+                # bearing); the corrective offset pushes away from the camera.
+                "along_bearing_offset_m": -float(audit["along_bearing_bias_m"]),
+                "along_bearing_std_m": float(audit["along_bearing_std_m"]),
+                "samples": int(audit["detected_rows_audited"]),
+            }
+        calibration = {
+            "kind": "projection_along_bearing_offsets",
+            "method": (
+                "per-camera mean along-bearing projection error vs simulation "
+                "truth (near-edge box-bottom pull); commissioning-time constant, "
+                "never refit during deployment"
+            ),
+            "source_run": str(args.raw_dir),
+            "world_sdf": str(args.world_sdf),
+            "cameras": cameras,
+        }
+        args.emit_projection_calibration.parent.mkdir(parents=True, exist_ok=True)
+        args.emit_projection_calibration.write_text(
+            json.dumps(calibration, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        print(f"wrote projection calibration for {len(cameras)} cameras -> {args.emit_projection_calibration}")
     for camera_id, audit in sorted(audits.items()):
         bias = (
             f" bias=({audit.get('bias_x_m', math.nan):+.3f}, {audit.get('bias_y_m', math.nan):+.3f}) m"

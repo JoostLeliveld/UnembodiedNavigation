@@ -25,11 +25,12 @@ def _detector_params(
     pixel_topic: str,
     diagnostics_topic: str,
     observation_topic: str,
+    device_arg: str,
 ) -> dict:
     return {
         "use_sim_time": LaunchConfiguration("use_sim_time"),
         "model_path": LaunchConfiguration("yolo_model"),
-        "device": LaunchConfiguration("yolo_device"),
+        "device": LaunchConfiguration(device_arg),
         "image_size": LaunchConfiguration("yolo_imgsz"),
         "confidence_threshold": LaunchConfiguration("yolo_conf_threshold"),
         "iou_threshold": LaunchConfiguration("yolo_iou_threshold"),
@@ -69,6 +70,7 @@ def _detector_node(camera_id: str, image_topic: str) -> Node:
                 pixel_topic=f"/perception/{camera_id}/pixel_pose",
                 diagnostics_topic=f"/perception/{camera_id}/detection_diagnostics",
                 observation_topic=f"/perception/camera_observation/{camera_id}",
+                device_arg=f"yolo_device_{camera_id.lower()}",
             )
         ],
     )
@@ -139,6 +141,7 @@ def generate_launch_description() -> LaunchDescription:
             "authority": LaunchConfiguration("manager_authority"),
             "gp_artifact_template": LaunchConfiguration("manager_gp_artifact_template"),
             "decision_rate_hz": LaunchConfiguration("manager_decision_rate_hz"),
+            "projection_calibration": LaunchConfiguration("manager_projection_calibration"),
         }],
     )
 
@@ -158,6 +161,17 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("encoder_noise_seed", default_value="0"),
         DeclareLaunchArgument("yolo_model", default_value="", description="Local path to the trained YOLO model"),
         DeclareLaunchArgument("yolo_device", default_value=""),
+        # Four concurrent GPU detector processes (~760 MiB each) exceed the
+        # 4 GiB Quadro P2000: the fourth dies with CUDA OOM (verified
+        # 2026-07-16, camera_A). Default camera_A to CPU so the stock launch
+        # brings up all four streams; override per camera on larger GPUs.
+        DeclareLaunchArgument(
+            "yolo_device_camera_a", default_value="cpu",
+            description="Detector device for camera_A (default cpu: 4 GB GPU fits only 3 detectors)",
+        ),
+        DeclareLaunchArgument("yolo_device_camera_b", default_value=LaunchConfiguration("yolo_device")),
+        DeclareLaunchArgument("yolo_device_camera_c", default_value=LaunchConfiguration("yolo_device")),
+        DeclareLaunchArgument("yolo_device_camera_d", default_value=LaunchConfiguration("yolo_device")),
         DeclareLaunchArgument("yolo_imgsz", default_value="640"),
         DeclareLaunchArgument("yolo_conf_threshold", default_value="0.05"),
         DeclareLaunchArgument("yolo_iou_threshold", default_value="0.45"),
@@ -192,6 +206,10 @@ def generate_launch_description() -> LaunchDescription:
             description="Optional per-camera GP npz path template with {camera_id}",
         ),
         DeclareLaunchArgument("manager_decision_rate_hz", default_value="5.0"),
+        DeclareLaunchArgument(
+            "manager_projection_calibration", default_value="",
+            description="Optional projection_calibration.json shared with the recorder",
+        ),
         sim_bringup,
         encoder_noise,
         shadow_manager,

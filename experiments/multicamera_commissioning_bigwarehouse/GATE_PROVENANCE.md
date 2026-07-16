@@ -40,8 +40,20 @@ protocol.
   (north), B +0.050 m; C+D sum 0.268 m reproduces the pilot's 0.247 m C↔D
   disagreement. Camera C dominates. (An earlier odom-referenced audit that
   implicated the north cameras was contaminated by wheel-odom drift and is
-  superseded.) Fix before re-qualifying D2 edges: compensate the bottom-centre
-  point toward the robot centre along the camera bearing.
+  superseded.)
+- **Bias FIXED (2026-07-16)**: the pull is distance-dependent, so
+  `tools/fit_projection_calibration.py` fits
+  `correction = intercept + slope·ground_distance` per camera against
+  simulation truth (two runs, 930+ samples; residual std 0.013–0.048 m);
+  frozen constants live in
+  `logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v2/`.
+  Applied at record time (recorder `--projection-calibration`) and in the live
+  manager node (`projection_calibration` param), C↔D disagreement drops
+  **0.247 → 0.078–0.107 m**. Remaining known issue: camera C carries a
+  ~0.11 m cross-bearing residual near the central pillar (occlusion-clipped
+  boxes) — a perception-quality effect for the trust/association gates, not
+  projection. See `gt_validation_smoke2_20260716/RESULTS.md`. The 4-detector
+  GPU OOM is likewise fixed (`yolo_device_camera_a` defaults to `cpu`).
 
 ## Rules going forward
 
