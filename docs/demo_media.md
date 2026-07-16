@@ -11,7 +11,7 @@ inside the module folders so each demonstration page owns its own media plan:
 
 | Asset | Use it for |
 | --- | --- |
-| [`docs/media/contribution_map.png`](media/contribution_map.png) | README contribution story from camera observation to route behavior. |
+| [`paper_artifacts/figures/explainers/contribution_map.png`](../paper_artifacts/figures/explainers/contribution_map.png) | README contribution story from camera observation to route behavior. |
 | [`paper_artifacts/figures/problem_setup_camera.png`](../paper_artifacts/figures/problem_setup_camera.png) | First-screen hero: the external-camera warehouse, robot, and driveable regions. |
 | [`paper_artifacts/figures/problem_setup_snapshots.png`](../paper_artifacts/figures/problem_setup_snapshots.png) | Wider problem setup and camera/warehouse context. |
 | [`paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg`](../paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg) | Detector demo: robot detections from the external camera. |
@@ -20,9 +20,9 @@ inside the module folders so each demonstration page owns its own media plan:
 | [`gp/demos/images/collection_to_covariance_story.png`](../gp/demos/images/collection_to_covariance_story.png) | GP story: detector-score collection to explicit `R_plan` matrix. |
 | [`paper_artifacts/figures/gp_pipeline_aws.png`](../paper_artifacts/figures/gp_pipeline_aws.png) | GP story: detector-score samples to reliability field to induced covariance. |
 | [`paper_artifacts/figures/localization_pathway.png`](../paper_artifacts/figures/localization_pathway.png) | Runtime localization path from camera image to planner state. |
-| [`docs/paper_vs_current/current/figures/robustness_spread_current.png`](paper_vs_current/current/figures/robustness_spread_current.png) | Current campaign result and route-choice behavior. |
-| [`docs/paper_vs_current/current/figures/paired_mechanism_west_current.png`](paper_vs_current/current/figures/paired_mechanism_west_current.png) | Current single-run mechanism figure with paired C1/C2 behavior. |
-| [`docs/media/system_architecture.svg`](media/system_architecture.svg) | Compact root-level architecture diagram. |
+| [`paper_artifacts/figures/current_surface/robustness_spread_current.png`](../paper_artifacts/figures/current_surface/robustness_spread_current.png) | Current campaign result and route-choice behavior. |
+| [`paper_artifacts/figures/current_surface/paired_mechanism_west_current.png`](../paper_artifacts/figures/current_surface/paired_mechanism_west_current.png) | Current single-run mechanism figure with paired C1/C2 behavior. |
+| [`paper_artifacts/figures/explainers/system_architecture.svg`](../paper_artifacts/figures/explainers/system_architecture.svg) | Compact root-level architecture diagram. |
 
 ## Module Media Plans
 
@@ -38,7 +38,7 @@ Keep videos compressed and short for the repository. Large raw recordings
 should live in an external archive or release artifact, with only final clips or
 links referenced from the module pages.
 
-Planned root overview video: `docs/media/videos/system_overview.mp4`. Do not
+Planned root overview video: record under `logs/`, promote final cut to `paper_artifacts/figures/explainers/`. Do not
 link it from the root README until the file exists.
 
 ## README Embed Pattern
@@ -47,7 +47,8 @@ Use stills until the video file exists. When a clip is tracked or hosted, replac
 the still with a linked thumbnail:
 
 ```markdown
-[![C1/C2 route comparison](paper_vs_current/current/figures/robustness_spread_current.png)](media/videos/04_c1_c2_route_compare.mp4)
+![C1/C2 route comparison](../paper_artifacts/figures/current_surface/robustness_spread_current.png)
+(planned video `04_c1_c2_route_compare.mp4` was never recorded; when it is, store under `logs/` and promote the final cut)
 ```
 
 ## Storyboard

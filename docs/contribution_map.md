@@ -4,7 +4,7 @@ This project is easiest to present as a chain of small, testable contributions.
 The planner result is not one monolithic planning trick; it comes from making
 camera reliability explicit and carrying it through the stack.
 
-![Contribution map](media/contribution_map.png)
+![Contribution map](../paper_artifacts/figures/explainers/contribution_map.png)
 
 ## 1. External-Camera Perception
 

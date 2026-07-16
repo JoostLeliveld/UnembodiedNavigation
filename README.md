@@ -19,7 +19,7 @@ warehouse route-choice experiments.
 
 ## Contribution Story
 
-![Contribution map](docs/media/contribution_map.png)
+![Contribution map](paper_artifacts/figures/explainers/contribution_map.png)
 
 The central contribution is the modular chain from camera observation to
 planning behavior. The GP does not learn the observation matrix `R` online and
@@ -34,9 +34,9 @@ python3 scripts/paper_figures/make_readme_visuals.py
 
 ## System Architecture
 
-![External-camera navigation architecture](docs/media/system_architecture.svg)
+![External-camera navigation architecture](paper_artifacts/figures/explainers/system_architecture.svg)
 
-Planned overview video: `docs/media/videos/system_overview.mp4`. This should be
+Planned overview video: record under `logs/` (bulk-media rule), promote the final cut to `paper_artifacts/figures/explainers/`. This should be
 a 20-30 second montage using the warehouse still, detector overlay, GP map,
 C1/C2 route contrast, and the final campaign counts once those clips exist.
 

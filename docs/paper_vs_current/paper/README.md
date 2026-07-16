@@ -7,18 +7,26 @@ defaulted to `keep_out`.
 
 ## Figures
 
+All media lives in `paper_artifacts/figures/` (single source of truth,
+consolidated 2026-07-15): canonical PDFs/PNGs + `_data/` bundles at the root,
+paper-side renders in `paper_snapshot/`.
+`PS = ../../../paper_artifacts/figures/paper_snapshot`,
+`PA = ../../../paper_artifacts/figures`.
+
 | artifact | purpose |
 | --- | --- |
-| `figures/gp_pipeline_aws.{pdf,png}` | Paper GP pipeline regenerated with archived `aws_gp_v7b`. |
-| `figures/problem_setup_camera.{pdf,png}` | External-camera setup panel. |
-| `figures/problem_setup_snapshots.{pdf,png}` | Problem-statement uncertainty snapshots. |
-| `figures/localization_pathway.{pdf,png}` | YOLO bottom-centre to BEV localization pathway. |
-| `figures/paired_mechanism_taskA_PAPER.{pdf,png,gif}` | Frozen task-A C1/C2 mechanism pair. |
-| `figures/robustness_spread.png` | Paper robustness spread over all four tasks and five seeds. |
-| `figures/yolo_training_clarification.png` | Detector-training clarification figure. |
+| [`PA/gp_pipeline_aws.png`](../../../paper_artifacts/figures/gp_pipeline_aws.png) (pdf in `PS/`) | Paper GP pipeline regenerated with archived `aws_gp_v7b`. |
+| [`PA/problem_setup_camera.png`](../../../paper_artifacts/figures/problem_setup_camera.png) (pdf in `PS/`) | External-camera setup panel. |
+| [`PA/problem_setup_snapshots.png`](../../../paper_artifacts/figures/problem_setup_snapshots.png) (pdf in `PS/`) | Problem-statement uncertainty snapshots. |
+| [`PA/localization_pathway.png`](../../../paper_artifacts/figures/localization_pathway.png) (pdf/png variants in `PS/`) | YOLO bottom-centre to BEV localization pathway. |
+| [`PA/paired_mechanism_taskA_PAPER.pdf`](../../../paper_artifacts/figures/paired_mechanism_taskA_PAPER.pdf) (+ png/gif in `PS/`) | Frozen task-A C1/C2 mechanism pair. |
+| [`PS/robustness_spread.png`](../../../paper_artifacts/figures/paper_snapshot/robustness_spread.png) | Paper robustness spread over all four tasks and five seeds. |
+| [`PA/yolo_training_clarification.png`](../../../paper_artifacts/figures/yolo_training_clarification.png) | Detector-training clarification figure. |
 
 The paired mechanism figure has a `.provenance.json` and source bundle under
-`data/paired_mechanism_taskA/`. Because the frozen paired logs predate the new
+`paper_artifacts/figures/paired_mechanism_taskA_PAPER_data/`. The paper
+robustness run summaries live at
+`paper_artifacts/campaigns/robustness_campaign_headline/`. Because the frozen paired logs predate the new
 GT schema, the plotter is run with `PAIRED_ALLOW_LEGACY_TRUTH=1` and the
 provenance labels the plotted source as `truth_x/truth_y,
 truth_belief_error_m`.

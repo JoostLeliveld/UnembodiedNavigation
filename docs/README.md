@@ -11,6 +11,7 @@ module landing pages:
 | [`contribution_map.md`](contribution_map.md) | Modular project story from camera observation to reliability-aware route behavior. |
 | [`custom_gpt_context/`](custom_gpt_context/) | Uploadable context pack for thesis-facing custom GPT instructions and knowledge. |
 | [`geometry_visibility_prior_plan.md`](geometry_visibility_prior_plan.md) | Detailed first-module plan for geometry-derived visibility, validation gates, and acceptance criteria. |
+| [`next_paper/`](next_paper/) | Evidence-aware storyline, visual board, media plan, and proposed research question for the post-paper self-commissioning extension. |
 | [`modular_validation_workflow.md`](modular_validation_workflow.md) | Validation-first way of working and list of missed issues to avoid repeating. |
 | [`demo_media.md`](demo_media.md) | Visual gallery, README media map, and planned video storyboard. |
 | [`experiment_registry.md`](experiment_registry.md) | Active evidence chain, current results surface, superseded lines, and caveats. |
