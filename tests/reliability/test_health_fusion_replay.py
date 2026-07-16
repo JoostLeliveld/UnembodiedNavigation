@@ -60,10 +60,17 @@ def _quality(camera_id: str, p: float, cov: float = 0.1**2) -> CameraQuality:
     )
 
 
-def _map_obs(camera_id: str, x: float, y: float, p: float = 0.9, cov: float = 0.1**2) -> MapObservation:
+def _map_obs(
+    camera_id: str,
+    x: float,
+    y: float,
+    p: float = 0.9,
+    cov: float = 0.1**2,
+    timestamp_s: float = 1.0,
+) -> MapObservation:
     return MapObservation(
         camera_id=camera_id,
-        timestamp_s=1.0,
+        timestamp_s=timestamp_s,
         xy_m=(x, y),
         covariance_m2=((cov, 0.0), (0.0, cov)),
         quality=_quality(camera_id, p),
@@ -248,7 +255,13 @@ def test_replay_hysteretic_handover_holds_then_switches_and_records_manager_deci
         ReplayFrame(
             timestamp_s=2.0,
             odometry_xy_m=(2.0, 0.0),
-            observations=(_map_obs("camera_A", 2.0, 0.0, p=0.70), _map_obs("camera_B", 2.02, 0.0, p=0.95)),
+            observations=(
+                # Stamps must track the frame time: the manager age-gates at
+                # max_measurement_age_s, so second-frame observations carrying
+                # the helper's default 1.0 s stamp would all be stale.
+                _map_obs("camera_A", 2.0, 0.0, p=0.70, timestamp_s=2.0),
+                _map_obs("camera_B", 2.02, 0.0, p=0.95, timestamp_s=2.0),
+            ),
         ),
     )
 

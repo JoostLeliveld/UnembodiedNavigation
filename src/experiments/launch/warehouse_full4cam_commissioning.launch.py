@@ -11,6 +11,7 @@ must be (re)designed for this world's geometry before collection.
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -118,6 +119,29 @@ def generate_launch_description() -> LaunchDescription:
         }],
     )
 
+    # Step-6 shadow rung (research_story ch.09): run the hysteretic manager
+    # against the live detector streams and log every decision WITHOUT
+    # authority.  Off by default so pure collection runs stay byte-identical.
+    # manager_authority=active republishes the selected observation to
+    # /state/bev and is only legitimate after the ch.09 release gates pass.
+    shadow_manager = Node(
+        package="reliability",
+        executable="camera_manager_node",
+        name="camera_manager_shadow",
+        output="screen",
+        condition=IfCondition(LaunchConfiguration("shadow_manager")),
+        parameters=[{
+            "use_sim_time": LaunchConfiguration("use_sim_time"),
+            "world_sdf": PathJoinSubstitution([
+                FindPackageShare("sim"), "gazebo_worlds", "worlds",
+                LaunchConfiguration("world"),
+            ]),
+            "authority": LaunchConfiguration("manager_authority"),
+            "gp_artifact_template": LaunchConfiguration("manager_gp_artifact_template"),
+            "decision_rate_hz": LaunchConfiguration("manager_decision_rate_hz"),
+        }],
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument("world", default_value="warehouse_full_4cam.world.sdf"),
         DeclareLaunchArgument("world_name", default_value="warehouse_full_4cam"),
@@ -154,8 +178,23 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("yolo_inference_in_callback", default_value="true"),
         DeclareLaunchArgument("camera_observation_r_visible_uv", default_value="2.5"),
         DeclareLaunchArgument("camera_observation_r_miss_uv", default_value="40.0"),
+        DeclareLaunchArgument(
+            "shadow_manager", default_value="false",
+            description="Run the hysteretic camera manager in shadow mode (no authority)",
+        ),
+        DeclareLaunchArgument(
+            "manager_authority", default_value="shadow",
+            description="'shadow' logs decisions only; 'active' republishes the "
+                        "selected observation to /state/bev (gated: ch.09 release gates)",
+        ),
+        DeclareLaunchArgument(
+            "manager_gp_artifact_template", default_value="",
+            description="Optional per-camera GP npz path template with {camera_id}",
+        ),
+        DeclareLaunchArgument("manager_decision_rate_hz", default_value="5.0"),
         sim_bringup,
         encoder_noise,
+        shadow_manager,
         _detector_node("camera_A", "/external_camera/image_raw"),
         _detector_node("camera_B", "/external_camera_b/image_raw"),
         _detector_node("camera_C", "/external_camera_c/image_raw"),

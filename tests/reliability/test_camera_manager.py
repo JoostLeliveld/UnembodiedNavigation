@@ -50,17 +50,16 @@ def _obs(
 
 
 def _manager(**kwargs) -> CameraManager:
-    return CameraManager(
-        CameraManagerConfig(
-            min_spatial_trust=0.10,
-            min_association_confidence=0.50,
-            max_measurement_age_s=0.20,
-            candidate_score_margin=0.05,
-            required_consecutive_better_frames=3,
-            max_cross_camera_disagreement_m=0.30,
-            **kwargs,
-        )
+    settings = dict(
+        min_spatial_trust=0.10,
+        min_association_confidence=0.50,
+        max_measurement_age_s=0.20,
+        candidate_score_margin=0.05,
+        required_consecutive_better_frames=3,
+        max_cross_camera_disagreement_m=0.30,
     )
+    settings.update(kwargs)
+    return CameraManager(CameraManagerConfig(**settings))
 
 
 def test_initial_selection_uses_highest_operational_score() -> None:
