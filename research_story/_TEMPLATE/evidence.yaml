@@ -1,0 +1,13 @@
+chapter: "NN"
+status: PLANNED
+world: aws_1cam
+contribution: ""
+gate: ""
+evidence:
+  # - path: ../../logs/studies/<study>/<exp>   (relative to this folder)
+  #   kind: study_output | campaign_runs | dataset | fit_artifacts | canonical_code | doc
+  #   tag: established | measured_in_sim | model_plumbing | open
+  #   note: ""
+  []
+figures:
+  planned: []

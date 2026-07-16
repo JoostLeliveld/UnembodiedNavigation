@@ -1,0 +1,25 @@
+chapter: "02"
+status: PARTIAL
+world: aws_1cam
+gate: "Fig 02D target table decides scalar vs factorised thesis"
+evidence:
+  - path: ../../logs/studies/optionA_commissioning/exp0_confidence_audit
+    kind: study_output
+    tag: measured_in_sim
+    note: "PARTIAL — Simpson confound; motivation only until re-derived stratified"
+  - path: ../../paper_artifacts/perception/warehouse_yolo_detector_v1
+    kind: model_metadata
+    tag: established
+    note: "clean retrain, periphery flat 0.027m; judge via bottom-centre BEV point"
+  - path: ../../logs/visibility_comparison/warehouse_visibility_capture_v1
+    kind: dataset
+    tag: measured_in_sim
+  - path: ../../logs/visibility_comparison/warehouse_visibility_targets_v1
+    kind: dataset
+    tag: measured_in_sim
+history:
+  - "raw confidence -> detection RATE switch (calibration invariance); disclosure owed"
+figures:
+  partial: [02B]
+  derivable: [02A, 02C, 02D, 02E]
+  video: {V02: derivable}

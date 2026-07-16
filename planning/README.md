@@ -61,7 +61,7 @@ Current packaged honest-campaign outcome:
 
 Single-run mechanism figure:
 
-- [`../docs/paper_vs_current/current/figures/paired_mechanism_west_current.png`](../docs/paper_vs_current/current/figures/paired_mechanism_west_current.png)
+- [`../paper_artifacts/figures/current_surface/paired_mechanism_west_current.png`](../paper_artifacts/figures/current_surface/paired_mechanism_west_current.png)
 - [`../paper_artifacts/figures/paired_mechanism_west_current_data/`](../paper_artifacts/figures/paired_mechanism_west_current_data/)
 
 ## Reproduce

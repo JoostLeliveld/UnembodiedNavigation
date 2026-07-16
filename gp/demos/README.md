@@ -22,7 +22,7 @@ python3 scripts/paper_figures/make_readme_visuals.py
 | Asset | Use |
 | --- | --- |
 | [`../../paper_artifacts/figures/gp_pipeline_aws.png`](../../paper_artifacts/figures/gp_pipeline_aws.png) | Earlier end-to-end GP pipeline figure. |
-| [`../../docs/paper_vs_current/current/figures/gp_pipeline_current.png`](../../docs/paper_vs_current/current/figures/gp_pipeline_current.png) | Current detection-rate GP pipeline figure. |
+| [`../../paper_artifacts/figures/current_surface/gp_pipeline_current.png`](../../paper_artifacts/figures/current_surface/gp_pipeline_current.png) | Current detection-rate GP pipeline figure. |
 | [`../../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_manifest.json`](../../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_manifest.json) | Artifact metadata. |
 
 ## Next Media Slots

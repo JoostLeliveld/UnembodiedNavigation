@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Self-commissioning observability — next paper board</title>
+  <style>
+    :root {
+      --ink: #e9f1f8;
+      --muted: #a9bac9;
+      --navy: #0b1728;
+      --panel: #11243a;
+      --panel-2: #142d46;
+      --line: #34526b;
+      --teal: #39d3bc;
+      --amber: #ffc857;
+      --red: #ff6b6b;
+      --blue: #79b8ff;
+      --shadow: 0 22px 55px rgba(0, 0, 0, .28);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-snap-type: y proximity; scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 85% 5%, #163b53 0, var(--navy) 34rem), var(--navy);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .deck { width: min(1600px, 100%); margin: 0 auto; }
+    .slide {
+      min-height: 100vh;
+      padding: clamp(2rem, 5vw, 5.5rem);
+      display: grid;
+      align-content: center;
+      gap: clamp(1.25rem, 2vw, 2.3rem);
+      scroll-snap-align: start;
+      position: relative;
+      overflow: hidden;
+    }
+    .eyebrow, .evidence {
+      display: inline-flex;
+      width: max-content;
+      align-items: center;
+      gap: .42rem;
+      text-transform: uppercase;
+      font-size: .72rem;
+      font-weight: 750;
+      letter-spacing: .14em;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: .42rem .7rem;
+      color: var(--muted);
+      background: rgba(7, 21, 36, .6);
+    }
+    .evidence.measured { color: var(--teal); border-color: rgba(57, 211, 188, .55); }
+    .evidence.model { color: var(--amber); border-color: rgba(255, 200, 87, .55); }
+    .evidence.open { color: var(--red); border-color: rgba(255, 107, 107, .55); }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: clamp(3.1rem, 8vw, 8rem); line-height: .92; letter-spacing: -.075em; max-width: 12ch; }
+    h2 { font-size: clamp(2rem, 4.3vw, 4.6rem); line-height: .98; letter-spacing: -.055em; max-width: 17ch; }
+    h3 { font-size: clamp(1.15rem, 1.8vw, 1.65rem); letter-spacing: -.025em; }
+    p { color: var(--muted); font-size: clamp(1rem, 1.35vw, 1.25rem); line-height: 1.55; max-width: 66ch; }
+    strong { color: var(--ink); }
+    .accent { color: var(--teal); }
+    .subhead { max-width: 42ch; font-size: clamp(1.15rem, 1.85vw, 1.65rem); }
+    .grid { display: grid; gap: 1.1rem; }
+    .two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .card {
+      background: linear-gradient(145deg, rgba(25, 51, 76, .96), rgba(12, 30, 49, .92));
+      border: 1px solid var(--line);
+      border-radius: 1.2rem;
+      padding: clamp(1.05rem, 2vw, 1.65rem);
+      box-shadow: var(--shadow);
+    }
+    .card p { font-size: .98rem; margin-top: .55rem; }
+    .card .number { color: var(--teal); font-size: .78rem; font-weight: 800; letter-spacing: .12em; }
+    .hero { padding-top: max(3rem, 10vh); }
+    .hero::after {
+      content: "";
+      position: absolute; right: -8vw; bottom: -20vh; width: min(68vw, 880px); aspect-ratio: 1;
+      background: url('../assets/warehouse_full_4cam_map.png') center / cover no-repeat;
+      opacity: .28; filter: saturate(.7) contrast(1.2); border-radius: 50%;
+      mask-image: radial-gradient(circle, black 20%, transparent 70%); pointer-events: none;
+    }
+    .hero > * { position: relative; z-index: 1; }
+    .arrow { color: var(--muted); font-size: .9rem; letter-spacing: .08em; text-transform: uppercase; }
+    .quote {
+      border-left: 4px solid var(--teal); padding: .85rem 0 .85rem 1.2rem;
+      color: #d9edf4; font-size: clamp(1.2rem, 2.1vw, 2rem); line-height: 1.3; max-width: 43ch;
+    }
+    .flow {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: .55rem; align-items: stretch;
+      max-width: 1200px;
+    }
+    .flow > div { background: var(--panel); border: 1px solid var(--line); border-radius: .8rem; padding: .9rem; font-size: .93rem; }
+    .flow > div:nth-child(odd) { border-color: rgba(57, 211, 188, .6); }
+    .flow .arrowbox { display: none; }
+    figure { margin: 0; min-width: 0; }
+    figure img, figure video { width: 100%; max-height: 61vh; object-fit: contain; display: block; border-radius: .9rem; background: #06111d; }
+    figcaption { margin-top: .6rem; font-size: .85rem; color: var(--muted); line-height: 1.4; }
+    .metric { font-size: clamp(2.1rem, 4vw, 4.4rem); line-height: 1; color: var(--teal); font-weight: 800; letter-spacing: -.06em; }
+    .metric.warn { color: var(--amber); }
+    .metric.red { color: var(--red); }
+    .footer { position: absolute; right: clamp(2rem, 5vw, 5.5rem); bottom: 1.6rem; color: #7e94a8; font-size: .78rem; }
+    .small { font-size: .88rem; color: var(--muted); }
+    .matrix { display: grid; grid-template-columns: 1.05fr 1.2fr 1.2fr; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 1rem; overflow: hidden; max-width: 1160px; }
+    .matrix > div { background: #10263c; padding: .85rem 1rem; font-size: .92rem; line-height: 1.35; }
+    .matrix .head { background: #1c4056; color: var(--ink); font-weight: 750; }
+    .next { background: linear-gradient(140deg, rgba(57, 211, 188, .14), rgba(121, 184, 255, .12)); }
+    @media (max-width: 800px) {
+      html { scroll-snap-type: none; }
+      .slide { min-height: auto; padding: 3rem 1.3rem 4.2rem; }
+      .two, .three, .flow { grid-template-columns: 1fr; }
+      .flow > div { min-height: 0; }
+      .matrix { grid-template-columns: 1fr; }
+      .hero::after { width: 105vw; opacity: .16; }
+      figure img, figure video { max-height: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck">
+    <section class="slide hero" id="start">
+      <span class="eyebrow">Next-paper research board · July 2026</span>
+      <h1>From a learned map to <span class="accent">self-commissioning</span> observability.</h1>
+      <p class="subhead">External-camera navigation should start safely in a new warehouse, learn from every drive, and know when its reliability map has become stale.</p>
+      <div class="quote">“A robot should not need an offline detector survey every time a warehouse changes.”</div>
+      <span class="arrow">Scroll ↓ · visual narrative and evidence boundaries</span>
+      <span class="footer">01 / 08</span>
+    </section>
+
+    <section class="slide" id="paper">
+      <span class="eyebrow">What the submitted paper established</span>
+      <div class="grid two">
+        <div>
+          <h2>A reliability field can make route planning more localization-aware.</h2>
+          <p style="margin-top:1.2rem">The paper’s contribution begins after the map exists: a learned detector-reliability field changes planner-facing observation covariance, which changes predicted belief quality and route choice.</p>
+        </div>
+        <figure>
+          <img src="../../paper_artifacts/figures/current_surface/paired_mechanism_taskA_current.png" alt="Paired mechanism from the current single-camera campaign">
+          <figcaption><span class="evidence measured">Established context</span> The next paper inherits this downstream mechanism; it does not need to reframe it as a new planner.</figcaption>
+        </figure>
+      </div>
+      <div class="flow">
+        <div>Offline detector survey</div><div>Learned reliability map</div><div>State-dependent <em>R</em><sub>plan</sub></div><div>Belief-aware prediction</div><div>Route choice</div>
+      </div>
+      <span class="footer">02 / 08</span>
+    </section>
+
+    <section class="slide" id="gap">
+      <span class="eyebrow">The deployment gap</span>
+      <h2>The hard part is not using the map. It is obtaining and maintaining it.</h2>
+      <div class="grid three">
+        <article class="card"><div class="number">DAY ZERO</div><h3>No detector survey yet</h3><p>A new camera or facility has no empirical reliability field, but navigation must still decide where it can trust camera localization.</p></article>
+        <article class="card"><div class="number">CHANGE</div><h3>Layouts do not stay static</h3><p>Racks, pallets, lighting, and camera pose can invalidate an offline field locally. A stale high-confidence prediction is the dangerous failure.</p></article>
+        <article class="card"><div class="number">LEARNING</div><h3>Driving is data collection</h3><p>Each detection and miss is evidence, but its location is uncertain. The update must preserve failure evidence without inventing precision.</p></article>
+      </div>
+      <figure>
+        <img src="../../logs/geometry_visibility_prior/demo/hard_evidence.png" alt="Existing hard-evidence diagnostic figure">
+        <figcaption><span class="evidence measured">Measured simulation</span> Existing logs demonstrate spatially structured detection behaviour and motivate a reliability lifecycle; use the readable conclusion, not every diagnostic subplot.</figcaption>
+      </figure>
+      <span class="footer">03 / 08</span>
+    </section>
+
+    <section class="slide" id="method">
+      <span class="eyebrow">Proposed contribution</span>
+      <h2>A <span class="accent">conservative prior</span> with an explicit right to be corrected.</h2>
+      <div class="flow">
+        <div><strong>Calibration</strong><br><span class="small">FOV, range, boundary, projection quality</span></div>
+        <div><strong>Sensed structure</strong><br><span class="small">Viewpoint-matched occlusion and unknown cells</span></div>
+        <div><strong>Prior mean + strength</strong><br><span class="small">Expected reliability and how quickly data can override it</span></div>
+        <div><strong>Driving updates</strong><br><span class="small">Hits/misses deposited with belief covariance</span></div>
+        <div><strong>Map health + R<sub>plan</sub></strong><br><span class="small">Plan, monitor residuals, re-commission locally</span></div>
+      </div>
+      <div class="grid two">
+        <article class="card"><h3>Mean answers: “what do we expect here?”</h3><p>Calibration and sensed occlusion form a day-zero prediction. It must be judged on unvisited cells and new layouts.</p></article>
+        <article class="card"><h3>Strength answers: “how much should we believe it?”</h3><p>Low strength at shadow boundaries and unknown structure lets real driving correct an uncertain prior quickly; high strength prevents isolated noise from flipping clear evidence.</p></article>
+      </div>
+      <span class="footer">04 / 08</span>
+    </section>
+
+    <section class="slide" id="learning">
+      <span class="eyebrow">The central visual mechanism</span>
+      <div class="grid two">
+        <div>
+          <h2>Normal driving turns the map from a prediction into evidence-backed knowledge.</h2>
+          <p style="margin-top:1.1rem">A miss is not discarded: it is an informative observation about camera reliability.  The planned comparison is not “fancy uncertainty always wins”; it is whether a spatially aware update improves the safety–sample-efficiency trade-off compared with naive deposition and hard gating.</p>
+          <div class="grid two" style="margin-top:1.2rem">
+            <article class="card"><div class="metric">0.207 → 0.064</div><p>Visited-cell map RMSE in the existing logged-driving demo.</p></article>
+            <article class="card"><div class="metric warn">Do not gate</div><p>Current offline ablations do not support throwing uncertain observations away.</p></article>
+          </div>
+        </div>
+        <figure>
+          <img src="../../logs/geometry_visibility_prior/demo/stereo_online_mechanism.png" alt="Spatial uncertainty update mechanism">
+          <figcaption><span class="evidence model">Mechanism illustration</span> Use belief covariance to broaden the footprint of an update; retain a naive-update baseline and let the frozen test decide.</figcaption>
+        </figure>
+      </div>
+      <span class="footer">05 / 08</span>
+    </section>
+
+    <section class="slide" id="video">
+      <span class="eyebrow">Existing media · play in meeting</span>
+      <h2>Show the field changing while the robot drives.</h2>
+      <div class="grid two">
+        <figure>
+          <img src="../../logs/geometry_visibility_prior/demo/gp_online_update.gif" alt="Online reliability-map update animation">
+          <figcaption><span class="evidence measured">Measured simulator logs</span> Primary clip: operational detections and misses refine a map. The resulting map is not yet consumed by the live planner.</figcaption>
+        </figure>
+        <figure>
+          <img src="../../logs/studies/multicamera_commissioning_bigwarehouse/four_camera_showcase/live_four_camera_montage.png" alt="Live Gazebo views from all four warehouse cameras">
+          <figcaption><span class="evidence model">Live simulator layout/runtime</span> Four live camera streams establish the A–D commissioning surface. This is not a learned-reliability or fusion result.</figcaption>
+        </figure>
+      </div>
+      <span class="footer">06 / 08</span>
+    </section>
+
+    <section class="slide" id="experiment">
+      <span class="eyebrow">The decisive experiment</span>
+      <h2>Earn the claim on <span class="accent">unvisited and changed</span> regions.</h2>
+      <div class="matrix">
+        <div class="head">Question</div><div class="head">Compare</div><div class="head">Report first</div>
+        <div>Is the day-zero map useful?</div><div>Uniform, calibration-only, sensed-structure, evaluation-only offline map</div><div>Unvisited-block/new-layout calibration and false-safe exposure</div>
+        <div>Does driving correct it safely?</div><div>Prior + online updates, data-only learner, hard-gate negative control, covariance-spread variant</div><div>Map quality versus observations on untouched cells; distance/time to target calibration</div>
+        <div>Does it improve operation?</div><div>Matched seeds: uniform R, static prior, online-updated map, offline upper reference</div><div>Clean goal, collision/stop/retreat, localization-risk exposure, belief calibration</div>
+      </div>
+      <div class="grid two">
+        <article class="card next"><h3>Deployment firewall</h3><p>Calibration and sensed structure may build the prior. Ground truth and exact CAD score it only. Never leak the offline detector survey into a day-zero condition.</p></article>
+        <article class="card next"><h3>Outcome discipline</h3><p>Report safety and calibration before path length. A map can look accurate on successful runs while hiding the conditions in which the robot failed.</p></article>
+      </div>
+      <span class="footer">07 / 08</span>
+    </section>
+
+    <section class="slide" id="scope">
+      <span class="eyebrow">Scope decision</span>
+      <div class="grid two">
+        <div>
+          <h2>Commission first. <span class="accent">Fuse cameras later.</span></h2>
+          <p style="margin-top:1.1rem">Two and four-camera layouts are a powerful scale-out test: they reduce blind coverage, but create source-switch uncertainty. Keep per-camera reliability and inflate covariance at an unsupported handover. Do not make this the headline before camera-B detector evidence and a closed-loop handover campaign exist.</p>
+          <div style="margin-top:1.35rem"><span class="evidence open">Open experiment</span></div>
+        </div>
+        <figure>
+          <img src="../../logs/studies/multicamera_commissioning_bigwarehouse/four_camera_showcase/overlap_handover_corridor.png" alt="Four-camera overlap and handover corridor">
+          <figcaption><span class="evidence model">Calibration-only coverage potential</span> Adjacent-camera overlap creates a handover and fusion test surface; the detector evidence chain must be collected first.</figcaption>
+        </figure>
+      </div>
+      <div class="quote">Recommended title direction: <strong>“Self-Commissioning Observation-Reliability Maps for External-Camera Robot Navigation.”</strong></div>
+      <span class="footer">08 / 08</span>
+    </section>
+  </main>
+</body>
+</html>

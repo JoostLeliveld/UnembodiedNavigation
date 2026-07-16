@@ -1,0 +1,19 @@
+chapter: "05"
+status: PARTIAL
+world: aws_1cam
+contribution: interface
+gate: "freeze blocked: r_miss_uv 40 vs 120 px; offline copy must delegate to single_camera_adapter; world_profiles.yaml default dangling (multicam WIP)"
+evidence:
+  - path: ../../src/reliability/reliability/single_camera_adapter.py
+    kind: canonical_code
+    tag: established
+    note: "most tested trust_to_r_plan copy"
+  - path: ../../scripts/geometry_visibility/geometry_visibility.py
+    kind: code
+    tag: established
+    note: "offline copy, r_miss_uv=40px — divergent"
+  - path: ../../logs/studies/optionA_commissioning/exp2_operational_mapping
+    kind: study_output
+    tag: measured_in_sim
+figures:
+  derivable: [05A, 05B, 05C, 05D]

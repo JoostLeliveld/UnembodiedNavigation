@@ -1,0 +1,215 @@
+# Chapter registry — machine-readable mirror of research_story/README.md
+# status: LOCKED | ACTIVE | PARTIAL | PLUMBING | PLANNED | FUTURE
+# Worlds:
+#   aws_1cam        = warehouse_aws.world.sdf (original warehouse, 1 external camera)
+#   full_4cam       = warehouse_full_4cam.world.sdf (THE thesis scale world: 24.5x20.5m,
+#                     cameras A-D at (+-6,+-10,6.1); docs/warehouse_full_4cam_layout.md)
+#   (all other development worlds were DELETED 2026-07-15 and archived under
+#    ../_archive/; data collected on them is historical only)
+# Evidence honesty tags (docs/next_paper/evidence_ledger.md):
+#   established | measured_in_sim | model_plumbing | open
+
+plan: research_story/THESIS_PLAN_2026-07-15.md
+runtime_contract: docs/current_runtime_contract.yaml
+artifact_chain_registry: docs/experiment_registry.md
+updated: 2026-07-15
+
+chapters:
+  - id: "00"
+    folder: 00_problem_and_existing_baseline
+    question: "Does spatially varying camera trust matter downstream?"
+    status: LOCKED
+    world: aws_1cam
+    contribution: motivation (established anchor)
+    implemented_now:
+      - "honest_campaign_v1: C1 15/20 (4 GT breaches, all west) vs C2 20/20 (0); 0 contacts"
+      - "whitenoise_campaign_v1 robustness companion (gap not a Q artifact)"
+    aiming_for: "nothing new — frozen; only cited"
+    key_evidence:
+      - logs/visibility_comparison/honest_campaign_v1
+      - logs/visibility_comparison/whitenoise_campaign_v1
+      - docs/paper_vs_current/
+      - paper_artifacts/figures/
+    gate: "FROZEN — never rerun/modify"
+
+  - id: "01"
+    folder: 01_operational_belief_and_logging
+    question: "Does ordinary driving produce usable belief-uncertain training records?"
+    status: PARTIAL
+    world: aws_1cam
+    contribution: infrastructure for contribution 1
+    implemented_now:
+      - "belief-stamped GP events (build_belief_gp_events.py) — prior-vs-posterior pairing unaudited"
+      - "exp5: raw filter NEES 16.8 -> 2.8 after smoothing (covariance overconfident as-is)"
+    aiming_for: "Fig 01B/01C: tr(P) directionally tracks GT error; ellipse coverage near nominal after chosen inflation/smoothing"
+    key_evidence:
+      - logs/visibility_comparison/belief_gp_events
+      - logs/studies/optionA_commissioning/exp5_trajectory_smoothing
+    gate: "GO/NO-GO for ch.03: covariance at least directionally related to actual error"
+    missing: "prior-belief logger study: (t, mu-, P-, opportunity, hit/miss, conf, u, v, dt) per camera frame"
+
+  - id: "02"
+    folder: 02_trust_target_and_calibration
+    question: "Which operational camera signal should the spatial GP learn?"
+    status: PARTIAL
+    world: aws_1cam
+    contribution: supporting (inside contribution 1)
+    implemented_now:
+      - "exp0 confidence audit (4 figs) — Simpson confound found, so motivation only"
+      - "precedent: raw confidence -> detection RATE switch for calibration invariance"
+      - "clean detector v1 (periphery flat 0.027m) + capture/targets v1 datasets"
+    aiming_for: "Fig 02D table (NLL/Brier/BEV-error corr/NIS prediction per target) -> scalar-vs-factorised decision"
+    key_evidence:
+      - logs/studies/optionA_commissioning/exp0_confidence_audit
+      - paper_artifacts/perception/warehouse_yolo_detector_v1
+      - logs/visibility_comparison/warehouse_visibility_capture_v1
+      - logs/visibility_comparison/warehouse_visibility_targets_v1
+    gate: "02D decides whether ch.04 opens"
+
+  - id: "03"
+    folder: 03_uncertain_input_gp
+    question: "Does modelling uncertain observation locations beat point/smoothing/weighting?"
+    status: ACTIVE
+    world: synthetic_then_aws_1cam
+    contribution: PRIMARY (core)
+    implemented_now:
+      - "expected-kernel/belief-aware GP code (fit_belief_aware_gp.py) + belief_aware_gp_score_v1 fits"
+      - "exp1 synthetic GP harness (needs U3/U5 panel extension)"
+      - "finding: methods TIE at real sigma -> alpha-sweep is the discriminating regime"
+    aiming_for: "Fig 03E: U5 degrades most gracefully over alpha in {0..8}, route-disjoint NLL/Brier; honest null (smoothing suffices) also publishable"
+    baselines: [U0_constant, U1_point_gp, U2_long_lengthscale, U3_gaussian_smoothing, U4_cov_weighted, U5_expected_kernel, U6_gt_position_EVAL_ONLY]
+    key_evidence:
+      - scripts/visibility_comparison/fit_belief_aware_gp.py
+      - logs/visibility_comparison/belief_aware_gp_score_v1
+      - logs/studies/optionA_commissioning/exp1_synthetic_gp
+      - logs/visibility_comparison/belief_gp_events
+    gate: "blocked on ch.01 gate; single-route training forbidden (false-confidence trap)"
+
+  - id: "04"
+    folder: 04_factorised_observation_model
+    question: "Are detection availability and conditional accuracy different spatial fields?"
+    status: PLANNED
+    world: aws_1cam_then_full_4cam
+    contribution: candidate second contribution A
+    implemented_now: []
+    aiming_for: "Fig 04A two-maps + Fig 04C NIS calibration where factorised beats scalar trust"
+    key_evidence: []
+    gate: "opens only on ch.02's 02D outcome; promote only if both components learned + validated + beat scalar + change R_plan/navigation"
+
+  - id: "05"
+    folder: 05_trust_to_rplan
+    question: "Can trust affect planning ONLY through one frozen, bounded, monotone interface?"
+    status: PARTIAL
+    world: aws_1cam
+    contribution: interface (not a contribution)
+    implemented_now:
+      - "3 divergent implementations: planner runtime (r_miss_uv=120px), single_camera_adapter (most tested), geometry_visibility offline (40px)"
+      - "exp2 operational mapping study (4 figs)"
+    aiming_for: "one reconciled implementation + Fig 05B bounded monotone curve + Fig 05C triptych -> FREEZE"
+    key_evidence:
+      - src/reliability/reliability/
+      - scripts/geometry_visibility/geometry_visibility.py
+      - logs/studies/optionA_commissioning/exp2_operational_mapping
+    gate: "freeze blocked: r_miss_uv 40vs120px; offline copy must delegate to adapter; world_profiles.yaml dangling default (multicam-branch WIP)"
+
+  - id: "06"
+    folder: 06_original_warehouse_navigation
+    question: "Does the OPERATIONALLY-learned trust map still win closed-loop?"
+    status: PLANNED
+    world: aws_1cam
+    contribution: PRIMARY (downstream evidence)
+    implemented_now:
+      - "C1/C2 harness + 4 locked routes + seeds (honest_campaign_v1 machinery)"
+      - "exp7 planner replay (cheap offline pre-check of route behaviour)"
+      - "exp6 stress test (inflation curves, stale-map behaviour)"
+    aiming_for: "Table 06C: N4 (uncertain-input operational GP) >= N1 constant-R and N3 point-GP on clean goals + GT breaches + calibration; NOT required to beat N2 survey-GP reference"
+    conditions: [N0_no_camera, N1_constant_R, N2_survey_reference, N3_point_gp, N4_uncertain_input, N5_factorised_optional]
+    key_evidence:
+      - logs/visibility_comparison/honest_campaign_v1
+      - logs/studies/optionA_commissioning/exp7_planner_replay
+      - logs/studies/optionA_commissioning/exp6_stress_test
+    gate: "runs only after ch.02/03/05 freeze; pre-registered; +1 designed uncertainty route"
+
+  - id: "07"
+    folder: 07_weak_priors_and_geometry
+    question: "How much reliability knowledge is free before any driving?"
+    status: ACTIVE
+    world: aws_1cam_then_full_4cam
+    contribution: "07a ablation; 07b separate only under strong evidence"
+    implemented_now:
+      - "geometry module 9/9 tests; S1 gate PASSED (Spearman 0.730 / R2 0.51 vs empirical GP; range term co-dominant)"
+      - "calibrated_prior_v1; exp34 init/budget curves"
+      - "day-zero prior generation proven at 4-cam scale (warehouse_full_4cam_dayzero_v1, no training data/GT)"
+      - "depth_sensed_initial_gp_v1 (sim-sensor benchmark AUROC 0.968 vs 0.782 camera-only)"
+    aiming_for: "Fig 07B: prior+updates reaches target NLL with fewest driven metres; Fig 07E verdict geometry-vs-range/FOV"
+    key_evidence:
+      - scripts/geometry_visibility
+      - logs/studies/geometry_visibility_prior/warehouse_aws_v0
+      - logs/studies/geometry_visibility_prior/calibrated_prior_v1
+      - logs/studies/optionA_commissioning/exp34_init_budget
+      - paper_artifacts/gp/warehouse_full_4cam_dayzero_v1
+      - logs/visibility_comparison/depth_sensed_initial_gp_v1
+    gate: "07b stays MODEL-ONLY until detector-evidence check; must clearly beat range/FOV to promote"
+
+  - id: "08"
+    folder: 08_large_warehouse_scaling
+    question: "Does the frozen single-camera pipeline transfer per-camera at scale?"
+    status: ACTIVE
+    world: full_4cam
+    contribution: evaluation environment (NOT a contribution)
+    implemented_now:
+      - "clean world warehouse_full_4cam.world.sdf + layout doc + map assets"
+      - "day-zero artifact warehouse_full_4cam_dayzero_v1: union coverage 99.2%, overlap 42.2%, per-camera + union/best maps, no training data/GT"
+      - "commissioning collection stack RETARGETED to full_4cam cameras A-D (launch warehouse_full4cam_commissioning, recorder, contracts, leakage firewall); routes pending redesign"
+      - "four-camera showcase deck builder (research_story/presentations/2026-07_four_camera_showcase)"
+    aiming_for: "Fig 08C: four distinct calibrated per-camera trust fields fitted with ZERO retuning of the frozen ch.02/03/05 choices; Fig 08D heterogeneity table"
+    key_evidence:
+      - src/sim/gazebo_worlds/worlds/warehouse_full_4cam.world.sdf
+      - docs/warehouse_full_4cam_layout.md
+      - paper_artifacts/gp/warehouse_full_4cam_dayzero_v1
+      - experiments/multicamera_commissioning_bigwarehouse
+      - scripts/visibility_comparison/warehouse_full_4cam_campaign.yaml
+    gate: "no method development here; per-camera detector evidence chain required before any fitted map is claimed"
+
+  - id: "09"
+    folder: 09_multicamera_handover_fusion
+    question: "Can multiple cameras be selected/handed-over/fused without overconfident belief?"
+    status: PLUMBING_PLUS_PILOT
+    world: full_4cam
+    contribution: candidate second contribution B
+    implemented_now:
+      - "M8 hysteretic handover manager (trust/freshness/association/overlap gates + hysteresis), operational-only"
+      - "S0-S4 selection/fusion baselines + offline overlap validation (D2)"
+      - "handover covariance inflation + estimator NIS gating; contract tests"
+      - "HISTORICAL 2-cam pilot (retired auxiliary world): D2 gate HONESTLY FAILED — 5 pairs vs 30 required, 20% spatial outliers vs 10% limit (4/5 within 0.30m); M8 cut switching 3->1 at map error 0.130->0.136m (stability trade-off)"
+    aiming_for: "Fig 09D calibrated fusion (NIS coverage, no overconfident overlap updates) + Fig 09B stable handover timeline; D2 pass with >=30 synchronized pairs"
+    conditions: "plan IDs M0-M7 map onto implemented S0-S4 + M8; M7 oracle = evaluation-only"
+    key_evidence:
+      - src/reliability/
+      - tests/reliability/
+      - experiments/multicamera_fusion_extension
+      - experiments/multicamera_commissioning_bigwarehouse
+    gate: "no fusion claims until per-camera detector chains + overlap-disagreement calibration (D2 pass) + closed-loop handover campaign"
+
+  - id: "10"
+    folder: 10_active_commissioning
+    question: "Can informative-but-safe routes cut commissioning driving?"
+    status: FUTURE
+    world: full_4cam
+    contribution: separate future paper
+    implemented_now: []
+    aiming_for: "Fig 10B: A5 (pose-uncertainty-aware info gain) reaches target map NLL with least driven metres"
+    conditions: [A0_task_routes, A1_uniform, A2_random_safe, A3_max_variance, A4_info_gain, A5_info_gain_pose_uncertain]
+    key_evidence: []
+    gate: "start only after ch.03 model + ch.08 per-camera maps; aws world = implementation sanity only"
+
+  - id: "11"
+    folder: 11_final_thesis_campaign
+    question: null
+    status: PLANNED
+    world: both
+    contribution: evidence package
+    implemented_now: []
+    aiming_for: "pre-registered final campaign; every figure regenerated from logs with provenance"
+    key_evidence: []
+    gate: "populated last, after upstream freezes"
