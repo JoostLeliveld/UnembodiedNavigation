@@ -72,9 +72,10 @@ class EvaluationTruthRecorder(Node):
         min_interval_s: float,
         use_sim_time: bool,
     ) -> None:
-        super().__init__("evaluation_truth_recorder")
-        if use_sim_time:
-            self.set_parameters([Parameter("use_sim_time", Parameter.Type.BOOL, True)])
+        super().__init__(
+            "evaluation_truth_recorder",
+            parameter_overrides=[Parameter("use_sim_time", value=bool(use_sim_time))],
+        )
         self.child_frame_id = child_frame_id
         self.min_interval_s = max(0.0, float(min_interval_s))
         self.first_stamp: float | None = None
@@ -84,8 +85,8 @@ class EvaluationTruthRecorder(Node):
 
         out_dir.mkdir(parents=True, exist_ok=True)
         self.csv_path = out_dir / "ground_truth.csv"
-        self.handle = self.csv_path.open("w", newline="", encoding="utf-8")
-        self.writer = csv.DictWriter(self.handle, fieldnames=TRUTH_FIELDS)
+        self._csv_handle = self.csv_path.open("w", newline="", encoding="utf-8")
+        self.writer = csv.DictWriter(self._csv_handle, fieldnames=TRUTH_FIELDS)
         self.writer.writeheader()
         self.create_subscription(TFMessage, topic, self._truth_callback, 50)
 
@@ -115,7 +116,7 @@ class EvaluationTruthRecorder(Node):
             )
             self.count += 1
             if self.count % 50 == 0:
-                self.handle.flush()
+                self._csv_handle.flush()
             return
 
     def elapsed_s(self) -> float:
@@ -124,7 +125,7 @@ class EvaluationTruthRecorder(Node):
         return self.last_stamp - self.first_stamp
 
     def close(self) -> None:
-        self.handle.close()
+        self._csv_handle.close()
         self.get_logger().info(f"wrote {self.count} ground-truth samples to {self.csv_path}")
 
 

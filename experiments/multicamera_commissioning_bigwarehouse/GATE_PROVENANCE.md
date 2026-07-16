@@ -31,13 +31,17 @@ protocol.
   ≥ 0.425; the first release appears at 0.40; below 0.25 the policy releases
   freely (43–54 updates) and the NIS gate starts doing the rejection work in
   the 0.225–0.30 band. The sweep is a disclosure, **not** a tuning source.
-- **Bias attribution**: `tools/attach_evaluation_truth.py` +
-  `tools/record_evaluation_truth.py` attach simulation truth to future runs so
-  cross-camera disagreement can be attributed to a specific calibration.
-  A preliminary odom-referenced audit of pilot run 01 shows the +y projection
-  bias concentrated on the north-wall cameras (B ≈ +0.33 m, D ≈ +0.27 m vs
-  A ≈ −0.11 m, C ≈ −0.06 m), implicating camera D in the C↔D 0.247 m offset —
-  to be confirmed against real ground truth before any correction.
+- **Bias attribution (real GT, 2026-07-16)**: `tools/record_evaluation_truth.py`
+  + `tools/attach_evaluation_truth.py` measured per-camera projection error
+  against `/ground_truth_tf` on a live handover pass
+  (`logs/studies/multicamera_commissioning_bigwarehouse/gt_validation_smoke_20260716/`).
+  Each camera pulls the robot toward its own wall — a near-edge box-bottom
+  projection bias, not one bad calibration: C −0.176 m (south), D +0.092 m
+  (north), B +0.050 m; C+D sum 0.268 m reproduces the pilot's 0.247 m C↔D
+  disagreement. Camera C dominates. (An earlier odom-referenced audit that
+  implicated the north cameras was contaminated by wheel-odom drift and is
+  superseded.) Fix before re-qualifying D2 edges: compensate the bottom-centre
+  point toward the robot centre along the camera bearing.
 
 ## Rules going forward
 
