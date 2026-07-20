@@ -1,5 +1,27 @@
 # Demo-layer restructure plan — contributions demonstrated separately (2026-07-16)
 
+> **Correction (2026-07-20), after building the first instance (D4):**
+> `experiments/demos/` is NOT free — it already exists for an unrelated
+> purpose (single-camera-campaign README media: `outcome_counts_by_condition.png`,
+> `campaign_result_table.png`, referenced from `experiments/README.md`). Do not
+> repurpose it as the demo-layer root; the "Repo structure" section below is
+> aspirational for that one path and should read `experiments/<owning_study>/`
+> instead of a shared `experiments/demos/` — each demo lives in the study that
+> owns its data (code in that study's `tools/`, outputs in that study's
+> `logs/studies/<study>/demos/<dN_name>/`), with its own short markdown doc
+> (see `experiments/multicamera_commissioning_bigwarehouse/DEMOS_D4_CAMERA_METHOD.md`
+> for the pattern). A shared cross-study index can still exist later as a
+> pure links-page once more than one study has a demo.
+>
+> **Also noted while building D4:** `research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/`
+> is being actively extended by a concurrent workstream (new camera-C story
+> renderer, readiness-audit figures, TALKING_POINTS edits across stages
+> 03–07, as of 2026-07-16). That folder is the natural eventual home for the
+> "retarget the walkthrough to consume demo outputs" step in the Execution
+> Order below — do not touch its files while that workstream is live; land
+> new demos as standalone, run-anywhere scripts first (as D4 did) and wire
+> the walkthrough retarget as a separate, later, coordinated step.
+
 Problem being solved: the repo proves things (manifests, gates, CSVs) but does
 not SHOW things. Current showcase renders fail a new reader in five specific
 ways:

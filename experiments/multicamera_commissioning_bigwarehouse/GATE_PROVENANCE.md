@@ -65,3 +65,8 @@ protocol.
    for `min_pair_count` (1 vs 30) and `max_outlier_rate` (0.05 vs 0.10).
 3. `min_spatial_trust = 0.45` sits 0.025–0.05 above the pilot's release cliff;
    report the sensitivity curve alongside any release/no-release claim.
+
+## Demo
+
+The projection-bias fix (before/after, C↔D verdict vs the 0.30 m gate) is
+rendered as a four-panel demo — see `DEMOS_D4_CAMERA_METHOD.md`.

@@ -69,6 +69,16 @@ detector-OOD at root. Camera C's ~0.11 m cross-bearing projection residual
      detection-RATE-based trust methodology (calibration-invariant, already
      the campaign standard) and record the disclosure.
 
+> **Addendum (2026-07-16, later):** the parallel workstream measured that one
+> four-image batched GPU call (single shared model) runs 38.9 ms vs 79.5 ms
+> for four sequential calls — this supersedes the camera_A-on-CPU mitigation
+> in 1d AND the OOM constraint (one model load instead of four). It also
+> added a geometry-certified **negative-frame contract** (deployment usually
+> has no robot in three of four views; positives-only training would let a
+> rack false-alarm read as availability) plus per-camera capture gates
+> (reserved-route/collision/range/split/occlusion, localhost-only transport).
+> Module 1b/1d below should be read through that lens; do not duplicate.
+
 1d. **Latency vs the age gate (CPU camera reality check)**
    - camera_A on CPU currently delivers ~1 Hz images; the manager's
      `max_measurement_age_s = 0.15` will mark a 1 Hz stream stale almost
