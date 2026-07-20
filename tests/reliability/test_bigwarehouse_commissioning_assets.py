@@ -48,9 +48,8 @@ def test_fullwarehouse_launch_targets_the_four_camera_world() -> None:
 
     assert "warehouse_full_4cam.world.sdf" in launch
     assert '"world_name", default_value="warehouse_full_4cam"' in launch
-    assert '"bridge_camera_b": "true"' in launch
-    assert '"bridge_camera_c": "true"' in launch
-    assert '"bridge_camera_d": "true"' in launch
+    assert '"bridge_camera_b": PythonExpression([' in launch
+    assert "direct_gz' else 'true'" in launch
     assert '"bridge_contacts": LaunchConfiguration("bridge_contacts")' in launch
     assert '"bridge_contacts", default_value="true"' in launch
     assert '"use_nvidia_prime_offload", default_value="false"' in launch

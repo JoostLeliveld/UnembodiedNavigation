@@ -62,6 +62,11 @@ to isolate strict timestamp-admission cost. It has no runtime contract and is
 therefore intentionally barred from recording and evidence; see
 [`LAPTOP_ASYNC_MICROBATCH_COMMISSIONING.md`](LAPTOP_ASYNC_MICROBATCH_COMMISSIONING.md).
 
+The v6 direct-Gazebo / fixed-shape TorchScript candidate keeps 640×360 source
+quality and has passed only its 3 Hz rate probe. It remains blocked pending
+equivalence and calibration validation; see
+[`LAPTOP_DIRECT_COMPILED_COMMISSIONING.md`](LAPTOP_DIRECT_COMPILED_COMMISSIONING.md).
+
 ## Start the passive four-camera stack
 
 ```bash

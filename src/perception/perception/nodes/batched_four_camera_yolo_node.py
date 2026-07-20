@@ -26,7 +26,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float64MultiArray, String
+from std_msgs.msg import Float64MultiArray, Header, String
 from ultralytics import YOLO
 
 import perception.core.four_camera_batch as four_camera_batch_module
@@ -74,6 +74,14 @@ CAMERA_TOPICS = {
 }
 
 
+@dataclass(frozen=True)
+class _DirectGzImagePayload:
+    """BGR image and reconstructed ROS header from a Gazebo transport image."""
+
+    header: Header
+    image_bgr: np.ndarray
+
+
 def _runtime_contract_qos() -> QoSProfile:
     """Retain exactly one detector identity for recorders that start later."""
 
@@ -106,6 +114,8 @@ class BatchedFourCameraYoloNode(Node):
         super().__init__("batched_four_camera_yolo_node")
 
         self.declare_parameter("model_path", "")
+        self.declare_parameter("runtime_backend", "native")
+        self.declare_parameter("compiled_model_path", "")
         self.declare_parameter("device", "")
         self.declare_parameter("cpu_num_threads", 2)
         self.declare_parameter("cpu_num_interop_threads", 1)
@@ -127,6 +137,8 @@ class BatchedFourCameraYoloNode(Node):
         self.declare_parameter("max_pending_wall_s", 0.50)
         self.declare_parameter("synchronization_mode", "strict")
         self.declare_parameter("async_coalesce_wall_s", 0.02)
+        self.declare_parameter("input_transport", "ros")
+        self.declare_parameter("runtime_trace_period_s", 0.0)
         self.declare_parameter("camera_observation_r_visible_uv", 2.5)
         self.declare_parameter("camera_observation_r_miss_uv", 40.0)
 
@@ -142,6 +154,18 @@ class BatchedFourCameraYoloNode(Node):
                 f"got {model_path}"
             )
         self.model_path = model_path.resolve()
+        self.runtime_backend = str(self.get_parameter("runtime_backend").value).strip().lower()
+        raw_compiled_model_path = str(self.get_parameter("compiled_model_path").value).strip()
+        if self.runtime_backend not in {"native", "torchscript"}:
+            raise RuntimeError("runtime_backend must be 'native' or 'torchscript'")
+        self.compiled_model_path = None
+        if self.runtime_backend == "torchscript":
+            compiled_path = Path(raw_compiled_model_path).expanduser()
+            if not compiled_path.is_file() or compiled_path.suffix.lower() != ".torchscript":
+                raise RuntimeError(
+                    "torchscript backend requires compiled_model_path ending in .torchscript"
+                )
+            self.compiled_model_path = compiled_path.resolve()
         # Keep this a string end to end.  In particular, ``0`` means CUDA GPU
         # zero to Ultralytics but would violate this declared ROS parameter if
         # launch serialized it as an integer.
@@ -202,8 +226,18 @@ class BatchedFourCameraYoloNode(Node):
         self.async_coalesce_wall_s = float(
             self.get_parameter("async_coalesce_wall_s").value
         )
+        self.input_transport = str(self.get_parameter("input_transport").value).strip().lower()
+        self.runtime_trace_period_s = float(self.get_parameter("runtime_trace_period_s").value)
         if self.synchronization_mode not in {"strict", "asynchronous"}:
             raise RuntimeError("synchronization_mode must be 'strict' or 'asynchronous'")
+        if self.input_transport not in {"ros", "direct_gz"}:
+            raise RuntimeError("input_transport must be 'ros' or 'direct_gz'")
+        if self.input_transport == "direct_gz" and self.synchronization_mode != "asynchronous":
+            raise RuntimeError("direct_gz input is diagnostic-only and requires asynchronous mode")
+        if self.runtime_backend != "native" and self.synchronization_mode != "asynchronous":
+            raise RuntimeError("compiled runtime is diagnostic-only and requires asynchronous mode")
+        if not math.isfinite(self.runtime_trace_period_s) or self.runtime_trace_period_s < 0.0:
+            raise RuntimeError("runtime_trace_period_s must be finite and non-negative")
         if not math.isfinite(self.async_coalesce_wall_s) or self.async_coalesce_wall_s <= 0.0:
             raise RuntimeError("async_coalesce_wall_s must be finite and positive")
         self.batcher = FourCameraBatcher(
@@ -214,6 +248,10 @@ class BatchedFourCameraYoloNode(Node):
         self._async_pending: dict[str, PendingFrame] = {}
         self._async_last_seen_stamp_ns = {camera_id: -1 for camera_id in CAMERA_ORDER}
         self._async_pending_lock = threading.Lock()
+        self._direct_gz_received = 0
+        self._async_batches_processed = 0
+        self._async_frames_processed = 0
+        self._async_last_batch_size = 0
         self._async_input_group = None
         self._async_processing_group = None
         if self.synchronization_mode == "asynchronous":
@@ -224,12 +262,16 @@ class BatchedFourCameraYoloNode(Node):
             self._async_processing_group = MutuallyExclusiveCallbackGroup()
         self._warning_counts: dict[str, int] = {}
 
-        # Native checkpoint only: one wrapper, one model allocation, one
-        # explicitly typed device.  TorchScript is intentionally not selected
-        # because the existing export is fixed-shape and bypasses the matched
-        # native preprocessing path.
+        # The source checkpoint remains mandatory in every mode. The compiled
+        # path is an asynchronous diagnostic candidate and is separately
+        # attested; strict evidence runs remain native-only.
         model_sha256_before_load = sha256_file(self.model_path)
-        self.model = YOLO(str(self.model_path))
+        self.compiled_model_sha256 = None
+        model_load_path = self.model_path
+        if self.compiled_model_path is not None:
+            self.compiled_model_sha256 = sha256_file(self.compiled_model_path)
+            model_load_path = self.compiled_model_path
+        self.model = YOLO(str(model_load_path))
         self.target_ids = target_class_ids(
             getattr(self.model, "names", {}), self.class_name, self.class_id
         )
@@ -282,6 +324,12 @@ class BatchedFourCameraYoloNode(Node):
             raise RuntimeError(
                 "model checkpoint bytes changed while the batched detector was loading"
             )
+        if self.compiled_model_path is not None:
+            compiled_hash_after_load = sha256_file(self.compiled_model_path)
+            if compiled_hash_after_load != self.compiled_model_sha256:
+                raise RuntimeError(
+                    "compiled model bytes changed while the batched detector was loading"
+                )
         if self.synchronization_mode == "strict":
             self._publish_runtime_contract()
         else:
@@ -320,29 +368,63 @@ class BatchedFourCameraYoloNode(Node):
         # Keep our references under a node-local name so the subscriptions
         # remain alive without shadowing the ROS API at startup.
         self.camera_subscriptions = []
-        for camera_id in CAMERA_ORDER:
-            self.camera_subscriptions.append(
-                self.create_subscription(
-                    Image,
+        self._gz_transport_node = None
+        if self.input_transport == "direct_gz":
+            # Subscribe before ROS conversion so B--D can bypass three large
+            # gz->ROS image copies. Outputs remain the normal ROS contracts.
+            from gz.msgs10.image_pb2 import Image as GzImage
+            from gz.transport13 import Node as GzTransportNode, SubscribeOptions
+
+            self._gz_image_type = GzImage
+            self._gz_transport_node = GzTransportNode()
+            for camera_id in CAMERA_ORDER:
+                self._gz_transport_node.subscribe_raw(
                     CAMERA_TOPICS[camera_id],
-                    lambda msg, selected_camera=camera_id: self._image_callback(
-                        selected_camera, msg
+                    lambda raw, _info, selected_camera=camera_id: self._gz_raw_image_callback(
+                        selected_camera, raw
                     ),
-                    1,
-                    callback_group=self._async_input_group,
+                    # Gazebo Fortress still advertises ignition.msgs.Image
+                    # even though its wire payload is protobuf-compatible with
+                    # gz.msgs.Image. Raw subscription avoids the type-name
+                    # handshake mismatch without a ROS conversion.
+                    "ignition.msgs.Image",
+                    SubscribeOptions(),
                 )
+            self.get_logger().info(
+                "subscribed directly to Gazebo image topics for camera_A through camera_D"
             )
+        else:
+            for camera_id in CAMERA_ORDER:
+                self.camera_subscriptions.append(
+                    self.create_subscription(
+                        Image,
+                        CAMERA_TOPICS[camera_id],
+                        lambda msg, selected_camera=camera_id: self._image_callback(
+                            selected_camera, msg
+                        ),
+                        1,
+                        callback_group=self._async_input_group,
+                    )
+                )
 
         self.get_logger().info(
             "Batched four-camera YOLO started "
-            f"(model={self.model_path}, device={self.device or 'auto'}, "
+            f"(model={model_load_path}, backend={self.runtime_backend}, "
+            f"device={self.device or 'auto'}, "
             f"batch_order={','.join(CAMERA_ORDER)}, batch_size={len(CAMERA_ORDER)}, "
             f"imgsz={self.image_size}, masks={self.use_masks}, "
             f"torch_threads={self.actual_cpu_num_threads}, "
             f"torch_interop={self.actual_cpu_num_interop_threads}, "
             f"opencv_threads={self.actual_opencv_num_threads}, "
-            f"input_policy={self.synchronization_mode}-new-latest-only)"
+            f"input_policy={self.synchronization_mode}-{self.input_transport}-new-latest-only)"
         )
+        if self.runtime_trace_period_s > 0.0:
+            trace_clock = RclpyClock(clock_type=ClockType.SYSTEM_TIME)
+            self.create_timer(
+                self.runtime_trace_period_s,
+                self._log_runtime_trace,
+                clock=trace_clock,
+            )
 
     def _publish_runtime_contract(self) -> None:
         """Publish the retained identity only after a usable model is ready.
@@ -463,6 +545,62 @@ class BatchedFourCameraYoloNode(Node):
         if decision.batch is not None:
             self._process_batch(decision.batch)
 
+    def _gz_image_callback(self, camera_id: str, msg: Any) -> None:
+        """Accept one Gazebo RGB image without a ros_gz_bridge conversion."""
+
+        receive_wall_s = time.perf_counter()
+        receive_stamp_s = self._clock_s()
+        try:
+            sec = int(msg.header.stamp.sec)
+            nanosec = int(msg.header.stamp.nsec)
+            stamp_ns = stamp_parts_to_ns(sec, nanosec)
+            width = int(msg.width)
+            height = int(msg.height)
+            step = int(msg.step)
+            if width <= 0 or height <= 0 or step != width * 3:
+                raise BatchContractError(
+                    f"unexpected Gazebo image geometry {width}x{height}, step={step}"
+                )
+            data = np.frombuffer(bytes(msg.data), dtype=np.uint8)
+            if data.size != height * step:
+                raise BatchContractError(
+                    f"Gazebo image data length {data.size} does not match {height}x{step}"
+                )
+            image = data.reshape(height, width, 3)
+            # Gazebo camera output is RGB_INT8 in the commissioned worlds.
+            # Convert once here to preserve the detector's existing BGR input
+            # contract and reject every other format rather than guessing.
+            if int(msg.pixel_format_type) != 3:  # gz.msgs.RGB_INT8
+                raise BatchContractError(
+                    f"unexpected Gazebo pixel format {int(msg.pixel_format_type)}; expected RGB_INT8"
+                )
+            bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+            header = Header()
+            header.stamp.sec = sec
+            header.stamp.nanosec = nanosec
+            header.frame_id = "image"
+            self._offer_async_frame(
+                PendingFrame(
+                    camera_id=camera_id,
+                    stamp_ns=stamp_ns,
+                    receive_stamp_s=receive_stamp_s,
+                    receive_wall_s=receive_wall_s,
+                    payload=_DirectGzImagePayload(header=header, image_bgr=bgr),
+                )
+            )
+            self._direct_gz_received += 1
+        except Exception as exc:
+            self._fatal(f"malformed direct Gazebo image for {camera_id}: {exc}", exc)
+
+    def _gz_raw_image_callback(self, camera_id: str, raw: bytes) -> None:
+        """Decode the legacy-advertised Gazebo image wire payload locally."""
+
+        try:
+            msg = self._gz_image_type.FromString(raw)
+        except Exception as exc:
+            self._fatal(f"could not decode direct Gazebo image for {camera_id}: {exc}", exc)
+        self._gz_image_callback(camera_id, msg)
+
     def _offer_async_frame(self, frame: PendingFrame) -> None:
         """Retain one fresh frame per camera without cross-camera stamp matching.
 
@@ -534,7 +672,21 @@ class BatchedFourCameraYoloNode(Node):
                 "waiting for simulation clock before publishing asynchronous frames",
             )
             return
+        self._async_batches_processed += 1
+        self._async_frames_processed += len(batch)
+        self._async_last_batch_size = len(batch)
         self._process_frames(batch)
+
+    def _log_runtime_trace(self) -> None:
+        """Emit low-rate local counters without subscribing to image topics."""
+
+        self.get_logger().info(
+            "runtime_trace "
+            f"transport={self.input_transport} direct_gz_received={self._direct_gz_received} "
+            f"async_batches={self._async_batches_processed} "
+            f"async_frames={self._async_frames_processed} "
+            f"last_batch_size={self._async_last_batch_size}"
+        )
 
     def _process_batch(self, batch: tuple[PendingFrame, ...]) -> None:
         if tuple(item.camera_id for item in batch) != CAMERA_ORDER:
@@ -548,7 +700,11 @@ class BatchedFourCameraYoloNode(Node):
         images: list[np.ndarray] = []
         try:
             for item in batch:
-                image = image_msg_to_bgr8(item.payload)
+                image = (
+                    item.payload.image_bgr
+                    if isinstance(item.payload, _DirectGzImagePayload)
+                    else image_msg_to_bgr8(item.payload)
+                )
                 if image.ndim != 3 or image.shape[2] != 3 or image.size == 0:
                     raise BatchContractError(
                         f"{item.camera_id} image conversion returned shape {image.shape!r}"

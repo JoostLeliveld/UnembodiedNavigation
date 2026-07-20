@@ -25,6 +25,11 @@ def test_versioned_laptop_successors_keep_async_diagnostics_out_of_evidence() ->
             encoding="utf-8"
         )
     )
+    v6 = yaml.safe_load(
+        (CONFIG_DIR / "detector_4cam_v6_laptop_direct_gz_torchscript416.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
 
     assert v1["runtime_pilot"]["evidence_selection"]["permitted"] is False
     assert v1["runtime_pilot"]["evidence_selection"]["selected_image_size"] is None
@@ -71,3 +76,11 @@ def test_versioned_laptop_successors_keep_async_diagnostics_out_of_evidence() ->
     assert v5["laptop_commissioning"]["source_sensor_update_rate_hz"] == 3
     assert v5["runtime_pilot"]["image_sizes"] == [416]
     assert v5["runtime_pilot"]["evidence_selection"]["permitted"] is False
+
+    assert v6["supersedes"] == v5["artifact_id"]
+    assert v6["lock_status"] == "commissioning_candidate_blocked_from_evidence"
+    assert v6["runtime_pilot"]["image_sizes"] == [416]
+    assert v6["runtime_pilot"]["launch_switch"]["yolo_input_transport"] == "direct_gz"
+    assert v6["runtime_pilot"]["launch_switch"]["yolo_runtime_backend"] == "torchscript"
+    assert len(v6["runtime_pilot"]["compiled_model_sha256"]) == 64
+    assert min(v6["runtime_pilot"]["measured_rate_probe"]["output_wall_hz"].values()) >= 3.0

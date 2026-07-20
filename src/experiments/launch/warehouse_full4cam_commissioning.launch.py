@@ -111,6 +111,8 @@ def _batched_detector_node() -> Node:
         parameters=[{
             "use_sim_time": LaunchConfiguration("use_sim_time"),
             "model_path": LaunchConfiguration("yolo_model"),
+            "runtime_backend": LaunchConfiguration("yolo_runtime_backend"),
+            "compiled_model_path": LaunchConfiguration("yolo_compiled_model"),
             "device": ParameterValue(
                 LaunchConfiguration("yolo_batched_device"), value_type=str
             ),
@@ -134,6 +136,8 @@ def _batched_detector_node() -> Node:
             "max_pending_wall_s": LaunchConfiguration("yolo_max_pending_wall_s"),
             "synchronization_mode": LaunchConfiguration("yolo_synchronization_mode"),
             "async_coalesce_wall_s": LaunchConfiguration("yolo_async_coalesce_wall_s"),
+            "input_transport": LaunchConfiguration("yolo_input_transport"),
+            "runtime_trace_period_s": LaunchConfiguration("yolo_runtime_trace_period_s"),
             "camera_observation_r_visible_uv": LaunchConfiguration(
                 "camera_observation_r_visible_uv"
             ),
@@ -161,9 +165,20 @@ def generate_launch_description() -> LaunchDescription:
             "reset_world": LaunchConfiguration("reset_world"),
             "use_lidar": "false",
             "bridge_scan": "false",
-            "bridge_camera_b": "true",
-            "bridge_camera_c": "true",
-            "bridge_camera_d": "true",
+            # In direct_gz diagnostic mode, B--D are consumed directly by the
+            # detector and must not pay an unnecessary gz->ROS image copy.
+            "bridge_camera_b": PythonExpression([
+                "'false' if '", LaunchConfiguration("yolo_input_transport"),
+                "'.lower() == 'direct_gz' else 'true'",
+            ]),
+            "bridge_camera_c": PythonExpression([
+                "'false' if '", LaunchConfiguration("yolo_input_transport"),
+                "'.lower() == 'direct_gz' else 'true'",
+            ]),
+            "bridge_camera_d": PythonExpression([
+                "'false' if '", LaunchConfiguration("yolo_input_transport"),
+                "'.lower() == 'direct_gz' else 'true'",
+            ]),
             "bridge_contacts": LaunchConfiguration("bridge_contacts"),
             "spawn_x": LaunchConfiguration("spawn_x"),
             "spawn_y": LaunchConfiguration("spawn_y"),
@@ -254,6 +269,14 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("use_encoder_noise", default_value="true"),
         DeclareLaunchArgument("encoder_noise_seed", default_value="0"),
         DeclareLaunchArgument("yolo_model", default_value="", description="Local path to the trained YOLO model"),
+        DeclareLaunchArgument(
+            "yolo_runtime_backend", default_value="native",
+            description="native is the strict runtime; torchscript is diagnostic-only",
+        ),
+        DeclareLaunchArgument(
+            "yolo_compiled_model", default_value="",
+            description="Explicit .torchscript path for the diagnostic compiled backend",
+        ),
         DeclareLaunchArgument("yolo_device", default_value=""),
         DeclareLaunchArgument(
             "enable_yolo", default_value="true",
@@ -288,6 +311,17 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument(
             "yolo_async_coalesce_wall_s", default_value="0.02",
             description="Wall-clock coalescing period for diagnostic asynchronous microbatches",
+        ),
+        DeclareLaunchArgument(
+            "yolo_input_transport", default_value="ros",
+            description=(
+                "ros is the strict runtime input; direct_gz bypasses RGB bridge copies "
+                "for diagnostic asynchronous runs only"
+            ),
+        ),
+        DeclareLaunchArgument(
+            "yolo_runtime_trace_period_s", default_value="0.0",
+            description="Diagnostic-only internal detector trace period in wall-clock seconds; zero disables",
         ),
         DeclareLaunchArgument("yolo_pixel_noise_sigma", default_value="0.0"),
         DeclareLaunchArgument("yolo_seed", default_value="0"),
