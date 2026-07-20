@@ -59,3 +59,8 @@ as immutable artifacts for this exact world and model:
 If any gate fails, retain the diagnostic result and use a stronger host for the
 unchanged 1280×720 paper configuration. Do not relax the 0.10 s synchronization
 bound to manufacture throughput.
+
+`bridge_contacts:=false` is available only for a non-evidence timing ablation.
+It suppresses the ROS forwarding of the 40 configured contact streams; it does
+not make a collision-valid run and the first ablation did not materially solve
+the throughput failure.

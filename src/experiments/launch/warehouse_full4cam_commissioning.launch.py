@@ -151,6 +151,7 @@ def generate_launch_description() -> LaunchDescription:
             "bridge_camera_b": "true",
             "bridge_camera_c": "true",
             "bridge_camera_d": "true",
+            "bridge_contacts": LaunchConfiguration("bridge_contacts"),
             "spawn_x": LaunchConfiguration("spawn_x"),
             "spawn_y": LaunchConfiguration("spawn_y"),
             "spawn_z": LaunchConfiguration("spawn_z"),
@@ -223,6 +224,10 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("use_sim_time", default_value="true"),
         DeclareLaunchArgument("headless", default_value="false"),
         DeclareLaunchArgument("reset_world", default_value="false"),
+        DeclareLaunchArgument(
+            "bridge_contacts", default_value="true",
+            description="Bridge all world contact sensors; disable only for non-evidence timing ablations",
+        ),
         # Central-aisle default; route-specific spawns come from study.yaml once
         # the full_4cam routes are designed.
         DeclareLaunchArgument("spawn_x", default_value="0.0"),

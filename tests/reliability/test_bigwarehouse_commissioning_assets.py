@@ -51,6 +51,8 @@ def test_fullwarehouse_launch_targets_the_four_camera_world() -> None:
     assert '"bridge_camera_b": "true"' in launch
     assert '"bridge_camera_c": "true"' in launch
     assert '"bridge_camera_d": "true"' in launch
+    assert '"bridge_contacts": LaunchConfiguration("bridge_contacts")' in launch
+    assert '"bridge_contacts", default_value="true"' in launch
     assert "external_camera_2" not in launch
     assert '_detector_node("camera_A", "/external_camera/image_raw")' in launch
     assert '_detector_node("camera_B", "/external_camera_b/image_raw")' in launch

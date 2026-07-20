@@ -33,6 +33,11 @@ fourfold source-pixel reduction does not solve the timing bottleneck on this
 host. No tolerance was widened: doing so would violate the stated 100 ms
 temporal-integrity contract.
 
+A non-evidence ablation disabled the ROS bridge for all 40 world contact
+sensors (each configured at 60 Hz). Accepted output rose only to about
+1.15 Hz, so contact-topic forwarding is not the primary cause. It may remain
+disabled only for timing diagnosis: collision-valid runs keep it enabled.
+
 ## Decision
 
 `detector_4cam_v3_laptop_640x360.yaml` remains
