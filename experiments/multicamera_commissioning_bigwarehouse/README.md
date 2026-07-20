@@ -48,6 +48,15 @@ truth and oracle labels are evaluation-only.
   fitting, all three overlap edges, paired replay policies, disturbances, and
   the gates that must pass before active handover can be enabled.
 
+## Laptop commissioning successor
+
+The locked 1280×720 paper configuration is not changed. A separate
+640×360-per-camera laptop commissioning world and v3 configuration are now
+available for throughput diagnosis on the P2000. It is explicitly blocked from
+evidence collection until it has fresh calibration, detector validation, and
+strict 3 Hz/100 ms timing evidence. See
+[`LAPTOP_640X360_COMMISSIONING.md`](LAPTOP_640X360_COMMISSIONING.md).
+
 ## Start the passive four-camera stack
 
 ```bash
