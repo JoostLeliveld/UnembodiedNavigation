@@ -107,7 +107,10 @@ def test_multicamera_export_builds_shared_replay_frames() -> None:
 
     export = export_multicamera_split_records_from_rows(
         camera_perception_rows={"camera_A": camera_a, "camera_B": camera_b},
-        experiment_rows=[{"stamp": "1.0", "odom_noisy_x": "1.0", "odom_noisy_y": "0.0"}],
+        experiment_rows=[{
+            "stamp": "1.0", "odom_noisy_x": "1.0", "odom_noisy_y": "0.0",
+            "odom_noisy_cov_xx": "0.04", "odom_noisy_cov_xy": "0.01", "odom_noisy_cov_yy": "0.09",
+        }],
         run_id="run_multi",
         frame_time_round_digits=3,
     )
@@ -116,6 +119,14 @@ def test_multicamera_export_builds_shared_replay_frames() -> None:
     assert len(export.camera_observations) == 2
     assert len(export.evaluation_frames) == 1
     assert len(export.replay_frames) == 1
+    assert export.operational_samples[0].belief == {
+        "source": "operational_noisy_odometry",
+        "stamp_s": 1.0,
+        "x_m": 1.0,
+        "y_m": 0.0,
+        "alignment_age_s": 0.0,
+        "covariance_xy_m2": [[0.04, 0.01], [0.01, 0.09]],
+    }
     frame = export.replay_frames[0]
     assert {obs.camera_id for obs in frame.observations} == {"camera_A", "camera_B"}
 

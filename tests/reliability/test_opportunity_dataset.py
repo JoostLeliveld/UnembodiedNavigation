@@ -29,6 +29,8 @@ def _sample(*, detected: bool = True, age_s: float = 0.02) -> OperationalReliabi
         measurement_age_s=age_s,
         selected_pixel=(320.0, 240.0) if detected else None,
         detector_result={"detected": detected, "raw_score": 0.7},
+        run_id="run",
+        belief={"x_m": 1.0, "y_m": 0.0, "covariance_xy_m2": [[0.04, 0.0], [0.0, 0.04]]},
         metadata={"camera_id": "camera_A"},
     )
 
@@ -117,6 +119,7 @@ def test_tools_build_and_label_operational_csv(tmp_path: Path) -> None:
 
     opportunity_tool = load_tool("build_opportunity_dataset.py")
     loo_tool = load_tool("build_loo_labels.py")
+    gp_tool = load_tool("train_factorized_gp.py")
     operational = tmp_path / "operational_reliability.jsonl"
     predictions = tmp_path / "predictions.jsonl"
     operational.write_text(json.dumps(_sample().to_dict()) + "\n", encoding="utf-8")
@@ -145,4 +148,16 @@ def test_tools_build_and_label_operational_csv(tmp_path: Path) -> None:
         max_residual_px=5.0,
     ) == {"opportunities": 1, "usable": 1}
     with labelled.open(newline="", encoding="utf-8") as handle:
-        assert list(csv.DictReader(handle))[0]["usable_label"] == "1"
+        labelled_row = list(csv.DictReader(handle))[0]
+    assert labelled_row["usable_label"] == "1"
+    assert gp_tool.prepare_events([labelled_row], camera_id="camera_A", kind="availability") == [{
+        "m_x": 1.0,
+        "m_y": 0.0,
+        "S_xx": 0.04,
+        "S_xy": 0.0,
+        "S_yy": 0.04,
+        "det_hit": 1,
+        "yolo_score_raw": 0.7,
+        "run_id": "run",
+        "camera_id": "camera_A",
+    }]

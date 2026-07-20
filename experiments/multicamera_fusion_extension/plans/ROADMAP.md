@@ -63,7 +63,9 @@ throwaway).
   still downstream work.
 - **Implemented structurally, intentionally not fitted:** 02 opportunity/LOO
   data builders now write operational-only rows and reject evaluation-only
-  inputs; 03 factorised GPs still wait for commissioning M1/M2 so discarded OOD
+  inputs. 03 supplies per-camera availability/quality wrappers around the
+  canonical belief-aware GP fitter, with preserved run-level holdouts and
+  model cards; fitting still waits for commissioning M1/M2 so discarded OOD
   detector outputs do not become paper artifacts.
 - **Blocked on an explicit empirical/configuration decision:** 07 must reconcile
   the 40 px versus 120 px miss-covariance endpoints from data before runtime and

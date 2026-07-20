@@ -22,3 +22,9 @@ residual.
 The actual sidecar/reference producers will be enabled only after the locked
 four-camera detector and projection commissioning gate passes. The schema and
 firewall are implemented now so that collection has a stable target.
+
+`train_availability_gp.py` and `train_quality_gp.py` are thin wrappers around
+the canonical belief-aware GP fitter. They preserve `run_id` and require a
+complete held-out run, so random-frame validation cannot be introduced at the
+last minute. Both write an input/model provenance card beside the fitted
+artifact.

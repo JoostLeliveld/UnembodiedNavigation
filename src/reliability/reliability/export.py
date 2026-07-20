@@ -88,7 +88,7 @@ def export_split_records_from_rows(
                 measurement_stale=not _bool(row.get("pixel_pose_fresh", True)),
                 odometry={},
                 state_estimate=_state_estimate_summary(row),
-                belief={},
+                belief=_belief_summary_for_stamp(experiment_rows, stamp),
                 camera_relative_range_m=_camera_relative_range(row),
                 image_location=_image_location(row),
                 recent_detector_history=tuple(),
@@ -195,7 +195,7 @@ def export_multicamera_split_records_from_rows(
                     measurement_stale=not _bool(row.get("pixel_pose_fresh", True)),
                     odometry={},
                     state_estimate=_state_estimate_summary(row),
-                    belief={},
+                    belief=_belief_summary_for_stamp(experiment_rows, stamp),
                     camera_relative_range_m=_camera_relative_range(row),
                     image_location=_image_location(row),
                     recent_detector_history=tuple(),
@@ -505,6 +505,36 @@ def _odom_xy_for_stamp(experiment_rows: Sequence[Mapping[str, Any]], stamp_s: fl
     x = _float_or_none(best.get("odom_noisy_x", best.get("odom_x", best.get("odom_map_x"))))
     y = _float_or_none(best.get("odom_noisy_y", best.get("odom_y", best.get("odom_map_y"))))
     return (x or 0.0, y or 0.0)
+
+
+def _belief_summary_for_stamp(
+    experiment_rows: Sequence[Mapping[str, Any]], stamp_s: float
+) -> dict[str, Any]:
+    """Return nearest operational noisy-odometry belief without any truth fields."""
+
+    if not experiment_rows:
+        return {}
+    best = min(
+        experiment_rows,
+        key=lambda row: abs(_first_finite(row, ("stamp", "log_stamp"), stamp_s) - stamp_s),
+    )
+    x = _float_or_none(best.get("odom_noisy_x", best.get("odom_x", best.get("odom_map_x"))))
+    y = _float_or_none(best.get("odom_noisy_y", best.get("odom_y", best.get("odom_map_y"))))
+    if x is None or y is None:
+        return {}
+    payload: dict[str, Any] = {
+        "source": "operational_noisy_odometry",
+        "stamp_s": _first_finite(best, ("stamp", "log_stamp"), stamp_s),
+        "x_m": x,
+        "y_m": y,
+        "alignment_age_s": abs(_first_finite(best, ("stamp", "log_stamp"), stamp_s) - stamp_s),
+    }
+    xx = _float_or_none(best.get("odom_noisy_cov_xx"))
+    xy = _float_or_none(best.get("odom_noisy_cov_xy"))
+    yy = _float_or_none(best.get("odom_noisy_cov_yy"))
+    if xx is not None and xy is not None and yy is not None and xx > 0.0 and yy > 0.0 and xx * yy > xy * xy:
+        payload["covariance_xy_m2"] = [[xx, xy], [xy, yy]]
+    return payload
 
 
 def _first_finite(row: Mapping[str, Any], keys: Sequence[str], default: float) -> float:
