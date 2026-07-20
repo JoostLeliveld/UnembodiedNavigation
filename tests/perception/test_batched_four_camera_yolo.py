@@ -16,6 +16,7 @@ from perception.core.four_camera_batch import (
     BatchContractError,
     FourCameraBatcher,
     PendingFrame,
+    frame_age_at_publish_s,
     stamp_parts_to_ns,
     validate_batch_results,
 )
@@ -115,6 +116,12 @@ def test_stamp_validation_is_exact_and_rejects_malformed_values() -> None:
             stamp_parts_to_ns(sec, nanosec)
 
 
+def test_future_image_stamps_are_an_integrity_fault_not_a_zero_age_frame() -> None:
+    assert frame_age_at_publish_s(publish_stamp_s=10.0, image_stamp_s=10.003) == 0.0
+    with pytest.raises(BatchContractError, match="materially in the future"):
+        frame_age_at_publish_s(publish_stamp_s=10.0, image_stamp_s=10.006)
+
+
 def test_result_validation_fails_closed_before_camera_identity_can_shift() -> None:
     valid = [_ValidResult() for _ in CAMERA_ORDER]
     assert validate_batch_results(valid) == tuple(valid)
@@ -176,6 +183,15 @@ def test_runtime_source_has_one_native_model_and_the_complete_operational_contra
     assert 'f"/perception/{camera_id}/pixel_pose"' in source
     assert 'f"/perception/{camera_id}/detection_diagnostics"' in source
     assert 'f"/perception/camera_observation/{camera_id}"' in source
+    assert 'RUNTIME_CONTRACT_TOPIC = "/perception/four_camera_detector_runtime_contract"' in (
+        ROOT / "src/perception/perception/core/four_camera_runtime_contract.py"
+    ).read_text(encoding="utf-8")
+    assert "DurabilityPolicy.TRANSIENT_LOCAL" in source
+    assert "ReliabilityPolicy.RELIABLE" in source
+    assert "self._publish_runtime_contract()" in source
+    assert "model checkpoint bytes changed while the batched detector was loading" in source
+    assert "source_hashes_from_paths" in source
+    assert "future image-stamp integrity fault" in source
 
 
 def test_launch_defaults_to_batched_mode_with_typed_device_and_keeps_fallback() -> None:

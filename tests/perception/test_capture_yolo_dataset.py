@@ -6,6 +6,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -20,6 +21,7 @@ from capture_yolo_dataset import (
     _CaptureOutputGuard,
     _build_simulation_asset_inventory,
     _canonical_inventory_sha256,
+    _capture_transport_environment,
     _filter_projectable_pose_records,
     _filter_pose_records,
     _mask_area_gate_for_range,
@@ -272,6 +274,37 @@ def test_capture_source_does_not_retry_deterministic_label_quality_failures() ->
     assert 'Only capture/synchronization exceptions' in source
 
 
+def test_capture_transport_contract_requires_local_isolation_and_marks_override_diagnostic() -> None:
+    isolated = {
+        'ROS_LOCALHOST_ONLY': '1',
+        'IGN_IP': '127.0.0.1',
+        'GZ_IP': '127.0.0.1',
+        'ROS_DOMAIN_ID': '79',
+        'IGN_PARTITION': 'fourcam_capture_A_001',
+    }
+
+    contract = _capture_transport_environment(isolated)
+
+    assert contract['training_eligible'] is True
+    assert contract['isolation_verified'] is True
+    assert contract['diagnostic_override_used'] is False
+    assert contract['violations'] == []
+    assert contract['observed_values'] == isolated
+
+    unisolated = dict(isolated, IGN_IP='0.0.0.0')
+    with pytest.raises(RuntimeError, match='Training-grade capture requires isolated'):
+        _capture_transport_environment(unisolated)
+
+    diagnostic = _capture_transport_environment(
+        unisolated,
+        allow_unisolated_transport=True,
+    )
+    assert diagnostic['training_eligible'] is False
+    assert diagnostic['isolation_verified'] is False
+    assert diagnostic['diagnostic_override_used'] is True
+    assert any('IGN_IP' in violation for violation in diagnostic['violations'])
+
+
 def test_capture_inventory_fingerprints_world_models_launch_and_robot_assets() -> None:
     inventory = _build_simulation_asset_inventory(
         world_path=REPO_ROOT / 'src/sim/gazebo_worlds/worlds/warehouse_full_4cam.world.sdf',
@@ -352,3 +385,24 @@ def test_capture_completion_marker_hashes_manifest_and_clears_in_progress(
     assert completion['training_eligible'] is True
     assert len(completion['dataset_manifest_sha256']) == 64
     assert not (output / '.capture_in_progress.json').exists()
+
+
+def test_diagnostic_transport_completion_marker_is_not_training_eligible(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / 'camera_A_diagnostic'
+    output.mkdir()
+    guard = _CaptureOutputGuard(
+        output,
+        camera_id='camera_A',
+        training_eligible=False,
+    )
+    manifest = output / 'dataset_manifest.json'
+    manifest.write_text('{"status":"complete"}\n', encoding='utf-8')
+
+    guard.complete(manifest)
+
+    completion = __import__('json').loads(
+        (output / '.complete').read_text(encoding='utf-8')
+    )
+    assert completion['training_eligible'] is False

@@ -135,6 +135,19 @@ def _validated_campaign_runs(
         }
 
     frozen = campaign_ledger.input_sha256(evaluated["provenance"])
+    try:
+        frozen_method_snapshot = campaign_ledger.method_freeze_snapshot(evaluated)
+        frozen_method_sha256 = campaign_ledger.method_freeze_sha256(evaluated)
+    except campaign_ledger.LedgerError as exc:
+        return [], {
+            "pass": False,
+            "eligible_runs": 0,
+            "failures": [f"campaign method-freeze validation failed: {exc}"],
+        }
+    if frozen_method_snapshot != method_snapshot:
+        failures.append(
+            "current analysis method snapshot differs from the campaign's plan-time snapshot"
+        )
     for label, path in (("study", study_path), ("protocol", protocol_path)):
         actual = _sha256(path)
         if frozen.get(label) != actual:
@@ -172,6 +185,7 @@ def _validated_campaign_runs(
 
     eligible: list[dict[str, Any]] = []
     role_excluded: list[str] = []
+    runtime_readiness_excluded: list[str] = []
     for run_dir, row in sorted(completed_dirs.items(), key=lambda item: str(item[0])):
         row_id = str(row["row_id"])
         run = runs_by_dir.get(run_dir)
@@ -181,6 +195,7 @@ def _validated_campaign_runs(
         raw_dir = Path(run["raw_dir"])
         operational = _json(raw_dir / "operational_recording_manifest.json") or {}
         truth = _json(raw_dir.parent / "evaluation_only/evaluation_truth_manifest.json") or {}
+        completion = _json(raw_dir.parent / "completion_manifest.json") or {}
         expected_role = row.get("expected_evidence_role")
         if operational.get("evidence_role") != expected_role or truth.get(
             "evidence_role"
@@ -190,14 +205,45 @@ def _validated_campaign_runs(
                 f"{run['run_id']}: recorder role differs from pre-declared row role"
             )
             continue
-        if operational.get("method_freeze") != method_snapshot:
-            failures.append(f"{run['run_id']}: method-freeze hashes differ from readiness snapshot")
+        if operational.get("method_freeze") != frozen_method_snapshot:
+            failures.append(
+                f"{run['run_id']}: method-freeze hashes differ from campaign snapshot"
+            )
+            continue
+        if (
+            completion.get("method_freeze") != frozen_method_snapshot
+            or completion.get("method_freeze_sha256") != frozen_method_sha256
+        ):
+            failures.append(
+                f"{run['run_id']}: completion method-freeze binding differs from campaign snapshot"
+            )
+            continue
+        expected_readiness, expected_route_health, readiness_errors = (
+            campaign_ledger.runtime_readiness_completion_evidence(
+                raw_dir.parent, evaluated, row
+            )
+        )
+        if (
+            readiness_errors
+            or expected_readiness is None
+            or expected_route_health is None
+            or completion.get("runtime_readiness") != expected_readiness
+            or completion.get("route_camera_health") != expected_route_health
+            or expected_route_health.get("pass") is not True
+        ):
+            runtime_readiness_excluded.append(str(run["run_id"]))
+            details = "; ".join(readiness_errors[:3]) or "missing or mismatched evidence"
+            failures.append(
+                f"{run['run_id']}: runtime readiness/route-wide camera health is invalid ({details})"
+            )
             continue
         run = dict(run)
         run["row_id"] = row_id
         run["row_tuple"] = dict(row["row_tuple"])
         run["phase"] = str(row["row_tuple"]["phase"])
         run["analysis_split"] = str(row["expected_analysis_split"])
+        run["runtime_readiness"] = dict(expected_readiness)
+        run["route_camera_health"] = dict(expected_route_health)
         eligible.append(run)
 
     unfinished = [
@@ -212,9 +258,12 @@ def _validated_campaign_runs(
         "completed_rows": len(completed_rows),
         "eligible_runs": len(eligible),
         "role_excluded_runs": sorted(role_excluded),
+        "runtime_readiness_excluded_runs": sorted(runtime_readiness_excluded),
         "untracked_runs": untracked,
         "unfinished_artifacts": unfinished,
         "frozen_input_sha256": frozen,
+        "frozen_method_freeze": frozen_method_snapshot,
+        "frozen_method_freeze_sha256": frozen_method_sha256,
         "failures": failures,
     }
 

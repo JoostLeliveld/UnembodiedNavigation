@@ -65,6 +65,10 @@ def test_recorder_uses_the_actual_bigwarehouse_camera_models_and_operational_sch
     assert "ground_truth" not in " ".join(module.PERCEPTION_FIELDS)
     assert "true_x" not in " ".join(module.PERCEPTION_FIELDS)
     assert "--use-sim-time" in module.main.__code__.co_consts
+    source = RECORDER.read_text(encoding="utf-8")
+    assert "separate-process fallback remains launch-compatible" in source
+    assert "reliable_transient_local_keep_last_1" in source
+    assert "stream watchdog exceeded" in source
 
 
 def test_recorder_calibrations_parse_all_fullwarehouse_camera_includes() -> None:
@@ -96,6 +100,36 @@ def test_recorder_maps_spawn_local_odom_back_to_the_documented_warehouse_frame()
 
     assert abs(world_x - (-1.8)) < 1e-4
     assert abs(world_y - 6.2) < 1e-4
+
+
+def test_recorder_stream_watchdog_starts_only_after_contract_arming() -> None:
+    module = _module()
+    recorder = object.__new__(module.OperationalLogRecorder)
+    recorder.detector_contract_armed = False
+    recorder.detector_contract_received_wall_s = None
+    recorder.max_stream_wall_age_s = 3.0
+    recorder.last_camera_observation_wall_s = {
+        camera: None for camera in module.DETECTOR_CAMERA_ORDER
+    }
+    recorder.last_odom_observation_wall_s = None
+
+    assert recorder.stream_watchdog_failures(now_wall_s=100.0) == []
+
+    recorder.detector_contract_armed = True
+    recorder.detector_contract_received_wall_s = 10.0
+    recorder.last_camera_observation_wall_s = {
+        "camera_A": 12.0,
+        "camera_B": 12.0,
+        "camera_C": 12.0,
+        "camera_D": 12.0,
+    }
+    recorder.last_odom_observation_wall_s = 12.0
+    assert recorder.stream_watchdog_failures(now_wall_s=15.0) == []
+
+    failures = recorder.stream_watchdog_failures(now_wall_s=15.001)
+    assert len(failures) == 5
+    assert any("camera_A stream watchdog exceeded" in failure for failure in failures)
+    assert any("odometry stream watchdog exceeded" in failure for failure in failures)
 
 
 def test_truth_attachment_requires_completed_matching_predeclared_sources(

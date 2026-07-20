@@ -141,19 +141,32 @@ python3 experiments/multicamera_commissioning_bigwarehouse/tools/campaign_ledger
   --model logs/perception_models/<frozen-model>/model.pt \
   --calibration logs/studies/multicamera_commissioning_bigwarehouse/<frozen-calibration>/projection_calibration.json \
   --config experiments/multicamera_commissioning_bigwarehouse/config/paper_analysis_plan.yaml \
-  --config experiments/multicamera_commissioning_bigwarehouse/config/detector_4cam_v1.yaml
+  --config experiments/multicamera_commissioning_bigwarehouse/config/detector_4cam_v2.yaml
 
 # Shared values (use the exact row_id/run_dir from campaign_ledger.json)
 campaign_root=logs/studies/multicamera_commissioning_bigwarehouse/<campaign>
 row_id=<row_id>
+attempt_id=attempt_001
 run_id=<unique-run-id>
-run_dir="$campaign_root/runs/$row_id"
+run_dir="$campaign_root/runs/$row_id/$attempt_id"
 route_completion="$run_dir/raw/route_completion.json"
 model=logs/perception_models/<frozen-model>/model.pt
 projection=logs/studies/multicamera_commissioning_bigwarehouse/<frozen-calibration>/projection_calibration.json
 analysis=experiments/multicamera_commissioning_bigwarehouse/config/paper_analysis_plan.yaml
-runtime_config=experiments/multicamera_commissioning_bigwarehouse/config/detector_4cam_v1.yaml
+runtime_config=experiments/multicamera_commissioning_bigwarehouse/config/detector_4cam_v2.yaml
+study_config=experiments/multicamera_commissioning_bigwarehouse/config/study.yaml
+protocol_config=experiments/multicamera_commissioning_bigwarehouse/config/paper_protocol.yaml
 seed=<seed-used-by-encoder-and-both-recorders>
+analysis_split=<expected-analysis-split-from-ledger>
+evidence_role=<expected-evidence-role-from-ledger>
+ros_domain_id=<ros_domain_id-from-attempt>
+ign_partition=<ign_partition-from-attempt>
+
+# These values are part of the attempt contract. Export them in every shell
+# (simulator, readiness barrier, both recorders, and driver); only one attempt
+# may be active for a campaign at a time.
+export ROS_LOCALHOST_ONLY=1 IGN_IP=127.0.0.1 GZ_IP=127.0.0.1
+export ROS_DOMAIN_ID=$ros_domain_id IGN_PARTITION=$ign_partition
 
 # Terminal 1 — exact frozen runtime at the offset-adjusted spawn pose
 source install/setup.bash
@@ -171,9 +184,19 @@ ros2 launch experiments warehouse_full4cam_commissioning.launch.py \
   camera_observation_r_visible_uv:=2.5 camera_observation_r_miss_uv:=40.0
 
 # Before any evidence run, this must pass in enforce mode. Pilot mode is
-# timing-diagnostic only and is never evidence-eligible.
+# timing-diagnostic only and is never evidence-eligible. This exact immutable
+# report is a required attempt artifact: run it before invoking the driver,
+# which writes raw/route_manifest.json immediately before route motion.
 python3 experiments/multicamera_commissioning_bigwarehouse/tools/runtime_readiness.py \
   --mode enforce --timeout-s 180 \
+  --campaign-ledger "$campaign_root/campaign_ledger.json" \
+  --run-id "$run_id" --plan-row-id "$row_id" --attempt-id "$attempt_id" \
+  --analysis-split "$analysis_split" --seed "$seed" \
+  --evidence-role "$evidence_role" \
+  --study-config "$study_config" --protocol "$protocol_config" --analysis-plan "$analysis" \
+  --detector-model "$model" --detector-runtime-config "$runtime_config" \
+  --detector-imgsz 640 --projection-calibration "$projection" \
+  --frozen-config "$analysis" --frozen-config "$runtime_config" \
   --min-camera-messages 30 --min-unique-camera-stamps 30 --sample-window 30 \
   --output "$run_dir/runtime_readiness.json"
 
@@ -183,13 +206,15 @@ python3 experiments/multicamera_commissioning_bigwarehouse/tools/record_operatio
   --out-dir "$run_dir/raw" --completion-manifest "$route_completion" \
   --wall-timeout-s 720 \
   --campaign-ledger "$campaign_root/campaign_ledger.json" \
-  --run-id "$run_id" --plan-row-id "$row_id" --seed "$seed" \
-  --evidence-role qualification \
+  --run-id "$run_id" --plan-row-id "$row_id" --attempt-id "$attempt_id" \
+  --analysis-split "$analysis_split" --seed "$seed" \
+  --evidence-role "$evidence_role" \
   --frozen-config "$analysis" --frozen-config "$runtime_config" \
   --odom-origin-x-m=<route-start-x> \
   --odom-origin-y-m=<route-start-y> \
   --odom-origin-yaw-rad=<route-start-yaw> \
-  --detector-model "$model" --detector-imgsz <frozen-image-size> \
+  --detector-model "$model" --detector-runtime-config "$runtime_config" \
+  --detector-imgsz 640 \
   --detector-conf 0.05 --detector-iou 0.45 --no-detector-use-masks \
   --detector-runtime-mode batched_four_camera \
   --detector-executable batched_four_camera_yolo_node \
@@ -210,8 +235,9 @@ python3 experiments/multicamera_commissioning_bigwarehouse/tools/record_evaluati
   --out-dir "$run_dir/evaluation_only" \
   --completion-manifest "$route_completion" --wall-timeout-s 720 \
   --campaign-ledger "$campaign_root/campaign_ledger.json" \
-  --run-id "$run_id" --plan-row-id "$row_id" --seed "$seed" \
-  --evidence-role qualification \
+  --run-id "$run_id" --plan-row-id "$row_id" --attempt-id "$attempt_id" \
+  --analysis-split "$analysis_split" --seed "$seed" \
+  --evidence-role "$evidence_role" \
   --frozen-config "$analysis" --frozen-config "$runtime_config"
 
 # Terminal 3 — start only after every recorder .part stream has received data
@@ -231,11 +257,18 @@ groups and terminate them with `SIGINT` so their fail-closed shutdown runs.
 After the driver and both recorders exit zero, publish the campaign completion
 contract. The finalizer refuses stale `.part`/failed files, mismatched run IDs,
 plan-row IDs, seeds, frozen hashes, route identity, or completion hashes. It
-also embeds and independently hashes `raw/route_completion.json`.
+also independently hashes `runtime_readiness.json` and `raw/route_completion.json`.
+The readiness report must be `enforce`/passing/evidence-eligible and timestamped
+before the pre-run route manifest. At finalization its hash is bound to the
+recorded detector runtime, model, and frozen configuration hashes. The finalizer
+also recomputes route-wide camera health from every raw camera CSV: each source
+must cover both route ends, keep frame ages fresh, and stay below the readiness
+wall-gap limit for the whole route. A healthy startup window alone cannot
+complete an evidence attempt.
 
 ```bash
 python3 experiments/multicamera_commissioning_bigwarehouse/tools/finalize_campaign_run.py \
-  --campaign-root "$campaign_root" --row-id "$row_id"
+  --campaign-root "$campaign_root" --row-id "$row_id" --attempt-id "$attempt_id"
 python3 experiments/multicamera_commissioning_bigwarehouse/tools/campaign_ledger.py validate \
   --campaign-root "$campaign_root" --rows
 ```
@@ -289,6 +322,19 @@ inventory again at the end and writes `.complete` only after all quality gates
 pass. An interrupt or failure preserves the files by atomically moving the
 directory to `<requested-output>.failed_<timestamp>` with
 `.capture_failed.json`; that directory is diagnostic only.
+
+Capture also fails closed unless the local transport boundary is explicit:
+`ROS_LOCALHOST_ONLY=1`, `IGN_IP=127.0.0.1`, `GZ_IP=127.0.0.1`, an explicit
+`ROS_DOMAIN_ID` (0–232), and a unique nonempty `IGN_PARTITION`. These values
+are recorded in the manifest. Launch the simulator and its matching capture
+client from shells inheriting the *same* values; for example set
+`ROS_LOCALHOST_ONLY=1 IGN_IP=127.0.0.1 GZ_IP=127.0.0.1 ROS_DOMAIN_ID=79
+IGN_PARTITION=fourcam_capture_A_001` before starting both processes for camera
+A. Start a fresh isolated partition for B/C/D rather than reusing that token.
+The
+`--allow-unisolated-transport` escape hatch is retained solely to preserve
+diagnostic files: it stamps both manifest and completion marker as
+non-training-eligible, so the merger rejects it.
 
 `tools/merge_fourcam_yolo_dataset.py` requires this provenance and matching
 capture-script/simulation-asset hashes across cameras by default. This is the

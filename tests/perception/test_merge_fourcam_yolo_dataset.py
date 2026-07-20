@@ -162,6 +162,21 @@ def _write_capture(root: Path, camera_id: str, camera_index: int) -> None:
                 "labels_topic": contract["labels_topic"],
             },
         },
+        "transport_environment": {
+            "schema_version": merge_tool.CAPTURE_TRANSPORT_SCHEMA_VERSION,
+            "required_values": dict(merge_tool.TRAINING_CAPTURE_TRANSPORT_VALUES),
+            "observed_values": {
+                "ROS_LOCALHOST_ONLY": "1",
+                "IGN_IP": "127.0.0.1",
+                "GZ_IP": "127.0.0.1",
+                "ROS_DOMAIN_ID": "79",
+                "IGN_PARTITION": f"fourcam_capture_{camera_id}",
+            },
+            "isolation_verified": True,
+            "training_eligible": True,
+            "diagnostic_override_used": False,
+            "violations": [],
+        },
         "simulation_asset_inventory": simulation_asset_inventory,
         "robot_label": 23,
         "camera_pose_xyz_rpy": [0.0, 0.0, 6.1, 0.0, 0.92, 0.0],
@@ -346,6 +361,7 @@ def test_legacy_capture_requires_explicit_diagnostic_non_training_override(
         "capture_script_path",
         "capture_script_sha256",
         "capture_invocation",
+        "transport_environment",
         "simulation_asset_inventory",
     )
     for camera_id in merge_tool.CAMERAS:
@@ -393,6 +409,57 @@ def test_merge_rejects_tampered_simulation_asset_inventory(
         merge_tool.DatasetMergeError,
         match="aggregate_sha256 does not match",
     ):
+        merge_tool.merge_fourcam_datasets(capture_dirs, output, _loose_config())
+    assert not output.exists()
+
+
+def test_merge_rejects_nonisolated_capture_transport(
+    tmp_path: Path, capture_dirs: dict[str, Path]
+) -> None:
+    manifest_path = capture_dirs["camera_A"] / "dataset_manifest.json"
+
+    def corrupt_transport(payload: dict[str, object]) -> None:
+        payload["transport_environment"]["observed_values"]["IGN_IP"] = "0.0.0.0"
+
+    _rewrite_json(manifest_path, corrupt_transport)
+    completion_path = capture_dirs["camera_A"] / ".complete"
+    _rewrite_json(
+        completion_path,
+        lambda payload: payload.update(
+            {"dataset_manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest()}
+        ),
+    )
+    output = tmp_path / "unisolated_transport"
+
+    with pytest.raises(
+        merge_tool.DatasetMergeError,
+        match=r"transport_environment\.observed_values\.IGN_IP",
+    ):
+        merge_tool.merge_fourcam_datasets(capture_dirs, output, _loose_config())
+    assert not output.exists()
+
+
+def test_merge_rejects_reused_capture_transport_partition(
+    tmp_path: Path, capture_dirs: dict[str, Path]
+) -> None:
+    manifest_path = capture_dirs["camera_B"] / "dataset_manifest.json"
+
+    def reuse_partition(payload: dict[str, object]) -> None:
+        payload["transport_environment"]["observed_values"]["IGN_PARTITION"] = (
+            "fourcam_capture_camera_A"
+        )
+
+    _rewrite_json(manifest_path, reuse_partition)
+    completion_path = capture_dirs["camera_B"] / ".complete"
+    _rewrite_json(
+        completion_path,
+        lambda payload: payload.update(
+            {"dataset_manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest()}
+        ),
+    )
+    output = tmp_path / "reused_transport_partition"
+
+    with pytest.raises(merge_tool.DatasetMergeError, match="reuse IGN_PARTITION"):
         merge_tool.merge_fourcam_datasets(capture_dirs, output, _loose_config())
     assert not output.exists()
 

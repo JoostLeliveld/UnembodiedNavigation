@@ -60,6 +60,9 @@ def _single_row_inputs(tmp_path: Path) -> dict[str, Path | list[Path]]:
     model = tmp_path / "model.pt"
     calibration = tmp_path / "calibration.json"
     runtime = tmp_path / "runtime.yaml"
+    analysis_study = tmp_path / "analysis_study"
+    analysis = analysis_study / "config" / "analysis.yaml"
+    method_source = analysis_study / "fixture.py"
     _write_yaml(
         study,
         {
@@ -98,18 +101,41 @@ def _single_row_inputs(tmp_path: Path) -> dict[str, Path | list[Path]]:
     model.write_bytes(b"frozen detector fixture\n")
     calibration.write_text('{"calibration": "fixture"}\n', encoding="utf-8")
     _write_yaml(runtime, {"fresh_age_s": 0.15})
+    method_source.parent.mkdir(parents=True)
+    analysis.parent.mkdir(parents=True)
+    method_source.write_text("# frozen fixture method\n", encoding="utf-8")
+    _write_yaml(
+        analysis,
+        {
+            "analysis_plan_id": "fixture_analysis",
+            "method_freeze": {"source_files": ["fixture.py"]},
+        },
+    )
     return {
         "study_path": study,
         "protocol_path": protocol,
         "model_path": model,
         "calibration_path": calibration,
-        "config_paths": [runtime],
+        "config_paths": [analysis, runtime],
     }
 
 
 def _write_csv(path: Path, *, rows: int = 1, stamp_column: str = "stamp") -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
+        if stamp_column == "diag_stamp":
+            writer.writerow(
+                [
+                    "diag_stamp",
+                    "recorder_wall_elapsed_s",
+                    "frame_age_at_publish_s",
+                    "value",
+                ]
+            )
+            for index in range(rows):
+                stamp = 0.0 if rows <= 1 else index / (rows - 1)
+                writer.writerow([stamp, stamp, 0.10, "ok"])
+            return
         writer.writerow([stamp_column, "value"])
         for index in range(rows):
             writer.writerow([index, "ok"])
@@ -144,6 +170,9 @@ def _populate_valid_run(
                 "speed_mps": float(exact["speed_mps"]),
                 "study_config_sha256": study_hash,
                 "contains_ground_truth": False,
+                # This is written by the route driver immediately before the
+                # route can receive its first control odometry sample.
+                "created_wall_time_s": 2_000_000_000.0,
                 "completion_artifact": str(raw / "route_completion.json"),
                 "completion_status": "pending_route_success",
             }
@@ -178,17 +207,88 @@ def _populate_valid_run(
     }
     route_completion_path.write_text(json.dumps(route_completion), encoding="utf-8")
     route_completion_hash = module._sha256(route_completion_path)
-    recorder_provenance = {
-        "study_config": {"sha256": frozen_hashes["study"]},
-        "protocol": {"sha256": frozen_hashes["protocol"]},
+    model_path = next(
+        item["path"] for item in ledger["provenance"] if item["label"] == "model"
+    )
+    detector_contract = {
+        "schema_version": "four_camera_detector_runtime_contract.v1",
+        "runtime_mode": "batched_four_camera",
+        "executable": "batched_four_camera_yolo_node",
+        "model_format": "native_ultralytics",
+        "model_path": model_path,
+        "model_sha256": frozen_hashes["model"],
+        "imgsz": 640,
+        "confidence_threshold": 0.05,
+        "iou_threshold": 0.45,
+        "use_masks": False,
+        "model_instances": 1,
+        "batch_size": 4,
+        "camera_order": list(module.CAMERAS),
+        "shared_device": "0",
+        "cpu_threads": 2,
+        "interop_threads": 1,
+        "opencv_threads": 1,
+        "max_batch_stamp_skew_s": 0.10,
+        "max_pending_wall_s": 0.50,
+        "frame_policy": "strict_new_unique_stamp_latest_only_no_reuse",
+        "inference_timing_semantics": "full_batch_wall_ms_repeated_per_camera_result",
+        "fault_policy": "fatal_process_exit_and_launch_shutdown_no_synthetic_miss",
+        "synchronization_miss_policy": "no_output_detected_by_liveness_gate",
+        "executable_source_sha256": "a" * 64,
+        "source_hashes": {
+            "perception.nodes.batched_four_camera_yolo_node": "a" * 64,
+            "perception.core.four_camera_batch": "b" * 64,
+            "perception.core.four_camera_runtime_contract": "c" * 64,
+            "perception.core.yolo_selection": "d" * 64,
+        },
     }
+    detector_contract["contract_sha256"] = module._canonical_sha256(detector_contract)
+    provenance_by_label = {item["label"]: item for item in ledger["provenance"]}
     frozen_configs = [
-        {"path": "fixture-runtime.yaml", "sha256": digest}
-        for label, digest in frozen_hashes.items()
-        if label.startswith("config:")
+        {"path": item["path"], "sha256": item["sha256"]}
+        for item in ledger["provenance"]
+        if item["label"].startswith("config:")
     ]
-    recorder_provenance["analysis_plan"] = {
-        "sha256": frozen_configs[0]["sha256"]
+    analysis_hash = module.method_freeze_snapshot(ledger)["analysis_plan_sha256"]
+    analysis_record = next(
+        item
+        for item in frozen_configs
+        if item["sha256"] == analysis_hash
+    )
+    recorder_provenance = {
+        "study_config": {
+            "path": provenance_by_label["study"]["path"],
+            "sha256": frozen_hashes["study"],
+        },
+        "protocol": {
+            "path": provenance_by_label["protocol"]["path"],
+            "sha256": frozen_hashes["protocol"],
+        },
+        "analysis_plan": dict(analysis_record),
+        "detector_model": {
+            "path": provenance_by_label["model"]["path"],
+            "sha256": frozen_hashes["model"],
+        },
+        "projection_calibration": {
+            "path": provenance_by_label["calibration"]["path"],
+            "sha256": frozen_hashes["calibration"],
+        },
+    }
+    readiness_provenance = {
+        "study": dict(recorder_provenance["study_config"]),
+        "protocol": dict(recorder_provenance["protocol"]),
+        "analysis_plan": dict(recorder_provenance["analysis_plan"]),
+        "model": dict(recorder_provenance["detector_model"]),
+        "calibration": dict(recorder_provenance["projection_calibration"]),
+    }
+    method_freeze = module.method_freeze_snapshot(ledger)
+    method_freeze_sha256 = module.method_freeze_sha256(ledger)
+    transport_environment = {
+        "ROS_LOCALHOST_ONLY": "1",
+        "IGN_IP": "127.0.0.1",
+        "GZ_IP": "127.0.0.1",
+        "IGN_PARTITION": attempt["ign_partition"],
+        "ROS_DOMAIN_ID": str(attempt["ros_domain_id"]),
     }
     campaign_contract = {
         "ledger_path": str(campaign_root / module.DEFAULT_LEDGER_NAME),
@@ -199,18 +299,74 @@ def _populate_valid_run(
         "expected_evidence_role": row["expected_evidence_role"],
         "expected_analysis_split": row["expected_analysis_split"],
         "input_sha256": frozen_hashes,
-        "transport_environment": {
-            "ROS_LOCALHOST_ONLY": "1",
-            "IGN_IP": "127.0.0.1",
-            "GZ_IP": "127.0.0.1",
-            "IGN_PARTITION": attempt["ign_partition"],
-            "ROS_DOMAIN_ID": str(attempt["ros_domain_id"]),
-        },
+        "method_freeze": method_freeze,
+        "method_freeze_sha256": method_freeze_sha256,
+        "transport_environment": transport_environment,
     }
+    readiness_path = run_dir / module.RUNTIME_READINESS_ARTIFACT
+    readiness_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mode": "enforce",
+                "pass": True,
+                "evidence_eligible": True,
+                "age_enforced": True,
+                "would_pass_age_enforcement": True,
+                "timed_out": False,
+                "interrupted": False,
+                "failures": [],
+                "created_utc": "2026-01-01T00:00:00Z",
+                "run_id": "fixture_run",
+                "plan_row_id": row["row_id"],
+                "attempt_id": attempt_id,
+                "analysis_split": row["expected_analysis_split"],
+                "seed": row["row_tuple"]["seed"],
+                "evidence_role": row["expected_evidence_role"],
+                "campaign_contract": campaign_contract,
+                "transport_environment": transport_environment,
+                "provenance": readiness_provenance,
+                "frozen_configs": frozen_configs,
+                "method_freeze": method_freeze,
+                "method_freeze_sha256": method_freeze_sha256,
+                "thresholds": {
+                    "max_frame_age_s": 0.15,
+                    "max_stream_wall_age_s": 3.0,
+                    "min_fresh_fraction": 1.0,
+                },
+                "age_gate_by_camera": {camera: True for camera in module.CAMERAS},
+                "detector_runtime_contract": {
+                    "topic": "/perception/four_camera_detector_runtime_contract",
+                    "qos": "reliable_transient_local_keep_last_1",
+                    "message_count": 1,
+                    "validated": True,
+                    "contract_sha256": detector_contract["contract_sha256"],
+                    "contract": detector_contract,
+                    "error": None,
+                },
+                "cameras": {
+                    camera: {
+                        "summary_window_count": 2,
+                        "sim_hz": 3.0,
+                        "frame_age_s": {
+                            "finite_count": 2,
+                            "fresh_fraction": 1.0,
+                            "threshold_s": 0.15,
+                        },
+                    }
+                    for camera in module.CAMERAS
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
     (raw / "operational_recording_manifest.json").write_text(
         json.dumps(
             {
                 "status": "completed",
+                "started_utc": "2026-01-01T00:01:00Z",
                 "stop_reason": "route_completion_manifest",
                 "contains_ground_truth": False,
                 "run_id": "fixture_run",
@@ -221,32 +377,46 @@ def _populate_valid_run(
                 "analysis_split": row["expected_analysis_split"],
                 "provenance": recorder_provenance,
                 "frozen_configs": frozen_configs,
-                "method_freeze": {
-                    "analysis_plan_id": "fixture_analysis",
-                    "analysis_plan_sha256": frozen_configs[0]["sha256"],
-                    "source_sha256": {"fixture.py": "0" * 64},
-                },
+                "method_freeze": method_freeze,
+                "method_freeze_sha256": method_freeze_sha256,
                 "campaign_contract": campaign_contract,
                 "transport_environment": campaign_contract["transport_environment"],
                 "detector_runtime": {
+                    "model_path": model_path,
                     "model_sha256": frozen_hashes["model"],
                     "topology": {
-                        "runtime_mode": "separate_processes",
-                        "executable": "yolo_robot_detector_node",
-                        "launch_switch_yolo_batched_four_camera": False,
+                        "runtime_mode": "batched_four_camera",
+                        "executable": "batched_four_camera_yolo_node",
+                        "launch_switch_yolo_batched_four_camera": True,
                         "model_format": "native_ultralytics",
-                        "model_instances": 4,
-                        "instances": 4,
-                        "batch_size": 1,
+                        "model_instances": 1,
+                        "batch_size": 4,
                         "camera_order": list(module.CAMERAS),
-                        "devices": {camera: "cpu" for camera in module.CAMERAS},
+                        "shared_device": "0",
+                        "cpu_threads": 2,
+                        "interop_threads": 1,
+                        "opencv_threads": 1,
+                        "max_batch_stamp_skew_s": 0.10,
+                        "max_pending_wall_s": 0.50,
+                        "frame_policy": "strict_new_unique_stamp_latest_only_no_reuse",
+                        "inference_timing_semantics": "full_batch_wall_ms_repeated_per_camera_result",
+                        "fault_policy": "fatal_process_exit_and_launch_shutdown_no_synthetic_miss",
+                        "synchronization_miss_policy": "no_output_detected_by_liveness_gate",
+                    },
+                    "observed_contract": detector_contract,
+                    "observed_contract_sha256": detector_contract["contract_sha256"],
+                    "observed_contract_requirement": {
+                        "state": "armed",
+                        "expected_contract": detector_contract,
+                        "expected_contract_sha256": detector_contract["contract_sha256"],
                     },
                 },
                 "projection_calibration": {"sha256": frozen_hashes["calibration"]},
                 "route_completion_manifest": {"sha256": route_completion_hash},
                 "fresh_age_s": 0.15,
+                "stream_liveness_watchdog": {"max_stream_wall_age_s": 3.0},
                 "minimum_stream_rows": {"per_camera": 1, "odometry": 1},
-                "camera_rows": {camera: 1 for camera in module.CAMERAS},
+                "camera_rows": {camera: 3 for camera in module.CAMERAS},
                 "odometry_rows": 1,
                 "camera_stamp_ranges_s": {
                     camera: {"first": 0.0, "last": 1.0}
@@ -283,19 +453,29 @@ def _populate_valid_run(
     )
     _write_csv(raw / "experiment.csv")
     for camera in module.CAMERAS:
-        _write_csv(raw / f"{camera}_perception.csv", stamp_column="diag_stamp")
+        _write_csv(raw / f"{camera}_perception.csv", rows=3, stamp_column="diag_stamp")
     _write_csv(evaluation / "ground_truth.csv")
     artifact_hashes = {
         relative: module._sha256(run_dir / relative)
         for relative in module.REQUIRED_ARTIFACTS
     }
+    runtime_readiness, route_camera_health, readiness_errors = (
+        module.runtime_readiness_completion_evidence(run_dir, ledger, row)
+    )
+    assert not readiness_errors
+    assert runtime_readiness is not None
+    assert route_camera_health is not None
     completion = {
         "schema_version": 1,
         "row_id": row["row_id"],
         "attempt_id": attempt_id,
         "row_tuple": row["row_tuple"],
         "input_sha256": module.input_sha256(ledger["provenance"]),
+        "method_freeze": method_freeze,
+        "method_freeze_sha256": method_freeze_sha256,
         "route_completion": route_completion,
+        "runtime_readiness": runtime_readiness,
+        "route_camera_health": route_camera_health,
         "run_identity": {
             "run_id": "fixture_run",
             "plan_row_id": row["row_id"],
@@ -313,6 +493,30 @@ def _populate_valid_run(
             json.dumps(completion, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
     return run_dir
+
+
+def _refresh_completion_evidence(module, run_dir: Path, ledger: dict) -> list[str]:
+    """Rehash a deliberate fixture mutation without hiding semantic failures."""
+
+    row = ledger["rows"][0]
+    completion_path = run_dir / "completion_manifest.json"
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    readiness, route_health, errors = module.runtime_readiness_completion_evidence(
+        run_dir, ledger, row
+    )
+    if readiness is not None:
+        completion["runtime_readiness"] = readiness
+    if route_health is not None:
+        completion["route_camera_health"] = route_health
+    completion["artifacts_sha256"] = {
+        relative: module._sha256(run_dir / relative)
+        for relative in module.REQUIRED_ARTIFACTS
+        if (run_dir / relative).is_file()
+    }
+    completion_path.write_text(
+        json.dumps(completion, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return errors
 
 
 def test_frozen_protocol_has_360_unique_stable_collection_rows() -> None:
@@ -566,6 +770,124 @@ def test_frozen_input_drift_blocks_refresh_without_rewriting_ledger(tmp_path: Pa
     assert ledger_path.read_bytes() == before
 
 
+def test_frozen_method_source_drift_blocks_refresh_without_rewriting_ledger(
+    tmp_path: Path,
+) -> None:
+    module = _module("campaign_ledger_method_freeze_drift")
+    inputs = _single_row_inputs(tmp_path)
+    desired = module.build_ledger(**inputs)
+    campaign_root = tmp_path / "campaign"
+    module.initialize_campaign(campaign_root, desired)
+    ledger_path = campaign_root / module.DEFAULT_LEDGER_NAME
+    before = ledger_path.read_bytes()
+    analysis_path = inputs["config_paths"][0]
+    assert isinstance(analysis_path, Path)
+    method_source = analysis_path.parent.parent / "fixture.py"
+    method_source.write_text("# changed after plan\n", encoding="utf-8")
+
+    with pytest.raises(module.LedgerError, match="Frozen method source changed"):
+        module.refresh_campaign(campaign_root)
+
+    assert ledger_path.read_bytes() == before
+
+
+def test_readiness_campaign_contract_is_bound_to_the_selected_attempt(
+    tmp_path: Path,
+) -> None:
+    module = _module("campaign_ledger_readiness_campaign_contract")
+    desired = module.build_ledger(**_single_row_inputs(tmp_path))
+    campaign_root = tmp_path / "campaign"
+    ledger = module.initialize_campaign(campaign_root, desired)
+    run_dir = _populate_valid_run(module, campaign_root, ledger)
+    readiness_path = run_dir / module.RUNTIME_READINESS_ARTIFACT
+    readiness = json.loads(readiness_path.read_text(encoding="utf-8"))
+    readiness["campaign_contract"]["attempt_id"] = "attempt_002"
+    readiness_path.write_text(json.dumps(readiness), encoding="utf-8")
+
+    evidence_errors = _refresh_completion_evidence(module, run_dir, ledger)
+    refreshed = module.refresh_campaign(campaign_root)
+
+    assert (
+        "runtime readiness campaign contract attempt_id does not match the campaign"
+        in evidence_errors
+    )
+    assert (
+        "runtime readiness campaign contract attempt_id does not match the campaign"
+        in refreshed["rows"][0]["validation_errors"]
+    )
+
+
+def test_campaign_preflight_and_validation_allow_only_one_active_attempt(
+    tmp_path: Path,
+) -> None:
+    module = _module("campaign_ledger_single_active_attempt")
+    inputs = _single_row_inputs(tmp_path)
+    study_path = inputs["study_path"]
+    protocol_path = inputs["protocol_path"]
+    assert isinstance(study_path, Path)
+    assert isinstance(protocol_path, Path)
+    study = yaml.safe_load(study_path.read_text(encoding="utf-8"))
+    study["collection"]["routes"].append(
+        {
+            "name": "fixture_route_two",
+            "start": {"x": 0.0, "y": 1.0},
+            "goal": {"x": 1.0, "y": 1.0},
+        }
+    )
+    _write_yaml(study_path, study)
+    protocol = yaml.safe_load(protocol_path.read_text(encoding="utf-8"))
+    protocol["route_disjoint_mapping"]["train_routes"].append("fixture_route_two")
+    _write_yaml(protocol_path, protocol)
+    desired = module.build_ledger(**inputs)
+    assert len(desired["rows"]) == 2
+    campaign_root = tmp_path / "campaign"
+    ledger = module.initialize_campaign(campaign_root, desired)
+
+    def preflight(row: dict) -> dict:
+        attempt = row["attempts"][0]
+        transport = {
+            "ROS_LOCALHOST_ONLY": "1",
+            "IGN_IP": "127.0.0.1",
+            "GZ_IP": "127.0.0.1",
+            "IGN_PARTITION": attempt["ign_partition"],
+            "ROS_DOMAIN_ID": str(attempt["ros_domain_id"]),
+        }
+        return module.recorder_preflight_contract(
+            ledger_path=campaign_root / module.DEFAULT_LEDGER_NAME,
+            plan_row_id=row["row_id"],
+            attempt_id=attempt["attempt_id"],
+            seed=row["row_tuple"]["seed"],
+            evidence_role=row["expected_evidence_role"],
+            analysis_split=row["expected_analysis_split"],
+            output_dir=campaign_root / attempt["run_dir"] / "raw",
+            artifact_subdir="raw",
+            expected_inputs={
+                "study": inputs["study_path"],
+                "protocol": inputs["protocol_path"],
+                "model": inputs["model_path"],
+                "calibration": inputs["calibration_path"],
+            },
+            frozen_config_paths=inputs["config_paths"],
+            transport_environment=transport,
+        )
+
+    first, second = ledger["rows"]
+    preflight(first)
+    with pytest.raises(module.LedgerError, match="another campaign attempt is active"):
+        preflight(second)
+
+    # Validate the same invariant even if an external process created the
+    # second declared directory without going through preflight.
+    (campaign_root / second["attempts"][0]["run_dir"]).mkdir(parents=True)
+    refreshed = module.refresh_campaign(campaign_root)
+    for row in refreshed["rows"]:
+        assert row["status"] == "failed"
+        assert any(
+            "more than one campaign attempt is active" in error
+            for error in row["validation_errors"]
+        )
+
+
 def test_driver_completion_is_required_hashed_and_semantically_anchored(tmp_path: Path) -> None:
     module = _module("campaign_ledger_route_completion_anchor")
     desired = module.build_ledger(**_single_row_inputs(tmp_path))
@@ -628,6 +950,143 @@ def test_completed_run_rejects_camera_that_died_before_route_end(tmp_path: Path)
     assert "camera_C did not cover the completed route interval" in refreshed["rows"][0][
         "validation_errors"
     ]
+
+
+def test_completed_run_requires_a_passing_enforced_readiness_artifact(tmp_path: Path) -> None:
+    module = _module("campaign_ledger_enforced_readiness")
+    desired = module.build_ledger(**_single_row_inputs(tmp_path))
+    campaign_root = tmp_path / "campaign"
+    ledger = module.initialize_campaign(campaign_root, desired)
+    run_dir = _populate_valid_run(module, campaign_root, ledger)
+    readiness_path = run_dir / module.RUNTIME_READINESS_ARTIFACT
+    readiness = json.loads(readiness_path.read_text(encoding="utf-8"))
+    readiness["mode"] = "pilot"
+    readiness["evidence_eligible"] = False
+    readiness["age_enforced"] = False
+    readiness_path.write_text(json.dumps(readiness), encoding="utf-8")
+
+    evidence_errors = _refresh_completion_evidence(module, run_dir, ledger)
+    refreshed = module.refresh_campaign(campaign_root)
+
+    assert "runtime readiness must use enforce mode" in evidence_errors
+    assert refreshed["rows"][0]["status"] == "failed"
+    assert "runtime readiness must use enforce mode" in refreshed["rows"][0][
+        "validation_errors"
+    ]
+
+
+def test_completed_run_requires_readiness_before_the_pre_run_route_manifest(tmp_path: Path) -> None:
+    module = _module("campaign_ledger_readiness_timestamp")
+    desired = module.build_ledger(**_single_row_inputs(tmp_path))
+    campaign_root = tmp_path / "campaign"
+    ledger = module.initialize_campaign(campaign_root, desired)
+    run_dir = _populate_valid_run(module, campaign_root, ledger)
+    readiness_path = run_dir / module.RUNTIME_READINESS_ARTIFACT
+    readiness = json.loads(readiness_path.read_text(encoding="utf-8"))
+    readiness["created_utc"] = "2034-01-01T00:00:00Z"
+    readiness_path.write_text(json.dumps(readiness), encoding="utf-8")
+
+    evidence_errors = _refresh_completion_evidence(module, run_dir, ledger)
+    refreshed = module.refresh_campaign(campaign_root)
+
+    assert "runtime readiness timestamp is not before the pre-run route manifest" in evidence_errors
+    assert "runtime readiness timestamp is not before the pre-run route manifest" in refreshed[
+        "rows"
+    ][0]["validation_errors"]
+
+
+def test_completed_run_requires_route_wide_camera_freshness_and_bounded_gap(
+    tmp_path: Path,
+) -> None:
+    module = _module("campaign_ledger_route_camera_health")
+    desired = module.build_ledger(**_single_row_inputs(tmp_path))
+    campaign_root = tmp_path / "campaign"
+    ledger = module.initialize_campaign(campaign_root, desired)
+    run_dir = _populate_valid_run(module, campaign_root, ledger)
+    camera_path = run_dir / "raw/camera_A_perception.csv"
+    with camera_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        fields = reader.fieldnames
+        rows = list(reader)
+    assert fields is not None
+    rows[1]["diag_stamp"] = "0.10"
+    rows[1]["frame_age_at_publish_s"] = "0.20"
+    rows[1]["recorder_wall_elapsed_s"] = "4.00"
+    rows[2]["recorder_wall_elapsed_s"] = "8.00"
+    with camera_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    evidence_errors = _refresh_completion_evidence(module, run_dir, ledger)
+    refreshed = module.refresh_campaign(campaign_root)
+
+    assert "camera_A route-wide frame freshness is below 1" in evidence_errors
+    assert "camera_A route-wide recorder wall gap exceeds 3s" in evidence_errors
+    assert "camera_A route-wide diagnostic-stamp gap exceeds 0.666667s" in evidence_errors
+    assert refreshed["rows"][0]["status"] == "failed"
+    assert "camera_A route-wide frame freshness is below 1" in refreshed["rows"][0][
+        "validation_errors"
+    ]
+    assert "camera_A route-wide recorder wall gap exceeds 3s" in refreshed["rows"][0][
+        "validation_errors"
+    ]
+    assert (
+        "camera_A route-wide diagnostic-stamp gap exceeds 0.666667s"
+        in refreshed["rows"][0]["validation_errors"]
+    )
+
+
+def test_runtime_readiness_binding_detects_detector_runtime_mutation(tmp_path: Path) -> None:
+    module = _module("campaign_ledger_readiness_runtime_binding")
+    desired = module.build_ledger(**_single_row_inputs(tmp_path))
+    campaign_root = tmp_path / "campaign"
+    ledger = module.initialize_campaign(campaign_root, desired)
+    run_dir = _populate_valid_run(module, campaign_root, ledger)
+    operational_path = run_dir / "raw/operational_recording_manifest.json"
+    operational = json.loads(operational_path.read_text(encoding="utf-8"))
+    # Image size is not otherwise part of the legacy topology-shape check. The
+    # immutable readiness binding must still catch a changed detector runtime.
+    operational["detector_runtime"]["imgsz"] = 1234
+    operational_path.write_text(json.dumps(operational), encoding="utf-8")
+    completion_path = run_dir / "completion_manifest.json"
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    completion["artifacts_sha256"]["raw/operational_recording_manifest.json"] = (
+        module._sha256(operational_path)
+    )
+    completion_path.write_text(json.dumps(completion), encoding="utf-8")
+
+    refreshed = module.refresh_campaign(campaign_root)
+
+    assert refreshed["rows"][0]["status"] == "failed"
+    assert (
+        "completion manifest runtime readiness binding does not match immutable artifacts"
+        in refreshed["rows"][0]["validation_errors"]
+    )
+
+
+def test_runtime_contract_self_hash_and_observed_copy_are_revalidated(tmp_path: Path) -> None:
+    module = _module("campaign_ledger_runtime_contract_tamper")
+    desired = module.build_ledger(**_single_row_inputs(tmp_path))
+    campaign_root = tmp_path / "campaign"
+    ledger = module.initialize_campaign(campaign_root, desired)
+    run_dir = _populate_valid_run(module, campaign_root, ledger)
+    operational_path = run_dir / "raw/operational_recording_manifest.json"
+    operational = json.loads(operational_path.read_text(encoding="utf-8"))
+    # Simulate a post-record edit that leaves the recorded contract digest in
+    # place. Hashing the manifest again must not make this eligible.
+    operational["detector_runtime"]["observed_contract"]["imgsz"] = 800
+    operational_path.write_text(json.dumps(operational), encoding="utf-8")
+
+    evidence_errors = _refresh_completion_evidence(module, run_dir, ledger)
+    refreshed = module.refresh_campaign(campaign_root)
+
+    assert "operational observed detector runtime contract differs from readiness" in evidence_errors
+    assert "operational observed detector runtime contract self-hash is invalid" in evidence_errors
+    assert refreshed["rows"][0]["status"] == "failed"
+    assert "operational observed detector runtime contract differs from readiness" in refreshed[
+        "rows"
+    ][0]["validation_errors"]
 
 
 def test_finalizer_publishes_only_a_complete_cross_checked_run(tmp_path: Path) -> None:

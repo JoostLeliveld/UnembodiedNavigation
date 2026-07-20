@@ -43,6 +43,9 @@ for relative in ("src/reliability", "src/unav_common"):
     source = str(REPO / relative)
     if source not in sys.path:
         sys.path.insert(0, source)
+perception_source = str(REPO / "src/perception")
+if perception_source not in sys.path:
+    sys.path.insert(0, perception_source)
 
 from reliability import CameraObservation  # noqa: E402
 from reliability.projection import (  # noqa: E402
@@ -51,6 +54,21 @@ from reliability.projection import (  # noqa: E402
     project_observation_to_world as _library_project_observation_to_world,
 )
 from unav_common.camera_model import ObliqueCameraModel  # noqa: E402
+from perception.core.four_camera_runtime_contract import (  # noqa: E402
+    BATCHED_CAMERA_ORDER,
+    BATCHED_RUNTIME_MODE,
+    BATCHED_EXECUTABLE,
+    EXECUTABLE_SOURCE_KEY,
+    FOUR_CAMERA_BATCH_SOURCE_KEY,
+    REQUIRED_SOURCE_KEYS,
+    RUNTIME_CONTRACT_SOURCE_KEY,
+    RUNTIME_CONTRACT_TOPIC,
+    RuntimeContractError,
+    YOLO_SELECTION_SOURCE_KEY,
+    build_batched_runtime_contract,
+    compare_batched_runtime_contract,
+    runtime_contract_sha256,
+)
 import campaign_ledger  # noqa: E402
 
 try:  # Keep calibration helpers importable for non-ROS asset tests.
@@ -58,6 +76,7 @@ try:  # Keep calibration helpers importable for non-ROS asset tests.
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
     from rclpy.parameter import Parameter
+    from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
     from std_msgs.msg import String
 except ImportError:  # pragma: no cover - only used in non-ROS tooling contexts
     rclpy = None
@@ -65,6 +84,10 @@ except ImportError:  # pragma: no cover - only used in non-ROS tooling contexts
     String = Any
     Node = object
     Parameter = Any
+    DurabilityPolicy = Any
+    HistoryPolicy = Any
+    QoSProfile = Any
+    ReliabilityPolicy = Any
 
 
 DEFAULT_WORLD = REPO / "src/sim/gazebo_worlds/worlds/warehouse_full_4cam.world.sdf"
@@ -83,6 +106,15 @@ DEFAULT_CAMERA_MODELS = {
 EVIDENCE_ROLES = ("fit", "qualification", "diagnostic")
 DETECTOR_CAMERA_ORDER = tuple(DEFAULT_CAMERA_TOPICS)
 BATCHED_FRAME_POLICY = "strict_new_unique_stamp_latest_only_no_reuse"
+DEFAULT_DETECTOR_CONTRACT_TIMEOUT_S = 60.0
+DETECTOR_RUNTIME_SOURCE_PATHS = {
+    EXECUTABLE_SOURCE_KEY: REPO
+    / "src/perception/perception/nodes/batched_four_camera_yolo_node.py",
+    FOUR_CAMERA_BATCH_SOURCE_KEY: REPO / "src/perception/perception/core/four_camera_batch.py",
+    RUNTIME_CONTRACT_SOURCE_KEY: REPO
+    / "src/perception/perception/core/four_camera_runtime_contract.py",
+    YOLO_SELECTION_SOURCE_KEY: REPO / "src/perception/perception/core/yolo_selection.py",
+}
 
 
 def _method_freeze(analysis_path: Path) -> dict[str, Any]:
@@ -169,6 +201,152 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _runtime_contract_qos() -> Any:
+    """Use the detector's retained identity, never a best-effort sample."""
+
+    if QoSProfile is Any:
+        raise RuntimeError("rclpy QoS support is required for runtime-contract recording")
+    return QoSProfile(
+        history=HistoryPolicy.KEEP_LAST,
+        depth=1,
+        reliability=ReliabilityPolicy.RELIABLE,
+        durability=DurabilityPolicy.TRANSIENT_LOCAL,
+    )
+
+
+def _frozen_detector_source_hashes(
+    *, analysis_path: Path, method_freeze: dict[str, Any]
+) -> dict[str, str]:
+    """Map analysis-freeze entries to the source modules attested by the node."""
+
+    source_sha256 = method_freeze.get("source_sha256")
+    if not isinstance(source_sha256, dict):
+        raise RuntimeError("method freeze lacks source SHA-256 values")
+    study_dir = analysis_path.parent.parent
+    resolved_freeze = {
+        (study_dir / str(relative)).resolve(): str(digest)
+        for relative, digest in source_sha256.items()
+    }
+    hashes: dict[str, str] = {}
+    missing: list[str] = []
+    for key in REQUIRED_SOURCE_KEYS:
+        source_path = DETECTOR_RUNTIME_SOURCE_PATHS[key].resolve()
+        digest = resolved_freeze.get(source_path)
+        if digest is None:
+            missing.append(str(source_path))
+            continue
+        if _sha256_file(source_path) != digest:
+            raise RuntimeError(
+                "detector source changed after the method freeze was created: "
+                f"{source_path}"
+            )
+        hashes[key] = digest
+    if missing:
+        raise RuntimeError(
+            "analysis method freeze omits runtime-contract source files: "
+            + ", ".join(missing)
+        )
+    return hashes
+
+
+def _config_model_path(config_path: Path, raw_model: Any) -> Path:
+    if not isinstance(raw_model, str) or not raw_model.strip():
+        raise RuntimeError("detector runtime config lacks runtime_pilot.model")
+    candidate = Path(raw_model).expanduser()
+    # Study configs conventionally use repository-relative asset paths.  Keep
+    # absolute paths available for a future immutable successor config.
+    if not candidate.is_absolute():
+        candidate = REPO / candidate
+    return candidate.resolve()
+
+
+def _validate_batched_cli_against_runtime_config(
+    *,
+    config_path: Path,
+    expected_contract: dict[str, Any],
+    evidence_role: str = "diagnostic",
+) -> dict[str, Any]:
+    """Ensure frozen config and recorder CLI describe the same deployment.
+
+    The CLI is useful for auditable shell invocations, but it is not allowed to
+    silently override the versioned detector configuration.
+    """
+
+    payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or not isinstance(payload.get("runtime_pilot"), dict):
+        raise RuntimeError(f"detector runtime config lacks runtime_pilot mapping: {config_path}")
+    runtime = payload["runtime_pilot"]
+    expected = {
+        "detector_mode": BATCHED_RUNTIME_MODE,
+        "runtime_executable": BATCHED_EXECUTABLE,
+        "launch_switch": "yolo_batched_four_camera",
+        "model_format": "native_ultralytics",
+        "model_instances": 1,
+        "batch_size": 4,
+        "camera_order": list(BATCHED_CAMERA_ORDER),
+        "device": expected_contract["shared_device"],
+        "cpu_threads": expected_contract["cpu_threads"],
+        "cpu_interop_threads": expected_contract["interop_threads"],
+        "opencv_threads": expected_contract["opencv_threads"],
+        "max_batch_stamp_skew_s": expected_contract["max_batch_stamp_skew_s"],
+        "max_pending_wall_s": expected_contract["max_pending_wall_s"],
+        "frame_policy": expected_contract["frame_policy"],
+        "inference_timing_semantics": expected_contract[
+            "inference_timing_semantics"
+        ],
+        "fault_policy": expected_contract["fault_policy"],
+        "synchronization_miss_policy": expected_contract[
+            "synchronization_miss_policy"
+        ],
+        "masks": expected_contract["use_masks"],
+        "confidence_threshold": expected_contract["confidence_threshold"],
+        "iou_threshold": expected_contract["iou_threshold"],
+    }
+    mismatches: list[str] = []
+    for key, expected_value in expected.items():
+        actual_value = runtime.get(key)
+        if isinstance(expected_value, float):
+            try:
+                matches = math.isclose(
+                    float(actual_value), expected_value, rel_tol=0.0, abs_tol=1.0e-12
+                )
+            except (TypeError, ValueError):
+                matches = False
+        else:
+            matches = actual_value == expected_value
+        if not matches:
+            mismatches.append(key)
+    configured_model = _config_model_path(config_path, runtime.get("model"))
+    if configured_model != Path(expected_contract["model_path"]).resolve():
+        mismatches.append("model")
+    image_sizes = runtime.get("image_sizes")
+    if not isinstance(image_sizes, list) or expected_contract["imgsz"] not in image_sizes:
+        mismatches.append("image_sizes")
+    if str(evidence_role) != "diagnostic":
+        selection = runtime.get("evidence_selection")
+        selected_imgsz = (
+            selection.get("selected_image_size")
+            if isinstance(selection, dict)
+            else None
+        )
+        if (
+            payload.get("lock_status") != "locked_before_evidence"
+            or not isinstance(selection, dict)
+            or selection.get("permitted") is not True
+            or isinstance(selected_imgsz, bool)
+            or not isinstance(selected_imgsz, int)
+            or selected_imgsz != expected_contract["imgsz"]
+            or image_sizes != [selected_imgsz]
+        ):
+            mismatches.append("evidence_selection")
+    if mismatches:
+        raise RuntimeError(
+            "detector runtime CLI differs from frozen runtime config "
+            f"{config_path}: " + ", ".join(sorted(set(mismatches)))
+        )
+    return runtime
+
+
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -214,6 +392,9 @@ class OperationalLogRecorder(Node):
         odom_origin_y_m: float,
         odom_origin_yaw_rad: float,
         use_sim_time: bool,
+        expected_detector_contract: dict[str, Any],
+        max_stream_wall_age_s: float,
+        detector_contract_topic: str = RUNTIME_CONTRACT_TOPIC,
         projection_calibrations: dict[str, dict[str, float]] | None = None,
     ) -> None:
         super().__init__(
@@ -225,11 +406,66 @@ class OperationalLogRecorder(Node):
         self.projection_calibrations = dict(projection_calibrations or {})
         self.contact_z_m = float(contact_z_m)
         self.fresh_age_s = float(fresh_age_s)
+        self.max_stream_wall_age_s = float(max_stream_wall_age_s)
+        if (
+            not math.isfinite(self.max_stream_wall_age_s)
+            or self.max_stream_wall_age_s <= 0.0
+        ):
+            raise RuntimeError("max_stream_wall_age_s must be finite and positive")
         self.odom_origin_x_m = float(odom_origin_x_m)
         self.odom_origin_y_m = float(odom_origin_y_m)
         self.odom_origin_yaw_rad = float(odom_origin_yaw_rad)
         self._origin_cos = math.cos(self.odom_origin_yaw_rad)
         self._origin_sin = math.sin(self.odom_origin_yaw_rad)
+        try:
+            # Validate the frozen side before subscribing.  A malformed local
+            # expectation is as unsafe as a malformed message from the live
+            # detector and must not leave a recorder waiting indefinitely.
+            self.expected_detector_contract = build_batched_runtime_contract(
+                **{
+                    "model_path": expected_detector_contract["model_path"],
+                    "model_sha256": expected_detector_contract["model_sha256"],
+                    "imgsz": expected_detector_contract["imgsz"],
+                    "confidence_threshold": expected_detector_contract[
+                        "confidence_threshold"
+                    ],
+                    "iou_threshold": expected_detector_contract["iou_threshold"],
+                    "use_masks": expected_detector_contract["use_masks"],
+                    "shared_device": expected_detector_contract["shared_device"],
+                    "cpu_threads": expected_detector_contract["cpu_threads"],
+                    "interop_threads": expected_detector_contract["interop_threads"],
+                    "opencv_threads": expected_detector_contract["opencv_threads"],
+                    "max_batch_stamp_skew_s": expected_detector_contract[
+                        "max_batch_stamp_skew_s"
+                    ],
+                    "max_pending_wall_s": expected_detector_contract[
+                        "max_pending_wall_s"
+                    ],
+                    "source_hashes": expected_detector_contract["source_hashes"],
+                }
+            )
+        except (KeyError, RuntimeContractError, TypeError, ValueError) as exc:
+            raise RuntimeError("invalid expected detector runtime contract") from exc
+        self.expected_detector_contract_sha256 = runtime_contract_sha256(
+            self.expected_detector_contract
+        )
+        self.detector_contract_topic = str(detector_contract_topic)
+        if self.detector_contract_topic != RUNTIME_CONTRACT_TOPIC:
+            raise RuntimeError(
+                "operational recorder only accepts the fixed four-camera runtime-contract topic"
+            )
+        self.detector_contract_armed = False
+        self.detector_contract_error: str | None = None
+        self.observed_detector_contract: dict[str, Any] | None = None
+        self.observed_detector_contract_sha256: str | None = None
+        self.detector_contract_received_wall_s: float | None = None
+        self.prearm_camera_messages = {camera_id: 0 for camera_id in camera_topics}
+        self.prearm_odom_messages = 0
+        self.last_camera_observation_wall_s: dict[str, float | None] = {
+            camera_id: None for camera_id in camera_topics
+        }
+        self.last_odom_observation_wall_s: float | None = None
+        self.stream_watchdog_failure: str | None = None
         self.latest_odom_xy = (0.0, 0.0)
         self.latest_odom_stamp = math.nan
         self.handles: dict[str, Any] = {}
@@ -253,6 +489,19 @@ class OperationalLogRecorder(Node):
         self._part_to_final: list[tuple[Path, Path]] = []
 
         out_dir.mkdir(parents=True, exist_ok=True)
+        # This subscription is deliberately established before observations
+        # and odometry.  Transient-local QoS also lets a recorder started after
+        # detector warm-up receive the retained identity before any route arms.
+        self.create_subscription(
+            String,
+            self.detector_contract_topic,
+            self._detector_contract_callback,
+            _runtime_contract_qos(),
+        )
+        self.get_logger().info(
+            "waiting for validated retained detector runtime contract: "
+            f"{self.detector_contract_topic}"
+        )
         for camera_id, topic in sorted(camera_topics.items()):
             if camera_id not in camera_models:
                 raise RuntimeError(f"No calibration model supplied for {camera_id}")
@@ -314,7 +563,91 @@ class OperationalLogRecorder(Node):
         world_yy = s * s * local_xx + 2.0 * s * c * local_xy + c * c * local_yy
         return world_xx, world_xy, world_yy
 
+    def _detector_contract_callback(self, message: String) -> None:
+        """Arm exactly once when the live model proves the frozen identity."""
+
+        try:
+            raw = getattr(message, "data", None)
+            if not isinstance(raw, str):
+                raise RuntimeContractError("runtime-contract message data is not a string")
+            parsed = json.loads(raw)
+            observed = compare_batched_runtime_contract(
+                parsed, self.expected_detector_contract
+            )
+        except Exception as exc:  # A bad retained contract must stop the run, not be ignored.
+            self.detector_contract_error = (
+                "detector runtime contract rejected: " f"{type(exc).__name__}: {exc}"
+            )
+            self.get_logger().error(self.detector_contract_error)
+            return
+
+        observed_sha256 = runtime_contract_sha256(observed)
+        if self.observed_detector_contract_sha256 is not None:
+            if observed_sha256 != self.observed_detector_contract_sha256:
+                self.detector_contract_error = (
+                    "detector runtime contract changed after recorder arming"
+                )
+                self.get_logger().error(self.detector_contract_error)
+            return
+        self.observed_detector_contract = observed
+        self.observed_detector_contract_sha256 = observed_sha256
+        self.detector_contract_received_wall_s = time.monotonic()
+        self.detector_contract_armed = True
+        self.get_logger().info(
+            "armed after validated detector runtime contract "
+            f"sha256={observed_sha256}"
+        )
+
+    def stream_watchdog_failures(self, *, now_wall_s: float) -> list[str]:
+        """Return post-arm stream gaps that make live evidence unsafe.
+
+        The timer begins only after the retained detector contract is accepted.
+        Pre-arm callbacks are deliberately ignored; a stream must then produce
+        valid, recordable observations rather than merely keeping its ROS topic
+        alive with malformed traffic.
+        """
+
+        if not self.detector_contract_armed:
+            return []
+        now = float(now_wall_s)
+        if not math.isfinite(now):
+            return ["stream watchdog received a non-finite wall clock"]
+        armed_at = self.detector_contract_received_wall_s
+        if armed_at is None or not math.isfinite(armed_at):
+            return ["stream watchdog is armed without a finite contract receipt time"]
+        failures: list[str] = []
+        for camera_id in sorted(self.last_camera_observation_wall_s):
+            last = self.last_camera_observation_wall_s[camera_id]
+            reference = armed_at if last is None else last
+            age = max(now - reference, 0.0)
+            if age > self.max_stream_wall_age_s:
+                phase = "since contract arming" if last is None else "since last valid observation"
+                failures.append(
+                    f"{camera_id} stream watchdog exceeded "
+                    f"{self.max_stream_wall_age_s:.3f}s {phase} (age={age:.3f}s)"
+                )
+        odom_reference = (
+            armed_at
+            if self.last_odom_observation_wall_s is None
+            else self.last_odom_observation_wall_s
+        )
+        odom_age = max(now - odom_reference, 0.0)
+        if odom_age > self.max_stream_wall_age_s:
+            phase = (
+                "since contract arming"
+                if self.last_odom_observation_wall_s is None
+                else "since last valid observation"
+            )
+            failures.append(
+                f"odometry stream watchdog exceeded {self.max_stream_wall_age_s:.3f}s "
+                f"{phase} (age={odom_age:.3f}s)"
+            )
+        return failures
+
     def _odom_callback(self, message: Odometry) -> None:
+        if not self.detector_contract_armed:
+            self.prearm_odom_messages += 1
+            return
         stamp = _stamp_s(message.header.stamp)
         if (
             not math.isfinite(stamp)
@@ -358,6 +691,7 @@ class OperationalLogRecorder(Node):
         )
         self.odom_handle.flush()
         self.odom_count += 1
+        self.last_odom_observation_wall_s = time.monotonic()
 
     def _record_sim_stamp(self, stamp: float) -> None:
         if not math.isfinite(stamp):
@@ -368,6 +702,9 @@ class OperationalLogRecorder(Node):
 
     def _camera_callback(self, expected_camera_id: str):
         def callback(message: String) -> None:
+            if not self.detector_contract_armed:
+                self.prearm_camera_messages[expected_camera_id] += 1
+                return
             try:
                 observation = CameraObservation.from_json(message.data)
             except Exception as exc:  # noqa: BLE001 - malformed input must not end a collection run
@@ -467,6 +804,7 @@ class OperationalLogRecorder(Node):
             self.counts[expected_camera_id] += 1
             self.calibration_ids[expected_camera_id].add(str(observation.calibration_id))
             self.image_frame_ids[expected_camera_id].add(str(observation.image_frame_id))
+            self.last_camera_observation_wall_s[expected_camera_id] = time.monotonic()
 
         return callback
 
@@ -511,6 +849,15 @@ def main() -> int:
     parser.add_argument("--odom-topic", default="/odom_noisy")
     parser.add_argument("--contact-z-m", type=float, default=0.05)
     parser.add_argument("--fresh-age-s", type=float, default=0.15)
+    parser.add_argument(
+        "--max-stream-wall-age-s",
+        type=float,
+        default=3.0,
+        help=(
+            "Post-contract live watchdog limit. It must equal the enforce "
+            "runtime-readiness max_stream_wall_age_s threshold for evidence runs."
+        ),
+    )
     parser.add_argument("--odom-origin-x-m", type=float, required=True)
     parser.add_argument("--odom-origin-y-m", type=float, required=True)
     parser.add_argument("--odom-origin-yaw-rad", type=float, required=True)
@@ -536,6 +883,16 @@ def main() -> int:
         ),
     )
     parser.add_argument("--detector-model", type=Path, required=True)
+    parser.add_argument(
+        "--detector-runtime-config",
+        type=Path,
+        default=REPO
+        / "experiments/multicamera_commissioning_bigwarehouse/config/detector_4cam_v2.yaml",
+        help=(
+            "Versioned detector runtime config; it must also be listed in "
+            "--frozen-config so CLI settings cannot override the freeze."
+        ),
+    )
     parser.add_argument("--detector-imgsz", type=int, required=True)
     parser.add_argument("--detector-conf", type=float, required=True)
     parser.add_argument("--detector-iou", type=float, required=True)
@@ -568,6 +925,15 @@ def main() -> int:
         action=argparse.BooleanOptionalAction,
         default=None,
         help="Explicit value of the warehouse launch topology switch.",
+    )
+    parser.add_argument(
+        "--detector-contract-timeout-s",
+        type=float,
+        default=DEFAULT_DETECTOR_CONTRACT_TIMEOUT_S,
+        help=(
+            "Wall-clock bound for receiving the retained observed detector "
+            "contract before this recorder fails closed."
+        ),
     )
     parser.add_argument(
         "--detector-use-masks",
@@ -617,6 +983,11 @@ def main() -> int:
         raise RuntimeError("rclpy is required; source the ROS workspace before running this recorder")
     if args.contact_z_m < 0.0 or args.fresh_age_s < 0.0 or args.duration_s < 0.0:
         parser.error("--contact-z-m and --fresh-age-s must be non-negative")
+    if (
+        not math.isfinite(args.max_stream_wall_age_s)
+        or args.max_stream_wall_age_s <= 0.0
+    ):
+        parser.error("--max-stream-wall-age-s must be finite and positive")
     if args.detector_use_masks is None:
         parser.error("explicitly pass --detector-use-masks or --no-detector-use-masks")
     if args.detector_imgsz <= 0 or args.min_camera_rows < 1 or args.min_odom_rows < 1:
@@ -625,6 +996,11 @@ def main() -> int:
         parser.error("detector confidence and IoU must lie in [0, 1]")
     if args.duration_s <= 0.0 and args.completion_manifest is None:
         parser.error("set --duration-s or --completion-manifest; unbounded recording is forbidden")
+    if (
+        not math.isfinite(args.detector_contract_timeout_s)
+        or args.detector_contract_timeout_s <= 0.0
+    ):
+        parser.error("--detector-contract-timeout-s must be finite and positive")
     if not all(
         math.isfinite(value)
         for value in (args.odom_origin_x_m, args.odom_origin_y_m, args.odom_origin_yaw_rad)
@@ -701,14 +1077,21 @@ def main() -> int:
         )
         if any(value is not None for value in batch_only_values):
             parser.error("separate-process detector cannot declare batched-only settings")
+        parser.error(
+            "separate-process fallback remains launch-compatible for timing diagnostics, "
+            "but cannot be collected as operational evidence because it has no single "
+            "observed four-camera runtime contract"
+        )
 
     world_sdf = args.world_sdf.expanduser().resolve()
     detector_model = args.detector_model.expanduser().resolve()
+    detector_runtime_config = args.detector_runtime_config.expanduser().resolve()
     projection_path = args.projection_calibration.expanduser().resolve()
     frozen_config_paths = [path.expanduser().resolve() for path in args.frozen_config]
     provenance_paths = {
         "world_sdf": world_sdf,
         "detector_model": detector_model,
+        "detector_runtime_config": detector_runtime_config,
         "projection_calibration": projection_path,
         "study_config": args.study_config.expanduser().resolve(),
         "protocol": args.protocol.expanduser().resolve(),
@@ -718,6 +1101,37 @@ def main() -> int:
     missing_paths.extend(str(path) for path in frozen_config_paths if not path.is_file())
     if missing_paths:
         parser.error("missing provenance inputs: " + ", ".join(missing_paths))
+    if detector_runtime_config not in frozen_config_paths:
+        parser.error(
+            "--detector-runtime-config must be repeated exactly as a --frozen-config input"
+        )
+    method_freeze = _method_freeze(provenance_paths["analysis_plan"])
+    try:
+        expected_detector_contract = build_batched_runtime_contract(
+            model_path=detector_model,
+            model_sha256=_sha256_file(detector_model),
+            imgsz=int(args.detector_imgsz),
+            confidence_threshold=float(args.detector_conf),
+            iou_threshold=float(args.detector_iou),
+            use_masks=bool(args.detector_use_masks),
+            shared_device=str(args.detector_shared_device),
+            cpu_threads=int(args.detector_cpu_threads),
+            interop_threads=int(args.detector_interop_threads),
+            opencv_threads=int(args.detector_opencv_threads),
+            max_batch_stamp_skew_s=float(args.detector_max_batch_stamp_skew_s),
+            max_pending_wall_s=float(args.detector_max_pending_wall_s),
+            source_hashes=_frozen_detector_source_hashes(
+                analysis_path=provenance_paths["analysis_plan"],
+                method_freeze=method_freeze,
+            ),
+        )
+        _validate_batched_cli_against_runtime_config(
+            config_path=detector_runtime_config,
+            expected_contract=expected_detector_contract,
+            evidence_role=args.evidence_role,
+        )
+    except (RuntimeContractError, RuntimeError, TypeError, ValueError) as exc:
+        parser.error(f"detector runtime freeze validation failed: {exc}")
     try:
         campaign_contract = campaign_ledger.recorder_preflight_contract(
             ledger_path=args.campaign_ledger,
@@ -738,6 +1152,15 @@ def main() -> int:
         )
     except campaign_ledger.LedgerError as exc:
         parser.error(f"campaign preflight failed: {exc}")
+    if campaign_contract.get("method_freeze") != method_freeze:
+        parser.error(
+            "campaign method-freeze snapshot differs from the locally resolved source bytes"
+        )
+    campaign_method_freeze_sha256 = campaign_contract.get("method_freeze_sha256")
+    if not isinstance(campaign_method_freeze_sha256, str) or len(
+        campaign_method_freeze_sha256
+    ) != 64:
+        parser.error("campaign method-freeze SHA-256 is missing or malformed")
     camera_models = {
         camera_id: camera_model_from_world(world_sdf, include_name=model_name)
         for camera_id, model_name in DEFAULT_CAMERA_MODELS.items()
@@ -813,7 +1236,12 @@ def main() -> int:
             {"path": str(path), "sha256": _sha256_file(path)}
             for path in frozen_config_paths
         ],
-        "method_freeze": _method_freeze(provenance_paths["analysis_plan"]),
+        "method_freeze": method_freeze,
+        # This is the plan-time provenance digest, rather than a fresh hash
+        # calculated by the recorder.  Keeping it beside the snapshot makes
+        # the ledger binding visible even when this manifest is inspected on
+        # its own.
+        "method_freeze_sha256": campaign_method_freeze_sha256,
         "campaign_contract": campaign_contract,
         "transport_environment": campaign_contract["transport_environment"],
         "git": _git_state(),
@@ -828,15 +1256,35 @@ def main() -> int:
         },
         "contact_z_m": float(args.contact_z_m),
         "fresh_age_s": float(args.fresh_age_s),
+        "stream_liveness_watchdog": {
+            "clock": "steady_monotonic",
+            "starts_after": "validated_detector_runtime_contract",
+            "max_stream_wall_age_s": float(args.max_stream_wall_age_s),
+            "streams": ["camera_A", "camera_B", "camera_C", "camera_D", "odometry"],
+            "prearm_messages_do_not_count": True,
+            "policy": "fatal_recorder_exit_and_part_artifact_quarantine",
+        },
         "detector_runtime": {
             "model_path": str(detector_model),
-            "model_sha256": _sha256_file(detector_model),
+            "model_sha256": expected_detector_contract["model_sha256"],
             "imgsz": int(args.detector_imgsz),
             "confidence_threshold": float(args.detector_conf),
             "iou_threshold": float(args.detector_iou),
             "use_masks": bool(args.detector_use_masks),
             "devices": devices,
             "topology": detector_topology,
+            "observed_contract": None,
+            "observed_contract_sha256": None,
+            "observed_contract_requirement": {
+                "topic": RUNTIME_CONTRACT_TOPIC,
+                "qos": "reliable_transient_local_keep_last_1",
+                "timeout_wall_s": float(args.detector_contract_timeout_s),
+                "expected_contract": expected_detector_contract,
+                "expected_contract_sha256": runtime_contract_sha256(
+                    expected_detector_contract
+                ),
+                "state": "waiting_before_arming",
+            },
         },
         "duration_clock": "simulation" if args.use_sim_time else "wall",
         "odom_covariance": {
@@ -870,10 +1318,13 @@ def main() -> int:
         odom_topic=str(args.odom_topic),
         contact_z_m=float(args.contact_z_m),
         fresh_age_s=float(args.fresh_age_s),
+        max_stream_wall_age_s=float(args.max_stream_wall_age_s),
         odom_origin_x_m=float(args.odom_origin_x_m),
         odom_origin_y_m=float(args.odom_origin_y_m),
         odom_origin_yaw_rad=float(args.odom_origin_yaw_rad),
         use_sim_time=bool(args.use_sim_time),
+        expected_detector_contract=expected_detector_contract,
+        detector_contract_topic=RUNTIME_CONTRACT_TOPIC,
         projection_calibrations=projection_calibrations,
     )
     status = "failed"
@@ -889,6 +1340,25 @@ def main() -> int:
     try:
         while rclpy.ok():
             rclpy.spin_once(node, timeout_sec=0.10)
+            if node.detector_contract_error is not None:
+                raise RuntimeError(node.detector_contract_error)
+            if not node.detector_contract_armed:
+                if (
+                    time.monotonic() - wall_start
+                    > float(args.detector_contract_timeout_s)
+                ):
+                    raise RuntimeError(
+                        "timed out waiting for a matching retained detector runtime contract "
+                        f"on {RUNTIME_CONTRACT_TOPIC} after "
+                        f"{args.detector_contract_timeout_s:.1f}s"
+                    )
+                # Neither detector nor odometry rows are accepted before this
+                # point; their callbacks only count pre-arm messages.
+                continue
+            watchdog_failures = node.stream_watchdog_failures(now_wall_s=time.monotonic())
+            if watchdog_failures:
+                node.stream_watchdog_failure = "; ".join(watchdog_failures)
+                raise RuntimeError(node.stream_watchdog_failure)
             now_s = (
                 node.get_clock().now().nanoseconds * 1e-9
                 if args.use_sim_time
@@ -920,25 +1390,80 @@ def main() -> int:
         failure_message = f"{type(exc).__name__}: {exc}"
     finally:
         if status == "completed":
-            low_cameras = {
-                camera: count for camera, count in node.counts.items()
-                if count < int(args.min_camera_rows)
-            }
-            if low_cameras or node.odom_count < int(args.min_odom_rows):
+            if not node.detector_contract_armed:
                 status = "failed"
-                stop_reason = "minimum_stream_rows_not_met"
-                failure_message = (
-                    f"camera rows below {args.min_camera_rows}: {low_cameras}; "
-                    f"odom rows {node.odom_count} < {args.min_odom_rows}"
-                )
-            if node.stream_integrity_errors:
-                status = "failed"
-                stop_reason = "stream_integrity_error"
-                failure_message = "; ".join(node.stream_integrity_errors[:10])
+                stop_reason = "detector_runtime_contract_not_armed"
+                failure_message = "no matching observed detector runtime contract"
+            if status == "completed":
+                low_cameras = {
+                    camera: count for camera, count in node.counts.items()
+                    if count < int(args.min_camera_rows)
+                }
+                if low_cameras or node.odom_count < int(args.min_odom_rows):
+                    status = "failed"
+                    stop_reason = "minimum_stream_rows_not_met"
+                    failure_message = (
+                        f"camera rows below {args.min_camera_rows}: {low_cameras}; "
+                        f"odom rows {node.odom_count} < {args.min_odom_rows}"
+                    )
+                if node.stream_integrity_errors:
+                    status = "failed"
+                    stop_reason = "stream_integrity_error"
+                    failure_message = "; ".join(node.stream_integrity_errors[:10])
         node.close(finalize=(status == "completed"))
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+    runtime_contract_requirement = manifest["detector_runtime"][
+        "observed_contract_requirement"
+    ]
+    runtime_contract_requirement.update(
+        {
+            "state": (
+                "armed"
+                if node.detector_contract_armed and node.detector_contract_error is None
+                else "rejected_or_unavailable"
+            ),
+            "received_wall_elapsed_s": (
+                None
+                if node.detector_contract_received_wall_s is None
+                else max(
+                    node.detector_contract_received_wall_s
+                    - node.started_wall_monotonic_s,
+                    0.0,
+                )
+            ),
+            "error": node.detector_contract_error,
+            "prearm_camera_messages": dict(node.prearm_camera_messages),
+            "prearm_odom_messages": int(node.prearm_odom_messages),
+        }
+    )
+    manifest["detector_runtime"]["observed_contract"] = node.observed_detector_contract
+    manifest["detector_runtime"]["observed_contract_sha256"] = (
+        node.observed_detector_contract_sha256
+    )
+    watchdog_manifest = manifest["stream_liveness_watchdog"]
+    watchdog_manifest.update(
+        {
+            "terminal_failure": node.stream_watchdog_failure,
+            "last_valid_camera_wall_elapsed_s": {
+                camera: (
+                    None
+                    if stamp is None
+                    else max(stamp - node.started_wall_monotonic_s, 0.0)
+                )
+                for camera, stamp in node.last_camera_observation_wall_s.items()
+            },
+            "last_valid_odom_wall_elapsed_s": (
+                None
+                if node.last_odom_observation_wall_s is None
+                else max(
+                    node.last_odom_observation_wall_s - node.started_wall_monotonic_s,
+                    0.0,
+                )
+            ),
+        }
+    )
     manifest.update({
         "status": status,
         "finished_utc": _utc_now(),

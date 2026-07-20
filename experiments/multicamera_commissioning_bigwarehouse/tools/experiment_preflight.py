@@ -42,7 +42,7 @@ STUDY_DIR = REPO / "experiments/multicamera_commissioning_bigwarehouse"
 DEFAULT_STUDY = STUDY_DIR / "config/study.yaml"
 DEFAULT_PROTOCOL = STUDY_DIR / "config/paper_protocol.yaml"
 DEFAULT_ANALYSIS = STUDY_DIR / "config/paper_analysis_plan.yaml"
-DEFAULT_DETECTOR_CONFIG = STUDY_DIR / "config/detector_4cam_v1.yaml"
+DEFAULT_DETECTOR_CONFIG = STUDY_DIR / "config/detector_4cam_v2.yaml"
 DEFAULT_WORLD = REPO / "src/sim/gazebo_worlds/worlds/warehouse_full_4cam.world.sdf"
 STALE_PATTERNS = (
     "drive_study_route.py",

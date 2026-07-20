@@ -42,6 +42,7 @@ DEFAULT_PROTOCOL = STUDY_DIR / "config" / "paper_protocol.yaml"
 DEFAULT_LEDGER_NAME = "campaign_ledger.json"
 DEFAULT_ATTEMPT_SLOTS = 3
 CAMERAS = ("camera_A", "camera_B", "camera_C", "camera_D")
+RUNTIME_READINESS_ARTIFACT = "runtime_readiness.json"
 ROW_FIELDS = (
     "phase",
     "route",
@@ -59,6 +60,7 @@ SUCCESS_END_REASONS = (
     "completed",
 )
 REQUIRED_ARTIFACTS = (
+    RUNTIME_READINESS_ARTIFACT,
     "raw/route_manifest.json",
     "raw/route_completion.json",
     "raw/operational_recording_manifest.json",
@@ -342,7 +344,143 @@ def input_sha256(provenance: Sequence[Mapping[str, Any]]) -> dict[str, str]:
     return hashes
 
 
-def _plan_sha256(rows: Sequence[Mapping[str, Any]], provenance: Sequence[Mapping[str, Any]]) -> str:
+def build_method_freeze_provenance(config_paths: Sequence[Path]) -> dict[str, Any]:
+    """Snapshot the analysis-declared implementation before a campaign starts.
+
+    A SHA-256 of the analysis YAML alone is insufficient: its `source_files`
+    are the actual implementation that turns operational recordings into paper
+    evidence.  This record is deliberately compatible with the operational
+    recorder's `method_freeze` payload while retaining resolved paths for
+    future frozen-input verification.
+    """
+
+    candidates: list[tuple[Path, dict[str, Any], dict[str, Any]]] = []
+    for supplied in config_paths:
+        path = supplied.expanduser().resolve()
+        payload = _load_yaml(path)
+        freeze = payload.get("method_freeze")
+        if freeze is not None:
+            if not isinstance(freeze, dict):
+                raise LedgerError(f"method_freeze must be a mapping in {path}")
+            candidates.append((path, payload, freeze))
+    if len(candidates) != 1:
+        raise LedgerError(
+            "Campaign --config inputs must contain exactly one analysis plan with method_freeze"
+        )
+    analysis_path, analysis, freeze = candidates[0]
+    analysis_plan_id = analysis.get("analysis_plan_id")
+    if not isinstance(analysis_plan_id, str) or not analysis_plan_id.strip():
+        raise LedgerError(f"analysis plan lacks a non-empty analysis_plan_id: {analysis_path}")
+    source_files = freeze.get("source_files")
+    if not isinstance(source_files, list) or not source_files:
+        raise LedgerError(f"analysis plan lacks method_freeze.source_files: {analysis_path}")
+    source_records: list[dict[str, str]] = []
+    source_sha256: dict[str, str] = {}
+    study_dir = analysis_path.parent.parent
+    for value in source_files:
+        if not isinstance(value, str) or not value.strip():
+            raise LedgerError("method_freeze.source_files entries must be non-empty strings")
+        relative = str(value)
+        if relative in source_sha256:
+            raise LedgerError(f"method_freeze.source_files contains duplicate {relative!r}")
+        source = (study_dir / relative).resolve()
+        if not source.is_file():
+            raise LedgerError(f"frozen method source is not a file: {source}")
+        digest = _sha256(source)
+        source_sha256[relative] = digest
+        source_records.append(
+            {"relative": relative, "path": str(source), "sha256": digest}
+        )
+    snapshot = {
+        "analysis_plan_id": analysis_plan_id,
+        "analysis_plan_sha256": _sha256(analysis_path),
+        "source_sha256": source_sha256,
+    }
+    core = {
+        "schema_version": 1,
+        "analysis_plan_path": str(analysis_path),
+        "snapshot": snapshot,
+        "source_records": source_records,
+    }
+    return {**core, "sha256": hashlib.sha256(_canonical_json(core)).hexdigest()}
+
+
+def _method_freeze_provenance_errors(ledger: Mapping[str, Any]) -> list[str]:
+    """Validate the stored source snapshot without reading mutable files."""
+
+    provenance = _dict(ledger.get("method_freeze_provenance"))
+    snapshot = _dict(provenance.get("snapshot"))
+    records = provenance.get("source_records")
+    if provenance.get("schema_version") != 1:
+        return ["ledger method-freeze provenance schema is invalid"]
+    analysis_path = provenance.get("analysis_plan_path")
+    if not isinstance(analysis_path, str) or not analysis_path:
+        return ["ledger method-freeze provenance lacks analysis_plan_path"]
+    if (
+        not isinstance(snapshot.get("analysis_plan_id"), str)
+        or not snapshot["analysis_plan_id"]
+        or not _is_sha256(snapshot.get("analysis_plan_sha256"))
+        or not isinstance(snapshot.get("source_sha256"), dict)
+        or not snapshot["source_sha256"]
+    ):
+        return ["ledger method-freeze snapshot is incomplete"]
+    if not isinstance(records, list) or not records:
+        return ["ledger method-freeze provenance lacks source records"]
+    source_hashes = snapshot["source_sha256"]
+    seen: set[str] = set()
+    for record in records:
+        if not isinstance(record, dict):
+            return ["ledger method-freeze source record is malformed"]
+        relative = record.get("relative")
+        path = record.get("path")
+        digest = record.get("sha256")
+        if (
+            not isinstance(relative, str)
+            or not relative
+            or relative in seen
+            or not isinstance(path, str)
+            or not path
+            or not _is_sha256(digest)
+            or source_hashes.get(relative) != digest
+        ):
+            return ["ledger method-freeze source records do not match snapshot hashes"]
+        seen.add(relative)
+    if set(source_hashes) != seen or not all(_is_sha256(value) for value in source_hashes.values()):
+        return ["ledger method-freeze source hash set is invalid"]
+    core = {
+        "schema_version": provenance.get("schema_version"),
+        "analysis_plan_path": analysis_path,
+        "snapshot": snapshot,
+        "source_records": records,
+    }
+    if provenance.get("sha256") != hashlib.sha256(_canonical_json(core)).hexdigest():
+        return ["ledger method-freeze provenance hash does not match its payload"]
+    return []
+
+
+def method_freeze_snapshot(ledger: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the recorder-compatible method snapshot from a valid ledger."""
+
+    errors = _method_freeze_provenance_errors(ledger)
+    if errors:
+        raise LedgerError("; ".join(errors))
+    return copy.deepcopy(dict(_dict(ledger["method_freeze_provenance"]["snapshot"])))
+
+
+def method_freeze_sha256(ledger: Mapping[str, Any]) -> str:
+    """Return the immutable digest that recorder preflight propagates."""
+
+    errors = _method_freeze_provenance_errors(ledger)
+    if errors:
+        raise LedgerError("; ".join(errors))
+    return str(ledger["method_freeze_provenance"]["sha256"])
+
+
+def _plan_sha256(
+    rows: Sequence[Mapping[str, Any]],
+    provenance: Sequence[Mapping[str, Any]],
+    method_freeze_provenance: Mapping[str, Any],
+) -> str:
     contract = {
         "rows": [
             {
@@ -356,6 +494,7 @@ def _plan_sha256(rows: Sequence[Mapping[str, Any]], provenance: Sequence[Mapping
             for row in rows
         ],
         "input_sha256": input_sha256(provenance),
+        "method_freeze_provenance": method_freeze_provenance,
     }
     return hashlib.sha256(_canonical_json(contract)).hexdigest()
 
@@ -382,6 +521,7 @@ def build_ledger(
         calibration_path=calibration_path,
         config_paths=config_paths,
     )
+    method_freeze_provenance = build_method_freeze_provenance(config_paths)
     rows: list[dict[str, Any]] = []
     for exact_tuple in tuples:
         identifier = row_id(exact_tuple)
@@ -424,17 +564,42 @@ def build_ledger(
         "updated_at": created_at,
         "revision": 0,
         "provenance": provenance,
+        # The analysis plan itself is one frozen config input, but its declared
+        # implementation files also need an eager, immutable snapshot.  Do
+        # not defer these hashes to recorder startup: code could change between
+        # planning and the first attempted run.
+        "method_freeze_provenance": method_freeze_provenance,
         "completion_contract": {
             "manifest": "completion_manifest.json",
             "row_tuple_fields": list(ROW_FIELDS),
             "success_end_reasons": list(SUCCESS_END_REASONS),
             "required_artifacts": list(REQUIRED_ARTIFACTS),
+            "runtime_readiness": {
+                "artifact": RUNTIME_READINESS_ARTIFACT,
+                "mode": "enforce",
+                "must_pass": True,
+                "must_be_evidence_eligible": True,
+                "must_precede_pre_run_route_manifest": True,
+                "route_wide_camera_health": {
+                    "required": True,
+                    "source": "raw camera CSV timing columns",
+                    "requirements": [
+                        "continuous route coverage",
+                        "fresh frame-age fraction",
+                        "maximum recorder-wall-time gap",
+                    ],
+                },
+            },
+            "method_freeze": {
+                "snapshot": method_freeze_provenance["snapshot"],
+                "sha256": method_freeze_provenance["sha256"],
+            },
             "input_sha256": input_sha256(provenance),
             "attempt_slots": attempt_slots,
         },
         "rows": rows,
     }
-    ledger["plan_sha256"] = _plan_sha256(rows, provenance)
+    ledger["plan_sha256"] = _plan_sha256(rows, provenance, method_freeze_provenance)
     ledger["summary"] = _summary(rows)
     validate_ledger_contract(ledger)
     return ledger
@@ -450,6 +615,29 @@ def validate_ledger_contract(ledger: Mapping[str, Any]) -> None:
         raise LedgerError(f"Unsupported ledger schema {ledger.get('schema_version')!r}")
     if ledger.get("campaign_kind") != "D1_D2_passive_collection":
         raise LedgerError("This tool accepts only the D1/D2 passive collection ledger")
+    completion_contract = _dict(ledger.get("completion_contract"))
+    if tuple(completion_contract.get("required_artifacts", [])) != REQUIRED_ARTIFACTS:
+        raise LedgerError("Ledger completion contract lacks the exact required artifact set")
+    readiness_contract = _dict(completion_contract.get("runtime_readiness"))
+    if (
+        readiness_contract.get("artifact") != RUNTIME_READINESS_ARTIFACT
+        or readiness_contract.get("mode") != "enforce"
+        or readiness_contract.get("must_pass") is not True
+        or readiness_contract.get("must_be_evidence_eligible") is not True
+        or readiness_contract.get("must_precede_pre_run_route_manifest") is not True
+        or _dict(readiness_contract.get("route_wide_camera_health")).get("required")
+        is not True
+    ):
+        raise LedgerError("Ledger runtime-readiness completion contract is incomplete")
+    method_freeze_errors = _method_freeze_provenance_errors(ledger)
+    if method_freeze_errors:
+        raise LedgerError("; ".join(method_freeze_errors))
+    method_freeze_contract = _dict(completion_contract.get("method_freeze"))
+    if (
+        method_freeze_contract.get("snapshot") != method_freeze_snapshot(ledger)
+        or method_freeze_contract.get("sha256") != method_freeze_sha256(ledger)
+    ):
+        raise LedgerError("Ledger method-freeze completion contract is incomplete")
     rows = ledger.get("rows")
     if not isinstance(rows, list) or not rows:
         raise LedgerError("Ledger rows must be a non-empty list")
@@ -502,7 +690,9 @@ def validate_ledger_contract(ledger: Mapping[str, Any]) -> None:
     provenance = ledger.get("provenance")
     if not isinstance(provenance, list) or len(provenance) < 5:
         raise LedgerError("Ledger must hash study, protocol, model, calibration, and config inputs")
-    expected_plan = _plan_sha256(rows, provenance)
+    expected_plan = _plan_sha256(
+        rows, provenance, _dict(ledger.get("method_freeze_provenance"))
+    )
     if ledger.get("plan_sha256") != expected_plan:
         raise LedgerError("Ledger plan_sha256 does not match rows and frozen inputs")
 
@@ -517,6 +707,70 @@ def verify_frozen_inputs(ledger: Mapping[str, Any]) -> None:
             raise LedgerError(
                 f"Frozen input changed: {record['label']} expected {record['sha256']}, got {actual}"
             )
+    for record in _dict(ledger.get("method_freeze_provenance")).get(
+        "source_records", []
+    ):
+        if not isinstance(record, dict):
+            # validate_ledger_contract normally catches this first.  Keep this
+            # explicit fail-closed branch for direct callers.
+            raise LedgerError("Frozen method source record is malformed")
+        path = Path(str(record.get("path", "")))
+        if not path.is_file():
+            raise LedgerError(
+                f"Frozen method source disappeared: {record.get('relative')} -> {path}"
+            )
+        actual = _sha256(path)
+        if actual != record.get("sha256"):
+            raise LedgerError(
+                "Frozen method source changed: "
+                f"{record.get('relative')} expected {record.get('sha256')}, got {actual}"
+            )
+
+
+def active_campaign_attempts(
+    campaign_root: Path,
+    ledger: Mapping[str, Any],
+    *,
+    exclude_run_dir: str | None = None,
+) -> list[dict[str, str]]:
+    """Return non-terminal declared attempt directories across a campaign.
+
+    ``ROS_DOMAIN_ID`` is deliberately a bounded integer namespace.  The
+    ledger does not pretend its recycled values are leases: a campaign may
+    reserve/run exactly one attempt directory at a time.  The three recorder
+    processes belonging to that *same* attempt are allowed to preflight
+    together, hence the optional exclusion.
+    """
+
+    root = campaign_root.expanduser().resolve()
+    active: list[dict[str, str]] = []
+    for row in ledger.get("rows", []):
+        if not isinstance(row, dict):
+            continue
+        for attempt in row.get("attempts", []):
+            if not isinstance(attempt, dict):
+                continue
+            relative = attempt.get("run_dir")
+            if not isinstance(relative, str) or not relative:
+                continue
+            if relative == exclude_run_dir:
+                continue
+            run_dir = root / relative
+            # A broken symlink is still a conflicting/unsafe occupancy.
+            if not run_dir.exists() and not run_dir.is_symlink():
+                continue
+            completion = run_dir / "completion_manifest.json"
+            failure = run_dir / "failure_manifest.json"
+            if completion.exists() or failure.exists():
+                continue
+            active.append(
+                {
+                    "row_id": str(row.get("row_id", "")),
+                    "attempt_id": str(attempt.get("attempt_id", "")),
+                    "run_dir": relative,
+                }
+            )
+    return active
 
 
 def recorder_preflight_contract(
@@ -629,6 +883,34 @@ def recorder_preflight_contract(
     )
     if len(actual_configs) != len(frozen_config_paths) or actual_configs != expected_configs:
         raise LedgerError("Recorder --frozen-config set differs from campaign --config inputs")
+    # Reserve this declared directory while holding the campaign lock.  Merely
+    # checking for a directory before recorder startup has a race: two rows
+    # could both see an idle campaign and launch with colliding recycled ROS
+    # domains.  The empty directory is an intentional in-progress reservation;
+    # later preflights for the same attempt are permitted.
+    root = path.parent
+    with _campaign_lock(root):
+        current = _load_json(path)
+        validate_ledger_contract(current)
+        verify_frozen_inputs(current)
+        if current.get("plan_sha256") != ledger.get("plan_sha256"):
+            raise LedgerError("Campaign ledger changed during recorder preflight")
+        conflicts = active_campaign_attempts(
+            root,
+            current,
+            exclude_run_dir=str(attempt["run_dir"]),
+        )
+        if conflicts:
+            labels = ", ".join(
+                f"{item['row_id']}/{item['attempt_id']}" for item in conflicts
+            )
+            raise LedgerError(
+                "another campaign attempt is active; only one attempt may use the "
+                f"shared ROS domain namespace at a time ({labels})"
+            )
+        if attempt_dir.is_symlink():
+            raise LedgerError(f"Attempt directory is unsafe symlink: {attempt_dir}")
+        attempt_dir.mkdir(parents=True, exist_ok=True)
     return {
         "ledger_path": str(path),
         "plan_sha256": str(ledger["plan_sha256"]),
@@ -639,6 +921,12 @@ def recorder_preflight_contract(
         "expected_analysis_split": str(row["expected_analysis_split"]),
         "transport_environment": expected_transport,
         "input_sha256": frozen,
+        # Both the readiness barrier and operational/evaluation recorders
+        # persist this exact plan-time snapshot.  This prevents a later
+        # re-hash of mutable analysis code from silently changing the method
+        # used to create paper evidence.
+        "method_freeze": method_freeze_snapshot(ledger),
+        "method_freeze_sha256": method_freeze_sha256(ledger),
     }
 
 
@@ -857,6 +1145,737 @@ def _finite_float(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
+def _canonical_sha256(value: Any) -> str:
+    """Hash a structured, already-recorded contract deterministically."""
+
+    return hashlib.sha256(_canonical_json(value)).hexdigest()
+
+
+def _is_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _utc_epoch(value: Any) -> float | None:
+    """Parse an explicit UTC timestamp without accepting naive local time."""
+
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    epoch = parsed.timestamp()
+    return epoch if math.isfinite(epoch) else None
+
+
+def _attempt_id_for_run_dir(row: Mapping[str, Any], run_dir: Path) -> str | None:
+    matches = [
+        attempt
+        for attempt in row.get("attempts", [])
+        if (run_dir.parents[2] / str(attempt.get("run_dir", ""))).resolve()
+        == run_dir.resolve()
+    ]
+    if len(matches) != 1:
+        return None
+    attempt_id = matches[0].get("attempt_id")
+    return str(attempt_id) if isinstance(attempt_id, str) and attempt_id else None
+
+
+def _runtime_readiness_report_errors(
+    report: Mapping[str, Any],
+) -> tuple[list[str], dict[str, Any], float | None]:
+    """Validate the immutable startup barrier used by an evidence attempt.
+
+    The report is generated before the route starts.  Its startup check is not
+    sufficient evidence by itself; :func:`build_route_camera_health` separately
+    verifies every camera throughout the recorded route interval.
+    """
+
+    errors: list[str] = []
+    if report.get("schema_version") != 1:
+        errors.append("runtime readiness schema_version must be 1")
+    if report.get("mode") != "enforce":
+        errors.append("runtime readiness must use enforce mode")
+    if report.get("pass") is not True:
+        errors.append("runtime readiness did not pass")
+    if report.get("evidence_eligible") is not True:
+        errors.append("runtime readiness is not evidence-eligible")
+    if report.get("age_enforced") is not True:
+        errors.append("runtime readiness did not enforce frame age")
+    if report.get("would_pass_age_enforcement") is not True:
+        errors.append("runtime readiness did not pass its age-enforcement gate")
+    if report.get("timed_out") is not False:
+        errors.append("runtime readiness timed out or omits timed_out=false")
+    if report.get("interrupted") is not False:
+        errors.append("runtime readiness was interrupted or omits interrupted=false")
+    failures = report.get("failures")
+    if not isinstance(failures, list) or failures:
+        errors.append("runtime readiness reports unresolved failures")
+
+    created_epoch = _utc_epoch(report.get("created_utc"))
+    if created_epoch is None:
+        errors.append("runtime readiness created_utc is missing, naive, or invalid")
+
+    thresholds = _dict(report.get("thresholds"))
+    max_frame_age_s = _finite_float(thresholds.get("max_frame_age_s"))
+    max_stream_wall_age_s = _finite_float(thresholds.get("max_stream_wall_age_s"))
+    min_fresh_fraction = _finite_float(thresholds.get("min_fresh_fraction"))
+    if max_frame_age_s is None or max_frame_age_s <= 0.0:
+        errors.append("runtime readiness max_frame_age_s threshold is invalid")
+    if max_stream_wall_age_s is None or max_stream_wall_age_s <= 0.0:
+        errors.append("runtime readiness max_stream_wall_age_s threshold is invalid")
+    if (
+        min_fresh_fraction is None
+        or min_fresh_fraction < 0.0
+        or min_fresh_fraction > 1.0
+    ):
+        errors.append("runtime readiness min_fresh_fraction threshold is invalid")
+
+    cameras = _dict(report.get("cameras"))
+    age_gates = _dict(report.get("age_gate_by_camera"))
+    if set(cameras) != set(CAMERAS):
+        errors.append("runtime readiness does not report exactly the four campaign cameras")
+    if set(age_gates) != set(CAMERAS) or any(
+        age_gates.get(camera) is not True for camera in CAMERAS
+    ):
+        errors.append("runtime readiness camera age gates are incomplete or failed")
+    max_diag_stamp_gap_s_by_camera: dict[str, float] = {}
+    if max_frame_age_s is not None and min_fresh_fraction is not None:
+        for camera in CAMERAS:
+            summary = _dict(cameras.get(camera))
+            frame_age = _dict(summary.get("frame_age_s"))
+            window_count = _finite_float(summary.get("summary_window_count"))
+            finite_count = _finite_float(frame_age.get("finite_count"))
+            fresh_fraction = _finite_float(frame_age.get("fresh_fraction"))
+            reported_threshold = _finite_float(frame_age.get("threshold_s"))
+            sim_hz = _finite_float(summary.get("sim_hz"))
+            if (
+                window_count is None
+                or window_count < 1.0
+                or finite_count != window_count
+                or fresh_fraction is None
+                or fresh_fraction < min_fresh_fraction
+                or reported_threshold is None
+                or abs(reported_threshold - max_frame_age_s) > 1.0e-9
+            ):
+                errors.append(
+                    f"runtime readiness {camera} lacks a fully fresh enforced sample window"
+                )
+            if sim_hz is None or sim_hz <= 0.0:
+                errors.append(
+                    f"runtime readiness {camera} lacks a positive simulation-time output rate"
+                )
+            else:
+                # Permit at most one missing nominal frame.  This gives a
+                # route-wide diagnostic-stamp gap an explicit, per-camera
+                # threshold derived from the enforced startup observation.
+                max_diag_stamp_gap_s_by_camera[camera] = 2.0 / sim_hz
+
+    normalized_thresholds = {
+        "max_frame_age_s": max_frame_age_s,
+        "max_stream_wall_age_s": max_stream_wall_age_s,
+        "min_fresh_fraction": min_fresh_fraction,
+        "max_diag_stamp_gap_s_by_camera": max_diag_stamp_gap_s_by_camera,
+    }
+    return sorted(set(errors)), normalized_thresholds, created_epoch
+
+
+def _camera_route_samples(path: Path) -> tuple[list[dict[str, float]] | None, list[str]]:
+    """Read the timing columns needed for route-wide liveness evidence."""
+
+    required = (
+        "diag_stamp",
+        "recorder_wall_elapsed_s",
+        "frame_age_at_publish_s",
+    )
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            if not set(required).issubset(reader.fieldnames or []):
+                return None, [
+                    f"{path.name} lacks route-health timing columns: {', '.join(required)}"
+                ]
+            samples: list[dict[str, float]] = []
+            previous_stamp: float | None = None
+            previous_wall: float | None = None
+            for row_number, row in enumerate(reader, start=2):
+                try:
+                    stamp = float(row["diag_stamp"])
+                    wall = float(row["recorder_wall_elapsed_s"])
+                    age = float(row["frame_age_at_publish_s"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    return None, [
+                        f"{path.name} has an invalid route-health value at CSV row {row_number}: {exc}"
+                    ]
+                if not all(math.isfinite(value) for value in (stamp, wall, age)) or age < 0.0:
+                    return None, [
+                        f"{path.name} has non-finite or negative route-health timing at CSV row {row_number}"
+                    ]
+                if previous_stamp is not None and stamp <= previous_stamp:
+                    return None, [
+                        f"{path.name} has duplicate or out-of-order diagnostic stamps"
+                    ]
+                if previous_wall is not None and wall <= previous_wall:
+                    return None, [
+                        f"{path.name} has duplicate or out-of-order recorder wall times"
+                    ]
+                samples.append(
+                    {
+                        "diag_stamp": stamp,
+                        "recorder_wall_elapsed_s": wall,
+                        "frame_age_at_publish_s": age,
+                    }
+                )
+                previous_stamp = stamp
+                previous_wall = wall
+    except (OSError, csv.Error) as exc:
+        return None, [f"cannot read {path.name} for route-health evidence: {exc}"]
+    if not samples:
+        return None, [f"{path.name} has no route-health samples"]
+    return samples, []
+
+
+def build_route_camera_health(
+    run_dir: Path,
+    *,
+    route_completion: Mapping[str, Any],
+    operational: Mapping[str, Any],
+    readiness_thresholds: Mapping[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """Derive a replayable, route-wide camera health contract from raw CSVs.
+
+    Startup readiness proves that all streams were healthy before motion.  This
+    payload proves that each camera remained live, fresh, ordered, and bounded
+    in *recorder wall-time gap* through the completed simulation-time route.
+    """
+
+    errors: list[str] = []
+    route_start = _finite_float(route_completion.get("route_started_sim_time_s"))
+    route_end = _finite_float(route_completion.get("route_completed_sim_time_s"))
+    max_frame_age_s = _finite_float(readiness_thresholds.get("max_frame_age_s"))
+    min_fresh_fraction = _finite_float(readiness_thresholds.get("min_fresh_fraction"))
+    max_wall_gap_s = _finite_float(readiness_thresholds.get("max_stream_wall_age_s"))
+    max_diag_gap_by_camera = _dict(
+        readiness_thresholds.get("max_diag_stamp_gap_s_by_camera")
+    )
+    recorder_fresh_age_s = _finite_float(operational.get("fresh_age_s"))
+    if route_start is None or route_end is None or route_end <= route_start:
+        errors.append("route completion lacks a non-empty simulation-time interval for camera health")
+    if max_frame_age_s is None or max_frame_age_s <= 0.0:
+        errors.append("route camera-health frame-age threshold is invalid")
+    if min_fresh_fraction is None or not 0.0 <= min_fresh_fraction <= 1.0:
+        errors.append("route camera-health fresh-fraction threshold is invalid")
+    if max_wall_gap_s is None or max_wall_gap_s <= 0.0:
+        errors.append("route camera-health wall-gap threshold is invalid")
+    if recorder_fresh_age_s is None or recorder_fresh_age_s <= 0.0:
+        errors.append("operational recorder fresh-age contract is invalid for route health")
+    elif max_frame_age_s is not None and abs(recorder_fresh_age_s - max_frame_age_s) > 1.0e-9:
+        errors.append("operational recorder fresh_age_s differs from readiness frame-age threshold")
+
+    source_hashes: dict[str, str] = {}
+    per_camera: dict[str, Any] = {}
+    boundary_tolerance_s = recorder_fresh_age_s
+    for camera in CAMERAS:
+        path = run_dir / f"raw/{camera}_perception.csv"
+        if path.is_file():
+            source_hashes[path.name] = _sha256(path)
+        samples, sample_errors = _camera_route_samples(path)
+        camera_errors = list(sample_errors)
+        result: dict[str, Any] = {
+            "source_csv": f"raw/{camera}_perception.csv",
+            "row_count": 0 if samples is None else len(samples),
+            "route_window_sample_count": 0,
+            "route_interior_sample_count": 0,
+            "route_start_covered": False,
+            "route_end_covered": False,
+            "diag_stamp_range_s": {"first": None, "last": None},
+            "recorder_wall_elapsed_range_s": {"first": None, "last": None},
+            "max_diag_stamp_gap_s": None,
+            "max_allowed_diag_stamp_gap_s": _finite_float(
+                max_diag_gap_by_camera.get(camera)
+            ),
+            "max_recorder_wall_gap_s": None,
+            "frame_age_s": {
+                "finite_count": 0,
+                "fresh_count": 0,
+                "fresh_fraction": 0.0,
+                "max": None,
+            },
+            "pass": False,
+        }
+        if (
+            samples is not None
+            and route_start is not None
+            and route_end is not None
+            and boundary_tolerance_s is not None
+            and max_frame_age_s is not None
+            and min_fresh_fraction is not None
+            and max_wall_gap_s is not None
+        ):
+            interior = [
+                sample
+                for sample in samples
+                if route_start <= sample["diag_stamp"] <= route_end
+            ]
+            max_diag_gap_s = _finite_float(max_diag_gap_by_camera.get(camera))
+            result.update(
+                {
+                    # All coverage and gap checks intentionally use only
+                    # samples inside the route.  Pre/post-route rows must not
+                    # conceal a camera outage while the robot was moving.
+                    "route_window_sample_count": len(interior),
+                    "route_interior_sample_count": len(interior),
+                    "route_start_covered": bool(interior)
+                    and interior[0]["diag_stamp"] - route_start
+                    <= boundary_tolerance_s,
+                    "route_end_covered": bool(interior)
+                    and route_end - interior[-1]["diag_stamp"]
+                    <= boundary_tolerance_s,
+                    "diag_stamp_range_s": {
+                        "first": interior[0]["diag_stamp"] if interior else None,
+                        "last": interior[-1]["diag_stamp"] if interior else None,
+                    },
+                    "recorder_wall_elapsed_range_s": {
+                        "first": (
+                            interior[0]["recorder_wall_elapsed_s"] if interior else None
+                        ),
+                        "last": (
+                            interior[-1]["recorder_wall_elapsed_s"] if interior else None
+                        ),
+                    },
+                }
+            )
+            if len(interior) >= 2:
+                # Include both route boundaries in the simulation-time gap:
+                # this catches a missing first/last in-route observation even
+                # when a pre/post sample exists just outside the interval.
+                result["max_diag_stamp_gap_s"] = max(
+                    [interior[0]["diag_stamp"] - route_start]
+                    + [
+                        right["diag_stamp"] - left["diag_stamp"]
+                        for left, right in zip(interior, interior[1:])
+                    ]
+                    + [route_end - interior[-1]["diag_stamp"]]
+                )
+                result["max_recorder_wall_gap_s"] = max(
+                    right["recorder_wall_elapsed_s"] - left["recorder_wall_elapsed_s"]
+                    for left, right in zip(interior, interior[1:])
+                )
+            if len(interior) < 2:
+                camera_errors.append(
+                    f"{camera} has fewer than two camera observations inside the route interval"
+                )
+            if not result["route_start_covered"] or not result["route_end_covered"]:
+                camera_errors.append(f"{camera} does not cover both ends of the completed route")
+            observed_diag_gap = _finite_float(result["max_diag_stamp_gap_s"])
+            if max_diag_gap_s is None or max_diag_gap_s <= 0.0:
+                camera_errors.append(
+                    f"{camera} lacks an enforced maximum diagnostic-stamp gap"
+                )
+            elif observed_diag_gap is None or observed_diag_gap > max_diag_gap_s + 1.0e-9:
+                camera_errors.append(
+                    f"{camera} route-wide diagnostic-stamp gap exceeds {max_diag_gap_s:.6g}s"
+                )
+            observed_wall_gap = _finite_float(result["max_recorder_wall_gap_s"])
+            if observed_wall_gap is None or observed_wall_gap > max_wall_gap_s + 1.0e-9:
+                camera_errors.append(
+                    f"{camera} route-wide recorder wall gap exceeds {max_wall_gap_s:.6g}s"
+                )
+            ages = [sample["frame_age_at_publish_s"] for sample in interior]
+            fresh_count = sum(age <= max_frame_age_s for age in ages)
+            fresh_fraction = fresh_count / len(ages) if ages else 0.0
+            result["frame_age_s"] = {
+                "finite_count": len(ages),
+                "fresh_count": fresh_count,
+                "fresh_fraction": fresh_fraction,
+                "max": max(ages) if ages else None,
+            }
+            if not ages or fresh_fraction < min_fresh_fraction:
+                camera_errors.append(
+                    f"{camera} route-wide frame freshness is below {min_fresh_fraction:.6g}"
+                )
+        result["pass"] = not camera_errors
+        result["errors"] = sorted(set(camera_errors))
+        per_camera[camera] = result
+        errors.extend(camera_errors)
+
+    health = {
+        "schema_version": 1,
+        "route_interval_sim_s": {"start": route_start, "end": route_end},
+        "thresholds": {
+            "max_frame_age_s": max_frame_age_s,
+            "min_fresh_fraction": min_fresh_fraction,
+            "max_recorder_wall_gap_s": max_wall_gap_s,
+            "max_diag_stamp_gap_s_by_camera": {
+                camera: _finite_float(max_diag_gap_by_camera.get(camera))
+                for camera in CAMERAS
+            },
+            "route_boundary_tolerance_s": boundary_tolerance_s,
+            "minimum_route_interior_samples": 2,
+        },
+        "source_camera_csv_sha256": source_hashes,
+        "cameras": per_camera,
+        "pass": not errors,
+    }
+    return health, sorted(set(errors))
+
+
+def _observed_detector_contract_errors(
+    readiness: Mapping[str, Any],
+    operational: Mapping[str, Any],
+    frozen: Mapping[str, str],
+) -> tuple[str | None, list[str]]:
+    """Independently cross-check the live detector contract on both artifacts.
+
+    The readiness tool validates the retained detector publication, and the
+    recorder validates it against its frozen CLI/config/model expectation.  The
+    completion validator repeats the non-ROS checks so a later manifest edit
+    cannot relabel an observation stream from another detector deployment.
+    """
+
+    errors: list[str] = []
+    readiness_contract = _dict(readiness.get("detector_runtime_contract"))
+    if readiness_contract.get("validated") is not True:
+        errors.append("runtime readiness lacks a validated detector runtime contract")
+    contract = readiness_contract.get("contract")
+    reported_digest = readiness_contract.get("contract_sha256")
+    if not isinstance(contract, dict):
+        errors.append("runtime readiness detector runtime contract is missing")
+        return None, errors
+    if not _is_sha256(reported_digest):
+        errors.append("runtime readiness detector runtime contract hash is invalid")
+        return None, errors
+    contract_digest = contract.get("contract_sha256")
+    if contract_digest != reported_digest:
+        errors.append("runtime readiness detector runtime contract self-hash disagrees")
+    without_digest = dict(contract)
+    without_digest.pop("contract_sha256", None)
+    if _canonical_sha256(without_digest) != reported_digest:
+        errors.append("runtime readiness detector runtime contract self-hash is invalid")
+    if contract.get("model_sha256") != frozen.get("model"):
+        errors.append(
+            "runtime readiness detector runtime contract model hash does not match frozen campaign model"
+        )
+    if contract.get("runtime_mode") != "batched_four_camera":
+        errors.append("runtime readiness detector runtime contract is not batched four-camera")
+    if contract.get("executable") != "batched_four_camera_yolo_node":
+        errors.append("runtime readiness detector runtime contract executable is invalid")
+    source_hashes = contract.get("source_hashes")
+    if not isinstance(source_hashes, dict) or not source_hashes or not all(
+        _is_sha256(value) for value in source_hashes.values()
+    ):
+        errors.append("runtime readiness detector runtime contract source hashes are invalid")
+
+    detector_runtime = _dict(operational.get("detector_runtime"))
+    if detector_runtime.get("model_sha256") != contract.get("model_sha256"):
+        errors.append(
+            "operational detector model hash differs from readiness detector runtime contract"
+        )
+    if detector_runtime.get("observed_contract") != contract:
+        errors.append(
+            "operational observed detector runtime contract differs from readiness"
+        )
+    if detector_runtime.get("observed_contract_sha256") != reported_digest:
+        errors.append(
+            "operational observed detector runtime contract hash differs from readiness"
+        )
+    observed_contract = detector_runtime.get("observed_contract")
+    if isinstance(observed_contract, dict):
+        observed_without_digest = dict(observed_contract)
+        observed_without_digest.pop("contract_sha256", None)
+        if _canonical_sha256(observed_without_digest) != reported_digest:
+            errors.append("operational observed detector runtime contract self-hash is invalid")
+    requirement = _dict(detector_runtime.get("observed_contract_requirement"))
+    if requirement.get("state") != "armed":
+        errors.append("operational recorder did not arm on the detector runtime contract")
+    if requirement.get("expected_contract_sha256") != reported_digest:
+        errors.append(
+            "operational expected detector runtime contract hash differs from readiness"
+        )
+    if requirement.get("expected_contract") != contract:
+        errors.append(
+            "operational expected detector runtime contract differs from readiness"
+        )
+    return str(reported_digest), sorted(set(errors))
+
+
+def _runtime_readiness_binding_errors(
+    readiness: Mapping[str, Any],
+    operational: Mapping[str, Any],
+    ledger: Mapping[str, Any],
+    row: Mapping[str, Any],
+    expected_attempt_id: str | None,
+) -> list[str]:
+    """Cross-bind the pre-route report to the one campaign attempt.
+
+    The readiness barrier is published before the recorder begins, so merely
+    seeing a passing report is insufficient.  Its immutable identity,
+    transport, provenance and method snapshot must be the same ones later
+    carried by the operational manifest and declared campaign row.
+    """
+
+    errors: list[str] = []
+    frozen = input_sha256(ledger["provenance"])
+    expected_method_freeze = method_freeze_snapshot(ledger)
+    expected_method_freeze_sha256 = method_freeze_sha256(ledger)
+    attempt = next(
+        (
+            item
+            for item in row.get("attempts", [])
+            if item.get("attempt_id") == expected_attempt_id
+        ),
+        None,
+    )
+    if not isinstance(attempt, dict):
+        errors.append("runtime readiness cannot resolve the selected campaign attempt")
+        expected_transport: dict[str, str] = {}
+    else:
+        expected_transport = {
+            "ROS_LOCALHOST_ONLY": "1",
+            "IGN_IP": "127.0.0.1",
+            "GZ_IP": "127.0.0.1",
+            "IGN_PARTITION": str(attempt.get("ign_partition", "")),
+            "ROS_DOMAIN_ID": str(attempt.get("ros_domain_id", "")),
+        }
+
+    expected_identity = {
+        "plan_row_id": row.get("row_id"),
+        "attempt_id": expected_attempt_id,
+        "analysis_split": row.get("expected_analysis_split"),
+        "seed": _dict(row.get("row_tuple")).get("seed"),
+        "evidence_role": row.get("expected_evidence_role"),
+    }
+    for field, expected in expected_identity.items():
+        if readiness.get(field) != expected:
+            errors.append(f"runtime readiness {field} does not match the campaign row")
+    readiness_seed = readiness.get("seed")
+    if isinstance(readiness_seed, bool) or not isinstance(readiness_seed, int):
+        errors.append("runtime readiness seed must be an integer")
+    readiness_run_id = readiness.get("run_id")
+    if not isinstance(readiness_run_id, str) or not readiness_run_id.strip():
+        errors.append("runtime readiness run_id is missing")
+
+    campaign = _dict(readiness.get("campaign_contract"))
+    expected_campaign = {
+        "plan_sha256": ledger.get("plan_sha256"),
+        "row_id": row.get("row_id"),
+        "row_tuple": row.get("row_tuple"),
+        "attempt_id": expected_attempt_id,
+        "expected_evidence_role": row.get("expected_evidence_role"),
+        "expected_analysis_split": row.get("expected_analysis_split"),
+        "input_sha256": frozen,
+        "method_freeze": expected_method_freeze,
+        "method_freeze_sha256": expected_method_freeze_sha256,
+        "transport_environment": expected_transport,
+    }
+    for field, expected in expected_campaign.items():
+        if campaign.get(field) != expected:
+            errors.append(
+                f"runtime readiness campaign contract {field} does not match the campaign"
+            )
+    if readiness.get("transport_environment") != expected_transport:
+        errors.append("runtime readiness transport environment does not match attempt contract")
+    if readiness.get("method_freeze") != expected_method_freeze:
+        errors.append("runtime readiness method-freeze does not match campaign snapshot")
+    if readiness.get("method_freeze_sha256") != expected_method_freeze_sha256:
+        errors.append("runtime readiness method-freeze hash does not match campaign snapshot")
+
+    expected_config_hashes = sorted(
+        digest for label, digest in frozen.items() if label.startswith("config:")
+    )
+    readiness_config_hashes = _manifest_config_hashes(readiness)
+    if (
+        readiness_config_hashes is None
+        or sorted(readiness_config_hashes) != expected_config_hashes
+    ):
+        errors.append("runtime readiness frozen config hashes do not match campaign configs")
+    readiness_provenance = _dict(readiness.get("provenance"))
+    expected_provenance_hashes = {
+        "study": frozen.get("study"),
+        "protocol": frozen.get("protocol"),
+        "model": frozen.get("model"),
+        "calibration": frozen.get("calibration"),
+        "analysis_plan": expected_method_freeze.get("analysis_plan_sha256"),
+    }
+    for field, expected in expected_provenance_hashes.items():
+        if _nested_sha256(readiness_provenance, field) != expected:
+            errors.append(
+                f"runtime readiness provenance {field} hash does not match campaign"
+            )
+
+    # Match the later recorder on every overlapping binding.  The two
+    # manifests use intentionally different provenance labels for a few
+    # paths, so compare those explicitly rather than incorrectly requiring
+    # their whole mappings to have identical keys.
+    for field in (
+        "run_id",
+        "plan_row_id",
+        "attempt_id",
+        "analysis_split",
+        "seed",
+        "evidence_role",
+    ):
+        if readiness.get(field) != operational.get(field):
+            errors.append(f"runtime readiness {field} differs from operational recorder")
+    operational_campaign = _dict(operational.get("campaign_contract"))
+    if campaign != operational_campaign:
+        errors.append("runtime readiness campaign contract differs from operational recorder")
+    if readiness.get("transport_environment") != operational.get("transport_environment"):
+        errors.append("runtime readiness transport environment differs from operational recorder")
+    if readiness.get("frozen_configs") != operational.get("frozen_configs"):
+        errors.append("runtime readiness frozen configs differ from operational recorder")
+    if readiness.get("method_freeze") != operational.get("method_freeze"):
+        errors.append("runtime readiness method-freeze differs from operational recorder")
+    if readiness.get("method_freeze_sha256") != operational.get("method_freeze_sha256"):
+        errors.append("runtime readiness method-freeze hash differs from operational recorder")
+    operational_provenance = _dict(operational.get("provenance"))
+    for readiness_key, operational_key in (
+        ("study", "study_config"),
+        ("protocol", "protocol"),
+        ("analysis_plan", "analysis_plan"),
+        ("model", "detector_model"),
+        ("calibration", "projection_calibration"),
+    ):
+        if readiness_provenance.get(readiness_key) != operational_provenance.get(
+            operational_key
+        ):
+            errors.append(
+                "runtime readiness provenance "
+                f"{readiness_key} differs from operational recorder"
+            )
+    return sorted(set(errors))
+
+
+def runtime_readiness_completion_evidence(
+    run_dir: Path,
+    ledger: Mapping[str, Any],
+    row: Mapping[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[str]]:
+    """Build the expected readiness binding and route-health payload.
+
+    This is intentionally pure: the finalizer embeds its result in the
+    immutable completion manifest, while validation recomputes it from raw
+    artifacts on every ledger refresh.
+    """
+
+    errors: list[str] = []
+    paths = {
+        "readiness": run_dir / RUNTIME_READINESS_ARTIFACT,
+        "route_manifest": run_dir / "raw/route_manifest.json",
+        "route_completion": run_dir / "raw/route_completion.json",
+        "operational": run_dir / "raw/operational_recording_manifest.json",
+    }
+    payloads: dict[str, dict[str, Any]] = {}
+    for label, path in paths.items():
+        try:
+            payloads[label] = _load_json(path)
+        except LedgerError as exc:
+            errors.append(str(exc))
+
+    readiness = payloads.get("readiness", {})
+    route_manifest = payloads.get("route_manifest", {})
+    route_completion = payloads.get("route_completion", {})
+    operational = payloads.get("operational", {})
+    readiness_errors, thresholds, readiness_epoch = _runtime_readiness_report_errors(
+        readiness
+    )
+    errors.extend(readiness_errors)
+
+    route_manifest_epoch = _finite_float(route_manifest.get("created_wall_time_s"))
+    if route_manifest_epoch is None or route_manifest_epoch <= 0.0:
+        errors.append("pre-run route manifest lacks a valid created_wall_time_s")
+    elif readiness_epoch is not None and readiness_epoch >= route_manifest_epoch:
+        errors.append("runtime readiness timestamp is not before the pre-run route manifest")
+
+    recorder_started_epoch = _utc_epoch(operational.get("started_utc"))
+    if recorder_started_epoch is None:
+        errors.append("operational recorder started_utc is missing, naive, or invalid")
+    elif readiness_epoch is not None and readiness_epoch > recorder_started_epoch:
+        errors.append("runtime readiness timestamp is after operational recorder startup")
+
+    expected_attempt_id = _attempt_id_for_run_dir(row, run_dir)
+    if expected_attempt_id is None:
+        errors.append("runtime readiness cannot identify this pre-declared attempt slot")
+    errors.extend(
+        _runtime_readiness_binding_errors(
+            readiness, operational, ledger, row, expected_attempt_id
+        )
+    )
+    detector_runtime = _dict(operational.get("detector_runtime"))
+    detector_model_sha256 = detector_runtime.get("model_sha256")
+    frozen = input_sha256(ledger["provenance"])
+    expected_config_hashes = sorted(
+        digest for label, digest in frozen.items() if label.startswith("config:")
+    )
+    operational_config_hashes = _manifest_config_hashes(operational)
+    if detector_model_sha256 != frozen.get("model"):
+        errors.append("runtime readiness detector model hash does not match frozen campaign model")
+    if operational_config_hashes is None or sorted(operational_config_hashes) != expected_config_hashes:
+        errors.append("runtime readiness detector config hashes do not match frozen campaign configs")
+    topology = _dict(detector_runtime.get("topology"))
+    if not topology:
+        errors.append("runtime readiness detector runtime topology is missing")
+    detector_contract_sha256, detector_contract_errors = (
+        _observed_detector_contract_errors(readiness, operational, frozen)
+    )
+    errors.extend(detector_contract_errors)
+    readiness_wall_age_s = _finite_float(thresholds.get("max_stream_wall_age_s"))
+    watchdog = _dict(operational.get("stream_liveness_watchdog"))
+    watchdog_wall_age_s = _finite_float(watchdog.get("max_stream_wall_age_s"))
+    if watchdog_wall_age_s is None or watchdog_wall_age_s <= 0.0:
+        errors.append("operational stream-liveness watchdog threshold is missing or invalid")
+    elif (
+        readiness_wall_age_s is None
+        or abs(watchdog_wall_age_s - readiness_wall_age_s) > 1.0e-9
+    ):
+        errors.append(
+            "operational stream-liveness watchdog threshold differs from runtime readiness"
+        )
+
+    binding: dict[str, Any] | None = None
+    if readiness and paths["readiness"].is_file():
+        binding = {
+            "artifact": RUNTIME_READINESS_ARTIFACT,
+            "sha256": _sha256(paths["readiness"]),
+            "created_utc": readiness.get("created_utc"),
+            "binding": {
+                "plan_sha256": ledger.get("plan_sha256"),
+                "row_id": row.get("row_id"),
+                "attempt_id": expected_attempt_id,
+                "input_sha256": frozen,
+                "detector_model_sha256": detector_model_sha256,
+                "detector_runtime_sha256": _canonical_sha256(detector_runtime),
+                "detector_topology_sha256": _canonical_sha256(topology),
+                "detector_runtime_contract_sha256": detector_contract_sha256,
+                "frozen_config_sha256": operational_config_hashes,
+                "campaign_contract_sha256": _canonical_sha256(
+                    _dict(readiness.get("campaign_contract"))
+                ),
+                "method_freeze_sha256": readiness.get("method_freeze_sha256"),
+                "stream_liveness_watchdog": {
+                    "max_stream_wall_age_s": watchdog_wall_age_s,
+                },
+            },
+        }
+
+    health: dict[str, Any] | None = None
+    if route_completion and operational:
+        health, health_errors = build_route_camera_health(
+            run_dir,
+            route_completion=route_completion,
+            operational=operational,
+            readiness_thresholds=thresholds,
+        )
+        errors.extend(health_errors)
+    return binding, health, sorted(set(errors))
+
+
 def _artifact_errors(run_dir: Path, completion: Mapping[str, Any]) -> list[str]:
     errors: list[str] = []
     declared = completion.get("artifacts_sha256")
@@ -897,6 +1916,8 @@ def _semantic_artifact_errors(
     frozen_config_hashes = sorted(
         digest for label, digest in frozen.items() if label.startswith("config:")
     )
+    expected_method_freeze = method_freeze_snapshot(ledger)
+    expected_method_freeze_sha256 = method_freeze_sha256(ledger)
     route_manifest_path = run_dir / "raw/route_manifest.json"
     route_completion_path = run_dir / "raw/route_completion.json"
     try:
@@ -1075,18 +2096,16 @@ def _semantic_artifact_errors(
             "transport_environment"
         ):
             errors.append("operational recorder transport environment is missing or mismatched")
-        method_freeze = _dict(operational.get("method_freeze"))
-        method_sources = method_freeze.get("source_sha256")
+        if operational.get("method_freeze") != expected_method_freeze:
+            errors.append("operational recorder method-freeze does not match campaign snapshot")
         if (
-            method_freeze.get("analysis_plan_sha256") not in frozen_config_hashes
-            or not isinstance(method_sources, dict)
-            or not method_sources
-            or any(
-                not isinstance(digest, str) or len(digest) != 64
-                for digest in method_sources.values()
-            )
+            operational_campaign.get("method_freeze") != expected_method_freeze
+            or operational_campaign.get("method_freeze_sha256")
+            != expected_method_freeze_sha256
         ):
-            errors.append("operational recorder method-freeze contract is incomplete or unfrozen")
+            errors.append(
+                "operational recorder campaign method-freeze binding is missing or mismatched"
+            )
         minimums = _dict(operational.get("minimum_stream_rows"))
         try:
             minimum_camera_rows = int(minimums.get("per_camera"))
@@ -1230,6 +2249,12 @@ def _semantic_artifact_errors(
             "transport_environment"
         ):
             errors.append("truth recorder transport environment is missing or mismatched")
+        if (
+            evaluation_campaign.get("method_freeze") != expected_method_freeze
+            or evaluation_campaign.get("method_freeze_sha256")
+            != expected_method_freeze_sha256
+        ):
+            errors.append("truth recorder campaign method-freeze binding is missing or mismatched")
         if _nested_sha256(evaluation_provenance, "analysis_plan") not in frozen_config_hashes:
             errors.append("truth recorder analysis-plan hash is not frozen by the campaign")
         actual_truth_rows = _csv_data_rows(run_dir / "evaluation_only/ground_truth.csv")
@@ -1336,6 +2361,26 @@ def validate_completion_payload(
         errors.append("completion manifest does not contain the exact six-field tuple")
     if completion.get("input_sha256") != input_sha256(ledger["provenance"]):
         errors.append("completion manifest frozen-input hashes do not match campaign")
+    if completion.get("method_freeze") != method_freeze_snapshot(ledger):
+        errors.append("completion manifest method-freeze snapshot does not match campaign")
+    if completion.get("method_freeze_sha256") != method_freeze_sha256(ledger):
+        errors.append("completion manifest method-freeze hash does not match campaign")
+    expected_readiness, expected_route_health, readiness_errors = (
+        runtime_readiness_completion_evidence(run_dir, ledger, row)
+    )
+    errors.extend(readiness_errors)
+    if expected_readiness is None:
+        errors.append("completion manifest lacks reconstructable runtime readiness evidence")
+    elif completion.get("runtime_readiness") != expected_readiness:
+        errors.append(
+            "completion manifest runtime readiness binding does not match immutable artifacts"
+        )
+    if expected_route_health is None:
+        errors.append("completion manifest lacks reconstructable route-wide camera health evidence")
+    elif completion.get("route_camera_health") != expected_route_health:
+        errors.append(
+            "completion manifest route-wide camera health does not match immutable raw streams"
+        )
     route_completion = completion.get("route_completion")
     if not isinstance(route_completion, dict):
         errors.append("completion manifest lacks route_completion")
@@ -1589,6 +2634,43 @@ def evaluate_campaign(campaign_root: Path, ledger: Mapping[str, Any]) -> dict[st
             next_planned["attempt_id"] if status == "planned" and next_planned else None
         )
         row["validated_at"] = now
+
+    # Domain IDs are deterministic but intentionally recycled after 200
+    # values.  Treating them as concurrent leases would let a large campaign
+    # cross-talk.  Revalidate the physical attempt directories as a global
+    # invariant, not merely one row at a time.
+    active_attempts = active_campaign_attempts(campaign_root, evaluated)
+    if len(active_attempts) > 1:
+        labels = ", ".join(
+            f"{item['row_id']}/{item['attempt_id']}" for item in active_attempts
+        )
+        violation = (
+            "more than one campaign attempt is active; ROS domain leases are not "
+            f"exclusive ({labels})"
+        )
+        occupied = {(item["row_id"], item["attempt_id"]) for item in active_attempts}
+        for row in evaluated["rows"]:
+            involved = [
+                state
+                for state in row.get("attempt_states", [])
+                if (str(row.get("row_id", "")), str(state.get("attempt_id", "")))
+                in occupied
+            ]
+            if not involved:
+                continue
+            for state in involved:
+                state["status"] = "invalid"
+                state["validation_errors"] = sorted(
+                    set(list(state.get("validation_errors", [])) + [violation])
+                )
+            row["status"] = "failed"
+            row["status_reason"] = "campaign-wide active-attempt safety violation"
+            row["validation_errors"] = sorted(
+                set(list(row.get("validation_errors", [])) + [violation])
+            )
+            row["selected_attempt_id"] = None
+            row["selected_run_dir"] = None
+            row["next_attempt_id"] = None
     evaluated["summary"] = _summary(evaluated["rows"])
     return evaluated
 

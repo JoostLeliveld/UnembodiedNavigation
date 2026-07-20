@@ -43,12 +43,24 @@ method_freeze:
     - config/paper_analysis_plan.yaml
     - tools/build_actual_commissioning_inputs.py
     - tools/record_operational_logs.py
+    - tools/runtime_readiness.py
+    - tools/campaign_ledger.py
+    - tools/finalize_campaign_run.py
+    - tools/paper_readiness.py
     - tools/run_paired_replay.py
     - ../../scripts/visibility_comparison/fit_belief_aware_gp.py
     - ../../src/reliability/reliability/replay.py
     - ../../src/reliability/reliability/camera_manager.py
     - ../../src/reliability/reliability/handover.py
+    - ../../src/reliability/reliability/nodes/camera_manager_node.py
     - ../../src/sim/sim/encoder_noise_node.py
+    - ../../src/sim/launch/bringup_sim.launch.py
+    - ../../src/experiments/launch/warehouse_full4cam_commissioning.launch.py
+    - ../../src/perception/perception/core/four_camera_batch.py
+    - ../../src/perception/perception/core/four_camera_runtime_contract.py
+    - ../../src/perception/perception/core/yolo_selection.py
+    - ../../src/perception/perception/nodes/batched_four_camera_yolo_node.py
+    - ../../src/perception/perception/nodes/yolo_robot_detector_node.py
   posterior_policy: one_frozen_posterior_per_camera
   hyperparameter_rule: >-
     GP target, mode (expected_kernel), prior, grid, and trust-to-covariance

@@ -20,10 +20,14 @@ import rclpy
 import torch
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float64MultiArray, String
 from ultralytics import YOLO
 
+import perception.core.four_camera_batch as four_camera_batch_module
+import perception.core.four_camera_runtime_contract as runtime_contract_module
+import perception.core.yolo_selection as yolo_selection_module
 from perception.core.detection_diagnostics import (
     diagnostics_from_message,
     diagnostics_message,
@@ -33,8 +37,20 @@ from perception.core.four_camera_batch import (
     BatchContractError,
     FourCameraBatcher,
     PendingFrame,
+    frame_age_at_publish_s,
     stamp_parts_to_ns,
     validate_batch_results,
+)
+from perception.core.four_camera_runtime_contract import (
+    EXECUTABLE_SOURCE_KEY,
+    FOUR_CAMERA_BATCH_SOURCE_KEY,
+    RUNTIME_CONTRACT_SOURCE_KEY,
+    RUNTIME_CONTRACT_TOPIC,
+    YOLO_SELECTION_SOURCE_KEY,
+    build_batched_runtime_contract,
+    runtime_contract_json,
+    sha256_file,
+    source_hashes_from_paths,
 )
 from perception.core.ros_image import image_msg_to_bgr8
 from perception.core.yolo_selection import select_best_detection, target_class_ids
@@ -51,6 +67,17 @@ CAMERA_TOPICS = {
     "camera_C": "/external_camera_c/image_raw",
     "camera_D": "/external_camera_d/image_raw",
 }
+
+
+def _runtime_contract_qos() -> QoSProfile:
+    """Retain exactly one detector identity for recorders that start later."""
+
+    return QoSProfile(
+        history=HistoryPolicy.KEEP_LAST,
+        depth=1,
+        reliability=ReliabilityPolicy.RELIABLE,
+        durability=DurabilityPolicy.TRANSIENT_LOCAL,
+    )
 
 
 @dataclass(frozen=True)
@@ -123,6 +150,12 @@ class BatchedFourCameraYoloNode(Node):
         except RuntimeError as exc:
             self.get_logger().warn(f"could not set PyTorch interop threads: {exc}")
         cv2.setNumThreads(self.opencv_num_threads)
+        # Attest the effective process settings, not merely requested ROS
+        # parameters. If a runtime cannot apply a setting, the observed
+        # contract must differ and the recorder will fail closed.
+        self.actual_cpu_num_threads = int(torch.get_num_threads())
+        self.actual_cpu_num_interop_threads = int(torch.get_num_interop_threads())
+        self.actual_opencv_num_threads = int(cv2.getNumThreads())
 
         self.image_size = int(self.get_parameter("image_size").value)
         self.confidence_threshold = float(self.get_parameter("confidence_threshold").value)
@@ -152,10 +185,14 @@ class BatchedFourCameraYoloNode(Node):
         if self.pixel_noise_sigma < 0.0 or self.min_bbox_area_px < 0.0:
             raise RuntimeError("pixel_noise_sigma and min_bbox_area_px must be non-negative")
 
+        self.max_batch_stamp_skew_s = float(
+            self.get_parameter("max_batch_stamp_skew_s").value
+        )
+        self.max_pending_wall_s = float(self.get_parameter("max_pending_wall_s").value)
         self.batcher = FourCameraBatcher(
             camera_order=CAMERA_ORDER,
-            max_stamp_skew_s=float(self.get_parameter("max_batch_stamp_skew_s").value),
-            max_pending_wall_s=float(self.get_parameter("max_pending_wall_s").value),
+            max_stamp_skew_s=self.max_batch_stamp_skew_s,
+            max_pending_wall_s=self.max_pending_wall_s,
         )
         self._warning_counts: dict[str, int] = {}
 
@@ -163,6 +200,7 @@ class BatchedFourCameraYoloNode(Node):
         # explicitly typed device.  TorchScript is intentionally not selected
         # because the existing export is fixed-shape and bypasses the matched
         # native preprocessing path.
+        model_sha256_before_load = sha256_file(self.model_path)
         self.model = YOLO(str(self.model_path))
         self.target_ids = target_class_ids(
             getattr(self.model, "names", {}), self.class_name, self.class_id
@@ -208,6 +246,16 @@ class BatchedFourCameraYoloNode(Node):
                 f"{(time.perf_counter() - warmup_start) * 1.0e3:.0f} ms"
             )
 
+        # Hash after the model is loaded and warmed, then reject a checkpoint
+        # replacement race rather than attesting bytes that were not the model
+        # used for the first live batch.
+        self.model_sha256 = sha256_file(self.model_path)
+        if self.model_sha256 != model_sha256_before_load:
+            raise RuntimeError(
+                "model checkpoint bytes changed while the batched detector was loading"
+            )
+        self._publish_runtime_contract()
+
         self.outputs: dict[str, _CameraOutput] = {}
         for camera_id in CAMERA_ORDER:
             self.outputs[camera_id] = _CameraOutput(
@@ -242,9 +290,61 @@ class BatchedFourCameraYoloNode(Node):
             f"(model={self.model_path}, device={self.device or 'auto'}, "
             f"batch_order={','.join(CAMERA_ORDER)}, batch_size={len(CAMERA_ORDER)}, "
             f"imgsz={self.image_size}, masks={self.use_masks}, "
-            f"torch_threads={torch.get_num_threads()}, "
-            f"torch_interop={torch.get_num_interop_threads()}, "
-            f"opencv_threads={cv2.getNumThreads()}, input_policy=strict-new-latest-only)"
+            f"torch_threads={self.actual_cpu_num_threads}, "
+            f"torch_interop={self.actual_cpu_num_interop_threads}, "
+            f"opencv_threads={self.actual_opencv_num_threads}, "
+            "input_policy=strict-new-latest-only)"
+        )
+
+    def _publish_runtime_contract(self) -> None:
+        """Publish the retained identity only after a usable model is ready.
+
+        The recorder subscribes to this topic before accepting detector or
+        odometry rows.  It compares the JSON byte-for-byte (via the embedded
+        digest) with its frozen CLI/configuration expectation, so this is not a
+        best-effort diagnostic announcement.
+        """
+
+        try:
+            source_hashes = source_hashes_from_paths(
+                {
+                    EXECUTABLE_SOURCE_KEY: Path(__file__),
+                    FOUR_CAMERA_BATCH_SOURCE_KEY: Path(four_camera_batch_module.__file__),
+                    RUNTIME_CONTRACT_SOURCE_KEY: Path(runtime_contract_module.__file__),
+                    YOLO_SELECTION_SOURCE_KEY: Path(yolo_selection_module.__file__),
+                }
+            )
+            self.runtime_contract = build_batched_runtime_contract(
+                model_path=self.model_path,
+                model_sha256=self.model_sha256,
+                imgsz=self.image_size,
+                confidence_threshold=self.confidence_threshold,
+                iou_threshold=self.iou_threshold,
+                use_masks=self.use_masks,
+                shared_device=self.device,
+                cpu_threads=self.actual_cpu_num_threads,
+                interop_threads=self.actual_cpu_num_interop_threads,
+                opencv_threads=self.actual_opencv_num_threads,
+                max_batch_stamp_skew_s=self.max_batch_stamp_skew_s,
+                max_pending_wall_s=self.max_pending_wall_s,
+                source_hashes=source_hashes,
+            )
+            self.runtime_contract_publisher = self.create_publisher(
+                String,
+                RUNTIME_CONTRACT_TOPIC,
+                _runtime_contract_qos(),
+            )
+            message = String()
+            message.data = runtime_contract_json(self.runtime_contract)
+            self.runtime_contract_publisher.publish(message)
+        except Exception as exc:
+            raise RuntimeError(
+                "could not publish the required four-camera detector runtime contract"
+            ) from exc
+        self.get_logger().info(
+            "published retained four-camera detector runtime contract "
+            f"sha256={self.runtime_contract['contract_sha256']} "
+            f"topic={RUNTIME_CONTRACT_TOPIC}"
         )
 
     def _clock_s(self) -> float:
@@ -485,7 +585,16 @@ class BatchedFourCameraYoloNode(Node):
             )
         else:
             latency_s = math.nan
-        frame_age_s = max(publish_stamp_s - stamp_s, 0.0)
+        try:
+            frame_age_s = frame_age_at_publish_s(
+                publish_stamp_s=publish_stamp_s,
+                image_stamp_s=stamp_s,
+            )
+        except BatchContractError as exc:
+            self._fatal(
+                f"future image-stamp integrity fault for {item.camera_id}: {exc}",
+                exc,
+            )
         detected = bool(selection.get("detected_after_threshold", False))
         message = diagnostics_message(
             stamp=stamp_s,

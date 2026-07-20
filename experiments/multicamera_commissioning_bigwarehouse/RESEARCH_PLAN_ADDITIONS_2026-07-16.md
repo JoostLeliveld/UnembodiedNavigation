@@ -58,16 +58,17 @@ detector-OOD at root. Camera C's ~0.11 m cross-bearing projection residual
      dedup rate) committed before training.
 
 1c. **Retrain + evaluate**
-   - Fine-tune v1 → `warehouse_yolo_detector_4cam_v1` at imgsz 960 (P2000 4 GB:
-     small batch + AMP, or train on the same external resource used for
-     aws_yolo_simseg_v3 if local VRAM blocks it).
+   - Fine-tune v1 → the locked successor `warehouse_yolo_detector_4cam_v2_640`
+     at imgsz 640 (P2000 4 GB; batch 4 + AMP). The successor is frozen before
+     D1/D2 evidence and supersedes the unresolved 960 candidate.
    - Acceptance gates (per camera, held-out capture): detection rate ≥0.9 at
      ≤12 m and ≥0.75 at 12–16 m on unoccluded poses; box-bottom localization
      audited vs analytic truth (flat over image periphery — the 0.027 m
      standard); score distribution documented (feeds Module 3 targets).
-   - Decision point: if scores remain poorly calibrated, keep the
-     detection-RATE-based trust methodology (calibration-invariant, already
-     the campaign standard) and record the disclosure.
+   - The deployment-size decision is already locked in the versioned successor;
+     if scores remain poorly calibrated, keep the detection-RATE-based trust
+     methodology (calibration-invariant, already the campaign standard) and
+     record the disclosure.
 
 > **Addendum (2026-07-16, later):** the parallel workstream measured that one
 > four-image batched GPU call (single shared model) runs 38.9 ms vs 79.5 ms

@@ -39,6 +39,17 @@ CARD_SCHEMA_VERSION = "fourcam_yolo_dataset_card.v1"
 CAPTURE_INVOCATION_SCHEMA_VERSION = "yolo_capture_invocation.v1"
 SIMULATION_ASSET_INVENTORY_SCHEMA_VERSION = "yolo_capture_simulation_assets.v1"
 CAPTURE_COMPLETION_SCHEMA_VERSION = "yolo_capture_completion.v1"
+CAPTURE_TRANSPORT_SCHEMA_VERSION = "yolo_capture_transport.v1"
+TRAINING_CAPTURE_TRANSPORT_VALUES = {
+    "ROS_LOCALHOST_ONLY": "1",
+    "IGN_IP": "127.0.0.1",
+    "GZ_IP": "127.0.0.1",
+}
+CAPTURE_TRANSPORT_VARIABLES = (
+    *TRAINING_CAPTURE_TRANSPORT_VALUES,
+    "ROS_DOMAIN_ID",
+    "IGN_PARTITION",
+)
 VERIFIED_CAPTURE_PROVENANCE = "verified_training_grade"
 LEGACY_CAPTURE_PROVENANCE = "legacy_missing_diagnostic_only"
 CAMERA_CONTRACTS: dict[str, dict[str, str]] = {
@@ -347,6 +358,7 @@ def _validate_capture_provenance(
         "capture_script_path",
         "capture_script_sha256",
         "capture_invocation",
+        "transport_environment",
         "simulation_asset_inventory",
     )
     present = [field in manifest for field in fields]
@@ -410,6 +422,65 @@ def _validate_capture_provenance(
                 f"{context}.capture_invocation.resolved_arguments.{key} does not "
                 "match the manifest contract"
             )
+
+    transport = manifest.get("transport_environment")
+    transport_context = f"{context}.transport_environment"
+    if not isinstance(transport, dict):
+        raise DatasetMergeError(f"{transport_context} must be a mapping")
+    if _require_text(transport, "schema_version", transport_context) != (
+        CAPTURE_TRANSPORT_SCHEMA_VERSION
+    ):
+        raise DatasetMergeError(
+            f"{transport_context} has unsupported schema_version"
+        )
+    required_values = transport.get("required_values")
+    if required_values != TRAINING_CAPTURE_TRANSPORT_VALUES:
+        raise DatasetMergeError(
+            f"{transport_context}.required_values must exactly match the training transport contract"
+        )
+    observed_values = transport.get("observed_values")
+    if not isinstance(observed_values, dict) or set(observed_values) != set(
+        CAPTURE_TRANSPORT_VARIABLES
+    ):
+        raise DatasetMergeError(
+            f"{transport_context}.observed_values must contain exactly "
+            f"{list(CAPTURE_TRANSPORT_VARIABLES)!r}"
+        )
+    for key, expected in TRAINING_CAPTURE_TRANSPORT_VALUES.items():
+        actual = observed_values.get(key)
+        if not isinstance(actual, str) or actual != expected:
+            raise DatasetMergeError(
+                f"{transport_context}.observed_values.{key} must be {expected!r}, got {actual!r}"
+            )
+    domain_value = observed_values.get("ROS_DOMAIN_ID")
+    try:
+        domain_id = int(str(domain_value))
+    except (TypeError, ValueError):
+        domain_id = -1
+    if not isinstance(domain_value, str) or not domain_value or not (0 <= domain_id <= 232):
+        raise DatasetMergeError(
+            f"{transport_context}.observed_values.ROS_DOMAIN_ID must be an explicit integer in 0..232"
+        )
+    partition = observed_values.get("IGN_PARTITION")
+    if (
+        not isinstance(partition, str)
+        or not partition
+        or any(character.isspace() for character in partition)
+    ):
+        raise DatasetMergeError(
+            f"{transport_context}.observed_values.IGN_PARTITION must be a non-empty whitespace-free token"
+        )
+    if transport.get("isolation_verified") is not True:
+        raise DatasetMergeError(f"{transport_context}.isolation_verified must be true")
+    if transport.get("training_eligible") is not True:
+        raise DatasetMergeError(f"{transport_context}.training_eligible must be true")
+    if transport.get("diagnostic_override_used") is not False:
+        raise DatasetMergeError(
+            f"{transport_context}.diagnostic_override_used must be false for training"
+        )
+    violations = transport.get("violations")
+    if not isinstance(violations, list) or violations:
+        raise DatasetMergeError(f"{transport_context}.violations must be an empty list")
 
     inventory = manifest.get("simulation_asset_inventory")
     if not isinstance(inventory, dict):
@@ -1478,6 +1549,15 @@ def _validate_cross_camera_contract(audits: Sequence[CameraAudit]) -> None:
                 "Source manifests disagree on simulation asset inventory: "
                 f"{sorted(asset_hashes)}"
             )
+        partitions = [
+            str(audit.manifest["transport_environment"]["observed_values"]["IGN_PARTITION"])
+            for audit in audits
+        ]
+        if len(set(partitions)) != len(partitions):
+            raise DatasetMergeError(
+                "Source manifests reuse IGN_PARTITION values; each source capture must "
+                f"have an isolated transport partition, got {partitions}"
+            )
 
     group_splits: dict[str, set[str]] = defaultdict(set)
     group_rows: dict[str, list[str]] = defaultdict(list)
@@ -1710,6 +1790,11 @@ def _source_summary(audit: CameraAudit) -> dict[str, Any]:
         "simulation_asset_inventory_sha256": (
             manifest.get("simulation_asset_inventory", {}).get("aggregate_sha256")
             if isinstance(manifest.get("simulation_asset_inventory"), dict)
+            else None
+        ),
+        "transport_environment": (
+            manifest.get("transport_environment")
+            if isinstance(manifest.get("transport_environment"), dict)
             else None
         ),
         "camera_pose_xyz_rpy": manifest["camera_pose_xyz_rpy"],

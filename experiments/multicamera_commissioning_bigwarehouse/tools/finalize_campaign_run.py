@@ -123,6 +123,19 @@ def build_completion_payload(
         relative: campaign_ledger._sha256(run_dir / relative)
         for relative in campaign_ledger.REQUIRED_ARTIFACTS
     }
+    runtime_readiness, route_camera_health, readiness_errors = (
+        campaign_ledger.runtime_readiness_completion_evidence(run_dir, ledger, row)
+    )
+    if readiness_errors or runtime_readiness is None or route_camera_health is None:
+        details = list(readiness_errors)
+        if runtime_readiness is None:
+            details.append("runtime readiness evidence could not be reconstructed")
+        if route_camera_health is None:
+            details.append("route-wide camera health evidence could not be reconstructed")
+        raise FinalizationError(
+            "runtime readiness or route-wide camera health is ineligible:\n- "
+            + "\n- ".join(sorted(set(details)))
+        )
     payload: dict[str, Any] = {
         "schema_version": 1,
         "created_utc": _utc_now(),
@@ -130,10 +143,21 @@ def build_completion_payload(
         "attempt_id": attempt["attempt_id"],
         "row_tuple": row["row_tuple"],
         "input_sha256": campaign_ledger.input_sha256(ledger["provenance"]),
+        "method_freeze": campaign_ledger.method_freeze_snapshot(ledger),
+        "method_freeze_sha256": campaign_ledger.method_freeze_sha256(ledger),
         # Embed the exact driver artifact.  Ledger validation also requires and
         # hashes the original file, so neither representation can be forged or
         # silently changed independently.
         "route_completion": route_completion,
+        # The startup barrier is a separately immutable artifact.  This binding
+        # freezes its hash together with the actual detector runtime/model and
+        # frozen-config hashes declared by the operational recorder.
+        "runtime_readiness": runtime_readiness,
+        # Startup health alone is not enough: this payload is recomputed from
+        # every raw camera stream on ledger refresh and covers liveness,
+        # freshness, ordering, and maximum recorder-wall-time gaps over the
+        # completed route interval.
+        "route_camera_health": route_camera_health,
         "run_identity": {
             "run_id": operational.get("run_id"),
             "plan_row_id": operational.get("plan_row_id"),
@@ -175,6 +199,17 @@ def finalize_campaign_run(
             raise FinalizationError(f"completion manifest already exists: {completion_path}")
         if failure_path.exists():
             raise FinalizationError(f"failure manifest already exists: {failure_path}")
+        conflicts = campaign_ledger.active_campaign_attempts(
+            root, ledger, exclude_run_dir=str(attempt["run_dir"])
+        )
+        if conflicts:
+            labels = ", ".join(
+                f"{item['row_id']}/{item['attempt_id']}" for item in conflicts
+            )
+            raise FinalizationError(
+                "another campaign attempt is active; refuse to finalize while the "
+                f"shared ROS domain namespace is occupied ({labels})"
+            )
         payload = build_completion_payload(root, ledger, row, attempt)
         try:
             _atomic_json_new(completion_path, payload)

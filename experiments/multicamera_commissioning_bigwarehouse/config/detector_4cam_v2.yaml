@@ -1,24 +1,23 @@
 schema_version: 1
-artifact_id: warehouse_yolo_detector_4cam_v1
+supersedes: warehouse_yolo_detector_4cam_v1
+lock_status: locked_before_evidence
+
+artifact_id: warehouse_yolo_detector_4cam_v2_640
 protocol_id: fullwarehouse_four_camera_paper_v2
 world: warehouse_full_4cam.world.sdf
 
-# Deployment size is selected by the matched 640/800/960 pilot before capture
-# or training.  A pilot outcome creates a versioned successor of this file;
-# confirmatory metrics never select it.
+# Versioned successor selected and locked before any D1/D2 evidence or training.
+# The measured four-image batch timing and P2000 memory budget establish the
+# engineering-safe 640 path; confirmatory metrics never select or alter it.
 runtime_pilot:
-  # This file is intentionally a pilot-only candidate set. It is forbidden as
-  # a D1/D2 evidence input: a successor must select exactly one image size and
-  # its frozen model before campaign planning/recording can proceed.
   evidence_selection:
-    permitted: false
-    selected_image_size: null
+    permitted: true
+    selected_image_size: 640
+    selection_basis: measured_640_batch_timing_and_P2000_resource_budget
     rule: >-
-      Matched 640/800/960 runtime pilots select one deployment size before any
-      fit or qualification collection. A versioned successor sets permitted:
-      true and selected_image_size to that one predeclared value; held-out and
-      confirmatory results never perform the selection.
-  image_sizes: [640, 800, 960]
+      This successor fixes one image size before D1/D2 campaign planning.
+      Confirmatory metrics cannot select or alter deployment resolution.
+  image_sizes: [640]
   model: logs/perception_models/warehouse_yolo_detector_v1/model.pt
   confidence_threshold: 0.05
   iou_threshold: 0.45
@@ -181,7 +180,7 @@ capture:
 
 training:
   base_model: logs/perception_models/warehouse_yolo_detector_v1/model.pt
-  image_size: pending_runtime_pilot
+  image_size: 640
   batch: 4
   workers: 2
   amp: true

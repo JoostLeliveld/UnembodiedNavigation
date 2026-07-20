@@ -37,7 +37,7 @@ def test_every_frozen_route_variant_has_robot_clearance() -> None:
 
 def test_preflight_config_uses_one_gpu_model_with_safe_separate_fallback() -> None:
     config = yaml.safe_load(
-        (ROOT / "experiments/multicamera_commissioning_bigwarehouse/config/detector_4cam_v1.yaml").read_text(
+        (ROOT / "experiments/multicamera_commissioning_bigwarehouse/config/detector_4cam_v2.yaml").read_text(
             encoding="utf-8"
         )
     )

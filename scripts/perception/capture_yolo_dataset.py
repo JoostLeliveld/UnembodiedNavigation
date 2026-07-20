@@ -74,6 +74,21 @@ CAPTURE_INVOCATION_SCHEMA_VERSION = 'yolo_capture_invocation.v1'
 SIMULATION_ASSET_INVENTORY_SCHEMA_VERSION = 'yolo_capture_simulation_assets.v1'
 CAPTURE_STATE_SCHEMA_VERSION = 'yolo_capture_state.v1'
 CAPTURE_COMPLETION_SCHEMA_VERSION = 'yolo_capture_completion.v1'
+CAPTURE_TRANSPORT_SCHEMA_VERSION = 'yolo_capture_transport.v1'
+# A dataset capture talks to a local simulator and ROS graph.  Leaving either
+# transport on its host/network default allowed an unrelated Gazebo process to
+# leak frames into a capture during commissioning.  Pin these values for every
+# training-grade capture and retain the observed environment in the manifest.
+TRAINING_CAPTURE_TRANSPORT_VALUES = {
+    'ROS_LOCALHOST_ONLY': '1',
+    'IGN_IP': '127.0.0.1',
+    'GZ_IP': '127.0.0.1',
+}
+CAPTURE_TRANSPORT_VARIABLES = (
+    *TRAINING_CAPTURE_TRANSPORT_VALUES,
+    'ROS_DOMAIN_ID',
+    'IGN_PARTITION',
+)
 _INVENTORY_IGNORED_PARTS = frozenset({'__pycache__'})
 _INVENTORY_IGNORED_SUFFIXES = frozenset({'.pyc', '.pyo'})
 _ACTIVE_CAPTURE_OUTPUT_GUARD: '_CaptureOutputGuard | None' = None
@@ -327,6 +342,65 @@ def _capture_invocation(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def _capture_transport_environment(
+    environment: Mapping[str, str] | None = None,
+    *,
+    allow_unisolated_transport: bool = False,
+) -> dict[str, Any]:
+    """Validate and preserve the local transport boundary for a capture.
+
+    ``IGN_PARTITION`` is deliberately unique per capture invocation; it is not
+    required to match across source cameras.  In contrast, the loopback values
+    prevent another host/process from joining the simulation transport, while a
+    declared ROS domain prevents accidental reuse of an ambient graph.  The
+    override exists only to preserve a failed/diagnostic run for investigation;
+    it records ``training_eligible=false`` and the merger refuses it.
+    """
+
+    values_source = os.environ if environment is None else environment
+    observed = {
+        key: str(values_source.get(key, '')).strip()
+        for key in CAPTURE_TRANSPORT_VARIABLES
+    }
+    violations: list[str] = []
+    for key, expected in TRAINING_CAPTURE_TRANSPORT_VALUES.items():
+        if observed[key] != expected:
+            violations.append(f'{key} must be {expected!r}, got {observed[key]!r}')
+
+    domain_value = observed['ROS_DOMAIN_ID']
+    try:
+        domain_id = int(domain_value)
+    except ValueError:
+        domain_id = -1
+    if not domain_value or not (0 <= domain_id <= 232):
+        violations.append(
+            'ROS_DOMAIN_ID must be an explicitly set integer in the inclusive range 0..232'
+        )
+
+    partition = observed['IGN_PARTITION']
+    if not partition or any(character.isspace() for character in partition):
+        violations.append('IGN_PARTITION must be a non-empty, whitespace-free token')
+
+    isolation_verified = not violations
+    if violations and not allow_unisolated_transport:
+        raise RuntimeError(
+            'Training-grade capture requires isolated local ROS/Gazebo transport: '
+            + '; '.join(violations)
+            + '. Set ROS_LOCALHOST_ONLY=1, IGN_IP=127.0.0.1, GZ_IP=127.0.0.1, '
+            'ROS_DOMAIN_ID, and a unique IGN_PARTITION. '
+            '--allow-unisolated-transport is diagnostic-only and cannot be merged for training.'
+        )
+    return {
+        'schema_version': CAPTURE_TRANSPORT_SCHEMA_VERSION,
+        'required_values': dict(TRAINING_CAPTURE_TRANSPORT_VALUES),
+        'observed_values': observed,
+        'isolation_verified': isolation_verified,
+        'training_eligible': isolation_verified,
+        'diagnostic_override_used': bool(violations and allow_unisolated_transport),
+        'violations': violations,
+    }
+
+
 def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f'.{path.name}.tmp-{os.getpid()}')
@@ -362,9 +436,16 @@ def _next_quarantine_path(output_dir: Path) -> Path:
 class _CaptureOutputGuard:
     """Own an output until a success marker or atomic failure quarantine exists."""
 
-    def __init__(self, output_dir: Path, *, camera_id: str) -> None:
+    def __init__(
+        self,
+        output_dir: Path,
+        *,
+        camera_id: str,
+        training_eligible: bool = True,
+    ) -> None:
         self.output_dir = output_dir.resolve()
         self.camera_id = str(camera_id)
+        self.training_eligible = bool(training_eligible)
         self.active = True
         self.quarantined_to: Path | None = None
         _atomic_write_json(
@@ -420,7 +501,7 @@ class _CaptureOutputGuard:
             {
                 'schema_version': CAPTURE_COMPLETION_SCHEMA_VERSION,
                 'status': 'complete',
-                'training_eligible': True,
+                'training_eligible': self.training_eligible,
                 'camera_id': self.camera_id,
                 'dataset_manifest': 'dataset_manifest.json',
                 'dataset_manifest_sha256': manifest_sha256,
@@ -1551,7 +1632,19 @@ def main() -> int:
         default=REPO_ROOT / 'experiments/multicamera_commissioning_bigwarehouse/config/study.yaml',
     )
     parser.add_argument('--route-exclusion-buffer-m', type=float, default=0.75)
+    parser.add_argument(
+        '--allow-unisolated-transport',
+        action='store_true',
+        help=(
+            'Permit a non-isolated capture for diagnosis only. Its manifest and completion '
+            'marker are marked non-training-eligible and the four-camera merger rejects it.'
+        ),
+    )
     args = parser.parse_args()
+
+    transport_environment = _capture_transport_environment(
+        allow_unisolated_transport=bool(args.allow_unisolated_transport),
+    )
 
     camera_model = str(args.camera_model).strip()
     if not camera_model:
@@ -1735,7 +1828,11 @@ def main() -> int:
             (out_dir / 'masks' / split).mkdir(parents=True, exist_ok=False)
     (out_dir / 'audit' / 'accepted').mkdir(parents=True, exist_ok=True)
     (out_dir / 'audit' / 'rejected').mkdir(parents=True, exist_ok=True)
-    output_guard = _CaptureOutputGuard(out_dir, camera_id=camera_id)
+    output_guard = _CaptureOutputGuard(
+        out_dir,
+        camera_id=camera_id,
+        training_eligible=bool(transport_environment['training_eligible']),
+    )
     _ACTIVE_CAPTURE_OUTPUT_GUARD = output_guard
 
     diagnostics: list[dict] = []
@@ -2194,6 +2291,7 @@ def main() -> int:
         'capture_script_path': str(capture_script_path),
         'capture_script_sha256': capture_script_sha256,
         'capture_invocation': capture_invocation,
+        'transport_environment': transport_environment,
         'simulation_asset_inventory': simulation_asset_inventory,
         'excluded_evaluation_routes': [str(value) for value in args.exclude_route],
         'route_exclusion_config': str(route_config_path),

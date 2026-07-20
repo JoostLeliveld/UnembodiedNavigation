@@ -16,6 +16,10 @@ from typing import Any, Sequence
 
 
 CAMERA_ORDER = ("camera_A", "camera_B", "camera_C", "camera_D")
+# A small ROS/Gazebo scheduling tolerance is allowed, but a materially future
+# image stamp is an integrity fault. Clamping it to zero would otherwise turn a
+# reversed or mismatched simulation clock into a plausible fresh observation.
+MAX_FUTURE_IMAGE_STAMP_S = 0.005
 
 
 class BatchContractError(ValueError):
@@ -57,6 +61,41 @@ def stamp_parts_to_ns(sec: Any, nanosec: Any) -> int:
     if sec_i < 0 or not 0 <= nanosec_i < 1_000_000_000:
         raise BatchContractError("stamp is outside the ROS time domain")
     return sec_i * 1_000_000_000 + nanosec_i
+
+
+def frame_age_at_publish_s(
+    *,
+    publish_stamp_s: float,
+    image_stamp_s: float,
+    future_tolerance_s: float = MAX_FUTURE_IMAGE_STAMP_S,
+) -> float:
+    """Return a non-negative frame age or reject a materially future image.
+
+    A tiny negative value can arise because the simulator advances the image
+    and ROS clocks on neighbouring callbacks. A larger negative age is not a
+    freshness success: it signals a clock/order contract failure and must tear
+    down the batch detector before it emits a deceptive availability row.
+    """
+
+    try:
+        publish = float(publish_stamp_s)
+        image = float(image_stamp_s)
+        tolerance = float(future_tolerance_s)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise BatchContractError(
+            "publish/image stamps and future tolerance must be numeric"
+        ) from exc
+    if not all(math.isfinite(value) for value in (publish, image, tolerance)):
+        raise BatchContractError("publish/image stamps and future tolerance must be finite")
+    if tolerance < 0.0:
+        raise BatchContractError("future image-stamp tolerance must be non-negative")
+    age = publish - image
+    if age < -tolerance:
+        raise BatchContractError(
+            "image stamp is materially in the future at publish time: "
+            f"publish={publish:.9f}, image={image:.9f}, tolerance={tolerance:.9f}"
+        )
+    return max(age, 0.0)
 
 
 def validate_batch_results(results: Any, expected_size: int = 4) -> tuple[Any, ...]:
