@@ -30,6 +30,7 @@ ros2 launch experiments warehouse_full4cam_commissioning.launch.py \
   world:=warehouse_full_4cam_laptop_640x360.world.sdf \
   world_name:=warehouse_full_4cam_laptop_640x360 \
   headless:=true reset_world:=false shadow_manager:=false \
+  use_nvidia_prime_offload:=true \
   yolo_model:=logs/perception_models/warehouse_yolo_detector_v1/model.pt \
   yolo_imgsz:=640 yolo_batched_four_camera:=true yolo_batched_device:=0 \
   yolo_batched_cpu_num_threads:=2 yolo_cpu_num_interop_threads:=1 \
@@ -39,6 +40,11 @@ ros2 launch experiments warehouse_full4cam_commissioning.launch.py \
 
 The detector's `yolo_imgsz:=640` is unchanged: it is the network's square
 letterbox input size, while 640×360 is the rendered source geometry.
+
+`use_nvidia_prime_offload:=true` is required on this hybrid-graphics laptop.
+It selects NVIDIA's EGL vendor for headless Gazebo as well as CUDA for YOLO;
+without it Gazebo reports EGL/Dri initialization failures and raw camera rate
+falls below the laptop target.
 
 ## Promotion gates
 

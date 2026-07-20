@@ -10,7 +10,12 @@ must be (re)designed for this world's geometry before collection.
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, Shutdown
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    SetEnvironmentVariable,
+    Shutdown,
+)
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
@@ -225,6 +230,10 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("headless", default_value="false"),
         DeclareLaunchArgument("reset_world", default_value="false"),
         DeclareLaunchArgument(
+            "use_nvidia_prime_offload", default_value="false",
+            description="Use NVIDIA PRIME/EGL rendering for a hybrid-graphics Linux host",
+        ),
+        DeclareLaunchArgument(
             "bridge_contacts", default_value="true",
             description="Bridge all world contact sensors; disable only for non-evidence timing ablations",
         ),
@@ -323,6 +332,23 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("manager_max_cross_camera_disagreement_m", default_value="0.30"),
         DeclareLaunchArgument("manager_max_overlap_time_delta_s", default_value="0.05"),
         DeclareLaunchArgument("manager_require_consistency_when_source_available", default_value="true"),
+        # Hybrid Intel/NVIDIA laptops otherwise let headless Gazebo choose the
+        # Mesa/Intel EGL path while YOLO uses CUDA.  Make the NVIDIA path an
+        # explicit opt-in rather than a machine-specific default. These values
+        # are inherited by Gazebo and every bridge started below.
+        SetEnvironmentVariable(
+            "__NV_PRIME_RENDER_OFFLOAD", "1",
+            condition=IfCondition(LaunchConfiguration("use_nvidia_prime_offload")),
+        ),
+        SetEnvironmentVariable(
+            "__GLX_VENDOR_LIBRARY_NAME", "nvidia",
+            condition=IfCondition(LaunchConfiguration("use_nvidia_prime_offload")),
+        ),
+        SetEnvironmentVariable(
+            "__EGL_VENDOR_LIBRARY_FILENAMES",
+            "/usr/share/glvnd/egl_vendor.d/10_nvidia.json",
+            condition=IfCondition(LaunchConfiguration("use_nvidia_prime_offload")),
+        ),
         sim_bringup,
         encoder_noise,
         shadow_manager,

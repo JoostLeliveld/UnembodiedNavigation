@@ -38,6 +38,12 @@ sensors (each configured at 60 Hz). Accepted output rose only to about
 1.15 Hz, so contact-topic forwarding is not the primary cause. It may remain
 disabled only for timing diagnosis: collision-valid runs keep it enabled.
 
+An explicit NVIDIA PRIME/EGL run (`use_nvidia_prime_offload:=true`) removed the
+Gazebo EGL/Dri warnings and raised raw RGB throughput to approximately
+3.35–3.82 Hz. Accepted strict batches nevertheless remained about 1.10 Hz:
+the remaining limitation is timestamp alignment, not rendering throughput or
+YOLO inference.
+
 ## Decision
 
 `detector_4cam_v3_laptop_640x360.yaml` remains
