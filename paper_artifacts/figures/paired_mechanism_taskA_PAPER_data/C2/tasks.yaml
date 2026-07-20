@@ -1,0 +1,181 @@
+tasks:
+  warehouse_aws.world.sdf:
+  - name: F31_b1_apron_a3_mid
+    description: 'F31 route-choice smoke: robot at A4 apron pick-pose (3.3, -1.0,
+      yaw=0, facing east) must reach A3 mid-cross-aisle (1.0, 1.75). Both start and
+      goal are in the GP-visible region. The short northward route passes near the
+      R4/R5 rack tops where visibility is lower; the southern sweep stays in the open
+      apron. F23 offline: C2 preferred the lower sweep, C1 went direct north.
+
+      '
+    tier: diagnostic
+    claim: visibility_route_choice
+    focus: shelf_pick_visibility_tradeoff
+    start:
+      x: 3.3
+      y: -1.0
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 1.0
+      y: 1.75
+  - name: visible_aisle_sanity_aws
+    description: 'Southern apron sanity check in the clean AWS/JdeRobot section. Both
+      start (-4.25,-3.15) and goal (3.45,-3.15) lie in the camera-visible open apron.
+      This separates detector/GP readiness from the failure-consequence benchmark.
+
+      '
+    tier: sanity
+    claim: null
+    focus: sanity
+    start:
+      x: -4.25
+      y: -3.15
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 3.45
+      y: -3.15
+  - name: b2_a0_west_to_a1_upper
+    description: 'West-side route-choice discriminator. Start in the visible west service lane A0 (-5.25,-0.75, p_vis~0.93), goal in the visible upper A1 aisle (-3.0,3.5, p_vis~0.65). The short northward A0 route traverses camera-poor space; the southern detour stays visible.
+
+      '
+    tier: generality
+    claim: visibility_route_choice
+    focus: west_side_route_choice
+    start:
+      x: -5.25
+      y: -0.75
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -3.0
+      y: 3.5
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
+  - name: a0_west_to_a1_upper_blocked_mid
+    description: 'Exploratory long-blind AWS route-choice benchmark (A0->A1 variant).
+      Robot starts in the widened west service lane A0 at (-5.25,-0.75), facing east (yaw=0),
+      and must reach the visible upper-A1 target at (-3.02,3.20). The campaign
+      config supplies a task-specific known driveable layer where the rack aisles
+      remain clear but the middle shelf-gap connector between rows is omitted, so
+      the shelf rows behave like long continuous shelves. The SDF is not changed.
+      A0 and A1 are separated by rack row R1, so reaching A1 requires either the
+      short blind north-west-corner traversal (up A0, across the upper cross-aisle,
+      then down into upper A1) or the longer south-visible detour (down to the lower/front
+      lane, east past R1, then north up A1). The intent is that the constant-R
+      baseline favours the short NW-corner route through camera-poor space while
+      the visibility-aware planner prefers the south-visible detour. Route choice
+      must emerge from the planner objective, not from these seeds. Exploratory
+      until detector, GP, config, logs, figures, and paper wording are aligned.
+
+      '
+    tier: exploratory
+    claim: visibility_route_choice
+    focus: a0_nw_blind_vs_south_visible_a1
+    start:
+      x: -5.25
+      y: -0.75
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -3.02
+      y: 3.2
+  - name: b3_lowereast_to_a2_mid
+    description: 'Longer-horizon route choice. Start in the visible lower-east aisle
+      (3.3,-2.5, facing west, p_vis~0.8), goal in the visible A2 mid-cross aisle (-1.0,1.75).
+      The visible route runs west along the lower aisle then up A2; shorter cuts pass
+      through the occluded A4/A3-north gaps.
+
+      '
+    tier: generality
+    claim: visibility_route_choice
+    focus: long_horizon_route_choice
+    start:
+      x: 3.3
+      y: -2.5
+      z: 0.05
+      yaw: 3.14159
+    goal:
+      x: -1.0
+      y: 1.75
+  - name: b4_a4_apron_to_occluded_upper
+    description: 'Safe-stop scenario. Start in the visible A4 apron (3.3,-1.0, p_vis~0.74);
+      goal at the occluded A4-upper aisle (3.1,3.0, p_vis~0.01). Every route to the
+      goal traverses deep occlusion (A4-north and mid-cross-east are both camera-poor).
+      The visibility-aware planner should stop safely with bounded belief error; the
+      constant-R baseline commits and diverges.
+
+      '
+    tier: generality
+    claim: visibility_safe_stop
+    focus: localization_unsafe_goal
+    start:
+      x: 3.3
+      y: -1.0
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 3.1
+      y: 3.0
+  - name: b5_a4_apron_to_a2_mid
+    description: 'Stronger route-choice. Start in the visible A4 apron (3.3,-1.0,
+      p_vis~0.77), goal in the visible A2 mid-cross aisle (-1.0,1.75, p_vis~0.60).
+      The short route up A4-north and across mid-cross-east is deeply occluded (p_vis~0.01-0.02
+      over a longer stretch than F31_b1); the visible detour runs south through the
+      apron, west, then up A2. Tests whether the localization-safety route choice
+      holds on a longer, more strongly occluded shortcut.
+
+      '
+    tier: paper
+    claim: visibility_route_choice
+    focus: severe_occlusion_long_shortcut
+    start:
+      x: 3.3
+      y: -1.0
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -1.0
+      y: 1.75
+  - name: b6_a0_west_to_a1_low_control
+    description: 'CONTROL task (visible start + visible goal). Start in the visible
+      west service lane (-5.25,-0.75, p_vis~0.93), goal in the visible A1 aisle low
+      (-3.0,-0.75, p_vis~0.83). Because R1 is a continuous shelf (no mid gap) and all
+      of A1-upper/west-upper is occluded, the only sensible route is the visible
+      lower path (down to the lower main aisle, east, up A1). There is no short-blind
+      shortcut, so BOTH C1 and C2 should agree on the visible route and reach. Tests
+      that the method does not invent spurious detours on easy/visible tasks.
+
+      '
+    tier: control
+    claim: no_spurious_detour
+    focus: visible_control
+    start:
+      x: -5.25
+      y: -0.75
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -3.0
+      y: -0.75
+  - name: b7_a0_west_to_a2_mid
+    description: 'West-side route-choice (visible start + visible goal). Start in the
+      visible west service lane (-5.25,-0.75, p_vis~0.93), goal in the visible A2 mid
+      cross-aisle (-1.0,1.75, p_vis~0.86). The short route climbs the occluded
+      west-upper / A1-upper region and crosses near the upper cross-aisle (camera-poor);
+      the visible detour runs south to the lower main aisle, east, then up the visible
+      A2 aisle. West-side analogue of F31_b1.
+
+      '
+    tier: paper
+    claim: visibility_route_choice
+    focus: west_side_long_shortcut
+    start:
+      x: -5.25
+      y: -0.75
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -1.0
+      y: 1.75
+  # [DEPRECATED_LEGACY_CLEANUP] Legacy/exploratory task
