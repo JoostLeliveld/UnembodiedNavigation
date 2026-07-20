@@ -145,7 +145,7 @@ def test_runtime_source_has_one_native_model_and_the_complete_operational_contra
 
     assert source.count("YOLO(str(self.model_path))") == 1
     assert '"source": list(images_bgr)' in source
-    assert '"batch": len(CAMERA_ORDER)' in source
+    assert '"batch": len(images_bgr)' in source
     assert "use_torchscript" not in source
     assert "ground_truth" not in source
     assert "oracle_" not in source
@@ -194,6 +194,10 @@ def test_runtime_source_has_one_native_model_and_the_complete_operational_contra
     assert "model checkpoint bytes changed while the batched detector was loading" in source
     assert "source_hashes_from_paths" in source
     assert "future image-stamp integrity fault" in source
+    assert 'self.declare_parameter("synchronization_mode", "strict")' in source
+    assert 'self.declare_parameter("async_coalesce_wall_s", 0.02)' in source
+    assert "self._drain_async_pending" in source
+    assert "diagnostic-only" in source
 
 
 def test_launch_defaults_to_batched_mode_with_typed_device_and_keeps_fallback() -> None:
@@ -205,8 +209,11 @@ def test_launch_defaults_to_batched_mode_with_typed_device_and_keeps_fallback() 
     assert '"yolo_batched_four_camera", default_value="true"' in launch
     assert 'executable="batched_four_camera_yolo_node"' in launch
     assert 'LaunchConfiguration("yolo_batched_device"), value_type=str' in launch
-    assert 'condition=IfCondition(LaunchConfiguration("yolo_batched_four_camera"))' in launch
-    assert 'condition=UnlessCondition(LaunchConfiguration("yolo_batched_four_camera"))' in launch
+    assert '"enable_yolo", default_value="true"' in launch
+    assert 'LaunchConfiguration("enable_yolo"), "\'.lower() == \'true\' and \'"' in launch
+    assert 'LaunchConfiguration("yolo_batched_four_camera"), "\'.lower() == \'true\'"' in launch
+    assert '"synchronization_mode": LaunchConfiguration("yolo_synchronization_mode")' in launch
+    assert '"yolo_synchronization_mode", default_value="strict"' in launch
     assert 'on_exit=Shutdown(reason="batched four-camera detector exited")' in launch
     assert 'executable="yolo_robot_detector_node"' in launch
     assert (

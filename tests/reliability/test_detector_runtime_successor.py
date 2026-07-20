@@ -9,11 +9,16 @@ ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT / "experiments/multicamera_commissioning_bigwarehouse/config"
 
 
-def test_v1_is_pilot_only_v2_is_locked_and_v3_is_a_blocked_laptop_successor() -> None:
+def test_versioned_laptop_successors_keep_async_diagnostics_out_of_evidence() -> None:
     v1 = yaml.safe_load((CONFIG_DIR / "detector_4cam_v1.yaml").read_text(encoding="utf-8"))
     v2 = yaml.safe_load((CONFIG_DIR / "detector_4cam_v2.yaml").read_text(encoding="utf-8"))
     v3 = yaml.safe_load(
         (CONFIG_DIR / "detector_4cam_v3_laptop_640x360.yaml").read_text(encoding="utf-8")
+    )
+    v4 = yaml.safe_load(
+        (CONFIG_DIR / "detector_4cam_v4_laptop_async_microbatch.yaml").read_text(
+            encoding="utf-8"
+        )
     )
 
     assert v1["runtime_pilot"]["evidence_selection"]["permitted"] is False
@@ -39,4 +44,18 @@ def test_v1_is_pilot_only_v2_is_locked_and_v3_is_a_blocked_laptop_successor() ->
     assert all(
         camera["source_image_size"] == [640, 360]
         for camera in v3["cameras"].values()
+    )
+
+    assert v4["supersedes"] == v3["artifact_id"]
+    assert v4["lock_status"] == "diagnostic_candidate_blocked_from_evidence"
+    assert v4["runtime_pilot"]["evidence_selection"]["permitted"] is False
+    assert v4["runtime_pilot"]["detector_mode"] == (
+        "asynchronous_shared_model_microbatch_diagnostic_only"
+    )
+    assert v4["runtime_pilot"]["batch_size"] == "dynamic_1_to_4"
+    assert v4["runtime_pilot"]["launch_switch"]["yolo_synchronization_mode"] == (
+        "asynchronous"
+    )
+    assert v4["runtime_pilot"]["runtime_contract"] == (
+        "absent_by_design_recorder_must_fail_closed"
     )

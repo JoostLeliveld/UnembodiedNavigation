@@ -16,9 +16,9 @@ from launch.actions import (
     SetEnvironmentVariable,
     Shutdown,
 )
-from launch.conditions import IfCondition, UnlessCondition
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -75,7 +75,10 @@ def _detector_node(camera_id: str, image_topic: str) -> Node:
         executable="yolo_robot_detector_node",
         name=f"yolo_robot_detector_{camera_id.lower()}",
         output="screen",
-        condition=UnlessCondition(LaunchConfiguration("yolo_batched_four_camera")),
+        condition=IfCondition(PythonExpression([
+            "'", LaunchConfiguration("enable_yolo"), "'.lower() == 'true' and '",
+            LaunchConfiguration("yolo_batched_four_camera"), "'.lower() != 'true'",
+        ])),
         parameters=[
             _detector_params(
                 camera_id=camera_id,
@@ -97,7 +100,10 @@ def _batched_detector_node() -> Node:
         executable="batched_four_camera_yolo_node",
         name="batched_four_camera_yolo",
         output="screen",
-        condition=IfCondition(LaunchConfiguration("yolo_batched_four_camera")),
+        condition=IfCondition(PythonExpression([
+            "'", LaunchConfiguration("enable_yolo"), "'.lower() == 'true' and '",
+            LaunchConfiguration("yolo_batched_four_camera"), "'.lower() == 'true'",
+        ])),
         # A detector contract/inference fault exits this process.  Propagate
         # that exit to the complete launch so an unsupervised route cannot keep
         # collecting plausible-looking rows after perception has failed.
@@ -126,6 +132,8 @@ def _batched_detector_node() -> Node:
             "warmup_iters": LaunchConfiguration("yolo_warmup_iters"),
             "max_batch_stamp_skew_s": LaunchConfiguration("yolo_max_batch_stamp_skew_s"),
             "max_pending_wall_s": LaunchConfiguration("yolo_max_pending_wall_s"),
+            "synchronization_mode": LaunchConfiguration("yolo_synchronization_mode"),
+            "async_coalesce_wall_s": LaunchConfiguration("yolo_async_coalesce_wall_s"),
             "camera_observation_r_visible_uv": LaunchConfiguration(
                 "camera_observation_r_visible_uv"
             ),
@@ -247,6 +255,13 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("encoder_noise_seed", default_value="0"),
         DeclareLaunchArgument("yolo_model", default_value="", description="Local path to the trained YOLO model"),
         DeclareLaunchArgument("yolo_device", default_value=""),
+        DeclareLaunchArgument(
+            "enable_yolo", default_value="true",
+            description=(
+                "Start perception nodes; set false only for a diagnostic camera/render "
+                "baseline, never for evidence collection"
+            ),
+        ),
         # One native model and a four-image batch is the P2000-safe study
         # default.  The legacy four-process allocation remains available with
         # yolo_batched_four_camera:=false for an explicit timing comparison or
@@ -263,6 +278,17 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("yolo_opencv_num_threads", default_value="1"),
         DeclareLaunchArgument("yolo_max_batch_stamp_skew_s", default_value="0.10"),
         DeclareLaunchArgument("yolo_max_pending_wall_s", default_value="0.50"),
+        DeclareLaunchArgument(
+            "yolo_synchronization_mode", default_value="strict",
+            description=(
+                "strict is the evidence-capable A-D contract; asynchronous is a "
+                "diagnostic-only per-camera microbatch mode"
+            ),
+        ),
+        DeclareLaunchArgument(
+            "yolo_async_coalesce_wall_s", default_value="0.02",
+            description="Wall-clock coalescing period for diagnostic asynchronous microbatches",
+        ),
         DeclareLaunchArgument("yolo_pixel_noise_sigma", default_value="0.0"),
         DeclareLaunchArgument("yolo_seed", default_value="0"),
         # Four concurrent GPU detector processes (~760 MiB each) exceed the 4

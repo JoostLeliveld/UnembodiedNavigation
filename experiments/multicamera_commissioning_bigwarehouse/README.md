@@ -57,6 +57,11 @@ evidence collection until it has fresh calibration, detector validation, and
 strict 3 Hz/100 ms timing evidence. See
 [`LAPTOP_640X360_COMMISSIONING.md`](LAPTOP_640X360_COMMISSIONING.md).
 
+The v4 asynchronous shared-model microbatch profile is a separate diagnostic
+to isolate strict timestamp-admission cost. It has no runtime contract and is
+therefore intentionally barred from recording and evidence; see
+[`LAPTOP_ASYNC_MICROBATCH_COMMISSIONING.md`](LAPTOP_ASYNC_MICROBATCH_COMMISSIONING.md).
+
 ## Start the passive four-camera stack
 
 ```bash

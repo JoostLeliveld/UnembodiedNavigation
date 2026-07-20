@@ -44,9 +44,34 @@ Gazebo EGL/Dri warnings and raised raw RGB throughput to approximately
 the remaining limitation is timestamp alignment, not rendering throughput or
 YOLO inference.
 
+## Detector-off and asynchronous follow-up
+
+The detector-off baseline, with the same 640×360 world, PRIME/EGL selection,
+and contact bridge disabled, sustained raw wall-clock rates of **3.578 Hz**
+(A), **3.577 Hz** (B), **3.441 Hz** (C), and **3.441 Hz** (D). Rendering and
+image bridging therefore clear the 3 Hz raw-stream gate on this machine.
+
+v4 then tested a diagnostic-only shared-model asynchronous microbatch path. It
+preserves a latest unseen image per camera but publishes no strict runtime
+contract and cannot record evidence. With its 20 ms coalescing window, live
+raw streams fell to **2.322–2.460 Hz** and all four `CameraObservation`
+streams measured **0.742 Hz**. A 120 ms window was no better: raw streams were
+**2.303–2.453 Hz** and observations **0.709–0.712 Hz**. A representative
+diagnostic reported about **200.3 ms** inference wall time but **1050.9 ms**
+end-to-end callback time.
+
+This rules out both the strict 100 ms stamp gate and a simple microbatch-window
+tuning as the primary explanation. Running YOLO concurrently materially slows
+the integrated Gazebo/ROS schedule; the laptop cannot meet the 3 Hz
+end-to-end requirement for this four-camera simulator/detector stack.
+
 ## Decision
 
 `detector_4cam_v3_laptop_640x360.yaml` remains
 `commissioning_candidate_blocked_from_evidence`. The final paper simulations
 should use a stronger host with the unchanged 1280×720/v2 runtime, unless a
 separate future synchronization redesign is specified and validated.
+
+`detector_4cam_v4_laptop_async_microbatch.yaml` is retained as a versioned
+negative diagnostic. It is `diagnostic_candidate_blocked_from_evidence`; it
+does not authorize campaign recording, calibration, training, or paper claims.
