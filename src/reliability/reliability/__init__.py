@@ -145,6 +145,15 @@ from reliability.overlap import (
     summarize_overlap_pairs,
     validate_camera_overlap,
 )
+from reliability.opportunity import (
+    LOOReference,
+    OpportunityConfig,
+    OpportunityPrediction,
+    OpportunityRow,
+    build_opportunity_row,
+    ellipse_inside_fraction,
+    label_loo_usability,
+)
 from reliability.planning_covariance import (
     batch_plan_query,
     expected_information_update,
@@ -300,6 +309,13 @@ __all__ = [
     "summarize_overlap_trust",
     "summarize_overlap_pairs",
     "validate_camera_overlap",
+    "LOOReference",
+    "OpportunityConfig",
+    "OpportunityPrediction",
+    "OpportunityRow",
+    "build_opportunity_row",
+    "ellipse_inside_fraction",
+    "label_loo_usability",
     "batch_plan_query",
     "expected_information_update",
     "plan_covariance",

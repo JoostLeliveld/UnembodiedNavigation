@@ -48,6 +48,15 @@ or a new controller while testing localization robustness.
    conservative best-camera selection.
 8. Train per-camera GP reliability before any temporal network.
 
+## Operational opportunity and usability labels
+
+The structural Plan-02 builders now live in [`tools/`](tools/README.md). They
+make detection misses meaningful only where a camera had an expected,
+operationally predicted opportunity, and derive usability from a reference that
+explicitly leaves out the camera being labelled. Neither builder accepts
+evaluation-only data. They are ready for the locked commissioning output, but
+no GP artifact will be fitted until the detector/projection gates pass.
+
 ## Module Status
 
 | Module | Status | Notes |

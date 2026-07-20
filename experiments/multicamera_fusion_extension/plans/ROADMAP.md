@@ -61,9 +61,10 @@ throwaway).
   APIs are exported by `reliability/__init__.py`. This is the pure-library
   layer; replay conditions, ROS/planner call sites, and fitted artifacts are
   still downstream work.
-- **Planned, intentionally not fitted yet:** 02 opportunity/LOO data and 03
-  factorised GPs. These wait for commissioning M1/M2 so discarded OOD detector
-  outputs do not become paper artifacts.
+- **Implemented structurally, intentionally not fitted:** 02 opportunity/LOO
+  data builders now write operational-only rows and reject evaluation-only
+  inputs; 03 factorised GPs still wait for commissioning M1/M2 so discarded OOD
+  detector outputs do not become paper artifacts.
 - **Blocked on an explicit empirical/configuration decision:** 07 must reconcile
   the 40 px versus 120 px miss-covariance endpoints from data before runtime and
   offline mappings are unified.
