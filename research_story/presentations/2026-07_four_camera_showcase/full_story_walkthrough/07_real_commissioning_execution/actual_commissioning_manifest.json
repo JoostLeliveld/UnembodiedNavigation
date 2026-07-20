@@ -1,12 +1,13 @@
 {
   "canonical_gp_root": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/fourcam_actual_20260715/final_02/gp",
-  "contains_ground_truth": false,
+  "contains_ground_truth": true,
   "inputs": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/multicamera_commissioning_bigwarehouse/actual_commissioning_20260715/analysis/final_02/inputs",
   "notes": [
     "All GP maps were fitted from operational detector observations aligned to noisy odometry with an explicit 0.10 m covariance floor.",
     "The covariance floor is a declared pilot assumption: the encoder-noise publisher currently leaves Odometry covariance entries at zero.",
     "The strict C/D overlap result passes its configured 0.30 m disagreement gate, but only has three synchronized pairs; it is pilot evidence, not a campaign-level fusion claim.",
-    "The configured hysteretic policy withheld all candidate corrections because learned spatial trust was below its 0.45 release threshold. This demonstrates its fail-safe path, not closed-loop improvement."
+    "The configured hysteretic policy withheld all candidate corrections because learned spatial trust was below its 0.45 release threshold. This demonstrates its fail-safe path, not closed-loop improvement.",
+    "The readiness-audit figure reads evaluation-only truth metrics from the independent smoke recording; those metrics remain excluded from every operational model and decision path."
   ],
   "outputs": {
     "algorithm_execution": "/home/joostleliveld/Thesis/UnembodiedNavigation/research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures/05_actual_algorithm_execution.png",
@@ -14,6 +15,7 @@
     "overlap_gate": "/home/joostleliveld/Thesis/UnembodiedNavigation/research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures/04_actual_overlap_gate_C_D.png",
     "per_camera_gp_updates": "/home/joostleliveld/Thesis/UnembodiedNavigation/research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures/02_actual_per_camera_gp_updates.png",
     "per_camera_gp_updates_wide": "/home/joostleliveld/Thesis/UnembodiedNavigation/research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures/02b_actual_gp_updates_wide.png",
+    "readiness_audit": "/home/joostleliveld/Thesis/UnembodiedNavigation/research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures/06_actual_readiness_audit.png",
     "real_routes_and_observations": "/home/joostleliveld/Thesis/UnembodiedNavigation/research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures/01_real_routes_and_observations.png"
   },
   "overlap_summary": {

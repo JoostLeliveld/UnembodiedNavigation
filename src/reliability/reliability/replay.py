@@ -78,12 +78,17 @@ class ReplayStep:
 @dataclass(frozen=True)
 class ReplayMetrics:
     rmse_m: float
+    p95_error_m: float
     max_error_m: float
     final_error_m: float
     mean_nis: float
     mean_nees: float
+    covariance_1sigma_coverage: float
+    covariance_2sigma_coverage: float
     update_acceptance_rate: float
     divergence_count: int
+    handover_count: int
+    unqualified_handover_count: int
 
 
 @dataclass(frozen=True)
@@ -243,6 +248,8 @@ def compute_replay_metrics(
     nees: list[float] = []
     nis: list[float] = []
     divergence_count = 0
+    handover_count = 0
+    unqualified_handover_count = 0
     for step in steps:
         eval_frame = eval_by_stamp.get(round(step.timestamp_s, 9))
         if eval_frame is not None:
@@ -259,19 +266,55 @@ def compute_replay_metrics(
             except ContractValidationError:
                 pass
         nis.extend(v for v in step.nis_by_camera.values() if math.isfinite(v))
+        for diagnostic in step.handover_diagnostics:
+            if not bool(diagnostic.get("switched", False)):
+                continue
+            handover_count += 1
+            reasons = {str(reason) for reason in diagnostic.get("reasons", [])}
+            if reasons.intersection(
+                {"overlap_disagreement", "no_overlap_confirmation", "async_handover", "selected_stale"}
+            ):
+                unqualified_handover_count += 1
 
     rmse = math.sqrt(sum(e * e for e in errors) / len(errors)) if errors else math.nan
     final_error = errors[-1] if errors else math.nan
     acceptance_den = accepted_total + rejected_total
     return ReplayMetrics(
         rmse_m=rmse,
+        p95_error_m=_percentile(errors, 95.0),
         max_error_m=max(errors) if errors else math.nan,
         final_error_m=final_error,
         mean_nis=sum(nis) / len(nis) if nis else math.nan,
         mean_nees=sum(nees) / len(nees) if nees else math.nan,
+        covariance_1sigma_coverage=_coverage(nees, 2.30),
+        covariance_2sigma_coverage=_coverage(nees, 6.18),
         update_acceptance_rate=(accepted_total / acceptance_den) if acceptance_den else math.nan,
         divergence_count=divergence_count,
+        handover_count=handover_count,
+        unqualified_handover_count=unqualified_handover_count,
     )
+
+
+def _percentile(values: Sequence[float], percentile: float) -> float:
+    """Return a deterministic linear percentile without a NumPy dependency."""
+
+    if not values:
+        return math.nan
+    ordered = sorted(float(value) for value in values)
+    rank = (len(ordered) - 1) * float(percentile) / 100.0
+    lower = int(math.floor(rank))
+    upper = int(math.ceil(rank))
+    if lower == upper:
+        return ordered[lower]
+    weight = rank - lower
+    return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
+
+
+def _coverage(nees: Sequence[float], threshold: float) -> float:
+    finite = [float(value) for value in nees if math.isfinite(value)]
+    if not finite:
+        return math.nan
+    return sum(value <= float(threshold) for value in finite) / len(finite)
 
 
 def _observations_for_config(

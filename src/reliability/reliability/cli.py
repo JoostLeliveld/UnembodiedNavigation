@@ -199,12 +199,17 @@ def replay_export_dir(
         summary["results"][config.mode.value] = {
             "steps": len(result.steps),
             "rmse_m": None if metrics is None else _none_nan(metrics.rmse_m),
+            "p95_error_m": None if metrics is None else _none_nan(metrics.p95_error_m),
             "max_error_m": None if metrics is None else _none_nan(metrics.max_error_m),
             "final_error_m": None if metrics is None else _none_nan(metrics.final_error_m),
             "mean_nis": None if metrics is None else _none_nan(metrics.mean_nis),
             "mean_nees": None if metrics is None else _none_nan(metrics.mean_nees),
+            "covariance_1sigma_coverage": None if metrics is None else _none_nan(metrics.covariance_1sigma_coverage),
+            "covariance_2sigma_coverage": None if metrics is None else _none_nan(metrics.covariance_2sigma_coverage),
             "update_acceptance_rate": None if metrics is None else _none_nan(metrics.update_acceptance_rate),
             "divergence_count": None if metrics is None else metrics.divergence_count,
+            "handover_count": None if metrics is None else metrics.handover_count,
+            "unqualified_handover_count": None if metrics is None else metrics.unqualified_handover_count,
         }
     return summary
 

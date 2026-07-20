@@ -246,7 +246,11 @@ def test_replay_handover_aware_selection_inflates_disagreeing_switch() -> None:
 
 def test_replay_hysteretic_handover_holds_then_switches_and_records_manager_decision() -> None:
     frames = (
-        ReplayFrame(timestamp_s=0.0, odometry_xy_m=(0.0, 0.0), observations=(_map_obs("camera_A", 0.0, 0.0, p=0.80),)),
+        ReplayFrame(
+            timestamp_s=0.0,
+            odometry_xy_m=(0.0, 0.0),
+            observations=(_map_obs("camera_A", 0.0, 0.0, p=0.80, timestamp_s=0.0),),
+        ),
         ReplayFrame(
             timestamp_s=1.0,
             odometry_xy_m=(1.0, 0.0),
@@ -289,7 +293,10 @@ def test_replay_hysteretic_selection_uses_camera_specific_reliability_provider()
     frame = ReplayFrame(
         timestamp_s=0.0,
         odometry_xy_m=(0.0, 0.0),
-        observations=(_map_obs("camera_A", 0.0, 0.0, p=0.50), _map_obs("camera_B", 0.0, 0.0, p=0.99)),
+        observations=(
+            _map_obs("camera_A", 0.0, 0.0, p=0.50, timestamp_s=0.0),
+            _map_obs("camera_B", 0.0, 0.0, p=0.99, timestamp_s=0.0),
+        ),
     )
 
     result = run_replay(

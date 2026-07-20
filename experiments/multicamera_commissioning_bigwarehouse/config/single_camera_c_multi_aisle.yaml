@@ -1,0 +1,30 @@
+# Dedicated evidence-collection layout for the presentation's one-camera
+# walkthrough.  It does not modify the frozen four-camera paper protocol.
+#
+# Camera C looks north from the south-east wall.  The three paths are in
+# distinct free warehouse aisles: west of E1, between E1/E2, and between E2/E3.
+# Each has the same y span so differences in its detector record are spatial,
+# not a change of route length or speed.
+study_id: camera_c_multi_aisle_collection_v1
+world: warehouse_full_4cam.world.sdf
+
+collection:
+  passive_only: true
+  control_odom_topic: /odom
+  operational_odom_topic: /odom_noisy
+  command_topic: /cmd_vel
+  arrival_radius_m: 0.20
+  start_hold_s: 2.0
+  routes:
+    - name: camera_C_aisle_west
+      purpose: Camera C collection west of rack E1
+      start: {x: 1.5, y: -7.2, yaw: 1.5708}
+      goal: {x: 1.5, y: -3.8}
+    - name: camera_C_aisle_middle
+      purpose: Camera C collection between racks E1 and E2
+      start: {x: 3.5, y: -7.2, yaw: 1.5708}
+      goal: {x: 3.5, y: -3.8}
+    - name: camera_C_aisle_east
+      purpose: Camera C collection between racks E2 and E3
+      start: {x: 5.5, y: -7.2, yaw: 1.5708}
+      goal: {x: 5.5, y: -3.8}

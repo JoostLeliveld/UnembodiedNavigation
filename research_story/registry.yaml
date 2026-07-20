@@ -160,7 +160,8 @@ chapters:
     implemented_now:
       - "clean world warehouse_full_4cam.world.sdf + layout doc + map assets"
       - "day-zero artifact warehouse_full_4cam_dayzero_v1: union coverage 99.2%, overlap 42.2%, per-camera + union/best maps, no training data/GT"
-      - "commissioning collection stack RETARGETED to full_4cam cameras A-D (launch warehouse_full4cam_commissioning, recorder, contracts, leakage firewall); routes pending redesign"
+      - "commissioning collection stack RETARGETED to full_4cam cameras A-D (launch warehouse_full4cam_commissioning, recorder, contracts, leakage firewall); D1/D2 routes are frozen in study.yaml"
+      - "frozen paper protocol + confirmatory analysis plan + D0-D4 readiness audit; sparse smoke evidence is explicitly non-confirmatory"
       - "four-camera showcase deck builder (research_story/presentations/2026-07_four_camera_showcase)"
     aiming_for: "Fig 08C: four distinct calibrated per-camera trust fields fitted with ZERO retuning of the frozen ch.02/03/05 choices; Fig 08D heterogeneity table"
     key_evidence:
@@ -181,6 +182,7 @@ chapters:
       - "M8 hysteretic handover manager (trust/freshness/association/overlap gates + hysteresis), operational-only"
       - "S0-S4 selection/fusion baselines + offline overlap validation (D2)"
       - "handover covariance inflation + estimator NIS gating; contract tests"
+      - "manifest-backed paired replay runner with per-camera frozen GPs, declared robustness faults, p95/coverage/handover metrics, and a pre-specified M8-versus-M7 decision rule"
       - "HISTORICAL 2-cam pilot (retired auxiliary world): D2 gate HONESTLY FAILED — 5 pairs vs 30 required, 20% spatial outliers vs 10% limit (4/5 within 0.30m); M8 cut switching 3->1 at map error 0.130->0.136m (stability trade-off)"
     aiming_for: "Fig 09D calibrated fusion (NIS coverage, no overconfident overlap updates) + Fig 09B stable handover timeline; D2 pass with >=30 synchronized pairs"
     conditions: "plan IDs M0-M7 map onto implemented S0-S4 + M8; M7 oracle = evaluation-only"

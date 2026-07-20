@@ -58,8 +58,43 @@ def test_fullwarehouse_launch_targets_the_four_camera_world() -> None:
     assert '_detector_node("camera_D", "/external_camera_d/image_raw")' in launch
     assert 'f"/perception/{camera_id}/pixel_pose"' in launch
     assert 'f"/perception/camera_observation/{camera_id}"' in launch
+    assert "ParameterValue(LaunchConfiguration(device_arg), value_type=str)" in launch
     assert 'executable="encoder_noise_node"' in launch
     assert '"output_topic": "/odom_noisy"' in launch
+    for frozen_default in (
+        '"manager_min_spatial_trust", default_value="0.45"',
+        '"manager_min_association_confidence", default_value="0.70"',
+        '"manager_max_measurement_age_s", default_value="0.15"',
+        '"manager_candidate_score_margin", default_value="0.08"',
+        '"manager_required_consecutive_better_frames", default_value="3"',
+        '"manager_max_cross_camera_disagreement_m", default_value="0.30"',
+        '"manager_max_overlap_time_delta_s", default_value="0.05"',
+    ):
+        assert frozen_default in launch
+    assert '"manager_require_projection_calibration", default_value="true"' in launch
+    assert '"manager_require_gp_artifacts", default_value="true"' in launch
+    assert '"yolo_cpu_num_threads_camera_a", default_value="2"' in launch
+
+
+def test_every_central_sweep_offset_clears_the_support_pillar() -> None:
+    study = yaml.safe_load(
+        (ROOT / "experiments" / "multicamera_commissioning_bigwarehouse" / "config" / "study.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    profile = yaml.safe_load((ROOT / "src" / "experiments" / "config" / "world_profiles.yaml").read_text(
+        encoding="utf-8"
+    ))["worlds"]["warehouse_full_4cam.world.sdf"]
+    pillar = next(region for region in profile["known_2d_regions"] if region["name"] == "central_support_pillar")
+    sweep = next(route for route in study["collection"]["routes"] if route["name"] == "central_overlap_sweep")
+
+    # Eastbound route offsets shift along +y.  Require 0.25 m centre clearance,
+    # which exceeds the TurtleBot half-width plus the commissioning margin.
+    for offset_m in study["collection"]["lateral_offsets_m"]:
+        route_y = float(sweep["start"]["y"]) + float(offset_m)
+        assert not (
+            float(pillar["ymin"]) - 0.25 <= route_y <= float(pillar["ymax"]) + 0.25
+        )
 
 
 def test_bigwarehouse_study_separates_control_and_operational_odometry() -> None:

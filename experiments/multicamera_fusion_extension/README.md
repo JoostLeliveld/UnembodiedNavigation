@@ -1,5 +1,14 @@
 # Multicamera Fusion Extension
 
+**Paper-extension plans (2026-07-17):** `plans/` holds the module-by-module
+implementation plan for the *Spatial and Instantaneous Reliability-Aware
+Multi-Camera Fusion and Planning* paper (Toro-Diz-baseline extension). Start
+at `plans/00_REPO_MAPPING.md` (where everything lives — no repo restructure)
+and `plans/ROADMAP.md` (dependency spine, baselines B0–B9, experiments E0–E8,
+pre-registered "beats Toro" criteria). Library modules land in
+`src/reliability/reliability/`, study CLIs in `tools/`, outputs in
+`logs/studies/multicamera_fusion_extension/`.
+
 This namespace is for the focused extension:
 
 ```text

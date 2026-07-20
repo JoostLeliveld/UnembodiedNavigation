@@ -30,6 +30,22 @@
 
 ## Ordered work
 
+## Paper approval gates — frozen before confirmatory collection
+
+- [x] Freeze the claim/analysis contract in `config/paper_analysis_plan.yaml`:
+  scope, baselines, endpoints, paired-bootstrap decision rule, non-claims, and
+  a required D4 closed-loop confirmation.
+- [x] Add `paper_readiness.py`: it audits the GT firewall, D0 camera projection
+  calibration, odometry covariance coverage, D1/D2 coverage, D3 replay
+  manifests, and source hashes. It never upgrades a sparse pilot.
+- [x] Add manifest-backed D3 replay runner with deterministic dropout, latency,
+  odometry-stress, and explicitly synthetic low-light-proxy perturbations.
+- [ ] Re-record D0/D1 after the encoder covariance update. The 2026-07-16
+  smoke audit correctly failed covariance calibration (mean NEES about 103),
+  so it is negative plumbing evidence, not a result.
+- [ ] Repair/revalidate camera C's projection bias and obtain enough camera-A/B
+  detections before any overlap or fusion claim.
+
 ### 1. Design full-warehouse collection routes — complete; freeze them
 
 - [x] Add routes for A, B, C, and D single-source regions.

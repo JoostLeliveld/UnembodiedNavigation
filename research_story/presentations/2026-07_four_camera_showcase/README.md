@@ -1,30 +1,20 @@
-# Four-camera warehouse reliability showcase (pitch deck)
+# Four-camera warehouse walkthrough
 
-Pitch for the enlarged four-camera system and its reliability-fusion architecture —
-chapter [08](../../08_large_warehouse_scaling/) / [09](../../09_multicamera_handover_fusion/)
-material. Map statistics come from the checked-in day-zero artifact
-(`paper_artifacts/gp/warehouse_full_4cam_dayzero_v1/`), not invented coverage numbers; the
-final scope slide separates implemented components from empirical claims that still need a
-four-camera campaign (per the ch.09 gate).
+The presentation is built directly in the numbered folders of
+`full_story_walkthrough/`. There is no separate result pack.
 
-```bash
-python3 build_four_camera_showcase.py
-```
+The intended visual sequence is deliberately simple:
 
-Inputs: `docs/assets/warehouse_full_4cam_map.png`, the day-zero npz + manifest, and captured
-frames in `logs/.../four_camera_showcase/live_gazebo_views/`.
-Outputs (regenerable, gitignored):
-`logs/studies/multicamera_commissioning_bigwarehouse/four_camera_showcase/` — deck
-`Four_Camera_Warehouse_Reliability_Showcase.pptx` (18 slides) + 4 rendered maps
-(reliability atlas, best-camera map, overlap/handover corridor, live montage). The maps are
-linked into the chapter 08/09 `figures/` views.
+1. The enlarged warehouse and four live views.
+2. Four day-zero camera priors.
+3. One real Camera C trajectory and the uncertainty-aware GP records collected on it.
+4. The same Camera C records fitted with each GP method, shown side by side.
+5. Four source-specific GP updates, rather than one pooled field.
+6. The camera overlay, overlap region, and source-switching behaviour.
+7. The target A→B robot operation: choose a trusted camera source, update belief, and replan if the source changes.
 
-Status: PITCH (deck labels planned work as such). Relocated here from
-`midterm_presentation/` on 2026-07-15 — the midterm package is a frozen deliverable and
-holds no active builders.
+Only Slide 3 is currently being revised. Its source figure is
+[`03_uncertainty_aware_collection/figures/camera_c_original_uncertainty_aware_collection.png`](full_story_walkthrough/03_uncertainty_aware_collection/figures/camera_c_original_uncertainty_aware_collection.png).
 
-For the full initialization → collection → per-camera GP → overlap → combination
-→ closed-loop story, see [FULL_STORY_VISUAL_PLAN.md](FULL_STORY_VISUAL_PLAN.md).
-The builder includes the first two acts as current evidence and renders the
-remaining acts as explicitly labelled protocol/evidence gates until the
-four-camera campaign produces data.
+The former protocol-picture assets have been removed. No visual should be
+presented as a measured result unless its source data is named explicitly.

@@ -117,6 +117,7 @@ class CameraManager:
         self._active_camera_id = ""
         self._contender_camera_id = ""
         self._contender_streak = 0
+        self._contender_last_timestamp_s = math.nan
 
     @property
     def active_camera_id(self) -> str:
@@ -128,6 +129,7 @@ class CameraManager:
         self._active_camera_id = ""
         self._contender_camera_id = ""
         self._contender_streak = 0
+        self._contender_last_timestamp_s = math.nan
 
     def select(
         self,
@@ -234,7 +236,7 @@ class CameraManager:
                 reasons=(consistency_reason,),
             )
 
-        self._advance_contender(best.camera_id)
+        self._advance_contender(best.camera_id, best.timestamp_s)
         if self._contender_streak < self.config.required_consecutive_better_frames:
             return self._decision(
                 timestamp=timestamp,
@@ -287,7 +289,9 @@ class CameraManager:
         if self.config.allowed_camera_ids and camera_id not in self.config.allowed_camera_ids:
             reasons.append("camera_not_allowed")
         age = observation_age_s(observation, timestamp_s=timestamp_s)
-        if observation.quality.stale or age > self.config.max_measurement_age_s:
+        if float(observation.timestamp_s) > timestamp_s:
+            reasons.append("measurement_future_dated")
+        elif observation.quality.stale or age > self.config.max_measurement_age_s:
             reasons.append("measurement_stale")
         if observation.quality.association_confidence < self.config.min_association_confidence:
             reasons.append("association_below_minimum")
@@ -306,16 +310,32 @@ class CameraManager:
             return "cross_camera_disagreement"
         return ""
 
-    def _advance_contender(self, camera_id: str) -> None:
+    def _advance_contender(self, camera_id: str, observation_timestamp_s: float) -> None:
+        """Advance hysteresis only for a newer frame from the same contender.
+
+        The live node calls :meth:`select` from a fixed-rate timer and retains
+        the latest observation between detector callbacks.  Counting every
+        timer call would therefore turn one slow camera frame into several
+        fictitious "consecutive better frames".  Replay already supplies one
+        call per frame, so keying the streak to the observation timestamp keeps
+        live and replay semantics aligned.
+        """
+
+        stamp = _finite(observation_timestamp_s, "observation_timestamp_s")
         if self._contender_camera_id == camera_id:
+            if stamp <= self._contender_last_timestamp_s:
+                return
             self._contender_streak += 1
+            self._contender_last_timestamp_s = stamp
         else:
             self._contender_camera_id = camera_id
             self._contender_streak = 1
+            self._contender_last_timestamp_s = stamp
 
     def _clear_contender(self) -> None:
         self._contender_camera_id = ""
         self._contender_streak = 0
+        self._contender_last_timestamp_s = math.nan
 
     def _decision(
         self,
@@ -348,7 +368,8 @@ def observation_age_s(observation: MapObservation, *, timestamp_s: float) -> flo
     """Return non-negative age in seconds without treating future stamps as fresh."""
 
     now = _finite(timestamp_s, "timestamp_s")
-    return max(0.0, now - float(observation.timestamp_s))
+    age = now - float(observation.timestamp_s)
+    return math.inf if age < 0.0 else age
 
 
 def operational_camera_score(

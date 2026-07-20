@@ -3,10 +3,17 @@
 # This file deliberately describes collection and offline replay only.  The
 # active planner must remain disabled until the mapping, D2 overlap, and replay
 # gates below pass; see research_story/09_multicamera_handover_fusion.
-protocol_id: fullwarehouse_four_camera_paper_v1
+protocol_id: fullwarehouse_four_camera_paper_v2
 evaluation_world: warehouse_full_4cam.world.sdf
 method_development_world: warehouse_aws.world.sdf
 two_world_rule: true
+
+protocol_amendments:
+  - date: 2026-07-17
+    before_confirmatory_collection: true
+    change: central_overlap_sweep moved from y=-0.30 m to y=0.30 m
+    reason: the pre-registered -0.50 m lateral variant intersected the central support pillar
+    method_impact: none; route safety correction only
 
 randomization:
   paired_seeds: 20
@@ -15,7 +22,9 @@ randomization:
   # is a final robustness check, not a tuning source.
   conditions:
     - nominal
-    - low_light
+    # Synthetic replay proxy only.  It may not be described as a physical
+    # lighting experiment; a future rendered/hardware light study is separate.
+    - low_light_proxy
     - camera_latency
     - camera_dropout
     - odometry_stress
@@ -77,7 +86,17 @@ offline_replay:
     - covariance_2sigma_coverage
     - false_high_trust_rate
     - handover_count
-    - unsafe_handover_count
+    # A source change with stale/asynchronous/disagreeing or missing-overlap
+    # evidence. This is an operational hazard indicator, not a collision label.
+    - unqualified_handover_count
+
+closed_loop_confirmation:
+  # D4 is deliberately absent from collection coverage and cannot run until
+  # D0--D3 gates pass.  It is a confirmation, not another tuning stage.
+  policies: [R1_single_fixed_R_NIS, M8_hysteretic_handover_selection]
+  tasks: [T1_long_handover, T2_reverse_handover, T5_central_recovery]
+  paired_seeds: 10
+  condition: nominal
 
 navigation_tasks:
   # These rows become closed-loop tasks only after the previous gates pass.
@@ -99,6 +118,7 @@ navigation_tasks:
     purpose: occlusion, recovery, and camera-health stress
 
 release_gates:
+  calibration: all camera projections pass evaluation-only D0 calibration thresholds
   mapping: route-disjoint heldout report exists for all four cameras
   overlap: all declared overlap edges pass the configured D2 thresholds
   covariance: propagated odometry covariance is logged and evaluated against simulation truth only

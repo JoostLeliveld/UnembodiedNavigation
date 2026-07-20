@@ -20,9 +20,14 @@ import argparse
 import csv
 import json
 import math
+import os
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Iterable
+
+# The workspace is intentionally sandboxed; keep Matplotlib's cache outside
+# the repo and away from an unwritable user configuration directory.
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/unav_paper_campaign_matplotlib")
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -128,6 +133,29 @@ def build_plan(study: dict[str, Any], protocol: dict[str, Any]) -> list[dict[str
                     }
                 )
 
+    closed_loop = dict(protocol.get("closed_loop_confirmation", {}))
+    task_by_id = {str(task["id"]): task for task in protocol["navigation_tasks"]}
+    for task_id in closed_loop.get("tasks", []):
+        task = task_by_id.get(str(task_id))
+        if task is None:
+            raise RuntimeError(f"Closed-loop confirmation references unknown task {task_id!r}")
+        for policy in closed_loop.get("policies", []):
+            for seed in range(int(closed_loop.get("paired_seeds", 0))):
+                rows.append(
+                    {
+                        "phase": "D4_closed_loop_confirmation",
+                        "route": str(task["route"]),
+                        "repeat": "",
+                        "lateral_offset_m": "",
+                        "speed_mps": "",
+                        "seed": seed,
+                        "condition": str(closed_loop.get("condition", "nominal")),
+                        "task_id": str(task_id),
+                        "purpose": str(task["purpose"]),
+                        "policy": str(policy),
+                    }
+                )
+
     missing = sorted({str(row["route"]) for row in rows}.difference(routes))
     if missing:
         raise RuntimeError(f"Protocol references routes absent from study.yaml: {missing}")
@@ -223,6 +251,8 @@ def discover_runs(run_root: Path) -> list[dict[str, Any]]:
                 yy = _finite(row.get("odom_noisy_cov_yy"))
                 if math.isfinite(xx) and math.isfinite(xy) and math.isfinite(yy) and xx > 0 and yy > 0 and xx * yy > xy * xy:
                     covariance_rows += 1
+        truth_path = raw_dir.parent / "evaluation_only" / "ground_truth.csv"
+        truth_rows = len(_read_rows(truth_path)) if truth_path.is_file() else 0
         discovered.append(
             {
                 "run_id": raw_dir.parent.name,
@@ -234,6 +264,7 @@ def discover_runs(run_root: Path) -> list[dict[str, Any]]:
                 "usable": experiment.is_file() and sum(camera_counts.values()) > 0,
                 "covariance_rows": covariance_rows,
                 "total_odom_rows": total_odom_rows,
+                "truth_rows": truth_rows,
             }
         )
     return discovered
@@ -245,7 +276,11 @@ def qualification_status(
     """Audit coverage and D2 evidence from operational data only."""
 
     plan = build_plan(study, protocol)
-    collection_rows = [row for row in plan if row["phase"] != "D3_paired_replay"]
+    collection_rows = [
+        row
+        for row in plan
+        if row["phase"].startswith("D1_") or row["phase"].startswith("D2_")
+    ]
     expected_by_phase_route = Counter((row["phase"], row["route"]) for row in collection_rows)
     usable = [run for run in runs if run["usable"]]
     actual_by_route = Counter(str(run["route"]) for run in usable)
@@ -302,6 +337,7 @@ def qualification_status(
 
     total_odom = sum(int(run["total_odom_rows"]) for run in usable)
     valid_covariance = sum(int(run["covariance_rows"]) for run in usable)
+    truth_rows = sum(int(run["truth_rows"]) for run in usable)
     covariance_coverage = valid_covariance / total_odom if total_odom else math.nan
     mapping_routes = set(protocol["route_disjoint_mapping"]["train_routes"])
     mapping_routes.update(protocol["route_disjoint_mapping"]["heldout_routes"])
@@ -329,6 +365,11 @@ def qualification_status(
             "coverage_fraction": None if not math.isfinite(covariance_coverage) else covariance_coverage,
             "ready_for_calibration": bool(total_odom and covariance_coverage >= 0.99),
         },
+        "evaluation_truth": {
+            "samples": truth_rows,
+            "runs_with_truth": sum(int(run["truth_rows"] > 0) for run in usable),
+            "ready_for_paired_replay": bool(usable and all(int(run["truth_rows"]) > 0 for run in usable)),
+        },
         "gates": {
             "mapping_collection_complete": all(
                 item["complete"]
@@ -337,6 +378,7 @@ def qualification_status(
             ),
             "overlap_complete": bool(edge_summaries) and all(item["pass_gate"] for item in edge_summaries),
             "covariance_logged": bool(total_odom and covariance_coverage >= 0.99),
+            "evaluation_truth_logged": bool(usable and all(int(run["truth_rows"]) > 0 for run in usable)),
             "closed_loop_permitted": False,
             "closed_loop_reason": "Frozen policy release requires mapping, D2, covariance-calibration, and matched replay evidence; this audit does not infer those from a sparse pilot.",
         },
@@ -347,8 +389,49 @@ def _save_route_figure(study: dict[str, Any], protocol: dict[str, Any], runs: li
     routes = _route_index(study)
     mapping = dict(protocol["route_disjoint_mapping"])
     colors = {"train": "#1976d2", "heldout": "#ef6c00", "overlap": "#2e7d32"}
-    fig, ax = plt.subplots(figsize=(11.0, 7.4), constrained_layout=True)
+    short_labels = {
+        "camera_A_south_west_pass": "A support",
+        "camera_B_north_west_pass": "B support",
+        "camera_C_south_east_pass": "C support",
+        "camera_D_north_east_pass": "D support",
+        "south_to_north_handover": "S→N handover",
+        "north_to_south_handover": "N→S handover",
+        "south_pair_overlap": "south overlap",
+        "north_pair_overlap": "north overlap",
+        "central_overlap_sweep": "central sweep",
+    }
+    camera_mounts = {
+        "A": (-6.0, -10.0),
+        "B": (-6.0, 10.0),
+        "C": (6.0, -10.0),
+        "D": (6.0, 10.0),
+    }
+    fig, ax = plt.subplots(figsize=(13.2, 7.9), constrained_layout=True)
     ax.set_facecolor("#f7f9fc")
+    ax.add_patch(
+        plt.Rectangle(
+            (-12.25, -10.25),
+            24.5,
+            20.5,
+            fill=False,
+            linewidth=2.0,
+            edgecolor="#455a64",
+            zorder=0,
+        )
+    )
+    ax.axvspan(-10.0, -3.0, color="#eceff1", alpha=0.70, zorder=-1, label="rack / occlusion zone")
+    ax.axvspan(3.0, 10.0, color="#eceff1", alpha=0.70, zorder=-1)
+    for camera_id, (x, y) in camera_mounts.items():
+        aim_y = -2.5 if camera_id in {"A", "C"} else 2.5
+        ax.scatter(x, y, marker="^", s=105, color="#5e35b1", edgecolors="white", linewidths=0.8, zorder=7)
+        ax.annotate(
+            "",
+            xy=(0.0, aim_y),
+            xytext=(x, y),
+            arrowprops={"arrowstyle": "->", "color": "#9575cd", "alpha": 0.58, "linewidth": 1.6},
+            zorder=2,
+        )
+        ax.text(x, y + (0.7 if y < 0 else -0.9), f"camera {camera_id}", ha="center", fontsize=9, weight="bold")
     for name, route in routes.items():
         start = route["start"]
         goal = route["goal"]
@@ -368,8 +451,9 @@ def _save_route_figure(study: dict[str, Any], protocol: dict[str, Any], runs: li
         ax.text(
             (float(start["x"]) + float(goal["x"])) / 2.0 + 0.12,
             (float(start["y"]) + float(goal["y"])) / 2.0 + 0.12,
-            name.replace("_", " "),
-            fontsize=8,
+            short_labels[name],
+            fontsize=8.5,
+            weight="medium",
         )
     for run in runs:
         route = routes.get(str(run["route"]))
@@ -390,8 +474,8 @@ def _save_route_figure(study: dict[str, Any], protocol: dict[str, Any], runs: li
     ax.set_title("Frozen four-camera paper protocol: route-disjoint mapping and overlap evidence", weight="bold")
     ax.set_xlabel("warehouse x [m]")
     ax.set_ylabel("warehouse y [m]")
-    ax.set_xlim(-3.0, 3.0)
-    ax.set_ylim(-8.2, 8.2)
+    ax.set_xlim(-12.9, 12.9)
+    ax.set_ylim(-10.9, 10.9)
     ax.set_aspect("equal")
     ax.grid(alpha=0.25)
     fig.savefig(path, dpi=180)
@@ -427,6 +511,54 @@ def _save_qualification_figure(status: dict[str, Any], path: Path) -> None:
     plt.close(fig)
 
 
+def _load_route_disjoint_validation(validation_root: Path) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for camera in CAMERAS:
+        path = validation_root / camera / "route_disjoint_validation.csv"
+        if not path.is_file():
+            continue
+        for row in _read_rows(path):
+            row["camera_id"] = camera
+            rows.append(row)
+    return rows
+
+
+def _save_route_disjoint_figure(rows: list[dict[str, str]], path: Path) -> None:
+    """Render held-out Brier/ECE matrices without pooling camera evidence."""
+
+    modes = [
+        "constant_train_mean",
+        "prior_only",
+        "naive",
+        "uncertainty_weighted",
+        "belief_spread",
+        "expected_kernel",
+    ]
+    by_key = {(str(row["camera_id"]), str(row["mode"])): row for row in rows}
+    fig, axes = plt.subplots(1, 2, figsize=(15.0, 5.0), constrained_layout=True)
+    labels = [item.replace("_", "\n") for item in modes]
+    for axis, metric, title, cmap in (
+        (axes[0], "brier", "Held-out Brier score ↓", "Blues_r"),
+        (axes[1], "ece", "Held-out calibration error ↓", "Purples_r"),
+    ):
+        matrix = np.full((len(CAMERAS), len(modes)), np.nan, dtype=float)
+        for i, camera in enumerate(CAMERAS):
+            for j, mode in enumerate(modes):
+                matrix[i, j] = _finite(by_key.get((camera, mode), {}).get(metric))
+        image = axis.imshow(matrix, aspect="auto", cmap=cmap)
+        axis.set_xticks(np.arange(len(modes)), labels, fontsize=8)
+        axis.set_yticks(np.arange(len(CAMERAS)), CAMERAS)
+        axis.set_title(title, weight="bold")
+        for i in range(matrix.shape[0]):
+            for j in range(matrix.shape[1]):
+                if math.isfinite(matrix[i, j]):
+                    axis.text(j, i, f"{matrix[i, j]:.3f}", ha="center", va="center", fontsize=8)
+        fig.colorbar(image, ax=axis, shrink=0.86)
+    fig.suptitle("Route-disjoint per-camera GP validation — complete held-out route", weight="bold")
+    fig.savefig(path, dpi=180)
+    plt.close(fig)
+
+
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     fieldnames = (
         "phase",
@@ -438,6 +570,7 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "condition",
         "task_id",
         "purpose",
+        "policy",
     )
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
@@ -464,15 +597,75 @@ def _write_talking_points(path: Path, protocol: dict[str, Any], status: dict[str
 
 - `01_protocol_route_coverage.png` separates blue training routes, orange held-out handover routes, and green overlap qualification routes. Black endpoints mark usable recorded passes.
 - `02_collection_qualification.png` reports collection progress against the frozen matrix. It is deliberately a progress figure, not a performance figure.
+- `03_route_disjoint_gp_validation.png`, when supplied with GP validation outputs, reports Brier and calibration per camera without pooling camera evidence. Treat it as pilot-only unless the frozen D1 matrix is complete.
 
 ## Gate status
 
 - Usable recordings: {status['usable_run_count']} of {status['run_count']} manifest-backed runs.
 - Propagated covariance present in {status['covariance_logging']['valid_rows']}/{status['covariance_logging']['total_rows']} logged odometry rows.
+- Evaluation-only truth: {status['evaluation_truth']['samples']} samples across {status['evaluation_truth']['runs_with_truth']} usable runs.
 {overlap_lines or '- No overlap recording is available yet.'}
 - Closed-loop handover remains disabled until mapping, D2 overlap, covariance calibration, and paired replay gates all pass.
 """
     path.write_text(text, encoding="utf-8")
+
+
+def _write_results(path: Path, status: dict[str, Any], validation_rows: list[dict[str, str]]) -> None:
+    """Write a claim-safe summary beside figures, including negative evidence."""
+
+    lines = [
+        "# Paper campaign status",
+        "",
+        "## Release decision",
+        "",
+        "**Not eligible for a learned-map, fusion, or closed-loop claim.**",
+        "",
+        f"- Mapping matrix complete: `{status['gates']['mapping_collection_complete']}`.",
+        f"- All D2 edges qualified: `{status['gates']['overlap_complete']}`.",
+        f"- Propagated covariance logged: `{status['gates']['covariance_logged']}`.",
+        f"- Evaluation-only truth logged: `{status['gates']['evaluation_truth_logged']}`.",
+        "",
+        "## Current operational pilot",
+        "",
+        f"- {status['usable_run_count']} usable recordings out of {status['run_count']} manifest-backed recordings.",
+        f"- {status['covariance_logging']['valid_rows']}/{status['covariance_logging']['total_rows']} odometry rows contain propagated covariance (the existing pilot predates this implementation).",
+        f"- {status['evaluation_truth']['samples']} evaluation-only truth samples are available for paired replay.",
+        "",
+    ]
+    if validation_rows:
+        lines.extend(
+            [
+                "## Route-disjoint GP pilot",
+                "",
+                "The table uses complete held-out runs, but only 12–13 held-out detector observations per camera. It is an end-to-end smoke result, not a paper comparison.",
+                "",
+                "| Camera | Best Brier mode | Brier | Held-out events |",
+                "| --- | --- | ---: | ---: |",
+            ]
+        )
+        for camera in CAMERAS:
+            candidates = [row for row in validation_rows if row.get("camera_id") == camera]
+            if not candidates:
+                continue
+            best = min(candidates, key=lambda row: _finite(row.get("brier")))
+            lines.append(
+                f"| {camera} | {best['mode']} | {_finite(best.get('brier')):.3f} | {best['heldout_events']} |"
+            )
+        lines.extend(
+            [
+                "",
+                "Several learned variants underperform a constant or day-zero prior on this tiny split. That is the expected reason to collect the frozen D1 matrix before selecting a method.",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "## Next evidence-producing action",
+            "",
+            "Collect the D1 training routes with the new covariance and separate evaluation-only truth recorder, then collect the held-out handovers and each D2 edge to its configured 30-pair minimum. Re-run this folder after every batch; do not alter the protocol based on held-out outcomes.",
+        ]
+    )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _write_collection_checklist(path: Path, study: dict[str, Any], protocol: dict[str, Any]) -> None:
@@ -482,11 +675,12 @@ Use one row from `campaign_plan.csv` at a time.  Do not change a threshold, GP h
 
 1. Launch `warehouse_full4cam_commissioning.launch.py` at the selected route's documented spawn pose, setting the paired encoder-noise seed.
 2. Start `record_operational_logs.py` with that same documented spawn pose.  Verify its manifest says `contains_ground_truth: false` and that the propagated covariance columns are populated.
-3. Run `drive_study_route.py` with the plan row's route, offset, and speed.  Keep the emitted `route_manifest.json` beside the raw CSVs.
-4. Export each completed run with `reliability_tools export-multicamera`; only evaluation exports may be joined with simulation truth.
-5. Build per-camera GP inputs from D1 training runs.  Fit the four posteriors separately, then run the route-disjoint held-out report.
-6. Qualify every D2 edge at ≥{protocol['overlap_qualification']['min_pairs_per_edge']} synchronized pairs before allowing its fusion condition.
-7. Run all replay policies on exactly the same exported frames and paired seeds.  Do not include any oracle policy in the operational comparison.
+3. Start `record_evaluation_truth.py` separately under `evaluation_only/`; it is a passive evaluator and must never be an operational topic.
+4. Run `drive_study_route.py` with the plan row's route, offset, and speed.  Keep the emitted `route_manifest.json` beside the raw CSVs.
+5. Use `attach_evaluation_truth.py` to create evaluation-only copies, then export each completed run with `reliability_tools export-multicamera`.
+6. Build per-camera GP inputs from D1 training runs.  Fit the four posteriors separately, then run the route-disjoint held-out report.
+7. Qualify every D2 edge at ≥{protocol['overlap_qualification']['min_pairs_per_edge']} synchronized pairs before allowing its fusion condition.
+8. Run all replay policies on exactly the same exported frames and paired seeds.  Do not include any oracle policy in the operational comparison.
 
 `paper_campaign.py` may be re-run at any time to update the audit figures and gate status.
 """
@@ -498,6 +692,12 @@ def main() -> int:
     parser.add_argument("--study", type=Path, default=DEFAULT_STUDY)
     parser.add_argument("--protocol", type=Path, default=DEFAULT_PROTOCOL)
     parser.add_argument("--run-root", type=Path, default=None, help="Operational run root to audit; omit for an empty-plan audit.")
+    parser.add_argument(
+        "--validation-root",
+        type=Path,
+        default=None,
+        help="Root containing camera_A...camera_D/route_disjoint_validation.csv outputs.",
+    )
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
 
@@ -521,7 +721,15 @@ def main() -> int:
     )
     _save_route_figure(study, protocol, runs, figures / "01_protocol_route_coverage.png")
     _save_qualification_figure(status, figures / "02_collection_qualification.png")
+    validation_rows = (
+        _load_route_disjoint_validation(args.validation_root.expanduser().resolve())
+        if args.validation_root
+        else []
+    )
+    if validation_rows:
+        _save_route_disjoint_figure(validation_rows, figures / "03_route_disjoint_gp_validation.png")
     _write_talking_points(out_dir / "TALKING_POINTS.md", protocol, status)
+    _write_results(out_dir / "RESULTS.md", status, validation_rows)
     _write_collection_checklist(out_dir / "COLLECTION_CHECKLIST.md", study, protocol)
 
     print(json.dumps({"out_dir": str(out_dir), "status": status["gates"]}, indent=2, sort_keys=True))

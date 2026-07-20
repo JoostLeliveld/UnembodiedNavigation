@@ -22,9 +22,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+from datetime import datetime, timezone
+import hashlib
 import json
 import math
+import os
 from pathlib import Path
+import sys
 import time
 from typing import Any
 
@@ -41,6 +45,33 @@ except ImportError:  # pragma: no cover - only used in non-ROS tooling contexts
 
 
 TRUTH_FIELDS = ("stamp", "gt_x", "gt_y", "gt_yaw")
+EVIDENCE_ROLES = ("fit", "qualification", "diagnostic")
+
+
+REPO = Path(__file__).resolve().parents[3]
+TOOLS_DIR = Path(__file__).resolve().parent
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+
+import campaign_ledger  # noqa: E402
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
 
 
 def _stamp_s(stamp: Any) -> float:
@@ -85,7 +116,10 @@ class EvaluationTruthRecorder(Node):
 
         out_dir.mkdir(parents=True, exist_ok=True)
         self.csv_path = out_dir / "ground_truth.csv"
-        self._csv_handle = self.csv_path.open("w", newline="", encoding="utf-8")
+        self.part_path = self.csv_path.with_suffix(self.csv_path.suffix + ".part")
+        if self.csv_path.exists() or self.part_path.exists():
+            raise RuntimeError(f"Refusing to overwrite truth output: {self.csv_path}")
+        self._csv_handle = self.part_path.open("x", newline="", encoding="utf-8")
         self.writer = csv.DictWriter(self._csv_handle, fieldnames=TRUTH_FIELDS)
         self.writer.writeheader()
         self.create_subscription(TFMessage, topic, self._truth_callback, 50)
@@ -124,8 +158,10 @@ class EvaluationTruthRecorder(Node):
             return 0.0
         return self.last_stamp - self.first_stamp
 
-    def close(self) -> None:
+    def close(self, *, finalize: bool) -> None:
         self._csv_handle.close()
+        if finalize:
+            os.replace(self.part_path, self.csv_path)
         self.get_logger().info(f"wrote {self.count} ground-truth samples to {self.csv_path}")
 
 
@@ -135,11 +171,123 @@ def main() -> int:
     parser.add_argument("--topic", default="/ground_truth_tf")
     parser.add_argument("--child-frame-id", default="turtlebot3")
     parser.add_argument("--duration-s", type=float, default=0.0)
+    parser.add_argument("--completion-manifest", type=Path, default=None)
+    parser.add_argument("--wall-timeout-s", type=float, default=0.0)
+    parser.add_argument("--min-samples", type=int, default=1)
     parser.add_argument("--min-interval-s", type=float, default=0.05)
     parser.add_argument("--use-sim-time", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--run-id", required=True)
+    parser.add_argument("--plan-row-id", required=True)
+    parser.add_argument("--attempt-id", required=True)
+    parser.add_argument("--analysis-split", required=True)
+    parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument(
+        "--campaign-ledger",
+        type=Path,
+        required=True,
+        help="Immutable plan contract that owns --plan-row-id and --out-dir.",
+    )
+    parser.add_argument(
+        "--evidence-role",
+        choices=EVIDENCE_ROLES,
+        default="diagnostic",
+        help=(
+            "Pre-declared before recording and required to match the operational "
+            "recorder. D0 readiness accepts qualification runs only."
+        ),
+    )
+    parser.add_argument(
+        "--study-config",
+        type=Path,
+        default=REPO / "experiments/multicamera_commissioning_bigwarehouse/config/study.yaml",
+    )
+    parser.add_argument(
+        "--protocol",
+        type=Path,
+        default=REPO / "experiments/multicamera_commissioning_bigwarehouse/config/paper_protocol.yaml",
+    )
+    parser.add_argument(
+        "--analysis-plan",
+        type=Path,
+        default=REPO
+        / "experiments/multicamera_commissioning_bigwarehouse/config/paper_analysis_plan.yaml",
+    )
+    parser.add_argument(
+        "--frozen-config",
+        type=Path,
+        action="append",
+        required=True,
+        help=(
+            "Frozen campaign config recorded in every run; repeat exactly the "
+            "--config set used to create campaign_ledger.json."
+        ),
+    )
     args = parser.parse_args()
     if rclpy is None:
         raise SystemExit("rclpy is required to record ground truth")
+
+    if args.duration_s < 0.0 or args.wall_timeout_s < 0.0 or args.min_samples < 1:
+        parser.error("durations must be non-negative and --min-samples must be positive")
+    if args.duration_s <= 0.0 and args.completion_manifest is None:
+        parser.error("set --duration-s or --completion-manifest; unbounded recording is forbidden")
+    provenance_paths = {
+        "study_config": args.study_config.expanduser().resolve(),
+        "protocol": args.protocol.expanduser().resolve(),
+        "analysis_plan": args.analysis_plan.expanduser().resolve(),
+    }
+    frozen_config_paths = [path.expanduser().resolve() for path in args.frozen_config]
+    missing = [str(path) for path in provenance_paths.values() if not path.is_file()]
+    missing.extend(str(path) for path in frozen_config_paths if not path.is_file())
+    if missing:
+        parser.error("missing provenance inputs: " + ", ".join(missing))
+    try:
+        campaign_contract = campaign_ledger.recorder_preflight_contract(
+            ledger_path=args.campaign_ledger,
+            plan_row_id=str(args.plan_row_id),
+            attempt_id=str(args.attempt_id),
+            seed=int(args.seed),
+            evidence_role=str(args.evidence_role),
+            analysis_split=str(args.analysis_split),
+            output_dir=args.out_dir,
+            artifact_subdir="evaluation_only",
+            expected_inputs={
+                "study": provenance_paths["study_config"],
+                "protocol": provenance_paths["protocol"],
+            },
+            frozen_config_paths=frozen_config_paths,
+        )
+    except campaign_ledger.LedgerError as exc:
+        parser.error(f"campaign preflight failed: {exc}")
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    final_manifest_path = args.out_dir / "evaluation_truth_manifest.json"
+    progress_manifest_path = args.out_dir / "evaluation_truth_manifest.in_progress.json"
+    failed_manifest_path = args.out_dir / "evaluation_truth_manifest.failed.json"
+    if any(path.exists() for path in (final_manifest_path, progress_manifest_path, failed_manifest_path)):
+        raise RuntimeError(f"Refusing to reuse truth output directory: {args.out_dir}")
+    base_manifest = {
+        "status": "in_progress",
+        "started_utc": _utc_now(),
+        "contains_ground_truth": True,
+        "evaluation_only": True,
+        "run_id": str(args.run_id),
+        "plan_row_id": str(args.plan_row_id),
+        "attempt_id": str(args.attempt_id),
+        "analysis_split": str(args.analysis_split),
+        "seed": int(args.seed),
+        "evidence_role": str(args.evidence_role),
+        "minimum_samples": int(args.min_samples),
+        "provenance": {
+            name: {"path": str(path), "sha256": _sha256_file(path)}
+            for name, path in provenance_paths.items()
+        },
+        "frozen_configs": [
+            {"path": str(path), "sha256": _sha256_file(path)}
+            for path in frozen_config_paths
+        ],
+        "campaign_contract": campaign_contract,
+        "transport_environment": campaign_contract["transport_environment"],
+    }
+    _write_json_atomic(progress_manifest_path, base_manifest)
 
     rclpy.init()
     recorder = EvaluationTruthRecorder(
@@ -150,40 +298,75 @@ def main() -> int:
         use_sim_time=args.use_sim_time,
     )
     wall_start = time.monotonic()
+    status = "failed"
+    stop_reason = "unknown"
+    failure_message = ""
+    wall_timeout_s = (
+        float(args.wall_timeout_s)
+        if args.wall_timeout_s > 0.0
+        else (10.0 * float(args.duration_s) + 60.0 if args.duration_s > 0.0 else 0.0)
+    )
     try:
         while rclpy.ok():
             rclpy.spin_once(recorder, timeout_sec=0.1)
             if args.duration_s > 0.0 and recorder.elapsed_s() >= args.duration_s:
+                status = "completed"
+                stop_reason = "requested_duration_reached"
                 break
-            # Wall-clock backstop so a paused simulation cannot hang the tool
-            # forever: allow generous 10x real-time slack.
-            if args.duration_s > 0.0 and time.monotonic() - wall_start > 10.0 * args.duration_s + 60.0:
-                recorder.get_logger().warn("wall-clock backstop reached before sim duration")
-                break
+            if args.completion_manifest is not None and args.completion_manifest.is_file():
+                completion = json.loads(args.completion_manifest.read_text(encoding="utf-8"))
+                if completion.get("status") == "completed":
+                    status = "completed"
+                    stop_reason = "route_completion_manifest"
+                    break
+            if wall_timeout_s > 0.0 and time.monotonic() - wall_start > wall_timeout_s:
+                raise RuntimeError("wall-clock deadman reached before truth recording completed")
     except KeyboardInterrupt:
-        pass
+        status = "interrupted"
+        stop_reason = "keyboard_interrupt"
+    except BaseException as exc:
+        status = "failed"
+        stop_reason = "exception"
+        failure_message = f"{type(exc).__name__}: {exc}"
     finally:
-        recorder.close()
-        manifest = {
-            "contains_ground_truth": True,
-            "evaluation_only": True,
-            "topic": args.topic,
-            "child_frame_id": args.child_frame_id,
-            "min_interval_s": float(args.min_interval_s),
-            "sample_count": recorder.count,
-            "first_stamp_s": recorder.first_stamp,
-            "last_stamp_s": recorder.last_stamp,
-            "note": (
-                "Simulation truth for evaluation_only exports and calibration audits. "
-                "Never an operational or model input (leakage firewall)."
-            ),
-        }
-        (args.out_dir / "evaluation_truth_manifest.json").write_text(
-            json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        if status == "completed" and recorder.count < int(args.min_samples):
+            status = "failed"
+            stop_reason = "minimum_samples_not_met"
+            failure_message = f"truth samples {recorder.count} < {args.min_samples}"
+        recorder.close(finalize=(status == "completed"))
         recorder.destroy_node()
-        rclpy.shutdown()
-    return 0
+        if rclpy.ok():
+            rclpy.shutdown()
+
+    manifest = {
+        **base_manifest,
+        "status": status,
+        "finished_utc": _utc_now(),
+        "stop_reason": stop_reason,
+        "failure_message": failure_message or None,
+        "wall_elapsed_s": float(time.monotonic() - wall_start),
+        "topic": args.topic,
+        "child_frame_id": args.child_frame_id,
+        "min_interval_s": float(args.min_interval_s),
+        "sample_count": recorder.count,
+        "first_stamp_s": recorder.first_stamp,
+        "last_stamp_s": recorder.last_stamp,
+        "note": (
+            "Simulation truth for evaluation_only exports and calibration audits. "
+            "Never an operational or model input (leakage firewall)."
+        ),
+    }
+    if args.completion_manifest is not None and args.completion_manifest.is_file():
+        manifest["route_completion_manifest"] = {
+            "path": str(args.completion_manifest.resolve()),
+            "sha256": _sha256_file(args.completion_manifest.resolve()),
+        }
+    progress_manifest_path.unlink(missing_ok=True)
+    if status == "completed":
+        _write_json_atomic(final_manifest_path, manifest)
+        return 0
+    _write_json_atomic(failed_manifest_path, manifest)
+    raise RuntimeError(f"evaluation truth recording did not complete: {stop_reason}: {failure_message}")
 
 
 if __name__ == "__main__":

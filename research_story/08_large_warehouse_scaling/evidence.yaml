@@ -24,7 +24,7 @@ evidence:
   - path: ../../experiments/multicamera_commissioning_bigwarehouse
     kind: study
     tag: established_infra
-    note: "full_4cam A-D collection stack, routes, propagated operational covariance, and frozen paper protocol are implemented. A sparse operational pilot exists but no learned-map, overlap, or closed-loop claim is promoted until the protocol gates pass. Retired-testbed data is historical."
+    note: "full_4cam A-D collection stack, routes, propagated operational covariance, frozen paper protocol, confirmatory analysis plan, and readiness audit are implemented. A sparse operational pilot exists but no learned-map, overlap, or closed-loop claim is promoted until D0-D4 gates pass. Retired-testbed data is historical."
   - path: ../presentations/2026-07_four_camera_showcase
     kind: presentation
     tag: pitch

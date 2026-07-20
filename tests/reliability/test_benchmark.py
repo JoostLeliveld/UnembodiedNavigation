@@ -90,6 +90,8 @@ def test_run_benchmark_auto_adds_multicamera_fusion_modes() -> None:
     assert ReplayMode.HANDOVER_AWARE_SELECTION.value in summary["results"]
     assert ReplayMode.HYSTERETIC_HANDOVER_SELECTION.value in summary["results"]
     assert summary["results"][ReplayMode.ODOM_ONLY.value]["rmse_m"] is not None
+    assert summary["results"][ReplayMode.ODOM_ONLY.value]["p95_error_m"] is not None
+    assert summary["results"][ReplayMode.ODOM_ONLY.value]["covariance_2sigma_coverage"] is not None
     assert summary["results"][ReplayMode.SEQUENTIAL_FUSION.value]["steps"] == 2
 
 

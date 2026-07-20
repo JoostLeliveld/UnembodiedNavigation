@@ -39,6 +39,14 @@ spatial-trust release threshold the newly fitted pilot maps released zero
 corrections. That is the intended fail-safe outcome: the system deferred rather
 than turning sparse, weakly trusted data into a false localization correction.”
 
+## Show 6 — `figures/06_actual_readiness_audit.png`
+
+“An evaluation-only smoke audit exposes the gap honestly. Camera A has no
+audited detections, Camera C exceeds the 0.15 m projection-bias target, and the
+current covariance coverage is badly miscalibrated. None of that ground truth
+was used to fit the GPs or drive the manager. It tells us exactly what the D0
+calibration and covariance campaign must fix before we make a paper claim.”
+
 ## Evidence boundary
 
 - Two executed pilot routes; not a route-disjoint closed-loop evaluation.
@@ -49,6 +57,8 @@ than turning sparse, weakly trusted data into a false localization correction.�
   are required before enabling or claiming general measurement fusion.
 - The policy replay demonstrates safe withholding, not localization
   improvement. Closed-loop corrections remain the next experiment.
+- The readiness audit is evaluator-only. Its current failures are research
+  gaps, not inputs or hidden tuning signals for the operational pipeline.
 
 ## Transition
 

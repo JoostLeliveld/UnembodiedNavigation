@@ -21,19 +21,40 @@ from reliability.export import (
     write_split_export,
 )
 from reliability.fusion import (
+    FuseOrSelectDecision,
     FixedZone,
     MapObservation,
     SequentialFusionResult,
     camera_disagreement_m,
     conservative_camera_score,
+    expected_information_gain,
+    fuse_or_select,
+    joseph_update_2d,
+    robust_reweight_covariance,
     select_best_static_reliability,
     select_conservative_best_camera,
     select_fixed_zone,
     select_freshest_valid,
     select_highest_detector_score,
+    select_information_best,
     select_primary_camera,
     sequential_kalman_update_2d,
     usable_observations,
+)
+from reliability.confidence_calibration import (
+    CalibrationError,
+    IsotonicCalibrator,
+    LogisticCalibrator,
+    MultivariateLogisticCalibrator,
+    reliability_curve,
+)
+from reliability.conditional_covariance import (
+    CovarianceEstimate,
+    chi2_coverage,
+    default_shrinkage_lambda,
+    estimate_conditional_covariance,
+    matrix_nll,
+    sharpness,
 )
 from reliability.benchmark import (
     ReplayBenchmarkCondition,
@@ -69,6 +90,14 @@ from reliability.health import (
     CameraHealthMachine,
     CameraHealthState,
     update_health_by_camera,
+)
+from reliability.health_ewma import (
+    CalibrationHealthState,
+    HealthDebouncer,
+    HealthDebouncerConfig,
+    InnovationHealthConfig,
+    InnovationHealthMonitor,
+    isolate_suspect_camera,
 )
 from reliability.handover import (
     HandoverUncertaintyConfig,
@@ -116,6 +145,13 @@ from reliability.overlap import (
     summarize_overlap_pairs,
     validate_camera_overlap,
 )
+from reliability.planning_covariance import (
+    batch_plan_query,
+    expected_information_update,
+    plan_covariance,
+    plan_reliability,
+    sequential_expected_update,
+)
 from reliability.replay import (
     EvaluationFrame,
     ReplayConfig,
@@ -136,6 +172,17 @@ from reliability.single_camera_adapter import (
     precision_blend_covariance,
     selected_pixel_source_name,
 )
+from reliability.toro_baseline import (
+    CalibrationPoint,
+    ToroCovarianceModel,
+    bin_observations,
+    constant_velocity_predict,
+)
+from reliability.trust_stacker import (
+    TrustFeatures,
+    TrustStacker,
+    split_groups,
+)
 
 __all__ = [
     "CameraObservation",
@@ -154,19 +201,36 @@ __all__ = [
     "export_split_records_from_rows",
     "read_csv_rows",
     "write_split_export",
+    "FuseOrSelectDecision",
     "FixedZone",
     "MapObservation",
     "SequentialFusionResult",
     "camera_disagreement_m",
     "conservative_camera_score",
+    "expected_information_gain",
+    "fuse_or_select",
+    "joseph_update_2d",
+    "robust_reweight_covariance",
     "select_best_static_reliability",
     "select_conservative_best_camera",
     "select_fixed_zone",
     "select_freshest_valid",
     "select_highest_detector_score",
+    "select_information_best",
     "select_primary_camera",
     "sequential_kalman_update_2d",
     "usable_observations",
+    "CalibrationError",
+    "IsotonicCalibrator",
+    "LogisticCalibrator",
+    "MultivariateLogisticCalibrator",
+    "reliability_curve",
+    "CovarianceEstimate",
+    "chi2_coverage",
+    "default_shrinkage_lambda",
+    "estimate_conditional_covariance",
+    "matrix_nll",
+    "sharpness",
     "ReplayBenchmarkCondition",
     "ReplayBenchmarkResult",
     "ReplayBenchmarkSuite",
@@ -194,6 +258,12 @@ __all__ = [
     "CameraHealthMachine",
     "CameraHealthState",
     "update_health_by_camera",
+    "CalibrationHealthState",
+    "HealthDebouncer",
+    "HealthDebouncerConfig",
+    "InnovationHealthConfig",
+    "InnovationHealthMonitor",
+    "isolate_suspect_camera",
     "HandoverUncertaintyConfig",
     "HandoverUncertaintyDiagnostic",
     "assess_handover_uncertainty",
@@ -230,6 +300,11 @@ __all__ = [
     "summarize_overlap_trust",
     "summarize_overlap_pairs",
     "validate_camera_overlap",
+    "batch_plan_query",
+    "expected_information_update",
+    "plan_covariance",
+    "plan_reliability",
+    "sequential_expected_update",
     "EvaluationFrame",
     "ReplayConfig",
     "ReplayFrame",
@@ -246,4 +321,11 @@ __all__ = [
     "camera_quality_from_planning_diagnostics",
     "precision_blend_covariance",
     "selected_pixel_source_name",
+    "CalibrationPoint",
+    "ToroCovarianceModel",
+    "bin_observations",
+    "constant_velocity_predict",
+    "TrustFeatures",
+    "TrustStacker",
+    "split_groups",
 ]

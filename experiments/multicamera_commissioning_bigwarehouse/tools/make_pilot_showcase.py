@@ -509,7 +509,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--static-probe", type=Path, required=True)
     parser.add_argument("--handover-probe", type=Path, required=True)
-    parser.add_argument("--world-sdf", type=Path, default=REPO.parent / "_archive/src/sim/gazebo_worlds/worlds/warehouse_big_2cam.world.sdf"  # HISTORICAL pilot world (archived))
+    parser.add_argument(
+        "--world-sdf",
+        type=Path,
+        default=REPO.parent
+        / "_archive/src/sim/gazebo_worlds/worlds/warehouse_big_2cam.world.sdf",
+        # HISTORICAL pilot world (archived).
+    )
     parser.add_argument(
         "--detector-model",
         type=Path,

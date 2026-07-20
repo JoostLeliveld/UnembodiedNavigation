@@ -212,6 +212,268 @@ def camera_disagreement_m(observations: Sequence[MapObservation]) -> float:
     return float(max_dist)
 
 
+@dataclass(frozen=True)
+class FuseOrSelectDecision:
+    """Outcome of the fuse-vs-select consistency logic (plan 09, §12.5)."""
+
+    mode: str
+    selected: tuple[str, ...]
+    excluded: tuple[str, ...]
+    reason: str
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("fuse", "select", "none"):
+            raise ContractValidationError("mode must be one of 'fuse', 'select', 'none'")
+        object.__setattr__(self, "selected", tuple(str(c) for c in self.selected))
+        object.__setattr__(self, "excluded", tuple(str(c) for c in self.excluded))
+
+
+def joseph_update_2d(
+    state_xy: Sequence[float],
+    cov_xy: Sequence[Sequence[float]],
+    observation: MapObservation,
+) -> tuple[tuple[float, float], tuple[tuple[float, float], tuple[float, float]], float]:
+    """Single position update in Joseph form: (I−KH)P(I−KH)ᵀ + KRKᵀ, H = I.
+
+    Numerically stable at small R. Returns (state, covariance, nis) where
+    nis is the innovation Mahalanobis distance d² = νᵀ S⁻¹ ν, S = P + R.
+    """
+
+    mean = _pair(state_xy, "state_xy")
+    cov = _matrix_2x2(cov_xy, "cov_xy")
+    _validate_spd(cov, "cov_xy")
+    r_mat = observation.covariance_m2
+
+    z = observation.xy_m
+    innovation = (z[0] - mean[0], z[1] - mean[1])
+    s_mat = _mat_add(cov, r_mat)
+    nis = _quad_form_inverse_2x2(innovation, s_mat)
+    k = _mat_mul(cov, _mat_inv_2x2(s_mat))
+    delta = _mat_vec(k, innovation)
+    mean_post = (mean[0] + delta[0], mean[1] + delta[1])
+    i_minus_k = _mat_sub(((1.0, 0.0), (0.0, 1.0)), k)
+    cov_post = _mat_add(
+        _mat_mul(_mat_mul(i_minus_k, cov), _transpose(i_minus_k)),
+        _mat_mul(_mat_mul(k, r_mat), _transpose(k)),
+    )
+    return mean_post, _symmetrize(cov_post), float(nis)
+
+
+def robust_reweight_covariance(
+    covariance: Sequence[Sequence[float]],
+    nis: float,
+    *,
+    dof: float = 4.0,
+    w_min: float = 0.1,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Student-t robust reweighting of an observation covariance.
+
+    w = (dof + 2) / (dof + nis); returns R / clamp(w, w_min, 1.0).
+
+    Deliberate deviation from plan 09's literal ``R / max(w, w_min)``: the
+    weight is additionally capped at 1.0 so the mapping is monotone
+    *inflating* only. Uncapped, nis < 2 would give w > 1 and shrink R
+    ("sharpening"), violating plan 07's property that lower trust never
+    reduces covariance — and a suspiciously-perfect observation should not
+    be trusted beyond its nominal R.  Limits: nis → 0 ⇒ R unchanged;
+    nis → ∞ ⇒ R / w_min floor. Ablatable: skipping this call = plain update.
+    """
+
+    r_mat = _matrix_2x2(covariance, "covariance")
+    _validate_spd(r_mat, "covariance")
+    nis_value = float(nis)
+    if not math.isfinite(nis_value) or nis_value < 0.0:
+        raise ContractValidationError("nis must be finite and non-negative")
+    dof_value = float(dof)
+    if not math.isfinite(dof_value) or dof_value <= 0.0:
+        raise ContractValidationError("dof must be finite and positive")
+    w_min_value = float(w_min)
+    if not math.isfinite(w_min_value) or not 0.0 < w_min_value <= 1.0:
+        raise ContractValidationError("w_min must be in (0, 1]")
+
+    weight = (dof_value + 2.0) / (dof_value + nis_value)
+    weight = min(max(weight, w_min_value), 1.0)
+    scale = 1.0 / weight
+    return (
+        (r_mat[0][0] * scale, r_mat[0][1] * scale),
+        (r_mat[1][0] * scale, r_mat[1][1] * scale),
+    )
+
+
+def expected_information_gain(
+    cov_prior: Sequence[Sequence[float]],
+    observation_covariance: Sequence[Sequence[float]],
+) -> float:
+    """Expected information gain Δ = log|P⁻| − log|P⁺| of a position update.
+
+    P⁺ is the standard posterior for H = I: P⁺ = (I − K)P⁻ with
+    K = P⁻ (P⁻ + R)⁻¹ (equivalently (P⁻¹ + R⁻¹)⁻¹). Always > 0 for SPD inputs.
+    """
+
+    p_mat = _matrix_2x2(cov_prior, "cov_prior")
+    _validate_spd(p_mat, "cov_prior")
+    r_mat = _matrix_2x2(observation_covariance, "observation_covariance")
+    _validate_spd(r_mat, "observation_covariance")
+
+    s_mat = _mat_add(p_mat, r_mat)
+    k = _mat_mul(p_mat, _mat_inv_2x2(s_mat))
+    p_post = _symmetrize(_mat_mul(_mat_sub(((1.0, 0.0), (0.0, 1.0)), k), p_mat))
+    det_prior = _det_2x2(p_mat)
+    det_post = _det_2x2(p_post)
+    if det_post <= 0.0:
+        raise ContractValidationError("posterior covariance is not positive definite")
+    return float(math.log(det_prior) - math.log(det_post))
+
+
+def select_information_best(
+    observations: Sequence[MapObservation],
+    cov_prior: Sequence[Sequence[float]],
+) -> MapObservation | None:
+    """B8: pick the observation with the largest expected information gain.
+
+    Geometry-aware: a high-reliability observation with poor geometry
+    (large variance along the prior's uncertain axis) can lose to a less
+    reliable one that constrains the right direction.
+    """
+
+    p_mat = _matrix_2x2(cov_prior, "cov_prior")
+    _validate_spd(p_mat, "cov_prior")
+    best: MapObservation | None = None
+    best_gain = -math.inf
+    for obs in observations:
+        if obs is None:
+            continue
+        gain = expected_information_gain(p_mat, obs.covariance_m2)
+        if gain > best_gain:
+            best = obs
+            best_gain = gain
+    return best
+
+
+def fuse_or_select(
+    observations: Sequence[MapObservation],
+    taus: Mapping[str, float],
+    healths: Mapping[str, float],
+    *,
+    tau_min: float,
+    h_min: float,
+    disagreement_gate_m: float,
+) -> FuseOrSelectDecision:
+    """Fuse-vs-select consistency logic (plan 09, §12.5).
+
+    Candidate set C = {i : τ_i ≥ tau_min and h_i ≥ h_min} (a camera missing
+    from ``taus``/``healths`` is treated as 0.0, i.e. excluded).
+
+    - |C| = 0 → mode 'none'; |C| = 1 → mode 'select'.
+    - If all pairwise position disagreements within C are ≤
+      ``disagreement_gate_m`` → mode 'fuse' with all of C.
+    - Otherwise iteratively drop the camera involved in the most
+      above-gate pairs (ties broken by lowest τ, then camera_id for
+      determinism) and re-check, until the remainder is mutually
+      consistent (fuse) or a single camera remains (select).
+    """
+
+    tau_min_value = _require_probability(tau_min, "tau_min")
+    h_min_value = _require_probability(h_min, "h_min")
+    gate = float(disagreement_gate_m)
+    if not math.isfinite(gate) or gate <= 0.0:
+        raise ContractValidationError("disagreement_gate_m must be finite and positive")
+
+    excluded: list[str] = []
+    candidates: list[MapObservation] = []
+    validated_taus: dict[str, float] = {}
+    for obs in observations:
+        tau = _require_probability(
+            taus.get(obs.camera_id, 0.0),
+            f"taus[{obs.camera_id!r}]",
+        )
+        health = _require_probability(
+            healths.get(obs.camera_id, 0.0),
+            f"healths[{obs.camera_id!r}]",
+        )
+        validated_taus[obs.camera_id] = tau
+        if tau >= tau_min_value and health >= h_min_value:
+            candidates.append(obs)
+        else:
+            excluded.append(obs.camera_id)
+
+    if not candidates:
+        return FuseOrSelectDecision(
+            mode="none",
+            selected=(),
+            excluded=tuple(excluded),
+            reason="no candidate passed tau_min/h_min thresholds",
+        )
+    if len(candidates) == 1:
+        return FuseOrSelectDecision(
+            mode="select",
+            selected=(candidates[0].camera_id,),
+            excluded=tuple(excluded),
+            reason="single candidate above thresholds",
+        )
+
+    dropped_for_disagreement: list[str] = []
+    while len(candidates) > 1:
+        violations: dict[str, int] = {obs.camera_id: 0 for obs in candidates}
+        any_violation = False
+        for i, obs_a in enumerate(candidates):
+            for obs_b in candidates[i + 1 :]:
+                dist = math.hypot(
+                    obs_a.xy_m[0] - obs_b.xy_m[0],
+                    obs_a.xy_m[1] - obs_b.xy_m[1],
+                )
+                if dist > gate:
+                    any_violation = True
+                    violations[obs_a.camera_id] += 1
+                    violations[obs_b.camera_id] += 1
+        if not any_violation:
+            break
+        worst_id = min(
+            violations,
+            key=lambda cid: (-violations[cid], validated_taus[cid], cid),
+        )
+        dropped_for_disagreement.append(worst_id)
+        excluded.append(worst_id)
+        candidates = [obs for obs in candidates if obs.camera_id != worst_id]
+
+    if len(candidates) == 1:
+        return FuseOrSelectDecision(
+            mode="select",
+            selected=(candidates[0].camera_id,),
+            excluded=tuple(excluded),
+            reason=(
+                "pairwise disagreement above gate; dropped "
+                + ", ".join(dropped_for_disagreement)
+            ),
+        )
+    reason = "all candidates mutually consistent"
+    if dropped_for_disagreement:
+        reason = (
+            "consistent after dropping disagreeing camera(s): "
+            + ", ".join(dropped_for_disagreement)
+        )
+    return FuseOrSelectDecision(
+        mode="fuse",
+        selected=tuple(obs.camera_id for obs in candidates),
+        excluded=tuple(excluded),
+        reason=reason,
+    )
+
+
+def _require_probability(value: object, field_name: str) -> float:
+    try:
+        out = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ContractValidationError(
+            f"{field_name} must be a finite probability in [0, 1]"
+        ) from exc
+    if not math.isfinite(out) or not 0.0 <= out <= 1.0:
+        raise ContractValidationError(
+            f"{field_name} must be a finite probability in [0, 1]"
+        )
+    return out
+
+
 def _pair(value: Sequence[float], field_name: str) -> tuple[float, float]:
     if hasattr(value, "tolist") and not isinstance(value, (str, bytes)):
         value = value.tolist()
@@ -278,6 +540,14 @@ def _quad_form_inverse_2x2(v, a):
     inv = _mat_inv_2x2(a)
     iv = _mat_vec(inv, v)
     return float(v[0] * iv[0] + v[1] * iv[1])
+
+
+def _transpose(a):
+    return ((a[0][0], a[1][0]), (a[0][1], a[1][1]))
+
+
+def _det_2x2(a):
+    return float(a[0][0] * a[1][1] - a[0][1] * a[1][0])
 
 
 def _symmetrize(a):

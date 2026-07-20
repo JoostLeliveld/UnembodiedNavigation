@@ -17,11 +17,18 @@ Topic wiring:
 
 import math
 import random
+from typing import Any
 
-import rclpy
-from nav_msgs.msg import Odometry
-from rclpy.node import Node
-from rclpy.time import Time
+try:  # Keep covariance propagation importable for non-ROS analysis/tests.
+    import rclpy
+    from nav_msgs.msg import Odometry
+    from rclpy.node import Node
+    from rclpy.time import Time
+except ImportError:  # pragma: no cover - runtime launch always supplies ROS.
+    rclpy = None
+    Odometry = Any
+    Node = object
+    Time = Any
 
 
 def _wrap_angle(a: float) -> float:
@@ -92,6 +99,13 @@ class EncoderNoiseNode(Node):
         # calibration against evaluation-only truth.
         self.declare_parameter('initial_position_std_m', 0.01)
         self.declare_parameter('initial_yaw_std_rad', 0.01)
+        # The encoder reading intentionally contains a systematic scale error
+        # (``linear_slip_mean``).  It is not independent white noise: over a
+        # straight aisle it accumulates coherently.  Carry a conservative,
+        # operationally declared residual scale uncertainty in addition to the
+        # white/AR process covariance, otherwise the reported ellipse is
+        # spuriously narrow along the driving direction.
+        self.declare_parameter('linear_scale_bias_std', -1.0)
         self.declare_parameter('covariance_floor_m2', 1.0e-8)
         self.declare_parameter('covariance_floor_yaw_rad2', 1.0e-8)
 
@@ -111,6 +125,12 @@ class EncoderNoiseNode(Node):
         self.max_dt_s = max(0.01, float(self.get_parameter('max_dt_s').value))
         self.initial_position_std_m = max(0.0, float(self.get_parameter('initial_position_std_m').value))
         self.initial_yaw_std_rad = max(0.0, float(self.get_parameter('initial_yaw_std_rad').value))
+        declared_scale_std = float(self.get_parameter('linear_scale_bias_std').value)
+        self.linear_scale_bias_std = (
+            max(0.0, declared_scale_std)
+            if declared_scale_std >= 0.0
+            else abs(self.linear_slip_mean)
+        )
         self.covariance_floor_m2 = max(0.0, float(self.get_parameter('covariance_floor_m2').value))
         self.covariance_floor_yaw_rad2 = max(
             0.0, float(self.get_parameter('covariance_floor_yaw_rad2').value)
@@ -129,6 +149,10 @@ class EncoderNoiseNode(Node):
         self._pose_theta: float | None = None
         self._last_stamp = None
         self._pose_cov = self._initial_pose_covariance()
+        # Jacobian of [x, y, yaw] with respect to a constant residual encoder
+        # scale error.  Keeping it separately avoids adding a fully correlated
+        # bias term repeatedly into the white-noise covariance recursion.
+        self._linear_scale_jacobian = [0.0, 0.0, 0.0]
 
         self._pub = self.create_publisher(Odometry, output_topic, 10)
         self.create_subscription(Odometry, input_topic, self._odom_cb, 10)
@@ -155,11 +179,11 @@ class EncoderNoiseNode(Node):
     def _propagate_pose_covariance(self, *, theta: float, v_true: float, w_true: float, dt: float) -> tuple[float, float]:
         """Propagate planar encoder uncertainty for one noisy integration step.
 
-        The AR(1) state has stationary standard deviation ``*_slip_std``.
-        Treating that variance as the one-step velocity uncertainty is
-        conservative when the correlation is high, which is appropriate for a
-        commissioning gate.  A later evaluation-only calibration report tests
-        whether the resulting covariance has correct coverage.
+        The AR(1) state has stationary standard deviation ``*_slip_std``.  Its
+        low-frequency accumulation is represented by the finite correlation
+        inflation below.  The separately propagated scale-bias Jacobian covers
+        the declared residual systematic encoder scale uncertainty; it uses no
+        simulator truth and is reported as part of the operational covariance.
         """
 
         c = math.cos(theta)
@@ -173,8 +197,9 @@ class EncoderNoiseNode(Node):
         fp = [[sum(f[i][k] * p[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
         propagated = [[sum(fp[i][k] * f[j][k] for k in range(3)) for j in range(3)] for i in range(3)]
 
-        var_v = (v_true * self.linear_slip_std) ** 2 + self.linear_additive_std ** 2
-        var_w = (w_true * self.angular_slip_std) ** 2 + self.angular_additive_std ** 2
+        correlation_inflation = (1.0 + self.correlation_alpha) / max(1.0 - self.correlation_alpha, 1.0e-6)
+        var_v = (v_true * self.linear_slip_std) ** 2 * correlation_inflation + self.linear_additive_std ** 2
+        var_w = (w_true * self.angular_slip_std) ** 2 * correlation_inflation + self.angular_additive_std ** 2
         g_v = (dt * c, dt * s, 0.0)
         g_w = (0.0, 0.0, dt)
         for i in range(3):
@@ -186,12 +211,29 @@ class EncoderNoiseNode(Node):
                 self.covariance_floor_yaw_rad2 if i == 2 else self.covariance_floor_m2,
             )
         self._pose_cov = propagated
+        previous_jacobian = list(getattr(self, '_linear_scale_jacobian', [0.0, 0.0, 0.0]))
+        scale_increment = (dt * c * v_true, dt * s * v_true, 0.0)
+        self._linear_scale_jacobian = [
+            sum(f[i][k] * previous_jacobian[k] for k in range(3)) + scale_increment[i]
+            for i in range(3)
+        ]
         return var_v, var_w
+
+    def _published_pose_covariance(self):
+        """Return process covariance plus the declared coherent scale term."""
+
+        p = self._pose_cov
+        jacobian = list(getattr(self, '_linear_scale_jacobian', [0.0, 0.0, 0.0]))
+        scale_std = max(0.0, float(getattr(self, 'linear_scale_bias_std', 0.0)))
+        return [
+            [p[i][j] + scale_std ** 2 * jacobian[i] * jacobian[j] for j in range(3)]
+            for i in range(3)
+        ]
 
     def _write_covariances(self, message: Odometry, *, var_v: float, var_w: float) -> None:
         """Write planar covariance into ROS's 6x6 pose/twist conventions."""
 
-        p = self._pose_cov
+        p = self._published_pose_covariance()
         pose_cov = [0.0] * 36
         pose_cov[0] = p[0][0]
         pose_cov[1] = pose_cov[6] = p[0][1]
@@ -283,6 +325,8 @@ class EncoderNoiseNode(Node):
 
 
 def main(args=None):
+    if rclpy is None:
+        raise RuntimeError('rclpy is required; source the ROS workspace before launching encoder_noise_node')
     rclpy.init(args=args)
     node = EncoderNoiseNode()
     try:

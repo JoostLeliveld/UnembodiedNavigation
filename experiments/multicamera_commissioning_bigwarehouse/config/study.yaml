@@ -45,7 +45,9 @@ collection:
   arrival_radius_m: 0.20
   start_hold_s: 2.0
   # All routes remain in the 4.5 m central aisle: x=±1.5 m keeps a 0.475 m
-  # centre-to-rack clearance; y=-0.3 avoids the central pillar at (0,-0.9).
+  # centre-to-rack clearance.  The central sweep is centred at y=0.3 so every
+  # pre-registered +/-0.5 m variant clears the pillar at (0,-0.9); the former
+  # y=-0.3 centreline made the -0.5 m variant intersect that pillar.
   # They were designed specifically for warehouse_full_4cam and must be driven
   # at their documented spawn pose. Offsets are only admitted after the centre
   # line has completed safely.
@@ -84,8 +86,8 @@ collection:
       goal: {x: 1.80, y: 3.30}
     - name: central_overlap_sweep
       purpose: D2 adjacent-camera overlap and source-switch sweep
-      start: {x: -1.80, y: -0.30, yaw: 0.0}
-      goal: {x: 1.80, y: -0.30}
+      start: {x: -1.80, y: 0.30, yaw: 0.0}
+      goal: {x: 1.80, y: 0.30}
   repeats_per_route: 5
   lateral_offsets_m: [-0.5, 0.0, 0.5]
   speeds_mps: [0.12, 0.20]

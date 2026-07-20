@@ -35,7 +35,18 @@ def _diagnostics() -> dict:
         "bbox_ymin": 410.0,
         "bbox_xmax": 424.0,
         "bbox_ymax": 456.0,
+        "mask_area_px": 812.0,
+        "mask_bottom_u": 391.0,
+        "mask_bottom_v": 455.0,
+        "mask_used": 1.0,
+        "mask_polygon_points": 18.0,
         "selected_pixel_source_code": 1.0,
+        "yolo_inference_ms": 42.5,
+        "detector_callback_ms": 47.0,
+        "yolo_receive_stamp": 184.60,
+        "yolo_start_stamp": 184.61,
+        "yolo_finish_stamp": 184.6525,
+        "yolo_publish_stamp": 184.66,
         "frame_age_at_publish_s": 0.04,
     }
 
@@ -60,7 +71,21 @@ def test_camera_observation_from_current_diagnostics_preserves_selected_fields()
     assert obs.pixel_uv == (392.0, 456.0)
     assert obs.detection_valid is True
     assert obs.detector_score == 0.83
+    assert obs.detector_score_raw == 0.81
     assert obs.bbox_xyxy == (360.0, 410.0, 424.0, 456.0)
+    assert obs.bbox_bottom_uv == (392.0, 456.0)
+    assert obs.mask_bottom_uv == (391.0, 455.0)
+    assert obs.selected_pixel_source == "bbox_bottom"
+    assert obs.mask_available is True
+    assert obs.mask_area_px == 812.0
+    assert obs.mask_polygon_points == 18.0
+    assert obs.yolo_inference_wall_ms == 42.5
+    assert obs.detector_callback_wall_ms == 47.0
+    assert obs.image_receive_stamp_s == 184.60
+    assert obs.inference_start_stamp_s == 184.61
+    assert obs.inference_finish_stamp_s == 184.6525
+    assert obs.publish_stamp_s == 184.66
+    assert obs.frame_age_at_publish_s == 0.04
     assert obs.measurement_age_s == 0.04
     assert obs.calibration_id == "calib_v1"
     assert obs.image_frame_id == "external_camera"

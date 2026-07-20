@@ -28,11 +28,14 @@ from __future__ import annotations
 import argparse
 import bisect
 import csv
+import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import statistics
 import sys
+import time
 
 REPO = Path(__file__).resolve().parents[3]
 for relative in ("src/reliability", "src/unav_common"):
@@ -50,6 +53,142 @@ DEFAULT_MODEL_INCLUDES = {
     "camera_C": "external_camera_c",
     "camera_D": "external_camera_d",
 }
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _load_json_object(path: Path, *, label: str) -> dict[str, object]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"{label} is missing or invalid: {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise SystemExit(f"{label} must be a JSON object: {path}")
+    return payload
+
+
+def _source_contract(
+    *,
+    raw_dir: Path,
+    truth_csv: Path,
+    evidence_role: str,
+) -> dict[str, object]:
+    """Verify that finalized operational and truth streams belong to one run."""
+
+    run_dir = raw_dir.parent
+    evaluation_dir = truth_csv.parent
+    if raw_dir.name != "raw" or evaluation_dir != run_dir / "evaluation_only":
+        raise SystemExit(
+            "--raw-dir and --truth-csv must be the raw/ and "
+            "evaluation_only/ground_truth.csv artifacts of the same run"
+        )
+    if truth_csv.name != "ground_truth.csv":
+        raise SystemExit("--truth-csv must name the finalized ground_truth.csv artifact")
+    unfinished = sorted(
+        str(path.relative_to(run_dir))
+        for directory in (raw_dir, evaluation_dir)
+        for pattern in ("*.part", "*.in_progress.json", "*.failed.json")
+        for path in directory.glob(pattern)
+        if path.is_file()
+    )
+    if unfinished:
+        raise SystemExit("run contains partial or failed artifacts: " + ", ".join(unfinished))
+
+    operational_path = raw_dir / "operational_recording_manifest.json"
+    truth_manifest_path = evaluation_dir / "evaluation_truth_manifest.json"
+    operational = _load_json_object(operational_path, label="operational manifest")
+    truth = _load_json_object(truth_manifest_path, label="evaluation truth manifest")
+    if operational.get("status") != "completed" or operational.get("contains_ground_truth") is not False:
+        raise SystemExit("operational manifest is not a completed ground-truth-free recording")
+    if (
+        truth.get("status") != "completed"
+        or truth.get("evaluation_only") is not True
+        or truth.get("contains_ground_truth") is not True
+    ):
+        raise SystemExit("truth manifest is not a completed evaluation-only recording")
+    identity_fields = ("run_id", "plan_row_id", "seed")
+    mismatched = [
+        field for field in identity_fields if operational.get(field) != truth.get(field)
+    ]
+    if mismatched:
+        raise SystemExit("operational/truth identity mismatch: " + ", ".join(mismatched))
+    operational_role = str(operational.get("evidence_role", ""))
+    truth_role = str(truth.get("evidence_role", ""))
+    if operational_role != evidence_role or truth_role != evidence_role:
+        raise SystemExit(
+            "--projection-role must match the role pre-declared by both recorders; "
+            f"requested={evidence_role!r}, operational={operational_role!r}, truth={truth_role!r}"
+        )
+    operational_completion = operational.get("route_completion_manifest")
+    truth_completion = truth.get("route_completion_manifest")
+    if (
+        not isinstance(operational_completion, dict)
+        or not isinstance(truth_completion, dict)
+        or operational_completion.get("sha256") != truth_completion.get("sha256")
+    ):
+        raise SystemExit("operational and truth recorders do not reference the same route completion")
+
+    completion_path = run_dir / "completion_manifest.json"
+    completion = _load_json_object(completion_path, label="campaign completion manifest")
+    declared = completion.get("artifacts_sha256")
+    if completion.get("schema_version") != 1 or not isinstance(declared, dict):
+        raise SystemExit("campaign completion manifest lacks the immutable artifact contract")
+    artifact_paths = {
+        "raw/operational_recording_manifest.json": operational_path,
+        "evaluation_only/evaluation_truth_manifest.json": truth_manifest_path,
+        "evaluation_only/ground_truth.csv": truth_csv,
+    }
+    for source in sorted(raw_dir.glob("camera_*_perception.csv")):
+        artifact_paths[f"raw/{source.name}"] = source
+    for relative, path in artifact_paths.items():
+        if not path.is_file() or declared.get(relative) != _sha256(path):
+            raise SystemExit(f"campaign completion hash mismatch for {relative}")
+
+    return {
+        "run_id": operational.get("run_id"),
+        "plan_row_id": operational.get("plan_row_id"),
+        "seed": operational.get("seed"),
+        "evidence_role": evidence_role,
+        "row_tuple": completion.get("row_tuple"),
+        "operational_manifest": {
+            "path": str(operational_path),
+            "sha256": _sha256(operational_path),
+        },
+        "truth_manifest": {
+            "path": str(truth_manifest_path),
+            "sha256": _sha256(truth_manifest_path),
+        },
+        "campaign_completion": {
+            "path": str(completion_path),
+            "sha256": _sha256(completion_path),
+        },
+        "detector_model_sha256": (operational.get("detector_runtime") or {}).get(
+            "model_sha256"
+        ) if isinstance(operational.get("detector_runtime"), dict) else None,
+        "projection_calibration_sha256": (
+            operational.get("projection_calibration") or {}
+        ).get("sha256") if isinstance(operational.get("projection_calibration"), dict) else None,
+    }
+
+
+def _write_json_new(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{time.monotonic_ns()}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True, allow_nan=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _load_truth(path: Path) -> tuple[list[float], list[tuple[float, float, float]]]:
@@ -110,6 +249,7 @@ def attach_camera_csv(
     error_y: list[float] = []
     error_norm: list[float] = []
     error_along_bearing: list[float] = []
+    error_cross_bearing: list[float] = []
     with source.open("r", newline="", encoding="utf-8") as in_handle:
         reader = csv.DictReader(in_handle)
         fieldnames = list(reader.fieldnames or [])
@@ -144,12 +284,20 @@ def attach_camera_csv(
                         error_y.append(dy)
                         error_norm.append(math.hypot(dx, dy))
                         if camera_ground_xy is not None:
-                            bearing_x = px - camera_ground_xy[0]
-                            bearing_y = py - camera_ground_xy[1]
+                            # Resolve residuals in the truth-referenced radial
+                            # basis.  Using the prediction itself would rotate
+                            # the basis by the very projection error being
+                            # audited and can hide a systematic cross-bearing
+                            # component.
+                            bearing_x = truth[0] - camera_ground_xy[0]
+                            bearing_y = truth[1] - camera_ground_xy[1]
                             norm = math.hypot(bearing_x, bearing_y)
                             if norm > 1.0e-9:
                                 error_along_bearing.append(
                                     (dx * bearing_x + dy * bearing_y) / norm
+                                )
+                                error_cross_bearing.append(
+                                    (dx * -bearing_y + dy * bearing_x) / norm
                                 )
                 writer.writerow(row)
     audit: dict[str, object] = {
@@ -173,6 +321,11 @@ def attach_camera_csv(
         audit["along_bearing_std_m"] = (
             statistics.stdev(error_along_bearing) if len(error_along_bearing) > 1 else 0.0
         )
+    if error_cross_bearing:
+        audit["cross_bearing_bias_m"] = statistics.fmean(error_cross_bearing)
+        audit["cross_bearing_std_m"] = (
+            statistics.stdev(error_cross_bearing) if len(error_cross_bearing) > 1 else 0.0
+        )
     return audit
 
 
@@ -182,6 +335,12 @@ def main() -> int:
     parser.add_argument("--truth-csv", type=Path, required=True)
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--max-time-delta-s", type=float, default=0.05)
+    parser.add_argument(
+        "--projection-role",
+        choices=("fit", "qualification", "diagnostic"),
+        default="diagnostic",
+        help="Pre-declared role of this run; readiness uses qualification runs only.",
+    )
     parser.add_argument(
         "--camera-glob",
         default="camera_*_perception.csv",
@@ -200,26 +359,52 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
-    if args.out_dir.resolve() == args.raw_dir.resolve():
+    raw_dir = args.raw_dir.expanduser().resolve()
+    truth_csv = args.truth_csv.expanduser().resolve()
+    out_dir = args.out_dir.expanduser().resolve()
+    world_sdf = args.world_sdf.expanduser().resolve()
+    if out_dir == raw_dir:
         raise SystemExit("--out-dir must differ from --raw-dir: operational inputs are never modified")
+    if out_dir.exists():
+        raise SystemExit(f"refusing to overwrite evaluation attachment output: {out_dir}")
+    if not world_sdf.is_file():
+        raise SystemExit(f"world SDF is missing: {world_sdf}")
+    if args.emit_projection_calibration is not None and args.projection_role != "fit":
+        raise SystemExit("projection calibration may be emitted from pre-declared fit runs only")
+    calibration_output = (
+        args.emit_projection_calibration.expanduser().resolve()
+        if args.emit_projection_calibration is not None
+        else None
+    )
+    if calibration_output is not None and calibration_output.exists():
+        raise SystemExit(f"refusing to overwrite projection calibration: {calibration_output}")
 
-    stamps, poses = _load_truth(args.truth_csv)
+    source_contract = _source_contract(
+        raw_dir=raw_dir,
+        truth_csv=truth_csv,
+        evidence_role=str(args.projection_role),
+    )
+
+    stamps, poses = _load_truth(truth_csv)
     if not stamps:
-        raise SystemExit(f"no usable truth rows in {args.truth_csv}")
+        raise SystemExit(f"no usable truth rows in {truth_csv}")
 
-    sources = sorted(args.raw_dir.glob(args.camera_glob))
+    sources = sorted(raw_dir.glob(args.camera_glob))
     if not sources:
-        raise SystemExit(f"no camera CSVs matching {args.camera_glob!r} in {args.raw_dir}")
+        raise SystemExit(f"no camera CSVs matching {args.camera_glob!r} in {raw_dir}")
 
-    args.out_dir.mkdir(parents=True, exist_ok=True)
+    staging = out_dir.with_name(f".{out_dir.name}.{os.getpid()}.part")
+    if staging.exists():
+        raise SystemExit(f"stale attachment staging directory exists: {staging}")
+    staging.mkdir(parents=True, exist_ok=False)
     audits: dict[str, dict[str, object]] = {}
     for source in sources:
-        destination = args.out_dir / source.name
+        destination = staging / source.name
         camera_id = source.name.replace("_perception.csv", "")
         camera_ground_xy = None
         include = DEFAULT_MODEL_INCLUDES.get(camera_id)
-        if include is not None and args.world_sdf.exists():
-            model = camera_model_from_world(args.world_sdf, include_name=include)
+        if include is not None and world_sdf.exists():
+            model = camera_model_from_world(world_sdf, include_name=include)
             camera_ground_xy = (float(model.cam_pos[0]), float(model.cam_pos[1]))
         audits[camera_id] = attach_camera_csv(
             source,
@@ -233,9 +418,20 @@ def main() -> int:
     summary = {
         "evaluation_only": True,
         "contains_ground_truth": True,
-        "truth_csv": str(args.truth_csv),
-        "raw_dir": str(args.raw_dir),
+        "truth_csv": str(truth_csv),
+        "truth_csv_sha256": _sha256(truth_csv),
+        "raw_dir": str(raw_dir),
         "max_time_delta_s": float(args.max_time_delta_s),
+        "projection_role": str(args.projection_role),
+        "role_predeclared_by_recorders": True,
+        "source_contract": source_contract,
+        "source_camera_csv_sha256": {
+            source.name: _sha256(source) for source in sources
+        },
+        "world_sdf": {
+            "path": str(world_sdf),
+            "sha256": _sha256(world_sdf) if world_sdf.is_file() else None,
+        },
         "truth_samples": len(stamps),
         "cameras": audits,
         "note": (
@@ -245,8 +441,34 @@ def main() -> int:
             "specific calibration. Never feed these columns to a model or manager."
         ),
     }
-    summary_path = args.out_dir / "truth_alignment_summary.json"
-    summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    summary_path = staging / "truth_alignment_summary.json"
+    summary_path.write_text(
+        json.dumps(summary, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    attached_artifacts = {
+        path.name: _sha256(path)
+        for path in sorted(staging.glob("*.csv"))
+    }
+    attached_artifacts[summary_path.name] = _sha256(summary_path)
+    attachment_manifest = {
+        "schema_version": 1,
+        "status": "completed",
+        "evaluation_only": True,
+        "contains_ground_truth": True,
+        "projection_role": str(args.projection_role),
+        "source_contract": source_contract,
+        "artifacts_sha256": attached_artifacts,
+    }
+    (staging / "truth_attachment_manifest.json").write_text(
+        json.dumps(
+            attachment_manifest, indent=2, sort_keys=True, allow_nan=False
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    os.rename(staging, out_dir)
+    summary_path = out_dir / "truth_alignment_summary.json"
 
     if args.emit_projection_calibration is not None:
         cameras = {}
@@ -267,15 +489,15 @@ def main() -> int:
                 "truth (near-edge box-bottom pull); commissioning-time constant, "
                 "never refit during deployment"
             ),
-            "source_run": str(args.raw_dir),
-            "world_sdf": str(args.world_sdf),
+            "source_run": str(raw_dir),
+            "source_contract": source_contract,
+            "world_sdf": str(world_sdf),
             "cameras": cameras,
         }
-        args.emit_projection_calibration.parent.mkdir(parents=True, exist_ok=True)
-        args.emit_projection_calibration.write_text(
-            json.dumps(calibration, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        print(f"wrote projection calibration for {len(cameras)} cameras -> {args.emit_projection_calibration}")
+        calibration_path = calibration_output
+        assert calibration_path is not None
+        _write_json_new(calibration_path, calibration)
+        print(f"wrote projection calibration for {len(cameras)} cameras -> {calibration_path}")
     for camera_id, audit in sorted(audits.items()):
         bias = (
             f" bias=({audit.get('bias_x_m', math.nan):+.3f}, {audit.get('bias_y_m', math.nan):+.3f}) m"

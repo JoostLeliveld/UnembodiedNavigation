@@ -89,6 +89,8 @@ class CameraManagerNode(Node):
         # Optional projection_calibration.json (per-camera along-bearing
         # offsets, commissioning constants) — same file the recorder consumes.
         self.declare_parameter("projection_calibration", "")
+        self.declare_parameter("require_projection_calibration", True)
+        self.declare_parameter("require_gp_artifacts", True)
         self.declare_parameter("frame_id", "map_bev")
         self.declare_parameter("authority", "shadow")
         self.declare_parameter("decision_topic", "/reliability/camera_manager/decision")
@@ -100,6 +102,7 @@ class CameraManagerNode(Node):
         self.declare_parameter("min_spatial_trust", defaults.min_spatial_trust)
         self.declare_parameter("min_association_confidence", defaults.min_association_confidence)
         self.declare_parameter("max_measurement_age_s", defaults.max_measurement_age_s)
+        self.declare_parameter("age_decay_s", defaults.age_decay_s)
         self.declare_parameter("candidate_score_margin", defaults.candidate_score_margin)
         self.declare_parameter(
             "required_consecutive_better_frames", defaults.required_consecutive_better_frames
@@ -108,6 +111,11 @@ class CameraManagerNode(Node):
             "max_cross_camera_disagreement_m", defaults.max_cross_camera_disagreement_m
         )
         self.declare_parameter("max_overlap_time_delta_s", defaults.max_overlap_time_delta_s)
+        self.declare_parameter(
+            "require_consistency_when_source_available",
+            defaults.require_consistency_when_source_available,
+        )
+        self.declare_parameter("fallback_on_active_camera_loss", defaults.fallback_on_active_camera_loss)
 
         self.camera_ids = [str(item) for item in self.get_parameter("camera_ids").value]
         template = str(self.get_parameter("observation_topic_template").value)
@@ -128,6 +136,10 @@ class CameraManagerNode(Node):
             for camera_id, include in zip(self.camera_ids, includes)
         }
         calibration_path = str(self.get_parameter("projection_calibration").value)
+        if bool(self.get_parameter("require_projection_calibration").value) and not calibration_path:
+            raise ValueError(
+                "projection_calibration is required by the fail-closed commissioning contract"
+            )
         self.projection_calibrations = (
             load_projection_calibration(calibration_path) if calibration_path else {}
         )
@@ -142,6 +154,8 @@ class CameraManagerNode(Node):
             ]
         if artifacts and len(artifacts) != len(self.camera_ids):
             raise ValueError("gp_artifacts must be empty or align with camera_ids")
+        if bool(self.get_parameter("require_gp_artifacts").value) and len(artifacts) != len(self.camera_ids):
+            raise ValueError("one frozen GP artifact per camera is required by the commissioning contract")
         providers = {}
         for camera_id, artifact in zip(self.camera_ids, artifacts):
             if artifact:
@@ -163,6 +177,7 @@ class CameraManagerNode(Node):
                     self.get_parameter("min_association_confidence").value
                 ),
                 max_measurement_age_s=float(self.get_parameter("max_measurement_age_s").value),
+                age_decay_s=float(self.get_parameter("age_decay_s").value),
                 candidate_score_margin=float(self.get_parameter("candidate_score_margin").value),
                 required_consecutive_better_frames=int(
                     self.get_parameter("required_consecutive_better_frames").value
@@ -172,6 +187,12 @@ class CameraManagerNode(Node):
                 ),
                 max_overlap_time_delta_s=float(
                     self.get_parameter("max_overlap_time_delta_s").value
+                ),
+                require_consistency_when_source_available=bool(
+                    self.get_parameter("require_consistency_when_source_available").value
+                ),
+                fallback_on_active_camera_loss=bool(
+                    self.get_parameter("fallback_on_active_camera_loss").value
                 ),
                 allowed_camera_ids=tuple(self.camera_ids),
             )

@@ -57,6 +57,11 @@ def _finite_with_default(value: Any, default: float) -> float:
     return float(default) if out is None else out
 
 
+def _finite_or_nan(value: Any) -> float:
+    out = _finite_or_none(value)
+    return math.nan if out is None else float(out)
+
+
 def _probability(value: Any, *, default: float = 0.0) -> float:
     out = _finite_with_default(value, default)
     return float(min(max(out, 0.0), 1.0))
@@ -191,13 +196,35 @@ def camera_observation_from_diagnostics(
             min_probability=cfg.min_probability,
         )
 
+    bbox = _optional_bbox_xyxy(diagnostics)
+    bbox_bottom_uv = None
+    if bbox is not None:
+        bbox_bottom_uv = (0.5 * (bbox[0] + bbox[2]), bbox[3])
+    mask_bottom_uv = _optional_pair(diagnostics, "mask_bottom_u", "mask_bottom_v")
+    selected_source = selected_pixel_source_name(diagnostics.get("selected_pixel_source_code", 0.0))
+    mask_available = _bool_flag(diagnostics.get("mask_used", mask_bottom_uv is not None))
+
     return CameraObservation(
         camera_id=cfg.camera_id,
         timestamp_s=float(timestamp_s),
         pixel_uv=pixel_uv,
         detection_valid=detection_valid,
         detector_score=detector_score,
-        bbox_xyxy=_optional_bbox_xyxy(diagnostics),
+        detector_score_raw=_finite_or_nan(diagnostics.get("yolo_score_raw")),
+        bbox_xyxy=bbox,
+        bbox_bottom_uv=bbox_bottom_uv,
+        mask_bottom_uv=mask_bottom_uv,
+        selected_pixel_source=selected_source,
+        mask_available=mask_available,
+        mask_area_px=_finite_or_nan(diagnostics.get("mask_area_px")),
+        mask_polygon_points=_finite_or_nan(diagnostics.get("mask_polygon_points")),
+        yolo_inference_wall_ms=_finite_or_nan(diagnostics.get("yolo_inference_ms")),
+        detector_callback_wall_ms=_finite_or_nan(diagnostics.get("detector_callback_ms")),
+        image_receive_stamp_s=_finite_or_nan(diagnostics.get("yolo_receive_stamp")),
+        inference_start_stamp_s=_finite_or_nan(diagnostics.get("yolo_start_stamp")),
+        inference_finish_stamp_s=_finite_or_nan(diagnostics.get("yolo_finish_stamp")),
+        publish_stamp_s=_finite_or_nan(diagnostics.get("yolo_publish_stamp")),
+        frame_age_at_publish_s=_finite_or_nan(diagnostics.get("frame_age_at_publish_s")),
         measurement_age_s=measurement_age_s,
         calibration_id=cfg.calibration_id,
         image_frame_id=cfg.image_frame_id,

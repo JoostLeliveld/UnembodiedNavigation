@@ -127,6 +127,18 @@ def test_bringup_extension_camera_bridges_are_opt_in() -> None:
         assert f"condition=IfCondition(bridge_camera_{suffix})" in bringup
 
 
+def test_bringup_extension_segmentation_bridges_are_independently_opt_in() -> None:
+    bringup = (ROOT / "src" / "sim" / "launch" / "bringup_sim.launch.py").read_text(encoding="utf-8")
+
+    for suffix in ["b", "c", "d"]:
+        assert f'"bridge_segmentation_{suffix}"' in bringup
+        assert (
+            f"/external_camera_{suffix}/segmentation/labels_map"
+            "@sensor_msgs/msg/Image[gz.msgs.Image"
+        ) in bringup
+        assert f"condition=IfCondition(bridge_segmentation_{suffix})" in bringup
+
+
 def test_multicamera_detector_launch_uses_isolated_topics() -> None:
     launch = (ROOT / "src" / "experiments" / "launch" / "warehouse_multicamera_extension.launch.py").read_text(
         encoding="utf-8"

@@ -113,6 +113,24 @@ def generate_launch_description():
         description="Bridge external-camera semantic segmentation labels for offline dataset capture",
     )
     bridge_segmentation = LaunchConfiguration("bridge_segmentation")
+    bridge_segmentation_b_arg = DeclareLaunchArgument(
+        "bridge_segmentation_b",
+        default_value="false",
+        description="Bridge camera-B semantic labels for offline dataset capture",
+    )
+    bridge_segmentation_b = LaunchConfiguration("bridge_segmentation_b")
+    bridge_segmentation_c_arg = DeclareLaunchArgument(
+        "bridge_segmentation_c",
+        default_value="false",
+        description="Bridge camera-C semantic labels for offline dataset capture",
+    )
+    bridge_segmentation_c = LaunchConfiguration("bridge_segmentation_c")
+    bridge_segmentation_d_arg = DeclareLaunchArgument(
+        "bridge_segmentation_d",
+        default_value="false",
+        description="Bridge camera-D semantic labels for offline dataset capture",
+    )
+    bridge_segmentation_d = LaunchConfiguration("bridge_segmentation_d")
     bridge_camera_b_arg = DeclareLaunchArgument(
         "bridge_camera_b",
         default_value="false",
@@ -380,6 +398,37 @@ def generate_launch_description():
         output="screen",
         condition=IfCondition(bridge_segmentation),
     )
+    # Keep every semantic stream on an isolated bridge.  The label images are
+    # large and intentionally opt-in; four-camera dataset capture enables only
+    # the camera being collected so a slow semantic renderer cannot stall the
+    # operational RGB/odometry bridge or the other cameras.
+    ros_gz_segmentation_b_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/external_camera_b/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
+        ],
+        output="screen",
+        condition=IfCondition(bridge_segmentation_b),
+    )
+    ros_gz_segmentation_c_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/external_camera_c/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
+        ],
+        output="screen",
+        condition=IfCondition(bridge_segmentation_c),
+    )
+    ros_gz_segmentation_d_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/external_camera_d/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
+        ],
+        output="screen",
+        condition=IfCondition(bridge_segmentation_d),
+    )
     ros_gz_camera_b_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
@@ -444,6 +493,9 @@ def generate_launch_description():
         headless_arg,
         bridge_contacts_arg,
         bridge_segmentation_arg,
+        bridge_segmentation_b_arg,
+        bridge_segmentation_c_arg,
+        bridge_segmentation_d_arg,
         bridge_camera_b_arg,
         bridge_camera_c_arg,
         bridge_camera_d_arg,
@@ -462,6 +514,9 @@ def generate_launch_description():
         spawn_after_clock,
         wait_for_clock,
         ros_gz_segmentation_bridge,
+        ros_gz_segmentation_b_bridge,
+        ros_gz_segmentation_c_bridge,
+        ros_gz_segmentation_d_bridge,
         ros_gz_camera_b_bridge,
         ros_gz_camera_c_bridge,
         ros_gz_camera_d_bridge,

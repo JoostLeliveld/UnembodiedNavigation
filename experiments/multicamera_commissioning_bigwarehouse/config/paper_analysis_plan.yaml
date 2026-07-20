@@ -1,0 +1,177 @@
+# Confirmatory analysis contract for the full-warehouse four-camera study.
+#
+# This is intentionally a claim contract, not a tuning notebook.  Values may
+# change only in a versioned successor written before inspecting the relevant
+# evaluation-only results.  The current sparse pilot is excluded from all
+# confirmatory summaries.
+analysis_plan_id: fullwarehouse_four_camera_analysis_v2
+protocol_id: fullwarehouse_four_camera_paper_v2
+scope: simulation_only
+
+paper_frame:
+  working_title: "Commissioning Camera Networks for Safe Multi-View Robot Localization"
+  central_question: >-
+    Can camera-specific reliability fields, learned from ordinary driving with
+    uncertain robot beliefs, support calibrated and conservative camera
+    handover in a warehouse camera network?
+  deployment_inputs:
+    - calibrated camera model
+    - detector output and projection validity
+    - timestamp/measurement age
+    - propagated odometry belief covariance
+    - per-camera posterior reliability field
+    - cross-camera consistency in observed overlap
+  forbidden_inputs:
+    - simulation ground truth
+    - CAD shelf geometry beyond the declared day-zero calibration prior
+    - oracle source selection
+    - evaluation-only error labels
+  non_claims:
+    - physical-world performance
+    - end-to-end image learning
+    - optimal multi-camera fusion
+    - a pooled GP as a deployment model
+
+method_freeze:
+  # These files are SHA-256 recorded for each readiness report.  A result may
+  # only be called confirmatory when its run/export manifests carry the same
+  # freeze identifier and the four named posteriors are fitted from D1 train
+  # routes only.
+  source_files:
+    - config/study.yaml
+    - config/paper_protocol.yaml
+    - config/paper_analysis_plan.yaml
+    - tools/build_actual_commissioning_inputs.py
+    - tools/record_operational_logs.py
+    - tools/run_paired_replay.py
+    - ../../scripts/visibility_comparison/fit_belief_aware_gp.py
+    - ../../src/reliability/reliability/replay.py
+    - ../../src/reliability/reliability/camera_manager.py
+    - ../../src/reliability/reliability/handover.py
+    - ../../src/sim/sim/encoder_noise_node.py
+  posterior_policy: one_frozen_posterior_per_camera
+  hyperparameter_rule: >-
+    GP target, mode (expected_kernel), prior, grid, and trust-to-covariance
+    mapping are selected from D1 training data or the original warehouse only;
+    D1 held-out routes, D2, D3, and D4 never tune them.
+
+data_integrity:
+  raw_ground_truth_forbidden: true
+  evaluation_truth_required: true
+  predeclared_evidence_roles: [fit, qualification, diagnostic]
+  confirmatory_role: qualification
+  role_rule: >-
+    Both recorders declare the role before route motion. Fit runs may emit a
+    calibration but never qualify it; qualification runs may evaluate a frozen
+    calibration but never alter or emit one. Diagnostic runs are excluded.
+  min_operational_covariance_fraction: 0.99
+  max_truth_alignment_delta_s: 0.05
+  required_camera_ids: [camera_A, camera_B, camera_C, camera_D]
+  d0_qualification_phases: [D1_mapping_heldout]
+  d1_analysis_split:
+    gp_fit_repeats: [1, 2, 3]
+    confidence_calibration_repeats: [4]
+    stacker_validation_repeats: [5]
+    final_test_phase: D1_mapping_heldout
+    rule: >-
+      GP/posterior fitting, confidence calibration, and trust-stacker validation
+      consume disjoint pre-declared D1-train repeats. D1 held-out routes remain
+      the final report surface and never select or calibrate a model.
+
+calibration_gate:
+  # Evaluation-only projection calibration.  It establishes that observed D2
+  # disagreement is not dominated by an obvious per-camera frame error.
+  min_detected_rows_per_camera: 200
+  required_projection_role: qualification
+  max_abs_along_bias_m: 0.05
+  max_abs_cross_bias_m: 0.05
+  max_p90_projection_error_m: 0.30
+  max_projection_error_m: 0.60
+
+odometry_covariance_gate:
+  # Planar Gaussian confidence regions use chi-square(2) radii 2.30 and 6.18.
+  required_evidence_role: qualification
+  min_matched_samples: 500
+  max_truth_alignment_delta_s: 0.05
+  mean_nees_range: [1.0, 3.5]
+  one_sigma_coverage_range: [0.50, 0.82]
+  min_two_sigma_coverage: 0.90
+
+d1_route_disjoint_gp:
+  primary_model: expected_kernel
+  descriptive_baselines: [constant_train_mean, prior_only, naive, uncertainty_weighted, belief_spread]
+  min_heldout_events_per_camera: 200
+  required_metrics: [brier, logloss, auroc, ece, false_high_trust_rate]
+  primary_endpoint: brier
+  secondary_endpoints: [logloss, ece, false_high_trust_rate]
+  interpretation: >-
+    Report every pre-specified mode per camera and their macro-average with
+    camera-level values shown.  Do not select a winner using held-out routes.
+
+d2_overlap:
+  primary_endpoint: outlier_rate
+  required_edges:
+    - [camera_A, camera_C]
+    - [camera_B, camera_D]
+    - [camera_C, camera_D]
+  interpretation: >-
+    Pair agreement qualifies conservative handover/fusion experiments; it does
+    not identify which camera is correct and is never used as a truth label.
+
+d3_paired_replay:
+  candidate_policy: M8_hysteretic_handover_selection
+  primary_comparator: M7_handover_aware_selection
+  descriptive_baselines:
+    - R0_odom_only
+    - R1_single_fixed_R
+    - R2_single_fixed_R_NIS
+    - R3_detector_score_R
+    - R4_current_GP_R
+    - M5_sequential_fusion
+    - M6_conservative_selection
+  primary_endpoint: unqualified_handover_count
+  noninferiority_endpoint: p95_position_error_m
+  noninferiority_margin_m: 0.15
+  calibration_endpoints: [mean_nees, covariance_1sigma_coverage, covariance_2sigma_coverage]
+  paired_unit: task_condition_seed
+  bootstrap:
+    resamples: 10000
+    ci_level: 0.95
+    seed: 20260716
+  decision_rule: >-
+    Claim a safer handover only if the upper 95% paired-bootstrap confidence
+    bound for M8 minus M7 unqualified handovers is below zero, the upper bound
+    for M8 minus M7 p95 position error is at most 0.15 m, and M8's two-sigma
+    coverage is at least 0.90.  Otherwise report the complete trade-off with
+    no safety-superiority claim.
+  perturbation_rule: >-
+    Nominal logs are never modified.  Non-nominal D3 conditions are deterministic
+    replay fault injections with a manifest of the seed, parameters, affected
+    camera, input-export hash, and policy-posterior hashes.  They are robustness
+    tests, not claims of physical low-light performance.
+
+d4_closed_loop_confirmation:
+  enabled_only_after: [calibration, odometry_covariance, d1, d2, d3]
+  policies: [R1_single_fixed_R_NIS, M8_hysteretic_handover_selection]
+  tasks: [T1_long_handover, T2_reverse_handover, T5_central_recovery]
+  paired_seeds: 10
+  primary_endpoints: [clean_goal_rate, collision_rate, p95_position_error_m, covariance_2sigma_coverage]
+  release_rule: >-
+    The active handover policy remains disabled unless every upstream gate has
+    passed and the D4 campaign is run with the frozen M8 configuration.  An
+    evaluation-only oracle must not appear in active-policy results.
+
+reporting:
+  show_per_camera_results: true
+  show_all_declared_baselines: true
+  report_negative_results: true
+  label_pilot_as_nonconfirmatory: true
+  artifact_requirements:
+    - frozen configuration and source hashes
+    - one manifest per operational run and replay result
+    - raw/evaluation-only firewall audit
+    - route-disjoint split table
+    - per-camera GP validation table
+    - overlap qualification table
+    - paired bootstrap table and per-seed scatter
+    - failure taxonomy and representative traces

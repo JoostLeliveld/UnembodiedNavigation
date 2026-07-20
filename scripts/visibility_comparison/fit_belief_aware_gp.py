@@ -175,6 +175,23 @@ def _aggregate_events(data: EventData, *, resolution_m: float, max_bin_weight: f
     )
 
 
+def _smooth_binary_aggregate(agg: AggregateData, *, total_pseudocount: float) -> AggregateData:
+    """Apply a symmetric Beta prior to aggregated binary reliability targets.
+
+    This affects only the latent-GP fitting target.  The raw event labels remain
+    untouched for audit and validation.  A zero pseudocount retains the legacy
+    behaviour exactly.
+    """
+
+    strength = float(total_pseudocount)
+    if strength < 0.0:
+        raise ValueError('total_pseudocount must be non-negative')
+    if strength == 0.0:
+        return agg
+    posterior_mean = (agg.y * agg.count + 0.5 * strength) / (agg.count + strength)
+    return AggregateData(X=agg.X, y=posterior_mean, cov=agg.cov, count=agg.count)
+
+
 def _sigma_points(mean: np.ndarray, cov: np.ndarray, *, scale: float) -> tuple[np.ndarray, np.ndarray]:
     vals, vecs = np.linalg.eigh(0.5 * (cov + cov.T))
     vals = np.clip(vals, 1e-9, None)
@@ -599,6 +616,7 @@ def _artifact_for_mode(
         'pose_length_scale': np.asarray([float(args.pose_length_scale)], dtype=float),
         'min_certainty': np.asarray([float(args.min_certainty)], dtype=float),
         'spread_scale': np.asarray([float(args.spread_scale)], dtype=float),
+        'binary_target_pseudocount': np.asarray([float(args.binary_target_pseudocount)], dtype=float),
     }
     artifact.update(metadata)
     artifact.update(_prior_artifact_payload(prior))
@@ -611,6 +629,7 @@ def _artifact_for_mode(
         'p_mean_map_mean': float(np.mean(p_mean)),
         'p_conservative_plan_map_mean': float(np.mean(p_plan)),
         'expected_kernel_jitter': float(expected_kernel_jitter),
+        'binary_target_pseudocount': float(args.binary_target_pseudocount),
         **mode_summary,
     }
     return artifact, summary
@@ -691,6 +710,11 @@ def _route_disjoint_validation(
         resolution_m=float(args.aggregate_resolution_m),
         max_bin_weight=float(args.max_bin_weight),
     )
+    if train_data.target_id == 'det_hit':
+        train_agg = _smooth_binary_aggregate(
+            train_agg,
+            total_pseudocount=float(args.binary_target_pseudocount),
+        )
     if train_agg.X.shape[0] < 4:
         raise RuntimeError(
             f'Route-disjoint evaluation needs at least 4 train aggregate points, got {train_agg.X.shape[0]}'
@@ -788,6 +812,11 @@ def _validate_modes(
             resolution_m=float(args.aggregate_resolution_m),
             max_bin_weight=float(args.max_bin_weight),
         )
+        if train_data.target_id == 'det_hit':
+            agg = _smooth_binary_aggregate(
+                agg,
+                total_pseudocount=float(args.binary_target_pseudocount),
+            )
         y_test = data.y[test_mask]
         X_test = data.X[test_mask]
         constant = np.full_like(y_test, float(np.mean(train_data.y)), dtype=float)
@@ -921,6 +950,12 @@ def main() -> int:
     parser.add_argument('--pose-length-scale', type=float, default=0.35)
     parser.add_argument('--min-certainty', type=float, default=0.05)
     parser.add_argument('--spread-scale', type=float, default=1.0)
+    parser.add_argument(
+        '--binary-target-pseudocount',
+        type=float,
+        default=0.0,
+        help='Symmetric Beta-prior pseudocount for aggregated binary hit targets; zero preserves legacy fitting.',
+    )
     parser.add_argument('--folds', type=int, default=5)
     parser.add_argument(
         '--holdout-run-id',
@@ -930,6 +965,8 @@ def main() -> int:
     )
     parser.add_argument('--skip-validation', action='store_true')
     args = parser.parse_args()
+    if args.binary_target_pseudocount < 0.0:
+        parser.error('--binary-target-pseudocount must be non-negative')
 
     events_path = Path(args.events).expanduser().resolve()
     output_dir = Path(args.out).expanduser().resolve()
@@ -963,6 +1000,11 @@ def main() -> int:
         resolution_m=float(args.aggregate_resolution_m),
         max_bin_weight=float(args.max_bin_weight),
     )
+    if data.target_id == 'det_hit':
+        agg = _smooth_binary_aggregate(
+            agg,
+            total_pseudocount=float(args.binary_target_pseudocount),
+        )
     if agg.X.shape[0] < 4:
         raise RuntimeError(f'Need at least 4 aggregate points, got {agg.X.shape[0]}')
 
@@ -999,6 +1041,7 @@ def main() -> int:
                 'target_mean': f'{summary["target_mean"]:.10g}',
                 'alpha_mean': f'{summary["alpha_mean"]:.10g}',
                 'mean_certainty': f'{summary["mean_certainty"]:.10g}',
+                'binary_target_pseudocount': f'{summary["binary_target_pseudocount"]:.10g}',
                 'prior_map_mean': '' if math.isnan(float(summary['prior_map_mean'])) else f'{summary["prior_map_mean"]:.10g}',
                 'expected_kernel_jitter': f'{summary["expected_kernel_jitter"]:.10g}',
                 'p_mean_map_mean': f'{summary["p_mean_map_mean"]:.10g}',
@@ -1018,6 +1061,7 @@ def main() -> int:
             'target_mean',
             'alpha_mean',
             'mean_certainty',
+            'binary_target_pseudocount',
             'prior_map_mean',
             'expected_kernel_jitter',
             'p_mean_map_mean',
@@ -1129,6 +1173,7 @@ def main() -> int:
                 'pose_length_scale': float(args.pose_length_scale),
                 'min_certainty': float(args.min_certainty),
                 'spread_scale': float(args.spread_scale),
+                'binary_target_pseudocount': float(args.binary_target_pseudocount),
                 'folds': int(args.folds),
             },
             'fit_summary_csv': str(output_dir / 'fit_summary.csv'),
@@ -1139,6 +1184,7 @@ def main() -> int:
                 'uncertainty_weighted inflates per-bin observation noise when the belief covariance trace is large.',
                 'belief_spread replaces each aggregate observation with five covariance sigma points while conserving total observation precision.',
                 'expected_kernel is the paper-style uncertain-input GP: the RBF kernel is integrated under N(m,S) pose beliefs.',
+                'For binary detector reliability, binary_target_pseudocount applies a symmetric Beta prior only to aggregate fitting targets; raw labels remain the evaluation target.',
                 'When --prior-gp is supplied, every mode fits trajectory residuals in logit space on top of that prior mean map.',
                 'When --holdout-run-id is supplied, complete held-out runs are excluded from fitting and are scored with canonical shared metrics.',
                 'Ground truth from the event table is not used for fitting; it is retained only for evaluation/audit.',

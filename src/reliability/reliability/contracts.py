@@ -422,7 +422,21 @@ class CameraObservation:
     pixel_uv: tuple[float, float] | None = None
     detection_valid: bool = False
     detector_score: float = 0.0
+    detector_score_raw: float = math.nan
     bbox_xyxy: tuple[float, float, float, float] | None = None
+    bbox_bottom_uv: tuple[float, float] | None = None
+    mask_bottom_uv: tuple[float, float] | None = None
+    selected_pixel_source: str = "none"
+    mask_available: bool = False
+    mask_area_px: float = math.nan
+    mask_polygon_points: float = math.nan
+    yolo_inference_wall_ms: float = math.nan
+    detector_callback_wall_ms: float = math.nan
+    image_receive_stamp_s: float = math.nan
+    inference_start_stamp_s: float = math.nan
+    inference_finish_stamp_s: float = math.nan
+    publish_stamp_s: float = math.nan
+    frame_age_at_publish_s: float = math.nan
     measurement_age_s: float = 0.0
     calibration_id: str = ""
     image_frame_id: str = ""
@@ -451,11 +465,58 @@ class CameraObservation:
             "detector_score",
             _finite_probability(self.detector_score, field_name="detector_score"),
         )
+        detector_score_raw = _finite_float(
+            self.detector_score_raw,
+            field_name="detector_score_raw",
+            allow_nan=True,
+        )
+        if math.isfinite(detector_score_raw) and not 0.0 <= detector_score_raw <= 1.0:
+            raise ContractValidationError(
+                f"detector_score_raw must be NaN or in [0, 1], got {detector_score_raw}"
+            )
+        object.__setattr__(self, "detector_score_raw", detector_score_raw)
         object.__setattr__(
             self,
             "bbox_xyxy",
             _as_quad(self.bbox_xyxy, field_name="bbox_xyxy", allow_none=True),
         )
+        object.__setattr__(
+            self,
+            "bbox_bottom_uv",
+            _as_pair(self.bbox_bottom_uv, field_name="bbox_bottom_uv", allow_none=True),
+        )
+        object.__setattr__(
+            self,
+            "mask_bottom_uv",
+            _as_pair(self.mask_bottom_uv, field_name="mask_bottom_uv", allow_none=True),
+        )
+        selected_source = str(self.selected_pixel_source).strip().lower()
+        if selected_source not in {"none", "bbox_bottom", "mask_bottom"}:
+            raise ContractValidationError(
+                "selected_pixel_source must be none, bbox_bottom, or mask_bottom"
+            )
+        object.__setattr__(self, "selected_pixel_source", selected_source)
+        object.__setattr__(self, "mask_available", bool(self.mask_available))
+        for field_name in (
+            "mask_area_px",
+            "mask_polygon_points",
+            "yolo_inference_wall_ms",
+            "detector_callback_wall_ms",
+            "image_receive_stamp_s",
+            "inference_start_stamp_s",
+            "inference_finish_stamp_s",
+            "publish_stamp_s",
+            "frame_age_at_publish_s",
+        ):
+            value = _finite_float(
+                getattr(self, field_name),
+                field_name=field_name,
+                allow_nan=True,
+            )
+            if field_name.endswith(("_ms", "area_px", "points", "age_at_publish_s")):
+                if math.isfinite(value) and value < 0.0:
+                    raise ContractValidationError(f"{field_name} must be non-negative or NaN")
+            object.__setattr__(self, field_name, value)
         measurement_age_s = _finite_float(self.measurement_age_s, field_name="measurement_age_s")
         if measurement_age_s < 0.0:
             raise ContractValidationError("measurement_age_s must be non-negative")

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import rclpy
+import torch
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from sensor_msgs.msg import Image
@@ -51,6 +52,11 @@ class YoloRobotDetectorNode(Node):
 
         self.declare_parameter('model_path', '')
         self.declare_parameter('device', '')
+        # Bound each detector process explicitly.  An uncapped CPU detector
+        # previously consumed the host thread pool, slowed Gazebo to ~0.16 RTF,
+        # and reduced the three GPU detector output rates as collateral damage.
+        self.declare_parameter('cpu_num_threads', 0)
+        self.declare_parameter('cpu_num_interop_threads', 1)
         self.declare_parameter('image_size', 640)
         self.declare_parameter('confidence_threshold', 0.25)
         self.declare_parameter('iou_threshold', 0.45)
@@ -108,6 +114,21 @@ class YoloRobotDetectorNode(Node):
 
         self.model_path = model_path.resolve()
         self.device = str(self.get_parameter('device').value).strip()
+        self.cpu_num_threads = max(0, int(self.get_parameter('cpu_num_threads').value))
+        self.cpu_num_interop_threads = max(
+            0, int(self.get_parameter('cpu_num_interop_threads').value)
+        )
+        if self.cpu_num_threads > 0:
+            torch.set_num_threads(self.cpu_num_threads)
+        if self.cpu_num_interop_threads > 0:
+            try:
+                torch.set_num_interop_threads(self.cpu_num_interop_threads)
+            except RuntimeError as exc:
+                # PyTorch permits setting this only before parallel work starts.
+                # A launch should still fail visibly in timing gates rather than
+                # taking down the detector solely because another library made
+                # an early one-time call.
+                self.get_logger().warn(f'could not set PyTorch interop threads: {exc}')
         self.image_size = int(self.get_parameter('image_size').value)
         self.confidence_threshold = float(self.get_parameter('confidence_threshold').value)
         self.iou_threshold = float(self.get_parameter('iou_threshold').value)
@@ -160,6 +181,10 @@ class YoloRobotDetectorNode(Node):
                     f'falling back to eager {self.model_path}'
                 )
         self.model = YOLO(str(load_path))
+        self.get_logger().info(
+            f'PyTorch thread budget: intraop={torch.get_num_threads()} '
+            f'interop={torch.get_num_interop_threads()} device={self.device or "auto"}'
+        )
         self.target_ids = target_class_ids(getattr(self.model, 'names', {}), self.class_name, self.class_id)
         if self.target_ids == set():
             names = getattr(self.model, 'names', {})

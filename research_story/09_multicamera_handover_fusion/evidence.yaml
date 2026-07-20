@@ -18,7 +18,7 @@ evidence:
   - path: ../../experiments/multicamera_commissioning_bigwarehouse
     kind: study
     tag: measured_in_sim
-    note: "Full_4cam operational pipeline pilot exists (two routes, four posterior fits, three strict C/D pairs); it is not qualified mapping/fusion/closed-loop evidence. config/paper_protocol.yaml freezes route-disjoint D1, all D2 edges, paired replay, and release gates. Historical retired-testbed pilot remains provenance only."
+    note: "Full_4cam operational pipeline pilot exists (two routes, four posterior fits, three strict C/D pairs); it is not qualified mapping/fusion/closed-loop evidence. The frozen protocol and analysis plan require D0 calibration, route-disjoint D1, all D2 edges, matched manifest-backed D3 replay, and D4 active confirmation. Historical retired-testbed pilot remains provenance only."
 figures:
   planned: [09A, 09B, 09C, 09D, 09E, 09F]
   video: {V09A: planned, V09B: planned, V09C: planned}

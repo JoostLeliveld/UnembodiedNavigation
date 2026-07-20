@@ -33,6 +33,7 @@ CHECKPOINT = REPO / "logs/visibility_comparison/fourcam_actual_20260715/checkpoi
 FINAL_GP = REPO / "logs/visibility_comparison/fourcam_actual_20260715/final_02/gp"
 STRICT_EXPORT = RUN_ROOT / "analysis/final_01/replay_export_strict"
 OVERLAP = RUN_ROOT / "analysis/final_01/strict_C_D_overlap.json"
+READINESS = REPO / "logs/studies/multicamera_commissioning_bigwarehouse/paper_readiness_v1/readiness_status.json"
 OUT = REPO / "research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures"
 CAMERAS = ("camera_A", "camera_B", "camera_C", "camera_D")
 COLORS = {
@@ -113,6 +114,16 @@ def render_run_evidence() -> Path:
         axis.set_ylabel("warehouse y [m]")
         axis.grid(color="#dce3eb", linewidth=0.6)
         axis.legend(loc="upper left", fontsize=7, ncol=2, frameon=True)
+        if raw_dir.name == "raw" and "south_to_north" in str(raw_dir):
+            # The real handover pass is nearly vertical.  Use a fixed corridor
+            # crop rather than autoscaling to its x jitter, which would make a
+            # genuine 15 m traversal look like a hairline in a slide.
+            axis.set_xlim(-4.0, 1.0)
+            axis.set_ylim(-8.0, 8.0)
+            axis.text(0.03, 0.91, "actual central-aisle crop", transform=axis.transAxes, fontsize=7.5, color="#536273")
+        else:
+            axis.set_xlim(-2.1, 2.1)
+            axis.set_ylim(-3.65, -2.85)
     fig.suptitle("Real operational collection: source identity, detections, misses, and noisy odometry", fontsize=14, weight="bold")
     output = OUT / "01_real_routes_and_observations.png"
     fig.savefig(output, facecolor="white")
@@ -319,6 +330,68 @@ def render_algorithm_execution(overlap_summary: dict) -> tuple[Path, dict]:
     return output, policy
 
 
+def render_readiness_audit() -> Path:
+    """Render the recorded D0 audit as an honest research-gap figure.
+
+    The readiness status contains evaluation-only truth metrics.  It is used
+    here solely for presentation and never fed to the GP, camera manager, or
+    replay policy.
+    """
+
+    status = json.loads(READINESS.read_text(encoding="utf-8"))
+    projection = status["projection_calibration"]["per_camera"]
+    covariance = status["odometry_covariance"]
+    plan = status["route_disjoint_gp"]["per_camera"]
+    fig = plt.figure(figsize=(13.2, 7.0), dpi=180, constrained_layout=True)
+    grid = fig.add_gridspec(2, 3, height_ratios=(1.0, 0.76))
+    detections = fig.add_subplot(grid[0, 0])
+    bias = fig.add_subplot(grid[0, 1])
+    cov = fig.add_subplot(grid[0, 2])
+    text = fig.add_subplot(grid[1, :])
+    names = [camera.replace("camera_", "Camera ") for camera in CAMERAS]
+    colors = [COLORS[camera] for camera in CAMERAS]
+    count = [projection[camera]["detected_rows"] for camera in CAMERAS]
+    detections.bar(names, count, color=colors)
+    detections.axhline(200, color="#c81919", linestyle="--", linewidth=1.3, label="D0 minimum = 200")
+    detections.set_title("Truth-audited detections in the independent smoke run", fontsize=10.2, weight="bold")
+    detections.set_ylabel("detected rows")
+    detections.tick_params(axis="x", labelrotation=20, labelsize=7.5)
+    detections.grid(axis="y", color="#dce3eb")
+    detections.legend(fontsize=7)
+    values = [projection[camera]["max_bias_norm_m"] for camera in CAMERAS]
+    display = [0.0 if not math.isfinite(value) else value for value in values]
+    bars = bias.bar(names, display, color=colors)
+    bias.axhline(0.15, color="#c81919", linestyle="--", linewidth=1.3, label="D0 bias gate = 0.15 m")
+    for bar, value in zip(bars, values):
+        label = "no detections" if not math.isfinite(value) else f"{value:.3f}"
+        bias.text(bar.get_x() + bar.get_width() / 2.0, bar.get_height() + 0.008, label, ha="center", fontsize=7.2)
+    bias.set_ylim(0.0, 0.24)
+    bias.set_title("Per-camera projection bias (evaluation-only)", fontsize=10.2, weight="bold")
+    bias.set_ylabel("bias norm [m]")
+    bias.tick_params(axis="x", labelrotation=20, labelsize=7.5)
+    bias.grid(axis="y", color="#dce3eb")
+    bias.legend(fontsize=7)
+    coverage = [covariance["covariance_1sigma_coverage"], covariance["covariance_2sigma_coverage"]]
+    cov.bar(["1σ coverage", "2σ coverage"], coverage, color=["#8d53c7", "#ed8a25"])
+    cov.axhline(0.50, color="#c81919", linestyle="--", linewidth=1.1, label="1σ lower gate = 0.50")
+    cov.axhline(0.90, color="#b76e00", linestyle=":", linewidth=1.1, label="2σ lower gate = 0.90")
+    cov.set_ylim(0.0, 1.03)
+    cov.set_title(f"Odometry covariance audit: mean NEES = {covariance['mean_nees']:.1f}", fontsize=10.2, weight="bold")
+    cov.set_ylabel("empirical coverage")
+    cov.grid(axis="y", color="#dce3eb")
+    cov.legend(fontsize=6.6, loc="upper left")
+    text.axis("off")
+    heldout = ", ".join(f"{camera[-1]}: {plan[camera]['heldout_events']}" for camera in CAMERAS)
+    text.text(0.02, 0.82, "Actual pilot audit: the infrastructure works, but the evidence is not yet publishable.", fontsize=14, weight="bold", color="#17212f", transform=text.transAxes)
+    text.text(0.02, 0.55, "The simulator truth recorder was intentionally kept evaluation-only. It exposes two concrete research tasks: fix/validate camera calibration before overlap claims, and validate the propagated encoder covariance before uncertainty-aware GP comparisons.", fontsize=10.5, color="#334155", transform=text.transAxes, wrap=True)
+    text.text(0.02, 0.25, f"Current GP hold-out smoke: {heldout} events (required: 200 per camera). This is a measurement of what remains to be done, not a negative performance result.", fontsize=10.2, color="#a64b16", transform=text.transAxes, wrap=True)
+    fig.suptitle("Actual readiness audit from the new four-camera system", fontsize=16, weight="bold")
+    output = OUT / "06_actual_readiness_audit.png"
+    fig.savefig(output, facecolor="white")
+    plt.close(fig)
+    return output
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     outputs = {
@@ -331,6 +404,7 @@ def main() -> int:
     outputs["overlap_gate"] = str(overlap_image)
     execution_image, policy = render_algorithm_execution(overlap_summary)
     outputs["algorithm_execution"] = str(execution_image)
+    outputs["readiness_audit"] = str(render_readiness_audit())
     manifest = {
         "outputs": outputs,
         "run_root": str(RUN_ROOT),
@@ -338,12 +412,13 @@ def main() -> int:
         "canonical_gp_root": str(FINAL_GP),
         "overlap_summary": overlap_summary,
         "policy_result": policy,
-        "contains_ground_truth": False,
+        "contains_ground_truth": True,
         "notes": [
             "All GP maps were fitted from operational detector observations aligned to noisy odometry with an explicit 0.10 m covariance floor.",
             "The covariance floor is a declared pilot assumption: the encoder-noise publisher currently leaves Odometry covariance entries at zero.",
             "The strict C/D overlap result passes its configured 0.30 m disagreement gate, but only has three synchronized pairs; it is pilot evidence, not a campaign-level fusion claim.",
             "The configured hysteretic policy withheld all candidate corrections because learned spatial trust was below its 0.45 release threshold. This demonstrates its fail-safe path, not closed-loop improvement.",
+            "The readiness-audit figure reads evaluation-only truth metrics from the independent smoke recording; those metrics remain excluded from every operational model and decision path.",
         ],
     }
     (OUT.parent / "actual_commissioning_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")

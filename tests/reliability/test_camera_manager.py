@@ -99,6 +99,38 @@ def test_handover_requires_same_better_candidate_for_required_frames() -> None:
     assert third.switched and third.reasons == ("hysteresis_handover",)
 
 
+def test_handover_hysteresis_counts_unique_candidate_frames_not_timer_ticks() -> None:
+    manager = _manager(required_consecutive_better_frames=2)
+    manager.select(timestamp_s=0.0, observations=(_obs("camera_A", timestamp_s=0.0, p=0.80),))
+
+    first = manager.select(
+        timestamp_s=1.0,
+        observations=(
+            _obs("camera_A", timestamp_s=1.0, p=0.70),
+            _obs("camera_B", timestamp_s=1.0, p=0.95),
+        ),
+    )
+    repeated = manager.select(
+        timestamp_s=1.05,
+        observations=(
+            _obs("camera_A", timestamp_s=1.0, p=0.70),
+            _obs("camera_B", timestamp_s=1.0, p=0.95),
+        ),
+    )
+    newer = manager.select(
+        timestamp_s=1.10,
+        observations=(
+            _obs("camera_A", timestamp_s=1.10, p=0.70),
+            _obs("camera_B", timestamp_s=1.10, p=0.95),
+        ),
+    )
+
+    assert first.selected_camera_id == repeated.selected_camera_id == "camera_A"
+    assert first.candidate_streak == repeated.candidate_streak == 1
+    assert newer.selected_camera_id == "camera_B"
+    assert newer.switched
+
+
 def test_alternating_candidates_do_not_accumulate_a_handover_streak() -> None:
     manager = _manager(required_consecutive_better_frames=2)
     manager.select(timestamp_s=0.0, observations=(_obs("camera_A", timestamp_s=0.0, p=0.80),))
@@ -161,6 +193,17 @@ def test_score_uses_age_and_epistemic_penalties() -> None:
     observation = _obs("camera_A", timestamp_s=0.5, p=1.0, association=1.0, epistemic=math.log(2.0))
     assert observation_age_s(observation, timestamp_s=1.0) == pytest.approx(0.5)
     assert operational_camera_score(observation, timestamp_s=1.0, age_decay_s=0.5) == pytest.approx(0.5 / math.e)
+
+
+def test_future_dated_observation_is_ineligible_instead_of_perfectly_fresh() -> None:
+    observation = _obs("camera_A", timestamp_s=1.01, p=1.0, association=1.0)
+    assert math.isinf(observation_age_s(observation, timestamp_s=1.0))
+    assert operational_camera_score(observation, timestamp_s=1.0, age_decay_s=0.5) == 0.0
+
+    decision = _manager().select(timestamp_s=1.0, observations=(observation,))
+
+    assert decision.selected_observation is None
+    assert "measurement_future_dated" in decision.rejected_by_camera["camera_A"]
 
 
 def test_manager_config_rejects_invalid_thresholds_and_camera_ids() -> None:
