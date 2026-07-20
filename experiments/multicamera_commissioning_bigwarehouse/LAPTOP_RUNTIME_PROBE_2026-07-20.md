@@ -75,3 +75,29 @@ separate future synchronization redesign is specified and validated.
 `detector_4cam_v4_laptop_async_microbatch.yaml` is retained as a versioned
 negative diagnostic. It is `diagnostic_candidate_blocked_from_evidence`; it
 does not authorize campaign recording, calibration, training, or paper claims.
+
+## Corrected executor and input-size follow-up
+
+The early raw-topic rate probes were themselves intrusive: each `ros2 topic
+hz` subscriber deserializes a full RGB image, adding four extra image consumers
+to an already constrained run. Mixed raw/output measurements that produced an
+output rate above a raw rate are therefore invalid and are not used for any
+decision. Later probes measured only the four small `CameraObservation` topics.
+
+Separating asynchronous image reception from inference with a two-thread ROS
+executor improved the 640×360, 416-input diagnostic to **2.384–2.410 Hz**.
+This is a real improvement over the previous single-executor result, but does
+not meet the 3 Hz gate. A 384 input was worse (**1.909–1.938 Hz**), a 3 Hz
+camera-cadence successor (v5) was worse (**1.169–1.194 Hz**), and a 250 ms
+coalescing window was worse (**1.090–1.236 Hz**). None is promotable.
+
+An isolated GPU benchmark measured a native Ultralytics 416 four-image batch
+at **93.2 ms median** (95.0 ms p90), so the remaining deficit is not network
+inference throughput alone. The existing TorchScript export is fixed to a
+960-square anchor layout and fails for the intended input shape; it is not an
+acceleration option without a newly exported, validation-gated artifact.
+
+The laptop remains worth pursuing, but the next ablation must reduce
+render/bridge image-transport cost (for example, an isolated lower-source-
+resolution successor) while retaining a fresh detector and calibration
+validation plan. No candidate crosses into evidence until it sustains 3 Hz.

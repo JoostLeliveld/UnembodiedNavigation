@@ -198,6 +198,9 @@ def test_runtime_source_has_one_native_model_and_the_complete_operational_contra
     assert 'self.declare_parameter("async_coalesce_wall_s", 0.02)' in source
     assert "self._drain_async_pending" in source
     assert "diagnostic-only" in source
+    assert "MultiThreadedExecutor(num_threads=2)" in source
+    assert "ReentrantCallbackGroup" in source
+    assert "MutuallyExclusiveCallbackGroup" in source
 
 
 def test_launch_defaults_to_batched_mode_with_typed_device_and_keeps_fallback() -> None:

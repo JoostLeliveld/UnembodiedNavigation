@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 from pathlib import Path
+import threading
 import time
 from typing import Any, NoReturn
 
@@ -20,6 +21,8 @@ import rclpy
 import torch
 from geometry_msgs.msg import PoseStamped
 from rclpy.clock import Clock as RclpyClock, ClockType
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Image
@@ -210,6 +213,15 @@ class BatchedFourCameraYoloNode(Node):
         )
         self._async_pending: dict[str, PendingFrame] = {}
         self._async_last_seen_stamp_ns = {camera_id: -1 for camera_id in CAMERA_ORDER}
+        self._async_pending_lock = threading.Lock()
+        self._async_input_group = None
+        self._async_processing_group = None
+        if self.synchronization_mode == "asynchronous":
+            # Camera callbacks must continue retaining fresh images while the
+            # shared model is busy. The timer itself remains mutually
+            # exclusive, so there is still exactly one inference at a time.
+            self._async_input_group = ReentrantCallbackGroup()
+            self._async_processing_group = MutuallyExclusiveCallbackGroup()
         self._warning_counts: dict[str, int] = {}
 
         # Native checkpoint only: one wrapper, one model allocation, one
@@ -301,6 +313,7 @@ class BatchedFourCameraYoloNode(Node):
                 self.async_coalesce_wall_s,
                 self._drain_async_pending,
                 clock=self._async_wall_clock,
+                callback_group=self._async_processing_group,
             )
 
         # ``Node.subscriptions`` is an rclpy-managed read-only property.
@@ -316,6 +329,7 @@ class BatchedFourCameraYoloNode(Node):
                         selected_camera, msg
                     ),
                     1,
+                    callback_group=self._async_input_group,
                 )
             )
 
@@ -458,60 +472,68 @@ class BatchedFourCameraYoloNode(Node):
         from different cameras are close enough to combine.
         """
 
-        expired = tuple(
-            camera_id
-            for camera_id, pending in self._async_pending.items()
-            if frame.receive_wall_s - pending.receive_wall_s > self.max_pending_wall_s
-        )
-        for camera_id in expired:
-            self._async_pending.pop(camera_id, None)
+        with self._async_pending_lock:
+            expired = tuple(
+                camera_id
+                for camera_id, pending in self._async_pending.items()
+                if frame.receive_wall_s - pending.receive_wall_s > self.max_pending_wall_s
+            )
+            for camera_id in expired:
+                self._async_pending.pop(camera_id, None)
+            last_seen = self._async_last_seen_stamp_ns[frame.camera_id]
+            if frame.stamp_ns > last_seen:
+                self._async_last_seen_stamp_ns[frame.camera_id] = frame.stamp_ns
+                self._async_pending[frame.camera_id] = frame
+                accepted = True
+            else:
+                status = "duplicate" if frame.stamp_ns == last_seen else "out_of_order"
+                accepted = False
         if expired:
             self._warn_bounded("async_pending_expired", f"expired pending frames: {expired}")
-        last_seen = self._async_last_seen_stamp_ns[frame.camera_id]
-        if frame.stamp_ns <= last_seen:
-            status = "duplicate" if frame.stamp_ns == last_seen else "out_of_order"
+        if not accepted:
             self._warn_bounded(
                 frame.camera_id + ":async_" + status,
                 f"{status} frame rejected for {frame.camera_id}",
             )
             return
-        self._async_last_seen_stamp_ns[frame.camera_id] = frame.stamp_ns
-        self._async_pending[frame.camera_id] = frame
 
     def _drain_async_pending(self) -> None:
-        if not self._async_pending:
-            return
         now_wall_s = time.perf_counter()
-        expired = tuple(
-            camera_id
-            for camera_id, pending in self._async_pending.items()
-            if now_wall_s - pending.receive_wall_s > self.max_pending_wall_s
-        )
-        for camera_id in expired:
-            self._async_pending.pop(camera_id, None)
+        with self._async_pending_lock:
+            if not self._async_pending:
+                return
+            expired = tuple(
+                camera_id
+                for camera_id, pending in self._async_pending.items()
+                if now_wall_s - pending.receive_wall_s > self.max_pending_wall_s
+            )
+            for camera_id in expired:
+                self._async_pending.pop(camera_id, None)
+            batch = tuple(
+                self._async_pending[camera_id]
+                for camera_id in CAMERA_ORDER
+                if camera_id in self._async_pending
+            )
+            if not batch:
+                return
+            # Do not consume a valid image before the simulated clock has
+            # caught up. Startup delivery can otherwise make a fresh Gazebo
+            # image look materially future-dated at publish time.
+            latest_source_stamp_s = max(item.stamp_ns for item in batch) * 1.0e-9
+            if self._clock_s() + MAX_FUTURE_IMAGE_STAMP_S < latest_source_stamp_s:
+                wait_for_clock = True
+            else:
+                wait_for_clock = False
+                for item in batch:
+                    self._async_pending.pop(item.camera_id, None)
         if expired:
             self._warn_bounded("async_pending_expired", f"expired pending frames: {expired}")
-        batch = tuple(
-            self._async_pending[camera_id]
-            for camera_id in CAMERA_ORDER
-            if camera_id in self._async_pending
-        )
-        if not batch:
-            return
-        # Do not consume a valid image before the simulated clock has caught
-        # up.  Startup delivery can otherwise make a fresh Gazebo image look
-        # materially future-dated at publish time.  Keeping it pending
-        # preserves latest-only semantics; normal pending expiry still bounds
-        # a stalled clock.
-        latest_source_stamp_s = max(item.stamp_ns for item in batch) * 1.0e-9
-        if self._clock_s() + MAX_FUTURE_IMAGE_STAMP_S < latest_source_stamp_s:
+        if wait_for_clock:
             self._warn_bounded(
                 "async_clock_wait",
                 "waiting for simulation clock before publishing asynchronous frames",
             )
             return
-        for item in batch:
-            self._async_pending.pop(item.camera_id, None)
         self._process_frames(batch)
 
     def _process_batch(self, batch: tuple[PendingFrame, ...]) -> None:
@@ -799,11 +821,19 @@ class BatchedFourCameraYoloNode(Node):
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = BatchedFourCameraYoloNode()
+    executor = None
     try:
-        rclpy.spin(node)
+        if node.synchronization_mode == "asynchronous":
+            executor = MultiThreadedExecutor(num_threads=2)
+            executor.add_node(node)
+            executor.spin()
+        else:
+            rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
+        if executor is not None:
+            executor.shutdown()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

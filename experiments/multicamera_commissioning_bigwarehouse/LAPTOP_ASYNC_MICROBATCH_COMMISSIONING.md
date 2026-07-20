@@ -49,3 +49,9 @@ detector validation, an immutable runtime identity, and a specified,
 independently validated temporal association/fusion contract. That successor
 must state how it treats readings whose camera stamps differ; it cannot inherit
 the strict-runtime evidence status from v2 or v3.
+
+The separate v5 asset (`detector_4cam_v5_laptop_3hz_img416.yaml`) paces the
+same 640×360 source cameras at 3 Hz and uses a 416-square YOLO input for the
+next diagnostic. It remains blocked from evidence for the same reasons and
+must pass the complete rate, freshness, calibration, detector, and temporal
+association gates before promotion.
