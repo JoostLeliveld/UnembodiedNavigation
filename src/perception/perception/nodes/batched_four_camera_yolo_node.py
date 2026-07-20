@@ -272,9 +272,12 @@ class BatchedFourCameraYoloNode(Node):
                 ),
             )
 
-        self.subscriptions = []
+        # ``Node.subscriptions`` is an rclpy-managed read-only property.
+        # Keep our references under a node-local name so the subscriptions
+        # remain alive without shadowing the ROS API at startup.
+        self.camera_subscriptions = []
         for camera_id in CAMERA_ORDER:
-            self.subscriptions.append(
+            self.camera_subscriptions.append(
                 self.create_subscription(
                     Image,
                     CAMERA_TOPICS[camera_id],

@@ -149,6 +149,8 @@ def test_runtime_source_has_one_native_model_and_the_complete_operational_contra
     assert "use_torchscript" not in source
     assert "ground_truth" not in source
     assert "oracle_" not in source
+    assert "self.subscriptions = []" not in source
+    assert "self.camera_subscriptions = []" in source
     assert "_publish_failed_batch" not in source
     assert "publishing misses" not in source
     assert 'self.get_logger().fatal(message)' in source
