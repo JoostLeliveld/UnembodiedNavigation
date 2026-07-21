@@ -56,3 +56,31 @@ re-derived. The evaluators are validated in
 `tests/reliability/test_experiment_evaluators.py` against synthetic data with
 known ground truth, so they run unchanged the moment real fitted models and
 recorded runs exist.
+
+## Offline replay sweep drivers (E4 / E5 / E6)
+
+`replay_sweeps.py` drives the degradation experiments by transforming recorded
+frames and re-running the SAME offline replay pipeline
+(`reliability.replay.run_replay`) over identical detections, so any difference
+between conditions is attributable to the transform, not to a retuned filter
+(§21 fusion gate). It loads no truth: the caller passes evaluation-only
+`EvaluationFrame`s from an evaluation harness.
+
+- `run_camera_subset_sweep(...)` (**E4**) — every non-empty camera subset through
+  the same fusion mode; a size-1 subset equals the single-camera result, so
+  `fusion_gain_p95` (best single-camera p95 − full-set p95) is like-for-like.
+- `run_dropout_sweep(...)` / `run_latency_sweep(...)` (**E5**) — intermittent
+  dropout and delayed-association transforms over a severity axis, each with an
+  error-severity AUC.
+- `run_calibration_drift_sweep(...)` (**E6**) — a controlled constant
+  world-position bias on one camera (images untouched = "controlled
+  calibration-ablation evidence"), over a bias-magnitude axis.
+
+The frame transforms (`filter_frames_to_subset`, `drop_camera_*`,
+`delay_camera`, `bias_camera_position`) are pure. Cross-run paired CIs are the
+caller's job: run each recorded run through a sweep, collect per-run
+`ReplayMetrics`, then use `reliability.campaign_statistics.summarize_paired` /
+`hierarchical_bootstrap`. Validated in `tests/reliability/test_replay_sweeps.py`
+against synthetic runs with known monotone behaviour — including the honest
+finding that a NIS gate makes error-vs-drift non-monotone because the gate
+rejects a grossly biased camera (the protective behaviour E6 studies).
