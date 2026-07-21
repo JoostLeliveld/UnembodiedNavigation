@@ -1,5 +1,15 @@
 # Four-camera throughput: why not 3 Hz, and does it actually block the paper?
 
+> **CORRECTION (2026-07-21, from real runs — see `REAL_RUN_FINDINGS_2026-07-21.md`).**
+> This doc's RTF 0.315 was measured WITH the detector running and wrongly read
+> as sim-inherent. Live runs show the sim alone is **RTF 0.748**; with the
+> batched detector **0.722**. The real ceiling is **batch inference latency**
+> (~805 ms per 4-image batch at imgsz=640 → ~1 Hz), NOT sim rendering and NOT
+> GPU saturation (55% util, 2.5 GiB of 4). camera_A also is NOT broken in
+> batched GPU mode (0.97 Hz, valid detections) — the ~986 ms CPU figure below is
+> only the separate-process fallback. Read `REAL_RUN_FINDINGS` for the measured
+> truth; the ranked fixes below still stand.
+
 Investigation date 2026-07-21. Evidence: `runtime_pilot_20260717_retry2/runtime_readiness.json`,
 `LAPTOP_RUNTIME_PROBE_2026-07-20.md`, `preflight_host_gpu_20260720.json`.
 Host: **Quadro P2000, 4 GiB VRAM**; system RAM 5.8 GiB free with swap ~100% used.
