@@ -1,5 +1,12 @@
 # Demo-layer restructure plan — contributions demonstrated separately (2026-07-16)
 
+> **Resolved (2026-07-21):** the "where do demos live" question is answered by the
+> `modules/` front door. Each contribution's demo presentation lives in
+> `modules/NN_name/demos/` (rendered figures) with its data staying in the owning
+> study's `logs/studies/<study>/`. The four-panel grammar below is the per-module
+> standard; `modules/README.md` is the index. This supersedes the aspirational
+> `experiments/demos/` root discussed in the correction note below.
+
 > **Correction (2026-07-20), after building the first instance (D4):**
 > `experiments/demos/` is NOT free — it already exists for an unrelated
 > purpose (single-camera-campaign README media: `outcome_counts_by_condition.png`,

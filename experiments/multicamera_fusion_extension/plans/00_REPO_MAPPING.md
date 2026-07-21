@@ -1,9 +1,16 @@
 # Repo mapping — where the paper-extension architecture lands (2026-07-17)
 
-Decision: **no repo restructure.** The paper draft (§19) proposes a fresh
-`multicam/` + `offline/` tree; UN/CLAUDE.md forbids new top-level directories
-and the repo already implements most of the runtime column under
-`src/reliability/`. Everything in the proposal maps onto existing homes.
+Decision: **no restructure of the runtime column.** The paper draft (§19)
+proposes a fresh `multicam/` + `offline/` tree; the repo already implements most
+of that runtime column under `src/reliability/`, and everything in the proposal
+maps onto existing homes (table below). This decision is unchanged.
+
+> **Update (2026-07-21):** a *presentation-layer* restructure has since landed —
+> a top-level `modules/` front door (one folder per contribution). It does not
+> move any runtime code; the mappings below are all still correct. This
+> contribution's landing page is `modules/07_multicam_handover_fusion/`, whose
+> `baselines/` holds the Toro-Diz reimplementation notes and `framings/` holds
+> the paper drafts. See `CLAUDE.md` for the updated repo map.
 
 ## Paper §19 → actual repo locations
 
