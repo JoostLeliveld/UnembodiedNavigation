@@ -35,15 +35,29 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "src" / "reliability"))
+sys.path.insert(0, str(ROOT / "src" / "unav_common"))  # camera_model for re-projection
 
-from reliability.contracts import CameraQuality  # noqa: E402
+from reliability.contracts import CameraObservation, CameraQuality  # noqa: E402
 from reliability.fusion import MapObservation  # noqa: E402
+from reliability.projection import (  # noqa: E402
+    camera_model_from_world,
+    load_projection_calibration,
+    project_observation_to_world,
+)
 from reliability.replay import EvaluationFrame, ReplayFrame  # noqa: E402
 
 DEFAULT_CAMERAS = ("camera_A", "camera_B", "camera_C", "camera_D")
 DEFAULT_OBS_STD_M = 0.15  # placeholder per-observation std; modes may override it
 DEFAULT_ASSOC_TOL_S = 0.05
 DEFAULT_GT_TOL_S = 0.06
+# World-SDF <include> names for each camera in warehouse_full_4cam.
+DEFAULT_CAMERA_INCLUDES = {
+    "camera_A": "external_camera",
+    "camera_B": "external_camera_b",
+    "camera_C": "external_camera_c",
+    "camera_D": "external_camera_d",
+}
+DEFAULT_CONTACT_Z_M = 0.05
 
 
 @dataclass(frozen=True)
@@ -100,10 +114,34 @@ def load_run(
     obs_std_m: float = DEFAULT_OBS_STD_M,
     association_tolerance_s: float = DEFAULT_ASSOC_TOL_S,
     gt_tolerance_s: float = DEFAULT_GT_TOL_S,
+    projection_calibration: str | Path | None = None,
+    world_sdf: str | Path | None = None,
+    camera_includes: dict[str, str] | None = None,
+    contact_z_m: float = DEFAULT_CONTACT_Z_M,
 ) -> LoadedRun:
-    """Load one captured run directory into replay + evaluation frames."""
+    """Load one captured run directory into replay + evaluation frames.
+
+    By default each observation's world position is the recorder's `pred_world`
+    (uncorrected). When `projection_calibration` AND `world_sdf` are given, the
+    world position is instead RE-PROJECTED from the recorded bottom-centre pixel
+    (`obs_u`, `obs_v`) through the per-camera along-bearing calibration — the
+    camera_C fix verified live on 2026-07-21 (bias −0.151→−0.034 m,
+    err 0.156→0.077 m vs GT). This is applied here, in the offline apparatus,
+    because the recorder wrote `pred_world` uncorrected; the live-pipeline wiring
+    is the parallel commissioning workstream's to land.
+    """
 
     run = Path(run_dir)
+    calib: dict[str, dict[str, float]] = {}
+    models: dict[str, object] = {}
+    if projection_calibration is not None:
+        if world_sdf is None:
+            raise ValueError("projection_calibration requires world_sdf to build camera models")
+        calib = load_projection_calibration(projection_calibration)
+        includes = camera_includes or DEFAULT_CAMERA_INCLUDES
+        for cam in cameras:
+            if cam in includes:
+                models[cam] = camera_model_from_world(world_sdf, include_name=includes[cam])
     odom_rows = _rows(run / "raw" / "experiment.csv")
     if not odom_rows:
         raise ValueError(f"no operational odometry rows in {run}/raw/experiment.csv")
@@ -132,10 +170,30 @@ def load_run(
             if str(row.get("detected", "0")).strip() not in ("1", "true", "True"):
                 continue
             t = _float(row.get("diag_stamp"))
-            wx = _float(row.get("pred_world_x"))
-            wy = _float(row.get("pred_world_y"))
-            if t is None or wx is None or wy is None:
+            if t is None:
                 continue
+            if cam in models:
+                # Re-project from the recorded pixel through the v2 calibration.
+                u = _float(row.get("obs_u"))
+                v = _float(row.get("obs_v"))
+                if u is None or v is None:
+                    continue
+                c = calib.get(cam, {"intercept_m": 0.0, "slope_per_m": 0.0})
+                point = project_observation_to_world(
+                    CameraObservation(camera_id=cam, pixel_uv=(u, v), detection_valid=True),
+                    models[cam],
+                    contact_z_m=contact_z_m,
+                    along_bearing_offset_m=c.get("intercept_m", 0.0),
+                    along_bearing_slope_per_m=c.get("slope_per_m", 0.0),
+                )
+                if point is None:
+                    continue
+                wx, wy = point
+            else:
+                wx = _float(row.get("pred_world_x"))
+                wy = _float(row.get("pred_world_y"))
+                if wx is None or wy is None:
+                    continue
             idx = _nearest_index(frame_times, t)
             if idx is None or abs(frame_times[idx] - t) > association_tolerance_s:
                 drop += 1
