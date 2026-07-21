@@ -26,7 +26,7 @@ import numpy as np
 
 __all__ = [
     "sigmoid", "logit", "clip_prob", "probit_prob",
-    "brier", "logloss", "auroc", "ece", "fhtr", "spearman",
+    "brier", "logloss", "auroc", "auprc", "ece", "fhtr", "spearman",
     "gaussian_nll_logit", "coverage_logit", "binned",
 ]
 
@@ -70,6 +70,45 @@ def auroc(y, p):
         return math.nan
     r = rankdata(p)
     return float((r[pos].sum() - n1 * (n1 + 1) / 2.0) / (n1 * n0))
+
+
+def auprc(y, p):
+    """Average precision (area under the PR curve), sklearn step definition.
+
+    AP = sum_k (R_k - R_{k-1}) * P_k over descending score thresholds, with tied
+    scores consumed together. Returns NaN when there are no positive labels
+    (recall is undefined), mirroring ``auroc``'s one-class behaviour. Preferred
+    over AUROC when positives are rare, as in per-camera usable-observation
+    labels.
+    """
+    y = np.asarray(y, float)
+    p = np.asarray(p, float)
+    pos_total = float((y >= 0.5).sum())
+    if pos_total == 0:
+        return math.nan
+    order = np.argsort(-p, kind="mergesort")  # stable sort, descending score
+    y_sorted = (y[order] >= 0.5).astype(float)
+    p_sorted = p[order]
+    n = len(p_sorted)
+    ap = 0.0
+    tp = 0.0
+    fp = 0.0
+    prev_recall = 0.0
+    i = 0
+    while i < n:
+        j = i
+        while j < n and p_sorted[j] == p_sorted[i]:  # consume tied scores together
+            if y_sorted[j] >= 0.5:
+                tp += 1.0
+            else:
+                fp += 1.0
+            j += 1
+        precision = tp / (tp + fp)
+        recall = tp / pos_total
+        ap += (recall - prev_recall) * precision
+        prev_recall = recall
+        i = j
+    return float(ap)
 
 
 def ece(y, p, bins=10):

@@ -53,7 +53,7 @@ Library modules 01, 04, 05, 06, 08, 09, 10 are **data-independent** (pure code
 current 4-cam detection rates 0.10–0.70 are OOD; anything fitted now is
 throwaway).
 
-## Structural implementation status (2026-07-17)
+## Structural implementation status (updated 2026-07-21)
 
 - **Implemented and unit-tested:** 01 Toro baseline, 04 confidence calibration,
   05 trust stacker, 06 conditional covariance, 08 calibration-health EWMA,
@@ -67,11 +67,31 @@ throwaway).
   canonical belief-aware GP fitter, with preserved run-level holdouts and
   model cards; fitting still waits for commissioning M1/M2 so discarded OOD
   detector outputs do not become paper artifacts.
-- **Blocked on an explicit empirical/configuration decision:** 07 must reconcile
-  the 40 px versus 120 px miss-covariance endpoints from data before runtime and
-  offline mappings are unified.
-- **Not yet executed:** 11 campaign drivers and 12 evidence promotion. No
-  multi-camera paper result is claimed by this structural implementation.
+- **07 reconcile — architecturally CLOSED, empirically PENDING (2026-07-21):**
+  `reliability/covariance_mapping.py` is now the single source of truth
+  (precision-blend + bounded-interpolation forms; property tests: monotone /
+  PSD / 2×2 / finite / factor-logged). A grid test proves the offline
+  (`geometry_visibility.trust_to_r_plan`) and adapter formulas are identical to
+  ~1e-9 — the historical 40-vs-120 px divergence is ONLY the miss endpoint
+  constant, not the math. `MissEndpointPolicy.require_reconciled()` blocks any
+  quote of 40 or 120 until the residual-tail measurement is made; see
+  `plans/DECISION_r_miss.md`. The empirical number still waits on commissioning
+  residuals.
+- **§16/§17 statistics — DONE (2026-07-21):** `reliability/campaign_statistics.py`
+  is the run-level inference backbone (Wilson intervals, paired differences,
+  clustered/hierarchical route→seed→episode bootstrap, `error_severity_auc`,
+  multiple-comparison discipline, and the pre-registered §17 beats-Toro decision
+  rules as pure functions). 22 unit tests.
+- **E1/E2 evaluators — DONE, validated on synthetic truth (2026-07-21):**
+  `tools/experiment_evaluators.py` (STUDY code — firewall quarantines
+  `reliability.evaluation`) scores reliability prediction (Brier/NLL/ECE/AUROC/
+  AUPRC/false-trust + §21 combined-beats-both gate) and conditional-covariance
+  calibration (MNLL/coverage/sharpness + over-inflation flag). Canonical `auprc`
+  added to `scripts/shared/metrics.py`. 11 evaluator tests + 5 auprc tests. The
+  apparatus is turn-key for real data; it does NOT itself constitute evidence.
+- **Not yet executed:** 11 campaign *drivers* (replay-fusion sweeps E3–E8) and 12
+  evidence promotion. No multi-camera paper result is claimed by this structural
+  implementation.
 
 ## Plan files
 

@@ -28,3 +28,31 @@ the canonical belief-aware GP fitter. They preserve `run_id` and require a
 complete held-out run, so random-frame validation cannot be introduced at the
 last minute. Both write an input/model provenance card beside the fitted
 artifact.
+
+## Offline experiment evaluators (the fixed measurement apparatus)
+
+`experiment_evaluators.py` is the data-independent scoring apparatus for
+experiments **E1** (reliability prediction) and **E2** (conditional covariance
+calibration), per `plans/11_experiment_campaign.md`. It deliberately lives here
+and NOT in the `reliability` package: the leakage firewall pre-registers
+`reliability.evaluation` as a forbidden planner-facing import, because
+evaluators may score residuals derived from evaluation ground truth.
+
+- `evaluate_reliability_prediction(...)` → Brier / NLL / ECE / AUROC / AUPRC /
+  false-high-trust-rate for one method's predicted trust probabilities, with a
+  clustered-bootstrap Brier CI over runs. `reliability_prediction_gate(...)`
+  enforces the §21 E1 gate: combined GP+confidence must beat BOTH GP-only and
+  confidence-only on Brier and NLL.
+- `evaluate_covariance_calibration(...)` → MNLL / χ² C95 coverage / sharpness /
+  bias / RMSE / median / p95, with a clustered-bootstrap MNLL CI.
+  `compare_covariance_methods(...)` renders a coverage-and-sharpness-together
+  table and flags over-inflated covariances (high coverage bought with useless
+  width — the §E2 failure mode).
+
+All scoring reuses the canonical scorers (`scripts/shared/metrics.py`), the
+canonical covariance primitives (`reliability.conditional_covariance`), and the
+canonical run-level inference (`reliability.campaign_statistics`); nothing is
+re-derived. The evaluators are validated in
+`tests/reliability/test_experiment_evaluators.py` against synthetic data with
+known ground truth, so they run unchanged the moment real fitted models and
+recorded runs exist.
