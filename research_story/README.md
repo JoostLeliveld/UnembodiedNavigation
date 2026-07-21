@@ -9,6 +9,14 @@ Master plan: [THESIS_PLAN_2026-07-15.md](THESIS_PLAN_2026-07-15.md). Statuses:
 [MEDIA_INDEX.md](MEDIA_INDEX.md). Chapter media views: `<chapter>/{figures,videos}/`
 (rebuild: `python3 _tools/link_media.py`).
 
+Two-paper programme view (Paper 1 = single-camera self-monitoring localization
+service, chapters 00–06; Paper 2 = multi-camera fault tolerance, chapters 07–11;
+Paper 3 = placement/fleet, PARKED) mapped onto these chapters + the investigation
+studies: [PROGRAMME_ROADMAP_2026-07-21.md](PROGRAMME_ROADMAP_2026-07-21.md).
+Governance layer: [`_shared/evidence_classes.md`](_shared/evidence_classes.md),
+[`_shared/ground_truth_firewall.md`](_shared/ground_truth_firewall.md),
+[`_shared/module_gates_and_stop_rules.md`](_shared/module_gates_and_stop_rules.md).
+
 ## The two worlds (hard rule)
 
 | | **Original warehouse** | **Full four-camera warehouse** |
