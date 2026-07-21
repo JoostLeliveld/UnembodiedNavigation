@@ -32,6 +32,16 @@ class EfeAgentNode(UnicyclePlannerNode):
         if not self.has_parameter('cmd_topic'):
             self.declare_parameter('cmd_topic', '/cmd_vel')
         self.cmd_topic = self.get_parameter('cmd_topic').value
+        # Global route source for the hierarchical planner. 'efe' runs the
+        # one-shot global EFE solve (C1/C2). 'geometric_shortest_path' selects
+        # the shortest valid lane-graph route over the same driveable + no-go
+        # geometry and hands it to the same local tracker, with no camera-
+        # reliability / EFE reasoning (C0 conventional-navigation baseline).
+        if not self.has_parameter('global_planner_mode'):
+            self.declare_parameter('global_planner_mode', 'efe')
+        self.global_planner_mode = str(
+            self.get_parameter('global_planner_mode').value or 'efe'
+        ).strip().lower()
         self.cmd_pub = self.create_publisher(Twist, self.cmd_topic, 10)
         self.active_execution_diag_pub = self.create_publisher(
             Float64MultiArray, '/planner/active_execution_diagnostics', 10
@@ -257,6 +267,72 @@ class EfeAgentNode(UnicyclePlannerNode):
         final_goal = self._goal_xy_from_msg(goal_ref)
 
         if self._hier_phase == 'GLOBAL':
+            if str(getattr(self, 'global_planner_mode', 'efe')) == 'geometric_shortest_path':
+                # C0 conventional-navigation baseline: pick the SHORTEST valid
+                # lane-graph route over the SAME driveable + no-go geometry as
+                # C1/C2 and hand it to the SAME local tracker. No GP/visibility
+                # input and no EFE solve -- the one-shot global optimisation is
+                # skipped entirely. Route seeds come from the identical
+                # generate_route_seeds call used by the EFE branch below.
+                def _polyline_len(waypoints) -> float:
+                    pts = np.asarray(waypoints, dtype=float)
+                    if pts.shape[0] < 2:
+                        return float('inf')
+                    return float(np.sum(np.linalg.norm(np.diff(pts, axis=0), axis=1)))
+
+                seeds = []
+                if str(getattr(self, 'driveable_geometry_json', '') or ''):
+                    try:
+                        from unav_common.lane_graph_routes import generate_route_seeds
+                        seeds = generate_route_seeds(
+                            self.driveable_geometry_json,
+                            (float(m0[0]), float(m0[1])),
+                            (float(final_goal[0]), float(final_goal[1])),
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        self.get_logger().warn(
+                            f"[geometric_shortest_path] lane-graph seed generation failed "
+                            f"({exc}); falling back to straight start->goal route"
+                        )
+                        seeds = []
+                if seeds:
+                    best = min(seeds, key=lambda s: _polyline_len(s['waypoints']))
+                    self._waypoints = [(float(w[0]), float(w[1])) for w in best['waypoints']]
+                    self.get_logger().info(
+                        f"[geometric_shortest_path] shortest of "
+                        f"{[s['name'] for s in seeds]} -> {best['name']} "
+                        f"({_polyline_len(best['waypoints']):.2f} m)"
+                    )
+                else:
+                    self.get_logger().warn(
+                        "[geometric_shortest_path] 0 lane-graph seeds "
+                        "(check driveable_geometry_json covers start/goal); "
+                        "using straight start->goal route"
+                    )
+                    self._waypoints = [(float(m0[0]), float(m0[1]))]
+                # Mirror the EFE branch: the tracked route must end at the actual
+                # mission goal rather than the route terminus.
+                if self._waypoints:
+                    last_wp = np.asarray(self._waypoints[-1], dtype=float)
+                    if float(np.linalg.norm(last_wp - final_goal)) > 1e-3:
+                        self._waypoints.append((float(final_goal[0]), float(final_goal[1])))
+                else:
+                    self._waypoints = [(float(final_goal[0]), float(final_goal[1]))]
+                self._wp_idx = 0
+                self._hier_phase = 'LOCAL'
+                # Same local warm-start bootstrap as the EFE branch.
+                if self._waypoints:
+                    try:
+                        wp0 = np.asarray(self._waypoints[0], dtype=float)
+                        seed = self.planner._controls_for_waypoints(m0[:3], [wp0])
+                        self.planner.prev_controls_flat = np.asarray(seed, dtype=float).reshape(-1)
+                    except Exception:
+                        pass
+                self.get_logger().info(
+                    f"[geometric_shortest_path] global route chosen without EFE solve -> "
+                    f"{len(self._waypoints)} waypoints; switching to local tracking"
+                )
+                return
             # Generate condition-neutral lane-graph route seeds from the driveable
             # map for this (one-shot) global solve. The global route is chosen once
             # and never replanned, so these seeds provide the nonconvex optimizer's

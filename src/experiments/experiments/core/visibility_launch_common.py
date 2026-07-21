@@ -60,6 +60,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'discount_gamma': '0.98',
     'robot_collision_radius_m': '0.125',
     'bridge_contacts': 'true',
+    'bridge_camera_a': 'true',
     'bridge_camera_b': 'false',
     'bridge_camera_c': 'false',
     'bridge_camera_d': 'false',
@@ -80,6 +81,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'optimizer_initial_routes_json': '',
     'optimizer_route_seed_mode': 'explicit',
     'use_hierarchical': 'false',
+    'global_planner_mode': 'efe',
     'global_horizon': '60',
     'global_dt': '0.0',
     'local_horizon': '12',
@@ -124,6 +126,11 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'stuck_cmd_fraction_min': '0.50',
     'stuck_idle_cmd_fraction_max': '0.10',
     'reset_world': 'false',
+    # Commissioning drive: when false, the goal-mission + goal-marker nodes are
+    # not launched, so no goal is published and the EFE planner stays silent
+    # (its belief EKF still runs and publishes /planner_belief). Default true
+    # preserves the frozen navigation comparison exactly.
+    'enable_mission': 'true',
     'yolo_model': '',
     'yolo_device': '',
     'yolo_imgsz': '640',
@@ -255,6 +262,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'use_ambiguity': _as_bool(_launch_value(context, 'use_ambiguity', PAPER_LAUNCH_DEFAULTS['use_ambiguity'])),
         'use_obs_risk': _as_bool(_launch_value(context, 'use_obs_risk', PAPER_LAUNCH_DEFAULTS['use_obs_risk'])),
         'auto_stop_on_goal': _as_bool(_launch_value(context, 'auto_stop_on_goal', PAPER_LAUNCH_DEFAULTS['auto_stop_on_goal'])),
+        'enable_mission': _as_bool(_launch_value(context, 'enable_mission', PAPER_LAUNCH_DEFAULTS['enable_mission'])),
         'goal_success_radius': float(_launch_value(context, 'goal_success_radius', PAPER_LAUNCH_DEFAULTS['goal_success_radius'])),
         'goal_success_hold_s': float(_launch_value(context, 'goal_success_hold_s', PAPER_LAUNCH_DEFAULTS['goal_success_hold_s'])),
         'goal_stable_radius': float(_launch_value(context, 'goal_stable_radius', PAPER_LAUNCH_DEFAULTS['goal_stable_radius'])),
@@ -289,6 +297,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'optimizer_initial_routes_json': _launch_value(context, 'optimizer_initial_routes_json', PAPER_LAUNCH_DEFAULTS['optimizer_initial_routes_json']),
         'optimizer_route_seed_mode': _launch_value(context, 'optimizer_route_seed_mode', PAPER_LAUNCH_DEFAULTS['optimizer_route_seed_mode']),
         'use_hierarchical': _as_bool(_launch_value(context, 'use_hierarchical', PAPER_LAUNCH_DEFAULTS['use_hierarchical'])),
+        'global_planner_mode': _launch_value(context, 'global_planner_mode', PAPER_LAUNCH_DEFAULTS['global_planner_mode']).strip().lower(),
         'global_horizon': int(_launch_value(context, 'global_horizon', PAPER_LAUNCH_DEFAULTS['global_horizon'])),
         'global_dt': float(_launch_value(context, 'global_dt', PAPER_LAUNCH_DEFAULTS['global_dt'])),
         'local_horizon': int(_launch_value(context, 'local_horizon', PAPER_LAUNCH_DEFAULTS['local_horizon'])),
@@ -429,6 +438,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'bridge_contacts': _as_bool(
             _launch_value(context, 'bridge_contacts', PAPER_LAUNCH_DEFAULTS['bridge_contacts'])
         ),
+        'bridge_camera_a': _as_bool(
+            _launch_value(context, 'bridge_camera_a', PAPER_LAUNCH_DEFAULTS['bridge_camera_a'])
+        ),
         'bridge_camera_b': _as_bool(
             _launch_value(context, 'bridge_camera_b', PAPER_LAUNCH_DEFAULTS['bridge_camera_b'])
         ),
@@ -514,11 +526,26 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'yolo_min_bbox_area_px': float(_launch_value(context, 'yolo_min_bbox_area_px', PAPER_LAUNCH_DEFAULTS['yolo_min_bbox_area_px'])),
         'yolo_debug_frame_dir': _launch_value(context, 'yolo_debug_frame_dir', ''),
         'yolo_use_torchscript': _as_bool(_launch_value(context, 'yolo_use_torchscript', 'false')),
+        'yolo_runtime_backend': _launch_value(context, 'yolo_runtime_backend', 'native').strip().lower(),
+        'yolo_compiled_model': _launch_value(context, 'yolo_compiled_model', '').strip(),
+        'yolo_input_transport': _launch_value(context, 'yolo_input_transport', 'ros').strip().lower(),
+        'yolo_runtime_trace_period_s': float(_launch_value(context, 'yolo_runtime_trace_period_s', '0.0')),
         'yolo_warmup_iters': int(_launch_value(context, 'yolo_warmup_iters', '3')),
         'yolo_inference_in_callback': _as_bool(_launch_value(context, 'yolo_inference_in_callback', 'true')),
     }
     if cfg['heading_update_mode'] != 'camera_xy_only':
         raise RuntimeError("heading_update_mode must be 'camera_xy_only' for current active runs")
+    if (
+        cfg['enable_logging']
+        and (
+            cfg['yolo_runtime_backend'] != 'native'
+            or cfg['yolo_input_transport'] != 'ros'
+        )
+    ):
+        raise RuntimeError(
+            'compiled/direct-Gazebo YOLO is a diagnostic runtime successor and '
+            'is blocked from evidence logging; set enable_logging:=false for commissioning'
+        )
 
     return cfg
 
@@ -577,7 +604,9 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         cfg['use_ambiguity'] = True
         cfg['use_obs_risk'] = True
     visibility_artifact_path = str(cfg.get('visibility_artifact_path', '') or '').strip()
-    if planner != 'constant_R_efe':
+    # Only the visibility-aware planner (C2) consumes the GP artifact. C1
+    # (constant_R_efe) and C0 (geometric_shortest_path) are camera-model-free.
+    if planner == 'visibility_aware_efe':
         if not visibility_artifact_path:
             raise RuntimeError(
                 "visibility_artifact_path must be provided explicitly — "
@@ -702,6 +731,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'spawn_yaw': str(cfg['spawn']['yaw']),
             'reset_world': 'true' if cfg.get('reset_world', False) else 'false',
             'bridge_contacts': 'true' if cfg.get('bridge_contacts', True) else 'false',
+            'bridge_camera_a': 'true' if cfg.get('bridge_camera_a', True) else 'false',
             'bridge_camera_b': 'true' if cfg.get('bridge_camera_b', False) else 'false',
             'bridge_camera_c': 'true' if cfg.get('bridge_camera_c', False) else 'false',
             'bridge_camera_d': 'true' if cfg.get('bridge_camera_d', False) else 'false',
@@ -813,6 +843,10 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'debug_frame_dir': cfg.get('yolo_debug_frame_dir', ''),
         # TIMING fix knobs (see yolo_robot_detector_node).
         'use_torchscript': cfg.get('yolo_use_torchscript', False),
+        'runtime_backend': cfg.get('yolo_runtime_backend', 'native'),
+        'compiled_model_path': cfg.get('yolo_compiled_model', ''),
+        'input_transport': cfg.get('yolo_input_transport', 'ros'),
+        'runtime_trace_period_s': cfg.get('yolo_runtime_trace_period_s', 0.0),
         'warmup_iters': int(cfg.get('yolo_warmup_iters', 3)),
         'inference_in_callback': cfg.get('yolo_inference_in_callback', True),
     }
@@ -1026,6 +1060,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'stuck_cmd_fraction_min': cfg['stuck_cmd_fraction_min'],
                 'stuck_idle_cmd_fraction_max': cfg['stuck_idle_cmd_fraction_max'],
                 'robot_collision_radius_m': cfg['robot_collision_radius_m'],
+                'terminate_on_geom_collision': cfg['terminate_on_geom_collision'],
                 'use_command_noise': cfg['use_command_noise'],
                 'use_odom_for_predict': cfg['use_odom_for_predict'],
                 'odom_topic': odom_topic,
@@ -1108,9 +1143,10 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     shared_nodes = build_shared_nodes(cfg)
     planner = cfg['planner']
 
-    if planner not in ('visibility_aware_efe', 'constant_R_efe'):
+    if planner not in ('visibility_aware_efe', 'constant_R_efe', 'geometric_shortest_path'):
         raise RuntimeError(
-            "planner must be 'visibility_aware_efe' or 'constant_R_efe' for agent launch"
+            "planner must be 'visibility_aware_efe', 'constant_R_efe' or "
+            "'geometric_shortest_path' for agent launch"
         )
 
     planner_params = {
@@ -1124,8 +1160,19 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'use_ambiguity': True,
             'use_obs_risk': True,
         },
+        # C0 conventional-navigation baseline: the one-shot global EFE solve is
+        # skipped (global_planner_mode='geometric_shortest_path'), so the EFE
+        # terms are unused; disable them so nothing is silently active.
+        'geometric_shortest_path': {
+            'approx_method': 'ET1',
+            'use_ambiguity': False,
+            'use_obs_risk': False,
+        },
     }
-    planner_uses_visibility = bool(cfg['use_visibility_model']) and planner != 'constant_R_efe'
+    planner_uses_visibility = (
+        bool(cfg['use_visibility_model'])
+        and planner not in ('constant_R_efe', 'geometric_shortest_path')
+    )
     agent_node = Node(
         package='planning',
         executable='efe_agent',
@@ -1203,6 +1250,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'optimizer_initial_routes_json': cfg['optimizer_initial_routes_json'],
             'optimizer_route_seed_mode': cfg['optimizer_route_seed_mode'],
             'use_hierarchical': cfg.get('use_hierarchical', False),
+            'global_planner_mode': cfg.get('global_planner_mode', 'efe'),
             'global_horizon': cfg.get('global_horizon', 60),
             'global_dt': cfg.get('global_dt', 0.0),
             'local_horizon': cfg.get('local_horizon', 12),
@@ -1236,9 +1284,14 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     after_odom = [
         shared_nodes['perception_node'],
         shared_nodes['pixel_to_bev'],
-        shared_nodes['mission_node'],
-        shared_nodes['goal_marker_node'],
     ]
+    # Commissioning drive (enable_mission=false): omit the goal publisher + marker
+    # so no goal is ever published. The EFE planner then no-ops in _plan_once and
+    # never emits /cmd_vel, while its belief EKF keeps predicting on odom and
+    # correcting on pixel detections — an external coverage controller drives.
+    if cfg.get('enable_mission', True):
+        after_odom.append(shared_nodes['mission_node'])
+        after_odom.append(shared_nodes['goal_marker_node'])
     if shared_nodes['logger_node'] is not None:
         after_odom.append(shared_nodes['logger_node'])
     if cfg['use_rviz']:

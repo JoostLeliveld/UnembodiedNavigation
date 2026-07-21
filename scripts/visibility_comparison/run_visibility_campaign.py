@@ -30,6 +30,7 @@ LOGS_ROOT = REPO_ROOT / 'logs' / 'visibility_comparison'
 
 # Map condition ID to planner name (must match ALLOWED_PLANNERS in launch file).
 CONDITION_PLANNER = {
+    'C0': 'geometric_shortest_path',
     'C1': 'constant_R_efe',
     'C2': 'visibility_aware_efe',
 }
@@ -331,7 +332,9 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         if expected is not None and key in manifest and str(manifest.get(key, '')) != str(expected):
             return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")!r}, config expects {expected!r}'
 
-    if CONDITION_PLANNER.get(condition_id) != 'constant_R_efe':
+    # Only the visibility-aware planner (C2) consumes the GP artifact; C1
+    # (constant_R_efe) and C0 (geometric_shortest_path) are camera-model-free.
+    if CONDITION_PLANNER.get(condition_id) == 'visibility_aware_efe':
         actual = str(manifest.get('visibility_artifact_path', '') or '')
         expected = str(_resolve_repo_path(cfg['gp_artifact'], strict=False))
         if _resolve_for_compare(actual) != _resolve_for_compare(expected):
@@ -430,8 +433,10 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'yolo_inference_in_callback:={str(cfg.get("yolo_inference_in_callback", True)).lower()}',
     ]
 
-    # Planner-specific args: pass GP artifact for C2, plus locked weights.
-    if planner != 'constant_R_efe':
+    # Planner-specific args: pass GP artifact only for the visibility-aware
+    # planner (C2). C1 (constant_R_efe) and C0 (geometric_shortest_path) are
+    # camera-model-free and must not receive it.
+    if planner == 'visibility_aware_efe':
         cmd.append(f'visibility_artifact_path:={gp_artifact}')
 
     task_cfg = cfg['tasks'].get(task_name, {})
@@ -472,6 +477,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'nogo_belief_kappa',
         'robot_collision_radius_m',
         'terminate_on_geom_collision',
+        'global_planner_mode',
         'bridge_camera_b', 'bridge_camera_c', 'bridge_camera_d',
         'stuck_window_s', 'stuck_max_displacement_m',
         'stuck_max_goal_improvement_m', 'stuck_cmd_fraction_min',

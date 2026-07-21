@@ -10,8 +10,11 @@ from launch_ros.substitutions import FindPackageShare
 #     comparison_method_id:=efe_main
 
 DEFAULT_PLANNER = 'visibility_aware_efe'
-ALLOWED_PLANNERS = ('visibility_aware_efe', 'constant_R_efe')
-PLANNER_DESCRIPTION = 'Primary thesis comparison: visibility_aware_efe | constant_R_efe'
+ALLOWED_PLANNERS = ('visibility_aware_efe', 'constant_R_efe', 'geometric_shortest_path')
+PLANNER_DESCRIPTION = (
+    'Primary thesis comparison: visibility_aware_efe (C2) | constant_R_efe (C1) | '
+    'geometric_shortest_path (C0 conventional-navigation baseline)'
+)
 
 
 def _planner_precision_arguments():
@@ -56,6 +59,8 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('optimizer_route_seed_mode', default_value='explicit',
                               description="Multistart route-seed source: 'explicit' uses optimizer_initial_routes_json; 'lane_graph' generates condition-neutral lane-centre Manhattan seeds from the driveable map."),
         DeclareLaunchArgument('use_hierarchical', default_value='false'),
+        DeclareLaunchArgument('global_planner_mode', default_value='efe',
+                              description="Global route source: 'efe' (one-shot global EFE solve, C1/C2) or 'geometric_shortest_path' (shortest valid lane-graph route, C0 baseline; skips the EFE solve)."),
         DeclareLaunchArgument('global_horizon', default_value='60'),
         DeclareLaunchArgument('global_dt', default_value='0.0',
                               description='Global planner step size; 0.0 inherits dt.'),
@@ -110,8 +115,19 @@ def _launch_setup(context, *args, **kwargs):
         # but the observation covariance is spatially uniform instead of GP-based.
         cfg['use_ambiguity'] = True
         cfg['use_obs_risk'] = True
+        cfg['global_planner_mode'] = 'efe'
+    elif planner == 'geometric_shortest_path':
+        # C0 conventional-navigation baseline: geometry-only shortest-path route
+        # over the same driveable + no-go geometry, tracked by the same local
+        # controller. No camera-reliability model and no EFE reasoning; the
+        # one-shot global EFE solve is skipped, so the EFE terms are unused.
+        cfg['use_visibility_model'] = False
+        cfg['global_planner_mode'] = 'geometric_shortest_path'
+        cfg['use_ambiguity'] = False
+        cfg['use_obs_risk'] = False
     else:
         cfg['use_visibility_model'] = True
+        cfg['global_planner_mode'] = 'efe'
 
     cfg = resolve_world_setup(cfg)
     return build_agent_runtime_actions(cfg)
@@ -134,6 +150,8 @@ def generate_launch_description():
         DeclareLaunchArgument('seed', default_value='0'),
         DeclareLaunchArgument('comparison_method_id', default_value=''),
         DeclareLaunchArgument('auto_stop_on_goal', default_value='true'),
+        DeclareLaunchArgument('enable_mission', default_value='true',
+                              description='Publish a navigation goal (true). Set false for a commissioning coverage drive: no goal, EFE planner silent, belief EKF still runs while an external /cmd_vel source drives.'),
         DeclareLaunchArgument('goal_success_radius', default_value='0.20'),
         DeclareLaunchArgument('goal_success_hold_s', default_value='2.0'),
         DeclareLaunchArgument('goal_stable_radius', default_value='0.20'),
@@ -177,6 +195,13 @@ def generate_launch_description():
         DeclareLaunchArgument('yolo_debug_frame_dir', default_value=''),
         DeclareLaunchArgument('yolo_use_torchscript', default_value='false',
                               description='Load the TorchScript export of the model (single C++ forward dispatch; bit-identical detections)'),
+        DeclareLaunchArgument('yolo_runtime_backend', default_value='native',
+                              description='Detector backend: native (evidence default) or torchscript (diagnostic successor).'),
+        DeclareLaunchArgument('yolo_compiled_model', default_value='',
+                              description='Fixed-shape .torchscript artifact required by yolo_runtime_backend:=torchscript.'),
+        DeclareLaunchArgument('yolo_input_transport', default_value='ros',
+                              description='Camera input: ros (default) or direct_gz (diagnostic, bypasses RGB bridge).'),
+        DeclareLaunchArgument('yolo_runtime_trace_period_s', default_value='0.0'),
         DeclareLaunchArgument('yolo_warmup_iters', default_value='3',
                               description='Dummy inferences at startup to pay lazy CUDA/JIT init off the hot path'),
         DeclareLaunchArgument('yolo_inference_in_callback', default_value='true',
@@ -188,6 +213,8 @@ def generate_launch_description():
         DeclareLaunchArgument('headless', default_value='false'),
         DeclareLaunchArgument('use_rviz', default_value='false'),
         DeclareLaunchArgument('reset_world', default_value='false'),
+        DeclareLaunchArgument('bridge_camera_a', default_value='true',
+                              description='Bridge primary external-camera RGB/camera_info; false only with yolo_input_transport:=direct_gz.'),
         DeclareLaunchArgument('bridge_camera_b', default_value='true',
                               description='Bridge the north-west external camera RGB/camera_info topics.'),
         DeclareLaunchArgument('bridge_camera_c', default_value='true',
