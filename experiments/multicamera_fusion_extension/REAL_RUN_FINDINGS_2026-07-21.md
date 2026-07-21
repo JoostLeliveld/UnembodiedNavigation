@@ -81,6 +81,32 @@ applied back). Fix = feed `projection_calibration_v2` wherever the world
 position is computed (live: `manager_projection_calibration:=<v2.json>`;
 offline: re-project from pixels with the calibration — done in the loader).
 
+## Full traverse — all four cameras validated (update, same day)
+
+A complete south→north traverse (spawn at start, `--max-sim-runtime-s 420`,
+robot reached y +7.01) captured **295 GT-joined detections across all four
+cameras**, clearing the earlier camera_B gap. v2 along-bearing calibration vs GT:
+
+| camera | n | RAW mean err (m) | +v2 mean err (m) |
+|---|---:|---:|---:|
+| A | 50 | 0.128 | 0.087 |
+| B | 59 | 0.058 | **0.026** |
+| C | 91 | 0.184 | 0.086 |
+| D | 95 | 0.107 | 0.036 |
+
+**camera_B (previously unverified) is now confirmed: 0.058 → 0.026 m.** The v2
+calibration more than halves error on every camera, so it is validated to land
+in the live pipeline for the whole camera set — the thin-evidence caveat below
+is resolved. camera_B only detects in the far-north stretch (y ≳ 5), which is
+why the earlier half-traverse saw zero B detections (not a camera fault).
+
+NOTE: this validation used a lightweight detection+GT logger that did NOT record
+odometry, so the closed-loop FUSION re-analysis on this full A/C→B/D handover
+still needs a run with the operational recorder (odom + perception + GT
+firewall) → `load_commissioning_run` → subset/fusion sweep. That is the real
+test of whether the handover regime (no single camera covers the whole aisle)
+finally makes fusion beat the best single camera.
+
 ## Caveats / honesty
 - The `south_to_north` pass only reached the handover band, so camera_B (north)
   has 0 detections here; a full traverse (raise the sim deadline) is needed for
