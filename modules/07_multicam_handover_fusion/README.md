@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Claim** | Static per-camera error calibration is insufficient because camera usefulness changes with position, individual detections, availability and calibration health; we combine a spatial GP prior, calibrated frame-level detector evidence and online camera-health monitoring, mapped into camera-specific covariance for fusion and planning. |
-| **Status** | Status report — data-independent library implemented + unit-tested; empirical results blocked on the detector retrain (real multi-camera data). No multi-camera result is claimed yet. |
+| **Status** | Data-independent library implemented + unit-tested. First REAL Gazebo pilot done (single pass, not paper evidence): both camera fixes verified live — camera_A works in batched GPU mode; camera_C's v2 projection calibration cuts its error 0.156→0.077 m vs GT. See [REAL_RUN_FINDINGS](../../experiments/multicamera_fusion_extension/REAL_RUN_FINDINGS_2026-07-21.md). Full multi-camera campaign still pending (needs a full traverse for camera_B + repeated runs). |
 | **Chapter** | [08 — large-warehouse scaling](../../research_story/08_large_warehouse_scaling/) (ACTIVE) / [09 — multicamera handover & fusion](../../research_story/09_multicamera_handover_fusion/) (PLUMBING+PILOT) |
 
 This is the home of the **paper extension** over Toro-Diz et al. The full plan,
@@ -26,6 +26,10 @@ current frame's confidence copied across the horizon.
 - [`toro_baseline.py`](../../src/reliability/reliability/toro_baseline.py) · [`conditional_covariance.py`](../../src/reliability/reliability/conditional_covariance.py) · [`confidence_calibration.py`](../../src/reliability/reliability/confidence_calibration.py) · [`trust_stacker.py`](../../src/reliability/reliability/trust_stacker.py) · [`health_ewma.py`](../../src/reliability/reliability/health_ewma.py) · [`fusion.py`](../../src/reliability/reliability/fusion.py) (v2 primitives) · [`planning_covariance.py`](../../src/reliability/reliability/planning_covariance.py)
 - Statistics backbone: [`campaign_statistics.py`](../../src/reliability/reliability/campaign_statistics.py)
 - Evaluators / replay drivers: [`../../experiments/multicamera_fusion_extension/tools/`](../../experiments/multicamera_fusion_extension/tools/)
+
+## Real-run findings (2026-07-21)
+- [REAL_RUN_FINDINGS](../../experiments/multicamera_fusion_extension/REAL_RUN_FINDINGS_2026-07-21.md) — brick-by-brick live Gazebo: sim RTF, detector rate/accuracy tradeoff, and both camera fixes verified vs ground truth.
+- [THROUGHPUT_DIAGNOSIS](../../experiments/multicamera_fusion_extension/THROUGHPUT_DIAGNOSIS_2026-07-21.md) — why 3 Hz is inference-bound on the P2000 (corrected by the real runs).
 
 ## baselines/
 External methods reimplemented as comparisons for this contribution. The
