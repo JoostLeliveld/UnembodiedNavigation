@@ -19,9 +19,9 @@ python3 scripts/paper_figures/make_readme_visuals.py
 
 | Asset | Use |
 | --- | --- |
-| [`../../paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg`](../../paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg) | Validation examples with selected robot boxes. |
-| [`../../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png`](../../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png) | Training curves. |
-| [`../../paper_artifacts/figures/yolo_training_clarification.png`](../../paper_artifacts/figures/yolo_training_clarification.png) | Dataset and label-generation explanation. |
+| [`../../../paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg`](../../../paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg) | Validation examples with selected robot boxes. |
+| [`../../../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png`](../../../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png) | Training curves. |
+| [`../../../paper_artifacts/figures/yolo_training_clarification.png`](../../../paper_artifacts/figures/yolo_training_clarification.png) | Dataset and label-generation explanation. |
 
 ## Next Media Slots
 

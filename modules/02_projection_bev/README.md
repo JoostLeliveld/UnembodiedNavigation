@@ -1,6 +1,6 @@
 # External-Camera State Estimation
 
-[Back to repository overview](../README.md)
+[Back to repository overview](../../README.md)
 
 This module shows how an image-space robot detection becomes a ground-plane
 state estimate and planner correction.
@@ -11,7 +11,7 @@ state estimate and planner correction.
 | --- | --- |
 | Problem | A detector box in the image is not yet a robot pose in the warehouse map. |
 | Contribution | The state stack projects the selected pixel to BEV, applies a small affine calibration, and keeps heading/noise conventions explicit. |
-| Implementation | Projection and runtime state publishing live in [`../src/state/state/core/pixel_to_bev.py`](../src/state/state/core/pixel_to_bev.py) and [`../src/state/state/nodes/pixel_to_bev_state_node.py`](../src/state/state/nodes/pixel_to_bev_state_node.py). |
+| Implementation | Projection and runtime state publishing live in [`../../src/state/state/core/pixel_to_bev.py`](../../src/state/state/core/pixel_to_bev.py) and [`../../src/state/state/nodes/pixel_to_bev_state_node.py`](../../src/state/state/nodes/pixel_to_bev_state_node.py). |
 
 ## Visual Demonstration
 
@@ -56,7 +56,7 @@ The paper-facing runtime separates three noise families:
 | Measurement noise | Camera observation covariance, constant in C1 and GP-blended in C2 planning. |
 
 The canonical uncertainty description is
-[`../docs/uncertainty_propagation.md`](../docs/uncertainty_propagation.md).
+[`../../docs/uncertainty_propagation.md`](../../docs/uncertainty_propagation.md).
 
 ## Reproduce
 
@@ -73,10 +73,10 @@ than using already packaged preview inputs.
 
 | File | Role |
 | --- | --- |
-| [`../src/state/state/nodes/pixel_to_bev_state_node.py`](../src/state/state/nodes/pixel_to_bev_state_node.py) | Runtime pixel-to-BEV state node. |
-| [`../src/state/state/core/pixel_to_bev.py`](../src/state/state/core/pixel_to_bev.py) | Projection helper. |
-| [`../src/state/state/core/noise.py`](../src/state/state/core/noise.py) | State covariance helper. |
-| [`../docs/runtime_dataflow.md`](../docs/runtime_dataflow.md) | Online topic path and runtime conventions. |
+| [`../../src/state/state/nodes/pixel_to_bev_state_node.py`](../../src/state/state/nodes/pixel_to_bev_state_node.py) | Runtime pixel-to-BEV state node. |
+| [`../../src/state/state/core/pixel_to_bev.py`](../../src/state/state/core/pixel_to_bev.py) | Projection helper. |
+| [`../../src/state/state/core/noise.py`](../../src/state/state/core/noise.py) | State covariance helper. |
+| [`../../docs/runtime_dataflow.md`](../../docs/runtime_dataflow.md) | Online topic path and runtime conventions. |
 
 ## Limitations
 

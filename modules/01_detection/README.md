@@ -1,6 +1,6 @@
 # YOLO External-Camera Detection
 
-[Back to repository overview](../README.md)
+[Back to repository overview](../../README.md)
 
 This module detects the robot in the fixed external-camera RGB image and
 exports the selected bottom-centre pixel as the runtime localization point.
@@ -11,7 +11,7 @@ exports the selected bottom-centre pixel as the runtime localization point.
 | --- | --- |
 | Problem | The warehouse camera sees the robot from an oblique external view, so the planner needs a stable image-space localization point. |
 | Contribution | A detector pipeline selects the robot box, exports the bottom-centre pixel, and logs the raw score as a reliability signal for later GP fitting. |
-| Implementation | Runtime selection lives in [`../src/perception/perception/nodes/yolo_robot_detector_node.py`](../src/perception/perception/nodes/yolo_robot_detector_node.py) and [`../src/perception/perception/core/yolo_selection.py`](../src/perception/perception/core/yolo_selection.py). |
+| Implementation | Runtime selection lives in [`../../src/perception/perception/nodes/yolo_robot_detector_node.py`](../../src/perception/perception/nodes/yolo_robot_detector_node.py) and [`../../src/perception/perception/core/yolo_selection.py`](../../src/perception/perception/core/yolo_selection.py). |
 
 ## Visual Demonstration
 
@@ -43,11 +43,11 @@ Additional media is catalogued in [`demos/`](demos/).
 ## Performance And Diagnostics
 
 Detector metadata lives in
-[`../paper_artifacts/perception/warehouse_yolo_detector_v1/manifest.json`](../paper_artifacts/perception/warehouse_yolo_detector_v1/manifest.json).
+[`../../paper_artifacts/perception/warehouse_yolo_detector_v1/manifest.json`](../../paper_artifacts/perception/warehouse_yolo_detector_v1/manifest.json).
 The packaged training run used 852 simulator-labeled images, split into 683
 training images and 169 validation images.
 
-![YOLO training curves](../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png)
+![YOLO training curves](../../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png)
 
 | Metric | Box | Mask |
 | --- | ---: | ---: |
@@ -86,10 +86,10 @@ python3 scripts/paper_figures/make_yolo_training_clarification.py
 
 | File | Role |
 | --- | --- |
-| [`../src/perception/perception/nodes/yolo_robot_detector_node.py`](../src/perception/perception/nodes/yolo_robot_detector_node.py) | Runtime ROS detector node. |
-| [`../src/perception/perception/core/yolo_selection.py`](../src/perception/perception/core/yolo_selection.py) | Detection selection and class filtering. |
-| [`../scripts/perception/train_yolo_seg.py`](../scripts/perception/train_yolo_seg.py) | YOLO fine-tuning wrapper. |
-| [`../docs/perception_details.md`](../docs/perception_details.md) | Full detector configuration and dataset notes. |
+| [`../../src/perception/perception/nodes/yolo_robot_detector_node.py`](../../src/perception/perception/nodes/yolo_robot_detector_node.py) | Runtime ROS detector node. |
+| [`../../src/perception/perception/core/yolo_selection.py`](../../src/perception/perception/core/yolo_selection.py) | Detection selection and class filtering. |
+| [`../../scripts/perception/train_yolo_seg.py`](../../scripts/perception/train_yolo_seg.py) | YOLO fine-tuning wrapper. |
+| [`../../docs/perception_details.md`](../../docs/perception_details.md) | Full detector configuration and dataset notes. |
 
 ## Limitations
 

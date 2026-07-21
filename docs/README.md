@@ -1,10 +1,9 @@
 # Documentation Index
 
 This folder is the deeper reference layer behind the demonstration modules.
-Start with the repository [`README.md`](../README.md), then click into the
-module landing pages:
-[`yolo`](../yolo/), [`gp`](../gp/), [`estimation`](../estimation/),
-[`planning`](../planning/), and [`experiments`](../experiments/).
+Start with the repository [`README.md`](../README.md), then the contribution
+front door [`modules/`](../modules/) and the investigation
+[`experiments/`](../experiments/).
 
 | File | Role |
 | --- | --- |
@@ -13,7 +12,6 @@ module landing pages:
 | [`geometry_visibility_prior_plan.md`](geometry_visibility_prior_plan.md) | Detailed first-module plan for geometry-derived visibility, validation gates, and acceptance criteria. |
 | [`next_paper/`](next_paper/) | Evidence-aware storyline, visual board, media plan, and proposed research question for the post-paper self-commissioning extension. |
 | [`modular_validation_workflow.md`](modular_validation_workflow.md) | Validation-first way of working and list of missed issues to avoid repeating. |
-| [`demo_media.md`](demo_media.md) | Visual gallery, README media map, and planned video storyboard. |
 | [`experiment_registry.md`](experiment_registry.md) | Active evidence chain, current results surface, superseded lines, and caveats. |
 | [`current_runtime_contract.yaml`](current_runtime_contract.yaml) | Machine-readable contract for the active honest-campaign runtime. |
 | [`paper_runtime_contract.yaml`](paper_runtime_contract.yaml) | Historical machine-readable snapshot of the submitted-paper runtime. |

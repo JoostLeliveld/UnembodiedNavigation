@@ -1,6 +1,6 @@
 # Visibility-Aware Route Planning
 
-[Back to repository overview](../README.md)
+[Back to repository overview](../../README.md)
 
 This module shows how constant and learned predictive camera covariance change
 route planning under the same warehouse geometry and task seeds.
@@ -11,7 +11,7 @@ route planning under the same warehouse geometry and task seeds.
 | --- | --- |
 | Problem | The shortest route can pass through camera-poor regions where future localization becomes ambiguous. |
 | Contribution | The planner compares a constant camera covariance baseline against GP-scaled `R_plan` while keeping the map, seeds, tracker, and no-go geometry fixed. |
-| Implementation | Planner behavior is in [`../src/planning/planning/planners/base_planner.py`](../src/planning/planning/planners/base_planner.py), with symbolic EFE terms in [`../src/planning/planning/core/casadi_efe.py`](../src/planning/planning/core/casadi_efe.py). |
+| Implementation | Planner behavior is in [`../../src/planning/planning/planners/base_planner.py`](../../src/planning/planning/planners/base_planner.py), with symbolic EFE terms in [`../../src/planning/planning/core/casadi_efe.py`](../../src/planning/planning/core/casadi_efe.py). |
 
 ## Visual Demonstration
 
@@ -61,8 +61,8 @@ Current packaged honest-campaign outcome:
 
 Single-run mechanism figure:
 
-- [`../paper_artifacts/figures/current_surface/paired_mechanism_west_current.png`](../paper_artifacts/figures/current_surface/paired_mechanism_west_current.png)
-- [`../paper_artifacts/figures/paired_mechanism_west_current_data/`](../paper_artifacts/figures/paired_mechanism_west_current_data/)
+- [`../../paper_artifacts/figures/current_surface/paired_mechanism_west_current.png`](../../paper_artifacts/figures/current_surface/paired_mechanism_west_current.png)
+- [`../../paper_artifacts/figures/paired_mechanism_west_current_data/`](../../paper_artifacts/figures/paired_mechanism_west_current_data/)
 
 ## Reproduce
 
@@ -85,10 +85,10 @@ python3 scripts/paper_figures/make_paired_mechanism.py
 
 | File | Role |
 | --- | --- |
-| [`../src/planning/planning/planners/base_planner.py`](../src/planning/planning/planners/base_planner.py) | Main planner logic. |
-| [`../src/planning/planning/core/casadi_efe.py`](../src/planning/planning/core/casadi_efe.py) | Symbolic EFE objective. |
-| [`../src/planning/planning/core/visibility_gp_map.py`](../src/planning/planning/core/visibility_gp_map.py) | GP map loading and querying. |
-| [`../src/planning/planning/core/nogo_cost.py`](../src/planning/planning/core/nogo_cost.py) | Keep-in/no-go cost support. |
+| [`../../src/planning/planning/planners/base_planner.py`](../../src/planning/planning/planners/base_planner.py) | Main planner logic. |
+| [`../../src/planning/planning/core/casadi_efe.py`](../../src/planning/planning/core/casadi_efe.py) | Symbolic EFE objective. |
+| [`../../src/planning/planning/core/visibility_gp_map.py`](../../src/planning/planning/core/visibility_gp_map.py) | GP map loading and querying. |
+| [`../../src/planning/planning/core/nogo_cost.py`](../../src/planning/planning/core/nogo_cost.py) | Keep-in/no-go cost support. |
 
 ## Limitations
 

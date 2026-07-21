@@ -20,9 +20,9 @@ python3 scripts/paper_figures/make_readme_visuals.py
 
 | Asset | Use |
 | --- | --- |
-| [`../../paper_artifacts/figures/localization_pathway.png`](../../paper_artifacts/figures/localization_pathway.png) | Earlier localization pathway figure. |
-| [`../../paper_artifacts/figures/inputs/loc_pathway_frame_v7b.jpg`](../../paper_artifacts/figures/inputs/loc_pathway_frame_v7b.jpg) | Source camera frame used by the README visual. |
-| [`../../../midterm_presentation/assets/slide04/belief_noise_terms.png`](../../../midterm_presentation/assets/slide04/belief_noise_terms.png) | Presentation-style noise-term explanation. |
+| [`../../../paper_artifacts/figures/localization_pathway.png`](../../../paper_artifacts/figures/localization_pathway.png) | Earlier localization pathway figure. |
+| [`../../../paper_artifacts/figures/inputs/loc_pathway_frame_v7b.jpg`](../../../paper_artifacts/figures/inputs/loc_pathway_frame_v7b.jpg) | Source camera frame used by the README visual. |
+| [`../../../../midterm_presentation/assets/slide04/belief_noise_terms.png`](../../../../midterm_presentation/assets/slide04/belief_noise_terms.png) | Presentation-style noise-term explanation. |
 
 ## Next Media Slots
 

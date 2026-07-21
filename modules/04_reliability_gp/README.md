@@ -1,6 +1,6 @@
 # GP-Derived Predictive Camera Covariance
 
-[Back to repository overview](../README.md)
+[Back to repository overview](../../README.md)
 
 This module turns empirical detector reliability into the state-dependent camera
 covariance used by the visibility-aware planner.
@@ -11,7 +11,7 @@ covariance used by the visibility-aware planner.
 | --- | --- |
 | Problem | A fixed warehouse camera is not equally reliable everywhere, but the planner needs that unevenness in a usable form. |
 | Contribution | Detector scores are fit with a spatial GP, discounted into a conservative trust field, and converted into planner-facing `R_plan`. |
-| Implementation | GP fitting lives in [`../scripts/visibility_comparison/fit_visibility_gps.py`](../scripts/visibility_comparison/fit_visibility_gps.py); planner loading lives in [`../src/planning/planning/core/visibility_gp_map.py`](../src/planning/planning/core/visibility_gp_map.py). |
+| Implementation | GP fitting lives in [`../../scripts/visibility_comparison/fit_visibility_gps.py`](../../scripts/visibility_comparison/fit_visibility_gps.py); planner loading lives in [`../../src/planning/planning/core/visibility_gp_map.py`](../../src/planning/planning/core/visibility_gp_map.py). |
 
 ## Visual Demonstration
 
@@ -103,8 +103,8 @@ Fit summary:
 
 Artifact metadata:
 
-- [`../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_manifest.json`](../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_manifest.json)
-- [`../paper_artifacts/figures/gp_pipeline_aws_provenance.json`](../paper_artifacts/figures/gp_pipeline_aws_provenance.json)
+- [`../../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_manifest.json`](../../paper_artifacts/gp/warehouse_visibility_gp_v1/gp_manifest.json)
+- [`../../paper_artifacts/figures/gp_pipeline_aws_provenance.json`](../../paper_artifacts/figures/gp_pipeline_aws_provenance.json)
 
 Current status:
 
@@ -139,16 +139,16 @@ python3 scripts/paper_figures/make_aws_gp_pipeline_figure.py
 
 | File | Role |
 | --- | --- |
-| [`../scripts/visibility_comparison/capture_visibility_samples.py`](../scripts/visibility_comparison/capture_visibility_samples.py) | Visibility sample capture. |
-| [`../scripts/visibility_comparison/build_gp_targets.py`](../scripts/visibility_comparison/build_gp_targets.py) | Target table construction. |
-| [`../scripts/visibility_comparison/fit_visibility_gps.py`](../scripts/visibility_comparison/fit_visibility_gps.py) | GP fitting and artifact writing. |
-| [`../scripts/visibility_comparison/audit_visibility_gp_artifacts.py`](../scripts/visibility_comparison/audit_visibility_gp_artifacts.py) | Locked artifact provenance audit. |
-| [`../scripts/visibility_comparison/build_belief_gp_events.py`](../scripts/visibility_comparison/build_belief_gp_events.py) | Belief/covariance detector-event extraction. |
-| [`../scripts/visibility_comparison/build_depth_sensed_initial_gp.py`](../scripts/visibility_comparison/build_depth_sensed_initial_gp.py) | Initial planner-compatible GP built from a depth-sensed height map. |
-| [`../scripts/visibility_comparison/fit_belief_aware_gp.py`](../scripts/visibility_comparison/fit_belief_aware_gp.py) | Expected-kernel uncertain-input GP plus ablation baselines. |
-| [`../scripts/visibility_comparison/showcase_belief_aware_update.py`](../scripts/visibility_comparison/showcase_belief_aware_update.py) | Visual explanation of uncertainty-aware updating. |
-| [`../scripts/visibility_comparison/showcase_gp_before_after_updates.py`](../scripts/visibility_comparison/showcase_gp_before_after_updates.py) | Before/after GP map comparison across update types. |
-| [`../src/planning/planning/core/visibility_gp_map.py`](../src/planning/planning/core/visibility_gp_map.py) | Planner-side artifact loader. |
+| [`../../scripts/visibility_comparison/capture_visibility_samples.py`](../../scripts/visibility_comparison/capture_visibility_samples.py) | Visibility sample capture. |
+| [`../../scripts/visibility_comparison/build_gp_targets.py`](../../scripts/visibility_comparison/build_gp_targets.py) | Target table construction. |
+| [`../../scripts/visibility_comparison/fit_visibility_gps.py`](../../scripts/visibility_comparison/fit_visibility_gps.py) | GP fitting and artifact writing. |
+| [`../../scripts/visibility_comparison/audit_visibility_gp_artifacts.py`](../../scripts/visibility_comparison/audit_visibility_gp_artifacts.py) | Locked artifact provenance audit. |
+| [`../../scripts/visibility_comparison/build_belief_gp_events.py`](../../scripts/visibility_comparison/build_belief_gp_events.py) | Belief/covariance detector-event extraction. |
+| [`../../scripts/visibility_comparison/build_depth_sensed_initial_gp.py`](../../scripts/visibility_comparison/build_depth_sensed_initial_gp.py) | Initial planner-compatible GP built from a depth-sensed height map. |
+| [`../../scripts/visibility_comparison/fit_belief_aware_gp.py`](../../scripts/visibility_comparison/fit_belief_aware_gp.py) | Expected-kernel uncertain-input GP plus ablation baselines. |
+| [`../../scripts/visibility_comparison/showcase_belief_aware_update.py`](../../scripts/visibility_comparison/showcase_belief_aware_update.py) | Visual explanation of uncertainty-aware updating. |
+| [`../../scripts/visibility_comparison/showcase_gp_before_after_updates.py`](../../scripts/visibility_comparison/showcase_gp_before_after_updates.py) | Before/after GP map comparison across update types. |
+| [`../../src/planning/planning/core/visibility_gp_map.py`](../../src/planning/planning/core/visibility_gp_map.py) | Planner-side artifact loader. |
 
 ## Limitations
 
