@@ -1,0 +1,237 @@
+schema_version: 1
+supersedes: warehouse_yolo_detector_4cam_v2_640
+lock_status: commissioning_candidate_blocked_from_evidence
+
+artifact_id: warehouse_yolo_detector_4cam_v3_laptop_640x360
+protocol_id: fullwarehouse_four_camera_laptop_commissioning_v3
+world: warehouse_full_4cam_laptop_640x360.world.sdf
+world_name: warehouse_full_4cam_laptop_640x360
+
+# This is a distinct laptop commissioning asset, not a change to the locked
+# 1280x720 paper world. It is ineligible for evidence collection until the
+# gates below are satisfied and a new evidence-eligible successor is frozen.
+laptop_commissioning:
+  source_image_size: [640, 360]
+  source_aspect_ratio: "16:9"
+  paper_source_image_size: [1280, 720]
+  render_pixel_reduction_factor: 4
+  renderer: nvidia_prime_egl_required_on_hybrid_laptop
+  launch_argument: use_nvidia_prime_offload:=true
+  status: blocked_pending_validation
+  required_before_evidence_successor:
+    - fresh_per_camera_projection_calibration_from_laptop_world
+    - detector_validation_with_long_range_and_bottom_point_audits
+    - per_camera_output_wall_hz_at_least_3_0
+    - strict_batch_stamp_skew_at_most_0_10_s
+    - frame_age_and_freshness_gates_pass
+    - immutable_runtime_readiness_report
+
+# Native YOLO still consumes 640-square letterboxed inputs. What changes here
+# is the rendered camera source: 640x360 rather than the paper world's
+# 1280x720. Therefore calibration and detection evidence must be regenerated.
+runtime_pilot:
+  evidence_selection:
+    permitted: true
+    selected_image_size: 640
+    selection_basis: laptop_render_budget_successor_pending_runtime_validation
+    rule: >-
+      This freezes a laptop commissioning profile only. It cannot become a
+      deployment configuration from confirmatory metrics; a later successor
+      must bind fresh calibration, detector, and timing evidence.
+  image_sizes: [640]
+  model: logs/perception_models/warehouse_yolo_detector_v1/model.pt
+  confidence_threshold: 0.05
+  iou_threshold: 0.45
+  detector_mode: batched_four_camera
+  runtime_executable: batched_four_camera_yolo_node
+  launch_switch: yolo_batched_four_camera
+  model_format: native_ultralytics
+  model_instances: 1
+  batch_size: 4
+  camera_order: [camera_A, camera_B, camera_C, camera_D]
+  device: "0"
+  cpu_threads: 2
+  cpu_interop_threads: 1
+  opencv_threads: 1
+  max_batch_stamp_skew_s: 0.10
+  max_pending_wall_s: 0.50
+  frame_policy: strict_new_unique_stamp_latest_only_no_reuse
+  inference_timing_semantics: full_batch_wall_ms_repeated_per_camera_result
+  fault_policy: fatal_process_exit_and_launch_shutdown_no_synthetic_miss
+  synchronization_miss_policy: no_output_detected_by_liveness_gate
+  separate_process_fallback:
+    runtime_executable: yolo_robot_detector_node
+    model_instances: 4
+    devices: {camera_A: cpu, camera_B: "0", camera_C: "0", camera_D: "0"}
+    cpu_threads: {camera_A: 2, camera_B: 1, camera_C: 1, camera_D: 1}
+  masks: false
+  route: central_overlap_sweep
+  lateral_offset_m: 0.0
+  speed_mps: 0.12
+  required_outputs:
+    - opportunity_conditioned_detection_rate_by_range
+    - score_distribution
+    - inference_wall_ms_p50_p90
+    - output_wall_hz
+    - output_sim_hz
+    - frame_age_p90_and_fresh_fraction
+    - gpu_peak_memory_mib
+    - simulation_real_time_factor
+    - per_camera_stamp_skew_s_p50_p90_max
+
+cameras:
+  camera_A:
+    camera_model: external_camera
+    image_topic: /external_camera/image_raw
+    labels_topic: /external_camera/segmentation/labels_map
+    segmentation_bridge_argument: bridge_segmentation
+    source_image_size: [640, 360]
+  camera_B:
+    camera_model: external_camera_b
+    image_topic: /external_camera_b/image_raw
+    labels_topic: /external_camera_b/segmentation/labels_map
+    segmentation_bridge_argument: bridge_segmentation_b
+    source_image_size: [640, 360]
+  camera_C:
+    camera_model: external_camera_c
+    image_topic: /external_camera_c/image_raw
+    labels_topic: /external_camera_c/segmentation/labels_map
+    segmentation_bridge_argument: bridge_segmentation_c
+    source_image_size: [640, 360]
+  camera_D:
+    camera_model: external_camera_d
+    image_topic: /external_camera_d/image_raw
+    labels_topic: /external_camera_d/segmentation/labels_map
+    segmentation_bridge_argument: bridge_segmentation_d
+    source_image_size: [640, 360]
+
+capture:
+  one_semantic_stream_at_a_time: true
+  provenance:
+    capture_script_sha256: required
+    exact_invocation_and_resolved_arguments: required
+    simulation_asset_inventory_schema: yolo_capture_simulation_assets.v1
+    inventory_scope:
+      - resolved_world_sdf
+      - world_profiles
+      - route_exclusion_config
+      - recursively_referenced_local_model_packages
+      - sim_launch_files
+      - robot_description_and_render_meshes
+    rehash_at_capture_end: required
+    completion_marker: required
+    cross_camera_script_and_asset_hash_match: required
+    local_transport_schema: yolo_capture_transport.v1
+    required_local_transport:
+      ROS_LOCALHOST_ONLY: "1"
+      IGN_IP: 127.0.0.1
+      GZ_IP: 127.0.0.1
+      ROS_DOMAIN_ID: explicit_integer_0_to_232
+      IGN_PARTITION: unique_nonempty_token_per_capture
+    unisolated_override: diagnostic_non_training_only
+    training_grade_merge_default: true
+    legacy_override: diagnostic_legacy_non_training_only
+  ground_range_m: [5.0, 16.0]
+  split_mode: spatial_cell
+  split_seed: 417
+  spatial_block_size: 2
+  validation_fraction: 0.20
+  collision_clearance_m: 0.25
+  projection_filter: nominal_robot_bbox_intersects_image
+  route_exclusion_buffer_m: 0.75
+  # These routes form the independent detector/calibration test surface and
+  # are excluded with every configured lateral variant from train and val.
+  excluded_evaluation_routes:
+    - south_to_north_handover
+    - north_to_south_handover
+    - south_pair_overlap
+    - north_pair_overlap
+    - central_overlap_sweep
+  mask_area_gate_px:
+    below_12m: 80.0
+    from_12m: 40.0
+  occlusion_policy: visible-mask-positive
+  localization_rule: >-
+    Visible partial masks are valid detector positives, but rows marked
+    localization_qualified=0 are forbidden in bottom-point projection fits.
+  negative_frames:
+    # At runtime the robot is absent from most camera frames. A fresh capture
+    # therefore includes one *unique* train-only, geometry-certified empty
+    # background per source. Repeated static empty renders are deduplicated and
+    # are augmentation only, not independent false-positive evidence.
+    required_unique_train_per_camera: 1
+    sample_kind: negative
+    semantic_robot_pixels: 0
+    geometry_rule: nominal_robot_bbox_fully_outside_image
+    allowed_no_opportunity_reasons:
+      - projection_behind_camera
+      - projection_outside_image
+    forbidden_reason: fully_occluded_in_frustum_robot
+    split: train_only
+    duplicate_policy: exact_image_hash_zero_within_and_across_splits
+    limitation: >-
+      Fixed-scene backgrounds do not establish false-alarm robustness. A
+      separate D1 train-region no-opportunity route pilot must report
+      per-camera opportunity-conditioned false-positive rate, high-confidence
+      false-positive rate, and maximum consecutive false-positive streak before
+      any such claim. Held-out/D2 results remain evaluation only.
+  smoke:
+    # The 6x5 pilot left only two visible/clear XY groups for camera A after
+    # route, collision, range and image-projection filters (8 positives and no
+    # validation group).  This denser grid is the smallest follow-up expected
+    # to expose at least ten clear XY groups per camera; its gate remains 40.
+    sample_nx: 14
+    sample_ny: 12
+    yaw_samples: 4
+    min_accepted_per_camera: 40
+  full:
+    # Static-view yield is limited by racks and each camera frustum.  The old
+    # 18x14 grid could not geometrically produce the declared 600 positives.
+    sample_nx: 36
+    sample_ny: 28
+    yaw_samples: 8
+    target_accepted_per_camera: [600, 800]
+    required_accepted_per_range_bin:
+      lt_8m: 40
+      8_to_12m: 100
+      12_to_16m: 100
+  leakage_gates:
+    exact_image_duplicates_across_inputs: 0
+    train_val_pose_group_conflicts: 0
+    evaluation_route_buffer_intrusions: 0
+  limitation: >-
+    Static-world rack/pillar occlusions are included. No randomized clutter or
+    lighting claim is permitted until a scene-seed randomization capture exists
+    and scene seeds are grouped by split.
+
+training:
+  base_model: logs/perception_models/warehouse_yolo_detector_v1/model.pt
+  image_size: 640
+  batch: 4
+  workers: 2
+  amp: true
+  cache: false
+  deterministic: true
+  seed: 417
+  smoke_epochs: 5
+  full_epochs: 30
+  immutable_versioned_output: true
+
+acceptance:
+  independent_test_only: true
+  per_camera:
+    detection_rate_le_12m: 0.90
+    detection_rate_12_to_16m_unoccluded: 0.75
+  bottom_localization_audit_required: true
+  score_calibration_report_required: true
+
+# This resolves the documented 40 px vs 120 px mismatch before collection.
+# The value is an asserted deployment convention inherited from the existing
+# camera-observation contract, not selected on four-camera evaluation truth.
+pixel_covariance_convention:
+  r_visible_uv_px: 2.5
+  r_miss_uv_px: 40.0
+  legacy_planner_default_px: 120.0
+  active_launch_must_override_legacy_default: true
+  required_sensitivity_px: [40.0, 80.0, 120.0]
+  disclosure: asserted convention; report the complete sensitivity curve

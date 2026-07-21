@@ -1,0 +1,111 @@
+{
+  "canonical_gp_root": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/fourcam_actual_20260715/final_02/gp",
+  "contains_ground_truth": true,
+  "inputs": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/multicamera_commissioning_bigwarehouse/actual_commissioning_20260715/analysis/final_02/inputs",
+  "notes": [
+    "All GP maps were fitted from operational detector observations aligned to noisy odometry with an explicit 0.10 m covariance floor.",
+    "The covariance floor is a declared pilot assumption: the encoder-noise publisher currently leaves Odometry covariance entries at zero.",
+    "The strict C/D overlap result passes its configured 0.30 m disagreement gate, but only has three synchronized pairs; it is pilot evidence, not a campaign-level fusion claim.",
+    "The configured hysteretic policy withheld all candidate corrections because learned spatial trust was below its 0.45 release threshold. This demonstrates its fail-safe path, not closed-loop improvement.",
+    "The readiness-audit figure reads evaluation-only truth metrics from the independent smoke recording; those metrics remain excluded from every operational model and decision path."
+  ],
+  "outputs": {
+    "algorithm_execution": "/home/joostleliveld/Thesis/UnembodiedNavigation/research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures/05_actual_algorithm_execution.png",
+    "gp_learning_progress": "/home/joostleliveld/Thesis/UnembodiedNavigation/research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures/03_actual_gp_learning_progress.png",
+    "overlap_gate": "/home/joostleliveld/Thesis/UnembodiedNavigation/research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures/04_actual_overlap_gate_C_D.png",
+    "per_camera_gp_updates": "/home/joostleliveld/Thesis/UnembodiedNavigation/research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures/02_actual_per_camera_gp_updates.png",
+    "per_camera_gp_updates_wide": "/home/joostleliveld/Thesis/UnembodiedNavigation/research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures/02b_actual_gp_updates_wide.png",
+    "readiness_audit": "/home/joostleliveld/Thesis/UnembodiedNavigation/research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures/06_actual_readiness_audit.png",
+    "real_routes_and_observations": "/home/joostleliveld/Thesis/UnembodiedNavigation/research_story/presentations/2026-07_four_camera_showcase/full_story_walkthrough/07_real_commissioning_execution/figures/01_real_routes_and_observations.png"
+  },
+  "overlap_summary": {
+    "camera_a_id": "camera_C",
+    "camera_b_id": "camera_D",
+    "max_allowed_disagreement_m": 0.3,
+    "max_disagreement_m": 0.2738475168034973,
+    "mean_disagreement_m": 0.24702468010488213,
+    "pair_count": 3,
+    "pairs": [
+      {
+        "camera_a_id": "camera_C",
+        "camera_b_id": "camera_D",
+        "disagreement_m": 0.24999927360490998,
+        "timestamp_a_s": 57.2,
+        "timestamp_b_s": 57.2,
+        "xy_a_m": [
+          -1.450734759,
+          2.243021908
+        ],
+        "xy_b_m": [
+          -1.449268206,
+          2.49301688
+        ]
+      },
+      {
+        "camera_a_id": "camera_C",
+        "camera_b_id": "camera_D",
+        "disagreement_m": 0.21722724990623915,
+        "timestamp_a_s": 60.4,
+        "timestamp_b_s": 60.4,
+        "xy_a_m": [
+          -1.458764627,
+          2.926076489
+        ],
+        "xy_b_m": [
+          -1.442092363,
+          3.142662993
+        ]
+      },
+      {
+        "camera_a_id": "camera_C",
+        "camera_b_id": "camera_D",
+        "disagreement_m": 0.2738475168034973,
+        "timestamp_a_s": 61.8,
+        "timestamp_b_s": 61.8,
+        "xy_a_m": [
+          -1.439016635,
+          3.153032207
+        ],
+        "xy_b_m": [
+          -1.439577232,
+          3.42687915
+        ]
+      }
+    ],
+    "pass_gate": true,
+    "rms_disagreement_m": 0.2481127279848497,
+    "trust": {
+      "bias_norm_m": 0.24687901613750635,
+      "camera_a_id": "camera_C",
+      "camera_b_id": "camera_D",
+      "disagreement_gate_m": 0.3,
+      "max_disagreement_m": 0.2738475168034973,
+      "mean_delta_b_minus_a_m": [
+        0.005859406666666696,
+        0.24680947300000003
+      ],
+      "mean_disagreement_m": 0.24702468010488213,
+      "median_disagreement_m": 0.24999927360490998,
+      "outlier_rate": 0.0,
+      "p90_disagreement_m": 0.2690778681637798,
+      "pair_count": 3,
+      "pair_trust_score": 0.4078212851174497,
+      "pass_gate": true
+    }
+  },
+  "policy_result": {
+    "accepted_updates": 0,
+    "frames": 57,
+    "interpretation": "The configured pilot policy correctly withheld corrections when the newly learned spatial trust remained below its release threshold.",
+    "min_spatial_trust": 0.45,
+    "no_eligible_camera_frames": 57,
+    "policy": "hysteretic_handover_selection",
+    "selected_counts": {
+      "camera_A": 0,
+      "camera_B": 0,
+      "camera_C": 0,
+      "camera_D": 0
+    }
+  },
+  "run_root": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/multicamera_commissioning_bigwarehouse/actual_commissioning_20260715"
+}

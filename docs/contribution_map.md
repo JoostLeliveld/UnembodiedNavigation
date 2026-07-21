@@ -4,7 +4,7 @@ This project is easiest to present as a chain of small, testable contributions.
 The planner result is not one monolithic planning trick; it comes from making
 camera reliability explicit and carrying it through the stack.
 
-![Contribution map](media/contribution_map.png)
+![Contribution map](../paper_artifacts/figures/explainers/contribution_map.png)
 
 ## 1. External-Camera Perception
 
@@ -14,7 +14,7 @@ turns the RGB image into one localization point: the selected bounding-box
 bottom centre. The raw detector score is logged as an empirical reliability
 signal, but it is not treated as a calibrated probability.
 
-Start here: [`../yolo/README.md`](../yolo/README.md).
+Start here: [`../modules/01_detection/README.md`](../modules/01_detection/README.md).
 
 ## 2. Image-To-BEV Localization
 
@@ -24,7 +24,7 @@ small affine correction fit on the capture grid. Heading is not directly
 observed by the camera in the locked campaign; it is odometry-driven and can be
 corrected only indirectly through belief covariance.
 
-Start here: [`../estimation/README.md`](../estimation/README.md).
+Start here: [`../modules/02_projection_bev/README.md`](../modules/02_projection_bev/README.md).
 
 ## 3. Stochastic Belief Story
 
@@ -70,7 +70,7 @@ The ellipses in the README visuals are therefore circular glyphs whose size
 changes across the map. They explain "camera measurement gets fuzzier here",
 not "the robot footprint gets bigger here".
 
-Start here: [`../gp/README.md`](../gp/README.md).
+Start here: [`../modules/04_reliability_gp/README.md`](../modules/04_reliability_gp/README.md).
 
 ## 5. Planning With Reliability, Ambiguity, And No-Go Geometry
 
@@ -87,7 +87,7 @@ ambiguity and belief growth, which can make a short camera-poor route less
 attractive than a longer route where localization remains useful. Obstacle and
 no-go costs are separate from the GP field.
 
-Start here: [`../planning/README.md`](../planning/README.md).
+Start here: [`../modules/08_planning_efe/README.md`](../modules/08_planning_efe/README.md).
 
 ## 6. Campaign Evidence
 

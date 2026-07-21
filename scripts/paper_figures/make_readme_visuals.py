@@ -37,7 +37,7 @@ MIDTERM_ASSETS = REPO.parent / "midterm_presentation" / "assets"
 GP_ARTIFACT = REPO / "paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz"
 CAMPAIGN_CONFIG = REPO / "scripts/visibility_comparison/warehouse_visibility_campaign.yaml"
 WEST_PAIR = REPO / "paper_artifacts/figures/paired_mechanism_west_current_data"
-FULL_CAMPAIGN_LOG = REPO / "docs/paper_vs_current/current/data/paired_mechanism_taskA_lowlat/campaign_log.json"
+FULL_CAMPAIGN_LOG = REPO / "paper_artifacts/figures/paired_mechanism_taskA_lowlat_data/campaign_log.json"
 
 R_VISIBLE_UV = 2.5
 R_MISS_UV = 40.0
@@ -349,7 +349,7 @@ def make_contribution_map() -> None:
         color=DARK,
         fontweight="bold",
     )
-    save(fig, REPO / "docs/media/contribution_map.png")
+    save(fig, REPO / "paper_artifacts/figures/explainers/contribution_map.png")
 
 
 def make_yolo_bottom_center() -> None:
@@ -405,7 +405,7 @@ def make_yolo_bottom_center() -> None:
         color=DARK,
         linespacing=1.35,
     )
-    save(fig, REPO / "yolo/demos/images/bottom_centre_01.png")
+    save(fig, REPO / "modules/01_detection/demos/images/bottom_centre_01.png")
 
 
 def make_image_to_bev(gp: dict[str, np.ndarray | str]) -> None:
@@ -471,7 +471,7 @@ def make_image_to_bev(gp: dict[str, np.ndarray | str]) -> None:
         fontsize=11.5,
         color=DARK,
     )
-    save(fig, REPO / "estimation/demos/images/image_to_bev_01.png")
+    save(fig, REPO / "modules/02_projection_bev/demos/images/image_to_bev_01.png")
 
 
 def read_affine() -> tuple[np.ndarray, np.ndarray]:
@@ -534,7 +534,7 @@ def make_affine_calibration(gp: dict[str, np.ndarray | str]) -> None:
         fontsize=11.5,
         color=DARK,
     )
-    save(fig, REPO / "estimation/demos/images/affine_calibration_before_after.png")
+    save(fig, REPO / "modules/02_projection_bev/demos/images/affine_calibration_before_after.png")
 
 
 def make_induced_covariance(gp: dict[str, np.ndarray | str]) -> None:
@@ -558,7 +558,7 @@ def make_induced_covariance(gp: dict[str, np.ndarray | str]) -> None:
         fontsize=11.3,
         color=DARK,
     )
-    save(fig, REPO / "gp/demos/images/induced_covariance.png")
+    save(fig, REPO / "modules/04_reliability_gp/demos/images/induced_covariance.png")
 
 
 def matrix_text_for_trust(trust: float) -> tuple[str, float, float]:
@@ -693,7 +693,7 @@ def make_collection_to_covariance_story(gp: dict[str, np.ndarray | str]) -> None
         fontsize=11.0,
         color=DARK,
     )
-    save(fig, REPO / "gp/demos/images/collection_to_covariance_story.png")
+    save(fig, REPO / "modules/04_reliability_gp/demos/images/collection_to_covariance_story.png")
 
 
 def make_r_plan_ellipses(gp: dict[str, np.ndarray | str]) -> None:
@@ -724,7 +724,7 @@ def make_r_plan_ellipses(gp: dict[str, np.ndarray | str]) -> None:
         fontsize=10.7,
         color=DARK,
     )
-    save(fig, REPO / "gp/demos/images/r_plan_map_and_ellipses.png")
+    save(fig, REPO / "modules/04_reliability_gp/demos/images/r_plan_map_and_ellipses.png")
 
 
 def make_paired_route_choice(gp: dict[str, np.ndarray | str]) -> None:
@@ -763,7 +763,7 @@ def make_paired_route_choice(gp: dict[str, np.ndarray | str]) -> None:
         fontsize=10.8,
         color=DARK,
     )
-    save(fig, REPO / "planning/demos/images/paired_route_choice.png")
+    save(fig, REPO / "modules/08_planning_efe/demos/images/paired_route_choice.png")
 
 
 def make_covariance_along_route(gp: dict[str, np.ndarray | str]) -> None:
@@ -807,7 +807,7 @@ def make_covariance_along_route(gp: dict[str, np.ndarray | str]) -> None:
         fontsize=10.8,
         color=DARK,
     )
-    save(fig, REPO / "planning/demos/images/covariance_along_route.png")
+    save(fig, REPO / "modules/08_planning_efe/demos/images/covariance_along_route.png")
 
 
 def outcome_counts() -> tuple[dict[str, dict[str, int]], dict[str, dict[str, dict[str, int]]]]:

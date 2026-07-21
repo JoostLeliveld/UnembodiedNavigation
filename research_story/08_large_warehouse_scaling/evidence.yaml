@@ -1,0 +1,35 @@
+chapter: "08"
+status: ACTIVE
+world: full_4cam            # warehouse_full_4cam.world.sdf — THE thesis scale world (only large world in repo)
+contribution: evaluation_environment_only
+gate: "no method development; per-camera detector evidence chain required before any fitted-map claim; day-zero maps are MODEL/PRIOR, never 'learned'"
+evidence:
+  - path: ../../src/sim/gazebo_worlds/worlds/warehouse_full_4cam.world.sdf
+    kind: world
+    tag: established
+    note: "24.5x20.5m, cameras A-D at (+-6,+-10,6.1); top-down cam is media-only"
+  - path: ../../docs/warehouse_full_4cam_layout.md
+    kind: layout_doc
+    tag: established
+  - path: ../../paper_artifacts/gp/warehouse_full_4cam_dayzero_v1
+    kind: dayzero_artifact
+    tag: model_plumbing
+    note: "calibration-only prior; union coverage 99.2%, overlap 42.2%; training_data_used=false, ground_truth_used=false"
+  - path: ../../scripts/visibility_comparison/warehouse_full_4cam_campaign.yaml
+    kind: config
+    tag: model_plumbing
+  - path: ../../scripts/geometry_visibility/build_full4cam_planner_prior.py
+    kind: generator
+    tag: model_plumbing
+  - path: ../../experiments/multicamera_commissioning_bigwarehouse
+    kind: study
+    tag: established_infra
+    note: "full_4cam A-D collection stack, routes, propagated operational covariance, frozen paper protocol, confirmatory analysis plan, and readiness audit are implemented. A sparse operational pilot exists but no learned-map, overlap, or closed-loop claim is promoted until D0-D4 gates pass. Retired-testbed data is historical."
+  - path: ../presentations/2026-07_four_camera_showcase
+    kind: presentation
+    tag: pitch
+historical_note: "Retired-testbed development material is archived outside the active evidence chain and is not used by this chapter."
+figures:
+  partial: [08A]
+  planned: [08B, 08C, 08D, 08E]
+  video: {V08: planned}

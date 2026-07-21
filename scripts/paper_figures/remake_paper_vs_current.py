@@ -1,29 +1,26 @@
 #!/usr/bin/env python3
 """Regenerate the paper-vs-current comparison figures.
 
-This script intentionally writes into docs/paper_vs_current only. It keeps the
-frozen paper baseline explicit (archived paper GP/config and legacy truth column)
-and the current snapshot explicit (honest campaign, current GP/config, GT
-columns).
+All media lives under paper_artifacts/figures (single source of truth since the
+2026-07-15 consolidation): canonical paired-mechanism PDFs + `_data/` trees at the
+root, side-specific renders (previews, gifs, side-only figures) in
+`paper_snapshot/` (frozen paper baseline: archived paper GP/config, legacy truth
+column) and `current_surface/` (honest campaign, current GP/config, GT columns).
+docs/paper_vs_current keeps only the markdown comparison pages and the two frozen
+config snapshots; nothing is copied there anymore.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PVC = ROOT / "docs/paper_vs_current"
-PAPER = PVC / "paper"
-CURRENT = PVC / "current"
-PAPER_FIG = PAPER / "figures"
-CURRENT_FIG = CURRENT / "figures"
-PAPER_DATA = PAPER / "data"
-CURRENT_DATA = CURRENT / "data"
+PAPER_FIG = ROOT / "paper_artifacts/figures/paper_snapshot"
+CURRENT_FIG = ROOT / "paper_artifacts/figures/current_surface"
 
 PAPER_GP = "paper_artifacts/gp/archive/aws_gp_v7b_superseded/yolo_score_raw_gp.npz"
 CURRENT_GP = "paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz"
@@ -36,7 +33,6 @@ CURRENT_ROBUSTNESS = "logs/visibility_comparison/honest_campaign_v1"
 PAIRED_RUNS = [
     {
         "out": "paired_mechanism_taskA_PAPER",
-        "data": "paired_mechanism_taskA",
         "side": "paper",
         "camp": "_paper_runs/paired_mechanism_clean_verify",
         "task": "route_apron_to_a3_mid",
@@ -49,7 +45,6 @@ PAIRED_RUNS = [
     },
     {
         "out": "paired_mechanism_taskA_current",
-        "data": "paired_mechanism_taskA",
         "side": "current",
         "camp": "paired_mechanism_current_taskA",
         "task": "route_apron_to_a3_mid",
@@ -61,7 +56,6 @@ PAIRED_RUNS = [
     },
     {
         "out": "paired_mechanism_west_current",
-        "data": "paired_mechanism_west",
         "side": "current",
         "camp": "paired_mechanism_current_west",
         "task": "route_west_to_a1_upper",
@@ -73,7 +67,6 @@ PAIRED_RUNS = [
     },
     {
         "out": "paired_mechanism_taskA_lowlat",
-        "data": "paired_mechanism_taskA_lowlat",
         "side": "current",
         "camp": "honest_campaign_v1",
         "task": "route_apron_to_a3_mid",
@@ -85,7 +78,6 @@ PAIRED_RUNS = [
     },
     {
         "out": "paired_mechanism_a2mid_lowlat",
-        "data": "paired_mechanism_a2mid_lowlat",
         "side": "current",
         "camp": "honest_campaign_v1",
         "task": "route_apron_to_a2_mid",
@@ -97,7 +89,6 @@ PAIRED_RUNS = [
     },
     {
         "out": "paired_mechanism_west_lowlat",
-        "data": "paired_mechanism_west_lowlat",
         "side": "current",
         "camp": "honest_campaign_v1",
         "task": "route_west_to_a1_upper",
@@ -109,7 +100,6 @@ PAIRED_RUNS = [
     },
     {
         "out": "paired_mechanism_control_lowlat",
-        "data": "paired_mechanism_control_lowlat",
         "side": "current",
         "camp": "honest_campaign_v1",
         "task": "control_west_to_a1_low",
@@ -146,19 +136,6 @@ def run(args: list[str], *, env: dict[str, str] | None = None, cwd: Path = ROOT)
         merged.update(env)
     print("+", " ".join(args))
     subprocess.run(args, cwd=cwd, env=merged, check=True)
-
-
-def copy_file(src: Path, dst: Path) -> None:
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dst)
-    print(f"copied {rel(src)} -> {rel(dst)}")
-
-
-def copy_tree(src: Path, dst: Path) -> None:
-    if dst.exists():
-        shutil.rmtree(dst)
-    shutil.copytree(src, dst)
-    print(f"copied {rel(src)} -> {rel(dst)}")
 
 
 def run_dir_from_campaign(campaign: str, task: str, cond: str, seed: int) -> Path:
@@ -205,9 +182,9 @@ def regenerate_method_figures() -> None:
         "--out", str(PAPER_FIG / "localization_pathway.pdf"),
         "--preview", str(PAPER_FIG / "localization_pathway.png"),
     ])
+    # yolo_training_clarification.png is canonical at paper_artifacts/figures/ and
+    # applies to both sides; no per-side copies.
     run(["python3", "scripts/paper_figures/make_yolo_training_clarification.py"])
-    copy_file(ROOT / "paper_artifacts/figures/yolo_training_clarification.png", PAPER_FIG / "yolo_training_clarification.png")
-    copy_file(ROOT / "paper_artifacts/figures/yolo_training_clarification.png", CURRENT_FIG / "yolo_training_clarification_current.png")
 
 
 def regenerate_spreads() -> None:
@@ -250,13 +227,12 @@ def regenerate_paired() -> None:
             env["PAIRED_ALLOW_LEGACY_TRUTH"] = "1"
         run(["python3", "scripts/paper_figures/make_paired_mechanism.py"], env=env)
 
+        # canonical pdf + provenance + _data stay at paper_artifacts/figures root;
+        # only the png preview is rendered into the side directory.
         side_fig = PAPER_FIG if spec["side"] == "paper" else CURRENT_FIG
-        side_data = PAPER_DATA if spec["side"] == "paper" else CURRENT_DATA
+        side_fig.mkdir(parents=True, exist_ok=True)
         artifact = ROOT / "paper_artifacts/figures" / spec["out"]
-        copy_file(artifact.with_suffix(".pdf"), side_fig / f"{spec['out']}.pdf")
-        copy_file(artifact.with_suffix(".provenance.json"), side_fig / f"{spec['out']}.provenance.json")
-        copy_tree(ROOT / "paper_artifacts/figures" / f"{spec['out']}_data", side_data / spec["data"])
-        convert_pdf_preview(side_fig / f"{spec['out']}.pdf", side_fig / spec["out"])
+        convert_pdf_preview(artifact.with_suffix(".pdf"), side_fig / spec["out"])
 
 
 def regenerate_gifs() -> None:
@@ -284,7 +260,7 @@ def main() -> int:
     regenerate_spreads()
     regenerate_paired()
     regenerate_gifs()
-    print(f"\nRegenerated paper-vs-current figures under {PVC}")
+    print(f"\nRegenerated paper-vs-current figures under {rel(PAPER_FIG)} and {rel(CURRENT_FIG)}")
     return 0
 
 

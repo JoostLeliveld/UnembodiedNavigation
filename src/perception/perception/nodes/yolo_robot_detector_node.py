@@ -5,14 +5,16 @@ from pathlib import Path
 
 import numpy as np
 import rclpy
+import torch
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, String
 from ultralytics import YOLO
 
 from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
+    diagnostics_from_message,
     diagnostics_message,
 )
 from perception.core.ros_image import image_msg_to_bgr8
@@ -50,6 +52,11 @@ class YoloRobotDetectorNode(Node):
 
         self.declare_parameter('model_path', '')
         self.declare_parameter('device', '')
+        # Bound each detector process explicitly.  An uncapped CPU detector
+        # previously consumed the host thread pool, slowed Gazebo to ~0.16 RTF,
+        # and reduced the three GPU detector output rates as collateral damage.
+        self.declare_parameter('cpu_num_threads', 0)
+        self.declare_parameter('cpu_num_interop_threads', 1)
         self.declare_parameter('image_size', 640)
         self.declare_parameter('confidence_threshold', 0.25)
         self.declare_parameter('iou_threshold', 0.45)
@@ -86,6 +93,18 @@ class YoloRobotDetectorNode(Node):
         # during inference are dropped by the middleware, preserving the
         # latest-frame-only policy with zero intra-process GIL contention.
         self.declare_parameter('inference_in_callback', True)
+        # Phase-1 camera-interface pass-through. Disabled by default so the
+        # frozen C1/C2 runtime keeps identical topic contracts unless requested.
+        self.declare_parameter('publish_camera_observation_json', False)
+        self.declare_parameter('image_topic', '/external_camera/image_raw')
+        self.declare_parameter('pixel_pose_topic', '/perception/pixel_pose')
+        self.declare_parameter('diagnostics_topic', DETECTION_DIAGNOSTICS_TOPIC)
+        self.declare_parameter('camera_observation_topic', '')
+        self.declare_parameter('camera_id', 'camera_A')
+        self.declare_parameter('camera_calibration_id', 'warehouse_aws_external_camera_v1')
+        self.declare_parameter('camera_image_frame_id', 'external_camera')
+        self.declare_parameter('camera_observation_r_visible_uv', 2.5)
+        self.declare_parameter('camera_observation_r_miss_uv', 40.0)
 
         model_path = Path(str(self.get_parameter('model_path').value).strip()).expanduser()
         if not str(model_path):
@@ -95,6 +114,21 @@ class YoloRobotDetectorNode(Node):
 
         self.model_path = model_path.resolve()
         self.device = str(self.get_parameter('device').value).strip()
+        self.cpu_num_threads = max(0, int(self.get_parameter('cpu_num_threads').value))
+        self.cpu_num_interop_threads = max(
+            0, int(self.get_parameter('cpu_num_interop_threads').value)
+        )
+        if self.cpu_num_threads > 0:
+            torch.set_num_threads(self.cpu_num_threads)
+        if self.cpu_num_interop_threads > 0:
+            try:
+                torch.set_num_interop_threads(self.cpu_num_interop_threads)
+            except RuntimeError as exc:
+                # PyTorch permits setting this only before parallel work starts.
+                # A launch should still fail visibly in timing gates rather than
+                # taking down the detector solely because another library made
+                # an early one-time call.
+                self.get_logger().warn(f'could not set PyTorch interop threads: {exc}')
         self.image_size = int(self.get_parameter('image_size').value)
         self.confidence_threshold = float(self.get_parameter('confidence_threshold').value)
         self.iou_threshold = float(self.get_parameter('iou_threshold').value)
@@ -113,6 +147,17 @@ class YoloRobotDetectorNode(Node):
         self.use_torchscript = bool(self.get_parameter('use_torchscript').value) if isinstance(self.get_parameter('use_torchscript').value, bool) else _as_bool(self.get_parameter('use_torchscript').value)
         self.warmup_iters = int(self.get_parameter('warmup_iters').value)
         self.inference_in_callback = bool(self.get_parameter('inference_in_callback').value) if isinstance(self.get_parameter('inference_in_callback').value, bool) else _as_bool(self.get_parameter('inference_in_callback').value)
+        self.publish_camera_observation_json = bool(self.get_parameter('publish_camera_observation_json').value) if isinstance(self.get_parameter('publish_camera_observation_json').value, bool) else _as_bool(self.get_parameter('publish_camera_observation_json').value)
+        self.image_topic = str(self.get_parameter('image_topic').value)
+        self.pixel_pose_topic = str(self.get_parameter('pixel_pose_topic').value)
+        self.diagnostics_topic = str(self.get_parameter('diagnostics_topic').value)
+        self.camera_observation_topic = str(self.get_parameter('camera_observation_topic').value).strip()
+        self.camera_id = str(self.get_parameter('camera_id').value)
+        self.camera_calibration_id = str(self.get_parameter('camera_calibration_id').value)
+        self.camera_image_frame_id = str(self.get_parameter('camera_image_frame_id').value)
+        self.camera_observation_r_visible_uv = float(self.get_parameter('camera_observation_r_visible_uv').value)
+        self.camera_observation_r_miss_uv = float(self.get_parameter('camera_observation_r_miss_uv').value)
+        self._camera_observation_warned = False
         self._last_inference_ms = math.nan
         self._last_callback_ms = math.nan
         self._last_receive_stamp_s = math.nan
@@ -136,6 +181,10 @@ class YoloRobotDetectorNode(Node):
                     f'falling back to eager {self.model_path}'
                 )
         self.model = YOLO(str(load_path))
+        self.get_logger().info(
+            f'PyTorch thread budget: intraop={torch.get_num_threads()} '
+            f'interop={torch.get_num_interop_threads()} device={self.device or "auto"}'
+        )
         self.target_ids = target_class_ids(getattr(self.model, 'names', {}), self.class_name, self.class_id)
         if self.target_ids == set():
             names = getattr(self.model, 'names', {})
@@ -159,9 +208,17 @@ class YoloRobotDetectorNode(Node):
                 f'{(time.perf_counter() - _wt0) * 1e3:.0f}ms'
             )
 
-        self.pixel_pub = self.create_publisher(PoseStamped, '/perception/pixel_pose', 10)
-        self.diag_pub = self.create_publisher(Float64MultiArray, DETECTION_DIAGNOSTICS_TOPIC, 10)
-        self.create_subscription(Image, '/external_camera/image_raw', self._image_cb, 1)
+        self.pixel_pub = self.create_publisher(PoseStamped, self.pixel_pose_topic, 10)
+        self.diag_pub = self.create_publisher(Float64MultiArray, self.diagnostics_topic, 10)
+        self.camera_observation_pub = None
+        if self.publish_camera_observation_json:
+            camera_observation_topic = self.camera_observation_topic or f'/perception/camera_observation/{self.camera_id}'
+            self.camera_observation_pub = self.create_publisher(
+                String,
+                camera_observation_topic,
+                10,
+            )
+        self.create_subscription(Image, self.image_topic, self._image_cb, 1)
         # Worker thread is only started in the legacy (contended) path. Default
         # is single-threaded inference in the callback (no GIL contention).
         self._worker = None
@@ -175,6 +232,8 @@ class YoloRobotDetectorNode(Node):
             f'task=seg/det, device={self.device or "auto"}, '
             f'torchscript={self.use_torchscript}, '
             f'inference_in_callback={self.inference_in_callback}, '
+            f'camera_id={self.camera_id}, image_topic={self.image_topic}, '
+            f'pixel_pose_topic={self.pixel_pose_topic}, diagnostics_topic={self.diagnostics_topic}, '
             'input_policy=latest-frame-only)'
         )
 
@@ -243,53 +302,81 @@ class YoloRobotDetectorNode(Node):
         else:
             yolo_latency_s = math.nan
         frame_age_at_publish_s = max(publish_stamp_s - stamp, 0.0) if math.isfinite(stamp) else math.nan
-        self.diag_pub.publish(
-            diagnostics_message(
-                stamp=stamp,
-                detected=detected_after_threshold,
-                u_mid=selected_u,
-                v_mid=selected_v,
-                yaw_est=yaw_est,
-                u_red=u_front,
-                v_red=v_front,
-                red_area_px=math.nan,
-                u_blue=u_rear,
-                v_blue=v_rear,
-                blue_area_px=math.nan,
-                separation_px=separation_px,
-                border_margin_px=border_margin,
-                yolo_score_raw=raw_score,
-                yolo_score_selected=selected_score,
-                yolo_detected_after_threshold=1.0 if detected_after_threshold else 0.0,
-                yolo_best_class_id=float(selection.get('best_class_id', math.nan)),
-                yolo_target_candidate_count=float(selection.get('n_candidates', 0)),
-                bbox_area_px=bbox_area,
-                bbox_xmin=x0,
-                bbox_ymin=y0,
-                bbox_xmax=x1,
-                bbox_ymax=y1,
-                logit_margin=math.nan,
-                class_entropy=math.nan,
-                mask_area_px=mask_area,
-                mask_bottom_u=mask_bottom_u,
-                mask_bottom_v=mask_bottom_v,
-                mask_used=1.0 if mask_available else 0.0,
-                mask_polygon_points=mask_points,
-                confidence_logit=_confidence_logit(raw_score) if raw_score > 0.0 else math.nan,
-                mask_compactness=math.nan,
-                mask_border_frac=math.nan,
-                mask_score=selected_score if mask_available else math.nan,
-                selected_pixel_source_code=_selected_pixel_source_code(selection.get('selected_pixel_source', 'none')),
-                yolo_inference_ms=self._last_inference_ms,
-                detector_callback_ms=self._last_callback_ms,
-                yolo_receive_stamp=self._last_receive_stamp_s,
-                yolo_start_stamp=self._last_predict_start_stamp_s,
-                yolo_finish_stamp=self._last_predict_finish_stamp_s,
-                yolo_publish_stamp=publish_stamp_s,
-                yolo_latency_s=yolo_latency_s,
-                frame_age_at_publish_s=frame_age_at_publish_s,
-            )
+        diag_msg = diagnostics_message(
+            stamp=stamp,
+            detected=detected_after_threshold,
+            u_mid=selected_u,
+            v_mid=selected_v,
+            yaw_est=yaw_est,
+            u_red=u_front,
+            v_red=v_front,
+            red_area_px=math.nan,
+            u_blue=u_rear,
+            v_blue=v_rear,
+            blue_area_px=math.nan,
+            separation_px=separation_px,
+            border_margin_px=border_margin,
+            yolo_score_raw=raw_score,
+            yolo_score_selected=selected_score,
+            yolo_detected_after_threshold=1.0 if detected_after_threshold else 0.0,
+            yolo_best_class_id=float(selection.get('best_class_id', math.nan)),
+            yolo_target_candidate_count=float(selection.get('n_candidates', 0)),
+            bbox_area_px=bbox_area,
+            bbox_xmin=x0,
+            bbox_ymin=y0,
+            bbox_xmax=x1,
+            bbox_ymax=y1,
+            logit_margin=math.nan,
+            class_entropy=math.nan,
+            mask_area_px=mask_area,
+            mask_bottom_u=mask_bottom_u,
+            mask_bottom_v=mask_bottom_v,
+            mask_used=1.0 if mask_available else 0.0,
+            mask_polygon_points=mask_points,
+            confidence_logit=_confidence_logit(raw_score) if raw_score > 0.0 else math.nan,
+            mask_compactness=math.nan,
+            mask_border_frac=math.nan,
+            mask_score=selected_score if mask_available else math.nan,
+            selected_pixel_source_code=_selected_pixel_source_code(selection.get('selected_pixel_source', 'none')),
+            yolo_inference_ms=self._last_inference_ms,
+            detector_callback_ms=self._last_callback_ms,
+            yolo_receive_stamp=self._last_receive_stamp_s,
+            yolo_start_stamp=self._last_predict_start_stamp_s,
+            yolo_finish_stamp=self._last_predict_finish_stamp_s,
+            yolo_publish_stamp=publish_stamp_s,
+            yolo_latency_s=yolo_latency_s,
+            frame_age_at_publish_s=frame_age_at_publish_s,
         )
+        self.diag_pub.publish(diag_msg)
+        self._publish_camera_observation_json(diag_msg)
+
+    def _publish_camera_observation_json(self, diag_msg: Float64MultiArray) -> None:
+        if self.camera_observation_pub is None:
+            return
+        try:
+            from reliability.single_camera_adapter import (
+                SingleCameraAdapterConfig,
+                camera_observation_from_diagnostics,
+            )
+
+            config = SingleCameraAdapterConfig(
+                camera_id=self.camera_id,
+                calibration_id=self.camera_calibration_id,
+                image_frame_id=self.camera_image_frame_id,
+                r_visible_uv=self.camera_observation_r_visible_uv,
+                r_miss_uv=self.camera_observation_r_miss_uv,
+            )
+            obs = camera_observation_from_diagnostics(
+                diagnostics_from_message(diag_msg),
+                config=config,
+            )
+            msg = String()
+            msg.data = obs.to_json()
+            self.camera_observation_pub.publish(msg)
+        except Exception as exc:  # pragma: no cover - defensive runtime bridge
+            if not self._camera_observation_warned:
+                self.get_logger().warn(f'camera observation JSON publish failed: {exc}')
+                self._camera_observation_warned = True
 
     def _image_cb(self, msg: Image):
         receive_stamp_s = float(self.get_clock().now().nanoseconds) * 1e-9

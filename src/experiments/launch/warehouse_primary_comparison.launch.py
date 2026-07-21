@@ -5,7 +5,7 @@ from launch_ros.substitutions import FindPackageShare
 
 # Quick launch:
 # ros2 launch experiments warehouse_primary_comparison.launch.py \
-#     planner:=visibility_aware_efe task:=route_apron_to_a3_mid seed:=0 \
+#     planner:=visibility_aware_efe task:=full_traverse_handover seed:=0 \
 #     yolo_model:=logs/perception_models/warehouse_yolo_detector_v1/model.pt \
 #     comparison_method_id:=efe_main
 
@@ -127,7 +127,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('planner', default_value=DEFAULT_PLANNER, description=PLANNER_DESCRIPTION),
-        DeclareLaunchArgument('world', default_value='warehouse_aws.world.sdf'),
+        DeclareLaunchArgument('world', default_value='warehouse_full_4cam.world.sdf'),
         DeclareLaunchArgument('world_profiles', default_value=world_profiles_default, description='World profile YAML'),
         DeclareLaunchArgument('tasks_yaml', default_value=tasks_default, description='Task YAML'),
         DeclareLaunchArgument('task', default_value='', description='Task name; empty uses the world profile recommended_task'),
@@ -188,5 +188,11 @@ def generate_launch_description():
         DeclareLaunchArgument('headless', default_value='false'),
         DeclareLaunchArgument('use_rviz', default_value='false'),
         DeclareLaunchArgument('reset_world', default_value='false'),
+        DeclareLaunchArgument('bridge_camera_b', default_value='true',
+                              description='Bridge the north-west external camera RGB/camera_info topics.'),
+        DeclareLaunchArgument('bridge_camera_c', default_value='true',
+                              description='Bridge the south-east external camera RGB/camera_info topics.'),
+        DeclareLaunchArgument('bridge_camera_d', default_value='true',
+                              description='Bridge the north-east external camera RGB/camera_info topics.'),
         OpaqueFunction(function=_launch_setup),
     ])

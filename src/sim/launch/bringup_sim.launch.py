@@ -113,6 +113,48 @@ def generate_launch_description():
         description="Bridge external-camera semantic segmentation labels for offline dataset capture",
     )
     bridge_segmentation = LaunchConfiguration("bridge_segmentation")
+    bridge_segmentation_b_arg = DeclareLaunchArgument(
+        "bridge_segmentation_b",
+        default_value="false",
+        description="Bridge camera-B semantic labels for offline dataset capture",
+    )
+    bridge_segmentation_b = LaunchConfiguration("bridge_segmentation_b")
+    bridge_segmentation_c_arg = DeclareLaunchArgument(
+        "bridge_segmentation_c",
+        default_value="false",
+        description="Bridge camera-C semantic labels for offline dataset capture",
+    )
+    bridge_segmentation_c = LaunchConfiguration("bridge_segmentation_c")
+    bridge_segmentation_d_arg = DeclareLaunchArgument(
+        "bridge_segmentation_d",
+        default_value="false",
+        description="Bridge camera-D semantic labels for offline dataset capture",
+    )
+    bridge_segmentation_d = LaunchConfiguration("bridge_segmentation_d")
+    bridge_camera_b_arg = DeclareLaunchArgument(
+        "bridge_camera_b",
+        default_value="false",
+        description="Bridge extension-only /external_camera_b RGB and camera_info topics",
+    )
+    bridge_camera_b = LaunchConfiguration("bridge_camera_b")
+    bridge_camera_c_arg = DeclareLaunchArgument(
+        "bridge_camera_c",
+        default_value="false",
+        description="Bridge extension-only /external_camera_c RGB and camera_info topics",
+    )
+    bridge_camera_c = LaunchConfiguration("bridge_camera_c")
+    bridge_camera_d_arg = DeclareLaunchArgument(
+        "bridge_camera_d",
+        default_value="false",
+        description="Bridge extension-only /external_camera_d RGB and camera_info topics",
+    )
+    bridge_camera_d = LaunchConfiguration("bridge_camera_d")
+    bridge_overview_camera_arg = DeclareLaunchArgument(
+        "bridge_overview_camera",
+        default_value="false",
+        description="Bridge the presentation-only full-facility overview camera",
+    )
+    bridge_overview_camera = LaunchConfiguration("bridge_overview_camera")
     world_arg = DeclareLaunchArgument(
         "world",
         default_value="warehouse_aws.world.sdf",
@@ -356,6 +398,77 @@ def generate_launch_description():
         output="screen",
         condition=IfCondition(bridge_segmentation),
     )
+    # Keep every semantic stream on an isolated bridge.  The label images are
+    # large and intentionally opt-in; four-camera dataset capture enables only
+    # the camera being collected so a slow semantic renderer cannot stall the
+    # operational RGB/odometry bridge or the other cameras.
+    ros_gz_segmentation_b_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/external_camera_b/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
+        ],
+        output="screen",
+        condition=IfCondition(bridge_segmentation_b),
+    )
+    ros_gz_segmentation_c_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/external_camera_c/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
+        ],
+        output="screen",
+        condition=IfCondition(bridge_segmentation_c),
+    )
+    ros_gz_segmentation_d_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/external_camera_d/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
+        ],
+        output="screen",
+        condition=IfCondition(bridge_segmentation_d),
+    )
+    ros_gz_camera_b_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/external_camera_b/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
+            "/external_camera_b/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
+        ],
+        output="screen",
+        condition=IfCondition(bridge_camera_b),
+    )
+    ros_gz_camera_c_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/external_camera_c/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
+            "/external_camera_c/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
+        ],
+        output="screen",
+        condition=IfCondition(bridge_camera_c),
+    )
+    ros_gz_camera_d_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/external_camera_d/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
+            "/external_camera_d/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
+        ],
+        output="screen",
+        condition=IfCondition(bridge_camera_d),
+    )
+    ros_gz_overview_camera_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/presentation_overview_camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
+            "/presentation_overview_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
+        ],
+        output="screen",
+        condition=IfCondition(bridge_overview_camera),
+    )
     # Contact bridge: gz-sim publishes one topic PER contact sensor (there is no
     # aggregated /physics/contacts topic), and the sensor set depends on the
     # world SDF, so build the bridge at launch time by parsing the world.
@@ -380,6 +493,13 @@ def generate_launch_description():
         headless_arg,
         bridge_contacts_arg,
         bridge_segmentation_arg,
+        bridge_segmentation_b_arg,
+        bridge_segmentation_c_arg,
+        bridge_segmentation_d_arg,
+        bridge_camera_b_arg,
+        bridge_camera_c_arg,
+        bridge_camera_d_arg,
+        bridge_overview_camera_arg,
         reset_world_arg,
         spawn_x_arg,
         spawn_y_arg,
@@ -394,6 +514,13 @@ def generate_launch_description():
         spawn_after_clock,
         wait_for_clock,
         ros_gz_segmentation_bridge,
+        ros_gz_segmentation_b_bridge,
+        ros_gz_segmentation_c_bridge,
+        ros_gz_segmentation_d_bridge,
+        ros_gz_camera_b_bridge,
+        ros_gz_camera_c_bridge,
+        ros_gz_camera_d_bridge,
+        ros_gz_overview_camera_bridge,
         ros_gz_contact_bridge,
         ros_gz_groundtruth_bridge,
         ros_gz_scan_bridge,

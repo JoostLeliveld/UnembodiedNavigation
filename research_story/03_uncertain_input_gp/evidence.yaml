@@ -1,0 +1,27 @@
+chapter: "03"
+status: ACTIVE
+world: synthetic_then_aws_1cam
+contribution: primary
+gate: "route-disjoint held-out NLL/Brier, U5 vs U1-U4 across alpha-scaled input covariance; null result acceptable"
+baselines: [U0, U1, U2, U3, U4, U5, U6_eval_only]
+evidence:
+  - path: ../../scripts/visibility_comparison/fit_belief_aware_gp.py
+    kind: canonical_code
+    tag: established
+    note: "import, never reimplement"
+  - path: ../../logs/visibility_comparison/belief_aware_gp_score_v1
+    kind: fit_artifacts
+    tag: measured_in_sim
+  - path: ../../logs/studies/optionA_commissioning/exp1_synthetic_gp
+    kind: study_output
+    tag: model_plumbing
+  - path: ../../logs/visibility_comparison/belief_gp_events
+    kind: training_events
+    tag: measured_in_sim
+    note: "usable after ch.01 prior-belief pairing audit"
+known_findings:
+  - "methods tie at real sigma (Option-A); alpha-sweep is the discriminating regime"
+  - "single-route training = false-confidence trap; route-disjoint splits mandatory"
+figures:
+  derivable: [03A, 03B, 03C, 03D, 03E, 03F]
+  video: {V03: derivable}

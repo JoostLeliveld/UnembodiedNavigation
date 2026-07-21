@@ -16,7 +16,7 @@ from launch_ros.substitutions import FindPackageShare
 
 PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'planner': 'visibility_aware_efe',
-    'world': 'warehouse_aws.world.sdf',
+    'world': 'warehouse_full_4cam.world.sdf',
     'task': '',
     'seed': '0',
     'odom_wait_timeout_s': '60.0',
@@ -60,6 +60,9 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'discount_gamma': '0.98',
     'robot_collision_radius_m': '0.125',
     'bridge_contacts': 'true',
+    'bridge_camera_b': 'false',
+    'bridge_camera_c': 'false',
+    'bridge_camera_d': 'false',
     'use_command_noise': 'true',
     'use_encoder_noise': 'true',
     'use_odom_for_predict': 'true',
@@ -426,6 +429,15 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'bridge_contacts': _as_bool(
             _launch_value(context, 'bridge_contacts', PAPER_LAUNCH_DEFAULTS['bridge_contacts'])
         ),
+        'bridge_camera_b': _as_bool(
+            _launch_value(context, 'bridge_camera_b', PAPER_LAUNCH_DEFAULTS['bridge_camera_b'])
+        ),
+        'bridge_camera_c': _as_bool(
+            _launch_value(context, 'bridge_camera_c', PAPER_LAUNCH_DEFAULTS['bridge_camera_c'])
+        ),
+        'bridge_camera_d': _as_bool(
+            _launch_value(context, 'bridge_camera_d', PAPER_LAUNCH_DEFAULTS['bridge_camera_d'])
+        ),
         'use_command_noise': _as_bool(
             _launch_value(context, 'use_command_noise', PAPER_LAUNCH_DEFAULTS['use_command_noise'])
         ),
@@ -690,6 +702,9 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
             'spawn_yaw': str(cfg['spawn']['yaw']),
             'reset_world': 'true' if cfg.get('reset_world', False) else 'false',
             'bridge_contacts': 'true' if cfg.get('bridge_contacts', True) else 'false',
+            'bridge_camera_b': 'true' if cfg.get('bridge_camera_b', False) else 'false',
+            'bridge_camera_c': 'true' if cfg.get('bridge_camera_c', False) else 'false',
+            'bridge_camera_d': 'true' if cfg.get('bridge_camera_d', False) else 'false',
         }.items(),
     )
 

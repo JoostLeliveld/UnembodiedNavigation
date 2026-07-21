@@ -78,7 +78,7 @@ from `0.0016` to `0.9232` and mean target `0.5498`.
 In the locked comparison, C1 uses a constant observation covariance. C2 uses the
 GP-derived reliability to build state-dependent camera covariance inside the EFE
 horizon. The route-choice summary is visualized in
-[`../../paper_artifacts/figures/robustness_spread.png`](../../paper_artifacts/figures/robustness_spread.png).
+[`../../paper_artifacts/figures/paper_snapshot/robustness_spread.png`](../../paper_artifacts/figures/paper_snapshot/robustness_spread.png).
 
 ## Caveats
 

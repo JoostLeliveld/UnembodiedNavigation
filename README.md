@@ -19,7 +19,7 @@ warehouse route-choice experiments.
 
 ## Contribution Story
 
-![Contribution map](docs/media/contribution_map.png)
+![Contribution map](paper_artifacts/figures/explainers/contribution_map.png)
 
 The central contribution is the modular chain from camera observation to
 planning behavior. The GP does not learn the observation matrix `R` online and
@@ -34,9 +34,9 @@ python3 scripts/paper_figures/make_readme_visuals.py
 
 ## System Architecture
 
-![External-camera navigation architecture](docs/media/system_architecture.svg)
+![External-camera navigation architecture](paper_artifacts/figures/explainers/system_architecture.svg)
 
-Planned overview video: `docs/media/videos/system_overview.mp4`. This should be
+Planned overview video: record under `logs/` (bulk-media rule), promote the final cut to `paper_artifacts/figures/explainers/`. This should be
 a 20-30 second montage using the warehouse still, detector overlay, GP map,
 C1/C2 route contrast, and the final campaign counts once those clips exist.
 
@@ -44,10 +44,10 @@ C1/C2 route contrast, and the final campaign counts once those clips exist.
 
 | Module | Contribution | Visual |
 | --- | --- | --- |
-| [YOLO perception](yolo/) | Detect the robot in the fixed warehouse camera image and export the selected bottom-centre pixel plus raw score. | <img src="yolo/demos/images/bottom_centre_01.png" width="190" alt="YOLO bottom centre visual"> |
-| [State estimation](estimation/) | Turn image-space evidence into a calibrated ground-plane point and keep the belief/noise story explicit. | <img src="estimation/demos/images/image_to_bev_01.png" width="190" alt="Image to BEV visual"> |
-| [GP covariance model](gp/) | Learn a spatial detector-trust field and convert it into the explicit `R_plan` measurement covariance matrix. | <img src="gp/demos/images/collection_to_covariance_story.png" width="190" alt="Collection to covariance visual"> |
-| [Route planning](planning/) | Compare constant `R` against GP-scaled `R_plan` under the same map, tasks, seeds, and no-go geometry. | <img src="planning/demos/images/paired_route_choice.png" width="190" alt="Route choice visual"> |
+| [YOLO perception](modules/01_detection/) | Detect the robot in the fixed warehouse camera image and export the selected bottom-centre pixel plus raw score. | <img src="modules/01_detection/demos/images/bottom_centre_01.png" width="190" alt="YOLO bottom centre visual"> |
+| [State estimation](modules/02_projection_bev/) | Turn image-space evidence into a calibrated ground-plane point and keep the belief/noise story explicit. | <img src="modules/02_projection_bev/demos/images/image_to_bev_01.png" width="190" alt="Image to BEV visual"> |
+| [GP covariance model](modules/04_reliability_gp/) | Learn a spatial detector-trust field and convert it into the explicit `R_plan` measurement covariance matrix. | <img src="modules/04_reliability_gp/demos/images/collection_to_covariance_story.png" width="190" alt="Collection to covariance visual"> |
+| [Route planning](modules/08_planning_efe/) | Compare constant `R` against GP-scaled `R_plan` under the same map, tasks, seeds, and no-go geometry. | <img src="modules/08_planning_efe/demos/images/paired_route_choice.png" width="190" alt="Route choice visual"> |
 | [Experiments](experiments/) | Package the current honest campaign surface, result counts, paired figures, and reproduction commands. | <img src="experiments/demos/images/outcome_counts_by_condition.png" width="190" alt="Outcome counts visual"> |
 
 Each module folder is a mini landing page with visuals, inputs/outputs,

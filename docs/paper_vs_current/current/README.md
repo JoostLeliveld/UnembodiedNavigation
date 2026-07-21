@@ -9,19 +9,25 @@ physics-contact channel.
 
 ## Figures
 
+All media lives in `paper_artifacts/figures/` (single source of truth,
+consolidated 2026-07-15): canonical paired PDFs + `.provenance.json` + `_data/`
+source bundles at the root, current-side renders in `current_surface/`.
+`CS = ../../../paper_artifacts/figures/current_surface`,
+`PA = ../../../paper_artifacts/figures`.
+
 | artifact | purpose |
 | --- | --- |
-| `figures/gp_pipeline_current.{pdf,png}` | Current detection-rate GP and induced covariance map. |
-| `figures/robustness_spread_current.png` | 40-run current spread: all seeds over the current GP field. |
-| `figures/paired_mechanism_taskA_current.{pdf,png,gif}` | Current task-A representative pair from `paired_mechanism_current_taskA`. |
-| `figures/paired_mechanism_west_current.{pdf,png,gif}` | Current hard west-route pair from `paired_mechanism_current_west`. |
-| `figures/paired_mechanism_{taskA,a2mid,west,control}_lowlat.{pdf,png,gif}` | Representative seed pairs from `honest_campaign_v1`. |
-| `figures/yolo_training_clarification_current.png` | Current clean detector training/validation clarification. |
+| [`CS/gp_pipeline_current.{pdf,png}`](../../../paper_artifacts/figures/current_surface/gp_pipeline_current.png) | Current detection-rate GP and induced covariance map. |
+| [`CS/robustness_spread_current.png`](../../../paper_artifacts/figures/current_surface/robustness_spread_current.png) | 40-run current spread: all seeds over the current GP field. |
+| [`PA/paired_mechanism_taskA_current.pdf`](../../../paper_artifacts/figures/paired_mechanism_taskA_current.pdf) (+ png/gif in `CS/`) | Current task-A representative pair from `paired_mechanism_current_taskA`. |
+| [`PA/paired_mechanism_west_current.pdf`](../../../paper_artifacts/figures/paired_mechanism_west_current.pdf) (+ png/gif in `CS/`) | Current hard west-route pair from `paired_mechanism_current_west`. |
+| `PA/paired_mechanism_{taskA,a2mid,west,control}_lowlat.pdf` (+ png/gif in `CS/`) | Representative seed pairs from `honest_campaign_v1`. |
+| [`PA/yolo_training_clarification.png`](../../../paper_artifacts/figures/yolo_training_clarification.png) | Clean detector training/validation clarification (shared with the paper side). |
 
-Each paired PDF has a `.provenance.json` and mirrored source bundle under
-`data/<figure-name>/`. Current paired plots use `gt_x/gt_y` and
-`belief_error_gt_m`; the paper paired plot is explicitly labelled as the legacy
-paper truth column for the frozen baseline.
+Each paired PDF has a `.provenance.json` and its source bundle under
+`paper_artifacts/figures/<figure-name>_data/`. Current paired plots use
+`gt_x/gt_y` and `belief_error_gt_m`; the paper paired plot is explicitly
+labelled as the legacy paper truth column for the frozen baseline.
 
 ## 40-run headline
 

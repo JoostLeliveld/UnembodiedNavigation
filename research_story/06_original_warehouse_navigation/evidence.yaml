@@ -1,0 +1,18 @@
+chapter: "06"
+status: PLANNED
+world: aws_1cam
+contribution: primary_downstream
+gate: "N4 beats N1/N3 (realistic baselines); pre-registered campaign; runs only after ch.02/03/05 freeze"
+conditions: [N0, N1, N2_reference, N3_point_gp, N4_uncertain_input, N5_optional]
+evidence:
+  - path: ../../logs/visibility_comparison/honest_campaign_v1
+    kind: anchor_campaign
+    tag: established
+    note: "N1/N2 anchor; harness to reuse"
+  - path: ../../logs/studies/optionA_commissioning/exp7_planner_replay
+    kind: study_output
+    tag: measured_in_sim
+    note: "offline replay pre-check for N3/N4"
+figures:
+  planned: [06A, 06B, 06C, 06D]
+  video: {V06: planned}

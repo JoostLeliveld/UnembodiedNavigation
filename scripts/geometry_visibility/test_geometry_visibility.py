@@ -158,6 +158,60 @@ def test_points_visible_from_camera():
     assert not bool(gv.points_visible_from_camera(cam, behind, [wall])[0])
 
 
+def test_fit_detector_response_recovers_signs():
+    # synthetic: detection likelier with more clearance and higher log px/m
+    rng = np.random.RandomState(0)
+    clr = rng.uniform(-0.5, 0.5, 800)
+    lpm = rng.uniform(0.5, 2.5, 800)
+    z = -6.0 + 8.0 * clr + 3.0 * lpm
+    y = (rng.uniform(size=800) < 1 / (1 + np.exp(-z))).astype(float)
+    feats = np.stack([clr, lpm], axis=-1)
+    resp = gv.fit_detector_response(feats, y, l2=1.0)
+    assert resp["coef"][0] > 0.0 and resp["coef"][1] > 0.0  # both signs correct
+    assert resp["feature_names"] == gv.DETECTOR_FEATURE_NAMES
+
+
+def test_calibrated_detection_prob_fov_gate_and_monotone():
+    resp = {"intercept": -6.0, "coef": np.array([8.0, 3.0]),
+            "feature_names": gv.DETECTOR_FEATURE_NAMES, "l2": 1.0}
+    fov = np.array([[True, True], [True, False]])
+    clr = np.array([[-0.3, 0.4], [0.4, 0.4]])
+    pxm = np.array([[50.0, 300.0], [300.0, 300.0]])
+    p = gv.calibrated_detection_prob(fov, clr, pxm, resp)
+    assert p.min() >= 0.0 and p.max() <= 1.0
+    assert p[1, 1] == 0.0                     # out-of-FOV -> hard 0
+    assert p[0, 1] > p[0, 0]                  # more clearance + resolution -> higher p
+
+
+def test_prior_logit_mean_inverts():
+    p = np.array([0.2, 0.5, 0.9])
+    lg = gv.prior_logit_mean(p)
+    assert np.allclose(1 / (1 + np.exp(-lg)), p, atol=1e-6)
+    assert gv.prior_logit_mean(np.array([0.0]))[0] < -5.0   # out-of-FOV clips very negative
+
+
+def test_prior_pseudocount_confidence_ordering():
+    cam = _toy_camera()
+    xs, ys = _toy_grid()
+    fov = gv.fov_projection_grid(cam, xs, ys, z_marker=0.3)
+    # unambiguous clearance far from any occluder top vs grazing (~0) clearance
+    clr_clear = np.full((len(ys), len(xs)), 2.0)
+    clr_graze = np.zeros((len(ys), len(xs)))
+    n_clear = gv.prior_pseudocount(fov["fov_mask"], clr_clear, fov["u"], fov["v"],
+                                   cam.img_width, cam.img_height, n_floor=1.0, n_max=20.0)
+    n_graze = gv.prior_pseudocount(fov["fov_mask"], clr_graze, fov["u"], fov["v"],
+                                   cam.img_width, cam.img_height, n_floor=1.0, n_max=20.0)
+    iy, ix = gv.world_to_grid(xs, ys, 0.0, 0.0)
+    assert n_clear.min() >= 1.0 - 1e-9 and n_clear.max() <= 20.0 + 1e-9
+    assert n_clear[iy, ix] > n_graze[iy, ix]          # confident geometry worth more
+    assert np.isclose(n_graze[iy, ix], 1.0, atol=1e-6)  # grazing occlusion -> floor
+    # unobserved (no depth return) collapses strength to the floor
+    unobs = np.zeros((len(ys), len(xs)))
+    n_unobs = gv.prior_pseudocount(fov["fov_mask"], clr_clear, fov["u"], fov["v"],
+                                   cam.img_width, cam.img_height, observed=unobs, n_floor=1.0, n_max=20.0)
+    assert np.allclose(n_unobs, 1.0)
+
+
 def main() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

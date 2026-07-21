@@ -25,6 +25,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'batched_four_camera_yolo_node = perception.nodes.batched_four_camera_yolo_node:main',
             'yolo_robot_detector_node = perception.nodes.yolo_robot_detector_node:main',
         ],
     },

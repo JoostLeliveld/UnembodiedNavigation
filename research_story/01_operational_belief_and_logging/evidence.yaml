@@ -1,0 +1,21 @@
+chapter: "01"
+status: PARTIAL
+world: aws_1cam
+gate: "belief covariance directionally related to actual error (01B/01C) before ch.03 fitting"
+evidence:
+  - path: ../../logs/visibility_comparison/belief_gp_events
+    kind: derived_events
+    tag: measured_in_sim
+    note: "belief-stamped GP events; audit whether pairing uses PRIOR or POSTERIOR belief"
+  - path: ../../logs/studies/optionA_commissioning/exp5_trajectory_smoothing
+    kind: study_output
+    tag: measured_in_sim
+    note: "NEES 16.8 -> 2.8 via smoothing; raw filter covariance overconfident"
+  - path: ../../docs/uncertainty_propagation.md
+    kind: doc
+    tag: established
+missing:
+  - "prior-belief logger study (experiments/belief_prior_logger/) producing (t, mu-, P-, opportunity, m, c, u, v, dt)"
+figures:
+  derivable: [01A, 01B, 01C, 01D]
+  video: {V01: needs_data}

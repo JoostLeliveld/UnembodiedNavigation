@@ -1,1 +1,0 @@
-Image-space YOLO detection is reduced to the bounding-box bottom centre, which is related to a BEV position estimate by the calibrated homography/camera model. The planner correction compares the detector pixel with the forward projection of the belief, so the camera constrains ground-plane position but does not directly measure heading.

@@ -1,0 +1,132 @@
+{
+  "world": "warehouse_full_4cam.world.sdf",
+  "artifact": "paper_artifacts/gp/warehouse_full_4cam_dayzero_v1/camera_a_planner_with_four_camera_maps.npz",
+  "planner_map": "P_conservative_plan_map",
+  "planner_map_semantics": "camera_A day-zero calibrated prior; compatible with current single-camera planner measurement stream",
+  "multicamera_maps": [
+    "P_union_4cam_map",
+    "P_best_4cam_map",
+    "coverage_count",
+    "best_camera_id"
+  ],
+  "training_data_used": false,
+  "ground_truth_used": false,
+  "camera_poses_xyz_rpy": {
+    "camera_A": [
+      -6.0,
+      -10.0,
+      6.1,
+      0.0,
+      0.92,
+      1.5708
+    ],
+    "camera_B": [
+      -6.0,
+      10.0,
+      6.1,
+      0.0,
+      0.92,
+      -1.5708
+    ],
+    "camera_C": [
+      6.0,
+      -10.0,
+      6.1,
+      0.0,
+      0.92,
+      1.5708
+    ],
+    "camera_D": [
+      6.0,
+      10.0,
+      6.1,
+      0.0,
+      0.92,
+      -1.5708
+    ]
+  },
+  "grid": {
+    "nx": 240,
+    "ny": 184,
+    "source_profile_nx": 470,
+    "source_profile_ny": 360,
+    "x_min": -11.7,
+    "x_max": 11.7,
+    "y_min": -9.0,
+    "y_max": 9.0
+  },
+  "summary": {
+    "camera_ids": [
+      "camera_A",
+      "camera_B",
+      "camera_C",
+      "camera_D"
+    ],
+    "shape": [
+      184,
+      240
+    ],
+    "union_coverage_fraction": 0.9915760869565218,
+    "multi_covered_fraction": 0.42219202898550723,
+    "mean_union_probability": 0.645921591929363,
+    "mean_best_probability": 0.5710579292376539,
+    "camera_maps": {
+      "camera_A": {
+        "camera_id": "camera_A",
+        "shape": [
+          184,
+          240
+        ],
+        "x_min": -11.7,
+        "x_max": 11.7,
+        "y_min": -9.0,
+        "y_max": 9.0,
+        "coverage_fraction": 0.42629076086956524,
+        "mean_probability": 0.17496879586256647,
+        "max_probability": 0.9647379645389875
+      },
+      "camera_B": {
+        "camera_id": "camera_B",
+        "shape": [
+          184,
+          240
+        ],
+        "x_min": -11.7,
+        "x_max": 11.7,
+        "y_min": -9.0,
+        "y_max": 9.0,
+        "coverage_fraction": 0.42629076086956524,
+        "mean_probability": 0.1750437032545517,
+        "max_probability": 0.9647379645389875
+      },
+      "camera_C": {
+        "camera_id": "camera_C",
+        "shape": [
+          184,
+          240
+        ],
+        "x_min": -11.7,
+        "x_max": 11.7,
+        "y_min": -9.0,
+        "y_max": 9.0,
+        "coverage_fraction": 0.42629076086956524,
+        "mean_probability": 0.175072838713811,
+        "max_probability": 0.9647379645389875
+      },
+      "camera_D": {
+        "camera_id": "camera_D",
+        "shape": [
+          184,
+          240
+        ],
+        "x_min": -11.7,
+        "x_max": 11.7,
+        "y_min": -9.0,
+        "y_max": 9.0,
+        "coverage_fraction": 0.42629076086956524,
+        "mean_probability": 0.17499326947871582,
+        "max_probability": 0.9647379645389875
+      }
+    }
+  }
+}

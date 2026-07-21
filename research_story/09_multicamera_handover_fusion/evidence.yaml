@@ -1,0 +1,24 @@
+chapter: "09"
+status: PLUMBING
+world: full_4cam
+contribution: candidate_second_contribution_B
+gate: "no fusion claims until per-camera detector chains + D2 pass (>=30 synchronized pairs, <=10% outliers) + replay baselines + closed-loop handover campaign; active planner handover stays disabled"
+conditions: "S0-S4 baselines + M8 hysteretic manager (implemented); plan IDs M0-M7 map onto these; oracle selection = evaluation-only"
+evidence:
+  - path: ../../src/reliability
+    kind: runtime_code
+    tag: established_code
+    note: "camera contracts, health, M8 CameraManager (operational-only), handover covariance inflation; WIP on multicam branch"
+  - path: ../../tests/reliability
+    kind: tests
+    tag: established_code
+  - path: ../../experiments/multicamera_fusion_extension
+    kind: study
+    tag: model_plumbing
+  - path: ../../experiments/multicamera_commissioning_bigwarehouse
+    kind: study
+    tag: measured_in_sim
+    note: "Full_4cam operational pipeline pilot exists (two routes, four posterior fits, three strict C/D pairs); it is not qualified mapping/fusion/closed-loop evidence. The frozen protocol and analysis plan require D0 calibration, route-disjoint D1, all D2 edges, matched manifest-backed D3 replay, and D4 active confirmation. Historical retired-testbed pilot remains provenance only."
+figures:
+  planned: [09A, 09B, 09C, 09D, 09E, 09F]
+  video: {V09A: planned, V09B: planned, V09C: planned}

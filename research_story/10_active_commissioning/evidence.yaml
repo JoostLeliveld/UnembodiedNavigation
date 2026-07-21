@@ -1,0 +1,13 @@
+chapter: "10"
+status: FUTURE
+world: full_4cam   # warehouse_full_4cam.world.sdf
+contribution: separate_future_paper
+gate: "start only after ch.03 model + ch.08 per-camera maps; AWS world = sanity test only"
+conditions: [A0, A1, A2, A3, A4, A5]
+evidence: []
+adjacent:
+  - path: ../../experiments/optionA_commissioning
+    note: "offline commissioning data-value/budget studies; reuse tooling, not conclusions"
+figures:
+  planned: [10A, 10B, 10C, 10D, 10E]
+  video: {V10: planned}

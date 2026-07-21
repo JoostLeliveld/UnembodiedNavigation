@@ -20,10 +20,10 @@ python3 scripts/paper_figures/make_readme_visuals.py
 
 | Asset | Use |
 | --- | --- |
-| [`../../docs/paper_vs_current/current/figures/robustness_spread_current.png`](../../docs/paper_vs_current/current/figures/robustness_spread_current.png) | Current 40-run trajectory map. |
+| [`../../paper_artifacts/figures/current_surface/robustness_spread_current.png`](../../paper_artifacts/figures/current_surface/robustness_spread_current.png) | Current 40-run trajectory map. |
 | [`../../docs/paper_vs_current/current/README.md`](../../docs/paper_vs_current/current/README.md) | Human-readable current metrics table. |
-| [`../../docs/paper_vs_current/current/figures/paired_mechanism_taskA_current.gif`](../../docs/paper_vs_current/current/figures/paired_mechanism_taskA_current.gif) | Existing paired route GIF for task A. |
-| [`../../docs/paper_vs_current/current/figures/paired_mechanism_west_current.gif`](../../docs/paper_vs_current/current/figures/paired_mechanism_west_current.gif) | Existing paired route GIF for the hard west route. |
+| [`../../paper_artifacts/figures/current_surface/paired_mechanism_taskA_current.gif`](../../paper_artifacts/figures/current_surface/paired_mechanism_taskA_current.gif) | Existing paired route GIF for task A. |
+| [`../../paper_artifacts/figures/current_surface/paired_mechanism_west_current.gif`](../../paper_artifacts/figures/current_surface/paired_mechanism_west_current.gif) | Existing paired route GIF for the hard west route. |
 
 ## Next Media Slots
 

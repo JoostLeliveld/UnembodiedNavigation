@@ -33,6 +33,13 @@ Additional media is catalogued in [`demos/`](demos/).
 | GP artifact `warehouse_visibility_gp_v1` | current comparison figures and provenance bundles |
 | `warehouse_aws.world.sdf` | current result surface under `docs/paper_vs_current/current/` |
 
+## Evidence Namespaces
+
+| Namespace | Role |
+| --- | --- |
+| [`single_camera_current/`](single_camera_current/) | Frozen current thesis evidence: matched C1/C2, four tasks, five seeds, current 15/20 vs 20/20 result. |
+| [`multicamera_fusion_extension/`](multicamera_fusion_extension/) | Planned extension surface for camera-specific reliability, replay, loss/recovery, and two-camera selection/fusion gates. |
+
 ## Method
 
 The campaign compares two planner conditions across four tasks and five seeds
@@ -67,7 +74,7 @@ Evidence files:
 
 - [`../docs/current_runtime_contract.yaml`](../docs/current_runtime_contract.yaml)
 - [`../docs/paper_vs_current/current/README.md`](../docs/paper_vs_current/current/README.md)
-- [`../docs/paper_vs_current/current/figures/robustness_spread_current.png`](../docs/paper_vs_current/current/figures/robustness_spread_current.png)
+- [`../paper_artifacts/figures/current_surface/robustness_spread_current.png`](../paper_artifacts/figures/current_surface/robustness_spread_current.png)
 - [`../docs/experiment_registry.md`](../docs/experiment_registry.md)
 - Historical submitted-paper comparison: [`../docs/paper_vs_current/paper/README.md`](../docs/paper_vs_current/paper/README.md)
 

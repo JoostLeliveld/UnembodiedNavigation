@@ -1,0 +1,10 @@
+chapter: "04"
+status: PLANNED
+world: aws_1cam_then_full_4cam
+contribution: candidate_second_contribution_A
+gate: "promote only if: both components learned + independently validated + beats scalar trust + measurably changes R_plan/navigation"
+depends_on: ["02 (Fig 02D outcome)", "03 (frozen GP machinery)"]
+evidence: []
+figures:
+  planned: [04A, 04B, 04C, 04D]
+  video: {V04: planned}

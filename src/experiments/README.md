@@ -6,7 +6,7 @@ It is the folder that turns the method into a repeatable benchmark: same world,
 same route tasks, same seeds, same local detector checkpoint path, and explicit
 GP artifact paths.
 
-![Robustness campaign spread](../../docs/paper_vs_current/current/figures/robustness_spread_current.png)
+![Robustness campaign spread](../../paper_artifacts/figures/current_surface/robustness_spread_current.png)
 
 ## Central Files
 

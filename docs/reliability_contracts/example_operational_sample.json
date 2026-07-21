@@ -1,0 +1,70 @@
+{
+  "artifact_hashes": {
+    "bev_calibration": "sha256:8ff0c7e6",
+    "gp_artifact": "sha256:09dc5229",
+    "yolo_model": "sha256:4b80b61a"
+  },
+  "belief": {
+    "available": true,
+    "cov_xy_px2_proxy": 6.25,
+    "stamp_s": 184.58,
+    "x_m": 1.22,
+    "y_m": 1.68,
+    "yaw_rad": 0.04
+  },
+  "camera_relative_range_m": 6.82,
+  "config_hash": "sha256:1b18a4e0",
+  "detector_result": {
+    "bbox_area_px2": 2926.0,
+    "bbox_bottom_u": 392.0,
+    "bbox_bottom_v": 456.0,
+    "detected": true,
+    "inference_latency_ms": 18.6,
+    "mask_area_px": 0.0,
+    "raw_score": 0.83,
+    "selected_pixel_source": "bbox_bottom",
+    "selected_score": 0.83
+  },
+  "image_hash": "sha256:596c1d2e4f9f",
+  "image_location": {
+    "u_norm": 0.6125,
+    "v_norm": 0.7125
+  },
+  "image_ref": "logs/experiments/experiment_00123/camera/frame_000184.png",
+  "measurement_age_s": 0.04,
+  "measurement_stale": false,
+  "metadata": {
+    "perception_backend": "yolo",
+    "projection_backend": "homography"
+  },
+  "odometry": {
+    "linear_speed_mps": 0.31,
+    "stamp_s": 184.55,
+    "yaw_rate_radps": 0.02
+  },
+  "projection_valid": true,
+  "recent_detector_history": [
+    true,
+    true,
+    false,
+    true,
+    true
+  ],
+  "run_id": "experiment_00123",
+  "sample_id": "experiment_00123:000184",
+  "schema_version": "phase0.v1",
+  "seed": 3,
+  "selected_pixel": [
+    392.0,
+    456.0
+  ],
+  "state_estimate": {
+    "source_x": "yolo_mask_or_bbox_homography",
+    "source_y": "yolo_mask_or_bbox_homography",
+    "source_yaw": "none",
+    "x_m": 1.2,
+    "y_m": 1.66
+  },
+  "task_id": "route_apron_to_a3_mid",
+  "timestamp_s": 184.62
+}
