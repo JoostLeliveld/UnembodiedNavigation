@@ -88,8 +88,7 @@ promoted only with realistically available geometry AND a clear win over range/F
 ## Honesty rules (every chapter)
 
 - Evidence tags: `established` / `measured_in_sim` / `model_plumbing` / `open`
-  (vocabulary from `docs/next_paper/evidence_ledger.md`, which this directory supersedes as
-  storyline of record).
+  (defined in [`_shared/honesty_tags.md`](_shared/honesty_tags.md)).
 - GT (`gt_*`, oracle labels) and CAD are **evaluation-only**; figures/videos carry
   `BELIEF` / `PIXEL` / `MODEL` / `GT — evaluation only` labels.
 - Unrun plots in decks are `PLANNED` / `HYPOTHETICAL`.

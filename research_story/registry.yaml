@@ -6,7 +6,7 @@
 #                     cameras A-D at (+-6,+-10,6.1); docs/warehouse_full_4cam_layout.md)
 #   (all other development worlds were DELETED 2026-07-15 and archived under
 #    ../_archive/; data collected on them is historical only)
-# Evidence honesty tags (docs/next_paper/evidence_ledger.md):
+# Evidence honesty tags (research_story/_shared/honesty_tags.md):
 #   established | measured_in_sim | model_plumbing | open
 
 plan: research_story/THESIS_PLAN_2026-07-15.md
