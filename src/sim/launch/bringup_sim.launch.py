@@ -131,6 +131,12 @@ def generate_launch_description():
         description="Bridge camera-D semantic labels for offline dataset capture",
     )
     bridge_segmentation_d = LaunchConfiguration("bridge_segmentation_d")
+    bridge_camera_a_arg = DeclareLaunchArgument(
+        "bridge_camera_a",
+        default_value="true",
+        description="Bridge the primary /external_camera RGB and camera_info topics",
+    )
+    bridge_camera_a = LaunchConfiguration("bridge_camera_a")
     bridge_camera_b_arg = DeclareLaunchArgument(
         "bridge_camera_b",
         default_value="false",
@@ -354,8 +360,6 @@ def generate_launch_description():
             "/model/turtlebot3/odometry@nav_msgs/msg/Odometry[gz.msgs.Odometry",
             "/model/turtlebot3/odometry_tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V",
             "/model/turtlebot3/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model",
-            "/external_camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
-            "/external_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
             # Segmentation stays out of the runtime bridge. Dataset capture
             # enables it through the separate conditional bridge below so a
             # stalled semantic stream cannot take the RGB bridge down with it.
@@ -439,6 +443,19 @@ def generate_launch_description():
         output="screen",
         condition=IfCondition(bridge_camera_b),
     )
+    # Camera A is isolated too.  This keeps the default ROS contract unchanged
+    # while allowing the diagnostic direct-Gazebo detector to remove its large
+    # image conversion without risking odometry/control bridging.
+    ros_gz_camera_a_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/external_camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
+            "/external_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
+        ],
+        output="screen",
+        condition=IfCondition(bridge_camera_a),
+    )
     ros_gz_camera_c_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
@@ -496,6 +513,7 @@ def generate_launch_description():
         bridge_segmentation_b_arg,
         bridge_segmentation_c_arg,
         bridge_segmentation_d_arg,
+        bridge_camera_a_arg,
         bridge_camera_b_arg,
         bridge_camera_c_arg,
         bridge_camera_d_arg,
@@ -517,6 +535,7 @@ def generate_launch_description():
         ros_gz_segmentation_b_bridge,
         ros_gz_segmentation_c_bridge,
         ros_gz_segmentation_d_bridge,
+        ros_gz_camera_a_bridge,
         ros_gz_camera_b_bridge,
         ros_gz_camera_c_bridge,
         ros_gz_camera_d_bridge,

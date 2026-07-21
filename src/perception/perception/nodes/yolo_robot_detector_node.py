@@ -9,7 +9,7 @@ import torch
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float64MultiArray, String
+from std_msgs.msg import Float64MultiArray, Header, String
 from ultralytics import YOLO
 
 from perception.core.detection_diagnostics import (
@@ -82,6 +82,13 @@ class YoloRobotDetectorNode(Node):
         # Ultralytics YOLO() wrapper, so detections are bit-identical. Falls back
         # to model_path when the sibling .torchscript is missing.
         self.declare_parameter('use_torchscript', False)
+        # Diagnostic successor: keep the native .pt checkpoint as the declared
+        # source identity, while explicitly loading a fixed-shape compiled
+        # artifact.  Defaults retain the established single-camera runtime.
+        self.declare_parameter('runtime_backend', 'native')
+        self.declare_parameter('compiled_model_path', '')
+        self.declare_parameter('input_transport', 'ros')
+        self.declare_parameter('runtime_trace_period_s', 0.0)
         # TIMING: run N dummy inferences at startup to pay the one-off lazy CUDA
         # / cuDNN init + (TorchScript) JIT specialization cost off the hot path,
         # so the first live frame is not a multi-hundred-ms stall.
@@ -113,6 +120,27 @@ class YoloRobotDetectorNode(Node):
             raise RuntimeError(f'model_path does not exist: {model_path}')
 
         self.model_path = model_path.resolve()
+        if self.model_path.suffix.lower() != '.pt':
+            raise RuntimeError('model_path must be the native source .pt checkpoint')
+        self.runtime_backend = str(self.get_parameter('runtime_backend').value).strip().lower()
+        self.compiled_model_path = None
+        raw_compiled_path = str(self.get_parameter('compiled_model_path').value).strip()
+        if self.runtime_backend not in ('native', 'torchscript'):
+            raise RuntimeError("runtime_backend must be 'native' or 'torchscript'")
+        if self.runtime_backend == 'torchscript':
+            candidate = Path(raw_compiled_path).expanduser()
+            if not candidate.is_file() or candidate.suffix.lower() != '.torchscript':
+                raise RuntimeError('torchscript backend requires compiled_model_path ending in .torchscript')
+            self.compiled_model_path = candidate.resolve()
+        self.input_transport = str(self.get_parameter('input_transport').value).strip().lower()
+        if self.input_transport not in ('ros', 'direct_gz'):
+            raise RuntimeError("input_transport must be 'ros' or 'direct_gz'")
+        legacy_torchscript = self.get_parameter('use_torchscript').value
+        if self.runtime_backend == 'torchscript' and _as_bool(legacy_torchscript):
+            raise RuntimeError('use_torchscript and runtime_backend=torchscript are mutually exclusive')
+        self.runtime_trace_period_s = float(self.get_parameter('runtime_trace_period_s').value)
+        if not math.isfinite(self.runtime_trace_period_s) or self.runtime_trace_period_s < 0.0:
+            raise RuntimeError('runtime_trace_period_s must be finite and non-negative')
         self.device = str(self.get_parameter('device').value).strip()
         self.cpu_num_threads = max(0, int(self.get_parameter('cpu_num_threads').value))
         self.cpu_num_interop_threads = max(
@@ -171,7 +199,9 @@ class YoloRobotDetectorNode(Node):
         self._worker_stop = threading.Event()
 
         load_path = self.model_path
-        if self.use_torchscript:
+        if self.compiled_model_path is not None:
+            load_path = self.compiled_model_path
+        elif self.use_torchscript:
             ts_path = self.model_path.with_suffix('.torchscript')
             if ts_path.is_file():
                 load_path = ts_path
@@ -180,7 +210,10 @@ class YoloRobotDetectorNode(Node):
                     f'use_torchscript=true but {ts_path} is missing; '
                     f'falling back to eager {self.model_path}'
                 )
-        self.model = YOLO(str(load_path))
+        self.model = YOLO(
+            str(load_path),
+            task='segment' if self.runtime_backend == 'torchscript' else None,
+        )
         self.get_logger().info(
             f'PyTorch thread budget: intraop={torch.get_num_threads()} '
             f'interop={torch.get_num_interop_threads()} device={self.device or "auto"}'
@@ -218,7 +251,29 @@ class YoloRobotDetectorNode(Node):
                 camera_observation_topic,
                 10,
             )
-        self.create_subscription(Image, self.image_topic, self._image_cb, 1)
+        self._direct_gz_received = 0
+        self._gz_transport_node = None
+        if self.input_transport == 'direct_gz':
+            from gz.msgs10.image_pb2 import Image as GzImage
+            from gz.transport13 import Node as GzTransportNode, SubscribeOptions
+
+            self._gz_image_type = GzImage
+            self._gz_transport_node = GzTransportNode()
+            self._gz_transport_node.subscribe_raw(
+                self.image_topic,
+                self._direct_gz_raw_image_cb,
+                # Fortress advertises ignition.msgs.Image but shares the wire
+                # format with gz.msgs.Image. Raw subscription avoids the
+                # type-name handshake while removing the gz->ROS image copy.
+                'ignition.msgs.Image',
+                SubscribeOptions(),
+            )
+            self.get_logger().warn(
+                'direct Gazebo input is a diagnostic successor: preserve source/output '
+                'validation and do not use it for evidence recording'
+            )
+        else:
+            self.create_subscription(Image, self.image_topic, self._image_cb, 1)
         # Worker thread is only started in the legacy (contended) path. Default
         # is single-threaded inference in the callback (no GIL contention).
         self._worker = None
@@ -230,12 +285,15 @@ class YoloRobotDetectorNode(Node):
             f'YOLO runtime detector started (model={load_path}, conf={self.confidence_threshold:.2f}, '
             f'iou={self.iou_threshold:.2f}, use_masks={self.use_masks}, '
             f'task=seg/det, device={self.device or "auto"}, '
-            f'torchscript={self.use_torchscript}, '
+            f'torchscript={self.use_torchscript}, backend={self.runtime_backend}, '
+            f'input_transport={self.input_transport}, '
             f'inference_in_callback={self.inference_in_callback}, '
             f'camera_id={self.camera_id}, image_topic={self.image_topic}, '
             f'pixel_pose_topic={self.pixel_pose_topic}, diagnostics_topic={self.diagnostics_topic}, '
             'input_policy=latest-frame-only)'
         )
+        if self.runtime_trace_period_s > 0.0:
+            self.create_timer(self.runtime_trace_period_s, self._log_runtime_trace)
 
     def _predict(self, image_bgr: np.ndarray):
         kwargs = {
@@ -390,6 +448,41 @@ class YoloRobotDetectorNode(Node):
             self._pending_image = msg
             self._pending_receive_stamp_s = receive_stamp_s
         self._image_event.set()
+
+    def _direct_gz_raw_image_cb(self, raw: bytes, _info) -> None:
+        try:
+            gz_msg = self._gz_image_type.FromString(raw)
+            width, height, step = int(gz_msg.width), int(gz_msg.height), int(gz_msg.step)
+            if width <= 0 or height <= 0 or step != width * 3:
+                raise RuntimeError(f'unexpected Gazebo image geometry {width}x{height}, step={step}')
+            if int(gz_msg.pixel_format_type) != 3:  # gz.msgs.RGB_INT8
+                raise RuntimeError(f'unexpected Gazebo pixel format {int(gz_msg.pixel_format_type)}')
+            data = np.frombuffer(bytes(gz_msg.data), dtype=np.uint8)
+            if data.size != height * step:
+                raise RuntimeError(f'image data size {data.size} does not match {height}x{step}')
+            image = data.reshape(height, width, 3)[:, :, ::-1].copy()
+            msg = Image()
+            msg.header = Header()
+            msg.header.stamp.sec = int(gz_msg.header.stamp.sec)
+            msg.header.stamp.nanosec = int(gz_msg.header.stamp.nsec)
+            msg.header.frame_id = 'image'
+            msg.height = height
+            msg.width = width
+            msg.encoding = 'bgr8'
+            msg.step = step
+            msg.data = image.tobytes()
+            self._direct_gz_received += 1
+            self._image_cb(msg)
+        except Exception as exc:
+            self.get_logger().error(f'malformed direct Gazebo image: {exc}')
+
+    def _log_runtime_trace(self) -> None:
+        self.get_logger().info(
+            f'runtime_trace transport={self.input_transport} '
+            f'direct_gz_received={self._direct_gz_received} '
+            f'last_inference_ms={self._last_inference_ms:.1f} '
+            f'last_callback_ms={self._last_callback_ms:.1f}'
+        )
 
     def _take_latest_image(self):
         with self._image_lock:

@@ -116,6 +116,7 @@ class BatchedFourCameraYoloNode(Node):
         self.declare_parameter("model_path", "")
         self.declare_parameter("runtime_backend", "native")
         self.declare_parameter("compiled_model_path", "")
+        self.declare_parameter("torchscript_detection_only", False)
         self.declare_parameter("device", "")
         self.declare_parameter("cpu_num_threads", 2)
         self.declare_parameter("cpu_num_interop_threads", 1)
@@ -166,6 +167,12 @@ class BatchedFourCameraYoloNode(Node):
                     "torchscript backend requires compiled_model_path ending in .torchscript"
                 )
             self.compiled_model_path = compiled_path.resolve()
+        detection_only_value = self.get_parameter("torchscript_detection_only").value
+        self.torchscript_detection_only = (
+            detection_only_value
+            if isinstance(detection_only_value, bool)
+            else _as_bool(detection_only_value)
+        )
         # Keep this a string end to end.  In particular, ``0`` means CUDA GPU
         # zero to Ultralytics but would violate this declared ROS parameter if
         # launch serialized it as an integer.
@@ -236,6 +243,16 @@ class BatchedFourCameraYoloNode(Node):
             raise RuntimeError("direct_gz input is diagnostic-only and requires asynchronous mode")
         if self.runtime_backend != "native" and self.synchronization_mode != "asynchronous":
             raise RuntimeError("compiled runtime is diagnostic-only and requires asynchronous mode")
+        if self.torchscript_detection_only and (
+            self.runtime_backend != "torchscript"
+            or self.compiled_model_path is None
+            or self.use_masks
+            or self.confidence_threshold <= 0.0
+        ):
+            raise RuntimeError(
+                "torchscript_detection_only requires the compiled torchscript backend, "
+                "use_masks=false, and a positive confidence_threshold"
+            )
         if not math.isfinite(self.runtime_trace_period_s) or self.runtime_trace_period_s < 0.0:
             raise RuntimeError("runtime_trace_period_s must be finite and non-negative")
         if not math.isfinite(self.async_coalesce_wall_s) or self.async_coalesce_wall_s <= 0.0:
@@ -271,7 +288,24 @@ class BatchedFourCameraYoloNode(Node):
         if self.compiled_model_path is not None:
             self.compiled_model_sha256 = sha256_file(self.compiled_model_path)
             model_load_path = self.compiled_model_path
-        self.model = YOLO(str(model_load_path))
+        # A TorchScript file does not retain Ultralytics' task metadata.  This
+        # checkpoint is a segmentation model; loading it without the explicit
+        # task silently selects the detect predictor, discards masks and applies
+        # the wrong interpretation to the raw output tensor.  Keep the task
+        # explicit for the compiled diagnostic path so its normal Results
+        # contract remains equivalent to the source checkpoint.
+        # The raw detection-only path owns exactly one CUDA copy of the
+        # compiled graph below.  Load the source checkpoint only for immutable
+        # class metadata here, otherwise asking ``YOLO(...).names`` would load
+        # a second compiled graph and exhaust the 4 GiB laptop GPU beside
+        # Gazebo's renderer.
+        metadata_model_path = (
+            self.model_path if self.torchscript_detection_only else model_load_path
+        )
+        self.model = YOLO(
+            str(metadata_model_path),
+            task="segment" if self.runtime_backend == "torchscript" and not self.torchscript_detection_only else None,
+        )
         self.target_ids = target_class_ids(
             getattr(self.model, "names", {}), self.class_name, self.class_id
         )
@@ -281,6 +315,30 @@ class BatchedFourCameraYoloNode(Node):
                 f"class_name={self.class_name!r}, class_id={self.class_id}, "
                 f"names={getattr(self.model, 'names', {})!r}"
             )
+        if self.torchscript_detection_only and (
+            self.target_ids is None
+            or len(self.target_ids) != 1
+            or len(getattr(self.model, "names", {})) != 1
+        ):
+            raise RuntimeError(
+                "torchscript_detection_only is restricted to the one-class commissioned checkpoint"
+            )
+        self._torchscript_detection_model = None
+        self._torchscript_detection_device = None
+        if self.torchscript_detection_only:
+            # The source checkpoint is segmentation-trained, but this explicit
+            # runtime publishes bbox-bottom observations only. Avoid building
+            # unused instance masks by applying class-aware NMS directly to
+            # the compiled graph's raw detection tensor.
+            if not self.device or not torch.cuda.is_available():
+                raise RuntimeError(
+                    "torchscript_detection_only requires an explicit CUDA device"
+                )
+            device_name = self.device if self.device.startswith("cuda") else f"cuda:{self.device}"
+            self._torchscript_detection_device = torch.device(device_name)
+            self._torchscript_detection_model = torch.jit.load(
+                str(self.compiled_model_path), map_location=self._torchscript_detection_device
+            ).eval()
 
         try:
             from reliability.single_camera_adapter import (
@@ -308,7 +366,10 @@ class BatchedFourCameraYoloNode(Node):
             warmup_start = time.perf_counter()
             for _ in range(self.warmup_iters):
                 try:
-                    validate_batch_results(self._predict_batch(dummy_batch), len(CAMERA_ORDER))
+                    if self.torchscript_detection_only:
+                        self._predict_detection_only(dummy_batch)
+                    else:
+                        validate_batch_results(self._predict_batch(dummy_batch), len(CAMERA_ORDER))
                 except Exception as exc:
                     raise RuntimeError(f"four-image detector warmup failed: {exc}") from exc
             self.get_logger().info(
@@ -413,6 +474,7 @@ class BatchedFourCameraYoloNode(Node):
             f"device={self.device or 'auto'}, "
             f"batch_order={','.join(CAMERA_ORDER)}, batch_size={len(CAMERA_ORDER)}, "
             f"imgsz={self.image_size}, masks={self.use_masks}, "
+            f"detection_only={self.torchscript_detection_only}, "
             f"torch_threads={self.actual_cpu_num_threads}, "
             f"torch_interop={self.actual_cpu_num_interop_threads}, "
             f"opencv_threads={self.actual_opencv_num_threads}, "
@@ -497,6 +559,80 @@ class BatchedFourCameraYoloNode(Node):
         if self.device:
             kwargs["device"] = self.device
         return self.model.predict(**kwargs)
+
+    def _predict_detection_only(self, images_bgr: list[np.ndarray]) -> list[dict[str, Any]]:
+        """Return compiled bbox-bottom selections without constructing masks."""
+
+        if self._torchscript_detection_model is None or self._torchscript_detection_device is None:
+            raise BatchContractError("detection-only runtime was not initialized")
+        prepared: list[np.ndarray] = []
+        transforms: list[tuple[float, int, int, int, int]] = []
+        for image in images_bgr:
+            height, width = image.shape[:2]
+            gain = min(float(self.image_size) / width, float(self.image_size) / height)
+            resized_width, resized_height = round(width * gain), round(height * gain)
+            pad_x = round((self.image_size - resized_width) / 2.0 - 0.1)
+            pad_y = round((self.image_size - resized_height) / 2.0 - 0.1)
+            canvas = np.full((self.image_size, self.image_size, 3), 114, dtype=np.uint8)
+            canvas[
+                pad_y:pad_y + resized_height,
+                pad_x:pad_x + resized_width,
+            ] = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
+            prepared.append(np.ascontiguousarray(canvas[:, :, ::-1].transpose(2, 0, 1)))
+            transforms.append((gain, pad_x, pad_y, width, height))
+        tensor = torch.from_numpy(np.stack(prepared)).to(
+            device=self._torchscript_detection_device, dtype=torch.float32
+        ).div_(255.0)
+        with torch.inference_mode():
+            raw = self._torchscript_detection_model(tensor)
+            predictions = raw[0] if isinstance(raw, (tuple, list)) else raw
+        if predictions.ndim != 3 or predictions.shape[0] != len(images_bgr) or predictions.shape[1] < 5:
+            raise BatchContractError(
+                f"unexpected one-class raw prediction shape {tuple(predictions.shape)}"
+            )
+        selections: list[dict[str, Any]] = []
+        for prediction, (gain, pad_x, pad_y, width, height) in zip(predictions, transforms, strict=True):
+            # In the one-class export the score channel is index four. NMS
+            # always retains its global maximum first, so directly selecting
+            # that element is exactly the bbox-only observable while avoiding
+            # multi-second suppression over irrelevant low-score anchors.
+            score, index = torch.max(prediction[4], dim=0)
+            score = float(score.item())
+            if score < self.confidence_threshold:
+                selections.append({
+                    "detected": False, "detected_after_threshold": False,
+                    "raw_best_score": 0.0, "selected_score": 0.0, "confidence": 0.0,
+                    "best_class_id": math.nan, "class_id": math.nan, "bbox_xyxy": None,
+                    "mask_area": math.nan, "mask_bottom_u": math.nan, "mask_bottom_v": math.nan,
+                    "selected_u": math.nan, "selected_v": math.nan,
+                    "selected_pixel_source": "none", "mask_available": 0,
+                    "n_candidates": 0, "detection": None,
+                })
+                continue
+            best_xywh = prediction[:4, index].detach().cpu().numpy().astype(float)
+            center_x, center_y, box_width, box_height = best_xywh
+            bbox = np.asarray([
+                center_x - box_width / 2.0,
+                center_y - box_height / 2.0,
+                center_x + box_width / 2.0,
+                center_y + box_height / 2.0,
+            ])
+            bbox[[0, 2]] = (bbox[[0, 2]] - float(pad_x)) / gain
+            bbox[[1, 3]] = (bbox[[1, 3]] - float(pad_y)) / gain
+            bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0.0, float(width - 1))
+            bbox[[1, 3]] = np.clip(bbox[[1, 3]], 0.0, float(height - 1))
+            selections.append({
+                "detected": True, "detected_after_threshold": True,
+                "raw_best_score": score, "selected_score": score, "confidence": score,
+                "best_class_id": 0, "class_id": 0, "bbox_xyxy": bbox,
+                "mask_area": math.nan, "mask_bottom_u": math.nan, "mask_bottom_v": math.nan,
+                "bbox_bottom_u": float(0.5 * (bbox[0] + bbox[2])),
+                "bbox_bottom_v": float(bbox[3]),
+                "selected_u": float(0.5 * (bbox[0] + bbox[2])), "selected_v": float(bbox[3]),
+                "selected_pixel_source": "bbox_bottom", "mask_available": 0,
+                "n_candidates": 1, "detection": None,
+            })
+        return selections
 
     def _warn_bounded(self, key: str, message: str) -> None:
         count = self._warning_counts.get(key, 0) + 1
@@ -716,7 +852,12 @@ class BatchedFourCameraYoloNode(Node):
         predict_start_stamp_s = self._clock_s()
         predict_start_wall_s = time.perf_counter()
         try:
-            raw_results = self._predict_batch(images)
+            selections = (
+                self._predict_detection_only(images)
+                if self.torchscript_detection_only
+                else None
+            )
+            raw_results = None if selections is not None else self._predict_batch(images)
         except Exception as exc:
             elapsed_ms = max((time.perf_counter() - predict_start_wall_s) * 1.0e3, 0.0)
             self._fatal(
@@ -732,15 +873,18 @@ class BatchedFourCameraYoloNode(Node):
                 (time.perf_counter() - predict_start_wall_s) * 1.0e3, 0.0
             ),
         )
+        prepared: list[dict[str, Any]] = []
         try:
-            results = validate_batch_results(raw_results, len(batch))
+            results = None if selections is not None else validate_batch_results(raw_results, len(batch))
         except BatchContractError as exc:
             self._fatal(f"malformed four-camera results: {exc}", exc)
-
-        prepared: list[dict[str, Any]] = []
-        for item, image, result in zip(batch, images, results, strict=True):
+        for index, (item, image) in enumerate(zip(batch, images, strict=True)):
             try:
-                prepared.append(self._prepare_result(result))
+                prepared.append(
+                    self._prepare_selection(selections[index])
+                    if selections is not None
+                    else self._prepare_result(results[index])
+                )
             except Exception as exc:
                 self._fatal(
                     f"malformed result contract for {item.camera_id}: {exc}",
@@ -761,6 +905,10 @@ class BatchedFourCameraYoloNode(Node):
             mask_min_area=self.mask_min_area,
             mask_bottom_band_px=self.mask_bottom_band_px,
         )
+        return self._prepare_selection(selection)
+
+    def _prepare_selection(self, selection: dict[str, Any]) -> dict[str, Any]:
+        selection = dict(selection)
         bbox = selection.get("bbox_xyxy")
         if bbox is not None and self.min_bbox_area_px > 0.0:
             x0, y0, x1, y1 = np.asarray(bbox, dtype=float).reshape(4)

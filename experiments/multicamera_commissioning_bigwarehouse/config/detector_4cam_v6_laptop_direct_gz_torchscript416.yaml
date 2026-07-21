@@ -56,7 +56,10 @@ runtime_pilot:
     yolo_runtime_backend: torchscript
     yolo_compiled_model: logs/perception_models/warehouse_yolo_detector_v1/compiled/warehouse_yolo_detector_416_batch4.torchscript
     yolo_imgsz: 416
-    yolo_async_coalesce_wall_s: 0.02
+    # Camera transport arrivals are phase-offset. A 20 ms drain produced
+    # mostly one-frame microbatches; 150 ms retains one newest frame per camera
+    # long enough to form the intended four-image GPU batch.
+    yolo_async_coalesce_wall_s: 0.15
   model_format: source_checkpoint_plus_fixed_shape_torchscript
   source_checkpoint_sha256: cd77b4b79d8d7f79bcc02b40aadd1bca99449b4498d87b003a32c53f12237a87
   compiled_model_sha256: f367cf8f88e2c700240037bfdb2aeac3f59421a52e4c6b0beddd8e927b4ce849
@@ -78,9 +81,19 @@ runtime_pilot:
   measured_rate_probe:
     date: 2026-07-20
     source_image_size: [640, 360]
-    output_wall_hz: {camera_A: 3.386, camera_B: 3.387, camera_C: 3.391, camera_D: 3.391}
+    invalidated_measurement:
+      output_wall_hz: {camera_A: 3.386, camera_B: 3.387, camera_C: 3.391, camera_D: 3.391}
+      reason: >-
+        TorchScript lost the source segmentation-task metadata and was then
+        interpreted as a detect model. That run did not preserve the source
+        output contract and cannot qualify this successor.
+    corrected_runtime_probe:
+      processing_rate_per_camera_hz: approximately_1.2
+      reason: >-
+        Explicit task=segment restores native-equivalent selections, but the
+        full simulator runtime remains below the 3 Hz gate.
     measurement_policy: four_CameraObservation_topics_only_no_raw_image_monitor_subscribers
-    status: rate_gate_only_passed_all_other_evidence_gates_pending
+    status: failed_after_correct_segmentation_contract
   separate_process_fallback:
     runtime_executable: yolo_robot_detector_node
     model_instances: 4

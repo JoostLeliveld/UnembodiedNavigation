@@ -8,11 +8,16 @@ detection outputs remain unchanged.
 
 ## Rate result
 
-On 2026-07-20, the isolated laptop rate probe measured `CameraObservation`
-wall-clock output rates of 3.386 Hz (A), 3.387 Hz (B), 3.391 Hz (C), and 3.391
-Hz (D). The source resolution was unchanged at 640×360. Only small output
-topics were observed; raw image monitors are prohibited because they add image
-deserialization load and perturb the measurement.
+An initial 2026-07-20 rate probe reported `CameraObservation` wall-clock
+output rates near 3.39 Hz per camera. That result is invalid: the TorchScript
+artifact lost the source segmentation-task metadata and was interpreted as a
+detection model, so it did not preserve the source output contract.
+
+With `task=segment` explicitly restored, detector selection agrees with the
+native source checkpoint on 64 held-out images, but full four-camera simulator
+integration processes only approximately 1.2 frames/s per camera. The runtime
+therefore fails the 3 Hz gate. Source resolution remains 640×360; only small
+output topics were observed, since raw-image monitors perturb the measurement.
 
 ## Status
 

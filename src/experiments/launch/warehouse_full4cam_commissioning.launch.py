@@ -113,6 +113,7 @@ def _batched_detector_node() -> Node:
             "model_path": LaunchConfiguration("yolo_model"),
             "runtime_backend": LaunchConfiguration("yolo_runtime_backend"),
             "compiled_model_path": LaunchConfiguration("yolo_compiled_model"),
+            "torchscript_detection_only": LaunchConfiguration("yolo_torchscript_detection_only"),
             "device": ParameterValue(
                 LaunchConfiguration("yolo_batched_device"), value_type=str
             ),
@@ -165,8 +166,12 @@ def generate_launch_description() -> LaunchDescription:
             "reset_world": LaunchConfiguration("reset_world"),
             "use_lidar": "false",
             "bridge_scan": "false",
-            # In direct_gz diagnostic mode, B--D are consumed directly by the
-            # detector and must not pay an unnecessary gz->ROS image copy.
+            # In direct_gz diagnostic mode, all cameras are consumed directly
+            # by the detector and must not pay unnecessary gz->ROS image copies.
+            "bridge_camera_a": PythonExpression([
+                "'false' if '", LaunchConfiguration("yolo_input_transport"),
+                "'.lower() == 'direct_gz' else 'true'",
+            ]),
             "bridge_camera_b": PythonExpression([
                 "'false' if '", LaunchConfiguration("yolo_input_transport"),
                 "'.lower() == 'direct_gz' else 'true'",
@@ -276,6 +281,10 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument(
             "yolo_compiled_model", default_value="",
             description="Explicit .torchscript path for the diagnostic compiled backend",
+        ),
+        DeclareLaunchArgument(
+            "yolo_torchscript_detection_only", default_value="false",
+            description="Diagnostic compiled bbox-only postprocess; requires use_masks:=false and positive confidence threshold.",
         ),
         DeclareLaunchArgument("yolo_device", default_value=""),
         DeclareLaunchArgument(
