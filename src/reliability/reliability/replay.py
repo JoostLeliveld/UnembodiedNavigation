@@ -11,6 +11,12 @@ from reliability.camera_manager import CameraManager, CameraManagerConfig
 from reliability.contracts import CameraQuality, ContractValidationError
 from reliability.fusion import MapObservation, SequentialFusionResult, sequential_kalman_update_2d
 from reliability.handover import HandoverUncertaintyConfig, HandoverUncertaintyDiagnostic, handover_adjusted_observation
+from reliability.health_ewma import (
+    HealthDebouncer,
+    HealthDebouncerConfig,
+    InnovationHealthConfig,
+    InnovationHealthMonitor,
+)
 from reliability.providers import CameraReliabilityProvider
 
 
@@ -24,6 +30,7 @@ class ReplayMode(str, Enum):
     CONSERVATIVE_SELECTION = "M6_conservative_selection"
     HANDOVER_AWARE_SELECTION = "M7_handover_aware_selection"
     HYSTERETIC_HANDOVER_SELECTION = "M8_hysteretic_handover_selection"
+    HEALTH_AWARE_FUSION = "B6_health_aware_fusion"
 
 
 @dataclass(frozen=True)
@@ -61,6 +68,15 @@ class ReplayConfig:
     quality_providers: Mapping[str, CameraReliabilityProvider] = field(default_factory=dict)
     handover_config: HandoverUncertaintyConfig = field(default_factory=HandoverUncertaintyConfig)
     camera_manager_config: CameraManagerConfig = field(default_factory=CameraManagerConfig)
+    # B6 health-aware fusion (HEALTH_AWARE_FUSION mode) — see _health_aware_observations.
+    health_config: InnovationHealthConfig | None = None
+    health_debouncer_config: HealthDebouncerConfig | None = None
+    # health below this = "inconsistent" for the debouncer. Nominal health is
+    # ~sigmoid(eta0)=0.95, so 0.7 flags a meaningful drop while sparing healthy
+    # cameras. PROVISIONAL default — the fault-containment pre-registration
+    # finalizes it (and eta/rho) on the pilot before the confirmatory campaign.
+    health_inflate_threshold: float = 0.7
+    health_suspect_inflation: float = 9.0
 
 
 @dataclass(frozen=True)
@@ -73,6 +89,8 @@ class ReplayStep:
     nis_by_camera: dict[str, float]
     handover_diagnostics: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     camera_manager_decision: dict[str, Any] = field(default_factory=dict)
+    health_by_camera: dict[str, float] = field(default_factory=dict)
+    health_state_by_camera: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -131,6 +149,8 @@ def run_replay(
     previous_selected_camera_id: str | None = None
     previous_selected_observation: MapObservation | None = None
     camera_manager = CameraManager(config.camera_manager_config)
+    health_monitors: dict[str, InnovationHealthMonitor] = {}
+    health_debouncers: dict[str, HealthDebouncer] = {}
 
     for idx, frame in enumerate(ordered):
         if idx > 0:
@@ -143,6 +163,8 @@ def run_replay(
         handover_diagnostics: tuple[HandoverUncertaintyDiagnostic, ...] = tuple()
         selected_handover_observation: MapObservation | None = None
         camera_manager_decision: dict[str, Any] = {}
+        frame_health: dict[str, float] = {}
+        frame_health_state: dict[str, str] = {}
         if config.mode == ReplayMode.HANDOVER_AWARE_SELECTION:
             replay_obs, handover_diagnostics, selected_handover_observation = _handover_observations_for_config(
                 frame.observations,
@@ -172,6 +194,15 @@ def run_replay(
             )
             replay_obs = (adjusted,) if adjusted is not None else tuple()
             handover_diagnostics = (diagnostic,)
+        elif config.mode == ReplayMode.HEALTH_AWARE_FUSION:
+            replay_obs, frame_health, frame_health_state = _health_aware_observations(
+                frame.observations,
+                mean,
+                cov,
+                health_monitors,
+                health_debouncers,
+                config,
+            )
         else:
             replay_obs = _observations_for_config(
                 frame.observations,
@@ -220,6 +251,8 @@ def run_replay(
                 nis_by_camera=fusion.nis_by_camera,
                 handover_diagnostics=tuple(item.to_dict() for item in handover_diagnostics),
                 camera_manager_decision=camera_manager_decision,
+                health_by_camera=dict(frame_health),
+                health_state_by_camera=dict(frame_health_state),
             )
         )
 
@@ -342,6 +375,86 @@ def _observations_for_config(
         selected = _select_quality_observation(candidates)
         return (selected,)
     return tuple(observations)
+
+
+def _health_aware_observations(
+    observations: Sequence[MapObservation],
+    mean_xy: Sequence[float],
+    cov: tuple[tuple[float, float], tuple[float, float]],
+    monitors: dict[str, InnovationHealthMonitor],
+    debouncers: dict[str, HealthDebouncer],
+    config: ReplayConfig,
+) -> tuple[tuple[MapObservation, ...], dict[str, float], dict[str, str]]:
+    """B6 full method: per-camera innovation-health gating on top of fusion.
+
+    For each observation this frame we compute its innovation and NIS against the
+    current (frame-prior) belief, feed a PERSISTENT per-camera
+    :class:`InnovationHealthMonitor` + :class:`HealthDebouncer`, and act on the
+    debounced state:
+
+    - HEALTHY   -> accept the observation unchanged;
+    - SUSPECT / RECOVERING -> inflate its covariance by ``health_suspect_inflation``
+      (down-weight without discarding);
+    - DEGRADED  -> reject it (drop from the update).
+
+    The debouncer's consistency signal is ``NIS <= gate AND health >= threshold``.
+    Using the continuous health (not the raw per-frame NIS gate alone) is what lets
+    B6 catch the *gate-evading moderate-drift band*: a persistent moderate bias keeps
+    each frame's NIS below the gate yet erodes the NIS/bias EWMA, so health falls,
+    the debouncer trips SUSPECT->DEGRADED, and the drifting camera is contained —
+    exactly the mechanism WP5 validated single-camera. GROUND TRUTH IS NEVER USED:
+    innovation is measurement-minus-prior, all operational.
+    """
+
+    health_cfg = config.health_config or InnovationHealthConfig()
+    deb_cfg = config.health_debouncer_config or HealthDebouncerConfig()
+    gate = config.nis_gate if config.nis_gate is not None else 9.21
+    inflation = float(config.health_suspect_inflation)
+    threshold = float(config.health_inflate_threshold)
+
+    accepted: list[MapObservation] = []
+    health_vals: dict[str, float] = {}
+    health_states: dict[str, str] = {}
+    for obs in observations:
+        cam = obs.camera_id
+        monitor = monitors.get(cam)
+        if monitor is None:
+            monitor = InnovationHealthMonitor(cam, health_cfg)
+            monitors[cam] = monitor
+        debouncer = debouncers.get(cam)
+        if debouncer is None:
+            debouncer = HealthDebouncer(deb_cfg)
+            debouncers[cam] = debouncer
+
+        innovation = (obs.xy_m[0] - mean_xy[0], obs.xy_m[1] - mean_xy[1])
+        innovation_cov = _mat_add(cov, obs.covariance_m2)
+        try:
+            nis = _quad_form_inverse_2x2(innovation, innovation_cov)
+        except ContractValidationError:
+            nis = math.inf
+
+        health = monitor.update(
+            nis=(nis if math.isfinite(nis) else None),
+            innovation_uv=innovation,
+            dropped=False,
+        )
+        consistent = math.isfinite(nis) and nis <= gate and health >= threshold
+        state = debouncer.step(consistent)
+        health_vals[cam] = health
+        health_states[cam] = state.value
+
+        policy = HealthDebouncer.response_policy(state)
+        if policy == "reject":
+            continue
+        if policy in ("inflate", "slow_reentry"):
+            inflated = (
+                (obs.covariance_m2[0][0] * inflation, obs.covariance_m2[0][1] * inflation),
+                (obs.covariance_m2[1][0] * inflation, obs.covariance_m2[1][1] * inflation),
+            )
+            accepted.append(_with_cov(obs, inflated, "health_inflated"))
+        else:
+            accepted.append(obs)
+    return tuple(accepted), health_vals, health_states
 
 
 def _handover_observations_for_config(

@@ -187,6 +187,11 @@ from reliability.toro_baseline import (
     bin_observations,
     constant_velocity_predict,
 )
+from reliability.toro_filter import (
+    ToroFilterConfig,
+    ToroFilterResult,
+    run_toro_filter,
+)
 from reliability.trust_stacker import (
     TrustFeatures,
     TrustStacker,
@@ -372,6 +377,9 @@ __all__ = [
     "ToroCovarianceModel",
     "bin_observations",
     "constant_velocity_predict",
+    "ToroFilterConfig",
+    "ToroFilterResult",
+    "run_toro_filter",
     "TrustFeatures",
     "TrustStacker",
     "split_groups",
