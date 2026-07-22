@@ -154,14 +154,22 @@ band is the **pre-declared primary analysis window** for H-E6 (the pilot showed 
   constant position-bias proxy (a 1° yaw barely moves a near point, badly moves a far one). Tests:
   10 in `test_calibration_perturbation.py`. This is now the **primary** E6 fault model; the
   position-bias proxy in `run_containment_pilot` is retained only as a coarse secondary.
+- **Pilot integration — DONE**: `run_containment_pilot` now takes `--fault-model
+  position|calibration` (calibration builds a `PinholeGroundCamera` per camera from the
+  world SDF and injects the faithful yaw drift) and, when run with
+  `--fusion-mode HEALTH_AWARE_FUSION`, emits the **detection table** (delay/isolation/FAR +
+  §5 stop rule) alongside `Δ_fault` in a single pass — including one nominal (no-fault)
+  episode for the false-alarm rate. Tests: 5 fixture-free plumbing tests in
+  `test_containment_pilot.py` (incl. B6 catching a gross persistent drift end-to-end).
 
 **Must build before the confirmatory campaign (blocking, ranked):**
-1. **Wire the calibration perturbation into the sweep**: swap `replay_sweeps.run_calibration_drift_sweep`
-   / `run_containment_pilot` from the position-bias proxy to `perturb_camera_calibration`
-   (needs the per-camera `PinholeGroundCamera` reconstructed from the deployed calibration).
-2. **B5 GP+confidence** and **B9 oracle-removal** conditions.
-3. **Wire the detection scoring into `run_containment_pilot`** so a real capture emits the
-   detection table alongside `Δ_fault` in one pass.
+1. **B5 GP+confidence** and **B9 oracle-removal** conditions (the remaining §3 methods).
+2. *(optional)* mirror the pluggable fault model into `replay_sweeps.run_calibration_drift_sweep`
+   so the standalone severity sweeps also use the faithful calibration fault.
+
+Everything else the load-bearing block needs is now code-complete; the binding constraint
+is **data** — the detector must reach gate (§9) and a multi-session handover capture must
+exist before any confirmatory Δ_fault / detection number is produced.
 
 ## 8. Data requirements (§18)
 

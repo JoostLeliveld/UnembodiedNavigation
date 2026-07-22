@@ -23,6 +23,10 @@ sys.path.insert(0, str(ROOT / "src" / "reliability"))
 sys.path.insert(0, str(ROOT / "experiments" / "multicamera_fusion_extension" / "tools"))
 
 import run_containment_pilot as pilot  # noqa: E402
+from reliability.calibration_perturbation import PinholeGroundCamera  # noqa: E402
+from reliability.contracts import CameraQuality  # noqa: E402
+from reliability.fusion import MapObservation  # noqa: E402
+from reliability.replay import EvaluationFrame, ReplayConfig, ReplayFrame, ReplayMode  # noqa: E402
 
 _CANDIDATES = (
     "logs/studies/multicamera_commissioning_bigwarehouse/gt_validation_smoke2_20260716",
@@ -81,3 +85,88 @@ def test_healthy_full_set_error_is_sane(res):
     # real belief-vs-GT error is small (campaign-metrics: p95 ~0.13 m); a heavy tail
     # would signal the bridge grabbed a stale/wrong position column.
     assert 0.0 < res["p95_healthy_full_m"] < 1.0
+
+
+# --------------------------------------------------------------------------- #
+# Fixture-free plumbing tests for the fault models + detection wiring.
+# Synthetic frames; correctness only, not evidence.
+# --------------------------------------------------------------------------- #
+def _obs(camera_id, t, xy):
+    return MapObservation(
+        camera_id=camera_id, timestamp_s=float(t), xy_m=(float(xy[0]), float(xy[1])),
+        covariance_m2=((0.05**2, 0.0), (0.0, 0.05**2)),
+        quality=CameraQuality(camera_id=camera_id, p_available=0.9),
+    )
+
+
+def _two_camera_scenario(n=40):
+    """Robot creeps along +x; camA + camB both accurate; odom perfectly anchors."""
+    frames, evals = [], []
+    for i in range(n):
+        t = 0.1 * i
+        truth = (1.0 + 0.03 * i, 0.0)
+        frames.append(ReplayFrame(
+            timestamp_s=t, odometry_xy_m=truth,
+            observations=(_obs("camA", t, truth), _obs("camB", t, truth)),
+        ))
+        evals.append(EvaluationFrame(timestamp_s=t, truth_xy_m=truth))
+    return frames, evals
+
+
+def test_position_fault_fn_biases_only_target():
+    frames, _ = _two_camera_scenario(3)
+    fn = pilot.position_fault_fn()
+    out = fn(frames, "camA", 0.5)
+    by_cam = {o.camera_id: o for o in out[0].observations}
+    assert by_cam["camA"].xy_m[0] == pytest.approx(frames[0].observations[0].xy_m[0] + 0.5)
+    assert by_cam["camB"].xy_m == frames[0].observations[1].xy_m  # untouched
+
+
+def test_calibration_fault_fn_reprojects_target():
+    frames, _ = _two_camera_scenario(3)
+    cam = PinholeGroundCamera.looking_at((0.0, 0.0, 6.0), (4.0, 0.0, 0.0), fov_h_deg=90.0)
+    fn = pilot.calibration_fault_fn({"camA": cam})
+    out = fn(frames, "camA", 2.0)
+    by_cam = {o.camera_id: o for o in out[0].observations}
+    assert by_cam["camA"].xy_m != frames[0].observations[0].xy_m  # yaw drift moved it
+    assert by_cam["camB"].xy_m == frames[0].observations[1].xy_m  # untouched
+
+
+def test_delta_fault_for_camera_structured():
+    frames, evals = _two_camera_scenario()
+    cfg = ReplayConfig(mode=ReplayMode.SEQUENTIAL_FUSION, nis_gate=9.21)
+    rows = pilot.delta_fault_for_camera(
+        frames, evals, "camA", cfg, fault_fn=pilot.position_fault_fn(), severities=(0.2, 0.5))
+    assert len(rows) == 2
+    assert {r["bias_m"] for r in rows} == {0.2, 0.5}
+    assert len({r["p95_dropped_m"] for r in rows}) == 1  # dropped baseline is severity-independent
+    for r in rows:
+        assert math.isfinite(r["delta_fault_m"])
+
+
+def test_detection_for_camera_scores_b6_and_catches_gross_drift():
+    frames, evals = _two_camera_scenario()
+    cfg = ReplayConfig(mode=ReplayMode.HEALTH_AWARE_FUSION, nis_gate=9.21)
+    out = pilot.detection_for_camera(
+        frames, evals, "camA", cfg, fault_fn=pilot.position_fault_fn(), severities=(0.3, 1.0))
+    assert [s for s, _ in out] == [0.3, 1.0]
+    for _s, det in out:
+        assert det.faulted_camera == "camA"
+        assert det.episode.startswith("camA@")
+    gross = dict(out)[1.0]
+    assert gross.detected is True  # a 1.0 m persistent bias is flagged by the health monitor
+
+
+def test_build_camera_models_from_world(tmp_path):
+    sdf = tmp_path / "world.sdf"
+    sdf.write_text(
+        "<sdf version='1.7'><world name='w'>"
+        "<include><name>camera_A</name><uri>model://cam</uri><pose>0 0 6 0 0.9 0</pose></include>"
+        "</world></sdf>",
+        encoding="utf-8",
+    )
+    models = pilot.build_camera_models_from_world(sdf, ["camera_A"])
+    assert "camera_A" in models
+    assert isinstance(models["camera_A"], PinholeGroundCamera)
+    # the model can project a ground point in front of it
+    assert models["camera_A"].world_to_pixel((4.0, 0.0)) is not None
