@@ -150,6 +150,7 @@ def run_one(out: Path, *, domain: int, task: str, condition: str, fault: str,
             fault_after_s: float, lookat_drift: str, drift_ramp_s: float,
             run_timeout_after_first_cmd_s: float, hard_timeout_s: float,
             seed: int = 0, safe_stop: bool = False, health_gate: bool = False,
+            health_gate_health_below: float = 0.0,
             nis_threshold: float | None = None, partition: str = "tier1pilot",
             require_free: bool = True) -> dict:
     """Run ONE isolated real-Gazebo cell; return a metrics dict. Collision-safe.
@@ -191,9 +192,12 @@ def run_one(out: Path, *, domain: int, task: str, condition: str, fault: str,
                "--drift-ramp-s", str(drift_ramp_s)], "injector.log")
         spawn([sys.executable, str(HEALTH), "--log-csv", str(health_csv)], "health.log")
         if health_gate:
-            spawn([sys.executable, str(MGATE), "--in-topic", "/perception/pixel_pose_faulted",
-                   "--out-topic", "/perception/pixel_pose_health_gated",
-                   "--degraded-topic", "/reliability/localization_degraded"], "mgate.log")
+            mgate_cmd = [sys.executable, str(MGATE), "--in-topic", "/perception/pixel_pose_faulted",
+                         "--out-topic", "/perception/pixel_pose_health_gated",
+                         "--degraded-topic", "/reliability/localization_degraded"]
+            if health_gate_health_below > 0.0:
+                mgate_cmd += ["--trigger-health-below", str(health_gate_health_below)]
+            spawn(mgate_cmd, "mgate.log")
         if safe_stop:
             spawn([sys.executable, str(GATE), "--in-topic", "/cmd_vel_pregate",
                    "--out-topic", "/cmd_vel", "--degraded-topic", "/reliability/localization_degraded",
@@ -231,6 +235,7 @@ def run_one(out: Path, *, domain: int, task: str, condition: str, fault: str,
     m["runner_rc"] = runner_rc
     m["safe_stop"] = safe_stop
     m["health_gate"] = health_gate
+    m["health_gate_health_below"] = health_gate_health_below
     m["nis_threshold"] = nis_threshold
     m["seed"] = seed
     return m
