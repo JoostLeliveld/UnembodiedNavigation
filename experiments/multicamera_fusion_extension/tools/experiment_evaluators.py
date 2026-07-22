@@ -43,7 +43,7 @@ import importlib
 import math
 from pathlib import Path
 import sys
-from typing import Sequence
+from typing import Mapping, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -52,11 +52,13 @@ sys.path.insert(0, str(ROOT / "src" / "reliability"))
 from reliability.conditional_covariance import chi2_coverage, matrix_nll, sharpness  # noqa: E402
 from reliability.campaign_statistics import (  # noqa: E402
     Leaf,
+    ProportionEstimate,
     Verdict,
     hierarchical_bootstrap,
     mean,
     median,
     percentile,
+    wilson_interval,
 )
 
 Pair = Sequence[float]
@@ -399,4 +401,257 @@ def reliability_prediction_gate(
         passed=all(criteria.values()),
         criteria=criteria,
         notes="§21 E1 combined-beats-both gate",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# E5 / E6 — fault detection & isolation from the health-state timeline.
+#
+# The health monitor (reliability.health_ewma, run inside
+# ReplayMode.HEALTH_AWARE_FUSION) uses NO ground truth. THIS scoring does: it
+# compares the monitor's DEGRADED flags against the KNOWN injected fault (a
+# controlled experimental variable, not sensor GT) — which is exactly why it is
+# firewalled study code. It feeds the pre-registered detection gate and the
+# critical-failure stop rule (a monitor that removes healthy cameras at least as
+# often as it catches faulty ones must not be used downstream).
+# --------------------------------------------------------------------------- #
+
+_DEGRADED = "DEGRADED"
+_NON_HEALTHY = ("SUSPECT", "DEGRADED", "RECOVERING")
+# ≥3 co-visible cameras are needed to attribute a fault to ONE camera; with 2 the
+# evidence is ambiguous (pre-reg §2 / §11.3 caveat), so isolation is not scored.
+_MIN_CAMERAS_FOR_ISOLATION = 3
+DEFAULT_NOMINAL_FAR_GATE = 0.02  # pre-reg §5 (WP5 measured 0.000 over 3700 frames)
+
+# One health-state timeline entry: (timestamp_s, {camera_id: state}). A caller
+# builds it from a replay result via
+# ``[(s.timestamp_s, s.health_state_by_camera) for s in result.steps]``.
+HealthTimeline = Sequence["tuple[float, Mapping[str, str]]"]
+
+
+@dataclass(frozen=True)
+class FaultDetectionResult:
+    """Per-episode fault-detection outcome (E5/E6)."""
+
+    episode: str
+    faulted_camera: str | None
+    onset_s: float | None
+    n_cameras: int
+    detected: bool
+    detection_delay_s: float | None
+    escalation_delay_s: float | None  # onset -> first non-HEALTHY of the faulted camera
+    isolated: bool | None  # None when nominal or < 3 cameras (ambiguous)
+    false_alarm: bool
+    false_alarm_cameras: tuple[str, ...]
+
+    def as_row(self) -> dict[str, object]:
+        return {
+            "episode": self.episode,
+            "faulted_camera": self.faulted_camera,
+            "onset_s": self.onset_s,
+            "n_cameras": self.n_cameras,
+            "detected": self.detected,
+            "detection_delay_s": self.detection_delay_s,
+            "escalation_delay_s": self.escalation_delay_s,
+            "isolated": self.isolated,
+            "false_alarm": self.false_alarm,
+            "false_alarm_cameras": list(self.false_alarm_cameras),
+        }
+
+
+def _first_state_time(
+    steps: Sequence["tuple[float, Mapping[str, str]]"],
+    camera: str,
+    states: tuple[str, ...],
+    *,
+    at_or_after: float | None,
+) -> float | None:
+    for t, by_cam in steps:
+        if at_or_after is not None and t < at_or_after:
+            continue
+        if str(by_cam.get(camera, "")) in states:
+            return t
+    return None
+
+
+def evaluate_fault_detection(
+    episode: str,
+    timeline: HealthTimeline,
+    *,
+    faulted_camera: str | None = None,
+    onset_s: float | None = None,
+    degraded_state: str = _DEGRADED,
+    min_cameras_for_isolation: int = _MIN_CAMERAS_FOR_ISOLATION,
+) -> FaultDetectionResult:
+    """Score one episode's health-state timeline against the injected fault.
+
+    ``timeline`` is a sequence of ``(timestamp_s, {camera_id: state})``; states are
+    the ``CalibrationHealthState`` values (HEALTHY/SUSPECT/DEGRADED/RECOVERING) that
+    ``ReplayStep.health_state_by_camera`` logs. For a **fault** episode pass the
+    ``faulted_camera`` and its ``onset_s``; for a **nominal** episode leave both
+    ``None`` (only the false-alarm fields are then meaningful).
+
+    Detection is the faulted camera reaching ``degraded_state`` at or after onset;
+    ``escalation_delay_s`` is its first non-HEALTHY state (the earlier *inflate*
+    signal). ``false_alarm_cameras`` are the *other* cameras that ever went
+    DEGRADED — a healthy camera wrongly removed. Isolation (faulted degraded AND no
+    other camera degraded) is scored only with ≥ ``min_cameras_for_isolation``
+    cameras; otherwise it is ``None`` (ambiguous).
+    """
+
+    steps = sorted(
+        ((float(t), dict(by_cam)) for t, by_cam in timeline),
+        key=lambda item: item[0],
+    )
+    cameras: set[str] = set()
+    for _t, by_cam in steps:
+        cameras.update(str(c) for c in by_cam.keys())
+    n_cameras = len(cameras)
+
+    if faulted_camera is not None and onset_s is None:
+        raise ValueError("a fault episode requires onset_s")
+
+    other_degraded = tuple(
+        sorted(
+            cam
+            for cam in cameras
+            if cam != faulted_camera
+            and _first_state_time(steps, cam, (degraded_state,), at_or_after=None) is not None
+        )
+    )
+    false_alarm = len(other_degraded) > 0
+
+    if faulted_camera is None:
+        # Nominal episode: only false alarms are defined.
+        return FaultDetectionResult(
+            episode=str(episode),
+            faulted_camera=None,
+            onset_s=None,
+            n_cameras=n_cameras,
+            detected=False,
+            detection_delay_s=None,
+            escalation_delay_s=None,
+            isolated=None,
+            false_alarm=false_alarm,
+            false_alarm_cameras=other_degraded,
+        )
+
+    onset = float(onset_s)
+    t_degraded = _first_state_time(steps, faulted_camera, (degraded_state,), at_or_after=onset)
+    t_escalated = _first_state_time(steps, faulted_camera, _NON_HEALTHY, at_or_after=onset)
+    detected = t_degraded is not None
+    detection_delay = (t_degraded - onset) if t_degraded is not None else None
+    escalation_delay = (t_escalated - onset) if t_escalated is not None else None
+    isolated: bool | None
+    if n_cameras < int(min_cameras_for_isolation):
+        isolated = None
+    else:
+        isolated = detected and not false_alarm
+
+    return FaultDetectionResult(
+        episode=str(episode),
+        faulted_camera=str(faulted_camera),
+        onset_s=onset,
+        n_cameras=n_cameras,
+        detected=detected,
+        detection_delay_s=detection_delay,
+        escalation_delay_s=escalation_delay,
+        isolated=isolated,
+        false_alarm=false_alarm,
+        false_alarm_cameras=other_degraded,
+    )
+
+
+@dataclass(frozen=True)
+class FaultDetectionSummary:
+    """Campaign-level detection summary + the §5 critical-failure stop rule."""
+
+    n_fault_episodes: int
+    n_nominal_episodes: int
+    detection_rate: ProportionEstimate | None
+    isolation_tpr: ProportionEstimate | None
+    false_isolation_rate: ProportionEstimate | None
+    nominal_far: ProportionEstimate | None
+    median_detection_delay_s: float | None
+    mean_detection_delay_s: float | None
+    stop_rule: Verdict
+
+    def as_row(self) -> dict[str, object]:
+        def _pt(est: ProportionEstimate | None) -> object:
+            return None if est is None else {"point": est.point, "low": est.low, "high": est.high}
+
+        return {
+            "n_fault_episodes": self.n_fault_episodes,
+            "n_nominal_episodes": self.n_nominal_episodes,
+            "detection_rate": _pt(self.detection_rate),
+            "isolation_tpr": _pt(self.isolation_tpr),
+            "false_isolation_rate": _pt(self.false_isolation_rate),
+            "nominal_far": _pt(self.nominal_far),
+            "median_detection_delay_s": self.median_detection_delay_s,
+            "mean_detection_delay_s": self.mean_detection_delay_s,
+            "stop_rule_passed": self.stop_rule.passed,
+        }
+
+
+def summarize_fault_detection(
+    results: Sequence[FaultDetectionResult],
+    *,
+    nominal_far_gate: float = DEFAULT_NOMINAL_FAR_GATE,
+) -> FaultDetectionSummary:
+    """Aggregate per-episode results and evaluate the critical-failure stop rule.
+
+    Stop rule (pre-reg §5, non-negotiable): the health monitor may be used
+    downstream only if isolation-TPR strictly exceeds the false-isolation rate
+    (it must catch faulty cameras more often than it removes healthy ones) AND the
+    nominal false-alarm rate is within ``nominal_far_gate``. Rates use Wilson
+    intervals (§16) because the run counts are small.
+    """
+
+    fault = [r for r in results if r.faulted_camera is not None]
+    nominal = [r for r in results if r.faulted_camera is None]
+
+    detection_rate = (
+        wilson_interval(sum(1 for r in fault if r.detected), len(fault)) if fault else None
+    )
+    iso_eps = [r for r in fault if r.isolated is not None]
+    isolation_tpr = (
+        wilson_interval(sum(1 for r in iso_eps if r.isolated), len(iso_eps)) if iso_eps else None
+    )
+    false_isolation_rate = (
+        wilson_interval(sum(1 for r in fault if r.false_alarm), len(fault)) if fault else None
+    )
+    nominal_far = (
+        wilson_interval(sum(1 for r in nominal if r.false_alarm), len(nominal)) if nominal else None
+    )
+
+    delays = [r.detection_delay_s for r in fault if r.detection_delay_s is not None]
+    median_delay = median(delays) if delays else None
+    mean_delay = mean(delays) if delays else None
+
+    criteria: dict[str, bool] = {}
+    if isolation_tpr is not None and false_isolation_rate is not None:
+        criteria["isolation_exceeds_false_isolation"] = (
+            isolation_tpr.point > false_isolation_rate.point
+        )
+    if nominal_far is not None:
+        criteria["nominal_far_within_gate"] = nominal_far.point <= float(nominal_far_gate)
+    stop_rule = Verdict(
+        passed=bool(criteria) and all(criteria.values()),
+        criteria=criteria,
+        notes=(
+            "§5 critical-failure stop rule: isolation-TPR must exceed false-isolation "
+            f"rate AND nominal FAR ≤ {float(nominal_far_gate):g}"
+        ),
+    )
+
+    return FaultDetectionSummary(
+        n_fault_episodes=len(fault),
+        n_nominal_episodes=len(nominal),
+        detection_rate=detection_rate,
+        isolation_tpr=isolation_tpr,
+        false_isolation_rate=false_isolation_rate,
+        nominal_far=nominal_far,
+        median_detection_delay_s=median_delay,
+        mean_detection_delay_s=mean_delay,
+        stop_rule=stop_rule,
     )

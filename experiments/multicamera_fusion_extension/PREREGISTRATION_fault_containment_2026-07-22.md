@@ -129,26 +129,30 @@ band is the **pre-declared primary analysis window** for H-E6 (the pilot showed 
 - E6 `Δ_fault` via the **position-bias proxy** through M5/M6/M7/M8 + R0–R4
   (`run_containment_pilot`), and `error_severity_auc`.
 
-**Built since (2026-07-22):**
+**Built since (2026-07-22) — committed:**
 - **B2 Toro baseline — DONE** as a standalone constant-velocity Kalman filter
   ([`toro_filter.py`](../../src/reliability/reliability/toro_filter.py), `run_toro_filter`),
   NOT a `ReplayMode`: Toro uses a CV/no-odometry temporal model, so it is a separate
   estimator (nearest-point covariance + validated-FOV gate + B2a-simultaneous / B2b-sequential
   variants), scored through the SAME `compute_replay_metrics` for paired comparability. Tests:
   `tests/reliability/test_toro_filter.py` (9, synthetic plumbing only — not evidence).
-- **B6 health-aware fusion — IN PROGRESS** (owned by the concurrent `replay.py` workstream):
-  `ReplayMode.HEALTH_AWARE_FUSION` + per-step health logging have landed; test suite and the
-  detection-metric scoring below are queued against the landed API once it settles.
+- **B6 health-aware fusion — DONE**: `ReplayMode.HEALTH_AWARE_FUSION` (per-camera
+  innovation-health → inflate SUSPECT / reject DEGRADED) + per-step health-state logging;
+  `run_containment_pilot --fusion-mode M5|B6`. Tests: `test_health_aware_fusion.py`,
+  `test_containment_pilot.py`.
+- **Detection-metric scoring — DONE**: `evaluate_fault_detection` / `summarize_fault_detection`
+  in [`experiment_evaluators.py`](tools/experiment_evaluators.py) compute detection delay,
+  escalation delay, isolation accuracy and false-alarm rate from the health-state timeline,
+  with Wilson intervals and the §5 **critical-failure stop rule** as a `Verdict`. Firewalled
+  study code (it compares against the injected fault). Tests: 10 in `test_experiment_evaluators.py`.
 
 **Must build before the confirmatory campaign (blocking, ranked):**
-1. **Health-state timeseries scoring** → detection delay / isolation / FAR (§4) from the
-   per-step health logs `replay.py` now emits. All detection metrics depend on it.
-2. **True calibration-parameter perturbation + re-projection** (yaw/pitch/roll/translation/
+1. **True calibration-parameter perturbation + re-projection** (yaw/pitch/roll/translation/
    pp/focal through the camera model), replacing the position-bias proxy as the primary E6
    fault model. Position-bias remains a coarse secondary.
-3. **B5 GP+confidence** and **B9 oracle-removal** conditions.
-4. **B6 test suite** (against the landed `HEALTH_AWARE_FUSION` API): monotone inflation, PSD,
-   gate-evading-drift rejection, robust-ablation gap, zero false alarms on clean data.
+2. **B5 GP+confidence** and **B9 oracle-removal** conditions.
+3. **Wire the detection scoring into `run_containment_pilot`** so a real capture emits the
+   detection table alongside `Δ_fault` in one pass.
 
 ## 8. Data requirements (§18)
 

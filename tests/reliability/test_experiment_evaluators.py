@@ -16,10 +16,13 @@ sys.path.insert(0, str(ROOT / "experiments" / "multicamera_fusion_extension" / "
 
 from experiment_evaluators import (  # noqa: E402
     NOMINAL_COVERAGE,
+    FaultDetectionResult,
     compare_covariance_methods,
     evaluate_covariance_calibration,
+    evaluate_fault_detection,
     evaluate_reliability_prediction,
     reliability_prediction_gate,
+    summarize_fault_detection,
 )
 
 
@@ -191,3 +194,133 @@ def test_reliability_prediction_guards() -> None:
         evaluate_reliability_prediction("m", [0.5, 0.5], [0.0, 0.5])   # non-binary label
     with pytest.raises(ValueError):
         evaluate_reliability_prediction("m", combined, y, groups=["a", "b"])  # misaligned
+
+
+# --------------------------------------------------------------------------- #
+# E5 / E6 — fault detection & isolation
+# --------------------------------------------------------------------------- #
+def _degrade_episode(faulted, onset, delay, cams=("A", "B", "C"), false_cam=None):
+    healthy = {c: "HEALTHY" for c in cams}
+    degraded = dict(healthy)
+    degraded[faulted] = "DEGRADED"
+    if false_cam:
+        degraded[false_cam] = "DEGRADED"
+    # onset while still healthy; escalate to SUSPECT one step in, DEGRADED at onset+delay
+    suspect = dict(healthy)
+    suspect[faulted] = "SUSPECT"
+    return [
+        (0.0, dict(healthy)),
+        (onset, dict(healthy)),
+        (onset + 0.5 * delay, suspect),
+        (onset + delay, degraded),
+    ]
+
+
+def _nominal_episode(cams=("A", "B", "C"), degrade_cam=None):
+    healthy = {c: "HEALTHY" for c in cams}
+    steps = [(0.0, dict(healthy)), (1.0, dict(healthy))]
+    if degrade_cam:
+        d = dict(healthy)
+        d[degrade_cam] = "DEGRADED"
+        steps.append((2.0, d))
+    return steps
+
+
+def test_fault_detection_detects_isolates_and_times():
+    tl = _degrade_episode("B", onset=1.0, delay=3.0)  # DEGRADED at t=4, SUSPECT at t=2.5
+    r = evaluate_fault_detection("ep", tl, faulted_camera="B", onset_s=1.0)
+    assert r.detected is True
+    assert r.detection_delay_s == pytest.approx(3.0)
+    assert r.escalation_delay_s == pytest.approx(1.5)  # SUSPECT arrives before DEGRADED
+    assert r.escalation_delay_s < r.detection_delay_s
+    assert r.isolated is True
+    assert r.false_alarm is False
+    assert r.n_cameras == 3
+
+
+def test_fault_detection_never_degrades():
+    healthy = {c: "HEALTHY" for c in ("A", "B", "C")}
+    tl = [(float(t), dict(healthy)) for t in range(6)]
+    r = evaluate_fault_detection("ep", tl, faulted_camera="B", onset_s=1.0)
+    assert r.detected is False
+    assert r.detection_delay_s is None
+    assert r.escalation_delay_s is None
+    assert r.isolated is False  # detected False -> not isolated
+    assert r.false_alarm is False
+
+
+def test_fault_detection_isolation_none_with_two_cameras():
+    tl = _degrade_episode("B", onset=1.0, delay=2.0, cams=("A", "B"))
+    r = evaluate_fault_detection("ep", tl, faulted_camera="B", onset_s=1.0)
+    assert r.detected is True
+    assert r.isolated is None  # <3 cameras -> ambiguous
+
+
+def test_fault_detection_false_isolation():
+    tl = _degrade_episode("B", onset=1.0, delay=2.0, false_cam="A")  # a healthy cam also degrades
+    r = evaluate_fault_detection("ep", tl, faulted_camera="B", onset_s=1.0)
+    assert r.detected is True
+    assert r.false_alarm is True
+    assert r.false_alarm_cameras == ("A",)
+    assert r.isolated is False
+
+
+def test_fault_detection_nominal_false_alarm():
+    r_clean = evaluate_fault_detection("n0", _nominal_episode())
+    assert r_clean.false_alarm is False
+    assert r_clean.detected is False
+    assert r_clean.isolated is None
+    r_fa = evaluate_fault_detection("n1", _nominal_episode(degrade_cam="C"))
+    assert r_fa.false_alarm is True
+    assert r_fa.false_alarm_cameras == ("C",)
+
+
+def test_fault_detection_requires_onset():
+    with pytest.raises(ValueError):
+        evaluate_fault_detection("ep", _nominal_episode(), faulted_camera="B")  # onset missing
+
+
+def test_summarize_stop_rule_passes_on_clean_isolation():
+    results = [
+        evaluate_fault_detection(f"f{i}", _degrade_episode("B", 1.0, 1.0 + i), faulted_camera="B", onset_s=1.0)
+        for i in range(5)
+    ] + [evaluate_fault_detection(f"n{i}", _nominal_episode()) for i in range(5)]
+    s = summarize_fault_detection(results)
+    assert s.detection_rate.point == pytest.approx(1.0)
+    assert s.isolation_tpr.point == pytest.approx(1.0)
+    assert s.false_isolation_rate.point == pytest.approx(0.0)
+    assert s.nominal_far.point == pytest.approx(0.0)
+    assert s.median_detection_delay_s is not None
+    assert s.stop_rule.passed is True
+
+
+def test_summarize_stop_rule_fails_on_false_isolation():
+    # Every fault episode also degrades a healthy camera -> false isolation everywhere.
+    results = [
+        evaluate_fault_detection(f"f{i}", _degrade_episode("B", 1.0, 1.0, false_cam="A"), faulted_camera="B", onset_s=1.0)
+        for i in range(4)
+    ]
+    s = summarize_fault_detection(results)
+    assert s.false_isolation_rate.point == pytest.approx(1.0)
+    assert s.isolation_tpr.point == pytest.approx(0.0)
+    assert s.stop_rule.criteria["isolation_exceeds_false_isolation"] is False
+    assert s.stop_rule.passed is False
+
+
+def test_summarize_stop_rule_fails_on_nominal_false_alarms():
+    results = [
+        evaluate_fault_detection(f"f{i}", _degrade_episode("B", 1.0, 1.0), faulted_camera="B", onset_s=1.0)
+        for i in range(4)
+    ] + [evaluate_fault_detection(f"n{i}", _nominal_episode(degrade_cam="A")) for i in range(4)]
+    s = summarize_fault_detection(results)
+    assert s.nominal_far.point == pytest.approx(1.0)
+    assert s.stop_rule.criteria["nominal_far_within_gate"] is False
+    assert s.stop_rule.passed is False
+
+
+def test_fault_detection_result_row_is_serializable():
+    r = evaluate_fault_detection("ep", _degrade_episode("B", 1.0, 2.0), faulted_camera="B", onset_s=1.0)
+    row = r.as_row()
+    assert row["faulted_camera"] == "B"
+    assert row["detected"] is True
+    assert isinstance(FaultDetectionResult(**{**r.__dict__}), FaultDetectionResult)
