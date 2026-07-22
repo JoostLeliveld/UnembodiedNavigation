@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import math
 import sys
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -100,6 +101,7 @@ def main():
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--inflate-h", type=float, default=0.5, help="health below this = inconsistent frame")
     ap.add_argument("--diag-topic", default="/planner/pixel_correction_diagnostics")
+    ap.add_argument("--log-csv", default="", help="if set, append t_wall,h,state_code,nis,nis_ewma,bias,accepted,degraded per frame")
     args = ap.parse_args()
     if args.selftest:
         raise SystemExit(_selftest())
@@ -117,7 +119,12 @@ def main():
             self.create_subscription(Float64MultiArray, args.diag_topic, self._cb, 20)
             self.pub_h = self.create_publisher(Float64MultiArray, "/reliability/localization_health", 10)
             self.pub_d = self.create_publisher(Bool, "/reliability/localization_degraded", 10)
-            self.get_logger().info(f"health monitor up; diag={args.diag_topic} inflate_h={self.inflate_h}")
+            self._csv = None
+            if args.log_csv:
+                self._csv = open(args.log_csv, "w", buffering=1)
+                self._csv.write("t_wall,h,state_code,nis,nis_ewma,bias,accepted,degraded\n")
+            self.get_logger().info(f"health monitor up; diag={args.diag_topic} inflate_h={self.inflate_h}"
+                                   + (f" log_csv={args.log_csv}" if args.log_csv else ""))
 
         def _cb(self, msg):
             d = msg.data
@@ -128,10 +135,15 @@ def main():
             h, state, policy = step_health(self.mon, self.deb, nis=nis, innov_uv=innov,
                                            accepted=accepted, inflate_h=self.inflate_h)
             bias = math.hypot(*self.mon.bias_ewma)
+            degraded = (state == CalibrationHealthState.DEGRADED)
             out = Float64MultiArray()
             out.data = [float(h), STATE_CODE[state], float(self.mon.nis_ewma), float(bias), POLICY_CODE[policy]]
             self.pub_h.publish(out)
-            self.pub_d.publish(Bool(data=(state == CalibrationHealthState.DEGRADED)))
+            self.pub_d.publish(Bool(data=degraded))
+            if self._csv is not None:
+                self._csv.write(f"{time.time():.3f},{h:.4f},{STATE_CODE[state]:.0f},"
+                                f"{nis if math.isfinite(nis) else float('nan'):.4f},"
+                                f"{self.mon.nis_ewma:.4f},{bias:.4f},{int(accepted)},{int(degraded)}\n")
 
     rclpy.init()
     node = HealthNode()
