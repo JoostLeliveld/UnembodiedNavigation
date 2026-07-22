@@ -211,6 +211,10 @@ def generate_launch_description():
                               description='World-pixel measurement topic the planner corrects on. '
                                           'Point at a fault-injector output (e.g. /perception/pixel_pose_faulted) '
                                           'for controlled calibration-fault ablations; default preserves the locked path.'),
+        DeclareLaunchArgument('command_noise_output_topic', default_value='/cmd_vel',
+                              description='Topic the actuation-noise node publishes to. Route to /cmd_vel_pregate '
+                                          'and interpose a safe-degradation gate (N3 safe-stop) before /cmd_vel; '
+                                          'default /cmd_vel preserves the locked path.'),
         *_planner_precision_arguments(),
         DeclareLaunchArgument('enable_logging', default_value='true'),
         DeclareLaunchArgument('log_dir', default_value='logs/experiments'),

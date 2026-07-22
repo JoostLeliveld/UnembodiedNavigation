@@ -35,6 +35,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'pixel_correction_nis_threshold': '0.0',
     'use_truth_localization': 'false',
     'cmd_publish_rate': '10.0',
+    'command_noise_output_topic': '/cmd_vel',
     'min_state_cov': '1e-6',
     'plan_rate': '2.0',
     'belief_publish_rate': '10.0',
@@ -386,6 +387,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'cmd_publish_rate': float(_launch_value(
             context, 'cmd_publish_rate', PAPER_LAUNCH_DEFAULTS['cmd_publish_rate']
         )),
+        'command_noise_output_topic': _launch_value(
+            context, 'command_noise_output_topic', PAPER_LAUNCH_DEFAULTS['command_noise_output_topic']
+        ).strip(),
         'belief_publish_rate': float(_launch_value(context, 'belief_publish_rate', PAPER_LAUNCH_DEFAULTS['belief_publish_rate'])),
         'horizon': int(_launch_value(context, 'horizon', PAPER_LAUNCH_DEFAULTS['horizon'])),
         'dt': float(_launch_value(context, 'dt', PAPER_LAUNCH_DEFAULTS['dt'])),
@@ -777,7 +781,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'use_sim_time': True,
                 'enabled': True,
                 'input_topic': '/cmd_vel_raw',
-                'output_topic': '/cmd_vel',
+                'output_topic': cfg.get('command_noise_output_topic', '/cmd_vel'),
                 'diagnostics_topic': '/cmd_vel_noise/diagnostics',
                 'seed': cfg['seed'],
                 'linear_slip_mean': cfg['command_noise_linear_slip_mean'],

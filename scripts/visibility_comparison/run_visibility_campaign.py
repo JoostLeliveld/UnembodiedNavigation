@@ -445,7 +445,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'risk_weight_obs', 'ambiguity_weight',
         'belief_publish_rate',
         'heading_update_mode',
-        'use_pixel_correction', 'pixel_topic',
+        'use_pixel_correction', 'pixel_topic', 'command_noise_output_topic',
         'pixel_timeout_s', 'skip_stale_pixel_correction',
         'bev_y_calibration_offset_m', 'bev_affine_calibration', 'bbox_contact_z_m', 'pixel_max_correction_jump_m',
         'pixel_correction_nis_threshold', 'use_truth_localization',

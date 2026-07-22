@@ -39,6 +39,7 @@ REPO = Path(__file__).resolve().parents[3]
 TOOLS = REPO / "experiments" / "single_camera_uigp_reliability" / "tools"
 INJECTOR = TOOLS / "single_cam_fault_injector.py"
 HEALTH = TOOLS / "localization_health_node.py"
+GATE = TOOLS / "safe_degradation_gate.py"
 HONEST = REPO / "scripts" / "visibility_comparison" / "warehouse_visibility_campaign_honest_v1.yaml"
 RUNNER = REPO / "scripts" / "visibility_comparison" / "run_visibility_campaign.py"
 
@@ -71,15 +72,17 @@ def wait_machine_free(timeout_s=45.0, poll_s=3.0):
     return not machine_busy()
 
 
-def build_pilot_cfg(out: Path, *, domain: int, task: str, condition: str,
-                    pixel_topic: str, run_timeout_after_first_cmd_s: float) -> Path:
+def build_pilot_cfg(out: Path, *, domain: int, task: str, condition: str, seed: int = 0,
+                    pixel_topic: str, run_timeout_after_first_cmd_s: float,
+                    command_noise_output_topic: str = "/cmd_vel") -> Path:
     cfg = yaml.safe_load(HONEST.read_text())
     orig_task = cfg["tasks"].get(task, {})
     cfg["conditions"] = {condition: cfg["conditions"][condition]}
-    cfg["tasks"] = {task: {"conditions": [condition], "seeds": [0],
+    cfg["tasks"] = {task: {"conditions": [condition], "seeds": [seed],
                            **({"optimizer_initial_routes_json": orig_task["optimizer_initial_routes_json"]}
                               if "optimizer_initial_routes_json" in orig_task else {})}}
     cfg["pixel_topic"] = pixel_topic
+    cfg["command_noise_output_topic"] = command_noise_output_topic
     cfg["cleanup_sim_stragglers"] = False
     cfg["ros_domain_id_base"] = domain
     cfg["run_timeout_after_first_cmd_s"] = run_timeout_after_first_cmd_s
@@ -142,8 +145,15 @@ def compute_metrics(health_csv: Path, log_root: Path, fault_after_s: float) -> d
 def run_one(out: Path, *, domain: int, task: str, condition: str, fault: str,
             fault_after_s: float, lookat_drift: str, drift_ramp_s: float,
             run_timeout_after_first_cmd_s: float, hard_timeout_s: float,
-            partition: str = "tier1pilot", require_free: bool = True) -> dict:
-    """Run ONE isolated real-Gazebo cell; return a metrics dict. Collision-safe."""
+            seed: int = 0, safe_stop: bool = False, partition: str = "tier1pilot",
+            require_free: bool = True) -> dict:
+    """Run ONE isolated real-Gazebo cell; return a metrics dict. Collision-safe.
+
+    safe_stop=True enables the N3 actuation: the actuation-noise node publishes to
+    /cmd_vel_pregate and a safe-degradation gate republishes to /cmd_vel, latching a
+    STOP once /reliability/localization_degraded goes True. safe_stop=False is N0
+    (health monitored + logged, but the robot keeps driving on the faulted camera).
+    """
     out.mkdir(parents=True, exist_ok=True)
     health_csv = out / "health_trace.csv"
     log_root = out / "campaign"
@@ -151,9 +161,11 @@ def run_one(out: Path, *, domain: int, task: str, condition: str, fault: str,
     if require_free and machine_busy():
         return {"aborted": "machine_busy", **compute_metrics(health_csv, log_root, fault_after_s)}
 
-    pilot_cfg = build_pilot_cfg(out, domain=domain, task=task, condition=condition,
+    cmd_out = "/cmd_vel_pregate" if safe_stop else "/cmd_vel"
+    pilot_cfg = build_pilot_cfg(out, domain=domain, task=task, condition=condition, seed=seed,
                                 pixel_topic="/perception/pixel_pose_faulted",
-                                run_timeout_after_first_cmd_s=run_timeout_after_first_cmd_s)
+                                run_timeout_after_first_cmd_s=run_timeout_after_first_cmd_s,
+                                command_noise_output_topic=cmd_out)
     env = isolated_env(domain, partition, out)
     children = []
 
@@ -170,6 +182,10 @@ def run_one(out: Path, *, domain: int, task: str, condition: str, fault: str,
                "--fault-after-s", str(fault_after_s), "--calib-lookat-drift", lookat_drift,
                "--drift-ramp-s", str(drift_ramp_s)], "injector.log")
         spawn([sys.executable, str(HEALTH), "--log-csv", str(health_csv)], "health.log")
+        if safe_stop:
+            spawn([sys.executable, str(GATE), "--in-topic", "/cmd_vel_pregate",
+                   "--out-topic", "/cmd_vel", "--degraded-topic", "/reliability/localization_degraded",
+                   "--slow-factor", "0.0", "--latch-stop"], "gate.log")
         time.sleep(2.0)
         with open(out / "runner.log", "w") as rlog:
             rp = subprocess.Popen([sys.executable, str(RUNNER), "--config", str(pilot_cfg),
@@ -201,6 +217,8 @@ def run_one(out: Path, *, domain: int, task: str, condition: str, fault: str,
 
     m = compute_metrics(health_csv, log_root, fault_after_s)
     m["runner_rc"] = runner_rc
+    m["safe_stop"] = safe_stop
+    m["seed"] = seed
     return m
 
 
