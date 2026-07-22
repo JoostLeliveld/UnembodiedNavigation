@@ -1,10 +1,17 @@
 # Pre-registration — fault-containment experiment family (E5 · E6 · E7)
 
-Load-bearing block of the ICRA paper (framing-of-record:
+> **This is TIER 2 (camera-network generalization) of the two-tier realistic-network
+> pre-registration** ([`PREREGISTRATION_realistic_network_2026-07-22`](PREREGISTRATION_realistic_network_2026-07-22.md)).
+> Tier 1 — the single-camera closed-loop core + the safe-operating-envelope characterization — is the
+> **headline** and lives there; this document holds the multi-camera fusion/containment detail
+> unchanged. Tier 2 is **on the 4-cam detector-gate critical path and is cuttable to future work**
+> without touching the headline. Content below is not restated in Tier 1, only referenced.
+
+Camera-network fault generalization for the ICRA paper (framing-of-record:
 [`ICRA_FRAMING_2026-07-22`](../../modules/07_multicam_handover_fusion/framings/ICRA_FRAMING_2026-07-22.md)).
-**E6 (calibration drift → containment) is the centrepiece.** E5 (dropout/latency) and
+**E6 (calibration drift → containment) is the Tier-2 centrepiece.** E5 (dropout/latency) and
 E7 (selection-vs-fusion) share its metrics, harness, and statistical design and are
-pre-registered here together so the whole fault-tolerance claim is frozen at once.
+pre-registered here together so the whole multi-camera fault-tolerance claim is frozen at once.
 
 > **Registration status: DRAFT → freeze on commit.** Freezing = commit this file, then
 > fill the integrity block (§10) with the git commit, detector artifact hash (must be a

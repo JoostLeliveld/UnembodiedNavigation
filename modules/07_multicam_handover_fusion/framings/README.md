@@ -24,11 +24,17 @@ WP5 fault-detection with zero false alarms), R3–R6 pre-registered and pending 
 handover capture. Reframed around **fault containment** (overlap is only 7–13%).
 
 **ICRA positioning (framing-of-record):** [`ICRA_FRAMING_2026-07-22.md`](ICRA_FRAMING_2026-07-22.md)
-— consolidates Framing A for an ICRA submission under three locked decisions (moderate
-runway · Gazebo-only + Toro-framed · fault-tolerance PoC headline). Holds the calibrated
-contribution statement, the nulls-as-scoping discipline, the right-sized E0–E8 slate, the
-critical path, and the paper section outline. Start here for the paper-level story; the
-results draft above is its evidence layer.
+— the single source of truth for the paper-level story. Under the three locked decisions (moderate
+runway · Gazebo-only + Toro-framed · NOT "GP beats calibration"), the headline was **broadened
+(2026-07-22, reason-backed) from a fault-tolerance PoC to "safe navigation on a realistic
+infrastructure-camera network"** — coverage- and health-aware localization for a no-onboard-fallback
+robot, generalizing IWAI; fault-tolerance is now one pillar (C3). It holds the problem statement, the
+C1–C4 claim block, the nulls-as-scoping discipline, and a **two-tier structure**:
+- **Tier 1 (headline)** — single-camera closed-loop core + the safe-operating-envelope
+  characterization. Contract: [`PREREGISTRATION_realistic_network_2026-07-22`](../../../experiments/multicamera_fusion_extension/PREREGISTRATION_realistic_network_2026-07-22.md).
+- **Tier 2 (generalization, cuttable)** — multi-camera fusion/containment. Contract:
+  [`PREREGISTRATION_fault_containment_2026-07-22`](../../../experiments/multicamera_fusion_extension/PREREGISTRATION_fault_containment_2026-07-22.md)
+  (subsumed as Tier 2). Start here for the story; the results draft above is its evidence layer.
 
 > Add a sibling section here when a second framing is drafted (e.g. a
 > localization-only framing that drops the planning claim, or a
