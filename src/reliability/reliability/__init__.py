@@ -192,6 +192,13 @@ from reliability.toro_filter import (
     ToroFilterResult,
     run_toro_filter,
 )
+from reliability.calibration_perturbation import (
+    CalibrationPerturbation,
+    PinholeGroundCamera,
+    calibration_drift_world_bias,
+    perturb_camera_calibration,
+    reproject_world,
+)
 from reliability.trust_stacker import (
     TrustFeatures,
     TrustStacker,
@@ -380,6 +387,11 @@ __all__ = [
     "ToroFilterConfig",
     "ToroFilterResult",
     "run_toro_filter",
+    "CalibrationPerturbation",
+    "PinholeGroundCamera",
+    "calibration_drift_world_bias",
+    "perturb_camera_calibration",
+    "reproject_world",
     "TrustFeatures",
     "TrustStacker",
     "split_groups",

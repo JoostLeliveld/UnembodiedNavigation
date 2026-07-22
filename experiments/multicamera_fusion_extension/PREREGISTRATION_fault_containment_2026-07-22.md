@@ -145,11 +145,20 @@ band is the **pre-declared primary analysis window** for H-E6 (the pilot showed 
   escalation delay, isolation accuracy and false-alarm rate from the health-state timeline,
   with Wilson intervals and the §5 **critical-failure stop rule** as a `Verdict`. Firewalled
   study code (it compares against the injected fault). Tests: 10 in `test_experiment_evaluators.py`.
+- **Calibration-parameter perturbation — DONE** (the faithful E6 fault model):
+  [`calibration_perturbation.py`](../../src/reliability/reliability/calibration_perturbation.py)
+  — a self-contained pinhole ground-plane camera + `CalibrationPerturbation`
+  (yaw/pitch/roll/translation/principal-point/focal). `perturb_camera_calibration` re-projects
+  a camera's observations through the drifted calibration (recovering the pixel from the world
+  point), so the world bias is range- and viewing-angle-dependent — strictly stronger than the
+  constant position-bias proxy (a 1° yaw barely moves a near point, badly moves a far one). Tests:
+  10 in `test_calibration_perturbation.py`. This is now the **primary** E6 fault model; the
+  position-bias proxy in `run_containment_pilot` is retained only as a coarse secondary.
 
 **Must build before the confirmatory campaign (blocking, ranked):**
-1. **True calibration-parameter perturbation + re-projection** (yaw/pitch/roll/translation/
-   pp/focal through the camera model), replacing the position-bias proxy as the primary E6
-   fault model. Position-bias remains a coarse secondary.
+1. **Wire the calibration perturbation into the sweep**: swap `replay_sweeps.run_calibration_drift_sweep`
+   / `run_containment_pilot` from the position-bias proxy to `perturb_camera_calibration`
+   (needs the per-camera `PinholeGroundCamera` reconstructed from the deployed calibration).
 2. **B5 GP+confidence** and **B9 oracle-removal** conditions.
 3. **Wire the detection scoring into `run_containment_pilot`** so a real capture emits the
    detection table alongside `Δ_fault` in one pass.
