@@ -207,6 +207,10 @@ def generate_launch_description():
         DeclareLaunchArgument('yolo_inference_in_callback', default_value='true',
                               description='Run inference synchronously in the image callback (single thread, no GIL contention)'),
         DeclareLaunchArgument('use_pixel_correction', default_value='true'),
+        DeclareLaunchArgument('pixel_topic', default_value='/perception/pixel_pose',
+                              description='World-pixel measurement topic the planner corrects on. '
+                                          'Point at a fault-injector output (e.g. /perception/pixel_pose_faulted) '
+                                          'for controlled calibration-fault ablations; default preserves the locked path.'),
         *_planner_precision_arguments(),
         DeclareLaunchArgument('enable_logging', default_value='true'),
         DeclareLaunchArgument('log_dir', default_value='logs/experiments'),
