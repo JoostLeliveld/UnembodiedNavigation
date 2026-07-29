@@ -166,6 +166,29 @@ def test_one_bad_camera_is_rejected_while_the_others_are_accepted():
     assert abs(node.belief_m[0]) < 0.5
 
 
+def test_disabling_per_camera_reanchor_does_not_enable_the_pixel_jump_limit():
+    """Recovery policy and measurement space are independent choices.
+
+    Per-camera observations deliberately cannot re-anchor the belief on one
+    camera's word.  They are still metric observations, so disabling re-anchor
+    must not select paper-1's 0.5 m pixel-update limiter.  That accidental
+    coupling rejected routine camera corrections in the live showcase.
+    """
+    node = make_per_camera_node(
+        belief_xy=(0.0, 0.0), belief_stamp_s=9.90, now_s=10.0, belief_cov=1.0
+    )
+    assert node.state_max_correction_jump_m == 0.0
+    assert node.pixel_max_correction_jump_m == pytest.approx(0.5)
+
+    node._apply_map_observations([
+        observation("camera_A", 1.0, 0.0, seconds=9.95, var=0.03),
+    ])
+
+    diag = node.pixel_correction_diag_pub.published[-1]
+    assert diag[IDX_ACCEPTED] == 1.0
+    assert diag[IDX_REJECT_CODE] != bc.REJECT_CODES['jump_too_large']
+
+
 def test_a_low_confidence_camera_moves_the_belief_less_than_a_confident_one():
     """Each camera's own covariance reaches the filter and weights its update."""
     def final_x(var):

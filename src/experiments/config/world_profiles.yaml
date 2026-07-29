@@ -104,7 +104,35 @@ worlds:
       visibility_beta: 1.0
       visibility_target_height_m: 0.35
     known_2d_regions:
-      - {name: open_floor_inside_site_boundary, type: traversable, xmin: -11.20, xmax: 11.50, ymin: -8.60, ymax: 8.60, note: open operating field; blue lines mark the keep-in boundary and green lines mark no-go obstacle outlines}
+      # Keep-in envelope, NOT a lane. It is deliberately not `traversable`: the
+      # driveable union is what paper 1's lane-graph seeding validates Manhattan
+      # routes against, so a floor-wide rectangle would make every route "valid",
+      # including ones straight through the rack rows. The lanes below carry the
+      # aisle structure the way warehouse_aws does.
+      - {name: open_floor_inside_site_boundary, type: site_boundary, xmin: -11.20, xmax: 11.50, ymin: -8.60, ymax: 8.60, note: open operating field; blue lines mark the keep-in boundary and green lines mark no-go obstacle outlines}
+      # North-south aisles: the x-gaps between rack columns, INSET 0.25 m from the
+      # rack faces. Paper 1 draws its lanes the same way (measured median inset
+      # +0.25 m): the drivable map is a conservative navigable corridor, not the
+      # raw geometric gap, so keep_in still leaves margin after corner rounding.
+      - {name: west_service_lane, type: traversable, xmin: -10.95, xmax: -9.35, ymin: -8.35, ymax: 8.35, note: lane between the west wall-backed shelf and rack column W4}
+      - {name: rack_aisle_W3, type: traversable, xmin: -8.3, xmax: -7.25, ymin: -8.35, ymax: 8.35, note: aisle between rack columns W4 and W3}
+      - {name: rack_aisle_W2_south, type: traversable, xmin: -6.2, xmax: -5.15, ymin: -8.35, ymax: -5.15, note: west aisle 2 south of dropped_stack_WA2, which blocks the aisle}
+      - {name: rack_aisle_W2_north, type: traversable, xmin: -6.2, xmax: -5.15, ymin: -4.05, ymax: 8.35, note: west aisle 2 north of dropped_stack_WA2}
+      - {name: rack_aisle_W1, type: traversable, xmin: -4.1, xmax: -3.05, ymin: -8.35, ymax: 8.35, note: aisle between rack columns W2 and W1}
+      - {name: central_aisle_west, type: traversable, xmin: -2.0, xmax: -0.5, ymin: -8.35, ymax: 8.35, note: central aisle west of the support pillar}
+      - {name: central_aisle_east, type: traversable, xmin: 0.5, xmax: 2.0, ymin: -8.35, ymax: 8.35, note: central aisle east of the support pillar}
+      - {name: rack_aisle_E1, type: traversable, xmin: 3.05, xmax: 4.1, ymin: -8.35, ymax: 8.35, note: aisle between rack columns E1 and E2}
+      - {name: rack_aisle_E2, type: traversable, xmin: 5.15, xmax: 6.2, ymin: -8.35, ymax: 8.35, note: aisle between rack columns E2 and E3}
+      - {name: rack_aisle_E3, type: traversable, xmin: 7.25, xmax: 8.3, ymin: -8.35, ymax: 8.35, note: aisle between rack columns E3 and E4}
+      - {name: east_service_lane_south, type: traversable, xmin: 9.35, xmax: 11.25, ymin: -8.35, ymax: 0.2, note: east service lane south of east_staging_pallet_island}
+      - {name: east_service_lane_north, type: traversable, xmin: 9.35, xmax: 11.25, ymin: 1.4, ymax: 8.35, note: east service lane north of east_staging_pallet_island}
+      # East-west cross aisles: the y-gaps between the three rack bands, clear
+      # over the full floor width. These supply the corridor centres that paper
+      # 1's _horizontal_corridor_centres picks up (wide prisms, w > h).
+      - {name: south_perimeter_aisle, type: traversable, xmin: -10.95, xmax: 11.25, ymin: -8.35, ymax: -6.75, note: cross aisle south of the lower rack band}
+      - {name: lower_cross_aisle, type: traversable, xmin: -10.95, xmax: 11.25, ymin: -2.35, ymax: -1.65, note: cross aisle between the lower and middle rack bands}
+      - {name: upper_cross_aisle, type: traversable, xmin: -10.95, xmax: 11.25, ymin: 2.05, ymax: 2.75, note: cross aisle between the middle and upper rack bands}
+      - {name: north_perimeter_aisle, type: traversable, xmin: -10.95, xmax: 11.25, ymin: 7.15, ymax: 8.35, note: cross aisle north of the upper rack band}
       - {name: west_wall_backed_one_sided_shelf, type: non_driveable_obstacle, xmin: -11.91, xmax: -11.36, ymin: -6.50, ymax: 6.90, note: shelf row flush to west wall; reachable only from east/aisle side}
       - {name: central_support_pillar, type: non_driveable_obstacle, xmin: -0.25, xmax: 0.25, ymin: -1.15, ymax: -0.65, note: fixed building column inside the 4.5 m central aisle}
       - {name: dropped_stack_WA2, type: non_driveable_staging, xmin: -6.125, xmax: -5.225, ymin: -4.90, ymax: -4.30, note: temporary pallet stack narrowing west aisle 2}

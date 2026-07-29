@@ -205,8 +205,36 @@ cannot be attributed to selection/fusion.
 
 # START HERE if you are the Gazebo session (appended 2026-07-29, end of day)
 
-Everything below is **code-complete, tested (720 pass, 2 pre-existing detector failures unrelated),
-and built**. Nothing has been run in Gazebo. Do not re-derive any of it.
+## Gazebo update — solve showcase completed
+
+The R sweep and a waypoint-free three-seed `rob_easy` showcase have now run.
+The sweep did not rescue the difficult route: all three R arms solved globally
+but later collided. The subsequent `rob_easy` run exposed two implementation
+bugs in the per-camera correction arm:
+
+1. `allow_reanchor=False` was incorrectly passed as
+   `metric_measurement=False`, selecting paper-1's 0.5 m pixel jump limiter for
+   metric observations; and
+2. `camera_xy_only` spliced prior XY-heading correlations into the posterior XY
+   block, making the committed covariance indefinite and NIS negative.
+
+Both are fixed and regression-tested. The real fixed showcase reached the goal
+in **3/3 seeds**, collision-free, with **526/526 accepted corrections**, no
+negative NIS, and pooled belief-error p95 **0.174 m**. See
+`docs/multicam_solve_showcase_2026-07-29.md` and
+`logs/studies/multicam_nav_demo/figures/fig33_multicam_solve_showcase.png`.
+
+The straight `rob_easy` result is now treated only as the estimator regression
+check. The harder waypoint-free offline gate has also passed. For the
+`rob_hardA` and `rob_hardB` start/final-goal pairs, the old H75 solve missed by
+5.62 m / 3.21 m; collision-aware condition-neutral map seeds plus the corrected
+seed tracker and H120/iter120 converged to valid curved routes ending 0.17 m /
+0.12 m from goal. See
+`docs/multicam_offline_hard_route_showcase_2026-07-29.md`. No new hard-route
+Gazebo claim has been made yet.
+
+Everything below describes the state before that Gazebo result and is retained
+as the investigation record.
 
 ## Immediate next action: the R sweep (3 runs, ~5 min each)
 
@@ -271,7 +299,9 @@ edits; this list is from file mtimes plus the session record.
 
 ## Open, in order
 
-1. Run the R sweep above; then the full `_rob_*` campaign at whichever R wins.
+1. Freeze the passed offline hard-route settings, create waypoint-free hard
+   task entries, and run the real hard-route Gazebo showcase. Do not reuse the
+   existing mission-waypoint outcomes as evidence.
 2. Measure `time_skew_rejected_camera_ids` from the manager decision payload -- the new 0.25 s window
    may be silently cutting effective camera count.
 3. Commission `Σ_unmodelled` from the between-camera spread in overlap regions (`overlap.py`,

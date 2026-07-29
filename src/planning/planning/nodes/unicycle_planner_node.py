@@ -1213,7 +1213,12 @@ class UnicyclePlannerNode(Node):
             yaw_source=0.0,
         )
 
-    def _correction_gates(self, *, metric_measurement: bool = False) -> bc.CorrectionGates:
+    def _correction_gates(
+        self,
+        *,
+        metric_measurement: bool = False,
+        allow_reanchor: bool = True,
+    ) -> bc.CorrectionGates:
         """Thresholds for the shared gate chain, from the node's parameters.
 
         ``metric_measurement`` enables the divergence guard, whose threshold is
@@ -1231,7 +1236,11 @@ class UnicyclePlannerNode(Node):
             nis_threshold=float(self.pixel_correction_nis_threshold),
             cov_eig_floor=float(self.cov_eig_floor),
             min_state_cov=float(self.min_state_cov),
-            reanchor_innov_m=float(self.state_reanchor_m) if metric_measurement else 0.0,
+            reanchor_innov_m=(
+                float(self.state_reanchor_m)
+                if metric_measurement and allow_reanchor
+                else 0.0
+            ),
             max_predict_speed_mps=float(self.max_predict_speed_mps),
         )
 
@@ -2133,7 +2142,16 @@ class UnicyclePlannerNode(Node):
                 snapshot_fn=lambda: self._snapshot_metric_correction_inputs(stamp_msg, z_xy),
                 measurement_cov_fn=lambda: R,
             ),
-            gates=self._correction_gates(metric_measurement=allow_reanchor),
+            # This is always a metric measurement.  ``allow_reanchor`` controls
+            # only the divergence recovery policy; it must not accidentally
+            # select the paper-1 pixel jump limit.  The old coupling caused
+            # every per-camera update (where re-anchor is intentionally off) to
+            # inherit pixel_max_correction_jump_m=0.5 despite the metric arm's
+            # state_max_correction_jump_m=0.0.
+            gates=self._correction_gates(
+                metric_measurement=True,
+                allow_reanchor=allow_reanchor,
+            ),
             replay=self._replay_cmd_log_interval,
             age=age,
             dt_s=dt_corr,
@@ -2168,18 +2186,28 @@ class UnicyclePlannerNode(Node):
             S_pred = np.asarray(outcome.S_pred, dtype=float)
             # camera_xy_only: heading comes from map-frame odometry
             # (odom_yaw+offset), not the xy measurement. Falls back to the
-            # predicted heading pre-odom. The xy measurement says nothing about
-            # heading, so its row/column keep the predicted (grown) values.
+            # predicted heading pre-odom. Since heading is externally anchored,
+            # do not carry x/y-theta correlations through this correction. A
+            # previous implementation replaced the posterior cross terms with
+            # the much larger PRIOR cross terms while retaining the posterior
+            # xy block. That hybrid is not a covariance matrix: it became
+            # indefinite during straight multicamera drives, produced negative
+            # NIS values, and let the belief diverge while valid observations
+            # were rejected. Keep the predicted heading variance, but make the
+            # externally anchored heading independent of camera xy.
             h = self._map_frame_heading()
             m_upd[2] = float(h) if h is not None else float(outcome.m_pred[2])
-            S_upd[2, :] = S_pred[2, :]
-            S_upd[:, 2] = S_pred[:, 2]
+            S_upd[:2, 2] = 0.0
+            S_upd[2, :2] = 0.0
+            S_upd[2, 2] = float(S_pred[2, 2])
             # Floor the posterior xy variance at half the measurement noise so
             # the filter never becomes so confident that the next innovation
             # trips the NIS gate -- the collapse that caused divergence at tight R.
             S_upd[0, 0] = max(float(S_upd[0, 0]), 0.5 * float(R[0, 0]))
             S_upd[1, 1] = max(float(S_upd[1, 1]), 0.5 * float(R[1, 1]))
             S_upd = self._regularize_state_covariance(S_upd)
+            if np.min(np.linalg.eigvalsh(S_upd)) < self.cov_eig_floor:
+                S_upd = self.project_to_psd(S_upd, floor=self.cov_eig_floor)
             # Write back so the published diagnostics report what was actually
             # committed, heading override and variance floor included.
             outcome.next_m = m_upd

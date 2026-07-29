@@ -145,6 +145,37 @@ def test_accepted_correction_commits_and_keeps_heading_from_odom():
     assert diag[IDX_MEASUREMENT_SPACE] == bc.SPACE_MAP_XY
 
 
+def test_camera_xy_only_commit_keeps_the_belief_covariance_psd():
+    """Never splice prior heading correlations into a posterior xy block.
+
+    The live multicamera showcase exposed this exact failure: the resulting
+    hybrid covariance became indefinite, then NIS went negative (which is
+    mathematically impossible for a valid innovation covariance).
+    """
+    node = make_state_node()
+    S_pred = np.array([
+        [1.0, 0.0, 0.9],
+        [0.0, 1.0, 0.0],
+        [0.9, 0.0, 1.0],
+    ])
+    outcome = bc.CorrectionOutcome(
+        reason=bc.RejectReason.ACCEPTED,
+        m_pred=np.zeros(3),
+        S_pred=S_pred,
+        next_m=np.zeros(3),
+        next_S=np.diag([0.01, 0.01, 0.10]),
+    )
+
+    node._commit_metric_correction_outcome(
+        stamp(9.95), np.diag([0.02, 0.02]), outcome
+    )
+
+    assert np.min(np.linalg.eigvalsh(node.belief_S)) >= node.cov_eig_floor
+    np.testing.assert_allclose(node.belief_S[:2, 2], 0.0, atol=1e-15)
+    np.testing.assert_allclose(node.belief_S[2, :2], 0.0, atol=1e-15)
+    assert node.belief_S[2, 2] == pytest.approx(S_pred[2, 2])
+
+
 # --------------------------------------------------------------------------
 # The three confirmed gaps
 # --------------------------------------------------------------------------

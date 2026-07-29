@@ -740,19 +740,32 @@ class UnicyclePlannerBase:
         m = np.asarray(start_xy_yaw, dtype=float).reshape(-1)[:3].copy()
         S_dummy = np.eye(3, dtype=float) * 1e-6
         waypoint_idx = 0
+        # The global planner can move farther than the old fixed 0.18 m
+        # threshold in one control interval (e.g. 0.6 * 0.4 = 0.24 m).
+        # Scale arrival to the integration step so a route seed cannot hop over
+        # a corner and oscillate around it forever.
+        arrival_radius = max(0.18, self.v_max * self.dt)
         for k in range(self.horizon):
             if waypoint_idx >= len(wps):
                 break
             target = wps[waypoint_idx]
             d = target - m[:2]
-            if float(np.linalg.norm(d)) < 0.18 and waypoint_idx < len(wps) - 1:
+            if float(np.linalg.norm(d)) <= arrival_radius:
+                if waypoint_idx >= len(wps) - 1:
+                    # Leave the unused tail at zero. Continuing to chase the
+                    # final point makes a long-horizon seed repeatedly overshoot
+                    # the goal and end far from it.
+                    break
                 waypoint_idx += 1
                 target = wps[waypoint_idx]
                 d = target - m[:2]
             desired_yaw = math.atan2(float(d[1]), float(d[0]))
             yaw_err = wrap_angle(desired_yaw - float(m[2]))
             w = float(np.clip(yaw_err / max(self.dt, 1e-6), self.w_min, self.w_max))
-            v = self.v_max if abs(yaw_err) < 0.65 else 0.0
+            # Route seeds should enter a leg nearly aligned. The former 0.65-rad
+            # drive gate made the unicycle cut obstacle corners even when the
+            # map polyline itself had sufficient clearance.
+            v = self.v_max if abs(yaw_err) < 0.25 else 0.0
             controls[k] = [float(np.clip(v, self.v_min, self.v_max)), w]
             m, _ = self.predict(m, S_dummy, controls[k])
         return controls.reshape(-1)
