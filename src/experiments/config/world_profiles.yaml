@@ -126,13 +126,16 @@ worlds:
       - {name: rack_aisle_E3, type: traversable, xmin: 7.25, xmax: 8.3, ymin: -8.35, ymax: 8.35, note: aisle between rack columns E3 and E4}
       - {name: east_service_lane_south, type: traversable, xmin: 9.35, xmax: 11.25, ymin: -8.35, ymax: 0.2, note: east service lane south of east_staging_pallet_island}
       - {name: east_service_lane_north, type: traversable, xmin: 9.35, xmax: 11.25, ymin: 1.4, ymax: 8.35, note: east service lane north of east_staging_pallet_island}
-      # East-west cross aisles: the y-gaps between the three rack bands, clear
-      # over the full floor width. These supply the corridor centres that paper
-      # 1's _horizontal_corridor_centres picks up (wide prisms, w > h).
-      - {name: south_perimeter_aisle, type: traversable, xmin: -10.95, xmax: 11.25, ymin: -8.35, ymax: -6.75, note: cross aisle south of the lower rack band}
-      - {name: lower_cross_aisle, type: traversable, xmin: -10.95, xmax: 11.25, ymin: -2.35, ymax: -1.65, note: cross aisle between the lower and middle rack bands}
-      - {name: upper_cross_aisle, type: traversable, xmin: -10.95, xmax: 11.25, ymin: 2.05, ymax: 2.75, note: cross aisle between the middle and upper rack bands}
-      - {name: north_perimeter_aisle, type: traversable, xmin: -10.95, xmax: 11.25, ymin: 7.15, ymax: 8.35, note: cross aisle north of the upper rack band}
+      # East-west cross aisles: the y-gaps between the three rack bands, at their
+      # FULL height. Paper 1 insets its rack aisles (+0.20..0.30 m) but leaves its
+      # cross aisles flush with the rack bands (measured +0.000 m) -- insetting
+      # these too shrinks the corridor below what a 0.25 m nogo_safe_distance can
+      # fit, and the lane-graph seed then scores worse than the warm start.
+      # These also supply the corridor centres _horizontal_corridor_centres picks up.
+      - {name: south_perimeter_aisle, type: traversable, xmin: -10.95, xmax: 11.25, ymin: -8.6, ymax: -6.5, note: cross aisle south of the lower rack band}
+      - {name: lower_cross_aisle, type: traversable, xmin: -10.95, xmax: 11.25, ymin: -2.6, ymax: -1.4, note: cross aisle between the lower and middle rack bands}
+      - {name: upper_cross_aisle, type: traversable, xmin: -10.95, xmax: 11.25, ymin: 1.8, ymax: 3.0, note: cross aisle between the middle and upper rack bands}
+      - {name: north_perimeter_aisle, type: traversable, xmin: -10.95, xmax: 11.25, ymin: 6.9, ymax: 8.6, note: cross aisle north of the upper rack band}
       - {name: west_wall_backed_one_sided_shelf, type: non_driveable_obstacle, xmin: -11.91, xmax: -11.36, ymin: -6.50, ymax: 6.90, note: shelf row flush to west wall; reachable only from east/aisle side}
       - {name: central_support_pillar, type: non_driveable_obstacle, xmin: -0.25, xmax: 0.25, ymin: -1.15, ymax: -0.65, note: fixed building column inside the 4.5 m central aisle}
       - {name: dropped_stack_WA2, type: non_driveable_staging, xmin: -6.125, xmax: -5.225, ymin: -4.90, ymax: -4.30, note: temporary pallet stack narrowing west aisle 2}

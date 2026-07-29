@@ -37,12 +37,16 @@ METHOD_CRITICAL_KEYS = (
 
 #: Keys that legitimately differ, each with the reason. Anything not listed here
 #: and not identical across worlds fails the test.
-ALLOWED_TO_DIFFER = {
-    # Open-floor 4-cam world uses obstacle footprints (keep_out); paper-1's
-    # marked-lane world uses keep_in. Verified correct, see the parity audit's
-    # D1 correction.
-    "nogo_mode",
-}
+# nogo_mode was here, justified by "the 4-cam world is open-floor so keep_out is
+# correct". That justification was circular: the world only looked open-floor
+# because its drivable region map had never been authored (one floor-wide
+# rectangle). With the lane network in place the 4-cam world uses keep_in, the
+# same as the corrected paper campaign (honest_campaign_v2), where BOTH C1 and
+# C2 run keep_in and the only condition difference is the observation model.
+# Measured offline: keep_in gives +0.47..+0.57 m clearance (the paper's C2 band),
+# keep_out +0.19..+0.30 m (its C1 band). Keeping this empty is deliberate --
+# every planner-facing config key must now agree across worlds.
+ALLOWED_TO_DIFFER: set[str] = set()
 
 
 def load_configs():

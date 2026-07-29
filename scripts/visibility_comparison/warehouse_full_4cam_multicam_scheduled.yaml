@@ -51,7 +51,7 @@ bev_affine_calibration: 0.996142,-0.002705,-0.002021,-0.002609,0.991001,0.066112
 pixel_max_correction_jump_m: 0.5
 use_odom_for_predict: true
 use_nogo_cost: true
-nogo_mode: keep_out
+nogo_mode: keep_in
 nogo_weight: 2000.0
 # Kinematic plausibility cap on the EKF prediction step (= v_max). The motion
 # replay extrapolates the last command when odometry samples are missing; this
