@@ -85,10 +85,10 @@ observation_risk_scale: 1.0
 ambiguity_term_scale: 1.0
 control_weight: 0.0
 visibility_weight: 0.0
-goal_prior_u_std_start: 50.0
-goal_prior_v_std_start: 50.0
-goal_prior_u_std_final: 12.0
-goal_prior_v_std_final: 12.0
+goal_prior_u_std_start: 24.0
+goal_prior_v_std_start: 24.0
+goal_prior_u_std_final: 6.0
+goal_prior_v_std_final: 6.0
 goal_tightening_power: 0.9
 pixel_timeout_s: 1.25
 skip_stale_pixel_correction: true

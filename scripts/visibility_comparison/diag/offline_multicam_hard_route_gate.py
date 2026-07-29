@@ -221,6 +221,7 @@ def main() -> None:
     results = []
     trajectories = {}
     seed_paths = {}
+    all_seeds = {}
     endpoints = {}
     for task_name in TASK_NAMES:
         task = _task(world, task_name)
@@ -245,6 +246,13 @@ def main() -> None:
         )
         seed_length = _path_length(seed_points)
         seed_paths[task_name] = seed_points
+        # Export EVERY candidate seed, not just the one the rollout was scored
+        # on: the solver chooses between below/above, and that choice is the
+        # route-choice behaviour worth showing.
+        for cand in route_seeds:
+            all_seeds[f"{task_name}__seedcand__{cand['name']}"] = np.asarray(
+                [start[:2], *cand["waypoints"]], dtype=float
+            )
         endpoints[task_name] = np.asarray([start[:2], goal], dtype=float)
 
         for label, horizon in (
@@ -344,6 +352,7 @@ def main() -> None:
         collision_geometry_json=collision_json,
         **{f"{task}__{label}": states for (task, label), states in trajectories.items()},
         **{f"{task}__seed": pts for task, pts in seed_paths.items()},
+        **all_seeds,
         **{f"{task}__endpoints": pts for task, pts in endpoints.items()},
     )
 
