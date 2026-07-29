@@ -148,7 +148,9 @@ class CameraManager:
 
         timestamp = _finite(timestamp_s, "timestamp_s")
         previous_id = self._active_camera_id
-        candidates, scores, rejected = self._eligible_by_camera(timestamp, observations)
+        candidates, scores, rejected = self.eligible_observations(
+            timestamp_s=timestamp, observations=observations
+        )
         active = candidates.get(previous_id)
 
         if not previous_id:
@@ -261,6 +263,22 @@ class CameraManager:
             rejected=rejected,
             reasons=("hysteresis_handover",),
         )
+
+    def eligible_observations(
+        self,
+        *,
+        timestamp_s: float,
+        observations: Sequence[MapObservation],
+    ) -> tuple[dict[str, MapObservation], dict[str, float], dict[str, tuple[str, ...]]]:
+        """Return the current non-mutating eligibility decision.
+
+        Selection and fusion must start from the same operational contract.  A
+        fusion experiment must not accept a stale, low-trust, or poorly
+        associated camera merely because it does not use hysteresis.  This
+        method deliberately does not change the active-camera state.
+        """
+        timestamp = _finite(timestamp_s, "timestamp_s")
+        return self._eligible_by_camera(timestamp, observations)
 
     def _eligible_by_camera(
         self,

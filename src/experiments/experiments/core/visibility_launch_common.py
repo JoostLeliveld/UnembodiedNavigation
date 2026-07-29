@@ -42,6 +42,23 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'horizon': '40',
     'dt': '0.25',
     'v_max': '0.22',
+    # Kinematic plausibility cap on the EKF prediction step. 0 = off, which is
+    # the single-camera default: the locked honest_campaign_v1 ran without it
+    # and its evidence must stay reproducible. The 4-cam configs set it to v_max.
+    'max_predict_speed_mps': '0.0',
+    # 'fused' = one pre-fused /state/bev pose per tick; 'per_camera' = fold the
+    # per-camera map observations in sequentially, each with its own covariance
+    # and its own gate decision. Same gate chain either way, so a clean A/B.
+    'state_correction_mode': 'fused',
+    # Jump limiter for the METRIC correction path. 0 = off (default): on a
+    # linear-H metric measurement NIS is the correct gate, and a jump limit
+    # deadlocks recovery because rejecting inflates S, which raises the gain,
+    # which raises the update. Distinct from pixel_max_correction_jump_m.
+    'state_max_correction_jump_m': '0.0',
+    # Unmodelled-error term added in quadrature to every metric correction:
+    # R' = R + sigma^2 I. Mostly INTER-CAMERA DISAGREEMENT, which the
+    # per-camera pixel covariance cannot express. 0 = off (single-camera path).
+    'state_measurement_inflation_std_m': '0.0',
     'control_weight': '0.0',
     'risk_weight_obs': '1.0',
     'ambiguity_weight': '3.0',
@@ -247,6 +264,48 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'odom_wait_position_tolerance': 0.25,
         'odom_wait_yaw_tolerance': 0.5,
         'use_pixel_correction': _as_bool(_launch_value(context, 'use_pixel_correction', PAPER_LAUNCH_DEFAULTS['use_pixel_correction'])),
+        # Multi-camera belief front-end (guarded; default off preserves single-cam path).
+        'multicam_belief': _as_bool(_launch_value(context, 'multicam_belief', 'false')),
+        'multicam_scheduled': _as_bool(_launch_value(context, 'multicam_scheduled', 'false')),
+        'scheduled_coverage_artifact': _launch_value(context, 'scheduled_coverage_artifact', '').strip(),
+        'scheduled_report_std_m': float(_launch_value(context, 'scheduled_report_std_m', '0.15')),
+        'scheduled_rate_hz': float(_launch_value(context, 'scheduled_rate_hz', '5.0')),
+        'manager_gp_artifact_template': _launch_value(context, 'manager_gp_artifact_template', '').strip(),
+        'manager_projection_calibration': _launch_value(context, 'manager_projection_calibration', '').strip(),
+        'manager_min_spatial_trust': float(_launch_value(context, 'manager_min_spatial_trust', '0.15')),
+        'manager_decision_rate_hz': float(_launch_value(context, 'manager_decision_rate_hz', '5.0')),
+        'manager_camera_ids': _launch_value(context, 'manager_camera_ids', '').strip(),
+        'manager_fusion_mode': _as_bool(_launch_value(context, 'manager_fusion_mode', 'true')),
+        'manager_fusion_disagreement_gate_m': float(
+            _launch_value(context, 'manager_fusion_disagreement_gate_m', '0.6')
+        ),
+        'manager_require_gp_artifacts': _as_bool(_launch_value(context, 'manager_require_gp_artifacts', 'true')),
+        'manager_fusion_report_std_m': float(_launch_value(context, 'manager_fusion_report_std_m', '0.3')),
+        'manager_fusion_max_timestamp_spread_s': float(
+            _launch_value(context, 'manager_fusion_max_timestamp_spread_s', '0.25')
+        ),
+        'manager_covariance_profile': _launch_value(
+            context, 'manager_covariance_profile', 'legacy_fixed_metric'
+        ).strip().lower(),
+        'manager_max_measurement_age_s': float(
+            _launch_value(context, 'manager_max_measurement_age_s', '1.25')
+        ),
+        'manager_age_decay_s': float(_launch_value(context, 'manager_age_decay_s', '1.25')),
+        'manager_min_association_confidence': float(
+            _launch_value(context, 'manager_min_association_confidence', '0.30')
+        ),
+        'manager_required_consecutive_better_frames': int(
+            _launch_value(context, 'manager_required_consecutive_better_frames', '1')
+        ),
+        'manager_max_cross_camera_disagreement_m': float(
+            _launch_value(context, 'manager_max_cross_camera_disagreement_m', '1.0')
+        ),
+        'manager_require_consistency_when_source_available': _as_bool(
+            _launch_value(context, 'manager_require_consistency_when_source_available', 'false')
+        ),
+        # Raw string so the multicam branch can default it ON while still letting
+        # a config explicitly opt out (empty = unset -> multicam default True).
+        'state_correction_ekf_raw': _launch_value(context, 'state_correction_ekf', '').strip(),
         'pixel_topic': _launch_value(context, 'pixel_topic', PAPER_LAUNCH_DEFAULTS['pixel_topic']).strip(),
         'pixel_timeout_s': float(_launch_value(context, 'pixel_timeout_s', PAPER_LAUNCH_DEFAULTS['pixel_timeout_s'])),
         'pixel_correction_min_interval_s': float(_launch_value(context, 'pixel_correction_min_interval_s', '0.0')),
@@ -394,6 +453,20 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'horizon': int(_launch_value(context, 'horizon', PAPER_LAUNCH_DEFAULTS['horizon'])),
         'dt': float(_launch_value(context, 'dt', PAPER_LAUNCH_DEFAULTS['dt'])),
         'v_max': float(_launch_value(context, 'v_max', PAPER_LAUNCH_DEFAULTS['v_max'])),
+        'max_predict_speed_mps': float(_launch_value(
+            context, 'max_predict_speed_mps', PAPER_LAUNCH_DEFAULTS['max_predict_speed_mps']
+        )),
+        'state_measurement_inflation_std_m': float(_launch_value(
+            context, 'state_measurement_inflation_std_m',
+            PAPER_LAUNCH_DEFAULTS['state_measurement_inflation_std_m']
+        )),
+        'state_max_correction_jump_m': float(_launch_value(
+            context, 'state_max_correction_jump_m',
+            PAPER_LAUNCH_DEFAULTS['state_max_correction_jump_m']
+        )),
+        'state_correction_mode': _launch_value(
+            context, 'state_correction_mode', PAPER_LAUNCH_DEFAULTS['state_correction_mode']
+        ).strip().lower(),
         'control_weight': float(_launch_value(context, 'control_weight', PAPER_LAUNCH_DEFAULTS['control_weight'])),
         'risk_weight_obs': float(_launch_value(context, 'risk_weight_obs', PAPER_LAUNCH_DEFAULTS['risk_weight_obs'])),
         'ambiguity_weight': float(_launch_value(context, 'ambiguity_weight', PAPER_LAUNCH_DEFAULTS['ambiguity_weight'])),
@@ -598,6 +671,16 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     }
     goal_x = float(goal['x'])
     goal_y = float(goal['y'])
+    # Optional multi-goal tour: task 'waypoints' = ordered list of {x,y}. The goal
+    # node drives them in sequence; the FINAL waypoint is the mission goal (used
+    # for success/auto-stop), so override goal_x/goal_y to it.
+    import json as _json
+    waypoints = task.get('waypoints') if isinstance(task, dict) else None
+    waypoints_json = ''
+    if waypoints:
+        pts = [[float(w['x']), float(w['y'])] for w in waypoints]
+        waypoints_json = _json.dumps(pts)
+        goal_x, goal_y = pts[-1][0], pts[-1][1]
 
     planner = str(cfg['planner'])
     if planner == 'auto':
@@ -697,6 +780,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         'spawn': spawn,
         'goal_x': goal_x,
         'goal_y': goal_y,
+        'waypoints_json': waypoints_json,
         'start_x': float(start['x']),
         'start_y': float(start['y']),
         'start_yaw': float(start['yaw']),
@@ -908,6 +992,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'frame_id': 'map_bev',
         'goal_x': cfg['goal_x'],
         'goal_y': cfg['goal_y'],
+        'waypoints_json': cfg.get('waypoints_json', ''),
     }
     mission_node = Node(
         package='experiments',
@@ -1133,6 +1218,156 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     }
 
 
+def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
+    """Multi-camera belief front-end (multicam_belief mode).
+
+    Replaces the single-camera ``yolo_robot_detector_node`` + ``pixel_to_bev``
+    with the batched four-camera detector and the ``camera_manager`` running in
+    ``authority=active`` mode. The manager selects the best available camera
+    per frame and republishes the world-frame correction to ``/state/bev`` --
+    the same topic the planner's ``_state_cb`` consumes -- so no planner change
+    is needed. Every camera's detection is projected with its own calibration,
+    so the fused correction is genuinely multi-camera.
+    """
+    sim_pkg = FindPackageShare('sim')
+    world_sdf = PathJoinSubstitution([sim_pkg, 'gazebo_worlds', 'worlds', cfg['world']])
+    batched = Node(
+        package='perception',
+        executable='batched_four_camera_yolo_node',
+        name='batched_four_camera_yolo',
+        output='screen',
+        parameters=[{
+            'use_sim_time': True,
+            'model_path': cfg['yolo_model'],
+            'runtime_backend': 'native',
+            'device': '0',
+            'image_size': cfg['yolo_imgsz'],
+            'confidence_threshold': cfg['yolo_conf_threshold'],
+            'iou_threshold': cfg['yolo_iou_threshold'],
+            'class_name': cfg['yolo_target_class'],
+            'class_id': cfg['yolo_class_id'],
+            'use_masks': False,
+            'mask_min_area': cfg['yolo_min_mask_area_px'],
+            'mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
+            'min_bbox_area_px': cfg['yolo_min_bbox_area_px'],
+            # Prune sub-threshold anchors before NMS+mask post-processing. At the
+            # 0.25 reporting threshold this changes no reported detection but cuts
+            # batch inference ~140 ms -> ~39 ms, which frees the P2000 to render
+            # the four oblique cameras faster: measured 3.3 Hz -> 4.9 Hz per
+            # camera (batched, all four in lockstep). See scheduled note.
+            'predict_conf_floor': float(cfg.get('yolo_predict_conf_floor', 0.05)),
+            'warmup_iters': int(cfg.get('yolo_warmup_iters', 3)),
+            # 0.25 s tolerates the phase offset between the four 5 Hz cameras;
+            # at 0.10 s most 4-way batches were dropped as stamp_skew.
+            'max_batch_stamp_skew_s': float(cfg.get('yolo_max_batch_stamp_skew_s', 0.25)),
+            'max_pending_wall_s': 0.50,
+            'synchronization_mode': 'strict',
+            'input_transport': 'ros',
+            'camera_observation_r_visible_uv': float(cfg.get('r_visible_uv', 2.5)),
+            'camera_observation_r_miss_uv': float(cfg.get('r_miss_uv', 40.0)),
+        }],
+    )
+    # Which cameras the fusion manager uses. Empty -> all four (default); restrict
+    # to one (e.g. "camera_A") for a single-camera localization baseline in the
+    # fused-vs-single comparison. camera_model_includes must stay aligned 1:1 with
+    # camera_ids (the manager asserts this), so derive it from the same selection.
+    _model_include_by_id = {
+        'camera_A': 'external_camera', 'camera_B': 'external_camera_b',
+        'camera_C': 'external_camera_c', 'camera_D': 'external_camera_d',
+    }
+    _mc_camera_ids = (
+        [c.strip() for c in str(cfg.get('manager_camera_ids', '') or '').split(',') if c.strip()]
+        or ['camera_A', 'camera_B', 'camera_C', 'camera_D']
+    )
+    _mc_model_includes = [_model_include_by_id[c] for c in _mc_camera_ids]
+    manager = Node(
+        package='reliability',
+        executable='camera_manager_node',
+        name='camera_manager_active',
+        output='screen',
+        parameters=[{
+            'use_sim_time': True,
+            'world_sdf': world_sdf,
+            'authority': 'active',
+            'active_output_topic': '/state/bev',
+            'frame_id': 'map_bev',
+            'gp_artifact_template': str(cfg.get('manager_gp_artifact_template', '') or ''),
+            'camera_ids': _mc_camera_ids,
+            'camera_model_includes': _mc_model_includes,
+            'decision_rate_hz': float(cfg.get('manager_decision_rate_hz', 5.0)),
+            'projection_calibration': str(cfg.get('manager_projection_calibration', '') or ''),
+            'require_projection_calibration': bool(cfg.get('manager_require_projection_calibration', True)),
+            'require_gp_artifacts': bool(cfg.get('manager_require_gp_artifacts', True)),
+            # Covariance-weighted fusion of all in-view cameras (default) instead
+            # of hard single-camera selection, which destabilised the belief.
+            'fusion_mode': bool(cfg.get('manager_fusion_mode', True)),
+            # Per-camera map observations for the planner's sequential filter.
+            # Additive -- the fused/selected outputs are unchanged -- so it is on
+            # whenever the planner might want them, and the planner ignores them
+            # unless state_correction_mode=per_camera.
+            'publish_map_observations': bool(
+                cfg.get('manager_publish_map_observations',
+                        str(cfg.get('state_correction_mode', 'fused')) == 'per_camera')
+            ),
+            'fusion_disagreement_gate_m': float(cfg.get('manager_fusion_disagreement_gate_m', 0.6)),
+            'fusion_max_timestamp_spread_s': float(
+                cfg.get('manager_fusion_max_timestamp_spread_s', 0.25)
+            ),
+            'covariance_profile': str(
+                cfg.get('manager_covariance_profile', 'legacy_fixed_metric')
+            ),
+            # Covariance the fused /state/bev correction reports to the planner
+            # EKF. At the higher ~5 Hz correction rate the fused observation is
+            # measured at ~0.19 m vs GT, so a 0.3 m report understates it and the
+            # EKF drifts on odometry between corrections. Reporting the measured
+            # accuracy lets the dense corrections pull the belief in.
+            'fusion_report_std_m': float(cfg.get('manager_fusion_report_std_m', 0.3)),
+            'min_spatial_trust': float(cfg.get('manager_min_spatial_trust', 0.15)),
+            # Gates relaxed for the ~1 Hz four-detector regime: the shipped
+            # defaults (age 0.15 s, assoc 0.70, 3-frame hysteresis, 0.30 m
+            # disagreement) were tuned for a higher-rate pilot and reject every
+            # observation here. These are disclosed demo-commissioning values.
+            'max_measurement_age_s': float(cfg.get('manager_max_measurement_age_s', cfg['pixel_timeout_s'])),
+            'age_decay_s': float(cfg.get('manager_age_decay_s', cfg['pixel_timeout_s'])),
+            'min_association_confidence': float(cfg.get('manager_min_association_confidence', 0.30)),
+            'required_consecutive_better_frames': int(cfg.get('manager_required_consecutive_better_frames', 1)),
+            'max_cross_camera_disagreement_m': float(cfg.get('manager_max_cross_camera_disagreement_m', 1.0)),
+            'require_consistency_when_source_available': bool(
+                cfg.get('manager_require_consistency_when_source_available', False)
+            ),
+        }],
+    )
+    return [batched, manager]
+
+
+def _scheduled_detector_node(cfg: Dict[str, object]):
+    """Reliability-aware scheduled detector: one inference/cycle on the
+    coverage-best camera, hand-over by belief, ~3-4 Hz -> /state/bev."""
+    sim_pkg = FindPackageShare('sim')
+    world_sdf = PathJoinSubstitution([sim_pkg, 'gazebo_worlds', 'worlds', cfg['world']])
+    return Node(
+        package='perception', executable='scheduled_camera_detector_node',
+        name='scheduled_camera_detector', output='screen',
+        parameters=[{
+            'use_sim_time': True,
+            'model_path': cfg['yolo_model'],
+            'world_sdf': world_sdf,
+            'coverage_artifact': str(cfg.get('scheduled_coverage_artifact', '') or ''),
+            'projection_calibration': str(cfg.get('manager_projection_calibration', '') or ''),
+            'device': str(cfg.get('yolo_device', '0') or '0'),
+            'imgsz': int(cfg.get('yolo_imgsz', 640)),
+            'conf': float(cfg.get('yolo_conf_threshold', 0.05)),
+            'iou': float(cfg.get('yolo_iou_threshold', 0.45)),
+            'contact_z_m': float(cfg.get('bbox_contact_z_m', 0.05)),
+            'report_std_m': float(cfg.get('scheduled_report_std_m', 0.15)),
+            'rate_hz': float(cfg.get('scheduled_rate_hz', 5.0)),
+            'frame_id': 'map_bev',
+            'spawn_x': float(cfg['spawn']['x']),
+            'spawn_y': float(cfg['spawn']['y']),
+        }],
+    )
+
+
 def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     """Create runtime actions for the visibility-aware agent launch."""
     odom_topic = str(cfg.get('odom_topic') or '/odom_noisy')
@@ -1145,6 +1380,24 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
         resolved_use_nogo_cost = _as_bool(raw_use_nogo_cost)
 
     cfg = dict(cfg)
+    multicam_belief = _as_bool(cfg.get('multicam_belief', False))
+    multicam_scheduled = _as_bool(cfg.get('multicam_scheduled', False))
+    if multicam_belief or multicam_scheduled:
+        # Multi-camera correction arrives as a world-frame /state/bev message,
+        # not a single-camera pixel_pose, so disable the pixel-correction path.
+        cfg['use_pixel_correction'] = False
+        # Fuse /state/bev as a proper recursive EKF (corrections applied on arrival
+        # in _apply_state_correction: latency-compensated motion replay + Kalman
+        # update + NIS gate with dead-reckon-and-grow recovery), matching the
+        # single-camera pixel path. No hard resets. Default ON for multicam; opt
+        # out with state_correction_ekf:false in the config.
+        raw_ekf = str(cfg.get('state_correction_ekf_raw', '') or '').strip()
+        cfg['state_correction_ekf'] = _as_bool(raw_ekf) if raw_ekf else True
+        # Preserve the locked single-camera result (where this cap did not
+        # exist), but prevent multicam fallback replay from inventing more
+        # motion than the robot can physically execute.
+        if float(cfg.get('max_predict_speed_mps', 0.0)) <= 0.0:
+            cfg['max_predict_speed_mps'] = float(cfg['v_max'])
     cfg['resolved_use_nogo_cost'] = resolved_use_nogo_cost
     shared_nodes = build_shared_nodes(cfg)
     planner = cfg['planner']
@@ -1193,8 +1446,14 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'horizon': cfg['horizon'],
             'dt': cfg['dt'],
             'v_max': cfg['v_max'],
+            'max_predict_speed_mps': cfg.get('max_predict_speed_mps', 0.0),
             'control_weight': cfg['control_weight'],
             'use_pixel_correction': cfg['use_pixel_correction'],
+            'state_correction_ekf': _as_bool(cfg.get('state_correction_ekf', False)),
+            'state_correction_mode': cfg.get('state_correction_mode', 'fused'),
+            'state_max_correction_jump_m': cfg.get('state_max_correction_jump_m', 0.0),
+            'state_measurement_inflation_std_m': cfg.get(
+                'state_measurement_inflation_std_m', 0.0),
             'pixel_topic': cfg['pixel_topic'],
             'pixel_timeout_s': cfg['pixel_timeout_s'],
             'pixel_correction_min_interval_s': cfg['pixel_correction_min_interval_s'],
@@ -1209,6 +1468,9 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'odom_topic': odom_topic,
             'use_odom_for_predict': cfg['use_odom_for_predict'],
             'heading_update_mode': cfg['heading_update_mode'],
+            # Spawn-yaw offset so the multicam belief heading lands in map_bev
+            # (single-cam path applies this in pixel_to_bev; multicam replaces it).
+            'odom_yaw_offset_rad': float(cfg['spawn']['yaw']),
             'local_controller_type': cfg['local_controller_type'],
             'min_state_cov': cfg['min_state_cov'],
             'debug_runtime': cfg['debug_runtime'],
@@ -1288,10 +1550,19 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
         }],
     )
 
-    after_odom = [
-        shared_nodes['perception_node'],
-        shared_nodes['pixel_to_bev'],
-    ]
+    if multicam_scheduled:
+        # Reliability-aware scheduled detector -> /state/bev (single-cam rate,
+        # hand-over by belief).
+        after_odom = [_scheduled_detector_node(cfg)]
+    elif multicam_belief:
+        # Guarded swap: 4-camera detector + active camera_manager -> /state/bev,
+        # in place of the single-camera detector + pixel_to_bev.
+        after_odom = list(_multicam_perception_nodes(cfg))
+    else:
+        after_odom = [
+            shared_nodes['perception_node'],
+            shared_nodes['pixel_to_bev'],
+        ]
     # Commissioning drive (enable_mission=false): omit the goal publisher + marker
     # so no goal is ever published. The EFE planner then no-ops in _plan_once and
     # never emits /cmd_vel, while its belief EKF keeps predicting on odom and

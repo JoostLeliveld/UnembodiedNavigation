@@ -1,0 +1,39 @@
+# Frozen usable-observation gate (P1 of the p_det / p_qual / p_use refocus).
+#
+# Loaded by reliability.observation_gates.UsableObservationGateConfig.from_yaml.
+# This file is FROZEN per dataset: its config_hash is recorded in every dataset
+# manifest and every model/planner artifact. Changing any value below changes the
+# meaning of detection_label / quality_label / usable_label — bump gate_id and
+# re-export rather than editing in place.
+#
+# Provenance: all inputs are operational (PIXEL / STATE / BELIEF / ODOM). No GT.
+
+gate_id: usable_observation_gate_v1
+
+# Camera image geometry — must match the dataset's cameras (external_camera*_3hz = 640x360).
+image_width_px: 640
+image_height_px: 360
+
+# --- detection availability (D_c) -------------------------------------------------
+# Frame liveness is a health-axis precondition for a detection to be possible.
+check_frame_freshness: true
+max_frame_age_ms: 500.0          # matches OpportunityConfig.max_measurement_age_s = 0.5 s
+
+# --- conditional quality (U_c | D_c) ----------------------------------------------
+# Confidence is a QUALITY check, not part of detection_label (framing that makes the
+# A5/A6 "quality gate without vs with confidence" ablation well defined).
+# 0.25 = node default (yolo_robot_detector_node.py:61); dataset re-gates offline from
+# logged raw_score. Only valid where the capture threshold was <= 0.25.
+check_confidence: true
+confidence_threshold: 0.25
+
+# Single-class robot detector today -> class check off until multi-class/id logs exist.
+check_class: false
+expected_class: null
+
+check_projection: true           # OperationalReliabilitySample.projection_valid
+check_association: true          # association-window validity
+require_track: false             # no runtime tracker in the localizer path yet
+check_edge_clip: true
+min_edge_distance_px: 4.0        # selected pixel must be >= 4 px from any image border
+check_localizer_accept: true     # final covariance-mapping accept/inflate/reject gate

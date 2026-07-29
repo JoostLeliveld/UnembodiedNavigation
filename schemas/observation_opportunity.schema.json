@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unav/schemas/observation_opportunity.schema.json",
+  "title": "ObservationOpportunity",
+  "description": "One camera opportunity (detection or miss) with frozen usability labels. Operational fields only; no Gazebo ground truth. Mirrors reliability.observation_opportunity.ObservationOpportunity (schema_version obs_opportunity_v1).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "timestamp", "run_id", "route_id", "camera_id",
+    "state_x", "state_y", "state_yaw", "state_source",
+    "frame_expected", "frame_received",
+    "detection_received", "confidence_threshold",
+    "image_width", "image_height",
+    "projection_attempted", "projection_valid",
+    "association_attempted", "association_valid",
+    "tracking_available", "tracking_valid",
+    "accepted_by_localizer",
+    "detection_label", "quality_label", "usable_label",
+    "failure_reason", "schema_version"
+  ],
+  "properties": {
+    "timestamp": {"type": "number"},
+    "run_id": {"type": "string", "minLength": 1},
+    "route_id": {"type": "string"},
+    "camera_id": {"type": "string", "minLength": 1},
+
+    "state_x": {"type": "number"},
+    "state_y": {"type": "number"},
+    "state_yaw": {"type": "number"},
+    "state_source": {"type": "string", "enum": ["ODOM", "BELIEF", "STATE"]},
+    "state_covariance": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3}
+      ]
+    },
+
+    "frame_expected": {"type": "boolean"},
+    "frame_received": {"type": "boolean"},
+    "frame_age_ms": {"type": ["number", "null"]},
+
+    "detection_received": {"type": "boolean"},
+    "detector_class": {"type": ["string", "null"]},
+    "detector_confidence": {"type": ["number", "null"], "minimum": 0.0, "maximum": 1.0},
+    "confidence_threshold": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+
+    "bbox_xmin": {"type": ["number", "null"]},
+    "bbox_ymin": {"type": ["number", "null"]},
+    "bbox_xmax": {"type": ["number", "null"]},
+    "bbox_ymax": {"type": ["number", "null"]},
+    "bbox_width": {"type": ["number", "null"]},
+    "bbox_height": {"type": ["number", "null"]},
+    "bbox_area": {"type": ["number", "null"]},
+    "bbox_center_u": {"type": ["number", "null"]},
+    "bbox_center_v": {"type": ["number", "null"]},
+    "selected_pixel_u": {"type": ["number", "null"]},
+    "selected_pixel_v": {"type": ["number", "null"]},
+    "image_width": {"type": "integer", "exclusiveMinimum": 0},
+    "image_height": {"type": "integer", "exclusiveMinimum": 0},
+    "edge_distance_px": {"type": ["number", "null"]},
+
+    "projection_attempted": {"type": "boolean"},
+    "projection_valid": {"type": "boolean"},
+    "association_attempted": {"type": "boolean"},
+    "association_valid": {"type": "boolean"},
+    "tracking_available": {"type": "boolean"},
+    "tracking_valid": {"type": "boolean"},
+    "accepted_by_localizer": {"type": "boolean"},
+
+    "detection_label": {"type": "integer", "enum": [0, 1]},
+    "quality_label": {"type": "integer", "enum": [0, 1]},
+    "usable_label": {"type": "integer", "enum": [0, 1]},
+
+    "failure_reason": {
+      "type": "string",
+      "enum": [
+        "NO_FRAME", "STALE_FRAME", "NO_DETECTION", "LOW_CONFIDENCE",
+        "WRONG_CLASS_OR_ID", "INVALID_PROJECTION", "INVALID_ASSOCIATION",
+        "INVALID_TRACK", "CLIPPED_OR_EDGE", "REJECTED_BY_LOCALIZER",
+        "USABLE", "UNKNOWN"
+      ]
+    },
+    "source_labels": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "enum": ["GT", "ODOM", "BELIEF", "STATE", "PIXEL", "MODEL"]}
+    },
+    "schema_version": {"type": "string", "const": "obs_opportunity_v1"}
+  },
+  "allOf": [
+    {
+      "description": "usable_label == 1 iff failure_reason == USABLE",
+      "if": {"properties": {"failure_reason": {"const": "USABLE"}}},
+      "then": {"properties": {"usable_label": {"const": 1}}},
+      "else": {"properties": {"usable_label": {"const": 0}}}
+    },
+    {
+      "description": "quality_label == 1 requires detection_label == 1",
+      "if": {"properties": {"quality_label": {"const": 1}}},
+      "then": {"properties": {"detection_label": {"const": 1}}}
+    }
+  ]
+}

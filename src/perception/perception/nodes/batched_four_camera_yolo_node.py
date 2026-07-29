@@ -123,6 +123,15 @@ class BatchedFourCameraYoloNode(Node):
         self.declare_parameter("opencv_num_threads", 1)
         self.declare_parameter("image_size", 640)
         self.declare_parameter("confidence_threshold", 0.25)
+        # Anchor pre-filter passed to Ultralytics ``predict`` (``conf``). At the
+        # default 0.0 every anchor survives to NMS and the segmentation head
+        # builds a mask for each survivor -- ~140 ms/batch on the P2000. Raising
+        # this floor below ``confidence_threshold`` prunes only anchors that
+        # would be thresholded out anyway, so the final detections are identical
+        # while NMS+mask cost drops ~3.5x (140 ms -> 39 ms). Kept at 0.0 by
+        # default so the strict evidence path (which reads raw_best_score on
+        # deep misses for availability modelling) is byte-for-byte unchanged.
+        self.declare_parameter("predict_conf_floor", 0.0)
         self.declare_parameter("iou_threshold", 0.45)
         self.declare_parameter("class_name", "robot")
         self.declare_parameter("class_id", -1)
@@ -197,6 +206,7 @@ class BatchedFourCameraYoloNode(Node):
 
         self.image_size = int(self.get_parameter("image_size").value)
         self.confidence_threshold = float(self.get_parameter("confidence_threshold").value)
+        self.predict_conf_floor = float(self.get_parameter("predict_conf_floor").value)
         self.iou_threshold = float(self.get_parameter("iou_threshold").value)
         self.class_name = str(self.get_parameter("class_name").value)
         self.class_id = int(self.get_parameter("class_id").value)
@@ -218,6 +228,11 @@ class BatchedFourCameraYoloNode(Node):
             raise RuntimeError("image_size must be positive")
         if not 0.0 <= self.confidence_threshold <= 1.0:
             raise RuntimeError("confidence_threshold must be in [0, 1]")
+        if not 0.0 <= self.predict_conf_floor <= self.confidence_threshold:
+            raise RuntimeError(
+                "predict_conf_floor must be in [0, confidence_threshold] so it can "
+                "never suppress a detection that clears the reporting threshold"
+            )
         if not 0.0 <= self.iou_threshold <= 1.0:
             raise RuntimeError("iou_threshold must be in [0, 1]")
         if self.pixel_noise_sigma < 0.0 or self.min_bbox_area_px < 0.0:
@@ -550,7 +565,7 @@ class BatchedFourCameraYoloNode(Node):
         kwargs = {
             "source": list(images_bgr),
             "imgsz": self.image_size,
-            "conf": 0.0,
+            "conf": self.predict_conf_floor,
             "iou": self.iou_threshold,
             "batch": len(images_bgr),
             "stream": False,
@@ -832,6 +847,21 @@ class BatchedFourCameraYoloNode(Node):
     def _process_frames(self, batch: tuple[PendingFrame, ...]) -> None:
         if not batch or len({item.camera_id for item in batch}) != len(batch):
             self._fatal("internal camera micro-batch identity violation")
+
+        # Startup clock race: before the first /clock tick under use_sim_time,
+        # ``now()`` reads 0 while camera images already carry sim stamps (e.g.
+        # 4.8 s), so publishing would trip the future-stamp integrity fault. The
+        # async drain guards this explicitly; mirror it here for the strict path
+        # so a batch that forms before the clock catches up is dropped (bounded
+        # warning) rather than crashing the detector. Only fires during the brief
+        # startup window where the clock is genuinely behind the image.
+        latest_source_stamp_s = max(item.stamp_ns for item in batch) * 1.0e-9
+        if self._clock_s() + MAX_FUTURE_IMAGE_STAMP_S < latest_source_stamp_s:
+            self._warn_bounded(
+                "strict_clock_wait",
+                "waiting for simulation clock before publishing four-camera batch",
+            )
+            return
 
         images: list[np.ndarray] = []
         try:

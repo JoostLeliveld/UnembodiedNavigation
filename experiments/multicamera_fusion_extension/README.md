@@ -17,6 +17,14 @@ camera-specific reliability
 -> continuity through occlusion and handover
 ```
 
+The focused D1 addition handles **short-lived dynamic occlusion** from tracked
+people, forklifts, or pallet jacks. It is deliberately a fusion-side response:
+a tracked actor crossing a fixed camera's sight line reduces that camera's
+instantaneous availability and inflates its map-observation covariance. It does
+not make dynamic actors part of the planner or use simulator truth at runtime.
+Run `tools/run_dynamic_occlusion_regression.py` for the deterministic regression
+artifact; live Gazebo actor data remains a separate experiment gate.
+
 It is not a license to turn the thesis into full CCTV graph optimization, LiDAR
 mapping, transformer fusion, fleet coordination, or energy-aware scheduling.
 

@@ -30,6 +30,14 @@ EVALUATION_ONLY_FIELD_NAMES = frozenset(
         "gt_x",
         "gt_y",
         "gt_yaw",
+        # raw-log GT-pose naming (perception.csv / experiment.csv). These are the ground
+        # truth as logged; the token list only caught gt_*, so add the true_* names and the
+        # GT-derived pos error explicitly. Mirrors reliability/config/leakage_firewall.yaml.
+        "true_available",
+        "true_x",
+        "true_y",
+        "true_yaw",
+        "state_pos_error",
         "gazebo_ground_truth_pose",
         "ground_truth_pose",
         "ground_truth_projected_pixel",

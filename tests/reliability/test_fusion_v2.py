@@ -16,6 +16,7 @@ from reliability.fusion import (  # noqa: E402
     MapObservation,
     expected_information_gain,
     fuse_or_select,
+    independent_measurement_fusion_2d,
     joseph_update_2d,
     robust_reweight_covariance,
     select_information_best,
@@ -93,6 +94,30 @@ class TestJosephUpdate:
         obs = _map_obs("camera_A", (1.0, 0.0))
         with pytest.raises(ContractValidationError):
             joseph_update_2d((0.0, 0.0), ((1.0, 5.0), (5.0, 1.0)), obs)
+
+
+class TestIndependentMeasurementFusion:
+    def test_equal_covariances_average_measurements_and_halve_covariance(self):
+        mean, covariance = independent_measurement_fusion_2d([
+            _map_obs("camera_A", (0.0, 2.0), ((0.04, 0.0), (0.0, 0.10))),
+            _map_obs("camera_B", (2.0, 4.0), ((0.04, 0.0), (0.0, 0.10))),
+        ])
+        assert mean == pytest.approx((1.0, 3.0))
+        assert covariance[0] == pytest.approx((0.02, 0.0))
+        assert covariance[1] == pytest.approx((0.0, 0.05))
+
+    def test_more_precise_measurement_gets_more_weight_without_prior_bias(self):
+        mean, covariance = independent_measurement_fusion_2d([
+            _map_obs("camera_A", (0.0, 0.0), ((0.01, 0.0), (0.0, 0.01))),
+            _map_obs("camera_B", (10.0, 10.0), ((1.0, 0.0), (0.0, 1.0))),
+        ])
+        assert mean == pytest.approx((10.0 / 101.0, 10.0 / 101.0))
+        assert covariance[0][0] == pytest.approx(1.0 / 101.0)
+        assert covariance[1][1] == pytest.approx(1.0 / 101.0)
+
+    def test_requires_an_observation(self):
+        with pytest.raises(ContractValidationError):
+            independent_measurement_fusion_2d([])
 
 
 class TestRobustReweight:

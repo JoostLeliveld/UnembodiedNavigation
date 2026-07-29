@@ -13,6 +13,8 @@ import xml.etree.ElementTree as ET
 
 from reliability.contracts import CameraObservation
 
+Matrix2x2 = tuple[tuple[float, float], tuple[float, float]]
+
 
 def camera_model_from_world(world_sdf: str | Path, *, include_name: str):
     """Build a ground-plane camera model from an SDF ``<include>`` pose."""
@@ -71,7 +73,88 @@ def project_observation_to_world(
 
     if not observation.detection_valid or observation.pixel_uv is None:
         return None
+    return _project_pixel_to_world(
+        observation.pixel_uv[0],
+        observation.pixel_uv[1],
+        camera,
+        contact_z_m=contact_z_m,
+        along_bearing_offset_m=along_bearing_offset_m,
+        along_bearing_slope_per_m=along_bearing_slope_per_m,
+    )
+
+
+def project_observation_to_world_with_covariance(
+    observation: CameraObservation,
+    camera,
+    *,
+    contact_z_m: float,
+    along_bearing_offset_m: float = 0.0,
+    along_bearing_slope_per_m: float = 0.0,
+    jacobian_step_px: float = 0.5,
+    min_eigenvalue_m2: float = 1.0e-12,
+) -> tuple[tuple[float, float], Matrix2x2] | None:
+    """Project an observation and its full pixel covariance into map coordinates.
+
+    This is the strict paper-1 precision-covariance reproduction path:
+    ``CameraObservation.conditional_cov_uv`` is already the historical
+    trust-to-R precision blend in px².  The complete corrected projection is
+    differentiated numerically and the covariance is propagated as
+    ``R_xy = J R_uv Jᵀ``.  The tiny eigenvalue floor is numerical only; it is
+    many orders of magnitude below any physical measurement covariance.
+    """
+
+    if not observation.detection_valid or observation.pixel_uv is None:
+        return None
+    step = float(jacobian_step_px)
+    if not math.isfinite(step) or step <= 0.0:
+        raise ValueError("jacobian_step_px must be finite and positive")
+    floor = float(min_eigenvalue_m2)
+    if not math.isfinite(floor) or floor <= 0.0:
+        raise ValueError("min_eigenvalue_m2 must be finite and positive")
+
     u, v = observation.pixel_uv
+    kwargs = {
+        "contact_z_m": contact_z_m,
+        "along_bearing_offset_m": along_bearing_offset_m,
+        "along_bearing_slope_per_m": along_bearing_slope_per_m,
+    }
+    centre = _project_pixel_to_world(u, v, camera, **kwargs)
+    if centre is None:
+        return None
+    du = _projection_derivative(
+        camera, u, v, axis=0, step=step, centre=centre, kwargs=kwargs
+    )
+    dv = _projection_derivative(
+        camera, u, v, axis=1, step=step, centre=centre, kwargs=kwargs
+    )
+    if du is None or dv is None:
+        return None
+
+    # J rows are map x/y and columns are pixel u/v.
+    j00, j10 = du
+    j01, j11 = dv
+    r_uv = observation.conditional_cov_uv
+    a = float(r_uv[0][0])
+    b = 0.5 * (float(r_uv[0][1]) + float(r_uv[1][0]))
+    d = float(r_uv[1][1])
+    xx = j00 * j00 * a + 2.0 * j00 * j01 * b + j01 * j01 * d
+    xy = j00 * j10 * a + (j00 * j11 + j01 * j10) * b + j01 * j11 * d
+    yy = j10 * j10 * a + 2.0 * j10 * j11 * b + j11 * j11 * d
+    covariance = _floor_spd_2x2(((xx, xy), (xy, yy)), floor)
+    return centre, covariance
+
+
+def _project_pixel_to_world(
+    u: float,
+    v: float,
+    camera,
+    *,
+    contact_z_m: float,
+    along_bearing_offset_m: float,
+    along_bearing_slope_per_m: float,
+) -> tuple[float, float] | None:
+    """Project one pixel through the complete mean-calibration function."""
+
     if contact_z_m > 0.0:
         point = camera.pixel_to_world_at_z(u, v, contact_z_m)
     else:
@@ -86,6 +169,59 @@ def project_observation_to_world(
     offset = along_bearing_offset_m + along_bearing_slope_per_m * norm
     scale = offset / norm
     return (point[0] + bearing_x * scale, point[1] + bearing_y * scale)
+
+
+def _projection_derivative(
+    camera,
+    u: float,
+    v: float,
+    *,
+    axis: int,
+    step: float,
+    centre: tuple[float, float],
+    kwargs: dict[str, float],
+) -> tuple[float, float] | None:
+    """Central projection derivative with a one-sided image-edge fallback."""
+
+    plus = _project_pixel_to_world(
+        u + (step if axis == 0 else 0.0),
+        v + (step if axis == 1 else 0.0),
+        camera,
+        **kwargs,
+    )
+    minus = _project_pixel_to_world(
+        u - (step if axis == 0 else 0.0),
+        v - (step if axis == 1 else 0.0),
+        camera,
+        **kwargs,
+    )
+    if plus is not None and minus is not None:
+        return (
+            (float(plus[0]) - float(minus[0])) / (2.0 * step),
+            (float(plus[1]) - float(minus[1])) / (2.0 * step),
+        )
+    if plus is not None:
+        return (
+            (float(plus[0]) - float(centre[0])) / step,
+            (float(plus[1]) - float(centre[1])) / step,
+        )
+    if minus is not None:
+        return (
+            (float(centre[0]) - float(minus[0])) / step,
+            (float(centre[1]) - float(minus[1])) / step,
+        )
+    return None
+
+
+def _floor_spd_2x2(matrix: Matrix2x2, floor: float) -> Matrix2x2:
+    """Add only enough isotropic jitter to give the matrix a numerical SPD floor."""
+
+    a = float(matrix[0][0])
+    b = 0.5 * (float(matrix[0][1]) + float(matrix[1][0]))
+    d = float(matrix[1][1])
+    minimum = 0.5 * (a + d) - math.hypot(0.5 * (a - d), b)
+    jitter = max(0.0, float(floor) - minimum)
+    return ((a + jitter, b), (b, d + jitter))
 
 
 def load_projection_calibration(path: str | Path) -> dict[str, dict[str, float]]:

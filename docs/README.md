@@ -26,6 +26,10 @@ manifests — so their paths are contracts, not free to move.
 | [`contribution_map.md`](contribution_map.md) | The module-chain narrative from camera observation to reliability-aware route behavior (long-form companion to [`../modules/`](../modules/)). |
 | [`campaign_log_metrics.md`](campaign_log_metrics.md) | Read before computing any metric: the 200+ log columns and the belief/truth column traps. Cited by the canonical loaders in `scripts/`. |
 | [`metric_definitions_and_gt_audit.md`](metric_definitions_and_gt_audit.md) | Metric definitions and the `truth_*` = wheel-odom contamination audit. |
+| [`observability_audit.md`](observability_audit.md) | Phase-0 repository audit for the spatial-observability refocus: data flow, labels, every GT use, GP target, planner interface, gaps. |
+| [`usable_observation/audit.md`](usable_observation/audit.md) | Audit through the p_det/p_qual/p_use decomposition: three disagreeing GP targets, misses-dropped gap, frozen-threshold gap, contract field gaps, staged plan. |
+| [`usable_observation/data_contract.md`](usable_observation/data_contract.md) | P1 usable-observation contract: ObservationOpportunity schema, frozen gate order + thresholds, failure_reason enum, label semantics, Gate 1 result. |
+| [`usable_observation/confidence_analysis.md`](usable_observation/confidence_analysis.md) | §10 confidence critique (EVAL-ONLY): YOLO confidence is positively associated with localization error (partial Spearman +0.59) and adds no value beyond geometry — must not be inverse covariance. |
 | [`modular_validation_workflow.md`](modular_validation_workflow.md) | Validation-first way of working and the module exit checklists. |
 | [`runtime_dataflow.md`](runtime_dataflow.md) | Offline artifact flow and online ROS topic flow. |
 | [`uncertainty_propagation.md`](uncertainty_propagation.md) | Process, command, encoder, and belief-covariance conventions. |

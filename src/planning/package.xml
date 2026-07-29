@@ -20,6 +20,9 @@
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>perception</exec_depend>
+  <!-- MapObservation wire format for the per-camera sequential filter.
+       reliability.fusion is ROS-free; no circular dependency. -->
+  <exec_depend>reliability</exec_depend>
   <exec_depend>unav_common</exec_depend>
   <exec_depend>python3-scipy</exec_depend>
 

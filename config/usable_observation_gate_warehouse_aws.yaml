@@ -1,0 +1,35 @@
+# Frozen usable-observation gate for the SINGLE-CAMERA warehouse_aws method-dev corpus
+# (honest_campaign_v1). Specializes config/usable_observation_gate.yaml to the
+# warehouse_aws external_camera (1280x720) and to the checks the single-cam operational
+# logs can actually populate.
+#
+# Disabled checks below are disabled *because the log lacks a reliable signal*, not to
+# inflate usability. Each is justified. Re-enable only when the corresponding field is
+# logged. Frozen: config_hash recorded in the dataset manifest; bump gate_id to change.
+
+gate_id: usable_observation_gate_warehouse_aws_v1
+
+# warehouse_aws external_camera model (src/sim/models/external_camera/model.sdf)
+image_width_px: 1280
+image_height_px: 720
+
+# --- detection availability (D_c) -------------------------------------------------
+# No reliable per-frame camera-frame-age column in perception.csv (pixel_pose_age_s is
+# mostly NaN); the external camera runs at a regular ~3 Hz. Frame-liveness is therefore
+# OFF for this corpus and handled as a health axis elsewhere. detection_received is set by
+# the exporter from yolo_score_raw >= detection_floor (0.05) — justified by the sharply
+# bimodal score distribution (misses: p95=0.000, max=0.040; detections: p05=0.787).
+check_frame_freshness: false
+max_frame_age_ms: 500.0
+
+# --- conditional quality (U_c | D_c) ----------------------------------------------
+check_confidence: true          # yolo_score_raw >= 0.25 (frozen quality threshold)
+confidence_threshold: 0.25
+check_class: false              # single-class robot detector
+expected_class: null
+check_projection: true          # pixel_pose_available==1 AND finite(pred_world_x) (99.6% pass)
+check_association: false         # no multi-camera association in single-cam; re-enable in 4-cam world
+require_track: false            # no runtime tracker in the localizer path
+check_edge_clip: true           # selected pixel >= 4 px from any border (never triggers here; min 47 px)
+min_edge_distance_px: 4.0
+check_localizer_accept: false    # no boolean localizer-accept logged; covariance-mapping re-eval is future work

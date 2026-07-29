@@ -29,6 +29,7 @@ from reliability.fusion import (
     conservative_camera_score,
     expected_information_gain,
     fuse_or_select,
+    independent_measurement_fusion_2d,
     joseph_update_2d,
     robust_reweight_covariance,
     select_best_static_reliability,
@@ -47,6 +48,13 @@ from reliability.confidence_calibration import (
     LogisticCalibrator,
     MultivariateLogisticCalibrator,
     reliability_curve,
+)
+from reliability.dynamic_occlusion import (
+    DynamicActorState,
+    DynamicOcclusionConfig,
+    DynamicOcclusionDiagnostic,
+    dynamic_occlusion_adjusted_observation,
+    dynamic_occlusion_probability,
 )
 from reliability.conditional_covariance import (
     CovarianceEstimate,
@@ -261,6 +269,7 @@ __all__ = [
     "conservative_camera_score",
     "expected_information_gain",
     "fuse_or_select",
+    "independent_measurement_fusion_2d",
     "joseph_update_2d",
     "robust_reweight_covariance",
     "select_best_static_reliability",
@@ -277,6 +286,11 @@ __all__ = [
     "LogisticCalibrator",
     "MultivariateLogisticCalibrator",
     "reliability_curve",
+    "DynamicActorState",
+    "DynamicOcclusionConfig",
+    "DynamicOcclusionDiagnostic",
+    "dynamic_occlusion_adjusted_observation",
+    "dynamic_occlusion_probability",
     "CovarianceEstimate",
     "chi2_coverage",
     "default_shrinkage_lambda",

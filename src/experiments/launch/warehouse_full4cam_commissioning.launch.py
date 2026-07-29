@@ -184,6 +184,14 @@ def generate_launch_description() -> LaunchDescription:
                 "'false' if '", LaunchConfiguration("yolo_input_transport"),
                 "'.lower() == 'direct_gz' else 'true'",
             ]),
+            # Semantic streams are disabled for operational commissioning. They
+            # are enabled only for the evaluation-only opportunity audit, where
+            # they establish per-camera visibility without entering the
+            # detector/planner/logging path.
+            "bridge_segmentation": LaunchConfiguration("bridge_segmentation"),
+            "bridge_segmentation_b": LaunchConfiguration("bridge_segmentation_b"),
+            "bridge_segmentation_c": LaunchConfiguration("bridge_segmentation_c"),
+            "bridge_segmentation_d": LaunchConfiguration("bridge_segmentation_d"),
             "bridge_contacts": LaunchConfiguration("bridge_contacts"),
             "spawn_x": LaunchConfiguration("spawn_x"),
             "spawn_y": LaunchConfiguration("spawn_y"),
@@ -264,6 +272,22 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument(
             "bridge_contacts", default_value="true",
             description="Bridge all world contact sensors; disable only for non-evidence timing ablations",
+        ),
+        DeclareLaunchArgument(
+            "bridge_segmentation", default_value="false",
+            description="Evaluation-only semantic bridge for camera_A; never enable during operational recording.",
+        ),
+        DeclareLaunchArgument(
+            "bridge_segmentation_b", default_value="false",
+            description="Evaluation-only semantic bridge for camera_B; never enable during operational recording.",
+        ),
+        DeclareLaunchArgument(
+            "bridge_segmentation_c", default_value="false",
+            description="Evaluation-only semantic bridge for camera_C; never enable during operational recording.",
+        ),
+        DeclareLaunchArgument(
+            "bridge_segmentation_d", default_value="false",
+            description="Evaluation-only semantic bridge for camera_D; never enable during operational recording.",
         ),
         # Central-aisle default; route-specific spawns come from study.yaml once
         # the full_4cam routes are designed.

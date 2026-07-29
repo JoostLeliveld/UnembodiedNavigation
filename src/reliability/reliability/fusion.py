@@ -27,6 +27,83 @@ class MapObservation:
         if self.quality.camera_id and self.quality.camera_id != self.camera_id:
             raise ContractValidationError("quality.camera_id must match MapObservation.camera_id")
 
+    def to_dict(self) -> dict:
+        return {
+            "camera_id": self.camera_id,
+            "timestamp_s": float(self.timestamp_s),
+            "xy_m": [float(self.xy_m[0]), float(self.xy_m[1])],
+            "covariance_m2": [
+                [float(self.covariance_m2[0][0]), float(self.covariance_m2[0][1])],
+                [float(self.covariance_m2[1][0]), float(self.covariance_m2[1][1])],
+            ],
+            "quality": self.quality.to_dict(),
+            "source": self.source,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping) -> "MapObservation":
+        if not isinstance(payload, Mapping):
+            raise ContractValidationError("MapObservation payload must be a mapping")
+        missing = {"camera_id", "timestamp_s", "xy_m", "covariance_m2", "quality"} - set(payload)
+        if missing:
+            raise ContractValidationError(
+                "MapObservation is missing fields: " + ", ".join(sorted(missing))
+            )
+        return cls(
+            camera_id=str(payload["camera_id"]),
+            timestamp_s=float(payload["timestamp_s"]),
+            xy_m=tuple(payload["xy_m"]),
+            covariance_m2=tuple(tuple(row) for row in payload["covariance_m2"]),
+            quality=CameraQuality.from_dict(payload["quality"]),
+            source=str(payload.get("source", "")),
+        )
+
+
+#: Wire format version for the per-camera map-observation batch. The planner
+#: refuses a batch it does not recognise rather than silently misreading it.
+MAP_OBSERVATION_BATCH_SCHEMA = "map_observation_batch/1"
+
+
+def map_observations_to_json(observations: Sequence[MapObservation], *, frame_id: str = "map") -> str:
+    """Serialize per-camera map observations for the planner's sequential filter.
+
+    This is the seam between projection/covariance (camera_manager's job) and
+    belief updating (the planner's job). Each observation keeps its OWN
+    covariance: the planner folds them in one at a time, so a per-camera
+    covariance model reaches the filter intact instead of being collapsed into
+    a single fused pose first.
+    """
+    import json
+
+    return json.dumps(
+        {
+            "schema": MAP_OBSERVATION_BATCH_SCHEMA,
+            "frame_id": frame_id,
+            "observations": [obs.to_dict() for obs in observations],
+        },
+        sort_keys=True,
+        allow_nan=False,
+    )
+
+
+def map_observations_from_json(text: str) -> tuple[list[MapObservation], str]:
+    """Inverse of :func:`map_observations_to_json`; returns (observations, frame_id)."""
+    import json
+
+    payload = json.loads(text)
+    if not isinstance(payload, Mapping):
+        raise ContractValidationError("map-observation batch must be a JSON object")
+    schema = str(payload.get("schema", ""))
+    if schema != MAP_OBSERVATION_BATCH_SCHEMA:
+        raise ContractValidationError(
+            f"unsupported map-observation batch schema {schema!r}; "
+            f"expected {MAP_OBSERVATION_BATCH_SCHEMA!r}"
+        )
+    raw = payload.get("observations", [])
+    if not isinstance(raw, Sequence):
+        raise ContractValidationError("map-observation batch 'observations' must be a list")
+    return [MapObservation.from_dict(item) for item in raw], str(payload.get("frame_id", "map"))
+
 
 @dataclass(frozen=True)
 class SequentialFusionResult:
@@ -197,6 +274,38 @@ def sequential_kalman_update_2d(
         rejected_camera_ids=tuple(rejected),
         nis_by_camera=nis_by_camera,
     )
+
+
+def independent_measurement_fusion_2d(
+    observations: Iterable[MapObservation],
+) -> tuple[tuple[float, float], tuple[tuple[float, float], tuple[float, float]]]:
+    """Fuse independent 2-D measurements without inventing a state prior.
+
+    ``R_fused = (sum R_i^-1)^-1`` and
+    ``z_fused = R_fused sum R_i^-1 z_i``.  This produces a measurement for the
+    planner's one real belief filter.  It must not be replaced by a Kalman
+    update against an arbitrary identity prior, which would filter the cameras
+    once here and then filter the resulting pseudo-measurement a second time.
+    Cross-camera correlation is deliberately outside this historical baseline.
+    """
+
+    items = tuple(observations)
+    if not items:
+        raise ContractValidationError("at least one map observation is required")
+    information = ((0.0, 0.0), (0.0, 0.0))
+    information_vector = (0.0, 0.0)
+    for observation in items:
+        precision = _mat_inv_2x2(observation.covariance_m2)
+        information = _mat_add(information, precision)
+        weighted = _mat_vec(precision, observation.xy_m)
+        information_vector = (
+            information_vector[0] + weighted[0],
+            information_vector[1] + weighted[1],
+        )
+    covariance = _symmetrize(_mat_inv_2x2(_symmetrize(information)))
+    mean = _mat_vec(covariance, information_vector)
+    _validate_spd(covariance, "fused_measurement_covariance_m2")
+    return mean, covariance
 
 
 def camera_disagreement_m(observations: Sequence[MapObservation]) -> float:

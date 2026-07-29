@@ -9,6 +9,11 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from reliability.camera_manager import CameraManager, CameraManagerConfig
 from reliability.contracts import CameraQuality, ContractValidationError
+from reliability.dynamic_occlusion import (
+    DynamicActorState,
+    DynamicOcclusionConfig,
+    dynamic_occlusion_adjusted_observation,
+)
 from reliability.fusion import MapObservation, SequentialFusionResult, sequential_kalman_update_2d
 from reliability.handover import HandoverUncertaintyConfig, HandoverUncertaintyDiagnostic, handover_adjusted_observation
 from reliability.health_ewma import (
@@ -31,6 +36,7 @@ class ReplayMode(str, Enum):
     HANDOVER_AWARE_SELECTION = "M7_handover_aware_selection"
     HYSTERETIC_HANDOVER_SELECTION = "M8_hysteretic_handover_selection"
     HEALTH_AWARE_FUSION = "B6_health_aware_fusion"
+    DYNAMIC_OCCLUSION_AWARE_FUSION = "D1_dynamic_occlusion_aware_fusion"
 
 
 @dataclass(frozen=True)
@@ -38,11 +44,13 @@ class ReplayFrame:
     timestamp_s: float
     odometry_xy_m: tuple[float, float]
     observations: tuple[MapObservation, ...] = field(default_factory=tuple)
+    dynamic_actors: tuple[DynamicActorState, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "timestamp_s", _finite(self.timestamp_s, "timestamp_s"))
         object.__setattr__(self, "odometry_xy_m", _pair(self.odometry_xy_m, "odometry_xy_m"))
         object.__setattr__(self, "observations", tuple(self.observations))
+        object.__setattr__(self, "dynamic_actors", tuple(self.dynamic_actors))
 
 
 @dataclass(frozen=True)
@@ -77,6 +85,9 @@ class ReplayConfig:
     # finalizes it (and eta/rho) on the pilot before the confirmatory campaign.
     health_inflate_threshold: float = 0.7
     health_suspect_inflation: float = 9.0
+    # D1 dynamic-occlusion-aware fusion. Actor states must come from an
+    # operational tracker at the same frame timestamp, never simulation truth.
+    dynamic_occlusion_config: DynamicOcclusionConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +102,7 @@ class ReplayStep:
     camera_manager_decision: dict[str, Any] = field(default_factory=dict)
     health_by_camera: dict[str, float] = field(default_factory=dict)
     health_state_by_camera: dict[str, str] = field(default_factory=dict)
+    dynamic_occlusion_diagnostics: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -165,6 +177,7 @@ def run_replay(
         camera_manager_decision: dict[str, Any] = {}
         frame_health: dict[str, float] = {}
         frame_health_state: dict[str, str] = {}
+        dynamic_occlusion_diagnostics: tuple[dict[str, Any], ...] = tuple()
         if config.mode == ReplayMode.HANDOVER_AWARE_SELECTION:
             replay_obs, handover_diagnostics, selected_handover_observation = _handover_observations_for_config(
                 frame.observations,
@@ -202,6 +215,10 @@ def run_replay(
                 health_monitors,
                 health_debouncers,
                 config,
+            )
+        elif config.mode == ReplayMode.DYNAMIC_OCCLUSION_AWARE_FUSION:
+            replay_obs, dynamic_occlusion_diagnostics = _dynamic_occlusion_observations(
+                frame.observations, frame.dynamic_actors, config,
             )
         else:
             replay_obs = _observations_for_config(
@@ -253,6 +270,7 @@ def run_replay(
                 camera_manager_decision=camera_manager_decision,
                 health_by_camera=dict(frame_health),
                 health_state_by_camera=dict(frame_health_state),
+                dynamic_occlusion_diagnostics=dynamic_occlusion_diagnostics,
             )
         )
 
@@ -455,6 +473,33 @@ def _health_aware_observations(
         else:
             accepted.append(obs)
     return tuple(accepted), health_vals, health_states
+
+
+def _dynamic_occlusion_observations(
+    observations: Sequence[MapObservation],
+    actors: Sequence[DynamicActorState],
+    config: ReplayConfig,
+) -> tuple[tuple[MapObservation, ...], tuple[dict[str, Any], ...]]:
+    """D1: make the camera update conservative while tracked actors cross its ray."""
+
+    if config.dynamic_occlusion_config is None:
+        raise ContractValidationError(
+            "DYNAMIC_OCCLUSION_AWARE_FUSION requires dynamic_occlusion_config"
+        )
+    adjusted: list[MapObservation] = []
+    diagnostics: list[dict[str, Any]] = []
+    for observation in observations:
+        item, diagnostic = dynamic_occlusion_adjusted_observation(
+            observation, actors, config.dynamic_occlusion_config,
+        )
+        adjusted.append(item)
+        diagnostics.append({
+            "camera_id": diagnostic.camera_id,
+            "occlusion_probability": diagnostic.occlusion_probability,
+            "covariance_inflation": diagnostic.covariance_inflation,
+            "blocking_actor_ids": list(diagnostic.blocking_actor_ids),
+        })
+    return tuple(adjusted), tuple(diagnostics)
 
 
 def _handover_observations_for_config(

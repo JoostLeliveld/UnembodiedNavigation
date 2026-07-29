@@ -189,6 +189,7 @@ training:
   seed: 417
   smoke_epochs: 5
   full_epochs: 30
+  require_training_grade_fourcam_dataset: true
   immutable_versioned_output: true
 
 acceptance:

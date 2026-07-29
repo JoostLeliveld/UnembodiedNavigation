@@ -75,6 +75,26 @@ def test_initial_selection_uses_highest_operational_score() -> None:
     assert not decision.switched
 
 
+def test_eligible_observations_is_non_mutating_and_applies_all_release_gates() -> None:
+    manager = _manager()
+    candidates, scores, rejected = manager.eligible_observations(
+        timestamp_s=1.0,
+        observations=(
+            _obs("camera_A", timestamp_s=1.0, p=0.90),
+            _obs("camera_B", timestamp_s=0.70, p=0.95),
+            _obs("camera_C", timestamp_s=1.0, association=0.20),
+            _obs("camera_D", timestamp_s=1.0, p=0.01),
+        ),
+    )
+
+    assert set(candidates) == {"camera_A"}
+    assert scores["camera_A"] > 0.0
+    assert "measurement_stale" in rejected["camera_B"]
+    assert "association_below_minimum" in rejected["camera_C"]
+    assert "spatial_trust_below_minimum" in rejected["camera_D"]
+    assert manager.active_camera_id == ""
+
+
 def test_handover_requires_same_better_candidate_for_required_frames() -> None:
     manager = _manager()
     assert manager.select(timestamp_s=0.0, observations=(_obs("camera_A", timestamp_s=0.0, p=0.80),)).selected_camera_id == "camera_A"

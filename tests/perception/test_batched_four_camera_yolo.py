@@ -146,6 +146,9 @@ def test_runtime_source_has_one_native_model_and_the_complete_operational_contra
     assert source.count("self.model = YOLO(str(model_load_path))") == 1
     assert '"source": list(images_bgr)' in source
     assert '"batch": len(images_bgr)' in source
+    # Native inference must run exactly once per A--D batch. Calling predict
+    # twice halves throughput while silently discarding the first result.
+    assert source.count("else self._predict_batch(images)") == 1
     assert "use_torchscript" not in source
     assert "ground_truth" not in source
     assert "oracle_" not in source
@@ -230,6 +233,14 @@ def test_launch_defaults_to_batched_mode_with_typed_device_and_keeps_fallback() 
     assert '"runtime_backend": LaunchConfiguration("yolo_runtime_backend")' in launch
     assert '"yolo_runtime_backend", default_value="native"' in launch
     assert '"runtime_trace_period_s": LaunchConfiguration("yolo_runtime_trace_period_s")' in launch
+    for bridge in (
+        "bridge_segmentation",
+        "bridge_segmentation_b",
+        "bridge_segmentation_c",
+        "bridge_segmentation_d",
+    ):
+        assert f'LaunchConfiguration("{bridge}")' in launch
+        assert f'"{bridge}", default_value="false"' in launch
     assert 'on_exit=Shutdown(reason="batched four-camera detector exited")' in launch
     assert 'executable="yolo_robot_detector_node"' in launch
     assert (

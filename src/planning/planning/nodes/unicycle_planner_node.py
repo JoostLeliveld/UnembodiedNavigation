@@ -15,15 +15,24 @@ from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallb
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry, Path
 from std_msgs.msg import Float64MultiArray, String
+from builtin_interfaces.msg import Time as TimeMsg
 
 from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
     diagnostics_from_message,
 )
+from reliability.fusion import map_observations_from_json
+
 from planning.core.efe_utils import wrap_angle
+from planning.core import belief_correction as bc
 
 PIXEL_DIAG_K_THETA_U_IDX = 42
 PIXEL_DIAG_K_THETA_V_IDX = 43
+
+# A metric xy correction says nothing about heading; keep its yaw variance
+# non-informative so no consumer mistakes it for a heading fix. Matches
+# camera_manager_node.NONINFORMATIVE_YAW_VAR.
+NONINFORMATIVE_YAW_VAR = float(math.pi ** 2)
 
 
 def _as_bool(value):
@@ -181,6 +190,24 @@ class UnicyclePlannerNode(Node):
 
         # Pixel correction params
         _declare_if_not('use_pixel_correction', False)
+        # Multicam /state/bev belief filter. When False the legacy path hard-resets
+        # the belief xy to each raw fused correction (no smoothing, no latency
+        # compensation). When True the /state/bev correction is fused through the
+        # same predict->EKF-update->predict cycle the single-camera pixel path
+        # uses: motion-replay latency compensation to the correction stamp, a
+        # covariance-weighted Kalman update, NIS + jump gating.
+        _declare_if_not('state_correction_ekf', False)
+        # How the multicam measurements reach the filter.
+        #   'fused'      -- one pre-fused /state/bev pose per tick (camera_manager
+        #                   fuses in map space, then the planner does one update).
+        #   'per_camera' -- the per-camera map observations, folded in
+        #                   SEQUENTIALLY, each with its own covariance and its own
+        #                   gate decision. One filter instead of two in series.
+        # Both run the same gate chain, so this is a clean A/B.
+        _declare_if_not('state_correction_mode', 'fused')
+        _declare_if_not(
+            'map_observations_topic', '/reliability/camera_manager/map_observations'
+        )
         _declare_if_not('pixel_topic', '/perception/pixel_pose')
         _declare_if_not('cmd_topic', '/cmd_vel')
         _declare_if_not('cmd_publish_rate', 10.0)
@@ -204,6 +231,76 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('odom_topic', '/odom_noisy')
         _declare_if_not('use_odom_for_predict', True)
         _declare_if_not('heading_update_mode', 'camera_xy_only')
+        # Spawn yaw (map_bev - odom). The single-camera path applies this in
+        # pixel_to_bev_state_node (heading = odom_yaw + offset); the multicam
+        # path replaces that node, so the planner must apply it itself or the
+        # belief heading stays in the raw-odom frame and the robot plans/drives
+        # ~90 deg off. Default 0 keeps the single-camera path unchanged.
+        _declare_if_not('odom_yaw_offset_rad', 0.0)
+        # Divergence guards for the multicam /state/bev EKF. The fused correction
+        # is camera-derived + manager-gated (reliable ~0.2 m), so if the predicted
+        # belief lands implausibly far from a fresh correction the belief (or a
+        # bad-stamp replay) has diverged -> hard re-anchor to the correction rather
+        # than NIS-reject it (which locks the belief out of recovery). And cap the
+        # motion-replay interval so a single far-future correction stamp cannot
+        # jump the prediction tens of metres.
+        _declare_if_not('state_reanchor_m', 2.0)
+        _declare_if_not('state_max_predict_dt_s', 1.5)
+        # Covariance added on a REJECTED /state/bev correction. A rejection must
+        # never freeze the belief, so the stamp still advances and S grows -- but
+        # the old +1.0 m^2 was large enough to neuter the NIS gate for the next
+        # correction (S_y ~ 1.0 makes a 1.87 m innovation score NIS ~3.4 and sail
+        # through at gain 0.97, which is how the unguarded jump got in). This is
+        # sized so repeated rejections still recover, via the state_reanchor_m
+        # guard, without blinding the gate after a single one.
+        _declare_if_not('state_reject_inflate_m2', 0.05)
+        # Jump limiter for the METRIC (/state/bev, per-camera) path. Default OFF,
+        # and deliberately separate from pixel_max_correction_jump_m.
+        #
+        # NIS and a jump limit fire in OPPOSITE regimes. Confident belief + large
+        # innovation -> NIS is huge (rejects, correctly) while the gain is small
+        # so the update is small and a jump limit would not fire. Uncertain
+        # belief + large innovation -> NIS is moderate (passes) while the gain is
+        # ~1 so the update is large and a jump limit DOES fire -- precisely when a
+        # large correction is warranted. On this path H = [I2 | 0] is linear, so
+        # NIS is the statistically correct gate and a jump limit is redundant at
+        # best.
+        #
+        # Worse, it deadlocks: rejecting inflates S, which RAISES the gain, which
+        # RAISES the update, so the limit keeps firing. A belief genuinely 1.5 m
+        # off never recovers until drift pushes the innovation past
+        # state_reanchor_m -- it has to get worse first. With NIS alone the same
+        # case recovers monotonically in ~6 corrections (~1.2 s at 5 Hz).
+        #
+        # The pixel path keeps its 0.5 m limit: nonlinear observation model, and
+        # it is locked paper-1 method backing honest_campaign_v1.
+        _declare_if_not('state_max_correction_jump_m', 0.0)
+        # Extra measurement uncertainty added IN QUADRATURE to every metric
+        # correction: R' = R + sigma^2 * I. This is the unmodelled-error term.
+        #
+        # conditional_cov_uv (and the fixed metric constant derived from it)
+        # models one camera's DETECTOR JITTER. It is structurally silent about
+        # inter-camera disagreement -- cameras A and C place the robot at
+        # X + d_A and X + d_C with different calibration / contact-height /
+        # bbox-bottom errors, and no single pose satisfies both. That term does
+        # not exist in a single-camera system, which is why paper 1 ran happily
+        # at 2.5 px (measured innovations 1.53 px, NIS median 0.29, 1 rejection
+        # in 6370) while the 4-cam fused observation measures ~0.19 m vs GT.
+        #
+        # Additive rather than a floor: independent error sources add in
+        # variance, and a floor would flatten every camera to the same value,
+        # destroying the relative weighting a far camera should get vs a near one.
+        #
+        # 0.0 = off, which keeps the single-camera path exactly as locked. The
+        # legacy fused path already had an equivalent via fusion_report_std_m
+        # (0.18 m); the per-camera path bypasses that, so it needs this.
+        _declare_if_not('state_measurement_inflation_std_m', 0.0)
+        # Kinematic plausibility cap on the prediction, m/s. The motion replay
+        # extrapolates the last command when odometry is missing (up to
+        # state_max_predict_dt_s), inventing up to ~0.9 m of travel. 0 disables.
+        # Left at 0 for the single-camera path: the locked campaign ran without
+        # it and its evidence must stay reproducible.
+        _declare_if_not('max_predict_speed_mps', 0.0)
         _declare_if_not('min_state_cov', 1e-6)
         _declare_if_not('debug_runtime', False)
         _declare_if_not('debug_log_period_s', 1.0)
@@ -349,6 +446,16 @@ class UnicyclePlannerNode(Node):
         ).strip().lower()
 
         self.use_pixel_correction = _as_bool(self.get_parameter('use_pixel_correction').value)
+        self.state_correction_ekf = _as_bool(self.get_parameter('state_correction_ekf').value)
+        self.state_correction_mode = str(
+            self.get_parameter('state_correction_mode').value
+        ).strip().lower()
+        if self.state_correction_mode not in ('fused', 'per_camera'):
+            raise RuntimeError(
+                "state_correction_mode must be 'fused' or 'per_camera', "
+                f"got {self.state_correction_mode!r}"
+            )
+        self.map_observations_topic = str(self.get_parameter('map_observations_topic').value)
         self.pixel_topic = self.get_parameter('pixel_topic').value
         self.cmd_topic = str(self.get_parameter('cmd_topic').value).strip() or '/cmd_vel'
         self.cmd_publish_rate = max(0.1, float(self.get_parameter('cmd_publish_rate').value))
@@ -391,6 +498,22 @@ class UnicyclePlannerNode(Node):
         )
         self.odom_topic = str(self.get_parameter('odom_topic').value)
         self.use_odom_for_predict = _as_bool(self.get_parameter('use_odom_for_predict').value)
+        self.odom_yaw_offset_rad = float(self.get_parameter('odom_yaw_offset_rad').value)
+        self.state_reanchor_m = float(self.get_parameter('state_reanchor_m').value)
+        self.state_max_predict_dt_s = float(self.get_parameter('state_max_predict_dt_s').value)
+        self.state_reject_inflate_m2 = max(
+            float(self.get_parameter('state_reject_inflate_m2').value), 0.0
+        )
+        self.state_max_correction_jump_m = max(
+            float(self.get_parameter('state_max_correction_jump_m').value), 0.0
+        )
+        self.state_measurement_inflation_m2 = max(
+            float(self.get_parameter('state_measurement_inflation_std_m').value), 0.0
+        ) ** 2
+        self.max_predict_speed_mps = max(
+            float(self.get_parameter('max_predict_speed_mps').value), 0.0
+        )
+        self._latest_odom_yaw = None
         self.heading_update_mode = str(self.get_parameter('heading_update_mode').value).strip().lower()
         if self.heading_update_mode != 'camera_xy_only':
             raise RuntimeError("heading_update_mode must be 'camera_xy_only' for current active runs")
@@ -434,6 +557,17 @@ class UnicyclePlannerNode(Node):
             PoseWithCovarianceStamped, '/state/bev', self._state_cb, qos_profile=state_qos,
             callback_group=self._io_group
         )
+        self.map_observations_sub = None
+        if self.state_correction_ekf and self.state_correction_mode == 'per_camera':
+            self.map_observations_sub = self.create_subscription(
+                String, self.map_observations_topic, self._map_observations_cb,
+                qos_profile=state_qos, callback_group=self._io_group
+            )
+            self.get_logger().info(
+                "state_correction_mode=per_camera: folding per-camera map "
+                f"observations from {self.map_observations_topic} into the belief "
+                "sequentially (one filter, N updates)"
+            )
         goal_qos = QoSProfile(depth=1)
         goal_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
         self.goal_sub = self.create_subscription(
@@ -597,6 +731,32 @@ class UnicyclePlannerNode(Node):
     def _state_cb(self, msg: PoseWithCovarianceStamped):
         with self._data_lock:
             self.state_msg = msg
+        # EKF mode: fold each fused correction into the belief on arrival (the
+        # same architecture the single-camera pixel path uses -- corrections are
+        # applied here, the planning loop only predicts the committed belief
+        # forward). The legacy hard-reset path leaves the belief update to
+        # _resolve_state_belief_for_planning instead.
+        # In per_camera mode the belief is corrected from the per-camera
+        # observations instead; applying the fused pose too would fold the same
+        # measurements in twice.
+        if self.state_correction_ekf and self.state_correction_mode == 'fused':
+            try:
+                self._apply_state_correction(msg)
+            except Exception as exc:
+                self.get_logger().warn(f"state correction update failed: {exc}")
+
+    def _map_observations_cb(self, msg: String):
+        if not (self.state_correction_ekf and self.state_correction_mode == 'per_camera'):
+            return
+        try:
+            observations, _frame_id = map_observations_from_json(msg.data)
+        except Exception as exc:
+            self._warn_stale_pixel_once(f"rejected map-observation batch: {exc}")
+            return
+        try:
+            self._apply_map_observations(observations)
+        except Exception as exc:
+            self.get_logger().warn(f"per-camera correction update failed: {exc}")
 
     def _update_goal_progress_origin(self, msg: PoseStamped):
         signature = (
@@ -728,6 +888,7 @@ class UnicyclePlannerNode(Node):
         yaw = self._yaw_from_quaternion(msg.pose.pose.orientation)
         v_odom = float(msg.twist.twist.linear.x)
         w_odom = float(msg.twist.twist.angular.z)
+        self._latest_odom_yaw = float(yaw)
         try:
             stamp_s = self._stamp_to_float(msg.header.stamp)
         except (AttributeError, TypeError, ValueError):
@@ -781,12 +942,40 @@ class UnicyclePlannerNode(Node):
         ], dtype=float)
 
         cov = state_ref.pose.covariance
-        S = np.diag([
-            cov[0] if len(cov) > 0 else 1e-6,
-            cov[7] if len(cov) > 7 else 1e-6,
-            cov[35] if len(cov) > 35 else 1e-6,
-        ]).astype(float)
+        R_xy = self._xy_covariance_from_pose(cov)
+        S = np.diag([0.0, 0.0, cov[35] if len(cov) > 35 else 1e-6]).astype(float)
+        S[:2, :2] = R_xy
         return m, self._regularize_state_covariance(S)
+
+    def _xy_covariance_from_pose(self, cov, *, floor=0.0):
+        """Full 2x2 xy block of a ROS pose covariance, cross terms included.
+
+        camera_manager publishes map-frame CROSS-covariance at indices 1 and 6
+        under the anisotropic covariance profiles: pixel noise projected through
+        an oblique camera is a long thin ellipse, not a circle, and its axes are
+        not aligned with map x/y. Reading only the diagonal silently discards
+        that -- the estimate is then weighted as if the error were isotropic,
+        which is the very thing the profile exists to fix.
+
+        Falls back to the diagonal if the symmetrized block is not positive
+        definite, so a malformed message degrades loudly-but-safely rather than
+        poisoning the filter.
+        """
+        vxx = max(float(cov[0]) if len(cov) > 0 else 0.0, floor)
+        vyy = max(float(cov[7]) if len(cov) > 7 else 0.0, floor)
+        vxy = 0.0
+        if len(cov) > 6:
+            vxy = 0.5 * (float(cov[1]) + float(cov[6]))
+        R = np.array([[vxx, vxy], [vxy, vyy]], dtype=float)
+        if not np.all(np.isfinite(R)):
+            return np.diag([vxx, vyy]).astype(float)
+        if vxy != 0.0 and np.min(np.linalg.eigvalsh(R)) <= 0.0:
+            self._warn_stale_pixel_once(
+                "pose covariance xy block is not positive definite "
+                f"(xx={vxx:.4g}, xy={vxy:.4g}, yy={vyy:.4g}); using its diagonal"
+            )
+            return np.diag([vxx, vyy]).astype(float)
+        return R
 
     def _state_msg_age_s(self, state_ref: PoseWithCovarianceStamped) -> float:
         try:
@@ -801,12 +990,7 @@ class UnicyclePlannerNode(Node):
 
     def _regularize_state_covariance(self, S):
         """Keep planner belief covariance positive enough for stable updates."""
-        S = np.asarray(S, dtype=float).copy()
-        if self.min_state_cov > 0.0:
-            for i in range(min(3, S.shape[0])):
-                if S[i, i] < self.min_state_cov:
-                    S[i, i] = self.min_state_cov
-        return (S + S.T) / 2.0
+        return bc.regularize_covariance(S, self.min_state_cov)
 
     def _init_belief_from_state(self):
         with self._data_lock:
@@ -883,13 +1067,6 @@ class UnicyclePlannerNode(Node):
             return (self.get_clock().now() - Time.from_msg(stamp_msg)).nanoseconds * 1e-9
         except (AttributeError, TypeError, ValueError):
             return 0.0
-
-    def _pixel_correction_age_is_invalid(self, age: float) -> bool:
-        future_tolerance_s = max(float(self.pixel_timeout_s), 0.25)
-        return bool(
-            self.skip_stale_pixel_correction
-            and (age > self.pixel_timeout_s or age < -future_tolerance_s)
-        )
 
     def _warn_stale_pixel_once(self, message: str):
         now_wall = time.monotonic()
@@ -1024,16 +1201,39 @@ class UnicyclePlannerNode(Node):
             meas = None if self.pixel_meas is None else self.pixel_meas.copy()
         if belief_m is None or belief_S is None or meas is None:
             return None
-        return {
-            'belief_m': belief_m,
-            'belief_S': belief_S,
-            'belief_stamp': belief_stamp,
-            'cmd': np.array([v_cmd, w_cmd], dtype=float),
-            'meas': meas,
-            'yaw_meas': None,
-            'yaw_sigma': math.nan,
-            'yaw_source': 0.0,
-        }
+        return bc.CorrectionSnapshot(
+            belief_m=belief_m,
+            belief_S=belief_S,
+            belief_stamp=belief_stamp,
+            cmd=np.array([v_cmd, w_cmd], dtype=float),
+            meas=meas,
+            meas_stamp=stamp_msg,
+            yaw_meas=None,
+            yaw_sigma=math.nan,
+            yaw_source=0.0,
+        )
+
+    def _correction_gates(self, *, metric_measurement: bool = False) -> bc.CorrectionGates:
+        """Thresholds for the shared gate chain, from the node's parameters.
+
+        ``metric_measurement`` enables the divergence guard, whose threshold is
+        in metres and so only means anything when the measurement is a map
+        position (the fused /state/bev path), not pixels.
+        """
+        return bc.CorrectionGates(
+            pixel_timeout_s=float(self.pixel_timeout_s),
+            dt_nominal_s=float(self.dt),
+            skip_stale=bool(self.skip_stale_pixel_correction),
+            max_jump_m=float(
+                self.state_max_correction_jump_m if metric_measurement
+                else self.pixel_max_correction_jump_m
+            ),
+            nis_threshold=float(self.pixel_correction_nis_threshold),
+            cov_eig_floor=float(self.cov_eig_floor),
+            min_state_cov=float(self.min_state_cov),
+            reanchor_innov_m=float(self.state_reanchor_m) if metric_measurement else 0.0,
+            max_predict_speed_mps=float(self.max_predict_speed_mps),
+        )
 
     def _log_pixel_shape_error_once(self, message: str):
         now_wall = time.monotonic()
@@ -1041,76 +1241,7 @@ class UnicyclePlannerNode(Node):
             self.get_logger().error(message)
             self._last_shape_mismatch_log = now_wall
 
-    @staticmethod
-    def project_to_psd(S, floor=1e-9):
-        S = np.asarray(S, dtype=float)
-        w, v = np.linalg.eigh(S)
-        w = np.maximum(w, floor)
-        return (v * w) @ v.T
-
-    def _compute_pixel_uv_update(self, m_pred, S_eff, meas, R_eff, gain_scale, *, corr_method):
-        mu_y, Sigma_y, Gamma = self.planner.approx_observation(
-            m_pred, S_eff, method=corr_method, R_override=R_eff
-        )
-        mu_y = np.asarray(mu_y, dtype=float).reshape(-1)
-        meas = np.asarray(meas, dtype=float).reshape(-1)
-        if meas.size != mu_y.size:
-            self._log_pixel_shape_error_once(
-                "Pixel correction shape mismatch: "
-                f"meas_dim={meas.size}, pred_dim={mu_y.size}. "
-                "Skipping correction for this message."
-            )
-            return None
-
-        Sigma_y = np.asarray(Sigma_y, dtype=float)
-        Gamma = np.asarray(Gamma, dtype=float)
-        if Sigma_y.shape != (meas.size, meas.size) or Gamma.shape[1] != meas.size:
-            self._log_pixel_shape_error_once(
-                "Pixel correction covariance shape mismatch: "
-                f"Sigma_y={Sigma_y.shape}, Gamma={Gamma.shape}, meas_dim={meas.size}. "
-                "Skipping correction for this message."
-            )
-            return None
-
-        innov = meas - mu_y
-        if innov.size >= 3:
-            innov[2] = wrap_angle(innov[2])
-        Sigma_y = (Sigma_y + Sigma_y.T) / 2.0
-        Sigma_inv = np.linalg.pinv(Sigma_y)
-        K = Gamma @ Sigma_inv
-        next_m = m_pred + gain_scale * (K @ innov)
-        next_m[2] = wrap_angle(next_m[2])
-        next_S = S_eff - gain_scale * (Gamma @ Sigma_inv @ Gamma.T)
-        next_S = 0.5 * (next_S + next_S.T)
-        eig_min = np.min(np.linalg.eigvalsh(next_S))
-        if eig_min < self.cov_eig_floor:
-            next_S = self.project_to_psd(next_S, floor=self.cov_eig_floor)
-        return {
-            'next_m': next_m,
-            'next_S': next_S,
-            'innov': innov,
-            'mu_y': mu_y,
-            'S_y': Sigma_y,
-            'K': K,
-        }
-
-    def _apply_yaw_anchor_after_pixel_update(
-        self,
-        next_m,
-        next_S,
-        m_pred,
-    ):
-        """Report the theta component induced indirectly by the XY update."""
-        theta_update_from_uv_rad = float(wrap_angle(float(next_m[2]) - float(m_pred[2])))
-        return {
-            'next_m': next_m,
-            'next_S': next_S,
-            'theta_update_from_uv_rad': theta_update_from_uv_rad,
-            'yaw_correction_applied': False,
-            'innov_theta': math.nan,
-            'k_theta_theta': math.nan,
-            'theta_update_total_rad': float(wrap_angle(float(next_m[2]) - float(m_pred[2]))),
-        }
+    project_to_psd = staticmethod(bc.project_to_psd)
 
     def _publish_pixel_correction_diagnostics(
         self,
@@ -1143,6 +1274,9 @@ class UnicyclePlannerNode(Node):
         nis_threshold=math.nan,
         K_theta_u=math.nan,
         K_theta_v=math.nan,
+        measurement_space=bc.SPACE_PIXEL_UV,
+        predict_clipped_m=0.0,
+        camera_index=math.nan,
     ):
         diag_msg = Float64MultiArray()
         r_eff = np.asarray(R_eff, dtype=float)
@@ -1207,19 +1341,19 @@ class UnicyclePlannerNode(Node):
             float(motion_replay_source_code) if math.isfinite(float(motion_replay_source_code)) else math.nan,
             float(K_theta_u) if math.isfinite(float(K_theta_u)) else math.nan,
             float(K_theta_v) if math.isfinite(float(K_theta_v)) else math.nan,
+            # Appended 2026-07-29 with the single/multicam chain consolidation.
+            # The pixel_corr_* columns are now shared by both stacks, so a reader
+            # needs to know which one produced the row: innov/meas are pixels
+            # when 0, metres when 1.
+            float(measurement_space),
+            float(predict_clipped_m),
+            # Which camera produced this correction in per_camera mode (index into
+            # the batch, sorted by stamp); NaN for the fused/pixel paths.
+            float(camera_index),
         ]
         self.pixel_correction_diag_pub.publish(diag_msg)
 
-    @staticmethod
-    def _pixel_correction_reject_code(reason: str) -> float:
-        return float({
-            'stale_age': 1,
-            'dt_implausible': 2,
-            'missing_snapshot': 3,
-            'update_failed': 4,
-            'jump_too_large': 5,
-            'nis_too_large': 6,
-        }.get(str(reason or '').strip(), 99))
+    _pixel_correction_reject_code = staticmethod(bc.reject_code)
 
     def _publish_pixel_correction_rejection(
         self,
@@ -1240,6 +1374,9 @@ class UnicyclePlannerNode(Node):
         cmd_replay_duration_s=math.nan,
         cmd_replay_used_fallback=math.nan,
         motion_replay_source_code=math.nan,
+        measurement_space=bc.SPACE_PIXEL_UV,
+        predict_clipped_m=0.0,
+        camera_index=math.nan,
     ):
         nan_state = np.array([math.nan, math.nan, math.nan], dtype=float)
         nan_meas = np.array([math.nan, math.nan], dtype=float)
@@ -1277,19 +1414,108 @@ class UnicyclePlannerNode(Node):
             cmd_replay_used_fallback=cmd_replay_used_fallback,
             motion_replay_source_code=motion_replay_source_code,
             nis_threshold=float(self.pixel_correction_nis_threshold),
+            measurement_space=measurement_space,
+            predict_clipped_m=predict_clipped_m,
+            camera_index=camera_index,
+        )
+
+    def _correction_reject_warning(self, outcome) -> str | None:
+        """Operator-facing text for a rejection, or None if it warns elsewhere."""
+        if outcome.reason is bc.RejectReason.JUMP_TOO_LARGE:
+            return (
+                f"Pixel correction jump {outcome.xy_update_norm_m:.3f} m exceeds "
+                f"limit {self.pixel_max_correction_jump_m:.3f} m; rejecting"
+            )
+        if outcome.reason is bc.RejectReason.NIS_TOO_LARGE:
+            return (
+                f"Pixel correction NIS {outcome.nis:.2f} exceeds "
+                f"threshold {self.pixel_correction_nis_threshold:.2f}; rejecting"
+            )
+        return None
+
+    def _publish_correction_outcome(self, stamp_msg, outcome, *, camera_index=math.nan):
+        """Publish diagnostics for one :class:`bc.CorrectionOutcome`."""
+        snapshot = outcome.snapshot
+        belief_input_stamp_s = (
+            self._stamp_to_float(snapshot.belief_stamp) if snapshot is not None else math.nan
+        )
+        meta = outcome.replay_meta or {}
+        replay_kwargs = {
+            'belief_input_stamp_s': belief_input_stamp_s,
+            'cmd_replay_count': float(meta.get('cmd_replay_count', math.nan)),
+            'cmd_replay_duration_s': float(meta.get('cmd_replay_duration_s', math.nan)),
+            'cmd_replay_used_fallback': float(meta.get('cmd_replay_used_fallback', math.nan)),
+            'motion_replay_source_code': float(meta.get('motion_replay_source_code', math.nan)),
+            'measurement_space': float(outcome.measurement_space),
+            'predict_clipped_m': float(outcome.predict_clipped_m),
+            'camera_index': float(camera_index),
+        }
+        if not outcome.accepted:
+            self._publish_pixel_correction_rejection(
+                stamp_msg,
+                reason=outcome.reason,
+                age=outcome.age,
+                dt_s=outcome.dt_s,
+                m_pred=outcome.m_pred,
+                meas=outcome.meas,
+                mu_y=outcome.mu_y,
+                innov=outcome.innov,
+                xy_update_norm_m=outcome.xy_update_norm_m,
+                R_eff=outcome.R_eff,
+                nis=outcome.nis,
+                **replay_kwargs,
+            )
+            return
+
+        K_theta_u = math.nan
+        K_theta_v = math.nan
+        K_mat = outcome.K
+        if K_mat is not None and K_mat.shape[0] >= 3:
+            if K_mat.shape[1] >= 1:
+                K_theta_u = float(K_mat[2, 0])
+            if K_mat.shape[1] >= 2:
+                K_theta_v = float(K_mat[2, 1])
+
+        self._publish_pixel_correction_diagnostics(
+            stamp_msg=stamp_msg,
+            age=outcome.age,
+            dt_s=outcome.dt_s,
+            p_vis=outcome.p_vis,
+            gain_scale=outcome.gain_scale,
+            innov=outcome.innov,
+            xy_update_norm_m=outcome.xy_update_norm_m,
+            yaw_info=outcome.yaw_info,
+            m_pred=outcome.m_pred,
+            next_m=outcome.next_m,
+            meas=outcome.meas,
+            mu_y=outcome.mu_y,
+            R_eff=outcome.R_eff,
+            yaw_meas=snapshot.yaw_meas if snapshot is not None else math.nan,
+            yaw_sigma=snapshot.yaw_sigma if snapshot is not None else math.nan,
+            yaw_source=snapshot.yaw_source if snapshot is not None else 0.0,
+            nis=outcome.nis,
+            accepted=True,
+            reject_reason_code=bc.ACCEPTED_CODE,
+            apply_stamp_s=float(self.get_clock().now().nanoseconds) * 1e-9,
+            nis_threshold=float(self.pixel_correction_nis_threshold),
+            K_theta_u=K_theta_u,
+            K_theta_v=K_theta_v,
+            **replay_kwargs,
         )
 
     def _apply_pixel_correction(self, stamp_msg, *, source='callback'):
         cb_start = time.perf_counter()
         age = self._stamp_age_s(stamp_msg)
-        if self._pixel_correction_age_is_invalid(age):
+        gates = self._correction_gates()
+
+        # The two gates below carry node-side effects (a warn-once, a belief
+        # re-init) so they stay here; the decision itself is the shared chain's.
+        if gates.age_is_invalid(age):
             self._warn_stale_pixel_once(
                 f"Skipping time-inconsistent pixel measurement (age {age:.2f}s)"
             )
-            self._publish_pixel_correction_rejection(
-                stamp_msg,
-                reason='stale_age',
-                age=age,
+            self._publish_correction_outcome(
+                stamp_msg, bc.CorrectionOutcome(reason=bc.RejectReason.STALE_AGE, age=age)
             )
             return
         if self._pixel_correction_is_throttled(stamp_msg):
@@ -1300,186 +1526,47 @@ class UnicyclePlannerNode(Node):
         if not has_belief and not self._init_belief_from_state():
             return
 
+        # Warns and re-initialises the belief from /state/bev on an implausible dt.
         dt_s = self._pixel_correction_dt_s(stamp_msg)
         if dt_s is None:
-            self._publish_pixel_correction_rejection(
-                stamp_msg,
-                reason='dt_implausible',
-                age=age,
+            self._publish_correction_outcome(
+                stamp_msg, bc.CorrectionOutcome(reason=bc.RejectReason.DT_IMPLAUSIBLE, age=age)
             )
             return
-
-        snapshot = self._snapshot_pixel_correction_inputs(stamp_msg)
-        if snapshot is None:
-            self._publish_pixel_correction_rejection(
-                stamp_msg,
-                reason='missing_snapshot',
-                age=age,
-                dt_s=dt_s,
-            )
-            return
-        belief_m = snapshot['belief_m']
-        belief_S = snapshot['belief_S']
-        meas = snapshot['meas']
-        yaw_meas = snapshot['yaw_meas']
-        yaw_sigma = snapshot['yaw_sigma']
-        yaw_meas_source = snapshot['yaw_source']
-
-        # Forward-predict belief from T_belief_stamp to T_pixel using the
-        # configured motion replay source. Paper-facing runs prefer
-        # /odom_noisy and fall back to command replay only when odometry samples
-        # are unavailable.
-        m_pred, S_pred, replay_meta = self._replay_cmd_log_interval(
-            belief_m, belief_S, snapshot['belief_stamp'], stamp_msg,
-            fallback_cmd=snapshot['cmd'], fallback_dt=dt_s,
-        )
-        planner_for_obs = getattr(self, 'global_planner', None) or self.planner
-        p_vis, R_eff, S_eff, gain_scale = planner_for_obs.observation_model_with_visibility(m_pred, S_pred)
 
         corr_method = self.approx_method if self.pixel_correction_approx == 'AUTO' else self.pixel_correction_approx
-        uv_update = self._compute_pixel_uv_update(
-            m_pred, S_eff, meas, R_eff, gain_scale, corr_method=corr_method
-        )
-        if uv_update is None:
-            self._publish_pixel_correction_rejection(
-                stamp_msg,
-                reason='update_failed',
-                age=age,
-                dt_s=dt_s,
-                m_pred=m_pred,
-                meas=meas,
-                R_eff=R_eff,
-                belief_input_stamp_s=self._stamp_to_float(snapshot['belief_stamp']),
-                cmd_replay_count=float(replay_meta.get('cmd_replay_count', math.nan)),
-                cmd_replay_duration_s=float(replay_meta.get('cmd_replay_duration_s', math.nan)),
-                cmd_replay_used_fallback=float(replay_meta.get('cmd_replay_used_fallback', math.nan)),
-                motion_replay_source_code=float(replay_meta.get('motion_replay_source_code', math.nan)),
-            )
-            return
-
-        next_m = uv_update['next_m']
-        next_S = uv_update['next_S']
-        innov = uv_update['innov']
-        meas = np.asarray(meas, dtype=float).reshape(-1)
-        mu_y = uv_update['mu_y']
-        xy_update_norm_m = float(np.linalg.norm(np.asarray(next_m[:2] - m_pred[:2], dtype=float)))
-        # Compute Normalized Innovation Squared (NIS) before any state mutation.
-        nis = float('nan')
-        S_y = uv_update.get('S_y')
-        if S_y is not None:
-            innov_2d = np.asarray(innov, dtype=float).reshape(-1)[:2]
-            try:
-                S_inv = np.linalg.inv(np.asarray(S_y, dtype=float)[:2, :2])
-                nis = float(innov_2d @ S_inv @ innov_2d)
-            except np.linalg.LinAlgError:
-                pass
-        if (self.pixel_max_correction_jump_m > 0.0
-                and xy_update_norm_m > self.pixel_max_correction_jump_m):
-            self._warn_stale_pixel_once(
-                f"Pixel correction jump {xy_update_norm_m:.3f} m exceeds "
-                f"limit {self.pixel_max_correction_jump_m:.3f} m; rejecting"
-            )
-            self._publish_pixel_correction_rejection(
-                stamp_msg,
-                reason='jump_too_large',
-                age=age,
-                dt_s=dt_s,
-                m_pred=m_pred,
-                meas=meas,
-                mu_y=mu_y,
-                innov=innov,
-                xy_update_norm_m=xy_update_norm_m,
-                R_eff=R_eff,
-                nis=nis,
-                belief_input_stamp_s=self._stamp_to_float(snapshot['belief_stamp']),
-                cmd_replay_count=float(replay_meta.get('cmd_replay_count', math.nan)),
-                cmd_replay_duration_s=float(replay_meta.get('cmd_replay_duration_s', math.nan)),
-                cmd_replay_used_fallback=float(replay_meta.get('cmd_replay_used_fallback', math.nan)),
-                motion_replay_source_code=float(replay_meta.get('motion_replay_source_code', math.nan)),
-            )
-            return
-        if (
-            self.pixel_correction_nis_threshold > 0.0
-            and math.isfinite(nis)
-            and nis > self.pixel_correction_nis_threshold
-        ):
-            self._warn_stale_pixel_once(
-                f"Pixel correction NIS {nis:.2f} exceeds "
-                f"threshold {self.pixel_correction_nis_threshold:.2f}; rejecting"
-            )
-            self._publish_pixel_correction_rejection(
-                stamp_msg,
-                reason='nis_too_large',
-                age=age,
-                dt_s=dt_s,
-                m_pred=m_pred,
-                meas=meas,
-                mu_y=mu_y,
-                innov=innov,
-                xy_update_norm_m=xy_update_norm_m,
-                R_eff=R_eff,
-                nis=nis,
-                belief_input_stamp_s=self._stamp_to_float(snapshot['belief_stamp']),
-                cmd_replay_count=float(replay_meta.get('cmd_replay_count', math.nan)),
-                cmd_replay_duration_s=float(replay_meta.get('cmd_replay_duration_s', math.nan)),
-                cmd_replay_used_fallback=float(replay_meta.get('cmd_replay_used_fallback', math.nan)),
-                motion_replay_source_code=float(replay_meta.get('motion_replay_source_code', math.nan)),
-            )
-            return
-        yaw_info = self._apply_yaw_anchor_after_pixel_update(
-            next_m,
-            next_S,
-            m_pred,
-        )
-        next_m = yaw_info['next_m']
-        next_S = self._regularize_state_covariance(yaw_info['next_S'])
-        with self._data_lock:
-            self.belief_m = next_m
-            self.belief_S = next_S
-            self.belief_stamp = stamp_msg
-            self._last_correction_stamp = stamp_msg
-            # Update rolling BEV correction cache for velocity estimation.
-        K_theta_u = math.nan
-        K_theta_v = math.nan
-        if uv_update is not None and 'K' in uv_update and uv_update['K'] is not None:
-            K_mat = uv_update['K']
-            if K_mat.shape[0] >= 3:
-                if K_mat.shape[1] >= 1:
-                    K_theta_u = float(K_mat[2, 0])
-                if K_mat.shape[1] >= 2:
-                    K_theta_v = float(K_mat[2, 1])
-
-        self._publish_pixel_correction_diagnostics(
-            stamp_msg=stamp_msg,
+        outcome = bc.apply_correction(
+            source=bc.PixelMeasurementSource(
+                planner=self.planner,
+                planner_for_obs=getattr(self, 'global_planner', None) or self.planner,
+                snapshot_fn=lambda: self._snapshot_pixel_correction_inputs(stamp_msg),
+                corr_method=corr_method,
+            ),
+            gates=gates,
+            # Forward-predict belief from T_belief_stamp to T_pixel using the
+            # configured motion replay source. Paper-facing runs prefer
+            # /odom_noisy and fall back to command replay only when odometry
+            # samples are unavailable.
+            replay=self._replay_cmd_log_interval,
             age=age,
             dt_s=dt_s,
-            p_vis=p_vis,
-            gain_scale=gain_scale,
-            innov=innov,
-            xy_update_norm_m=xy_update_norm_m,
-            yaw_info=yaw_info,
-            m_pred=m_pred,
-            next_m=next_m,
-            meas=meas,
-            mu_y=mu_y,
-            R_eff=R_eff,
-            yaw_meas=yaw_meas,
-            yaw_sigma=yaw_sigma,
-            yaw_source=yaw_meas_source,
-            nis=nis,
-            accepted=True,
-            reject_reason_code=0.0,
-            apply_stamp_s=float(self.get_clock().now().nanoseconds) * 1e-9,
-            belief_input_stamp_s=self._stamp_to_float(snapshot['belief_stamp']),
-            cmd_replay_count=float(replay_meta.get('cmd_replay_count', math.nan)),
-            cmd_replay_duration_s=float(replay_meta.get('cmd_replay_duration_s', math.nan)),
-            cmd_replay_used_fallback=float(replay_meta.get('cmd_replay_used_fallback', math.nan)),
-            motion_replay_source_code=float(replay_meta.get('motion_replay_source_code', math.nan)),
-            nis_threshold=float(self.pixel_correction_nis_threshold),
-            K_theta_u=K_theta_u,
-            K_theta_v=K_theta_v,
+            on_shape_error=self._log_pixel_shape_error_once,
         )
 
+        warning = self._correction_reject_warning(outcome)
+        if warning is not None:
+            self._warn_stale_pixel_once(warning)
+        if outcome.accepted:
+            with self._data_lock:
+                self.belief_m = outcome.next_m
+                self.belief_S = outcome.next_S
+                self.belief_stamp = stamp_msg
+                self._last_correction_stamp = stamp_msg
+        self._publish_correction_outcome(stamp_msg, outcome)
+        if not outcome.accepted:
+            return
+
+        p_vis = outcome.p_vis
         now_wall = time.monotonic()
         if self.debug_runtime and (now_wall - self._last_correction_log > 2.0):
             self.get_logger().info(
@@ -1651,10 +1738,31 @@ class UnicyclePlannerNode(Node):
                 self.belief_stamp = now_msg
         return m0, S0
 
+    def _map_frame_heading(self):
+        """map_bev heading = raw odom yaw + spawn-yaw offset (as pixel_to_bev does).
+        None until the first odometry message arrives."""
+        if self._latest_odom_yaw is None:
+            return None
+        return float(wrap_angle(self._latest_odom_yaw + self.odom_yaw_offset_rad))
+
     def _anchor_belief_yaw_for_planning(self, m0, S0, now_msg, mutate=True):
-        """Current campaign uses camera XY only; never inject explicit yaw."""
+        """Heading anchor.
+
+        Single-camera path (use_pixel_correction): pixel_to_bev already bakes the
+        spawn-yaw offset into /state/bev, so leave the belief yaw alone.
+        Multicam path (state_correction_ekf / no pixel correction): the manager's
+        /state/bev carries no heading, so anchor the belief yaw to the map-frame
+        odometry heading (odom_yaw + odom_yaw_offset_rad). Without this the belief
+        heading stays in the raw-odom frame and the planner steers ~90 deg off.
+        """
         self._heading_anchor_applied = False
         self._state_bev_yaw_ignored = True
+        if not self.use_pixel_correction:
+            h = self._map_frame_heading()
+            if h is not None:
+                m0 = np.asarray(m0, dtype=float).copy()
+                m0[2] = h
+                self._heading_anchor_applied = True
         return m0, S0
 
     def _resolve_pixel_corrected_belief_for_planning(self, now_msg):
@@ -1785,6 +1893,384 @@ class UnicyclePlannerNode(Node):
             'belief_age_s': 0.0,
         }
 
+    def _reanchor_belief_to_correction(self, state_msg, reason=""):
+        """Re-anchor to a fused /state/bev correction (message form)."""
+        self._reanchor_belief_to_xy(
+            state_msg.header.stamp,
+            np.array([
+                float(state_msg.pose.pose.position.x),
+                float(state_msg.pose.pose.position.y),
+            ], dtype=float),
+            self._state_measurement_cov(state_msg),
+            reason=reason,
+        )
+
+    def _reanchor_belief_to_xy(self, stamp_msg, z_xy, R, reason=""):
+        """Hard re-anchor the belief to a fresh metric correction (reliable) and
+        reset its covariance. Recovery from a diverged belief / bad-stamp jump:
+        the correction is trustworthy, so snap to it rather than dead-reckon."""
+        m = np.array([float(z_xy[0]), float(z_xy[1]), 0.0], dtype=float)
+        h = self._map_frame_heading()
+        if h is not None:
+            m[2] = h
+        R = np.asarray(R, dtype=float)
+        S = np.diag([0.0, 0.0, NONINFORMATIVE_YAW_VAR]).astype(float)
+        S[:2, :2] = R[:2, :2]
+        S = self._regularize_state_covariance(S)
+        with self._data_lock:
+            self.belief_m, self.belief_S = m.copy(), S.copy()
+            self.belief_stamp = stamp_msg
+            self._last_correction_stamp = stamp_msg
+        if reason:
+            self._warn_stale_pixel_once(f"belief re-anchored to metric correction ({reason})")
+
+    def _state_measurement_cov(self, state_msg):
+        """Measurement covariance of one fused /state/bev correction."""
+        return self._inflate_measurement_cov(
+            self._xy_covariance_from_pose(state_msg.pose.covariance, floor=self.min_state_cov)
+        )
+
+    def _inflate_measurement_cov(self, R):
+        """Add the unmodelled-error term in quadrature: R' = R + sigma^2 I."""
+        if self.state_measurement_inflation_m2 <= 0.0:
+            return R
+        R = np.asarray(R, dtype=float).copy()
+        R[0, 0] += self.state_measurement_inflation_m2
+        R[1, 1] += self.state_measurement_inflation_m2
+        return R
+
+    def _snapshot_metric_correction_inputs(self, stamp_msg, z_xy):
+        with self._data_lock:
+            belief_m = None if self.belief_m is None else self.belief_m.copy()
+            belief_S = None if self.belief_S is None else self.belief_S.copy()
+            belief_stamp = self.belief_stamp
+            cmd = self.last_cmd.copy()
+        if belief_m is None or belief_S is None or belief_stamp is None:
+            return None
+        return bc.CorrectionSnapshot(
+            belief_m=belief_m,
+            belief_S=belief_S,
+            belief_stamp=belief_stamp,
+            cmd=cmd,
+            meas=np.asarray(z_xy, dtype=float).reshape(-1)[:2].copy(),
+            meas_stamp=stamp_msg,
+            yaw_meas=None,
+            yaw_sigma=math.nan,
+            yaw_source=0.0,
+        )
+
+    def _apply_state_correction(self, state_msg):
+        """Fold one FUSED /state/bev correction into the belief (message form)."""
+        self._apply_metric_correction(
+            state_msg.header.stamp,
+            np.array([
+                float(state_msg.pose.pose.position.x),
+                float(state_msg.pose.pose.position.y),
+            ], dtype=float),
+            self._state_measurement_cov(state_msg),
+        )
+
+    def _apply_map_observations(self, observations):
+        """Fold PER-CAMERA map observations in sequentially, one filter, N updates.
+
+        The alternative -- collapsing them into a fused pose first -- runs two
+        filters in series: ``camera_manager`` seeds from a median with an
+        identity prior and no motion model, and the planner then treats that
+        output as an independent measurement. Sequential updating into the one
+        belief that actually has a prior and a motion model is the textbook form,
+        and it lets each camera carry its own measurement covariance and be
+        gated (and reason-coded) on its own.
+
+        Applied in TIMESTAMP order, because a Kalman update is only valid against
+        a prior predicted to that measurement's stamp; the chain predicts between
+        them. Observations not newer than the belief are dropped rather than
+        buffered -- with the belief already past them they carry no information
+        the filter can use without a smoother.
+        """
+        ordered = sorted(observations, key=lambda o: float(o.timestamp_s))
+        if not ordered:
+            return
+
+        # Divergence is a claim about the BELIEF, so it needs corroboration. A
+        # lone camera reporting metres away is far more likely to be a bad
+        # camera than proof the belief is lost -- snapping to it on its own word
+        # would hand the belief to the worst observation in the batch. So the
+        # per-observation re-anchor is OFF here, and instead a QUORUM of mutually
+        # agreeing cameras can re-anchor the belief before the updates run.
+        # (The fused path keeps the single-observation guard: that measurement
+        # has already been through the manager's NIS + disagreement gates.)
+        self._reanchor_on_camera_quorum(ordered)
+
+        accepted_any = False
+        for index, obs in enumerate(ordered):
+            outcome = self._apply_metric_correction(
+                self._float_to_stamp(float(obs.timestamp_s)),
+                np.array([float(obs.xy_m[0]), float(obs.xy_m[1])], dtype=float),
+                self._observation_covariance(obs),
+                camera_index=float(index),
+                label=str(obs.camera_id),
+                allow_reanchor=False,
+                # Inflate at most once per batch, below, and only if NOTHING
+                # anchored the belief: inflating per rejected camera would let a
+                # single persistently bad camera balloon the covariance at
+                # N x rate until it is itself waved through.
+                inflate_on_reject=False,
+            )
+            accepted_any = accepted_any or bool(outcome is not None and outcome.accepted)
+
+        if not accepted_any:
+            self._inflate_belief_after_rejection(
+                f"no camera accepted ({len(ordered)} observation(s))"
+            )
+
+    def _observation_covariance(self, obs):
+        R = np.array(
+            [[float(obs.covariance_m2[0][0]), float(obs.covariance_m2[0][1])],
+             [float(obs.covariance_m2[1][0]), float(obs.covariance_m2[1][1])]],
+            dtype=float,
+        )
+        R[0, 0] = max(R[0, 0], self.min_state_cov)
+        R[1, 1] = max(R[1, 1], self.min_state_cov)
+        return self._inflate_measurement_cov(R)
+
+    def _reanchor_on_camera_quorum(self, ordered):
+        """Re-anchor only when several mutually agreeing cameras say the belief is lost."""
+        if self.state_reanchor_m <= 0.0 or len(ordered) < 2:
+            return
+        with self._data_lock:
+            belief_m = None if self.belief_m is None else self.belief_m.copy()
+        if belief_m is None:
+            return
+        far = [
+            obs for obs in ordered
+            if math.hypot(float(obs.xy_m[0]) - float(belief_m[0]),
+                          float(obs.xy_m[1]) - float(belief_m[1])) > self.state_reanchor_m
+        ]
+        if len(far) < max(2, (len(ordered) + 1) // 2):
+            return
+        # They must agree with EACH OTHER far better than they disagree with the
+        # belief, else this is scattered noise rather than a lost belief.
+        spread = max(
+            math.hypot(float(a.xy_m[0]) - float(b.xy_m[0]), float(a.xy_m[1]) - float(b.xy_m[1]))
+            for a in far for b in far
+        )
+        if spread >= self.state_reanchor_m:
+            return
+        xs = sorted(float(obs.xy_m[0]) for obs in far)
+        ys = sorted(float(obs.xy_m[1]) for obs in far)
+        median = np.array([xs[len(xs) // 2], ys[len(ys) // 2]], dtype=float)
+        newest = max(far, key=lambda o: float(o.timestamp_s))
+        self._reanchor_belief_to_xy(
+            self._float_to_stamp(float(newest.timestamp_s)),
+            median,
+            self._observation_covariance(newest),
+            reason=f"{len(far)}/{len(ordered)} cameras agree, spread {spread:.2f} m",
+        )
+
+    def _inflate_belief_after_rejection(self, reason: str):
+        """Grow the belief covariance so a rejection can never freeze it."""
+        inflate = float(self.state_reject_inflate_m2)
+        if inflate <= 0.0:
+            return
+        with self._data_lock:
+            if self.belief_S is None:
+                return
+            S = np.asarray(self.belief_S, dtype=float).copy()
+            S[0, 0] += inflate
+            S[1, 1] += inflate
+            self.belief_S = self._regularize_state_covariance(S)
+        self._warn_stale_pixel_once(
+            f"correction rejected ({reason}); inflating {inflate:.3f} m^2"
+        )
+
+    def _apply_metric_correction(self, stamp_msg, z_xy, R, *,
+                                 camera_index=math.nan, label="fused",
+                                 allow_reanchor=True, inflate_on_reject=True):
+        """Fold one metric xy correction into the belief as a proper EKF update,
+        running the SAME gate chain as the single-camera pixel path
+        (``planning.core.belief_correction``).
+
+        A real recursive Bayesian filter, not a hard reset: predict the belief to
+        the correction (image) stamp via motion replay (latency compensation),
+        then a covariance-weighted Kalman update in map-xy (H = [I2 | 0]).
+        Heading stays camera_xy_only.
+
+        Previously the multicam path was a separately written chain, and every
+        parity gap in ``docs/multicam_vs_paper1_correction_parity.md`` came from
+        that fork: the jump limiter was configured but never read, and the NIS
+        gate inflated S by +1.0 m² on reject, which neutered it for the next
+        correction. Both are now the shared implementation. A rejection still
+        advances the belief stamp and inflates -- mildly -- so it can never
+        *freeze* the belief, the runaway the separate chain existed to avoid.
+        """
+        age = self._stamp_age_s(stamp_msg)
+        if not self._metric_correction_is_fresh(age):
+            return None
+        with self._data_lock:
+            has_belief = (
+                self.belief_m is not None
+                and self.belief_S is not None
+                and self.belief_stamp is not None
+            )
+            belief_stamp = self.belief_stamp
+
+        # Bootstrap the belief from the first fresh correction.
+        if not has_belief:
+            self._reanchor_belief_to_xy(stamp_msg, z_xy, R)
+            return None
+
+        dt_corr = self._stamp_to_float(stamp_msg) - self._stamp_to_float(belief_stamp)
+        if dt_corr <= 1e-3:
+            return None  # not newer than the belief we already hold
+        if dt_corr > self.state_max_predict_dt_s:
+            # Implausible gap (stale belief / bad-stamp correction). Replaying it
+            # would jump the prediction tens of metres -> re-anchor instead.
+            self._reanchor_belief_to_xy(stamp_msg, z_xy, R, reason=f"dt={dt_corr:.1f}s")
+            return None
+
+        outcome = bc.apply_correction(
+            source=bc.FusedMapMeasurementSource(
+                snapshot_fn=lambda: self._snapshot_metric_correction_inputs(stamp_msg, z_xy),
+                measurement_cov_fn=lambda: R,
+            ),
+            gates=self._correction_gates(metric_measurement=allow_reanchor),
+            replay=self._replay_cmd_log_interval,
+            age=age,
+            dt_s=dt_corr,
+        )
+        self._commit_metric_correction_outcome(
+            stamp_msg, R, outcome, label=label, inflate_on_reject=inflate_on_reject
+        )
+        self._publish_correction_outcome(stamp_msg, outcome, camera_index=camera_index)
+        return outcome
+
+    def _metric_correction_is_fresh(self, age: float) -> bool:
+        future_tolerance_s = max(float(self.pixel_timeout_s), 0.25)
+        return bool(
+            math.isfinite(age)
+            and age <= float(self.pixel_timeout_s)
+            and age >= -future_tolerance_s
+        )
+
+    def _float_to_stamp(self, seconds: float):
+        stamp = TimeMsg()
+        stamp.sec = int(seconds)
+        stamp.nanosec = int(round((float(seconds) - int(seconds)) * 1e9))
+        return stamp
+
+    def _commit_metric_correction_outcome(self, stamp_msg, R, outcome, *, label="fused",
+                                          inflate_on_reject=True):
+        """Apply one metric correction outcome to the belief."""
+        if outcome.accepted:
+            R = np.asarray(R, dtype=float)
+            m_upd = np.asarray(outcome.next_m, dtype=float).copy()
+            S_upd = np.asarray(outcome.next_S, dtype=float).copy()
+            S_pred = np.asarray(outcome.S_pred, dtype=float)
+            # camera_xy_only: heading comes from map-frame odometry
+            # (odom_yaw+offset), not the xy measurement. Falls back to the
+            # predicted heading pre-odom. The xy measurement says nothing about
+            # heading, so its row/column keep the predicted (grown) values.
+            h = self._map_frame_heading()
+            m_upd[2] = float(h) if h is not None else float(outcome.m_pred[2])
+            S_upd[2, :] = S_pred[2, :]
+            S_upd[:, 2] = S_pred[:, 2]
+            # Floor the posterior xy variance at half the measurement noise so
+            # the filter never becomes so confident that the next innovation
+            # trips the NIS gate -- the collapse that caused divergence at tight R.
+            S_upd[0, 0] = max(float(S_upd[0, 0]), 0.5 * float(R[0, 0]))
+            S_upd[1, 1] = max(float(S_upd[1, 1]), 0.5 * float(R[1, 1]))
+            S_upd = self._regularize_state_covariance(S_upd)
+            # Write back so the published diagnostics report what was actually
+            # committed, heading override and variance floor included.
+            outcome.next_m = m_upd
+            outcome.next_S = S_upd
+            with self._data_lock:
+                self.belief_m = m_upd
+                self.belief_S = S_upd
+                self.belief_stamp = stamp_msg
+                self._last_correction_stamp = stamp_msg
+            return
+
+        if outcome.recover == bc.RECOVER_REANCHOR:
+            # The BELIEF diverged, not the measurement. Snap to the correction --
+            # rejecting would lock the belief out of recovery.
+            self._reanchor_belief_to_xy(
+                stamp_msg, outcome.meas, R,
+                reason=f"{label} |innov|={outcome.innov_norm_m:.1f}m",
+            )
+            return
+
+        if outcome.m_pred is None or outcome.S_pred is None:
+            return   # rejected before a prediction existed; nothing to advance
+
+        # Hold the PREDICTION (not the rejected posterior), but ADVANCE THE STAMP
+        # and inflate, so a rejection can never freeze the belief. The inflation
+        # is deliberately small: the old +1.0 m^2 left S_y ~ 1.0, which scored a
+        # 1.87 m innovation at NIS ~3.4 and let it through un-gated on the very
+        # next correction.
+        inflate = float(self.state_reject_inflate_m2) if inflate_on_reject else 0.0
+        S_hold = np.asarray(outcome.S_pred, dtype=float).copy()
+        S_hold[0, 0] += inflate
+        S_hold[1, 1] += inflate
+        with self._data_lock:
+            self.belief_m = np.asarray(outcome.m_pred, dtype=float).copy()
+            self.belief_S = self._regularize_state_covariance(S_hold)
+            self.belief_stamp = stamp_msg
+        self._warn_stale_pixel_once(
+            f"{label} correction rejected ({outcome.reason.value}: "
+            f"NIS {outcome.nis:.2f}, update {outcome.xy_update_norm_m:.3f} m); "
+            f"holding prediction, inflating {inflate:.3f} m^2"
+        )
+
+    def _resolve_state_belief_ekf(self, now_msg):
+        """Planning-time belief for the EKF /state/bev path: read-only predict of
+        the committed belief to *now* (corrections are applied in
+        ``_apply_state_correction`` on arrival, exactly like the pixel path's
+        split between ``_apply_pixel_correction`` and its planning resolver)."""
+        with self._data_lock:
+            state_ref = self.state_msg
+            has_belief = self.belief_m is not None and self.belief_S is not None
+            belief_m = None if self.belief_m is None else self.belief_m.copy()
+            belief_S = None if self.belief_S is None else self.belief_S.copy()
+            belief_stamp = self.belief_stamp
+            last_cmd = self.last_cmd.copy()
+        self._state_bev_yaw_ignored = True
+        if not has_belief:
+            # No correction has bootstrapped the belief yet.
+            if state_ref is not None and self._state_msg_is_fresh(state_ref):
+                self._apply_state_correction(state_ref)
+                with self._data_lock:
+                    belief_m = None if self.belief_m is None else self.belief_m.copy()
+                    belief_S = None if self.belief_S is None else self.belief_S.copy()
+                    belief_stamp = self.belief_stamp
+            if belief_m is None or belief_S is None:
+                return None, None, {'measurement_available': False, 'belief_age_s': math.inf}
+
+        measurement_available = bool(
+            state_ref is not None and self._state_msg_is_fresh(state_ref)
+        )
+        belief_age_s = self._belief_age_for_planning(now_msg, belief_stamp)
+        if belief_age_s is None:
+            belief_age_s = 0.0
+        if belief_age_s > self.pixel_timeout_s:
+            m0, S0 = self._predict_belief_to_now(
+                belief_m, belief_S, last_cmd, belief_age_s, now_msg, mutate=True
+            )
+            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg, mutate=True)
+            inflate = min((belief_age_s - float(self.pixel_timeout_s)) * 0.3, 1.5)
+            S0 = S0.copy()
+            S0[0, 0] += inflate
+            S0[1, 1] += inflate
+        else:
+            m0, S0 = self._predict_belief_to_now(
+                belief_m, belief_S, last_cmd, belief_age_s, now_msg, mutate=False
+            )
+            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg, mutate=False)
+        return m0, S0, {
+            'measurement_available': measurement_available,
+            'belief_age_s': float(belief_age_s),
+        }
+
     def _resolve_truth_belief_for_planning(self):
         """DIAGNOSTIC: return ground-truth pose as the belief with tiny covariance."""
         with self._data_lock:
@@ -1804,6 +2290,8 @@ class UnicyclePlannerNode(Node):
             m0, S0, meta = self._resolve_truth_belief_for_planning()
         elif self.use_pixel_correction:
             m0, S0, meta = self._resolve_pixel_corrected_belief_for_planning(now_msg)
+        elif self.state_correction_ekf:
+            m0, S0, meta = self._resolve_state_belief_ekf(now_msg)
         else:
             m0, S0, meta = self._resolve_state_belief_for_planning()
         if m0 is None or S0 is None:

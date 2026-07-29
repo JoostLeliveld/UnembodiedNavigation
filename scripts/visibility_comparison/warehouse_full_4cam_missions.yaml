@@ -1,0 +1,167 @@
+world: warehouse_full_4cam.world.sdf
+launch_file: warehouse_primary_comparison.launch.py
+conditions:
+  C1:
+    planner: constant_R_efe
+    label: C1_constant_R
+  C2:
+    planner: visibility_aware_efe
+    label: C2_visibility_aware_spawngrid_GP
+tasks:
+  mc_central_ns:
+    conditions:
+    - C1
+    - C2
+    seeds:
+    - 0
+  mc_south_we:
+    conditions:
+    - C1
+    - C2
+    seeds:
+    - 0
+  mc_north_we:
+    conditions:
+    - C1
+    - C2
+    seeds:
+    - 0
+perception_backend: yolo
+yolo_model: logs/perception_models/warehouse_yolo_detector_4cam_v3_960/model.pt
+yolo_device: '0'
+yolo_imgsz: 640
+yolo_conf_threshold: 0.05
+yolo_iou_threshold: 0.45
+yolo_target_class: robot
+yolo_class_id: 0
+yolo_use_masks: false
+yolo_min_mask_area_px: 12.0
+yolo_mask_bottom_band_px: 3.0
+yolo_min_bbox_area_px: 0.0
+gp_artifact: logs/visibility_comparison/spawn_grid_20260727/fused_planner_four_camera.npz
+multicam_belief: true
+manager_gp_artifact_template: /home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/spawn_grid_20260727/gp/{camera_id}/det_hit_expected_kernel_gp.npz
+manager_projection_calibration: /home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v2/projection_calibration.json
+manager_min_spatial_trust: 0.0
+manager_decision_rate_hz: 5.0
+headless: true
+use_rviz: false
+reset_world: false
+bridge_camera_b: true
+bridge_camera_c: true
+bridge_camera_d: true
+ros_domain_id_base: 207
+cleanup_sim_stragglers: false
+debug_runtime: true
+heading_update_mode: camera_xy_only
+odom_heading_timeout_s: 2.0
+bev_y_calibration_offset_m: 0.05
+bev_affine_calibration: 0.996142,-0.002705,-0.002021,-0.002609,0.991001,0.066112
+pixel_max_correction_jump_m: 0.5
+use_odom_for_predict: true
+use_nogo_cost: true
+nogo_mode: keep_out
+nogo_weight: 2000.0
+# Kinematic plausibility cap on the EKF prediction step (= v_max). The motion
+# replay extrapolates the last command when odometry samples are missing; this
+# bounds the step it can invent. Off (0.0) on the single-camera path.
+max_predict_speed_mps: 0.6
+# Per-camera sequential updating: each camera folded into the belief on its own,
+# with its own covariance and its own gate. One filter (the planner) instead of
+# camera_manager fusing first and the planner filtering that. Development default.
+state_correction_mode: per_camera
+nogo_safe_distance: 0.25
+nogo_penalty_type: warning_band
+nogo_warning_band: 0.05
+nogo_near_weight: 50.0
+nogo_logbarrier_eps: 0.01
+use_belief_nogo_cost: true
+nogo_belief_kappa: 1.0
+horizon: 20
+dt: 0.25
+v_max: 0.6
+discount_gamma: 0.995
+belief_publish_rate: 10.0
+process_noise_xy: 0.012
+process_noise_theta: 0.05
+init_belief_sigma_xy: 0.05
+init_belief_sigma_theta: 0.05
+risk_weight_obs: 1.0
+r_visible_uv: 2.5
+r_miss_uv: 40.0
+ambiguity_weight: 1.0
+observation_risk_scale: 1.0
+ambiguity_term_scale: 1.0
+control_weight: 0.0
+visibility_weight: 0.0
+goal_prior_u_std_start: 50.0
+goal_prior_v_std_start: 50.0
+goal_prior_u_std_final: 12.0
+goal_prior_v_std_final: 12.0
+goal_tightening_power: 0.9
+pixel_timeout_s: 1.25
+skip_stale_pixel_correction: true
+pixel_correction_nis_threshold: 9.21
+robot_collision_radius_m: 0.125
+use_hierarchical: true
+global_horizon: 75
+global_dt: 0.4
+local_horizon: 6
+local_plan_rate: 5.0
+cmd_publish_rate: 10.0
+local_optimizer_maxiter: 30
+global_use_ambiguity: true
+local_use_ambiguity: false
+local_use_obs_risk: true
+global_optimizer_multistart: true
+local_optimizer_multistart: false
+local_use_visibility_model: false
+local_use_belief_nogo_cost: true
+local_nogo_penalty_type: warning_band
+local_nogo_weight: 1000.0
+local_nogo_safe_distance: 0.2
+local_goal_prior_u_std_start: 4.0
+local_goal_prior_v_std_start: 4.0
+local_goal_prior_u_std_final: 2.0
+local_goal_prior_v_std_final: 2.0
+waypoint_spacing_m: 0.12
+waypoint_arrival_radius_m: 0.1
+latency_compensate_plan_handoff: false
+local_replan_min_remaining_s: 0.0
+local_replan_on_waypoint_change: false
+optimizer_maxiter: 60
+optimizer_maxfun: 360
+optimizer_ftol: 1.0e-06
+optimizer_gtol: 0.0001
+optimizer_warm_start: true
+optimizer_multistart: true
+optimizer_multistart_include_direct: false
+optimizer_route_seed_mode: lane_graph
+stuck_window_s: 20.0
+stuck_max_displacement_m: 0.08
+stuck_max_goal_improvement_m: 0.05
+stuck_cmd_fraction_min: 0.5
+stuck_idle_cmd_fraction_max: 0.1
+goal_success_radius: 0.25
+goal_success_hold_s: 2.0
+run_timeout_after_first_cmd_s: 300.0
+auto_stop_on_goal: true
+use_command_noise: true
+use_encoder_noise: true
+command_noise_linear_slip_mean: 0.02
+command_noise_linear_slip_std: 0.03
+command_noise_angular_slip_mean: 0.0
+command_noise_angular_slip_std: 0.02
+command_noise_linear_additive_std: 0.005
+command_noise_angular_additive_std: 0.02
+command_noise_correlation_alpha: 0.85
+encoder_noise_linear_slip_mean: 0.01
+encoder_noise_linear_slip_std: 0.02
+encoder_noise_linear_additive_std: 0.003
+encoder_noise_angular_slip_mean: 0.0
+encoder_noise_angular_slip_std: 0.04
+encoder_noise_angular_additive_std: 0.03
+encoder_noise_correlation_alpha: 0.8
+yolo_predict_conf_floor: 0.05
+yolo_max_batch_stamp_skew_s: 0.25
+manager_fusion_report_std_m: 0.18

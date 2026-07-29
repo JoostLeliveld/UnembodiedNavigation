@@ -875,6 +875,10 @@ class ExperimentLogger(Node):
             'off_map', 'inside_no_go', 'valid_run', 'invalid_reason',
             'heading_update_mode',
             'pixel_corr_K_theta_u', 'pixel_corr_K_theta_v',
+            # Shared single-cam/multicam correction chain (2026-07-29): innov and
+            # meas are PIXELS when measurement_space==0, METRES when ==1.
+            'pixel_corr_measurement_space', 'pixel_corr_predict_clipped_m',
+            'pixel_corr_camera_index',
             'yaw_error_odom_noisy_vs_odom_map_rad',
             'state_bev_yaw_latest',
             'state_bev_cov_theta_theta', 'state_bev_cov_x_theta', 'state_bev_cov_y_theta',
@@ -1401,6 +1405,7 @@ class ExperimentLogger(Node):
             4: 'update_failed',
             5: 'jump_too_large',
             6: 'nis_too_large',
+            7: 'diverged',
         }.get(value, 'unknown')
 
     @staticmethod
@@ -2117,6 +2122,9 @@ class ExperimentLogger(Node):
         pixel_corr_expected_after_visible = math.nan
         pixel_corr_K_theta_u = math.nan
         pixel_corr_K_theta_v = math.nan
+        pixel_corr_measurement_space = math.nan
+        pixel_corr_predict_clipped_m = math.nan
+        pixel_corr_camera_index = math.nan
         if (
             self.pixel_correction_diag is not None
             and self.pixel_correction_diag.data
@@ -2169,6 +2177,11 @@ class ExperimentLogger(Node):
             if len(cdata) >= 44:
                 pixel_corr_K_theta_u = float(cdata[42])
                 pixel_corr_K_theta_v = float(cdata[43])
+            if len(cdata) >= 46:
+                pixel_corr_measurement_space = float(cdata[44])
+                pixel_corr_predict_clipped_m = float(cdata[45])
+            if len(cdata) >= 47:
+                pixel_corr_camera_index = float(cdata[46])
 
         cmd_v = self.cmd_msg.linear.x if self.cmd_msg else 0.0
         cmd_w = self.cmd_msg.angular.z if self.cmd_msg else 0.0
@@ -2555,6 +2568,8 @@ class ExperimentLogger(Node):
             off_map, inside_no_go, valid_run, invalid_reason,
             self.heading_update_mode,
             pixel_corr_K_theta_u, pixel_corr_K_theta_v,
+            pixel_corr_measurement_space, pixel_corr_predict_clipped_m,
+            pixel_corr_camera_index,
             yaw_error_odom_noisy_vs_odom_map_rad,
             state_bev_yaw_latest,
             state_bev_cov_theta_theta, state_bev_cov_x_theta, state_bev_cov_y_theta,

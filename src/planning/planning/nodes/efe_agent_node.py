@@ -75,6 +75,19 @@ class EfeAgentNode(UnicyclePlannerNode):
         self._hier_phase = 'GLOBAL'
         self._waypoints = None
         self._wp_idx = 0
+        # Multi-goal support: the (x,y) the frozen global route currently targets.
+        # When the mission goal advances to a new waypoint (goal moves by more than
+        # goal_replan_move_m) we re-enter the GLOBAL phase and replan the route to
+        # the new goal; without this the robot tracks the stale route to the old
+        # waypoint and then stalls at the corner.
+        self._global_goal_xy = None
+        # True once the FIRST global solve has completed. The first solve is the
+        # route-choice evidence and any failure there is fatal; subsequent solves
+        # are per-leg multi-goal replans and must degrade gracefully instead.
+        self._global_solve_done = False
+        if not self.has_parameter('goal_replan_move_m'):
+            self.declare_parameter('goal_replan_move_m', 1.0)
+        self.goal_replan_move_m = float(self.get_parameter('goal_replan_move_m').value)
         # persistent state for the alternative trackers (hyst_damp damping/hysteresis)
         self._ctrl_prev_w = 0.0
         self._ctrl_spin = False
@@ -179,6 +192,17 @@ class EfeAgentNode(UnicyclePlannerNode):
         if self._run_dir and self._pending_global_artifact is not None:
             self._write_global_artifact(self._pending_global_artifact)
 
+    def _densify_line(self, p0, p1):
+        """Straight-line waypoint list from p0 to p1 at waypoint_spacing_m, ending
+        exactly at p1. Fallback route when a multi-goal replan solve fails."""
+        p0 = np.asarray(p0, dtype=float).reshape(2)
+        p1 = np.asarray(p1, dtype=float).reshape(2)
+        dist = float(np.linalg.norm(p1 - p0))
+        spacing = max(float(getattr(self, 'waypoint_spacing_m', 0.12)), 1e-3)
+        n = max(int(math.ceil(dist / spacing)), 1)
+        return [(float(x), float(y))
+                for x, y in (p0 + (p1 - p0) * (k / n) for k in range(1, n + 1))]
+
     def _save_global_plan_artifacts(self, rg, m0, final_goal):
         """Capture the one-shot solved global route and persist it (or defer until
         the run directory is known)."""
@@ -266,6 +290,21 @@ class EfeAgentNode(UnicyclePlannerNode):
             return
         final_goal = self._goal_xy_from_msg(goal_ref)
 
+        # Multi-goal: if the mission goal has advanced (a new waypoint published to
+        # /goal_bev), re-enter the GLOBAL phase so a fresh route is planned to the
+        # new goal. The frozen route only reaches the previous waypoint, so without
+        # this the local tracker runs out of waypoints and the robot stalls.
+        if (self._hier_phase == 'LOCAL'
+                and self._global_goal_xy is not None
+                and float(np.linalg.norm(final_goal - self._global_goal_xy))
+                > self.goal_replan_move_m):
+            self.get_logger().info(
+                f"[hierarchical] mission goal advanced "
+                f"({self._global_goal_xy[0]:.2f},{self._global_goal_xy[1]:.2f}) -> "
+                f"({final_goal[0]:.2f},{final_goal[1]:.2f}); replanning global route"
+            )
+            self._hier_phase = 'GLOBAL'
+
         if self._hier_phase == 'GLOBAL':
             if str(getattr(self, 'global_planner_mode', 'efe')) == 'geometric_shortest_path':
                 # C0 conventional-navigation baseline: pick the SHORTEST valid
@@ -320,6 +359,7 @@ class EfeAgentNode(UnicyclePlannerNode):
                     self._waypoints = [(float(final_goal[0]), float(final_goal[1]))]
                 self._wp_idx = 0
                 self._hier_phase = 'LOCAL'
+                self._global_goal_xy = np.asarray(final_goal, dtype=float)
                 # Same local warm-start bootstrap as the EFE branch.
                 if self._waypoints:
                     try:
@@ -338,6 +378,8 @@ class EfeAgentNode(UnicyclePlannerNode):
             # and never replanned, so these seeds provide the nonconvex optimizer's
             # route-basin coverage. Generated from geometry + actual start + goal;
             # identical across conditions; no GP/visibility input.
+            is_replan = self._global_solve_done
+            fresh_seeds = False
             if (str(getattr(self, 'optimizer_route_seed_mode', 'explicit')) == 'lane_graph'
                     and str(getattr(self, 'driveable_geometry_json', '') or '')):
                 try:
@@ -351,6 +393,7 @@ class EfeAgentNode(UnicyclePlannerNode):
                         self.global_planner.optimizer_initial_routes = (
                             self.global_planner._parse_initial_routes(json.dumps(seeds))
                         )
+                        fresh_seeds = True
                         self.get_logger().info(
                             f"[hierarchical] lane-graph route seeds: "
                             f"{[s['name'] for s in seeds]}"
@@ -362,11 +405,44 @@ class EfeAgentNode(UnicyclePlannerNode):
                         )
                 except Exception as exc:  # noqa: BLE001
                     self.get_logger().warn(f"lane-graph seed generation failed ({exc}); using explicit seeds")
+            # Multi-goal replan: the explicit optimizer_initial_routes are anchored to
+            # the ORIGINAL start->goal, so reusing them for a new leg initialises the
+            # EFE optimiser with a geometrically-wrong trajectory (covariance can go
+            # non-PD -> LinAlgError). When no fresh lane-graph seeds were produced,
+            # seed the replan with a direct route from the current belief to the new
+            # goal so the optimiser starts from a sane, leg-appropriate trajectory.
+            if is_replan and not fresh_seeds:
+                direct = [{'name': 'replan_direct',
+                           'waypoints': [(float(m0[0]), float(m0[1])),
+                                         (float(final_goal[0]), float(final_goal[1]))]}]
+                self.global_planner.optimizer_initial_routes = (
+                    self.global_planner._parse_initial_routes(direct))
+                self.global_planner.prev_controls_flat = None
+                self.get_logger().info(
+                    "[hierarchical] replan seeded with direct route "
+                    f"({m0[0]:.2f},{m0[1]:.2f})->({final_goal[0]:.2f},{final_goal[1]:.2f})")
             plan_start = time.perf_counter()
             try:
                 rg = self.global_planner.plan(m0, S0, final_goal)
             except Exception as exc:  # noqa: BLE001
-                self._fatal_experiment_stop("Global planner raised an exception", exc)
+                if not is_replan:
+                    self._fatal_experiment_stop("Global planner raised an exception", exc)
+                    return
+                # A per-leg replan failure must not kill the mission: fall back to a
+                # straight geometric route to the new goal and keep tracking locally.
+                self.get_logger().warn(
+                    f"[hierarchical] replan global solve failed ({exc}); "
+                    "falling back to straight route to new goal")
+                self._waypoints = self._densify_line(m0[:2], final_goal)
+                self._wp_idx = 0
+                self._hier_phase = 'LOCAL'
+                self._global_goal_xy = np.asarray(final_goal, dtype=float)
+                try:
+                    wp0 = np.asarray(self._waypoints[0], dtype=float)
+                    seed = self.planner._controls_for_waypoints(m0[:3], [wp0])
+                    self.planner.prev_controls_flat = np.asarray(seed, dtype=float).reshape(-1)
+                except Exception:
+                    pass
                 return
             self._waypoints = extract_waypoints(
                 rg.states, spacing_m=self.waypoint_spacing_m, include_goal=True
@@ -383,6 +459,8 @@ class EfeAgentNode(UnicyclePlannerNode):
                 self._waypoints = [(float(final_goal[0]), float(final_goal[1]))]
             self._wp_idx = 0
             self._hier_phase = 'LOCAL'
+            self._global_goal_xy = np.asarray(final_goal, dtype=float)
+            self._global_solve_done = True
             # Bootstrap the local planner's warm start from a direct-goal seed to the
             # first waypoint.  Without this, the first local call uses a cold zero-control
             # initialisation which takes 20-30 L-BFGS-B iterations to escape; with it,
