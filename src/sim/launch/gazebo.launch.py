@@ -53,6 +53,14 @@ def generate_launch_description():
         name="GZ_SIM_RESOURCE_PATH",
         value=":".join(gz_resource_paths)
     )
+    # ROS 2 Humble's ros_gz packages on this machine target Gazebo Sim 6
+    # (Fortress). Fortress still consumes the IGN_* spelling, while newer
+    # Gazebo releases consume GZ_*. Keep both names identical so a world never
+    # appears to load while its model:// camera assets are unresolved.
+    set_ign_resource_path = SetEnvironmentVariable(
+        name="IGN_GAZEBO_RESOURCE_PATH",
+        value=":".join(gz_resource_paths)
+    )
 
     # PRIME render offload: make the gz server's OGRE (camera sensor) GL context
     # bind to the discrete NVIDIA GPU instead of the integrated Intel GPU. On
@@ -90,6 +98,11 @@ def generate_launch_description():
                 ]),
                 world_path,
             ],
+            # Pin the ABI used by /opt/ros/humble's ros_gz_bridge. Both
+            # `ign gazebo` (Fortress 6) and `gz sim` (Harmonic 8) are installed
+            # locally; allowing the latter to start yields advertised camera
+            # bridges with no ROS image messages.
+            "gz_version": "6",
         }.items()
     )
 
@@ -98,6 +111,7 @@ def generate_launch_description():
         headless_arg,
         nvidia_offload_arg,
         set_gz_resource_path,
+        set_ign_resource_path,
         set_prime_offload,
         set_glx_vendor,
         gazebo,

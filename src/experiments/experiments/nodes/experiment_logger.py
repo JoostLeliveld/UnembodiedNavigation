@@ -94,6 +94,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('state_source_y', 'unknown')
         self.declare_parameter('state_source_theta', 'unknown')
         self.declare_parameter('state_estimator_mode', 'unknown')
+        self.declare_parameter('state_correction_mode', 'fused')
         self.declare_parameter('use_pixel_correction', False)
         self.declare_parameter('pixel_timeout_s', 0.5)
         self.declare_parameter('use_ambiguity', False)
@@ -243,6 +244,9 @@ class ExperimentLogger(Node):
         self.state_source_y = str(self.get_parameter('state_source_y').value)
         self.state_source_theta = str(self.get_parameter('state_source_theta').value)
         self.state_estimator_mode = str(self.get_parameter('state_estimator_mode').value)
+        self.state_correction_mode = str(
+            self.get_parameter('state_correction_mode').value
+        )
         self.heading_update_mode = str(self.get_parameter('heading_update_mode').value)
         self.use_pixel_correction = bool(self.get_parameter('use_pixel_correction').value)
         self.pixel_timeout_s = float(self.get_parameter('pixel_timeout_s').value)
@@ -484,6 +488,7 @@ class ExperimentLogger(Node):
             'state_source_y': self.state_source_y,
             'state_source_theta': self.state_source_theta,
             'state_estimator_mode': self.state_estimator_mode,
+            'state_correction_mode': self.state_correction_mode,
             'heading_update_mode': self.heading_update_mode,
             'use_pixel_correction': self.use_pixel_correction,
             'pixel_timeout_s': self.pixel_timeout_s,

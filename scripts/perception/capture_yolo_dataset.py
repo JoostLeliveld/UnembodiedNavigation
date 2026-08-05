@@ -65,9 +65,10 @@ from unav_common.occlusion_geometry import (
 
 CAMERA_MODEL_TO_ID = {
     'external_camera': 'camera_A',
-    'external_camera_b': 'camera_B',
-    'external_camera_c': 'camera_C',
-    'external_camera_d': 'camera_D',
+    **{
+        f'external_camera_{suffix.lower()}': f'camera_{suffix}'
+        for suffix in 'BCDEFGHIJKL'
+    },
 }
 
 CAPTURE_INVOCATION_SCHEMA_VERSION = 'yolo_capture_invocation.v1'
@@ -1534,12 +1535,19 @@ def main() -> int:
     parser.add_argument('--world', default='warehouse_aws.world.sdf')
     parser.add_argument('--world-profiles', default=str((REPO_ROOT / 'src' / 'experiments' / 'config' / 'world_profiles.yaml').resolve()))
     parser.add_argument('--out', default='', help='Output dataset folder; defaults under logs/')
+    parser.add_argument('--plan-only', action='store_true',
+                        help='Validate provenance inputs and print the filtered capture plan without creating output or requiring ROS topics.')
     parser.add_argument('--replace', action='store_true', help='Delete an existing output folder before capture.')
     parser.add_argument('--archive-existing', action='store_true', help='Move an existing output folder under sibling archive/ before capture.')
     parser.add_argument('--sample-nx', type=int, default=16)
     parser.add_argument('--sample-ny', type=int, default=14)
     parser.add_argument('--yaw-samples', type=int, default=8)
     parser.add_argument('--wall-margin', type=float, default=0.65)
+    parser.add_argument('--sample-min-x', type=float, default=None,
+                        help='Optional camera-specific sampling bound; defaults to the world profile bound plus wall margin.')
+    parser.add_argument('--sample-max-x', type=float, default=None)
+    parser.add_argument('--sample-min-y', type=float, default=None)
+    parser.add_argument('--sample-max-y', type=float, default=None)
     parser.add_argument('--val-fraction', type=float, default=0.20)
     parser.add_argument('--split-mode', choices=('cyclic', 'yaw_bucket', 'spatial_cell', 'spatial_yaw_bucket'), default='spatial_cell',
                         help='Grouped train/val split. spatial_cell (default) keeps every heading at one x/y in one split.')
@@ -1619,9 +1627,9 @@ def main() -> int:
     parser.add_argument('--min-camera-range-m', type=float, default=0.0)
     parser.add_argument('--max-camera-range-m', type=float, default=float('inf'))
     parser.add_argument('--camera-model', default='external_camera',
-                        help='World include whose pose defines projection checks (external_camera[_b|_c|_d]).')
+                        help='World include whose pose defines projection checks (external_camera or external_camera_b..l).')
     parser.add_argument('--camera-id', default='',
-                        help='Stable provenance ID; inferred as camera_A..camera_D for known camera models.')
+                        help='Stable provenance ID; inferred as camera_A..camera_L for known camera models.')
     parser.add_argument('--allow-topic-model-mismatch', action='store_true',
                         help='Allow image/label topics outside the selected camera-model namespace.')
     parser.add_argument('--exclude-route', action='append', default=[],
@@ -1671,6 +1679,14 @@ def main() -> int:
     xmax = float(vis.get('visibility_map_max_x', 3.0)) - float(args.wall_margin)
     ymin = float(vis.get('visibility_map_min_y', -3.0)) + float(args.wall_margin)
     ymax = float(vis.get('visibility_map_max_y', 3.0)) - float(args.wall_margin)
+    if args.sample_min_x is not None:
+        xmin = max(xmin, float(args.sample_min_x))
+    if args.sample_max_x is not None:
+        xmax = min(xmax, float(args.sample_max_x))
+    if args.sample_min_y is not None:
+        ymin = max(ymin, float(args.sample_min_y))
+    if args.sample_max_y is not None:
+        ymax = min(ymax, float(args.sample_max_y))
     if xmax <= xmin or ymax <= ymin:
         raise RuntimeError('Invalid sampling bounds after wall margin')
 
@@ -1807,6 +1823,29 @@ def main() -> int:
             'Capture plan has no projectable pose in both grouped splits: '
             f'{dict(planned_split_counts)}; increase spatial grid density without changing the split seed.'
         )
+    if bool(args.plan_only):
+        print(json.dumps({
+            'world': str(args.world),
+            'camera_id': camera_id,
+            'camera_model': camera_model,
+            'sampling_bounds': {'xmin': xmin, 'xmax': xmax, 'ymin': ymin, 'ymax': ymax},
+            'unfiltered_pose_count': len(unfiltered_pose_records),
+            'projectable_pose_count': len(planned),
+            'split_counts': dict(planned_split_counts),
+            'filter_counts': pose_filter_counts,
+            'negative_candidate_count': len(negative_candidates),
+            'negative_candidate_preview': [
+                {
+                    'x': float(record['x']),
+                    'y': float(record['y']),
+                    'yaw': float(record['yaw']),
+                    'reason': reason,
+                }
+                for record, reason in negative_candidates[:16]
+            ],
+            'simulation_asset_inventory_sha256': simulation_asset_inventory['aggregate_sha256'],
+        }, indent=2, sort_keys=True))
+        return 0
 
     if str(args.out).strip():
         out_dir = Path(args.out).expanduser().resolve()

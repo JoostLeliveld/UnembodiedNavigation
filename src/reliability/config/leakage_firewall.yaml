@@ -42,6 +42,12 @@ evaluation_only_columns:
   - oracle_occlusion_reason
 
 evaluation_only_patterns:
+  # `eval_` marks an evaluation-only column by convention (build_belief_gp_events.py,
+  # build_actual_commissioning_inputs.py). The GT-derived signed-residual columns
+  # eval_res_x / eval_res_y / eval_pred_world_x / eval_pred_world_y contain none of the
+  # gt_/true_/localization_error tokens below, so the prefix is matched explicitly.
+  # Mirrors EVALUATION_ONLY_PREFIXES in reliability/contracts.py.
+  - "^eval_"
   - "^gt_"
   - ".*_gt_.*"
   - ".*_gt$"

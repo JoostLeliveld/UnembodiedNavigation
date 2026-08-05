@@ -143,7 +143,13 @@ def test_runtime_source_has_one_native_model_and_the_complete_operational_contra
         / "src/perception/perception/nodes/batched_four_camera_yolo_node.py"
     ).read_text(encoding="utf-8")
 
-    assert source.count("self.model = YOLO(str(model_load_path))") == 1
+    # Exactly one Ultralytics model is constructed, and the compiled diagnostic
+    # path owns exactly one CUDA copy of its graph. A second construction of
+    # either kind puts a second compiled graph beside Gazebo's renderer on the
+    # 4 GiB laptop GPU. (Asserted on the construction itself rather than on one
+    # spelling of the load path, which the torchscript metadata split changed.)
+    assert source.count("= YOLO(") == 1
+    assert source.count("torch.jit.load(") == 1
     assert '"source": list(images_bgr)' in source
     assert '"batch": len(images_bgr)' in source
     # Native inference must run exactly once per A--D batch. Calling predict

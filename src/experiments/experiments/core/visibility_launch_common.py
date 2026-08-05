@@ -98,6 +98,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'optimizer_multistart': 'false',
     'optimizer_multistart_include_direct': 'true',
     'optimizer_initial_routes_json': '',
+    'optimizer_terminal_goal_tolerance_m': '0.0',
     'optimizer_route_seed_mode': 'explicit',
     'use_hierarchical': 'false',
     'global_planner_mode': 'efe',
@@ -150,6 +151,8 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     # (its belief EKF still runs and publishes /planner_belief). Default true
     # preserves the frozen navigation comparison exactly.
     'enable_mission': 'true',
+    'wait_for_belief_before_first_goal': 'false',
+    'initial_belief_max_sigma_m': '0.0',
     'yolo_model': '',
     'yolo_device': '',
     'yolo_imgsz': '640',
@@ -202,6 +205,10 @@ VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
     'use_belief_nogo_cost': 'false',
     'nogo_belief_kappa': 1.0,
     'nogo_mode': 'keep_out',
+    # Hit/miss expected-belief mixture in the EFE objective. 'false' reproduces
+    # the published precision-blend planner bit-for-bit; only an experiment that
+    # deliberately evaluates the new measurement model may set it true.
+    'use_hit_miss_mixture': 'false',
 }
 
 
@@ -270,6 +277,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'scheduled_coverage_artifact': _launch_value(context, 'scheduled_coverage_artifact', '').strip(),
         'scheduled_report_std_m': float(_launch_value(context, 'scheduled_report_std_m', '0.15')),
         'scheduled_rate_hz': float(_launch_value(context, 'scheduled_rate_hz', '5.0')),
+        'scheduled_selection_mode': _launch_value(
+            context, 'scheduled_selection_mode', 'coverage_best_with_fallback'
+        ).strip().lower(),
         'manager_gp_artifact_template': _launch_value(context, 'manager_gp_artifact_template', '').strip(),
         'manager_projection_calibration': _launch_value(context, 'manager_projection_calibration', '').strip(),
         'manager_min_spatial_trust': float(_launch_value(context, 'manager_min_spatial_trust', '0.15')),
@@ -325,6 +335,16 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'use_obs_risk': _as_bool(_launch_value(context, 'use_obs_risk', PAPER_LAUNCH_DEFAULTS['use_obs_risk'])),
         'auto_stop_on_goal': _as_bool(_launch_value(context, 'auto_stop_on_goal', PAPER_LAUNCH_DEFAULTS['auto_stop_on_goal'])),
         'enable_mission': _as_bool(_launch_value(context, 'enable_mission', PAPER_LAUNCH_DEFAULTS['enable_mission'])),
+        'wait_for_belief_before_first_goal': _as_bool(_launch_value(
+            context,
+            'wait_for_belief_before_first_goal',
+            PAPER_LAUNCH_DEFAULTS['wait_for_belief_before_first_goal'],
+        )),
+        'initial_belief_max_sigma_m': float(_launch_value(
+            context,
+            'initial_belief_max_sigma_m',
+            PAPER_LAUNCH_DEFAULTS['initial_belief_max_sigma_m'],
+        )),
         'goal_success_radius': float(_launch_value(context, 'goal_success_radius', PAPER_LAUNCH_DEFAULTS['goal_success_radius'])),
         'goal_success_hold_s': float(_launch_value(context, 'goal_success_hold_s', PAPER_LAUNCH_DEFAULTS['goal_success_hold_s'])),
         'goal_stable_radius': float(_launch_value(context, 'goal_stable_radius', PAPER_LAUNCH_DEFAULTS['goal_stable_radius'])),
@@ -357,6 +377,11 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'optimizer_multistart': _as_bool(_launch_value(context, 'optimizer_multistart', PAPER_LAUNCH_DEFAULTS['optimizer_multistart'])),
         'optimizer_multistart_include_direct': _as_bool(_launch_value(context, 'optimizer_multistart_include_direct', PAPER_LAUNCH_DEFAULTS['optimizer_multistart_include_direct'])),
         'optimizer_initial_routes_json': _launch_value(context, 'optimizer_initial_routes_json', PAPER_LAUNCH_DEFAULTS['optimizer_initial_routes_json']),
+        'optimizer_terminal_goal_tolerance_m': float(_launch_value(
+            context,
+            'optimizer_terminal_goal_tolerance_m',
+            PAPER_LAUNCH_DEFAULTS['optimizer_terminal_goal_tolerance_m'],
+        )),
         'optimizer_route_seed_mode': _launch_value(context, 'optimizer_route_seed_mode', PAPER_LAUNCH_DEFAULTS['optimizer_route_seed_mode']),
         'use_hierarchical': _as_bool(_launch_value(context, 'use_hierarchical', PAPER_LAUNCH_DEFAULTS['use_hierarchical'])),
         'global_planner_mode': _launch_value(context, 'global_planner_mode', PAPER_LAUNCH_DEFAULTS['global_planner_mode']).strip().lower(),
@@ -503,6 +528,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'use_belief_nogo_cost': _as_bool(_launch_value(context, 'use_belief_nogo_cost', str(VISIBILITY_FALLBACK_DEFAULTS['use_belief_nogo_cost']))),
         'nogo_belief_kappa': float(_launch_value(context, 'nogo_belief_kappa', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_belief_kappa']))),
         'nogo_mode': _launch_value(context, 'nogo_mode', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_mode'])).strip().lower(),
+        'use_hit_miss_mixture': _as_bool(_launch_value(context, 'use_hit_miss_mixture', str(VISIBILITY_FALLBACK_DEFAULTS['use_hit_miss_mixture']))),
         'goal_sigma_uv': float(_launch_value(context, 'goal_sigma_uv', PAPER_LAUNCH_DEFAULTS['goal_sigma_uv'])),
         'robot_collision_radius_m': float(
             _launch_value(
@@ -712,6 +738,41 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     spawn_quat = compute_camera_quaternion_from_rpy(0.0, 0.0, spawn['yaw'])
 
     intrinsics = dict(_intrinsics)
+    profile_camera_ids = [
+        str(item).strip() for item in
+        (profile.get('camera_ids') or ['camera_A', 'camera_B', 'camera_C', 'camera_D'])
+    ]
+    profile_camera_models = [
+        str(item).strip() for item in
+        (profile.get('camera_model_includes') or [
+            'external_camera', 'external_camera_b', 'external_camera_c', 'external_camera_d',
+        ])
+    ]
+    if (
+        not profile_camera_ids
+        or len(profile_camera_ids) != len(profile_camera_models)
+        or len(set(profile_camera_ids)) != len(profile_camera_ids)
+        or len(set(profile_camera_models)) != len(profile_camera_models)
+        or any(not item for item in (*profile_camera_ids, *profile_camera_models))
+    ):
+        raise RuntimeError(
+            f"World profile camera_ids and camera_model_includes must be aligned, "
+            f"non-empty, and unique for {cfg['world']}"
+        )
+    profile_camera_topics = [
+        str(item).strip() for item in
+        (profile.get('camera_image_topics') or [
+            f'/{model}/image_raw' for model in profile_camera_models
+        ])
+    ]
+    if (
+        len(profile_camera_topics) != len(profile_camera_ids)
+        or len(set(profile_camera_topics)) != len(profile_camera_topics)
+        or any(not item for item in profile_camera_topics)
+    ):
+        raise RuntimeError(
+            f"World profile camera_image_topics must align with camera_ids for {cfg['world']}"
+        )
     camera_params = {
         'cam_pos': cam_pos,
         'look_at': look_at,
@@ -785,6 +846,9 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         'start_y': float(start['y']),
         'start_yaw': float(start['yaw']),
         'camera_params': camera_params,
+        'profile_camera_ids': profile_camera_ids,
+        'profile_camera_model_includes': profile_camera_models,
+        'profile_camera_image_topics': profile_camera_topics,
         'tf_args': tf_args,
         'world_path': world_path,
         'visibility_geometry_json': visibility_geometry_json,
@@ -803,29 +867,39 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     if not use_encoder_noise and odom_topic == '/odom_noisy':
         odom_topic = '/odom'
     sim_pkg = FindPackageShare('sim')
+    sim_launch_arguments = {
+        'use_sim_time': 'true',
+        'use_lidar': 'false',
+        'show_pose_markers': 'false',
+        'bridge_scan': 'false',
+        'headless': 'true' if cfg.get('headless', False) else 'false',
+        'world': cfg['world'],
+        'world_name': cfg['profile']['world_name'],
+        'spawn_x': str(cfg['spawn']['x']),
+        'spawn_y': str(cfg['spawn']['y']),
+        'spawn_z': str(cfg['spawn']['z']),
+        'spawn_yaw': str(cfg['spawn']['yaw']),
+        'reset_world': 'true' if cfg.get('reset_world', False) else 'false',
+        'bridge_contacts': 'true' if cfg.get('bridge_contacts', True) else 'false',
+        'bridge_camera_a': 'true' if cfg.get('bridge_camera_a', True) else 'false',
+        'bridge_camera_b': 'true' if cfg.get('bridge_camera_b', False) else 'false',
+        'bridge_camera_c': 'true' if cfg.get('bridge_camera_c', False) else 'false',
+        'bridge_camera_d': 'true' if cfg.get('bridge_camera_d', False) else 'false',
+    }
+    if bool(cfg.get('multicam_scheduled', False)):
+        # The scheduled detector allocates one model and infers one view per
+        # cycle, but it still needs fresh RGB frames from every commissioned
+        # camera. bringup_sim declares these opt-in A--L bridge switches.
+        for camera_id in cfg.get('profile_camera_ids', []):
+            suffix = str(camera_id).removeprefix('camera_').lower()
+            if suffix in tuple('efghijkl'):
+                sim_launch_arguments[f'bridge_camera_{suffix}'] = 'true'
+
     bringup_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([sim_pkg, 'launch', 'bringup_sim.launch.py'])
         ),
-        launch_arguments={
-            'use_sim_time': 'true',
-            'use_lidar': 'false',
-            'show_pose_markers': 'false',
-            'bridge_scan': 'false',
-            'headless': 'true' if cfg.get('headless', False) else 'false',
-            'world': cfg['world'],
-            'world_name': cfg['profile']['world_name'],
-            'spawn_x': str(cfg['spawn']['x']),
-            'spawn_y': str(cfg['spawn']['y']),
-            'spawn_z': str(cfg['spawn']['z']),
-            'spawn_yaw': str(cfg['spawn']['yaw']),
-            'reset_world': 'true' if cfg.get('reset_world', False) else 'false',
-            'bridge_contacts': 'true' if cfg.get('bridge_contacts', True) else 'false',
-            'bridge_camera_a': 'true' if cfg.get('bridge_camera_a', True) else 'false',
-            'bridge_camera_b': 'true' if cfg.get('bridge_camera_b', False) else 'false',
-            'bridge_camera_c': 'true' if cfg.get('bridge_camera_c', False) else 'false',
-            'bridge_camera_d': 'true' if cfg.get('bridge_camera_d', False) else 'false',
-        }.items(),
+        launch_arguments=sim_launch_arguments.items(),
     )
 
     perception_pkg = FindPackageShare('perception')
@@ -993,6 +1067,12 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'goal_x': cfg['goal_x'],
         'goal_y': cfg['goal_y'],
         'waypoints_json': cfg.get('waypoints_json', ''),
+        'wait_for_belief_before_first_goal': cfg.get(
+            'wait_for_belief_before_first_goal', False
+        ),
+        'initial_belief_max_sigma_m': cfg.get(
+            'initial_belief_max_sigma_m', 0.0
+        ),
     }
     mission_node = Node(
         package='experiments',
@@ -1041,6 +1121,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'state_source_y': state_sources['state_source_y'],
                 'state_source_theta': state_sources['state_source_theta'],
                 'state_estimator_mode': state_sources['state_estimator_mode'],
+                'state_correction_mode': cfg.get('state_correction_mode', 'fused'),
                 'use_pixel_correction': cfg['use_pixel_correction'],
                 'pixel_timeout_s': cfg['pixel_timeout_s'],
                 'use_ambiguity': cfg['use_ambiguity'],
@@ -1076,6 +1157,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'nogo_near_weight': cfg['nogo_near_weight'],
                 'use_belief_nogo_cost': cfg['use_belief_nogo_cost'],
                 'nogo_belief_kappa': cfg['nogo_belief_kappa'],
+                'use_hit_miss_mixture': cfg.get('use_hit_miss_mixture', False),
                 'nogo_mode': cfg.get('nogo_mode', 'keep_out'),
                 'yolo_model': cfg['yolo_model'],
                 'yolo_device': cfg['yolo_device'],
@@ -1117,6 +1199,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'optimizer_multistart': cfg['optimizer_multistart'],
                 'optimizer_multistart_include_direct': cfg['optimizer_multistart_include_direct'],
                 'optimizer_initial_routes_json': cfg['optimizer_initial_routes_json'],
+                'optimizer_terminal_goal_tolerance_m': cfg['optimizer_terminal_goal_tolerance_m'],
                 'optimizer_route_seed_mode': cfg['optimizer_route_seed_mode'],
                 'use_hierarchical': cfg.get('use_hierarchical', False),
                 'global_horizon': cfg.get('global_horizon', 60),
@@ -1134,6 +1217,14 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'local_nogo_penalty_type': cfg.get('local_nogo_penalty_type', ''),
                 'local_nogo_weight': cfg.get('local_nogo_weight', -1.0),
                 'local_nogo_safe_distance': cfg.get('local_nogo_safe_distance', -1.0),
+                # Record the resolved local goal prior, not the logger's -1
+                # sentinel.  The planner already receives these values below;
+                # omitting them here made otherwise valid runs fail campaign
+                # resume/config-parity checks.
+                'local_goal_prior_u_std_start': cfg.get('local_goal_prior_u_std_start', -1.0),
+                'local_goal_prior_v_std_start': cfg.get('local_goal_prior_v_std_start', -1.0),
+                'local_goal_prior_u_std_final': cfg.get('local_goal_prior_u_std_final', -1.0),
+                'local_goal_prior_v_std_final': cfg.get('local_goal_prior_v_std_final', -1.0),
                 'waypoint_spacing_m': cfg.get('waypoint_spacing_m', 1.0),
                 'waypoint_arrival_radius_m': cfg.get('waypoint_arrival_radius_m', 0.35),
                 'local_replan_min_remaining_s': cfg.get('local_replan_min_remaining_s', 0.0),
@@ -1364,6 +1455,14 @@ def _scheduled_detector_node(cfg: Dict[str, object]):
             'frame_id': 'map_bev',
             'spawn_x': float(cfg['spawn']['x']),
             'spawn_y': float(cfg['spawn']['y']),
+            'camera_ids': list(cfg.get('profile_camera_ids', [])),
+            'camera_model_includes': list(cfg.get('profile_camera_model_includes', [])),
+            'camera_image_topics': list(cfg.get('profile_camera_image_topics', [])),
+            'selection_mode': str(
+                cfg.get('scheduled_selection_mode', 'coverage_best_with_fallback')
+            ),
+            'publish_camera_observation_json': True,
+            'camera_calibration_id_prefix': str(cfg['profile']['world_name']),
         }],
     )
 
@@ -1508,6 +1607,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'nogo_near_weight': cfg['nogo_near_weight'],
             'use_belief_nogo_cost': cfg['use_belief_nogo_cost'],
             'nogo_belief_kappa': cfg['nogo_belief_kappa'],
+            'use_hit_miss_mixture': cfg.get('use_hit_miss_mixture', False),
             'robot_collision_radius_m': cfg['robot_collision_radius_m'],
             'optimizer_maxiter': cfg['optimizer_maxiter'],
             'optimizer_maxfun': cfg['optimizer_maxfun'],
@@ -1517,6 +1617,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'optimizer_multistart': cfg['optimizer_multistart'],
             'optimizer_multistart_include_direct': cfg['optimizer_multistart_include_direct'],
             'optimizer_initial_routes_json': cfg['optimizer_initial_routes_json'],
+            'optimizer_terminal_goal_tolerance_m': cfg['optimizer_terminal_goal_tolerance_m'],
             'optimizer_route_seed_mode': cfg['optimizer_route_seed_mode'],
             'use_hierarchical': cfg.get('use_hierarchical', False),
             'global_planner_mode': cfg.get('global_planner_mode', 'efe'),

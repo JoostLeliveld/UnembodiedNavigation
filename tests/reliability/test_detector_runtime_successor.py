@@ -83,4 +83,18 @@ def test_versioned_laptop_successors_keep_async_diagnostics_out_of_evidence() ->
     assert v6["runtime_pilot"]["launch_switch"]["yolo_input_transport"] == "direct_gz"
     assert v6["runtime_pilot"]["launch_switch"]["yolo_runtime_backend"] == "torchscript"
     assert len(v6["runtime_pilot"]["compiled_model_sha256"]) == 64
-    assert min(v6["runtime_pilot"]["measured_rate_probe"]["output_wall_hz"].values()) >= 3.0
+
+    # v6's 2026-07-20 probe reported ~3.39 Hz per camera, then was retracted: the
+    # TorchScript export had lost the segmentation task metadata and was read as a
+    # detect model, so it never preserved the source output contract. With
+    # task=segment restored the runtime does ~1.2 Hz and FAILS the 3 Hz gate.
+    # This asserted the retracted number until 2026-08-05. The contract worth
+    # guarding is that the retraction stays recorded and v6 stays out of evidence.
+    probe = v6["runtime_pilot"]["measured_rate_probe"]
+    assert probe["status"] == "failed_after_correct_segmentation_contract"
+    assert probe["invalidated_measurement"]["reason"]
+    assert min(probe["invalidated_measurement"]["output_wall_hz"].values()) >= 3.0
+    assert probe["corrected_runtime_probe"]["processing_rate_per_camera_hz"] == (
+        "approximately_1.2"
+    )
+    assert v6["runtime_pilot"]["evidence_selection"]["permitted"] is False

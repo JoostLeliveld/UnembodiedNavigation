@@ -259,6 +259,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
 
     numeric_keys = (
         'horizon', 'dt', 'goal_success_radius', 'goal_success_hold_s',
+        'optimizer_terminal_goal_tolerance_m',
         'run_timeout_after_first_cmd_s', 'r_visible_uv', 'r_miss_uv',
         'process_noise_xy', 'process_noise_theta', 'risk_weight_obs',
         'ambiguity_weight', 'observation_risk_scale', 'ambiguity_term_scale',
@@ -325,6 +326,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'optimizer_route_seed_mode',
         'local_nogo_penalty_type',
         'heading_update_mode',
+        'state_correction_mode',
         'local_controller_type',
     )
     for key in string_keys:
@@ -402,6 +404,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'optimizer_maxfun:={cfg.get("optimizer_maxfun", 500)}',
         f'optimizer_multistart:={str(cfg.get("optimizer_multistart", False)).lower()}',
         f'optimizer_multistart_include_direct:={str(cfg.get("optimizer_multistart_include_direct", True)).lower()}',
+        f'optimizer_terminal_goal_tolerance_m:={cfg.get("optimizer_terminal_goal_tolerance_m", 0.0)}',
         f'use_command_noise:={str(cfg.get("use_command_noise", True)).lower()}',
         f'use_encoder_noise:={str(cfg.get("use_encoder_noise", True)).lower()}',
         f'use_odom_for_predict:={str(cfg.get("use_odom_for_predict", True)).lower()}',
@@ -456,6 +459,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'debug_runtime',
         'optimizer_ftol', 'optimizer_gtol', 'optimizer_warm_start',
         'optimizer_initial_routes_json',
+        'optimizer_terminal_goal_tolerance_m',
         'optimizer_route_seed_mode',
         'driveable_geometry_json',
         'use_hierarchical', 'global_horizon', 'global_dt', 'local_horizon',
@@ -496,6 +500,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'manager_require_consistency_when_source_available',
         'manager_camera_ids', 'manager_fusion_mode', 'manager_require_gp_artifacts',
         'state_correction_ekf',
+        'wait_for_belief_before_first_goal', 'initial_belief_max_sigma_m',
         'multicam_scheduled', 'scheduled_coverage_artifact',
         'scheduled_report_std_m', 'scheduled_rate_hz',
         'stuck_window_s', 'stuck_max_displacement_m',

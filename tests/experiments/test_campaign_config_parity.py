@@ -194,11 +194,13 @@ def test_state_correction_mode_values_are_valid():
         assert mode in ("fused", "per_camera"), f"{name}: {mode!r}"
 
 
-def test_reproduction_arms_stay_fused_and_dev_configs_are_per_camera():
-    """The 2x2 historical reproduction is a fused-path experiment by definition."""
+def test_reproduction_and_corrected_robustness_arms_stay_fused():
+    """Published/corrected arms use one fused observation at the measurement seam."""
     for name, cfg in CONFIGS:
         mode = str(cfg.get("state_correction_mode", "fused"))
         if name.startswith("_mc_2x2_"):
             assert mode == "fused", f"{name}: reproduction arm must stay fused"
-        if name.startswith("_rob_"):
+        if name == "_rob_val.yaml":
+            assert mode == "fused", f"{name}: corrected robustness arm must stay fused"
+        elif name.startswith("_rob_"):
             assert mode == "per_camera", f"{name}: dev robustness config should be per_camera"

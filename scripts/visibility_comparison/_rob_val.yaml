@@ -8,13 +8,15 @@ conditions:
     planner: visibility_aware_efe
     label: C2_visibility_aware_spawngrid_GP
 tasks:
-  rob_hardA:
+  rob_hardA_free:
     conditions:
+    - C1
     - C2
     seeds:
     - 0
-  rob_hardB:
+  rob_hardB_free:
     conditions:
+    - C1
     - C2
     seeds:
     - 0
@@ -58,10 +60,11 @@ nogo_weight: 2000.0
 # replay extrapolates the last command when odometry samples are missing; this
 # bounds the step it can invent. Off (0.0) on the single-camera path.
 max_predict_speed_mps: 0.6
-# Per-camera sequential updating: each camera folded into the belief on its own,
-# with its own covariance and its own gate. One filter (the planner) instead of
-# camera_manager fusing first and the planner filtering that. Development default.
-state_correction_mode: per_camera
+# Paper-1 comparison seam: camera_manager first produces one covariance-weighted
+# four-camera map observation, then the planner treats that fused pose exactly
+# like any other measurement source. C1 and C2 share this correction path; only
+# C2 uses the four-camera visibility field when evaluating candidate plans.
+state_correction_mode: fused
 nogo_safe_distance: 0.25
 nogo_penalty_type: warning_band
 nogo_warning_band: 0.05
@@ -96,7 +99,7 @@ skip_stale_pixel_correction: true
 pixel_correction_nis_threshold: 9.21
 robot_collision_radius_m: 0.125
 use_hierarchical: true
-global_horizon: 75
+global_horizon: 120
 global_dt: 0.4
 local_horizon: 6
 local_plan_rate: 5.0
@@ -121,13 +124,14 @@ waypoint_arrival_radius_m: 0.1
 latency_compensate_plan_handoff: false
 local_replan_min_remaining_s: 0.0
 local_replan_on_waypoint_change: false
-optimizer_maxiter: 60
-optimizer_maxfun: 360
+optimizer_maxiter: 120
+optimizer_maxfun: 720
 optimizer_ftol: 1.0e-06
 optimizer_gtol: 0.0001
 optimizer_warm_start: true
 optimizer_multistart: true
 optimizer_multistart_include_direct: false
+optimizer_terminal_goal_tolerance_m: 0.25
 optimizer_route_seed_mode: lane_graph
 stuck_window_s: 20.0
 stuck_max_displacement_m: 0.08
@@ -160,3 +164,11 @@ manager_fusion_report_std_m: 0.18
 manager_camera_ids: ''
 manager_fusion_mode: 'true'
 local_controller_type: ff_fb
+# The four-camera detector starts after the mission node. Do not snapshot the
+# one-shot global solve from the first rejected/inflated bootstrap correction;
+# release the goal after the next accepted update has reduced xy uncertainty.
+wait_for_belief_before_first_goal: true
+# The manager's fused measurement covariance is 0.18 m per axis; repeated,
+# accepted updates settle the planner at ~0.127 m. 0.15 admits that stable
+# fused belief while still rejecting the unavailable/inflated bootstrap state.
+initial_belief_max_sigma_m: 0.15

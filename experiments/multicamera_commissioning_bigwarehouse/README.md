@@ -63,8 +63,9 @@ therefore intentionally barred from recording and evidence; see
 [`LAPTOP_ASYNC_MICROBATCH_COMMISSIONING.md`](LAPTOP_ASYNC_MICROBATCH_COMMISSIONING.md).
 
 The v6 direct-Gazebo / fixed-shape TorchScript candidate keeps 640×360 source
-quality and has passed only its 3 Hz rate probe. It remains blocked pending
-equivalence and calibration validation; see
+quality but **fails** the 3 Hz gate: its 3.39 Hz probe was retracted (the export
+had lost the segmentation task metadata), and with `task=segment` restored the
+integrated runtime does ~1.2 Hz per camera. It stays blocked; see
 [`LAPTOP_DIRECT_COMPILED_COMMISSIONING.md`](LAPTOP_DIRECT_COMPILED_COMMISSIONING.md).
 
 ## Start the passive four-camera stack

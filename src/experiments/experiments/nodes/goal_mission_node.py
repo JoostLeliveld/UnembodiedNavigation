@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 
 import rclpy
 from rclpy.node import Node
@@ -28,12 +29,20 @@ class GoalMissionNode(Node):
         self.declare_parameter('frame_id', 'map_bev')
         self.declare_parameter('waypoints_json', '')
         self.declare_parameter('arrival_radius_m', 0.6)
+        self.declare_parameter('wait_for_belief_before_first_goal', False)
+        self.declare_parameter('initial_belief_max_sigma_m', 0.0)
 
         self.delay = float(self.get_parameter('delay_seconds').value)
         self.repeat_rate = float(self.get_parameter('repeat_rate').value)
         self.repeat_count = int(self.get_parameter('repeat_count').value)
         self.frame_id = self.get_parameter('frame_id').value
         self.arrival_radius = float(self.get_parameter('arrival_radius_m').value)
+        self.wait_for_belief = bool(
+            self.get_parameter('wait_for_belief_before_first_goal').value
+        )
+        self.initial_belief_max_sigma_m = max(
+            float(self.get_parameter('initial_belief_max_sigma_m').value), 0.0
+        )
 
         # Build the waypoint list: explicit tour if given, else the single goal.
         raw = str(self.get_parameter('waypoints_json').value or '').strip()
@@ -53,6 +62,9 @@ class GoalMissionNode(Node):
         self.goal_pub = self.create_publisher(PoseStamped, '/goal_bev', qos_profile=goal_qos)
         self.create_subscription(PoseWithCovarianceStamped, '/planner_belief', self._belief_cb, 10)
         self._belief_xy = None
+        self._belief_ready = False
+        self._belief_sigma_m = math.inf
+        self._belief_wait_logged = False
         self.sent_count = 0
         self.wall_clock = Clock(clock_type=ClockType.SYSTEM_TIME)
         self.start_time = self.wall_clock.now()
@@ -61,11 +73,27 @@ class GoalMissionNode(Node):
         self.create_timer(period, self._send_goal, clock=self.wall_clock)
         self.get_logger().info(
             f"Mission ready. {len(self.waypoints)} waypoint(s) {self.waypoints} in frame "
-            f"'{self.frame_id}', first in {self.delay}s (arrival_radius {self.arrival_radius} m)"
+            f"'{self.frame_id}', first in {self.delay}s (arrival_radius {self.arrival_radius} m, "
+            f"wait_for_belief={self.wait_for_belief}, "
+            f"initial_sigma_max={self.initial_belief_max_sigma_m:.3f} m)"
         )
 
     def _belief_cb(self, msg: PoseWithCovarianceStamped):
         self._belief_xy = (float(msg.pose.pose.position.x), float(msg.pose.pose.position.y))
+        cov = msg.pose.covariance
+        variances = (float(cov[0]), float(cov[7]))
+        if all(math.isfinite(v) and v >= 0.0 for v in variances):
+            self._belief_sigma_m = math.sqrt(max(variances))
+            self._belief_ready = (
+                self.initial_belief_max_sigma_m <= 0.0
+                or self._belief_sigma_m <= self.initial_belief_max_sigma_m
+            )
+            if self._belief_ready and self._belief_wait_logged:
+                self.get_logger().info(
+                    f"Initial belief ready (max xy sigma={self._belief_sigma_m:.3f} m); "
+                    "releasing mission goal"
+                )
+                self._belief_wait_logged = False
 
     def _maybe_advance(self):
         """Advance to the next waypoint once the belief reaches the current one
@@ -84,6 +112,20 @@ class GoalMissionNode(Node):
     def _send_goal(self):
         elapsed = (self.wall_clock.now() - self.start_time).nanoseconds * 1e-9
         if elapsed < self.delay:
+            return
+        if self.sent_count == 0 and self.wait_for_belief and not self._belief_ready:
+            if not self._belief_wait_logged:
+                sigma = (
+                    f"{self._belief_sigma_m:.3f} m"
+                    if math.isfinite(self._belief_sigma_m)
+                    else "unavailable"
+                )
+                self.get_logger().info(
+                    f"Holding first goal until planner belief is ready "
+                    f"(max xy sigma={sigma}, required <= "
+                    f"{self.initial_belief_max_sigma_m:.3f} m)"
+                )
+                self._belief_wait_logged = True
             return
         if self.repeat_count > 0 and self.sent_count >= self.repeat_count:
             return

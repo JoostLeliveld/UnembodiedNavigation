@@ -84,6 +84,17 @@ EVALUATION_ONLY_TOKENS = (
     "localization_error",
 )
 
+# Prefixes that mark a column/key as evaluation-only regardless of the rest of
+# the name. The token list above is a substring test, so it only caught the
+# eval_ columns whose names happen to also contain "gt_" (eval_gt_x,
+# eval_belief_error_gt_m). Signed-residual columns such as ``eval_res_x`` and
+# ``eval_pred_world_x`` are just as GT-derived but contain no such token, so
+# the ``eval_`` prefix is matched explicitly here. Anchored as a PREFIX, not a
+# substring, so ordinary words that embed the letters (e.g. "retrieval_") are
+# not falsely flagged. Mirrors "^eval_" in
+# reliability/config/leakage_firewall.yaml.
+EVALUATION_ONLY_PREFIXES = ("eval_",)
+
 
 def _finite_float(value: Any, *, field_name: str, allow_nan: bool = False) -> float:
     if value is None and allow_nan:
@@ -190,7 +201,11 @@ def _unknown_fields(cls: type, payload: Mapping[str, Any]) -> set[str]:
 
 def _contains_evaluation_key(key: str) -> bool:
     lowered = str(key).strip().lower()
-    return lowered in EVALUATION_ONLY_FIELD_NAMES or any(token in lowered for token in EVALUATION_ONLY_TOKENS)
+    return (
+        lowered in EVALUATION_ONLY_FIELD_NAMES
+        or lowered.startswith(EVALUATION_ONLY_PREFIXES)
+        or any(token in lowered for token in EVALUATION_ONLY_TOKENS)
+    )
 
 
 def _find_evaluation_keys(payload: Any, *, prefix: str = "") -> list[str]:

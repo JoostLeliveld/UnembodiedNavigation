@@ -1849,7 +1849,8 @@ def _dataset_card(
     provenance = _merged_provenance(audits, config)
     intended_use = (
         "Fine-tuning and validating the single-class YOLO segmentation detector "
-        "for the frozen four-camera warehouse commissioning study."
+        f"for the frozen {len(CAMERAS)}-camera {Path(config.expected_world).name} "
+        "commissioning study."
         if provenance["training_eligible"]
         else (
             "Diagnostic smoke auditing only. This legacy merge lacks complete capture "
@@ -1866,7 +1867,8 @@ def _dataset_card(
         "out_of_scope": [
             "Claiming detector-confidence calibration without a separate held-out calibration set.",
             "Using validation images for optimization or model selection beyond the declared protocol.",
-            "Generalizing performance claims beyond warehouse_full_4cam without new evaluation data.",
+            f"Generalizing performance claims beyond {Path(config.expected_world).name} "
+            "without new evaluation data.",
         ],
         "contract": {
             "world": Path(config.expected_world).name,

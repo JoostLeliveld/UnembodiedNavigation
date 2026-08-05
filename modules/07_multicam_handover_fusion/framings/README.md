@@ -36,6 +36,22 @@ C1–C4 claim block, the nulls-as-scoping discipline, and a **two-tier structure
   [`PREREGISTRATION_fault_containment_2026-07-22`](../../../experiments/multicamera_fusion_extension/PREREGISTRATION_fault_containment_2026-07-22.md)
   (subsumed as Tier 2). Start here for the story; the results draft above is its evidence layer.
 
+**Addendum (2026-08-04):** [`ICRA_FRAMING_ADDENDUM_2026-08-04.md`](ICRA_FRAMING_ADDENDUM_2026-08-04.md)
+— the framing-of-record **stands**; the 2026-07-30 narrowing to *"the hit/miss mixture changes
+route choice"* is **retired as a headline** (`R_cond` was never data-blocked, it was bias-blocked;
+per-camera `R_cond` only ties a pooled constant). Adds **C5 — the dominant error is per-camera
+*systematic* bias, and correcting it is a gated, GT-free, per-camera decision** (NEES 8.51 → 1.06
+on a held-out capture; ungated the same fix harms camera A by 27 mm), and one new null: **per-camera
+calibration cannot be fitted for every camera — correct the outliers, leave the rest raw.** The
+mixture is demoted to a belief-propagation *correctness* argument under C1. Ranks the three
+realistic-warehouse exposures, with **calibration drift** as the recommended next experiment.
+
+**New-world role (2026-08-04):**
+[`MEERHOVEN_PAPER_ROLE_2026-08-04.md`](MEERHOVEN_PAPER_ROLE_2026-08-04.md) — Meerhoven is a
+second, exploratory external-validity test of the assistive localization service contract,
+not a replacement for the compact AWS/B1 paper core and not a “twelve beats four” claim.
+Promotion requires its complete detector → calibration → GP → seeded-run provenance chain.
+
 > Add a sibling section here when a second framing is drafted (e.g. a
 > localization-only framing that drops the planning claim, or a
 > calibration-health-centred framing). Keep each framing's evidence pointers

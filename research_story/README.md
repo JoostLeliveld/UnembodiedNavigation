@@ -1,5 +1,12 @@
 # Research story — the investigation, chapter by chapter
 
+> **Scope update, 2026-08-05.** This numbered programme is retained as thesis history,
+> but it is no longer the active ICRA task list. The focused workstream is defined in
+> [`../paused_archive/ACTIVE_RESEARCH_SET.md`](../paused_archive/ACTIVE_RESEARCH_SET.md),
+> with all paused/archived directions catalogued in
+> [`../paused_archive/ARCHIVE_CATALOG_2026-08-05.md`](../paused_archive/ARCHIVE_CATALOG_2026-08-05.md).
+> Do not start a chapter experiment from this page without checking that active set.
+
 One numbered folder per storyline chapter. Each chapter is an **investigation**: a research
 question, what a contribution would look like if the answer is yes, the concrete result we
 are aiming for, what is implemented today, and the gate that decides whether we proceed.

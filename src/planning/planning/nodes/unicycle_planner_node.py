@@ -124,6 +124,11 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('nogo_near_weight', 50.0)
         _declare_if_not('use_belief_nogo_cost', False)
         _declare_if_not('nogo_belief_kappa', 1.0)
+        # Hit/miss expected-belief mixture in the EFE objective. MUST stay False by
+        # default: false reproduces the published single-camera precision-blend
+        # planner bit-for-bit. True switches the objective to the Bernoulli
+        # availability model (and stops reading r_miss_uv entirely).
+        _declare_if_not('use_hit_miss_mixture', False)
         _declare_if_not('nogo_mode', 'keep_out')
         _declare_if_not('driveable_geometry_json', '')
         _declare_if_not('visibility_artifact_path', '')
@@ -138,6 +143,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('optimizer_multistart', False)
         _declare_if_not('optimizer_multistart_include_direct', True)
         _declare_if_not('optimizer_initial_routes_json', '')
+        _declare_if_not('optimizer_terminal_goal_tolerance_m', 0.0)
         # Route-seed source for the multistart: 'explicit' uses
         # optimizer_initial_routes_json as-is; 'lane_graph' generates condition-
         # neutral lane-centre Manhattan seeds from the driveable map at the (one-shot)
@@ -366,6 +372,7 @@ class UnicyclePlannerNode(Node):
         self.nogo_near_weight = float(self.get_parameter('nogo_near_weight').value)
         self.use_belief_nogo_cost = _as_bool(self.get_parameter('use_belief_nogo_cost').value)
         self.nogo_belief_kappa = float(self.get_parameter('nogo_belief_kappa').value)
+        self.use_hit_miss_mixture = _as_bool(self.get_parameter('use_hit_miss_mixture').value)
         self.nogo_mode = str(self.get_parameter('nogo_mode').value or 'keep_out').strip().lower()
         self.driveable_geometry_json = str(self.get_parameter('driveable_geometry_json').value or '')
         self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value).strip()
@@ -382,6 +389,9 @@ class UnicyclePlannerNode(Node):
         )
         self.optimizer_initial_routes_json = str(
             self.get_parameter('optimizer_initial_routes_json').value
+        )
+        self.optimizer_terminal_goal_tolerance_m = float(
+            self.get_parameter('optimizer_terminal_goal_tolerance_m').value
         )
         self.optimizer_route_seed_mode = str(
             self.get_parameter('optimizer_route_seed_mode').value or 'explicit'
@@ -686,6 +696,7 @@ class UnicyclePlannerNode(Node):
             f"use_visibility_model={self.use_visibility_model}, "
             f"use_nogo_cost={self.use_nogo_cost}, nogo_penalty_type={self.nogo_penalty_type}, "
             f"use_belief_nogo_cost={self.use_belief_nogo_cost}, "
+            f"use_hit_miss_mixture={self.use_hit_miss_mixture}, "
             f"use_pixel_correction={self.use_pixel_correction}, "
             f"cmd_topic={self.cmd_topic}, "
             f"pixel_correction_approx={self.pixel_correction_approx}, "
@@ -814,6 +825,9 @@ class UnicyclePlannerNode(Node):
             optimizer_multistart=_as_bool(g('optimizer_multistart')),
             optimizer_multistart_include_direct=_as_bool(g('optimizer_multistart_include_direct')),
             optimizer_initial_routes_json=g('optimizer_initial_routes_json'),
+            optimizer_terminal_goal_tolerance_m=float(
+                g('optimizer_terminal_goal_tolerance_m')
+            ),
             approx_method=self.approx_method, use_obs_risk=_as_bool(g('use_obs_risk')),
             use_ambiguity=_as_bool(g('use_ambiguity')), seed=self.seed, camera_params=self._camera_params,
             use_visibility_model=_as_bool(g('use_visibility_model')),
@@ -838,6 +852,7 @@ class UnicyclePlannerNode(Node):
             nogo_near_weight=float(g('nogo_near_weight')),
             use_belief_nogo_cost=_as_bool(g('use_belief_nogo_cost')),
             nogo_belief_kappa=float(g('nogo_belief_kappa')),
+            use_hit_miss_mixture=_as_bool(g('use_hit_miss_mixture')),
             nogo_mode=str(g('nogo_mode')), driveable_geometry_json=g('driveable_geometry_json'),
             robot_collision_radius_m=self.robot_collision_radius_m, runtime_debug=self.debug_runtime,
         )

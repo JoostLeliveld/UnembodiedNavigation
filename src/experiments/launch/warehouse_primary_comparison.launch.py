@@ -60,6 +60,8 @@ def _planner_precision_arguments():
                               description='Include a steer-straight-to-goal seed when multistart is on.'),
         DeclareLaunchArgument('optimizer_initial_routes_json', default_value='',
                               description='Optional JSON list of named waypoint routes used only as optimizer seeds (not mission waypoints).'),
+        DeclareLaunchArgument('optimizer_terminal_goal_tolerance_m', default_value='0.0',
+                              description='If positive, valid multistart candidates reaching this terminal goal tolerance outrank incomplete candidates before EFE cost comparison.'),
         DeclareLaunchArgument('optimizer_route_seed_mode', default_value='explicit',
                               description="Multistart route-seed source: 'explicit' uses optimizer_initial_routes_json; 'lane_graph' generates condition-neutral lane-centre Manhattan seeds from the driveable map."),
         DeclareLaunchArgument('use_hierarchical', default_value='false'),
@@ -156,6 +158,16 @@ def generate_launch_description():
         DeclareLaunchArgument('auto_stop_on_goal', default_value='true'),
         DeclareLaunchArgument('enable_mission', default_value='true',
                               description='Publish a navigation goal (true). Set false for a commissioning coverage drive: no goal, EFE planner silent, belief EKF still runs while an external /cmd_vel source drives.'),
+        DeclareLaunchArgument(
+            'wait_for_belief_before_first_goal',
+            default_value='false',
+            description='Hold the first mission goal until /planner_belief satisfies the configured xy-sigma readiness gate.',
+        ),
+        DeclareLaunchArgument(
+            'initial_belief_max_sigma_m',
+            default_value='0.0',
+            description='Maximum xy sigma for the initial-belief readiness gate; <=0 accepts the first finite belief.',
+        ),
         DeclareLaunchArgument('goal_success_radius', default_value='0.20'),
         DeclareLaunchArgument('goal_success_hold_s', default_value='2.0'),
         DeclareLaunchArgument('goal_stable_radius', default_value='0.20'),
@@ -253,6 +265,8 @@ def generate_launch_description():
                               description='npz with per-camera P_camera_X_map + xs/ys used to pick the camera per belief position.'),
         DeclareLaunchArgument('scheduled_report_std_m', default_value='0.15'),
         DeclareLaunchArgument('scheduled_rate_hz', default_value='5.0'),
+        DeclareLaunchArgument('scheduled_selection_mode', default_value='coverage_best_with_fallback',
+                              description='coverage_best_with_fallback for deployment; round_robin for commissioning evidence collection.'),
         DeclareLaunchArgument('pixel_topic', default_value='/perception/pixel_pose',
                               description='World-pixel measurement topic the planner corrects on. '
                                           'Point at a fault-injector output (e.g. /perception/pixel_pose_faulted) '

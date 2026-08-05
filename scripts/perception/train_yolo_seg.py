@@ -112,11 +112,11 @@ def _validate_dataset(data_yaml: Path) -> dict:
     }
 
 
-def _validate_training_grade_fourcam_dataset(dataset: dict) -> dict:
-    """Fail closed for the paper four-camera training path.
+def _validate_training_grade_multicam_dataset(dataset: dict) -> dict:
+    """Fail closed for a paper multi-camera training path.
 
     The generic trainer intentionally remains usable for small local experiments,
-    but a four-camera paper checkpoint must never be produced from a legacy
+    but a paper checkpoint must never be produced from a legacy
     diagnostic merge. The merger writes these immutable metadata files only
     after validating every camera capture and its source inventory.
     """
@@ -129,7 +129,7 @@ def _validate_training_grade_fourcam_dataset(dataset: dict) -> dict:
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise RuntimeError(
-            'Training-grade four-camera dataset is missing immutable merge metadata: '
+            'Training-grade multi-camera dataset is missing immutable merge metadata: '
             + ', '.join(missing)
         )
     try:
@@ -137,23 +137,23 @@ def _validate_training_grade_fourcam_dataset(dataset: dict) -> dict:
         manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
         completion = json.loads(completion_path.read_text(encoding='utf-8'))
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f'Cannot parse four-camera dataset provenance under {root}: {exc}') from exc
+        raise RuntimeError(f'Cannot parse multi-camera dataset provenance under {root}: {exc}') from exc
     if not all(isinstance(value, dict) for value in (card, manifest, completion)):
-        raise RuntimeError(f'Four-camera dataset provenance files must be JSON objects: {root}')
+        raise RuntimeError(f'Multi-camera dataset provenance files must be JSON objects: {root}')
     card_provenance = dict(card.get('provenance') or {})
     manifest_provenance = dict(manifest.get('provenance') or {})
     if card_provenance.get('grade') != 'training_grade' or not bool(card_provenance.get('training_eligible')):
         raise RuntimeError(
-            'Refusing paper training from a non-training-grade four-camera dataset. '
+            'Refusing paper training from a non-training-grade multi-camera dataset. '
             'Run the fail-closed merger without its legacy diagnostic override.'
         )
     if not bool(manifest_provenance.get('training_eligible')) or manifest.get('status') != 'complete':
-        raise RuntimeError('Four-camera dataset manifest is incomplete or not training eligible.')
+        raise RuntimeError('Multi-camera dataset manifest is incomplete or not training eligible.')
     expected_sha = str(completion.get('dataset_manifest_sha256', '')).strip().lower()
     observed_sha = _sha256_file(manifest_path)
     if expected_sha != observed_sha:
         raise RuntimeError(
-            'Four-camera dataset completion marker does not match dataset_manifest.json; '
+            'Multi-camera dataset completion marker does not match dataset_manifest.json; '
             'the dataset may have been modified after merge.'
         )
     return {
@@ -164,6 +164,12 @@ def _validate_training_grade_fourcam_dataset(dataset: dict) -> dict:
         'completion_marker': str(completion_path),
         'provenance_grade': str(card_provenance.get('grade')),
     }
+
+
+def _validate_training_grade_fourcam_dataset(dataset: dict) -> dict:
+    """Backward-compatible name for older commissioning scripts and imports."""
+
+    return _validate_training_grade_multicam_dataset(dataset)
 
 
 def main() -> int:
@@ -186,7 +192,9 @@ def main() -> int:
                         help='Disabled by default to avoid exhausting host RAM/swap.')
     parser.add_argument('--close-mosaic', type=int, default=10)
     parser.add_argument('--require-training-grade-fourcam-dataset', action='store_true',
-                        help='Refuse a merged four-camera dataset unless its immutable provenance '
+                        help=argparse.SUPPRESS)
+    parser.add_argument('--require-training-grade-multicam-dataset', action='store_true',
+                        help='Refuse a merged multi-camera dataset unless its immutable provenance '
                              'marks it training-grade. Required for paper checkpoints.')
     args = parser.parse_args()
 
@@ -201,9 +209,13 @@ def main() -> int:
         raise RuntimeError(f'Output folder already exists: {out_dir}')
 
     dataset = _validate_dataset(data_yaml)
-    fourcam_provenance = (
-        _validate_training_grade_fourcam_dataset(dataset)
-        if bool(args.require_training_grade_fourcam_dataset)
+    require_training_grade = bool(
+        args.require_training_grade_multicam_dataset
+        or args.require_training_grade_fourcam_dataset
+    )
+    multicam_provenance = (
+        _validate_training_grade_multicam_dataset(dataset)
+        if require_training_grade
         else None
     )
     out_dir.mkdir(parents=True, exist_ok=False)
@@ -213,7 +225,11 @@ def main() -> int:
         'base_model': str(base_model),
         'base_model_sha256': _sha256_file(base_model),
         'dataset': dataset,
-        'fourcam_training_provenance': fourcam_provenance,
+        'multicam_training_provenance': multicam_provenance,
+        # Preserve the historical key for downstream readers of older
+        # four-camera training manifests. New consumers should use the generic
+        # multicam key above.
+        'fourcam_training_provenance': multicam_provenance,
         'parameters': {
             'epochs': int(args.epochs),
             'image_size': int(args.imgsz),
@@ -226,7 +242,10 @@ def main() -> int:
             'deterministic': bool(args.deterministic),
             'cache': bool(args.cache),
             'close_mosaic': int(args.close_mosaic),
-            'require_training_grade_fourcam_dataset': bool(args.require_training_grade_fourcam_dataset),
+            'require_training_grade_multicam_dataset': require_training_grade,
+            'require_training_grade_fourcam_dataset': bool(
+                args.require_training_grade_fourcam_dataset
+            ),
         },
         'environment': {
             'python': platform.python_version(),
@@ -300,8 +319,12 @@ def main() -> int:
         'deterministic': bool(args.deterministic),
         'cache': bool(args.cache),
         'close_mosaic': int(args.close_mosaic),
-        'require_training_grade_fourcam_dataset': bool(args.require_training_grade_fourcam_dataset),
-        'fourcam_training_provenance': fourcam_provenance,
+        'require_training_grade_multicam_dataset': require_training_grade,
+        'multicam_training_provenance': multicam_provenance,
+        'require_training_grade_fourcam_dataset': bool(
+            args.require_training_grade_fourcam_dataset
+        ),
+        'fourcam_training_provenance': multicam_provenance,
         'output_model': str(model_out),
         'output_model_sha256': _sha256_file(model_out),
         'training_run_dir': str(run_dir),

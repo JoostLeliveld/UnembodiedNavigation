@@ -77,6 +77,30 @@ def _make_contact_bridge(context, *args, **kwargs):
 
 
 def generate_launch_description():
+    # A--D are retained as named variables below for backwards-compatible
+    # launch APIs. Meerhoven adds E--L; build those declarations and isolated
+    # bridges mechanically so camera topic/model suffixes cannot drift apart.
+    extra_camera_suffixes = tuple("efghijkl")
+    extra_segmentation_args = []
+    extra_segmentation_flags = {}
+    extra_camera_args = []
+    extra_camera_flags = {}
+    for suffix in extra_camera_suffixes:
+        segmentation_name = f"bridge_segmentation_{suffix}"
+        camera_name = f"bridge_camera_{suffix}"
+        extra_segmentation_args.append(DeclareLaunchArgument(
+            segmentation_name,
+            default_value="false",
+            description=f"Bridge camera-{suffix.upper()} semantic labels for offline dataset capture",
+        ))
+        extra_segmentation_flags[suffix] = LaunchConfiguration(segmentation_name)
+        extra_camera_args.append(DeclareLaunchArgument(
+            camera_name,
+            default_value="false",
+            description=f"Bridge extension-only /external_camera_{suffix} RGB and camera_info topics",
+        ))
+        extra_camera_flags[suffix] = LaunchConfiguration(camera_name)
+
     use_sim_time_arg = DeclareLaunchArgument(
         "use_sim_time",
         default_value="true",
@@ -325,12 +349,12 @@ def generate_launch_description():
     set_pose_service_arg = PythonExpression([
         "'/world/' + '",
         world_name,
-        "' + '/set_pose@ros_gz_interfaces/srv/SetEntityPose@gz.msgs.Pose@gz.msgs.Boolean'"
+        "' + '/set_pose@ros_gz_interfaces/srv/SetEntityPose'"
     ])
     control_service_arg = PythonExpression([
         "'/world/' + '",
         world_name,
-        "' + '/control@ros_gz_interfaces/srv/ControlWorld@gz.msgs.WorldControl@gz.msgs.Boolean'"
+        "' + '/control@ros_gz_interfaces/srv/ControlWorld'"
     ])
     clock_remap_src = PythonExpression([
         "'/world/' + '",
@@ -476,6 +500,36 @@ def generate_launch_description():
         output="screen",
         condition=IfCondition(bridge_camera_d),
     )
+    extra_segmentation_bridges = [
+        Node(
+            package="ros_gz_bridge",
+            executable="parameter_bridge",
+            arguments=[
+                f"/external_camera_{suffix}/segmentation/labels_map"
+                "@sensor_msgs/msg/Image[gz.msgs.Image",
+            ],
+            name=f"ros_gz_segmentation_{suffix}_bridge",
+            output="screen",
+            condition=IfCondition(extra_segmentation_flags[suffix]),
+        )
+        for suffix in extra_camera_suffixes
+    ]
+    extra_camera_bridges = [
+        Node(
+            package="ros_gz_bridge",
+            executable="parameter_bridge",
+            arguments=[
+                f"/external_camera_{suffix}/image_raw"
+                "@sensor_msgs/msg/Image[gz.msgs.Image",
+                f"/external_camera_{suffix}/camera_info"
+                "@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
+            ],
+            name=f"ros_gz_camera_{suffix}_bridge",
+            output="screen",
+            condition=IfCondition(extra_camera_flags[suffix]),
+        )
+        for suffix in extra_camera_suffixes
+    ]
     ros_gz_overview_camera_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
@@ -513,10 +567,12 @@ def generate_launch_description():
         bridge_segmentation_b_arg,
         bridge_segmentation_c_arg,
         bridge_segmentation_d_arg,
+        *extra_segmentation_args,
         bridge_camera_a_arg,
         bridge_camera_b_arg,
         bridge_camera_c_arg,
         bridge_camera_d_arg,
+        *extra_camera_args,
         bridge_overview_camera_arg,
         reset_world_arg,
         spawn_x_arg,
@@ -535,10 +591,12 @@ def generate_launch_description():
         ros_gz_segmentation_b_bridge,
         ros_gz_segmentation_c_bridge,
         ros_gz_segmentation_d_bridge,
+        *extra_segmentation_bridges,
         ros_gz_camera_a_bridge,
         ros_gz_camera_b_bridge,
         ros_gz_camera_c_bridge,
         ros_gz_camera_d_bridge,
+        *extra_camera_bridges,
         ros_gz_overview_camera_bridge,
         ros_gz_contact_bridge,
         ros_gz_groundtruth_bridge,

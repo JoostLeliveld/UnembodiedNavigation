@@ -1,0 +1,9 @@
+collection:
+  lateral_offsets_m: [0.0]
+  routes:
+    - name: meerhoven_haul_lane_sanity
+      start: {x: -12.0, y: -4.9}
+      goal: {x: 12.0, y: -4.9}
+    - name: meerhoven_west_to_returns_direct
+      start: {x: -9.0, y: 7.9}
+      goal: {x: 12.2, y: 4.4}

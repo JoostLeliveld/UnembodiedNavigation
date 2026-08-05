@@ -96,10 +96,16 @@ def test_load_projection_calibration_round_trip(tmp_path):
     path = tmp_path / "projection_calibration.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     calibrations = load_projection_calibration(path)
+    # Every entry now also carries the cross-bearing degree of freedom, which an
+    # along-only file leaves at zero so the correction is unchanged. See
+    # tests/reliability/test_projection_cross_bearing.py.
     assert calibrations == {
-        "camera_B": {"intercept_m": -0.045, "slope_per_m": 0.0175},
-        "camera_C": {"intercept_m": 0.166, "slope_per_m": 0.0},
-        "camera_D": {"intercept_m": 0.105, "slope_per_m": 0.0},
+        "camera_B": {"intercept_m": -0.045, "slope_per_m": 0.0175,
+                     "cross_intercept_m": 0.0, "cross_slope_per_m": 0.0},
+        "camera_C": {"intercept_m": 0.166, "slope_per_m": 0.0,
+                     "cross_intercept_m": 0.0, "cross_slope_per_m": 0.0},
+        "camera_D": {"intercept_m": 0.105, "slope_per_m": 0.0,
+                     "cross_intercept_m": 0.0, "cross_slope_per_m": 0.0},
     }
 
 

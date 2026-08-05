@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Build belief-aware detector events from visibility campaign logs."""
+"""Build belief-aware detector events from visibility campaign logs.
+
+Model inputs stay strictly operational (belief mean + covariance, detector
+outcome). Alongside them the builder copies an EVALUATION-ONLY block of
+``eval_`` columns, including the SIGNED localization residual
+``pred_world - ground_truth`` needed to fit a per-camera bias and conditional
+covariance offline. Nothing in the ``eval_`` block may ever be a GP or
+deployment input.
+"""
 
 from __future__ import annotations
 
@@ -47,7 +55,30 @@ EVENT_COLUMNS = (
     'eval_gt_x',
     'eval_gt_y',
     'eval_belief_error_gt_m',
+    # Signed localization residual, EVALUATION-ONLY (see RESIDUAL_COLUMNS).
+    'eval_pred_world_x',
+    'eval_pred_world_y',
+    'eval_res_x',
+    'eval_res_y',
+    'eval_res_gt_source',
 )
+
+# The signed 2-vector residual (pred_world - ground truth) in metres. This is
+# what `localization_error_captime_m` throws away: that column is a magnitude,
+# so it can never identify a *direction*, i.e. a per-camera bias b_c(x).
+#
+# EVALUATION-ONLY, like every other `eval_` column here: they exist for audit
+# and for offline bias / conditional-covariance fitting, and must never be fed
+# to a GP or any other deployed model as an input feature.
+RESIDUAL_COLUMNS = (
+    'eval_pred_world_x',
+    'eval_pred_world_y',
+    'eval_res_x',
+    'eval_res_y',
+    'eval_res_gt_source',
+)
+
+EVALUATION_ONLY_COLUMNS = tuple(name for name in EVENT_COLUMNS if name.startswith('eval_'))
 
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
@@ -90,6 +121,69 @@ def _fmt(value: float | int | str) -> str:
     if not math.isfinite(float(value)):
         return ''
     return f'{float(value):.10g}'
+
+
+def _signed_residual(
+    per_row: dict[str, str],
+    exp_row: dict[str, str],
+    *,
+    detected: bool,
+) -> dict[str, str]:
+    """Signed localization residual ``pred_world - ground_truth`` in metres.
+
+    EVALUATION-ONLY (see ``RESIDUAL_COLUMNS``).
+
+    Every field is emitted EMPTY -- never ``0.0`` -- when the quantity is not
+    actually measured, because a zero would read to a bias fit as "this camera
+    is unbiased here" and silently drag ``b_c(x)`` toward the origin. Empty is
+    produced when:
+
+    * the camera did not detect the robot on this frame (no projected point),
+    * ``pred_world_x/y`` is missing or non-finite,
+    * no ground truth is available for the frame.
+
+    Ground truth is taken from the perception row's own ``true_x/true_y`` when
+    present (same row, same log time as ``pred_world_x/y``, so the residual is
+    exactly the vector whose norm the logger stores as
+    ``localization_error_m``). Campaign perception rows that predate the truth
+    columns fall back to the joined ``experiment.csv`` ``gt_x/gt_y``, which is
+    the nearest experiment sample rather than the same instant --
+    ``eval_res_gt_source`` records which one was used so the two time bases are
+    never silently pooled in one bias fit.
+    """
+
+    blank = {name: '' for name in RESIDUAL_COLUMNS}
+    if not detected:
+        return blank
+    pred_x = _f(per_row, 'pred_world_x')
+    pred_y = _f(per_row, 'pred_world_y')
+    if not (math.isfinite(pred_x) and math.isfinite(pred_y)):
+        return blank
+
+    out = dict(blank)
+    out['eval_pred_world_x'] = _fmt(pred_x)
+    out['eval_pred_world_y'] = _fmt(pred_y)
+
+    gt_x = _f(per_row, 'true_x')
+    gt_y = _f(per_row, 'true_y')
+    source = 'perception_true_xy'
+    true_available = _f(per_row, 'true_available')
+    if math.isfinite(true_available) and true_available < 0.5:
+        gt_x = gt_y = math.nan
+    if not (math.isfinite(gt_x) and math.isfinite(gt_y)):
+        gt_x = _f(exp_row, 'gt_x')
+        gt_y = _f(exp_row, 'gt_y')
+        source = 'experiment_gt_xy'
+        gt_available = _f(exp_row, 'gt_available')
+        if math.isfinite(gt_available) and gt_available < 0.5:
+            gt_x = gt_y = math.nan
+    if not (math.isfinite(gt_x) and math.isfinite(gt_y)):
+        return out
+
+    out['eval_res_x'] = _fmt(pred_x - gt_x)
+    out['eval_res_y'] = _fmt(pred_y - gt_y)
+    out['eval_res_gt_source'] = source
+    return out
 
 
 def _nearest_index(stamps: np.ndarray, stamp: float) -> tuple[int, float]:
@@ -207,38 +301,38 @@ def _extract_run_events(
             counts['skipped_missing_covariance'] += 1
             continue
 
-        rows.append(
-            {
-                'event_id': f'belief_event_{event_idx:08d}',
-                'run_dir': rel_run_dir,
-                'route': route,
-                'condition': condition,
-                'seed': seed,
-                'run_id': run_id,
-                'diag_stamp': _fmt(_f(per_row, 'diag_stamp')),
-                'log_stamp': _fmt(_f(per_row, 'log_stamp')),
-                'matched_experiment_stamp': _fmt(_f(exp_row, 'stamp')),
-                'stamp_delta_s': _fmt(delta_s),
-                'm_x': _fmt(m_x),
-                'm_y': _fmt(m_y),
-                'S_xx': _fmt(S_xx),
-                'S_xy': _fmt(S_xy),
-                'S_yy': _fmt(S_yy),
-                'sigma_major_m': _fmt(sigma_major),
-                'sigma_minor_m': _fmt(sigma_minor),
-                'trace_S_xy': _fmt(trace_s),
-                'det_hit': det_raw,
-                'yolo_score_raw': _fmt(_f(per_row, 'yolo_score_raw')),
-                'yolo_detected_after_threshold': _flag(per_row, 'yolo_detected_after_threshold'),
-                'pixel_pose_available': _flag(per_row, 'pixel_pose_available'),
-                'pixel_pose_fresh': _flag(per_row, 'pixel_pose_fresh'),
-                'localization_error_captime_m': _fmt(_f(per_row, 'localization_error_captime_m')),
-                'state_source': 'BELIEF',
-                'eval_gt_x': _fmt(_f(exp_row, 'gt_x')),
-                'eval_gt_y': _fmt(_f(exp_row, 'gt_y')),
-                'eval_belief_error_gt_m': _fmt(_f(exp_row, 'belief_error_gt_m')),
-            }
-        )
+        event_row = {
+            'event_id': f'belief_event_{event_idx:08d}',
+            'run_dir': rel_run_dir,
+            'route': route,
+            'condition': condition,
+            'seed': seed,
+            'run_id': run_id,
+            'diag_stamp': _fmt(_f(per_row, 'diag_stamp')),
+            'log_stamp': _fmt(_f(per_row, 'log_stamp')),
+            'matched_experiment_stamp': _fmt(_f(exp_row, 'stamp')),
+            'stamp_delta_s': _fmt(delta_s),
+            'm_x': _fmt(m_x),
+            'm_y': _fmt(m_y),
+            'S_xx': _fmt(S_xx),
+            'S_xy': _fmt(S_xy),
+            'S_yy': _fmt(S_yy),
+            'sigma_major_m': _fmt(sigma_major),
+            'sigma_minor_m': _fmt(sigma_minor),
+            'trace_S_xy': _fmt(trace_s),
+            'det_hit': det_raw,
+            'yolo_score_raw': _fmt(_f(per_row, 'yolo_score_raw')),
+            'yolo_detected_after_threshold': _flag(per_row, 'yolo_detected_after_threshold'),
+            'pixel_pose_available': _flag(per_row, 'pixel_pose_available'),
+            'pixel_pose_fresh': _flag(per_row, 'pixel_pose_fresh'),
+            'localization_error_captime_m': _fmt(_f(per_row, 'localization_error_captime_m')),
+            'state_source': 'BELIEF',
+            'eval_gt_x': _fmt(_f(exp_row, 'gt_x')),
+            'eval_gt_y': _fmt(_f(exp_row, 'gt_y')),
+            'eval_belief_error_gt_m': _fmt(_f(exp_row, 'belief_error_gt_m')),
+        }
+        event_row.update(_signed_residual(per_row, exp_row, detected=det_raw == '1'))
+        rows.append(event_row)
         event_idx += 1
     return rows, counts
 
@@ -250,6 +344,30 @@ def _mean_finite(rows: list[dict[str, str]], key: str) -> float:
         if math.isfinite(value):
             values.append(value)
     return float(np.mean(values)) if values else math.nan
+
+
+def _residual_coverage(rows: list[dict[str, str]]) -> dict[str, Any]:
+    """Audit how many events carry a usable signed residual, and from which GT."""
+
+    finite = [
+        row
+        for row in rows
+        if math.isfinite(_f(row, 'eval_res_x')) and math.isfinite(_f(row, 'eval_res_y'))
+    ]
+    detections = sum(1 for row in rows if str(row.get('det_hit', '')).strip() == '1')
+    by_source: dict[str, int] = {}
+    for row in finite:
+        key = str(row.get('eval_res_gt_source', '')).strip() or 'unknown'
+        by_source[key] = by_source.get(key, 0) + 1
+    return {
+        'events_with_signed_residual': int(len(finite)),
+        'detection_events': int(detections),
+        'gt_source_counts': dict(sorted(by_source.items())),
+        'mean_eval_res_x': _mean_finite(finite, 'eval_res_x'),
+        'mean_eval_res_y': _mean_finite(finite, 'eval_res_y'),
+        'std_eval_res_x': float(np.std([_f(row, 'eval_res_x') for row in finite])) if finite else math.nan,
+        'std_eval_res_y': float(np.std([_f(row, 'eval_res_y') for row in finite])) if finite else math.nan,
+    }
 
 
 def main() -> int:
@@ -306,6 +424,9 @@ def main() -> int:
             'score_target': 'yolo_score_raw',
         },
         'gt_fields_evaluation_only': ['eval_gt_x', 'eval_gt_y', 'eval_belief_error_gt_m'],
+        'residual_fields_evaluation_only': list(RESIDUAL_COLUMNS),
+        'evaluation_only_columns': list(EVALUATION_ONLY_COLUMNS),
+        'residual_coverage': _residual_coverage(all_rows),
         'skip_counts': skipped,
         'run_event_counts': run_event_counts,
         'summary': {
@@ -320,15 +441,32 @@ def main() -> int:
         'notes': [
             'Each event is a detector observation paired to the nearest experiment.csv row by the selected perception stamp.',
             'Training coordinates are planner_belief_x/y with planner covariance; state_x/state_y are intentionally not used.',
-            'Ground-truth columns are copied only for audit/evaluation and must not be used as GP inputs.',
+            'Ground-truth columns are copied only for audit/evaluation and must not be used as GP inputs. '
+            'This covers EVERY eval_ column, including the signed-residual block '
+            '(eval_pred_world_x/y, eval_res_x/y, eval_res_gt_source): they are derived from ground truth '
+            'and are evaluation-only, never a model/deployment input.',
+            'eval_res_x/eval_res_y are the SIGNED residual pred_world - ground_truth in metres. '
+            'localization_error_captime_m is the magnitude only and cannot identify a bias direction; '
+            'the signed pair is what a per-camera bias b_c(x) and conditional covariance R_cond,c(x) are fitted from.',
+            'A missing residual is written EMPTY, never 0.0: no detection, no projected world point, or no '
+            'ground truth all yield blanks so an absent measurement cannot be mistaken for a zero bias.',
+            'eval_res_gt_source records the ground-truth time base: perception_true_xy is the same perception '
+            'row (log-time truth, so hypot(eval_res_x, eval_res_y) reproduces the logger localization_error_m); '
+            'experiment_gt_xy is the nearest joined experiment.csv sample. Do not pool the two without checking.',
         ],
     }
     write_manifest(output_dir / 'manifest.json', manifest)
 
+    coverage = manifest['residual_coverage']
     print(f'Wrote belief GP events to {events_path}')
     print(f'Runs: {len(run_dirs)}')
     print(f'Events: {len(all_rows)}')
     print(f'Skipped missing covariance: {skipped.get("skipped_missing_covariance", 0)}')
+    print(
+        'Signed residuals (eval-only): '
+        f'{coverage["events_with_signed_residual"]}/{coverage["detection_events"]} detections, '
+        f'mean=({coverage["mean_eval_res_x"]:.4f}, {coverage["mean_eval_res_y"]:.4f}) m'
+    )
     return 0
 
 

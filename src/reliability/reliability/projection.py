@@ -57,6 +57,8 @@ def project_observation_to_world(
     contact_z_m: float,
     along_bearing_offset_m: float = 0.0,
     along_bearing_slope_per_m: float = 0.0,
+    cross_bearing_offset_m: float = 0.0,
+    cross_bearing_slope_per_m: float = 0.0,
 ) -> tuple[float, float] | None:
     """Project a valid camera observation into the metric warehouse frame.
 
@@ -69,6 +71,19 @@ def project_observation_to_world(
     centre, by an amount that grows with viewing distance.  Values are
     per-camera commissioning calibration constants (see
     ``fit_projection_calibration.py``), never fitted during deployment.
+
+    ``cross_bearing_*`` adds the perpendicular degree of freedom, positive to the
+    LEFT of the bearing.  The along-bearing form above cannot represent a lateral
+    offset at all, and the audit found one: camera C retained **+0.078 m** of
+    uncorrected lateral bias, which is an extrinsic/rotation signature rather
+    than the contact-point signature the along term targets.  See
+    ``logs/studies/external_camera_bias_model/exp2_two_dof_bias/RESULTS.md`` --
+    including the reason the cross term is **gated per camera** and left at zero
+    where the lateral bias is not resolvable against that camera's own scatter
+    (fitting it there made camera A 61 % worse on held-out data).
+
+    Both defaults are 0.0, so an along-only calibration reproduces the previous
+    behaviour exactly (asserted in ``tests/reliability/test_projection_cross_bearing.py``).
     """
 
     if not observation.detection_valid or observation.pixel_uv is None:
@@ -80,6 +95,8 @@ def project_observation_to_world(
         contact_z_m=contact_z_m,
         along_bearing_offset_m=along_bearing_offset_m,
         along_bearing_slope_per_m=along_bearing_slope_per_m,
+        cross_bearing_offset_m=cross_bearing_offset_m,
+        cross_bearing_slope_per_m=cross_bearing_slope_per_m,
     )
 
 
@@ -90,6 +107,8 @@ def project_observation_to_world_with_covariance(
     contact_z_m: float,
     along_bearing_offset_m: float = 0.0,
     along_bearing_slope_per_m: float = 0.0,
+    cross_bearing_offset_m: float = 0.0,
+    cross_bearing_slope_per_m: float = 0.0,
     jacobian_step_px: float = 0.5,
     min_eigenvalue_m2: float = 1.0e-12,
 ) -> tuple[tuple[float, float], Matrix2x2] | None:
@@ -117,6 +136,8 @@ def project_observation_to_world_with_covariance(
         "contact_z_m": contact_z_m,
         "along_bearing_offset_m": along_bearing_offset_m,
         "along_bearing_slope_per_m": along_bearing_slope_per_m,
+        "cross_bearing_offset_m": cross_bearing_offset_m,
+        "cross_bearing_slope_per_m": cross_bearing_slope_per_m,
     }
     centre = _project_pixel_to_world(u, v, camera, **kwargs)
     if centre is None:
@@ -152,23 +173,41 @@ def _project_pixel_to_world(
     contact_z_m: float,
     along_bearing_offset_m: float,
     along_bearing_slope_per_m: float,
+    cross_bearing_offset_m: float = 0.0,
+    cross_bearing_slope_per_m: float = 0.0,
 ) -> tuple[float, float] | None:
-    """Project one pixel through the complete mean-calibration function."""
+    """Project one pixel through the complete mean-calibration function.
+
+    The bearing basis is built from the RAW projected point, so the two
+    corrections are orthogonal translations of that point and neither depends on
+    the other's magnitude.
+    """
 
     if contact_z_m > 0.0:
         point = camera.pixel_to_world_at_z(u, v, contact_z_m)
     else:
         point = camera.pixel_to_world(u, v)
-    if point is None or (not along_bearing_offset_m and not along_bearing_slope_per_m):
+    if point is None or not (
+        along_bearing_offset_m
+        or along_bearing_slope_per_m
+        or cross_bearing_offset_m
+        or cross_bearing_slope_per_m
+    ):
         return point
     bearing_x = point[0] - float(camera.cam_pos[0])
     bearing_y = point[1] - float(camera.cam_pos[1])
     norm = math.hypot(bearing_x, bearing_y)
     if norm <= 1.0e-9:
         return point
-    offset = along_bearing_offset_m + along_bearing_slope_per_m * norm
-    scale = offset / norm
-    return (point[0] + bearing_x * scale, point[1] + bearing_y * scale)
+    unit_along = (bearing_x / norm, bearing_y / norm)
+    # Left of the bearing, matching the sign convention the calibration is fitted in.
+    unit_cross = (-unit_along[1], unit_along[0])
+    along = along_bearing_offset_m + along_bearing_slope_per_m * norm
+    cross = cross_bearing_offset_m + cross_bearing_slope_per_m * norm
+    return (
+        point[0] + along * unit_along[0] + cross * unit_cross[0],
+        point[1] + along * unit_along[1] + cross * unit_cross[1],
+    )
 
 
 def _projection_derivative(
@@ -225,12 +264,20 @@ def _floor_spd_2x2(matrix: Matrix2x2, floor: float) -> Matrix2x2:
 
 
 def load_projection_calibration(path: str | Path) -> dict[str, dict[str, float]]:
-    """Read per-camera along-bearing calibrations from a JSON file.
+    """Read per-camera bearing-frame calibrations from a JSON file.
 
-    Returns ``{camera_id: {"intercept_m": a, "slope_per_m": b}}`` where the
-    applied correction is ``a + b * ground_distance``.  Accepts legacy entries
-    that are a bare float or carry only ``along_bearing_offset_m`` (treated as
-    intercept-only).
+    Returns ``{camera_id: {"intercept_m", "slope_per_m", "cross_intercept_m",
+    "cross_slope_per_m"}}``.  The along-bearing correction is
+    ``intercept_m + slope_per_m * d`` and the cross-bearing one is
+    ``cross_intercept_m + cross_slope_per_m * d``, both in metres, ``d`` the
+    ground distance.
+
+    Every key is optional and defaults to 0.0, so **along-only calibration files
+    (including the deployed v2) load to an identical correction to before** —
+    the cross keys simply come back zero.  Legacy entries that are a bare float,
+    or that carry only ``along_bearing_offset_m``, are still accepted as
+    intercept-only.  ``cross_bearing_offset_m`` is accepted as an alias for
+    ``cross_intercept_m``.
     """
 
     import json
@@ -242,8 +289,47 @@ def load_projection_calibration(path: str | Path) -> dict[str, dict[str, float]]
         if isinstance(entry, dict):
             intercept = float(entry.get("intercept_m", entry.get("along_bearing_offset_m", 0.0)))
             slope = float(entry.get("slope_per_m", 0.0))
+            cross_intercept = float(
+                entry.get("cross_intercept_m", entry.get("cross_bearing_offset_m", 0.0))
+            )
+            cross_slope = float(
+                entry.get("cross_slope_per_m", entry.get("cross_bearing_slope_per_m", 0.0))
+            )
         else:
             intercept = float(entry)
             slope = 0.0
-        calibrations[str(camera_id)] = {"intercept_m": intercept, "slope_per_m": slope}
+            cross_intercept = 0.0
+            cross_slope = 0.0
+        calibrations[str(camera_id)] = {
+            "intercept_m": intercept,
+            "slope_per_m": slope,
+            "cross_intercept_m": cross_intercept,
+            "cross_slope_per_m": cross_slope,
+        }
     return calibrations
+
+
+def projection_kwargs_for_camera(
+    calibrations: dict[str, dict[str, float]],
+    camera_id: str,
+    *,
+    contact_z_m: float,
+) -> dict[str, float]:
+    """Complete projection keyword arguments for one camera.
+
+    THE single place that maps a loaded calibration onto the projection
+    signature.  Call this instead of picking ``intercept_m`` / ``slope_per_m`` out
+    of the dict by hand: three call sites used to do that independently, so
+    adding the cross-bearing degree of freedom would silently have left some of
+    them at one DOF.  A camera absent from ``calibrations`` yields an all-zero
+    (raw) correction, matching the previous per-site ``.get(..., 0.0)`` behaviour.
+    """
+
+    entry = calibrations.get(camera_id, {})
+    return {
+        "contact_z_m": float(contact_z_m),
+        "along_bearing_offset_m": float(entry.get("intercept_m", 0.0)),
+        "along_bearing_slope_per_m": float(entry.get("slope_per_m", 0.0)),
+        "cross_bearing_offset_m": float(entry.get("cross_intercept_m", 0.0)),
+        "cross_bearing_slope_per_m": float(entry.get("cross_slope_per_m", 0.0)),
+    }

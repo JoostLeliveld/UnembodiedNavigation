@@ -17,6 +17,15 @@ def casadi_available() -> bool:
     return ca is not None
 
 
+# Innovation-covariance floor, in pixel^2, used ONLY on the hit/miss mixture path
+# to keep the single ca.solve well posed. (0.05 px)^2 — a twentieth of a pixel,
+# two orders of magnitude below the ~2.5 px conditional residual std this detector
+# actually achieves, so it can never bind on real data. Deliberately NOT 1e-9:
+# against the 1e3–1e5 px^2 magnitudes of J S J^T, a 1e-9 floor sits below float64
+# round-off and buys nothing while pretending to be a safeguard.
+INNOVATION_COV_FLOOR_PX2 = 0.05 ** 2
+
+
 @dataclass
 class CasadiEfeParams:
     # NOTE: there is no static `Q` field. Process noise is rebuilt per step inside the
@@ -41,6 +50,25 @@ class CasadiEfeParams:
     time_horizon: int
     dt: float
     Du: int
+
+    # --- hit/miss expected-belief mixture -----------------------------------
+    # DEFAULT OFF. With use_hit_miss_mixture=False every field below is ignored
+    # and the planner runs the precision-blend path bit-for-bit unchanged — that
+    # path is FROZEN METHOD for the published single-camera paper and backs the
+    # locked honest_campaign_v1 (see tests/planning/test_efe_hit_miss_mixture.py).
+    #
+    # With the flag on, detection availability stops being laundered into the
+    # measurement covariance and becomes what it actually is: a Bernoulli
+    # variable. See hit_miss_posterior_ca for the model.
+    use_hit_miss_mixture: bool = False
+    # R_cond: conditional measurement covariance GIVEN a usable detection.
+    # None -> falls back to R_visible (see _r_cond_expr). R_miss is never read on
+    # the mixture path.
+    R_cond: object = None
+    # obs_bias: constant conditional measurement bias b in pixels, shape (2,1).
+    # None -> zero. Plumbing for the companion measurement workstream; no value
+    # is invented here.
+    obs_bias: object = None
 
 
 def _require_casadi():
@@ -307,6 +335,164 @@ def state_posterior_cov_ca(S, Sigma, Gamma):
     return _ensure_symmetric_pd(S_post)
 
 
+# ---------------------------------------------------------------------------
+# Hit/miss expected-belief mixture (opt-in; see CasadiEfeParams.use_hit_miss_mixture)
+#
+# The frozen path precision-blends the visibility probability into ONE effective
+# covariance (_blend_observation_covariance_ca) and then takes ONE deterministic
+# ET update with it. That conflates two different random quantities: whether a
+# usable detection ARRIVES (Bernoulli) and how accurate it is GIVEN that it
+# arrived (Gaussian). A missed detection produces no filter update at all — it is
+# not a Gaussian measurement with a huge R.
+#
+# The mixture below models them separately. As a side effect it needs no miss
+# endpoint at all, which dissolves the unreconciled 40 px (offline) vs 120 px
+# (runtime) r_miss constant that reliability.covariance_mapping.MissEndpointPolicy
+# still refuses to bless: on this path the miss branch simply takes no update.
+# ---------------------------------------------------------------------------
+
+def _as_dm(M):
+    """Accept numpy / list / DM / MX uniformly, without copying symbolics."""
+    if isinstance(M, (ca.DM, ca.MX, ca.SX)):
+        return M
+    return ca.DM(np.asarray(M, dtype=float))
+
+
+def _r_cond_expr(params: CasadiEfeParams, state, R_cond_state=None):
+    """Conditional measurement covariance R_cond, given a usable detection.
+
+    This is the ONLY measurement covariance on the mixture path. Availability is
+    carried by the Bernoulli branch weight, never by inflating R.
+
+    Sources, in priority order:
+
+    1. ``R_cond_state(state)`` — a measured, spatially varying field R_cond(x).
+       Nothing is wired to this yet; the hook exists so the companion
+       measurement workstream can drop a field in without touching this file.
+    2. ``params.R_cond`` — a measured constant, once one is recorded.
+    3. ``params.R_visible`` — **the current default and the current reality.**
+       No R_cond field has been measured yet, so the mixture reuses the existing
+       visible-regime covariance unchanged. That is a placeholder standing in for
+       an unmeasured quantity, not an estimate of it.
+    """
+    if R_cond_state is not None:
+        return _as_dm(R_cond_state(state))
+    if params.R_cond is not None:
+        return _as_dm(params.R_cond)
+    return _as_dm(params.R_visible)
+
+
+def _obs_bias_expr(params: CasadiEfeParams, state, obs_bias_state=None, dim=2):
+    """Conditional measurement bias b(x), in pixels. Defaults to zero.
+
+    Same contract as _r_cond_expr: a hook for a measured field, a constant
+    fallback, and zero when nothing has been measured. No value is invented.
+    """
+    if obs_bias_state is not None:
+        return ca.reshape(_as_dm(obs_bias_state(state)), dim, 1)
+    if params.obs_bias is not None:
+        return ca.reshape(_as_dm(params.obs_bias), dim, 1)
+    return ca.DM.zeros(dim, 1)
+
+
+def hit_miss_posterior_ca(S, J, R_cond, p_use):
+    """Two-branch expected belief under Bernoulli(p_use) detection availability.
+
+    ``S`` is the predicted (prior) state covariance P-, ``J`` the observation
+    Jacobian H, ``R_cond`` the conditional measurement covariance, ``p_use`` the
+    probability that a usable measurement arrives.
+
+        P_hit  = P- - P- H^T (H P- H^T + R_cond)^-1 H P-     (a measurement arrives)
+        P_miss = P-                                          (nothing arrives)
+        E[P+]  = p_use * P_hit + (1 - p_use) * P_miss
+
+    Returns ``(P_mix, P_hit, S_sym, Sigma)`` where ``Sigma`` is the innovation
+    covariance ``H P- H^T + R_cond``.
+
+    PSD hygiene. ``P_hit`` is built in **Joseph form**,
+
+        P_hit = (I - K H) P- (I - K H)^T + K R_cond K^T,   K = P- H^T Sigma^-1,
+
+    which is a sum of two congruences of PSD matrices and is therefore PSD *by
+    construction*, not by repair. That matters: the algebraically equivalent
+    short form ``P- - K Sigma K^T`` is a difference, and differences of nearly
+    equal covariances are exactly how the 2026-07-29 indefinite-belief bug was
+    produced. Everything here is whole-matrix; no block is ever spliced, and no
+    eigenvalue floor is applied to the state-space result at all. The only floor
+    in the expression is INNOVATION_COV_FLOOR_PX2 on the matrix being inverted.
+
+    A convex combination of two PSD matrices is PSD, so ``P_mix`` inherits
+    PSD-ness from its branches; ``p_use in [0, 1]`` is guaranteed upstream by the
+    clipping in ``_visibility_effective_score_ca``.
+
+    Everything is a smooth CasADi expression — products, one linear solve, and a
+    convex combination. No ``if`` on a symbolic value, so the NLP stays
+    differentiable.
+    """
+    _require_casadi()
+    n = int(S.size1())
+    S_sym = 0.5 * (S + S.T)
+    R_sym = 0.5 * (R_cond + R_cond.T)
+
+    Sigma = ca.mtimes([J, S_sym, J.T]) + R_sym
+    Sigma = 0.5 * (Sigma + Sigma.T) + INNOVATION_COV_FLOOR_PX2 * ca.DM.eye(int(Sigma.size1()))
+
+    # K = P- H^T Sigma^-1, written as a solve against the symmetric Sigma.
+    K = ca.solve(Sigma, ca.mtimes(J, S_sym)).T
+    A = ca.DM.eye(n) - ca.mtimes(K, J)
+    P_hit = ca.mtimes([A, S_sym, A.T]) + ca.mtimes([K, R_sym, K.T])
+    P_hit = 0.5 * (P_hit + P_hit.T)
+
+    P_mix = p_use * P_hit + (1.0 - p_use) * S_sym
+    return P_mix, P_hit, S_sym, Sigma
+
+
+def expected_posterior_cov_ca(S, J, R_cond, p_use):
+    """E[P+] over the hit/miss mixture. See :func:`hit_miss_posterior_ca`."""
+    return hit_miss_posterior_ca(S, J, R_cond, p_use)[0]
+
+
+def _differential_entropy_ca(P):
+    dim = int(P.size1())
+    return 0.5 * (dim * math.log(2.0 * math.pi * math.e) + _logdet_small_pd(0.5 * (P + P.T)))
+
+
+def expected_posterior_uncertainty_ca(S, J, R_cond, p_use):
+    """Expected posterior uncertainty (differential entropy) over the mixture.
+
+        E[H(P+)] = p_use * H(P_hit) + (1 - p_use) * H(P-)
+                 = H(P-) - p_use * I(x; y)
+
+    i.e. the prior uncertainty minus the *availability-weighted* information gain
+    — which is exactly the epistemic term of EFE, written honestly: a measurement
+    that never arrives buys no information.
+
+    Note this is E[H], the expectation of the branch entropies, not H(E[P]) the
+    entropy of the mixture covariance. E[H] is the correct expected uncertainty,
+    because the realised posterior is one branch or the other and never the
+    averaged matrix. Both are smooth; E[H] is itself a convex combination of two
+    smooth scalars, so it costs nothing extra. (Trace-based readouts do not
+    distinguish the two — trace is linear — so the fig_e1 sweep is unaffected.)
+
+    This REPLACES the observation-space ambiguity term on the mixture path. It
+    has to: with R_cond spatially constant, ``logdet(R_cond)`` is constant, so
+    the frozen ambiguity term carries no visibility signal once the miss endpoint
+    is gone. It also fixes a units artifact — a constant px^2 ambiguity scaled by
+    availability makes the sign of the visibility preference depend on whether
+    ``logdet(R_cond)`` happens to be positive. Here the term is in state units
+    throughout and is monotone decreasing in ``p_use`` by construction, since
+    ``I(x; y) >= 0``.
+
+    SCALE NOTE (reported, not tuned): the frozen term is a px^2 log-determinant
+    and this one is an m^2/rad^2 log-determinant, so the two are not on the same
+    numeric scale and ``ambiguity_scale`` does not mean the same thing across the
+    flag. That is a fact about the change, recorded here for whoever runs the
+    closed-loop campaign. No reweighting is proposed or applied.
+    """
+    _P_mix, P_hit, S_sym, _Sigma = hit_miss_posterior_ca(S, J, R_cond, p_use)
+    return p_use * _differential_entropy_ca(P_hit) + (1.0 - p_use) * _differential_entropy_ca(S_sym)
+
+
 def visibility_aware_unicycle_efe_ca(
     u_flat,
     m0,
@@ -323,12 +509,29 @@ def visibility_aware_unicycle_efe_ca(
     p_vis_state=None,
     nogo_cost=None,
     nogo_belief_cost=None,
+    R_cond_state=None,
+    obs_bias_state=None,
 ):
     """
     Core Expected Free Energy functional for a unicycle agent.
     Iteratively propagates Gaussian state (m, S) over params.time_horizon.
     Goal-seeking emerges from the EFE goal-prior in the risk term (no external
     goal-distance reward).
+
+    Two measurement models, selected by ``params.use_hit_miss_mixture``:
+
+    * OFF (default, FROZEN): one deterministic ET update with the precision-blend
+      covariance ``R_plan(p_vis)``. Untouched, bit-for-bit.
+    * ON: the availability variable is Bernoulli, so every measurement-dependent
+      term is evaluated in both branches and averaged with weights
+      ``(p_use, 1 - p_use)``:
+
+          G_t = p_use * [risk(hit)] + (1 - p_use) * [risk(miss)]  +  E[H(P+)]
+
+      The hit branch's predicted observation carries ``R_cond`` (and bias ``b``);
+      the miss branch has no measurement, so no measurement noise and no bias —
+      only the projected belief compared against the goal prior. The epistemic
+      term is the expected posterior uncertainty over the mixture.
     """
     m = m0
     S = S0
@@ -361,6 +564,53 @@ def visibility_aware_unicycle_efe_ca(
                 kappa=params.visibility_sigma_kappa,
             )
         p_vis_eff = _visibility_effective_score_ca(p_vis, params)
+
+        progress = (progress_index0 + float(t)) / denom
+        goal_cov_t = goal_obs_cov_ca_for_progress(params, progress)
+        weight_t = params.discount_gamma ** t
+
+        if params.use_hit_miss_mixture:
+            # p_use: probability a USABLE measurement arrives. Sourced from the
+            # same (frozen, unchanged) expected-visibility field as before; the
+            # observability workstream is measuring a proper p_c(x, y) to put here.
+            p_use = p_vis_eff
+            R_cond = _r_cond_expr(params, m, R_cond_state)
+            bias = _obs_bias_expr(params, m, obs_bias_state)
+
+            # One ET call serves both branches: ET1/ET2 add R_eff as the final
+            # term, so the no-measurement branch is exactly Sigma_hit - R_cond.
+            # Cheaper than two calls and algebraically identical.
+            if approx == 'ET1':
+                mu, Sigma_hit, Gamma = et1_ca(m, S, R_cond, g, dg)
+            elif approx == 'ET2':
+                mu, Sigma_hit, Gamma = et2_ca(m, S, R_cond, g, dg, d2g or [])
+            else:
+                raise RuntimeError(f"Unsupported CasADi approximation: {approx}")
+            Sigma_miss = Sigma_hit - R_cond
+
+            # Risk: expectation over the two branches. The bias is a SENSOR bias,
+            # so it shifts the predicted observation only when one is received.
+            risk_hit = risk_ca(mu + bias, Sigma_hit, goal_obs, goal_cov_t)
+            risk_miss = risk_ca(mu, Sigma_miss, goal_obs, goal_cov_t)
+            total_risk += (weight_t * params.risk_scale
+                           * (p_use * risk_hit + (1.0 - p_use) * risk_miss))
+
+            # Epistemic: expected posterior uncertainty over the mixture, i.e.
+            # H(P-) - p_use * I(x; y). Replaces the observation-space ambiguity
+            # term (see expected_posterior_uncertainty_ca for why it has to).
+            J_t = dg(m)
+            total_amb += (weight_t * params.ambiguity_scale
+                          * expected_posterior_uncertainty_ca(S, J_t, R_cond, p_use))
+
+            total_control += weight_t * params.control_weight * ca.sumsqr(u_t)
+            if nogo_belief_cost is not None and params.use_belief_nogo_cost:
+                S_drive = expected_posterior_cov_ca(S, J_t, R_cond, p_use)
+                total_nogo += weight_t * nogo_belief_cost(m, S_drive)
+            elif nogo_cost is not None:
+                total_nogo += weight_t * nogo_cost(m)
+            continue
+
+        # --- FROZEN precision-blend path (do not modify) ----------------------
         R_plan = _blend_observation_covariance_ca(p_vis_eff, params)
         if approx == 'ET1':
             mu, Sigma, Gamma = et1_ca(m, S, R_plan, g, dg)
@@ -369,9 +619,6 @@ def visibility_aware_unicycle_efe_ca(
         else:
             raise RuntimeError(f"Unsupported CasADi approximation: {approx}")
 
-        progress = (progress_index0 + float(t)) / denom
-        goal_cov_t = goal_obs_cov_ca_for_progress(params, progress)
-        weight_t = params.discount_gamma ** t
         total_risk += weight_t * params.risk_scale * risk_ca(mu, Sigma, goal_obs, goal_cov_t)
         total_amb += weight_t * params.ambiguity_scale * ambiguity_ca(Sigma, Gamma, S)
         total_control += weight_t * params.control_weight * ca.sumsqr(u_t)
@@ -421,11 +668,21 @@ def make_efe_valgrad_fn(
     p_vis_state=None,
     nogo_cost=None,
     nogo_belief_cost=None,
+    R_cond_state=None,
+    obs_bias_state=None,
 ):
     _require_casadi()
     approx = str(approx or 'ET1').upper()
     if approx not in ('ET1', 'ET2'):
         raise RuntimeError("CasADi EFE path supports only ET1 or ET2")
+    if (R_cond_state is not None or obs_bias_state is not None) and not params.use_hit_miss_mixture:
+        # Fail loudly rather than silently ignoring them: the frozen precision-blend
+        # path has no place to put a spatially varying R_cond or a bias term, and a
+        # caller passing them clearly expects the mixture.
+        raise RuntimeError(
+            "R_cond_state/obs_bias_state require params.use_hit_miss_mixture=True; "
+            "the frozen precision-blend path ignores them"
+        )
 
     g = make_g_from_homography(H)
 
@@ -475,6 +732,8 @@ def make_efe_valgrad_fn(
         p_vis_state=p_vis_state,
         nogo_cost=nogo_cost,
         nogo_belief_cost=nogo_belief_cost,
+        R_cond_state=R_cond_state,
+        obs_bias_state=obs_bias_state,
     )
     gradient = ca.gradient(objective, u_flat)
     valgrad = ca.Function(

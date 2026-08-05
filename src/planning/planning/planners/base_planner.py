@@ -130,6 +130,7 @@ class UnicyclePlannerBase:
         optimizer_multistart=False,
         optimizer_multistart_include_direct=True,
         optimizer_initial_routes_json='',
+        optimizer_terminal_goal_tolerance_m=0.0,
         use_nogo_cost=False,
         nogo_penalty_type='warning_band',
         nogo_weight=0.0,
@@ -142,6 +143,7 @@ class UnicyclePlannerBase:
         nogo_mode='keep_out',
         driveable_geometry_json='',
         robot_collision_radius_m=0.125,
+        use_hit_miss_mixture=False,
         runtime_debug=False,
     ):
         self.horizon = int(horizon)
@@ -204,6 +206,9 @@ class UnicyclePlannerBase:
             optimizer_multistart_include_direct
         )
         self.optimizer_initial_routes = self._parse_initial_routes(optimizer_initial_routes_json)
+        self.optimizer_terminal_goal_tolerance_m = float(
+            max(optimizer_terminal_goal_tolerance_m, 0.0)
+        )
         self.rng = np.random.default_rng(int(seed))
 
         self.camera = ObliqueCameraModel(
@@ -226,6 +231,15 @@ class UnicyclePlannerBase:
         self.nogo_warning_band = float(max(nogo_warning_band, 1e-6))
         self.nogo_near_weight = float(max(nogo_near_weight, 0.0))
         self.use_belief_nogo_cost = bool(use_belief_nogo_cost)
+        # Hit/miss expected-belief mixture in the CasADi EFE objective. DEFAULT OFF:
+        # off, the planner runs the frozen precision-blend path bit-for-bit (see
+        # tests/planning/test_efe_hit_miss_mixture.py). On, detection availability
+        # is modelled as Bernoulli instead of being laundered into R_plan, and
+        # r_miss_uv is not read at all. Affects the CasADi objective only — the
+        # numpy `_evaluate_controls` diagnostics path still reports blend-based
+        # metrics, and `observation_model_with_visibility` (the correction path)
+        # is deliberately untouched.
+        self.use_hit_miss_mixture = bool(use_hit_miss_mixture)
         self.nogo_belief_kappa = float(max(nogo_belief_kappa, 1e-6))
         self.nogo_mode = str(nogo_mode or 'keep_out').strip().lower()
         self.driveable_geometry_json = str(driveable_geometry_json or '')
@@ -293,6 +307,36 @@ class UnicyclePlannerBase:
         if isinstance(value, (int, float)):
             return bool(value)
         return str(value).strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on')
+
+    def _terminal_goal_feasible(self, diagnostics):
+        """Return whether a rollout satisfies the optional terminal task gate."""
+        if self.optimizer_terminal_goal_tolerance_m <= 0.0:
+            return True
+        distance = float(diagnostics.get('terminal_goal_distance_pred', math.inf))
+        return bool(
+            np.isfinite(distance)
+            and distance <= self.optimizer_terminal_goal_tolerance_m
+        )
+
+    def _prefer_candidate(
+        self,
+        *,
+        candidate_valid,
+        candidate_goal_feasible,
+        candidate_cost,
+        incumbent_valid,
+        incumbent_goal_feasible,
+        incumbent_cost,
+    ):
+        """Lexicographic multistart choice: safety, task feasibility, then EFE."""
+        if bool(candidate_valid) != bool(incumbent_valid):
+            return bool(candidate_valid)
+        if (
+            self.optimizer_terminal_goal_tolerance_m > 0.0
+            and bool(candidate_goal_feasible) != bool(incumbent_goal_feasible)
+        ):
+            return bool(candidate_goal_feasible)
+        return float(candidate_cost) < float(incumbent_cost)
 
     @staticmethod
     def _parse_initial_routes(raw):
@@ -875,6 +919,7 @@ class UnicyclePlannerBase:
             float(self.robot_collision_radius_m),
             bool(self.use_nogo_cost),
             bool(self.use_belief_nogo_cost),
+            bool(self.use_hit_miss_mixture),
             float(self.nogo_belief_kappa),
             tuple(self.nogo_cost_model.signature) if self.nogo_cost_model is not None else (),
             tuple(self.collision_cost_model.signature) if self.collision_cost_model is not None else (),
@@ -948,6 +993,13 @@ class UnicyclePlannerBase:
                 time_horizon=int(self.horizon),
                 dt=float(self.dt),
                 Du=2,
+                use_hit_miss_mixture=bool(self.use_hit_miss_mixture),
+                # R_cond / obs_bias stay None: no conditional-covariance field or
+                # bias has been measured yet, so casadi_efe falls back to
+                # R_visible and zero bias (documented in _r_cond_expr). Wire the
+                # measured values here, not by editing casadi_efe.
+                R_cond=None,
+                obs_bias=None,
             )
             valgrad = casadi_efe.make_efe_valgrad_fn(
                 params_ca,
@@ -1247,19 +1299,20 @@ class UnicyclePlannerBase:
                 )
                 opt_valid = bool(opt_diag['rollout_valid'])
                 seed_valid = bool(seed_diag['rollout_valid'])
+                opt_goal_feasible = self._terminal_goal_feasible(opt_diag)
+                seed_goal_feasible = self._terminal_goal_feasible(seed_diag)
                 # The optimizer is allowed to improve a neutral route seed, but
                 # it must not replace a valid seed with a cheaper corner-cutting
-                # trajectory through forbidden floor.
-                if seed_valid and not opt_valid:
-                    candidate = seed_candidate
-                    candidate['controls_flat'] = np.asarray(x_init, dtype=float)
-                    candidate['optimizer_seed_fallback'] = True
-                    diag_attempt = seed_diag
-                elif opt_valid and not seed_valid:
-                    candidate['controls_flat'] = x_opt
-                    candidate['optimizer_seed_fallback'] = False
-                    diag_attempt = opt_diag
-                elif float(seed_candidate['total_cost']) < float(candidate['total_cost']):
+                # trajectory through forbidden floor or with a cheaper partial
+                # trajectory that does not complete the task.
+                if self._prefer_candidate(
+                    candidate_valid=seed_valid,
+                    candidate_goal_feasible=seed_goal_feasible,
+                    candidate_cost=seed_candidate['total_cost'],
+                    incumbent_valid=opt_valid,
+                    incumbent_goal_feasible=opt_goal_feasible,
+                    incumbent_cost=candidate['total_cost'],
+                ):
                     candidate = seed_candidate
                     candidate['controls_flat'] = np.asarray(x_init, dtype=float)
                     candidate['optimizer_seed_fallback'] = True
@@ -1270,6 +1323,7 @@ class UnicyclePlannerBase:
                     diag_attempt = opt_diag
                 ctrls_attempt = np.asarray(candidate['controls_flat'], dtype=float).reshape(self.horizon, 2)
                 cand_valid = bool(diag_attempt['rollout_valid'])
+                cand_goal_feasible = self._terminal_goal_feasible(diag_attempt)
                 source_label = (
                     f'solver:shifted_warm_start' if (init_name == 'warm_or_cold' and self.prev_controls_flat is not None)
                     else f'solver:{init_name}'
@@ -1277,11 +1331,14 @@ class UnicyclePlannerBase:
                 candidate.update({
                     'source': source_label,
                     'rollout_valid': cand_valid,
+                    'terminal_goal_feasible': cand_goal_feasible,
                     'optimizer_result': result,
                 })
                 self._runtime_debug_print(
                     f"[planner_debug] init={init_name!s} solver finished "
                     f"J={candidate['total_cost']:.3f}, valid={cand_valid}, "
+                    f"goal_gap={float(diag_attempt.get('terminal_goal_distance_pred', math.nan)):.3f}, "
+                    f"goal_feasible={cand_goal_feasible}, "
                     f"min_clear={float(diag_attempt.get('min_predicted_obstacle_distance_m', math.nan)):.3f}, "
                     f"invalid={str(diag_attempt.get('invalid_reason', '')) or '-'}, "
                     f"success={bool(result.success)}, status={int(result.status)}, "
@@ -1295,16 +1352,22 @@ class UnicyclePlannerBase:
                     keep = True
                 else:
                     best_valid = bool(best_candidate.get('rollout_valid', False))
+                    best_goal_feasible = bool(
+                        best_candidate.get('terminal_goal_feasible', True)
+                    )
                     # The smooth no-go term shapes the continuous optimization,
                     # but the final multi-start choice should never prefer an
-                    # invalid shortcut over a valid rollout. This is
-                    # condition-neutral safety handling, not route scripting.
-                    if cand_valid and not best_valid:
-                        keep = True
-                    elif best_valid and not cand_valid:
-                        keep = False
-                    else:
-                        keep = float(candidate['total_cost']) < float(best_candidate['total_cost'])
+                    # invalid shortcut or an incomplete route over a candidate
+                    # satisfying the task. This is condition-neutral feasibility
+                    # handling, not route scripting.
+                    keep = self._prefer_candidate(
+                        candidate_valid=cand_valid,
+                        candidate_goal_feasible=cand_goal_feasible,
+                        candidate_cost=candidate['total_cost'],
+                        incumbent_valid=best_valid,
+                        incumbent_goal_feasible=best_goal_feasible,
+                        incumbent_cost=best_candidate['total_cost'],
+                    )
                 if keep:
                     best_candidate = candidate
                     best_init_name = init_name
@@ -1352,7 +1415,8 @@ class UnicyclePlannerBase:
                     )
             self._runtime_debug_print(
                 f"[planner_debug] Best optimizer init={best_init_name!s} "
-                f"J={best_candidate['total_cost']:.3f}, valid={best_candidate.get('rollout_valid', False)}"
+                f"J={best_candidate['total_cost']:.3f}, valid={best_candidate.get('rollout_valid', False)}, "
+                f"goal_feasible={best_candidate.get('terminal_goal_feasible', True)}"
             )
             self._runtime_debug_print(
                 "[planner_debug] CasADi-backed minimize finished in "

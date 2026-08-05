@@ -120,6 +120,9 @@ def _planner(
         optimizer_multistart=True,
         optimizer_multistart_include_direct=False,
         optimizer_initial_routes_json=json.dumps(route_seeds),
+        optimizer_terminal_goal_tolerance_m=float(
+            cfg.get("optimizer_terminal_goal_tolerance_m", 0.0)
+        ),
         approx_method=str(cfg.get("approx_method", "ET1")),
         use_obs_risk=True,
         use_ambiguity=_as_bool(cfg.get("global_use_ambiguity", True)),
@@ -203,6 +206,11 @@ def main() -> None:
     parser.add_argument("--fixed-horizon", type=int, default=120)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--optimizer-maxiter", type=int, default=120)
+    parser.add_argument(
+        "--fixed-only",
+        action="store_true",
+        help="Run only the H=fixed-horizon setting (skip the legacy comparison).",
+    )
     args = parser.parse_args()
 
     cfg = _load_yaml(args.config)
@@ -255,10 +263,11 @@ def main() -> None:
             )
         endpoints[task_name] = np.asarray([start[:2], goal], dtype=float)
 
-        for label, horizon in (
+        settings = [("offline_fix", args.fixed_horizon)] if args.fixed_only else [
             ("old_horizon", args.baseline_horizon),
             ("offline_fix", args.fixed_horizon),
-        ):
+        ]
+        for label, horizon in settings:
             planner = _planner(
                 cfg,
                 horizon=horizon,
@@ -334,8 +343,9 @@ def main() -> None:
         "world": world,
         "config": str(args.config),
         "route_policy": (
-            "start+goal only; task waypoints ignored; map-derived collision-aware "
-            "A* seed; no visibility/measurement data used in seed generation"
+            "start+goal only; task waypoints ignored; every valid map-derived "
+            "lane-graph cross-aisle seed; no visibility/measurement data used "
+            "in seed generation"
         ),
         "clearance_m": clearance,
         "results": results,
@@ -356,13 +366,17 @@ def main() -> None:
         **{f"{task}__endpoints": pts for task, pts in endpoints.items()},
     )
 
-    fig, axes = plt.subplots(2, 2, figsize=(13.0, 10.0), sharex=True, sharey=True)
+    labels = ("offline_fix",) if args.fixed_only else ("old_horizon", "offline_fix")
+    fig, axes = plt.subplots(
+        2, len(labels), figsize=(6.5 * len(labels), 10.0),
+        sharex=True, sharey=True, squeeze=False,
+    )
     colors = {"old_horizon": "#d95f02", "offline_fix": "#0072b2"}
     for row, task_name in enumerate(TASK_NAMES):
         task = _task(world, task_name)
         start = np.array([task["start"]["x"], task["start"]["y"]], dtype=float)
         goal = np.array([task["goal"]["x"], task["goal"]["y"]], dtype=float)
-        for col, label in enumerate(("old_horizon", "offline_fix")):
+        for col, label in enumerate(labels):
             ax = axes[row, col]
             _draw_world(ax, collision_json)
             states = trajectories[(task_name, label)]

@@ -54,6 +54,12 @@ def test_four_cam_drivable_map_yields_paper1_lane_seeds() -> None:
             (task["goal"]["x"], task["goal"]["y"]),
         )
         assert seeds, f"no lane-graph seed for {name}"
+        seed_names = {seed["name"] for seed in seeds}
+        assert "below_south_cross_aisle" in seed_names, (
+            f"{name} is missing the early south crossing used by the hard route"
+        )
+        assert "below_main_aisle" in seed_names
+        assert "above_connector" in seed_names
 
 
 def test_four_cam_lanes_are_inset_from_obstacles_like_paper1() -> None:
@@ -106,3 +112,37 @@ def test_route_seed_waypoint_arrival_scales_with_global_control_step() -> None:
     for control in controls:
         state, covariance = planner.predict(state, covariance, control)
     assert np.linalg.norm(state[:2] - np.array([2.0, 1.0])) < 0.35
+
+
+def test_multistart_terminal_gate_prefers_goal_reaching_candidate() -> None:
+    planner = object.__new__(UnicyclePlannerBase)
+    planner.optimizer_terminal_goal_tolerance_m = 0.25
+
+    assert planner._terminal_goal_feasible(
+        {"terminal_goal_distance_pred": 0.25}
+    )
+    assert not planner._terminal_goal_feasible(
+        {"terminal_goal_distance_pred": 12.0}
+    )
+    assert planner._prefer_candidate(
+        candidate_valid=True,
+        candidate_goal_feasible=True,
+        candidate_cost=1000.0,
+        incumbent_valid=True,
+        incumbent_goal_feasible=False,
+        incumbent_cost=1.0,
+    )
+
+
+def test_multistart_terminal_gate_keeps_safety_ahead_of_goal_completion() -> None:
+    planner = object.__new__(UnicyclePlannerBase)
+    planner.optimizer_terminal_goal_tolerance_m = 0.25
+
+    assert not planner._prefer_candidate(
+        candidate_valid=False,
+        candidate_goal_feasible=True,
+        candidate_cost=1.0,
+        incumbent_valid=True,
+        incumbent_goal_feasible=False,
+        incumbent_cost=1000.0,
+    )

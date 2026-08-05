@@ -47,6 +47,7 @@ from reliability.projection import (
     load_projection_calibration,
     project_observation_to_world,
     project_observation_to_world_with_covariance,
+    projection_kwargs_for_camera,
 )
 from reliability.providers import GridMapReliabilityProvider
 from reliability.replay import ReplayConfig, ReplayMode, _with_provider_quality
@@ -440,15 +441,9 @@ class CameraManagerNode(Node):
     def _map_observations(self, now_s: float) -> list[MapObservation]:
         observations: list[MapObservation] = []
         for camera_id, contract in self._latest.items():
-            projection_kwargs = {
-                "contact_z_m": self.contact_z_m,
-                "along_bearing_offset_m": self.projection_calibrations.get(
-                    camera_id, {}
-                ).get("intercept_m", 0.0),
-                "along_bearing_slope_per_m": self.projection_calibrations.get(
-                    camera_id, {}
-                ).get("slope_per_m", 0.0),
-            }
+            projection_kwargs = projection_kwargs_for_camera(
+                self.projection_calibrations, camera_id, contact_z_m=self.contact_z_m
+            )
             if self.covariance_profile == PAPER1_HISTORICAL_COVARIANCE:
                 projected = project_observation_to_world_with_covariance(
                     contract, self.camera_models[camera_id], **projection_kwargs
