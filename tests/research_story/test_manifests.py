@@ -71,3 +71,28 @@ def test_manifest_is_valid(manifest: Path) -> None:
             assert target.exists(), (
                 f"{manifest}: dangling {entry['kind']} path {entry['path']!r}"
             )
+
+
+@pytest.mark.parametrize("manifest", MANIFESTS, ids=lambda p: p.parent.name)
+def test_absent_data_evidence_points_at_cold_storage(manifest: Path) -> None:
+    """Data payloads may be archived out of the workspace, but never silently.
+
+    The 2026-08-05 archive pass moved 11 GB of gitignored logs to
+    `../_archive/UnembodiedNavigation_paused_2026-08-05`, which left twelve manifest
+    entries pointing at nothing. Existence of data kinds is deliberately not required
+    (see the module docstring), so the invariant is the weaker one that still protects
+    the evidence chain: if the working-tree path is gone, the entry must say where the
+    payload went, and that target must exist.
+    """
+    data = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    for i, entry in enumerate(data.get("evidence") or []):
+        if entry["kind"] in SOURCE_KINDS or (manifest.parent / entry["path"]).exists():
+            continue
+        archived_to = entry.get("archived_to")
+        assert archived_to, (
+            f"{manifest}: evidence[{i}] {entry['path']!r} is absent from the workspace "
+            "and carries no 'archived_to' — evidence must not disappear silently"
+        )
+        assert (manifest.parent / archived_to).exists(), (
+            f"{manifest}: evidence[{i}] archived_to {archived_to!r} does not exist"
+        )

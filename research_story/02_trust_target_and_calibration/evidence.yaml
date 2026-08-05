@@ -5,6 +5,7 @@ gate: "Fig 02D target table decides scalar vs factorised thesis"
 evidence:
   - path: ../../logs/studies/optionA_commissioning/exp0_confidence_audit
     kind: study_output
+    archived_to: ../../../_archive/UnembodiedNavigation_paused_2026-08-05/studies/optionA_commissioning/exp0_confidence_audit
     tag: measured_in_sim
     note: "PARTIAL — Simpson confound; motivation only until re-derived stratified"
   - path: ../../paper_artifacts/perception/warehouse_yolo_detector_v1

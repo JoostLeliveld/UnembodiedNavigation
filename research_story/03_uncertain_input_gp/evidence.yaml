@@ -11,12 +11,15 @@ evidence:
     note: "import, never reimplement"
   - path: ../../logs/visibility_comparison/belief_aware_gp_score_v1
     kind: fit_artifacts
+    archived_to: ../../../_archive/UnembodiedNavigation_paused_2026-08-05/visibility_comparison/belief_aware_gp_score_v1
     tag: measured_in_sim
   - path: ../../logs/studies/optionA_commissioning/exp1_synthetic_gp
     kind: study_output
+    archived_to: ../../../_archive/UnembodiedNavigation_paused_2026-08-05/studies/optionA_commissioning/exp1_synthetic_gp
     tag: model_plumbing
   - path: ../../logs/visibility_comparison/belief_gp_events
     kind: training_events
+    archived_to: ../../../_archive/UnembodiedNavigation_paused_2026-08-05/visibility_comparison/belief_gp_events
     tag: measured_in_sim
     note: "usable after ch.01 prior-belief pairing audit"
 known_findings:

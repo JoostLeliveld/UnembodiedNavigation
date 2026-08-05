@@ -11,6 +11,7 @@ evidence:
     note: "N1/N2 anchor; harness to reuse"
   - path: ../../logs/studies/optionA_commissioning/exp7_planner_replay
     kind: study_output
+    archived_to: ../../../_archive/UnembodiedNavigation_paused_2026-08-05/studies/optionA_commissioning/exp7_planner_replay
     tag: measured_in_sim
     note: "offline replay pre-check for N3/N4"
 figures:

@@ -10,9 +10,11 @@ evidence:
     note: "9/9 tests; S1 gate PASSED (Spearman 0.730, R2 0.51)"
   - path: ../../logs/studies/geometry_visibility_prior/warehouse_aws_v0
     kind: study_output
+    archived_to: ../../../_archive/UnembodiedNavigation_paused_2026-08-05/studies/geometry_visibility_prior/warehouse_aws_v0
     tag: measured_in_sim
   - path: ../../logs/studies/geometry_visibility_prior/calibrated_prior_v1
     kind: study_output
+    archived_to: ../../../_archive/UnembodiedNavigation_paused_2026-08-05/studies/geometry_visibility_prior/calibrated_prior_v1
     tag: measured_in_sim
   - path: ../../paper_artifacts/gp/warehouse_full_4cam_dayzero_v1
     kind: dayzero_artifact
@@ -20,10 +22,12 @@ evidence:
     note: "prior pipeline proven at 4-cam scale, calibration-only (feeds ch.08)"
   - path: ../../logs/visibility_comparison/depth_sensed_initial_gp_v1
     kind: fit_artifacts
+    archived_to: ../../../_archive/UnembodiedNavigation_paused_2026-08-05/visibility_comparison/depth_sensed_initial_gp_v1
     tag: model_plumbing
     note: "simulated-sensor benchmark AUROC 0.968 vs 0.782 camera-only; sensing realism explicit"
   - path: ../../logs/studies/optionA_commissioning/exp34_init_budget
     kind: study_output
+    archived_to: ../../../_archive/UnembodiedNavigation_paused_2026-08-05/studies/optionA_commissioning/exp34_init_budget
     tag: measured_in_sim
   - path: ../../docs/reliability_prior_sensing_survey.md
     kind: survey

@@ -14,6 +14,7 @@ evidence:
     note: "offline copy, r_miss_uv=40px — divergent"
   - path: ../../logs/studies/optionA_commissioning/exp2_operational_mapping
     kind: study_output
+    archived_to: ../../../_archive/UnembodiedNavigation_paused_2026-08-05/studies/optionA_commissioning/exp2_operational_mapping
     tag: measured_in_sim
 figures:
   derivable: [05A, 05B, 05C, 05D]

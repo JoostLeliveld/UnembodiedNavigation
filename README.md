@@ -8,6 +8,14 @@ learns a spatial camera-reliability model, converts that reliability into
 planner-facing observation covariance, and evaluates the behavior in matched
 warehouse route-choice experiments.
 
+> **Current ICRA focus (2026-08-05).** Active research is now limited to the
+> correlated per-camera bias → honest belief → closed-loop consequence chain.
+> Start with [`paused_archive/ACTIVE_RESEARCH_SET.md`](paused_archive/ACTIVE_RESEARCH_SET.md)
+> and the full [`research audit and ICRA plan`](research_story/RESEARCH_AUDIT_AND_ICRA_PLAN_2026-08-05.md).
+> Paused directions and relocated bulk payloads are indexed in
+> [`paused_archive/`](paused_archive/). The older contribution story below is retained
+> as historical context and must not be read as the current paper claim.
+
 > **Current configuration (2026-07-01 honest re-run).** The locked runtime values
 > are checked in [`docs/current_runtime_contract.yaml`](docs/current_runtime_contract.yaml)
 > and differ from the original paper — see [`docs/paper_vs_current/README.md`](docs/paper_vs_current/README.md)
