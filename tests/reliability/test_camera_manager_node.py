@@ -217,6 +217,25 @@ def test_node_module_imports_without_ros():
     assert quality.source_model == "live_contract"
 
 
+def test_gp_query_uses_state_nearest_camera_capture_time():
+    from reliability.nodes.camera_manager_node import _nearest_state_xy
+
+    history = [
+        (9.7, (-1.0, 2.0)),
+        (10.04, (3.0, 4.0)),
+        (10.4, (8.0, 9.0)),
+    ]
+    assert _nearest_state_xy(history, 10.0, max_delta_s=0.10) == (3.0, 4.0)
+
+
+def test_gp_query_rejects_state_outside_sync_window():
+    from reliability.nodes.camera_manager_node import _nearest_state_xy
+
+    assert _nearest_state_xy(
+        [(9.5, (1.0, 2.0))], 10.0, max_delta_s=0.35
+    ) is None
+
+
 def test_paper1_profile_preserves_fused_cross_covariance_without_report_floor():
     from reliability.nodes.camera_manager_node import (
         PAPER1_HISTORICAL_COVARIANCE,

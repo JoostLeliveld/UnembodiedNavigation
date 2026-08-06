@@ -294,3 +294,57 @@ def test_no_node_reimplements_the_projection():
         "these modules apply a bearing correction without going through "
         f"reliability.projection: {offenders}"
     )
+
+
+def test_contact_plane_travels_with_the_calibration_artifact(tmp_path) -> None:
+    """The contact plane and the along-bearing term are one quantity, not two knobs.
+
+    Intersecting the ray at height ``z`` instead of the floor shortens every estimate
+    by ``z·d/(H−z)`` — exactly the form of ``slope_per_m``. While the plane was a node
+    parameter and the slope was fitted per camera, the fit absorbed a constant the
+    operator had chosen: measured on the four-camera captures, moving the plane from
+    the historical 0.05 m to the floor cuts held-out along-bearing bias from 13.1 cm to
+    4.0 cm with **no** fitted correction at all. So the artifact owns both, and an
+    artifact that predates the field keeps the historical default.
+    """
+
+    from reliability.projection import load_projection_contact_z
+
+    v2_style = tmp_path / "v2.json"
+    v2_style.write_text(
+        json.dumps({"contact_z_m": 0.05, "cameras": {"camera_A": {"intercept_m": 0.1}}}),
+        encoding="utf-8",
+    )
+    assert load_projection_contact_z(v2_style) == pytest.approx(0.05)
+
+    v4_style = tmp_path / "v4.json"
+    v4_style.write_text(
+        json.dumps({"contact_z_m": 0.0, "cameras": {"camera_A": {"intercept_m": 0.0}}}),
+        encoding="utf-8",
+    )
+    assert load_projection_contact_z(v4_style) == pytest.approx(0.0)
+
+    legacy = tmp_path / "legacy.json"
+    legacy.write_text(json.dumps({"camera_A": 0.1}), encoding="utf-8")
+    assert load_projection_contact_z(legacy, default=0.05) == pytest.approx(0.05)
+
+
+def test_shipped_v4_artifact_carries_the_floor_plane_and_no_along_bearing_term() -> None:
+    """v4 is the measured replacement: floor plane, zero along-bearing, gated cross."""
+
+    payload = json.loads(
+        (
+            ROOT
+            / "logs/studies/multicamera_commissioning_bigwarehouse"
+            / "projection_calibration_v4/projection_calibration.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert payload["contact_z_m"] == pytest.approx(0.0)
+    for camera_id, entry in payload["cameras"].items():
+        assert entry["intercept_m"] == pytest.approx(0.0), camera_id
+        assert entry["slope_per_m"] == pytest.approx(0.0), camera_id
+        # the cross-bearing term stays per-camera and gated: it is the one component
+        # that does not transfer between cameras.
+        assert entry["cross_term_fitted"] == (entry["cross_bias_to_sigma"] >= 1.2)
+        if not entry["cross_term_fitted"]:
+            assert entry["cross_intercept_m"] == pytest.approx(0.0), camera_id

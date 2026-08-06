@@ -28,6 +28,7 @@ projection, GP trust artifacts.  Ground truth cannot enter this node
 
 from __future__ import annotations
 
+from collections import deque
 import json
 import math
 from pathlib import Path
@@ -45,6 +46,7 @@ from reliability.handover import HandoverUncertaintyConfig, handover_adjusted_ob
 from reliability.projection import (
     camera_model_from_world,
     load_projection_calibration,
+    load_projection_contact_z,
     project_observation_to_world,
     project_observation_to_world_with_covariance,
     projection_kwargs_for_camera,
@@ -80,6 +82,29 @@ SUPPORTED_COVARIANCE_PROFILES = (
     LEGACY_MULTICAM_COVARIANCE,
     PAPER1_HISTORICAL_COVARIANCE,
 )
+
+
+def _nearest_state_xy(
+    history: list[tuple[float, tuple[float, float]]] | deque,
+    timestamp_s: float,
+    *,
+    max_delta_s: float,
+) -> tuple[float, float] | None:
+    """Return the operational state prediction nearest a camera capture time."""
+
+    if (
+        not history
+        or not math.isfinite(timestamp_s)
+        or not math.isfinite(max_delta_s)
+        or max_delta_s < 0.0
+    ):
+        return None
+    nearest_stamp, nearest_xy = min(
+        history, key=lambda row: abs(float(row[0]) - timestamp_s)
+    )
+    if abs(float(nearest_stamp) - timestamp_s) > max_delta_s:
+        return None
+    return float(nearest_xy[0]), float(nearest_xy[1])
 
 
 def _fusion_report_covariance(
@@ -235,6 +260,11 @@ class CameraManagerNode(Node):
         self.declare_parameter("decision_topic", "/reliability/camera_manager/decision")
         self.declare_parameter("selected_topic", "/reliability/camera_manager/selected_observation")
         self.declare_parameter("active_output_topic", "/state/bev")
+        # GP reliability is a property of the predicted robot location, not of
+        # the camera measurement being scored.  Query a timestamp-matched
+        # operational belief; the measurement is used only during bootstrap.
+        self.declare_parameter("reliability_query_topic", "/planner_belief")
+        self.declare_parameter("reliability_query_max_time_delta_s", 0.35)
         # Operational gates: defaults mirror CameraManagerConfig; override from
         # the frozen study/protocol config in the launch file, never here.
         defaults = CameraManagerConfig()
@@ -305,6 +335,14 @@ class CameraManagerNode(Node):
         self.projection_calibrations = (
             load_projection_calibration(calibration_path) if calibration_path else {}
         )
+        # The contact plane and the along-bearing correction are the same quantity, so
+        # the artifact owns both. v2/v3 declare 0.05 and are unchanged; v4 declares 0.0
+        # and carries no along-bearing term. Falls back to the node parameter when the
+        # artifact predates the field.
+        if calibration_path:
+            self.contact_z_m = load_projection_contact_z(
+                calibration_path, default=self.contact_z_m
+            )
 
         artifacts = [str(item) for item in self.get_parameter("gp_artifacts").value]
         if artifacts == [""]:
@@ -322,7 +360,7 @@ class CameraManagerNode(Node):
         for camera_id, artifact in zip(self.camera_ids, artifacts):
             if artifact:
                 providers[camera_id] = GridMapReliabilityProvider.from_npz(
-                    Path(artifact), camera_id=camera_id, out_of_bounds_policy="clamp"
+                    Path(artifact), camera_id=camera_id, out_of_bounds_policy="min"
                 )
         # One ReplayConfig instance carries the provider set and the exact
         # score->covariance constants of the offline M8 pipeline, so shadow
@@ -361,6 +399,8 @@ class CameraManagerNode(Node):
         )
         self.handover_config = HandoverUncertaintyConfig()
         self._latest: dict[str, CameraObservation] = {}
+        self._belief_query_history = deque(maxlen=400)
+        self._reliability_query_source_by_camera: dict[str, str] = {}
         self._previous_camera_id: str | None = None
         self._previous_observation: MapObservation | None = None
 
@@ -415,6 +455,23 @@ class CameraManagerNode(Node):
                 "precision-blend covariance with no handover or reporting-floor inflation"
             )
 
+        self.reliability_query_max_time_delta_s = float(
+            self.get_parameter("reliability_query_max_time_delta_s").value
+        )
+        if (
+            not math.isfinite(self.reliability_query_max_time_delta_s)
+            or self.reliability_query_max_time_delta_s < 0.0
+        ):
+            raise ValueError(
+                "reliability_query_max_time_delta_s must be finite and non-negative"
+            )
+        self.create_subscription(
+            PoseWithCovarianceStamped,
+            str(self.get_parameter("reliability_query_topic").value),
+            self._belief_query_callback,
+            20,
+        )
+
         for camera_id in self.camera_ids:
             topic = template.format(camera_id=camera_id)
             self.create_subscription(String, topic, self._observation_callback(camera_id), 10)
@@ -437,6 +494,28 @@ class CameraManagerNode(Node):
             self._latest[expected_camera_id] = observation
 
         return callback
+
+    def _belief_query_callback(self, message) -> None:
+        if message.header.frame_id and message.header.frame_id != self.frame_id:
+            self.get_logger().warn(
+                "ignoring reliability query state in frame "
+                f"{message.header.frame_id!r}; expected {self.frame_id!r}"
+            )
+            return
+        timestamp_s = (
+            float(message.header.stamp.sec)
+            + 1.0e-9 * float(message.header.stamp.nanosec)
+        )
+        xy = (
+            float(message.pose.pose.position.x),
+            float(message.pose.pose.position.y),
+        )
+        if math.isfinite(timestamp_s) and all(math.isfinite(value) for value in xy):
+            if (
+                not self._belief_query_history
+                or timestamp_s != self._belief_query_history[-1][0]
+            ):
+                self._belief_query_history.append((timestamp_s, xy))
 
     def _map_observations(self, now_s: float) -> list[MapObservation]:
         observations: list[MapObservation] = []
@@ -470,11 +549,19 @@ class CameraManagerNode(Node):
                     else "live_contract:legacy_fixed_metric_covariance"
                 ),
             )
-            # Offline replay queries the provider at the filter mean; the
-            # shadow node carries no filter, so the measurement position is the
-            # query point. Documented divergence, conservative in practice.
+            query_xy = _nearest_state_xy(
+                self._belief_query_history,
+                contract.timestamp_s,
+                max_delta_s=self.reliability_query_max_time_delta_s,
+            )
+            if query_xy is None:
+                query_xy = world_xy
+                query_source = "measurement_bootstrap"
+            else:
+                query_source = "timestamp_matched_planner_belief"
+            self._reliability_query_source_by_camera[camera_id] = query_source
             observations.append(
-                _with_provider_quality(base, self.replay_config, world_xy, now_s)
+                _with_provider_quality(base, self.replay_config, query_xy, now_s)
             )
         return observations
 
@@ -509,6 +596,9 @@ class CameraManagerNode(Node):
             self.covariance_profile != PAPER1_HISTORICAL_COVARIANCE
         )
         payload["handover_diagnostic"] = diagnostic.to_dict()
+        payload["gp_query_source_by_camera"] = dict(
+            self._reliability_query_source_by_camera
+        )
         message = String()
         message.data = json.dumps(payload, sort_keys=True)
         self.decision_pub.publish(message)
@@ -550,7 +640,10 @@ class CameraManagerNode(Node):
                        "accepted_camera_ids": [], "reasons": ["no_eligible_synchronous_observations"],
                        "scores_by_camera": scores,
                        "rejected_by_camera": {key: list(value) for key, value in rejected.items()},
-                       "time_skew_rejected_camera_ids": time_skew_rejected}
+                       "time_skew_rejected_camera_ids": time_skew_rejected,
+                       "gp_query_source_by_camera": dict(
+                           self._reliability_query_source_by_camera
+                       )}
             msg = String(); msg.data = json.dumps(payload, sort_keys=True)
             self.decision_pub.publish(msg)
             return
@@ -583,6 +676,9 @@ class CameraManagerNode(Node):
                 },
                 "time_skew_rejected_camera_ids": time_skew_rejected,
                 "covariance_profile": self.covariance_profile,
+                "gp_query_source_by_camera": dict(
+                    self._reliability_query_source_by_camera
+                ),
             }
             decision_message = String()
             decision_message.data = json.dumps(payload, sort_keys=True)
@@ -622,6 +718,9 @@ class CameraManagerNode(Node):
                    "reporting_floor_applied":
                        self.covariance_profile != PAPER1_HISTORICAL_COVARIANCE,
                    "max_timestamp_spread_s": self.fusion_max_timestamp_spread_s}
+        payload["gp_query_source_by_camera"] = dict(
+            self._reliability_query_source_by_camera
+        )
         dmsg = String(); dmsg.data = json.dumps(payload, sort_keys=True)
         self.decision_pub.publish(dmsg)
 
@@ -669,7 +768,8 @@ def main(args=None) -> int:
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
     return 0
 
 

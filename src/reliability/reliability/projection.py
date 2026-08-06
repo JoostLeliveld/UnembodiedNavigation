@@ -309,6 +309,29 @@ def load_projection_calibration(path: str | Path) -> dict[str, dict[str, float]]
     return calibrations
 
 
+def load_projection_contact_z(path: str | Path, *, default: float = 0.05) -> float:
+    """Read the contact plane height a calibration artifact was fitted against.
+
+    The plane the ray is intersected with and the along-bearing correction are the
+    same physical quantity seen twice: intersecting at ``z`` instead of the floor
+    shortens every estimate by ``z·d/(H−z)``, which is exactly the form of the
+    ``slope_per_m`` term. Fitting one while the other is set independently lets a
+    per-camera correction absorb a constant the operator chose, so the two must
+    travel together — selecting a calibration selects its contact plane.
+
+    ``default`` preserves the historical node default for artifacts predating this
+    field, so v2/v3 load to a bit-identical projection.
+    """
+
+    import json
+
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return float(default)
+    value = payload.get("contact_z_m")
+    return float(default) if value is None else float(value)
+
+
 def projection_kwargs_for_camera(
     calibrations: dict[str, dict[str, float]],
     camera_id: str,
