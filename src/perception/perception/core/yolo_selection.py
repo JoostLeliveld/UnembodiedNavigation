@@ -42,7 +42,20 @@ def collect_candidate_detections(result, target_ids):
     xyxy = boxes.xyxy.detach().cpu().numpy()
     conf = boxes.conf.detach().cpu().numpy()
     cls = boxes.cls.detach().cpu().numpy().astype(int)
+    # Box-geometry validity moved here from an `assert` on the selected detection further
+    # down.  An assert in a runtime detector node turns a malformed box into a dead node, and
+    # it only ever guarded the top-scoring candidate.  BEHAVIOUR NOTE for anyone comparing
+    # detection rates across this change: a frame whose candidates are all non-finite,
+    # negative-origin or zero-area now reports `detected=False` where it previously raised,
+    # and a frame whose BEST candidate was malformed now falls through to the runner-up
+    # instead of raising.  Every well-formed box is selected exactly as before, so campaign
+    # logs recorded on valid detections are unaffected.
     valid = np.isfinite(conf)
+    valid &= np.all(np.isfinite(xyxy[:, :4]), axis=1)
+    valid &= xyxy[:, 0] >= 0.0
+    valid &= xyxy[:, 1] >= 0.0
+    valid &= xyxy[:, 2] > xyxy[:, 0]
+    valid &= xyxy[:, 3] > xyxy[:, 1]
     if target_ids is not None:
         valid &= np.asarray([int(c) in target_ids for c in cls], dtype=bool)
     idxs = np.flatnonzero(valid)
@@ -113,7 +126,6 @@ def select_best_detection(
     detection = detections[0]
     bbox = np.asarray(detection['bbox'], dtype=float)
     x0, y0, x1, y1 = [float(v) for v in bbox]
-    assert x0 >= 0.0 and y0 >= 0.0, f"YOLO bounding box out of bounds: {bbox}"
     polygon = detection['polygon']
     mask_area = math.nan
     mask_available = 0
@@ -126,9 +138,9 @@ def select_best_detection(
     mask_centroid_u = math.nan
     mask_centroid_v = math.nan
 
-    # The state estimator inverts the selected pixel through a ground-plane
-    # homography. Empirically, the bbox bottom-center is the most stable proxy
-    # for the robot's ground-plane pose in the current external-camera setup.
+    # The deployed state estimator inverts the bbox bottom-centre through its configured
+    # contact plane. Alternative statistics remain experiment-local until their complete
+    # observation contract and sequential-use semantics are approved together.
     selected_source = 'bbox_bottom'
     selected_u = bbox_bottom_u
     selected_v = bbox_bottom_v

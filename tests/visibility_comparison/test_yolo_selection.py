@@ -12,7 +12,7 @@ for rel in ('src/perception',):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from perception.core.yolo_selection import select_best_detection
+from perception.core.yolo_selection import collect_candidate_detections, select_best_detection
 
 
 class _Tensor:
@@ -114,3 +114,32 @@ def test_select_best_detection_keeps_bbox_bottom_as_state_point_when_mask_exists
     assert selected['bbox_bottom_v'] == 60.0
     assert np.isclose(selected['mask_bottom_u'], 58.0 / 3.0)
     assert selected['mask_bottom_v'] == 60.0
+
+
+def test_malformed_candidate_boxes_fail_closed_and_fall_through() -> None:
+    result = _Result()
+    result.boxes = _Boxes(
+        cls=[0, 0, 0, 0],
+        conf=[0.9, 0.85, 0.8, 0.6],
+        xyxy=[
+            [-1.0, 20.0, 30.0, 60.0],
+            [10.0, 20.0, 10.0, 60.0],
+            [10.0, 20.0, 30.0, float('nan')],
+            [40.0, 50.0, 60.0, 90.0],
+        ],
+    )
+
+    detections = collect_candidate_detections(result, {0})
+    assert len(detections) == 1
+    selected = select_best_detection(
+        result,
+        confidence_threshold=0.25,
+        target_ids={0},
+        use_masks=False,
+        mask_min_area=0.0,
+        mask_bottom_band_px=0.0,
+    )
+
+    assert selected['detected'] is True
+    assert selected['selected_pixel_source'] == 'bbox_bottom'
+    assert (selected['selected_u'], selected['selected_v']) == (50.0, 90.0)
