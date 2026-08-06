@@ -7,9 +7,9 @@ Registry updated: `2026-08-06`
 
 - Research: `EXP-CL-CAL` — Matched closed-loop belief-honesty campaign
 - Gate: Complete the preregistered 30-run matched campaign or retain a documented null.
-- Next: Rebuild and launch the frozen campaign from a clean checkout; then complete the 30-run matrix.
+- Next: Run and analyse the complete preregistered 30-run v2-versus-v3 matrix.
 - Maintenance: `MNT-CONSOLIDATION` — Consolidate the research repository and install the control plane
-- Maintenance next: Promote active evidence, remove competing roadmaps, and verify the cold archive.
+- Maintenance next: None; the control plane, retirement wave, cold archive, clean rebuild, and launch smoke test are complete.
 
 ## Claims
 
@@ -36,7 +36,7 @@ Registry updated: `2026-08-06`
 | EXP-HIT-MISS | LOCKED | posterior covariance error relative to explicit mixture | Require offline route discrimination before campaign allocation. |
 | EXP-PLANNER-BRANCH | LOCKED | branch choice and predicted terminal covariance | Reuse its route-discrimination pattern for EXP-USABLE. |
 | EXP-COMMISSION | LOCKED | held-out calibration and commissioning readiness | Freeze v2 and v3 as immutable campaign arms. |
-| EXP-CL-CAL | ACTIVE | clean-goal rate with breach rate and belief calibration as co-primary diagnostics | Rebuild and launch the frozen campaign from a clean checkout; then complete the 30-run matrix. |
+| EXP-CL-CAL | ACTIVE | clean-goal rate with breach rate and belief calibration as co-primary diagnostics | Run and analyse the complete preregistered 30-run v2-versus-v3 matrix. |
 | EXP-USABLE | READY | held-out Brier score followed by offline route discrimination | Complete the assumption register and define frozen source-benchmark splits. |
 | EXP-PIXEL-GROUND | READY | held-out calibration of propagated ground covariance | Decide whether this is required infrastructure for EXP-USABLE or supporting analysis only. |
 | EXP-CAM-MGMT | PLANNED | localization calibration and navigation outcome under fixed fields | Remain separate and downstream of EXP-USABLE. |

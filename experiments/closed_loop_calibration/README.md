@@ -44,8 +44,7 @@ promotion_gate: Complete the preregistered 30-run matched campaign or retain a d
 evidence_paths:
 - experiments/closed_loop_calibration/README.md
 archive_rule: Preserve every completed run ledger summary provenance and null result.
-next_action: Rebuild and launch the frozen campaign from a clean checkout; then complete
-  the 30-run matrix.
+next_action: Run and analyse the complete preregistered 30-run v2-versus-v3 matrix.
 ```
 
 <!-- RESEARCH-METADATA:END -->

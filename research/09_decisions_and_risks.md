@@ -40,6 +40,24 @@ only after the relative path, type, size, and SHA-256 inventories matched. Per-e
 inventories and restore commands live beside each archived payload and in the central
 manifest directory.
 
+## Consolidation verification — 2026-08-06
+
+- Recovery state: four coherent preservation commits and tag
+  `pre-research-consolidation-2026-08-06`.
+- Registry: validator, generated status, experiment metadata synchronization, and hygiene
+  checks pass.
+- Repository tests: `912 passed`; three non-failing dependency/Matplotlib warnings.
+- Clean checkout: detached worktree at `7f4ce18`; all seven colcon packages rebuilt with
+  `--symlink-install` in 1 minute 6 seconds.
+- Campaign smoke: the v3 `mc_central_ns` arm launched from the clean build; Gazebo, four
+  camera bridges, batched detector, runtime-contract publication, camera manager, logger,
+  and planner initialized. The robot executed repeated valid CasADi plans until the
+  intentional 55-second timeout.
+- Generated output: old `build/`, `install/`, and `log/` were removed only after the clean
+  build and launch passed; these paths remain explicitly ignored and disposable.
+- Remaining dirty files after consolidation belong to the independently preserved
+  pixel-to-ground projection work and were not included in cleanup commits.
+
 ## Principal risks
 
 | Risk | Control | Residual limitation |

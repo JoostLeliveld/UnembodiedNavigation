@@ -9,8 +9,8 @@ current_focus:
 maintenance_tasks:
   - id: MNT-CONSOLIDATION
     title: Consolidate the research repository and install the control plane
-    status: ACTIVE
-    next_action: Promote active evidence, remove competing roadmaps, and verify the cold archive.
+    status: COMPLETE
+    next_action: None; the control plane, retirement wave, cold archive, clean rebuild, and launch smoke test are complete.
 
 questions:
   - {id: SQ1, title: "How should observation quality be represented?", status: LOCKED}
@@ -304,7 +304,7 @@ experiments:
     promotion_gate: Complete the preregistered 30-run matched campaign or retain a documented null.
     evidence_paths: [experiments/closed_loop_calibration/README.md]
     archive_rule: Preserve every completed run ledger summary provenance and null result.
-    next_action: Rebuild and launch the frozen campaign from a clean checkout; then complete the 30-run matrix.
+    next_action: Run and analyse the complete preregistered 30-run v2-versus-v3 matrix.
 
   - experiment_id: EXP-USABLE
     title: Usable-observation source benchmark foundation

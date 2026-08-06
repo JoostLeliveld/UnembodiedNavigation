@@ -10,11 +10,11 @@ comparison is the next thesis chapter and is not a prerequisite for writing that
 
 **Gate:** complete the preregistered matrix, or preserve a fully documented null result.
 
-**Next action:** rebuild and launch the frozen campaign from a clean checkout, then finish
-the matrix and promote its table and figure to `paper_artifacts/`.
+**Next action:** run and analyse the complete preregistered v2-versus-v3 matrix, then
+promote its table and figure to `paper_artifacts/`.
 
-**Repository maintenance:** `MNT-CONSOLIDATION`, migration to this control plane and a
-verified external cold archive.
+**Repository maintenance:** `MNT-CONSOLIDATION` is complete: the control plane, retirement
+wave, verified cold archive, clean rebuild, and bounded campaign launch all passed.
 
 ## What is authoritative
 
