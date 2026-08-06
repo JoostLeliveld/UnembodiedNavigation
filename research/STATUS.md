@@ -5,9 +5,9 @@ Registry updated: `2026-08-06`
 
 ## Current focus
 
-- Research: `EXP-CL-CAL` — Closed-loop belief-honesty protocol and matched campaign
-- Gate: Freeze scientifically valid calibration arms and analysis, pass campaign readiness, then complete the matched campaign or retain a documented null.
-- Next: Resolve the v2-v3-v4 arm conflict, primary endpoint, seed matrix, and world-field compatibility before generating configs or running readiness.
+- Research: `EXP-CL-CAL` — Calibration identifiability and gated closed-loop protocol
+- Gate: First identify the calibration components under yaw-diverse route-disjoint evidence; then freeze one causal arm pair and analysis, pass readiness, and complete the matched campaign or retain a documented null.
+- Next: Redesign WS05 around camera region and yaw identifiability using E6; no v2-v3-v4 arm or closed-loop endpoint may be selected before that gate passes.
 - Maintenance: `MNT-CONSOLIDATION` — Consolidate the research repository and install the control plane
 - Maintenance next: None; the control plane, retirement wave, cold archive, clean rebuild, and launch smoke test are complete.
 
@@ -18,7 +18,7 @@ Registry updated: `2026-08-06`
 | C1 | LOCKED | Availability alone is insufficient to characterize observation quality. |
 | C2 | READY | Reliability methods form three operational families with different information requirements and failure modes. |
 | C3 | READY | Explicit observation-quality modelling can change predicted belief and route choice. |
-| C4 | ACTIVE | Better observation models improve navigation only where observation quality changes the achievable belief. |
+| C4 | BLOCKED | Better observation models improve navigation only where observation quality changes the achievable belief. |
 | C5 | READY | Camera management should be evaluated separately from observation-quality estimation. |
 | C6 | PLANNED | Different operational regimes favour different estimator families. |
 
@@ -26,7 +26,7 @@ Registry updated: `2026-08-06`
 
 | ID | Status | Primary metric | Next action |
 |---|---|---|---|
-| EXP-BIAS | LOCKED | held-out residual bias and coverage | None; use as locked paper evidence. |
+| EXP-BIAS | LOCKED | held-out residual bias and coverage | Preserve as locked residual evidence; E6 blocks camera-bias attribution until yaw route and region are independently varied. |
 | EXP-PROJ-AMP | LOCKED | ground-error amplification ratio | None; locked supporting mechanism. |
 | EXP-RCOND | LOCKED | held-out covariance calibration | No promotion; per-camera conditional covariance tied or lost to pooled covariance. |
 | EXP-BELIEF | LOCKED | NEES and truth outside stated 95 percent ellipse | Carry the frozen belief fields into the matched closed-loop campaign. |
@@ -35,10 +35,10 @@ Registry updated: `2026-08-06`
 | EXP-PRECISION | LOCKED | floor fraction where availability and precision select different cameras | Use the locked fields in camera-management experiments only after source comparison. |
 | EXP-HIT-MISS | LOCKED | posterior covariance error relative to explicit mixture | Require offline route discrimination before campaign allocation. |
 | EXP-PLANNER-BRANCH | LOCKED | branch choice and predicted terminal covariance | Reuse its route-discrimination pattern for EXP-USABLE. |
-| EXP-COMMISSION | LOCKED | held-out calibration and commissioning readiness | Preserve commissioning evidence; WS05 owns the superseding v2-v3-v4 campaign-arm decision. |
-| EXP-CL-CAL | ACTIVE | Pending WS05 protocol choice among clean-goal rate belief calibration and run-level localization error | Resolve the v2-v3-v4 arm conflict, primary endpoint, seed matrix, and world-field compatibility before generating configs or running readiness. |
-| EXP-USABLE | READY | held-out Brier score followed by offline route discrimination | Complete the assumption register and define frozen source-benchmark splits. |
-| EXP-PIXEL-GROUND | READY | held-out calibration of propagated ground covariance | Decide whether this is required infrastructure for EXP-USABLE or supporting analysis only. |
+| EXP-COMMISSION | LOCKED | held-out calibration and commissioning readiness | Preserve commissioning evidence; do not treat v2/v3/v4 terms as identified camera calibration until the E6 confound is resolved. |
+| EXP-CL-CAL | BLOCKED | Held-out identifiability of silhouette geometry versus camera calibration before any closed-loop endpoint is selected | Redesign WS05 around camera region and yaw identifiability using E6; no v2-v3-v4 arm or closed-loop endpoint may be selected before that gate passes. |
+| EXP-USABLE | BLOCKED | held-out Brier score followed by offline route discrimination | Recover a hash-verifiable usable-observation evidence package or preregister a deterministic rebuild; then freeze the exact target height labels budgets and grouped splits. |
+| EXP-PIXEL-GROUND | LOCKED | held-out calibration of propagated ground covariance | Preserve as supporting analysis only; keep candidate code experiment-local until held-out covariance occlusion yaw and sequential-correlation gates pass. |
 | EXP-CAM-MGMT | PLANNED | localization calibration and navigation outcome under fixed fields | Remain separate and downstream of EXP-USABLE. |
 
 ## Reviewer concerns
@@ -59,3 +59,4 @@ Registry updated: `2026-08-06`
 | RQ12 | OPEN | How expensive is commissioning? |
 | RQ13 | OPEN | Does improved prediction actually change navigation? |
 | RQ14 | OPEN | What makes each method fail? |
+| RQ15 | OPEN | Are camera-specific residuals identifiable from robot appearance route and yaw? |

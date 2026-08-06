@@ -17,6 +17,7 @@ reviewer_question_ids:
 - RQ07
 - RQ11
 - RQ14
+- RQ15
 figure_ids:
 - F01
 - F03
@@ -35,7 +36,8 @@ evidence_paths:
 - logs/studies/external_camera_bias_model/exp2_two_dof_bias/summary.json
 - logs/studies/external_camera_bias_model/exp3_projection_pipeline_minimal/summary.json
 archive_rule: Preserve summaries provenance residual tables and decisive figures permanently.
-next_action: None; use as locked paper evidence.
+next_action: Preserve as locked residual evidence; E6 blocks camera-bias attribution
+  until yaw route and region are independently varied.
 ```
 
 <!-- RESEARCH-METADATA:END -->

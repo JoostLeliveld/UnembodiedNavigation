@@ -74,13 +74,12 @@ def project_observation_to_world(
 
     ``cross_bearing_*`` adds the perpendicular degree of freedom, positive to the
     LEFT of the bearing.  The along-bearing form above cannot represent a lateral
-    offset at all, and the audit found one: camera C retained **+0.078 m** of
-    uncorrected lateral bias, which is an extrinsic/rotation signature rather
-    than the contact-point signature the along term targets.  See
-    ``logs/studies/external_camera_bias_model/exp2_two_dof_bias/RESULTS.md`` --
-    including the reason the cross term is **gated per camera** and left at zero
-    where the lateral bias is not resolvable against that camera's own scatter
-    (fitting it there made camera A 61 % worse on held-out data).
+    offset at all. Historical route data contained a camera-C residual of
+    **+0.078 m**, so the implementation supports a gated cross term. Later E6
+    analysis shows that this signal is not identifiable as camera extrinsic bias
+    once robot silhouette and route yaw are modelled. The code remains for exact
+    artifact reproduction; new calibration claims require the grouped
+    identifiability study registered under RQ15.
 
     Both defaults are 0.0, so an along-only calibration reproduces the previous
     behaviour exactly (asserted in ``tests/reliability/test_projection_cross_bearing.py``).

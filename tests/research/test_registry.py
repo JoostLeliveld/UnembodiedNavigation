@@ -27,7 +27,26 @@ def test_evaluation_truth_leak_is_rejected() -> None:
 
 def test_retired_dependency_is_rejected_for_active_focus() -> None:
     data = MODULE.load_registry()
-    active = next(row for row in data["experiments"] if row["status"] == "ACTIVE")
-    active["dependencies"].append("ASSET-LEGACY-UIGP")
+    focus_id = data["current_focus"]["research_experiment_id"]
+    focus = next(row for row in data["experiments"] if row["experiment_id"] == focus_id)
+    focus["status"] = "ACTIVE"
+    focus["dependencies"].append("ASSET-LEGACY-UIGP")
     errors = MODULE.validate(data, ROOT)
     assert any("depends on retired code" in error for error in errors)
+
+
+def test_blocked_experiment_can_remain_the_current_focus() -> None:
+    data = MODULE.load_registry()
+    focus_id = data["current_focus"]["research_experiment_id"]
+    focus = next(row for row in data["experiments"] if row["experiment_id"] == focus_id)
+    focus["status"] = "BLOCKED"
+    assert MODULE.validate(data, ROOT) == []
+
+
+def test_planned_experiment_cannot_be_the_current_focus() -> None:
+    data = MODULE.load_registry()
+    focus_id = data["current_focus"]["research_experiment_id"]
+    focus = next(row for row in data["experiments"] if row["experiment_id"] == focus_id)
+    focus["status"] = "PLANNED"
+    errors = MODULE.validate(data, ROOT)
+    assert any("current research focus must be ACTIVE or BLOCKED" in error for error in errors)

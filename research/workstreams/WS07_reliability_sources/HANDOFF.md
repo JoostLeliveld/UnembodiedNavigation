@@ -33,12 +33,13 @@ operational sensor.
 
 ## Evidence inherited, not sufficient
 
-- Existing single-camera foundation reports distance `0.0546`, FOV/range `0.0557`, GP
-  `0.0584` Brier on its hard route. Preserve this GP null if recovered/reproduced.
+- The existing single-camera README reports distance `0.0546`, FOV/range `0.0557`, GP
+  `0.0584` Brier on its hard route, but the evidence directories are absent. Treat the
+  numbers as recovery targets only; preserve the GP null if recovered or reproduced.
 - Existing four-camera spawn-grid GP validation also loses to prior-only fields, but events
   come effectively from one grid campaign and are not route-independent replication.
-- The old dataset is in-FOV-only and has `p_qual` about `0.997`, so it mostly estimates
-  detection probability.
+- The old dataset is described as in-FOV-only and quality-saturated, so it mostly estimates
+  detection probability. That description is also unverified until recovery.
 - README-referenced evidence directories are currently absent. Recover via a verified cold
   archive or rebuild with frozen splits; prose numbers alone are not evidence.
 - Existing “depth” prototypes mix complete SDF, perfect/degraded Gazebo depth, monocular

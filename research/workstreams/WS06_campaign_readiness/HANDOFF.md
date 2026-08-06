@@ -9,9 +9,10 @@ scientific choices or run the campaign.
 
 ## Start gate
 
-Do not begin implementation until WS05 supplies approved arms, primary/secondary outcomes,
-tasks, seeds, invalid-run policy and expected matrix. Until then, this handoff is planning
-context only.
+Do not begin implementation until WS05's calibration-identifiability stage has passed and
+WS05 then supplies approved arms, primary/secondary outcomes, tasks, seeds, invalid-run
+policy and expected matrix. E6 means v2/v3/v4 alone cannot satisfy this gate. Until then,
+this handoff is planning context only.
 
 ## Ownership
 
@@ -120,8 +121,8 @@ You may edit only:
 - optionally scripts/research/capture_environment.py and its test
 
 Treat the frozen protocol/configs, campaign runner, runtime code, world, detector,
-calibrations and GP/fields as read-only. Do not edit registry/status. Do not touch current
-uncommitted yolo_selection.py, projection.py or test_box_projection_path.py changes.
+calibrations and GP/fields as read-only. Do not edit registry/status. Do not touch the
+integrated pixel-ground supporting study or the separately reviewed malformed-box runtime fix.
 
 Compose existing multicamera experiment_preflight.py, runtime_readiness.py, detector runtime
 contract, leakage firewall, route/collision checks, config parity and Gazebo-version checks

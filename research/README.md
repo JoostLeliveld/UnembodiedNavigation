@@ -6,14 +6,14 @@ comparison is the next thesis chapter and is not a prerequisite for writing that
 
 ## Current focus
 
-**Research:** `EXP-CL-CAL`, the closed-loop protocol and matched calibration campaign.
+**Research:** `EXP-CL-CAL`, currently blocked at calibration identifiability before any
+closed-loop protocol is frozen.
 
-**Gate:** freeze scientifically valid calibration arms and analysis, pass readiness, then
-complete the matched matrix or preserve a fully documented null.
+**Gate:** separate silhouette/yaw, camera and region effects on held-out groups. Only then
+freeze a causal arm pair, pass readiness and run a matched matrix or preserve a null.
 
-**Next action:** resolve the v2-v3-v4 arm conflict, primary endpoint, seed matrix, and
-world-field compatibility. Do not generate confirmatory configs or launch runs before those
-decisions pass the workstream gates.
+**Next action:** design the WS05 yaw-diverse, route/region-disjoint identifiability protocol.
+Do not select v2/v3/v4 confirmatory arms, generate configs or launch runs first.
 
 **Repository maintenance:** `MNT-CONSOLIDATION` is complete: the control plane, retirement
 wave, verified cold archive, clean rebuild, and bounded campaign launch all passed.
@@ -39,12 +39,13 @@ python3 scripts/research/hygiene_check.py
 
 ## Locked evidence already available
 
-- Camera-specific residual bias and projection amplification.
+- Structured residual error and projection amplification, with camera-bias attribution open.
 - Conventional-filter overconfidence under persistent correlated error.
 - Per-camera residual flooring and leave-one-out belief checks.
-- Gated cross-bearing calibration and its drift-expiry monitor.
+- Historical gated cross-bearing calibration and its v3-specific drift-expiry monitor.
 - The difference between availability and achievable precision.
-- Null results for sharper conditional covariance, naive fusion, and GP superiority.
+- Null results for sharper conditional covariance and naive fusion. The narrated GP null is
+  not evidence of record until its missing package is recovered or rebuilt.
 
 The live progress table is in [`STATUS.md`](STATUS.md). Decisions, archive manifests, and
 recovery instructions belong in [`09_decisions_and_risks.md`](09_decisions_and_risks.md).

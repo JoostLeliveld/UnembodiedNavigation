@@ -34,7 +34,7 @@ claims:
   - id: C4
     question_id: SQ3
     statement: Better observation models improve navigation only where observation quality changes the achievable belief.
-    status: ACTIVE
+    status: BLOCKED
   - id: C5
     question_id: SQ4
     statement: Camera management should be evaluated separately from observation-quality estimation.
@@ -60,7 +60,11 @@ assumptions:
   - {id: A13, title: Camera errors may be temporally persistent and mutually correlated., status: TESTED}
   - {id: A14, title: Evidence is simulation-only and supports no hardware-deployment claim., status: ACCEPTED}
   - {id: A15, title: Evaluation truth is unavailable to all deployed interfaces., status: ACCEPTED}
-  - {id: A16, title: Four cameras provide geometric and bias diversity but not optical archetype diversity., status: ACCEPTED}
+  - {id: A16, title: Four cameras provide geometric and residual-structure diversity but not optical archetype diversity., status: ACCEPTED}
+  - {id: A17, title: Candidate-pose grid and target height are frozen and shared across compared arms., status: ACCEPTED}
+  - {id: A18, title: Commissioning budgets count unique sites rather than repeated frames., status: ACCEPTED}
+  - {id: A19, title: Splits use preregistered grouping appropriate to the estimand., status: ACCEPTED}
+  - {id: A20, title: Pixel statistic and inversion plane form one coupled measurement choice., status: ACCEPTED}
 
 reviewer_questions:
   - {id: RQ01, concern: "Why not use distance only?", status: OPEN, claim_ids: [C2]}
@@ -77,15 +81,16 @@ reviewer_questions:
   - {id: RQ12, concern: "How expensive is commissioning?", status: OPEN, claim_ids: [C2, C6]}
   - {id: RQ13, concern: "Does improved prediction actually change navigation?", status: OPEN, claim_ids: [C3, C4]}
   - {id: RQ14, concern: "What makes each method fail?", status: OPEN, claim_ids: [C2, C6]}
+  - {id: RQ15, concern: "Are camera-specific residuals identifiable from robot appearance route and yaw?", status: OPEN, claim_ids: [C1, C6]}
 
 figures:
-  - {id: F01, title: Persistent camera-specific residuals, status: LOCKED}
-  - {id: F02, title: Conventional-filter inconsistency and correlated-error floor, status: LOCKED}
-  - {id: F03, title: Calibration policy and held-out effect, status: LOCKED}
-  - {id: F04, title: Calibration drift detection and expiry, status: LOCKED}
-  - {id: F05, title: Achievable precision versus availability map, status: LOCKED}
-  - {id: F06, title: Matched closed-loop clean-goal breach and calibration results, status: ACTIVE}
-  - {id: F07, title: Reliability-source offline prediction comparison, status: PLANNED}
+  - {id: F01, title: Structured projection residuals and identifiability, status: READY}
+  - {id: F02, title: Conventional-filter inconsistency and correlated-error floor, status: READY}
+  - {id: F03, title: Calibration policy and held-out effect, status: BLOCKED}
+  - {id: F04, title: Calibration drift detection and expiry, status: BLOCKED}
+  - {id: F05, title: Achievable precision versus availability map, status: READY}
+  - {id: F06, title: Matched closed-loop clean-goal breach and calibration results, status: BLOCKED}
+  - {id: F07, title: Reliability-source offline prediction comparison, status: BLOCKED}
   - {id: F08, title: Reliability-source route discrimination, status: PLANNED}
   - {id: F09, title: Commissioning and deployment decision matrix, status: PLANNED}
   - {id: F10, title: Method-specific failure gallery, status: PLANNED}
@@ -103,7 +108,7 @@ experiments:
     status: LOCKED
     claim_ids: [C1]
     assumption_ids: [A01, A02, A08, A13, A15]
-    reviewer_question_ids: [RQ07, RQ11, RQ14]
+    reviewer_question_ids: [RQ07, RQ11, RQ14, RQ15]
     figure_ids: [F01, F03]
     dependencies: [ASSET-RUNTIME]
     operational_inputs: [camera_id, pixel_measurement, calibration]
@@ -116,7 +121,7 @@ experiments:
       - logs/studies/external_camera_bias_model/exp2_two_dof_bias/summary.json
       - logs/studies/external_camera_bias_model/exp3_projection_pipeline_minimal/summary.json
     archive_rule: Preserve summaries provenance residual tables and decisive figures permanently.
-    next_action: None; use as locked paper evidence.
+    next_action: Preserve as locked residual evidence; E6 blocks camera-bias attribution until yaw route and region are independently varied.
 
   - experiment_id: EXP-PROJ-AMP
     title: Projection amplification versus detector error
@@ -286,32 +291,32 @@ experiments:
       - logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v3/projection_calibration.json
       - experiments/multicamera_commissioning_bigwarehouse/GATE_PROVENANCE.md
     archive_rule: Keep chosen captures manifests calibrations and detector; cold-store superseded raw captures.
-    next_action: Preserve commissioning evidence; WS05 owns the superseding v2-v3-v4 campaign-arm decision.
+    next_action: Preserve commissioning evidence; do not treat v2/v3/v4 terms as identified camera calibration until the E6 confound is resolved.
 
   - experiment_id: EXP-CL-CAL
-    title: Closed-loop belief-honesty protocol and matched campaign
+    title: Calibration identifiability and gated closed-loop protocol
     study_path: experiments/closed_loop_calibration
-    status: ACTIVE
+    status: BLOCKED
     claim_ids: [C3, C4]
-    assumption_ids: [A01, A03, A08, A10, A11, A12, A13, A14, A15]
-    reviewer_question_ids: [RQ07, RQ11, RQ13]
+    assumption_ids: [A01, A03, A08, A10, A11, A12, A13, A14, A15, A19, A20]
+    reviewer_question_ids: [RQ07, RQ11, RQ13, RQ15]
     figure_ids: [F06]
     dependencies: [ASSET-RUNTIME, ASSET-PLANNER, ASSET-CAMPAIGN]
     operational_inputs: [camera_measurements, odometry_belief, frozen_calibration, camera_residual_floor]
     operational_interface_inputs: [camera_measurements, odometry_belief, frozen_calibration, camera_residual_floor]
     evaluation_only_inputs: [ground_truth_pose, contact_events, nees]
-    primary_metric: Pending WS05 protocol choice among clean-goal rate belief calibration and run-level localization error
-    promotion_gate: Freeze scientifically valid calibration arms and analysis, pass campaign readiness, then complete the matched campaign or retain a documented null.
+    primary_metric: Held-out identifiability of silhouette geometry versus camera calibration before any closed-loop endpoint is selected
+    promotion_gate: First identify the calibration components under yaw-diverse route-disjoint evidence; then freeze one causal arm pair and analysis, pass readiness, and complete the matched campaign or retain a documented null.
     evidence_paths: [experiments/closed_loop_calibration/README.md]
     archive_rule: Preserve every completed run ledger summary provenance and null result.
-    next_action: Resolve the v2-v3-v4 arm conflict, primary endpoint, seed matrix, and world-field compatibility before generating configs or running readiness.
+    next_action: Redesign WS05 around camera region and yaw identifiability using E6; no v2-v3-v4 arm or closed-loop endpoint may be selected before that gate passes.
 
   - experiment_id: EXP-USABLE
     title: Usable-observation source benchmark foundation
     study_path: experiments/usable_observation
-    status: READY
+    status: BLOCKED
     claim_ids: [C2, C3, C6]
-    assumption_ids: [A02, A03, A04, A05, A06, A08, A14, A15]
+    assumption_ids: [A02, A03, A04, A05, A06, A08, A14, A15, A17, A18, A19]
     reviewer_question_ids: [RQ01, RQ02, RQ03, RQ04, RQ05, RQ06, RQ10, RQ12, RQ14]
     figure_ids: [F07, F08, F09, F10]
     dependencies: [ASSET-RUNTIME, ASSET-PLANNER]
@@ -322,16 +327,16 @@ experiments:
     promotion_gate: Offline prediction and route gates precede all Gazebo campaign time.
     evidence_paths: [experiments/usable_observation/README.md]
     archive_rule: Preserve all baselines null results manifests and split definitions.
-    next_action: Complete the assumption register and define frozen source-benchmark splits.
+    next_action: Recover a hash-verifiable usable-observation evidence package or preregister a deterministic rebuild; then freeze the exact target height labels budgets and grouped splits.
 
   - experiment_id: EXP-PIXEL-GROUND
     title: Pixel-to-ground uncertainty path
     study_path: experiments/pixel_ground_path
-    status: READY
-    claim_ids: [C1, C2]
-    assumption_ids: [A01, A02, A03, A08, A09, A14]
-    reviewer_question_ids: [RQ08, RQ14]
-    figure_ids: [F01, F07]
+    status: LOCKED
+    claim_ids: [C1]
+    assumption_ids: [A01, A02, A03, A08, A09, A14, A20]
+    reviewer_question_ids: [RQ08, RQ14, RQ15]
+    figure_ids: [F01]
     dependencies: [ASSET-RUNTIME]
     operational_inputs: [pixel_statistic, camera_calibration, robot_geometry]
     operational_interface_inputs: [pixel_statistic, camera_calibration, robot_geometry]
@@ -342,8 +347,11 @@ experiments:
       - experiments/pixel_ground_path/README.md
       - logs/studies/pixel_ground_path/e4_covariance_calibration/summary.json
       - logs/studies/pixel_ground_path/e5_yaw_aware_headroom/summary.json
-    archive_rule: Preserve summaries and the chosen minimal model; archive superseded fitted corrections.
-    next_action: Decide whether this is required infrastructure for EXP-USABLE or supporting analysis only.
+      - paper_artifacts/correlated_error_icra/results/F01/pixel_ground_e6/RESULTS.md
+      - paper_artifacts/correlated_error_icra/results/F01/pixel_ground_e6/summary.json
+      - paper_artifacts/correlated_error_icra/results/F01/pixel_ground_e6/provenance.json
+    archive_rule: Preserve summaries candidate model provenance and the external E6 challenge permanently.
+    next_action: Preserve as supporting analysis only; keep candidate code experiment-local until held-out covariance occlusion yaw and sequential-correlation gates pass.
 
   - experiment_id: EXP-CAM-MGMT
     title: Camera selection and conservative fusion

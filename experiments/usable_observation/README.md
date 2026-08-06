@@ -4,7 +4,7 @@
 
 ```yaml
 experiment_id: EXP-USABLE
-status: READY
+status: BLOCKED
 claim_ids:
 - C2
 - C3
@@ -18,6 +18,9 @@ assumption_ids:
 - A08
 - A14
 - A15
+- A17
+- A18
+- A19
 reviewer_question_ids:
 - RQ01
 - RQ02
@@ -48,7 +51,9 @@ promotion_gate: Offline prediction and route gates precede all Gazebo campaign t
 evidence_paths:
 - experiments/usable_observation/README.md
 archive_rule: Preserve all baselines null results manifests and split definitions.
-next_action: Complete the assumption register and define frozen source-benchmark splits.
+next_action: Recover a hash-verifiable usable-observation evidence package or preregister
+  a deterministic rebuild; then freeze the exact target height labels budgets and
+  grouped splits.
 ```
 
 <!-- RESEARCH-METADATA:END -->

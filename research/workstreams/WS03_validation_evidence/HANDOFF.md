@@ -124,7 +124,8 @@ Do not edit registry/status, algorithms, configs or artifacts. Do not launch Gaz
 a calibration arm, retune parameters or delete files. First make a read-only evidence audit,
 then update only the three owned research documents.
 
-Record these blockers explicitly: v4 supersedes the currently planned v2/v3 pipeline;
+Record these blockers explicitly: E6 prevents selecting any v2/v3/v4 causal arm until
+silhouette, camera, region and yaw are separated;
 generated closed-loop configs contain seed 0 only; analyse.py lacks NEES/NIS,
 acceptance/age, confidence intervals, plot generation and a 15-pair completeness gate;
 runtime NIS 9.21 differs from offline 5.991; usable-observation evidence directories quoted

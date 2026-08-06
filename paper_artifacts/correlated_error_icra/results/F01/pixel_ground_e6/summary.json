@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "experiment_id": "EXP-PIXEL-GROUND",
+  "analysis_id": "e6_external_log_validation",
+  "maturity": "supporting_evidence",
+  "primary_stratum": {
+    "heading_source": "recorded_ground_truth_yaw",
+    "n_rows": 1195,
+    "mean_error_before_m": 0.14391658794176057,
+    "mean_error_after_cad_m": 0.03467401665204046,
+    "mean_along_before_m": -0.1341606866507671,
+    "mean_along_after_cad_m": 0.002490272216492024
+  },
+  "secondary_stratum": {
+    "heading_source": "recorded_yaw_plus_226_path_tangent_rows",
+    "n_rows": 1421,
+    "mean_error_before_m": 0.14312935096320048,
+    "mean_error_after_cad_m": 0.03353714121448194,
+    "mean_along_before_m": -0.13295128838935344,
+    "mean_along_after_cad_m": -0.00003536957263481818
+  },
+  "cross_bearing_gate": {
+    "threshold_abs_bias_over_sigma": 1.2,
+    "camera_A": {"raw_ratio": 0.1566167381963682, "after_cad_ratio": 1.5832729039196878},
+    "camera_B": {"raw_ratio": 1.0399205087877128, "after_cad_ratio": 1.8278417799423652},
+    "camera_C": {"raw_ratio": 4.645920979882193, "after_cad_ratio": 0.5376604425658791},
+    "camera_D": {"raw_ratio": 1.2992020519763223, "after_cad_ratio": 0.6555319640109323}
+  },
+  "allowed_conclusion": "Existing C/D cross-bearing constants are not identifiable as camera calibration on these route-and-yaw-confounded logs once silhouette geometry is modelled.",
+  "forbidden_conclusion": "No per-camera lateral correction is ever warranted."
+}

@@ -9,6 +9,8 @@
 - Evidence is Gazebo-only, one robot, and 2-D position; no hardware claim is made.
 - Null results, summaries, manifests, provenance, and decisive figures are permanent.
 - Generated data is disposable; irreplaceable raw data moves only after hash verification.
+- Candidate pixel-ground code remains experiment-local; no `bbox_center` runtime interface
+  exists until its observation contract and correlated-error semantics are promoted together.
 
 ## Recovery
 
@@ -67,16 +69,17 @@ manifest directory.
 | Oracle leakage | Operational/evaluation input split is validated. | Runtime code review remains necessary. |
 | Campaign sprawl | One active experiment and offline promotion gates. | Exploratory work must remain outside active studies. |
 | Cold archive becomes a junk drawer | Hash manifests and one archive index. | Storage health/backups are outside repository control. |
-| Four cameras are overgeneralized | Report geometric and bias diversity only. | Optical/hardware diversity is not tested. |
+| Four cameras are overgeneralized | Report geometry and installed-view residual structure only. | Optical/hardware diversity is not tested; camera-specific attribution awaits RQ15. |
 | Better prediction does not help navigation | Treat C4 as open and preserve a null. | A null narrows the contribution to representation/estimation. |
+| Camera calibration is confounded with silhouette, region and yaw | E6 is tracked and WS05 now begins with grouped identifiability. | Existing v2/v3/v4 artifacts remain historical until a new design separates the terms. |
 
 ## Campaign hold — 2026-08-06
 
-`EXP-CL-CAL` remains the active scientific focus, but it is in protocol-resolution work, not
-campaign execution. Separate audits found four blockers:
+`EXP-CL-CAL` remains the current scientific focus but is explicitly `BLOCKED`, not in
+campaign execution. Integration found five blockers:
 
-- the active v2-v3 arm definition predates held-out evidence that explicitly supersedes both
-  artifacts with the minimal v4 pipeline;
+- E6 shows that the C/D correction signal is explainable by silhouette geometry on the
+  route/yaw-confounded external logs, so no v2/v3/v4 causal arm is currently identified;
 - generated `_clv2.yaml` and `_clv3.yaml` currently contain seed 0 only, not the documented
   seeds 0-4;
 - the analyzer lacks the preregistered NEES/NIS, correction acceptance/age, uncertainty

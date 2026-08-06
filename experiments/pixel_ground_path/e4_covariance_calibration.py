@@ -47,10 +47,10 @@ from reliability.projection import camera_model_from_world  # noqa: E402
 import robot_silhouette_model as RSM  # noqa: E402
 
 WORLD = REPO / "src/sim/gazebo_worlds/worlds/warehouse_full_4cam.world.sdf"
-DATASET = Path(
-    "/home/joostleliveld/Thesis/_archive/UnembodiedNavigation_paused_2026-08-05"
-    "/perception_datasets/warehouse_yolo_dataset_4cam_v3_20260724/merged"
-)
+from dataset_paths import dataset_root  # noqa: E402
+
+# Resolved, not hard-coded: the payload moved to cold storage on 2026-08-05.
+DATASET = dataset_root(REPO)
 DET_CACHE = (REPO / "logs/studies/pixel_ground_path/e2_detector_edge_characterisation"
              / "detector_boxes.csv")
 OUT = REPO / "logs/studies/pixel_ground_path/e4_covariance_calibration"

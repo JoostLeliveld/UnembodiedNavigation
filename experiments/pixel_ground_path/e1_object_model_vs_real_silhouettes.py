@@ -41,10 +41,10 @@ from reliability.projection import camera_model_from_world  # noqa: E402
 WORLD = REPO / "src/sim/gazebo_worlds/worlds/warehouse_full_4cam.world.sdf"
 # Dataset payload lives in cold storage; see logs/perception_datasets/COLD_STORAGE.md.
 # Read-only -- nothing is copied back into the workspace.
-DATASET = Path(
-    "/home/joostleliveld/Thesis/_archive/UnembodiedNavigation_paused_2026-08-05"
-    "/perception_datasets/warehouse_yolo_dataset_4cam_v3_20260724/merged"
-)
+from dataset_paths import dataset_root  # noqa: E402
+
+# Resolved, not hard-coded: the payload moved to cold storage on 2026-08-05.
+DATASET = dataset_root(REPO)
 OUT = REPO / "logs/studies/pixel_ground_path/e1_object_model_vs_real_silhouettes"
 
 MODEL_INCLUDES = {

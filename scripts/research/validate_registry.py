@@ -76,8 +76,15 @@ def validate(data: dict[str, Any], root: Path = ROOT) -> list[str]:
     focus = data.get("current_focus", {})
     if focus.get("research_experiment_id") not in experiment_ids:
         errors.append("exactly one valid current research focus must be declared")
-    elif active_research != [focus.get("research_experiment_id")]:
-        errors.append("current research focus must be the sole ACTIVE experiment")
+    else:
+        focus_experiment = next(
+            row for row in data.get("experiments", [])
+            if row.get("experiment_id") == focus.get("research_experiment_id")
+        )
+        if focus_experiment.get("status") not in {"ACTIVE", "BLOCKED"}:
+            errors.append("current research focus must be ACTIVE or BLOCKED")
+        if active_research and active_research != [focus.get("research_experiment_id")]:
+            errors.append("an ACTIVE experiment must be the declared current research focus")
     if focus.get("maintenance_task_id") not in known["maintenance_tasks"]:
         errors.append("current maintenance focus must reference a maintenance task")
 

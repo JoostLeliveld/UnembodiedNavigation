@@ -2,11 +2,11 @@
 
 ## Paper thesis
 
-Persistent camera-specific error is repeatedly counted as fresh evidence by conventional
-infrastructure-camera localization, producing a belief that is precise but wrong. A gated
-calibration policy corrects resolvable outliers; per-camera residual flooring and a
-leave-one-camera-out check prevent unearned confidence when calibration cannot remove the
-error; a change monitor expires stale corrections.
+Persistent structured projection error is repeatedly counted as fresh evidence by
+conventional infrastructure-camera localization, producing a belief that is precise but
+wrong. The present evidence supports per-camera residual flooring and a leave-one-camera-out
+check as containment mechanisms. Whether the repeatable error should be attributed to camera
+calibration, robot silhouette/yaw or their interaction is now an explicit open question.
 
 ## Included thesis claims
 
@@ -20,7 +20,8 @@ localization.
 
 ## Evidence of record
 
-- Up to 78 mm residual cross-bearing bias remains after deployed calibration.
+- Up to 78 mm residual cross-bearing structure remains after deployed calibration on the
+  historical routes; E6 shows that this is not identifiable as camera bias on those logs.
 - Projection amplification changes roughly 4.1 times across a footprint, but residual bias
   transfer dominates the remaining covariance problem.
 - The conventional filter reports median NEES 4.22, 1.9 cm stated uncertainty versus
@@ -29,8 +30,12 @@ localization.
   covariance worsens median NEES to 5.11.
 - The per-camera correlation floor plus leave-one-out check reduces outside-ellipse rate to
   3.3 percent while leaving RMSE essentially unchanged.
-- Gated cross-bearing calibration reduces camera C bias from about 77 mm to 4 mm and
-  held-out NEES from 8.51 to 1.06; ungated use harms a marginal camera.
+- Historically, gated cross-bearing correction reduced camera C error on one held-out split
+  and harmed a marginal camera. This is mechanism evidence, not an identified calibration
+  policy after E6.
+- On 1,195 external-log rows with recorded yaw, the CAD silhouette model reduces mean error
+  from 143.9 mm to 34.7 mm and removes the previous C/D cross-bearing gate signal. Camera,
+  region and yaw remain confounded.
 - A stale correction becomes harmful at 0.25 degrees yaw drift; the change statistic
   detects at 0.1 degrees or 0.025 m translation.
 - Availability and achievable precision choose different cameras on 15.7 percent of the
@@ -38,10 +43,11 @@ localization.
 
 ## Current decision gate
 
-Do not launch the matched campaign yet. Newer held-out evidence for the minimal projection
-pipeline says v4 supersedes the currently specified v2/v3 pair. The protocol must first
-select a scientifically interpretable causal contrast, choose a primary endpoint, generate
-the complete seed matrix, and resolve current-world versus July-field compatibility.
+Do not launch the matched campaign yet. WS05 must first independently vary camera, spatial
+region and yaw and determine whether any residual camera term transfers after the object
+model. Only an identified held-out effect may become a causal arm. After that, the protocol
+may choose one primary endpoint, generate the complete seed matrix and resolve current-world
+versus July-field compatibility.
 
 After those decisions and readiness pass, report clean-goal rate, breaches/contacts,
 NEES/NIS calibration, correction acceptance/age, path/time, and the full null if navigation
@@ -52,5 +58,5 @@ not open the source-comparison campaign before this package is promoted.
 ## Scope
 
 Gazebo-only; simulated detector imagery; one robot; 2-D position; controlled faults; four
-nominally identical cameras with geometric and bias diversity; no formal safety or hardware
-deployment guarantee.
+nominally identical cameras with geometric diversity and potentially confounded residual
+structure; no formal safety or hardware-deployment guarantee.

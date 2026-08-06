@@ -4,7 +4,7 @@
 
 ```yaml
 experiment_id: EXP-CL-CAL
-status: ACTIVE
+status: BLOCKED
 claim_ids:
 - C3
 - C4
@@ -18,10 +18,13 @@ assumption_ids:
 - A13
 - A14
 - A15
+- A19
+- A20
 reviewer_question_ids:
 - RQ07
 - RQ11
 - RQ13
+- RQ15
 figure_ids:
 - F06
 dependencies:
@@ -37,15 +40,16 @@ evaluation_only_inputs:
 - ground_truth_pose
 - contact_events
 - nees
-primary_metric: Pending WS05 protocol choice among clean-goal rate belief calibration
-  and run-level localization error
-promotion_gate: Freeze scientifically valid calibration arms and analysis, pass campaign
-  readiness, then complete the matched campaign or retain a documented null.
+primary_metric: Held-out identifiability of silhouette geometry versus camera calibration
+  before any closed-loop endpoint is selected
+promotion_gate: First identify the calibration components under yaw-diverse route-disjoint
+  evidence; then freeze one causal arm pair and analysis, pass readiness, and complete
+  the matched campaign or retain a documented null.
 evidence_paths:
 - experiments/closed_loop_calibration/README.md
 archive_rule: Preserve every completed run ledger summary provenance and null result.
-next_action: Resolve the v2-v3-v4 arm conflict, primary endpoint, seed matrix, and
-  world-field compatibility before generating configs or running readiness.
+next_action: Redesign WS05 around camera region and yaw identifiability using E6;
+  no v2-v3-v4 arm or closed-loop endpoint may be selected before that gate passes.
 ```
 
 <!-- RESEARCH-METADATA:END -->

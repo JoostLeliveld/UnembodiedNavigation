@@ -14,7 +14,7 @@ These paths are one coherent, currently dirty change set and belong exclusively 
 
 - `src/perception/perception/core/yolo_selection.py`
 - `src/reliability/reliability/projection.py`
-- `tests/reliability/test_box_projection_path.py`
+- `tests/experiments/test_pixel_ground_box_projection.py`
 
 The changes add an opt-in `bbox_center` pixel, a derived plane at `z=0.085 m`, propagated
 pixel covariance and a yaw-marginal covariance. Historical `bbox_bottom` remains default,
@@ -94,7 +94,7 @@ Work only on the isolated pixel-to-ground workstream in:
 Preserve the existing uncommitted changes in:
 - src/perception/perception/core/yolo_selection.py
 - src/reliability/reliability/projection.py
-- tests/reliability/test_box_projection_path.py
+- tests/experiments/test_pixel_ground_box_projection.py
 
 You may edit only those paths and experiments/pixel_ground_path/. Read the corresponding
 logs/studies/pixel_ground_path evidence read-only. Do not edit registry/status, launch or
