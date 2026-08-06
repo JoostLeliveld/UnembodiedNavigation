@@ -7,7 +7,6 @@ under `paper_artifacts/` and copied into `thesis-report/figures/` when needed.
 
 | Figure/artifact | Script |
 | --- | --- |
-| README module visuals | `make_readme_visuals.py` |
 | GP reliability pipeline | `make_aws_gp_pipeline_figure.py` |
 | Problem setup panels | `make_aws_problem_setup_figure.py` |
 | Localization pathway | `make_localization_pathway_figure.py` |
@@ -20,4 +19,4 @@ under `paper_artifacts/` and copied into `thesis-report/figures/` when needed.
 
 Files named `diag_*`, `validate_*`, `make_f88_*`, or `make_f31b1_*` are
 diagnostic/provenance tools unless their output is explicitly listed in
-`docs/experiment_registry.md` or `paper_artifacts/README.md`.
+`research/registry.yaml` or `paper_artifacts/README.md`.

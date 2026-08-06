@@ -40,8 +40,8 @@ next_action: Use the locked fields in camera-management experiments only after s
 <!-- RESEARCH-METADATA:END -->
 
 
-**Chapter served:** [09 — multicamera handover & fusion](../../research_story/09_multicamera_handover_fusion/)
-· fills §VIII of [`PAPER_DRAFT_abstract_intro_2026-08-04`](../../modules/07_multicam_handover_fusion/framings/PAPER_DRAFT_abstract_intro_2026-08-04.md)
+**Claims served:** C1, C3, and C5; intended figure F05 in
+[`research/08_figures.md`](../../research/08_figures.md).
 
 ## Question
 

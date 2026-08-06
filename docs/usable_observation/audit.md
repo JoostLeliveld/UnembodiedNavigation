@@ -119,7 +119,7 @@ covariance-blending change.
   C0 `geometric_shortest_path`, C1 `constant_R_efe`, C2 `visibility_aware_efe` (+ `gp_artifact`).
   Run matrix = task × condition × seed via `run_visibility_campaign.py`.
 - **Runtime contract:** `docs/current_runtime_contract.yaml`, `docs/paper_runtime_contract.yaml`.
-- **Registry:** `docs/experiment_registry.md`; storyline `research_story/` ch.00–11 +
+- **Registry:** `research/registry.yaml`; thesis dependency tree in `research/` +
   `registry.yaml`.
 - **Logs / artifacts:** single-cam `logs/visibility_comparison/<campaign>/`; studies
   `logs/studies/<study>/`; 4-cam `logs/multicamera_commissioning_bigwarehouse/`,

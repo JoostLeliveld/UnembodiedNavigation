@@ -75,7 +75,7 @@ Evidence files:
 - [`../docs/current_runtime_contract.yaml`](../docs/current_runtime_contract.yaml)
 - [`../docs/paper_vs_current/current/README.md`](../docs/paper_vs_current/current/README.md)
 - [`../paper_artifacts/figures/current_surface/robustness_spread_current.png`](../paper_artifacts/figures/current_surface/robustness_spread_current.png)
-- [`../docs/experiment_registry.md`](../docs/experiment_registry.md)
+- [`../research/registry.yaml`](../research/registry.yaml)
 - Historical submitted-paper comparison: [`../docs/paper_vs_current/paper/README.md`](../docs/paper_vs_current/paper/README.md)
 
 Additional archived campaign diagnostics from the submitted-paper era:

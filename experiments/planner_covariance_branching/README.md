@@ -34,9 +34,7 @@ next_action: Reuse its route-discrimination pattern for EXP-USABLE.
 <!-- RESEARCH-METADATA:END -->
 
 
-**Chapter served:** [09 — multicamera handover & fusion](../../research_story/09_multicamera_handover_fusion/)
-(ICRA-2027 observation-model workstream; index in
-[`modules/07_multicam_handover_fusion`](../../modules/07_multicam_handover_fusion/README.md)).
+**Claim served:** C3; reuse this offline discrimination pattern for `EXP-USABLE`.
 
 ## Question
 

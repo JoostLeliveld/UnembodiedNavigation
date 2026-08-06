@@ -50,8 +50,8 @@ next_action: Decide whether this is required infrastructure for EXP-USABLE or su
 into a metric ground position with an honest covariance — logical, standard, and
 commissionable by an integrator?
 
-**Chapters served.** `research_story/04_factorised_observation_model` (the observation model)
-and `research_story/09_multicamera_handover_fusion` (per-camera covariance and fusion).
+**Claims served.** C1 (quality representation) and C2 (estimation), as registered in
+`research/registry.yaml`.
 Supersedes the *correction* line in `experiments/external_camera_bias_model/`: that study's
 audit findings stand, its fitted artifacts (v2, v4) do not.
 
@@ -69,12 +69,26 @@ Estimand: the vertical projection of the robot's `base_footprint` origin onto th
 |---|---|---|
 | 1 | **Object model = the URDF visual meshes** (body box, two tyres, LiDAR puck), assembled in the `base_footprint` frame | The semantic mask renders the visual meshes, not the collision primitives, and they differ by 6.8 mm at the top. A bounding cylinder is wrong by −4.3 px in width. |
 | 2 | **Pixel statistic = the box centre**: `u = u_centre`, `v = v_bottom + 0.5·(v_top − v_bottom)` | Chosen at design time by minimising yaw-marginal error over a CAD grid. The α curve is a plateau over [0.3, 0.6]; a pre-registered tie-break prefers the named statistic. |
-| 3 | **Yaw-aware inversion**: Gauss-Newton on `(x, y)` so the modelled box statistic matches the observed one, at the filter's current heading | The dominant error is the body's 32 mm x offset seen through the heading. Conditioning on heading takes 50.4 mm → **17.9 mm**, and still wins at 45° of heading error. |
-| 3b | **Fallback when heading is unavailable or unreliable**: back-project the box centre onto the plane `z* = 0.085 m` | Closed form, no iteration, no heading. 50.4 mm. Both arms share the same object model and statistic, so the fallback is a degradation, not a different method. |
+| 3 | **Inversion: back-project the box centre onto the plane `z* = 0.085 m`** | Closed form, one matrix multiply, no heading input, no iteration. **50.4 mm, unbiased.** |
 | 4 | **Validity gate**: predict the box size at the solved position and gate on its Mahalanobis distance | Catches border clipping and shelf occlusion. Size is a gate, never an estimator — 1 px of box height is 0.89 m of range. |
 
-`z* = 0.085 m` is *derived* (it minimises the CAD yaw-marginal error), not chosen. Contrast
-the deployed `contact_z_m = 0.05`, a free operator constant worth 94 mm of radial bias.
+`z* = 0.085 m` is *derived* (it minimises the CAD heading-marginal error), not chosen.
+Contrast the deployed `contact_z_m = 0.05`, a free operator constant worth 94 mm of radial
+bias.
+
+**Decision, 2026-08-06: the heading-blind path above is the one we carry.** e5 showed that
+conditioning the inversion on the filter's heading estimate reaches 17.9 mm instead of
+50.4 mm, and that it still beats heading-blind up to 45° of heading error. It is deliberately
+**not** adopted: it needs an iterative solve, a heading-quality monitor with a fallback, and a
+defence of the heading estimate itself. 5 cm unbiased is enough, and this version is defensible
+in four sentences. The heading-aware arm stays recorded as measured headroom, not as method.
+
+Runtime: `reliability.projection.project_box_to_world` /
+`project_box_to_world_with_covariance`, with the constants frozen alongside them.
+`perception.core.yolo_selection.select_best_detection(pixel_source='bbox_center')` emits the
+matching pixel; the default is still `bbox_bottom`, so nothing changes until a config opts in.
+The statistic and its plane are **one choice** — the box centre with the old contact plane is
+worse than either pairing.
 
 ## 2. Calibration procedure
 
@@ -102,9 +116,9 @@ Two terms, because they scale differently: the pixel term grows with range (radi
 metres. Collapsing them into one pixel constant gave NEES running 26 at short range to 7 at
 long range; separating them gives **2.83, uniform 2.54–3.18 across camera, range and yaw**.
 
-Drop `Σ_yaw` when the yaw-aware arm is active — it exists only to cover the heading you
-chose not to use — and replace it with `J·(∂/∂θ)·σ_θ²·(∂/∂θ)ᵀ` from the filter's heading
-variance. e5's degradation curve is the empirical version of that term.
+`Σ_yaw` is the price of being heading-blind, and since we chose to be heading-blind it is
+always on. `project_box_to_world_with_covariance(..., sigma_yaw_m=None)` drops it, and exists
+only so the heading-aware arm can be tried later without touching this code.
 
 ## 4. Assumptions
 
@@ -120,9 +134,11 @@ variance. e5's degradation curve is the empirical version of that term.
 5. **The detector's box tracks the true silhouette bbox**, which holds because it was trained
    on exactly that label definition. A detector trained on differently-defined boxes would
    need C5 re-run and could need a non-zero Δ.
-6. **Heading is available to ~30° or better** for the yaw-aware arm. Break-even is 45°.
-7. **Detections are unoccluded and fully in frame.** Every sample in the evidence base is
+6. **Detections are unoccluded and fully in frame.** Every sample in the evidence base is
    `occlusion_state == clear`.
+
+The heading-blind choice means there is **no assumption about heading at all** — that is the
+point of it. The 30 mm `Σ_yaw` term is what buys that freedom.
 
 ## 5. Weaknesses
 
@@ -141,11 +157,12 @@ variance. e5's degradation curve is the empirical version of that term.
    and occlusion is where the bottom-edge path fails worst — so the *comparison* against the
    deployed path is also untested in its worst regime.
 5. **Open-loop only.** No closed-loop run, no navigation claim. The 9.21 chi-square gate and
-   `pixel_max_correction_jump_m` interact with a 50 mm→18 mm change in a way nobody has
+   `pixel_max_correction_jump_m` interact with a 110 mm→50 mm change in a way nobody has
    measured.
-6. **The yaw-aware arm is iterative.** Gauss-Newton converges in 2–3 steps from the
-   closed-form seed, but it is no longer a single matrix multiply, and its runtime cost in
-   the ~3 Hz perception loop is unmeasured.
+6. **We are knowingly leaving 30 mm on the table.** `Σ_yaw` is the largest term and it exists
+   only because the estimator ignores a heading estimate the filter already has. That is a
+   deliberate simplicity trade, not an oversight — but a reviewer may well ask, and the answer
+   has to be "measured, 17.9 mm, chose not to".
 7. **Single-robot evidence.** All 1849 samples are one TurtleBot3 Burger in one world.
 
 ## 6. Failure modes
@@ -154,7 +171,7 @@ variance. e5's degradation curve is the empirical version of that term.
 |---|---|---|---|---|
 | Clipped box at the image border | robot at FOV edge | box centre wrong by half the clip; error grows without bound | size-consistency gate (step 4) | **no** |
 | Bottom occluded by a rack | robot behind foreground shelf | 1.47 cm per clipped pixel through the centre path, 2.91 through the bottom path | size gate + `visible_height_fraction` | **no** |
-| Heading estimate diverges | filter loses heading lock | yaw-aware arm degrades past 45° error and becomes **worse** than yaw-blind | monitor `σ_θ`; fall back to arm 3b above a threshold | curve measured, switch not built |
+| — (heading is not an input) | — | the heading-blind path cannot fail this way; that is what `Σ_yaw` buys | n/a | n/a |
 | Wrong object model | different robot, added payload, changed LiDAR | radial bias returns; ~7 mm of height error ≈ 13 mm of position error | compare predicted vs observed box height as a monitor | partially (mesh vs primitives) |
 | Extrinsic drift | camera knocked or sags | direct position bias; this method has **no** self-check for it | the existing calib-drift health monitor is the right owner | not in this study |
 | Detector regresses to a different box convention | retrain, different label policy | Δ becomes non-zero and per-camera | C5 re-run gates it | mechanism in place |

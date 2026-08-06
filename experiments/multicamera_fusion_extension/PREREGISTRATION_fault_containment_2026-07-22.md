@@ -8,7 +8,7 @@
 > without touching the headline. Content below is not restated in Tier 1, only referenced.
 
 Camera-network fault generalization for the ICRA paper (framing-of-record:
-[`ICRA_FRAMING_2026-07-22`](../../modules/07_multicam_handover_fusion/framings/ICRA_FRAMING_2026-07-22.md)).
+[`research/papers/correlated_error_icra.md`](../../research/papers/correlated_error_icra.md)).
 **E6 (calibration drift → containment) is the Tier-2 centrepiece.** E5 (dropout/latency) and
 E7 (selection-vs-fusion) share its metrics, harness, and statistical design and are
 pre-registered here together so the whole multi-camera fault-tolerance claim is frozen at once.

@@ -1,7 +1,7 @@
 # Pre-registration — safe navigation on a realistic infrastructure-camera network (two-tier)
 
 Experiment contract for the ICRA framing-of-record
-([`ICRA_FRAMING_2026-07-22`](../../modules/07_multicam_handover_fusion/framings/ICRA_FRAMING_2026-07-22.md)).
+([`research/papers/correlated_error_icra.md`](../../research/papers/correlated_error_icra.md)).
 **Two tiers, one story:**
 
 - **TIER 1 — single-camera core (PRIMARY, headline).** Closed-loop navigation under mid-mission

@@ -2,7 +2,7 @@
 #
 # This file deliberately describes collection and offline replay only.  The
 # active planner must remain disabled until the mapping, D2 overlap, and replay
-# gates below pass; see research_story/09_multicamera_handover_fusion.
+# gates below pass; see research/registry.yaml entry EXP-COMMISSION.
 protocol_id: fullwarehouse_four_camera_paper_v2
 evaluation_world: warehouse_full_4cam.world.sdf
 method_development_world: warehouse_aws.world.sdf
@@ -11,7 +11,7 @@ two_world_rule: true
 protocol_amendments:
   - date: 2026-07-17
     before_confirmatory_collection: true
-    change: central_overlap_sweep moved from y=-0.30 m to y=0.30 m
+    change: central_overlap_sweep moved from y=-0.30 m to y=0.60 m to preserve the 0.25 m pillar-clearance contract for every lateral offset
     reason: the pre-registered -0.50 m lateral variant intersected the central support pillar
     method_impact: none; route safety correction only
 

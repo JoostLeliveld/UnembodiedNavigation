@@ -104,22 +104,6 @@ tasks:
     goal:
       x: 3.1
       y: 4.6
-  warehouse_meerhoven.world.sdf:
-  - name: meerhoven_haul_lane_sanity
-    description: Direct-goal simulator and detector sanity run along the main haul lane. Both conditions should complete without a visibility-driven route difference; use this before any paper-facing comparison.
-    tier: sanity
-    claim: null
-    focus: twelve_camera_transport_and_state_sanity
-    start: {x: -12.0, y: -4.9, z: 0.05, yaw: 0.0}
-    goal: {x: 12.0, y: -4.9}
-  - name: meerhoven_west_to_returns_direct
-    description: Waypoint-free infrastructure-scale evaluation from the visible charging area to the returns approach. The planner must negotiate storage, cross-aisle and returns geometry while camera availability, overlap and handover vary. No particular route outcome is assumed.
-    tier: exploratory
-    claim: assistive_infrastructure_observability_and_handover
-    focus: twelve_camera_occlusion_handover_direct_goal
-    start: {x: -9.0, y: 7.9, z: 0.05, yaw: 0.0}
-    goal: {x: 12.2, y: 4.4}
-
   warehouse_full_4cam.world.sdf:
   - name: full_traverse_handover
     description: 'Flagship four-camera traverse: from the south dock apron through

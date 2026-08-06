@@ -96,7 +96,7 @@ Campaign logs (logs/visibility_comparison/<campaign>/, logs/studies/<study>/)
 | Campaign conditions | `scripts/visibility_comparison/warehouse_visibility_campaign_honest_v2.yaml` | C0 `geometric_shortest_path`, C1 `constant_R_efe`, C2 `visibility_aware_efe` + `gp_artifact` |
 | Run logger (single cam) | `src/experiments/experiments/nodes/experiment_logger.py` | buffers `/ground_truth_tf` (line 761) for eval-only error columns |
 | Replay / fusion modes | `src/reliability/reliability/replay.py:23` | `ReplayMode`: R0 odom-only … R4 current-GP-R, M5 sequential fusion, M6/M7/M8 selection, B6 health-aware fusion |
-| Health monitoring | `reliability` health_ewma (WP5) + `experiments/single_camera_uigp_reliability/tools/wp5_drift_detection.py` | innovation-driven per-camera health |
+| Health monitoring | `reliability` health_ewma + `experiments/calibration_drift_lifecycle/` | innovation-driven per-camera health and calibration expiry |
 | Metrics (canonical) | `scripts/shared/metrics.py` | Brier/logloss/AUC/Spearman/ECE — never hand-rolled |
 | Log loading (canonical) | `scripts/geometry_visibility/campaign_metrics.py` | `load_run/load_detections` assert canonical columns |
 | Tests | `tests/` (root pytest via `pyproject.toml`/`conftest.py`) | contract, firewall, manifest, replay tests exist |

@@ -45,10 +45,8 @@ next_action: None; use as locked paper evidence.
 calibration is applied, what residual remains in an external camera network —
 and is that remainder homogeneous enough for the planner's single scalar `R`?
 
-**Chapter served.** `research_story/09_multicamera_handover_fusion` (selection,
-handover, fusion without overconfidence), with the extrapolation-coverage result
-feeding back to `research_story/08_large_warehouse_scaling`. This is the
-multi-camera paper-2 line (ch.07-11).
+**Claim served.** C1. This is locked evidence for
+[`research/papers/correlated_error_icra.md`](../../research/papers/correlated_error_icra.md).
 
 ## What is NOT ours
 

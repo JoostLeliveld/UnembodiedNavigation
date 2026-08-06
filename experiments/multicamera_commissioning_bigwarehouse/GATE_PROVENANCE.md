@@ -6,7 +6,7 @@ defaults, none is derived from data, and none originates in the
 `warehouse_aws` method-development world.** They were carried unchanged from
 the retired two-camera `warehouse_big` pilot. Two (`min_overlap_pairs: 30`,
 `max_overlap_outlier_rate: 0.10`) are pre-registered in
-`research_story/09_multicamera_handover_fusion/evidence.yaml`; the rest are
+`research/registry.yaml`; the rest are
 asserted. `config/paper_protocol.yaml` is now the frozen single source of
 truth for the paper campaign — module defaults are implementation details, not
 protocol.

@@ -34,9 +34,8 @@ next_action: None; locked supporting mechanism.
 <!-- RESEARCH-METADATA:END -->
 
 
-**Chapter served:** [09 — multicamera handover & fusion](../../research_story/09_multicamera_handover_fusion/)
-(ICRA-2027 observation-model workstream; index in
-[`modules/07_multicam_handover_fusion`](../../modules/07_multicam_handover_fusion/README.md)).
+**Claim served:** C1; paper scope in
+[`research/papers/correlated_error_icra.md`](../../research/papers/correlated_error_icra.md).
 
 ## Question
 

@@ -55,10 +55,8 @@ observation-model claim: the hit/miss mixture currently falls back to a constant
 truth — `r_t = z_t − h(μ_t^s)` — and subtract the state contribution explicitly:
 `C_t = H_t P_t^s H_tᵀ + R_cond(s_t)`.
 
-**Chapters served.** `research_story/01_operational_belief_and_logging` (PARTIAL;
-supplies the missing prior-belief/covariance-calibration evidence) and
-`research_story/04_factorised_observation_model` (PLANNED, `implemented_now: []`;
-supplies the conditional-accuracy half of the `p_use` × `R_cond` factorisation).
+**Claim served.** C1. This locked null result supplies the conditional-accuracy half of
+the `p_use` × `R_cond` factorisation and rules out sharper per-camera `R_cond` as the fix.
 
 ## Status — 2026-08-04
 
@@ -106,7 +104,7 @@ Headline adaptations:
 - The trust→covariance mapping is frozen (`reliability.covariance_mapping`). This
   study supplies its `R_good` endpoint; it does not add a mapping form.
 - The KF+RTS smoother behaviour originates in
-  `experiments/optionA_commissioning/exp5_trajectory_smoothing.py`; this study
+  the retired Option-A trajectory smoother; this study
   promotes it to a library, it does not invent it.
 - `p_use` is already selected (B2 FOV/range, per Gate 4). Not revisited.
 

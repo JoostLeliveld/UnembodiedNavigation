@@ -78,7 +78,7 @@ def _make_contact_bridge(context, *args, **kwargs):
 
 def generate_launch_description():
     # A--D are retained as named variables below for backwards-compatible
-    # launch APIs. Meerhoven adds E--L; build those declarations and isolated
+    # launch APIs. Optional larger camera registries add E--L; build those declarations and isolated
     # bridges mechanically so camera topic/model suffixes cannot drift apart.
     extra_camera_suffixes = tuple("efghijkl")
     extra_segmentation_args = []

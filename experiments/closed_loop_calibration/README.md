@@ -56,8 +56,8 @@ safe operating envelope — is a closed-loop claim. Does the gated 2-DOF per-cam
 correction change breach rate, contacts, goal completion, or belief calibration when the
 robot is actually driving on it?
 
-**Chapter served.** `research_story/09_multicamera_handover_fusion`; ICRA framing-of-record
-C1, with C5 as the mechanism.
+**Claims served.** C3 and C4; this is the active gate in
+[`research/papers/correlated_error_icra.md`](../../research/papers/correlated_error_icra.md).
 
 **Register status.** Runway item **#2** — the last genuinely open item.
 

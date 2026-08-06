@@ -48,7 +48,7 @@ dominant error is per-camera systematic bias; correcting it is a gated GT-free d
 from a commissioning result into the **lifecycle capability C3 already claims**. Without
 it, "correct the outliers, leave the rest raw" is a policy with no expiry date.
 
-**Chapter served.** `research_story/09_multicamera_handover_fusion`; ICRA addendum C3/C5.
+**Claims served.** C1 and the calibration-lifecycle portion of C6.
 
 ## Fault model (A4 + A8)
 

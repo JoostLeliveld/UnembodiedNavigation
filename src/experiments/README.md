@@ -48,7 +48,7 @@ Current packaged outcome across four tasks and five seeds per condition:
 
 See also:
 
-- [`../../docs/experiment_registry.md`](../../docs/experiment_registry.md)
+- [`../../research/registry.yaml`](../../research/registry.yaml)
 - [`../../docs/current_runtime_contract.yaml`](../../docs/current_runtime_contract.yaml)
 - [`../../docs/runtime_dataflow.md`](../../docs/runtime_dataflow.md)
 - [`config/README.md`](config/README.md)

@@ -57,7 +57,7 @@ def test_route_manifest_is_operational_only_and_tied_to_study_config() -> None:
 
     assert manifest["contains_ground_truth"] is False
     assert len(manifest["study_config_sha256"]) == 64
-    assert manifest["waypoints_warehouse_xy_m"] == [{"x": -1.8, "y": 0.3}, {"x": 1.8, "y": 0.3}]
+    assert manifest["waypoints_warehouse_xy_m"] == [{"x": -1.8, "y": 0.6}, {"x": 1.8, "y": 0.6}]
     assert manifest["waypoints_spawn_local_xy_m"] == [{"x": 0.0, "y": 0.0}, {"x": 3.6, "y": 0.0}]
 
 

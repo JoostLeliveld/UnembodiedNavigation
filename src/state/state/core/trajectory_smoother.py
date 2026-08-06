@@ -1,11 +1,10 @@
 """Offline KF + RTS smoother over 2-D position — the operational training belief.
 
 Promotes the one-off smoother in
-``experiments/optionA_commissioning/exp5_trajectory_smoothing.py::smooth_run``
+the retired Option-A commissioning study (recoverable from the consolidation tag)
 to an importable library, so that a *reusable* smoothed trajectory belief
 ``(mu_t^s, P_t^s)`` can back the operational residual used to estimate the
-per-camera conditional covariance ``R_cond``
-(``experiments/operational_residual_rcond/PLAN.md`` R1).
+per-camera conditional covariance ``R_cond`` (registry experiment ``EXP-RCOND``).
 
 What this is
 ------------

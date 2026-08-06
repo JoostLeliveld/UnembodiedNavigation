@@ -47,6 +47,8 @@ def main() -> int:
         for path in candidates:
             if not path.is_file() or path.suffix.lower() not in {".md", ".py", ".yaml", ".yml", ".json"}:
                 continue
+            if path.resolve() == Path(__file__).resolve():
+                continue
             try:
                 text = path.read_text(encoding="utf-8")
             except UnicodeDecodeError:

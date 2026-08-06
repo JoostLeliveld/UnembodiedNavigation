@@ -3,7 +3,7 @@ import pytest
 from perception.nodes.scheduled_camera_detector_node import _camera_specs
 
 
-def test_camera_specs_scale_to_meerhoven_a_through_l():
+def test_camera_specs_scale_to_twelve_camera_registry():
     ids = [f"camera_{letter}" for letter in "ABCDEFGHIJKL"]
     models = ["external_camera", *[f"external_camera_{letter.lower()}" for letter in "BCDEFGHIJKL"]]
     topics = [f"/{model}/image_raw" for model in models]

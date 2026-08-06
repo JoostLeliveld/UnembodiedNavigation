@@ -280,7 +280,7 @@ push through rather than stall.
 
 - New cost terms (forbidden by the clean-EFE invariant).
 - World, GP, or YOLO retraining; see the artifact-generation scripts and
-  `docs/experiment_registry.md` before regenerating current assets.
+  `research/registry.yaml` before regenerating current assets.
 
 ---
 

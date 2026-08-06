@@ -31,7 +31,7 @@ def test_service_bridges_use_service_syntax_not_topic_type_syntax():
     assert "ControlWorld@gz.msgs" not in launch
 
 
-def test_meerhoven_extra_camera_bridges_cover_e_through_l():
+def test_optional_extra_camera_bridges_cover_e_through_l():
     launch = (ROOT / "src/sim/launch/bringup_sim.launch.py").read_text(encoding="utf-8")
 
     assert 'extra_camera_suffixes = tuple("efghijkl")' in launch

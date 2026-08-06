@@ -41,8 +41,8 @@ next_action: Use as supporting commissioning evidence; do not claim end-to-end t
 <!-- RESEARCH-METADATA:END -->
 
 
-**Chapter served:** [09 — multicamera handover & fusion](../../research_story/09_multicamera_handover_fusion/)
-· framing: [`ICRA_FRAMING_ADDENDUM_2026-08-04`](../../modules/07_multicam_handover_fusion/framings/ICRA_FRAMING_ADDENDUM_2026-08-04.md)
+**Claims served:** C1 and C6; paper scope in
+[`research/papers/correlated_error_icra.md`](../../research/papers/correlated_error_icra.md).
 
 ## Question
 

@@ -86,8 +86,8 @@ collection:
       goal: {x: 1.80, y: 3.30}
     - name: central_overlap_sweep
       purpose: D2 adjacent-camera overlap and source-switch sweep
-      start: {x: -1.80, y: 0.30, yaw: 0.0}
-      goal: {x: 1.80, y: 0.30}
+      start: {x: -1.80, y: 0.60, yaw: 0.0}
+      goal: {x: 1.80, y: 0.60}
   repeats_per_route: 5
   lateral_offsets_m: [-0.5, 0.0, 0.5]
   speeds_mps: [0.12, 0.20]

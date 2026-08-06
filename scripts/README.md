@@ -50,5 +50,5 @@ The paper figure scripts turn the curated outputs into the public visual story:
 
 Older route probes, decomposition studies, and pre-Gazebo diagnostics are kept
 only when they are useful for reproducing a final figure or explaining a method
-choice. They are not paper evidence unless `docs/experiment_registry.md` lists
+choice. They are not paper evidence unless `research/registry.yaml` lists
 their generated artifact.
