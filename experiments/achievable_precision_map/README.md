@@ -1,5 +1,45 @@
 # achievable_precision_map — what the robot can KNOW, not just where it is SEEN
 
+<!-- RESEARCH-METADATA:START (generated; edit research/registry.yaml) -->
+
+```yaml
+experiment_id: EXP-PRECISION
+status: LOCKED
+claim_ids:
+- C1
+- C3
+- C5
+assumption_ids:
+- A03
+- A11
+- A13
+- A16
+reviewer_question_ids:
+- RQ01
+- RQ09
+- RQ13
+figure_ids:
+- F05
+dependencies:
+- ASSET-RUNTIME
+- ASSET-PLANNER
+operational_inputs:
+- availability
+- odometry_growth
+- camera_residual_floor
+evaluation_only_inputs: []
+primary_metric: floor fraction where availability and precision select different cameras
+promotion_gate: Demonstrate nontrivial decision disagreement.
+evidence_paths:
+- logs/studies/achievable_precision_map/exp1_precision_vs_coverage/summary.json
+archive_rule: Preserve summary map and generator.
+next_action: Use the locked fields in camera-management experiments only after source
+  comparison.
+```
+
+<!-- RESEARCH-METADATA:END -->
+
+
 **Chapter served:** [09 — multicamera handover & fusion](../../research_story/09_multicamera_handover_fusion/)
 · fills §VIII of [`PAPER_DRAFT_abstract_intro_2026-08-04`](../../modules/07_multicam_handover_fusion/framings/PAPER_DRAFT_abstract_intro_2026-08-04.md)
 

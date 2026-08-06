@@ -1,5 +1,44 @@
 # operational_residual_rcond — conditional camera covariance without ground truth
 
+<!-- RESEARCH-METADATA:START (generated; edit research/registry.yaml) -->
+
+```yaml
+experiment_id: EXP-RCOND
+status: LOCKED
+claim_ids:
+- C1
+assumption_ids:
+- A08
+- A12
+- A13
+- A15
+reviewer_question_ids:
+- RQ11
+- RQ14
+figure_ids:
+- F02
+dependencies:
+- ASSET-RUNTIME
+operational_inputs:
+- camera_id
+- timestamped_detection
+- leave_one_out_reference
+evaluation_only_inputs:
+- ground_truth_pose
+primary_metric: held-out covariance calibration
+promotion_gate: Beat pooled covariance on held-out evidence.
+evidence_paths:
+- logs/studies/operational_residual_rcond/exp1_timing_and_coverage/timing_and_coverage.json
+- logs/studies/operational_residual_rcond/exp2_operational_rcond/operational_rcond.json
+- logs/studies/operational_residual_rcond/exp3_two_dof_rcond/operational_rcond.json
+archive_rule: Retain the null result permanently.
+next_action: No promotion; per-camera conditional covariance tied or lost to pooled
+  covariance.
+```
+
+<!-- RESEARCH-METADATA:END -->
+
+
 **Question.** Can the per-camera conditional measurement covariance `R_cond,c`
 be estimated from **operational signals only** — wheel odometry plus the camera
 network itself — instead of from a ground-truth-referenced residual?

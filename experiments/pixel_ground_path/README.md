@@ -1,5 +1,51 @@
 # pixel_ground_path — the locked pixel→ground path for infrastructure-camera localization
 
+<!-- RESEARCH-METADATA:START (generated; edit research/registry.yaml) -->
+
+```yaml
+experiment_id: EXP-PIXEL-GROUND
+status: READY
+claim_ids:
+- C1
+- C2
+assumption_ids:
+- A01
+- A02
+- A03
+- A08
+- A09
+- A14
+reviewer_question_ids:
+- RQ08
+- RQ14
+figure_ids:
+- F01
+- F07
+dependencies:
+- ASSET-RUNTIME
+operational_inputs:
+- pixel_statistic
+- camera_calibration
+- robot_geometry
+evaluation_only_inputs:
+- ground_truth_pose
+- rendered_silhouette
+primary_metric: held-out calibration of propagated ground covariance
+promotion_gate: Promote only the minimal calibrated path that improves held-out covariance
+  honesty.
+evidence_paths:
+- experiments/pixel_ground_path/README.md
+- logs/studies/pixel_ground_path/e4_covariance_calibration/summary.json
+- logs/studies/pixel_ground_path/e5_yaw_aware_headroom/summary.json
+archive_rule: Preserve summaries and the chosen minimal model; archive superseded
+  fitted corrections.
+next_action: Decide whether this is required infrastructure for EXP-USABLE or supporting
+  analysis only.
+```
+
+<!-- RESEARCH-METADATA:END -->
+
+
 **Question.** What is the ONE defensible way to turn a detection in a fixed overhead camera
 into a metric ground position with an honest covariance — logical, standard, and
 commissionable by an integrator?

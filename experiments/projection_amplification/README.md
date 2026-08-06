@@ -1,5 +1,39 @@
 # projection_amplification — is the spatial camera noise detector variation or geometry?
 
+<!-- RESEARCH-METADATA:START (generated; edit research/registry.yaml) -->
+
+```yaml
+experiment_id: EXP-PROJ-AMP
+status: LOCKED
+claim_ids:
+- C1
+assumption_ids:
+- A01
+- A02
+- A08
+- A14
+reviewer_question_ids:
+- RQ14
+figure_ids:
+- F01
+dependencies:
+- ASSET-RUNTIME
+operational_inputs:
+- pixel_measurement
+- calibration
+evaluation_only_inputs:
+- ground_truth_pose
+primary_metric: ground-error amplification ratio
+promotion_gate: Separate projection geometry from detector residuals.
+evidence_paths:
+- logs/studies/projection_amplification/exp1_geometry_vs_detector/summary.json
+archive_rule: Preserve summary and analysis script.
+next_action: None; locked supporting mechanism.
+```
+
+<!-- RESEARCH-METADATA:END -->
+
+
 **Chapter served:** [09 — multicamera handover & fusion](../../research_story/09_multicamera_handover_fusion/)
 (ICRA-2027 observation-model workstream; index in
 [`modules/07_multicam_handover_fusion`](../../modules/07_multicam_handover_fusion/README.md)).

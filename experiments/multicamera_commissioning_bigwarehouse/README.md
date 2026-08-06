@@ -1,5 +1,50 @@
 # Full-Warehouse Four-Camera Commissioning
 
+<!-- RESEARCH-METADATA:START (generated; edit research/registry.yaml) -->
+
+```yaml
+experiment_id: EXP-COMMISSION
+status: LOCKED
+claim_ids:
+- C1
+- C6
+assumption_ids:
+- A01
+- A03
+- A08
+- A10
+- A14
+- A15
+- A16
+reviewer_question_ids:
+- RQ07
+- RQ09
+- RQ12
+figure_ids:
+- F01
+- F03
+dependencies:
+- ASSET-RUNTIME
+operational_inputs:
+- camera_frames
+- detections
+- calibration
+evaluation_only_inputs:
+- ground_truth_pose
+primary_metric: held-out calibration and commissioning readiness
+promotion_gate: Frozen detector calibration and provenance pass the readiness contract.
+evidence_paths:
+- logs/studies/multicamera_commissioning_bigwarehouse/paper_readiness_v1/readiness_status.json
+- logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v3/projection_calibration.json
+- experiments/multicamera_commissioning_bigwarehouse/GATE_PROVENANCE.md
+archive_rule: Keep chosen captures manifests calibrations and detector; cold-store
+  superseded raw captures.
+next_action: Freeze v2 and v3 as immutable campaign arms.
+```
+
+<!-- RESEARCH-METADATA:END -->
+
+
 > **Retargeted 2026-07-15 — world consolidation.** This study commissions the
 > four fixed external cameras in `warehouse_full_4cam.world.sdf`. The thesis
 > keeps only `warehouse_aws` and `warehouse_full_4cam`; the former auxiliary

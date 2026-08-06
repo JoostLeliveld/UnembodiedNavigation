@@ -1,5 +1,46 @@
 # network_commissioning_realism — would this commission in a real warehouse?
 
+<!-- RESEARCH-METADATA:START (generated; edit research/registry.yaml) -->
+
+```yaml
+experiment_id: EXP-NET-COMMISSION
+status: LOCKED
+claim_ids:
+- C1
+- C6
+assumption_ids:
+- A01
+- A10
+- A12
+- A13
+- A15
+reviewer_question_ids:
+- RQ07
+- RQ11
+- RQ12
+figure_ids:
+- F03
+- F09
+dependencies:
+- ASSET-RUNTIME
+operational_inputs:
+- camera_residuals
+- leave_one_out_reference
+- commissioning_baseline
+evaluation_only_inputs:
+- ground_truth_pose
+primary_metric: agreement between operational and truth-based commissioning decisions
+promotion_gate: Recover the actionable camera decision without operational truth leakage.
+evidence_paths:
+- logs/studies/network_commissioning_realism/exp1_gate_without_truth/summary.json
+archive_rule: Preserve summary provenance and negative camera decisions.
+next_action: Use as supporting commissioning evidence; do not claim end-to-end truth-free
+  calibration.
+```
+
+<!-- RESEARCH-METADATA:END -->
+
+
 **Chapter served:** [09 — multicamera handover & fusion](../../research_story/09_multicamera_handover_fusion/)
 · framing: [`ICRA_FRAMING_ADDENDUM_2026-08-04`](../../modules/07_multicam_handover_fusion/framings/ICRA_FRAMING_ADDENDUM_2026-08-04.md)
 

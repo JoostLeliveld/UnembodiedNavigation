@@ -1,5 +1,43 @@
 # calibration_drift_lifecycle — does the commissioning gate survive into service?
 
+<!-- RESEARCH-METADATA:START (generated; edit research/registry.yaml) -->
+
+```yaml
+experiment_id: EXP-DRIFT
+status: LOCKED
+claim_ids:
+- C1
+- C6
+assumption_ids:
+- A01
+- A03
+- A12
+- A14
+reviewer_question_ids:
+- RQ04
+- RQ07
+- RQ14
+figure_ids:
+- F04
+dependencies:
+- ASSET-RUNTIME
+operational_inputs:
+- camera_residual_change
+- commissioning_baseline
+evaluation_only_inputs:
+- injected_pose_fault
+- ground_truth_pose
+primary_metric: drift detected before stale correction becomes harmful
+promotion_gate: Detection threshold precedes harm threshold across controlled faults.
+evidence_paths:
+- logs/studies/calibration_drift_lifecycle/exp1_stale_correction/drift_lifecycle.json
+archive_rule: Preserve summary fault ladder and figure.
+next_action: None; state controlled-injection scope explicitly.
+```
+
+<!-- RESEARCH-METADATA:END -->
+
+
 **Question.** The 2-DOF per-camera bias correction is fitted once at commissioning
 (assumption **A2**) and then deployed frozen. Cameras drift. Does a *stale* correction
 become harmful, and can the drift be detected with the same GT-free statistic the

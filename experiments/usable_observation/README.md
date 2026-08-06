@@ -1,5 +1,59 @@
 # usable_observation — learning p_use,c(s) for planning
 
+<!-- RESEARCH-METADATA:START (generated; edit research/registry.yaml) -->
+
+```yaml
+experiment_id: EXP-USABLE
+status: READY
+claim_ids:
+- C2
+- C3
+- C6
+assumption_ids:
+- A02
+- A03
+- A04
+- A05
+- A06
+- A08
+- A14
+- A15
+reviewer_question_ids:
+- RQ01
+- RQ02
+- RQ03
+- RQ04
+- RQ05
+- RQ06
+- RQ10
+- RQ12
+- RQ14
+figure_ids:
+- F07
+- F08
+- F09
+- F10
+dependencies:
+- ASSET-RUNTIME
+- ASSET-PLANNER
+operational_inputs:
+- candidate_pose
+- camera_geometry
+- operational_map_or_model
+evaluation_only_inputs:
+- ground_truth_visibility
+- detector_outcome
+primary_metric: held-out Brier score followed by offline route discrimination
+promotion_gate: Offline prediction and route gates precede all Gazebo campaign time.
+evidence_paths:
+- experiments/usable_observation/README.md
+archive_rule: Preserve all baselines null results manifests and split definitions.
+next_action: Complete the assumption register and define frozen source-benchmark splits.
+```
+
+<!-- RESEARCH-METADATA:END -->
+
+
 **Question:** where is the warehouse external-camera system likely to provide a *usable* robot
 localization observation, and can that probability improve navigation planning?
 

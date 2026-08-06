@@ -1,5 +1,56 @@
 # closed_loop_calibration — does the bias fix change closed-loop safety?
 
+<!-- RESEARCH-METADATA:START (generated; edit research/registry.yaml) -->
+
+```yaml
+experiment_id: EXP-CL-CAL
+status: ACTIVE
+claim_ids:
+- C3
+- C4
+assumption_ids:
+- A01
+- A03
+- A08
+- A10
+- A11
+- A12
+- A13
+- A14
+- A15
+reviewer_question_ids:
+- RQ07
+- RQ11
+- RQ13
+figure_ids:
+- F06
+dependencies:
+- ASSET-RUNTIME
+- ASSET-PLANNER
+- ASSET-CAMPAIGN
+operational_inputs:
+- camera_measurements
+- odometry_belief
+- frozen_calibration
+- camera_residual_floor
+evaluation_only_inputs:
+- ground_truth_pose
+- contact_events
+- nees
+primary_metric: clean-goal rate with breach rate and belief calibration as co-primary
+  diagnostics
+promotion_gate: Complete the preregistered 30-run matched campaign or retain a documented
+  null.
+evidence_paths:
+- experiments/closed_loop_calibration/README.md
+archive_rule: Preserve every completed run ledger summary provenance and null result.
+next_action: Rebuild and launch the frozen campaign from a clean checkout; then complete
+  the 30-run matrix.
+```
+
+<!-- RESEARCH-METADATA:END -->
+
+
 **Question.** Every observation-model result in this workstream is **offline**. C1 — the
 safe operating envelope — is a closed-loop claim. Does the gated 2-DOF per-camera bias
 correction change breach rate, contacts, goal completion, or belief calibration when the

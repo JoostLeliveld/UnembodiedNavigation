@@ -1,5 +1,46 @@
 # external_camera_bias_model — audit of the deployed along-bearing projection correction
 
+<!-- RESEARCH-METADATA:START (generated; edit research/registry.yaml) -->
+
+```yaml
+experiment_id: EXP-BIAS
+status: LOCKED
+claim_ids:
+- C1
+assumption_ids:
+- A01
+- A02
+- A08
+- A13
+- A15
+reviewer_question_ids:
+- RQ07
+- RQ11
+- RQ14
+figure_ids:
+- F01
+- F03
+dependencies:
+- ASSET-RUNTIME
+operational_inputs:
+- camera_id
+- pixel_measurement
+- calibration
+evaluation_only_inputs:
+- ground_truth_pose
+primary_metric: held-out residual bias and coverage
+promotion_gate: Bias mechanism repeats across held-out captures.
+evidence_paths:
+- logs/studies/external_camera_bias_model/exp1_residual_characterization/audit.json
+- logs/studies/external_camera_bias_model/exp2_two_dof_bias/summary.json
+- logs/studies/external_camera_bias_model/exp3_projection_pipeline_minimal/summary.json
+archive_rule: Preserve summaries provenance residual tables and decisive figures permanently.
+next_action: None; use as locked paper evidence.
+```
+
+<!-- RESEARCH-METADATA:END -->
+
+
 **Question.** After the *already-deployed* per-camera along-bearing projection
 calibration is applied, what residual remains in an external camera network —
 and is that remainder homogeneous enough for the planner's single scalar `R`?

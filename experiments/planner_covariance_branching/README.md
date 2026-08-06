@@ -1,5 +1,39 @@
 # planner_covariance_branching — is folding availability into R defensible?
 
+<!-- RESEARCH-METADATA:START (generated; edit research/registry.yaml) -->
+
+```yaml
+experiment_id: EXP-PLANNER-BRANCH
+status: LOCKED
+claim_ids:
+- C3
+assumption_ids:
+- A11
+- A15
+reviewer_question_ids:
+- RQ13
+- RQ14
+figure_ids:
+- F08
+dependencies:
+- ASSET-PLANNER
+operational_inputs:
+- prior_covariance
+- candidate_route
+- observation_model
+evaluation_only_inputs: []
+primary_metric: branch choice and predicted terminal covariance
+promotion_gate: Preserve as offline evidence; navigation claim still requires closed
+  loop.
+evidence_paths:
+- logs/studies/planner_covariance_branching/exp1_scaled_vs_branch/summary.json
+archive_rule: Preserve summary grid and null route cases.
+next_action: Reuse its route-discrimination pattern for EXP-USABLE.
+```
+
+<!-- RESEARCH-METADATA:END -->
+
+
 **Chapter served:** [09 — multicamera handover & fusion](../../research_story/09_multicamera_handover_fusion/)
 (ICRA-2027 observation-model workstream; index in
 [`modules/07_multicam_handover_fusion`](../../modules/07_multicam_handover_fusion/README.md)).

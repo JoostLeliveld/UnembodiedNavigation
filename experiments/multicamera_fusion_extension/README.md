@@ -1,5 +1,45 @@
 # Multicamera Fusion Extension
 
+<!-- RESEARCH-METADATA:START (generated; edit research/registry.yaml) -->
+
+```yaml
+experiment_id: EXP-CAM-MGMT
+status: PLANNED
+claim_ids:
+- C5
+assumption_ids:
+- A03
+- A10
+- A12
+- A13
+- A16
+reviewer_question_ids:
+- RQ09
+- RQ11
+- RQ13
+figure_ids:
+- F09
+- F10
+dependencies:
+- ASSET-RUNTIME
+- ASSET-PLANNER
+operational_inputs:
+- frozen_quality_fields
+- camera_health
+- belief_state
+evaluation_only_inputs:
+- ground_truth_pose
+primary_metric: localization calibration and navigation outcome under fixed fields
+promotion_gate: Begin only after the winning reliability fields are frozen.
+evidence_paths:
+- experiments/multicamera_fusion_extension/README.md
+archive_rule: Preserve naive-fusion nulls and all containment failures.
+next_action: Remain separate and downstream of EXP-USABLE.
+```
+
+<!-- RESEARCH-METADATA:END -->
+
+
 **Paper-extension plans (2026-07-17):** `plans/` holds the module-by-module
 implementation plan for the *Spatial and Instantaneous Reliability-Aware
 Multi-Camera Fusion and Planning* paper (Toro-Diz-baseline extension). Start
