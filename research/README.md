@@ -6,12 +6,14 @@ comparison is the next thesis chapter and is not a prerequisite for writing that
 
 ## Current focus
 
-**Research:** `EXP-CL-CAL`, the matched 30-run closed-loop calibration campaign.
+**Research:** `EXP-CL-CAL`, the closed-loop protocol and matched calibration campaign.
 
-**Gate:** complete the preregistered matrix, or preserve a fully documented null result.
+**Gate:** freeze scientifically valid calibration arms and analysis, pass readiness, then
+complete the matched matrix or preserve a fully documented null.
 
-**Next action:** run and analyse the complete preregistered v2-versus-v3 matrix, then
-promote its table and figure to `paper_artifacts/`.
+**Next action:** resolve the v2-v3-v4 arm conflict, primary endpoint, seed matrix, and
+world-field compatibility. Do not generate confirmatory configs or launch runs before those
+decisions pass the workstream gates.
 
 **Repository maintenance:** `MNT-CONSOLIDATION` is complete: the control plane, retirement
 wave, verified cold archive, clean rebuild, and bounded campaign launch all passed.
@@ -24,6 +26,8 @@ wave, verified cold archive, clean rebuild, and bounded campaign launch all pass
 - The numbered documents explain the science and do not carry competing progress state.
 - [`papers/`](papers/) selects thesis claims for publications without creating new claim
   systems.
+- [`workstreams/`](workstreams/) contains bounded handoffs for separate chats. It defines
+  ownership and dependencies but never overrides the registry.
 
 Regenerate and validate with:
 

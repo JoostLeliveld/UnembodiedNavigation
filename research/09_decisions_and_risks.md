@@ -70,6 +70,25 @@ manifest directory.
 | Four cameras are overgeneralized | Report geometric and bias diversity only. | Optical/hardware diversity is not tested. |
 | Better prediction does not help navigation | Treat C4 as open and preserve a null. | A null narrows the contribution to representation/estimation. |
 
+## Campaign hold — 2026-08-06
+
+`EXP-CL-CAL` remains the active scientific focus, but it is in protocol-resolution work, not
+campaign execution. Separate audits found four blockers:
+
+- the active v2-v3 arm definition predates held-out evidence that explicitly supersedes both
+  artifacts with the minimal v4 pipeline;
+- generated `_clv2.yaml` and `_clv3.yaml` currently contain seed 0 only, not the documented
+  seeds 0-4;
+- the analyzer lacks the preregistered NEES/NIS, correction acceptance/age, uncertainty
+  intervals, plot output, and complete-pair gate;
+- the current world changed after the July GP fields, whose manifests do not bind a world
+  hash.
+
+No confirmatory config generation, readiness run, or campaign is permitted until WS05
+resolves the scientific protocol and WS06 passes the resulting fail-closed readiness gate.
+The workstream ownership and paste-ready separate-chat handoffs live under
+`research/workstreams/`.
+
 ## Artifact hashes
 
 Detector, calibration, GP, and campaign hashes are canonical entries in `registry.yaml` and

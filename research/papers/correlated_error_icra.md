@@ -36,12 +36,18 @@ localization.
 - Availability and achievable precision choose different cameras on 15.7 percent of the
   reachable floor.
 
-## Required final evidence
+## Current decision gate
 
-The only active scientific gate is the matched 30-run closed-loop campaign. Report
-clean-goal rate, breaches/contacts, NEES/NIS calibration, path/time, and the full null if
-navigation does not change. Do not open the source-comparison chapter before this package is
-promoted.
+Do not launch the matched campaign yet. Newer held-out evidence for the minimal projection
+pipeline says v4 supersedes the currently specified v2/v3 pair. The protocol must first
+select a scientifically interpretable causal contrast, choose a primary endpoint, generate
+the complete seed matrix, and resolve current-world versus July-field compatibility.
+
+After those decisions and readiness pass, report clean-goal rate, breaches/contacts,
+NEES/NIS calibration, correction acceptance/age, path/time, and the full null if navigation
+does not change. A calibration-only contrast supports a calibration-consequence claim; it
+does not establish closed-loop benefit for the complete correlation-floor/LOO method. Do
+not open the source-comparison campaign before this package is promoted.
 
 ## Scope
 

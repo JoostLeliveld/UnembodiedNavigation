@@ -286,10 +286,10 @@ experiments:
       - logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v3/projection_calibration.json
       - experiments/multicamera_commissioning_bigwarehouse/GATE_PROVENANCE.md
     archive_rule: Keep chosen captures manifests calibrations and detector; cold-store superseded raw captures.
-    next_action: Freeze v2 and v3 as immutable campaign arms.
+    next_action: Preserve commissioning evidence; WS05 owns the superseding v2-v3-v4 campaign-arm decision.
 
   - experiment_id: EXP-CL-CAL
-    title: Matched closed-loop belief-honesty campaign
+    title: Closed-loop belief-honesty protocol and matched campaign
     study_path: experiments/closed_loop_calibration
     status: ACTIVE
     claim_ids: [C3, C4]
@@ -300,11 +300,11 @@ experiments:
     operational_inputs: [camera_measurements, odometry_belief, frozen_calibration, camera_residual_floor]
     operational_interface_inputs: [camera_measurements, odometry_belief, frozen_calibration, camera_residual_floor]
     evaluation_only_inputs: [ground_truth_pose, contact_events, nees]
-    primary_metric: clean-goal rate with breach rate and belief calibration as co-primary diagnostics
-    promotion_gate: Complete the preregistered 30-run matched campaign or retain a documented null.
+    primary_metric: Pending WS05 protocol choice among clean-goal rate belief calibration and run-level localization error
+    promotion_gate: Freeze scientifically valid calibration arms and analysis, pass campaign readiness, then complete the matched campaign or retain a documented null.
     evidence_paths: [experiments/closed_loop_calibration/README.md]
     archive_rule: Preserve every completed run ledger summary provenance and null result.
-    next_action: Run and analyse the complete preregistered 30-run v2-versus-v3 matrix.
+    next_action: Resolve the v2-v3-v4 arm conflict, primary endpoint, seed matrix, and world-field compatibility before generating configs or running readiness.
 
   - experiment_id: EXP-USABLE
     title: Usable-observation source benchmark foundation
@@ -368,6 +368,7 @@ artifacts:
   - {id: ART-DETECTOR-4CAM-V3, path: logs/perception_models/warehouse_yolo_detector_4cam_v3_960/model.pt, sha256: cb1f42499026ec363ce6d9331639487d23737068b6694e2c0377ee80e2e5bb80}
   - {id: ART-CALIB-V2, path: logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v2/projection_calibration.json, sha256: 6b8b15890f694fb7c0055b06739ab80a37c9078f12cc22b17d5ee41bc352c583}
   - {id: ART-CALIB-V3, path: logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v3/projection_calibration.json, sha256: c3fab37d01790ff7751e2b1938c4d5bf822cf6891479ac6385dd6d514897bd0d}
+  - {id: ART-CALIB-V4, path: logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v4/projection_calibration.json, sha256: 31d60b8523c5e6dbe7987d74abffa9bbd5f89d8329a363fc1b4d135f23559d99}
   - {id: ART-GP-V1, path: logs/visibility_comparison/warehouse_visibility_gp_v1/gp_manifest.json, sha256: 383619706a146fe354c6041473dcc774eb4cd0e9d98a2ca4ad2fc50760274692}
   - {id: ART-CAMPAIGN-HONEST, path: logs/visibility_comparison/honest_campaign_v1/campaign_log.json, sha256: 4ea5b86c97ad9c37cbae00f385cd4a313bf0ade19c658b2fe35aecbfa10ee489}
   - {id: ART-CAMPAIGN-WHITENOISE, path: logs/visibility_comparison/whitenoise_campaign_v1/campaign_log.json, sha256: e657ca10600b83ae390636cb21a67e0aa53ddf23d926395ae0c267cc467d90c4}

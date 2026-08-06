@@ -37,14 +37,15 @@ evaluation_only_inputs:
 - ground_truth_pose
 - contact_events
 - nees
-primary_metric: clean-goal rate with breach rate and belief calibration as co-primary
-  diagnostics
-promotion_gate: Complete the preregistered 30-run matched campaign or retain a documented
-  null.
+primary_metric: Pending WS05 protocol choice among clean-goal rate belief calibration
+  and run-level localization error
+promotion_gate: Freeze scientifically valid calibration arms and analysis, pass campaign
+  readiness, then complete the matched campaign or retain a documented null.
 evidence_paths:
 - experiments/closed_loop_calibration/README.md
 archive_rule: Preserve every completed run ledger summary provenance and null result.
-next_action: Run and analyse the complete preregistered 30-run v2-versus-v3 matrix.
+next_action: Resolve the v2-v3-v4 arm conflict, primary endpoint, seed matrix, and
+  world-field compatibility before generating configs or running readiness.
 ```
 
 <!-- RESEARCH-METADATA:END -->
