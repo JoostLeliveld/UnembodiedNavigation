@@ -474,6 +474,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'waypoint_spacing_m', 'waypoint_arrival_radius_m',
         'local_replan_min_remaining_s', 'local_replan_on_waypoint_change',
         'latency_compensate_plan_handoff',
+        'local_controller_type',
         'cmd_publish_rate',
         'goal_prior_u_std_start', 'goal_prior_v_std_start',
         'goal_prior_u_std_final', 'goal_prior_v_std_final',

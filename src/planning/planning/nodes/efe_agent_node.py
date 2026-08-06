@@ -3,6 +3,7 @@
 import json
 import math
 import time
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -20,6 +21,170 @@ from planning.nodes.unicycle_planner_node import UnicyclePlannerNode
 from planning.planners.base_planner import UnicyclePlannerBase, extract_waypoints
 from planning.core.dynamics import unicycle_step
 from planning.core.efe_utils import wrap_angle
+
+
+def _preview_corner_speed_limit(
+    waypoints: np.ndarray,
+    nearest_index: int,
+    xy: np.ndarray,
+    *,
+    v_max: float,
+    preview_m: float = 0.90,
+    max_decel_mps2: float = 0.90,
+    corner_speed_mps: float = 0.30,
+    min_corner_angle_rad: float = 0.35,
+) -> float:
+    """Braking-feasible speed for the first meaningful corner ahead.
+
+    The global path is densely sampled, so this scans the upcoming polyline
+    instead of waiting for a large heading error at the corner itself.
+    """
+
+    points = np.asarray(waypoints, dtype=float)
+    if points.ndim != 2 or points.shape[0] < 3 or points.shape[1] < 2:
+        return float(v_max)
+    j = int(np.clip(nearest_index, 0, len(points) - 1))
+    first_corner_index = max(j, 1)
+    distance_m = float(
+        np.linalg.norm(
+            points[first_corner_index, :2] - np.asarray(xy, dtype=float)[:2]
+        )
+    )
+    limit = float(v_max)
+    for k in range(first_corner_index, len(points) - 1):
+        if k > first_corner_index:
+            distance_m += float(np.linalg.norm(points[k, :2] - points[k - 1, :2]))
+        if distance_m > preview_m:
+            break
+        incoming = points[k, :2] - points[k - 1, :2]
+        outgoing = points[k + 1, :2] - points[k, :2]
+        in_norm = float(np.linalg.norm(incoming))
+        out_norm = float(np.linalg.norm(outgoing))
+        if in_norm < 1.0e-6 or out_norm < 1.0e-6:
+            continue
+        cosine = float(np.clip(np.dot(incoming, outgoing) / (in_norm * out_norm), -1.0, 1.0))
+        corner_angle = math.acos(cosine)
+        if corner_angle < min_corner_angle_rad:
+            continue
+        allowed = math.sqrt(
+            max(corner_speed_mps, 0.0) ** 2
+            + 2.0 * max(max_decel_mps2, 0.0) * max(distance_m, 0.0)
+        )
+        limit = min(limit, allowed)
+    return float(np.clip(limit, 0.0, v_max))
+
+
+def _ff_fb_forward_speed(
+    nominal_v: float,
+    corner_cap: float,
+    angular_velocity: float,
+    heading_error: float,
+    *,
+    v_max: float,
+    yaw_gate_rad: float,
+) -> float:
+    """Choose FF/FB translation speed, pivoting for large heading errors.
+
+    Maintaining even the old 0.25 m/s floor during a 90-degree waypoint turn
+    makes a differential-drive robot orbit a close waypoint.  The path tangent
+    then keeps rotating and the waypoint may never be reached.  Pivot first,
+    while retaining the 1 m/s ceiling on aligned straights.
+    """
+    if abs(float(heading_error)) > float(yaw_gate_rad):
+        return 0.0
+    lateral_cap = (
+        float(v_max)
+        if abs(float(angular_velocity)) < 1.0e-6
+        else 0.65 / abs(float(angular_velocity))
+    )
+    return float(np.clip(
+        min(float(nominal_v), float(corner_cap), lateral_cap),
+        0.05,
+        float(v_max),
+    ))
+
+
+def _tracking_waypoints(
+    waypoints,
+    waypoint_index: int,
+    state_xy: np.ndarray,
+) -> np.ndarray | None:
+    """Return the remaining path with the current state as its first point."""
+
+    if not waypoints:
+        return None
+    target_index = int(np.clip(waypoint_index, 0, len(waypoints) - 1))
+    # Before the first waypoint the live state is the only valid segment
+    # origin. After a waypoint transition, retain the previous route corner as
+    # the segment anchor. Prepending the live state on every cycle erased
+    # cross-track error and made a displaced robot drive parallel to the aisle
+    # centreline instead of converging back to it.
+    start = max(target_index - 1, 0)
+    remaining = np.asarray(
+        [(float(w[0]), float(w[1])) for w in waypoints[start:]], dtype=float
+    )
+    state = np.asarray(state_xy, dtype=float)[:2]
+    if remaining.size == 0:
+        return None
+    if target_index == 0 and float(np.linalg.norm(remaining[0] - state)) > 1.0e-6:
+        remaining = np.vstack((state, remaining))
+    return remaining
+
+
+def _route_length_from(start_xy: np.ndarray, waypoints) -> float:
+    """Polyline length including the otherwise implicit start-to-first leg."""
+
+    points = np.asarray(
+        [np.asarray(start_xy, dtype=float)[:2], *waypoints], dtype=float
+    )
+    if points.ndim != 2 or points.shape[0] < 2 or points.shape[1] < 2:
+        return float("inf")
+    return float(np.sum(np.linalg.norm(np.diff(points[:, :2], axis=0), axis=1)))
+
+
+def _geometric_route_time_cost(
+    start_state: np.ndarray,
+    waypoints,
+    *,
+    v_max: float,
+    pivot_rate_rad_s: float = 0.75,
+) -> float:
+    """Estimated traversal time: translation plus in-place heading changes."""
+
+    start = np.asarray(start_state, dtype=float)
+    points = np.asarray([start[:2], *waypoints], dtype=float)
+    if points.ndim != 2 or points.shape[0] < 2 or points.shape[1] < 2:
+        return float("inf")
+    segments = np.diff(points[:, :2], axis=0)
+    lengths = np.linalg.norm(segments, axis=1)
+    keep = lengths > 1.0e-6
+    if not np.any(keep):
+        return 0.0
+    headings = np.arctan2(segments[keep, 1], segments[keep, 0])
+    previous = float(start[2]) if start.size >= 3 else float(headings[0])
+    turn_radians = 0.0
+    for heading in headings:
+        turn_radians += abs(wrap_angle(float(heading) - previous))
+        previous = float(heading)
+    travel_s = float(np.sum(lengths)) / max(float(v_max), 1.0e-3)
+    pivot_s = turn_radians / max(float(pivot_rate_rad_s), 1.0e-3)
+    return travel_s + pivot_s
+
+
+def _route_states(start_state: np.ndarray, waypoints) -> np.ndarray:
+    """Build drawable x/y/yaw states for a geometric waypoint route."""
+
+    start = np.asarray(start_state, dtype=float)
+    points = np.asarray([start[:2], *waypoints], dtype=float)
+    states = np.zeros((len(points), 3), dtype=float)
+    states[:, :2] = points[:, :2]
+    states[0, 2] = float(start[2]) if start.size >= 3 else 0.0
+    for index in range(len(points) - 1):
+        delta = points[index + 1] - points[index]
+        states[index, 2] = math.atan2(float(delta[1]), float(delta[0]))
+    if len(points) > 1:
+        states[-1, 2] = states[-2, 2]
+    return states
 
 
 class EfeAgentNode(UnicyclePlannerNode):
@@ -307,17 +472,21 @@ class EfeAgentNode(UnicyclePlannerNode):
 
         if self._hier_phase == 'GLOBAL':
             if str(getattr(self, 'global_planner_mode', 'efe')) == 'geometric_shortest_path':
-                # C0 conventional-navigation baseline: pick the SHORTEST valid
+                # C0 conventional-navigation baseline: pick the shortest-time valid
                 # lane-graph route over the SAME driveable + no-go geometry as
                 # C1/C2 and hand it to the SAME local tracker. No GP/visibility
                 # input and no EFE solve -- the one-shot global optimisation is
                 # skipped entirely. Route seeds come from the identical
                 # generate_route_seeds call used by the EFE branch below.
                 def _polyline_len(waypoints) -> float:
-                    pts = np.asarray(waypoints, dtype=float)
-                    if pts.shape[0] < 2:
-                        return float('inf')
-                    return float(np.sum(np.linalg.norm(np.diff(pts, axis=0), axis=1)))
+                    return _route_length_from(m0[:2], waypoints)
+
+                def _route_time(waypoints) -> float:
+                    return _geometric_route_time_cost(
+                        m0,
+                        waypoints,
+                        v_max=float(self.v_max),
+                    )
 
                 seeds = []
                 if str(getattr(self, 'driveable_geometry_json', '') or ''):
@@ -335,12 +504,13 @@ class EfeAgentNode(UnicyclePlannerNode):
                         )
                         seeds = []
                 if seeds:
-                    best = min(seeds, key=lambda s: _polyline_len(s['waypoints']))
+                    best = min(seeds, key=lambda s: _route_time(s['waypoints']))
                     self._waypoints = [(float(w[0]), float(w[1])) for w in best['waypoints']]
                     self.get_logger().info(
-                        f"[geometric_shortest_path] shortest of "
+                        f"[geometric_shortest_path] shortest-time of "
                         f"{[s['name'] for s in seeds]} -> {best['name']} "
-                        f"({_polyline_len(best['waypoints']):.2f} m)"
+                        f"({_polyline_len(best['waypoints']):.2f} m, "
+                        f"{_route_time(best['waypoints']):.2f} s estimated)"
                     )
                 else:
                     self.get_logger().warn(
@@ -371,6 +541,16 @@ class EfeAgentNode(UnicyclePlannerNode):
                 self.get_logger().info(
                     f"[geometric_shortest_path] global route chosen without EFE solve -> "
                     f"{len(self._waypoints)} waypoints; switching to local tracking"
+                )
+                # C0 has no optimizer result, but consumers (including the live
+                # dashboard) still need the route the planner actually chose.
+                route_result = SimpleNamespace(
+                    states=_route_states(m0[:3], self._waypoints)
+                )
+                self.path_pub.publish(
+                    self._build_path_message(
+                        route_result, final_goal, append_goal=False
+                    )
                 )
                 return
             # Generate condition-neutral lane-graph route seeds from the driveable
@@ -606,11 +786,10 @@ class EfeAgentNode(UnicyclePlannerNode):
             return self._ff_fb_plan(m0)
         return self._simple_local_plan(m0, target)
 
-    def _waypoint_array(self) -> np.ndarray | None:
-        wps = self._waypoints
-        if not wps:
-            return None
-        return np.asarray([(float(w[0]), float(w[1])) for w in wps], dtype=float)
+    def _waypoint_array(self, state_xy=None) -> np.ndarray | None:
+        if state_xy is None:
+            state_xy = self._waypoints[self._wp_idx] if self._waypoints else (0.0, 0.0)
+        return _tracking_waypoints(self._waypoints, self._wp_idx, state_xy)
 
     def _hyst_damp_plan(self, m0: np.ndarray, target: np.ndarray) -> np.ndarray:
         """Turn-then-go + hysteresis on the spin gate, rate-limited (damped) w, and a
@@ -641,7 +820,7 @@ class EfeAgentNode(UnicyclePlannerNode):
     def _pure_pursuit_plan(self, m0: np.ndarray) -> np.ndarray:
         """Lookahead path tracker over the global waypoint polyline (always moving)."""
         H = int(self.local_horizon); dt = float(self.dt); v_max = float(self.v_max)
-        wps = self._waypoint_array()
+        wps = self._waypoint_array(m0[:2])
         controls = np.zeros((H, 2), dtype=float)
         if wps is None:
             return controls
@@ -663,25 +842,72 @@ class EfeAgentNode(UnicyclePlannerNode):
         return controls
 
     def _ff_fb_plan(self, m0: np.ndarray) -> np.ndarray:
-        """Path tangent feed-forward + cross-track/heading feedback on the belief."""
+        """Path feedback with straight-line speed and corner-aware braking."""
         H = int(self.local_horizon); dt = float(self.dt); v_max = float(self.v_max)
-        wps = self._waypoint_array()
+        wps = self._waypoint_array(m0[:2])
         controls = np.zeros((H, 2), dtype=float)
         if wps is None or len(wps) < 2:
             return controls
         state = m0[:3].copy().astype(float)
         for i in range(H):
-            j = int(np.argmin(np.hypot(wps[:, 0] - state[0], wps[:, 1] - state[1])))
+            # wps[0] -> wps[1] is the segment for the currently active mission
+            # waypoint. Picking the nearest vertex switches to wps[1] -> wps[2]
+            # halfway along a long segment and cuts the corner by metres.
+            j = 0
             j2 = min(j + 1, len(wps) - 1)
             seg = wps[j2] - wps[j]; seglen = float(np.hypot(*seg))
             if seglen < 1e-4:
                 break
-            tang = math.atan2(seg[1], seg[0])
-            nh = np.array([-math.sin(tang), math.cos(tang)])
-            ct = float((state[:2] - wps[j]) @ nh)        # + = left of path
+            to_target = wps[j2] - state[:2]
+            target_dist = float(np.hypot(*to_target))
+            if target_dist < 0.05:
+                break
+            along = float((state[:2] - wps[j]) @ (seg / seglen))
+            capture_target = target_dist < 0.60 or along >= seglen
+            if capture_target:
+                # Point capture makes both ordinary waypoints and the final
+                # goal convergent. A fixed segment tangent otherwise continues
+                # forward forever after a discrete control step overshoots it.
+                tang = math.atan2(to_target[1], to_target[0])
+                ct = 0.0
+            else:
+                tang = math.atan2(seg[1], seg[0])
+                nh = np.array([-math.sin(tang), math.cos(tang)])
+                ct = float((state[:2] - wps[j]) @ nh)    # + = left of path
             he = wrap_angle(tang - state[2])
-            v = float(np.clip(v_max * max(0.25, 1.0 - 1.2 * abs(he) - 1.5 * abs(ct)), 0.05, v_max))
-            w = float(np.clip(1.5 * he - 3.0 * ct, -1.5, 1.5))
+            # Fast wheel-counterrotation makes Gazebo's wheel odometry finish a
+            # pivot before the physical body, which is especially damaging when
+            # heading is intentionally odometry-only. Stay below the observed
+            # traction-safe turn rate while preserving 1 m/s on straights.
+            w = float(np.clip(1.5 * he - 3.0 * ct, -0.75, 0.75))
+            nominal_v = float(
+                np.clip(
+                    v_max * max(0.25, 1.0 - 1.2 * abs(he) - 1.5 * abs(ct)),
+                    0.05,
+                    v_max,
+                )
+            )
+            corner_cap = _preview_corner_speed_limit(
+                wps,
+                j,
+                state[:2],
+                v_max=v_max,
+                preview_m=max(0.90, 6.0 * float(self.waypoint_spacing_m)),
+                corner_speed_mps=min(0.30, 0.40 * v_max),
+            )
+            arrival_cap = min(v_max, max(0.08, 1.5 * target_dist))
+            # For unicycle motion lateral acceleration is v*|w|. This keeps a
+            # high straight-line ceiling without entering tight turns at that
+            # same speed. Large departure turns pivot in place, otherwise the
+            # minimum forward speed can create a waypoint-orbit limit cycle.
+            v = _ff_fb_forward_speed(
+                nominal_v,
+                min(corner_cap, arrival_cap),
+                w,
+                he,
+                v_max=v_max,
+                yaw_gate_rad=float(self.simple_tracker_yaw_gate_rad),
+            )
             controls[i] = [v, w]
             state = unicycle_step(state, [v, w], dt)
             if np.hypot(*(wps[-1] - state[:2])) < 0.05:

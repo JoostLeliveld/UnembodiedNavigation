@@ -56,7 +56,13 @@ def load_configs():
             cfg = yaml.safe_load(path.read_text())
         except yaml.YAMLError as exc:                      # pragma: no cover
             pytest.fail(f"{path.name}: {exc}")
-        if isinstance(cfg, dict) and cfg.get("world"):
+        # Presentation profiles may deliberately change execution speed while
+        # retaining the same sensing stack. They are not scientific campaigns.
+        if (
+            isinstance(cfg, dict)
+            and cfg.get("world")
+            and not cfg.get("presentation_profile", False)
+        ):
             out.append((path.name, cfg))
     return out
 
