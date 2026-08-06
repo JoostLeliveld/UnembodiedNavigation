@@ -6,8 +6,8 @@ Style = warehouse_aws (the 'old' world): box-collision racks with contact sensor
 (planner/logger/CAD-parser compatible) + blue top rails + tan shelf boxes + REAL
 AWS RoboMaker shelf-mesh visual overlays (ShelfD/E, measured native dims
 3.917 x 0.880 x 2.613 m), docks, staging clutter (real mesh models), hanging lamps,
-and floor safety markings: blue site bounds plus green no-go outlines around
-obstacles.
+and floor safety markings: blue site bounds plus conservative green no-go
+envelopes around operational obstacles.
 
 Cameras are placed like fixed warehouse operations/security cameras along the
 north/south walls, centered over four dock-apron columns:
@@ -34,16 +34,19 @@ import math
 import os
 import pathlib
 
+import yaml
+
 REPO = pathlib.Path(__file__).resolve().parents[2]
 OUT = REPO / "src/sim/gazebo_worlds/worlds/warehouse_full_4cam.world.sdf"
 DOC = REPO / "docs/warehouse_full_4cam_layout.md"
 SVG = REPO / "docs/assets/warehouse_full_4cam_map.svg"
 PNG = REPO / "docs/assets/warehouse_full_4cam_map.png"
+PROFILE = REPO / "src/experiments/config/world_profiles.yaml"
+WORLD_FILE = "warehouse_full_4cam.world.sdf"
 
 RACK_YELLOW = "0.93 0.80 0.08 1"
 RAIL_BLUE = "0.00 0.28 0.50 1"
 BOX_TAN = "0.75 0.56 0.24 1"
-CRATE = "0.67 0.46 0.20 1"
 WALL_GRAY = "0.62 0.64 0.67 1"
 FLOOR = "0.56 0.55 0.51 1"
 BLUE_MARK = "0.05 0.30 0.85 1"
@@ -62,19 +65,22 @@ ROWS_W = [-(INNER_ROW_ABS_X + 3 * ROW_SPACING), -(INNER_ROW_ABS_X + 2 * ROW_SPAC
 ROWS_E = [INNER_ROW_ABS_X, INNER_ROW_ABS_X + ROW_SPACING, INNER_ROW_ABS_X + 2 * ROW_SPACING, INNER_ROW_ABS_X + 3 * ROW_SPACING]
 WALL_BACKED_ROW_X = X0 + 0.09 + RACK_W / 2.0
 SITE_X0, SITE_X1, SITE_Y0, SITE_Y1 = -11.20, 11.50, -8.60, 8.60
-SEGS = [("south", -6.5, -2.6), ("mid", -1.4, 1.8), ("north", 3.0, 6.9)]
-LOW_CRATE_XS = [ROWS_W[0], ROWS_W[2], ROWS_E[1], ROWS_E[3]]
-
-DRIVE_REGIONS = [
-    ("open_floor", (SITE_X0 + SITE_X1) / 2.0, 0.0, SITE_X1 - SITE_X0, SITE_Y1 - SITE_Y0, "open operating floor inside the blue site boundary; green outlines mark no-go obstacles"),
-]
+# The 1.60 m raw cross-aisles retain 0.96 m after applying the 0.32 m
+# operational envelope on each adjoining rack end. The former 1.20 m gaps left
+# only 0.56 m between the painted no-go lines and almost no useful planner
+# corridor after its 0.25 m keep-in margin.
+SEGS = [("south", -6.5, -2.8), ("mid", -1.2, 1.6), ("north", 3.2, 6.9)]
 
 NON_DRIVEABLE_SPOTS = [
     ("central_support_pillar", 0.0, -0.90, 0.50, 0.50, "fixed building column inside the 4.5 m central aisle"),
-    ("dropped_stack_WA2", -5.675, -4.60, 0.90, 0.60, "temporary pallet stack narrowing west aisle 2"),
-    ("east_staging_pallet_island", 10.20, 0.80, 0.90, 0.70, "side staging island outside the main rack aisles"),
     ("west_wall_backed_shelf", WALL_BACKED_ROW_X, 0.20, RACK_W, 13.40, "ShelfD/E row backed directly against the west wall; reachable only from the east aisle side"),
 ]
+
+# Floor paint represents a conservative operational exclusion envelope, not a
+# tracing of mesh/collision geometry.  The margin is deliberately wider than
+# the TurtleBot footprint and visually separates the safety contract from the
+# exact shelf/box dimensions.
+NOGO_MARGIN_M = 0.32
 
 CAMERA_ITEMS = [
     (
@@ -121,8 +127,8 @@ CLUTTER_ITEMS = [
     ("clutterA_sw", "ClutteringA_01", "-10.8 -9.2 0 0 0 0", "clutter A"),
     ("clutterC_ne", "ClutteringC_01", "10.6 9.0 0 0 0 3.1416", "clutter C"),
     ("clutterD_dock", "ClutteringD_01", "-2.5 -9.3 0 0 0 0", "clutter D"),
-    ("palletjack_apron", "PalletJackB_01", "-4.6 -9.1 0 0 0 1.2", "pallet jack"),
-    ("desk_qc_ne", "DeskC_01", "8.75 8.75 0 0 0 3.1416", "QC desk"),
+    ("palletjack_apron", "PalletJackB_01", "-4.6 -9.1 0 0 0 0", "pallet jack"),
+    ("desk_qc_ne", "DeskC_01", "8.75 8.85 0 0 0 3.1416", "QC desk"),
 ]
 
 PROP_SIZES = {
@@ -159,7 +165,14 @@ def pose_xy_from_text(pose: str) -> tuple[float, float]:
     return vals[0], vals[1]
 
 
-def outline_links(name, cx, cy, sx, sy, color=GREEN_MARK, *, pad=0.12, thickness=0.055):
+def profile_regions(region_type: str) -> list[dict]:
+    """Return the exact map rectangles consumed by the runtime planner."""
+    data = yaml.safe_load(PROFILE.read_text(encoding="utf-8"))
+    regions = data["worlds"][WORLD_FILE].get("known_2d_regions", [])
+    return [region for region in regions if str(region.get("type", "")) == region_type]
+
+
+def outline_links(name, cx, cy, sx, sy, color=GREEN_MARK, *, pad=NOGO_MARGIN_M, thickness=0.055):
     ox, oy = sx + 2.0 * pad, sy + 2.0 * pad
     return [
         box_link(f"{name}_outline_s", cx, cy - oy / 2.0, ox, thickness, 0.014, color, collide=False, z=0.035),
@@ -205,18 +218,9 @@ for bi, (rows, blk) in enumerate([(ROWS_W, "W"), (ROWS_E, "E")]):
 for seg, ya, yb in SEGS:
     rack_segment("W0", seg, WALL_BACKED_ROW_X, ya, yb, H_STD, "ShelfD_01")
 
-# ---------------- central features --------------------------------------------
+# ---------------- central feature ---------------------------------------------
 links.append(box_link("support_pillar", 0.0, -0.9, 0.50, 0.50, 5.20, WALL_GRAY))
 occluders.append(("support_pillar", 0.0, -0.9, 0.50, 0.50, 5.20))
-for i, (sx, sy, sz) in enumerate([(0.90, 0.70, 0.70), (0.82, 0.62, 0.70), (0.72, 0.54, 0.62)]):
-    links.append(box_link(f"island_stack_{i}", 10.20, 0.80, sx, sy, sz, CRATE, z=0.35 + 0.70 * i))
-occluders.append(("island_stack", 10.20, 0.80, 0.90, 0.70, 2.02))
-links.append(box_link("dropped_stack_WA2", -5.675, -4.60, 0.90, 0.60, 2.30, CRATE))
-occluders.append(("dropped_stack_WA2", -5.675, -4.60, 0.90, 0.60, 2.30))
-
-# staging crates at shelf ends (south apron edge, outside drivable)
-for i, cx in enumerate(LOW_CRATE_XS):
-    links.append(box_link(f"low_crate_{i}", cx, -6.85, 0.42, 0.30, 0.22, CRATE, z=0.11))
 
 rack_model = "\n".join(links)
 mesh_model = "\n".join(mesh_links)
@@ -231,23 +235,21 @@ walls = "\n".join([
   + [box_link(f"north_dock_{c}", x, Y1 - 0.08, 1.10, 0.07, 0.15, "0.50 0.50 0.50 1", collide=False, z=0.075)
      for c, x in zip("ab", [-5.0, 5.0])])
 
-# Blue site boundary + green no-go/collision outlines (visual only). The open
-# floor is assumed driveable; crossing a green outline means entering an obstacle
-# footprint, so it matches the user's mental model for "safe unless crossing".
+# Blue site boundary + conservative green no-go envelopes (visual only). The
+# paint includes clearance beyond collision geometry and is emitted only for
+# obstacles inside the operational boundary.
 marks = []
 bx0, bx1, by0, by1 = SITE_X0, SITE_X1, SITE_Y0, SITE_Y1
-marks += [box_link("bnd_s", 0, by0, bx1 - bx0, 0.05, 0.014, BLUE_MARK, collide=False, z=0.035),
-          box_link("bnd_n", 0, by1, bx1 - bx0, 0.05, 0.014, BLUE_MARK, collide=False, z=0.035),
-          box_link("bnd_w", bx0, 0, 0.05, by1 - by0, 0.014, BLUE_MARK, collide=False, z=0.035),
-          box_link("bnd_e", bx1, 0, 0.05, by1 - by0, 0.014, BLUE_MARK, collide=False, z=0.035)]
+bcx, bcy = 0.5 * (bx0 + bx1), 0.5 * (by0 + by1)
+marks += [box_link("bnd_s", bcx, by0, bx1 - bx0, 0.05, 0.014, BLUE_MARK, collide=False, z=0.035),
+          box_link("bnd_n", bcx, by1, bx1 - bx0, 0.05, 0.014, BLUE_MARK, collide=False, z=0.035),
+          box_link("bnd_w", bx0, bcy, 0.05, by1 - by0, 0.014, BLUE_MARK, collide=False, z=0.035),
+          box_link("bnd_e", bx1, bcy, 0.05, by1 - by0, 0.014, BLUE_MARK, collide=False, z=0.035)]
 for name, cx, cy, sx, sy, _h in occluders:
     marks.extend(outline_links(f"nogo_{name}", cx, cy, sx, sy))
-for i, cx in enumerate(LOW_CRATE_XS):
-    marks.extend(outline_links(f"nogo_low_crate_{i}", cx, -6.85, 0.42, 0.30, pad=0.08))
-for name, model, pose, _label in CLUTTER_ITEMS:
-    cx, cy = pose_xy_from_text(pose)
-    sx, sy = PROP_SIZES.get(model, (0.70, 0.70))
-    marks.extend(outline_links(f"nogo_{name}", cx, cy, sx, sy, pad=0.10))
+# CLUTTER_ITEMS are already outside the blue operational boundary.  Their old
+# approximate footprint outlines sometimes enclosed empty floor because the
+# visual mesh origin is not its footprint centre; omit those stale markings.
 marker_model = "\n".join(marks)
 
 # clutter: full mesh model includes (own scale/collisions), all OUTSIDE drivable regions
@@ -307,6 +309,7 @@ def _clipped_fov_points(x: float, y: float, yaw: float) -> list[tuple[float, flo
 def _svg_map() -> str:
     width, height, margin = 1180, 900, 74
     plot_w, plot_h = width - 2 * margin, height - 2 * margin
+    traversable = profile_regions("traversable")
 
     def sx(x: float) -> float:
         return margin + (x - X0) / (X1 - X0) * plot_w
@@ -344,7 +347,7 @@ def _svg_map() -> str:
         pts = " ".join(f"{sx(x):.1f},{sy(y):.1f}" for x, y in points)
         return f'<polygon points="{pts}" fill="{fill}" stroke="{stroke}" stroke-width="1.5" opacity="{opacity:.3f}"/>'
 
-    def outline_rect(cx, cy, rx, ry, pad=0.12):
+    def outline_rect(cx, cy, rx, ry, pad=NOGO_MARGIN_M):
         return rect(cx, cy, rx + 2.0 * pad, ry + 2.0 * pad, "none", "#138a43", 1.0)
 
     parts = [
@@ -361,7 +364,7 @@ def _svg_map() -> str:
         "</defs>",
         '<rect width="100%" height="100%" fill="#f5f7f9"/>',
         '<text x="74" y="42" class="title">warehouse_full_4cam: 24.5 x 20.5 m AWS-style warehouse</text>',
-        '<text x="74" y="66" class="subtitle">4.5 m central aisle, west wall-backed one-sided shelf, green no-go outlines, and four calibrated wall cameras.</text>',
+        '<text x="74" y="66" class="subtitle">Cyan planner aisles never cross green no-go envelopes; loose aisle boxes have been removed.</text>',
         rect(0, 0, X1 - X0, Y1 - Y0, "#d6d0c8", "#42505c", 1.0),
     ]
 
@@ -372,12 +375,27 @@ def _svg_map() -> str:
         parts.append(line(X0, y, X1, y, "#ffffff", 0.8, "3 7"))
         parts.append(f'<text x="{sx(X0) - 14:.1f}" y="{sy(y) + 4:.1f}" class="axis" text-anchor="end">y={y}</text>')
 
+    for region in traversable:
+        xmin, xmax = float(region["xmin"]), float(region["xmax"])
+        ymin, ymax = float(region["ymin"]), float(region["ymax"])
+        parts.append(rect(
+            0.5 * (xmin + xmax),
+            0.5 * (ymin + ymax),
+            xmax - xmin,
+            ymax - ymin,
+            "#67d5e8",
+            "#1282a2",
+            0.20,
+        ))
+
     for _label, _include, _model, pose, _topic, color, _mount in CAMERA_ITEMS:
         parts.append(poly(_clipped_fov_points(pose[0], pose[1], pose[5]), color, color, 0.14))
-    parts.append(rect((X0 + X1) / 2, -8.6, X1 - X0 - 1.0, 0.07, "#1f6feb", "#1f6feb", 1.0))
-    parts.append(rect((X0 + X1) / 2, 8.6, X1 - X0 - 1.0, 0.07, "#1f6feb", "#1f6feb", 1.0))
-    parts.append(rect(-11.5, 0, 0.07, 17.2, "#1f6feb", "#1f6feb", 1.0))
-    parts.append(rect(11.5, 0, 0.07, 17.2, "#1f6feb", "#1f6feb", 1.0))
+    boundary_cx = 0.5 * (SITE_X0 + SITE_X1)
+    boundary_cy = 0.5 * (SITE_Y0 + SITE_Y1)
+    parts.append(rect(boundary_cx, SITE_Y0, SITE_X1 - SITE_X0, 0.07, "#1f6feb", "#1f6feb", 1.0))
+    parts.append(rect(boundary_cx, SITE_Y1, SITE_X1 - SITE_X0, 0.07, "#1f6feb", "#1f6feb", 1.0))
+    parts.append(rect(SITE_X0, boundary_cy, 0.07, SITE_Y1 - SITE_Y0, "#1f6feb", "#1f6feb", 1.0))
+    parts.append(rect(SITE_X1, boundary_cy, 0.07, SITE_Y1 - SITE_Y0, "#1f6feb", "#1f6feb", 1.0))
 
     for name, cx, cy, rx, ry, h in occluders:
         if name.startswith(("W", "E")):
@@ -386,13 +404,6 @@ def _svg_map() -> str:
             parts.append(rect(cx, cy, rx, ry, fill, "#5b4222", 0.96, label, 11))
         elif name == "support_pillar":
             parts.append(rect(cx, cy, rx, ry, "#6b7280", "#374151", 1.0, "pillar", 11))
-        elif name == "island_stack":
-            parts.append(rect(cx, cy, rx, ry, "#a06a3b", "#5f3b1d", 0.92, "pallet island", 11))
-        elif name == "dropped_stack_WA2":
-            parts.append(rect(cx, cy, rx, ry, "#8b5a2b", "#5f3b1d", 0.92, "dropped stack", 11))
-
-    for i, cx in enumerate(LOW_CRATE_XS):
-        parts.append(rect(cx, -6.85, 0.42, 0.30, "#b88745", "#5f3b1d", 0.95, f"crate {i}", 9))
 
     for _name, model, pose, label in CLUTTER_ITEMS:
         cx, cy = _pose_xy(pose)
@@ -401,13 +412,6 @@ def _svg_map() -> str:
 
     for _name, cx, cy, rx, ry, _h in occluders:
         parts.append(outline_rect(cx, cy, rx, ry))
-    for cx in LOW_CRATE_XS:
-        parts.append(outline_rect(cx, -6.85, 0.42, 0.30, 0.08))
-    for _name, model, pose, _label in CLUTTER_ITEMS:
-        cx, cy = _pose_xy(pose)
-        rx, ry = PROP_SIZES.get(model, (0.7, 0.7))
-        parts.append(outline_rect(cx, cy, rx, ry, 0.10))
-
     for i, (x, y) in enumerate(LAMP_POSES):
         parts.append(f'<circle cx="{sx(x):.1f}" cy="{sy(y):.1f}" r="8" fill="#fff2a8" stroke="#8f7a20" stroke-width="1.4"/>')
         parts.append(f'<text x="{sx(x):.1f}" y="{sy(y) + 22:.1f}" class="tiny" text-anchor="middle">lamp {i}</text>')
@@ -431,35 +435,36 @@ def _svg_map() -> str:
                 1.0,
             )
         )
-        anchor = "start" if x < 0 else "end"
-        text_x = sx(x + (0.45 if x < 0 else -0.45))
+        anchor = "end" if include == "external_camera" else ("start" if x < 0 else "end")
+        offset_x = -0.45 if anchor == "end" else 0.45
+        text_x = sx(x + offset_x)
         text_y = sy(y + (0.58 if y < 0 else -0.58))
         parts.append(f'<text x="{text_x:.1f}" y="{text_y:.1f}" class="label" font-size="14" text-anchor="{anchor}">{label}</text>')
         parts.append(f'<text x="{text_x:.1f}" y="{text_y + 15:.1f}" class="tiny" text-anchor="{anchor}">{esc(include)}</text>')
-        parts.append(f'<text x="{text_x:.1f}" y="{text_y + 30:.1f}" class="tiny" text-anchor="{anchor}">{esc(topic)}</text>')
-        parts.append(f'<text x="{text_x:.1f}" y="{text_y + 45:.1f}" class="tiny" text-anchor="{anchor}">{esc(mount)}</text>')
 
     legend_x, legend_y = 850, 104
     legend = [
+        ("#67d5e8", "planner driveable aisle union"),
         ("#f2c94c", "standard ShelfD/E rack"),
         ("#d96b27", "tall 2.61 m rack / handover occluder"),
-        ("#138a43", "green no-go/collision outline"),
+        ("#138a43", "conservative no-go envelope"),
         ("#1f6feb", "blue site/dock boundary"),
         ("#7f8c8d", "AWS prop / staging object"),
     ]
-    parts.append(f'<rect x="{legend_x}" y="{legend_y}" width="250" height="152" fill="#ffffff" stroke="#b6c2cc" rx="6"/>')
+    parts.append(f'<rect x="{legend_x}" y="{legend_y}" width="250" height="172" fill="#ffffff" stroke="#b6c2cc" rx="6"/>')
     parts.append(f'<text x="{legend_x + 16}" y="{legend_y + 25}" font-size="15" font-weight="700">Legend</text>')
     for i, (color, label) in enumerate(legend):
         y = legend_y + 50 + 20 * i
         parts.append(f'<rect x="{legend_x + 16}" y="{y - 11}" width="18" height="12" fill="{color}" stroke="#34495e"/>')
         parts.append(f'<text x="{legend_x + 42}" y="{y}" class="tiny">{label}</text>')
 
-    parts.append(f'<text x="{sx(0):.1f}" y="{sy(0) + 5:.1f}" class="label" font-size="16" text-anchor="middle">4.5 m central aisle / camera overlap</text>')
+    parts.append(f'<text x="{sx(0):.1f}" y="{sy(0.45) + 5:.1f}" class="label" font-size="16" text-anchor="middle">4.5 m central aisle / local pillar bypass</text>')
     parts.append("</svg>")
     return "\n".join(parts) + "\n"
 
 
 def _layout_markdown() -> str:
+    traversable = profile_regions("traversable")
     tall_segments = [
         f"- `{name}` at `({cx:+.2f}, {cy:+.2f})`, height `{h:.2f} m`"
         for name, cx, cy, _rx, _ry, h in occluders
@@ -474,8 +479,9 @@ def _layout_markdown() -> str:
         for label, include, _model, pose, topic, _color, mount in CAMERA_ITEMS
     ]
     drive_regions = [
-        f"- `{name}`: center `({cx:+.2f}, {cy:+.2f})`, size `{sx:.2f} x {sy:.2f} m` - {note}"
-        for name, cx, cy, sx, sy, note in DRIVE_REGIONS
+        f"- `{region['name']}`: x `[{float(region['xmin']):+.2f}, {float(region['xmax']):+.2f}]`, "
+        f"y `[{float(region['ymin']):+.2f}, {float(region['ymax']):+.2f}]` - {region.get('note', '')}"
+        for region in traversable
     ]
     blocked_spots = [
         f"- `{name}`: center `({cx:+.2f}, {cy:+.2f})`, footprint `{sx:.2f} x {sy:.2f} m` - {note}"
@@ -493,9 +499,10 @@ def _layout_markdown() -> str:
         "## Map Decision",
         "",
         "- Footprint: ground plane `24.5 x 20.5 m`, walls at `x = +/-12 m`, `y = +/-10 m`.",
-        "- Structure: two four-row rack blocks copied from the old warehouse style, spaced so the inner rack faces bound a `4.50 m` central aisle instead of a broad empty hall.",
+        "- Structure: two four-row rack blocks copied from the old warehouse style, spaced so the inner rack faces bound a `4.50 m` central aisle instead of a broad empty hall. Rack segments were shortened so both interior cross-aisles retain `0.96 m` between conservative no-go envelopes.",
         "- One-sided shelf: an extra ShelfD/E row is backed directly against the west wall, so it can only be reached from the aisle side.",
-        "- Floor semantics: beige floor inside the blue site boundary is the open driveable field. Green markings are no-go/collision outlines around racks, wall-backed shelves, props, crates, and the pillar; crossing a green line means entering a crash-risk footprint.",
+        f"- Floor semantics: beige is the physical floor, cyan is the exact planner driveable union from `world_profiles.yaml`, blue is the site boundary, and green is a conservative no-go envelope expanded by {NOGO_MARGIN_M:.2f} m beyond collision geometry. Cyan and green regions are contract-checked not to overlap.",
+        "- Aisle cleanup: the dropped west-aisle stack, four loose south-apron crates, and east-service pallet-box island were removed. The fixed building pillar remains and is represented as a local two-sided bypass instead of removing the whole center strip.",
         "- Camera placement: four high wall-mounted cameras sit at `(-6.0, -10)`, `(-6.0, 10)`, `(6.0, -10)`, and `(6.0, 10)` and look perpendicular to their wall. Bringing the columns closer to the central aisle widens adjacent-camera overlap for handover validation.",
         "- Presentation overview: a separate top-down camera at `(0.0, 0.0, 26.0)` produces a full-facility Gazebo view for media only. It is not a fifth localization camera and is excluded from the GP/fusion/planner interfaces.",
         "- Occlusion/handover: W-block inner north racks and E-block inner south racks are tall, creating different blind regions for the north/south camera pairs.",
@@ -508,11 +515,11 @@ def _layout_markdown() -> str:
         "",
         "Approximate FOV wedges in the SVG are visual planning aids only. Runtime projection still comes from the camera model and calibration.",
         "",
-        "## Open Floor",
+        "## Planner Driveable Aisles (cyan)",
         "",
         *drive_regions,
         "",
-        "## Green No-Go Outlines",
+        "## Conservative No-Go Envelopes",
         "",
         *blocked_spots,
         "",
@@ -547,6 +554,7 @@ def _write_png_map() -> bool:
         return False
 
     fig, ax = plt.subplots(figsize=(12.4, 9.2), dpi=150)
+    traversable = profile_regions("traversable")
     ax.set_facecolor("#f5f7f9")
     ax.set_xlim(X0 - 0.7, X1 + 0.7)
     ax.set_ylim(Y0 - 0.9, Y1 + 0.9)
@@ -561,7 +569,7 @@ def _write_png_map() -> bool:
         if label:
             ax.text(cx, cy, label, ha="center", va="center", fontsize=6.5, weight="bold", color="#1f2933")
 
-    def add_outline(cx, cy, rx, ry, pad=0.12):
+    def add_outline(cx, cy, rx, ry, pad=NOGO_MARGIN_M):
         ax.add_patch(Rectangle(
             (cx - rx / 2 - pad, cy - ry / 2 - pad),
             rx + 2.0 * pad,
@@ -573,13 +581,27 @@ def _write_png_map() -> bool:
         ))
 
     ax.add_patch(Rectangle((X0, Y0), X1 - X0, Y1 - Y0, facecolor="#d6d0c8", edgecolor="#42505c", linewidth=1.2))
+    for region in traversable:
+        xmin, xmax = float(region["xmin"]), float(region["xmax"])
+        ymin, ymax = float(region["ymin"]), float(region["ymax"])
+        ax.add_patch(Rectangle(
+            (xmin, ymin),
+            xmax - xmin,
+            ymax - ymin,
+            facecolor="#67d5e8",
+            edgecolor="#1282a2",
+            linewidth=0.7,
+            alpha=0.20,
+        ))
     for _label, _include, _model, pose, _topic, color, _mount in CAMERA_ITEMS:
         ax.add_patch(Polygon(_clipped_fov_points(pose[0], pose[1], pose[5]), closed=True, facecolor=color, edgecolor=color, alpha=0.14))
 
-    add_rect(0, -8.6, X1 - X0 - 1.0, 0.07, "#1f6feb", "#1f6feb")
-    add_rect(0, 8.6, X1 - X0 - 1.0, 0.07, "#1f6feb", "#1f6feb")
-    add_rect(-11.5, 0, 0.07, 17.2, "#1f6feb", "#1f6feb")
-    add_rect(11.5, 0, 0.07, 17.2, "#1f6feb", "#1f6feb")
+    boundary_cx = 0.5 * (SITE_X0 + SITE_X1)
+    boundary_cy = 0.5 * (SITE_Y0 + SITE_Y1)
+    add_rect(boundary_cx, SITE_Y0, SITE_X1 - SITE_X0, 0.07, "#1f6feb", "#1f6feb")
+    add_rect(boundary_cx, SITE_Y1, SITE_X1 - SITE_X0, 0.07, "#1f6feb", "#1f6feb")
+    add_rect(SITE_X0, boundary_cy, 0.07, SITE_Y1 - SITE_Y0, "#1f6feb", "#1f6feb")
+    add_rect(SITE_X1, boundary_cy, 0.07, SITE_Y1 - SITE_Y0, "#1f6feb", "#1f6feb")
 
     for name, cx, cy, rx, ry, h in occluders:
         if name.startswith(("W", "E")):
@@ -587,13 +609,6 @@ def _write_png_map() -> bool:
             add_rect(cx, cy, rx, ry, "#d96b27" if h >= 2.5 else "#f2c94c", "#5b4222", label, 0.96)
         elif name == "support_pillar":
             add_rect(cx, cy, rx, ry, "#6b7280", "#374151", "pillar")
-        elif name == "island_stack":
-            add_rect(cx, cy, rx, ry, "#a06a3b", "#5f3b1d", "pallet island", 0.92)
-        elif name == "dropped_stack_WA2":
-            add_rect(cx, cy, rx, ry, "#8b5a2b", "#5f3b1d", "dropped stack", 0.92)
-
-    for i, cx in enumerate(LOW_CRATE_XS):
-        add_rect(cx, -6.85, 0.42, 0.30, "#b88745", "#5f3b1d", f"crate {i}", 0.95)
 
     for _name, model, pose, label in CLUTTER_ITEMS:
         cx, cy = _pose_xy(pose)
@@ -602,13 +617,6 @@ def _write_png_map() -> bool:
 
     for _name, cx, cy, rx, ry, _h in occluders:
         add_outline(cx, cy, rx, ry)
-    for cx in LOW_CRATE_XS:
-        add_outline(cx, -6.85, 0.42, 0.30, 0.08)
-    for _name, model, pose, _label in CLUTTER_ITEMS:
-        cx, cy = _pose_xy(pose)
-        rx, ry = PROP_SIZES.get(model, (0.7, 0.7))
-        add_outline(cx, cy, rx, ry, 0.10)
-
     for i, (x, y) in enumerate(LAMP_POSES):
         ax.add_patch(Circle((x, y), 0.18, facecolor="#fff2a8", edgecolor="#8f7a20", linewidth=0.8))
         ax.text(x, y - 0.42, f"lamp {i}", ha="center", va="top", fontsize=6.5)
@@ -617,16 +625,17 @@ def _write_png_map() -> bool:
         x, y, yaw = pose[0], pose[1], pose[5]
         ax.add_patch(Circle((x, y), 0.24, facecolor=color, edgecolor="#111827", linewidth=1.0, zorder=5))
         ax.arrow(x, y, 0.72 * math.cos(yaw), 0.72 * math.sin(yaw), width=0.05, head_width=0.28, head_length=0.28, color="#111827", zorder=6)
-        ha = "left" if x < 0 else "right"
-        tx = x + (0.45 if x < 0 else -0.45)
+        ha = "right" if include == "external_camera" else ("left" if x < 0 else "right")
+        tx = x + (-0.45 if ha == "right" else 0.45)
         ty = y + (0.65 if y < 0 else -0.65)
-        ax.text(tx, ty, f"{label}\n{include}\n{topic}\n{mount}", ha=ha, va="center", fontsize=7.0, weight="bold", color="#1f2933")
+        ax.text(tx, ty, f"{label}\n{include}", ha=ha, va="center", fontsize=7.0, weight="bold", color="#1f2933")
 
-    ax.text(0, 0, "4.5 m central aisle / camera overlap", ha="center", va="center", fontsize=9, weight="bold", color="#1f2933")
+    ax.text(0, 0.45, "4.5 m central aisle / local pillar bypass", ha="center", va="center", fontsize=9, weight="bold", color="#1f2933")
     handles = [
+        Rectangle((0, 0), 1, 1, facecolor="#67d5e8", edgecolor="#1282a2", alpha=0.40, label="planner driveable aisle union"),
         Rectangle((0, 0), 1, 1, facecolor="#f2c94c", edgecolor="#5b4222", label="standard ShelfD/E rack"),
         Rectangle((0, 0), 1, 1, facecolor="#d96b27", edgecolor="#5b4222", label="tall handover occluder"),
-        Rectangle((0, 0), 1, 1, facecolor="none", edgecolor="#138a43", label="no-go/collision outline"),
+        Rectangle((0, 0), 1, 1, facecolor="none", edgecolor="#138a43", label="conservative no-go envelope"),
         Rectangle((0, 0), 1, 1, facecolor="#1f6feb", edgecolor="#1f6feb", label="site/dock boundary"),
         Rectangle((0, 0), 1, 1, facecolor="#7f8c8d", edgecolor="#34495e", label="AWS prop/staging"),
     ]

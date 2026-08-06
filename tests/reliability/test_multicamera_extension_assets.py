@@ -65,6 +65,15 @@ def test_full_warehouse_four_camera_world_is_canonical_aws_mesh_layout() -> None
     ]
     mesh_visuals = root.findall(".//model[@name='aws_shelf_mesh_visuals']/link")
     assert len(rack_collisions) == 27
+    collision_link_names = {
+        link.get("name", "")
+        for link in root.findall(".//model[@name='warehouse_rack_occluders']/link")
+        if link.find("collision") is not None
+    }
+    assert not any(
+        name.startswith(("dropped_stack", "low_crate", "island_stack"))
+        for name in collision_link_names
+    )
     assert len(mesh_visuals) == 27
     rack_xs = sorted({
         round(float(link.findtext("pose", "").split()[0]), 3)
@@ -73,12 +82,55 @@ def test_full_warehouse_four_camera_world_is_canonical_aws_mesh_layout() -> None
     assert rack_xs == [-11.635, -8.825, -6.725, -4.625, -2.525, 2.525, 4.625, 6.725, 8.825]
     inner_clearance_m = (2.525 - 0.55 / 2.0) - (-2.525 + 0.55 / 2.0)
     assert 4.45 <= inner_clearance_m <= 4.55
+    rack_by_name = {link.get("name", ""): link for link in rack_collisions}
+    south = rack_by_name["rack_W1_south"]
+    middle = rack_by_name["rack_W1_mid"]
+    south_pose_y = float(south.findtext("pose", "").split()[1])
+    south_length = float(south.findtext("collision/geometry/box/size", "").split()[1])
+    middle_pose_y = float(middle.findtext("pose", "").split()[1])
+    middle_length = float(middle.findtext("collision/geometry/box/size", "").split()[1])
+    raw_cross_aisle = (middle_pose_y - middle_length / 2.0) - (
+        south_pose_y + south_length / 2.0
+    )
+    assert np.isclose(raw_cross_aisle, 1.60)
     assert "rack_W0_south" in text
     assert "model://aws_robomaker_warehouse_ShelfD_01" in text
     assert "model://aws_robomaker_warehouse_ShelfE_01" in text
     assert include_by_name["desk_qc_ne"].findtext("uri") == "model://aws_robomaker_warehouse_DeskC_01"
     assert include_by_name["palletjack_apron"].findtext("uri") == "model://aws_robomaker_warehouse_PalletJackB_01"
     assert include_by_name["clutterA_sw"].findtext("uri") == "model://aws_robomaker_warehouse_ClutteringA_01"
+
+    marker_links = {
+        link.get("name", ""): link
+        for link in root.findall(".//model[@name='known_driveable_boundary']/link")
+    }
+    marker_link_list = root.findall(".//model[@name='known_driveable_boundary']/link")
+    assert len(marker_links) == len(marker_link_list), "SDF model contains duplicate marker link names"
+    # Rack collision width is 0.55 m; the painted envelope is deliberately
+    # 0.32 m wider on each side instead of tracing the shelf exactly.
+    rack_marker_size = marker_links["nogo_W1_south_outline_s"].findtext(
+        "visual/geometry/box/size", ""
+    )
+    assert [float(value) for value in rack_marker_size.split()] == [1.19, 0.055, 0.014]
+    # The site is intentionally asymmetric in x. All generated map variants
+    # must use the configured [-11.20, 11.50] boundary, not the old symmetric
+    # approximation centred on x=0.
+    south_pose = [float(value) for value in marker_links["bnd_s"].findtext("pose", "").split()]
+    south_size = [
+        float(value)
+        for value in marker_links["bnd_s"].findtext("visual/geometry/box/size", "").split()
+    ]
+    west_pose = [float(value) for value in marker_links["bnd_w"].findtext("pose", "").split()]
+    east_pose = [float(value) for value in marker_links["bnd_e"].findtext("pose", "").split()]
+    assert south_pose[:2] == [0.15, -8.6]
+    assert south_size[:2] == [22.7, 0.05]
+    assert west_pose[:2] == [-11.2, 0.0]
+    assert east_pose[:2] == [11.5, 0.0]
+    # External decorative props must not leave misleading empty floor boxes.
+    assert not any(
+        name.startswith(("nogo_bucket", "nogo_trashcan", "nogo_clutter", "nogo_palletjack", "nogo_desk"))
+        for name in marker_links
+    )
 
 
 def test_full_warehouse_layout_map_documents_the_chosen_structure() -> None:
@@ -98,12 +150,19 @@ def test_full_warehouse_layout_map_documents_the_chosen_structure() -> None:
     assert "W2_north" in doc
     assert "E3_south" in doc
     assert "4.50 m` central aisle" in doc
-    assert "wall-backed" in doc
-    assert "Green No-Go Outlines" in doc
-    assert "crossing a green line" in doc
+    assert "backed directly against the west wall" in doc
+    assert "Conservative No-Go Envelopes" in doc
+    assert "expanded by 0.32 m beyond collision geometry" in doc
+    assert "Cyan and green regions are contract-checked not to overlap" in doc
+    assert "east-service pallet-box island were removed" in doc
+    assert "Planner Driveable Aisles (cyan)" in doc
+    assert "local two-sided bypass" in doc
     assert "warehouse_full_4cam: 24.5 x 20.5 m AWS-style warehouse" in svg
-    assert "4.5 m central aisle" in svg
-    assert "green no-go/collision outline" in svg
+    assert "planner driveable aisle union" in svg
+    assert "loose aisle boxes have been removed" in svg
+    assert "conservative no-go envelope" in svg
+    assert 'x="108.4" y="772.0" width="976.1"' in svg
+    assert 'x="106.9" y="126.6" width="3.0" height="646.7"' in svg
 
 
 def test_extension_camera_models_use_isolated_topics_only() -> None:
