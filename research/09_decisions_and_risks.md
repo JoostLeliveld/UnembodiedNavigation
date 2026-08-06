@@ -20,6 +20,26 @@ Cold-storage manifests are stored both beside the archived content and under
 `/home/joostleliveld/Thesis_Cold_Archive/manifests/`. Each records source, destination,
 size, file count, SHA-256 manifest, reason, evidence references, date, and restore command.
 
+## Verified cold-storage transfers — 2026-08-06
+
+| Source | Bytes | Entries | Payload-manifest SHA-256 |
+|---|---:|---:|---|
+| `_archive` | 15,448,978,927 | 71,319 | `47c5cdb2ad24c9d028de89737ebd36e8551b73d126ab6b6eb5647f022de9dce9` |
+| `RobotControlExternalCamera` | 330,666,321 | 2,907 | `4436841489019b15f5eacc1e2d215a0c31486e32dfac277ef2e005ed268e4a74` |
+| `thesis-report` | 94,953,537 | 857 | `7589636b8b5ced5e6e74bb090c8edbbabb550fed62442b3ecc0f2096284ef1d6` |
+| `midterm_presentation` | 214,601,653 | 399 | `5e28786f31f940ad710dc3811542ac52de80e2d2c702642fc37364c1dec91490` |
+| `side_projects` | 410,679,425 | 5,455 | `a9a8917d7dabafc603a4d21e8e39e0725771a3cd410b4a94635c14dc64cb0f88` |
+| `meeting_results_update_2026-07-27` | 1,374,621 | 5 | `26f699a183953da7c70f6b5e85ed564275a34789fb0ec559035cb3e36babb281` |
+| `_private_ai_notes` | 318,267 | 34 | `279a9dc9f60953d365a70585d53e2ff9c481b3579bc736659d67fe8c19e2ed19` |
+| `.claude` | 311 | 1 | `7f48210dce3e3f81b174d8d007e1684d51264f63e72fbd0f04f54d85d47bf6f2` |
+| `REPO_ORGANIZATION_AUDIT_2026-07-15.md` | 13,017 | 1 | `d7541811daa7bf390efe6afe61332a38e59145b24d2de5a72a8c98948579963a` |
+
+All destinations are under
+`/home/joostleliveld/Thesis_Cold_Archive/workspace_repositories/`. The source was removed
+only after the relative path, type, size, and SHA-256 inventories matched. Per-entry hash
+inventories and restore commands live beside each archived payload and in the central
+manifest directory.
+
 ## Principal risks
 
 | Risk | Control | Residual limitation |
