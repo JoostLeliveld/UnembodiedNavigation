@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": null,
+  "study": "fused_observation_model",
+  "source_path": "logs/studies/fused_observation_model/exp1_availability_fusion/fig_a4_recalibration.pdf",
+  "source_sha256": "0feb4787f670f72de74ce73a37e0f63f399487546be65dcc5056c579f36b448b",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

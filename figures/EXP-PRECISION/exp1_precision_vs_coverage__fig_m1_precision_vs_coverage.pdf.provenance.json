@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": "EXP-PRECISION",
+  "study": "achievable_precision_map",
+  "source_path": "logs/studies/achievable_precision_map/exp1_precision_vs_coverage/fig_m1_precision_vs_coverage.pdf",
+  "source_sha256": "b0bf5b18f3c5bdb45a1f1aa1badce12012c7b3fc85f389bff25d30ada76bf697",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

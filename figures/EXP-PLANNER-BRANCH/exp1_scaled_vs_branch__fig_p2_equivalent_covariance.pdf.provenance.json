@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": "EXP-PLANNER-BRANCH",
+  "study": "planner_covariance_branching",
+  "source_path": "logs/studies/planner_covariance_branching/exp1_scaled_vs_branch/fig_p2_equivalent_covariance.pdf",
+  "source_sha256": "da2d525d259685d548af7600595418a6a3c1d380f3fa75108caa1d6bc37b945c",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

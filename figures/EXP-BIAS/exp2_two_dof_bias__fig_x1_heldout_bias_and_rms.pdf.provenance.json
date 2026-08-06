@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": "EXP-BIAS",
+  "study": "external_camera_bias_model",
+  "source_path": "logs/studies/external_camera_bias_model/exp2_two_dof_bias/fig_x1_heldout_bias_and_rms.pdf",
+  "source_sha256": "93934d3f4184b1c19ab3518bd59d62452cb00c64427a1339db54f6bb489c2e2b",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

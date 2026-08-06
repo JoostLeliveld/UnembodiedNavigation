@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": "EXP-BELIEF",
+  "study": "bayesian_filter_showcase",
+  "source_path": "logs/studies/bayesian_filter_showcase/exp1_graceful_vs_trusting/fig_s2_where_the_trust_goes.png",
+  "source_sha256": "1940a0db8b77ad34c4bff60c146eb9b30745fe3f7f335f4375181e16ca5e2d72",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

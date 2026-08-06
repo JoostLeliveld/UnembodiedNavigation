@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": "EXP-HIT-MISS",
+  "study": "efe_hit_miss_mixture",
+  "source_path": "logs/studies/efe_hit_miss_mixture/exp1_mixture_vs_blend/fig_e1_mixture_vs_blend.png",
+  "source_sha256": "32350d4d777a6e1a7d05583c39359e38d31339e4ba0c841b5dba2aa35f83f23f",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

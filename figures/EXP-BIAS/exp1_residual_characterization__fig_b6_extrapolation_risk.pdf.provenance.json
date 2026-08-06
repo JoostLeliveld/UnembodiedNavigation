@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": "EXP-BIAS",
+  "study": "external_camera_bias_model",
+  "source_path": "logs/studies/external_camera_bias_model/exp1_residual_characterization/fig_b6_extrapolation_risk.pdf",
+  "source_sha256": "292b5027054cf2eb612bba2bf5e2cf64da719f1f13d9cafae4d6de2f55cd2d12",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

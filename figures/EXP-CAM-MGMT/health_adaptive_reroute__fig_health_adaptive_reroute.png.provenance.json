@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": "EXP-CAM-MGMT",
+  "study": "multicamera_fusion_extension",
+  "source_path": "logs/studies/multicamera_fusion_extension/health_adaptive_reroute/fig_health_adaptive_reroute.png",
+  "source_sha256": "ab2db0daef4dd2bb0736511e70c542f4441483e7b45a85cce43cfbb6a2a66302",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

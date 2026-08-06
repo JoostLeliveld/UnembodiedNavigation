@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": "EXP-PROJ-AMP",
+  "study": "projection_amplification",
+  "source_path": "logs/studies/projection_amplification/exp1_geometry_vs_detector/fig_g3_heldout_model_comparison.png",
+  "source_sha256": "974e6852b23004a281e21f415f48c485bae53d0cf6317a0d93e9860fa463e222",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": null,
+  "study": "single_camera_uigp_reliability",
+  "source_path": "logs/studies/single_camera_uigp_reliability/expA_alpha_sweep/expA_alpha_sweep.png",
+  "source_sha256": "a3fef9da8b1981f6bcd1f310df9c0b67cade797029d96aaf7abee29604f425db",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

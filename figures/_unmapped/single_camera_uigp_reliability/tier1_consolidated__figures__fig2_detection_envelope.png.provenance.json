@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": null,
+  "study": "single_camera_uigp_reliability",
+  "source_path": "logs/studies/single_camera_uigp_reliability/tier1_consolidated/figures/fig2_detection_envelope.png",
+  "source_sha256": "265130d28ea557160032fde3c99937b71b9c1f8c8b7fc543b7bdc63c2f03503d",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

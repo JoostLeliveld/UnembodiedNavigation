@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": "EXP-NET-COMMISSION",
+  "study": "network_commissioning_realism",
+  "source_path": "logs/studies/network_commissioning_realism/exp1_gate_without_truth/fig_n2_sample_efficiency.png",
+  "source_sha256": "4876480ea6e204a11bc787be9dd21c1f3b4e3084e6ea2f86469295042016bf96",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

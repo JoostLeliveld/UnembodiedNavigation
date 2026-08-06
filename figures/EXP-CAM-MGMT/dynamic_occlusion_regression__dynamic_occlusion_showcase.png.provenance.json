@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": "EXP-CAM-MGMT",
+  "study": "multicamera_fusion_extension",
+  "source_path": "logs/studies/multicamera_fusion_extension/dynamic_occlusion_regression/dynamic_occlusion_showcase.png",
+  "source_sha256": "3d44a5542c48d85559f306322e3c19da913f97c804f215f5bfbf114ba8b9c438",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

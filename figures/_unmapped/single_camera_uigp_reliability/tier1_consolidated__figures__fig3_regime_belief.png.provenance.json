@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": null,
+  "study": "single_camera_uigp_reliability",
+  "source_path": "logs/studies/single_camera_uigp_reliability/tier1_consolidated/figures/fig3_regime_belief.png",
+  "source_sha256": "3dde1bc7fa2a469f189d1f004b4512110c6d9c7b6548e9ad88879ae3d34d95aa",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

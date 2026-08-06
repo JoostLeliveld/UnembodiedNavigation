@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-06",
+  "experiment_id": "EXP-BIAS",
+  "study": "external_camera_bias_model",
+  "source_path": "logs/studies/external_camera_bias_model/exp1_residual_characterization/fig_b2_bias_to_noise_ratio.pdf",
+  "source_sha256": "a9f1a9faad3768155bd368a9b723215011778e2f16adde6b089226ee998065e3",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}
