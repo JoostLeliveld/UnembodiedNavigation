@@ -3,6 +3,6 @@
   "experiment_id": "EXP-PROJ-AMP",
   "study": "projection_amplification",
   "source_path": "logs/studies/projection_amplification/exp2_grid_geometry/fig_g4_camera_C_geometry_check.pdf",
-  "source_sha256": "3ff6c8f6104e045031ec32065bbc64024bb136d5705dbc34c8757c9e38e0a081",
+  "source_sha256": "3bf83da93f26371184c27e055f1aead59d61f6641369d355976940776eceeed4",
   "note": "Promoted from ignored run output; regenerate by rerunning the study."
 }

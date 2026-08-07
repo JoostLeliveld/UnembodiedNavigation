@@ -55,6 +55,14 @@ from reliability.projection import (  # noqa: E402
 )
 import residual_audit as RA  # noqa: E402  (world, mounts, contact height, calibration)
 
+sys.path.insert(0, str(REPO / "experiments" / "pixel_ground_path"))
+from box_projection import (  # noqa: E402  (experiment-local candidate, never runtime)
+    BOX_STATISTIC_ALPHA,
+    BOX_STATISTIC_PLANE_Z_M,
+    box_statistic_pixel,
+    project_box_to_world,
+)
+
 #: perception_targets.csv names cameras by ROS frame; the studies key on camera_A..D.
 FRAME_TO_CAMERA = {frame: camera for camera, frame in RA.MODEL_INCLUDES.items()}
 
@@ -75,7 +83,14 @@ def _f(value, default=math.nan) -> float:
     return out
 
 
-def build(targets_csv: Path, conf_threshold: float) -> tuple[list[dict], dict]:
+def build(targets_csv: Path, conf_threshold: float, path: str = "deployed"
+          ) -> tuple[list[dict], dict]:
+    """path='deployed': bottom-centre pixel, contact plane 0.05 m, v2 along-bearing fit.
+    path='candidate': box-centre pixel, derived plane 0.085 m, NO fitted correction.
+
+    The candidate is experiment-local by locked decision. Scoring it here changes no
+    runtime interface; it produces a residual table for comparison and nothing else.
+    """
     calib = load_projection_calibration(RA.DEPLOYED_CALIB)
     models = {
         camera: camera_model_from_world(RA.WORLD_SDF, include_name=include)
@@ -96,7 +111,15 @@ def build(targets_csv: Path, conf_threshold: float) -> tuple[list[dict], dict]:
                 continue
 
             score = _f(record.get("yolo_score_raw"))
-            u, v = _f(record.get("yolo_bottom_u")), _f(record.get("yolo_bottom_v"))
+            if path == "candidate":
+                try:
+                    box = json.loads(record.get("yolo_bbox_xyxy") or "null")
+                    u, v = box_statistic_pixel(box, alpha=BOX_STATISTIC_ALPHA)
+                except (ValueError, TypeError):
+                    counts["no_detection"] += 1
+                    continue
+            else:
+                u, v = _f(record.get("yolo_bottom_u")), _f(record.get("yolo_bottom_v"))
             if not (math.isfinite(u) and math.isfinite(v)):
                 counts["no_detection"] += 1
                 continue
@@ -110,15 +133,26 @@ def build(targets_csv: Path, conf_threshold: float) -> tuple[list[dict], dict]:
                 continue
 
             entry = calib.get(camera, {})
-            raw = _project_pixel_to_world(
-                u, v, models[camera], contact_z_m=RA.CONTACT_Z_M,
-                along_bearing_offset_m=0.0, along_bearing_slope_per_m=0.0,
-            )
-            cor = _project_pixel_to_world(
-                u, v, models[camera], contact_z_m=RA.CONTACT_Z_M,
-                along_bearing_offset_m=float(entry.get("intercept_m", 0.0)),
-                along_bearing_slope_per_m=float(entry.get("slope_per_m", 0.0)),
-            )
+            if path == "candidate":
+                # Zero fitted parameters: the plane is derived from CAD, and there is no
+                # correction term at all. "raw" and "cor" are the same point by design --
+                # both columns are kept so the downstream figure code is unchanged.
+                box = json.loads(record.get("yolo_bbox_xyxy"))
+                raw = project_box_to_world(
+                    box, models[camera], alpha=BOX_STATISTIC_ALPHA,
+                    plane_z_m=BOX_STATISTIC_PLANE_Z_M,
+                )
+                cor = raw
+            else:
+                raw = _project_pixel_to_world(
+                    u, v, models[camera], contact_z_m=RA.CONTACT_Z_M,
+                    along_bearing_offset_m=0.0, along_bearing_slope_per_m=0.0,
+                )
+                cor = _project_pixel_to_world(
+                    u, v, models[camera], contact_z_m=RA.CONTACT_Z_M,
+                    along_bearing_offset_m=float(entry.get("intercept_m", 0.0)),
+                    along_bearing_slope_per_m=float(entry.get("slope_per_m", 0.0)),
+                )
             if raw is None or cor is None:
                 counts["projection_failed"] += 1
                 continue
@@ -163,6 +197,9 @@ def main() -> int:
                         help="explicit perception_targets.csv (defaults to <capture>/…)")
     parser.add_argument("--out", default="",
                         help="output residuals.csv (defaults beside the targets file)")
+    parser.add_argument("--path", choices=("deployed", "candidate"), default="deployed",
+                        help="deployed = bottom pixel @ 0.05 m + v2 fit; candidate = box "
+                             "centre @ 0.085 m with zero fitted parameters")
     parser.add_argument("--conf-threshold", type=float, default=0.05,
                         help="detector confidence floor. 0.05 is the RUNTIME value; the "
                              "offline gate contract says 0.25 (U6). Confidence is kept per "
@@ -176,9 +213,11 @@ def main() -> int:
             f"missing {targets}\n"
             "run scripts/visibility_comparison/extract_perception_targets.py first"
         )
-    out_path = Path(args.out) if args.out else targets.parent / "grid_residuals.csv"
+    suffix = "" if args.path == "deployed" else "_candidate"
+    out_path = (Path(args.out) if args.out
+                else targets.parent / f"grid_residuals{suffix}.csv")
 
-    rows, counts = build(targets, float(args.conf_threshold))
+    rows, counts = build(targets, float(args.conf_threshold), path=args.path)
     if not rows:
         raise SystemExit(f"no usable detections; counts={counts}")
 
@@ -193,13 +232,16 @@ def main() -> int:
         by_camera[row["camera"]] = by_camera.get(row["camera"], 0) + 1
         headings.setdefault(row["camera"], set()).add(round(math.degrees(row["theta"])))
     summary = {
+        "path": args.path,
+        "candidate_alpha": BOX_STATISTIC_ALPHA if args.path == "candidate" else None,
+        "candidate_plane_z_m": BOX_STATISTIC_PLANE_Z_M if args.path == "candidate" else None,
         "targets_csv": str(targets),
         "conf_threshold": float(args.conf_threshold),
         "counts": counts,
         "per_camera": {c: {"n": n, "distinct_headings": sorted(headings[c])}
                        for c, n in sorted(by_camera.items())},
     }
-    (out_path.parent / "grid_residuals_summary.json").write_text(
+    (out_path.parent / f"grid_residuals{suffix}_summary.json").write_text(
         json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 
     print(json.dumps(counts, indent=2))

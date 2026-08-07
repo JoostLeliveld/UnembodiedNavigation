@@ -811,6 +811,23 @@ def footprint_mask(model, kwargs, nx: int = 90, ny: int = 74):
     return xs, ys, mask
 
 
+def arm_label(per_camera: dict) -> str:
+    """Name the measurement path from the residuals themselves.
+
+    The candidate path applies no correction, so raw and corrected coincide exactly.
+    Printing "deployed-corrected" on a candidate figure would be a factual error, and a
+    figure travels alone, so this is derived rather than passed in.
+    """
+
+    for bucket in per_camera.values():
+        if len(bucket.get("raw", [])) and len(bucket.get("cor", [])):
+            if np.allclose(bucket["raw"], bucket["cor"], atol=1e-12):
+                return ("candidate path: box centre @ "
+                        "$z^{*}=0.085$ m, ZERO fitted parameters")
+            return "deployed path: bottom pixel @ $z=0.05$ m + v2 along-bearing fit"
+    return "residual"
+
+
 def fig_g4(per_camera: dict, models, calib, kind: str = "cor") -> dict:
     """One figure per camera: where the data is, then whether geometry predicts it.
 
@@ -894,7 +911,7 @@ def fig_g4(per_camera: dict, models, calib, kind: str = "cor") -> dict:
         ax_fit.set_title("(b)  does geometry predict the local SPREAD?\n" + note,
                          fontsize=9.0, fontweight="bold")
 
-        fig.suptitle(f"{camera.replace('camera_', 'Camera ')} — deployed-corrected residual",
+        fig.suptitle(f"{camera.replace('camera_', 'Camera ')} — {arm_label(per_camera)}",
                      fontsize=12.5, fontweight="bold", y=1.03)
         # The coverage caveat is MEASURED, never hardcoded: the same code renders both the
         # thin-ribbon route capture and the 2-D grid, and stating the route limitation on a
@@ -1060,7 +1077,12 @@ def main() -> int:
         },
         "heldout": results_by_kind,
         "geometry": fig_g1(models, calib),
-        "projection_and_correction": fig_g0(per_camera, models, calib),
+        "projection_and_correction": (
+            fig_g0(per_camera, models, calib)
+            if "deployed" in arm_label(per_camera)
+            else {"skipped": "candidate path applies no correction; fig_g0 would document "
+                             "a function this arm does not use"}
+        ),
         "range_profile": fig_g2(per_camera, results_by_kind),
         "spatial_cells": fig_g4(per_camera, models, calib, kind="cor"),
     }
