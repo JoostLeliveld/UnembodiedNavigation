@@ -101,6 +101,7 @@ class TeleportImageCapture(Node):
         world_name: str,
         image_topic: str,
         odom_topic: str,
+        extra_cameras: tuple[tuple[str, str], ...] = (),
         robot_z: float,
         settle_s: float,
         image_timeout_s: float,
@@ -128,12 +129,29 @@ class TeleportImageCapture(Node):
         self.latest_image = None
         self.latest_odom_xyyaw = None
         self.create_subscription(Image, str(image_topic), self._image_cb, 10)
+        # Extra cameras ride along on the SAME teleport. Capturing four cameras in one
+        # pass instead of four sequential passes is a 4x saving on a grid this size, and
+        # it guarantees the four views share one robot pose rather than four re-teleports.
+        self.extra_latest: dict[str, object] = {}
+        self.extra_count: dict[str, int] = {}
+        for frame, topic in extra_cameras:
+            self.extra_latest[frame] = None
+            self.extra_count[frame] = 0
+            self.create_subscription(
+                Image, str(topic), self._make_extra_cb(str(frame)), 10
+            )
         if self.verify_with_odom:
             self.create_subscription(Odometry, str(odom_topic), self._odom_cb, 10)
 
     def _image_cb(self, msg: Image) -> None:
         self.latest_image = image_msg_to_bgr8(msg)
         self.image_count += 1
+
+    def _make_extra_cb(self, frame: str):
+        def _cb(msg: Image) -> None:
+            self.extra_latest[frame] = image_msg_to_bgr8(msg)
+            self.extra_count[frame] = self.extra_count.get(frame, 0) + 1
+        return _cb
 
     def _odom_cb(self, msg: Odometry) -> None:
         q = msg.pose.pose.orientation
@@ -221,14 +239,35 @@ class TeleportImageCapture(Node):
                 else:
                     raise RuntimeError(message)
 
+        before_extra = {f: int(c) for f, c in self.extra_count.items()}
         deadline = time.monotonic() + max(self.image_timeout_s, 0.0)
         while rclpy.ok() and time.monotonic() < deadline:
             rclpy.spin_once(self, timeout_sec=0.05)
-            if self.image_count >= (before + self.min_new_frames) and self.latest_image is not None:
-                return self.latest_image.copy()
+            primary_ready = (self.image_count >= (before + self.min_new_frames)
+                             and self.latest_image is not None)
+            extras_ready = all(
+                self.extra_count.get(f, 0) >= before_extra[f] + self.min_new_frames
+                and self.extra_latest.get(f) is not None
+                for f in before_extra
+            )
+            if primary_ready and extras_ready:
+                return self._snapshot()
         if self.latest_image is None:
             raise RuntimeError('No camera image available after teleport')
-        return self.latest_image.copy()
+        # Timed out waiting for one or more extras; the caller records which frames are
+        # stale rather than silently pairing an old image with a new pose.
+        return self._snapshot(before_extra=before_extra)
+
+    def _snapshot(self, before_extra: dict | None = None):
+        """Latest frame per camera. Frames that did not refresh are returned as None."""
+
+        out = {None: self.latest_image.copy() if self.latest_image is not None else None}
+        for frame, image in self.extra_latest.items():
+            fresh = True
+            if before_extra is not None:
+                fresh = self.extra_count.get(frame, 0) > before_extra.get(frame, 0)
+            out[frame] = image.copy() if (image is not None and fresh) else None
+        return out
 
 
 def main() -> int:
@@ -252,6 +291,17 @@ def main() -> int:
     parser.add_argument('--image-topic', default='/external_camera/image_raw')
     parser.add_argument('--ready-timeout-s', type=float, default=15.0)
     parser.add_argument('--camera-frame', default='external_camera')
+    parser.add_argument(
+        '--extra-cameras', default='',
+        help=('Comma-separated frame=topic pairs captured on the SAME teleport, e.g. '
+              '"external_camera_b=/external_camera_b/image_raw,...". Empty (default) '
+              'preserves the single-camera capture byte for byte.'),
+    )
+    parser.add_argument(
+        '--no-previews', action='store_true',
+        help=('Skip the annotated preview JPEGs. They double disk for no analytical value '
+              'on large grids; the oracle pixel is already a CSV column.'),
+    )
     parser.add_argument('--odom-topic', default='/odom')
     parser.add_argument('--pose-timeout-s', type=float, default=2.0)
     parser.add_argument('--pose-tolerance-m', type=float, default=0.05)
@@ -307,11 +357,38 @@ def main() -> int:
 
     rows: list[dict[str, str]] = []
     image_hashes: list[str] = []
+    #: Teleports where a camera did not deliver a fresh frame in time. Recorded rather
+    #: than dropped silently, so coverage gaps are auditable.
+    stale_views: list[dict] = []
     rclpy.init()
+    extra_cameras = tuple(
+        tuple(part.split('=', 1))  # type: ignore[misc]
+        for part in (p.strip() for p in str(args.extra_cameras).split(','))
+        if part and '=' in part
+    )
+    extra_models = {}
+    for frame, _topic in extra_cameras:
+        # load_profile resolves the mount for a named camera model in the same world.
+        _p, intr_e, _w, pose_e = load_profile(
+            str(args.world_profiles), str(args.world), camera_model=str(frame)
+        )
+        pos_e = np.asarray(pose_e[:3], dtype=float)
+        extra_models[frame] = ObliqueCameraModel(
+            cam_pos=pos_e,
+            look_at=compute_look_at_from_pose(pos_e, pose_e[3], pose_e[4], pose_e[5]),
+            img_width=int(intr_e['img_width']),
+            img_height=int(intr_e['img_height']),
+            fov_h_rad=float(intr_e['fov_h_rad']),
+        )
+    if extra_cameras:
+        print(f'[capture] multicam: {1 + len(extra_cameras)} cameras per teleport '
+              f'({args.camera_frame} + {[f for f, _t in extra_cameras]})')
+
     node = TeleportImageCapture(
         world_name=str(profile['world_name']),
         image_topic=str(args.image_topic),
         odom_topic=str(args.odom_topic),
+        extra_cameras=extra_cameras,
         robot_z=float(args.robot_z),
         settle_s=float(args.settle_s),
         image_timeout_s=float(args.image_timeout_s),
@@ -327,63 +404,80 @@ def main() -> int:
         sample_id = 0
         for position_idx, (x, y) in enumerate(positions):
             for heading_idx, yaw in enumerate(yaws):
-                image = node.capture_image_at_pose(x=x, y=y, yaw=float(yaw))
-                image_path = output_dir / 'images' / f'{sample_id:06d}_xy{position_idx:04d}_h{heading_idx:02d}.jpg'
-                preview_path = output_dir / 'previews' / f'{sample_id:06d}_xy{position_idx:04d}_h{heading_idx:02d}.jpg'
-                cv2.imwrite(str(image_path), image)
-                image_hashes.append(hashlib.md5(image_path.read_bytes()).hexdigest())
+                frames = node.capture_image_at_pose(x=x, y=y, yaw=float(yaw))
+                # One teleport, one row per camera. `None` keys the primary camera so the
+                # single-camera path below is unchanged when --extra-cameras is empty.
+                views = [(None, str(args.camera_frame), camera)]
+                views += [(f, f, extra_models[f]) for f, _t in extra_cameras]
 
-                bottom_u, bottom_v, _ = camera.world_to_pixel(float(x), float(y), 0.0)
-                target_xyz = np.asarray([float(x), float(y), float(args.target_height_m)], dtype=float)
-                occluded = segment_occluded(occlusion_scene.prisms, camera.cam_pos, target_xyz)
-                in_frame = (math.isfinite(bottom_u) and math.isfinite(bottom_v)
-                            and 0.0 <= bottom_u < image.shape[1]
-                            and 0.0 <= bottom_v < image.shape[0])
-                if not in_frame:
-                    oracle_visible = 0
-                    oracle_reason = 'outside_image'
-                elif occluded:
-                    oracle_visible = 0
-                    oracle_reason = 'occluded'
-                else:
-                    oracle_visible = 1
-                    oracle_reason = 'visible'
+                for key, frame_name, cam_model in views:
+                    image = frames.get(key)
+                    if image is None:
+                        stale_views.append(
+                            {'sample_id': sample_id, 'camera_frame': frame_name,
+                             'x': float(x), 'y': float(y), 'theta': float(yaw)}
+                        )
+                        continue
+                    suffix = '' if key is None else f'_{frame_name}'
+                    stem = f'{sample_id:06d}_xy{position_idx:04d}_h{heading_idx:02d}{suffix}'
+                    image_path = output_dir / 'images' / f'{stem}.jpg'
+                    preview_path = output_dir / 'previews' / f'{stem}.jpg'
+                    cv2.imwrite(str(image_path), image)
+                    image_hashes.append(hashlib.md5(image_path.read_bytes()).hexdigest())
 
-                preview = image.copy()
-                if math.isfinite(bottom_u) and math.isfinite(bottom_v):
-                    color = (0, 255, 0) if oracle_visible else (0, 0, 255)
-                    cv2.circle(preview, (int(round(bottom_u)), int(round(bottom_v))), 5, color, -1)
-                cv2.putText(
-                    preview,
-                    f'sample={sample_id} xy={position_idx} h={heading_idx} oracle={oracle_visible} reason={oracle_reason}',
-                    (12, 28),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.55,
-                    (255, 255, 255),
-                    2,
-                    cv2.LINE_AA,
-                )
-                cv2.imwrite(str(preview_path), preview)
+                    bottom_u, bottom_v, _ = cam_model.world_to_pixel(float(x), float(y), 0.0)
+                    target_xyz = np.asarray(
+                        [float(x), float(y), float(args.target_height_m)], dtype=float)
+                    occluded = segment_occluded(
+                        occlusion_scene.prisms, cam_model.cam_pos, target_xyz)
+                    in_frame = (math.isfinite(bottom_u) and math.isfinite(bottom_v)
+                                and 0.0 <= bottom_u < image.shape[1]
+                                and 0.0 <= bottom_v < image.shape[0])
+                    if not in_frame:
+                        oracle_visible, oracle_reason = 0, 'outside_image'
+                    elif occluded:
+                        oracle_visible, oracle_reason = 0, 'occluded'
+                    else:
+                        oracle_visible, oracle_reason = 1, 'visible'
 
-                rows.append({
-                    'sample_id': str(sample_id),
-                    'image_path': repo_relative(image_path, output_dir),
-                    'preview_path': repo_relative(preview_path, output_dir),
-                    'x': f'{float(x):.8f}',
-                    'y': f'{float(y):.8f}',
-                    'theta': f'{float(yaw):.8f}',
-                    'timestamp': f'{time.time():.6f}',
-                    'world': str(args.world),
-                    'camera_frame': str(args.camera_frame),
-                    'oracle_visible': str(int(oracle_visible)),
-                    'oracle_bottom_u': '' if not math.isfinite(bottom_u) else f'{float(bottom_u):.8f}',
-                    'oracle_bottom_v': '' if not math.isfinite(bottom_v) else f'{float(bottom_v):.8f}',
-                    'oracle_occlusion_reason': oracle_reason,
-                    'segmentation_path': '',
-                    'labels_map_path': '',
-                    'robot_label': '',
-                })
+                    preview = image if args.no_previews else image.copy()
+                    if (not args.no_previews) and math.isfinite(bottom_u) and math.isfinite(bottom_v):
+                        color = (0, 255, 0) if oracle_visible else (0, 0, 255)
+                        cv2.circle(preview, (int(round(bottom_u)), int(round(bottom_v))),
+                                   5, color, -1)
+                    if not args.no_previews:
+                        cv2.putText(
+                            preview,
+                            f'sample={sample_id} {frame_name} xy={position_idx} '
+                            f'h={heading_idx} oracle={oracle_visible} reason={oracle_reason}',
+                            (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2,
+                            cv2.LINE_AA,
+                        )
+                    if not args.no_previews:
+                        cv2.imwrite(str(preview_path), preview)
+
+                    rows.append({
+                        'sample_id': str(sample_id),
+                        'image_path': repo_relative(image_path, output_dir),
+                        'preview_path': repo_relative(preview_path, output_dir),
+                        'x': f'{float(x):.8f}',
+                        'y': f'{float(y):.8f}',
+                        'theta': f'{float(yaw):.8f}',
+                        'timestamp': f'{time.time():.6f}',
+                        'world': str(args.world),
+                        'camera_frame': frame_name,
+                        'oracle_visible': str(int(oracle_visible)),
+                        'oracle_bottom_u': '' if not math.isfinite(bottom_u) else f'{float(bottom_u):.8f}',
+                        'oracle_bottom_v': '' if not math.isfinite(bottom_v) else f'{float(bottom_v):.8f}',
+                        'oracle_occlusion_reason': oracle_reason,
+                        'segmentation_path': '',
+                        'labels_map_path': '',
+                        'robot_label': '',
+                    })
                 sample_id += 1
+                if sample_id % 100 == 0:
+                    print(f'[capture] {sample_id}/{len(positions) * len(yaws)} poses, '
+                          f'{len(rows)} rows, {len(stale_views)} stale views', flush=True)
     finally:
         node.destroy_node()
         rclpy.shutdown()
@@ -398,6 +492,14 @@ def main() -> int:
         'world_path': str(Path(world_path).resolve()),
         'capture_method': 'grid_teleport',
         'camera_frame': str(args.camera_frame),
+        'extra_camera_frames': [f for f, _t in extra_cameras],
+        'extra_camera_mounts': {
+            f: [float(v) for v in load_profile(
+                str(args.world_profiles), str(args.world), camera_model=str(f))[3]]
+            for f, _t in extra_cameras
+        },
+        'stale_views': stale_views,
+        'n_stale_views': len(stale_views),
         'camera_pose': [float(v) for v in camera_pose],
         'camera_pos': [float(v) for v in cam_pos],
         'look_at': [float(v) for v in look_at],
