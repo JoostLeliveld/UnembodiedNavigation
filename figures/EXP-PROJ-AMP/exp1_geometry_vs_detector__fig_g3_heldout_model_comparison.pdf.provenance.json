@@ -3,6 +3,6 @@
   "experiment_id": "EXP-PROJ-AMP",
   "study": "projection_amplification",
   "source_path": "logs/studies/projection_amplification/exp1_geometry_vs_detector/fig_g3_heldout_model_comparison.pdf",
-  "source_sha256": "ba90ca5f07a5484f60266db56a76ddcb8a7e13a5cc9f4c75cac08603eff4e59f",
+  "source_sha256": "6d8c50657e8a007146282004d6afe172646c4b52a1241d58d6ad6fb91aaed288",
   "note": "Promoted from ignored run output; regenerate by rerunning the study."
 }

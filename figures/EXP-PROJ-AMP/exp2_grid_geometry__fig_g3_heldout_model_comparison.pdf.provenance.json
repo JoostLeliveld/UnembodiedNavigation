@@ -3,6 +3,6 @@
   "experiment_id": "EXP-PROJ-AMP",
   "study": "projection_amplification",
   "source_path": "logs/studies/projection_amplification/exp2_grid_geometry/fig_g3_heldout_model_comparison.pdf",
-  "source_sha256": "a7b17f7c7ebb8648cbfe5d3ee332b814454974612b92f93989ea638999247fb3",
+  "source_sha256": "dae9756952bf7e4bf523f11bbde029f786f79a86b994826ef2daa149b2db276e",
   "note": "Promoted from ignored run output; regenerate by rerunning the study."
 }

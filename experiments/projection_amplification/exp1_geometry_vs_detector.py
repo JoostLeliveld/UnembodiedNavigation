@@ -797,51 +797,86 @@ def fig_g4(per_camera: dict, models, calib, kind: str = "cor") -> dict:
 
 
 def fig_g3(results: dict, kind_label: str) -> None:
-    """Held-out model comparison, as differences against the one-parameter baseline.
+    """Held-out model comparison as ABSOLUTE scores, in the units each metric is in.
 
-    Absolute NLL is dominated by camera A (whose held-out bias shift is larger than
-    its noise), which hides every other camera. Plotting NLL *relative to R1-iso*
-    removes the per-camera scale and shows the only thing being compared: which
-    variance form wins, and by how much. Symlog keeps A on the same axis as the
-    sub-nat differences elsewhere.
+    The previous version plotted NLL *relative to R1-iso* on a symlog axis. That hides
+    the two things a reader needs: what the numbers actually are, and whether any model
+    is calibrated. A relative bar of "-0.04 nats" is unreadable; "the model claims 41 mm,
+    reality is 56 mm, and its 90 % interval caught 82 %" is not.
+
+    Left: absolute held-out NLL per camera per model, lowest wins, annotated.
+    Right: calibration -- claimed RMS against measured RMS, with 90 % coverage, in mm.
+
+    R1-range carries the same single free parameter as R2-geom and is fitted by the same
+    closed-form ML; only the shape differs. It is here because a reviewer is entitled to
+    ask whether JJ^T does anything beyond encoding distance from the camera.
     """
 
     usable = [c for c in CAMERAS if results.get(c, {}).get("status") == "ok"]
-    fig, axes = plt.subplots(1, 3, figsize=(14.5, 4.4))
-    width = 0.34
-    positions = np.arange(len(usable))
-    for ax, centring, panel in (
-        (axes[0], "", "deployable  (train-fold centring)"),
-        (axes[1], " (oracle-centred)", "variance model isolated  (oracle centring)"),
-    ):
-        for offset, name in ((-width / 2, "R1-full"), (width / 2, "R2-geom")):
-            deltas = [
-                results[c][name + centring]["nll"] - results[c]["R1-iso" + centring]["nll"]
-                for c in usable
-            ]
-            ax.bar(positions + offset, deltas, width, color=MODEL_COLORS[name], label=name)
-        ax.axhline(0.0, color="#333333", lw=1.2)
-        ax.set_yscale("symlog", linthresh=0.1)
-        ax.set_xticks(positions, [c.replace("camera_", "") for c in usable])
-        ax.set_ylabel("held-out NLL relative to R1-iso  [nats]\n(negative = beats the "
-                      "one-parameter baseline)")
-        ax.set_title(panel, fontweight="bold", fontsize=10)
-        ax.legend(fontsize=8)
-    ax2 = axes[2]
-    for offset, name in zip((-width * 0.75, 0.0, width * 0.75),
-                            ("R1-iso", "R1-full", "R2-geom")):
-        ax2.bar(positions + offset, [100 * results[c][name]["coverage_90"] for c in usable],
-                width * 0.7, color=MODEL_COLORS[name], label=name)
-    ax2.axhline(90.0, color="#333333", lw=1.2, ls="--", label="nominal 90 %")
-    ax2.set_xticks(positions, [c.replace("camera_", "") for c in usable])
-    ax2.set_ylabel("empirical 90 % coverage  [%]")
-    ax2.set_title("Calibration, deployable centring\n(read with the likelihood, never alone)",
-                  fontweight="bold", fontsize=10)
-    ax2.legend(fontsize=8)
-    fig.suptitle(f"R2-geom ($\\sigma_{{pix}}^2 J J^T$) has the SAME parameter count as R1-iso "
-                 f"— residuals {kind_label}",
-                 fontsize=12.5, fontweight="bold")
-    fig.tight_layout(rect=(0, 0, 1, 0.92))
+    if not usable:
+        return
+    models = ("R1-iso", "R1-range", "R2-geom", "R1-full")
+    labels = {"R1-iso": "constant", "R1-range": "range-only",
+              "R2-geom": r"geometry $JJ^{T}$", "R1-full": "full 2x2"}
+
+    fig, (ax_nll, ax_cal) = plt.subplots(1, 2, figsize=(14.2, 4.8))
+    width = 0.2
+    positions = np.arange(len(usable), dtype=float)
+
+    for index, name in enumerate(models):
+        values = [results[c][name]["nll"] for c in usable]
+        offset = (index - (len(models) - 1) / 2.0) * width
+        ax_nll.bar(positions + offset, values, width * 0.92, zorder=3,
+                   color=MODEL_COLORS[name], edgecolor="white", linewidth=0.7,
+                   label=labels[name])
+        for x, v in zip(positions + offset, values):
+            ax_nll.text(x, v, f"{v:.2f}", ha="center", fontsize=6.8, rotation=90,
+                        va="bottom" if v >= 0 else "top", zorder=6)
+    # Mark the winner per camera so "lower is better" needs no decoding.
+    for x, camera in zip(positions, usable):
+        best = min(models, key=lambda m: results[camera][m]["nll"])
+        ax_nll.text(x, ax_nll.get_ylim()[1], f"best: {labels[best]}", ha="center",
+                    va="top", fontsize=7.5, fontweight="bold", color="#333333")
+    ax_nll.grid(True, axis="y", zorder=0)
+    ax_nll.axhline(0.0, color="#333333", lw=1.0)
+    ax_nll.set_xticks(positions)
+    ax_nll.set_xticklabels([c.replace("camera_", "") for c in usable])
+    ax_nll.set_ylabel("held-out NLL  [nats]   (lower is better)")
+    ax_nll.set_title("(a)  absolute held-out score, not a difference",
+                     fontweight="bold", fontsize=10)
+    ax_nll.legend(fontsize=7.5, ncol=2)
+
+    for index, name in enumerate(models):
+        claimed = [1000.0 * results[c][name]["stated_rms_m"] for c in usable]
+        offset = (index - (len(models) - 1) / 2.0) * width
+        ax_cal.bar(positions + offset, claimed, width * 0.92, zorder=3,
+                   color=MODEL_COLORS[name], edgecolor="white", linewidth=0.7,
+                   label=labels[name])
+        for x, c_name in zip(positions + offset, usable):
+            cov = results[c_name][name]["coverage_90"]
+            ax_cal.text(x, 1.0, f"{100 * cov:.0f}%", ha="center", va="bottom",
+                        fontsize=6.5, rotation=90, color="white", zorder=6)
+    measured = [1000.0 * results[c]["R1-iso"]["rms_m"] for c in usable]
+    ax_cal.plot(positions, measured, "k_", markersize=30, markeredgewidth=2.4, zorder=7,
+                label="measured RMS")
+    ax_cal.grid(True, axis="y", zorder=0)
+    ax_cal.set_xticks(positions)
+    ax_cal.set_xticklabels([c.replace("camera_", "") for c in usable])
+    ax_cal.set_ylabel("error magnitude [mm]")
+    ax_cal.set_title("(b)  calibration: claimed RMS vs measured, % = held-out 90 % coverage\n"
+                     "a model can buy coverage by claiming a huge sigma -- read both bars",
+                     fontweight="bold", fontsize=9.5)
+    ax_cal.legend(fontsize=7.5, ncol=2)
+
+    fig.suptitle(f"Held-out variance-model comparison — {kind_label}",
+                 fontweight="bold", fontsize=12.5, y=1.02)
+    fig.text(0.5, -0.04,
+             "All four models are fitted on leave-region-out folds and scored on the held-out "
+             "fold. R1-iso, R1-range and R2-geom each carry ONE free parameter and differ only "
+             "in the per-sample shape; R1-full carries three. Nominal coverage is 90 %. "
+             "Ground truth scores the outcome and never enters a fit.",
+             ha="center", va="top", fontsize=7.4, color="#333333", wrap=True)
+    fig.tight_layout()
     for ext in ("png", "pdf"):
         fig.savefig(OUT / f"fig_g3_heldout_model_comparison.{ext}", bbox_inches="tight")
     plt.close(fig)

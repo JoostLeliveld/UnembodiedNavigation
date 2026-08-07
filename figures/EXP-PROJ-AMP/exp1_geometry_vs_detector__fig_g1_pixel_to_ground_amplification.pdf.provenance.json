@@ -3,6 +3,6 @@
   "experiment_id": "EXP-PROJ-AMP",
   "study": "projection_amplification",
   "source_path": "logs/studies/projection_amplification/exp1_geometry_vs_detector/fig_g1_pixel_to_ground_amplification.pdf",
-  "source_sha256": "4692ecd6c6eec6838889cb0ff84d249326bca86200239bd2b1549bd5034fbb5c",
+  "source_sha256": "e11f19b18532ce92e629733741bba0a16a525b95bb6b490b373057806348a1f7",
   "note": "Promoted from ignored run output; regenerate by rerunning the study."
 }
