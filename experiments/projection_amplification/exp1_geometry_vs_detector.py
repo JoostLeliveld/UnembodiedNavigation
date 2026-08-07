@@ -85,7 +85,18 @@ RANGE_EDGES = np.arange(3.0, 16.01, 1.0)
 C_ISO = "#E69F00"
 C_FULL = "#D55E00"
 C_GEOM = "#0072B2"
-MODEL_COLORS = {"R1-iso": C_ISO, "R1-full": C_FULL, "R2-geom": C_GEOM}
+C_RANGE = "#009E73"
+MODEL_COLORS = {"R1-iso": C_ISO, "R1-full": C_FULL, "R2-geom": C_GEOM, "R1-range": C_RANGE}
+#: Okabe-Ito, one per camera, for the per-detection scatter in fig_g2.
+CAMERA_COLORS = {"camera_A": "#0072B2", "camera_B": "#E69F00",
+                 "camera_C": "#009E73", "camera_D": "#CC79A7"}
+
+
+def _rho(a, b) -> float:
+    """Spearman from the shared library, tolerating its (rho, p) return shape."""
+
+    value = spearman(np.asarray(a, dtype=float), np.asarray(b, dtype=float))
+    return float(value[0] if isinstance(value, tuple) else value)
 
 
 def _style() -> None:
@@ -202,6 +213,31 @@ def geometric_shapes(jac: np.ndarray) -> np.ndarray:
     return np.einsum("nij,nkj->nik", jac, jac)
 
 
+def range_shapes(ranges: np.ndarray) -> np.ndarray:
+    """R1-range: isotropic shape growing as range^2, normalised to unit mean scale.
+
+    The reviewer question this answers is "is J J' doing anything beyond encoding
+    distance from the camera?". To answer it the range model must cost the SAME one
+    free parameter as R2-geom, so the range dependence enters as a fixed per-sample
+    *shape* and a single scalar is fitted by the same closed-form ML. Only the shape
+    differs between the two models, which is exactly the comparison of interest.
+    """
+
+    scale = (ranges / float(np.mean(ranges))) ** 2
+    return scale[:, None, None] * np.eye(2)[None, :, :]
+
+
+def stated_rms_m(covariances) -> float:
+    """The error magnitude the model CLAIMS, in metres: sqrt(E[|e|^2]) = sqrt(E[tr C]).
+
+    Pairs with the measured ``rms_m`` so a reader can compare "the model says 4 cm"
+    against "reality is 5 cm" without converting nats.
+    """
+
+    traces = [float(np.trace(np.asarray(c))) for c in covariances]
+    return float(np.sqrt(np.mean(traces))) if traces else float("nan")
+
+
 def fit_iso(res: np.ndarray) -> np.ndarray:
     """R1-iso: s^2 I, ML over the centred residuals (s^2 = mean of e'e / 2)."""
 
@@ -256,9 +292,10 @@ def evaluate(per_camera: dict, kind: str = "cor") -> dict:
             results[camera] = {"status": "insufficient_samples", "n": int(len(res_all))}
             continue
         shapes_all = geometric_shapes(bucket["jac"])
+        range_all = range_shapes(bucket["range"])
         collected = {
             (name, centring): {"res": [], "cov": []}
-            for name in ("R1-iso", "R1-full", "R2-geom")
+            for name in ("R1-iso", "R1-full", "R1-range", "R2-geom")
             for centring in ("train", "oracle")
         }
         folds = 0
@@ -282,11 +319,14 @@ def evaluate(per_camera: dict, kind: str = "cor") -> dict:
             iso = fit_iso(train_res)
             full = fit_full(train_res)
             pixel_var = fit_geometric_pixel_variance(train_res, shapes_all[train])
+            # Same closed-form ML, same one free parameter, different fixed shape.
+            range_var = fit_geometric_pixel_variance(train_res, range_all[train])
             sigma_pix.append(math.sqrt(pixel_var))
 
             for name, covariances in (
                 ("R1-iso", [iso] * int(test.sum())),
                 ("R1-full", [full] * int(test.sum())),
+                ("R1-range", [range_var * shape for shape in range_all[test]]),
                 ("R2-geom", [pixel_var * shape for shape in shapes_all[test]]),
             ):
                 floored = [_psd_floor(np.asarray(c)).tolist() for c in covariances]
@@ -310,6 +350,8 @@ def evaluate(per_camera: dict, kind: str = "cor") -> dict:
                 "coverage_90": chi2_coverage(residuals, covariances, 0.90),
                 "coverage_95": chi2_coverage(residuals, covariances, 0.95),
                 "rms_m": float(np.sqrt(np.mean(np.sum(np.asarray(residuals) ** 2, axis=1)))),
+                # What the model CLAIMS, in metres, so the score is readable without nats.
+                "stated_rms_m": stated_rms_m(covariances),
             }
         entry["nll_gain_geom_vs_iso"] = entry["R1-iso"]["nll"] - entry["R2-geom"]["nll"]
         entry["nll_gain_geom_vs_full"] = entry["R1-full"]["nll"] - entry["R2-geom"]["nll"]
@@ -390,76 +432,123 @@ def fig_g1(models, calib) -> dict:
 
 
 def fig_g2(per_camera: dict, results_by_kind: dict) -> dict:
-    """Does the geometric prediction track the observed residual growth with range?
+    """Does projection geometry explain the residual we actually observe?
 
-    Two rows, because the answer differs: the RAW residual is what pure projection
-    geometry should explain, while the deployed correction is itself a function of
-    range and so removes part of that structure before the variance model sees it.
+    One point per detection, never a range bin. The previous version of this figure
+    reduced each camera to 3-7 range-binned medians and reported a Spearman over those
+    bins; with 3 bins that statistic is +-1 almost regardless of the data, and it
+    reported rho = -1.00 for a camera whose observed curve ran OPPOSITE to the
+    prediction. Range was also the wrong axis: J = J(x, y), not J(r).
+
+    Left/middle: observed |e| against the geometric prediction sigma_pix*sqrt(tr G),
+    raw and after the deployed correction. Right: what each model CLAIMS versus what
+    actually happened, in millimetres, with held-out 90 % coverage -- the same
+    comparison fig_g3 scores in nats, in units a reader can check by eye.
+
+    Scope, stated on the figure because it is the binding limit: the robot drove
+    straight routes, so sigma_max(J) and range are collinear at rho >= 0.97 and this
+    data CANNOT separate them.
     """
 
     kinds = (("raw", "raw projection"), ("cor", "after the deployed correction"))
-    fig, axes = plt.subplots(len(kinds), len(CAMERAS),
-                             figsize=(3.9 * len(CAMERAS), 3.5 * len(kinds)),
-                             sharex="col")
-    stats: dict[str, dict] = {}
-    for row, (kind, kind_label) in enumerate(kinds):
-        results = results_by_kind[kind]
-        stats[kind] = {}
-        for column, camera in enumerate(CAMERAS):
-            ax = axes[row][column]
+    fig = plt.figure(figsize=(15.6, 5.4))
+    grid = fig.add_gridspec(1, 3, width_ratios=(1.0, 1.0, 1.25), wspace=0.28)
+    stats: dict = {}
+
+    for col, (kind, kind_label) in enumerate(kinds):
+        ax = fig.add_subplot(grid[0, col])
+        ax.grid(True, zorder=0)
+        allx, ally = [], []
+        for camera in CAMERAS:
             bucket = per_camera[camera]
-            entry = results.get(camera, {})
+            entry = results_by_kind[kind].get(camera, {})
             if entry.get("status") != "ok":
-                ax.set_title(f"{camera} — insufficient samples", fontsize=9)
                 continue
-            res = bucket[kind] - bucket[kind].mean(axis=0)
-            shapes = geometric_shapes(bucket["jac"])
             sigma_pix = entry["sigma_pix_px"]["mean"]
-            observed = np.sum(res**2, axis=1)
-            predicted = (sigma_pix**2) * np.trace(shapes, axis1=1, axis2=2)
-            centres, obs_med, counts = binned(bucket["range"], observed, RANGE_EDGES)
-            _, pred_med, _ = binned(bucket["range"], predicted, RANGE_EDGES)
-            keep = counts >= 5
-            ax.plot(centres[keep], np.sqrt(obs_med[keep]) * 1000.0, "o-", color="#333333",
-                    lw=1.8, ms=4, label="observed (median)")
-            ax.plot(centres[keep], np.sqrt(pred_med[keep]) * 1000.0, "s--", color=C_GEOM,
-                    lw=1.8, ms=4, label=r"geometric $\sigma_{pix}\|J\|$")
-            if row == len(kinds) - 1:
-                ax.set_xlabel("range [m]")
-            ax.set_title(f"{camera.replace('camera_', 'camera ')} · {kind_label}\n"
-                         f"$\\sigma_{{pix}}$ = {sigma_pix:.2f} px",
-                         fontweight="bold", fontsize=9)
-            if row == 0 and column == 0:
-                ax.legend(fontsize=7.5)
-            ratio = np.sqrt(obs_med[keep] / pred_med[keep])
-            rho = spearman(pred_med[keep], obs_med[keep])[0] if keep.sum() >= 3 else float("nan")
-            ax.text(
-                0.03, 0.03,
-                f"shape $\\rho$ = {rho:+.2f}  ({int(keep.sum())} bins)\n"
-                f"obs/pred = {np.median(ratio):.2f}",
-                transform=ax.transAxes, fontsize=7.5, va="bottom", ha="left",
-                bbox=dict(facecolor="white", alpha=0.85, edgecolor="none", pad=2.0),
-            )
-            # Spearman of observed-vs-predicted across bins says whether the SHAPE
-            # of the range dependence matches, independent of overall scale.
-            stats[kind][camera] = {
-                "sigma_pix_px": sigma_pix,
-                "observed_over_predicted_std_median": float(np.median(ratio)),
-                "observed_over_predicted_std_range": [float(np.min(ratio)),
-                                                      float(np.max(ratio))],
-                "shape_spearman_binned": (
-                    float(spearman(pred_med[keep], obs_med[keep])[0])
-                    if keep.sum() >= 3 else None
-                ),
-                "range_bins_used": int(keep.sum()),
+            shapes = geometric_shapes(bucket["jac"])
+            pred_mm = 1000.0 * sigma_pix * np.sqrt(np.trace(shapes, axis1=1, axis2=2))
+            obs_mm = 1000.0 * np.linalg.norm(bucket[kind], axis=1)
+            ax.scatter(pred_mm, obs_mm, s=7, alpha=0.35, linewidths=0,
+                       color=CAMERA_COLORS[camera], label=camera.replace("camera_", ""),
+                       zorder=3)
+            allx.extend(pred_mm.tolist())
+            ally.extend(obs_mm.tolist())
+            stats.setdefault(kind, {})[camera] = {
+                "n": int(len(obs_mm)),
+                "spearman_obs_vs_pred": float(_rho(obs_mm, pred_mm)),
+                "median_obs_mm": float(np.median(obs_mm)),
+                "median_pred_mm": float(np.median(pred_mm)),
             }
-        axes[row][0].set_ylabel(f"residual magnitude [mm]\n({kind_label})")
-    fig.suptitle("Observed residual growth with range versus the one-parameter geometric "
-                 "prediction\n"
-                 r"($\rho$ = Spearman of binned observed vs predicted; obs/pred = median std "
-                 "ratio. A/B cover only 3 range bins)",
-                 fontsize=12.0, fontweight="bold", y=1.0)
-    fig.tight_layout(rect=(0, 0, 1, 0.93))
+        if allx:
+            # Percentile, not max: a handful of large residuals otherwise compress the
+            # bulk of the detections into the bottom-left corner and hide the structure.
+            hi = float(np.percentile(np.concatenate([allx, ally]), 99.0)) * 1.08
+            ax.plot([0, hi], [0, hi], color="#444444", ls="--", lw=1.2, zorder=4,
+                    label="identity")
+            ax.set_xlim(0, hi)
+            ax.set_ylim(0, hi)
+        ax.set_xlabel(r"geometry prediction  $\sigma_{pix}\sqrt{\mathrm{tr}\,JJ^{T}}$  [mm]")
+        if col == 0:
+            ax.set_ylabel("observed residual $|e|$  [mm]")
+        rhos = "\n".join(
+            f"  {c.replace('camera_', '')}  {stats[kind][c]['spearman_obs_vs_pred']:+.2f}"
+            for c in CAMERAS if c in stats.get(kind, {})
+        )
+        ax.set_title(f"({'ab'[col]})  {kind_label}", fontsize=10, fontweight="bold")
+        ax.text(0.97, 0.03, "Spearman per detection\n" + rhos, transform=ax.transAxes,
+                ha="right", va="bottom", fontsize=7.8, family="monospace",
+                bbox=dict(fc="white", ec="#cccccc", alpha=0.93, pad=3), zorder=9)
+        ax.legend(fontsize=7.5, loc="upper left", ncol=2, markerscale=2.0)
+
+    # ---- (c) stated vs actual, in millimetres ----
+    ax = fig.add_subplot(grid[0, 2])
+    ax.grid(True, axis="y", zorder=0)
+    models = ("R1-iso", "R1-range", "R2-geom")
+    labels = {"R1-iso": "constant", "R1-range": "range-only", "R2-geom": r"geometry $JJ^{T}$"}
+    width = 0.26
+    xs = np.arange(len(CAMERAS), dtype=float)
+    for mi, model in enumerate(models):
+        stated, actual, cov90 = [], [], []
+        for camera in CAMERAS:
+            entry = results_by_kind["cor"].get(camera, {})
+            row = entry.get(model, {}) if entry.get("status") == "ok" else {}
+            stated.append(1000.0 * row.get("stated_rms_m", np.nan))
+            actual.append(1000.0 * row.get("rms_m", np.nan))
+            cov90.append(row.get("coverage_90", np.nan))
+        off = (mi - 1) * width
+        ax.bar(xs + off, stated, width * 0.9, color=MODEL_COLORS.get(model, "#888888"),
+               edgecolor="white", linewidth=0.7, zorder=3, label=f"{labels[model]} — claimed")
+        for x, a, c in zip(xs + off, actual, cov90):
+            if np.isfinite(c):
+                ax.text(x, 2, f"{100 * c:.0f}%", ha="center", va="bottom", fontsize=6.5,
+                        rotation=90, color="white", zorder=6)
+    actual_cor = [1000.0 * results_by_kind["cor"].get(c, {}).get("R1-iso", {}).get("rms_m", np.nan)
+                  for c in CAMERAS]
+    ax.plot(xs, actual_cor, "k_", markersize=26, markeredgewidth=2.2, zorder=7,
+            label="actual RMS (measured)")
+    ax.set_xticks(xs)
+    ax.set_xticklabels([c.replace("camera_", "") for c in CAMERAS])
+    ax.set_ylabel("error magnitude [mm]")
+    ax.set_title("(c)  what each model CLAIMS vs what happened\n"
+                 "bar = claimed RMS, dash = measured RMS, % = held-out 90 % coverage",
+                 fontsize=9.5, fontweight="bold")
+    ax.set_ylim(0, max(np.nanmax(actual_cor), 80.0) * 1.32)
+    ax.legend(fontsize=7, loc="upper center", ncol=2, framealpha=0.95)
+
+    fig.suptitle("Does projection geometry explain the observed residual?  "
+                 "One point per detection, no range binning",
+                 fontsize=12.5, fontweight="bold", y=1.02)
+    fig.text(0.5, -0.10,
+             "1424 detections from THREE captures (smoke1 90 deg, smoke2 0 deg, "
+             "fusion_handover tangent-derived): two headings only. The robot drove straight "
+             "routes, so the sampled footprint is a thin ribbon -- image column spans ~100 px "
+             "of ~1280 on cameras A and B -- and sigma_max(J) is collinear with range at "
+             "rho = 0.976/0.969/0.999/0.996. This data therefore CANNOT test whether JJ^T "
+             "adds anything beyond distance from camera; the range-only bar is shown so that "
+             "limit is visible rather than assumed. Folds are leave-region-out, not "
+             "train/val/test by run. Ground truth measures the residual and never enters a "
+             "projection, Jacobian or covariance.",
+             ha="center", va="top", fontsize=7.4, color="#333333", wrap=True)
     for ext in ("png", "pdf"):
         fig.savefig(OUT / f"fig_g2_observed_vs_geometric.{ext}", bbox_inches="tight")
     plt.close(fig)
