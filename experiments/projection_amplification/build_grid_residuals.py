@@ -33,6 +33,8 @@ It never enters a projection, a Jacobian, a fitted parameter or a covariance.
 
 from __future__ import annotations
 
+import pathlib
+
 import argparse
 import csv
 import json
@@ -48,11 +50,22 @@ REPO = repo_root(_HERE)
 for _p in ("src/reliability", "src/unav_common", "experiments/external_camera_bias_model"):
     sys.path.insert(0, str(REPO / _p))
 
-from reliability.projection import (  # noqa: E402
-    _project_pixel_to_world,
+from reliability.projection import (
     camera_model_from_world,
-    load_projection_calibration,
 )
+
+# The projection corrections below were deleted from `reliability.projection` on 2026-08-07
+# (measured harmful: e7). This study is ABOUT them, so it reads the graveyard copy instead.
+import importlib.util as _ilu
+_lpc = _ilu.spec_from_file_location(
+    "legacy_projection_corrections",
+    str(pathlib.Path(__file__).resolve().parents[1] / "legacy_projection_corrections.py"),
+)
+legacy_projection = _ilu.module_from_spec(_lpc)
+_lpc.loader.exec_module(legacy_projection)
+_project_pixel_to_world = legacy_projection.project_pixel_to_world
+load_projection_calibration = legacy_projection.load_projection_calibration
+
 import residual_audit as RA  # noqa: E402  (world, mounts, contact height, calibration)
 
 sys.path.insert(0, str(REPO / "experiments" / "pixel_ground_path"))
@@ -73,6 +86,13 @@ COLUMNS = (
     # appended: what the route-based capture could not record
     "theta", "yolo_score", "oracle_visible",
 )
+
+
+def _finite_xy(point):
+    if point is None:
+        return None
+    x, y = float(point[0]), float(point[1])
+    return (x, y) if (math.isfinite(x) and math.isfinite(y)) else None
 
 
 def _f(value, default=math.nan) -> float:
@@ -111,7 +131,11 @@ def build(targets_csv: Path, conf_threshold: float, path: str = "deployed"
                 continue
 
             score = _f(record.get("yolo_score_raw"))
-            if path == "candidate":
+            if path == "raw_ipm":
+                # The path e7 retained: bottom-centre pixel straight through the
+                # homography onto the floor plane. Zero parameters, no contact offset.
+                u, v = _f(record.get("yolo_bottom_u")), _f(record.get("yolo_bottom_v"))
+            elif path == "candidate":
                 try:
                     box = json.loads(record.get("yolo_bbox_xyxy") or "null")
                     u, v = box_statistic_pixel(box, alpha=BOX_STATISTIC_ALPHA)
@@ -133,7 +157,10 @@ def build(targets_csv: Path, conf_threshold: float, path: str = "deployed"
                 continue
 
             entry = calib.get(camera, {})
-            if path == "candidate":
+            if path == "raw_ipm":
+                raw = _finite_xy(models[camera].pixel_to_world(u, v))
+                cor = raw
+            elif path == "candidate":
                 # Zero fitted parameters: the plane is derived from CAD, and there is no
                 # correction term at all. "raw" and "cor" are the same point by design --
                 # both columns are kept so the downstream figure code is unchanged.
@@ -197,7 +224,8 @@ def main() -> int:
                         help="explicit perception_targets.csv (defaults to <capture>/…)")
     parser.add_argument("--out", default="",
                         help="output residuals.csv (defaults beside the targets file)")
-    parser.add_argument("--path", choices=("deployed", "candidate"), default="deployed",
+    parser.add_argument("--path", choices=("deployed", "candidate", "raw_ipm"),
+                        default="deployed",
                         help="deployed = bottom pixel @ 0.05 m + v2 fit; candidate = box "
                              "centre @ 0.085 m with zero fitted parameters")
     parser.add_argument("--conf-threshold", type=float, default=0.05,
@@ -213,7 +241,7 @@ def main() -> int:
             f"missing {targets}\n"
             "run scripts/visibility_comparison/extract_perception_targets.py first"
         )
-    suffix = "" if args.path == "deployed" else "_candidate"
+    suffix = {"deployed": "", "candidate": "_candidate", "raw_ipm": "_raw_ipm"}[args.path]
     out_path = (Path(args.out) if args.out
                 else targets.parent / f"grid_residuals{suffix}.csv")
 
