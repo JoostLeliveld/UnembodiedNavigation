@@ -3,6 +3,6 @@
   "experiment_id": "EXP-PROJ-AMP",
   "study": "projection_amplification",
   "source_path": "logs/studies/projection_amplification/exp2_grid_geometry/fig_g2_observed_vs_geometric.pdf",
-  "source_sha256": "6de8883dc728c364f979daacbc8666570f9c893a3a0b17b3e54881c62419044e",
+  "source_sha256": "55fa3739d33ecae86ae0a6c59a09bafde27fbaa97c900e41e6a4d5ea37aa6bda",
   "note": "Promoted from ignored run output; regenerate by rerunning the study."
 }

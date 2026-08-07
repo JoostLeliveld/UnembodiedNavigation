@@ -95,6 +95,8 @@ C_ISO = "#E69F00"
 C_FULL = "#D55E00"
 C_GEOM = "#0072B2"
 C_RANGE = "#009E73"
+# Okabe-Ito names used by the fig_g0 schematic.
+ORANGE, BLUE, GREEN, VERMILION = "#E69F00", "#0072B2", "#009E73", "#D55E00"
 MODEL_COLORS = {"R1-iso": C_ISO, "R1-full": C_FULL, "R2-geom": C_GEOM, "R1-range": C_RANGE}
 #: Okabe-Ito, one per camera, for the per-detection scatter in fig_g2.
 CAMERA_COLORS = {"camera_A": "#0072B2", "camera_B": "#E69F00",
@@ -377,6 +379,144 @@ def evaluate(per_camera: dict, kind: str = "cor") -> dict:
 
 
 # --------------------------------------------------------------------- figures
+
+
+def fig_g0(per_camera: dict, models, calib) -> dict:
+    """How a pixel becomes a position, and what the deployed correction actually does.
+
+    Every later figure scores residuals of THIS function, so it is worth drawing once.
+
+        (u, v)  ->  back-project through K and R  ->  intersect the contact plane
+                    z = CONTACT_Z_M  ->  raw ground point p_raw
+                ->  shift p_raw ALONG the camera bearing by
+                    correction_m = intercept_m + slope_per_m * ground_distance
+                ->  p_corrected
+
+    The correction is one-dimensional: a translation along the bearing from camera to
+    target, positive away from the camera. It has no cross-bearing term in v2, so it can
+    move the estimate nearer or further but never sideways.
+
+    Panel (b) is the point of this figure. Each camera's constants were fitted over a
+    narrow band of ground distances, and the deployed function is then applied at every
+    distance the robot is ever seen at. Camera A is the extreme case: fitted across
+    0.97 m of range with the slope forced to zero, so it applies one constant offset
+    everywhere. The grid capture spans a far wider range than any of the fits, so the
+    extrapolation is drawn rather than described.
+    """
+
+    out: dict = {}
+    fit_meta = json.loads(Path(RA.DEPLOYED_CALIB).read_text()).get("cameras", {})
+    fig = plt.figure(figsize=(14.0, 5.0))
+    grid = fig.add_gridspec(1, 2, width_ratios=(1.0, 1.15), wspace=0.24)
+
+    # ---- (a) the pipeline, drawn to scale in the x-z plane ----
+    ax = fig.add_subplot(grid[0, 0])
+    cam_h = 6.1
+    r_true = 9.0
+    ax.plot([-1.0, 13.0], [0.0, 0.0], color="#444444", lw=2.0, zorder=3)
+    ax.text(12.9, 0.30, "floor  $z=0$", ha="right", fontsize=8, color="#444444")
+    ax.axhline(RA.CONTACT_Z_M, color=ORANGE, ls="--", lw=1.4, zorder=4)
+    ax.text(-0.9, RA.CONTACT_Z_M - 0.42,
+            f"contact plane  $z={RA.CONTACT_Z_M:g}$ m", fontsize=8, color=ORANGE)
+
+    ax.plot([0.0], [cam_h], marker="v", markersize=13, color=VERMILION,
+            markeredgecolor="white", zorder=6)
+    ax.text(0.0, cam_h + 0.35, "camera", ha="center", fontsize=9, fontweight="bold")
+    ax.annotate("", xy=(r_true, RA.CONTACT_Z_M), xytext=(0.0, cam_h),
+                arrowprops=dict(arrowstyle="-|>", color=BLUE, lw=1.8), zorder=5)
+    ax.text(3.4, 3.6, "back-projected ray\n$K^{-1}, R$ from the pixel $(u,v)$",
+            fontsize=8.5, color=BLUE, ha="left")
+
+    ax.plot([r_true], [RA.CONTACT_Z_M], marker="o", markersize=8, color=BLUE,
+            markeredgecolor="white", zorder=7)
+    ax.text(r_true - 0.35, RA.CONTACT_Z_M + 0.9, r"$p_{raw}$", ha="right", fontsize=10,
+            color=BLUE, fontweight="bold")
+
+    shift = 1.7  # drawn large; real corrections are 20-120 mm, see panel (b)
+    ax.annotate("", xy=(r_true + shift, RA.CONTACT_Z_M), xytext=(r_true, RA.CONTACT_Z_M),
+                arrowprops=dict(arrowstyle="-|>", color=GREEN, lw=2.6), zorder=8)
+    ax.plot([r_true + shift], [RA.CONTACT_Z_M], marker="o", markersize=8, color=GREEN,
+            markeredgecolor="white", zorder=9)
+    ax.text(r_true + shift + 0.3, RA.CONTACT_Z_M + 0.35, r"$p_{corrected}$", ha="left",
+            fontsize=10, color=GREEN, fontweight="bold")
+    ax.text(r_true + shift / 2.0, -0.75,
+            "correction, ALONG the bearing:\n"
+            r"$a + b\,\cdot\,d$   (no cross term in v2)",
+            ha="center", fontsize=8.5, color=GREEN)
+    ax.annotate("", xy=(r_true, -0.35), xytext=(0.0, -0.35),
+                arrowprops=dict(arrowstyle="<->", color="#777777", lw=1.0))
+    ax.text(r_true / 2.0, -0.30, "ground distance $d$", ha="center", va="bottom",
+            fontsize=8, color="#777777")
+    ax.set_xlim(-1.2, 13.2)
+    ax.set_ylim(-2.1, cam_h + 1.0)
+    ax.set_xlabel("ground distance from camera [m]")
+    ax.set_ylabel("height [m]")
+    ax.set_title("(a)  pixel $\\rightarrow$ ray $\\rightarrow$ contact plane $\\rightarrow$ "
+                 "bearing correction\n(arrow drawn large; true magnitudes in (b))",
+                 fontweight="bold", fontsize=10)
+    ax.grid(True, alpha=0.25, zorder=0)
+
+    # ---- (b) the correction function, and where it was actually fitted ----
+    ax2 = fig.add_subplot(grid[0, 1])
+    ax2.grid(True, zorder=0)
+    ax2.axhline(0.0, color="#333333", lw=1.0, zorder=2)
+    d_axis = np.linspace(0.0, 22.0, 200)
+    for camera in CAMERAS:
+        entry = calib.get(camera, {})
+        a = float(entry.get("intercept_m", 0.0))
+        b = float(entry.get("slope_per_m", 0.0))
+        colour = CAMERA_COLORS[camera]
+        ax2.plot(d_axis, 1000.0 * (a + b * d_axis), color=colour, lw=1.4, ls=":",
+                 alpha=0.55, zorder=3)
+        meta = fit_meta.get(camera, {})
+        lo = float(meta.get("distance_min_m", np.nan))
+        hi = float(meta.get("distance_max_m", np.nan))
+        observed = per_camera.get(camera, {}).get("range", np.asarray([]))
+        r0 = r1 = float("nan")
+        if len(observed):
+            r0, r1 = float(np.min(observed)), float(np.max(observed))
+            span = np.linspace(r0, r1, 60)
+            ax2.plot(span, 1000.0 * (a + b * span), color=colour, lw=1.6, alpha=0.85,
+                     zorder=4)
+        if np.isfinite(lo) and np.isfinite(hi):
+            ax2.axvspan(lo, hi, color=colour, alpha=0.10, zorder=1)
+            band = np.linspace(lo, hi, 50)
+            ax2.plot(band, 1000.0 * (a + b * band), color=colour, lw=5.0,
+                     solid_capstyle="butt", zorder=6,
+                     label=(f"{camera.replace('camera_', '')}: fitted {lo:.1f}-{hi:.1f} m "
+                            f"({hi - lo:.1f} m), used {r0:.1f}-{r1:.1f} m"))
+            out[camera] = {
+                "intercept_m": a, "slope_per_m": b,
+                "fitted_range_m": [lo, hi], "fitted_span_m": float(hi - lo),
+                "observed_range_m": [r0, r1], "observed_span_m": float(r1 - r0),
+                "correction_at_observed_min_mm": 1000.0 * (a + b * r0),
+                "correction_at_observed_max_mm": 1000.0 * (a + b * r1),
+                "extrapolation_factor": float((r1 - r0) / max(hi - lo, 1e-9)),
+            }
+    ax2.set_xlabel("ground distance from camera $d$ [m]")
+    ax2.set_ylabel("applied along-bearing correction [mm]")
+    ax2.set_title("(b)  the deployed correction $a + b\\,d$\n"
+                  "thick = the band it was FITTED on · thin arrow = the range actually "
+                  "observed · dotted = extrapolation",
+                  fontweight="bold", fontsize=10)
+    ax2.legend(fontsize=7.2, loc="upper left", framealpha=0.95)
+    ax2.set_xlim(0.0, 22.0)
+
+    fig.suptitle("How a detector pixel becomes a ground position, and what the deployed "
+                 "correction does to it", fontweight="bold", fontsize=12.5, y=1.03)
+    fig.text(0.5, -0.07,
+             "The correction is commissioning-time and is never refit during deployment. "
+             "It is purely along-bearing in v2: positive moves the estimate away from the "
+             "camera, and no cross-bearing term exists, so this function cannot correct a "
+             "sideways error. Camera A was fitted across 0.97 m of range with its slope "
+             "forced to zero, so it applies one constant offset at every distance. Ground "
+             "truth fitted these constants at commissioning and scores them here; it is "
+             "never an input to the function itself.",
+             ha="center", va="top", fontsize=7.4, color="#333333", wrap=True)
+    for ext in ("png", "pdf"):
+        fig.savefig(OUT / f"fig_g0_projection_and_correction.{ext}", bbox_inches="tight")
+    plt.close(fig)
+    return out
 
 
 def fig_g1(models, calib) -> dict:
@@ -920,6 +1060,7 @@ def main() -> int:
         },
         "heldout": results_by_kind,
         "geometry": fig_g1(models, calib),
+        "projection_and_correction": fig_g0(per_camera, models, calib),
         "range_profile": fig_g2(per_camera, results_by_kind),
         "spatial_cells": fig_g4(per_camera, models, calib, kind="cor"),
     }
