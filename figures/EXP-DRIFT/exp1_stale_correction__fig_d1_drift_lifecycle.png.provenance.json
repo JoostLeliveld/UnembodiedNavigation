@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-07",
+  "experiment_id": "EXP-DRIFT",
+  "study": "calibration_drift_lifecycle",
+  "source_path": "logs/studies/calibration_drift_lifecycle/exp1_stale_correction/fig_d1_drift_lifecycle.png",
+  "source_sha256": "2a4ee50e0b01624fde3a72282813c7a56454a11dd3621b777cf14543d19d190c",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

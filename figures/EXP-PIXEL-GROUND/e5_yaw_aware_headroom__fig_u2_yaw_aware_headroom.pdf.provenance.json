@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-07",
+  "experiment_id": "EXP-PIXEL-GROUND",
+  "study": "pixel_ground_path",
+  "source_path": "logs/studies/pixel_ground_path/e5_yaw_aware_headroom/fig_u2_yaw_aware_headroom.pdf",
+  "source_sha256": "f04b807d5f73065fc545b22db66f8d8f0c329732ff368c9a2116c5cad3581b4d",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

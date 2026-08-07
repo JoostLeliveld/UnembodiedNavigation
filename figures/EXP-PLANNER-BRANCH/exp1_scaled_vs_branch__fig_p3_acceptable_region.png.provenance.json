@@ -1,5 +1,5 @@
 {
-  "promoted": "2026-08-06",
+  "promoted": "2026-08-07",
   "experiment_id": "EXP-PLANNER-BRANCH",
   "study": "planner_covariance_branching",
   "source_path": "logs/studies/planner_covariance_branching/exp1_scaled_vs_branch/fig_p3_acceptable_region.png",

@@ -1,5 +1,5 @@
 {
-  "promoted": "2026-08-06",
+  "promoted": "2026-08-07",
   "experiment_id": "EXP-BELIEF",
   "study": "bayesian_filter_showcase",
   "source_path": "logs/studies/bayesian_filter_showcase/exp1_graceful_vs_trusting/fig_s2_where_the_trust_goes.png",

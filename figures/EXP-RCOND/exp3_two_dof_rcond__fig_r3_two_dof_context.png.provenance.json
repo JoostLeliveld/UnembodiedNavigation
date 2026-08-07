@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-07",
+  "experiment_id": "EXP-RCOND",
+  "study": "operational_residual_rcond",
+  "source_path": "logs/studies/operational_residual_rcond/exp3_two_dof_rcond/fig_r3_two_dof_context.png",
+  "source_sha256": "151a78b0162e74cc6ffaefbacbc54774989f720ecf04e3cc681777c1ffe8f8e9",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}
