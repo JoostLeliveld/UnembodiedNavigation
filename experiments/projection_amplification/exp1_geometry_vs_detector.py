@@ -35,6 +35,7 @@ Outputs -> logs/studies/projection_amplification/exp1_geometry_vs_detector/
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import math
@@ -159,7 +160,7 @@ def load_samples(models, calib) -> dict[str, dict]:
 
     per_camera: dict[str, dict] = {
         camera: {"cor": [], "raw": [], "jac": [], "range": [], "xy": [], "uv": [],
-                 "capture": []}
+                 "theta": [], "capture": []}
         for camera in CAMERAS
     }
     skipped = {camera: 0 for camera in CAMERAS}
@@ -181,8 +182,13 @@ def load_samples(models, calib) -> dict[str, dict]:
             bucket["xy"].append([float(row["true_x"]), float(row["true_y"])])
             bucket["uv"].append([u, v])
             bucket["capture"].append(row["capture"])
+            # Grid captures record the commanded heading; route captures do not.
+            try:
+                bucket["theta"].append(float(row.get("theta", "nan")))
+            except (TypeError, ValueError):
+                bucket["theta"].append(float("nan"))
     for camera, bucket in per_camera.items():
-        for key in ("cor", "raw", "jac", "range", "xy", "uv"):
+        for key in ("cor", "raw", "jac", "range", "xy", "uv", "theta"):
             bucket[key] = np.asarray(bucket[key], dtype=float)
         bucket["skipped"] = skipped[camera]
     return per_camera
@@ -750,18 +756,36 @@ def fig_g4(per_camera: dict, models, calib, kind: str = "cor") -> dict:
 
         fig.suptitle(f"{camera.replace('camera_', 'Camera ')} — deployed-corrected residual",
                      fontsize=12.5, fontweight="bold", y=1.03)
+        # The coverage caveat is MEASURED, never hardcoded: the same code renders both the
+        # thin-ribbon route capture and the 2-D grid, and stating the route limitation on a
+        # grid figure would be a straight factual error.
+        x_span = float(bucket["xy"][:, 0].ptp())
+        y_span = float(bucket["xy"][:, 1].ptp())
+        rho_u = abs(_rho(bucket["uv"][:, 0], bucket["range"]))
+        theta = np.asarray(bucket.get("theta", []), dtype=float)
+        theta = theta[np.isfinite(theta)]  # route captures carry no heading column
+        n_head = len({round(math.degrees(t)) % 360 for t in theta})
+        covered = (x_span >= 6.0 and y_span >= 6.0 and rho_u < 0.6)
+        if covered:
+            limit = (f"COVERAGE: {x_span:.1f} x {y_span:.1f} m sampled in two dimensions"
+                     + (f" across {n_head} headings" if n_head else "")
+                     + f"; image column is decorrelated from range (|rho| = {rho_u:.2f}), so "
+                     "this dataset CAN separate image position from distance. It still cannot "
+                     "separate sigma_max(J) from range: those stay collinear at |rho| ~ 0.98 "
+                     "because for an oblique ground-plane camera the amplification is set by "
+                     "depth, which is what range measures. That is a property of the geometry, "
+                     "not of the sampling.")
+        else:
+            limit = (f"READ THE LIMIT BEFORE THE RESULT: only {x_span:.1f} x {y_span:.1f} m is "
+                     f"sampled and image column tracks range at |rho| = {rho_u:.2f}, so range, "
+                     "image row and projection conditioning are collinear here. A weak or "
+                     "negative R^2 does NOT show that geometry fails -- it shows this dataset "
+                     "cannot test it.")
         fig.text(0.5, -0.06,
                  "Point area in (b) scales with detections in the cell. sigma_pix is fitted on "
                  "leave-region-out folds, so each cell's prediction is out-of-region. Ground "
                  "truth positions the dots in (a) and measures the residual; it never enters a "
-                 "projection, Jacobian or covariance. READ THE LIMIT BEFORE THE RESULT: the "
-                 "sampled ribbon in (a) never covers the footprint in two dimensions, so range, "
-                 "image row and projection conditioning are collinear along it. A weak or "
-                 "negative R^2 here therefore does NOT show that geometry fails -- it shows this "
-                 "dataset cannot test it. The honest conclusion is that straight-route logs are "
-                 "insufficient to decide whether full 2-D projection geometry beats a simpler "
-                 "range effect; that needs a commissioning capture with 2-D coverage and "
-                 "multiple headings per location.",
+                 "projection, Jacobian or covariance. " + limit,
                  ha="center", va="top", fontsize=7.4, color="#333333", wrap=True)
         fig.tight_layout()
         for ext in ("png", "pdf"):
@@ -824,6 +848,18 @@ def fig_g3(results: dict, kind_label: str) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--residuals", default="",
+                        help="residual CSV to analyse; defaults to the route-based "
+                             "external_camera_bias_model file. Point at a grid capture's "
+                             "grid_residuals.csv to use 2-D coverage.")
+    parser.add_argument("--out", default="", help="output directory override")
+    args = parser.parse_args()
+    global RESIDUALS_CSV, OUT
+    if args.residuals:
+        RESIDUALS_CSV = Path(args.residuals).resolve()
+    if args.out:
+        OUT = Path(args.out).resolve()
     if not RESIDUALS_CSV.is_file():
         print(f"missing input: {RESIDUALS_CSV}\n"
               "run experiments/external_camera_bias_model/residual_audit.py first")

@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-07",
+  "experiment_id": "EXP-PROJ-AMP",
+  "study": "projection_amplification",
+  "source_path": "logs/studies/projection_amplification/exp2_grid_geometry/fig_g1_pixel_to_ground_amplification.pdf",
+  "source_sha256": "5a3a66aa824c5e6bc8ad6ac0c523025b022dd0e6e783089cebde5a2658302e4a",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}
