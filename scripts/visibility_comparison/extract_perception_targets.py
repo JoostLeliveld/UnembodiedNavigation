@@ -202,6 +202,7 @@ def main() -> int:
             'oracle_visible': str(row.get('oracle_visible', '')).strip(),
             'oracle_bottom_u': str(row.get('oracle_bottom_u', '')).strip(),
             'oracle_bottom_v': str(row.get('oracle_bottom_v', '')).strip(),
+            'camera_frame': str(row.get('camera_frame', '')).strip(),
         })
 
     targets_path = output_dir / 'perception_targets.csv'

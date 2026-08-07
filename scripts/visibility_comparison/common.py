@@ -86,6 +86,10 @@ PERCEPTION_TARGET_COLUMNS = (
     'oracle_visible',
     'oracle_bottom_u',
     'oracle_bottom_v',
+    # Appended for multicam captures: four cameras share one sample_id, so without this
+    # the rows are distinguishable only by image_path. Readers use DictReader, so older
+    # single-camera consumers ignore it.
+    'camera_frame',
 )
 
 GP_TARGET_COLUMNS = (
