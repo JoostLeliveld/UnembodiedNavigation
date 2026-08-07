@@ -82,6 +82,14 @@ MIN_FOLD_TRAIN = 20
 MIN_CAMERA_SAMPLES = 60
 RANGE_EDGES = np.arange(3.0, 16.01, 1.0)
 
+# --- fig_g4 spatial-cell contract (frozen; do not tune for presentation) ---------
+#: Cell edge for aggregating repeated detections before comparing RMS to RMS.
+CELL_SIZE_M = 0.5
+#: A cell must hold this many detections before its measured RMS is trustworthy.
+MIN_CELL_DETECTIONS = 5
+#: Below this many populated cells a camera cannot establish a trend; say so on the plot.
+MIN_CELLS_FOR_TREND = 10
+
 C_ISO = "#E69F00"
 C_FULL = "#D55E00"
 C_GEOM = "#0072B2"
@@ -555,6 +563,186 @@ def fig_g2(per_camera: dict, results_by_kind: dict) -> dict:
     return stats
 
 
+def heldout_sigma_pix(bucket: dict, kind: str) -> np.ndarray:
+    """Per-detection sigma_pix fitted WITHOUT that detection's spatial region.
+
+    Each detection is predicted using the pixel-noise scalar fitted on the folds where
+    it was held out, so the cell scatter is a genuine out-of-region prediction rather
+    than a fit evaluated on itself.
+    """
+
+    res_all = bucket[kind]
+    shapes_all = geometric_shapes(bucket["jac"])
+    out = np.full(len(res_all), np.nan)
+    for train, test in spatial_folds(bucket["xy"]):
+        train_res = res_all[train] - res_all[train].mean(axis=0)
+        out[test] = math.sqrt(fit_geometric_pixel_variance(train_res, shapes_all[train]))
+    return out
+
+
+def spatial_cells(bucket: dict, kind: str) -> dict:
+    """Aggregate detections into fixed ground cells and compare RMS against RMS.
+
+    A covariance model does not claim "this detection will be 42 mm wrong"; it claims a
+    spread for observations made around a place. Comparing a predicted spread to a single
+    realised residual makes the identity line meaningless, so both axes are RMS over
+    repeated detections in the same cell.
+    """
+
+    xy = bucket["xy"]
+    residual = bucket[kind]
+    sigma_pix = heldout_sigma_pix(bucket, kind)
+    shapes = geometric_shapes(bucket["jac"])
+    # E[|e|^2] = tr(Sigma) with Sigma = sigma_pix^2 J J', so the predicted RMS magnitude
+    # is sigma_pix * sqrt(tr(J J')). sigma_max would answer a different question (G1's).
+    pred = sigma_pix * np.sqrt(np.trace(shapes, axis1=1, axis2=2))
+    obs = np.linalg.norm(residual, axis=1)
+
+    buckets: dict[tuple[int, int], list[int]] = {}
+    for index, (x, y) in enumerate(xy):
+        if not np.isfinite(pred[index]):
+            continue
+        buckets.setdefault(
+            (int(np.floor(x / CELL_SIZE_M)), int(np.floor(y / CELL_SIZE_M))), []
+        ).append(index)
+
+    cells = []
+    for (ix, iy), members in sorted(buckets.items()):
+        if len(members) < MIN_CELL_DETECTIONS:
+            continue
+        idx = np.asarray(members)
+        cells.append({
+            "x_m": (ix + 0.5) * CELL_SIZE_M,
+            "y_m": (iy + 0.5) * CELL_SIZE_M,
+            "n": int(idx.size),
+            "pred_rms_m": float(np.sqrt(np.mean(pred[idx] ** 2))),
+            "obs_rms_m": float(np.sqrt(np.mean(obs[idx] ** 2))),
+        })
+
+    payload = {
+        "cell_size_m": CELL_SIZE_M,
+        "min_cell_detections": MIN_CELL_DETECTIONS,
+        "n_detections": int(len(obs)),
+        "n_cells": len(cells),
+        "cells": cells,
+    }
+    if len(cells) >= 3:
+        o = np.array([c["obs_rms_m"] for c in cells])
+        q = np.array([c["pred_rms_m"] for c in cells])
+        # R^2 of the prediction used AS IS (against identity), not of a refitted line.
+        payload["r2_identity"] = float(1.0 - ((o - q) ** 2).sum() / ((o - o.mean()) ** 2).sum())
+        payload["spearman_cells"] = _rho(o, q)
+        payload["median_ratio_obs_over_pred"] = float(np.median(o / q))
+    return payload
+
+
+def footprint_mask(model, kwargs, nx: int = 90, ny: int = 74):
+    """Coarse visible-floor mask for the camera, so the sampled ribbon can be seen
+    against the footprint it fails to cover."""
+
+    x0, x1, y0, y1 = RA.SITE
+    xs = np.linspace(x0, x1, nx)
+    ys = np.linspace(y0, y1, ny)
+    mask = np.zeros((ys.size, xs.size), dtype=float)
+    for j, x in enumerate(xs):
+        for i, y in enumerate(ys):
+            _u, _v, visible = model.world_to_pixel(x, y, RA.CONTACT_Z_M)
+            mask[i, j] = 1.0 if visible else np.nan
+    return xs, ys, mask
+
+
+def fig_g4(per_camera: dict, models, calib, kind: str = "cor") -> dict:
+    """One figure per camera: where the data is, then whether geometry predicts it.
+
+    Deliberately the DEPLOYED-corrected residual only. Raw-versus-corrected is the
+    ablation in fig_g2; mixing both here would double the panels and bury the question
+    that actually matters downstream, which is whether the uncertainty REMAINING after
+    the deployed correction follows projection geometry.
+    """
+
+    out: dict = {}
+    per_cam_cells = {c: spatial_cells(per_camera[c], kind) for c in CAMERAS
+                     if len(per_camera[c][kind]) >= MIN_CAMERA_SAMPLES}
+    # One colour scale across A-D, otherwise each map silently rescales its own errors.
+    all_obs_mm = np.concatenate([
+        1000.0 * np.linalg.norm(per_camera[c][kind], axis=1) for c in per_cam_cells
+    ])
+    vmax = float(np.percentile(all_obs_mm, 95))
+
+    for camera, cells in per_cam_cells.items():
+        bucket = per_camera[camera]
+        fig, (ax_map, ax_fit) = plt.subplots(1, 2, figsize=(11.4, 4.9))
+
+        xs, ys, mask = footprint_mask(models[camera], projection_kwargs(calib, camera))
+        ax_map.pcolormesh(xs, ys, mask, cmap="Greys", vmin=0.0, vmax=6.0, shading="auto",
+                          zorder=1)
+        obs_mm = 1000.0 * np.linalg.norm(bucket[kind], axis=1)
+        scatter = ax_map.scatter(bucket["xy"][:, 0], bucket["xy"][:, 1], c=obs_mm, s=11,
+                                 cmap="viridis", vmin=0.0, vmax=vmax, linewidths=0, zorder=3)
+        cam_xy = getattr(models[camera], "cam_pos", None)
+        if cam_xy is not None:
+            ax_map.plot(cam_xy[0], cam_xy[1], marker="v", color="#D55E00", markersize=11,
+                        markeredgecolor="white", linestyle="none", zorder=5, label="camera")
+            # Keep the mount in frame: the oblique viewing direction is half the story of
+            # why the amplification field looks the way it does.
+            ax_map.set_xlim(min(ax_map.get_xlim()[0], cam_xy[0] - 1.0),
+                            max(ax_map.get_xlim()[1], cam_xy[0] + 1.0))
+            ax_map.set_ylim(min(ax_map.get_ylim()[0], cam_xy[1] - 1.0),
+                            max(ax_map.get_ylim()[1], cam_xy[1] + 1.0))
+            ax_map.legend(fontsize=8, loc="upper right")
+        fig.colorbar(scatter, ax=ax_map, label=f"observed |e| [mm]  (shared scale, p95={vmax:.0f})")
+        ax_map.set_aspect("equal")
+        ax_map.set_xlabel("x [m]")
+        ax_map.set_ylabel("y [m]")
+        ax_map.set_title("(a)  where the robot was actually observed\n"
+                         "grey = visible floor; dots = detections at evaluation truth",
+                         fontsize=9.5, fontweight="bold")
+
+        pred = np.array([c["pred_rms_m"] for c in cells["cells"]]) * 1000.0
+        obs = np.array([c["obs_rms_m"] for c in cells["cells"]]) * 1000.0
+        counts = np.array([c["n"] for c in cells["cells"]], dtype=float)
+        ax_fit.grid(True, zorder=0)
+        if pred.size:
+            ax_fit.scatter(pred, obs, s=18 + 4.0 * counts, alpha=0.8, zorder=3,
+                           color=CAMERA_COLORS[camera], edgecolor="white", linewidth=0.8)
+            hi = float(max(pred.max(), obs.max())) * 1.15
+            ax_fit.plot([0, hi], [0, hi], ls="--", lw=1.3, color="#444444", zorder=4,
+                        label="$y=x$")
+            ax_fit.set_xlim(0, hi)
+            ax_fit.set_ylim(0, hi)
+            ax_fit.legend(fontsize=8, loc="upper left")
+        ax_fit.set_xlabel(r"geometry-predicted RMS  $\sigma_{pix}\sqrt{\mathrm{tr}\,JJ^{T}}$  [mm]")
+        ax_fit.set_ylabel("measured RMS in the same cell [mm]")
+        note = (f"N = {cells['n_detections']} detections · M = {cells['n_cells']} cells "
+                f"({CELL_SIZE_M:g} m, $\geq${MIN_CELL_DETECTIONS} each)")
+        if "r2_identity" in cells:
+            note += (f"\nheld-out $R^2$ vs identity = {cells['r2_identity']:+.2f} · "
+                     f"cell Spearman = {cells['spearman_cells']:+.2f} · "
+                     f"median obs/pred = {cells['median_ratio_obs_over_pred']:.2f}")
+        if cells["n_cells"] < MIN_CELLS_FOR_TREND:
+            note += (f"\nONLY {cells['n_cells']} CELLS — too few to establish a trend; "
+                     "read as a scale check, not a fit")
+        ax_fit.set_title("(b)  does geometry predict the local error?\n" + note,
+                         fontsize=9.0, fontweight="bold")
+
+        fig.suptitle(f"{camera.replace('camera_', 'Camera ')} — deployed-corrected residual",
+                     fontsize=12.5, fontweight="bold", y=1.03)
+        fig.text(0.5, -0.06,
+                 "Point area in (b) scales with detections in the cell. sigma_pix is fitted on "
+                 "leave-region-out folds, so each cell's prediction is out-of-region. Ground "
+                 "truth positions the dots in (a) and measures the residual; it never enters a "
+                 "projection, Jacobian or covariance. The sampled ribbon in (a) is the binding "
+                 "limit of this dataset: the footprint is not covered in two dimensions, so "
+                 "range and the full Jacobian cannot be separated here.",
+                 ha="center", va="top", fontsize=7.4, color="#333333", wrap=True)
+        fig.tight_layout()
+        for ext in ("png", "pdf"):
+            fig.savefig(OUT / f"fig_g4_{camera}_geometry_check.{ext}", bbox_inches="tight")
+        plt.close(fig)
+        out[camera] = cells
+    return out
+
+
 def fig_g3(results: dict, kind_label: str) -> None:
     """Held-out model comparison, as differences against the one-parameter baseline.
 
@@ -633,6 +821,7 @@ def main() -> int:
         "heldout": results_by_kind,
         "geometry": fig_g1(models, calib),
         "range_profile": fig_g2(per_camera, results_by_kind),
+        "spatial_cells": fig_g4(per_camera, models, calib, kind="cor"),
     }
     fig_g3(results_by_kind["cor"], "after the deployed correction")
     (OUT / "summary.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
