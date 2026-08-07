@@ -607,16 +607,27 @@ def spatial_cells(bucket: dict, kind: str) -> dict:
         ).append(index)
 
     cells = []
+    deviation = np.full(len(obs), np.nan)  # |e_i - mean_k|, the conditional part
     for (ix, iy), members in sorted(buckets.items()):
         if len(members) < MIN_CELL_DETECTIONS:
             continue
         idx = np.asarray(members)
+        # Split the cell into a deterministic part and a variable part. A projection
+        # covariance should be judged against the SECOND: bounding-box geometry, heading
+        # and calibration all leave a deterministic offset here, and folding that into
+        # "noise" would credit the covariance model for explaining a bias.
+        mean_e = residual[idx].mean(axis=0)
+        centred = residual[idx] - mean_e
+        deviation[idx] = np.linalg.norm(centred, axis=1)
+        cov = centred.T @ centred / max(len(idx) - 1, 1)
         cells.append({
             "x_m": (ix + 0.5) * CELL_SIZE_M,
             "y_m": (iy + 0.5) * CELL_SIZE_M,
             "n": int(idx.size),
             "pred_rms_m": float(np.sqrt(np.mean(pred[idx] ** 2))),
             "obs_rms_m": float(np.sqrt(np.mean(obs[idx] ** 2))),
+            "bias_m": float(np.linalg.norm(mean_e)),
+            "cond_rms_m": float(np.sqrt(np.trace(cov))),
         })
 
     payload = {
@@ -626,13 +637,16 @@ def spatial_cells(bucket: dict, kind: str) -> dict:
         "n_cells": len(cells),
         "cells": cells,
     }
+    payload["deviation_m"] = deviation
     if len(cells) >= 3:
-        o = np.array([c["obs_rms_m"] for c in cells])
         q = np.array([c["pred_rms_m"] for c in cells])
-        # R^2 of the prediction used AS IS (against identity), not of a refitted line.
-        payload["r2_identity"] = float(1.0 - ((o - q) ** 2).sum() / ((o - o.mean()) ** 2).sum())
-        payload["spearman_cells"] = _rho(o, q)
-        payload["median_ratio_obs_over_pred"] = float(np.median(o / q))
+        for label, key in (("", "obs_rms_m"), ("cond_", "cond_rms_m")):
+            o = np.array([c[key] for c in cells])
+            payload[f"{label}r2_identity"] = float(
+                1.0 - ((o - q) ** 2).sum() / ((o - o.mean()) ** 2).sum())
+            payload[f"{label}spearman_cells"] = _rho(o, q)
+            payload[f"{label}median_ratio_obs_over_pred"] = float(np.median(o / q))
+        payload["median_bias_m"] = float(np.median([c["bias_m"] for c in cells]))
     return payload
 
 
@@ -664,10 +678,11 @@ def fig_g4(per_camera: dict, models, calib, kind: str = "cor") -> dict:
     per_cam_cells = {c: spatial_cells(per_camera[c], kind) for c in CAMERAS
                      if len(per_camera[c][kind]) >= MIN_CAMERA_SAMPLES}
     # One colour scale across A-D, otherwise each map silently rescales its own errors.
-    all_obs_mm = np.concatenate([
-        1000.0 * np.linalg.norm(per_camera[c][kind], axis=1) for c in per_cam_cells
+    all_dev_mm = np.concatenate([
+        1000.0 * per_cam_cells[c]["deviation_m"][np.isfinite(per_cam_cells[c]["deviation_m"])]
+        for c in per_cam_cells
     ])
-    vmax = float(np.percentile(all_obs_mm, 95))
+    vmax = float(np.percentile(all_dev_mm, 95))
 
     for camera, cells in per_cam_cells.items():
         bucket = per_camera[camera]
@@ -676,9 +691,14 @@ def fig_g4(per_camera: dict, models, calib, kind: str = "cor") -> dict:
         xs, ys, mask = footprint_mask(models[camera], projection_kwargs(calib, camera))
         ax_map.pcolormesh(xs, ys, mask, cmap="Greys", vmin=0.0, vmax=6.0, shading="auto",
                           zorder=1)
-        obs_mm = 1000.0 * np.linalg.norm(bucket[kind], axis=1)
-        scatter = ax_map.scatter(bucket["xy"][:, 0], bucket["xy"][:, 1], c=obs_mm, s=11,
-                                 cmap="viridis", vmin=0.0, vmax=vmax, linewidths=0, zorder=3)
+        dev_mm = 1000.0 * cells["deviation_m"]
+        finite = np.isfinite(dev_mm)
+        ax_map.scatter(bucket["xy"][~finite, 0], bucket["xy"][~finite, 1], s=6,
+                       color="#cccccc", linewidths=0, zorder=2,
+                       label="below cell minimum")
+        scatter = ax_map.scatter(bucket["xy"][finite, 0], bucket["xy"][finite, 1],
+                                 c=dev_mm[finite], s=11, cmap="viridis", vmin=0.0,
+                                 vmax=vmax, linewidths=0, zorder=3)
         cam_xy = getattr(models[camera], "cam_pos", None)
         if cam_xy is not None:
             ax_map.plot(cam_xy[0], cam_xy[1], marker="v", color="#D55E00", markersize=11,
@@ -690,16 +710,17 @@ def fig_g4(per_camera: dict, models, calib, kind: str = "cor") -> dict:
             ax_map.set_ylim(min(ax_map.get_ylim()[0], cam_xy[1] - 1.0),
                             max(ax_map.get_ylim()[1], cam_xy[1] + 1.0))
             ax_map.legend(fontsize=8, loc="upper right")
-        fig.colorbar(scatter, ax=ax_map, label=f"observed |e| [mm]  (shared scale, p95={vmax:.0f})")
+        fig.colorbar(scatter, ax=ax_map,
+                     label=f"conditional |e - mean$_k$| [mm]  (shared, p95={vmax:.0f})")
         ax_map.set_aspect("equal")
         ax_map.set_xlabel("x [m]")
         ax_map.set_ylabel("y [m]")
         ax_map.set_title("(a)  where the robot was actually observed\n"
-                         "grey = visible floor; dots = detections at evaluation truth",
+                         "colour = error AFTER removing the local mean (bias split out)",
                          fontsize=9.5, fontweight="bold")
 
         pred = np.array([c["pred_rms_m"] for c in cells["cells"]]) * 1000.0
-        obs = np.array([c["obs_rms_m"] for c in cells["cells"]]) * 1000.0
+        obs = np.array([c["cond_rms_m"] for c in cells["cells"]]) * 1000.0
         counts = np.array([c["n"] for c in cells["cells"]], dtype=float)
         ax_fit.grid(True, zorder=0)
         if pred.size:
@@ -712,17 +733,19 @@ def fig_g4(per_camera: dict, models, calib, kind: str = "cor") -> dict:
             ax_fit.set_ylim(0, hi)
             ax_fit.legend(fontsize=8, loc="upper left")
         ax_fit.set_xlabel(r"geometry-predicted RMS  $\sigma_{pix}\sqrt{\mathrm{tr}\,JJ^{T}}$  [mm]")
-        ax_fit.set_ylabel("measured RMS in the same cell [mm]")
+        ax_fit.set_ylabel(r"measured CONDITIONAL RMS $\sqrt{\mathrm{tr}\,\hat\Sigma_k}$ [mm]")
         note = (f"N = {cells['n_detections']} detections · M = {cells['n_cells']} cells "
                 f"({CELL_SIZE_M:g} m, $\geq${MIN_CELL_DETECTIONS} each)")
-        if "r2_identity" in cells:
-            note += (f"\nheld-out $R^2$ vs identity = {cells['r2_identity']:+.2f} · "
-                     f"cell Spearman = {cells['spearman_cells']:+.2f} · "
-                     f"median obs/pred = {cells['median_ratio_obs_over_pred']:.2f}")
+        if "cond_r2_identity" in cells:
+            note += (f"\nconditional: $R^2$ vs identity = {cells['cond_r2_identity']:+.2f} · "
+                     f"cell Spearman = {cells['cond_spearman_cells']:+.2f} · "
+                     f"median obs/pred = {cells['cond_median_ratio_obs_over_pred']:.2f}"
+                     f"\nmedian per-cell BIAS removed first = "
+                     f"{1000 * cells['median_bias_m']:.0f} mm")
         if cells["n_cells"] < MIN_CELLS_FOR_TREND:
             note += (f"\nONLY {cells['n_cells']} CELLS — too few to establish a trend; "
                      "read as a scale check, not a fit")
-        ax_fit.set_title("(b)  does geometry predict the local error?\n" + note,
+        ax_fit.set_title("(b)  does geometry predict the local SPREAD?\n" + note,
                          fontsize=9.0, fontweight="bold")
 
         fig.suptitle(f"{camera.replace('camera_', 'Camera ')} — deployed-corrected residual",
@@ -731,15 +754,21 @@ def fig_g4(per_camera: dict, models, calib, kind: str = "cor") -> dict:
                  "Point area in (b) scales with detections in the cell. sigma_pix is fitted on "
                  "leave-region-out folds, so each cell's prediction is out-of-region. Ground "
                  "truth positions the dots in (a) and measures the residual; it never enters a "
-                 "projection, Jacobian or covariance. The sampled ribbon in (a) is the binding "
-                 "limit of this dataset: the footprint is not covered in two dimensions, so "
-                 "range and the full Jacobian cannot be separated here.",
+                 "projection, Jacobian or covariance. READ THE LIMIT BEFORE THE RESULT: the "
+                 "sampled ribbon in (a) never covers the footprint in two dimensions, so range, "
+                 "image row and projection conditioning are collinear along it. A weak or "
+                 "negative R^2 here therefore does NOT show that geometry fails -- it shows this "
+                 "dataset cannot test it. The honest conclusion is that straight-route logs are "
+                 "insufficient to decide whether full 2-D projection geometry beats a simpler "
+                 "range effect; that needs a commissioning capture with 2-D coverage and "
+                 "multiple headings per location.",
                  ha="center", va="top", fontsize=7.4, color="#333333", wrap=True)
         fig.tight_layout()
         for ext in ("png", "pdf"):
             fig.savefig(OUT / f"fig_g4_{camera}_geometry_check.{ext}", bbox_inches="tight")
         plt.close(fig)
-        out[camera] = cells
+        # deviation_m is a per-detection plotting intermediate, not evidence.
+        out[camera] = {k: v for k, v in cells.items() if k != "deviation_m"}
     return out
 
 

@@ -3,6 +3,6 @@
   "experiment_id": "EXP-PROJ-AMP",
   "study": "projection_amplification",
   "source_path": "logs/studies/projection_amplification/exp1_geometry_vs_detector/fig_g4_camera_B_geometry_check.png",
-  "source_sha256": "5baeffc147a43c7d6d0f085dadc982f61d6ff1b51f0de98ee25677b491d1a27a",
+  "source_sha256": "226d38b5e805c555edabbc7c26e11775ec69c5a113f67d7ae86449ddc1db6129",
   "note": "Promoted from ignored run output; regenerate by rerunning the study."
 }
