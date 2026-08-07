@@ -70,7 +70,6 @@ class PixelToBevStateNode(Node):
         # ground homography biases the BEV position, growing at grazing/peripheral
         # views (0.06 m centre -> 0.32 m far-NW). Back-projecting onto z=this height
         # removes most of that bias. 0.0 keeps the original z=0 behaviour.
-        self.declare_parameter('bbox_contact_z_m', 0.0)
 
         self.declare_parameter('cam_pos', [-3.0, -3.0, 6.0])
         self.declare_parameter('look_at', [1.5, 1.5, 0.0])
@@ -114,7 +113,6 @@ class PixelToBevStateNode(Node):
                     )
             except Exception as exc:  # pragma: no cover
                 self.get_logger().warn(f'bad bev_affine_calibration ({exc}); using constant offset')
-        self.bbox_contact_z_m = float(self.get_parameter('bbox_contact_z_m').value)
 
         # Baseline measurement noise (pixels)
         self.R_visible_std = 2.5
@@ -264,15 +262,7 @@ class PixelToBevStateNode(Node):
             u += float(self._rng.normal(0.0, self.pixel_noise_sigma))
             v += float(self._rng.normal(0.0, self.pixel_noise_sigma))
 
-        if self.bbox_contact_z_m > 0.0:
-            world = self._transformer.pixel_to_world_at_z(
-                u,
-                v,
-                self.bbox_contact_z_m,
-                transform_noise_sigma=self.transform_noise_sigma,
-            )
-        else:
-            world = self._transformer.pixel_to_world(
+        world = self._transformer.pixel_to_world(
                 u,
                 v,
                 transform_noise_sigma=self.transform_noise_sigma,

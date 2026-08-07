@@ -6,8 +6,9 @@ between corrections), this runs ONE inference per cycle on the camera the
 coverage map says best sees the robot's current belief position, and hands over
 to the next camera as the robot drives. Single-image inference restores
 ~3-4 Hz corrections (single-camera rate) while keeping full-warehouse coverage
-through hand-over. It projects the detection with that camera's calibration and
-publishes the world-frame correction directly to /state/bev.
+through hand-over. It projects the detection by inverse perspective mapping --
+box bottom-centre onto the floor plane, no parameters -- and publishes the
+world-frame correction directly to /state/bev.
 """
 from __future__ import annotations
 import math
@@ -22,12 +23,7 @@ from std_msgs.msg import String
 from cv_bridge import CvBridge
 from ultralytics import YOLO
 
-from reliability.projection import (
-    _project_pixel_to_world,
-    camera_model_from_world,
-    load_projection_calibration,
-    projection_kwargs_for_camera,
-)
+from reliability.projection import camera_model_from_world
 from reliability.contracts import CameraObservation
 
 DEFAULT_CAMERA_SPECS = [
@@ -53,27 +49,13 @@ def _camera_specs(camera_ids, model_includes, image_topics):
     return list(zip(ids, models, topics))
 
 
-def _project(camera, u, v, projection_kwargs):
-    """Thin wrapper over THE library projection.
-
-    This used to be a hand-copied reimplementation of
-    ``reliability.projection._project_pixel_to_world``. That copy silently had one
-    along-bearing degree of freedom, so adding the cross-bearing term to the
-    library would have left this node projecting differently from the camera
-    manager. Guarded by
-    ``tests/reliability/test_projection_cross_bearing.py::test_no_node_reimplements_the_projection``.
-    """
-
-    return _project_pixel_to_world(u, v, camera, **projection_kwargs)
-
-
 class ScheduledCameraDetector(Node):
     def __init__(self) -> None:
         super().__init__("scheduled_camera_detector")
         gp = self.declare_parameter
         gp("model_path", ""); gp("world_sdf", ""); gp("coverage_artifact", "")
-        gp("projection_calibration", ""); gp("device", "0"); gp("imgsz", 640)
-        gp("conf", 0.05); gp("iou", 0.45); gp("contact_z_m", 0.05)
+        gp("device", "0"); gp("imgsz", 640)
+        gp("conf", 0.05); gp("iou", 0.45)
         gp("report_std_m", 0.15); gp("rate_hz", 5.0); gp("frame_id", "map_bev")
         gp("spawn_x", 0.0); gp("spawn_y", 0.0); gp("min_coverage", 0.02)
         gp("selection_mode", "coverage_best_with_fallback")
@@ -90,7 +72,7 @@ class ScheduledCameraDetector(Node):
         )
         world = str(g("world_sdf")); self.device = str(g("device"))
         self.imgsz = int(g("imgsz")); self.conf = float(g("conf")); self.iou = float(g("iou"))
-        self.contact_z = float(g("contact_z_m")); self.rvar = float(g("report_std_m")) ** 2
+        self.rvar = float(g("report_std_m")) ** 2
         self.frame_id = str(g("frame_id")); self.min_cov = float(g("min_coverage"))
         self.belief = (float(g("spawn_x")), float(g("spawn_y")))
         self.selection_mode = str(g("selection_mode")).strip().lower()
@@ -108,10 +90,6 @@ class ScheduledCameraDetector(Node):
             cid: camera_model_from_world(world, include_name=mname)
             for cid, mname, _ in self.cams
         }
-        try:
-            self.calib = load_projection_calibration(str(g("projection_calibration")))
-        except Exception:
-            self.calib = {}
         d = np.load(str(g("coverage_artifact")))
         self.xs = np.asarray(d["xs"], float); self.ys = np.asarray(d["ys"], float)
         self.cov = {
@@ -259,10 +237,8 @@ class ScheduledCameraDetector(Node):
                 bbox=bbox,
             )
             u = float((x1 + x2) / 2.0); v = float(y2)  # bottom-centre
-            world = _project(
-                self.cam_models[cid], u, v,
-                projection_kwargs_for_camera(self.calib, cid, contact_z_m=self.contact_z),
-            )
+            # Inverse perspective mapping, no parameters (e7, 2026-08-07).
+            world = self.cam_models[cid].pixel_to_world(u, v)
             if world is None:
                 continue
             now = self.get_clock().now()

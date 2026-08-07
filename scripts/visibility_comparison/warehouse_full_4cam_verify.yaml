@@ -33,7 +33,6 @@ yolo_min_bbox_area_px: 0.0
 gp_artifact: logs/visibility_comparison/spawn_grid_20260727/fused_planner_four_camera.npz
 multicam_belief: true
 manager_gp_artifact_template: /home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/spawn_grid_20260727/gp/{camera_id}/det_hit_expected_kernel_gp.npz
-manager_projection_calibration: /home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v2/projection_calibration.json
 manager_min_spatial_trust: 0.0
 manager_decision_rate_hz: 5.0
 headless: true

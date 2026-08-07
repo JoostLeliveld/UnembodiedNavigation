@@ -35,6 +35,8 @@ Outputs -> logs/studies/projection_amplification/exp1_geometry_vs_detector/
 
 from __future__ import annotations
 
+import pathlib
+
 import argparse
 import csv
 import json
@@ -59,12 +61,23 @@ sys.path.insert(0, str(REPO / "experiments" / "external_camera_bias_model"))
 
 from metrics import binned, spearman  # noqa: E402  (THE shared scoring library)
 from reliability.conditional_covariance import chi2_coverage, matrix_nll  # noqa: E402
-from reliability.projection import (  # noqa: E402
-    _project_pixel_to_world,
+from reliability.projection import (
     _projection_derivative,
     camera_model_from_world,
-    load_projection_calibration,
 )
+
+# The projection corrections below were deleted from `reliability.projection` on 2026-08-07
+# (measured harmful: e7). This study is ABOUT them, so it reads the graveyard copy instead.
+import importlib.util as _ilu
+_lpc = _ilu.spec_from_file_location(
+    "legacy_projection_corrections",
+    str(pathlib.Path(__file__).resolve().parents[1] / "legacy_projection_corrections.py"),
+)
+legacy_projection = _ilu.module_from_spec(_lpc)
+_lpc.loader.exec_module(legacy_projection)
+_project_pixel_to_world = legacy_projection.project_pixel_to_world
+load_projection_calibration = legacy_projection.load_projection_calibration
+
 
 # Study constants (world SDF, camera includes, contact height, deployed calibration,
 # site extent) are owned by the residual-audit study; imported, never re-declared.

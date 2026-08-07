@@ -50,7 +50,6 @@ if perception_source not in sys.path:
 from reliability import CameraObservation  # noqa: E402
 from reliability.projection import (  # noqa: E402
     camera_model_from_world as _library_camera_model_from_world,
-    load_projection_calibration,
     project_observation_to_world as _library_project_observation_to_world,
 )
 from unav_common.camera_model import ObliqueCameraModel  # noqa: E402
@@ -386,7 +385,6 @@ class OperationalLogRecorder(Node):
         camera_topics: dict[str, str],
         camera_models: dict[str, ObliqueCameraModel],
         odom_topic: str,
-        contact_z_m: float,
         fresh_age_s: float,
         odom_origin_x_m: float,
         odom_origin_y_m: float,
@@ -395,7 +393,6 @@ class OperationalLogRecorder(Node):
         expected_detector_contract: dict[str, Any],
         max_stream_wall_age_s: float,
         detector_contract_topic: str = RUNTIME_CONTRACT_TOPIC,
-        projection_calibrations: dict[str, dict[str, float]] | None = None,
     ) -> None:
         super().__init__(
             "bigwarehouse_multicamera_operational_recorder",
@@ -403,8 +400,6 @@ class OperationalLogRecorder(Node):
         )
         self.out_dir = out_dir
         self.camera_models = dict(camera_models)
-        self.projection_calibrations = dict(projection_calibrations or {})
-        self.contact_z_m = float(contact_z_m)
         self.fresh_age_s = float(fresh_age_s)
         self.max_stream_wall_age_s = float(max_stream_wall_age_s)
         if (
@@ -739,16 +734,9 @@ class OperationalLogRecorder(Node):
                 self.last_camera_stamp_s[expected_camera_id] = float(
                     observation.timestamp_s
                 )
+            # Inverse perspective mapping, no parameters (e7, 2026-08-07).
             world_xy = project_observation_to_world(
-                observation,
-                self.camera_models[expected_camera_id],
-                contact_z_m=self.contact_z_m,
-                along_bearing_offset_m=self.projection_calibrations.get(
-                    expected_camera_id, {}
-                ).get("intercept_m", 0.0),
-                along_bearing_slope_per_m=self.projection_calibrations.get(
-                    expected_camera_id, {}
-                ).get("slope_per_m", 0.0),
+                observation, self.camera_models[expected_camera_id]
             )
             fresh = observation.measurement_age_s <= self.fresh_age_s
             u, v = observation.pixel_uv if observation.pixel_uv is not None else (math.nan, math.nan)
@@ -847,7 +835,6 @@ def main() -> int:
     parser.add_argument("--min-camera-rows", type=int, default=1)
     parser.add_argument("--min-odom-rows", type=int, default=1)
     parser.add_argument("--odom-topic", default="/odom_noisy")
-    parser.add_argument("--contact-z-m", type=float, default=0.05)
     parser.add_argument("--fresh-age-s", type=float, default=0.15)
     parser.add_argument(
         "--max-stream-wall-age-s",
@@ -981,8 +968,8 @@ def main() -> int:
     args = parser.parse_args()
     if rclpy is None:
         raise RuntimeError("rclpy is required; source the ROS workspace before running this recorder")
-    if args.contact_z_m < 0.0 or args.fresh_age_s < 0.0 or args.duration_s < 0.0:
-        parser.error("--contact-z-m and --fresh-age-s must be non-negative")
+    if args.fresh_age_s < 0.0 or args.duration_s < 0.0:
+        parser.error("--fresh-age-s and --duration-s must be non-negative")
     if (
         not math.isfinite(args.max_stream_wall_age_s)
         or args.max_stream_wall_age_s <= 0.0
@@ -1254,7 +1241,6 @@ def main() -> int:
             "yaw_rad": float(args.odom_origin_yaw_rad),
             "source": "documented_launch_spawn_not_ground_truth",
         },
-        "contact_z_m": float(args.contact_z_m),
         "fresh_age_s": float(args.fresh_age_s),
         "stream_liveness_watchdog": {
             "clock": "steady_monotonic",
@@ -1299,14 +1285,12 @@ def main() -> int:
             "odometry": int(args.min_odom_rows),
         },
     }
-    projection_calibrations: dict[str, dict[str, float]] = load_projection_calibration(projection_path)
     projection_payload = json.loads(projection_path.read_text(encoding="utf-8"))
     manifest["projection_calibration"] = {
         "path": str(projection_path),
         "sha256": _sha256_file(projection_path),
         "kind": projection_payload.get("kind"),
         "calibration_id": projection_payload.get("calibration_id"),
-        "along_bearing_calibrations": projection_calibrations,
     }
     _write_json_atomic(progress_manifest_path, manifest)
 
@@ -1316,7 +1300,6 @@ def main() -> int:
         camera_topics=DEFAULT_CAMERA_TOPICS,
         camera_models=camera_models,
         odom_topic=str(args.odom_topic),
-        contact_z_m=float(args.contact_z_m),
         fresh_age_s=float(args.fresh_age_s),
         max_stream_wall_age_s=float(args.max_stream_wall_age_s),
         odom_origin_x_m=float(args.odom_origin_x_m),
@@ -1325,7 +1308,6 @@ def main() -> int:
         use_sim_time=bool(args.use_sim_time),
         expected_detector_contract=expected_detector_contract,
         detector_contract_topic=RUNTIME_CONTRACT_TOPIC,
-        projection_calibrations=projection_calibrations,
     )
     status = "failed"
     stop_reason = "unknown"

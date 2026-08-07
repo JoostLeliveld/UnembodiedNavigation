@@ -14,6 +14,8 @@ measurements and the comparison isolates the *reference*, not the projection.
 
 from __future__ import annotations
 
+import pathlib
+
 import csv
 from dataclasses import dataclass
 import json
@@ -33,12 +35,23 @@ sys.path.insert(0, str(REPO / "src" / "state"))
 sys.path.insert(0, str(REPO / "src" / "unav_common"))
 sys.path.insert(0, str(REPO / "experiments" / "multicamera_commissioning_bigwarehouse" / "tools"))
 
-from reliability.projection import (  # noqa: E402
+from reliability.projection import (
     camera_model_from_world,
-    load_projection_calibration,
-    projection_kwargs_for_camera,
-    _project_pixel_to_world,
 )
+
+# The projection corrections below were deleted from `reliability.projection` on 2026-08-07
+# (measured harmful: e7). This study is ABOUT them, so it reads the graveyard copy instead.
+import importlib.util as _ilu
+_lpc = _ilu.spec_from_file_location(
+    "legacy_projection_corrections",
+    str(pathlib.Path(__file__).resolve().parents[1] / "legacy_projection_corrections.py"),
+)
+legacy_projection = _ilu.module_from_spec(_lpc)
+_lpc.loader.exec_module(legacy_projection)
+load_projection_calibration = legacy_projection.load_projection_calibration
+projection_kwargs_for_camera = legacy_projection.projection_kwargs_for_camera
+_project_pixel_to_world = legacy_projection.project_pixel_to_world
+
 import attach_evaluation_truth as AET  # noqa: E402  (canonical nearest-stamp join)
 from state.core import trajectory_smoother as ts  # noqa: E402
 

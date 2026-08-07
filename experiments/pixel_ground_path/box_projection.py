@@ -1,5 +1,20 @@
 """Candidate box-to-ground projection used only by the pixel-ground study.
 
+NOT ADOPTED — decision 2026-08-07.  The deployed measurement is inverse perspective
+mapping: box bottom-centre intersected with the floor plane (`contact_z_m = 0.0`,
+calibration artifact `projection_calibration_v4`).  This module stays here, runnable and
+unmoved, because it is the *comparison that justifies that choice* — not because it is a
+path anyone should wire up.  Do not import it from `src/`; it never shipped there.
+
+Why it lost, in one line: it is 50.4 mm vs IPM's 66.6 mm on the same 1844 detections, and
+that 16 mm costs two scalars (`alpha`, `z*`) picked by a grid search plus a paragraph of
+defence.  `z* = 0.085` is the argmin of an 81-point sweep over z on [0, 0.20] crossed with
+11 values of alpha, minimising yaw-marginal RMS on a CAD silhouette grid -- the true optimum
+was alpha=0.4, z=0.06 (37.4 mm) and a pre-registered 2 mm plateau tie-break snapped it to the
+named box centre (38.3 mm).  Nothing was fitted to robot measurements, but it is a numerical
+optimum, not a derivation; earlier wording in this study called it "derived", which overstates
+it.  Full record: `README.md` and `logs/studies/pixel_ground_path/RESULTS.md`.
+
 This is deliberately experiment-local.  Its constants are specific to the simulated
 TurtleBot3 appearance, the studied detector and the 6.10 m / 0.92 rad camera mounts.  The
 yaw-marginal covariance is temporally correlated and is not licensed as independent

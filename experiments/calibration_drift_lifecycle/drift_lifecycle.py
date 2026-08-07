@@ -37,6 +37,8 @@ Outputs -> logs/studies/calibration_drift_lifecycle/exp1_stale_correction/
 
 from __future__ import annotations
 
+import pathlib
+
 import json
 import math
 from pathlib import Path
@@ -64,11 +66,21 @@ from reliability.calibration_perturbation import (  # noqa: E402
     perturb,
 )
 from reliability.operational_residual import build_operational_residuals  # noqa: E402
-from reliability.projection import (  # noqa: E402
-    load_projection_calibration,
-    projection_kwargs_for_camera,
-    _project_pixel_to_world,
+
+
+# The projection corrections below were deleted from `reliability.projection` on 2026-08-07
+# (measured harmful: e7). This study is ABOUT them, so it reads the graveyard copy instead.
+import importlib.util as _ilu
+_lpc = _ilu.spec_from_file_location(
+    "legacy_projection_corrections",
+    str(pathlib.Path(__file__).resolve().parents[1] / "legacy_projection_corrections.py"),
 )
+legacy_projection = _ilu.module_from_spec(_lpc)
+_lpc.loader.exec_module(legacy_projection)
+load_projection_calibration = legacy_projection.load_projection_calibration
+projection_kwargs_for_camera = legacy_projection.projection_kwargs_for_camera
+_project_pixel_to_world = legacy_projection.project_pixel_to_world
+
 
 OUT = REPO / "logs/studies/calibration_drift_lifecycle/exp1_stale_correction"
 

@@ -24,6 +24,8 @@ onto the frame timestamps by nearest-stamp join so the replay metrics can align.
 
 from __future__ import annotations
 
+import pathlib
+
 import argparse
 import bisect
 import csv
@@ -39,11 +41,22 @@ sys.path.insert(0, str(ROOT / "src" / "unav_common"))  # camera_model for re-pro
 
 from reliability.contracts import CameraObservation, CameraQuality  # noqa: E402
 from reliability.fusion import MapObservation  # noqa: E402
-from reliability.projection import (  # noqa: E402
+from reliability.projection import (
     camera_model_from_world,
-    load_projection_calibration,
     project_observation_to_world,
 )
+
+# The projection corrections below were deleted from `reliability.projection` on 2026-08-07
+# (measured harmful: e7). This study is ABOUT them, so it reads the graveyard copy instead.
+import importlib.util as _ilu
+_lpc = _ilu.spec_from_file_location(
+    "legacy_projection_corrections",
+    str(pathlib.Path(__file__).resolve().parents[2] / "legacy_projection_corrections.py"),
+)
+legacy_projection = _ilu.module_from_spec(_lpc)
+_lpc.loader.exec_module(legacy_projection)
+load_projection_calibration = legacy_projection.load_projection_calibration
+
 from reliability.replay import EvaluationFrame, ReplayFrame  # noqa: E402
 
 DEFAULT_CAMERAS = ("camera_A", "camera_B", "camera_C", "camera_D")

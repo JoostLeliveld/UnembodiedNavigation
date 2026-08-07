@@ -18,6 +18,8 @@ Outputs -> logs/studies/external_camera_bias_model/exp1_residual_characterizatio
 
 from __future__ import annotations
 
+import pathlib
+
 import csv
 import json
 import math
@@ -39,11 +41,22 @@ sys.path.insert(
 )
 
 from metrics import spearman, binned  # noqa: E402  (THE shared scoring library)
-from reliability.projection import (  # noqa: E402
+from reliability.projection import (
     camera_model_from_world,
-    load_projection_calibration,
-    _project_pixel_to_world,
 )
+
+# The projection corrections below were deleted from `reliability.projection` on 2026-08-07
+# (measured harmful: e7). This study is ABOUT them, so it reads the graveyard copy instead.
+import importlib.util as _ilu
+_lpc = _ilu.spec_from_file_location(
+    "legacy_projection_corrections",
+    str(pathlib.Path(__file__).resolve().parents[1] / "legacy_projection_corrections.py"),
+)
+legacy_projection = _ilu.module_from_spec(_lpc)
+_lpc.loader.exec_module(legacy_projection)
+load_projection_calibration = legacy_projection.load_projection_calibration
+_project_pixel_to_world = legacy_projection.project_pixel_to_world
+
 import attach_evaluation_truth as AET  # noqa: E402  (canonical nearest-stamp join)
 
 # ---------------------------------------------------------------- configuration

@@ -30,7 +30,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'skip_stale_pixel_correction': 'true',
     'bev_y_calibration_offset_m': '0.127',
     'bev_affine_calibration': '',
-    'bbox_contact_z_m': '0.0',
     'pixel_max_correction_jump_m': '0.0',
     'pixel_correction_nis_threshold': '0.0',
     'use_truth_localization': 'false',
@@ -281,7 +280,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             context, 'scheduled_selection_mode', 'coverage_best_with_fallback'
         ).strip().lower(),
         'manager_gp_artifact_template': _launch_value(context, 'manager_gp_artifact_template', '').strip(),
-        'manager_projection_calibration': _launch_value(context, 'manager_projection_calibration', '').strip(),
         'manager_min_spatial_trust': float(_launch_value(context, 'manager_min_spatial_trust', '0.15')),
         'manager_decision_rate_hz': float(_launch_value(context, 'manager_decision_rate_hz', '5.0')),
         'manager_camera_ids': _launch_value(context, 'manager_camera_ids', '').strip(),
@@ -321,7 +319,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'pixel_correction_min_interval_s': float(_launch_value(context, 'pixel_correction_min_interval_s', '0.0')),
         'bev_y_calibration_offset_m': float(_launch_value(context, 'bev_y_calibration_offset_m', PAPER_LAUNCH_DEFAULTS['bev_y_calibration_offset_m'])),
         'bev_affine_calibration': _launch_value(context, 'bev_affine_calibration', PAPER_LAUNCH_DEFAULTS['bev_affine_calibration']),
-        'bbox_contact_z_m': float(_launch_value(context, 'bbox_contact_z_m', PAPER_LAUNCH_DEFAULTS['bbox_contact_z_m'])),
         'pixel_max_correction_jump_m': float(_launch_value(context, 'pixel_max_correction_jump_m', PAPER_LAUNCH_DEFAULTS['pixel_max_correction_jump_m'])),
         'pixel_correction_nis_threshold': float(_launch_value(context, 'pixel_correction_nis_threshold', PAPER_LAUNCH_DEFAULTS['pixel_correction_nis_threshold'])),
         'use_truth_localization': _as_bool(_launch_value(context, 'use_truth_localization', PAPER_LAUNCH_DEFAULTS['use_truth_localization'])),
@@ -1050,7 +1047,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         # the default 0.0 and the south-bias correction never took effect.
         'bev_y_calibration_offset_m': cfg.get('bev_y_calibration_offset_m', 0.0),
         'bev_affine_calibration': cfg.get('bev_affine_calibration', ''),
-        'bbox_contact_z_m': cfg.get('bbox_contact_z_m', 0.0),
         **cfg['camera_params'],
     }
     pixel_to_bev = Node(
@@ -1173,7 +1169,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'diagnostics_match_tolerance_s': 1e-3,
                 'bev_y_calibration_offset_m': cfg['bev_y_calibration_offset_m'],
                 'bev_affine_calibration': cfg.get('bev_affine_calibration', ''),
-                'bbox_contact_z_m': cfg['bbox_contact_z_m'],
                 'pixel_correction_nis_threshold': cfg['pixel_correction_nis_threshold'],
                 'world_profiles_path': cfg['world_profiles_path'],
                 'tasks_yaml': cfg['tasks_yaml'],
@@ -1386,8 +1381,6 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
             'camera_ids': _mc_camera_ids,
             'camera_model_includes': _mc_model_includes,
             'decision_rate_hz': float(cfg.get('manager_decision_rate_hz', 5.0)),
-            'projection_calibration': str(cfg.get('manager_projection_calibration', '') or ''),
-            'require_projection_calibration': bool(cfg.get('manager_require_projection_calibration', True)),
             'require_gp_artifacts': bool(cfg.get('manager_require_gp_artifacts', True)),
             # Covariance-weighted fusion of all in-view cameras (default) instead
             # of hard single-camera selection, which destabilised the belief.
@@ -1444,12 +1437,10 @@ def _scheduled_detector_node(cfg: Dict[str, object]):
             'model_path': cfg['yolo_model'],
             'world_sdf': world_sdf,
             'coverage_artifact': str(cfg.get('scheduled_coverage_artifact', '') or ''),
-            'projection_calibration': str(cfg.get('manager_projection_calibration', '') or ''),
             'device': str(cfg.get('yolo_device', '0') or '0'),
             'imgsz': int(cfg.get('yolo_imgsz', 640)),
             'conf': float(cfg.get('yolo_conf_threshold', 0.05)),
             'iou': float(cfg.get('yolo_iou_threshold', 0.45)),
-            'contact_z_m': float(cfg.get('bbox_contact_z_m', 0.05)),
             'report_std_m': float(cfg.get('scheduled_report_std_m', 0.15)),
             'rate_hz': float(cfg.get('scheduled_rate_hz', 5.0)),
             'frame_id': 'map_bev',
@@ -1560,7 +1551,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'skip_stale_pixel_correction': cfg['skip_stale_pixel_correction'],
             'bev_y_calibration_offset_m': cfg['bev_y_calibration_offset_m'],
             'bev_affine_calibration': cfg.get('bev_affine_calibration', ''),
-            'bbox_contact_z_m': cfg['bbox_contact_z_m'],
             'pixel_max_correction_jump_m': cfg['pixel_max_correction_jump_m'],
             'pixel_correction_nis_threshold': cfg['pixel_correction_nis_threshold'],
             'use_truth_localization': cfg['use_truth_localization'],

@@ -1,5 +1,28 @@
 # pixel_ground_path — candidate pixel→ground path for infrastructure-camera localization
 
+> ## OUTCOME 2026-08-07: the candidate was NOT adopted
+>
+> The deployed measurement is **inverse perspective mapping** — box bottom-centre
+> intersected with the floor plane (`contact_z_m = 0.0`, artifact
+> `projection_calibration_v4`). This study's box-centre @ `z* = 0.085 m` candidate is
+> **rejected as method** and retained as **the evidence that justifies the choice**. All six
+> scripts stay runnable and in place; nothing here was moved or deleted.
+>
+> | path | mean | radial bias | tuned scalars |
+> |---|---|---|---|
+> | bottom @ floor — **DEPLOYED**, textbook IPM | 66.6 mm | −27.3 mm | 0 |
+> | centre @ 0.085 m — this study's candidate, rejected | 50.4 mm | +4.0 mm | 2 (`alpha`, `z*`) |
+> | bottom @ 0.05 m — *previously* deployed, now superseded | 110.2 mm | −94.1 mm | 1 (free constant) |
+>
+> The 16 mm the candidate wins is not worth two search-chosen scalars and a paragraph of
+> defence. The 44 mm the *old* default lost is what actually mattered, and that is fixed.
+>
+> **Correction to the wording below:** §1 calls `z* = 0.085 m` *derived*. That overstates it.
+> It is the argmin of a grid search (81 values of z on [0, 0.20] × 11 values of alpha) over a
+> CAD silhouette grid. The true optimum was `alpha = 0.4, z = 0.06` (37.4 mm RMS); a
+> pre-registered 2 mm plateau tie-break snapped it to the named box centre (38.3 mm). Zero
+> robot measurements entered the objective — but it is a numerical optimum, not geometry.
+
 <!-- RESEARCH-METADATA:START (generated; edit research/registry.yaml) -->
 
 ```yaml

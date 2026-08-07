@@ -76,7 +76,6 @@ manager_decision_rate_hz: 5.0
 manager_fusion_report_std_m: 0.18
 manager_gp_artifact_template: /home/joostleliveld/Thesis/UnembodiedNavigation/logs/visibility_comparison/spawn_grid_20260727/gp/{camera_id}/det_hit_expected_kernel_gp.npz
 manager_min_spatial_trust: 0.0
-manager_projection_calibration: /home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v3/projection_calibration.json
 max_predict_speed_mps: 0.6
 multicam_belief: true
 nogo_belief_kappa: 1.0
@@ -123,16 +122,28 @@ tasks:
     - C2
     seeds:
     - 0
+    - 1
+    - 2
+    - 3
+    - 4
   mc_north_we:
     conditions:
     - C2
     seeds:
     - 0
+    - 1
+    - 2
+    - 3
+    - 4
   mc_south_we:
     conditions:
     - C2
     seeds:
     - 0
+    - 1
+    - 2
+    - 3
+    - 4
 use_belief_nogo_cost: true
 use_command_noise: true
 use_encoder_noise: true

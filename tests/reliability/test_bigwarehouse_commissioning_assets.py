@@ -75,7 +75,10 @@ def test_fullwarehouse_launch_targets_the_four_camera_world() -> None:
         '"manager_max_overlap_time_delta_s", default_value="0.05"',
     ):
         assert frozen_default in launch
-    assert '"manager_require_projection_calibration", default_value="true"' in launch
+    # Projection takes no calibration since 2026-08-07 (e7: every fitted correction
+    # measured worse than none), so the launch must NOT reintroduce the argument.
+    assert "manager_require_projection_calibration" not in launch
+    assert "manager_projection_calibration" not in launch
     assert '"manager_require_gp_artifacts", default_value="true"' in launch
     assert '"yolo_cpu_num_threads_camera_a", default_value="2"' in launch
 

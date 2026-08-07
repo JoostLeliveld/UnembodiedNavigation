@@ -53,6 +53,14 @@ for relative in ("src/reliability", "src/unav_common"):
         sys.path.insert(0, location)
 
 from reliability.contracts import CameraObservation  # noqa: E402
+import importlib.util as _ilu  # noqa: E402
+_spec = _ilu.spec_from_file_location(
+    "legacy_projection_corrections",
+    str(Path(__file__).resolve().parents[2] / "legacy_projection_corrections.py"),
+)
+_legacy = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(_legacy)
+
 from reliability.projection import (  # noqa: E402
     camera_model_from_world,
     project_observation_to_world,
@@ -124,7 +132,11 @@ def _collect_samples(
                 pixel_uv=(float(row["obs_u"]), float(row["obs_v"])),
                 detection_valid=True,
             )
-            point = project_observation_to_world(observation, model, contact_z_m=contact_z_m)
+            # This tool FITS the corrections that were deleted from the runtime on
+            # 2026-08-07 (measured harmful: e7), so it reads the graveyard copy.
+            point = _legacy.project_observation_to_world(
+                observation, model, contact_z_m=contact_z_m
+            )
             if point is None:
                 continue
             bearing_x = point[0] - cam_x

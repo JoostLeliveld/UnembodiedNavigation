@@ -311,7 +311,7 @@ class LiveDashboardNode(Node):
 
 
 class DashboardRenderer:
-    def __init__(self, artifact: Path, world: Path, projection_calibration: Path,
+    def __init__(self, artifact: Path, world: Path,
                  start, goal, start_yaw, gp_root: Path | None = None,
                  world_profiles: Path | None = None):
         gp = np.load(artifact, allow_pickle=True)
@@ -375,9 +375,6 @@ class DashboardRenderer:
             cam: camera_model_from_world(world, include_name=include)
             for cam, include in includes.items()
         }
-        calibration = json.loads(projection_calibration.read_text())
-        self.projection_calibration = calibration.get("cameras", {})
-        self.contact_z_m = float(calibration.get("contact_z_m", 0.05))
         self.start = tuple(start)
         self.goal = tuple(goal)
         self.start_yaw = float(start_yaw)
@@ -524,23 +521,10 @@ class DashboardRenderer:
         return max(finite, key=finite.get) if finite else None
 
     def _project_pixel(self, cam, u, v):
-        model = self.camera_models[cam]
-        point = model.pixel_to_world_at_z(float(u), float(v), self.contact_z_m)
-        if point is None:
-            return None
-        cfg = self.projection_calibration.get(cam, {})
-        dx = float(point[0]) - float(model.cam_pos[0])
-        dy = float(point[1]) - float(model.cam_pos[1])
-        distance = math.hypot(dx, dy)
-        if distance <= 1.0e-9:
-            return float(point[0]), float(point[1])
-        ux, uy = dx / distance, dy / distance
-        along = float(cfg.get("intercept_m", 0.0)) + float(cfg.get("slope_per_m", 0.0)) * distance
-        cross = float(cfg.get("cross_intercept_m", 0.0)) + float(cfg.get("cross_slope_per_m", 0.0)) * distance
-        return (
-            float(point[0]) + along * ux - cross * uy,
-            float(point[1]) + along * uy + cross * ux,
-        )
+        """Inverse perspective mapping -- the same projection the runtime uses."""
+
+        point = self.camera_models[cam].pixel_to_world(float(u), float(v))
+        return None if point is None else (float(point[0]), float(point[1]))
 
     def _project_observation(self, cam, observation):
         if not observation.get("detection_valid", False):
@@ -1007,7 +991,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--artifact", type=Path, default=repo / "logs/visibility_comparison/spawn_grid_20260727/fused_planner_four_camera.npz")
     parser.add_argument("--world", type=Path, default=repo / "src/sim/gazebo_worlds/worlds/warehouse_full_4cam.world.sdf")
-    parser.add_argument("--projection-calibration", type=Path, default=repo / "logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v2/projection_calibration.json")
     parser.add_argument(
         "--gp-root", type=Path,
         default=repo / "logs/visibility_comparison/spawn_grid_20260727/gp",
@@ -1026,7 +1009,7 @@ def main():
     spin_thread = threading.Thread(target=executor.spin, daemon=True)
     spin_thread.start()
     renderer = DashboardRenderer(
-        args.artifact, args.world, args.projection_calibration,
+        args.artifact, args.world,
         args.start, args.goal, args.start_yaw, args.gp_root,
     )
     window = "Four-camera navigation dashboard"

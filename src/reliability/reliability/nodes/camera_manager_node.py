@@ -45,11 +45,8 @@ from reliability.fusion import (
 from reliability.handover import HandoverUncertaintyConfig, handover_adjusted_observation
 from reliability.projection import (
     camera_model_from_world,
-    load_projection_calibration,
-    load_projection_contact_z,
     project_observation_to_world,
     project_observation_to_world_with_covariance,
-    projection_kwargs_for_camera,
 )
 from reliability.providers import GridMapReliabilityProvider
 from reliability.replay import ReplayConfig, ReplayMode, _with_provider_quality
@@ -249,11 +246,11 @@ class CameraManagerNode(Node):
         # ".../final_02/gp/{camera_id}/det_hit_expected_kernel_gp.npz".
         self.declare_parameter("gp_artifact_template", "")
         self.declare_parameter("decision_rate_hz", 5.0)
-        self.declare_parameter("contact_z_m", 0.05)
-        # Optional projection_calibration.json (per-camera along-bearing
-        # offsets, commissioning constants) — same file the recorder consumes.
-        self.declare_parameter("projection_calibration", "")
-        self.declare_parameter("require_projection_calibration", True)
+        # Projection takes no parameters: it is inverse perspective mapping, the
+        # box-bottom ray intersected with the floor plane.  The contact-plane
+        # constant and the projection_calibration artifact were deleted 2026-08-07
+        # because every fitted correction measured worse than none -- see
+        # logs/studies/pixel_ground_path/e7_ipm_zero_parameter/RESULTS.md.
         self.declare_parameter("require_gp_artifacts", True)
         self.declare_parameter("frame_id", "map_bev")
         self.declare_parameter("authority", "shadow")
@@ -311,7 +308,6 @@ class CameraManagerNode(Node):
 
         self.camera_ids = [str(item) for item in self.get_parameter("camera_ids").value]
         template = str(self.get_parameter("observation_topic_template").value)
-        self.contact_z_m = float(self.get_parameter("contact_z_m").value)
         self.frame_id = str(self.get_parameter("frame_id").value)
         self.authority = str(self.get_parameter("authority").value).strip().lower()
         if self.authority not in ("shadow", "active"):
@@ -327,23 +323,6 @@ class CameraManagerNode(Node):
             camera_id: camera_model_from_world(world_sdf, include_name=include)
             for camera_id, include in zip(self.camera_ids, includes)
         }
-        calibration_path = str(self.get_parameter("projection_calibration").value)
-        if bool(self.get_parameter("require_projection_calibration").value) and not calibration_path:
-            raise ValueError(
-                "projection_calibration is required by the fail-closed commissioning contract"
-            )
-        self.projection_calibrations = (
-            load_projection_calibration(calibration_path) if calibration_path else {}
-        )
-        # The contact plane and the along-bearing correction are the same quantity, so
-        # the artifact owns both. v2/v3 declare 0.05 and are unchanged; v4 declares 0.0
-        # and carries no along-bearing term. Falls back to the node parameter when the
-        # artifact predates the field.
-        if calibration_path:
-            self.contact_z_m = load_projection_contact_z(
-                calibration_path, default=self.contact_z_m
-            )
-
         artifacts = [str(item) for item in self.get_parameter("gp_artifacts").value]
         if artifacts == [""]:
             artifacts = []
@@ -520,19 +499,16 @@ class CameraManagerNode(Node):
     def _map_observations(self, now_s: float) -> list[MapObservation]:
         observations: list[MapObservation] = []
         for camera_id, contract in self._latest.items():
-            projection_kwargs = projection_kwargs_for_camera(
-                self.projection_calibrations, camera_id, contact_z_m=self.contact_z_m
-            )
             if self.covariance_profile == PAPER1_HISTORICAL_COVARIANCE:
                 projected = project_observation_to_world_with_covariance(
-                    contract, self.camera_models[camera_id], **projection_kwargs
+                    contract, self.camera_models[camera_id]
                 )
                 if projected is None:
                     continue
                 world_xy, covariance_m2 = projected
             else:
                 world_xy = project_observation_to_world(
-                    contract, self.camera_models[camera_id], **projection_kwargs
+                    contract, self.camera_models[camera_id]
                 )
                 if world_xy is None:
                     continue

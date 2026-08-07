@@ -228,8 +228,6 @@ def generate_launch_description():
                                           'with the batched 4-cam detector + active camera_manager -> /state/bev.'),
         DeclareLaunchArgument('manager_gp_artifact_template', default_value='',
                               description='Per-camera GP npz path template with {camera_id} for camera_manager selection.'),
-        DeclareLaunchArgument('manager_projection_calibration', default_value='',
-                              description='projection_calibration.json for the active camera_manager.'),
         DeclareLaunchArgument('manager_min_spatial_trust', default_value='0.15',
                               description='Min spatial trust to release a camera_manager correction (lower = more corrections).'),
         DeclareLaunchArgument('manager_decision_rate_hz', default_value='5.0'),

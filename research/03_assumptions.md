@@ -85,10 +85,10 @@ in §1 record which.
   satisfied: both worlds use a Gazebo ground plane, so the assumption is untested, not
   confirmed.
 - **Sensitivity / justification.** The dominant sensitivity is *which* plane, not floor
-  flatness. On 1849 real samples: box bottom at the deployed 0.05 m contact plane = 110.2 mm
-  mean error; box bottom at the floor plane = 66.6 mm; box centre at z\* = 0.085 m with a mesh
-  model = 50.4 mm. Plane error enters ground error through the mount obliquity (6.10 m,
-  0.92 rad).
+  flatness. On 1844 scored detections: box bottom at the **floor plane = 66.6 mm** mean error
+  (deployed since 2026-08-07); at the formerly deployed 0.05 m contact plane = 110.2 mm; box
+  centre at z\* = 0.085 m with a mesh model = 50.4 mm (measured, not adopted). Plane error
+  enters ground error through the mount obliquity (6.10 m, 0.92 rad).
 - **Consequence if violated.** A tilted or stepped floor biases every ground point in a
   range-dependent way that a constant per-camera bias cannot absorb, and conditional
   covariance stays too tight.
@@ -384,16 +384,22 @@ in §1 record which.
 ### A20 — The pixel statistic and the inversion plane are one coupled design choice
 
 - **Need.** The selected pixel and the plane it is inverted onto are not independently
-  swappable: box-bottom belongs with a contact/floor plane, box-centre with the derived
-  z\* = 0.085 m plane and a mesh model.
+  swappable: box-bottom belongs with a contact/floor plane, box-centre with the
+  grid-search-optimised z\* = 0.085 m plane and a mesh model.
 - **Plausibility.** A control, derived from measurement.
 - **Sensitivity / justification.** Mixing them is not a small error: bottom-at-0.05 m gives
-  110.2 mm, bottom-at-floor 66.6 mm, centre-at-0.085 m 50.4 mm on the same 1849 samples.
+  110.2 mm, bottom-at-floor 66.6 mm, centre-at-0.085 m 50.4 mm on the same 1844 scored
+  detections (1849 index rows).
 - **Consequence if violated.** A calibration arm labelled as testing one mechanism silently
   tests two, and the covariance constants no longer correspond to the estimator in use.
-- **Evidence.** `logs/studies/pixel_ground_path/RESULTS.md`; WS04's opt-in `bbox_center` path.
-- **State.** `ACCEPTED`. Which pair is frozen for contract A is §8 U5, owned by
-  WS04/WS05.
+- **Evidence.** `logs/studies/pixel_ground_path/RESULTS.md`;
+  `logs/studies/pixel_ground_path/e3_mesh_model_and_covariance/summary.json`.
+- **State.** `ACCEPTED`, and now **moot for the deployed path**: the frozen pair is box
+  bottom-centre + floor plane with no correction of any kind, so there is no longer a plane
+  constant or a per-camera term that could be mismatched to the statistic (§8 U5, resolved
+  2026-08-07; evidence `logs/studies/pixel_ground_path/e7_ipm_zero_parameter/RESULTS.md`).
+  The coupling remains true of the *historical* artifacts and is why v2 scores 68.2 mm with
+  its along-bearing term but 110.2 mm with the plane alone.
 
 ---
 
@@ -542,7 +548,7 @@ Each item blocks something concrete. None can be inferred from an existing locke
 | U2 | Does `p_use,c(s)` take `s = (x, y)` or `(x, y, heading)`? | A11 keeps heading odometry-backed, but the pixel-path evidence shows heading conditioning is worth 2.8× on *accuracy* — a different quantity from *availability*, and the two need not share an argument | Grid size, commissioning budget, A17, every arm's feature vector | WS01/WS07 + supervisor |
 | U3 | What counts as a **local** versus **global** layout change, and where may a changed-layout variant live? | Only one concrete instance exists (a 2.6 m pallet in `warehouse_aws` aisle A2, prediction only). The two-world rule reserves `warehouse_full_4cam` for frozen-method evaluation, so a changed variant of it is either a rule exception or a third world | B4 transfer gate, D4/D5, the third world split in `06` §3 | WS02 → supervisor |
 | U4 | Is the current world compatible with the July GP fields? | The world hash postdates the fields, whose manifests bind no world hash. Shared exposure may preserve a within-study contrast but not external interpretation | Contract A readiness (fail-closed) | WS06 |
-| U5 | Which complete measurement definition is frozen: a historical `bbox_bottom` path with its matching contact plane/artifact, or the experiment-local `bbox_center` @ 0.085 m candidate with no v4 correction? | A20 makes these coupled; E6 blocks treating v4 as the calibration for the candidate path, and WS04 prohibits runtime promotion | Contract A §5, every covariance constant | WS05 after RQ15 |
+| ~~U5~~ | **RESOLVED 2026-08-07: `bbox_bottom` intersected with the floor plane (inverse perspective mapping), NO calibration artifact at all.** The `bbox_center` @ 0.085 m candidate is rejected as method and retained as the comparison that justifies the choice; `contact_z_m = 0.05` is superseded. Rationale: IPM is the textbook path with zero statistic-level tuned scalars and 66.6 mm mean error, versus 50.4 mm for a candidate carrying two grid-search-chosen scalars, versus 110.2 mm for the previous default. This went further than first decided: e7 then measured v4's two surviving cross-bearing constants against the same 1844 detections and they made it **worse** (70.1 mm vs 66.6 mm raw), inverting the per-camera lateral bias they existed to remove (camera C +18.8 mm -> -58.7 mm). All correction degrees of freedom were therefore **deleted from the runtime**, not merely unselected. This also closes the registry's E6 caveat by removing the terms it warned about rather than identifying them. | — | — | closed |
 | U6 | Is the frozen detector confidence threshold 0.25 or 0.05? | The offline gate contract and the runtime configs disagree, and `p_qual` is *defined* by the threshold, so the offline labels and the runtime are not currently the same gate | B's label generation, A08, any `p_qual` number | WS07 + integration |
 | U7 | Which NIS policy is frozen — runtime 9.21 or offline 5.991? | They are different policies applied to the same mechanism; neither is documented as superseding the other | Contract A acceptance statistics, cross-study comparability | WS05 |
 | U8 | What is the reconciled miss endpoint (`r_miss_uv` 40 vs 120)? | `MissEndpointPolicy.require_reconciled()` blocks quoting either until the residual-tail measurement is made on real data | Any published EFE/covariance figure | WS04/WS05 |

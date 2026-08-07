@@ -31,7 +31,6 @@ def _renderer(module):
     return module.DashboardRenderer(
         ROOT / "logs/visibility_comparison/spawn_grid_20260727/fused_planner_four_camera.npz",
         ROOT / "src/sim/gazebo_worlds/worlds/warehouse_full_4cam.world.sdf",
-        ROOT / "logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v2/projection_calibration.json",
         (-10.0, -6.0),
         (-3.57, 6.0),
         -math.pi / 2.0,
