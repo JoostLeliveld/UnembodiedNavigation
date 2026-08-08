@@ -88,6 +88,91 @@ def binned_stats(d: np.ndarray, e: np.ndarray) -> list[dict]:
     return out
 
 
+#: Mount height of every camera in this world, for the elevation-angle axis.
+CAMERA_HEIGHT_M = 6.1
+
+
+def _along_by_range(path: Path) -> tuple[np.ndarray, np.ndarray]:
+    d, a = [], []
+    with path.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            if row.get("oracle_visible") != "1":
+                continue
+            d.append(float(row["range_m"]))
+            a.append(1000.0 * float(row["cor_along"]))
+    return np.asarray(d, dtype=float), np.asarray(a, dtype=float)
+
+
+def fig_e2(bottom_csv: Path, centre_csv: Path, out_dir: Path) -> dict:
+    """Why no single fixed-plane pixel statistic works across a footprint.
+
+    Both statistics assume the detected pixel corresponds to a known height. Neither
+    assumption survives the full range of viewing angles, and they fail at OPPOSITE ends:
+
+      * the BOTTOM edge is a poor stand-in for the contact point seen from above, where
+        the silhouette's lower boundary is the far side of the robot rather than its feet;
+      * the BOX CENTRE relies on an assumed height, and the ground error from a height
+        error scales as 1/tan(elevation), so it blows up at shallow angles.
+
+    Plotted against elevation angle rather than range, because the angle is the mechanism
+    and the range is only its proxy at this mount height.
+    """
+
+    series = {"box bottom edge  ($z=0$)": _along_by_range(bottom_csv),
+              "box centre  ($z^{*}=0.085$ m)": _along_by_range(centre_csv)}
+    colours = {"box bottom edge  ($z=0$)": "#0072B2",
+               "box centre  ($z^{*}=0.085$ m)": "#009E73"}
+    edges = np.arange(2.0, 17.1, 2.0)
+
+    fig, ax = plt.subplots(figsize=(8.2, 5.0))
+    ax.grid(True, alpha=0.3, zorder=0)
+    ax.axhline(0.0, color="#222222", lw=1.4, zorder=3)
+    out: dict = {}
+    for label, (d, a) in series.items():
+        mids, bias, elev = [], [], []
+        for lo, hi in zip(edges[:-1], edges[1:]):
+            mask = (d >= lo) & (d < hi)
+            if mask.sum() < MIN_BIN_N:
+                continue
+            mid = 0.5 * (lo + hi)
+            mids.append(mid)
+            bias.append(float(a[mask].mean()))
+            elev.append(float(np.degrees(np.arctan2(CAMERA_HEIGHT_M, mid))))
+        ax.plot(elev, bias, marker="o", ms=6, lw=2.0, color=colours[label], zorder=5,
+                label=label)
+        out[label] = {"elevation_deg": elev, "along_bias_mm": bias, "range_mid_m": mids}
+
+    ax.invert_xaxis()  # steep (near) on the left, shallow (far) on the right
+    ax.set_xlabel("camera elevation angle to the robot [deg]   "
+                  "(steep / near  $\\leftarrow$   $\\rightarrow$  shallow / far)")
+    ax.set_ylabel("along-bearing bias [mm]")
+    ax.set_title("Each pixel statistic fails at the OPPOSITE end of the footprint\n"
+                 "bottom edge is biased looking down; box centre is biased looking flat",
+                 fontweight="bold", fontsize=11)
+    ax.set_ylim(-62.0, 46.0)
+    ax.legend(fontsize=9, loc="upper left")
+    ax.annotate("bottom edge: the silhouette base\nis not the contact point\nwhen seen from above",
+                xy=(56, -50), fontsize=8.5, color="#0072B2", ha="center", va="top",
+                bbox=dict(fc="white", ec="#0072B2", alpha=0.9, pad=2.5), zorder=8)
+    ax.annotate("box centre: assumed-height error\namplified by 1/tan(elevation)",
+                xy=(32, 40), fontsize=8.5, color="#009E73", ha="center", va="top",
+                bbox=dict(fc="white", ec="#009E73", alpha=0.9, pad=2.5), zorder=8)
+    ax.axvline(40.0, color="#777777", ls=":", lw=1.2, zorder=2)
+    ax.text(40.0, -58, "crossover ~40 deg", fontsize=8, color="#555555", ha="center")
+    fig.text(0.5, -0.02,
+             "Same clear detections through both statistics, so this is paired. Elevation is "
+             "computed from the 6.1 m mount height. Neither curve is fitted -- each point is "
+             "the mean along-bearing bias in a 2 m range bin. The crossing near 40 deg is why "
+             "a single fixed-plane statistic cannot be unbiased across a whole footprint.",
+             ha="center", va="top", fontsize=7.4, color="#333333", wrap=True)
+    fig.tight_layout()
+    for ext in ("png", "pdf"):
+        fig.savefig(out_dir / f"fig_e2_pixel_statistic_vs_elevation.{ext}",
+                    bbox_inches="tight")
+    plt.close(fig)
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--residuals", default=str(DEFAULT_RESIDUALS))
@@ -158,7 +243,14 @@ def main() -> int:
         fig.savefig(out_dir / f"fig_e1_error_vs_distance.{ext}", bbox_inches="tight")
     plt.close(fig)
 
+    # ---- fig_e2: the pixel statistic interacts with viewing angle -----------------
+    candidate_csv = residuals.parent / "grid_residuals_candidate.csv"
+    crossover = {}
+    if candidate_csv.is_file():
+        crossover = fig_e2(residuals, candidate_csv, out_dir)
+
     summary = {
+        "pixel_statistic_vs_elevation": crossover,
         "residuals_csv": str(residuals.relative_to(REPO)),
         "bin_width_m": BIN_WIDTH_M, "min_bin_n": MIN_BIN_N,
         "n_clear_detections": int(len(pooled_e)),

@@ -21,7 +21,7 @@ Regenerate with `python3 scripts/research/promote_figures.py`.
 | EXP-RCOND | `operational_residual_rcond` | 6 |
 | EXP-PIXEL-GROUND | `pixel_ground_path` | 4 |
 | EXP-PLANNER-BRANCH | `planner_covariance_branching` | 6 |
-| EXP-PROJ-AMP | `projection_amplification` | 48 |
+| EXP-PROJ-AMP | `projection_amplification` | 50 |
 | _unmapped_ | `single_camera_uigp_reliability` | 5 |
 
 ## Experiments with no figures
