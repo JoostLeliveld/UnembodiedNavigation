@@ -54,6 +54,12 @@ next_action: Redesign WS05 around camera region and yaw identifiability using E6
 
 <!-- RESEARCH-METADATA:END -->
 
+> **Blocked historical design — do not run as written.** This plan compares retired v2/v3
+> projection artifacts and treats route/yaw-confounded signed residuals as camera constants.
+> The current runtime has no fitted projection correction. Any replacement campaign needs a
+> new frozen manifest and an explicit injected or independently identified fault. See
+> `docs/localization_metrics.md`.
+
 
 **Question.** Every observation-model result in this workstream is **offline**. C1 — the
 safe operating envelope — is a closed-loop claim. Does the gated 2-DOF per-camera bias
@@ -108,7 +114,8 @@ cross-bearing constants differ, and only on the two cameras the commissioning ga
 | D | CALIBRATE | +0.0156 | +0.00167 |
 
 So the expected closed-loop effect is confined to segments observed by C and D, and its
-size is the measured bias removal: camera C 77 → 4 mm, D 33 → 2 mm.
+historical expected size was the signed cross-bearing change: camera C 77 → 4 mm, D 33 →
+2 mm under the retired capture/pipeline context. It is not a current effect size.
 
 **This bounds the claim honestly**: a ~7 cm belief improvement on C-observed segments only
 changes an outcome where 7 cm decides a breach. The campaign either finds that regime or

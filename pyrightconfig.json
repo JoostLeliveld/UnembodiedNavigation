@@ -20,7 +20,8 @@
     "src/planning",
     "src/perception",
     "src/state",
-    "src/sim"
+    "src/sim",
+    "experiments/mono_depth_visibility"
   ],
   "pythonVersion": "3.10",
   "pythonPlatform": "Linux",

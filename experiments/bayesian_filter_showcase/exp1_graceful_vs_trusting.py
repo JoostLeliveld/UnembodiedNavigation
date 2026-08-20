@@ -5,8 +5,9 @@ The goal here is NOT the lowest localization error. The goal is that the robot's
 stated uncertainty tracks its real error, so it never claims confidence it has not
 earned -- because unearned confidence is what drives a robot into a shelf.
 
-The fault is real, not injected: run with the deployed v2 calibration, camera C
-carries its measured **+78 mm lateral bias**. That bias is invisible to camera C
+The input residual is recorded, not injected: under the now-retired v2 calibration,
+camera C carries a historical **+76.9 mm signed lateral bias** on these confounded driving
+captures. This is mechanism evidence, not current camera accuracy. That bias is invisible to camera C
 itself. It is only detectable because three other cameras disagree with it, which
 is what makes this a multi-camera result rather than a filtering trick.
 
@@ -102,7 +103,7 @@ R_COND_SIGMA_M = {
 #: logs/studies/operational_residual_rcond/exp2_operational_rcond) — not tuned.
 #:
 #: This is the bridge between the calibration work and the filter. R_cond measures
-#: SCATTER only; a camera with a 78 mm lean has an error the scatter cannot explain.
+#: SCATTER only; a repeated historical-v2 lean has an error the scatter cannot explain.
 #: Rather than trying to remove that error, the filter ACCOUNTS for it: the leftover
 #: bias enters as the R_model term of the innovation decomposition, so a leaning
 #: camera is honestly modelled as a less informative one. Caveat, documented in
@@ -142,23 +143,30 @@ ARM_SPEC = {
                                    cross_check=True, floor="pooled"),
 }
 ARMS = tuple(ARM_SPEC)
+#: Tick labels must say what the arm DOES, not just its code -- these figures are read
+#: by people who have not read this file (see CLAUDE.md, "Figures must stand alone").
+#: fig_s1 draws HORIZONTAL bars precisely so these can be full phrases: seven of them
+#: as vertical-bar tick labels collide at any font size that stays legible.
 ARM_LABEL = {
-    "A0_trust_everything": "A0\ntrust all",
-    "A1_hard_gate": "A1\nNIS gate",
-    "A2_factorized": "A2\nper-cam R",
-    "A3_network_consistency": "A3\n+cross-check",
-    "A4_correlation_floor": "A4\n+corr. floor",
-    "X1_floor_only": "X1\nfloor, no\ncross-check",
-    "X2_pooled_floor": "X2\npooled floor",
+    "A0_trust_everything": "A0   trust every camera equally",
+    "A1_hard_gate": "A1   + reject wild disagreements",
+    "A2_factorized": "A2   + measure each camera's noise",
+    "A3_network_consistency": "A3   + check each against the others",
+    "A4_correlation_floor": "A4   + uncertainty floor   ← FULL METHOD",
+    "X1_floor_only": "X1   floor only, no cross-checking",
+    "X2_pooled_floor": "X2   one shared floor for all cameras",
 }
+#: Legend and results-table wording. Each entry says the MECHANISM in words, with the
+#: familiar name of the technique in brackets for readers who know it.
 ARM_LONG = {
-    "A0_trust_everything": "A0 trust everything (state of practice)",
-    "A1_hard_gate": "A1 hard NIS gate (classical robust)",
-    "A2_factorized": "A2 sharp per-camera R, no cross-check",
-    "A3_network_consistency": "A3 + leave-one-out network cross-check",
-    "A4_correlation_floor": "A4 + correlation floor (ours, full)",
-    "X1_floor_only": "X1 ablation: floor without the cross-check",
-    "X2_pooled_floor": "X2 ablation: one pooled floor for every camera",
+    "A0_trust_everything": "A0  trust every camera equally (what is normally done)",
+    "A1_hard_gate": "A1  + reject sightings that disagree wildly (classical robust filtering)",
+    "A2_factorized": "A2  + measure how noisy each camera really is",
+    "A3_network_consistency": "A3  + judge each camera against a position built WITHOUT it",
+    "A4_correlation_floor": "A4  + a floor on each camera's uncertainty that repeated looks "
+                            "cannot shrink  (full method)",
+    "X1_floor_only": "X1  the floor alone, without judging cameras against each other",
+    "X2_pooled_floor": "X2  one shared floor for all four cameras instead of one each",
 }
 ARM_COLOR = {"A0_trust_everything": "#D55E00", "A1_hard_gate": "#E69F00",
              "A2_factorized": "#CC79A7", "A3_network_consistency": "#56B4E9",
@@ -414,42 +422,61 @@ def summarize(records: list[dict]) -> dict:
 def fig_s1(per_arm: dict) -> None:
     """Honesty and sharpness side by side — neither means anything alone."""
 
-    fig, (ax, ax2, ax3) = plt.subplots(1, 3, figsize=(14.4, 4.6))
+    # Horizontal bars, shared y axis: the arm descriptions are full phrases and only
+    # fit as y-tick labels. Top-to-bottom reading order, so A0 sits at the top.
+    fig, (ax, ax2, ax3) = plt.subplots(1, 3, figsize=(15.2, 4.8), sharey=True)
     positions = np.arange(len(ARMS))
-    ax.bar(positions, [per_arm[a]["median_nees"] for a in ARMS],
-           color=[ARM_COLOR[a] for a in ARMS])
-    ax.axhline(1.386, color="#009E73", lw=2.0, ls="--", label="calibrated (1.39)")
-    ax.set_yscale("log")
-    ax.set_xticks(positions, [ARM_LABEL[a] for a in ARMS], fontsize=8)
-    ax.set_ylabel("median NEES   (log)")
-    ax.set_title("Is the stated uncertainty honest?\nabove the line = overconfident",
+    colors = [ARM_COLOR[a] for a in ARMS]
+
+    ax.barh(positions, [per_arm[a]["median_nees"] for a in ARMS], color=colors)
+    ax.axvline(1.386, color="#009E73", lw=2.0, ls="--",
+               label="perfectly honest = 1.39")
+    ax.set_xscale("log")
+    # Default log ticks give a single labelled decade here; readers need to be able to
+    # see that A4 sits BELOW 1.39 and A2 sits ~4x above it.
+    ax.set_xticks([0.5, 1.0, 1.39, 2.0, 5.0])
+    ax.set_xticklabels(["0.5", "1", "1.39", "2", "5"])
+    ax.minorticks_off()
+    ax.set_yticks(positions, [ARM_LABEL[a] for a in ARMS], fontsize=9)
+    ax.invert_yaxis()
+    ax.set_xlabel("(actual error)² ÷ (uncertainty the filter claims)\n"
+                  "median over all updates, log scale")
+    ax.set_title("Does the robot know how lost it is?\n"
+                 "right of the line = claims more precision than it has",
                  fontweight="bold", fontsize=10)
-    ax.legend(fontsize=8)
+    ax.legend(fontsize=8, loc="lower right")
 
-    ax2.bar(positions, [100 * per_arm[a]["unearned_confidence_fraction"] for a in ARMS],
-            color=[ARM_COLOR[a] for a in ARMS])
-    ax2.axhline(5.0, color="#009E73", lw=2.0, ls="--", label="nominal 5 %")
-    ax2.set_xticks(positions, [ARM_LABEL[a] for a in ARMS], fontsize=8)
-    ax2.set_ylabel("% of updates where the true error\nescapes the stated 95 % ellipse")
-    ax2.set_title("Unearned confidence\n(this is what drives into shelves)",
+    ax2.barh(positions, [100 * per_arm[a]["unearned_confidence_fraction"] for a in ARMS],
+             color=colors)
+    ax2.axvline(5.0, color="#009E73", lw=2.0, ls="--", label="should be 5 %")
+    ax2.set_xlabel("% of updates where the robot's true position\n"
+                   "lay outside its own 95 % confidence ellipse")
+    ax2.set_title("How often the robot was somewhere\nit was sure it was not",
                   fontweight="bold", fontsize=10)
-    ax2.legend(fontsize=8)
+    ax2.legend(fontsize=8, loc="lower right")
 
-    width = 0.38
-    ax3.bar(positions - width / 2, [100 * per_arm[a]["rmse_m"] for a in ARMS], width,
-            color=[ARM_COLOR[a] for a in ARMS], label="actual RMSE")
-    ax3.bar(positions + width / 2, [100 * per_arm[a]["mean_stated_sigma_m"] for a in ARMS],
-            width, color=[ARM_COLOR[a] for a in ARMS], alpha=0.45,
-            hatch="//", label="stated sigma")
-    ax3.set_xticks(positions, [ARM_LABEL[a] for a in ARMS], fontsize=8)
-    ax3.set_ylabel("cm")
-    ax3.set_title("Honest, not just vague\nstated should ≈ actual, and both small",
+    height = 0.38
+    ax3.barh(positions - height / 2, [100 * per_arm[a]["rmse_m"] for a in ARMS], height,
+             color=colors, label="2-D belief position RMSE")
+    ax3.barh(positions + height / 2, [100 * per_arm[a]["mean_stated_sigma_m"] for a in ARMS],
+             height, color=colors, alpha=0.45, hatch="//",
+             label="mean RMS per-axis 1σ")
+    ax3.set_xlabel("centimetres")
+    # Headroom so the legend does not sit on top of the bars; every bar still starts at 0.
+    ax3.set_xlim(0.0, 7.4)
+    ax3.set_title("Accuracy and sharpness\ncalibration is judged by NEES/coverage, not bar equality",
                   fontweight="bold", fontsize=10)
-    ax3.legend(fontsize=8)
+    ax3.legend(fontsize=8, loc="lower right")
 
-    fig.suptitle("A camera with a real +78 mm lateral bias: what each filter does about it",
-                 fontsize=12.5, fontweight="bold")
-    fig.tight_layout(rect=(0, 0, 1, 0.91))
+    fig.suptitle(
+        "Retired-v2 inputs contain repeated bias. What does each filter do about it?",
+        fontsize=12.5, fontweight="bold")
+    fig.text(0.5, 0.930,
+             "1,424 update steps from three named 4-camera Gazebo captures under retired v2. "
+             "The repeated residual is recorded but camera/route/yaw-confounded. Ground truth only scores the arms — no "
+             "filter ever sees it.",
+             ha="center", va="top", fontsize=8.5, color="#444444")
+    fig.tight_layout(rect=(0, 0, 1, 0.885))
     for ext in ("png", "pdf"):
         fig.savefig(OUT / f"fig_s1_honesty_and_sharpness.{ext}", bbox_inches="tight")
     plt.close(fig)
@@ -458,41 +485,66 @@ def fig_s1(per_arm: dict) -> None:
 def fig_s2(per_arm_records: dict) -> None:
     """Where the trust goes: how each arm treated the biased camera vs the others."""
 
-    fig, axes = plt.subplots(1, 2, figsize=(11.6, 4.3))
+    fig, axes = plt.subplots(1, 2, figsize=(13.0, 5.0))
     ax, ax2 = axes
-    for arm in ARMS:
-        records = per_arm_records[arm]
-        by_camera = {}
-        for camera in rc.CAMERAS:
-            weights = [r["responsibility"] if r["accepted"] else 0.0
-                       for r in records if r["camera"] == camera]
-            by_camera[camera] = float(np.mean(weights)) if weights else math.nan
-        positions = np.arange(len(rc.CAMERAS))
-        offset = (ARMS.index(arm) - 1) * 0.27
-        ax.bar(positions + offset, [by_camera[c] for c in rc.CAMERAS], 0.27,
-               color=ARM_COLOR[arm], label=ARM_LONG[arm])
-    ax.set_xticks(np.arange(len(rc.CAMERAS)),
-                  [c.replace("camera_", "") for c in rc.CAMERAS])
-    ax.set_ylabel("mean weight given to this camera")
-    ax.set_title("C is the biased camera. Who noticed?", fontweight="bold")
-    ax.legend(fontsize=7.5)
 
+    # LEFT: the leave-one-camera-out verdict, which is the quantity that actually
+    # distinguishes the arms. (An earlier version plotted the outlier responsibility
+    # here; only A2 uses that mechanism, so every other arm sat flat at 1.0 and the
+    # panel said nothing.) 1.0 = "this camera looks perfectly fine to me".
+    positions = np.arange(len(rc.CAMERAS))
+    width = 0.115
+    for index, arm in enumerate(ARMS):
+        records = per_arm_records[arm]
+        by_camera = []
+        for camera in rc.CAMERAS:
+            verdicts = [r["health"] for r in records if r["camera"] == camera]
+            by_camera.append(float(np.mean(verdicts)) if verdicts else math.nan)
+        # Centre the group of 7 on its tick; the old (index - 1) offset pushed every
+        # group to the right of the camera it described.
+        offset = (index - (len(ARMS) - 1) / 2.0) * width
+        ax.bar(positions + offset, by_camera, width,
+               color=ARM_COLOR[arm], label=ARM_LONG[arm])
+    ax.axhline(1.0, color="#444444", lw=1.0, ls=":")
+    ax.set_xticks(positions,
+                  [f"camera {c.replace('camera_', '')}" for c in rc.CAMERAS],
+                  fontsize=9)
+    ax.set_ylim(0.0, 1.28)
+    ax.set_ylabel("health this camera was given\n1.0 = “nothing wrong here”")
+    ax.set_title("Which filters noticed the cameras that lean?\n"
+                 "a flat row at 1.0 means the filter never suspected anything",
+                 fontweight="bold", fontsize=10)
+    # Name the actual lean of each camera on the plot, so the reader can compare the
+    # verdict against the fault instead of taking the caption's word for it.
+    for index, camera in enumerate(rc.CAMERAS):
+        ax.text(index, 1.20, f"lean\n{1000 * RESIDUAL_BIAS_M[camera]:.0f} mm",
+                ha="center", va="center", fontsize=8, color="#333333")
+
+    # RIGHT: the full distribution, not just the median.
     for arm in ARMS:
         records = per_arm_records[arm]
         nees = np.asarray([r["nees"] for r in records])
         order = np.sort(nees)
         ax2.plot(order, np.linspace(0, 1, order.size), lw=2.0,
                  color=ARM_COLOR[arm], label=ARM_LONG[arm])
-    ax2.axvline(5.991, color="#009E73", lw=1.6, ls="--", label="95 % ellipse")
+    ax2.axvline(5.991, color="#009E73", lw=1.6, ls="--",
+                label="edge of the claimed 95 % ellipse")
+    ax2.axhline(0.95, color="#009E73", lw=1.0, ls=":")
     ax2.set_xscale("log")
-    ax2.set_xlabel("NEES  (log)")
-    ax2.set_ylabel("cumulative fraction of updates")
-    ax2.set_title("The whole distribution, not just the median", fontweight="bold")
-    ax2.legend(fontsize=7.5, loc="lower right")
+    ax2.set_xlabel("(actual error)² ÷ (uncertainty the filter claims), log scale")
+    ax2.set_ylabel("fraction of updates at or below that value")
+    ax2.set_title("Not just the typical case — the whole spread\n"
+                  "honest = curve crosses 95 % left of the dashed line",
+                  fontweight="bold", fontsize=10)
 
-    fig.suptitle("Only the network can catch a lying camera — one camera cannot check itself",
-                 fontsize=12.0, fontweight="bold")
-    fig.tight_layout(rect=(0, 0, 1, 0.90))
+    fig.suptitle("A camera cannot detect its own lean. Only its neighbours can.",
+                 fontsize=12.5, fontweight="bold")
+    # ONE shared legend below both panels: seven long descriptions cannot sit inside
+    # the axes without covering the data they explain.
+    handles, labels = ax2.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2, fontsize=8.0,
+               frameon=False, bbox_to_anchor=(0.5, 0.0))
+    fig.tight_layout(rect=(0, 0.155, 1, 0.91))
     for ext in ("png", "pdf"):
         fig.savefig(OUT / f"fig_s2_where_the_trust_goes.{ext}", bbox_inches="tight")
     plt.close(fig)
@@ -525,8 +577,14 @@ def main() -> int:
     fig_s2(per_arm_records)
     payload = {
         "config": {
-            "fault": "deployed v2 calibration — camera C carries its measured "
-                     "+78 mm lateral bias (real, not injected)",
+            "context_id": "BELIEF-V2",
+            "metric_object": "filter_belief_and_honesty",
+            "experimental_unit": "filter_update_step",
+            "run_ids": list(rc.CAPTURES),
+            "projection_runtime": "projection_calibration_v2_retired",
+            "mean_stated_sigma_definition": "mean(sqrt(trace(P)/2)); RMS per-axis 1-sigma",
+            "fault": "retired v2 context — camera C carries a recorded +76.9 mm signed "
+                     "lateral bias on route/yaw-confounded captures (not current accuracy)",
             "fixed_R_sigma_m": FIXED_R_SIGMA_M,
             "r_cond_sigma_m": R_COND_SIGMA_M,
             "outlier_prior": OUTLIER_PRIOR,

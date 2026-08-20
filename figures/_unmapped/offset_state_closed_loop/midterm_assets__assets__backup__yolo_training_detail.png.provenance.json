@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": null,
+  "study": "offset_state_closed_loop",
+  "source_path": "logs/studies/offset_state_closed_loop/midterm_assets/assets/backup/yolo_training_detail.png",
+  "source_sha256": "6e823afeda044012f1daa3d6448225bf489cf09887b8537f2167feecf0fe95d7",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

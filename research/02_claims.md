@@ -68,22 +68,26 @@ against all reductions, so C1 makes no minimality or sufficiency claim.
 
 **Evidence.** Five independent failures of the collapsed representation:
 
-- *Availability is not accuracy.* `EXP-PRECISION`: on 15.7 % of the reachable floor the
+- *Availability is not accuracy.* `EXP-PRECISION`, a sensitivity map composed with
+  historical-v2 residual floors: on 15.7 % of the reachable floor the
   most-available camera is not the most informative one; camera C's territory falls from
   25 % (coverage) to 14.8 % (precision), and following coverage costs a median 3.6 cm where
-  the two disagree.
-- *A per-frame noise model cannot represent a lean.* `EXP-BELIEF`: the conventional filter
+  the two disagree. The mechanism is preserved; the fraction and Camera C share are not
+  current camera-management inputs.
+- *A per-frame noise model cannot represent a lean.* `EXP-BELIEF`, using retired-v2
+  observations from the three named July captures: the conventional filter
   reports median NEES 4.22 with 1.9 cm stated σ against 5.3 cm RMSE and 41.9 % of truth
   outside its stated 95 % ellipse. Sharpening the per-camera covariance makes it **worse**
   (NEES 5.11, 43.6 %); a hard innovation gate rejects 0.2 % of updates and changes nothing
   (4.13).
-- *The floor is the missing field.* Adding the per-camera residual floor plus the
-  leave-one-out cross-check gives NEES 0.46, 3.3 % outside, stated 5.1 cm against 5.0 cm
-  RMSE — honest to 2 % at unchanged accuracy. Ablations locate the mechanism: floor without
+- *The floor is the missing field in that historical-input study.* Adding the per-camera residual floor plus the
+  leave-one-out cross-check gives median NEES 0.46 and 3.3 % outside at 5.0 cm belief RMSE,
+  versus 5.3 cm baseline RMSE. This is conservative, not “honest to 2%”: the separately
+  reported 5.1 cm value is RMS per-axis 1σ and should not equal 2-D radial RMSE. Ablations locate the mechanism: floor without
   cross-check 6.9 %, one **pooled** floor 19.3 %, baseline 41.9 %. Leave-one-capture-out
   gives 1.1 / 3.5 / 11.4 % against a 36–46 % baseline, so it is not in-sample.
 - *Persistent structure is what bounds the covariance.* `EXP-RCOND`: median NEES 8.5–10.8 at detection
-  instants under the deployed calibration, worse at detections than over the whole track —
+  instants under the then-deployed, now-retired v2 calibration, worse at detections than over the whole track —
   an update contracts `P` toward a measurement that is 3–8 cm systematically off. A
   historical fitted correction moves one held-out capture 8.51 → 1.06, but E6 shows that its
   camera-bias interpretation is confounded with robot silhouette and route yaw.
@@ -96,10 +100,12 @@ against all reductions, so C1 makes no minimality or sufficiency claim.
   takes NEES 45.4 → 2.83, uniform across camera, range and yaw.
 
 **Scope.** Gazebo only; simulated detector imagery; one robot, no association ambiguity;
-2-D position with odometry-backed heading; three captures (1424–1426 detections, 125–530 per
-camera) for the residual/belief evidence and 1849 commanded-pose samples for the pixel-ground
-evidence; four nominally identical cameras. Camera A is the weakest case throughout (125
-samples, 91.7 % of its footprint outside the fitted calibration range).
+2-D position with odometry-backed heading; three route/yaw-confounded captures (1421 scored
+measurement rows; 1424 belief update steps; 125–530 rows per camera) for the historical
+residual/belief mechanism and 1844 detector-qualified commanded-pose samples for the current
+pixel-ground comparison; four nominally identical cameras. The historical captures do not
+support an A–D accuracy ranking. Camera A is their weakest sampled case (125 rows, 91.7 % of
+its footprint outside the fitted calibration range).
 
 **Non-claim.** C1 does **not** claim the five fields are sufficient — only that one is not
 enough. It does **not** claim per-camera `R_cond` beats a pooled constant: it does not
@@ -135,12 +141,12 @@ a refutation of the taxonomy.
   a hash-verifiable package or rebuild the comparison on frozen splits.
 - *The geometric family's failure mode is also visible.* Historical fitted corrections do not
   transfer when the systematic is not resolvable against its own scatter: gating at
-  `|b_cross|/σ_cross ≳ 1.2` earns +42.4 mm held-out on camera C and costs −26.9 mm on camera
+  `|b_cross|/σ_cross ≳ 1.2` historically earned +42.4 mm held-out on camera C and cost −26.9 mm on camera
   A, monotone in that ratio across all four cameras. E6 then shows that even the apparently
   resolvable C/D term can disappear after modelling silhouette geometry, so resolvability is
   necessary but not sufficient for causal attribution. A six-parameter world-affine model
-  extrapolates to a 3.0 m held-out error on camera A. The shipped pipeline carries **two**
-  fitted parameters where twelve were fitted before.
+  extrapolates to a 3.0 m held-out error on camera A. Those fitted projection parameters have
+  since all been deleted; the current runtime is zero-parameter floor-plane IPM.
 - *Commissioning cost is a family property, and it is measurable.* `EXP-NET-COMMISSION`: a
   large resolvable bias is decided correctly from 20 detections (100 %), while three cameras
   near the decision boundary never reach 60 % with all available data, and the small-sample
@@ -242,9 +248,10 @@ without changing the estimand or introducing evaluation-only inputs. Agreement b
 policies would make management practically unimportant in the tested regime, but would not
 refute the need to evaluate it separately.
 
-**Evidence.** `EXP-PRECISION`: 15.7 % of the reachable floor selects a different camera under
+**Evidence.** `EXP-PRECISION`, under frozen historical-v2 residual floors: 15.7 % of the reachable floor selects a different camera under
 the two criteria; the achievable-precision map is 2.6 cm median against 3.5 cm for
 coverage-following, and the gap is in the *typical* case, not the tail (p90 7.8 vs 7.9 cm).
+This is a representation sensitivity result, not a current A–D selector.
 `EXP-BIAS`: uniform fusion over 103 multi-camera clusters scores 0.052 m against 0.039 m for
 the best single camera and beats it in only 12.6 % of clusters — you cannot fuse well without
 per-camera conditional accuracy. `EXP-BELIEF`: a single pooled floor is 6× worse than a
@@ -334,15 +341,16 @@ slice of C6**.
 
 | Subquestion | Answered by | Status of the answer |
 |---|---|---|
-| A-SQ1 What does the deployed projection pipeline actually get wrong? | `EXP-BIAS`, `EXP-PROJ-AMP`, `EXP-PIXEL-GROUND` | Answered: a persistent per-camera cross-bearing lean the deployed model cannot reach, plus a body-offset term seen through unobserved yaw |
+| A-SQ1 What does the current projection pipeline get wrong? | `EXP-BIAS`, `EXP-PROJ-AMP`, `EXP-PIXEL-GROUND` | Answered narrowly: current yaw-blind floor-IPM retains silhouette/body-offset error; on the fair balanced dataset A–D mean measurement errors are 64.6–68.1 mm. The large historical per-camera lean is not identifiable as calibration. |
 | A-SQ2 Why does a conventional filter become confidently wrong on it? | `EXP-BELIEF`, `EXP-RCOND` | Answered: repeated looks from one camera are counted as independent evidence while the error floor does not shrink |
-| A-SQ3 What restores honest uncertainty without losing sharpness? | `EXP-BELIEF` A4 with X1/X2 ablations | Answered, with the mechanism attributed: the per-camera floor does most of the work; the leave-one-out check is secondary |
+| A-SQ3 What contains overconfidence under the historical repeated-bias inputs? | `EXP-BELIEF` A4 with X1/X2 ablations | Answered for the mechanism: the per-camera floor does most of the work; the leave-one-out check is secondary. A4 is conservative (median NEES 0.46), so no “without losing sharpness” claim is made. |
 | A-SQ4 Can the decision be made, and kept valid, without operational truth? | `EXP-NET-COMMISSION`, `EXP-DRIFT`, E6/RQ15 | Lifecycle monitoring is supported for a historical correction; whether the correction is an identifiable camera term is open |
 | A-SQ5 Does any of it change navigation? | `EXP-CL-CAL` | **Open.** A documented null is an acceptable answer and bounds the paper to a belief-calibration result |
 
 **Independence contract.** Paper A consumes no field produced by the source benchmark. Its
-one availability input is the frozen four-camera coverage artifact inside `EXP-PRECISION`,
-which is a composition of already-locked quantities, not a benchmark output. Paper A is
+one availability input is the frozen four-camera coverage artifact inside `EXP-PRECISION`.
+The composed precision map is historical-v2 sensitivity only and cannot supply current
+camera-selection effects. Paper A is
 therefore writable to completion while `EXP-USABLE` is untouched, and no gate in Chapter B
 blocks it.
 
@@ -350,9 +358,10 @@ blocks it.
 
 ## Chapter B — reliability-source comparison
 
-Scope of record: `papers/reliability_source_comparison.md`. Opens only after Paper A's
-package is closed. Claims used: **C2 in full**, **C6 in full**, the **route half of C3**, and
-**C5**.
+Scope of record: `papers/reliability_source_comparison.md`. Method investigation and
+prototype refinement may proceed in parallel with Paper A; the frozen confirmatory benchmark
+and source-ranking claims open only after Paper A's package is closed. Claims used: **C2 in
+full**, **C6 in full**, the **route half of C3**, and **C5**.
 
 | Subquestion | Gate | Notes |
 |---|---|---|

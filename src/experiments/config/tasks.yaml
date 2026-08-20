@@ -140,6 +140,21 @@ tasks:
     goal:
       x: -5.68
       y: 5.5
+  - name: route_tall_shadow_west_safe_start
+    description: 'Closed-loop version of route_tall_shadow_west with the start moved
+      0.30 m inside the south driveable boundary. This prevents the local controller
+      from rejecting step zero before the planned route can be tested.'
+    tier: exploratory
+    claim: static_observation_probability_planning
+    focus: four_camera_asymmetric_tall_shadows
+    start:
+      x: -7.78
+      y: -7.5
+      z: 0.05
+      yaw: 1.5708
+    goal:
+      x: -5.68
+      y: 5.5
   - name: mc_m1_s2n_central
     start:
       x: 0.0
@@ -405,3 +420,40 @@ tasks:
     goal:
       x: 5.5
       y: 8.0
+  warehouse_v2.world.sdf: &warehouse_v2_tasks
+  - name: fusion_overlap_primary
+    description: >-
+      Geometry-frozen primary fusion traverse from the south mouth of section-A
+      aisle A1|A2 to the east end of the north block-storage aisle. The arm-neutral
+      route generator produces three corridor-distinct choices (geometry only);
+      the camera-layout gate requires every choice to retain substantial peak-state
+      two-camera opportunity before detector capture is allowed.
+    tier: preregistered_geometry_only
+    claim: calibrated_bias_aware_multicamera_fusion
+    focus: overlap_connected_five_camera_network
+    route_library_task: aisleA1_s__aisleC_n_e
+    start:
+      x: -7.05
+      y: -5.20
+      z: 0.05
+      yaw: 1.5708
+    goal:
+      x: 10.60
+      y: 2.15
+  - name: apron_to_north_cross_aisle
+    description: >-
+      Straight commissioning traverse from the dock apron through the central
+      artery to the north cross aisle. This is a sensor/clock/coverage smoke task,
+      not the primary route-choice or fusion-effectiveness task.
+    tier: commissioning_smoke
+    claim: none
+    focus: five_camera_runtime_readiness
+    start:
+      x: 0.55
+      y: -7.50
+      z: 0.05
+      yaw: 1.5708
+    goal:
+      x: 0.55
+      y: 8.20
+  warehouse_v2_shipout.world.sdf: *warehouse_v2_tasks

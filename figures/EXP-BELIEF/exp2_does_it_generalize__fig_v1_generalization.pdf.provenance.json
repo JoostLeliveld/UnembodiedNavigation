@@ -1,8 +1,8 @@
 {
-  "promoted": "2026-08-08",
+  "promoted": "2026-08-18",
   "experiment_id": "EXP-BELIEF",
   "study": "bayesian_filter_showcase",
   "source_path": "logs/studies/bayesian_filter_showcase/exp2_does_it_generalize/fig_v1_generalization.pdf",
-  "source_sha256": "9ef872f1de46900443cb1f1ead0c27ffd13abbc4d959bd87e1287297c3e1db6d",
+  "source_sha256": "6fbdb84c64b7d4f9b2c09b550eba35615c7fe267e74605dbc73290d0444417e8",
   "note": "Promoted from ignored run output; regenerate by rerunning the study."
 }

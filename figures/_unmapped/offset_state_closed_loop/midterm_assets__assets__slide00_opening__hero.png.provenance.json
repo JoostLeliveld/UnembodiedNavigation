@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": null,
+  "study": "offset_state_closed_loop",
+  "source_path": "logs/studies/offset_state_closed_loop/midterm_assets/assets/slide00_opening/hero.png",
+  "source_sha256": "4f955c1d99f4055d4f622e184548d57aa11a6d8379c8e7cba76ee008a1836a58",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

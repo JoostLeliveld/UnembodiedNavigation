@@ -32,10 +32,16 @@ promotion_gate: Detection threshold precedes harm threshold across controlled fa
 evidence_paths:
 - logs/studies/calibration_drift_lifecycle/exp1_stale_correction/drift_lifecycle.json
 archive_rule: Preserve summary fault ladder and figure.
-next_action: None; state controlled-injection scope explicitly.
+next_action: Preserve as controlled historical-correction lifecycle evidence; the
+  fitted correction no longer exists in the current runtime.
 ```
 
 <!-- RESEARCH-METADATA:END -->
+
+> **Historical correction lifecycle.** This locked study asks what happens when a fitted
+> correction exists and becomes stale. The correction itself has since been deleted from the
+> runtime. Preserve the lifecycle mechanism; do not quote its camera errors as current
+> accuracy. See `docs/localization_metrics.md`.
 
 
 **Question.** The 2-DOF per-camera bias correction is fitted once at commissioning

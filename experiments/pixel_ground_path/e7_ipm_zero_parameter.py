@@ -140,7 +140,7 @@ def load_rows() -> list[dict]:
 def score(rows, models, kwargs_for) -> dict:
     """Radial / lateral error in the camera bearing frame, metres."""
 
-    per_camera: dict[str, list[tuple[float, float]]] = {}
+    per_camera: dict[str, list[tuple[float, float, float, float]]] = {}
     radial, lateral, norms = [], [], []
     for row in rows:
         camera = models[row["camera"]]
@@ -159,7 +159,9 @@ def score(rows, models, kwargs_for) -> dict:
         radial.append(rad)
         lateral.append(lat)
         norms.append(math.hypot(ex, ey))
-        per_camera.setdefault(row["camera"], []).append((rad, lat))
+        per_camera.setdefault(row["camera"], []).append(
+            (rad, lat, math.hypot(ex, ey), row["rng"])
+        )
     radial = np.asarray(radial)
     lateral = np.asarray(lateral)
     norms = np.asarray(norms)
@@ -176,8 +178,14 @@ def score(rows, models, kwargs_for) -> dict:
     out["per_camera"] = {
         cam: dict(
             n=len(vals),
+            mean_range_m=float(np.mean([v[3] for v in vals])),
+            mean_m=float(np.mean([v[2] for v in vals])),
+            median_m=float(np.median([v[2] for v in vals])),
+            p95_m=float(np.percentile([v[2] for v in vals], 95)),
             radial_bias_m=float(np.mean([v[0] for v in vals])),
+            radial_sd_m=float(np.std([v[0] for v in vals])),
             lateral_bias_m=float(np.mean([v[1] for v in vals])),
+            lateral_sd_m=float(np.std([v[1] for v in vals])),
         )
         for cam, vals in sorted(per_camera.items())
     }
@@ -215,7 +223,29 @@ def main() -> None:
             fitted=fitted,
         )
 
-    summary = {"n_detections": len(rows), "arms": {}}
+    summary = {
+        "schema_version": 2,
+        "metric_scope": "open-loop per-detection camera measurement error",
+        "runtime_information": [
+            "camera_id", "RGB image", "YOLO bounding box",
+            "camera intrinsics", "camera world pose",
+        ],
+        "evaluation_only_information": [
+            "commanded ground-truth x/y", "robot yaw", "dataset stratum",
+        ],
+        "dataset": {
+            "id": "warehouse_yolo_dataset_4cam_v3_20260724/localization_calibration",
+            "protocol": "set-pose grid; four cameras; four cardinal robot yaws",
+            "index": (
+                "logs/perception_datasets/warehouse_yolo_dataset_4cam_v3_20260724/"
+                "merged/localization_calibration_index.csv"
+            ),
+            "detector_boxes": str(DET_CACHE.relative_to(REPO)),
+            "world": str(WORLD.relative_to(REPO)),
+        },
+        "n_detections": len(rows),
+        "arms": {},
+    }
     print(f"\n{'arm':38} {'fitted':>6} {'mean':>9} {'median':>9} "
           f"{'rad bias':>10} {'lat bias':>10}")
     for name, spec in arms.items():
@@ -238,7 +268,17 @@ def main() -> None:
     summary["verdict"] = verdict
     print(f"\n  v4 - raw IPM = {delta_mm:+.1f} mm  ->  {verdict}")
 
-    print("\nper-camera lateral bias (mm), the quantity the cross term corrects:")
+    print("\ncurrent raw-IPM per-camera measurement error (same balanced dataset):")
+    print(f"  {'camera':9} {'n':>5} {'range':>8} {'mean':>9} {'median':>9} "
+          f"{'p95':>9} {'rad bias':>10} {'lat bias':>10}")
+    for cam in sorted(raw["per_camera"]):
+        value = raw["per_camera"][cam]
+        print(f"  {cam:9} {value['n']:5d} {value['mean_range_m']:6.1f}m "
+              f"{value['mean_m']*1000:7.1f}mm {value['median_m']*1000:7.1f}mm "
+              f"{value['p95_m']*1000:7.1f}mm {value['radial_bias_m']*1000:+8.1f}mm "
+              f"{value['lateral_bias_m']*1000:+8.1f}mm")
+
+    print("\nhistorical v4 comparison -- lateral bias only (not current runtime):")
     print(f"  {'camera':9} {'raw IPM':>10} {'v4':>10}")
     for cam in sorted(raw["per_camera"]):
         print(f"  {cam:9} {raw['per_camera'][cam]['lateral_bias_m']*1000:+9.1f} "

@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": null,
+  "study": "offset_state_model",
+  "source_path": "logs/studies/offset_state_model/exp3_model_the_geometry/fig_g3_transfer.pdf",
+  "source_sha256": "7b630705aa603e24528939f2e854a0714ca520dc7d9d056e925cfc9de0d056eb",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

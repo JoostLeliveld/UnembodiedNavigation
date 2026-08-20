@@ -32,11 +32,16 @@ evidence_paths:
 - logs/studies/operational_residual_rcond/exp2_operational_rcond/operational_rcond.json
 - logs/studies/operational_residual_rcond/exp3_two_dof_rcond/operational_rcond.json
 archive_rule: Retain the null result permanently.
-next_action: No promotion; per-camera conditional covariance tied or lost to pooled
-  covariance.
+next_action: Preserve the null under retired-v2 inputs; per-camera conditional covariance
+  tied or lost to pooled covariance, and its magnitudes are not current runtime fields.
 ```
 
 <!-- RESEARCH-METADATA:END -->
+
+> **Historical-input scope.** This study consumes the retired v2 projection on the three
+> `MC-DRIVE-V2` captures. Its covariance-estimation mechanism remains evidence; its 78 mm
+> Camera C residual is not current accuracy and the captures do not support an A–D ranking.
+> See `docs/localization_metrics.md`.
 
 
 **Question.** Can the per-camera conditional measurement covariance `R_cond,c`
@@ -69,7 +74,7 @@ Executed on real recorded captures. Full write-up:
 | R1 belief calibration | **FAIL** — belief overconfident (median NEES 8.5–10.8 at detections vs 1.39); cause = uncorrected per-camera bias, not the smoother |
 | R2 state-corrected estimator | **BUILT** |
 | R3 circularity | **PASS and load-bearing** — the anchored estimate understates camera A by **4.2×** |
-| R4 operational vs oracle | **PARTIAL** — within ~10% for A/C/D; recovers camera C's +0.078 m lateral bias without truth; camera B unresolvable |
+| R4 operational vs oracle | **PARTIAL** — within ~10% for A/C/D; recovers the historical-v2 Camera C +0.0769 m signed lateral bias without truth; camera B unresolvable |
 | R5 deliver into frozen `R_good` | **WITHHELD** — per-camera `R_cond` loses to a constant pooled matrix on held-out MNLL |
 
 **Headline:** `R_cond` is not blocked on data, it is blocked on **per-camera bias**. The
@@ -98,7 +103,7 @@ Headline adaptations:
 
 ## What is NOT ours
 
-- The along-bearing projection correction is pre-existing and **deployed**
+- The along-bearing projection correction was pre-existing and **then deployed, now retired**
   (`logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v2/`).
   Applied exactly as the runtime applies it; never refitted here.
 - The trust→covariance mapping is frozen (`reliability.covariance_mapping`). This

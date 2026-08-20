@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": null,
+  "study": "offset_state_closed_loop",
+  "source_path": "logs/studies/offset_state_closed_loop/midterm_assets/assets/slide02/camera_system_pipeline.png",
+  "source_sha256": "4e2b2a49f5e33f3305cfd301868615e2f88365b2d68ff7b82e9a4d7eb861d6d8",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

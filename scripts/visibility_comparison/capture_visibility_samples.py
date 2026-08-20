@@ -183,24 +183,48 @@ class TeleportImageCapture(Node):
         )
 
     def _set_robot_pose(self, *, x: float, y: float, yaw: float) -> None:
-        req = SetEntityPose.Request()
-        req.entity = Entity(name='turtlebot3')
-        req.entity.type = Entity.MODEL
-        req.pose.position.x = float(x)
-        req.pose.position.y = float(y)
-        req.pose.position.z = float(self.robot_z)
-        half = 0.5 * float(yaw)
-        req.pose.orientation.z = math.sin(half)
-        req.pose.orientation.w = math.cos(half)
-        future = self.client.call_async(req)
-        start = time.monotonic()
-        while rclpy.ok() and not future.done():
-            rclpy.spin_once(self, timeout_sec=0.05)
-            if (time.monotonic() - start) > 10.0:
-                raise RuntimeError(f'Timed out waiting for {self.service_name} response')
-        result = future.result()
-        if result is None or not bool(getattr(result, 'success', False)):
-            raise RuntimeError(f'Set pose request failed at x={x:.3f}, y={y:.3f}, yaw={yaw:.3f}')
+        # Long grid captures have occasionally seen one transient service timeout
+        # after thousands of successful teleports.  Retrying the *same* idempotent
+        # pose request is safer than discarding a 15k-frame capture; downstream
+        # membership and stale-frame gates still fail the capture closed.
+        failures = []
+        for attempt in range(1, 4):
+            req = SetEntityPose.Request()
+            req.entity = Entity(name='turtlebot3')
+            req.entity.type = Entity.MODEL
+            req.pose.position.x = float(x)
+            req.pose.position.y = float(y)
+            req.pose.position.z = float(self.robot_z)
+            half = 0.5 * float(yaw)
+            req.pose.orientation.z = math.sin(half)
+            req.pose.orientation.w = math.cos(half)
+            future = self.client.call_async(req)
+            start = time.monotonic()
+            timed_out = False
+            while rclpy.ok() and not future.done():
+                rclpy.spin_once(self, timeout_sec=0.05)
+                if (time.monotonic() - start) > 10.0:
+                    timed_out = True
+                    break
+            if timed_out:
+                failures.append(f'attempt {attempt}: response timeout')
+            else:
+                result = future.result()
+                if result is not None and bool(getattr(result, 'success', False)):
+                    return
+                failures.append(f'attempt {attempt}: service returned failure')
+            if attempt < 3:
+                self.get_logger().warning(
+                    f'Set-pose transient at x={x:.3f}, y={y:.3f}, yaw={yaw:.3f}; '
+                    f'{failures[-1]}; retrying')
+                # Spin briefly so a late response is drained before issuing the
+                # identical request again.
+                retry_until = time.monotonic() + 0.5
+                while rclpy.ok() and time.monotonic() < retry_until:
+                    rclpy.spin_once(self, timeout_sec=0.05)
+        raise RuntimeError(
+            f'Set pose failed after 3 attempts at x={x:.3f}, y={y:.3f}, '
+            f'yaw={yaw:.3f}: {"; ".join(failures)}')
 
     def _pose_matches(self, *, x: float, y: float, yaw: float) -> bool:
         if self.latest_odom_xyyaw is None:

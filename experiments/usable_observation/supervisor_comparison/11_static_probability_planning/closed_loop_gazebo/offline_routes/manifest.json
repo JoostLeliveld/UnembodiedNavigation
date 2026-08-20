@@ -1,0 +1,19 @@
+{
+  "generator": "experiments/usable_observation/supervisor_comparison/11_static_probability_planning/closed_loop_gazebo/solve_offline_routes.py",
+  "inputs": {
+    "experiments/usable_observation/supervisor_comparison/11_static_probability_planning/experiment.yaml": "6ac7e867c8fd384b8e2c5d97848cecaf22e3aa5af67f15e8f6afb4f57bb992cd",
+    "logs/studies/pixel_ground_path/e7_ipm_zero_parameter/summary.json": "e37fe6dd383ad85b960773998be42820c0c4e4f106dedafea57a600ab61f9ead",
+    "src/experiments/config/world_profiles.yaml": "664a9118966fac8351880c5909764e95f1c62e6f5bf14c0f7e553aff5c473eef",
+    "src/experiments/config/tasks.yaml": "7ecfc163480248597c7980ed97109290ecb5cd5ac5930c3b2a4255b20336cfad",
+    "logs/visibility_comparison/spawn_grid_20260727/fused_planner_four_camera.npz": "12f8b9842171291dcfbc6db3b224a620e7f76b678671098386689ef953fb5ea2",
+    "experiments/usable_observation/supervisor_comparison/11_static_probability_planning/results/static_planning_inputs.npz": "4ec1c84af76e00bd05952bbddc26cb1b9ea2d59474ee5b436a019f97c728cb89"
+  },
+  "outputs": {
+    "routes.json": "1c0fc43a9b3c4b6e957027f9c0675bbf4caa134f45c7b4fd8055525373a1bceb",
+    "candidates.csv": "64f48ee54098fc6eea71265475d836936d1495c400ecab79272df610f55e9c36",
+    "selected.csv": "35d15d9c2dacf478217361bad0bb5c5c679505faba4cb70bdd6eb4797e561bda",
+    "route_points.csv": "d7aa0cf8df42629264339fd487a42eacab1d99458ab2bf45994592257d34b94b",
+    "01_executable_routes.png": "4fcf916e014a8f776930f93ffb5e6c15008d7a1058d81eb1c91677ba78efea70"
+  },
+  "gazebo_processes_started": false
+}

@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": "EXP-AVAIL-SOURCE",
+  "study": "availability_paper",
+  "source_path": "logs/studies/availability_paper/figures/06_objective_imbalance.png",
+  "source_sha256": "e7d3920c7052046ebe2d5048d43f73c635d064c771c0c32b4899cafccbbe695f",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

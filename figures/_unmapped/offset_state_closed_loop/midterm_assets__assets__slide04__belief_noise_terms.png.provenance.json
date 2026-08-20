@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": null,
+  "study": "offset_state_closed_loop",
+  "source_path": "logs/studies/offset_state_closed_loop/midterm_assets/assets/slide04/belief_noise_terms.png",
+  "source_sha256": "f124c6d558d4c634e89ff9375f3322428d86fc71060db3fc438295ee4fdfcf9b",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

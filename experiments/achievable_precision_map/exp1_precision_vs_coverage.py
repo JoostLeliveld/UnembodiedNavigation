@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""exp1: coverage says where the robot is SEEN. This says how well it can be KNOWN.
+"""exp1: historical-v2 sensitivity of coverage versus achievable precision.
 
 Coverage-aware planning asks one question of each point on the floor: will a camera
 see me here? The correlation-floor result
 (`logs/studies/bayesian_filter_showcase/exp1_graceful_vs_trusting`) says that is
 only half the question, because the belief may never become sharper than the
 residual systematic of whichever camera is watching. A spot covered only by a
-camera with a 77 mm lean can never be known better than 77 mm, however long the
+camera with a repeated residual floor cannot be known better than that floor, however long the
 robot loiters there and however reliably it is seen.
 
 So achievable precision is a FIELD, determined jointly by availability and by which
@@ -31,9 +31,10 @@ The minimum, not a fusion: this network's overlap is 13 % and uniform fusion is
 already known to lose to the best single camera. Selection is the operation that
 matches the evidence.
 
-Everything on the right-hand side is already measured: ``p_c`` from the frozen
-four-camera coverage artifact, ``floor_c`` from the per-camera residual bias, ``f``
-and ``q_rate`` from the recorded runtime. Nothing here is fitted.
+Everything on the right-hand side was measured for the original study: ``p_c`` from the
+frozen four-camera coverage artifact, ``floor_c`` from the retired-v2 per-camera residual
+study, and ``f``/``q_rate`` from its recorded runtime. The floor values are now historical
+and route/yaw-confounded, so this is mechanism sensitivity rather than a current selector.
 
 Outputs -> logs/studies/achievable_precision_map/exp1_precision_vs_coverage/
 """
@@ -68,7 +69,7 @@ CAMERAS = ("camera_A", "camera_B", "camera_C", "camera_D")
 #: Measured (logs/studies/operational_residual_rcond/exp2_operational_rcond, oracle
 #: bias norms). See exp2_does_it_generalize: stable for C, and a generous bound
 #: rather than a precise constant for the others.
-FLOOR_M = {
+HISTORICAL_V2_FLOOR_M = {
     "camera_A": 0.0071,
     "camera_B": 0.0123,
     "camera_C": 0.0768,
@@ -118,7 +119,9 @@ def main() -> int:
     xs, ys = data["xs"], data["ys"]
     availability = {c: np.asarray(data[f"P_camera_{c[-1]}_map"], float) for c in CAMERAS}
 
-    sigma_stack = np.stack([per_camera_sigma(availability[c], FLOOR_M[c]) for c in CAMERAS])
+    sigma_stack = np.stack([
+        per_camera_sigma(availability[c], HISTORICAL_V2_FLOOR_M[c]) for c in CAMERAS
+    ])
     availability_stack = np.stack([availability[c] for c in CAMERAS])
 
     # The two competing views of the same floor.
@@ -140,6 +143,9 @@ def main() -> int:
                          - achievable_sigma[disagree])
 
     stats = {
+        "status": "historical_v2_sensitivity_only",
+        "comparison_context": "MC-DRIVE-V2 residual floors composed with frozen coverage",
+        "prohibited_use": "current camera ranking or camera-management input",
         "reachable_cells": int(reachable.sum()),
         "fraction_where_best_coverage_is_not_best_precision": float(
             disagree.sum() / max(reachable.sum(), 1)
@@ -170,7 +176,7 @@ def main() -> int:
             "detection_rate_hz": DETECTION_RATE_HZ,
             "nominal_speed_mps": NOMINAL_SPEED_MPS,
             "odom_sigma_per_sqrt_m": ODOM_SIGMA_PER_SQRT_M,
-            "floor_m": FLOOR_M,
+            "historical_v2_floor_m": HISTORICAL_V2_FLOOR_M,
             "coverage_artifact": str(COVERAGE_NPZ.relative_to(REPO)),
         },
     }
@@ -212,7 +218,7 @@ def main() -> int:
         ax.set_xlabel("x [m]")
     axes[0].set_ylabel("y [m]")
     fig.suptitle(
-        "Being seen is not the same as being known: "
+        "Historical-v2 sensitivity: being seen is not the same as being known — "
         f"on {100 * stats['fraction_where_best_coverage_is_not_best_precision']:.0f} % of "
         "the reachable floor the most-available camera is not the most informative one",
         fontsize=12.5, fontweight="bold")

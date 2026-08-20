@@ -1,0 +1,55 @@
+experiment_id: EXP-AVAIL-VS-ACC
+title: Availability and conditional accuracy are separately estimated fields
+status: complete_offline_characterisation
+claim_ids: [C1]
+world: warehouse_full_4cam.world.sdf
+
+question: >-
+  Are "will an observation arrive here?" and "how accurate is it if one does?" the
+  same field up to a monotone transform? If they were, one scalar trust score would
+  do and folding availability into covariance would be harmless.
+
+dataset:
+  capture: logs/visibility_comparison/commissioning_grid_20260807
+  grid: 942 positions x 8 headings x 4 cameras
+  attempted_poses: 30144
+  detections: 9635
+  projection: current zero-parameter floor-plane IPM, no fitted correction
+
+definitions:
+  availability: detections divided by attempted headings at a position
+  conditional_accuracy: mean projection error norm over that position's detections
+  thresholds:
+    min_attempts: 8
+    min_detections: 2
+  note: >-
+    A position needs enough attempted headings for a rate to mean anything and
+    enough detections for a conditional mean to mean anything. Both thresholds are
+    set before looking at any correlation.
+
+endpoints:
+  primary: >-
+    Rank correlation of the geometric visibility field against availability, versus
+    the same field against conditional error. A large gap means one field cannot
+    serve both roles.
+  secondary:
+    - direct rank correlation between availability and conditional error
+    - fraction of multi-camera positions where the most-available camera is not the
+      most accurate one
+    - median accuracy cost of choosing by availability at those positions
+
+prespecified_interpretation:
+  - A high correlation with availability and a low one with error refutes the
+    single-scalar representation directly, without needing a navigation result.
+  - A strong negative correlation between availability and error would instead mean
+    the two fields largely coincide, and would weaken C1.
+
+prohibited_interpretation:
+  - any navigation, safety or closed-loop reading
+  - "per-camera R_cond beats pooled R_cond" — that is EXP-RCOND's registered null
+  - any claim that the disagreement fraction is a camera-management input; it is a
+    characterisation of the fields, and management is layer 4
+
+evaluation_only_inputs: [commanded ground-truth x/y]
+assumption_ids: [A02, A08, A11, A14, A15, A17]
+reviewer_question_ids: [RQ01, RQ11, RQ14, RQ15]

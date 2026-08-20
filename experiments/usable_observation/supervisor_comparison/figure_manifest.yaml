@@ -1,0 +1,71 @@
+package_status: exploratory_method_explanation
+common:
+  gazebo_view:
+    status: used
+    source: logs/studies/multicamera_commissioning_bigwarehouse/four_camera_showcase/live_gazebo_views
+  four_camera_layout:
+    status: reference_only
+    source: docs/assets/warehouse_full_4cam_map.png
+  common_route_example:
+    status: reference_only
+    source: paper_artifacts/figures/current_surface/paired_mechanism_taskA_current.png
+methods:
+  constant_distance:
+    begin_state: generated_deterministic
+    planning_field: generated_deterministic
+    update_sequence: generated_deterministic
+    route_grid: generated_deterministic
+  fov_range:
+    begin_state: generated_deterministic
+    planning_field: generated_deterministic
+    update_sequence: generated_deterministic
+    route_grid: generated_deterministic
+  depth_raycast:
+    begin_state: generated_deterministic
+    planning_field: generated_deterministic
+    update_sequence: generated_deterministic
+    route_grid: generated_deterministic
+    provenance_ladder: generated_deterministic
+  gp:
+    begin_state: generated_from_existing_artifact
+    planning_field: generated_from_existing_artifact
+    update_sequence: generated_from_existing_artifact
+    route_grid: generated_deterministic
+  hybrid:
+    begin_state: generated_deterministic
+    planning_field: generated_deterministic
+    update_sequence: generated_deterministic
+    route_grid: generated_deterministic
+    boundary_cross_section: generated_deterministic
+  cad_reference:
+    begin_state: generated_deterministic_reference_only
+    planning_field: generated_deterministic_reference_only
+    update_sequence: generated_deterministic_reference_only
+    route_grid: generated_deterministic_reference_only
+    cad_vs_sensed_surface: generated_deterministic
+route_set:
+  R1: mc_blind_L_or_mc_blind_R
+  R2: mc_south_we_and_mc_north_we
+  R3: mc_central_ns
+  R6: central_corridor_control
+renderer: experiments/usable_observation/supervisor_comparison/render_all.py
+hash_manifest: experiments/usable_observation/supervisor_comparison/generated_data/render_manifest.json
+decision_layers:
+  fusion_comparison:
+    status: assembled_from_deterministic_repository_figures
+    outputs: 8
+    scope:
+      - availability_field_fusion
+      - camera_selection
+      - simultaneous_measurement_fusion
+      - health_adjusted_route_mechanism
+  state_update_comparison:
+    status: assembled_from_deterministic_repository_figures
+    outputs: 8
+    scope:
+      - deployed_precision_blend
+      - scaled_covariance_R_over_p
+      - explicit_expected_hit_miss_branch
+      - realized_predict_update_filter
+  renderer: experiments/usable_observation/supervisor_comparison/render_decision_layer_comparisons.py
+  hash_manifest: experiments/usable_observation/supervisor_comparison/generated_data/decision_layer_manifest.json

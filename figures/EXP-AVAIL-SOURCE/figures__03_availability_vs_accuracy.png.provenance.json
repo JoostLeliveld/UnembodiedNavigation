@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": "EXP-AVAIL-SOURCE",
+  "study": "availability_paper",
+  "source_path": "logs/studies/availability_paper/figures/03_availability_vs_accuracy.png",
+  "source_sha256": "fa2d6f15c5cc9e79a7478230447fa7282c21192d9ca2c1ab403aa73d1dc55f65",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

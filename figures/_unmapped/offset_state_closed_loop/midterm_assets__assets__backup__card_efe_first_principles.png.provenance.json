@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": null,
+  "study": "offset_state_closed_loop",
+  "source_path": "logs/studies/offset_state_closed_loop/midterm_assets/assets/backup/card_efe_first_principles.png",
+  "source_sha256": "219cde65bdd6fd79327300855abca5d33856f5e855fc187dcdd0fe8eac425cee",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

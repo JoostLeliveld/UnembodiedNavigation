@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": "EXP-BELIEF",
+  "study": "bayesian_filter_showcase",
+  "source_path": "logs/studies/bayesian_filter_showcase/demo_state_space_model/fig_m2_filtering_and_smoothing.pdf",
+  "source_sha256": "a26d87f1d1c9c36223850314e460f4cc320b882f6dcf1307131b2b47050ba09a",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

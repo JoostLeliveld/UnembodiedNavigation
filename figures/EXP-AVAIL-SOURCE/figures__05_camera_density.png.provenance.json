@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": "EXP-AVAIL-SOURCE",
+  "study": "availability_paper",
+  "source_path": "logs/studies/availability_paper/figures/05_camera_density.png",
+  "source_sha256": "0748da84e96a3fe51fe395c195f7c49a122b148710697ad5caf683512e5eaba4",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

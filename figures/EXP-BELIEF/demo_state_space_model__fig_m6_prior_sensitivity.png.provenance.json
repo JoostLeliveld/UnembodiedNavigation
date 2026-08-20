@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": "EXP-BELIEF",
+  "study": "bayesian_filter_showcase",
+  "source_path": "logs/studies/bayesian_filter_showcase/demo_state_space_model/fig_m6_prior_sensitivity.png",
+  "source_sha256": "5f4a6a9b4f6b7ef859b4c1414b1216363e036961fd09604b3ef66b6a15cd2db1",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

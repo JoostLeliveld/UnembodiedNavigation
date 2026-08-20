@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": "EXP-BELIEF",
+  "study": "bayesian_filter_showcase",
+  "source_path": "logs/studies/bayesian_filter_showcase/demo_state_space_model/fig_m3_forecasting.png",
+  "source_sha256": "5a7583932e145c1b3ea66f6f1ed3e3edccad229d06dd41395e5b25a50831f380",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

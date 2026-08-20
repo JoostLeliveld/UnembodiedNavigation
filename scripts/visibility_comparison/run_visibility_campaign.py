@@ -27,13 +27,39 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOGS_ROOT = REPO_ROOT / 'logs' / 'visibility_comparison'
+UNAV_COMMON_SRC = REPO_ROOT / 'src' / 'unav_common'
+if str(UNAV_COMMON_SRC) not in sys.path:
+    sys.path.insert(0, str(UNAV_COMMON_SRC))
+
+from unav_common.preselected_route import (  # noqa: E402
+    canonicalize_polyline_json,
+    route_sha256,
+    validate_preselected_route,
+)
 
 # Map condition ID to planner name (must match ALLOWED_PLANNERS in launch file).
 CONDITION_PLANNER = {
     'C0': 'geometric_shortest_path',
     'C1': 'constant_R_efe',
     'C2': 'visibility_aware_efe',
+    # Same visibility-aware planner and field as C2; the condition-level
+    # use_hit_miss_mixture override selects the Bernoulli observation model.
+    'C3': 'visibility_aware_efe',
+    # Prospective closed-loop successor: these are route arms, not new planner
+    # objectives. Both execute through the same geometry/local-tracker path.
+    'gp': 'geometric_shortest_path',
+    'mono_depth': 'geometric_shortest_path',
 }
+
+PRESELECTED_ROUTE_KEYS = (
+    'preselected_route_json',
+    'preselected_route_sha256',
+    'preselected_route_source_path',
+    'preselected_route_source_sha256',
+    'preselected_route_clearance_m',
+    'preselected_route_endpoint_tolerance_m',
+    'preselected_route_sample_step_m',
+)
 
 
 def _load_config(path: Path) -> dict:
@@ -44,12 +70,12 @@ def _load_config(path: Path) -> dict:
 
 
 def _validate_config(cfg: dict, path: Path) -> None:
-    for key in ('world', 'launch_file', 'conditions', 'tasks', 'gp_artifact',
+    for key in ('world', 'launch_file', 'conditions', 'tasks',
                 'yolo_model', 'horizon', 'dt', 'goal_success_radius',
                 'run_timeout_after_first_cmd_s'):
         if key not in cfg:
             raise RuntimeError(f"Campaign config {path} is missing required key: '{key}'")
-    for key in ('gp_artifact', 'yolo_model'):
+    for key in ('yolo_model',):
         if str(cfg[key]).startswith('[FILL'):
             raise RuntimeError(
                 f"Campaign config {path} has unfilled placeholder for '{key}': {cfg[key]!r}\n"
@@ -67,6 +93,18 @@ def _validate_config(cfg: dict, path: Path) -> None:
                 f"Campaign config {path} uses unsupported active condition '{condition_id}'. "
                 f"Allowed conditions are: {', '.join(CONDITION_PLANNER)}"
             )
+        condition_cfg = cfg['conditions'].get(condition_id, {}) or {}
+        if not isinstance(condition_cfg, dict):
+            raise RuntimeError(
+                f"Condition '{condition_id}' in {path} must be a mapping"
+            )
+        declared_planner = condition_cfg.get('planner')
+        expected_planner = CONDITION_PLANNER[condition_id]
+        if declared_planner is not None and str(declared_planner) != expected_planner:
+            raise RuntimeError(
+                f"Condition '{condition_id}' declares planner {declared_planner!r}, "
+                f"but the active runner contract requires {expected_planner!r}"
+            )
     for task_name, task_cfg in cfg['tasks'].items():
         for condition_id in task_cfg.get('conditions', []):
             if condition_id not in CONDITION_PLANNER:
@@ -74,6 +112,31 @@ def _validate_config(cfg: dict, path: Path) -> None:
                     f"Task '{task_name}' in {path} uses unsupported active condition "
                     f"'{condition_id}'. Allowed conditions are: {', '.join(CONDITION_PLANNER)}"
                 )
+
+    active_cells = [
+        (task_name, condition_id)
+        for task_name, task_cfg in cfg['tasks'].items()
+        for condition_id in task_cfg.get('conditions', [])
+    ]
+    needs_gp = any(
+        CONDITION_PLANNER[condition_id] == 'visibility_aware_efe'
+        and str(_effective_value(cfg, task_name, condition_id, 'global_planner_mode') or 'efe')
+        != 'preselected_route'
+        for task_name, condition_id in active_cells
+    )
+    if needs_gp:
+        if 'gp_artifact' not in cfg or str(cfg.get('gp_artifact', '')).startswith('[FILL'):
+            raise RuntimeError(
+                f"Campaign config {path} requires a filled gp_artifact for its "
+                "visibility-aware global-planner condition"
+            )
+
+    if any(
+        str(_effective_value(cfg, task_name, condition_id, 'global_planner_mode') or '')
+        == 'preselected_route'
+        for task_name, condition_id in active_cells
+    ):
+        _validate_preselected_campaign_routes(cfg, path)
 
 
 def _terminate_process_group(pgid: int, *, grace_s: float = 3.0) -> None:
@@ -221,6 +284,216 @@ def _resolve_for_compare(path_str: str) -> Path:
     return _resolve_repo_path(path_str, strict=False)
 
 
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on')
+
+
+def _route_overrides(cfg: dict, task_name: str, condition_id: str) -> dict:
+    task_cfg = cfg.get('tasks', {}).get(task_name, {}) or {}
+    routes = task_cfg.get('preselected_routes', {}) or {}
+    if not isinstance(routes, dict):
+        raise RuntimeError(
+            f"Task '{task_name}' preselected_routes must be a mapping by condition"
+        )
+    route_cfg = routes.get(condition_id, {}) or {}
+    if not isinstance(route_cfg, dict):
+        raise RuntimeError(
+            f"Task '{task_name}' route '{condition_id}' must be a mapping"
+        )
+    return route_cfg
+
+
+def _effective_value(cfg: dict, task_name: str, condition_id: str, key: str):
+    """Resolve route > condition > task > campaign overrides deterministically."""
+
+    task_cfg = cfg.get('tasks', {}).get(task_name, {}) or {}
+    condition_cfg = cfg.get('conditions', {}).get(condition_id, {}) or {}
+    route_cfg = _route_overrides(cfg, task_name, condition_id)
+    if key in route_cfg:
+        return route_cfg[key]
+    if key in condition_cfg:
+        return condition_cfg[key]
+    if key in task_cfg:
+        return task_cfg[key]
+    return cfg.get(key)
+
+
+def _task_spec_from_yaml(cfg: dict, task_name: str, config_path: Path) -> dict:
+    tasks_path = _resolve_repo_path(
+        cfg.get('tasks_yaml', 'src/experiments/config/tasks.yaml'), strict=True
+    )
+    payload = yaml.safe_load(tasks_path.read_text(encoding='utf-8')) or {}
+    world_tasks = (payload.get('tasks') or {}).get(cfg['world'])
+    if not isinstance(world_tasks, list):
+        raise RuntimeError(
+            f"Campaign {config_path}: no tasks list for world {cfg['world']!r} "
+            f"in {tasks_path}"
+        )
+    for task in world_tasks:
+        if isinstance(task, dict) and task.get('name') == task_name:
+            return task
+    raise RuntimeError(
+        f"Campaign {config_path}: task {task_name!r} is not registered for "
+        f"world {cfg['world']!r} in {tasks_path}"
+    )
+
+
+def _profile_driveable_geometry(cfg: dict, config_path: Path) -> str:
+    profiles_path = _resolve_repo_path(
+        cfg.get('world_profiles', 'src/experiments/config/world_profiles.yaml'),
+        strict=True,
+    )
+    payload = yaml.safe_load(profiles_path.read_text(encoding='utf-8')) or {}
+    profile = (payload.get('worlds') or {}).get(cfg['world'])
+    if not isinstance(profile, dict):
+        raise RuntimeError(
+            f"Campaign {config_path}: world {cfg['world']!r} is not present in "
+            f"{profiles_path}"
+        )
+    prisms = []
+    for region in profile.get('known_2d_regions', []) or []:
+        if str(region.get('type', '')).strip().lower() != 'traversable':
+            continue
+        try:
+            prisms.append({
+                'name': str(region.get('name', 'lane')),
+                'xmin': float(region['xmin']),
+                'xmax': float(region['xmax']),
+                'ymin': float(region['ymin']),
+                'ymax': float(region['ymax']),
+                'zmin': 0.0,
+                'zmax': 0.1,
+            })
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"Campaign {config_path}: malformed traversable region {region!r}"
+            ) from exc
+    if not prisms:
+        raise RuntimeError(
+            f"Campaign {config_path}: world profile has no traversable driveable regions"
+        )
+    return json.dumps({'prisms': prisms, 'model_name': 'driveable_region'})
+
+
+def _validate_preselected_campaign_routes(cfg: dict, config_path: Path) -> None:
+    """Make ``--dry-run`` exercise the same route identity/geometry gate as launch."""
+
+    profile_driveable = None
+    for task_name, task_cfg in cfg['tasks'].items():
+        for condition_id in task_cfg.get('conditions', []):
+            mode = str(
+                _effective_value(cfg, task_name, condition_id, 'global_planner_mode') or ''
+            ).strip().lower()
+            route_cfg = _route_overrides(cfg, task_name, condition_id)
+            if mode != 'preselected_route':
+                if route_cfg:
+                    raise RuntimeError(
+                        f"Task {task_name!r} condition {condition_id!r} supplies a "
+                        "preselected route but global_planner_mode is not preselected_route"
+                    )
+                continue
+            if not _as_bool(
+                _effective_value(cfg, task_name, condition_id, 'use_hierarchical')
+            ):
+                raise RuntimeError(
+                    f"Task {task_name!r} condition {condition_id!r}: "
+                    "preselected_route requires use_hierarchical=true"
+                )
+            if _as_bool(
+                _effective_value(cfg, task_name, condition_id, 'use_truth_localization')
+            ):
+                raise RuntimeError(
+                    f"Task {task_name!r} condition {condition_id!r}: control from "
+                    "ground truth is forbidden by the closed-loop contract"
+                )
+            identity_keys = PRESELECTED_ROUTE_KEYS[:4]
+            missing = [key for key in identity_keys if not str(route_cfg.get(key, '') or '')]
+            if missing:
+                raise RuntimeError(
+                    f"Task {task_name!r} condition {condition_id!r} is missing "
+                    f"route-specific fields: {', '.join(missing)}"
+                )
+
+            task = _task_spec_from_yaml(cfg, task_name, config_path)
+            if task.get('waypoints'):
+                raise RuntimeError(
+                    f"Task {task_name!r} is a waypoint tour; preselected_route accepts "
+                    "one start-to-goal polyline"
+                )
+            try:
+                start = (float(task['start']['x']), float(task['start']['y']))
+                goal = (float(task['goal']['x']), float(task['goal']['y']))
+            except (KeyError, TypeError, ValueError) as exc:
+                raise RuntimeError(
+                    f"Task {task_name!r} has malformed start/goal coordinates"
+                ) from exc
+
+            driveable = _effective_value(
+                cfg, task_name, condition_id, 'driveable_geometry_json'
+            )
+            if not str(driveable or '').strip():
+                if profile_driveable is None:
+                    profile_driveable = _profile_driveable_geometry(cfg, config_path)
+                driveable = profile_driveable
+
+            endpoint_tolerance = float(
+                _effective_value(
+                    cfg,
+                    task_name,
+                    condition_id,
+                    'preselected_route_endpoint_tolerance_m',
+                )
+                or 0.25
+            )
+            sample_step = float(
+                _effective_value(
+                    cfg, task_name, condition_id, 'preselected_route_sample_step_m'
+                )
+                or 0.04
+            )
+            if not 0.0 <= endpoint_tolerance <= 0.25:
+                raise RuntimeError(
+                    "preselected_route_endpoint_tolerance_m must be within [0, 0.25]"
+                )
+            if not 0.0 < sample_step <= 0.04:
+                raise RuntimeError(
+                    "preselected_route_sample_step_m must be within (0, 0.04]"
+                )
+            source_path = _resolve_repo_path(
+                route_cfg['preselected_route_source_path'], strict=True
+            )
+            try:
+                validate_preselected_route(
+                    route_cfg['preselected_route_json'],
+                    route_cfg['preselected_route_sha256'],
+                    start_xy=start,
+                    goal_xy=goal,
+                    driveable_geometry_json=str(driveable),
+                    declared_clearance_m=float(
+                        _effective_value(
+                            cfg,
+                            task_name,
+                            condition_id,
+                            'preselected_route_clearance_m',
+                        )
+                        or 0.25
+                    ),
+                    source_path=source_path,
+                    expected_source_sha256=route_cfg[
+                        'preselected_route_source_sha256'
+                    ],
+                    endpoint_tolerance_m=endpoint_tolerance,
+                    sample_step_m=sample_step,
+                )
+            except (OSError, ValueError) as exc:
+                raise RuntimeError(
+                    f"Campaign {config_path}: route gate failed for task "
+                    f"{task_name!r}, condition {condition_id!r}: {exc}"
+                ) from exc
+
+
 def _float_close(a, b, *, tol: float = 1e-8) -> bool:
     try:
         fa = float(a)
@@ -240,6 +513,93 @@ def _load_run_manifest(run_dir: Path) -> dict:
         return {}
 
 
+def _verify_preselected_run_artifacts(
+    run_dir: Path,
+    cfg: dict,
+    task_name: str,
+    condition_id: str,
+    *,
+    manifest: dict | None = None,
+) -> tuple[bool, str]:
+    """Require the executed route bytes and no-global-solve provenance on disk."""
+
+    mode = str(
+        _effective_value(cfg, task_name, condition_id, 'global_planner_mode') or ''
+    ).strip().lower()
+    if mode != 'preselected_route':
+        return True, ''
+    route_cfg = _route_overrides(cfg, task_name, condition_id)
+    try:
+        points, canonical = canonicalize_polyline_json(
+            route_cfg['preselected_route_json']
+        )
+    except (KeyError, ValueError) as exc:
+        return False, f'invalid configured preselected route: {exc}'
+    expected_hash = str(route_cfg.get('preselected_route_sha256', '') or '')
+    if route_sha256(canonical) != expected_hash:
+        return False, 'configured canonical preselected-route hash no longer matches'
+    expected_source = str(
+        _resolve_repo_path(route_cfg.get('preselected_route_source_path', ''), strict=False)
+    )
+    expected_source_hash = str(
+        route_cfg.get('preselected_route_source_sha256', '') or ''
+    )
+
+    run_manifest = manifest if manifest is not None else _load_run_manifest(run_dir)
+    strict_manifest_values = {
+        'global_planner_mode': 'preselected_route',
+        'preselected_route_json': canonical,
+        'preselected_route_sha256': expected_hash,
+        'preselected_route_source_path': expected_source,
+        'preselected_route_source_sha256': expected_source_hash,
+    }
+    for key, expected in strict_manifest_values.items():
+        actual = str(run_manifest.get(key, '') or '')
+        if key == 'preselected_route_source_path':
+            if _resolve_for_compare(actual) != _resolve_for_compare(expected):
+                return False, f'run manifest {key} mismatch'
+        elif actual != expected:
+            return False, f'run manifest {key} mismatch'
+
+    route_path = run_dir / 'preselected_route.json'
+    try:
+        route_bytes = route_path.read_bytes()
+        route_text = route_bytes.decode('utf-8')
+    except (OSError, UnicodeDecodeError) as exc:
+        return False, f'missing/malformed exact preselected route artifact: {exc}'
+    if route_text != canonical:
+        return False, 'preselected_route.json bytes differ from canonical campaign route'
+    if route_sha256(route_text) != expected_hash:
+        return False, 'preselected_route.json has the wrong route SHA-256'
+
+    provenance_path = run_dir / 'preselected_route_provenance.json'
+    meta_path = run_dir / 'global_plan_meta.json'
+    try:
+        provenance = json.loads(provenance_path.read_text(encoding='utf-8'))
+        meta = json.loads(meta_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, f'missing/malformed preselected route provenance: {exc}'
+    if provenance.get('validation_status') != 'passed':
+        return False, 'preselected route provenance does not record a passed gate'
+    if provenance.get('route_sha256') != expected_hash:
+        return False, 'preselected route provenance hash mismatch'
+    if provenance.get('route_points') != [[x, y] for x, y in points]:
+        return False, 'preselected route provenance coordinates mismatch'
+    if provenance.get('source_sha256') != expected_source_hash:
+        return False, 'preselected route source provenance hash mismatch'
+    if _resolve_for_compare(provenance.get('source_path', '')) != _resolve_for_compare(
+        expected_source
+    ):
+        return False, 'preselected route source provenance path mismatch'
+    if meta.get('global_planner_mode') != 'preselected_route':
+        return False, 'global plan metadata does not identify preselected_route mode'
+    if meta.get('global_solve_invoked') is not False:
+        return False, 'global plan metadata does not prove the global solve was skipped'
+    if meta.get('route_sha256') != expected_hash:
+        return False, 'global plan metadata route hash mismatch'
+    return True, ''
+
+
 def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
     condition_id = str(entry.get('condition', ''))
     run_dir_str = str(entry.get('run_dir', '') or '')
@@ -249,8 +609,10 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
     if not manifest:
         return False, f'missing run_manifest.json in {run_dir_str}'
 
-    task_name = entry.get('task')
-    task_cfg = cfg['tasks'].get(task_name, {}) if task_name else {}
+    task_name = str(entry.get('task', '') or '')
+
+    def expected_value(key: str):
+        return _effective_value(cfg, task_name, condition_id, key)
 
     expected_yolo_model = str(_resolve_repo_path(cfg['yolo_model'], strict=False))
     actual_yolo_model = str(manifest.get('yolo_model', '') or '')
@@ -287,9 +649,12 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'encoder_noise_linear_additive_std',
         'encoder_noise_angular_additive_std',
         'encoder_noise_correlation_alpha',
+        'preselected_route_clearance_m',
+        'preselected_route_endpoint_tolerance_m',
+        'preselected_route_sample_step_m',
     )
     for key in numeric_keys:
-        expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
+        expected = expected_value(key)
         if expected is not None and key in manifest and not _float_close(manifest.get(key), expected):
             return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")}, config expects {expected}'
 
@@ -312,9 +677,10 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'local_replan_on_waypoint_change',
         'latency_compensate_plan_handoff',
         'use_truth_localization',
+        'use_hit_miss_mixture',
     )
     for key in bool_keys:
-        expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
+        expected = expected_value(key)
         if expected is not None and key in manifest and bool(manifest.get(key)) != bool(expected):
             return False, f'{key} mismatch: run used {manifest.get(key)}, config expects {expected}'
 
@@ -328,15 +694,25 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'heading_update_mode',
         'state_correction_mode',
         'local_controller_type',
+        'global_planner_mode',
     )
     for key in string_keys:
-        expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
+        expected = expected_value(key)
         if expected is not None and key in manifest and str(manifest.get(key, '')) != str(expected):
             return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")!r}, config expects {expected!r}'
 
-    # Only the visibility-aware planner (C2) consumes the GP artifact; C1
+    route_matches, route_reason = _verify_preselected_run_artifacts(
+        Path(run_dir_str), cfg, task_name, condition_id, manifest=manifest
+    )
+    if not route_matches:
+        return False, route_reason
+
+    # Only an actually solved visibility-aware planner consumes the GP; C1
     # (constant_R_efe) and C0 (geometric_shortest_path) are camera-model-free.
-    if CONDITION_PLANNER.get(condition_id) == 'visibility_aware_efe':
+    if (
+        CONDITION_PLANNER.get(condition_id) == 'visibility_aware_efe'
+        and str(expected_value('global_planner_mode') or 'efe') != 'preselected_route'
+    ):
         actual = str(manifest.get('visibility_artifact_path', '') or '')
         expected = str(_resolve_repo_path(cfg['gp_artifact'], strict=False))
         if _resolve_for_compare(actual) != _resolve_for_compare(expected):
@@ -366,7 +742,12 @@ def _ros_domain_for_run(cfg: dict, run_idx: int) -> str | None:
 
 def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, log_dir: Path) -> list[str]:
     planner = CONDITION_PLANNER[condition_id]
-    gp_artifact = str(_resolve_repo_path(cfg['gp_artifact'], strict=True))
+    global_mode = str(
+        _effective_value(cfg, task_name, condition_id, 'global_planner_mode') or 'efe'
+    ).strip().lower()
+    gp_artifact = None
+    if planner == 'visibility_aware_efe' and global_mode != 'preselected_route':
+        gp_artifact = str(_resolve_repo_path(cfg['gp_artifact'], strict=True))
     yolo_model = str(_resolve_repo_path(cfg['yolo_model'], strict=True))
     odom_topic = str(cfg.get('odom_topic', '/odom_noisy'))
     if not bool(cfg.get('use_encoder_noise', True)) and odom_topic == '/odom_noisy':
@@ -439,14 +820,15 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'yolo_warmup_iters:={cfg.get("yolo_warmup_iters", 3)}',
         f'yolo_inference_in_callback:={str(cfg.get("yolo_inference_in_callback", True)).lower()}',
     ]
+    if global_mode == 'preselected_route':
+        cmd.append(f'comparison_method_id:=closed_loop_{condition_id}')
 
     # Planner-specific args: pass GP artifact only for the visibility-aware
     # planner (C2). C1 (constant_R_efe) and C0 (geometric_shortest_path) are
     # camera-model-free and must not receive it.
-    if planner == 'visibility_aware_efe':
+    if gp_artifact is not None:
         cmd.append(f'visibility_artifact_path:={gp_artifact}')
 
-    task_cfg = cfg['tasks'].get(task_name, {})
     for key in (
         'observation_risk_scale', 'ambiguity_term_scale',
         'risk_weight_obs', 'ambiguity_weight',
@@ -484,9 +866,11 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'nogo_logbarrier_eps', 'nogo_warning_band', 'nogo_near_weight',
         'use_belief_nogo_cost',
         'nogo_belief_kappa',
+        'use_hit_miss_mixture',
         'robot_collision_radius_m',
         'terminate_on_geom_collision',
         'global_planner_mode',
+        *PRESELECTED_ROUTE_KEYS,
         'bridge_camera_b', 'bridge_camera_c', 'bridge_camera_d',
         'multicam_belief', 'manager_gp_artifact_template',
         'manager_min_spatial_trust',
@@ -508,7 +892,11 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'stuck_max_goal_improvement_m', 'stuck_cmd_fraction_min',
         'stuck_idle_cmd_fraction_max',
     ):
-        val = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
+        val = _effective_value(cfg, task_name, condition_id, key)
+        if key == 'preselected_route_json' and val is not None:
+            _points, val = canonicalize_polyline_json(str(val))
+        elif key == 'preselected_route_source_path' and val is not None:
+            val = str(_resolve_repo_path(str(val), strict=True))
         if val is not None and not str(val).startswith('[FILL'):
             cmd.append(f'{key}:={val}')
 
@@ -669,6 +1057,14 @@ def main() -> int:
             'condition': condition_id,
             'seed': seed,
             'planner': CONDITION_PLANNER[condition_id],
+            'global_planner_mode': str(
+                _effective_value(
+                    cfg, task_name, condition_id, 'global_planner_mode'
+                ) or 'efe'
+            ),
+            'preselected_route_sha256': _effective_value(
+                cfg, task_name, condition_id, 'preselected_route_sha256'
+            ),
             'run_log_dir': str(run_log_dir),
             'started_at': datetime.now().isoformat(),
             'outcome': None,
@@ -743,6 +1139,12 @@ def main() -> int:
         # Read run summary written by experiment_logger
         run_dir = _find_latest_run_dir(run_log_dir)
         summary = _read_run_summary(run_dir) if run_dir else None
+        route_artifact_ok = True
+        route_artifact_reason = ''
+        if run_dir is not None:
+            route_artifact_ok, route_artifact_reason = _verify_preselected_run_artifacts(
+                run_dir, cfg, task_name, condition_id
+            )
 
         if no_first_cmd_timeout:
             outcome = 'infra_invalid'
@@ -752,6 +1154,10 @@ def main() -> int:
             outcome = 'infra_invalid'
             completion_reason = 'no_summary'
             print(f'  INFRA INVALID: no run_summary.json found in {run_log_dir}')
+        elif not route_artifact_ok:
+            outcome = 'infra_invalid'
+            completion_reason = 'wrong_route_artifact'
+            print(f'  INFRA INVALID: {route_artifact_reason}')
         elif not summary.get('completed', False) and timed_out:
             outcome = 'infra_invalid'
             completion_reason = 'wall_clock_timeout'
@@ -780,6 +1186,8 @@ def main() -> int:
             'elapsed_after_first_cmd_s': summary.get('elapsed_after_first_cmd_s') if summary else None,
             'minimum_goal_distance': summary.get('minimum_goal_distance') if summary else None,
             'run_dir': str(run_dir) if run_dir else None,
+            'route_artifact_verified': route_artifact_ok if run_dir else False,
+            'route_artifact_verification_reason': route_artifact_reason,
         })
         campaign_log[key] = run_entry
         _save_run_log(campaign_log_path, campaign_log)

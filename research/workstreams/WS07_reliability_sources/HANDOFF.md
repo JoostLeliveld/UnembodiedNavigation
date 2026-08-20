@@ -9,8 +9,15 @@ budgets, and offline promotion gates before any navigation campaign.
 
 ## Start gate
 
-Design may start after WS01/WS02. Implementation needs the WS04 measurement-interface
-decision. Gazebo execution waits until the current correlated-error paper package is closed.
+Design and non-confirmatory method investigation may start after WS01/WS02. Once the WS04
+measurement-interface decision is available, this includes common-interface code, depth-map
+and raycast prototypes, provenance/fallback tests, and explicitly exploratory offline
+comparisons on existing material. The frozen benchmark data collection, source-ranking
+analysis and closed-loop Gazebo campaign wait until the current correlated-error paper
+package is closed and the corresponding offline gates pass.
+
+This separation exists to allow the methods to improve now without treating exploratory
+single-camera or one-layout diagnostics as the final evidence package.
 
 ## Ownership
 

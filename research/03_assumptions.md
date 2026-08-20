@@ -267,7 +267,10 @@ in §1 record which.
 - **Consequence if violated (i.e. if independence is assumed anyway).** Measured on 1424
   steps: trust-everything gives median NEES 4.22, mean 6.68, 95 % coverage 0.58 and an
   unearned-confidence fraction of 0.42; factorized fusion is *worse* (median NEES 5.11, 50 %
-  coverage 0.076). The driver is camera C's real +78 mm lateral bias.
+  coverage 0.076). In this locked mechanism study, the dominant input is Camera C's
+  historical-v2 +76.9 mm signed lateral bias. That magnitude came from route/yaw-confounded
+  captures and is not a current camera-accuracy claim; current balanced-IPM Camera C lateral
+  bias is +18.8 mm and its mean measurement error is 66.6 mm.
 - **Evidence.** `logs/studies/bayesian_filter_showcase/exp1_graceful_vs_trusting/summary.json`
   and `exp2_does_it_generalize/summary.json`; `EXP-RCOND`, whose null shows the floor is
   bias-bound rather than data-bound (per-camera conditional covariance ties or loses to
@@ -308,11 +311,13 @@ in §1 record which.
   differ; E6 shows that the residual structure cannot yet be attributed uniquely to camera
   calibration rather than route, region, yaw or robot silhouette.
 - **Plausibility.** Certain — it is a statement about the configuration, not a hypothesis.
-- **Sensitivity / justification.** Historical per-camera fits report residual floors of
-  7.1 / 12.3 / 76.8 / 32.8 mm for A / B / C / D, plus a best-precision floor share of
+- **Sensitivity / justification.** Retired-v2 driving evidence reports signed residual
+  magnitudes of 7.1 / 12.3 / 76.9 / 32.3 mm for A / B / C / D, plus a best-precision floor share of
   31.0 / 28.0 / 14.8 / 26.2 % against an essentially uniform 25 % best-coverage share.
   These establish heterogeneous installed-view residuals, not four independent camera
-  biases. RQ15 and the WS05 identifiability gate control any stronger attribution.
+  biases or current accuracy. On the fair current balanced-IPM comparison, mean measurement
+  errors are 64.6 / 68.1 / 66.6 / 67.1 mm. RQ15 and the WS05 identifiability gate control any
+  stronger attribution.
 - **Consequence if violated (i.e. if optical archetypes are claimed).** Any statement about
   wide-angle versus narrow, high versus low resolution, or vendor differences would be
   unsupported by construction. See `06_world_camera_design.md` §6 for the exact
@@ -533,7 +538,7 @@ robot is there.
 | Occlusion | Static, mapped structure | Dynamic occluders (people, forklifts, moved pallets) | A06; no dynamic occluder exists in either world |
 | Layout stability | Static layouts | Changed, stale or rescanned layouts | A04/§4 D3–D5 are unimplemented; `whatif_layout_change.py` predicts but does not measure |
 | Calibration drift | Detection precedes harm under a controlled injected ladder | Real drift processes, drift isolation, or multi-camera simultaneous drift | A01 |
-| Worlds | Two worlds with measured properties, under the two-world rule | "Warehouses in general"; and no clean world-to-world transfer claim, because the two worlds differ in mount height *and* detector | RQ10; see `06_world_camera_design.md` §1–§3 |
+| Worlds | Worlds with measured properties (the two-world rule was retired 2026-08-20) | "Warehouses in general"; and no clean world-to-world transfer claim, because the two worlds differ in mount height *and* detector | RQ10; see `06_world_camera_design.md` §1–§3 |
 | Truth-free commissioning | Recovering an actionable per-camera *decision* without truth | Sizing a covariance without truth | A15 caveat; disagreement-based sizing fails by ~4× |
 
 ---
@@ -546,7 +551,7 @@ Each item blocks something concrete. None can be inferred from an existing locke
 |---|---|---|---|---|
 | U1 | Which geometry rung (§4) is contract B's **primary operational depth** arm? | The survey recommends D8 on cost grounds but validates nothing; D1/D2 are implemented but never frozen; D3–D5 do not exist | B design freeze, RQ03, the whole depth arm | WS07 + supervisor |
 | U2 | Does `p_use,c(s)` take `s = (x, y)` or `(x, y, heading)`? | A11 keeps heading odometry-backed, but the pixel-path evidence shows heading conditioning is worth 2.8× on *accuracy* — a different quantity from *availability*, and the two need not share an argument | Grid size, commissioning budget, A17, every arm's feature vector | WS01/WS07 + supervisor |
-| U3 | What counts as a **local** versus **global** layout change, and where may a changed-layout variant live? | Only one concrete instance exists (a 2.6 m pallet in `warehouse_aws` aisle A2, prediction only). The two-world rule reserves `warehouse_full_4cam` for frozen-method evaluation, so a changed variant of it is either a rule exception or a third world | B4 transfer gate, D4/D5, the third world split in `06` §3 | WS02 → supervisor |
+| U3 | What counts as a **local** versus **global** layout change? | PARTLY RESOLVED 2026-08-20: `warehouse_v2` + `warehouse_v2_shipout` are a matched restock pair (identical lane network, 13,554 camera-cell pairs changed), so a changed-layout variant now exists and needs no rule exception — the two-world rule is retired. What remains open is only the local/global *definition* | B4 transfer gate, D4/D5 | WS02 → supervisor |
 | U4 | Is the current world compatible with the July GP fields? | The world hash postdates the fields, whose manifests bind no world hash. Shared exposure may preserve a within-study contrast but not external interpretation | Contract A readiness (fail-closed) | WS06 |
 | ~~U5~~ | **RESOLVED 2026-08-07: `bbox_bottom` intersected with the floor plane (inverse perspective mapping), NO calibration artifact at all.** The `bbox_center` @ 0.085 m candidate is rejected as method and retained as the comparison that justifies the choice; `contact_z_m = 0.05` is superseded. Rationale: IPM is the textbook path with zero statistic-level tuned scalars and 66.6 mm mean error, versus 50.4 mm for a candidate carrying two grid-search-chosen scalars, versus 110.2 mm for the previous default. This went further than first decided: e7 then measured v4's two surviving cross-bearing constants against the same 1844 detections and they made it **worse** (70.1 mm vs 66.6 mm raw), inverting the per-camera lateral bias they existed to remove (camera C +18.8 mm -> -58.7 mm). All correction degrees of freedom were therefore **deleted from the runtime**, not merely unselected. This also closes the registry's E6 caveat by removing the terms it warned about rather than identifying them. | — | — | closed |
 | U6 | Is the frozen detector confidence threshold 0.25 or 0.05? | The offline gate contract and the runtime configs disagree, and `p_qual` is *defined* by the threshold, so the offline labels and the runtime are not currently the same gate | B's label generation, A08, any `p_qual` number | WS07 + integration |

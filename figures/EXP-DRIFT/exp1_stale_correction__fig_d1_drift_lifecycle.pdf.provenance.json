@@ -1,5 +1,5 @@
 {
-  "promoted": "2026-08-08",
+  "promoted": "2026-08-18",
   "experiment_id": "EXP-DRIFT",
   "study": "calibration_drift_lifecycle",
   "source_path": "logs/studies/calibration_drift_lifecycle/exp1_stale_correction/fig_d1_drift_lifecycle.pdf",

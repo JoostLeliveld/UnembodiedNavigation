@@ -1,0 +1,54 @@
+{
+  "belief_model": {
+    "dt_s": 0.4,
+    "form": "position-only sequential Bernoulli hit/miss mixture",
+    "initial_sigma_xy_m": 0.05,
+    "process_noise_xy": 0.012,
+    "speed_mps": 0.6,
+    "uncertainty_weight": 50.0
+  },
+  "evaluation_only_inputs": [],
+  "experiment_id": "EXP-AVAIL-ROUTE",
+  "generated_utc": "2026-08-17T14:05:14+00:00",
+  "inputs_sha256": {
+    "experiments/usable_observation/supervisor_comparison/10_monocular_depth_results/four_camera/maps/visibility_maps__unidepth_v2_vits14.npz": "c4c50280671cbbfef46b6b32f1afeb542b0d1e2899957496f9428cb1218ede1c",
+    "experiments/usable_observation/supervisor_comparison/10_monocular_depth_results/four_camera/results.json": "fb51f6cfd4b04d3b35f6cbe893f9dcef688c82aa3a20d84d5f57509c2915396b",
+    "logs/studies/multicamera_commissioning_bigwarehouse/spawn_grid_20260727/events/camera_A_events.csv": "77a8fc3640dcbda440c1d403e8dc875cb4dcf9e79d2808a20ea5d323abb48dc5",
+    "logs/studies/multicamera_commissioning_bigwarehouse/spawn_grid_20260727/events/camera_B_events.csv": "e212b6563aee591a06f87bb57831a54598cd77b6081cd8ddf93e728c68e284a3",
+    "logs/studies/multicamera_commissioning_bigwarehouse/spawn_grid_20260727/events/camera_C_events.csv": "d4a7c365d44e61deb71998e97fc1293c7f70a96c4c04ca786839ac8c16229e2e",
+    "logs/studies/multicamera_commissioning_bigwarehouse/spawn_grid_20260727/events/camera_D_events.csv": "7b86f9f202104429ae0e9e0a7e09a025c1ea4c7876d29441bfb3496f778cdbee",
+    "logs/studies/pixel_ground_path/e7_ipm_zero_parameter/summary.json": "e37fe6dd383ad85b960773998be42820c0c4e4f106dedafea57a600ab61f9ead",
+    "logs/visibility_comparison/spawn_grid_20260727/gp/camera_A/det_hit_expected_kernel_gp.npz": "57269808ae0fd545b3f548a14cf491d5b58081e0281ab6ce421835fd2232b6da",
+    "logs/visibility_comparison/spawn_grid_20260727/gp/camera_B/det_hit_expected_kernel_gp.npz": "e0850ce1b119c5d2c83673547d79bf12b07c3838ee68052d4942952c60066bcc",
+    "logs/visibility_comparison/spawn_grid_20260727/gp/camera_C/det_hit_expected_kernel_gp.npz": "e1c19e80fc44fb0ae4e20aeafa51fa9acb75b8d27d728c46b076026ee7d7a6e5",
+    "logs/visibility_comparison/spawn_grid_20260727/gp/camera_D/det_hit_expected_kernel_gp.npz": "6edeba3e686aa00d3164d07067692586726da53cc8bae4c2e59e1f987b1c45bb",
+    "paper_artifacts/gp/warehouse_full_4cam_dayzero_v1/camera_a_planner_with_four_camera_maps.npz": "b0f90ac490084a3559bd9b35fdb9c17719ef606dd1f721c2975ef6813470ec06",
+    "src/sim/gazebo_worlds/worlds/warehouse_full_4cam.world.sdf": "5c3347010ff1a72fcd0c91447bb2db26013e9168322a57581ec73134698d934d"
+  },
+  "lambdas": [
+    0.0,
+    0.25,
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+    20.0,
+    50.0
+  ],
+  "r_cond_isotropic_sigma_m": {
+    "camera_A": 0.04658762258460919,
+    "camera_B": 0.04839823496546621,
+    "camera_C": 0.04624287433157363,
+    "camera_D": 0.045396789677365296
+  },
+  "r_cond_source": "logs/studies/pixel_ground_path/e7_ipm_zero_parameter/summary.json",
+  "reference_caveat": "The reference is a CAD raycast, which requires a surveyed 3-D model. It is an evaluation reference, not a deployable method and not truth.",
+  "reference_field": "cad_reference",
+  "tasks": [
+    "full_traverse_handover",
+    "mc_blind_L",
+    "mc_m2_w2e_traverse",
+    "route_tall_shadow_west"
+  ]
+}

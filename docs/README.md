@@ -1,5 +1,11 @@
 # Technical documentation
 
+**Start here: [`METHOD.md`](METHOD.md)** — the whole method start to finish in plain
+language, with a glossary (belief, NEES, NIS, `R`, `Q`, IPM, bias) and an explicit list of
+what is settled versus open. Everything else in this directory is detail hanging off one of
+its steps. Read it before `research/`, which is a bookkeeping layer and assumes you already
+know what the system does.
+
 This directory documents runtime contracts, dataflow, geometry, perception, metrics, and
 deployment mechanics. Scientific status and paper framing live only in [`research/`](../research/README.md).
 
@@ -15,6 +21,7 @@ deployment mechanics. Scientific status and paper framing live only in [`researc
 
 | Path | Role |
 |---|---|
+| [`localization_metrics.md`](localization_metrics.md) | **Canonical localization statistics, information timeline, run registry, and comparison rules. Read before quoting any error number.** |
 | [`campaign_log_metrics.md`](campaign_log_metrics.md) | Log columns and metric traps. |
 | [`metric_definitions_and_gt_audit.md`](metric_definitions_and_gt_audit.md) | Metric definitions and truth audit. |
 | [`runtime_dataflow.md`](runtime_dataflow.md) | Offline artifact and online ROS-topic flow. |

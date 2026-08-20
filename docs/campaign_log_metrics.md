@@ -1,5 +1,10 @@
 # Campaign log metrics — canonical columns (read before computing any metric)
 
+This document chooses columns inside one campaign log. For cross-study metric definitions,
+information availability, exact run contexts, and comparison permissions, the higher-level
+authority is [`localization_metrics.md`](localization_metrics.md). Never form a campaign by
+globbing whichever run directories exist; bind exact route/condition/seed keys in a manifest.
+
 The visibility-comparison per-run logs (`logs/visibility_comparison/<campaign>/<route>/<C>/<seed>/experiment_*/`)
 have **~216 columns**, including **six overlapping position fields**. Picking the wrong
 one silently produces garbage. Several fields are **stale**. This is the single source

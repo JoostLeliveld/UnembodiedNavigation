@@ -28,8 +28,8 @@ Three estimators of the same quantity are compared:
 The state correction matters here for a specific reason: the operational residual
 carries the robot's own position uncertainty, which inflates sigma_cross and so
 DEFLATES the ratio. An uncorrected operational gate is therefore biased toward
-"do not calibrate" -- the safe direction, but it would leave camera C's 78 mm
-lateral bias in place.
+"do not calibrate" -- the safe direction, but in this retired-v2 study it would leave
+camera C's historical 76.9 mm signed lateral bias in place.
 
 Sampling honesty: subsamples are CONTIGUOUS windows, not random draws. Detections
 0.2 s apart are not independent, and "this camera has seen N detections" means one

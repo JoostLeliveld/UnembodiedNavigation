@@ -1,5 +1,9 @@
 # Four-camera pipeline: brick-by-brick REAL Gazebo runs (2026-07-21)
 
+> **Historical runtime snapshot.** “Current” and “deployed” in this dated note mean
+> 2026-07-21. Its projection corrections and per-camera error numbers are retired and must
+> not be compared with current floor-IPM metrics. See `docs/localization_metrics.md`.
+
 Every number here is from an actual headless Gazebo run on this host
 (Quadro P2000, 4 GiB), measured live — no synthetic data, no replay. Built one
 layer at a time; each brick verified before the next.

@@ -1,5 +1,5 @@
 {
-  "promoted": "2026-08-08",
+  "promoted": "2026-08-18",
   "experiment_id": "EXP-BELIEF",
   "study": "bayesian_filter_showcase",
   "source_path": "logs/studies/bayesian_filter_showcase/exp2_does_it_generalize/fig_v1_generalization.png",

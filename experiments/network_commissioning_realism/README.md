@@ -34,11 +34,16 @@ promotion_gate: Recover the actionable camera decision without operational truth
 evidence_paths:
 - logs/studies/network_commissioning_realism/exp1_gate_without_truth/summary.json
 archive_rule: Preserve summary provenance and negative camera decisions.
-next_action: Use as supporting commissioning evidence; do not claim end-to-end truth-free
-  calibration.
+next_action: Preserve sample-efficiency mechanism under retired-v2 targets; do not
+  claim current calibration decisions or end-to-end truth-free calibration.
 ```
 
 <!-- RESEARCH-METADATA:END -->
+
+> **Historical commissioning statistic.** The decision targets below come from the retired
+> v2 residual context and are confounded with route, region, yaw, and silhouette. Preserve the
+> sample-efficiency mechanism; do not present the decisions or magnitudes as current camera
+> calibration. See `docs/localization_metrics.md`.
 
 
 **Claims served:** C1 and C6; paper scope in

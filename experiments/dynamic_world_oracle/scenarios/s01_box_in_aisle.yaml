@@ -1,0 +1,65 @@
+# The simplest possible change-in-the-world scenario.
+#
+#   clear aisle  ->  one box appears in it  ->  the box sits on camera A's
+#   sight-line  ->  the box is driven away up the aisle  ->  the box is removed
+#   and the world is exactly as it started.
+#
+# The pose was not guessed. choose_obstacle_pose.py sweeps the aisle and reports
+# how many visible floor cells each camera loses; y = -4.5 is the point where
+# camera A loses 44 cells and cameras B, C and D lose none, which is what makes
+# "this obstacle intersects a SELECTED camera's rays" a checkable statement
+# rather than a description. The move target y = +5.5 is the mirror case: camera
+# A is fully restored while camera B now loses 40 cells, so the obstacle is
+# demonstrably still in the world and still occluding — just not for A.
+#
+# Aisle rack_aisle_W2 is 0.91 m wide and the pallet is 0.80 m across at yaw 90 deg,
+# leaving 5 cm either side. That is deliberate: it is a blocked aisle, not a
+# decoration, and it cannot drift sideways because the obstacle holds its
+# commanded pose exactly.
+
+scenario_id: s01_box_in_aisle
+description: >-
+  One loaded pallet is set down in the aisle camera A looks along, driven to the
+  far end of the same aisle, and removed. Four cameras, oracle depth and
+  ray-cast visibility are captured throughout.
+
+world_file: warehouse_full_4cam_dynamic.world.sdf
+world_name: warehouse_full_4cam_dynamic
+
+seed: 20260811
+step_size_s: 0.001        # must match <max_step_size> in the world SDF
+tick_s: 0.2               # camera update period: 5 Hz sensors
+duration_s: 8.0
+
+target_height_m: 0.35     # height of the point a camera must see to localise a robot
+grid_resolution_m: 0.25
+
+events:
+  - t: 1.0
+    kind: spawn
+    entity: box_01
+    model: dyn_pallet_box
+    pose: {x: -5.675, y: -4.5, z: 0.0, yaw: deg90}
+    note: pallet set down in rack_aisle_W2, on camera A's sight-line
+
+  - t: 3.0
+    kind: move
+    entity: box_01
+    pose: {x: -5.675, y: 5.5, z: 0.0, yaw: deg90}
+    duration_s: 2.0
+    note: driven 10 m north along the aisle, out of camera A's shadow and into camera B's
+
+  - t: 5.0
+    kind: stop
+    entity: box_01
+    note: motion ends; the pallet holds this pose
+
+  - t: 7.0
+    kind: remove
+    entity: box_01
+    note: pallet taken away; the oracle map must return to its t=0 state
+
+captures:
+  start_t: 0.4
+  period_s: 0.4
+  end_t: 8.0

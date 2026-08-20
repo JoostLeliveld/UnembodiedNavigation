@@ -1,6 +1,73 @@
-# UnembodiedNavigation — layout rules (read before creating ANY file/folder)
+# UnembodiedNavigation
 
 ROS 2 + Gazebo thesis repo: external-camera reliability for warehouse robot navigation.
+
+## What this actually does (read this first)
+
+A small robot drives around a simulated warehouse. Its wheel odometry drifts without bound, so
+it leans on four fixed wall-mounted cameras that can see it on the floor. Cameras are not
+equally useful everywhere — shelves block views, accuracy degrades with range and viewing
+angle, and a camera can be quietly miscalibrated. The thesis question is therefore **not** "can
+the robot see itself" but **"how good is this particular sighting, and does knowing that change
+how the robot should drive?"**
+
+Before quoting any accuracy or uncertainty number, read
+[`docs/localization_metrics.md`](docs/localization_metrics.md). It is the canonical boundary
+between camera measurements, filter beliefs, honesty statistics, navigation runs, and
+historical projection versions.
+
+The whole pipeline, in order:
+
+```text
+wheel odometry (drifts)  ─┐
+                          ├─► EKF: predict, then update through a gate chain ─► belief ─► planner
+camera image                                                                   (mean +      (route +
+  ─► YOLO box                                                                  covariance)   clearance)
+  ─► bottom-centre pixel ─► ray ─► floor plane  = position   (plain IPM, 0 params, 66.6 mm)
+  ─► pixel uncertainty pushed through J         = covariance (R_xy = J R_uv Jᵀ)
+  ─► four cameras reconciled by camera_manager
+```
+
+**The central object is the *belief*: a position AND a stated uncertainty.** Most of this
+thesis is about whether that stated uncertainty is honest, not about whether the position is
+accurate. Those are separate claims and a filter can pass one while badly failing the other.
+
+**The core finding:** a camera can have a repeated *lean* — the same error every frame. A
+Kalman filter treats N sightings as N independent votes and shrinks its uncertainty like `1/N`,
+but the lean does not shrink. In the locked historical-v2 belief study, the robot states a
+mean 1.9 cm 1σ while its belief has 5.3 cm RMSE, and the truth escapes its stated 95% ellipse
+41.9% of the time. Those magnitudes are mechanism evidence under retired inputs, not current
+per-camera accuracy. Fixing the mechanism needs a covariance *floor* that repeated looks
+cannot shrink — no per-frame noise model can represent a constant bias.
+
+📖 **[`docs/METHOD.md`](docs/METHOD.md) is the start-to-finish walkthrough with the glossary
+(belief, NEES, NIS, `R`, `Q`, IPM, bias) and an explicit list of what is settled vs. open.**
+Read it before reading `research/`. If you find yourself reading registry IDs to work out what
+the system does, you are in the wrong file.
+
+### Talk and write in plain terms
+
+The `research/` control plane uses short IDs (`EXP-BELIEF`, `C1`, `RQ11`, `WS05`) for
+bookkeeping. They are *filing labels, not explanations*. When reporting to the user, in figures,
+and in READMEs: say the thing, not the label. "The truth falls outside the stated 95% ellipse
+41.9% of the time" — not "EXP-BELIEF NEES exceeds the calibrated reference". Define a term at first use or
+don't use it.
+
+### Figures must stand alone
+
+Every promoted figure is read by someone who has not read the code. So:
+
+- **The title states the finding**, not the variable names. "Under retired v2 inputs, repeated bias makes the filter overconfident:
+  what each filter does about it" — not "NEES by arm".
+- **Axis labels say what the number means** and which direction is good. If a threshold matters,
+  draw it and label it in words ("above the line = overconfident").
+- **No bare arm/condition codes as tick labels.** `A0`/`A2` need their meaning on the axis
+  ("trust every camera", "per-camera noise model") or in a legend, not in a caption only the
+  author will read.
+- **Honesty and sharpness always appear together.** A filter that just widens its ellipse passes
+  any calibration test and is useless, so never show a calibration score without the stated σ
+  and the actual error beside it.
+- Say what the data is: how many detections, real or injected fault, which world.
 
 ## The five organizing layers (do not invent new top-level directories)
 
@@ -112,10 +179,12 @@ Live-run facts worth not re-deriving (verified 2026-08-06 on `clv2_pilot`):
 
 ## Hard rules
 
-- **Two-world rule**: method development ONLY in the original warehouse (`warehouse_aws`);
-  the full 4-camera world (`warehouse_full_4cam.world.sdf`) evaluates FROZEN methods (scale/handover/fusion). See
-  `research/06_world_camera_design.md`. `honest_campaign_v1` is the locked reference — never
-  rerun/modify.
+- **Locked campaigns**: `honest_campaign_v1` and `honest_campaign_v2` are the published
+  reference runs — never rerun or modify them.
+  (The old **two-world rule**, which confined method development to `warehouse_aws` and
+  reserved `warehouse_full_4cam` for frozen methods, was **retired 2026-08-20**. It predated
+  `warehouse_v2`, which is now the development world. Choose a world for what it measures and
+  say why in the study README.)
 - **Never** hand-roll brier/logloss/AUC/Spearman/ECE — import `scripts/shared/metrics.py`
   (an audit found 15 divergent copies; three different Spearman formulas).
 - **Never** read `state_x/y` or `truth_x/y` from campaign CSVs as belief/truth — use

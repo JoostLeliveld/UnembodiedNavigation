@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "canonical_document": "docs/localization_metrics.md",
+  "current_as_of": "2026-08-18",
+  "contexts": {
+    "PG-IPM-CURRENT": {
+      "status": "current",
+      "metric_object": "camera_measurement",
+      "reference": "commanded_ground_truth_xy",
+      "projection_runtime": "floor_ipm_no_correction",
+      "experimental_unit": "detection",
+      "dataset": "warehouse_yolo_dataset_4cam_v3_20260724/localization_calibration",
+      "protocol": "set-pose grid; four cameras; four cardinal robot yaws",
+      "source": "logs/studies/pixel_ground_path/e7_ipm_zero_parameter/summary.json",
+      "generator": "experiments/pixel_ground_path/e7_ipm_zero_parameter.py",
+      "comparison_group": "PG-IPM-CURRENT",
+      "n": 1844,
+      "pooled": {
+        "mean_euclidean_error_m": 0.06663248678087501,
+        "median_euclidean_error_m": 0.07424498582098987,
+        "p95_euclidean_error_m": 0.10207778086959644,
+        "radial_bias_m": -0.02734926574521677,
+        "lateral_bias_m": 0.0026041220472699405
+      },
+      "per_camera": {
+        "camera_A": {"n": 455, "mean_euclidean_error_m": 0.06462661594877071, "median_euclidean_error_m": 0.07099499805750985, "p95_euclidean_error_m": 0.09885833550996179, "radial_bias_m": -0.02532271457675696, "lateral_bias_m": -0.006825466962627823},
+        "camera_B": {"n": 476, "mean_euclidean_error_m": 0.06810580520638544, "median_euclidean_error_m": 0.07611613851600105, "p95_euclidean_error_m": 0.10310573687883237, "radial_bias_m": -0.025281959686089088, "lateral_bias_m": 0.014382708345348291},
+        "camera_C": {"n": 449, "mean_euclidean_error_m": 0.06662761260357099, "median_euclidean_error_m": 0.07495299229502116, "p95_euclidean_error_m": 0.10035400551613329, "radial_bias_m": -0.026312937063581354, "lateral_bias_m": 0.018846937716299698},
+        "camera_D": {"n": 464, "mean_euclidean_error_m": 0.06709274575431037, "median_euclidean_error_m": 0.07473987863793839, "p95_euclidean_error_m": 0.10470143576822351, "radial_bias_m": -0.0324601063569588, "lateral_bias_m": -0.01595012000828216}
+      }
+    },
+    "RCOND-UV-CURRENT-AUDIT": {
+      "status": "current_audit",
+      "metric_object": "camera_measurement_covariance",
+      "reference": "commanded_ground_truth_xy_projected_to_pixel",
+      "projection_runtime": "floor_ipm_no_correction",
+      "experimental_unit": "detection",
+      "dataset": "warehouse_yolo_dataset_4cam_v3_20260724/localization_calibration",
+      "protocol": "same 1844 detections as PG-IPM-CURRENT; six leave-one-spatial-block-out folds",
+      "source": "logs/studies/factorized_observation_successor/rcond/summary.json",
+      "generator": "experiments/factorized_observation_successor/commission_rcond.py",
+      "comparison_group": "RCOND-UV-CURRENT-AUDIT",
+      "n": 1844,
+      "selected_model": "constant_conditional_pixel_covariance",
+      "geometry_gate": "FAIL",
+      "out_of_fold": {
+        "constant_mean_gaussian_nll": 5.699345046468301,
+        "geometry_mean_gaussian_nll": 5.6993450464682995,
+        "constant_coverage_95": 0.8703904555314533,
+        "geometry_coverage_95": 0.8703904555314533
+      },
+      "restrictions": [
+        "not an independent dataset from PG-IPM-CURRENT",
+        "range-conditioned variance slopes collapsed to zero",
+        "no spatial conditional-covariance claim",
+        "ground-space covariance may vary only through projection geometry"
+      ]
+    },
+    "MC-DRIVE-V2": {
+      "status": "historical",
+      "metric_object": "camera_measurement",
+      "reference": "gazebo_ground_truth_xy",
+      "projection_runtime": "projection_calibration_v2_retired",
+      "experimental_unit": "detection",
+      "run_ids": ["smoke1_20260716", "smoke2_20260716", "fusion_handover_20260721"],
+      "source": "logs/studies/pixel_ground_path/e6_external_log_validation/summary.json",
+      "comparison_group": "MC-DRIVE-V2",
+      "n": 1421,
+      "restrictions": [
+        "two recorded headings",
+        "camera route region and yaw are confounded",
+        "not a current camera ranking"
+      ],
+      "camera_C_historical": {
+        "signed_cross_bearing_bias_m": 0.07691443838943977,
+        "pixel_offset_u_contact_px": -4.0111293803178185,
+        "signed_cross_bearing_bias_after_mesh_m": 0.008130491922734944,
+        "pixel_offset_u_after_mesh_px": -0.3283375194601342
+      }
+    },
+    "BELIEF-V2": {
+      "status": "locked_mechanism_only",
+      "metric_object": "filter_belief_and_honesty",
+      "reference": "gazebo_ground_truth_xy",
+      "projection_runtime": "projection_calibration_v2_retired",
+      "experimental_unit": "filter_update_step",
+      "run_ids": ["smoke1_20260716", "smoke2_20260716", "fusion_handover_20260721"],
+      "source": "logs/studies/bayesian_filter_showcase/exp1_graceful_vs_trusting/summary.json",
+      "comparison_group": "BELIEF-V2",
+      "n": 1424,
+      "arms": {
+        "trust_every_camera": {"rmse_m": 0.05318535677131861, "p95_error_m": 0.09434718600078108, "mean_stated_sigma_m": 0.019233296741895924, "median_nees": 4.2189286234177485, "outside_95_fraction": 0.41853932584269665},
+        "per_camera_correlation_floor": {"rmse_m": 0.050048191325271336, "p95_error_m": 0.09226490453221653, "mean_stated_sigma_m": 0.05056687989256579, "median_nees": 0.45503103848568593, "outside_95_fraction": 0.03300561797752809}
+      }
+    },
+    "HONEST-CAMPAIGN-V1": {
+      "status": "locked_campaign",
+      "metric_object": "filter_belief_and_navigation_run",
+      "reference": "gazebo_ground_truth_xy",
+      "experimental_unit": "run",
+      "campaign": "honest_campaign_v1",
+      "n_runs": 43,
+      "loader": "scripts/geometry_visibility/campaign_metrics.py",
+      "comparison_group": "HONEST-CAMPAIGN-V1",
+      "restrictions": [
+        "use planner_belief_x/y and gt_x/y only",
+        "never use state_x/y or legacy truth_x/y",
+        "not a four-camera per-measurement comparison"
+      ]
+    }
+  }
+}

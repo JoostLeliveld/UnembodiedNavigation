@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": null,
+  "study": "offset_state_closed_loop",
+  "source_path": "logs/studies/offset_state_closed_loop/midterm_assets/assets/backup/covariance_mapping.png",
+  "source_sha256": "8d645eab812e3ff299b0e7e7ddd50842ffea1ae7d73bca8cc178b27a51a5d55e",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

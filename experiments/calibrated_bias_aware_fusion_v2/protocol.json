@@ -1,0 +1,524 @@
+{
+  "schema_version": 1,
+  "protocol_id": "CBAF-WV2-2026-01",
+  "title": "Calibrated bias-aware multi-camera localization in an asymmetric warehouse",
+  "status": "prospective_unfrozen",
+  "created_utc": "2026-08-20T00:00:00Z",
+  "scope": {
+    "primary_contribution": "A commissioned multi-camera localization pipeline that propagates a full keypoint covariance, estimates only observable physical camera-extrinsic drift modes, and preserves uncertainty in unobservable modes.",
+    "secondary_validation": "Matched replay, closed-loop handovers, and a frozen expected-free-energy planner consuming the resulting belief.",
+    "explicitly_out_of_scope": [
+      "monocular depth",
+      "a new planner or expected-free-energy objective",
+      "raw detector confidence as measurement covariance",
+      "proving or disproving any prior paper",
+      "real-world or hardware generalization"
+    ]
+  },
+  "repository": {
+    "root_marker": "src",
+    "world_artifacts": [
+      {
+        "role": "primary_world",
+        "path": "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
+      },
+      {
+        "role": "shipout_world",
+        "path": "src/sim/gazebo_worlds/worlds/warehouse_v2_shipout.world.sdf"
+      }
+    ],
+    "method_artifacts": [
+      "experiments/warehouse_v2_sketches/warehouse_v2.py",
+      "experiments/warehouse_v2_sketches/make_world.py",
+      "experiments/warehouse_v2_sketches/route_tasks.py",
+      "scripts/perception/capture_projected_keypoint_dataset.py",
+      "src/experiments/config/world_profiles.yaml"
+    ],
+    "camera_model_names": {
+      "A": "external_camera",
+      "B": "external_camera_b",
+      "C": "external_camera_c",
+      "D": "external_camera_d",
+      "E": "external_camera_e"
+    },
+    "allowed_world_basenames": [
+      "warehouse_v2.world.sdf",
+      "warehouse_v2_shipout.world.sdf"
+    ],
+    "forbidden_legacy_tokens": [
+      "warehouse_aws",
+      "warehouse_full_4cam",
+      "empty_notebook",
+      "warehouse_yolo_dataset_4cam_v3_20260724",
+      "PG-IPM-CURRENT",
+      "MC-DRIVE-V2",
+      "BELIEF-V2",
+      "HONEST-CAMPAIGN-V1"
+    ]
+  },
+  "information_boundary": {
+    "online_allowed": [
+      "camera_id",
+      "rgb_image",
+      "capture_timestamp",
+      "frozen_intrinsics",
+      "survey_extrinsics_and_prior_covariance",
+      "keypoint_pixels",
+      "keypoint_validity",
+      "odometry_increment",
+      "prior_belief_mean_and_covariance",
+      "accepted_camera_measurements_and_covariances",
+      "innovation_and_gate_decision",
+      "frozen_binary_availability_field",
+      "frozen_route_candidate_menu"
+    ],
+    "evaluation_only": [
+      "gt_x",
+      "gt_y",
+      "gt_yaw",
+      "injected_extrinsic_delta",
+      "measurement_error",
+      "belief_error",
+      "NEES",
+      "ellipse_coverage",
+      "future_detection_outcome",
+      "oracle_camera_exclusion"
+    ],
+    "forbidden_online": [
+      "truth_x",
+      "truth_y",
+      "ground_truth",
+      "per_frame_localization_error",
+      "detector_confidence_as_R",
+      "detector_confidence_as_bias",
+      "future_detection_outcome",
+      "oracle_camera_exclusion"
+    ],
+    "detector_score_policy": "May be logged and thresholded by one globally frozen usability rule; it is neither an R input nor a bias-state input nor an availability-GP feature. Misses remain Bernoulli zeros."
+  },
+  "measurement_model": {
+    "vector": [
+      "front_u_px",
+      "front_v_px",
+      "rear_u_px",
+      "rear_v_px"
+    ],
+    "dimension": 4,
+    "covariance": "A positive-definite full 4x4 per-camera keypoint-pixel covariance selected using development sessions and propagated to world XY through the frozen projection Jacobian.",
+    "candidate_R_models": [
+      "per_camera_full_constant",
+      "per_camera_full_conditioned_on_predeclared_image_geometry"
+    ],
+    "condition_features": [
+      "normalized_keypoint_midpoint_u",
+      "normalized_keypoint_midpoint_v",
+      "pixel_keypoint_separation"
+    ],
+    "selection_rule": "The conditioned model is retained only when validation-session mean Gaussian NLL improves, absolute 95-percent coverage error does not worsen, and its eigenvalues vary non-degenerately. Otherwise use per-camera full constant R.",
+    "prohibitions": [
+      "scalar confidence-derived variance",
+      "using GT residual magnitude online",
+      "diagonalizing before propagation",
+      "fitting or selecting R on final test sessions"
+    ]
+  },
+  "availability_model": {
+    "target": "For every scheduled camera opportunity, usable=1 exactly when an image arrives before the frozen deadline, one robot instance passes the globally frozen detection threshold, both ordered keypoints pass their frozen validity thresholds, projection is finite, timestamp age is valid, and the frozen pre-update innovation rule accepts it against the causal prior; otherwise usable=0. Every condition is runtime-observable and misses are retained. GT, injected drift, and localization error are forbidden in this label.",
+    "model": "Per-camera Bernoulli Gaussian process with a fixed kernel family and spatially blocked fitting.",
+    "features": [
+      "world_x",
+      "world_y",
+      "sin_heading",
+      "cos_heading"
+    ],
+    "planner_use": "Frozen availability probability may affect only the miss/hit opportunity model used by the downstream planner.",
+    "estimator_use": "Availability may predict whether an update arrives; it may not scale R for an update that arrived and may not estimate camera bias.",
+    "prohibitions": [
+      "detector confidence as a GP target",
+      "detections-only training",
+      "a continuous confidence regression target",
+      "availability folded into measurement covariance"
+    ]
+  },
+  "drift_model": {
+    "state_per_camera": [
+      "delta_tx_m",
+      "delta_ty_m",
+      "delta_tz_m",
+      "delta_roll_rad",
+      "delta_pitch_rad",
+      "delta_yaw_rad"
+    ],
+    "process": "Slow random walk about the surveyed camera pose with a frozen per-mode spectral-density prior.",
+    "measurement_relation": "Keypoint reprojection through the perturbed physical camera extrinsic; no additive world-XY camera offset is used in the proposed arm.",
+    "gauge_anchor": "Independent survey priors anchor the global frame. Ground truth is never an online anchor.",
+    "observability_gate": {
+      "window": "A frozen overlap window containing timestamp-associated observations from at least two distinct cameras and robot motion.",
+      "method": "Whitened stacked Jacobian SVD after marginalizing robot pose; update only singular-vector directions passing both absolute and relative singular-value thresholds.",
+      "absolute_singular_value_min": 0.001,
+      "relative_to_max_min": 0.01,
+      "min_distinct_cameras": 2,
+      "min_associated_instants": 8,
+      "nullspace_policy": "Project the drift update out of failed directions and retain or increase their survey-prior covariance; never report those directions as calibrated."
+    },
+    "injection_levels": {
+      "delta_tx_m": [0.02, 0.05],
+      "delta_ty_m": [0.02, 0.05],
+      "delta_tz_m": [0.02, 0.05],
+      "delta_roll_deg": [0.25, 0.75],
+      "delta_pitch_deg": [0.25, 0.75],
+      "delta_yaw_deg": [0.25, 0.75]
+    }
+  },
+  "hypotheses": [
+    {
+      "id": "H1_R",
+      "claim": "Commissioned full keypoint R improves held-out measurement likelihood and coverage calibration over scalar R.",
+      "primary_stage": "G1",
+      "primary_contrast": "B2_scalar_R versus B3_calibrated_R_independent",
+      "primary_endpoint": "heldout_session_mean_gaussian_nll"
+    },
+    {
+      "id": "H2_OBS",
+      "claim": "The observability gate identifies recoverable extrinsic-drift directions and prevents false certainty in unrecoverable directions.",
+      "primary_stage": "G3",
+      "primary_contrast": "B3_calibrated_R_independent versus B7_proposed_observability_gated_drift",
+      "primary_endpoint": "observable_subspace_error_and_nullspace_coverage"
+    },
+    {
+      "id": "H3_FUSION",
+      "claim": "Bias-aware covariance-respecting fusion improves held-out belief accuracy and honesty during camera handovers.",
+      "primary_stage": "G4",
+      "primary_contrast": "B3_calibrated_R_independent versus B7_proposed_observability_gated_drift",
+      "primary_endpoint": "stream_level_time_averaged_gaussian_belief_nll"
+    },
+    {
+      "id": "H4_CLOSED_LOOP",
+      "claim": "The estimator benefit survives closed-loop handovers under an identical controller and route.",
+      "primary_stage": "G5",
+      "primary_contrast": "B3_calibrated_R_independent versus B7_proposed_observability_gated_drift",
+      "primary_endpoint": "run_level_belief_rmse"
+    },
+    {
+      "id": "H5_DOWNSTREAM",
+      "claim": "A frozen EFE planner makes better uncertainty-sensitive route decisions when supplied the proposed calibrated belief.",
+      "primary_stage": "G6",
+      "primary_contrast": "B3_calibrated_R_independent versus B7_proposed_observability_gated_drift",
+      "primary_endpoint": "run_level_realized_uncertainty_cost"
+    }
+  ],
+  "baselines": [
+    {
+      "id": "B1_best_single",
+      "description": "At every associated instant use the single available camera with lowest commissioned predicted trace(R_xy); ties break by camera ID."
+    },
+    {
+      "id": "B2_scalar_R",
+      "description": "Independent fusion using one globally commissioned scalar pixel variance and no drift state."
+    },
+    {
+      "id": "B3_calibrated_R_independent",
+      "description": "Independent fusion using the selected per-camera full keypoint R and no drift state."
+    },
+    {
+      "id": "B4_static_offset",
+      "description": "B3 plus a fixed per-camera world-XY offset estimated on commissioning sessions only."
+    },
+    {
+      "id": "B5_NIS_gating",
+      "description": "B3 plus a frozen chi-square innovation gate; rejected measurements cause no update."
+    },
+    {
+      "id": "B6a_covariance_intersection",
+      "description": "B3 measurements fused by covariance intersection with its weight selected by frozen minimum-logdet rule."
+    },
+    {
+      "id": "B6b_split_covariance_intersection",
+      "description": "B3 fused by Split Covariance Intersection after decomposing each estimate into registered independent and shared components; the decomposition and weight rule are frozen before test replay."
+    },
+    {
+      "id": "B7_proposed_observability_gated_drift",
+      "description": "Full calibrated R plus physical camera-extrinsic drift states, survey priors, overlap updates, and the observability gate."
+    },
+    {
+      "id": "B8_oracle_exclusion",
+      "description": "Offline diagnostic only: excludes the known injected-drift camera using evaluation-only labels; never an operational baseline or claimed deployable method."
+    }
+  ],
+  "splits": {
+    "rules": [
+      "A simulator restart defines a session; a session belongs to exactly one split.",
+      "All repeats, headings, cameras, and nearby poses from one spatial anchor stay together.",
+      "Final-test GT and injected-drift labels are sealed until all code, thresholds, and figures are frozen.",
+      "Hyperparameters and baseline choices use train or validation only.",
+      "No row, image hash, timestamp, anchor, trajectory stream, or simulator seed may cross train/validation/test.",
+      "G4 replays all arms on the exact same frozen streams; a stream is not duplicated as an independent unit.",
+      "G5 and G6 are paired by task, seed, world variant, and perturbation condition."
+    ],
+    "g1_sessions": {
+      "train": [1, 2, 3, 4, 5, 6, 7],
+      "validation": [8, 9, 10],
+      "test": [11, 12, 13, 14, 15]
+    },
+    "g2_sessions": {
+      "train": [1, 2, 3, 4],
+      "validation": [5, 6],
+      "test": [7, 8, 9]
+    },
+    "spatial_blocks": "Six fixed contiguous blocks: x-tertiles crossed with y-halves; block definitions are computed before capture from the frozen driveable mask.",
+    "independent_units": {
+      "G1": "session for primary inference; session-by-spatial-block for hierarchical diagnostics; not detections",
+      "G2": "session-by-spatial-block; not camera opportunities",
+      "G3": "injection episode, paired by camera, mode, magnitude, sign, and seed",
+      "G4": "captured trajectory stream, paired across replay arms",
+      "G5": "closed-loop run, paired by task/seed/perturbation",
+      "G6": "closed-loop run, paired by task/seed/world variant"
+    }
+  },
+  "sample_size_targets": {
+    "G1": {
+      "sessions": 15,
+      "anchors_per_session": 60,
+      "headings_per_anchor": 4,
+      "repeats_per_heading": 3,
+      "camera_opportunities_per_snapshot": 5,
+      "minimum_valid_keypoint_detections_per_camera_test": 500,
+      "rationale": "Five untouched restart sessions support session-level intervals; repeated observations estimate within-cell covariance without treating repetitions as independent evidence."
+    },
+    "G2": {
+      "sessions": 9,
+      "anchors_per_session": 120,
+      "headings_per_anchor": 8,
+      "repeats_per_heading": 2,
+      "camera_opportunities_per_snapshot": 5,
+      "minimum_test_events_per_camera": 1000,
+      "rationale": "Every scheduled camera opportunity is retained so misses are represented; inference clusters by session and spatial block."
+    },
+    "G3": {
+      "seeds_per_injection_cell": 5,
+      "cameras": 5,
+      "physical_modes": 6,
+      "positive_and_negative_signs": 2,
+      "magnitudes_per_mode": 2,
+      "no_injection_control_seeds_per_camera": 5,
+      "rationale": "Balanced sign/magnitude cells expose parameter confounding; the episode, not an update, is independent."
+    },
+    "G4": {
+      "heldout_streams": 30,
+      "route_profiles": 6,
+      "capture_sessions": 5,
+      "replay_arms": 9,
+      "rationale": "All nine estimator variants, including standard and Split CI, see bit-identical streams; five independent restarts allow session-aware paired intervals."
+    },
+    "G5": {
+      "task_slots": 4,
+      "seeds_per_task": 10,
+      "closed_loop_arms": 6,
+      "planned_runs": 240,
+      "rationale": "Forty matched task/seed units give operational replication while retaining both conservative fusion baselines."
+    },
+    "G6": {
+      "task_slots": 4,
+      "seeds_per_task": 10,
+      "planner_input_arms": 4,
+      "world_variants": 2,
+      "planned_runs": 320,
+      "rationale": "The fixed planner is tested across peak and shipout variants; estimator is the treatment and planner code is identical."
+    }
+  },
+  "resource_estimates": {
+    "policy": "These estimates support scheduling and parallelization only. Calendar pressure never changes a scientific gate, camera set, endpoint, split, sample target, or the scope of the registered full program.",
+    "estimated_machine_time": {
+      "G0": "2-4 hours plus one working day for any A-E runtime repair",
+      "G1": "10,800 teleported snapshots across 15 restarts; about 4-10 machine hours depending on settle time, plus 1-2 analysis days",
+      "G3": "625 injection/control episodes; about 8-20 machine hours if batched, plus 2 analysis days",
+      "G4": "30 captured streams replayed through nine arms; about 5-12 machine hours, plus 1 analysis day",
+      "G5": "240 closed-loop runs; about 20 machine hours at 5 minutes/run or 40 hours at 10 minutes/run",
+      "G2": "17,280 teleported snapshots; about 6-14 machine hours plus GP fitting",
+      "G6": "320 closed-loop runs across two worlds; about 27-54 machine hours"
+    }
+  },
+  "stages": [
+    {
+      "id": "G0",
+      "name": "environment_and_freeze",
+      "depends_on": [],
+      "outputs": [
+        "world and shipout hashes",
+        "five-camera topic and pose audit",
+        "driveable-mask and collision audit",
+        "arm-neutral route menu",
+        "software/environment lock",
+        "empty campaign data root"
+      ],
+      "pass_gate": "The primary asymmetric warehouse and matched shipout variant load; generic commissioning capture obtains fresh A-E frames at one shared teleported pose; separately, the detector, association, logger and estimator demonstrate true A-E end-to-end closed-loop input; required GT bridge is logger-only; route-menu geometry gate passes; and a generated manifest validates with no legacy inputs."
+    },
+    {
+      "id": "G1",
+      "name": "keypoint_and_R_commissioning",
+      "depends_on": ["G0"],
+      "outputs": [
+        "frozen keypoint detector",
+        "full 4x4 R candidates",
+        "projection Jacobian validation",
+        "held-out NLL coverage and sharpness report"
+      ],
+      "pass_gate": "Each camera meets the test detection minimum; selected R is positive definite and finite; test NLL and 50/80/95 coverage are reported by session with sharpness. Failure narrows the claim or returns to apparatus development before unsealing later stages."
+    },
+    {
+      "id": "G2",
+      "name": "binary_availability_map",
+      "depends_on": ["G0", "G1"],
+      "outputs": [
+        "miss-inclusive opportunity table",
+        "frozen per-camera Bernoulli GP",
+        "spatial-block calibration report"
+      ],
+      "pass_gate": "Every scheduled opportunity has exactly one binary label; detector confidence is absent from GP features; held-out Brier, log loss, calibration, prevalence and counts are reported. This gate authorizes availability only for G6."
+    },
+    {
+      "id": "G3",
+      "name": "observability_and_bias_injection",
+      "depends_on": ["G0", "G1"],
+      "outputs": [
+        "injected physical extrinsic perturbation episodes",
+        "pre-update singular spectra",
+        "observable and nullspace error report",
+        "frozen observability thresholds"
+      ],
+      "pass_gate": "Thresholds are frozen on development episodes; final episodes show lower observable-subspace error without undercoverage in gated nullspace directions; false-update rate is reported on no-injection controls."
+    },
+    {
+      "id": "G4",
+      "name": "matched_fusion_replay",
+      "depends_on": ["G1", "G3"],
+      "outputs": [
+        "frozen held-out streams",
+        "bit-matched eight-arm replay",
+        "measurement belief and honesty metrics"
+      ],
+      "pass_gate": "All arms consume identical timestamped inputs, GT remains evaluator-only, no stream is missing, and primary paired stream-level belief-NLL analysis is complete regardless of sign. Only G4 can establish the estimator efficacy claim before closed loop."
+    },
+    {
+      "id": "G5",
+      "name": "closed_loop_handover",
+      "depends_on": ["G4"],
+      "outputs": [
+        "four deterministically resolved task slots",
+        "matched closed-loop runs",
+        "run-level estimator and navigation report"
+      ],
+      "pass_gate": "A blind preflight confirms every task crosses at least one camera handover and all arms use the identical route/controller; all 240 scheduled runs are present or exclusions follow the frozen non-outcome rule."
+    },
+    {
+      "id": "G6",
+      "name": "fixed_EFE_downstream_routes",
+      "depends_on": ["G2", "G4", "G5"],
+      "outputs": [
+        "frozen availability field",
+        "frozen planner checksum",
+        "route-discrimination preflight",
+        "matched peak and shipout runs"
+      ],
+      "pass_gate": "Planner objective and candidate menu are identical across estimator inputs, at least two candidate routes differ by the declared geometry threshold, and predicted versus realized uncertainty and operational outcomes are reported. No planner novelty claim is made."
+    }
+  ],
+  "stage_arms": {
+    "G1": ["B2_scalar_R", "B3_calibrated_R_independent"],
+    "G3": ["B3_calibrated_R_independent", "B7_proposed_observability_gated_drift", "B8_oracle_exclusion"],
+    "G4": ["B1_best_single", "B2_scalar_R", "B3_calibrated_R_independent", "B4_static_offset", "B5_NIS_gating", "B6a_covariance_intersection", "B6b_split_covariance_intersection", "B7_proposed_observability_gated_drift", "B8_oracle_exclusion"],
+    "G5": ["B1_best_single", "B3_calibrated_R_independent", "B5_NIS_gating", "B6a_covariance_intersection", "B6b_split_covariance_intersection", "B7_proposed_observability_gated_drift"],
+    "G6": ["B1_best_single", "B3_calibrated_R_independent", "B6b_split_covariance_intersection", "B7_proposed_observability_gated_drift"]
+  },
+  "task_resolution": {
+    "route_menu_source": "logs/studies/warehouse_v2/route_tasks/route_tasks.json",
+    "symbolic_handover_slots": [
+      "H1_STRONG_OVERLAP_HANDOVER",
+      "H2_WEAK_OVERLAP_HANDOVER",
+      "H3_LONG_CROSS_WAREHOUSE",
+      "H4_MINIMAL_DRIFT_SENSITIVITY_CONTROL"
+    ],
+    "symbolic_planner_slots": [
+      "P1_MAX_PREDICTED_ROUTE_DISAGREEMENT",
+      "P2_HIGH_AVAILABILITY_CONTROL",
+      "P3_BLACKSPOT_TRAVERSE",
+      "P4_LONGEST_G3_PASSING_ROUTE"
+    ],
+    "freeze_rule": "Resolve slots using G0 geometry plus train/validation outputs only, before final G4 streams or any G5/G6 outcomes are inspected. Ties break lexicographically. Record route polylines and hashes in an amendment."
+  },
+  "metrics": {
+    "measurement": [
+      "Gaussian NLL of the 4D keypoint residual",
+      "50/80/95 percent keypoint-residual ellipsoid coverage",
+      "mean logdet R as sharpness",
+      "world-XY measurement mean Euclidean error, RMSE and p95 versus Gazebo GT for offline evaluation only"
+    ],
+    "availability": [
+      "Bernoulli log loss",
+      "Brier score",
+      "50/80/95 reliability bins with prevalence and event counts",
+      "AUROC as ranking-only secondary metric"
+    ],
+    "belief": [
+      "time-averaged 2D Gaussian belief NLL, 0.5 times (e transpose P inverse e plus logdet(2 pi P)), first averaged within a stream/run",
+      "world-XY belief RMSE versus time-aligned Gazebo gt_x/gt_y",
+      "world-XY belief p95 error",
+      "mean 2D NEES with reference 2.0",
+      "median 2D NEES with reference 1.386",
+      "50/80/95 percent belief-ellipse coverage",
+      "mean sqrt(trace(P)/2) sharpness"
+    ],
+    "drift": [
+      "observable-subspace parameter error",
+      "nullspace projected error and posterior coverage",
+      "accepted observable rank",
+      "false-update rate on no-injection controls",
+      "recovery time after injection"
+    ],
+    "navigation": [
+      "run-level belief RMSE and p95",
+      "clean-goal indicator",
+      "completion reason",
+      "contact indicator and minimum clearance",
+      "time and path length",
+      "longest interval without an accepted camera correction",
+      "predicted versus realized integrated uncertainty cost"
+    ],
+    "metric_contract": {
+      "reference": "Gazebo gt_x/gt_y joined to capture or belief timestamp",
+      "forbidden_reference": "truth_x/truth_y wheel odometry",
+      "timestamp_join_max_delta_s": 0.05,
+      "mean_nees_reference_2d": 2.0,
+      "median_nees_reference_2d": 1.386,
+      "coverage_levels": [0.5, 0.8, 0.95]
+    }
+  },
+  "statistics": {
+    "primary_interval": "Paired cluster bootstrap with 10000 resamples at the declared independent-unit level and a two-sided 95-percent percentile interval.",
+    "session_reporting": "Always show every session/run point, the paired effect, and the session/run-level confidence interval; detection- or update-level intervals may appear only as diagnostics.",
+    "multiplicity": "H1-H5 are an ordered gatekeeping family. Test H1, then H2, then H3, then H4, then H5 at alpha 0.05; after the first failed primary claim, later p-values are descriptive.",
+    "missingness": "Do not discard misses, failed routes, rejected updates, or incomplete runs. Apply only prespecified infrastructure exclusions and report denominators and reasons per arm.",
+    "effect_reporting": "Report absolute values, paired differences, confidence intervals, and sample counts; do not turn a non-significant result into equivalence.",
+    "power_policy": "Targets are feasibility-based minimums. After G0, a blinded variance-only pilot may increase all remaining seeds uniformly; it may never reduce targets or inspect arm labels/outcomes."
+  },
+  "manifest_policy": {
+    "data_root": "logs/campaigns/calibrated_bias_aware_fusion_v2",
+    "required_sha256_roles": [
+      "protocol",
+      "primary_world",
+      "shipout_world",
+      "method_artifact"
+    ],
+    "legacy_input_datasets": [],
+    "must_reject": [
+      "missing or extra scheduled units",
+      "missing artifact hash",
+      "artifact hash mismatch",
+      "legacy world or dataset token",
+      "overlapping train validation or test session IDs",
+      "GT or oracle fields in online inputs",
+      "detector confidence used as R bias or GP feature",
+      "any undeclared exclusion"
+    ]
+  }
+}

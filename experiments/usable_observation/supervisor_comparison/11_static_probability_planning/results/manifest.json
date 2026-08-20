@@ -1,0 +1,64 @@
+{
+  "experiment_id": "EXP-STATIC-PUSE-PLANNING-V1",
+  "status": "exploratory_offline_mechanism",
+  "run_count": 4800,
+  "selected_route_count": 12,
+  "candidate_evaluation_count": 96,
+  "tasks": [
+    "mc_blind_L",
+    "mc_m2_w2e_traverse",
+    "full_traverse_handover",
+    "route_tall_shadow_west"
+  ],
+  "methods": [
+    "availability_blind_shortest",
+    "r_over_p_shortcut",
+    "explicit_hit_miss"
+  ],
+  "input_sha256": {
+    "experiments/usable_observation/supervisor_comparison/11_static_probability_planning/experiment.yaml": "6ac7e867c8fd384b8e2c5d97848cecaf22e3aa5af67f15e8f6afb4f57bb992cd",
+    "logs/studies/pixel_ground_path/e7_ipm_zero_parameter/summary.json": "e37fe6dd383ad85b960773998be42820c0c4e4f106dedafea57a600ab61f9ead",
+    "src/sim/gazebo_worlds/worlds/warehouse_full_4cam.world.sdf": "5c3347010ff1a72fcd0c91447bb2db26013e9168322a57581ec73134698d934d",
+    "src/experiments/config/world_profiles.yaml": "664a9118966fac8351880c5909764e95f1c62e6f5bf14c0f7e553aff5c473eef",
+    "src/experiments/config/tasks.yaml": "d1b0fb02e8625b2f693e253787f9b648947cd29590dc8fee05ff9c69f41c4a7d",
+    "logs/visibility_comparison/spawn_grid_20260727/gp/camera_A/det_hit_expected_kernel_gp.npz": "57269808ae0fd545b3f548a14cf491d5b58081e0281ab6ce421835fd2232b6da",
+    "logs/visibility_comparison/spawn_grid_20260727/gp/camera_B/det_hit_expected_kernel_gp.npz": "e0850ce1b119c5d2c83673547d79bf12b07c3838ee68052d4942952c60066bcc",
+    "logs/visibility_comparison/spawn_grid_20260727/gp/camera_C/det_hit_expected_kernel_gp.npz": "e1c19e80fc44fb0ae4e20aeafa51fa9acb75b8d27d728c46b076026ee7d7a6e5",
+    "logs/visibility_comparison/spawn_grid_20260727/gp/camera_D/det_hit_expected_kernel_gp.npz": "6edeba3e686aa00d3164d07067692586726da53cc8bae4c2e59e1f987b1c45bb"
+  },
+  "output_sha256": {
+    "RESULTS.md": "b9e9ff235d6a513888e3f1cb4b30b7a8cf614c7a2831355a121b452c71977043",
+    "figures/01_four_camera_static_fields.png": "89e1ff5a573cd35eb35f58a917de145f36134bff825badc27c2b0fbf6ad337d2",
+    "figures/02_selected_routes.png": "29e1712ff20c3e093972bfbf2bd66dee082f1494b62b4b3cb06a0d1ce287b27f",
+    "figures/03_planning_tradeoff.png": "e9c9206d660c413ce4d7248da8a580e32505409016852c06f3666ea28a4f69fa",
+    "figures/04_monte_carlo_outcomes.png": "81c7deea87dfa2195625dfc504cf185cb9d4539827e7935360562244059a1ed8",
+    "figures/05_hit_miss_vs_r_over_p.png": "dbe1710043e02078e56583ab379170017117ebbfceff773315d47c4b79eb7407",
+    "results/candidate_routes.csv": "bb6af632cb5cc2249d217b7dc30bbc17ed058aa2fd40707385735ff43e483ca2",
+    "results/monte_carlo_runs.csv": "d9b7367e4ea1c18804caa7675c40ec7699918b090df6f76d9e24a2bff6cbff24",
+    "results/monte_carlo_summary.csv": "8659b35716c6a9ae236685c432559b49e4d7709c78d68701800fd200cb100038",
+    "results/selected_routes.csv": "5b5da7e64c850204205512162bc391dad0c2a1316cfda7d5c2017c651bc6d6b3",
+    "results/static_planning_inputs.npz": "4ec1c84af76e00bd05952bbddc26cb1b9ea2d59474ee5b436a019f97c728cb89"
+  },
+  "metric_contract": {
+    "metric_object": "filter_belief_model_replay",
+    "reference": "sampled_linear_gaussian_model_truth",
+    "experimental_unit": "run",
+    "n_runs_per_task_method": 400,
+    "online_planning_inputs": [
+      "frozen P_conservative_plan_map",
+      "current belief covariance",
+      "route candidates"
+    ],
+    "evaluation_only_inputs": [
+      "full-fit P_mean_map replay probability",
+      "sampled truth error"
+    ],
+    "status": "exploratory_offline_mechanism"
+  },
+  "limitations": [
+    "closed_loop_Gazebo_navigation_result",
+    "heldout_probability_calibration",
+    "real_robot_result",
+    "simultaneous_multicamera_fusion_result"
+  ]
+}

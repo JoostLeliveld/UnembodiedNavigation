@@ -32,7 +32,12 @@ def _make_contact_bridge(context, *args, **kwargs):
     if LaunchConfiguration("bridge_contacts").perform(context).lower() != "true":
         return []
     world_file = LaunchConfiguration("world").perform(context)
-    world_name = world_file.replace(".world.sdf", "").replace(".sdf", "")
+    # Use the same explicit namespace as the clock, reset, control and
+    # ground-truth bridges.  Deriving this from the filename is wrong for a
+    # perfectly valid SDF whose internal <world name> differs from its file
+    # name, and previously made the contact bridge silently subscribe to a
+    # non-existent Gazebo topic.
+    world_name = LaunchConfiguration("world_name").perform(context)
     world_path = os.path.join(
         get_package_share_directory("sim"), "gazebo_worlds", "worlds", world_file
     )

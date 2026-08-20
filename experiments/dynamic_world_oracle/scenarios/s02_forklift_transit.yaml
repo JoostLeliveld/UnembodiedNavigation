@@ -1,0 +1,63 @@
+# A forklift drives the length of the south perimeter aisle, west to east.
+#
+# Where s01 puts one obstacle down and takes it away, this one keeps the obstacle
+# moving for six seconds, so the oracle has to track a shadow that sweeps across
+# the floor rather than one that switches on and off.
+#
+# choose_obstacle_pose.py --model dyn_forklift --lane south_perimeter_aisle --along x
+# gives the reason for this route: at x = -9 the forklift costs camera A 109
+# visible cells and the other three nothing; at x = +9 it costs camera C 117 and
+# the other three nothing; and it crosses over around x = 0, where both A and C
+# lose part of their map at once. One transit therefore exercises a clean
+# single-camera occlusion, a hand-over, and the mirror-image single-camera case.
+#
+# The aisle is 1.53 m wide and the forklift is 1.02 m across, leaving 0.26 m
+# either side. It travels 18 m in 6 s = 3 m/s, which is brisk for a warehouse
+# truck but keeps the run short; the pose is commanded afresh every 0.2 s sensor
+# tick, so the obstacle advances 0.6 m between rendered frames.
+
+scenario_id: s02_forklift_transit
+description: >-
+  A forklift-shaped obstacle drives the full length of the south perimeter aisle,
+  handing its occlusion shadow from camera A to camera C, then stops and is removed.
+
+world_file: warehouse_full_4cam_dynamic.world.sdf
+world_name: warehouse_full_4cam_dynamic
+
+seed: 20260811
+step_size_s: 0.001
+tick_s: 0.2
+duration_s: 10.0
+
+target_height_m: 0.35
+grid_resolution_m: 0.25
+
+events:
+  - t: 1.0
+    kind: spawn
+    entity: forklift_01
+    model: dyn_forklift
+    pose: {x: -9.0, y: -7.585, z: 0.0, yaw: 0.0}
+    note: enters at the west end of the south perimeter aisle, inside camera A's field
+
+  - t: 2.0
+    kind: move
+    entity: forklift_01
+    pose: {x: 9.0, y: -7.585, z: 0.0, yaw: 0.0}
+    duration_s: 6.0
+    note: 18 m transit at 3 m/s; the occlusion shadow hands over from camera A to camera C
+
+  - t: 8.0
+    kind: stop
+    entity: forklift_01
+    note: parks at the east end, now occluding only camera C
+
+  - t: 9.0
+    kind: remove
+    entity: forklift_01
+    note: drives out of the world; the oracle map must return to its t=0 state
+
+captures:
+  start_t: 0.4
+  period_s: 0.8
+  end_t: 10.0

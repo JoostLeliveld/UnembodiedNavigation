@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": null,
+  "study": "monocular_depth_adapter",
+  "source_path": "logs/studies/monocular_depth_adapter/bs1_native_flip/depth_maps.png",
+  "source_sha256": "1e8e0a43861da9a20ebff36b337dabf120cbb27b00ea4c475983a988d6360336",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

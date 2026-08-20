@@ -1,5 +1,9 @@
 # Implementation Plan — Full-Warehouse Four-Camera Commissioning
 
+> **Superseded historical plan.** Calibration TODOs and error claims below predate deletion of
+> all fitted projection corrections. Do not resume them as current work; use
+> `docs/localization_metrics.md` and the active research registry.
+
 ## Scope lock
 
 - **World:** `warehouse_full_4cam.world.sdf` (24.5 × 20.5 m).

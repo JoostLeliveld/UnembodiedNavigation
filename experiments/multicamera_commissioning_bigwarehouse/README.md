@@ -39,8 +39,8 @@ evidence_paths:
 - experiments/multicamera_commissioning_bigwarehouse/GATE_PROVENANCE.md
 archive_rule: Keep chosen captures manifests calibrations and detector; cold-store
   superseded raw captures.
-next_action: Preserve commissioning evidence; do not treat v2/v3/v4 terms as identified
-  camera calibration until the E6 confound is resolved.
+next_action: Preserve detector/readiness evidence and retire v2/v3/v4 calibration
+  effects; the current runtime uses zero-parameter floor-plane IPM.
 ```
 
 <!-- RESEARCH-METADATA:END -->

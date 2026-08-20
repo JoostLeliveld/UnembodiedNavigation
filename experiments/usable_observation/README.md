@@ -80,6 +80,14 @@ is a pending follow-up.
 | Tests | `tests/observability/` |
 | Docs | `docs/usable_observation/{audit,data_contract}.md` (method/confidence/final reports pending) |
 
+## Supervisor method comparison
+
+The visual-first explanation package for constant/distance, FOV/range, depth/raycast, GP,
+hybrid and CAD-reference methods is in
+[`supervisor_comparison/`](supervisor_comparison/README.md). It standardizes the begin state,
+planner field, update mechanism and route views required for every method before results are
+added.
+
 ## Status
 
 - P1 contract — **DONE**, Gate 1 PASS (23 tests).

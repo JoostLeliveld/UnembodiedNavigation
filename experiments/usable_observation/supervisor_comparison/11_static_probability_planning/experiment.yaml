@@ -1,0 +1,68 @@
+experiment_id: EXP-STATIC-PUSE-PLANNING-V1
+status: exploratory_offline_mechanism
+world: warehouse_full_4cam.world.sdf
+
+tasks:
+  - mc_blind_L
+  - mc_m2_w2e_traverse
+  - full_traverse_handover
+  - route_tall_shadow_west
+
+methods:
+  - availability_blind_shortest
+  - r_over_p_shortcut
+  - explicit_hit_miss
+
+static_probability:
+  planning_field_key: P_conservative_plan_map
+  stochastic_replay_field_key: P_mean_map
+  camera_policy: frozen_best_expected_information_at_reference_prior
+  simultaneous_fusion: false
+  note: >-
+    These are existing detector-hit GP fields fitted to the 2026-07-27 four-camera
+    spawn grid. They are frozen for this experiment. The full-fit posterior mean
+    drives model-based stochastic replay; it is not independent held-out truth.
+
+conditional_measurement_covariance:
+  source_context: PG-IPM-CURRENT
+  source_arm: raw IPM (floor, no correction)
+  construction: >-
+    Per-camera isotropic sigma is sqrt((radial_sd^2 + lateral_sd^2) / 2).
+    The current balanced set-pose dataset contains 1844 detections. Bias is omitted
+    to isolate availability modelling.
+
+dynamics:
+  state: [x, y, theta]
+  observation: [x, y]
+  dt_s: 0.4
+  speed_mps: 0.6
+  process_noise_xy: 0.012
+  process_noise_theta: 0.05
+  initial_sigma_xy_m: 0.05
+  initial_sigma_theta_rad: 0.05
+
+route_search:
+  grid_connectivity: 8
+  prevent_diagonal_corner_cutting: true
+  candidate_reliability_lambdas: [0.0, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0]
+  objective: path_length_m + uncertainty_weight_per_m2 * integral_position_trace_m3
+  uncertainty_weight_per_m2: 50.0
+
+monte_carlo:
+  seeds: 400
+  base_seed: 260812
+  runtime_filter: realised_hit_or_no_update
+  measurement_noise: zero_mean_gaussian_R_cond
+  process_noise: linearised_unicycle_Q
+
+evaluation:
+  experimental_unit: run
+  reference: sampled_linear_gaussian_model_truth
+  evaluation_only_inputs:
+    - P_mean_map used as stochastic replay probability
+    - sampled truth error
+  forbidden_claims:
+    - closed_loop_Gazebo_navigation_result
+    - heldout_probability_calibration
+    - real_robot_result
+    - simultaneous_multicamera_fusion_result

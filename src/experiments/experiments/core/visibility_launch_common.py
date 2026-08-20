@@ -101,6 +101,13 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'optimizer_route_seed_mode': 'explicit',
     'use_hierarchical': 'false',
     'global_planner_mode': 'efe',
+    'preselected_route_json': '',
+    'preselected_route_sha256': '',
+    'preselected_route_source_path': '',
+    'preselected_route_source_sha256': '',
+    'preselected_route_clearance_m': '0.25',
+    'preselected_route_endpoint_tolerance_m': '0.25',
+    'preselected_route_sample_step_m': '0.04',
     'global_horizon': '60',
     'global_dt': '0.0',
     'local_horizon': '12',
@@ -382,6 +389,37 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'optimizer_route_seed_mode': _launch_value(context, 'optimizer_route_seed_mode', PAPER_LAUNCH_DEFAULTS['optimizer_route_seed_mode']),
         'use_hierarchical': _as_bool(_launch_value(context, 'use_hierarchical', PAPER_LAUNCH_DEFAULTS['use_hierarchical'])),
         'global_planner_mode': _launch_value(context, 'global_planner_mode', PAPER_LAUNCH_DEFAULTS['global_planner_mode']).strip().lower(),
+        'preselected_route_json': _launch_value(
+            context, 'preselected_route_json', PAPER_LAUNCH_DEFAULTS['preselected_route_json']
+        ).strip(),
+        'preselected_route_sha256': _launch_value(
+            context, 'preselected_route_sha256', PAPER_LAUNCH_DEFAULTS['preselected_route_sha256']
+        ).strip(),
+        'preselected_route_source_path': _launch_value(
+            context,
+            'preselected_route_source_path',
+            PAPER_LAUNCH_DEFAULTS['preselected_route_source_path'],
+        ).strip(),
+        'preselected_route_source_sha256': _launch_value(
+            context,
+            'preselected_route_source_sha256',
+            PAPER_LAUNCH_DEFAULTS['preselected_route_source_sha256'],
+        ).strip(),
+        'preselected_route_clearance_m': float(_launch_value(
+            context,
+            'preselected_route_clearance_m',
+            PAPER_LAUNCH_DEFAULTS['preselected_route_clearance_m'],
+        )),
+        'preselected_route_endpoint_tolerance_m': float(_launch_value(
+            context,
+            'preselected_route_endpoint_tolerance_m',
+            PAPER_LAUNCH_DEFAULTS['preselected_route_endpoint_tolerance_m'],
+        )),
+        'preselected_route_sample_step_m': float(_launch_value(
+            context,
+            'preselected_route_sample_step_m',
+            PAPER_LAUNCH_DEFAULTS['preselected_route_sample_step_m'],
+        )),
         'global_horizon': int(_launch_value(context, 'global_horizon', PAPER_LAUNCH_DEFAULTS['global_horizon'])),
         'global_dt': float(_launch_value(context, 'global_dt', PAPER_LAUNCH_DEFAULTS['global_dt'])),
         'local_horizon': int(_launch_value(context, 'local_horizon', PAPER_LAUNCH_DEFAULTS['local_horizon'])),
@@ -716,9 +754,14 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         cfg['use_ambiguity'] = True
         cfg['use_obs_risk'] = True
     visibility_artifact_path = str(cfg.get('visibility_artifact_path', '') or '').strip()
-    # Only the visibility-aware planner (C2) consumes the GP artifact. C1
-    # (constant_R_efe) and C0 (geometric_shortest_path) are camera-model-free.
-    if planner == 'visibility_aware_efe':
+    # Only an actually solved visibility-aware global plan consumes this GP.
+    # A preselected route may retain the same local/filter configuration, but
+    # its route is hash-bound and no global EFE objective is evaluated.
+    if (
+        planner == 'visibility_aware_efe'
+        and str(cfg.get('global_planner_mode', 'efe')).strip().lower()
+        != 'preselected_route'
+    ):
         if not visibility_artifact_path:
             raise RuntimeError(
                 "visibility_artifact_path must be provided explicitly — "
@@ -829,6 +872,85 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         else:
             collision_geometry_json = serialize_collision_geometry_from_world(world_path)
 
+    global_planner_mode = str(cfg.get('global_planner_mode', 'efe') or 'efe').strip().lower()
+    allowed_global_modes = ('efe', 'geometric_shortest_path', 'preselected_route')
+    if global_planner_mode not in allowed_global_modes:
+        raise RuntimeError(
+            f"global_planner_mode must be one of: {', '.join(allowed_global_modes)}"
+        )
+
+    route_argument_names = (
+        'preselected_route_json',
+        'preselected_route_sha256',
+        'preselected_route_source_path',
+        'preselected_route_source_sha256',
+    )
+    route_args_present = any(str(cfg.get(name, '') or '').strip() for name in route_argument_names)
+    preselected_route_validation_json = ''
+    if global_planner_mode == 'preselected_route':
+        if not bool(cfg.get('use_hierarchical', False)):
+            raise RuntimeError(
+                "global_planner_mode='preselected_route' requires use_hierarchical:=true "
+                "so the existing belief-based local waypoint tracker executes the route"
+            )
+        if waypoints_json:
+            raise RuntimeError(
+                "preselected_route accepts one start-to-goal polyline; task waypoint tours "
+                "would change the goal during execution and are not allowed"
+            )
+        endpoint_tolerance_m = float(
+            cfg.get('preselected_route_endpoint_tolerance_m', 0.25)
+        )
+        if endpoint_tolerance_m < 0.0 or endpoint_tolerance_m > 0.25:
+            raise RuntimeError(
+                "preselected_route_endpoint_tolerance_m must be within [0, 0.25] m "
+                "under the frozen one-cell endpoint gate"
+            )
+        sample_step_m = float(cfg.get('preselected_route_sample_step_m', 0.04))
+        if sample_step_m <= 0.0 or sample_step_m > 0.04:
+            raise RuntimeError(
+                "preselected_route_sample_step_m must be within (0, 0.04] m so "
+                "between-vertex clearance is not under-sampled"
+            )
+        try:
+            from unav_common.preselected_route import validate_preselected_route
+
+            validated_route = validate_preselected_route(
+                str(cfg.get('preselected_route_json', '') or ''),
+                str(cfg.get('preselected_route_sha256', '') or ''),
+                start_xy=(float(start['x']), float(start['y'])),
+                goal_xy=(goal_x, goal_y),
+                driveable_geometry_json=driveable_geometry_json,
+                declared_clearance_m=float(
+                    cfg.get('preselected_route_clearance_m', 0.25)
+                ),
+                source_path=str(cfg.get('preselected_route_source_path', '') or ''),
+                expected_source_sha256=str(
+                    cfg.get('preselected_route_source_sha256', '') or ''
+                ),
+                endpoint_tolerance_m=endpoint_tolerance_m,
+                sample_step_m=sample_step_m,
+            )
+        except (OSError, ValueError) as exc:
+            raise RuntimeError(f"preselected route gate failed: {exc}") from exc
+        # Downstream components receive only the verified canonical bytes and
+        # resolved source path, never the caller's formatting/path aliases.
+        cfg['preselected_route_json'] = validated_route.canonical_json
+        cfg['preselected_route_sha256'] = validated_route.sha256
+        cfg['preselected_route_source_path'] = validated_route.source_path
+        cfg['preselected_route_source_sha256'] = validated_route.source_sha256
+        preselected_route_validation_json = _json.dumps(
+            validated_route.provenance_dict(),
+            sort_keys=True,
+            separators=(',', ':'),
+            allow_nan=False,
+        )
+    elif route_args_present:
+        raise RuntimeError(
+            "preselected route arguments were supplied but global_planner_mode is not "
+            "'preselected_route'; refusing to ignore a hash-bound route"
+        )
+
     cfg = dict(cfg)
     cfg.update({
         'profile': profile,
@@ -852,6 +974,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         'collision_geometry_json': collision_geometry_json,
         'driveable_geometry_json': driveable_geometry_json,
         'visibility_artifact_path': visibility_artifact_path,
+        'preselected_route_validation_json': preselected_route_validation_json,
     })
     return cfg
 
@@ -1197,6 +1320,27 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'optimizer_terminal_goal_tolerance_m': cfg['optimizer_terminal_goal_tolerance_m'],
                 'optimizer_route_seed_mode': cfg['optimizer_route_seed_mode'],
                 'use_hierarchical': cfg.get('use_hierarchical', False),
+                'global_planner_mode': cfg.get('global_planner_mode', 'efe'),
+                'preselected_route_json': cfg.get('preselected_route_json', ''),
+                'preselected_route_sha256': cfg.get('preselected_route_sha256', ''),
+                'preselected_route_source_path': cfg.get(
+                    'preselected_route_source_path', ''
+                ),
+                'preselected_route_source_sha256': cfg.get(
+                    'preselected_route_source_sha256', ''
+                ),
+                'preselected_route_clearance_m': cfg.get(
+                    'preselected_route_clearance_m', 0.25
+                ),
+                'preselected_route_endpoint_tolerance_m': cfg.get(
+                    'preselected_route_endpoint_tolerance_m', 0.25
+                ),
+                'preselected_route_sample_step_m': cfg.get(
+                    'preselected_route_sample_step_m', 0.04
+                ),
+                'preselected_route_validation_json': cfg.get(
+                    'preselected_route_validation_json', ''
+                ),
                 'global_horizon': cfg.get('global_horizon', 60),
                 'global_dt': cfg.get('global_dt', 0.0),
                 'local_horizon': cfg.get('local_horizon', 12),
@@ -1315,6 +1459,16 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
     is needed. Every camera's detection is projected with its own calibration,
     so the fused correction is genuinely multi-camera.
     """
+    frozen_batch_ids = ('camera_A', 'camera_B', 'camera_C', 'camera_D')
+    profile_camera_ids = tuple(cfg.get('profile_camera_ids', ()))
+    if profile_camera_ids != frozen_batch_ids:
+        raise RuntimeError(
+            "multicam_belief uses the frozen batched-four-camera runtime contract "
+            f"{frozen_batch_ids}, but the world profile declares {profile_camera_ids}. "
+            "Refusing to silently omit cameras. The registry-driven scheduled path "
+            "can smoke-test A-E, but a five-camera simultaneous detector/replay "
+            "contract must be commissioned separately before fusion evidence is logged."
+        )
     sim_pkg = FindPackageShare('sim')
     world_sdf = PathJoinSubstitution([sim_pkg, 'gazebo_worlds', 'worlds', cfg['world']])
     batched = Node(
@@ -1611,6 +1765,15 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'optimizer_route_seed_mode': cfg['optimizer_route_seed_mode'],
             'use_hierarchical': cfg.get('use_hierarchical', False),
             'global_planner_mode': cfg.get('global_planner_mode', 'efe'),
+            'preselected_route_json': cfg.get('preselected_route_json', ''),
+            'preselected_route_sha256': cfg.get('preselected_route_sha256', ''),
+            'preselected_route_source_path': cfg.get('preselected_route_source_path', ''),
+            'preselected_route_source_sha256': cfg.get(
+                'preselected_route_source_sha256', ''
+            ),
+            'preselected_route_validation_json': cfg.get(
+                'preselected_route_validation_json', ''
+            ),
             'global_horizon': cfg.get('global_horizon', 60),
             'global_dt': cfg.get('global_dt', 0.0),
             'local_horizon': cfg.get('local_horizon', 12),

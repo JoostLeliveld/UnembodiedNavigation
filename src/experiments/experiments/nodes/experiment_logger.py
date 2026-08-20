@@ -164,8 +164,18 @@ class ExperimentLogger(Node):
         self.declare_parameter('optimizer_multistart', False)
         self.declare_parameter('optimizer_multistart_include_direct', True)
         self.declare_parameter('optimizer_initial_routes_json', '')
+        self.declare_parameter('optimizer_terminal_goal_tolerance_m', 0.0)
         self.declare_parameter('optimizer_route_seed_mode', 'explicit')
         self.declare_parameter('use_hierarchical', False)
+        self.declare_parameter('global_planner_mode', 'efe')
+        self.declare_parameter('preselected_route_json', '')
+        self.declare_parameter('preselected_route_sha256', '')
+        self.declare_parameter('preselected_route_source_path', '')
+        self.declare_parameter('preselected_route_source_sha256', '')
+        self.declare_parameter('preselected_route_clearance_m', 0.25)
+        self.declare_parameter('preselected_route_endpoint_tolerance_m', 0.25)
+        self.declare_parameter('preselected_route_sample_step_m', 0.04)
+        self.declare_parameter('preselected_route_validation_json', '')
         self.declare_parameter('global_horizon', 60)
         self.declare_parameter('global_dt', 0.0)
         self.declare_parameter('local_horizon', 12)
@@ -200,6 +210,9 @@ class ExperimentLogger(Node):
         self.declare_parameter('nogo_near_weight', 50.0)
         self.declare_parameter('use_belief_nogo_cost', False)
         self.declare_parameter('nogo_belief_kappa', 1.0)
+        # Frozen planner-observation-model provenance. The launch path already
+        # forwards this parameter to both the planner and logger.
+        self.declare_parameter('use_hit_miss_mixture', False)
         self.declare_parameter('nogo_mode', 'keep_out')
         self.declare_parameter('yolo_model', '')
         self.declare_parameter('yolo_device', '')
@@ -320,10 +333,40 @@ class ExperimentLogger(Node):
         self.optimizer_initial_routes_json = str(
             self.get_parameter('optimizer_initial_routes_json').value
         )
+        self.optimizer_terminal_goal_tolerance_m = float(
+            self.get_parameter('optimizer_terminal_goal_tolerance_m').value
+        )
         self.optimizer_route_seed_mode = str(
             self.get_parameter('optimizer_route_seed_mode').value or 'explicit'
         )
         self.use_hierarchical = bool(self.get_parameter('use_hierarchical').value)
+        self.global_planner_mode = str(
+            self.get_parameter('global_planner_mode').value or 'efe'
+        ).strip().lower()
+        self.preselected_route_json = str(
+            self.get_parameter('preselected_route_json').value or ''
+        )
+        self.preselected_route_sha256 = str(
+            self.get_parameter('preselected_route_sha256').value or ''
+        )
+        self.preselected_route_source_path = str(
+            self.get_parameter('preselected_route_source_path').value or ''
+        )
+        self.preselected_route_source_sha256 = str(
+            self.get_parameter('preselected_route_source_sha256').value or ''
+        )
+        self.preselected_route_clearance_m = float(
+            self.get_parameter('preselected_route_clearance_m').value
+        )
+        self.preselected_route_endpoint_tolerance_m = float(
+            self.get_parameter('preselected_route_endpoint_tolerance_m').value
+        )
+        self.preselected_route_sample_step_m = float(
+            self.get_parameter('preselected_route_sample_step_m').value
+        )
+        self.preselected_route_validation_json = str(
+            self.get_parameter('preselected_route_validation_json').value or ''
+        )
         self.global_horizon = int(self.get_parameter('global_horizon').value)
         self.global_dt = float(self.get_parameter('global_dt').value)
         self.local_horizon = int(self.get_parameter('local_horizon').value)
@@ -385,6 +428,9 @@ class ExperimentLogger(Node):
         self.nogo_near_weight = float(self.get_parameter('nogo_near_weight').value)
         self.use_belief_nogo_cost = bool(self.get_parameter('use_belief_nogo_cost').value)
         self.nogo_belief_kappa = float(self.get_parameter('nogo_belief_kappa').value)
+        self.use_hit_miss_mixture = bool(
+            self.get_parameter('use_hit_miss_mixture').value
+        )
         self.nogo_mode = str(self.get_parameter('nogo_mode').value or 'keep_out')
         self.yolo_model = str(self.get_parameter('yolo_model').value)
         self.yolo_device = str(self.get_parameter('yolo_device').value)
@@ -535,6 +581,7 @@ class ExperimentLogger(Node):
             'nogo_near_weight': self.nogo_near_weight,
             'use_belief_nogo_cost': self.use_belief_nogo_cost,
             'nogo_belief_kappa': self.nogo_belief_kappa,
+            'use_hit_miss_mixture': self.use_hit_miss_mixture,
             'nogo_mode': self.nogo_mode,
             'yolo_model': self.yolo_model,
             'yolo_device': self.yolo_device,
@@ -578,8 +625,20 @@ class ExperimentLogger(Node):
             'optimizer_multistart': self.optimizer_multistart,
             'optimizer_multistart_include_direct': self.optimizer_multistart_include_direct,
             'optimizer_initial_routes_json': self.optimizer_initial_routes_json,
+            'optimizer_terminal_goal_tolerance_m': self.optimizer_terminal_goal_tolerance_m,
             'optimizer_route_seed_mode': self.optimizer_route_seed_mode,
             'use_hierarchical': self.use_hierarchical,
+            'global_planner_mode': self.global_planner_mode,
+            'preselected_route_json': self.preselected_route_json,
+            'preselected_route_sha256': self.preselected_route_sha256,
+            'preselected_route_source_path': self.preselected_route_source_path,
+            'preselected_route_source_sha256': self.preselected_route_source_sha256,
+            'preselected_route_clearance_m': self.preselected_route_clearance_m,
+            'preselected_route_endpoint_tolerance_m': (
+                self.preselected_route_endpoint_tolerance_m
+            ),
+            'preselected_route_sample_step_m': self.preselected_route_sample_step_m,
+            'preselected_route_validation_json': self.preselected_route_validation_json,
             'global_horizon': self.global_horizon,
             'global_dt': self.global_dt,
             'local_horizon': self.local_horizon,

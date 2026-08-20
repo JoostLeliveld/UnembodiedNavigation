@@ -1,0 +1,77 @@
+{
+  "study": "monocular_depth_adapter/frozen_depth_v1",
+  "status": "mechanism_evidence",
+  "date": "2026-08-11",
+  "dataset": {
+    "frames": 12,
+    "camera": "A",
+    "world": "warehouse_aws",
+    "resolution": "1280x720",
+    "scored_pixels": 451005,
+    "scored_region": "all valid non-floor pixels",
+    "evaluation_reference": "co-located Gazebo optical-axis depth",
+    "anchor_inputs": [
+      "fixed camera calibration",
+      "2-D open-floor mask"
+    ],
+    "evaluation_only_inputs": [
+      "Gazebo depth"
+    ]
+  },
+  "models": [
+    {
+      "id": "dav2_metric_indoor_small",
+      "label": "DA-V2 metric S",
+      "raw_mae_m": 0.621,
+      "floor_mae_m": 0.420,
+      "oracle_mae_m": 0.415,
+      "floor_abs_rel": 0.065,
+      "floor_within_25pct": 0.965,
+      "forward_s": 0.324,
+      "uncertainty_pass_s": 0.340,
+      "peak_gpu_mib": 627
+    },
+    {
+      "id": "dav2_relative_small",
+      "label": "DA-V2 relative S",
+      "raw_mae_m": null,
+      "floor_mae_m": 0.337,
+      "oracle_mae_m": 0.276,
+      "floor_abs_rel": 0.051,
+      "floor_within_25pct": 0.980,
+      "forward_s": 0.321,
+      "uncertainty_pass_s": 0.335,
+      "peak_gpu_mib": 627
+    },
+    {
+      "id": "metric3d_v2_vit_small",
+      "label": "Metric3D v2 ViT-S",
+      "raw_mae_m": 5.195,
+      "floor_mae_m": 0.327,
+      "oracle_mae_m": 0.305,
+      "floor_abs_rel": 0.051,
+      "floor_within_25pct": 0.966,
+      "forward_s": 0.988,
+      "uncertainty_pass_s": 1.004,
+      "peak_gpu_mib": 732
+    },
+    {
+      "id": "unidepth_v2_vits14",
+      "label": "UniDepthV2 ViT-S",
+      "raw_mae_m": 1.632,
+      "floor_mae_m": 0.247,
+      "oracle_mae_m": 0.235,
+      "floor_abs_rel": 0.037,
+      "floor_within_25pct": 0.990,
+      "forward_s": 6.016,
+      "uncertainty_pass_s": 6.045,
+      "peak_gpu_mib": 1757
+    }
+  ],
+  "provenance": {
+    "result_summary": "logs/studies/monocular_depth_adapter/RESULTS.md",
+    "accuracy_run_log": "logs/studies/monocular_depth_adapter/truth_evaluation/console_2026-08-11_inverse_depth_fixed.log",
+    "benchmark": "logs/studies/monocular_depth_adapter/bs1_native_flip/benchmark.json",
+    "model_output_figure": "logs/studies/monocular_depth_adapter/bs1_native_flip/depth_maps.png"
+  }
+}

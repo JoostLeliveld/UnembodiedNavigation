@@ -10,14 +10,21 @@ Regenerate with `python3 scripts/research/promote_figures.py`.
 | Experiment | Study | Figures |
 |---|---|---|
 | EXP-PRECISION | `achievable_precision_map` | 2 |
-| EXP-BELIEF | `bayesian_filter_showcase` | 6 |
+| _unmapped_ | `all_aisle_coverage` | 1048 |
+| EXP-AVAIL-SOURCE | `availability_paper` | 8 |
+| EXP-BELIEF | `bayesian_filter_showcase` | 40 |
 | EXP-DRIFT | `calibration_drift_lifecycle` | 4 |
+| EXP-DYN-ORACLE | `dynamic_world_oracle` | 280 |
 | EXP-HIT-MISS | `efe_hit_miss_mixture` | 4 |
 | EXP-BIAS | `external_camera_bias_model` | 18 |
+| _unmapped_ | `filter_notebook` | 3009 |
 | _unmapped_ | `fused_observation_model` | 8 |
+| _unmapped_ | `monocular_depth_adapter` | 14 |
 | EXP-COMMISSION | `multicamera_commissioning_bigwarehouse` | 4 |
 | EXP-CAM-MGMT | `multicamera_fusion_extension` | 2 |
 | EXP-NET-COMMISSION | `network_commissioning_realism` | 6 |
+| _unmapped_ | `offset_state_closed_loop` | 39 |
+| _unmapped_ | `offset_state_model` | 14 |
 | EXP-RCOND | `operational_residual_rcond` | 6 |
 | EXP-PIXEL-GROUND | `pixel_ground_path` | 4 |
 | EXP-PLANNER-BRANCH | `planner_covariance_branching` | 6 |
@@ -26,5 +33,6 @@ Regenerate with `python3 scripts/research/promote_figures.py`.
 
 ## Experiments with no figures
 
+- `EXP-AVAIL-CL`
 - `EXP-CL-CAL`
 - `EXP-USABLE`

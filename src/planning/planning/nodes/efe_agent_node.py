@@ -187,6 +187,22 @@ def _route_states(start_state: np.ndarray, waypoints) -> np.ndarray:
     return states
 
 
+def _polyline_states(points, *, initial_yaw: float = 0.0) -> np.ndarray:
+    """Build drawable states from an exact polyline without adding/removing points."""
+
+    route = np.asarray(points, dtype=float)
+    if route.ndim != 2 or route.shape[0] < 2 or route.shape[1] != 2:
+        raise ValueError("polyline must have shape (N,2), N >= 2")
+    states = np.zeros((len(route), 3), dtype=float)
+    states[:, :2] = route
+    states[0, 2] = float(initial_yaw)
+    for index in range(len(route) - 1):
+        delta = route[index + 1] - route[index]
+        states[index, 2] = math.atan2(float(delta[1]), float(delta[0]))
+    states[-1, 2] = states[-2, 2]
+    return states
+
+
 class EfeAgentNode(UnicyclePlannerNode):
     NODE_NAME = 'efe_agent'
     PLANNER_CLASS = UnicyclePlannerBase
@@ -197,16 +213,102 @@ class EfeAgentNode(UnicyclePlannerNode):
         if not self.has_parameter('cmd_topic'):
             self.declare_parameter('cmd_topic', '/cmd_vel')
         self.cmd_topic = self.get_parameter('cmd_topic').value
-        # Global route source for the hierarchical planner. 'efe' runs the
-        # one-shot global EFE solve (C1/C2). 'geometric_shortest_path' selects
-        # the shortest valid lane-graph route over the same driveable + no-go
-        # geometry and hands it to the same local tracker, with no camera-
-        # reliability / EFE reasoning (C0 conventional-navigation baseline).
+        # Global route source for the hierarchical planner. 'preselected_route'
+        # executes one launch-validated, hash-bound polyline and never invokes a
+        # global EFE or shortest-path solve.
         if not self.has_parameter('global_planner_mode'):
             self.declare_parameter('global_planner_mode', 'efe')
         self.global_planner_mode = str(
             self.get_parameter('global_planner_mode').value or 'efe'
         ).strip().lower()
+        if self.global_planner_mode not in (
+            'efe', 'geometric_shortest_path', 'preselected_route'
+        ):
+            raise RuntimeError(
+                "global_planner_mode must be 'efe', 'geometric_shortest_path', "
+                "or 'preselected_route'"
+            )
+
+        route_parameter_defaults = {
+            'preselected_route_json': '',
+            'preselected_route_sha256': '',
+            'preselected_route_source_path': '',
+            'preselected_route_source_sha256': '',
+            'preselected_route_validation_json': '',
+        }
+        for name, default in route_parameter_defaults.items():
+            if not self.has_parameter(name):
+                self.declare_parameter(name, default)
+        self.preselected_route_json = str(
+            self.get_parameter('preselected_route_json').value or ''
+        )
+        self.preselected_route_sha256 = str(
+            self.get_parameter('preselected_route_sha256').value or ''
+        )
+        self.preselected_route_source_path = str(
+            self.get_parameter('preselected_route_source_path').value or ''
+        )
+        self.preselected_route_source_sha256 = str(
+            self.get_parameter('preselected_route_source_sha256').value or ''
+        )
+        self.preselected_route_validation_json = str(
+            self.get_parameter('preselected_route_validation_json').value or ''
+        )
+        self._preselected_route_points = None
+        self._preselected_route_provenance = None
+        if self.global_planner_mode == 'preselected_route':
+            if not self.use_hierarchical:
+                raise RuntimeError(
+                    "preselected_route requires use_hierarchical=true so the "
+                    "belief-based local tracker executes the frozen polyline"
+                )
+            try:
+                launch_validation = json.loads(self.preselected_route_validation_json)
+                if not isinstance(launch_validation, dict):
+                    raise ValueError('validation record must be a JSON object')
+                if launch_validation.get('validation_status') != 'passed':
+                    raise ValueError("validation_status must be 'passed'")
+                from unav_common.preselected_route import validate_preselected_route
+
+                validated = validate_preselected_route(
+                    self.preselected_route_json,
+                    self.preselected_route_sha256,
+                    start_xy=launch_validation['registered_start_xy'],
+                    goal_xy=launch_validation['registered_goal_xy'],
+                    driveable_geometry_json=self.driveable_geometry_json,
+                    declared_clearance_m=float(
+                        launch_validation['declared_clearance_m']
+                    ),
+                    source_path=self.preselected_route_source_path,
+                    expected_source_sha256=self.preselected_route_source_sha256,
+                    endpoint_tolerance_m=float(
+                        launch_validation['endpoint_tolerance_m']
+                    ),
+                    sample_step_m=float(
+                        launch_validation['clearance_sample_step_m']
+                    ),
+                )
+            except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise RuntimeError(
+                    f"preselected route failed planner-side identity/geometry revalidation: {exc}"
+                ) from exc
+            self.preselected_route_json = validated.canonical_json
+            self.preselected_route_sha256 = validated.sha256
+            self.preselected_route_source_path = validated.source_path
+            self.preselected_route_source_sha256 = validated.source_sha256
+            self._preselected_route_points = validated.points
+            self._preselected_route_provenance = validated.provenance_dict()
+        elif any((
+            self.preselected_route_json,
+            self.preselected_route_sha256,
+            self.preselected_route_source_path,
+            self.preselected_route_source_sha256,
+            self.preselected_route_validation_json,
+        )):
+            raise RuntimeError(
+                "preselected route parameters were supplied for a different "
+                "global_planner_mode; refusing to ignore them"
+            )
         self.cmd_pub = self.create_publisher(Twist, self.cmd_topic, 10)
         self.active_execution_diag_pub = self.create_publisher(
             Float64MultiArray, '/planner/active_execution_diagnostics', 10
@@ -321,20 +423,29 @@ class EfeAgentNode(UnicyclePlannerNode):
                 nogo_weight=local_nogo_weight,
                 nogo_safe_distance=local_nogo_safe_distance,
             )
-            self.global_planner = self._construct_planner(
-                horizon=self.global_horizon,
-                dt=self.global_dt,
-                use_ambiguity=self.global_use_ambiguity,
-                optimizer_multistart=self.global_optimizer_multistart,
-                optimizer_warm_start_shift_steps=self._warm_start_shift_steps_for_rate(
-                    self.plan_rate
-                ),
+            if self.global_planner_mode != 'preselected_route':
+                self.global_planner = self._construct_planner(
+                    horizon=self.global_horizon,
+                    dt=self.global_dt,
+                    use_ambiguity=self.global_use_ambiguity,
+                    optimizer_multistart=self.global_optimizer_multistart,
+                    optimizer_warm_start_shift_steps=self._warm_start_shift_steps_for_rate(
+                        self.plan_rate
+                    ),
+                )
+            global_description = (
+                f"preselected route {self.preselected_route_sha256[:12]} "
+                "(no global planner constructed)"
+                if self.global_planner_mode == 'preselected_route'
+                else (
+                    f"global H={self.global_horizon} (dt={self.global_dt:.3f}s, "
+                    f"lookahead={self.global_horizon * self.global_dt:.1f}s, "
+                    f"ambiguity={self.global_use_ambiguity}, "
+                    f"multistart={self.global_optimizer_multistart})"
+                )
             )
             self.get_logger().info(
-                f"[hierarchical] global H={self.global_horizon} (dt={self.global_dt:.3f}s, "
-                f"lookahead={self.global_horizon * self.global_dt:.1f}s, "
-                f"ambiguity={self.global_use_ambiguity}, "
-                f"multistart={self.global_optimizer_multistart}) -> waypoints "
+                f"[hierarchical] {global_description} -> waypoints "
                 f"(spacing {self.waypoint_spacing_m} m) -> local H={self.local_horizon} "
                 f"(rate={self.local_plan_rate} Hz, ambiguity={self.local_use_ambiguity}, "
                 f"visibility={self.local_use_visibility_model}, "
@@ -405,6 +516,35 @@ class EfeAgentNode(UnicyclePlannerNode):
         else:
             self._pending_global_artifact = artifact
 
+    def _save_preselected_route_artifacts(self, states, final_goal):
+        """Persist the exact canonical bytes that the local tracker received."""
+
+        if self._global_artifact_saved:
+            return
+        provenance = dict(self._preselected_route_provenance or {})
+        meta = {
+            'selected_source': 'preselected_route',
+            'global_planner_mode': 'preselected_route',
+            'global_solve_invoked': False,
+            'route_sha256': self.preselected_route_sha256,
+            'route_source_path': self.preselected_route_source_path,
+            'route_source_sha256': self.preselected_route_source_sha256,
+            'goal_xy': [float(final_goal[0]), float(final_goal[1])],
+            'n_states': int(np.asarray(states).shape[0]),
+            'n_waypoints': int(len(self._preselected_route_points or ())),
+        }
+        artifact = {
+            'states': np.asarray(states, dtype=float),
+            'waypoints': list(self._preselected_route_points or ()),
+            'meta': meta,
+            'canonical_route_json': self.preselected_route_json,
+            'preselected_route_provenance': provenance,
+        }
+        if self._run_dir:
+            self._write_global_artifact(artifact)
+        else:
+            self._pending_global_artifact = artifact
+
     def _write_global_artifact(self, artifact):
         try:
             run_dir = self._run_dir
@@ -422,6 +562,27 @@ class EfeAgentNode(UnicyclePlannerNode):
                     f.write(f'{i},{float(w[0]):.6f},{float(w[1]):.6f}\n')
             with open(os.path.join(run_dir, 'global_plan_meta.json'), 'w', encoding='utf-8') as f:
                 json.dump(meta, f, indent=2)
+            if 'canonical_route_json' in artifact:
+                # No newline: the file bytes themselves have the registered hash.
+                with open(
+                    os.path.join(run_dir, 'preselected_route.json'),
+                    'w',
+                    encoding='utf-8',
+                    newline='',
+                ) as f:
+                    f.write(artifact['canonical_route_json'])
+                with open(
+                    os.path.join(run_dir, 'preselected_route_provenance.json'),
+                    'w',
+                    encoding='utf-8',
+                ) as f:
+                    json.dump(
+                        artifact['preselected_route_provenance'],
+                        f,
+                        indent=2,
+                        sort_keys=True,
+                        allow_nan=False,
+                    )
             self._global_artifact_saved = True
             self._pending_global_artifact = None
             self.get_logger().info(
@@ -463,6 +624,12 @@ class EfeAgentNode(UnicyclePlannerNode):
                 and self._global_goal_xy is not None
                 and float(np.linalg.norm(final_goal - self._global_goal_xy))
                 > self.goal_replan_move_m):
+            if self.global_planner_mode == 'preselected_route':
+                self._fatal_experiment_stop(
+                    "Mission goal changed during preselected-route execution; "
+                    "the frozen contract permits exactly one start-to-goal polyline"
+                )
+                return
             self.get_logger().info(
                 f"[hierarchical] mission goal advanced "
                 f"({self._global_goal_xy[0]:.2f},{self._global_goal_xy[1]:.2f}) -> "
@@ -471,6 +638,59 @@ class EfeAgentNode(UnicyclePlannerNode):
             self._hier_phase = 'GLOBAL'
 
         if self._hier_phase == 'GLOBAL':
+            if self.global_planner_mode == 'preselected_route':
+                if not self._preselected_route_points:
+                    self._fatal_experiment_stop(
+                        "Preselected route was not available after startup validation"
+                    )
+                    return
+                registered_goal = np.asarray(
+                    self._preselected_route_provenance['registered_goal_xy'], dtype=float
+                )
+                if float(np.linalg.norm(final_goal - registered_goal)) > 1.0e-6:
+                    self._fatal_experiment_stop(
+                        "Mission goal does not equal the task goal used by the "
+                        "preselected-route launch gate"
+                    )
+                    return
+
+                # Preserve every selected coordinate exactly. In particular, do
+                # not densify, smooth, truncate, or append the live belief/goal.
+                self._waypoints = [
+                    (float(point[0]), float(point[1]))
+                    for point in self._preselected_route_points
+                ]
+                self._wp_idx = 0
+                self._hier_phase = 'LOCAL'
+                self._global_goal_xy = np.asarray(final_goal, dtype=float)
+                self._global_solve_done = True
+                try:
+                    first_waypoint = np.asarray(self._waypoints[0], dtype=float)
+                    seed = self.planner._controls_for_waypoints(
+                        m0[:3], [first_waypoint]
+                    )
+                    self.planner.prev_controls_flat = np.asarray(
+                        seed, dtype=float
+                    ).reshape(-1)
+                except Exception:
+                    pass
+
+                route_states = _polyline_states(
+                    self._waypoints, initial_yaw=float(m0[2])
+                )
+                route_result = SimpleNamespace(states=route_states)
+                self.path_pub.publish(
+                    self._build_path_message(
+                        route_result, final_goal, append_goal=False
+                    )
+                )
+                self._save_preselected_route_artifacts(route_states, final_goal)
+                self.get_logger().info(
+                    f"[preselected_route] accepted {len(self._waypoints)} exact "
+                    f"waypoints, sha256={self.preselected_route_sha256}; "
+                    "switching to belief-based local tracking without a global solve"
+                )
+                return
             if str(getattr(self, 'global_planner_mode', 'efe')) == 'geometric_shortest_path':
                 # C0 conventional-navigation baseline: pick the shortest-time valid
                 # lane-graph route over the SAME driveable + no-go geometry as

@@ -158,7 +158,7 @@ def fig_b1(rows, audit):
                     rotation=90, va="center", ha="center", fontweight="bold", fontsize=10)
     fig.suptitle(
         "The deployed correction removes the along-bearing bias entirely — but leaves a "
-        "CROSS-bearing bias it cannot touch (camera C: +0.078 m)",
+        "historical-v2 CROSS-bearing bias it cannot touch (camera C: +0.0769 m)",
         fontweight="bold", fontsize=12.5, y=1.005)
     fig.tight_layout()
     save(fig, "fig_b1_residual_scatter_pre_post")

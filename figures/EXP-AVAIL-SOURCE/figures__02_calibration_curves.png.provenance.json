@@ -1,0 +1,8 @@
+{
+  "promoted": "2026-08-18",
+  "experiment_id": "EXP-AVAIL-SOURCE",
+  "study": "availability_paper",
+  "source_path": "logs/studies/availability_paper/figures/02_calibration_curves.png",
+  "source_sha256": "9aa81944b3335407b2630a2791e5aeb3902feca7b545398aa8748a19a5087827",
+  "note": "Promoted from ignored run output; regenerate by rerunning the study."
+}

@@ -1,5 +1,10 @@
 # Gate parameter provenance — audit of 2026-07-16
 
+> **Historical commissioning audit.** Projection v2/v3/v4 and all Camera C/D correction
+> effects below are retired. Detector/runtime-readiness provenance remains useful, but these
+> residual magnitudes are not current accuracy or identified camera calibration. See
+> `docs/localization_metrics.md`.
+
 Every commissioning gate value in `config/study.yaml` was traced to its origin
 before the paper campaign. Summary: **all eight values are copied library
 defaults, none is derived from data, and none originates in the

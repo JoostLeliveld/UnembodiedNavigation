@@ -79,6 +79,16 @@ def generate_launch_description():
         value="nvidia",
         condition=IfCondition(LaunchConfiguration("nvidia_offload")),
     )
+    # The server-only camera path uses EGL rather than GLX.  PRIME's GLX
+    # variables alone leave GLVND free to select Mesa, which then tries (and on
+    # this hybrid laptop fails) to create a DRI2 screen.  This matches the
+    # already commissioned four-camera launch and makes the headless sensor
+    # renderer select NVIDIA as well.
+    set_egl_vendor = SetEnvironmentVariable(
+        name="__EGL_VENDOR_LIBRARY_FILENAMES",
+        value="/usr/share/glvnd/egl_vendor.d/10_nvidia.json",
+        condition=IfCondition(LaunchConfiguration("nvidia_offload")),
+    )
 
 
     gazebo = IncludeLaunchDescription(
@@ -92,7 +102,7 @@ def generate_launch_description():
         launch_arguments={
             "gz_args": [
                 PythonExpression([
-                    "'-r -s ' if '",
+                    "'-r -s --headless-rendering ' if '",
                     LaunchConfiguration("headless"),
                     "'.strip().lower() in ('1', 'true', 'yes', 'on') else '-r '",
                 ]),
@@ -114,5 +124,6 @@ def generate_launch_description():
         set_ign_resource_path,
         set_prime_offload,
         set_glx_vendor,
+        set_egl_vendor,
         gazebo,
     ])

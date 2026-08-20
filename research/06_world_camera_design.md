@@ -41,10 +41,15 @@ Overlap fraction, camera-poor fraction and symmetry are **UNMEASURED** under a d
 
 ---
 
-## 2. The two worlds, as measured
+## 2. The worlds, as measured
 
-The **two-world hard rule** stands: method development happens only in `warehouse_aws`;
-`warehouse_full_4cam` evaluates frozen methods. It constrains §3.
+**The two-world hard rule was RETIRED on 2026-08-20.** It confined method development to
+`warehouse_aws` and reserved `warehouse_full_4cam` for frozen-method evaluation. It predated
+`warehouse_v2`, which is now the development world: five cameras mounted below the roofline,
+crossing angles spread uniformly over 0-180 degrees, six independent cycles in its lane
+network, and a restock that moves 13,554 camera-cell sight-line pairs against the old world's
+575. Nothing is reserved any more. Choose a world for what it measures, and record the reason
+in the study README.
 
 | Property | `warehouse_aws` | `warehouse_full_4cam` |
 |---|---|---|
@@ -82,10 +87,9 @@ The principal comparison needs three world states:
    regions, for route discrimination;
 3. a **changed-layout variant** of (2), for staleness and transfer.
 
-States (1) and (2) map onto the existing pair. State (3) **does not exist and cannot be
-created without a decision**: the two-world rule reserves `warehouse_full_4cam` for frozen
-evaluation, so a changed variant of it is either an explicit exception to that rule or a
-third world. `whatif_layout_change.py` predicts the effect of dropping a 2.6 m pallet into an
+States (1) and (2) map onto the older pair. State (3) now **exists**: `warehouse_v2` ships
+with a matched restocked variant (`warehouse_v2_shipout`), generated from one layout so the
+lane network is identical between them. The rule that once blocked this is retired. `whatif_layout_change.py` predicts the effect of dropping a 2.6 m pallet into an
 aisle but never measures it, and rungs D3–D5 of the geometry ladder are unimplemented. This is
 `U3`, and it blocks the B4 transfer gate, the D4/D5 arms and route archetype R5 below.
 
@@ -122,9 +126,11 @@ changes two properties at once is not admissible as an OFAT arm.
 | Optics | 90° HFOV, 58.7° derived VFOV | identical | identical | identical |
 | Sensor / rate | 1280 × 720, 5 Hz render, ≈2.2 Hz effective | identical | identical | identical |
 | Floor footprint along axis | ≈0.85 m to ≈14.1 m from the mount, axis crossing at 4.64 m | identical | identical | identical |
-| Persistent cross-bearing bias floor | 0.0071 m | 0.0123 m | **0.0768 m** | 0.0328 m |
+| **Current IPM mean measurement error** (balanced set-pose data) | 0.0646 m | 0.0681 m | 0.0666 m | 0.0671 m |
+| **Current IPM signed lateral bias** (same data) | −0.0068 m | +0.0144 m | +0.0188 m | −0.0160 m |
+| Historical v2 signed lateral bias (confounded driving data; not current accuracy) | −0.0071 m | +0.0123 m | +0.0769 m | −0.0323 m |
 | Conditional σ (`R_cond`, anchor 0.05 m) | 0.0267 m | 0.0127 m | 0.0250 m | 0.0224 m |
-| Best-precision share of reachable floor | 31.0 % | 28.0 % | 14.8 % | 26.2 % |
+| Historical-v2 best-precision share (sensitivity only) | 31.0 % | 28.0 % | 14.8 % | 26.2 % |
 | Best-coverage share of reachable floor | 25.0 % | 25.0 % | 25.0 % | 25.0 % |
 
 Range is a shared row: capture medians run 5.4–12.8 m across the three commissioning
@@ -133,15 +139,17 @@ in kind but not in effect — the 2.61 m tall segments sit on the north side of 
 and the south side of the east block, so the north and south pairs have structurally
 different blind regions, but the per-camera blind areas are **UNMEASURED**.
 
-The bias floor and the conditional σ are **different quantities**, not a conflict: camera C
-carries the large persistent lateral bias (+78 mm, measured in `EXP-BIAS` and reproduced as a
-real fault in the belief study) while its conditional *spread* is unremarkable. That
-separation is the empirical content of C1, and it is why `EXP-RCOND` concluded the floor is
-bias-bound rather than data-bound.
+The current IPM rows are the only fair A–D accuracy comparison: all four cameras are scored
+on the same detector dataset, four-yaw set-pose protocol, projection, and truth reference.
+The historical v2 row is retained only to identify the input to the locked belief-mechanism
+study. Its camera, route, region, and yaw are confounded; the +76.9 mm Camera C component
+collapses to +8.1 mm after accounting for the robot silhouette. It must not be interpreted as
+current Camera C accuracy or hardware quality. See `docs/localization_metrics.md`.
 
 Sources: `docs/warehouse_full_4cam_layout.md`; `src/sim/models/external_camera*/model.sdf`;
 `logs/studies/achievable_precision_map/exp1_precision_vs_coverage/summary.json`;
-`logs/studies/bayesian_filter_showcase/exp1_graceful_vs_trusting/summary.json`;
+`logs/studies/pixel_ground_path/e7_ipm_zero_parameter/summary.json`;
+`logs/studies/bayesian_filter_showcase/exp1_graceful_vs_trusting/summary.json` (historical v2 mechanism only);
 `logs/studies/operational_residual_rcond/exp1_timing_and_coverage/timing_and_coverage.json`.
 Floor-footprint figures are derived from the documented mount geometry and should be
 recomputed with the camera model rather than quoted from here.
@@ -162,11 +170,12 @@ residual structure. E6 prevents attributing the last item uniquely to camera cal
   from the deliberately asymmetric tall segments.
 - Handover and overlap behaviour: source switching, cross-camera disagreement in overlap
   bands, and fallback on active-camera loss.
-- Installed-view residual structure and its consequences: historical fits show an 11×
-  spread in residual floor (7.1 to 76.8 mm), correlated-error overconfidence, and different
+- Installed-view residual structure and its consequences: retired-v2 driving data show an 11×
+  spread in signed residual magnitude (7.1 to 76.9 mm), correlated-error overconfidence, and different
   availability/precision selections on 15.7 % of the reachable floor. Camera-specific bias
   is a hypothesis until RQ15's grouped identifiability design separates it from route,
-  region, yaw and robot silhouette.
+  region, yaw and robot silhouette. The current balanced-IPM A–D comparison instead spans
+  only 64.6–68.1 mm in mean camera-measurement error.
 - Mount-role transfer: whether a field fitted on three mounts predicts the fourth (split S4).
 
 **Not supported.**
@@ -222,7 +231,7 @@ composition and its in-FOV / out-of-FOV balance.
 | S3 | Changed-layout holdout | Layout state | Staleness and transfer | Blocked by `U3` |
 | S4 | Leave-one-camera-out | Camera id | **Mount-role transfer only** — whether a field fitted on three mounts predicts the fourth. Never optical transfer | Required, and mandatory for covariance work: the anchored leave-one-out reference understates camera A by ~4.2× |
 | S5 | Leave-one-yaw-out | Robot heading band | Guards against fitting at one heading and testing at another | Required. Two of the three existing bias captures are single straight lines at two fixed yaws, and the third repeats the first route (median nearest neighbour 0.006 m) |
-| S6 | Second world | World | External validity | Optional, in tension with the two-world rule, and **confounded as it stands**: the two worlds differ in mount height *and* detector, so a second-world holdout would not isolate the world. See `U3` |
+| S6 | Second world | World | External validity | **Confounded for the older pair**: `warehouse_aws` and `warehouse_full_4cam` differ in mount height *and* detector, so a holdout across them would not isolate the world. `warehouse_v2` + `warehouse_v2_shipout` are matched by construction and do isolate it. |
 
 A fold containing no out-of-FOV opportunities is invalid: it measures conditional detection
 quality, not usable-observation probability. This is the failure mode of the inherited
@@ -271,7 +280,7 @@ lifecycle question and must never be enabled in the primary comparison of either
 
 ## 10. Open items owned by this document
 
-`U3` (layout-change definition and the second-world/two-world conflict), `U11` (the 0.35 m
+`U3` (layout-change definition; the two-world half is retired), `U11` (the 0.35 m
 target height versus the robot's ≈0.20 m silhouette) and `U13` (whether an unavoidable
 camera-poor region exists) originate here and are recorded with the rest in
 [`03_assumptions.md`](03_assumptions.md) §8. Until they are resolved, R4 and R5 cannot be

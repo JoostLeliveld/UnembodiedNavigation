@@ -329,3 +329,52 @@ def test_success_is_published_only_after_the_full_stop_burst(
     module.StudyRouteDriver._finalize_termination(complete)
     assert complete.succeeded is True
     assert json.loads(complete_path.read_text(encoding="utf-8"))["route_complete"] is True
+
+
+AWS_STUDY = ROOT / "experiments" / "filter_notebook" / "config" / "aws_study.yaml"
+
+
+def test_waypoint_polyline_routes_load_as_given() -> None:
+    """A route may carry `waypoints:` instead of `goal:`, for turning routes.
+
+    The follower has always tracked an arbitrary waypoint list; only this loader
+    restricted routes to two points. Straight start/goal routes must be untouched.
+    """
+    module = _module()
+
+    _config, corner = module.load_route(
+        AWS_STUDY, route_name="apron_corner_left", lateral_offset_m=0.0
+    )
+    assert corner == pytest.approx([(-3.50, -4.30), (-0.50, -4.30), (-0.50, -2.20)])
+    # the start point is included exactly once, and the spawn agrees with it
+    spawn = module.route_spawn_pose(AWS_STUDY, route_name="apron_corner_left", lateral_offset_m=0.0)
+    assert spawn[:2] == pytest.approx((-3.50, -4.30))
+
+    _config, arc = module.load_route(
+        AWS_STUDY, route_name="apron_arc_left", lateral_offset_m=0.0
+    )
+    assert len(arc) == 9
+    assert arc[0] == pytest.approx((-3.20, -4.60))
+    assert arc[-1] == pytest.approx((-0.70, -2.10))
+    # it really does turn: the polyline is longer than the straight line across it
+    straight = ((arc[-1][0] - arc[0][0]) ** 2 + (arc[-1][1] - arc[0][1]) ** 2) ** 0.5
+    assert module.route_distance_m(arc) > straight * 1.1
+
+
+def test_straight_routes_still_two_points_and_offsettable() -> None:
+    module = _module()
+    _config, pts = module.load_route(
+        AWS_STUDY, route_name="apron_diagonal_ne", lateral_offset_m=0.0
+    )
+    assert pts == pytest.approx([(-3.00, -4.55), (-0.55, -2.10)])
+    _config, shifted = module.load_route(
+        AWS_STUDY, route_name="apron_diagonal_ne", lateral_offset_m=0.5
+    )
+    assert shifted != pytest.approx(pts)
+
+
+def test_lateral_offset_on_a_polyline_is_rejected_not_ignored() -> None:
+    """Silently ignoring it would move the spawn but not the route."""
+    module = _module()
+    with pytest.raises(ValueError, match="no well-defined meaning"):
+        module.load_route(AWS_STUDY, route_name="apron_arc_left", lateral_offset_m=0.5)

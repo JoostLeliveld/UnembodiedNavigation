@@ -36,11 +36,16 @@ evidence_paths:
 - logs/studies/external_camera_bias_model/exp2_two_dof_bias/summary.json
 - logs/studies/external_camera_bias_model/exp3_projection_pipeline_minimal/summary.json
 archive_rule: Preserve summaries provenance residual tables and decisive figures permanently.
-next_action: Preserve as locked residual evidence; E6 blocks camera-bias attribution
-  until yaw route and region are independently varied.
+next_action: Preserve as locked historical mechanism evidence; all fitted projection
+  terms are deleted, and no v2/v3/v4 magnitude or camera rank is current.
 ```
 
 <!-- RESEARCH-METADATA:END -->
+
+> **Historical projection study.** Every v2/v3/v4 calibration and every 77 mm Camera C
+> quantity below belongs to the retired `MC-DRIVE-V2` context. The current runtime uses
+> zero-parameter floor-plane IPM. This study remains locked mechanism evidence, but it is not
+> a current camera-accuracy comparison. See `docs/localization_metrics.md`.
 
 
 **Question.** After the *already-deployed* per-camera along-bearing projection
@@ -68,8 +73,8 @@ exactly as the runtime does.
 
 ## What IS ours (the audit)
 
-1. **Post-correction conditional covariance** `R_cond,c(x)` — the residual that
-   survives the deployed fix. This is the honest noise floor.
+1. **Historical post-correction conditional covariance** `R_cond,c(x)` — the residual that
+   survived the then-deployed v2 fix. This is a study input, not a current runtime field.
 2. **Network heterogeneity** — how much `R_cond` varies *between* cameras and
    *within* a camera across range. The planner currently collapses this to one
    scalar blended with detection probability; the size of that modelling gap is
@@ -88,13 +93,14 @@ exp1 audits; **exp2 fixes**. Three independent lines converged on the same next 
 result, `operational_residual_rcond/exp2`'s bias-bound `R_cond`), so exp2 fits and
 selects among 2-DOF candidates under leave-region-out CV.
 
-Result: `MD_plus_cross_const` — keep the frozen deployed along-bearing correction, add
+Historical result at the time: `MD_plus_cross_const` — keep the then-deployed along-bearing correction, add
 **one** cross-bearing parameter — wins on B/C/D and loses on A, and one measurable
 quantity predicts which: `|b_cross|/σ_cross` (A 0.16 → −27 mm, B 1.05 → +0 mm,
-D 1.30 → +10 mm, C 4.66 → +42 mm). Camera C's remaining bias drops 77→4 mm and its
-conditional covariance improves by 2.4 nats, which is the loop closing on the camera
-whose bias was the blocker. **Nothing is wired into the runtime** — the projection has
-one along-bearing DOF, so deployment is a separate deliberate change.
+D 1.30 → +10 mm, C 4.66 → +42 mm). Under those retired inputs, Camera C's signed
+cross-bearing bias dropped 77→4 mm and its
+conditional covariance improved by 2.4 nats. Later yaw/silhouette validation invalidated
+the camera-calibration interpretation, and the current runtime carries no fitted projection
+degree of freedom.
 
 ## Reproduce
 
@@ -119,6 +125,6 @@ projection, a correction, or a covariance.
 | Spearman, binning | `scripts/shared/metrics` (`spearman`, `binned`) |
 | camera models from SDF | `reliability.projection.camera_model_from_world` |
 | pixel→world + deployed correction | `reliability.projection._project_pixel_to_world` |
-| deployed calibration loader | `reliability.projection.load_projection_calibration` |
+| historical calibration loader (deleted from runtime) | experiment-local legacy loader |
 | nearest-stamp truth join | `attach_evaluation_truth._nearest` |
 | along-bearing fit (for model comparison only) | mirrors `fit_projection_calibration._fit_line` |

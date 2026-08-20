@@ -33,11 +33,18 @@ promotion_gate: Demonstrate nontrivial decision disagreement.
 evidence_paths:
 - logs/studies/achievable_precision_map/exp1_precision_vs_coverage/summary.json
 archive_rule: Preserve summary map and generator.
-next_action: Use the locked fields in camera-management experiments only after source
-  comparison.
+next_action: Do not use for current camera management; rebuild only after current-runtime
+  persistent floors are identified on a fair yaw-region design.
 ```
 
 <!-- RESEARCH-METADATA:END -->
+
+> **Historical-v2 sensitivity map, not a current camera-selection result.** The map hard-codes
+> residual magnitudes from the retired, route/yaw-confounded `MC-DRIVE-V2` captures. It shows
+> the mechanism by which heterogeneous persistent floors can change selection, but its 15.7%,
+> per-camera shares, and Camera C territory must not be used by current camera management.
+> Rebuild only after current persistent floors are identified on a fair design. See
+> `docs/localization_metrics.md`.
 
 
 **Claims served:** C1, C3, and C5; intended figure F05 in
@@ -53,13 +60,13 @@ precisely, no matter how reliably it is seen.
 
 Is that distinction big enough to change which camera a planner should use?
 
-## Answer (exp1)
+## Historical-input answer (exp1)
 
-**Yes, on 15.7 % of the reachable floor.** Achievable precision is 2.6 cm median when you
+**Under the retired-v2 residual constants, yes, on 15.7 % of the reachable floor.** Achievable precision is 2.6 cm median when you
 select for it, 3.5 cm if you follow coverage, and 3.6 cm worse in the region where the
 two criteria disagree. Camera C is most *available* on 25 % of the floor but most
-*informative* on only 14.8 % — coverage-only planning over-trusts it across roughly a
-tenth of the warehouse.
+*informative* on only 14.8 %. Those values are a sensitivity result for that frozen
+historical field, not current camera rankings.
 
 ## Run
 

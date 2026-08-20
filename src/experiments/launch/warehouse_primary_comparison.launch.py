@@ -66,7 +66,21 @@ def _planner_precision_arguments():
                               description="Multistart route-seed source: 'explicit' uses optimizer_initial_routes_json; 'lane_graph' generates condition-neutral lane-centre Manhattan seeds from the driveable map."),
         DeclareLaunchArgument('use_hierarchical', default_value='false'),
         DeclareLaunchArgument('global_planner_mode', default_value='efe',
-                              description="Global route source: 'efe' (one-shot global EFE solve, C1/C2) or 'geometric_shortest_path' (shortest valid lane-graph route, C0 baseline; skips the EFE solve)."),
+                              description="Global route source: 'efe' (one-shot global EFE solve, C1/C2), 'geometric_shortest_path' (C0), or 'preselected_route' (hash-bound external polyline; no global solve)."),
+        DeclareLaunchArgument('preselected_route_json', default_value='',
+                              description='Exactly one JSON [[x,y],...] polyline; canonical bytes are SHA-256 checked before launch.'),
+        DeclareLaunchArgument('preselected_route_sha256', default_value='',
+                              description='Expected SHA-256 of the canonical preselected route JSON.'),
+        DeclareLaunchArgument('preselected_route_source_path', default_value='',
+                              description='Original offline route-geometry artifact from which the polyline was selected.'),
+        DeclareLaunchArgument('preselected_route_source_sha256', default_value='',
+                              description='Expected SHA-256 of the complete source route-geometry artifact.'),
+        DeclareLaunchArgument('preselected_route_clearance_m', default_value='0.25',
+                              description='Declared minimum clearance inside the frozen driveable union.'),
+        DeclareLaunchArgument('preselected_route_endpoint_tolerance_m', default_value='0.25',
+                              description='Maximum start/end error; frozen protocol forbids values above 0.25 m.'),
+        DeclareLaunchArgument('preselected_route_sample_step_m', default_value='0.04',
+                              description='Maximum segment-walk step for clearance validation; must be <=0.04 m.'),
         DeclareLaunchArgument('global_horizon', default_value='60'),
         DeclareLaunchArgument('global_dt', default_value='0.0',
                               description='Global planner step size; 0.0 inherits dt.'),
@@ -112,6 +126,7 @@ def _launch_setup(context, *args, **kwargs):
     if planner not in ALLOWED_PLANNERS:
         raise RuntimeError(f"planner must be one of: {', '.join(ALLOWED_PLANNERS)}")
 
+    requested_global_mode = str(cfg.get('global_planner_mode', 'efe') or 'efe').strip().lower()
     cfg['planner'] = planner
     cfg['use_rviz'] = bool(cfg.get('use_rviz', False))
 
@@ -134,6 +149,15 @@ def _launch_setup(context, *args, **kwargs):
     else:
         cfg['use_visibility_model'] = True
         cfg['global_planner_mode'] = 'efe'
+
+    if requested_global_mode == 'preselected_route':
+        # This is an execution source, not a fourth planner condition. Both
+        # route arms use the same belief/filter/local-tracker configuration and
+        # skip every global EFE/shortest-path solve.
+        cfg['global_planner_mode'] = 'preselected_route'
+        cfg['use_visibility_model'] = False
+        cfg['use_ambiguity'] = False
+        cfg['use_obs_risk'] = False
 
     cfg = resolve_world_setup(cfg)
     return build_agent_runtime_actions(cfg)

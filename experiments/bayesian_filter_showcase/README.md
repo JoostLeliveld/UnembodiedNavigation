@@ -38,7 +38,8 @@ evidence_paths:
 - logs/studies/bayesian_filter_showcase/exp1_graceful_vs_trusting/summary.json
 - logs/studies/bayesian_filter_showcase/exp2_does_it_generalize/summary.json
 archive_rule: Preserve all summaries and provenance as headline evidence.
-next_action: Carry the frozen belief fields into the matched closed-loop campaign.
+next_action: Preserve the correlation-floor mechanism only; recompute residual magnitudes
+  under a frozen current-runtime manifest before any closed-loop use.
 ```
 
 <!-- RESEARCH-METADATA:END -->

@@ -192,11 +192,20 @@ def load_route(
     route_name: str,
     lateral_offset_m: float = 0.0,
 ) -> tuple[dict[str, Any], list[tuple[float, float]]]:
-    """Load a named straight route and shift it left of travel by an offset.
+    """Load a named route and shift it left of travel by an offset.
 
     The sign of ``lateral_offset_m`` is defined in the direction of travel:
     positive is left of the start-to-goal vector.  This makes the three offset
     values in the study configuration work identically in both directions.
+
+    A route is normally ``start`` + ``goal``, which gives the two-point straight
+    line every commissioning pass uses.  A route may instead carry an explicit
+    ``waypoints`` polyline, which is returned as-is after the ``start`` point --
+    the follower in this module has always tracked an arbitrary waypoint list and
+    turns toward each one, so only this loader was restricting routes to straight
+    lines.  Turning routes need it to measure what a heading estimate does through
+    a corner.  ``lateral_offset_m`` has no single meaning for a polyline and is
+    rejected rather than silently ignored.
     """
 
     path = Path(study_path).expanduser().resolve()
@@ -211,6 +220,20 @@ def load_route(
         raise ValueError(f"Unknown route {route_name!r}; choose one of: {available}")
 
     start = dict(selected.get("start") or {})
+
+    if selected.get("waypoints"):
+        if abs(float(lateral_offset_m)) > 1.0e-9:
+            raise ValueError(
+                f"Route {route_name!r} is a waypoint polyline; lateral_offset_m has no "
+                "well-defined meaning for it, so pass 0.0"
+            )
+        points = [(float(start["x"]), float(start["y"]))]
+        for step in selected["waypoints"]:
+            points.append((float(step["x"]), float(step["y"])))
+        if len(points) < 2:
+            raise ValueError(f"Route {route_name!r} needs at least one waypoint")
+        return config, points
+
     goal = dict(selected.get("goal") or {})
     start_xy = (float(start["x"]), float(start["y"]))
     goal_xy = (float(goal["x"]), float(goal["y"]))

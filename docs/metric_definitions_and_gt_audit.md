@@ -1,5 +1,9 @@
 # Metric definitions & ground-truth audit (2026-07-01)
 
+> This is the ground-truth/column audit. For current versus historical projection contexts,
+> camera-measurement versus belief metrics, run IDs, and allowed statistical comparisons, use
+> [`localization_metrics.md`](localization_metrics.md).
+
 **Headline:** the experiment's reference pose `truth_*` is **`/odom` = DiffDrive wheel
 odometry**, not the true robot pose. Wheel-odom drifts (worst in turns). So **every
 metric measured against `truth_*` is contaminated by odom drift** — most importantly
@@ -21,7 +25,7 @@ pose (correct) · **[EST]** = an estimate (not a reference) · **[PHYS]** = real
 | `odom_noisy_x/y` | `/odom` + injected encoder noise | EKF motion-prediction input |
 | `planner_belief_x/y/yaw` | planner **EKF belief** (predict `/odom_noisy` + correct pixel) | **[EST]** — the controller navigates by this. Accurate ~0.05–0.10 m vs GT |
 | `state_x/y` (`/state/bev`) | **camera-only** per-frame world pos (pixel→homography) | **[EST]** legacy/diagnostic, **NOT used by planner** (camera_xy_only) |
-| `pred_world_x/y_calibrated` (perception.csv) | YOLO bbox-bottom → ground → affine | **[EST]** the camera measurement; ~0.03–0.06 m vs GT even in turns |
+| `pred_world_x/y_calibrated` (historical perception.csv) | YOLO bbox-bottom → ground → retired fitted correction | **[EST]** historical camera measurement; never use its old ~0.03–0.06 m diagnostic as current IPM accuracy |
 
 ## Localization / belief error metrics
 | column | definition | flag |

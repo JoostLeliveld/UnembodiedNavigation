@@ -1,0 +1,144 @@
+# One long route for localization_reading_story, in the same schema as
+# experiments/filter_notebook/config/aws_study.yaml (loaded from it, so every other
+# key is that file's). Cleared by check_route_clearance.py before capture.
+study_id: localization_reading_story_long_route
+world: warehouse_aws.world.sdf
+world_name: warehouse_aws
+camera_ids:
+- camera_A
+cameras:
+  camera_A:
+    mount: south wall, centre, 4.80 m, pitched 0.92 rad down, facing north
+    world_include: external_camera
+    image_topic: /external_camera/image_raw
+    pixel_topic: /perception/camera_A/pixel_pose
+    diagnostics_topic: /perception/camera_A/detection_diagnostics
+    observation_topic: /perception/camera_observation/camera_A
+    calibration_id: warehouse_aws_camera_A
+collection:
+  passive_only: true
+  control_odom_topic: /odom
+  operational_odom_topic: /odom_noisy
+  duration_clock: simulation
+  command_topic: /cmd_vel
+  arrival_radius_m: 0.2
+  start_hold_s: 2.0
+  routes:
+  - name: long_snake
+    purpose: 47 m through three north-south aisles, both cross aisles and the apron,
+      with eight 90-degree turns, revisiting places at opposite headings. Built only
+      from lanes the existing routes already prove clear; checked with check_route_clearance.py
+      at margin 0.26 m, 83% clean / 7% partial / 11% hidden, camera range 1.2-8.5
+      m.
+    start:
+      x: -2.92
+      y: -4.6
+      yaw: 1.5708
+    waypoints:
+    - x: -2.92
+      y: 1.72
+    - x: -0.97
+      y: 1.72
+    - x: -0.97
+      y: -4.3
+    - x: 1.07
+      y: -4.3
+    - x: 1.07
+      y: 1.72
+    - x: 4.4
+      y: 1.72
+    - x: -3.4
+      y: 1.72
+    - x: -3.4
+      y: -4.3
+    - x: 4.0
+      y: -4.3
+  - name: comb_four_aisles
+    purpose: '64 m up and down all four north-south aisles, turning in the wide apron,
+      with a waypoint every 2 m so the driver aims down the lane rather than at a
+      point eight metres away. Minimum clearance 0.56 m and 96% cleanly visible (check_route_clearance.py).
+      Two earlier attempts hit a rack: long_snake used the 0.26 m cross aisle, and
+      the sparse-waypoint version of this route arced out of the lane coming out of
+      a 180-degree reversal.'
+    start:
+      x: -3.0
+      y: -4.1
+      yaw: 1.5708
+    waypoints:
+    - x: -3.0
+      y: -2.0999999999999996
+    - x: -3.0
+      y: -0.09999999999999964
+    - x: -3.0
+      y: 1.9000000000000004
+    - x: -3.0
+      y: 3.9000000000000004
+    - x: -3.0
+      y: 4.2
+    - x: -3.0
+      y: 2.2
+    - x: -3.0
+      y: 0.20000000000000018
+    - x: -3.0
+      y: -1.7999999999999998
+    - x: -3.0
+      y: -3.8
+    - x: -3.0
+      y: -4.1
+    - x: -1.0
+      y: -4.1
+    - x: -1.0
+      y: -2.0999999999999996
+    - x: -1.0
+      y: -0.09999999999999964
+    - x: -1.0
+      y: 1.9000000000000004
+    - x: -1.0
+      y: 3.9000000000000004
+    - x: -1.0
+      y: 4.2
+    - x: -1.0
+      y: 2.2
+    - x: -1.0
+      y: 0.20000000000000018
+    - x: -1.0
+      y: -1.7999999999999998
+    - x: -1.0
+      y: -3.8
+    - x: -1.0
+      y: -4.1
+    - x: 1.05
+      y: -4.1
+    - x: 1.05
+      y: -2.0999999999999996
+    - x: 1.05
+      y: -0.09999999999999964
+    - x: 1.05
+      y: 1.9000000000000004
+    - x: 1.05
+      y: 3.9000000000000004
+    - x: 1.05
+      y: 4.2
+    - x: 1.05
+      y: 2.2
+    - x: 1.05
+      y: 0.20000000000000018
+    - x: 1.05
+      y: -1.7999999999999998
+    - x: 1.05
+      y: -3.8
+    - x: 1.05
+      y: -4.1
+    - x: 3.0
+      y: -4.1
+    - x: 3.0
+      y: -2.0999999999999996
+    - x: 3.0
+      y: -0.09999999999999964
+    - x: 3.0
+      y: 1.9000000000000004
+    - x: 3.0
+      y: 3.9000000000000004
+    - x: 3.0
+      y: 4.2
+  repeats_per_route: 1

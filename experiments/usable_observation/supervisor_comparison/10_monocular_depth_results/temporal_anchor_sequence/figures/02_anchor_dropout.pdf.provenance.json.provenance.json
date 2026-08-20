@@ -1,0 +1,9 @@
+{
+  "generator": "experiments/usable_observation/supervisor_comparison/10_monocular_depth_results/temporal_anchor_sequence.py",
+  "note": "Gazebo oracle data were evaluation-only",
+  "results": "experiments/usable_observation/supervisor_comparison/10_monocular_depth_results/temporal_anchor_sequence/results.json",
+  "source_hashes": {
+    "manifest.json": "5726de71428f4352210d3ff6f439033e55037f52ad536135c0b716695780e5cd",
+    "records.jsonl": "eb1ec37bee880e3d41928f2077c55978652123fe845288bcc70e2929ae242205"
+  }
+}

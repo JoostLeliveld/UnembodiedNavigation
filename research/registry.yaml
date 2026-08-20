@@ -1,9 +1,9 @@
 schema_version: 1
-updated: 2026-08-06
+updated: 2026-08-18
 allowed_statuses: [PLANNED, READY, ACTIVE, BLOCKED, COMPLETE, LOCKED, RETIRED]
 
 current_focus:
-  research_experiment_id: EXP-CL-CAL
+  research_experiment_id: EXP-AVAIL-CL
   maintenance_task_id: MNT-CONSOLIDATION
 
 maintenance_tasks:
@@ -103,7 +103,7 @@ code_assets:
 
 experiments:
   - experiment_id: EXP-BIAS
-    title: Projection residual and camera-bias characterization
+    title: Historical-v2 projection residual characterization
     study_path: experiments/external_camera_bias_model
     status: LOCKED
     claim_ids: [C1]
@@ -121,7 +121,7 @@ experiments:
       - logs/studies/external_camera_bias_model/exp2_two_dof_bias/summary.json
       - logs/studies/external_camera_bias_model/exp3_projection_pipeline_minimal/summary.json
     archive_rule: Preserve summaries provenance residual tables and decisive figures permanently.
-    next_action: Preserve as locked residual evidence; E6 blocks camera-bias attribution until yaw route and region are independently varied.
+    next_action: Preserve as locked historical mechanism evidence; all fitted projection terms are deleted, and no v2/v3/v4 magnitude or camera rank is current.
 
   - experiment_id: EXP-PROJ-AMP
     title: Projection amplification versus detector error
@@ -160,7 +160,7 @@ experiments:
       - logs/studies/operational_residual_rcond/exp2_operational_rcond/operational_rcond.json
       - logs/studies/operational_residual_rcond/exp3_two_dof_rcond/operational_rcond.json
     archive_rule: Retain the null result permanently.
-    next_action: No promotion; per-camera conditional covariance tied or lost to pooled covariance.
+    next_action: Preserve the null under retired-v2 inputs; per-camera conditional covariance tied or lost to pooled covariance, and its magnitudes are not current runtime fields.
 
   - experiment_id: EXP-BELIEF
     title: Belief honesty under correlated camera error
@@ -180,7 +180,7 @@ experiments:
       - logs/studies/bayesian_filter_showcase/exp1_graceful_vs_trusting/summary.json
       - logs/studies/bayesian_filter_showcase/exp2_does_it_generalize/summary.json
     archive_rule: Preserve all summaries and provenance as headline evidence.
-    next_action: Carry the frozen belief fields into the matched closed-loop campaign.
+    next_action: Preserve the correlation-floor mechanism only; recompute residual magnitudes under a frozen current-runtime manifest before any closed-loop use.
 
   - experiment_id: EXP-DRIFT
     title: Calibration drift lifecycle
@@ -198,7 +198,7 @@ experiments:
     promotion_gate: Detection threshold precedes harm threshold across controlled faults.
     evidence_paths: [logs/studies/calibration_drift_lifecycle/exp1_stale_correction/drift_lifecycle.json]
     archive_rule: Preserve summary fault ladder and figure.
-    next_action: None; state controlled-injection scope explicitly.
+    next_action: Preserve as controlled historical-correction lifecycle evidence; the fitted correction no longer exists in the current runtime.
 
   - experiment_id: EXP-NET-COMMISSION
     title: Operational network commissioning without online truth
@@ -216,10 +216,10 @@ experiments:
     promotion_gate: Recover the actionable camera decision without operational truth leakage.
     evidence_paths: [logs/studies/network_commissioning_realism/exp1_gate_without_truth/summary.json]
     archive_rule: Preserve summary provenance and negative camera decisions.
-    next_action: Use as supporting commissioning evidence; do not claim end-to-end truth-free calibration.
+    next_action: Preserve sample-efficiency mechanism under retired-v2 targets; do not claim current calibration decisions or end-to-end truth-free calibration.
 
   - experiment_id: EXP-PRECISION
-    title: Achievable precision map
+    title: Historical-v2 achievable precision sensitivity map
     study_path: experiments/achievable_precision_map
     status: LOCKED
     claim_ids: [C1, C3, C5]
@@ -234,7 +234,7 @@ experiments:
     promotion_gate: Demonstrate nontrivial decision disagreement.
     evidence_paths: [logs/studies/achievable_precision_map/exp1_precision_vs_coverage/summary.json]
     archive_rule: Preserve summary map and generator.
-    next_action: Use the locked fields in camera-management experiments only after source comparison.
+    next_action: Do not use for current camera management; rebuild only after current-runtime persistent floors are identified on a fair yaw-region design.
 
   - experiment_id: EXP-HIT-MISS
     title: Hit-miss expected posterior correction
@@ -291,7 +291,7 @@ experiments:
       - logs/studies/multicamera_commissioning_bigwarehouse/projection_calibration_v3/projection_calibration.json
       - experiments/multicamera_commissioning_bigwarehouse/GATE_PROVENANCE.md
     archive_rule: Keep chosen captures manifests calibrations and detector; cold-store superseded raw captures.
-    next_action: Preserve commissioning evidence; do not treat v2/v3/v4 terms as identified camera calibration until the E6 confound is resolved.
+    next_action: Preserve detector/readiness evidence and retire v2/v3/v4 calibration effects; the current runtime uses zero-parameter floor-plane IPM.
 
   - experiment_id: EXP-CL-CAL
     title: Calibration identifiability and gated closed-loop protocol
@@ -370,6 +370,177 @@ experiments:
     evidence_paths: [experiments/multicamera_fusion_extension/README.md]
     archive_rule: Preserve naive-fusion nulls and all containment failures.
     next_action: Remain separate and downstream of EXP-USABLE.
+  - experiment_id: EXP-DYN-ORACLE
+    title: Dynamic world and ground-truth visibility oracle
+    study_path: experiments/dynamic_world_oracle
+    # READY, not ACTIVE: the apparatus is built and its acceptance run passes, but
+    # the declared current research focus is someone else's and this must not
+    # quietly take it over.
+    status: READY
+    claim_ids: []
+    assumption_ids: [A13]
+    reviewer_question_ids: []
+    figure_ids: []
+    dependencies: [ASSET-RUNTIME]
+    operational_inputs: [rgb_image, calibration]
+    operational_interface_inputs: [rgb_image, calibration]
+    evaluation_only_inputs: [oracle_depth, oracle_visibility_grid, obstacle_pose]
+    primary_metric: reproducibility and event-timed correctness of the oracle dataset
+    promotion_gate: >-
+      Measurement apparatus, not a claim. It graduates when a visibility model is
+      scored against it; until then it asserts only that the dataset is exactly
+      reproducible and that its ground truth is never read by src/.
+    evidence_paths: [experiments/dynamic_world_oracle/README.md]
+    archive_rule: >-
+      Keep every scenario YAML and its manifest; a run is worthless without the
+      timeline that produced it.
+    next_action: >-
+      Score a geometric or learned visibility model against the s01/s02 oracle
+      using RGB and calibration only.
+
+  - experiment_id: EXP-AVAIL-SOURCE
+    title: Deployable availability estimation and its offline consequences
+    study_path: experiments/availability_paper
+    status: COMPLETE
+    claim_ids: [C1, C2, C3]
+    assumption_ids: [A02, A04, A05, A08, A11, A14, A15, A17, A18, A19]
+    reviewer_question_ids: [RQ01, RQ02, RQ03, RQ05, RQ10, RQ11, RQ12, RQ13, RQ14, RQ15]
+    figure_ids: [F05, F07, F08]
+    dependencies: [ASSET-RUNTIME, ASSET-PLANNER]
+    operational_inputs: [candidate_pose, camera_geometry, camera_rgb, drivable_map, detector_outcomes, conditional_covariance]
+    operational_interface_inputs: [candidate_pose, camera_geometry, camera_rgb, drivable_map, detector_outcomes, conditional_covariance]
+    evaluation_only_inputs: [ground_truth_pose]
+    primary_metric: >-
+      pooled held-out Brier score of usable-observation probability under
+      leave-one-spatial-block-out, then longest continuous unobserved stretch along
+      the selected route
+    result_summary: logs/studies/availability_paper/RESULTS.md
+    provenance: logs/studies/availability_paper/e1_availability_calibration/manifest.json
+    promotion_gate: >-
+      A no-surveyed-model estimator matches the CAD raycast on paired held-out
+      Brier, and the frozen fields then discriminate routes offline, before any
+      Gazebo campaign time is allocated. Either half may instead be retained as a
+      documented loss or null.
+    evidence_paths:
+      - logs/studies/availability_paper/RESULTS.md
+      - logs/studies/availability_paper/e1_availability_calibration/e1_summary.csv
+      - logs/studies/availability_paper/e1_availability_calibration/e1_paired.csv
+      - logs/studies/availability_paper/e1_availability_calibration/manifest.json
+      - logs/studies/availability_paper/e2_availability_vs_accuracy/e2_correlations.csv
+      - logs/studies/availability_paper/e2_availability_vs_accuracy/e2_camera_disagreement.csv
+      - logs/studies/availability_paper/e3_route_discrimination/e3_routes.csv
+      - logs/studies/availability_paper/e3_route_discrimination/e3_candidates.csv
+      - logs/studies/availability_paper/e3_route_discrimination/e3_selected_routes.json
+      - logs/studies/availability_paper/e3_route_discrimination/manifest.json
+    archive_rule: >-
+      Preserve the fold table, the paired contrasts, the per-fold GP predictions, the
+      spatial-block definition, the route table and the selected polylines
+      permanently. The prediction numbers are meaningless without the blocks that
+      produced them, and E4 seeds its planner from the polylines.
+    next_action: >-
+      The two-world governance blocker is CLOSED: that rule was retired 2026-08-20,
+      so a source comparison run in warehouse_full_4cam needs no exception. The F07
+      contract now treats CAD as a surveyed
+      reference baseline rather than an assumed upper bound: monocular depth ties the
+      CAD raycast on paired held-out Brier (difference 0.0060, better in 8 of 24 folds,
+      sign test p 0.15). Three sub-results, all complete. E1: a Gaussian process
+      with no geometric mean function barely beats the constant baseline on ground it
+      has not seen, so the geometry carries the prediction. E2: geometry predicts
+      availability at rank correlation 0.82 to 0.84 and conditional error at only
+      0.10 to 0.23, and the most-available camera is not the most accurate at 42.2
+      percent of positions covered by two or more cameras, which rebuilds the
+      EXP-PRECISION mechanism on current inputs without any per-camera-versus-pooled
+      R_cond claim. E3, under the 0.25 m keep-in contract: on mc_blind_L a
+      0.16 m sidestep removes the blind route's 5.60 s unobserved stretch entirely and
+      lifts the realised hit rate from 64.1 to 84.1 percent, while terminal sigma moves
+      0.6 mm across arms, so terminal sigma must never be a closed-loop endpoint. The
+      effect is confined to two tasks of four, which is why the 2026-08-15 pilot could
+      not discriminate. WITHDRAWN by the clearance fix: the claim that a weak
+      availability field routes WORSE than ignoring availability, which was an artifact
+      of boundary-hugging routes; distance-only and FOV/range now tie the blind
+      baseline at 2.40 s and are worse only on the negative-control task. NEW: the
+      benefit depends on camera PLACEMENT rather than count, two opposing cameras
+      giving the largest saving of any configuration (3.40 s) and two on the same wall
+      the smallest (1.50 s) despite a worse blind baseline. NEW LIMITATION: prediction
+      parity is not decision parity, since monocular depth ties the CAD raycast on
+      held-out Brier yet spends an equal-length detour in the wrong place on
+      mc_blind_L and stays exposed 4.80 s against CAD's 0.00 s.
+      The R1 route archetype binding for mc_blind_L is NOT certified: measured detour
+      is about 2 percent against the roughly 27 percent in 06_world_camera_design
+      section 5, because the candidate set is grid Dijkstra rather than lane-graph
+      enumeration. E3 route search was corrected on 2026-08-17 to run on the driveable
+      mask eroded by the 0.25 m global keep-in contract: the previous version searched
+      the raw binary mask, which has no clearance term, and selected routes with
+      0.062 m and 0.005 m minimum clearance that the local controller would reject at
+      step zero and that E4 would have seeded its planner from. The erosion keeps
+      64.9 percent of the floor and leaves every task connected at 0.293 to 0.458 m.
+
+  - experiment_id: EXP-AVAIL-CL
+    title: Matched closed-loop campaign, availability-blind versus availability-aware
+    study_path: experiments/availability_paper/e4_closed_loop
+    status: BLOCKED
+    claim_ids: [C3, C4]
+    assumption_ids: [A01, A08, A10, A11, A12, A13, A14, A15]
+    reviewer_question_ids: [RQ11, RQ13]
+    figure_ids: [F06]
+    dependencies: [ASSET-RUNTIME, ASSET-PLANNER, ASSET-CAMPAIGN]
+    operational_inputs: [camera_measurements, odometry_belief, frozen_availability_field, conditional_covariance]
+    operational_interface_inputs: [camera_measurements, odometry_belief, frozen_availability_field, conditional_covariance]
+    evaluation_only_inputs: [ground_truth_pose, contact_events, nees]
+    primary_metric: longest continuous interval with no accepted camera correction
+    promotion_gate: >-
+      GATE-ONLINE-EFE must pass on one availability-blind seed first: a goal-feasible
+      online plan, no step-zero clearance rejection, arrival within 0.5 m without the
+      stuck detector, AND an executed path that enters ground where the arms differ.
+    evidence_paths:
+      - experiments/availability_paper/e4_closed_loop/campaign.yaml
+      - experiments/availability_paper/e0_online_efe_readiness/gate.yaml
+      - logs/studies/availability_paper/e5_offline_efe_solve/e5_offline_efe_solve.csv
+      - logs/studies/availability_paper/e6_offline_map_plan_audit/summary.json
+      - logs/studies/availability_paper/figures/11_offline_map_vs_solved_routes.png
+      - logs/studies/availability_paper/figures/12_p_maps_in_planning.png
+    archive_rule: >-
+      Preserve every run ledger, summary, provenance record and null result,
+      including runs that fail the gate.
+    next_action: >-
+      GATE-ONLINE-EFE PASSED 2026-08-18 on mc_blind_L C1 seed 0: goal reached in
+      36.7 s, 0.121 m final error, no collision, 818 of 861 timesteps with an
+      accepted camera correction, and minimum fused availability 0.0014 along the
+      executed path, so the run entered ground where the arms differ. E4 then stopped
+      after 12 of 45 plan-bearing mc_blind_L runs; one additional C3 attempt ended
+      before persisting a plan. All 12 global_plan.csv files contain the same 76
+      coordinates (14.88 m; maximum pointwise difference 0.0 m). E5 reproduces the
+      route-selection consensus for all three tasks and shows that the ambiguity term
+      changes with availability but is dominated by risk and obstacle costs. Do not
+      resume this frozen campaign or report an arm-level navigation comparison from
+      the incomplete set. Preregister a new planner formulation, and require an
+      offline runtime-objective sensitivity gate that produces a route difference,
+      before allocating another closed-loop campaign.
+
+  - experiment_id: EXP-RECFG
+    title: Reconfiguration holdout for survey-free availability estimation
+    study_path: experiments/reconfiguration_holdout
+    status: READY
+    claim_ids: [C2, C6]
+    assumption_ids: [A05, A06, A07, A08, A17, A19]
+    reviewer_question_ids: [RQ04, RQ05, RQ06]
+    figure_ids: []
+    dependencies: [ASSET-RUNTIME]
+    operational_inputs: [camera_calibration, drivable_map, camera_rgb, detector_outcomes]
+    operational_interface_inputs: [camera_calibration, drivable_map, camera_rgb, detector_outcomes]
+    evaluation_only_inputs: [ground_truth_pose, surveyed_3d_model, oracle_visibility]
+    primary_metric: change in held-out skill between the nominal and reconfigured warehouse
+    promotion_gate: A deployable arm degrades measurably less than the frozen historical arm with the paired interval excluding zero.
+    evidence_paths:
+      - logs/studies/reconfiguration_holdout/layout/layout_selected.json
+      - logs/studies/reconfiguration_holdout/e1_reconfiguration_holdout/e1_degradation.csv
+      - logs/studies/reconfiguration_holdout/e2_change_detection/e2_change_detection.csv
+    archive_rule: Preserve the captures outcome CSVs and the degradation table permanently; rendered frames are prunable and leave a prune record.
+    next_action: >-
+      L0 and L1 are measured; capture the two changed-lighting environments and rerun the
+      scoring over all four. Left READY rather than ACTIVE because the registry permits one
+      ACTIVE experiment and current_focus still declares EXP-AVAIL-CL; promoting this is a
+      research-focus decision, not a bookkeeping one.
 
 artifacts:
   - {id: ART-DETECTOR-V1, path: logs/perception_models/warehouse_yolo_detector_v1/model.pt, sha256: cd77b4b79d8d7f79bcc02b40aadd1bca99449b4498d87b003a32c53f12237a87}

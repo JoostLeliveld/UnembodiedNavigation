@@ -1,0 +1,104 @@
+experiment_id: EXP-AVAIL-CAL
+title: Held-out calibration of usable-observation probability across estimator families
+status: preregistered_offline
+claim_ids: [C1, C2]
+world: warehouse_full_4cam.world.sdf
+
+question: >-
+  Which availability estimator predicts, on spatially held-out ground, whether a
+  usable detection arrives at a candidate pose — and does a source that needs no
+  surveyed 3-D model reach the one that has it?
+
+estimand:
+  symbol: p_use_c(x, y)
+  definition: >-
+    Probability that camera c returns a usable detection for a robot at (x, y),
+    marginal over the sampled headings at that position.
+  label_source: det_hit indicator in the frozen 2026-07-27 four-camera spawn grid
+  label_note: >-
+    det_hit is the estimand's own label, not evaluation truth about the world.
+    No ground-truth pose is read by this experiment.
+
+dataset:
+  events: logs/studies/multicamera_commissioning_bigwarehouse/spawn_grid_20260727/events
+  events_per_camera: 2202
+  cameras: [camera_A, camera_B, camera_C, camera_D]
+  total_events: 8808
+
+split:
+  scheme: leave_one_spatial_block_out
+  blocks: 6
+  block_rule: three x-thirds by two y-halves over the warehouse extent
+  block_x_edges: [-11.7, -3.9, 3.9, 11.7]
+  block_y_edges: [-9.0, -0.25, 9.0]
+  verification: >-
+    The geometric rule must reproduce the six block_x{i}_y{j} groups frozen in
+    the events_blocked capture; common.assert_blocks_match_capture raises if not.
+  rationale: >-
+    A random k-fold over a dense pose grid leaves held-out points centimetres
+    from training points. Any smoother then scores near-perfectly, and the
+    comparison measures interpolation rather than the spatial transfer a
+    commissioned deployment actually needs.
+
+arms:
+  - key: constant
+    label: Constant (train prevalence)
+    needs_surveyed_model: false
+    role: floor
+  - key: fov_range
+    label: FOV / range
+    needs_surveyed_model: false
+    role: deployable
+  - key: mono_depth
+    label: Monocular depth raycast
+    needs_surveyed_model: false
+    role: deployable
+  - key: gp
+    label: Operational GP
+    needs_surveyed_model: false
+    role: deployable
+  - key: hybrid
+    label: Geometry prior + GP residual
+    needs_surveyed_model: true
+    role: commissioned
+  - key: cad_reference
+    label: CAD raycast
+    needs_surveyed_model: true
+    role: reference_upper_bound_candidate
+
+link:
+  form: P_D = sigmoid(a * logit(v) + b)
+  fitted_on: training folds only
+  applies_to: every arm, including arms that are already probabilities
+  rationale: >-
+    A geometric visibility fraction is not a detection probability. Giving every
+    arm the same two-parameter link stops a source from being advantaged or
+    penalised by its native scale; a calibrated probability recovers a ~ 1, b ~ 0.
+  secondary_variant: raw (unlinked) predictions, reported as a diagnostic only
+
+endpoints:
+  primary: pooled held-out Brier score, linked variant
+  experimental_unit: one camera-fold (24 units per arm)
+  secondary: [logloss, auroc, ece]
+  paired_contrast: >-
+    Per camera-fold differences against cad_reference and against gp, so arms are
+    compared on identical held-out blocks rather than on marginal means.
+
+prespecified_interpretation:
+  - A lower Brier for a no-surveyed-model arm than for CAD raycast refutes the
+    framing of CAD as an upper bound; CAD is then a baseline that happens to
+    require a survey.
+  - AUROC measures ranking, Brier and logloss measure calibration. An arm that
+    wins AUROC while losing Brier is a better ranker and a worse probability, and
+    only the probability is what the planner consumes.
+  - This experiment establishes prediction only. It supports no navigation,
+    safety, route or closed-loop reading; that crossing belongs to E4 alone.
+
+prohibited_interpretation:
+  - "the GP is the method"
+  - "monocular depth is map-free"
+  - any hardware, optical-archetype or vendor generality
+  - any detector generality beyond the frozen 4cam v3 detector
+
+assumption_ids: [A02, A04, A05, A08, A14, A15, A17, A18, A19]
+reviewer_question_ids: [RQ01, RQ02, RQ03, RQ05, RQ10, RQ12]

@@ -237,6 +237,14 @@ def build(args):
         clearance_map=clear, unknown_fraction_map=np.zeros_like(score),
         fov_mask=fov["fov_mask"], r_plan_std_map=r_std, r_plan_var_map=r_var,
         current_gp_trust_map=meta.get("P_mean_map", np.full_like(score, np.nan)),
+        # The three fields a planning figure needs, so it does not have to refit anything:
+        # what the survey learned, what geometry predicts on the same scale, and the two
+        # combined. NaN-filled when there is no GP to compare against.
+        empirical_gp_prob=meta.get("P_mean_map", np.full_like(score, np.nan)),
+        calibrated_geometry_prob=stage1.get("calibrated_geometry_prob",
+                                            np.full_like(score, np.nan)),
+        fused_posterior_prob=stage2.get("posterior_prob", np.full_like(score, np.nan)),
+        geometry_weight_map=stage2.get("geometry_weight", np.full_like(score, np.nan)),
         px_per_m_min=jac["px_per_m_min"], driveable_mask=drive_mask,
         z_marker=z_marker, geometry_sha256=meta["geometry_sha256"],
     )
@@ -398,6 +406,8 @@ def _stage2_fusion(meta, score, drive_mask, stage1, figs, args):
     plt.close(fig)
 
     out.update({
+        "posterior_prob": post_prob,
+        "geometry_weight": geom_weight,
         "sigma_prior": sigma_prior,
         "median_geom_weight": float(np.nanmedian(np.where(mask, geom_weight, np.nan))),
         "max_geom_weight": float(np.nanmax(np.where(mask, geom_weight, np.nan))),

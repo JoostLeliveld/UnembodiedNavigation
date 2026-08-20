@@ -1,0 +1,711 @@
+{
+  "frames": [
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        0.0,
+        -5.5,
+        4.8,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "aws_camA_s00000",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/warehouse_visibility_capture_v1/images/000000_xy0000_h00.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "method_development",
+      "sha256": "be3892adb1cf61a5d7b2ab3ae7c7876b84d484301509c91ae0660d99c9564f57",
+      "source_capture": "warehouse_visibility_capture_v1",
+      "source_sample_id": "0",
+      "width": 1280,
+      "world": "warehouse_aws.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        0.0,
+        -5.5,
+        4.8,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "aws_camA_s00050",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/warehouse_visibility_capture_v1/images/000050_xy0012_h02.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "method_development",
+      "sha256": "7fed1f7eb8be2616958ecbc26ecf850e785c4d36fc821d9152e18429d0f1b0b6",
+      "source_capture": "warehouse_visibility_capture_v1",
+      "source_sample_id": "50",
+      "width": 1280,
+      "world": "warehouse_aws.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        0.0,
+        -5.5,
+        4.8,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "aws_camA_s00101",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/warehouse_visibility_capture_v1/images/000101_xy0025_h01.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "method_development",
+      "sha256": "7eaf0a233d4f560ae3287b3c8626f160124d7c178751768363d06aca3a5587b6",
+      "source_capture": "warehouse_visibility_capture_v1",
+      "source_sample_id": "101",
+      "width": 1280,
+      "world": "warehouse_aws.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        0.0,
+        -5.5,
+        4.8,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "aws_camA_s00151",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/warehouse_visibility_capture_v1/images/000151_xy0037_h03.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "method_development",
+      "sha256": "d8fbbaf8622255d98f28ddb2a90143d5f7c037cf9ee7ae669c9750b32f6dcc4f",
+      "source_capture": "warehouse_visibility_capture_v1",
+      "source_sample_id": "151",
+      "width": 1280,
+      "world": "warehouse_aws.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        0.0,
+        -5.5,
+        4.8,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "aws_camA_s00202",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/warehouse_visibility_capture_v1/images/000202_xy0050_h02.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "method_development",
+      "sha256": "de50a076648061ac1dfc43e2e7610f616d54bf1559e224fdabeca64a4ef8ec2f",
+      "source_capture": "warehouse_visibility_capture_v1",
+      "source_sample_id": "202",
+      "width": 1280,
+      "world": "warehouse_aws.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        0.0,
+        -5.5,
+        4.8,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "aws_camA_s00252",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/warehouse_visibility_capture_v1/images/000252_xy0063_h00.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "method_development",
+      "sha256": "9cd99e09fcb64a8c4ae96f177af77925c212bca1f07da23df0d229b37f9924ad",
+      "source_capture": "warehouse_visibility_capture_v1",
+      "source_sample_id": "252",
+      "width": 1280,
+      "world": "warehouse_aws.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        0.0,
+        -5.5,
+        4.8,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "aws_camA_s00303",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/warehouse_visibility_capture_v1/images/000303_xy0075_h03.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "method_development",
+      "sha256": "d46ca6485b86b773d51f60b5a4d327e840793eb6fe29a85ac9f34578d60ff2cd",
+      "source_capture": "warehouse_visibility_capture_v1",
+      "source_sample_id": "303",
+      "width": 1280,
+      "world": "warehouse_aws.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        0.0,
+        -5.5,
+        4.8,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "aws_camA_s00353",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/warehouse_visibility_capture_v1/images/000353_xy0088_h01.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "method_development",
+      "sha256": "6c5c93de2897e811f3fc98f8c373a4a1ea6a058b79911da2679bf637b4dd2c19",
+      "source_capture": "warehouse_visibility_capture_v1",
+      "source_sample_id": "353",
+      "width": 1280,
+      "world": "warehouse_aws.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        0.0,
+        -5.5,
+        4.8,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "aws_camA_s00404",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/warehouse_visibility_capture_v1/images/000404_xy0101_h00.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "method_development",
+      "sha256": "6c5c93de2897e811f3fc98f8c373a4a1ea6a058b79911da2679bf637b4dd2c19",
+      "source_capture": "warehouse_visibility_capture_v1",
+      "source_sample_id": "404",
+      "width": 1280,
+      "world": "warehouse_aws.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        0.0,
+        -5.5,
+        4.8,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "aws_camA_s00454",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/warehouse_visibility_capture_v1/images/000454_xy0113_h02.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "method_development",
+      "sha256": "6c5c93de2897e811f3fc98f8c373a4a1ea6a058b79911da2679bf637b4dd2c19",
+      "source_capture": "warehouse_visibility_capture_v1",
+      "source_sample_id": "454",
+      "width": 1280,
+      "world": "warehouse_aws.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        0.0,
+        -5.5,
+        4.8,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "aws_camA_s00505",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/warehouse_visibility_capture_v1/images/000505_xy0126_h01.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "method_development",
+      "sha256": "6e51c5bb72fead767ded97cda4d8e7eddbfa3a5211444100edc6880ca29ab687",
+      "source_capture": "warehouse_visibility_capture_v1",
+      "source_sample_id": "505",
+      "width": 1280,
+      "world": "warehouse_aws.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        0.0,
+        -5.5,
+        4.8,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "aws_camA_s00555",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/warehouse_visibility_capture_v1/images/000555_xy0138_h03.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "method_development",
+      "sha256": "6c5c93de2897e811f3fc98f8c373a4a1ea6a058b79911da2679bf637b4dd2c19",
+      "source_capture": "warehouse_visibility_capture_v1",
+      "source_sample_id": "555",
+      "width": 1280,
+      "world": "warehouse_aws.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        -6.0,
+        -10.0,
+        6.1,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "full4cam_camA_s00000",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/commissioning_grid_20260807/images/000000_xy0000_h00.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "batch_plumbing_only",
+      "sha256": "6f4e3ce096dc7e7bd5584feb754fa4f77cb7e2e685007c4505548240201b9871",
+      "source_capture": "commissioning_grid_20260807",
+      "source_sample_id": "0",
+      "width": 1280,
+      "world": "warehouse_full_4cam.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera_b",
+      "camera_id": "B",
+      "camera_pose_xyzrpy": [
+        -6.0,
+        10.0,
+        6.1,
+        0.0,
+        0.92,
+        -1.5708
+      ],
+      "frame_id": "full4cam_camB_s00000",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/commissioning_grid_20260807/images/000000_xy0000_h00_external_camera_b.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "batch_plumbing_only",
+      "sha256": "34bf3a77d11588ba420b0ee3b6003b6bcec8e197655366fd4e2587bb6b1f8394",
+      "source_capture": "commissioning_grid_20260807",
+      "source_sample_id": "0",
+      "width": 1280,
+      "world": "warehouse_full_4cam.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera_c",
+      "camera_id": "C",
+      "camera_pose_xyzrpy": [
+        6.0,
+        -10.0,
+        6.1,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "full4cam_camC_s00000",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/commissioning_grid_20260807/images/000000_xy0000_h00_external_camera_c.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "batch_plumbing_only",
+      "sha256": "fe062c1958fe5b1d0407391afad090f12cfd03939703178104eb1c45dd23bb56",
+      "source_capture": "commissioning_grid_20260807",
+      "source_sample_id": "0",
+      "width": 1280,
+      "world": "warehouse_full_4cam.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera_d",
+      "camera_id": "D",
+      "camera_pose_xyzrpy": [
+        6.0,
+        10.0,
+        6.1,
+        0.0,
+        0.92,
+        -1.5708
+      ],
+      "frame_id": "full4cam_camD_s00000",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/commissioning_grid_20260807/images/000000_xy0000_h00_external_camera_d.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "batch_plumbing_only",
+      "sha256": "f9285b685bc8ebb9fccd795781dcb6a6c61b4620aca080adcdc7b96a0a2dda39",
+      "source_capture": "commissioning_grid_20260807",
+      "source_sample_id": "0",
+      "width": 1280,
+      "world": "warehouse_full_4cam.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        -6.0,
+        -10.0,
+        6.1,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "full4cam_camA_s03768",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/commissioning_grid_20260807/images/003768_xy0471_h00.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "batch_plumbing_only",
+      "sha256": "549769d6a64b1a9e63b6824db9ee2116447b613dd0049a8caafd4973a974412d",
+      "source_capture": "commissioning_grid_20260807",
+      "source_sample_id": "3768",
+      "width": 1280,
+      "world": "warehouse_full_4cam.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera_b",
+      "camera_id": "B",
+      "camera_pose_xyzrpy": [
+        -6.0,
+        10.0,
+        6.1,
+        0.0,
+        0.92,
+        -1.5708
+      ],
+      "frame_id": "full4cam_camB_s03768",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/commissioning_grid_20260807/images/003768_xy0471_h00_external_camera_b.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "batch_plumbing_only",
+      "sha256": "1cc0f2e157ab3e76c1b4d88aa5707bcb17978e587c8885ec591942114252888b",
+      "source_capture": "commissioning_grid_20260807",
+      "source_sample_id": "3768",
+      "width": 1280,
+      "world": "warehouse_full_4cam.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera_c",
+      "camera_id": "C",
+      "camera_pose_xyzrpy": [
+        6.0,
+        -10.0,
+        6.1,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "full4cam_camC_s03768",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/commissioning_grid_20260807/images/003768_xy0471_h00_external_camera_c.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "batch_plumbing_only",
+      "sha256": "6e56b67dde73176e38bb20c866a4ab2d1c0f2480b5abcf3ce222a5da1a93fb3f",
+      "source_capture": "commissioning_grid_20260807",
+      "source_sample_id": "3768",
+      "width": 1280,
+      "world": "warehouse_full_4cam.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera_d",
+      "camera_id": "D",
+      "camera_pose_xyzrpy": [
+        6.0,
+        10.0,
+        6.1,
+        0.0,
+        0.92,
+        -1.5708
+      ],
+      "frame_id": "full4cam_camD_s03768",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/commissioning_grid_20260807/images/003768_xy0471_h00_external_camera_d.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "batch_plumbing_only",
+      "sha256": "b404d1d05edcc792f669360e75ad4734ca89bc0bc270f932bec5c2b8d72f12be",
+      "source_capture": "commissioning_grid_20260807",
+      "source_sample_id": "3768",
+      "width": 1280,
+      "world": "warehouse_full_4cam.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera",
+      "camera_id": "A",
+      "camera_pose_xyzrpy": [
+        -6.0,
+        -10.0,
+        6.1,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "full4cam_camA_s07535",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/commissioning_grid_20260807/images/007535_xy0941_h07.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "batch_plumbing_only",
+      "sha256": "6f4e3ce096dc7e7bd5584feb754fa4f77cb7e2e685007c4505548240201b9871",
+      "source_capture": "commissioning_grid_20260807",
+      "source_sample_id": "7535",
+      "width": 1280,
+      "world": "warehouse_full_4cam.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera_b",
+      "camera_id": "B",
+      "camera_pose_xyzrpy": [
+        -6.0,
+        10.0,
+        6.1,
+        0.0,
+        0.92,
+        -1.5708
+      ],
+      "frame_id": "full4cam_camB_s07535",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/commissioning_grid_20260807/images/007535_xy0941_h07_external_camera_b.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "batch_plumbing_only",
+      "sha256": "34bf3a77d11588ba420b0ee3b6003b6bcec8e197655366fd4e2587bb6b1f8394",
+      "source_capture": "commissioning_grid_20260807",
+      "source_sample_id": "7535",
+      "width": 1280,
+      "world": "warehouse_full_4cam.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera_c",
+      "camera_id": "C",
+      "camera_pose_xyzrpy": [
+        6.0,
+        -10.0,
+        6.1,
+        0.0,
+        0.92,
+        1.5708
+      ],
+      "frame_id": "full4cam_camC_s07535",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/commissioning_grid_20260807/images/007535_xy0941_h07_external_camera_c.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "batch_plumbing_only",
+      "sha256": "d6f50ee78200f50af7dd96ea5291c8caa164bc38018970d2de8bd6ba699f30ec",
+      "source_capture": "commissioning_grid_20260807",
+      "source_sample_id": "7535",
+      "width": 1280,
+      "world": "warehouse_full_4cam.world.sdf"
+    },
+    {
+      "camera_frame": "external_camera_d",
+      "camera_id": "D",
+      "camera_pose_xyzrpy": [
+        6.0,
+        10.0,
+        6.1,
+        0.0,
+        0.92,
+        -1.5708
+      ],
+      "frame_id": "full4cam_camD_s07535",
+      "height": 720,
+      "image_path": "logs/visibility_comparison/commissioning_grid_20260807/images/007535_xy0941_h07_external_camera_d.jpg",
+      "intrinsics": {
+        "cx": 640.0,
+        "cy": 360.0,
+        "fx": 639.9976491530514,
+        "fy": 639.9976491530514,
+        "height": 720,
+        "width": 1280
+      },
+      "role": "batch_plumbing_only",
+      "sha256": "f9285b685bc8ebb9fccd795781dcb6a6c61b4620aca080adcdc7b96a0a2dda39",
+      "source_capture": "commissioning_grid_20260807",
+      "source_sample_id": "7535",
+      "width": 1280,
+      "world": "warehouse_full_4cam.world.sdf"
+    }
+  ],
+  "name": "monodepth_frozen_v1",
+  "purpose": "Frozen image set for monocular depth adapter acceptance tests and model benchmarking. Frames pinned by SHA-256.",
+  "role_contract": {
+    "batch_plumbing_only": "warehouse_full_4cam frames. Used ONLY to show four-camera batch inference runs and what it costs. No model ranking or accuracy claim.",
+    "method_development": "warehouse_aws frames. All accuracy, uncertainty and model-comparison statements come from these."
+  },
+  "schema_version": 1,
+  "sources": {
+    "warehouse_aws": "logs/visibility_comparison/warehouse_visibility_capture_v1",
+    "warehouse_full_4cam": "logs/visibility_comparison/commissioning_grid_20260807"
+  }
+}
