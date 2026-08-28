@@ -1,0 +1,191 @@
+# Better commissioning: does what commissioning MEASURES change what the robot does?
+#
+# Commissioning already produces a per-camera detector noise and the runtime pools it into one
+# number. On the four hull drives of 2026-08-27, one camera needed about three times the
+# variance of another, so the pooled number cannot be right for both.
+#
+#   K0  pooled detector noise, one number for all five cameras   <- what the runtime has always done
+#   K2  each camera's own noise, measured from the drive with no ground truth
+#
+# Nothing else differs: same world, same route, same controller, same detector, same fusion
+# rule (network, divided by N) and the same hull observation model.
+#
+# Both arms log the observation's own CAPTURE time, which no previous drive did. Without it a
+# reading can only be scored against the truth at logging time -- later by the whole
+# detector-and-manager delay, and that delay reads as measurement error identically on every
+# camera. It is what made the per-camera noise look 4-25x understated when it is not.
+world: warehouse_v2.world.sdf
+launch_file: warehouse_primary_comparison.launch.py
+
+conditions:
+  K0:
+    label: K0_pooled_detector_noise
+    manager_fusion_rule: network
+    manager_observation_model: hull
+    manager_commissioned_per_camera_sigma: false
+  K3:
+    label: K3_shared_error_added_back
+    manager_fusion_rule: network
+    manager_observation_model: hull
+    manager_commissioned_per_camera_sigma: true
+    # THE TREATMENT. Each camera's own stated ellipse is about right -- measured against the
+    # truth at the moment the camera saw the robot, four of five are slightly padded. But the
+    # cameras do not err independently: combining two of them produced an answer 3.8x more
+    # confident than it deserved. This is the part they get wrong TOGETHER, added back after
+    # they are combined. Measured on the K0 and K2 drives of 2026-08-27 as 3.40 and 3.01 cm;
+    # 3.2 cm is the midpoint, and it is a commissioned constant, not a live signal.
+    manager_fusion_common_mode_std_m: 0.032
+  K2:
+    label: K2_recommissioned_from_the_drive
+    manager_fusion_rule: network
+    manager_observation_model: hull
+    manager_commissioned_per_camera_sigma: true
+    # Not commissioning's numbers -- the network's own, measured from how far each camera sat
+    # from what the others saw on the four hull drives of 2026-08-27. No ground truth was used
+    # to produce this file. It says camera B needs 2.23 px where commissioning gave it 0.82.
+    manager_commissioned_calibration_path: logs/studies/learned_measurement_covariance/recommissioned.json
+
+tasks:
+  fusion_network_traverse:
+    conditions: [K3]
+    seeds: [0]
+    preselected_routes:
+      K0: &frozen_route
+        preselected_route_json: '[[-7.900000000000015,-8.700000000000005],[-7.000000000000018,-8.700000000000005],[-4.800000000000026,-6.500000000000012],[-1.1000000000000387,-6.500000000000012],[0.7999999999999545,-4.600000000000019],[0.7999999999999545,-2.2000000000000277],[1.5999999999999517,-1.4000000000000306],[10.099999999999923,-1.4000000000000306],[10.799999999999919,-0.700000000000033],[10.59999999999992,6.499999999999943]]'
+        preselected_route_sha256: 9d4a3a35d8d7254bfa6d59110f295ca0df648262227367e027c924c62bf34b76
+        preselected_route_source_path: experiments/fusion_on_fixed_routes/routes/fusion_network_traverse.json
+        preselected_route_source_sha256: c7c0322b930e2c22ac0b7d09b6ea8df0725f545da467519dd1ffecbab21cf3ed
+      K2: *frozen_route
+      K3: *frozen_route
+
+# ---------------------------------------------------------------------------
+# the sensor: frozen detector, one commissioned pixel-noise number
+# ---------------------------------------------------------------------------
+perception_backend: yolo
+yolo_model: logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt
+yolo_device: '0'
+yolo_imgsz: 960
+yolo_conf_threshold: 0.25
+yolo_iou_threshold: 0.45
+yolo_target_class: robot
+yolo_class_id: 0
+yolo_use_masks: false
+yolo_min_bbox_area_px: 0.0
+# The detector node stamps this sigma (px) onto every observation it publishes. The manager's
+# commissioned_sigma_px profile overrides it from calibration.json anyway, but leaving the old
+# 2.5 px here would put two different claims about the same detector in one run's provenance.
+r_visible_uv: 0.7642679454946852
+r_miss_uv: 40.0
+
+multicam_belief: true
+manager_fusion_mode: true
+manager_covariance_profile: commissioned_sigma_px
+manager_commissioned_calibration_path: logs/studies/measurement_commissioning/calibration.json
+# No reliability field is consulted anywhere in this experiment: availability predicts the
+# future and this experiment is entirely about measurements that have already arrived.
+manager_require_gp_artifacts: false
+# 5 Hz leaves up to 200 ms between deciding and using a correction, which the
+# propagation cannot see. 20 Hz cuts that to 50 ms.
+manager_decision_rate_hz: 20.0
+manager_require_source_batch_id: true
+manager_bootstrap_min_cameras: 2
+manager_bootstrap_max_disagreement_m: 0.30
+manager_fusion_disagreement_gate_m: 0.6
+# Below the 0.20 s detector period, so a stale round can never be fused as if it
+# were simultaneous. At 0.25 s it could, and did: 13 of 2661 decisions on the
+# frozen route combined readings 200 ms apart.
+manager_fusion_max_timestamp_spread_s: 0.05
+state_correction_mode: fused
+state_correction_ekf: true
+heading_update_mode: coupled
+pixel_correction_nis_threshold: 9.21
+
+# ---------------------------------------------------------------------------
+# the route: frozen, hash-bound, identical for every arm
+# ---------------------------------------------------------------------------
+use_hierarchical: true
+global_planner_mode: preselected_route
+use_truth_localization: false
+# The measured minimum along this polyline is 0.354 m; the grid erosion that produced it was
+# 0.50 m, because a polyline joining 0.10 m cell centres cuts diagonal corners.
+# freeze_route.py measures this on the SIMPLIFIED polyline -- the one actually driven -- and
+# against the same geometry the launch gate uses.
+#
+# The route is 10 vertices, not the generator's 284. The preselected-route contract executes
+# every coordinate as a waypoint, so 0.10 m grid steps became turn_then_go waypoints: the
+# robot tried to face points a hand's width away, span in place at 20.8 m of 30.7, and was
+# flagged stuck. Simplifying to the corners the route actually turns at (0.20 m
+# Douglas-Peucker) fixes the cause instead of loosening the stuck detector.
+preselected_route_clearance_m: 0.35
+preselected_route_endpoint_tolerance_m: 0.25
+preselected_route_sample_step_m: 0.04
+
+# ---------------------------------------------------------------------------
+# driving
+# ---------------------------------------------------------------------------
+v_max: 0.22
+horizon: 20
+dt: 0.25
+goal_success_radius: 0.35
+goal_success_hold_s: 2.0
+# Sim-time budget after the first command. 63 m at 0.22 m/s is about 310 s, so 600 is ample
+# and this was never the binding limit.
+#
+# THE BINDING LIMIT IS THE RUNNER'S OWN WALL CLOCK: --run-timeout, default 420 s, which killed
+# five healthy long-route drives at 44.5 m of 63.3 m and recorded them infra_invalid (correctly
+# — they are not results). It is a CLI flag rather than part of this config, so changing it
+# does not invalidate runs already in the log. Drive the long route with:
+#     --run-timeout 900
+run_timeout_after_first_cmd_s: 600
+# turn_then_go, for a measured reason. The worry was in-place rotation: the robot's
+# circumscribed radius is 0.486 m and the route's tightest point is 0.354 m from the DECLARED
+# LANE boundary. But the declared lanes are far narrower than the physical aisles -- at that
+# same corner the nearest real obstacle is 1.585 m away, and at the route's turns 0.95-1.00 m,
+# against a 0.275 m robot half-width. So a pirouette has about a metre of real room.
+# pure_pursuit was tried first and failed measurably: it cut the corner at (0.06, -4.71), left
+# the declared lane (0.010 m from its boundary, 0.374 m from anything physical), and the local
+# controller then refused every step with driveable_clearance_violation_step_0 -- the robot
+# drove 9.1 m of 30.7 and stopped. Tracking the polyline waypoint to waypoint keeps it on the
+# route the gate validated.
+local_controller_type: turn_then_go
+# The AMR is 0.80 x 0.55 m: half-width 0.275 m, not the 0.125 m Burger default.
+robot_collision_radius_m: 0.275
+use_nogo_cost: true
+nogo_penalty_type: warning_band
+nogo_safe_distance: 0.35
+# The local tracker's own keep-in margin, set 5 cm below the route's validated 0.354 m of lane
+# clearance so ordinary tracking error cannot put it in violation. It is a margin inside a
+# declared corridor that is itself conservative by roughly a metre.
+local_nogo_safe_distance: 0.30
+nogo_warning_band: 0.05
+nogo_weight: 40.0
+use_belief_nogo_cost: false
+terminate_on_geom_collision: false
+use_odom_for_predict: true
+odom_topic: /odom_noisy
+use_command_noise: true
+use_encoder_noise: true
+process_noise_xy: 0.01
+process_noise_theta: 0.02
+headless: true
+use_rviz: false
+reset_world: false
+debug_runtime: true
+# 24 runs need 24 consecutive domain ids inside 0..232, so the base moves down.
+ros_domain_id_base: 200
+
+# THE TREATMENT OF THIS CAMPAIGN.
+# The admission check, which the live pipeline had never run. Commissioning refuses
+# 30% of detections this way; those refused readings have a median error of 24 cm
+# and a worst of 122 cm, against 1.44 cm for the ones it keeps.
+manager_admission_gate: true
+# The leftover interval between carrying a correction forward and consuming it leaves a
+# displacement along the direction of travel: measured -1.72 cm with 1.89 cm of spread, i.e. a
+# bias as large as its own noise. The filter shrinks straight through it -- the belief's ellipse
+# reaches 1.12 cm on the axis where its error is 2.63 cm. Declared here as uncertainty along
+# travel rather than pretended away. 0.0 reproduces the previous behaviour.
+manager_correction_residual_interval_s: 0.05
+manager_correction_timestamp_compensation: true
+manager_correction_propagation_drift_std: 0.05
+# Propagate using odometry rather than the corrected belief: the belief jumps when a
+# correction lands, and that jitter goes straight into the displacement estimate.
