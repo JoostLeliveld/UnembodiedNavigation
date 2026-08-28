@@ -7,7 +7,7 @@ does not contain the canonical current output.
 
 The current GP artifact is:
 
-- `paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz`
+- a fitted GP `.npz` (the previous curated artifact was retired with the 2026-08-25 clean sheet)
 
 ## Rule
 

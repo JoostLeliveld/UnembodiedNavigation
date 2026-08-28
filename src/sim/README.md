@@ -6,8 +6,6 @@ It is the physical stage for the demo: Gazebo warehouse, external camera,
 TurtleBot3 Burger description, startup gates, and optional command/encoder
 noise.
 
-![Gazebo warehouse setup](../../paper_artifacts/figures/problem_setup_camera.png)
-
 ## Central Files
 
 | File | Role |

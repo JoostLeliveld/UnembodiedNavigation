@@ -1,5 +1,6 @@
-# RETARGETED 2026-07-15: this is the only active large-world commissioning study.
-# Material from the archived auxiliary testbed is historical and must be re-collected here.
+# RETIRED 2026-08-28. The warehouse_full_4cam commissioning study and its tools are
+# gone; this file survives only as the route list that the detector-capture tool
+# reserves from its train/val grid (capture_yolo_dataset.py --route-exclusion-config).
 study_id: multicamera_commissioning_fullwarehouse_v2
 world: warehouse_full_4cam.world.sdf
 world_name: warehouse_full_4cam

@@ -7,8 +7,6 @@ the detector publishes an image-space observation, the state node projects it to
 ground-plane `x,y`, and heading remains odometry-driven under the locked
 campaign configuration.
 
-![Localization pathway](../../paper_artifacts/figures/localization_pathway.png)
-
 The planner-facing observability model uses planar position:
 
 \[
@@ -40,7 +38,5 @@ The current paper-facing campaign configs and Task A figure manifests use odomet
 
 ## Read Next
 
-- [`../../docs/runtime_dataflow.md`](../../docs/runtime_dataflow.md) for the full
-  online topic path.
-- [`../../docs/uncertainty_propagation.md`](../../docs/uncertainty_propagation.md)
-  for the distinction between process, command, encoder, and measurement noise.
+- [`../../HOW_IT_WORKS.md`](../../HOW_IT_WORKS.md) for the full online topic path and
+  the distinction between process, command, encoder, and measurement noise.

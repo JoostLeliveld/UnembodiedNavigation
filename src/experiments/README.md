@@ -6,8 +6,6 @@ It is the folder that turns the method into a repeatable benchmark: same world,
 same route tasks, same seeds, same local detector checkpoint path, and explicit
 GP artifact paths.
 
-![Robustness campaign spread](../../paper_artifacts/figures/current_surface/robustness_spread_current.png)
-
 ## Central Files
 
 | File | Role |
@@ -36,8 +34,7 @@ The primary launch enforces the important paper assumptions:
 ## Current Benchmark
 
 The AWS-style warehouse is the current benchmark. It uses the
-curated artifacts under `paper_artifacts/` plus a local YOLO checkpoint under
-`logs/perception_models/warehouse_yolo_detector_v1/model.pt`.
+a local YOLO checkpoint under `logs/perception_models/`.
 
 Current packaged outcome across four tasks and five seeds per condition:
 
@@ -48,7 +45,6 @@ Current packaged outcome across four tasks and five seeds per condition:
 
 See also:
 
-- [`../../research/registry.yaml`](../../research/registry.yaml)
-- [`../../docs/current_runtime_contract.yaml`](../../docs/current_runtime_contract.yaml)
-- [`../../docs/runtime_dataflow.md`](../../docs/runtime_dataflow.md)
+- [`../../PLAN.md`](../../PLAN.md) for what the runs are for
+- [`../../HOW_IT_WORKS.md`](../../HOW_IT_WORKS.md) for the full online topic path
 - [`config/README.md`](config/README.md)

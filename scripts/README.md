@@ -25,9 +25,6 @@ Detector dataset capture, pseudo-labeling, and training utilities live in
 `perception/`. These scripts support detector provenance; trained YOLO weights
 are local artifacts and are not tracked in git.
 
-Representative output:
-
-![YOLO training curves](../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png)
 
 ## GP And Figure Support
 
@@ -42,13 +39,10 @@ capture_visibility_samples.py
 -> compute_paper_metrics.py
 ```
 
-The paper figure scripts turn the curated outputs into the public visual story:
-
-![GP pipeline](../paper_artifacts/figures/gp_pipeline_aws.png)
 
 ## Diagnostic Material
 
 Older route probes, decomposition studies, and pre-Gazebo diagnostics are kept
 only when they are useful for reproducing a final figure or explaining a method
-choice. They are not paper evidence unless `research/registry.yaml` lists
+choice. They are not paper evidence unless `PLAN.md` lists
 their generated artifact.

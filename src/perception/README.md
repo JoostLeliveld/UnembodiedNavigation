@@ -6,8 +6,6 @@ It is the first visible piece of the demo: a fixed warehouse camera detects the
 TurtleBot and turns the selected detection into an image-space robot
 observation.
 
-![YOLO validation predictions](../../paper_artifacts/perception/warehouse_yolo_detector_v1/val_batch0_pred.jpg)
-
 ## Active Runtime Node
 
 - [`perception/nodes/yolo_robot_detector_node.py`](perception/nodes/yolo_robot_detector_node.py)
@@ -31,9 +29,8 @@ The current paper-facing campaign uses the segmentation/detection path for
 
 ## Demonstrated Detector
 
-The paper-facing detector is documented in
-[`../../docs/perception_details.md`](../../docs/perception_details.md) and
-summarized by [`../../paper_artifacts/perception/warehouse_yolo_detector_v1/manifest.json`](../../paper_artifacts/perception/warehouse_yolo_detector_v1/manifest.json).
+The frozen detector and its training run live under `logs/perception_models/`; each
+checkpoint directory carries its own manifest.
 
 | Item | Value |
 | --- | --- |
@@ -45,9 +42,6 @@ summarized by [`../../paper_artifacts/perception/warehouse_yolo_detector_v1/mani
 | Final box mAP50-95 | 0.620 |
 | Final mask mAP50 | 0.745 |
 
-Training curves:
-
-![YOLO training curves](../../paper_artifacts/perception/warehouse_yolo_detector_v1/results.png)
 
 ## Pose-Keypoint Support (archived)
 

@@ -48,20 +48,6 @@ def _observation(
     )
 
 
-def test_recorder_delegates_projection_to_library():
-    """The recorder must reuse the library projection, not carry a fork."""
-
-    tools = ROOT / "experiments/multicamera_commissioning_bigwarehouse/tools"
-    sys.path.insert(0, str(tools))
-    try:
-        import record_operational_logs as recorder
-    finally:
-        sys.path.remove(str(tools))
-
-    assert recorder.project_observation_to_world is project_observation_to_world
-    assert recorder.camera_model_from_world is camera_model_from_world
-
-
 def test_projection_rejects_invalid_detection():
     model = camera_model_from_world(WORLD_SDF, include_name="external_camera")
     invalid = CameraObservation(camera_id="camera_A", timestamp_s=1.0, detection_valid=False)

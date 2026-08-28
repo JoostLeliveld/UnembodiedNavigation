@@ -15,8 +15,6 @@ For the current implementation, `R_{\mathrm{plan}}` is built through
 visibility-aware precision blending rather than a simple linear covariance mix.
 That is the central mechanism implemented in this package.
 
-![GP reliability and induced covariance](../../paper_artifacts/figures/gp_pipeline_aws.png)
-
 ## Why This Folder Exists
 
 This package answers the main research question: how does planning change when future observation quality depends on robot state?
@@ -70,15 +68,12 @@ This package answers the main research question: how does planning change when f
 
 ## Demonstrated Artifact
 
-The paper-facing GP artifact is
-[`../../paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz`](../../paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz).
-Its fit summary records 238 training targets with raw detector-score targets
-from `0.0016` to `0.9232` and mean target `0.5498`.
+The GP artifacts this path consumed were retired with the 2026-08-25 clean sheet. The
+availability map is being rebuilt from truth-free operational logs; see `PLAN.md`.
 
 In the locked comparison, C1 uses a constant observation covariance. C2 uses the
 GP-derived reliability to build state-dependent camera covariance inside the EFE
-horizon. The route-choice summary is visualized in
-[`../../paper_artifacts/figures/paper_snapshot/robustness_spread.png`](../../paper_artifacts/figures/paper_snapshot/robustness_spread.png).
+horizon.
 
 ## Caveats
 

@@ -197,11 +197,11 @@ reliability_tools export-run \
 
 reliability_tools replay \
   --export-dir logs/reliability_exports/experiment_XXXXX \
-  --gp-artifact paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz
+  --gp-artifact <path to a fitted GP .npz>
 
 reliability_tools benchmark \
   --export-dir logs/reliability_exports/experiment_XXXXX \
-  --gp-artifact paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz
+  --gp-artifact <path to a fitted GP .npz>
 
 reliability_tools export-multicamera \
   --camera-csv camera_A=logs/multicamera/run_001/camera_A_perception.csv \
