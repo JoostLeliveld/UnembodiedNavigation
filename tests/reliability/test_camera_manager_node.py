@@ -159,75 +159,13 @@ def test_gp_query_rejects_state_outside_sync_window():
     ) is None
 
 
-def test_paper1_profile_preserves_fused_cross_covariance_without_report_floor():
-    from reliability.nodes.camera_manager_node import (
-        PAPER1_HISTORICAL_COVARIANCE,
-        _fusion_report_covariance,
-    )
-
-    covariance = ((0.0025, -0.001), (-0.001, 0.010))
-    reported = _fusion_report_covariance(
-        covariance,
-        covariance_profile=PAPER1_HISTORICAL_COVARIANCE,
-        report_std_m=0.30,
-    )
-    assert reported == covariance
 
 
-def test_legacy_profile_retains_old_diagonal_report_floor():
-    from reliability.nodes.camera_manager_node import (
-        LEGACY_MULTICAM_COVARIANCE,
-        _fusion_report_covariance,
-    )
 
-    reported = _fusion_report_covariance(
-        ((0.0025, -0.001), (-0.001, 0.010)),
-        covariance_profile=LEGACY_MULTICAM_COVARIANCE,
-        report_std_m=0.30,
-    )
-    assert reported[0] == pytest.approx((0.09, 0.0))
-    assert reported[1] == pytest.approx((0.0, 0.09))
-
-
-def test_paper1_profile_does_not_apply_multicam_handover_inflation():
+def test_fusion_is_prior_free_and_rejects_a_metric_outlier():
+    """The gate is shared method: it holds for every rule, and needs no prior."""
     from reliability.fusion import MapObservation
-    from reliability.nodes.camera_manager_node import (
-        PAPER1_HISTORICAL_COVARIANCE,
-        _handover_profile_observation,
-    )
-
-    quality = CameraQuality(
-        camera_id="camera_B",
-        p_available=0.9,
-        conditional_cov_uv=((6.25, 0.0), (0.0, 6.25)),
-        association_confidence=0.9,
-    )
-    selected = MapObservation(
-        camera_id="camera_B",
-        timestamp_s=1.0,
-        xy_m=(1.0, 2.0),
-        covariance_m2=((0.02, 0.005), (0.005, 0.04)),
-        quality=quality,
-    )
-    inflated = MapObservation(
-        camera_id="camera_B",
-        timestamp_s=1.0,
-        xy_m=(1.0, 2.0),
-        covariance_m2=((0.18, 0.045), (0.045, 0.36)),
-        quality=quality,
-    )
-    assert _handover_profile_observation(
-        selected,
-        inflated,
-        covariance_profile=PAPER1_HISTORICAL_COVARIANCE,
-    ) is selected
-
-
-def test_paper1_fusion_is_prior_free_and_rejects_a_metric_outlier():
-    from reliability.fusion import MapObservation
-    from reliability.nodes.camera_manager_node import (
-        _paper1_precision_fusion_with_disagreement_gate,
-    )
+    from reliability.nodes.camera_manager_node import _gated_fusion
 
     def observation(camera_id, x):
         return MapObservation(
@@ -243,13 +181,14 @@ def test_paper1_fusion_is_prior_free_and_rejects_a_metric_outlier():
             ),
         )
 
-    result = _paper1_precision_fusion_with_disagreement_gate(
+    result = _gated_fusion(
         [
             observation("camera_A", 0.0),
             observation("camera_B", 0.2),
             observation("camera_C", 5.0),
         ],
         disagreement_gate_m=0.6,
+        rule="independent",
     )
     assert result.accepted_camera_ids == ("camera_A", "camera_B")
     assert result.rejected_camera_ids == ("camera_C",)

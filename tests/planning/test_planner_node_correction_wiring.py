@@ -139,7 +139,6 @@ def make_node(
     # Off on the single-camera path: honest_campaign_v1 is locked and ran
     # without the prediction cap, so its evidence must stay reproducible.
     node.max_predict_speed_mps = 0.0
-    node.state_measurement_inflation_m2 = 0.0   # unmodelled-error term, off
 
     node.planner = _Planner(r_eff=r_eff)
     node.global_planner = None

@@ -49,6 +49,27 @@ CONDITION_PLANNER = {
     # objectives. Both execute through the same geometry/local-tracker path.
     'gp': 'geometric_shortest_path',
     'mono_depth': 'geometric_shortest_path',
+    # The six-arm fusion comparison. Not planner variants: every arm drives ONE frozen
+    # preselected route through the same geometry/local-tracker path, so the only thing that
+    # differs is how the camera network's readings become one measurement (F1-F4) and what a
+    # detector's box is taken to mean (O1, O2). See
+    # experiments/fusion_on_fixed_routes/README.md.
+    'F1': 'geometric_shortest_path',
+    'F2': 'geometric_shortest_path',
+    'F3': 'geometric_shortest_path',
+    'F4': 'geometric_shortest_path',
+    'O1': 'geometric_shortest_path',
+    'O2': 'geometric_shortest_path',
+    # Commissioning arms: same frozen route and the same fusion rule, differing only in
+    # what the commissioning artifact is allowed to say about the cameras.
+    'K0': 'geometric_shortest_path',
+    'K1': 'geometric_shortest_path',
+    'K2': 'geometric_shortest_path',
+    'K3': 'geometric_shortest_path',
+    # Heading arms: the same frozen route and fusion rule, differing only in whether the
+    # camera update is allowed to move the heading through the position-heading covariance.
+    'H0': 'geometric_shortest_path',
+    'H1': 'geometric_shortest_path',
 }
 
 PRESELECTED_ROUTE_KEYS = (
@@ -777,7 +798,6 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'max_predict_speed_mps:={cfg.get("max_predict_speed_mps", 0.0)}',
         f'state_correction_mode:={cfg.get("state_correction_mode", "fused")}',
         f'state_max_correction_jump_m:={cfg.get("state_max_correction_jump_m", 0.0)}',
-        f'state_measurement_inflation_std_m:={cfg.get("state_measurement_inflation_std_m", 0.0)}',
         f'process_noise_xy:={cfg.get("process_noise_xy", 0.01)}',
         f'process_noise_theta:={cfg.get("process_noise_theta", 0.02)}',
         f'control_weight:={cfg.get("control_weight", 0.0)}',
@@ -874,10 +894,17 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'bridge_camera_b', 'bridge_camera_c', 'bridge_camera_d',
         'multicam_belief', 'manager_gp_artifact_template',
         'manager_min_spatial_trust',
-        'manager_decision_rate_hz', 'manager_fusion_report_std_m',
+        'manager_decision_rate_hz',
         'manager_fusion_disagreement_gate_m',
         'manager_fusion_max_timestamp_spread_s',
         'manager_covariance_profile',
+        'manager_commissioned_calibration_path', 'manager_commissioned_sigma_px',
+        'manager_commissioned_per_camera_sigma',
+        'manager_fusion_common_mode_std_m',
+        'manager_fusion_rule', 'manager_observation_model', 'manager_fixed_offset_m',
+        'manager_correction_timestamp_compensation', 'manager_admission_gate',
+        'manager_correction_residual_interval_s',
+        'manager_correction_propagation_drift_std',
         'manager_max_measurement_age_s', 'manager_age_decay_s',
         'manager_min_association_confidence',
         'manager_required_consecutive_better_frames',

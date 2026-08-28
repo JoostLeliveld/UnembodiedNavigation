@@ -368,10 +368,9 @@ def test_gates_expose_the_divergence_guard_only_for_metric_measurements():
 def anisotropic_state_msg(x, y, *, seconds, vxx, vyy, vxy):
     """A /state/bev pose whose xy covariance has real cross-correlation.
 
-    The paper1_historical covariance profile propagates conditional_cov_uv
-    through the projection as J R Jt, so an oblique camera yields a long thin
-    ellipse whose axes are NOT aligned with map x/y -- i.e. a non-zero cov[1]
-    and cov[6].
+    The commissioned profile propagates the pixel covariance through the
+    projection as J R Jt, so an oblique camera yields a long thin ellipse whose
+    axes are NOT aligned with map x/y -- i.e. a non-zero cov[1] and cov[6].
     """
     msg = state_msg(x, y, seconds=seconds)
     cov = list(msg.pose.covariance)
@@ -452,57 +451,54 @@ def test_legacy_diagonal_covariance_still_works_unchanged():
 # Unmodelled-error (inter-camera disagreement) inflation
 # --------------------------------------------------------------------------
 
-def test_measurement_inflation_adds_in_quadrature_not_as_a_floor():
-    """Independent error sources add in variance.
 
-    A floor would flatten every camera to the same value and destroy the
-    relative weighting a near camera should get over a far one; adding in
-    quadrature preserves it.
+
+
+
+
+def test_coupled_mode_lets_a_position_fix_move_the_heading():
+    """The opt-in mode keeps the posterior the update produced, heading included.
+
+    ``camera_xy_only`` anchors heading to odometry and deletes the position-heading
+    correlation at every correction, so heading uncertainty only ever grows. In ``coupled``
+    the same correction is allowed to use that correlation, which is the whole point: driving
+    with a heading error puts you sideways, so a position fix carries information about
+    heading. Measured offline on five recorded drives, this takes the heading error from
+    0.81-6.60 deg to 0.45-1.07 deg.
     """
-    node = make_state_node()
-    node.state_measurement_inflation_m2 = 0.12 ** 2
+    S_pred = np.array([
+        [0.04, 0.0, 0.05],
+        [0.0, 0.04, 0.0],
+        [0.05, 0.0, 0.20],
+    ])
+    posterior = np.array([
+        [0.01, 0.0, 0.02],
+        [0.0, 0.01, 0.0],
+        [0.02, 0.0, 0.09],
+    ])
+    def fresh():
+        # the commit writes its result back into the outcome for the diagnostics, so each
+        # node needs its own copy or the second one inherits the first one's heading
+        return bc.CorrectionOutcome(
+            reason=bc.RejectReason.ACCEPTED,
+            m_pred=np.zeros(3),
+            S_pred=S_pred.copy(),
+            next_m=np.array([0.05, 0.0, 0.33]),
+            next_S=posterior.copy(),
+        )
+    R = np.diag([1.0e-4, 1.0e-4])
 
-    near = node._inflate_measurement_cov(np.diag([0.02 ** 2, 0.02 ** 2]))
-    far = node._inflate_measurement_cov(np.diag([0.10 ** 2, 0.10 ** 2]))
+    anchored = make_state_node(odom_yaw=0.25)
+    anchored.heading_update_mode = 'camera_xy_only'
+    anchored._commit_metric_correction_outcome(stamp(10.0), R, fresh())
+    assert anchored.belief_m[2] == pytest.approx(0.25)        # odometry wins
+    assert anchored.belief_S[0, 2] == 0.0                     # correlation deleted
+    assert anchored.belief_S[2, 2] == pytest.approx(S_pred[2, 2])   # heading never sharpens
 
-    assert near[0, 0] == pytest.approx(0.02 ** 2 + 0.12 ** 2)
-    assert far[0, 0] == pytest.approx(0.10 ** 2 + 0.12 ** 2)
-    assert far[0, 0] > near[0, 0], "relative camera weighting must survive"
-
-
-def test_measurement_inflation_preserves_anisotropy():
-    node = make_state_node()
-    node.state_measurement_inflation_m2 = 0.12 ** 2
-    R = node._inflate_measurement_cov(np.array([[0.04, 0.008], [0.008, 0.0025]]))
-    assert R[0, 1] == pytest.approx(0.008), "cross term must not be touched"
-    assert R[0, 0] == pytest.approx(0.04 + 0.12 ** 2)
-
-
-def test_measurement_inflation_is_off_by_default():
-    node = make_state_node()
-    assert node.state_measurement_inflation_m2 == 0.0
-    R = np.diag([0.0064, 0.0064])
-    np.testing.assert_allclose(node._inflate_measurement_cov(R), R)
-
-
-def test_inflation_reaches_the_fused_measurement_covariance():
-    node = make_state_node()
-    node.state_measurement_inflation_m2 = 0.12 ** 2
-    R = node._state_measurement_cov(state_msg(0.0, 0.0, seconds=9.95, var=0.0064))
-    assert R[0, 0] == pytest.approx(0.0064 + 0.12 ** 2)
-
-
-def test_inflation_stops_a_normal_disagreement_being_rejected():
-    """The whole point: a ~0.19 m innovation is NORMAL for a 4-camera network.
-
-    Without the unmodelled-error term the filter is told to expect only detector
-    jitter, so a routine inter-camera disagreement scores as an outlier.
-    """
-    def rejected(inflation_std):
-        node = make_state_node(belief_xy=(0.0, 0.0), belief_cov=1e-3)
-        node.state_measurement_inflation_m2 = inflation_std ** 2
-        node._apply_state_correction(state_msg(0.19, 0.0, seconds=9.95, var=1e-3))
-        return only_diag(node)[IDX_ACCEPTED] == 0.0
-
-    assert rejected(0.0), "sanity: a tight R does reject a 0.19 m disagreement"
-    assert not rejected(0.20), "with the unmodelled-error term it must be accepted"
+    coupled = make_state_node(odom_yaw=0.25)
+    coupled.heading_update_mode = 'coupled'
+    coupled._commit_metric_correction_outcome(stamp(10.0), R, fresh())
+    assert coupled.belief_m[2] == pytest.approx(0.33)          # the fix moved heading
+    assert coupled.belief_S[0, 2] != 0.0                       # correlation kept
+    assert coupled.belief_S[2, 2] < S_pred[2, 2]               # heading actually sharpened
+    assert np.min(np.linalg.eigvalsh(coupled.belief_S)) > 0.0  # still a covariance matrix

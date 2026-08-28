@@ -25,7 +25,6 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('max_predict_speed_mps', default_value='0.0'),
         DeclareLaunchArgument('state_correction_mode', default_value='fused'),
         DeclareLaunchArgument('state_max_correction_jump_m', default_value='0.0'),
-        DeclareLaunchArgument('state_measurement_inflation_std_m', default_value='0.0'),
         DeclareLaunchArgument('discount_gamma', default_value='0.98'),
         DeclareLaunchArgument('goal_prior_u_std_start', default_value='80.0'),
         DeclareLaunchArgument('goal_prior_v_std_start', default_value='80.0'),
@@ -223,7 +222,17 @@ def generate_launch_description():
                               description='AR(1) correlation of encoder slip states.'),
         DeclareLaunchArgument('yolo_model', default_value='', description='Local path to a trained YOLO .pt model'),
         DeclareLaunchArgument('yolo_device', default_value='', description='Ultralytics device string; empty lets Ultralytics choose'),
-        DeclareLaunchArgument('yolo_imgsz', default_value='640'),
+                # 960, matching every trained model. Until 2026-08-21 this defaulted to 640
+        # while all five checkpoints were trained at imgsz 960, so inference ran at a
+        # resolution the weights had never seen. Measured on 200 real val frames with
+        # the frozen four-camera detector: the median bottom-edge error against the
+        # ground-truth box improves from 3.24 to 2.52 px (mask) and 2.88 to 2.40 px
+        # (box) going from 640 to 960, and recall is unchanged. 1280 is better again
+        # (2.83 / 2.02) but a five-image batch costs 164 ms against the 200 ms the
+        # 5 Hz cameras allow, leaving nothing for the rest of the stack; 960 costs
+        # 99 ms. The measurement matters because the MEASUREMENT is the mask's bottom
+        # edge, so inference resolution is a measurement parameter, not a speed knob.
+        DeclareLaunchArgument('yolo_imgsz', default_value='960'),
         DeclareLaunchArgument('yolo_conf_threshold', default_value='0.25'),
         DeclareLaunchArgument('yolo_iou_threshold', default_value='0.45'),
         DeclareLaunchArgument('yolo_target_class', default_value='robot'),
@@ -263,15 +272,62 @@ def generate_launch_description():
                               description='Maximum residual from the robust fusion seed before a camera is excluded.'),
         DeclareLaunchArgument('manager_require_gp_artifacts', default_value='true',
                               description='true = per-camera reliability GP sets each observation covariance (GP). false = no GP; every observation uses a fixed covariance (non-GP baseline). Set with an empty manager_gp_artifact_template for the non-GP arm.'),
-        DeclareLaunchArgument('manager_fusion_report_std_m', default_value='0.18',
-                              description='Reported std (m) of the fused /state/bev correction = the EKF measurement noise. 0.18 matches the measured ~0.17 m correction accuracy; tuned with state_correction_ekf for belief ~0.25 m (vs 0.33 m hard-reset).'),
         DeclareLaunchArgument('manager_fusion_max_timestamp_spread_s', default_value='0.25',
                               description='Maximum timestamp spread among views fused into one correction; older cached views are excluded.'),
-        DeclareLaunchArgument('manager_covariance_profile', default_value='legacy_fixed_metric',
-                              description='legacy_fixed_metric preserves the first multicam runtime; '
-                                          'paper1_historical propagates the detector 2.5/40 px '
-                                          'precision-blend covariance and disables multicam-only '
-                                          'handover/report-floor inflation.'),
+        DeclareLaunchArgument('manager_covariance_profile', default_value='commissioned_sigma_px',
+                              description='The sensor model. commissioned_sigma_px states '
+                                          'R_pix = sigma_px^2 I from the frozen calibration and lets '
+                                          'each camera geometry size the ellipse on the floor. It is '
+                                          'the only profile; nothing downstream floors or inflates '
+                                          'what it states.'),
+        DeclareLaunchArgument('manager_commissioned_calibration_path', default_value='',
+                              description='calibration.json the commissioned_sigma_px profile reads '
+                                          'sigma_px from. Required by that profile: the detector noise '
+                                          'is read, never typed in.'),
+        DeclareLaunchArgument('manager_commissioned_sigma_px', default_value='0.0',
+                              description='Deliberate override of the commissioned sigma_px (px). '
+                                          '0 = read it from the calibration artifact.'),
+        DeclareLaunchArgument('manager_commissioned_per_camera_sigma', default_value='false',
+                              description='Give each camera its own commissioned pixel noise '
+                                          'instead of the pooled one. Commissioning measures '
+                                          'both; pooling is a choice, and on these cameras one '
+                                          'camera needs ~3x the variance of another.'),
+        DeclareLaunchArgument('manager_fusion_common_mode_std_m', default_value='0.0',
+                              description='The error the cameras make together (m), added \n'
+                                          'back after they are combined. Commissioned once \n'
+                                          'against ground truth; 0 reproduces the previous \n'
+                                          'independent-cameras assumption.'),
+        DeclareLaunchArgument('manager_correction_timestamp_compensation', default_value='false',
+                              description='Carry each fused correction forward from the pose it '
+                                          'describes to the pose it is used on. Off reproduces '
+                                          'the historical behaviour, which applies a ~400 ms old '
+                                          'correction as if it were current (8.2 cm of lag bias '
+                                          'at 0.22 m/s).'),
+        DeclareLaunchArgument('manager_correction_propagation_drift_std', default_value='0.05',
+                              description='Uncertainty the propagation itself adds, per second '
+                                          'of correction age (m/s).'),
+        DeclareLaunchArgument('manager_correction_residual_interval_s', default_value='0.05',
+                              description='Interval between carrying a correction forward and '
+                                          'consuming it. Declared as uncertainty along the '
+                                          'direction of travel, because it is a bias there.'),
+        DeclareLaunchArgument('manager_admission_gate', default_value='true',
+                              description='Run the admission check on every detection: tall '
+                                          'enough, right width, contact point where predicted, '
+                                          'not touching the frame edge. Off reproduces the '
+                                          'ungated pipeline, which fused readings up to 122 cm '
+                                          'wrong.'),
+        DeclareLaunchArgument('manager_fusion_rule', default_value='legacy',
+                              description='How several cameras become one measurement: legacy keeps '
+                                          'the historical behaviour; best_single | distance_angle | '
+                                          'independent | network are the fusion arms.'),
+        DeclareLaunchArgument('manager_observation_model', default_value='hull',
+                              description='What a detector box means: hull predicts the box from the '
+                                          'robot shape; raw_box takes the box bottom-centre as the '
+                                          'robot; fixed_offset pushes that point a fixed distance '
+                                          'away from the camera.'),
+        DeclareLaunchArgument('manager_fixed_offset_m', default_value='0.0',
+                              description='The one commissioned number the fixed_offset observation '
+                                          'model uses, in metres.'),
         DeclareLaunchArgument('manager_max_measurement_age_s', default_value='1.25',
                               description='Maximum correction age admitted by selection or fusion; should not exceed planner freshness.'),
         DeclareLaunchArgument('manager_age_decay_s', default_value='1.25'),

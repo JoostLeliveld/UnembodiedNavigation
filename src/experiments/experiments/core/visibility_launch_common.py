@@ -57,7 +57,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     # Unmodelled-error term added in quadrature to every metric correction:
     # R' = R + sigma^2 I. Mostly INTER-CAMERA DISAGREEMENT, which the
     # per-camera pixel covariance cannot express. 0 = off (single-camera path).
-    'state_measurement_inflation_std_m': '0.0',
     'control_weight': '0.0',
     'risk_weight_obs': '1.0',
     'ambiguity_weight': '3.0',
@@ -295,13 +294,39 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             _launch_value(context, 'manager_fusion_disagreement_gate_m', '0.6')
         ),
         'manager_require_gp_artifacts': _as_bool(_launch_value(context, 'manager_require_gp_artifacts', 'true')),
-        'manager_fusion_report_std_m': float(_launch_value(context, 'manager_fusion_report_std_m', '0.3')),
         'manager_fusion_max_timestamp_spread_s': float(
             _launch_value(context, 'manager_fusion_max_timestamp_spread_s', '0.25')
         ),
         'manager_covariance_profile': _launch_value(
-            context, 'manager_covariance_profile', 'legacy_fixed_metric'
+            context, 'manager_covariance_profile', 'commissioned_sigma_px'
         ).strip().lower(),
+        'manager_commissioned_calibration_path': _launch_value(
+            context, 'manager_commissioned_calibration_path', ''
+        ).strip(),
+        'manager_commissioned_sigma_px': float(
+            _launch_value(context, 'manager_commissioned_sigma_px', '0.0')
+        ),
+        'manager_commissioned_per_camera_sigma': _as_bool(_launch_value(
+            context, 'manager_commissioned_per_camera_sigma', 'false')),
+        'manager_fusion_common_mode_std_m': float(
+            _launch_value(context, 'manager_fusion_common_mode_std_m', '0.0')),
+        'manager_fusion_rule': _launch_value(
+            context, 'manager_fusion_rule', 'legacy'
+        ).strip().lower(),
+        'manager_correction_timestamp_compensation': _as_bool(_launch_value(
+            context, 'manager_correction_timestamp_compensation', 'false')),
+        'manager_admission_gate': _as_bool(_launch_value(
+            context, 'manager_admission_gate', 'true')),
+        'manager_correction_residual_interval_s': float(_launch_value(
+            context, 'manager_correction_residual_interval_s', '0.05')),
+        'manager_correction_propagation_drift_std': float(_launch_value(
+            context, 'manager_correction_propagation_drift_std', '0.05')),
+        'manager_observation_model': _launch_value(
+            context, 'manager_observation_model', 'hull'
+        ).strip().lower(),
+        'manager_fixed_offset_m': float(
+            _launch_value(context, 'manager_fixed_offset_m', '0.0')
+        ),
         'manager_max_measurement_age_s': float(
             _launch_value(context, 'manager_max_measurement_age_s', '1.25')
         ),
@@ -516,10 +541,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'max_predict_speed_mps': float(_launch_value(
             context, 'max_predict_speed_mps', PAPER_LAUNCH_DEFAULTS['max_predict_speed_mps']
         )),
-        'state_measurement_inflation_std_m': float(_launch_value(
-            context, 'state_measurement_inflation_std_m',
-            PAPER_LAUNCH_DEFAULTS['state_measurement_inflation_std_m']
-        )),
         'state_max_correction_jump_m': float(_launch_value(
             context, 'state_max_correction_jump_m',
             PAPER_LAUNCH_DEFAULTS['state_max_correction_jump_m']
@@ -673,8 +694,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'yolo_warmup_iters': int(_launch_value(context, 'yolo_warmup_iters', '3')),
         'yolo_inference_in_callback': _as_bool(_launch_value(context, 'yolo_inference_in_callback', 'true')),
     }
-    if cfg['heading_update_mode'] != 'camera_xy_only':
-        raise RuntimeError("heading_update_mode must be 'camera_xy_only' for current active runs")
+    if cfg['heading_update_mode'] not in ('camera_xy_only', 'coupled'):
+        raise RuntimeError(
+            "heading_update_mode must be 'camera_xy_only' or 'coupled'")
     if (
         cfg['enable_logging']
         and (
@@ -1006,13 +1028,18 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'bridge_camera_c': 'true' if cfg.get('bridge_camera_c', False) else 'false',
         'bridge_camera_d': 'true' if cfg.get('bridge_camera_d', False) else 'false',
     }
-    if bool(cfg.get('multicam_scheduled', False)):
-        # The scheduled detector allocates one model and infers one view per
-        # cycle, but it still needs fresh RGB frames from every commissioned
-        # camera. bringup_sim declares these opt-in A--L bridge switches.
+    if bool(cfg.get('multicam_scheduled', False)) or bool(cfg.get('multicam_belief', False)):
+        # Both multi-camera front-ends need fresh RGB from EVERY camera the world profile
+        # declares: the scheduled detector infers one view per cycle, and the batched
+        # detector emits a batch only once every camera in its contract has contributed.
+        # An unbridged camera therefore does not degrade the run, it silently starves it --
+        # which is how camera E went missing when the profile grew from four cameras to
+        # five. So the bridges are derived from the profile rather than listed by hand.
         for camera_id in cfg.get('profile_camera_ids', []):
             suffix = str(camera_id).removeprefix('camera_').lower()
-            if suffix in tuple('efghijkl'):
+            if suffix == 'a':
+                sim_launch_arguments['bridge_camera_a'] = 'true'
+            elif suffix in tuple('bcdefghijkl'):
                 sim_launch_arguments[f'bridge_camera_{suffix}'] = 'true'
 
     bringup_sim = IncludeLaunchDescription(
@@ -1459,15 +1486,22 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
     is needed. Every camera's detection is projected with its own calibration,
     so the fused correction is genuinely multi-camera.
     """
-    frozen_batch_ids = ('camera_A', 'camera_B', 'camera_C', 'camera_D')
+    # The camera set is the perception layer's own contract, not a literal repeated here.
+    # It was ('camera_A'..'camera_D') while the batch runtime was four-camera; the runtime
+    # contract is now v2 and carries warehouse_v2's five wall cameras, so a stale literal
+    # here refused every warehouse_v2 arm before Gazebo started.
+    from perception.core.four_camera_runtime_contract import (  # noqa: PLC0415
+        BATCHED_CAMERA_ORDER,
+    )
+    contract_camera_ids = tuple(BATCHED_CAMERA_ORDER)
     profile_camera_ids = tuple(cfg.get('profile_camera_ids', ()))
-    if profile_camera_ids != frozen_batch_ids:
+    if profile_camera_ids != contract_camera_ids:
         raise RuntimeError(
-            "multicam_belief uses the frozen batched-four-camera runtime contract "
-            f"{frozen_batch_ids}, but the world profile declares {profile_camera_ids}. "
-            "Refusing to silently omit cameras. The registry-driven scheduled path "
-            "can smoke-test A-E, but a five-camera simultaneous detector/replay "
-            "contract must be commissioned separately before fusion evidence is logged."
+            "multicam_belief uses the batched detector's runtime contract "
+            f"{contract_camera_ids}, but the world profile declares {profile_camera_ids}. "
+            "Refusing to silently omit cameras: the batch is emitted only when every "
+            "camera in the contract has contributed a frame, so a mismatch would drop a "
+            "camera's evidence without saying so."
         )
     sim_pkg = FindPackageShare('sim')
     world_sdf = PathJoinSubstitution([sim_pkg, 'gazebo_worlds', 'worlds', cfg['world']])
@@ -1478,6 +1512,11 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
         output='screen',
         parameters=[{
             'use_sim_time': True,
+            # Every published observation carries a calibration identity of the form
+            # "<world>_<camera>", and the node refuses to run without the world half. This
+            # launch path never set it, so the batched detector died on start-up; the
+            # commissioning launch derived it the same way.
+            'calibration_world': str(cfg['world']).replace('.world.sdf', ''),
             'model_path': cfg['yolo_model'],
             'runtime_backend': 'native',
             'device': '0',
@@ -1511,14 +1550,22 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
     # to one (e.g. "camera_A") for a single-camera localization baseline in the
     # fused-vs-single comparison. camera_model_includes must stay aligned 1:1 with
     # camera_ids (the manager asserts this), so derive it from the same selection.
-    _model_include_by_id = {
-        'camera_A': 'external_camera', 'camera_B': 'external_camera_b',
-        'camera_C': 'external_camera_c', 'camera_D': 'external_camera_d',
-    }
+    # Derived from the world profile, which already carries camera_ids aligned 1:1 with
+    # camera_model_includes and is validated above. A hard-coded map here silently lacked
+    # camera_E and would have dropped the fifth camera from the manager.
+    _model_include_by_id = dict(zip(
+        cfg.get('profile_camera_ids', ()), cfg.get('profile_camera_model_includes', ())))
     _mc_camera_ids = (
         [c.strip() for c in str(cfg.get('manager_camera_ids', '') or '').split(',') if c.strip()]
-        or ['camera_A', 'camera_B', 'camera_C', 'camera_D']
+        or list(cfg.get('profile_camera_ids', ()))
     )
+    _missing = [c for c in _mc_camera_ids if c not in _model_include_by_id]
+    if _missing:
+        raise RuntimeError(
+            f"manager_camera_ids asks for {_missing}, which the world profile for "
+            f"{cfg['world']} does not declare. Fix the profile or the request; do not "
+            "guess a model include name."
+        )
     _mc_model_includes = [_model_include_by_id[c] for c in _mc_camera_ids]
     manager = Node(
         package='reliability',
@@ -1552,14 +1599,30 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
                 cfg.get('manager_fusion_max_timestamp_spread_s', 0.25)
             ),
             'covariance_profile': str(
-                cfg.get('manager_covariance_profile', 'legacy_fixed_metric')
+                cfg.get('manager_covariance_profile', 'commissioned_sigma_px')
             ),
+            # The commissioned profile reads the detector's noise from the artifact rather
+            # than carrying a remembered number through three config layers.
+            'commissioned_calibration_path': str(
+                cfg.get('manager_commissioned_calibration_path', '') or ''
+            ),
+            'commissioned_sigma_px': float(cfg.get('manager_commissioned_sigma_px', 0.0)),
+            'commissioned_per_camera_sigma': bool(
+                cfg.get('manager_commissioned_per_camera_sigma', False)),
+            'fusion_common_mode_std_m': float(
+                cfg.get('manager_fusion_common_mode_std_m', 0.0)),
+            'fusion_rule': str(cfg.get('manager_fusion_rule', 'legacy')),
+            'correction_timestamp_compensation': bool(
+                cfg.get('manager_correction_timestamp_compensation', False)),
+            'admission_gate': bool(cfg.get('manager_admission_gate', True)),
+            'correction_residual_interval_s': float(
+                cfg.get('manager_correction_residual_interval_s', 0.05)),
+            'correction_propagation_drift_std_m_per_s': float(
+                cfg.get('manager_correction_propagation_drift_std', 0.05)),
+            'observation_model': str(cfg.get('manager_observation_model', 'hull')),
+            'fixed_offset_m': float(cfg.get('manager_fixed_offset_m', 0.0)),
             # Covariance the fused /state/bev correction reports to the planner
             # EKF. At the higher ~5 Hz correction rate the fused observation is
-            # measured at ~0.19 m vs GT, so a 0.3 m report understates it and the
-            # EKF drifts on odometry between corrections. Reporting the measured
-            # accuracy lets the dense corrections pull the belief in.
-            'fusion_report_std_m': float(cfg.get('manager_fusion_report_std_m', 0.3)),
             'min_spatial_trust': float(cfg.get('manager_min_spatial_trust', 0.15)),
             # Gates relaxed for the ~1 Hz four-detector regime: the shipped
             # defaults (age 0.15 s, assoc 0.70, 3-frame hysteresis, 0.30 m
@@ -1696,8 +1759,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'state_correction_ekf': _as_bool(cfg.get('state_correction_ekf', False)),
             'state_correction_mode': cfg.get('state_correction_mode', 'fused'),
             'state_max_correction_jump_m': cfg.get('state_max_correction_jump_m', 0.0),
-            'state_measurement_inflation_std_m': cfg.get(
-                'state_measurement_inflation_std_m', 0.0),
             'pixel_topic': cfg['pixel_topic'],
             'pixel_timeout_s': cfg['pixel_timeout_s'],
             'pixel_correction_min_interval_s': cfg['pixel_correction_min_interval_s'],

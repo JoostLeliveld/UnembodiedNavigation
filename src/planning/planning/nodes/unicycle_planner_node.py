@@ -132,7 +132,11 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('nogo_mode', 'keep_out')
         _declare_if_not('driveable_geometry_json', '')
         _declare_if_not('visibility_artifact_path', '')
-        _declare_if_not('robot_collision_radius_m', 0.125)
+        # The planner models the robot as a disc, so this is the CIRCUMSCRIBED
+        # radius. warehouse_amr is 0.800 x 0.550 m -> hypot(0.400, 0.275) = 0.485.
+        # (turtlebot3_burger was 0.125; pass it explicitly to reproduce a
+        # pre-2026-08-20 campaign.)
+        _declare_if_not('robot_collision_radius_m', 0.485)
 
         # Optimizer params
         _declare_if_not('optimizer_maxiter', 50)
@@ -281,26 +285,6 @@ class UnicyclePlannerNode(Node):
         # The pixel path keeps its 0.5 m limit: nonlinear observation model, and
         # it is locked paper-1 method backing honest_campaign_v1.
         _declare_if_not('state_max_correction_jump_m', 0.0)
-        # Extra measurement uncertainty added IN QUADRATURE to every metric
-        # correction: R' = R + sigma^2 * I. This is the unmodelled-error term.
-        #
-        # conditional_cov_uv (and the fixed metric constant derived from it)
-        # models one camera's DETECTOR JITTER. It is structurally silent about
-        # inter-camera disagreement -- cameras A and C place the robot at
-        # X + d_A and X + d_C with different calibration / contact-height /
-        # bbox-bottom errors, and no single pose satisfies both. That term does
-        # not exist in a single-camera system, which is why paper 1 ran happily
-        # at 2.5 px (measured innovations 1.53 px, NIS median 0.29, 1 rejection
-        # in 6370) while the 4-cam fused observation measures ~0.19 m vs GT.
-        #
-        # Additive rather than a floor: independent error sources add in
-        # variance, and a floor would flatten every camera to the same value,
-        # destroying the relative weighting a far camera should get vs a near one.
-        #
-        # 0.0 = off, which keeps the single-camera path exactly as locked. The
-        # legacy fused path already had an equivalent via fusion_report_std_m
-        # (0.18 m); the per-camera path bypasses that, so it needs this.
-        _declare_if_not('state_measurement_inflation_std_m', 0.0)
         # Kinematic plausibility cap on the prediction, m/s. The motion replay
         # extrapolates the last command when odometry is missing (up to
         # state_max_predict_dt_s), inventing up to ~0.9 m of travel. 0 disables.
@@ -517,16 +501,16 @@ class UnicyclePlannerNode(Node):
         self.state_max_correction_jump_m = max(
             float(self.get_parameter('state_max_correction_jump_m').value), 0.0
         )
-        self.state_measurement_inflation_m2 = max(
-            float(self.get_parameter('state_measurement_inflation_std_m').value), 0.0
-        ) ** 2
         self.max_predict_speed_mps = max(
             float(self.get_parameter('max_predict_speed_mps').value), 0.0
         )
         self._latest_odom_yaw = None
         self.heading_update_mode = str(self.get_parameter('heading_update_mode').value).strip().lower()
-        if self.heading_update_mode != 'camera_xy_only':
-            raise RuntimeError("heading_update_mode must be 'camera_xy_only' for current active runs")
+        if self.heading_update_mode not in ('camera_xy_only', 'coupled'):
+            raise RuntimeError(
+                "heading_update_mode must be 'camera_xy_only' (heading anchored to odometry, "
+                "cameras move x/y only) or 'coupled' (the camera update also moves heading "
+                "through the position-heading covariance)")
         self.min_state_cov = float(self.get_parameter('min_state_cov').value)
         self.cov_eig_floor = 1e-9
         self._heading_anchor_applied = False
@@ -962,7 +946,7 @@ class UnicyclePlannerNode(Node):
         S[:2, :2] = R_xy
         return m, self._regularize_state_covariance(S)
 
-    def _xy_covariance_from_pose(self, cov, *, floor=0.0):
+    def _xy_covariance_from_pose(self, cov):
         """Full 2x2 xy block of a ROS pose covariance, cross terms included.
 
         camera_manager publishes map-frame CROSS-covariance at indices 1 and 6
@@ -976,8 +960,8 @@ class UnicyclePlannerNode(Node):
         definite, so a malformed message degrades loudly-but-safely rather than
         poisoning the filter.
         """
-        vxx = max(float(cov[0]) if len(cov) > 0 else 0.0, floor)
-        vyy = max(float(cov[7]) if len(cov) > 7 else 0.0, floor)
+        vxx = max(float(cov[0]) if len(cov) > 0 else 0.0, 0.0)
+        vyy = max(float(cov[7]) if len(cov) > 7 else 0.0, 0.0)
         vxy = 0.0
         if len(cov) > 6:
             vxy = 0.5 * (float(cov[1]) + float(cov[6]))
@@ -1949,19 +1933,13 @@ class UnicyclePlannerNode(Node):
             self._warn_stale_pixel_once(f"belief re-anchored to metric correction ({reason})")
 
     def _state_measurement_cov(self, state_msg):
-        """Measurement covariance of one fused /state/bev correction."""
-        return self._inflate_measurement_cov(
-            self._xy_covariance_from_pose(state_msg.pose.covariance, floor=self.min_state_cov)
-        )
+        """Measurement covariance of one fused /state/bev correction.
 
-    def _inflate_measurement_cov(self, R):
-        """Add the unmodelled-error term in quadrature: R' = R + sigma^2 I."""
-        if self.state_measurement_inflation_m2 <= 0.0:
-            return R
-        R = np.asarray(R, dtype=float).copy()
-        R[0, 0] += self.state_measurement_inflation_m2
-        R[1, 1] += self.state_measurement_inflation_m2
-        return R
+        Taken as the manager states it. Nothing here inflates it: the commissioned
+        covariance is the claim under test, and a bias the cameras repeat is bounded by
+        the manager's commissioned bias floor, not by widening R per frame.
+        """
+        return self._xy_covariance_from_pose(state_msg.pose.covariance)
 
     def _snapshot_metric_correction_inputs(self, stamp_msg, z_xy):
         with self._data_lock:
@@ -2048,14 +2026,12 @@ class UnicyclePlannerNode(Node):
             )
 
     def _observation_covariance(self, obs):
-        R = np.array(
+        """One camera's stated covariance, as it stated it (see _state_measurement_cov)."""
+        return np.array(
             [[float(obs.covariance_m2[0][0]), float(obs.covariance_m2[0][1])],
              [float(obs.covariance_m2[1][0]), float(obs.covariance_m2[1][1])]],
             dtype=float,
         )
-        R[0, 0] = max(R[0, 0], self.min_state_cov)
-        R[1, 1] = max(R[1, 1], self.min_state_cov)
-        return self._inflate_measurement_cov(R)
 
     def _reanchor_on_camera_quorum(self, ordered):
         """Re-anchor only when several mutually agreeing cameras say the belief is lost."""
@@ -2210,11 +2186,27 @@ class UnicyclePlannerNode(Node):
             # NIS values, and let the belief diverge while valid observations
             # were rejected. Keep the predicted heading variance, but make the
             # externally anchored heading independent of camera xy.
-            h = self._map_frame_heading()
-            m_upd[2] = float(h) if h is not None else float(outcome.m_pred[2])
-            S_upd[:2, 2] = 0.0
-            S_upd[2, :2] = 0.0
-            S_upd[2, 2] = float(S_pred[2, 2])
+            if getattr(self, 'heading_update_mode', 'camera_xy_only') == 'coupled':
+                # Keep the posterior the update actually produced, heading included. The
+                # prediction step builds a position-heading correlation (driving with a
+                # heading error puts you sideways), so a position fix carries information
+                # about heading and the gain's third row applies it. Deleting those terms
+                # throws that information away and leaves the heading variance growing for
+                # the whole drive. The indefiniteness that motivated the deletion came from
+                # the HYBRID -- posterior x/y block beside PRIOR cross terms -- not from the
+                # coupling; a consistent posterior is projected to PSD below like any other.
+                #
+                # Measured offline on five recorded drives before this was wired in
+                # (experiments/fusion_on_fixed_routes/coupled_heading.py): heading error
+                # 0.81-6.60 deg -> 0.45-1.07 deg, heading sigma 14.3 deg -> 1.3-5.4 deg,
+                # position unchanged, smallest eigenvalue positive throughout.
+                pass
+            else:
+                h = self._map_frame_heading()
+                m_upd[2] = float(h) if h is not None else float(outcome.m_pred[2])
+                S_upd[:2, 2] = 0.0
+                S_upd[2, :2] = 0.0
+                S_upd[2, 2] = float(S_pred[2, 2])
             # Floor the posterior xy variance at half the measurement noise so
             # the filter never becomes so confident that the next innovation
             # trips the NIS gate -- the collapse that caused divergence at tight R.
