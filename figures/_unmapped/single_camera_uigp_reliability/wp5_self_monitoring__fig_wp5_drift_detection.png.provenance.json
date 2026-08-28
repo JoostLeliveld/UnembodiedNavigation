@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": null,
-  "study": "single_camera_uigp_reliability",
-  "source_path": "logs/studies/single_camera_uigp_reliability/wp5_self_monitoring/fig_wp5_drift_detection.png",
-  "source_sha256": "71fe59d1826976a2be00a36bf962a7cbeb267c4c0ada413e7f5d45ff92d98f03",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

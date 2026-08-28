@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-PROJ-AMP",
-  "study": "projection_amplification",
-  "source_path": "logs/studies/projection_amplification/exp4_error_vs_distance/fig_e2_pixel_statistic_vs_elevation.pdf",
-  "source_sha256": "5c7eca0c2acd4d5060b9c98f606eec364d4f63d7b8333af1ac25dac790770340",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

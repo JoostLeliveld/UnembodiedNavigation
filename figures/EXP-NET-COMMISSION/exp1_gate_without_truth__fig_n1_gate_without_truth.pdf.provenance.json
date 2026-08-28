@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-NET-COMMISSION",
-  "study": "network_commissioning_realism",
-  "source_path": "logs/studies/network_commissioning_realism/exp1_gate_without_truth/fig_n1_gate_without_truth.pdf",
-  "source_sha256": "06663690edd0c4a530e1085112665e1a00d4ba948d1a20ffd069b0722a07da7a",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-COMMISSION",
-  "study": "multicamera_commissioning_bigwarehouse",
-  "source_path": "logs/studies/multicamera_commissioning_bigwarehouse/threshold_sensitivity_v1/threshold_sweep.png",
-  "source_sha256": "d67fe429dde9f0d66b18f9299582a8f40672d378e0f795954b8bbe4f46a453b0",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

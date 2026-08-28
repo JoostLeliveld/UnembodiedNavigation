@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": null,
-  "study": "offset_state_closed_loop",
-  "source_path": "logs/studies/offset_state_closed_loop/why_learn/fig_w1_why_learn.pdf",
-  "source_sha256": "055c01ca1e9ecd3d7ba8eae7b5130d24a044f82616d3af6d0fd5f578407b2c7b",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

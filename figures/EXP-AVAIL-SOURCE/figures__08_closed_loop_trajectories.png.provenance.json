@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-AVAIL-SOURCE",
-  "study": "availability_paper",
-  "source_path": "logs/studies/availability_paper/figures/08_closed_loop_trajectories.png",
-  "source_sha256": "bad511f2fa2d210a4a3fbc0edaedfd1a6ac80b6634ff20f4e4828a16cf9746c9",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

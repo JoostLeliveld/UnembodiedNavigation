@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-BELIEF",
-  "study": "bayesian_filter_showcase",
-  "source_path": "logs/studies/bayesian_filter_showcase/demo_state_space_model/fig_m7_same_ladder.pdf",
-  "source_sha256": "40ad3d996e7dc5f2071397f55f51d2dfdbb5624fdd4803809445db20d7e18e1b",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

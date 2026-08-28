@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-DRIFT",
-  "study": "calibration_drift_lifecycle",
-  "source_path": "logs/studies/calibration_drift_lifecycle/exp1_stale_correction/fig_d2_absolute_gate_diagnostic.png",
-  "source_sha256": "d8377f6414e2f96acc057678b19edaeae90580a13cdb3f471c68747216f75d89",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-BELIEF",
-  "study": "bayesian_filter_showcase",
-  "source_path": "logs/studies/bayesian_filter_showcase/meeting_r_spatial/old_circle_to_future_ellipse.png",
-  "source_sha256": "0cd5b3b8b282dcd9f9da4836eb82c2a2e85cab5fe1e7481e5a3056a1128a47c9",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

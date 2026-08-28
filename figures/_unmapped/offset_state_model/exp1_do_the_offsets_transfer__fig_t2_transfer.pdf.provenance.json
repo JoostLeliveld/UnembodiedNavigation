@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": null,
-  "study": "offset_state_model",
-  "source_path": "logs/studies/offset_state_model/exp1_do_the_offsets_transfer/fig_t2_transfer.pdf",
-  "source_sha256": "c2f8441de9a2a4d4540e40b6901b83fb66f0a0f54180af07081877e9593694f9",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

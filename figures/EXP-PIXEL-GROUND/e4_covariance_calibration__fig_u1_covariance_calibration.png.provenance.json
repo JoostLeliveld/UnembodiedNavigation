@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-PIXEL-GROUND",
-  "study": "pixel_ground_path",
-  "source_path": "logs/studies/pixel_ground_path/e4_covariance_calibration/fig_u1_covariance_calibration.png",
-  "source_sha256": "75957711b4b9054274ddb1ebbc4339a13af30ee68238c0298ad7da55f4445980",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

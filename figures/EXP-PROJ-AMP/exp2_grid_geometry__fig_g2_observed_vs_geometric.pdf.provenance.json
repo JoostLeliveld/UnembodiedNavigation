@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-PROJ-AMP",
-  "study": "projection_amplification",
-  "source_path": "logs/studies/projection_amplification/exp2_grid_geometry/fig_g2_observed_vs_geometric.pdf",
-  "source_sha256": "cd83aa9a6b9ead2a0b839f03f43020803fd5f21632deb5144c0b7eed58515818",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

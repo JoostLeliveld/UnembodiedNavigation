@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-BELIEF",
-  "study": "bayesian_filter_showcase",
-  "source_path": "logs/studies/bayesian_filter_showcase/demo_how_the_filter_works/fig_a4_shrinking_onto_a_lie.pdf",
-  "source_sha256": "776f5285c224c328bb85a21d60bb087087f2cff01f94dc87cb0d2d4a73a72603",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

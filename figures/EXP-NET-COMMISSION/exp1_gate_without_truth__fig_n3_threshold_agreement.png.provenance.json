@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-NET-COMMISSION",
-  "study": "network_commissioning_realism",
-  "source_path": "logs/studies/network_commissioning_realism/exp1_gate_without_truth/fig_n3_threshold_agreement.png",
-  "source_sha256": "a31a6c968942b09a73a90589a5669d5366f2fdd6483679bf0f564404a7e25b58",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

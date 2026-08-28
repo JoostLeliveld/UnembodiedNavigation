@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-BELIEF",
-  "study": "bayesian_filter_showcase",
-  "source_path": "logs/studies/bayesian_filter_showcase/demo_state_space_model/fig_m4_inferring_the_covariance.pdf",
-  "source_sha256": "0be598a7d433686f30b63f715f15f9362f674f017ec711ff6bbec91126537114",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

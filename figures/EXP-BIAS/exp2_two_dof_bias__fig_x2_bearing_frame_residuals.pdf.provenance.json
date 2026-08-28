@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-BIAS",
-  "study": "external_camera_bias_model",
-  "source_path": "logs/studies/external_camera_bias_model/exp2_two_dof_bias/fig_x2_bearing_frame_residuals.pdf",
-  "source_sha256": "8e571ec17e8322f0f1566d32ed9079187c42eb82cc065041a0a10862782a884f",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

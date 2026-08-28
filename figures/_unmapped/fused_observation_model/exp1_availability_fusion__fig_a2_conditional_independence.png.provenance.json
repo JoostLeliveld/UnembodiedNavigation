@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": null,
-  "study": "fused_observation_model",
-  "source_path": "logs/studies/fused_observation_model/exp1_availability_fusion/fig_a2_conditional_independence.png",
-  "source_sha256": "426c3120ea422ea4850b3e47685aa70753fac76d1aea1c8777b2abf846ad9c86",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

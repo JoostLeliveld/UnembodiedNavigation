@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": null,
-  "study": "single_camera_uigp_reliability",
-  "source_path": "logs/studies/single_camera_uigp_reliability/tier1_consolidated/figures/fig1_health_trace.png",
-  "source_sha256": "6f780a65eaf7b276f692efa2fad9fa5a46b1df96a25687094d6badceef46e7be",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

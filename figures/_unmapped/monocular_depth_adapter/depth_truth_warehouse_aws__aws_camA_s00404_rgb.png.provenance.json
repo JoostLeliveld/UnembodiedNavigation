@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": null,
-  "study": "monocular_depth_adapter",
-  "source_path": "logs/studies/monocular_depth_adapter/depth_truth_warehouse_aws/aws_camA_s00404_rgb.png",
-  "source_sha256": "e16ed888233bc65e62d8a7d133954eba1f1563a4a2371891e514310c45d6f94b",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

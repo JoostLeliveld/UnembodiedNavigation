@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-BELIEF",
-  "study": "bayesian_filter_showcase",
-  "source_path": "logs/studies/bayesian_filter_showcase/demo_how_the_filter_works/fig_a3_what_r_is_made_of.png",
-  "source_sha256": "adbe0c2f9071c85b923a72a3d14a3bc465fe9207ee669721d88492b15fc08e3d",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

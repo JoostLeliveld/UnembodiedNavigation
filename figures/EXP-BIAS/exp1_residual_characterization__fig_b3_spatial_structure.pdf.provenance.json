@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-BIAS",
-  "study": "external_camera_bias_model",
-  "source_path": "logs/studies/external_camera_bias_model/exp1_residual_characterization/fig_b3_spatial_structure.pdf",
-  "source_sha256": "f64a7a23b96c0009742bc95b4ef05068b614e5bfb1c01de57b312a6a91685f63",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

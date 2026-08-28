@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": null,
-  "study": "offset_state_model",
-  "source_path": "logs/studies/offset_state_model/exp2_offset_in_the_robot_frame/fig_b1_body_offsets.png",
-  "source_sha256": "1b38b0f8c2335001556936c33e9f0327e08bc9e52052b9bf10e7b192a5ea5ada",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

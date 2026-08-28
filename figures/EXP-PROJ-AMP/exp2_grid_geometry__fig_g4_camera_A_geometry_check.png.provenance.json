@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-PROJ-AMP",
-  "study": "projection_amplification",
-  "source_path": "logs/studies/projection_amplification/exp2_grid_geometry/fig_g4_camera_A_geometry_check.png",
-  "source_sha256": "0664810968190a7f143b105649b01622e13623e4c1ebe95d6f6dd16aeabe2e75",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

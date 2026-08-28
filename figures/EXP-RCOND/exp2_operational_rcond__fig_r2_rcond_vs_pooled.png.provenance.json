@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-RCOND",
-  "study": "operational_residual_rcond",
-  "source_path": "logs/studies/operational_residual_rcond/exp2_operational_rcond/fig_r2_rcond_vs_pooled.png",
-  "source_sha256": "1ce59c350d769dd2de6a6d817dfaceb7b48c390fa42d7e6c9f58dfdf55b56200",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

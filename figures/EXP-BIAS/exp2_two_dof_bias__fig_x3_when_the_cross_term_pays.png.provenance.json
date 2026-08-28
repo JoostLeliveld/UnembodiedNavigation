@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-BIAS",
-  "study": "external_camera_bias_model",
-  "source_path": "logs/studies/external_camera_bias_model/exp2_two_dof_bias/fig_x3_when_the_cross_term_pays.png",
-  "source_sha256": "e3c50232e486361c052991f6f1b8d53dd705a10f62bce3b1eb733de783bc8d86",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

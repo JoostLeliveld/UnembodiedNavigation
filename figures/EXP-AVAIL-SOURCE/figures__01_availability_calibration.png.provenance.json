@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-AVAIL-SOURCE",
-  "study": "availability_paper",
-  "source_path": "logs/studies/availability_paper/figures/01_availability_calibration.png",
-  "source_sha256": "da826feab079b7f4700f7e7f68955a61fbd1852a8cbab57b4aa8d0c3b379c7f1",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

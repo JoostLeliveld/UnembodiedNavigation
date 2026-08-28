@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": null,
-  "study": "offset_state_closed_loop",
-  "source_path": "logs/studies/offset_state_closed_loop/angular_diversity/fig_a1_angular_diversity.pdf",
-  "source_sha256": "057f31c4100cbe56a560e84a03a94defd268dc7eb86097285b5e8da5e90478ad",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-RCOND",
-  "study": "operational_residual_rcond",
-  "source_path": "logs/studies/operational_residual_rcond/exp2_operational_rcond/fig_r1_pooled_vs_per_camera.pdf",
-  "source_sha256": "a2262c65d70f2a4879a20f864101d18c9d6d76a40d4b813daca2afa6131add77",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

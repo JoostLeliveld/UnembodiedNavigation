@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": null,
-  "study": "offset_state_closed_loop",
-  "source_path": "logs/studies/offset_state_closed_loop/midterm_assets/assets/backup/card_planning_decomposition.png",
-  "source_sha256": "c1d2a333db12899bf2b185bde5ff61be354b3242a8db5a624a6c3e09d985ccce",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

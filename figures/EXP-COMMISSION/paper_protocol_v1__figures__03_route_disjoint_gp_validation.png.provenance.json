@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-COMMISSION",
-  "study": "multicamera_commissioning_bigwarehouse",
-  "source_path": "logs/studies/multicamera_commissioning_bigwarehouse/paper_protocol_v1/figures/03_route_disjoint_gp_validation.png",
-  "source_sha256": "e6340b0d1860c24ecbb23b1d0371655db7d487c0f36f9a6c46ee966e544d1f14",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

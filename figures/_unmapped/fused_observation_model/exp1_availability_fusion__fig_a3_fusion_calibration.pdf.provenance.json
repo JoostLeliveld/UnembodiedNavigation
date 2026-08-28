@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": null,
-  "study": "fused_observation_model",
-  "source_path": "logs/studies/fused_observation_model/exp1_availability_fusion/fig_a3_fusion_calibration.pdf",
-  "source_sha256": "70f587bbae27c0ae3ab6f7ef05e8ca354d861b1135624b0293dfabab30e76460",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

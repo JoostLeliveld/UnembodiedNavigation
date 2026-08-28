@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": null,
-  "study": "monocular_depth_adapter",
-  "source_path": "logs/studies/monocular_depth_adapter/bs1_native_flip/cost_and_agreement.png",
-  "source_sha256": "c5d489e8526d9325af7e7b76b2154ee35ab5ee5126260e3f8171fb55e7fb21ae",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

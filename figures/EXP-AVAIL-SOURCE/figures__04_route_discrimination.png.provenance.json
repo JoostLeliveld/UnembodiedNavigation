@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-AVAIL-SOURCE",
-  "study": "availability_paper",
-  "source_path": "logs/studies/availability_paper/figures/04_route_discrimination.png",
-  "source_sha256": "afb0d6e079c25cbde1ae71d941c5dc5ce33e8484730f36414905d53f8b71eea7",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

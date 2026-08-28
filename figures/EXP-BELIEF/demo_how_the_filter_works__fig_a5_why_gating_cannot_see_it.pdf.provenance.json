@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-BELIEF",
-  "study": "bayesian_filter_showcase",
-  "source_path": "logs/studies/bayesian_filter_showcase/demo_how_the_filter_works/fig_a5_why_gating_cannot_see_it.pdf",
-  "source_sha256": "e53305940dafaf52870f264e1796da7a2d96f1ed4b38a7052d3115861e2e2117",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

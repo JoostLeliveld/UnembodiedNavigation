@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-PROJ-AMP",
-  "study": "projection_amplification",
-  "source_path": "logs/studies/projection_amplification/exp2_grid_geometry/fig_g3_heldout_model_comparison.png",
-  "source_sha256": "648673f3e8333bfdea5ff4dbd029d3623003c73dbc969f5a4069352cbfb71ef1",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": null,
-  "study": "fused_observation_model",
-  "source_path": "logs/studies/fused_observation_model/exp1_availability_fusion/fig_a1_spatial_availability.png",
-  "source_sha256": "14174de6e9166e55eae4788aef0733f3207ce530ca698162fbaaa052a8b8ba21",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

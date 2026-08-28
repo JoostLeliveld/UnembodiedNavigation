@@ -1,2 +1,0 @@
-method_id,available,train_points,target_mean,target_min,target_max,artifact_path
-yolo_score_raw,1,238,0.54981340,0.00162770,0.92320190,yolo_score_raw_gp.npz

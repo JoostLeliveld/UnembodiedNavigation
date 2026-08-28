@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-COMMISSION",
-  "study": "multicamera_commissioning_bigwarehouse",
-  "source_path": "logs/studies/multicamera_commissioning_bigwarehouse/paper_protocol_v1/figures/01_protocol_route_coverage.png",
-  "source_sha256": "7103660b4f8d9cb83ecdb07ff5ae6c3d43ae6ac3227ec1c5212079a6e66b2c5d",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}

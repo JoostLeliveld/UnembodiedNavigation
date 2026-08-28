@@ -1,8 +1,0 @@
-{
-  "promoted": "2026-08-18",
-  "experiment_id": "EXP-BIAS",
-  "study": "external_camera_bias_model",
-  "source_path": "logs/studies/external_camera_bias_model/exp1_residual_characterization/fig_b5_fusion_simulation.pdf",
-  "source_sha256": "b174fbae462519f27c401b55b10f62813ab90bc56fca2580b6a746c2bbb5379b",
-  "note": "Promoted from ignored run output; regenerate by rerunning the study."
-}
