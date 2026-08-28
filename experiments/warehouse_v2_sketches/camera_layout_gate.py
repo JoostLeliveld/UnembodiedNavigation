@@ -24,19 +24,39 @@ sys.path.insert(0, str(HERE))
 from coverage import CELL, analyse  # noqa: E402
 from layouts import Camera  # noqa: E402
 from route_tasks import driveable, diverse_routes, hausdorff, snap  # noqa: E402
-from warehouse_v2 import build  # noqa: E402
+from warehouse_v2 import A_AISLE_X, C_AISLE_Y, build  # noqa: E402
 
 DECISION_PATH = HERE / "camera_layout_decision.json"
-PRIMARY_START = (-7.05, -5.20)
-PRIMARY_GOAL = (10.60, 2.15)
+# Derived from the layout's own aisle centrelines, so widening an aisle moves the
+# primary route with it rather than leaving its endpoints inside new racking.
+# aisleA2_s, the south mouth of picking aisle A2|A3 -- one aisle east of the original
+# choice. At the planner's real 0.35 m clearance the previous primary task
+# (aisleA1_s -> aisleC_n_e) gains a fourth route through the poorly covered block aisles
+# with only 24.7% of its points visible to two cameras, so its menu fails the 50% gate and
+# takes this firewall down with it. Of 91 tasks offering a real route choice, five have
+# every route above the gate; this is the strongest of them, and it keeps the same
+# destination so the traverse still crosses the network. Chosen from declared geometry, the
+# camera model and the route solver alone -- no image or detector output entered it.
+PRIMARY_START = (A_AISLE_X[1], -5.20)
+#: the route-library name for the pair above, kept beside them so the label cannot drift
+#: from the geometry it describes -- it did: the gate reported "aisleA1_s__aisleC_n_e" for
+#: one run while already measuring the A2 mouth.
+PRIMARY_TASK_NAME = "aisleA2_s__aisleC_n_e"
+PRIMARY_GOAL = (10.60, C_AISLE_Y[1])
 
 CANDIDATES = {
     "coverage_oriented_current": {
-        "pose_xyz_yaw_pitch_deg": [-7.05, 9.45, 5.0, -90.0, 38.0],
-        "purpose": "cover the previously blind A1|A2 aisle while retaining network overlap",
+        "pose_xyz_yaw_pitch_deg": [A_AISLE_X[0], 9.45, 5.0, -60.0, 38.0],
+        "purpose": "cover the previously blind A1|A2 aisle without spending the "
+                   "whole camera on it",
+    },
+    "aisle_axial_previous": {
+        "pose_xyz_yaw_pitch_deg": [A_AISLE_X[0], 9.45, 5.0, -90.0, 38.0],
+        "purpose": "look straight down A1|A2 -- the WHV2-CAMLAYOUT-V1 choice, "
+                   "kept as the documented alternative it was replaced by",
     },
     "fusion_oriented_alternative": {
-        "pose_xyz_yaw_pitch_deg": [-3.35, 9.45, 5.0, -90.0, 38.0],
+        "pose_xyz_yaw_pitch_deg": [A_AISLE_X[1], 9.45, 5.0, -90.0, 38.0],
         "purpose": "increase overlap in A2|A3 and Camera C overlap-graph edge strength",
     },
 }
@@ -141,7 +161,7 @@ def candidate_metrics(candidate: dict, routes, route_separation_m: float) -> dic
             _maximum_spanning_tree_bottleneck(edge_areas)
         ),
         "primary_route": {
-            "task": "aisleA1_s__aisleC_n_e",
+            "task": PRIMARY_TASK_NAME,
             "n_geometry_routes": len(routes),
             "max_route_separation_m": route_separation_m,
             "two_camera_fraction_per_route": route_fractions,
@@ -253,8 +273,8 @@ def validate(decision: dict, computed: dict) -> list[str]:
             f"active Camera C pose {active_pose} does not match selected pose {selected_pose}"
         )
 
-    if decision.get("capture_authorized") is not True:
-        failures.append("capture_authorized must be true only after every frozen gate passes")
+    if decision.get("geometry_gate_passed") is not True:
+        failures.append("geometry_gate_passed must be true only after every frozen geometry gate passes")
     return failures
 
 

@@ -4,6 +4,12 @@ ROS 2 + Gazebo thesis repo: external-camera reliability for warehouse robot navi
 
 ## What this actually does (read this first)
 
+📌 **[`PLAN.md`](PLAN.md) is the plan of record** — the five sentences the paper has to
+earn, what is done, what is still owed, and which data serves which purpose. Read it before
+proposing work. Anything that does not serve one of those five sentences belongs in a study
+README, not in the paper and not in a status report.
+
+
 A small robot drives around a simulated warehouse. Its wheel odometry drifts without bound, so
 it leans on four fixed wall-mounted cameras that can see it on the floor. Cameras are not
 equally useful everywhere — shelves block views, accuracy degrades with range and viewing
@@ -52,6 +58,36 @@ bookkeeping. They are *filing labels, not explanations*. When reporting to the u
 and in READMEs: say the thing, not the label. "The truth falls outside the stated 95% ellipse
 41.9% of the time" — not "EXP-BELIEF NEES exceeds the calibrated reference". Define a term at first use or
 don't use it.
+
+### Before reporting a number, ask whether it goes in the paper
+
+Most analysis produces intermediate quantities. Almost none of them belong in a reply.
+Apply this test to every number before it reaches the user:
+
+**Write the sentence it would appear in, in the paper. If you cannot write that
+sentence, do not report the number.**
+
+Concretely:
+
+- **Report in centimetres, percentages and seconds.** Not pixels, not unit-less ratios,
+  not log-likelihoods. Those are working units — convert before speaking. "Half a
+  centimetre of consistent lean" not "0.198 px pooled mean residual".
+- **One headline number per finding.** A six-row table of model variants is a working
+  artifact; the reply gets the winner and one sentence on why. Put the table in the
+  study's README where a reader can go looking for it.
+- **Never coin a metric name or use one without defining it in the same breath.** If a
+  diagnostic needs a symbol to explain, describe what it measures in words instead.
+- **Lead with the verdict, then the mechanism, then the caveat.** Not the derivation.
+  "The sensor is good enough to use, because X, but Y is still untested."
+- **If a result is a null, an artifact, or a correction to something you said earlier,
+  say so in the first sentence** — do not bury it after the supporting numbers.
+- **Machinery is not a finding.** Conventions, split definitions, parameter counts,
+  reproducibility hashes: these belong in the study README, not in a reply, unless the
+  user asked how something works or the machinery is itself the answer.
+
+The failure mode this exists to stop: reporting the full chain of reasoning that produced
+an answer, at the same level of detail as the answer, so the answer is impossible to find.
+When in doubt, say the conclusion in two sentences and offer the detail.
 
 ### Figures must stand alone
 

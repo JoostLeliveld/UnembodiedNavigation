@@ -73,8 +73,19 @@ CAMERA_CONTRACTS: dict[str, dict[str, str]] = {
         "image_topic": "/external_camera_d/image_raw",
         "labels_topic": "/external_camera_d/segmentation/labels_map",
     },
+    "camera_E": {
+        "camera_model": "external_camera_e",
+        "image_topic": "/external_camera_e/image_raw",
+        "labels_topic": "/external_camera_e/segmentation/labels_map",
+    },
 }
+#: Every camera this tool knows how to validate. WHICH of them a particular merge
+#: requires is ``MergeConfig.cameras``, not this tuple: warehouse_v2 has five wall
+#: cameras, while the frozen warehouse_full_4cam dataset has four, and re-validating
+#: that older dataset has to keep working exactly as it did.
 CAMERAS = tuple(CAMERA_CONTRACTS)
+FOURCAM_CAMERAS = ("camera_A", "camera_B", "camera_C", "camera_D")
+FIVECAM_CAMERAS = ("camera_A", "camera_B", "camera_C", "camera_D", "camera_E")
 SPLITS = ("train", "val")
 IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp"})
 SAFE_STEM = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -113,6 +124,7 @@ class DatasetMergeError(RuntimeError):
 @dataclass(frozen=True)
 class MergeConfig:
     expected_world: str = "warehouse_full_4cam.world.sdf"
+    cameras: tuple[str, ...] = FOURCAM_CAMERAS
     range_edges_m: tuple[float, ...] = (5.0, 8.0, 12.0, 16.0)
     min_train_per_camera: int = 1
     min_val_per_camera: int = 1
@@ -125,6 +137,13 @@ class MergeConfig:
     def __post_init__(self) -> None:
         if not str(self.expected_world).strip():
             raise DatasetMergeError("expected_world must not be empty")
+        cameras = tuple(str(name) for name in self.cameras)
+        if len(cameras) < 2 or len(set(cameras)) != len(cameras):
+            raise DatasetMergeError(f"cameras must be two or more distinct ids: {cameras}")
+        unknown = [name for name in cameras if name not in CAMERA_CONTRACTS]
+        if unknown:
+            raise DatasetMergeError(f"unknown camera ids: {unknown}")
+        object.__setattr__(self, "cameras", cameras)
         edges = tuple(float(value) for value in self.range_edges_m)
         if len(edges) < 2:
             raise DatasetMergeError("At least two range edges are required")
@@ -1706,7 +1725,7 @@ def _enforce_merge_gates(
 ) -> None:
     failures: list[str] = []
     core_bins = _range_bin_names(config.range_edges_m)[1:-1]
-    for camera_id in CAMERAS:
+    for camera_id in config.cameras:
         split_counts = counts["by_camera"][camera_id]["by_split"]
         for split, minimum in (
             ("train", config.min_train_per_camera),
@@ -1849,7 +1868,7 @@ def _dataset_card(
     provenance = _merged_provenance(audits, config)
     intended_use = (
         "Fine-tuning and validating the single-class YOLO segmentation detector "
-        f"for the frozen {len(CAMERAS)}-camera {Path(config.expected_world).name} "
+        f"for the frozen {len(config.cameras)}-camera {Path(config.expected_world).name} "
         "commissioning study."
         if provenance["training_eligible"]
         else (
@@ -1872,7 +1891,7 @@ def _dataset_card(
         ],
         "contract": {
             "world": Path(config.expected_world).name,
-            "camera_ids": list(CAMERAS),
+            "camera_ids": list(config.cameras),
             "class_names": {"0": "robot"},
             "task": "segment",
             "pose_group_rule": (
@@ -1934,7 +1953,7 @@ def _markdown_card(card: Mapping[str, Any]) -> str:
         + " |",
         "|---|---:|---:|---:|---:|" + "---:|" * len(bins),
     ]
-    for camera_id in CAMERAS:
+    for camera_id in card["contract"]["camera_ids"]:
         for split in SPLITS:
             payload = card["counts"]["by_camera"][camera_id]["by_split"][split]
             values = [str(payload["by_range_bin"][name]) for name in bins]
@@ -2052,17 +2071,17 @@ def merge_fourcam_datasets(
 
     config = config or MergeConfig()
     provided = set(camera_dirs)
-    expected = set(CAMERAS)
+    expected = set(config.cameras)
     if provided != expected:
         raise DatasetMergeError(
-            f"camera_dirs must contain exactly {list(CAMERAS)}; "
+            f"camera_dirs must contain exactly {list(config.cameras)}; "
             f"missing={sorted(expected - provided)}, extra={sorted(provided - expected)}"
         )
     resolved_dirs = {
         camera_id: Path(camera_dirs[camera_id]).expanduser().resolve()
-        for camera_id in CAMERAS
+        for camera_id in config.cameras
     }
-    if len(set(resolved_dirs.values())) != len(CAMERAS):
+    if len(set(resolved_dirs.values())) != len(config.cameras):
         raise DatasetMergeError("Each camera must use a distinct source directory")
     output = Path(output_dir).expanduser().resolve()
     if output.exists():
@@ -2074,7 +2093,8 @@ def merge_fourcam_datasets(
             )
 
     audits = tuple(
-        _audit_camera(camera_id, resolved_dirs[camera_id], config) for camera_id in CAMERAS
+        _audit_camera(camera_id, resolved_dirs[camera_id], config)
+        for camera_id in config.cameras
     )
     _validate_cross_camera_contract(audits)
     duplicates = _duplicate_audit(audits)
@@ -2313,9 +2333,18 @@ def main() -> int:
         action="append",
         required=True,
         metavar="CAMERA_ID=PATH",
-        help="Repeat exactly once for camera_A, camera_B, camera_C, and camera_D.",
+        help="Repeat exactly once for every camera named by --cameras.",
     )
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument(
+        "--cameras",
+        default=",".join(FOURCAM_CAMERAS),
+        help=(
+            "Comma-separated camera ids this merge requires. Default is the four-camera "
+            f"set, which keeps the frozen warehouse_full_4cam dataset reproducible; pass "
+            f"'{','.join(FIVECAM_CAMERAS)}' for warehouse_v2."
+        ),
+    )
     parser.add_argument("--expected-world", default="warehouse_full_4cam.world.sdf")
     parser.add_argument(
         "--range-edges-m",
@@ -2343,6 +2372,9 @@ def main() -> int:
         camera_dirs = _parse_camera_dirs(args.camera_dir)
         config = MergeConfig(
             expected_world=args.expected_world,
+            cameras=tuple(
+                token.strip() for token in str(args.cameras).split(",") if token.strip()
+            ),
             range_edges_m=tuple(args.range_edges_m),
             min_train_per_camera=args.min_train_per_camera,
             min_val_per_camera=args.min_val_per_camera,

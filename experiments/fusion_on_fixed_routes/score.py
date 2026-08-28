@@ -318,7 +318,7 @@ def _score_one(run: Path, arm: str, task: str = TASKS[0]) -> dict:
                     "that turned a 4.9 cm p95 into an apparent 124 cm one.",
         },
         "corrections": {
-            "detector_rounds": corrections["n_detections"],
+            "detector_rounds": corrections["n_detector_rounds"],
             "state_publications_seen": corrections["n_state_publications"],
             "state_fresh_rate_hz": (round(corrections["state_fresh_rate_hz"], 2)
                                     if math.isfinite(corrections["state_fresh_rate_hz"])

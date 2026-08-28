@@ -1,14 +1,15 @@
 """Shared geometry and label conventions for the front/rear pose-keypoint pipeline.
 
-These offsets must match the `pose_markers` block in
-`src/sim/robot_description/urdf/turtlebot3_burger.urdf.xacro`. The
-`test_pose_keypoint_geometry.py` test asserts that.
+These offsets must match the `pm_*` properties in the URDF of whichever robot
+is being driven -- `warehouse_amr.urdf.xacro` (current) or
+`turtlebot3_burger.urdf.xacro` (pre-2026-08-20 campaigns). The
+`test_pose_keypoint_geometry.py` test asserts both.
 
 Two keypoint indices are used by both the dataset capture script, the YOLO
 training YAML, the perception node, and the state node:
 
-  KEYPOINT_FRONT = 0   # cyan marker disk, +x in robot frame
-  KEYPOINT_REAR  = 1   # magenta marker disk, -x in robot frame
+  KEYPOINT_FRONT = 0   # +x in robot frame (deck front, above the wheelbase)
+  KEYPOINT_REAR  = 1   # -x in robot frame (deck rear, above the wheelbase)
 """
 
 from __future__ import annotations
@@ -52,13 +53,25 @@ class MarkerGeometry:
         return float(robot_footprint_z) + self.base_joint_z + self.marker_z_in_base_link
 
 
-# Default values must match turtlebot3_burger.urdf.xacro pm_* properties.
-# v2: explicit small cyan(front)/magenta(rear) marker disks at MAX front-rear
-# separation (baseline 0.140 m vs the old 0.082 m), both at z=0.200 in base_link
-# (above the lidar) so the oblique camera sees both and the state node can
-# back-project to a single z-plane. keypoint_marker_world_z = base_joint_z(0.010)
-# + 0.200 = 0.210 (robot resting on the floor, base_footprint z=0).
+# Default values must match the driven robot's URDF pm_* properties.
+#
+# warehouse_amr (current, 2026-08-20): low-deck 0.80 x 0.55 m AMR. Keypoints sit
+# at the deck edges above the wheelbase, a 0.600 m baseline against the Burger's
+# 0.140 m. keypoint_marker_world_z = base_joint_z(0.010) + 0.340 = 0.350 with the
+# robot resting on the floor. No marker disks: the cues are the chassis itself.
 DEFAULT_MARKER_GEOMETRY = MarkerGeometry(
+    front_x=0.300,
+    rear_x=-0.300,
+    marker_y=0.0,
+    marker_z_in_base_link=0.340,
+    base_joint_z=0.010,
+)
+
+# turtlebot3_burger (pre-2026-08-20): explicit cyan(front)/magenta(rear) disks at
+# z=0.200 in base_link, world plane 0.210. Kept so captures, trained models and
+# analyses from before the robot swap stay reproducible -- read
+# `keypoint_marker_world_z` from a capture manifest rather than assuming either.
+BURGER_MARKER_GEOMETRY = MarkerGeometry(
     front_x=0.040,
     rear_x=-0.100,
     marker_y=0.0,

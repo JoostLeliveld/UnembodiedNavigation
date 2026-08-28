@@ -52,7 +52,22 @@ APRON_TOP = -4.40        # dock apron is everything south of this (4.95 m deep)
 DOCK_DOORS = [-8.5, -1.5, 5.5]      # unevenly spaced on purpose
 
 # --- section A: west, north-south racking, three back-to-back pairs -----------
-A_X = [-8.90, -5.20, -1.50]         # pitch 3.70 -> 1.80 m picking aisles
+# Aisle widths are the one dimension the ROBOT sets, so they are parameters
+# rather than typed-in coordinates. The AMR is a real low-deck class: 0.80 x
+# 0.55 m, which is a MiR250 (0.80 x 0.58) or an OTTO 100 (0.74 x 0.55) and needs
+# a 0.971 m circle to turn on the spot. The declared keep-out envelope eats
+# 0.32 m of each side of every aisle, so a nominal width w leaves the planner
+# w - 0.64 m.
+#
+# The aisles were widened to fit that robot rather than the robot shrunk to fit
+# the aisles, and the reason is measurable: at 0.55 m wide the robot spans 28.7
+# px across the median covered cell, at 0.45 m only 23.5 px, and the whole
+# measurement chain in this thesis starts with a detector finding it. Making the
+# robot small is buying clearance with the evidence.
+A_AISLE = 2.00                      # 1.36 m declared-clear: turn plus 0.39 m
+A_X = [-8.90 + i * (PAIR + A_AISLE) for i in range(3)]
+#: centreline of each section-A picking aisle, west to east
+A_AISLE_X = [0.5 * (A_X[i] + A_X[i + 1]) for i in range(len(A_X) - 1)]
 A_Y0, A_Y1 = APRON_TOP, APRON_TOP + 3 * MODULE          # -4.40 .. 7.35
 # Top beam is TWO whole ShelfD modules, 5.23 m: 58 % of the 9.0 m clear height
 # instead of 47 %, and no squashed part-tier in the render. Going taller still
@@ -61,7 +76,10 @@ A_Y0, A_Y1 = APRON_TOP, APRON_TOP + 3 * MODULE          # -4.40 .. 7.35
 A_TOP = {"full": 2 * 2.613, "half": 2.613, "picked": 1.10}
 
 # --- main artery and the east half -------------------------------------------
-ARTERY = (-0.55, 1.80)                                  # 2.35 m main aisle
+#: main artery: from the east face of section A to the west edge of section C.
+#: Widening the picking aisles takes its width from 2.35 m to 1.95 m, which still
+#: leaves 1.31 m declared-clear against the AMR's 0.832 m turning circle.
+ARTERY = (-8.90 + 2 * (PAIR + A_AISLE) + PAIR / 2, 1.80)
 B_X0, B_X1 = 1.80, 1.80 + 2 * MODULE                    # 1.80 .. 9.63
 # Section B gives up its second rack pair so section C can have three rows and
 # two full-length aisles. One pair still reads as "racking turned 90 degrees",
@@ -70,7 +88,7 @@ B_Y = [8.35]
 B_Y0, B_Y1 = 7.40, 9.30
 B_TOP = {"full": 2.613, "half": 1.90, "picked": 1.10}   # one module, lower
 
-CROSS_E = (5.05, 7.40)                                  # east-side cross aisle, 2.35 m
+CROSS_E = (5.56, 7.40)   # east cross aisle; its south edge is where section C ends
 
 # --- section C: block-stacked boxes, three patterns --------------------------
 # Floor storage as two LONG east-west rows with one long aisle between them,
@@ -81,9 +99,40 @@ CROSS_E = (5.05, 7.40)                                  # east-side cross aisle,
 # The rows stop 1.50 m short of the site edge so there is an east perimeter lane.
 # Without it the stacks ran into the wall camera's face and it saw 14 % of the floor.
 C_X0, C_X1 = 1.80, 9.85                  # 8.05 m of row, east lane 9.85 .. 11.35
-C_ROWS = [("Cs", -4.40, -2.25), ("Cm", -0.75, 1.40), ("Cn", 2.90, 5.05)]
-C_AISLES = [(-2.25, -0.75), (1.40, 2.90)]               # two 1.50 x 9.55 m aisles
-C_PALLET = "ClutteringA_01"
+# Row depth is set by the pallet, not by taste: ClutteringA_01 is 1.983 m across
+# its short axis and _block_row insets 0.06 m a side, so 2.12 m is the shallowest
+# row the pallet actually fits in. The aisles then get everything that is left.
+C_ROW_DEPTH = 2.12
+C_AISLE = 1.80   # was 1.50, in which the AMR could not turn: it needs 0.971 m
+                 # and a 1.50 m aisle offers 0.80 m of inscribed clearance
+_c_names = ["Cs", "Cm", "Cn"]
+C_ROWS, C_AISLES, _y = [], [], APRON_TOP
+for _i, _nm in enumerate(_c_names):
+    C_ROWS.append((_nm, _y, _y + C_ROW_DEPTH))
+    _y += C_ROW_DEPTH
+    if _i < len(_c_names) - 1:
+        C_AISLES.append((_y, _y + C_AISLE))
+        _y += C_AISLE
+#: centreline of each section-C block aisle, south to north
+C_AISLE_Y = [0.5 * (a + b) for a, b in C_AISLES]
+# Three rows, three different product families -- three different meshes. The
+# AWS pack has three cluttering loads and using one of them nine times is what
+# made the block area read as copy-paste. They are different sizes as well as
+# different shapes, so each row also stacks to its own height.
+# Three rows, three genuinely different goods. Cardboard everywhere was the
+# complaint and it was fair: a real DC holds cartons, steel drums and returnable
+# plastic totes side by side, and they look nothing like each other.
+#
+#   drums  200 L steel drum, 0.58 m dia x 0.88 m -- 2x2 on a pallet = 1.20 m
+#          square. Built from primitives on the metal PBR set, in pool colours.
+#   totes  Large_Crate (OpenRobotics, CC-BY 4.0), 1.08 x 0.55 x 0.49 m, black
+#          plastic. 2 x 3 to a pallet layer = 2.16 x 1.65 m.
+DRUM_D, DRUM_H = 0.58, 0.88
+TOTE_L, TOTE_W, TOTE_H = 1.08, 0.55, 0.49
+C_MESH = {"Cs": "ClutteringA_01",                          # cartons, 1.06 m units
+          "Cm": ("drums", 1.20, 1.20, DRUM_H),             # steel drums
+          "Cn": ("totes", 2.16, 1.65, TOTE_H)}             # plastic totes
+C_PALLET = "ClutteringA_01"           # kept: the apron staging still uses it
 
 # Peak vs post-peak. Rows are the racking runs, columns the bays along each run.
 A_PEAK = [["full", "full", "full"],
@@ -97,8 +146,15 @@ B_AFTER = [["picked", "half"]]
 
 # Four stacks along each row, and how many pallets high each one is. Peak is a
 # full floor; after the ship-out two positions are cleared and the rest come down.
-C_PEAK = {"Cs": [1, 2, 3], "Cm": [2, 3, 1], "Cn": [3, 1, 2]}
-C_AFTER = {"Cs": [0, 1, 2], "Cm": [1, 0, 1], "Cn": [1, 1, 0]}
+# Stack counts are per row now, because the meshes are different heights: three
+# ClutteringC loads would stand 5.16 m, taller than the racking and taller than
+# anything block-stacked in a real DC. Counts are chosen so every row still has
+# a tall, a medium and a short position but nothing exceeds 3.44 m.
+# Counts are per row because the unit heights differ by 2x: a carton pallet is
+# 1.06 m, a drum 0.88 m, a tote 0.49 m. Peak tops out at 3.17 m (cartons),
+# 2.64 m (drums, 3 high is the real limit for stacked drums) and 1.96 m (totes).
+C_PEAK = {"Cs": [1, 2, 3], "Cm": [3, 1, 2], "Cn": [4, 2, 3]}
+C_AFTER = {"Cs": [0, 1, 2], "Cm": [1, 0, 2], "Cn": [2, 3, 0]}
 
 
 # --------------------------------------------------------------------------- #
@@ -130,11 +186,24 @@ def _rack_pair_ew(name, y, x0, x1, bays, tops, mesh_off=0):
     return out
 
 
-def _block_row(z: Zone, mesh: str, highs: list[int]):
-    """Whole pallets set out along a storage row, each stacked its own number
+def _block_row(z: Zone, spec, highs: list[int]):
+    """Whole unit loads set out along a storage row, each stacked its own number
     high. Positions are evenly spaced across the row so the gaps read as the
-    working clearance between stacks."""
-    sx, sy = footprint(mesh)
+    working clearance between stacks.
+
+    `spec` is either an AWS mesh name, or a (kind, sx, sy, unit_h) tuple for a
+    load built from primitives and included props. The declared height always
+    comes from the unit's REAL height times the stack count, so the occluder the
+    sight-line model sees is the size of the thing that is drawn -- that is the
+    whole point of deriving it rather than typing it in.
+    """
+    if isinstance(spec, tuple):
+        kind, sx, sy, unit_h = spec
+        mesh = kind
+    else:
+        mesh = spec
+        sx, sy = footprint(spec)
+        unit_h = height(spec)
     inset = 0.06
     if sy > z.sy - 2 * inset:               # turn the pallet to fit the row depth
         sx, sy = sy, sx
@@ -153,7 +222,7 @@ def _block_row(z: Zone, mesh: str, highs: list[int]):
             continue                        # this position is empty
         cx = z.xmin + inset + pitch * (k + 0.5)
         out.append(Obstacle(f"{z.name}_p{k}", cx, z.cy, sx, sy, 0.0,
-                            height(mesh) * nh, mesh, z.name))
+                            unit_h * nh, mesh, z.name))
     return out
 
 
@@ -192,7 +261,7 @@ def build() -> Layout:
             objs += _rack_pair_ew(f"B{i+1}", y, B_X0, B_X1, b_state[i], B_TOP, i + 1)
         for name, _y0, _y1 in C_ROWS:
             z = [q for q in L.zones if q.name == name][0]
-            objs += _block_row(z, C_PALLET, c_state[name])
+            objs += _block_row(z, C_MESH[name], c_state[name])
         # dock office and staged pallets on the apron
         oz = [q for q in L.zones if q.name == "DOCK_OFFICE"][0]
         objs.append(Obstacle("dock_office", oz.cx, oz.cy, oz.sx - 0.06, oz.sy - 0.06,
@@ -233,43 +302,72 @@ def build() -> Layout:
     L.cameras = [
         Camera("A", -11.45, -9.45, 5.00, 45.0, 44.0,
                "south-west corner, apron and the foot of section A", "#2a78d6"),
-        Camera("B", -1.50, -9.72, 5.00, 96.0, 48.0,
-               "south wall above the centre dock door, up the artery", "#eb6834"),
-        # C is an AISLE-END mount, not a corner mount, and that is a deliberate
-        # trade measured on this geometry (21 placements, both stock states).
-        # From the north-west corner it saw only 3.2 % of the two section-A
-        # picking aisles, leaving aisle A1|A2 at 17.8 % single-camera cover
-        # against 84.2 % for the floor as a whole -- the aisles were the one
-        # place the network was effectively blind, and re-aiming the corner mount
-        # does not help at all (A1|A2 stays at 17.8 % at every yaw from -30 to
-        # -70). Moving it to the head of aisle A1|A2 and looking straight down it
-        # takes that aisle to 100 % and both aisles together from 34.2 % to
-        # 76.9 %. The price, stated because the earlier note warned about exactly
-        # this: whole-floor single cover falls 84.2 -> 82.0 and TWO-camera cover
-        # falls 52.9 -> 42.6. Pitch 38 deg rather than the 24 deg that would put
-        # the far aisle end on the horizon -- 38 measured better on both aisles.
-        # KNOWN RESIDUAL: two-camera cover inside the aisles stays near 10 %, so
-        # fusion is still barely testable there. The alternative mount at
-        # (-3.35, 9.45), down aisle A2|A3, reaches 27.8 % two-camera aisle cover
-        # instead, because camera B already covers that aisle so a second view
-        # there creates overlap rather than new floor. That is the placement to
-        # switch to if aisle FUSION matters more than aisle blindness.
-        Camera("C", -7.05, 9.45, 5.00, -90.0, 38.0,
-               "north wall at the head of aisle A1|A2, straight down the aisle",
+        # B STAYS above the centre dock door and is re-aimed, not moved, and the
+        # reason is a gate rather than a preference. Sliding it west to the mouth
+        # of aisle A2|A3 does take that aisle from 54 % to 100 % single-camera
+        # cover -- but it drops the worst of the three diverse primary routes
+        # from 0.553 to 0.465 two-camera fraction, under the 0.50 the fusion
+        # study needs (camera_layout_decision.json). Every aim and every x from
+        # -3.35 to -2.50 was measured; none recovers it, because the loss comes
+        # from B's POSITION, not its aim. Re-aiming in place is free by contrast:
+        # +115 deg instead of +96 buys whole-floor two-camera cover 44.4 -> 49.2 %
+        # and floor cover 86.9 -> 87.6 % with the route fraction untouched.
+        #
+        # The cost, stated plainly: aisle A2|A3 stays near 54 %. Covering it and
+        # holding the route gate at the same time is not possible with five
+        # mounts on this geometry -- it needs a sixth.
+        Camera("B", -1.50, -9.72, 5.00, 115.0, 48.0,
+               "south wall above the centre dock door, across the apron and up "
+               "into section A", "#eb6834"),
+        # C is a north-wall mount at the head of aisle A1|A2. Two separate
+        # measurements set it, both on this geometry and both stock states:
+        #
+        #  * POSITION. From the north-west corner it saw 17.8 % of aisle A1|A2,
+        #    and re-aiming the corner mount does not help at all -- A1|A2 stays
+        #    at 17.8 % at every yaw from -30 to -70 deg. The aisle head is the
+        #    only place on the wall that fixes it.
+        #  * AIM. Looking straight DOWN the aisle at -90 deg is the trap. It
+        #    buys the last 1.7 points of that aisle (98.3 -> 100 %) and pays for
+        #    them with the rest of the building: whole-floor cover 86.8 -> 82.0,
+        #    two-camera cover 45.2 -> 42.5, and this camera's own share of the
+        #    floor 18.6 -> 10.9 %, i.e. it stops being a general-purpose camera
+        #    and becomes an aisle periscope. At -60 deg it sees the aisle AND
+        #    the floor either side of it.
+        Camera("C", -6.95, 9.45, 5.00, -60.0, 38.0,
+               "north wall at the head of aisle A1|A2, angled across section A",
                "#1baf7a"),
         Camera("D", 11.45, 7.20, 5.00, -140.0, 38.0,
                "east wall in the cross aisle, over the box rows", "#4a3aa7"),
         Camera("E", 11.45, -9.45, 5.00, 132.0, 42.0,
                "south-east corner, over the block stacks", "#e34948"),
     ]
+    # Chosen by search, not by taste: 918 wall mounts (four walls, this 5.00 m
+    # cap, 9 yaws x 3 pitches each) were ray-cast against both stock states and
+    # 5-camera sets scored by greedy seeding plus single-slot swaps. See
+    # camera_sweep.py and camera_sweep.json. Worse-of-both-states result for the
+    # set above, on drivable cells:
+    #
+    #   whole floor      87.6 % single-camera, 49.2 % two-camera
+    #   aisle A1|A2      98.3 %      aisle A2|A3      54.1 %
+    #   C block aisle 1  29.0 %      C block aisle 2  32.5 %
+    #   smallest share of the floor held by any one camera: 18.6 %
+    #   worst primary route: 0.553 two-camera fraction (gate 0.50) -- PASSES
+    #
+    # KNOWN RESIDUAL, and it is the honest weak point of this set: the two
+    # section-C block aisles stay near 30 %. They are the worst-covered driveable
+    # ground in the building and always were -- the rack aisles simply got the
+    # attention first. No 5-camera set in the pool covers both halves: the best
+    # "nothing is blind" set found (all four aisles >= 98 %) does it by putting
+    # three cameras on the east wall, which leaves 31.2 % of the floor west of
+    # the artery blind against 8.0 % here. Covering both needs a sixth mount.
     L.notes = [
-        "Section A: 3 back-to-back pairs, 1.80 m picking aisles, runs 11.75 m "
+        "Section A: 3 back-to-back pairs, 2.00 m picking aisles, runs 11.75 m "
         "(three native modules), 3-level racking to 4.2 m.",
         "Section B: one pair turned 90 deg against the north wall, runs 7.83 m "
         "(two modules), top beam 2.61 m -- a different product family, not a "
         "copy of A.",
-        "Section C: no racking. Three long floor-storage rows with two 1.50 m "
-        "aisles running their full 9.55 m length, four stacks per row at one, "
+        "Section C: no racking. Three long floor-storage rows with two 1.80 m "
+        "aisles running their full 8.05 m length, three stacks per row at one, "
         "two or three pallets high: 1.06 / 2.12 / 3.17 m.",
     ]
     bad = L.check()

@@ -79,7 +79,7 @@ def score(root: str, arm: str):
         # fresh correction at the 10 Hz log rate, which is an availability fraction
         # times duration. Collapsing them into one column silently compared a count of
         # detections in one row against a count of log rows in the next.
-        n=counts["n_detections"],
+        n=counts["n_detector_rounds"],
         fresh=counts["n_state_publications"],
         rate=counts["state_fresh_rate_hz"],
         blind=counts["longest_gap_s"],

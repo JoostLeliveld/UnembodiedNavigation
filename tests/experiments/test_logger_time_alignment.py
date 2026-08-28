@@ -159,4 +159,19 @@ def test_fusion_observations_can_be_deduplicated():
 
 
 def test_manifest_declares_its_logging_schema():
-    assert "'logging_schema_version': 2" in _source()
+    """Runs carry the conventions they were written under, so a scorer can refuse
+    a drive it cannot score instead of silently mixing two definitions of a column.
+    Bump this deliberately, together with the comment block that says what changed."""
+    assert "'logging_schema_version': 3" in _source()
+
+
+def test_schema_3_records_batch_identity_contact_liveness_and_belief_stopping():
+    """What schema 3 added over 2, each locking a defect from the 2026-08-28 audit."""
+    source = _source()
+    # a detector batch is one identity, so one round cannot be assimilated four times
+    assert "'source_batch_id'" in source
+    # silence on the contact channel is distinguishable from "no collisions"
+    for column in ("'contact_topic_publishers'", "'contact_messages_seen'"):
+        assert column in source, column
+    # ground truth never terminates a run
+    assert "use the physical /world_contacts channel instead" in source

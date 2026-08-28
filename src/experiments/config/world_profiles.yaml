@@ -177,28 +177,28 @@ worlds:
       visibility_beta: 1.0
       visibility_target_height_m: 0.35
     known_2d_regions:
-      - {name: open_floor_inside_site_boundary, type: site_boundary, xmin: -11.35, xmax: 11.35, ymin: -9.35, ymax: 9.35, note: operating field; blue paint marks its edge}
+      - {name: open_floor_inside_site_boundary, type: site_boundary, xmin: -11.35, xmax: 11.35, ymin: -9.35, ymax: 9.35, note: operating field; a planner bound, deliberately NOT painted on the floor}
       - {name: lane_01, type: traversable, xmin: -8.50, xmax: 11.40, ymin: -7.80, ymax: -4.70, note: derived lane rectangle}
-      - {name: lane_02, type: traversable, xmin: -0.20, xmax: 1.50, ymin: -4.70, ymax: 9.40, note: derived lane rectangle}
-      - {name: lane_03, type: traversable, xmin: -11.30, xmax: -0.20, ymin: 7.70, ymax: 9.40, note: derived lane rectangle}
-      - {name: lane_04, type: traversable, xmin: 10.20, xmax: 11.40, ymin: -4.70, ymax: 9.40, note: derived lane rectangle}
-      - {name: lane_05, type: traversable, xmin: -11.30, xmax: -10.20, ymin: -7.20, ymax: 7.70, note: derived lane rectangle}
-      - {name: lane_06, type: traversable, xmin: 1.50, xmax: 10.20, ymin: 5.40, ymax: 7.10, note: derived lane rectangle}
-      - {name: lane_07, type: traversable, xmin: -7.60, xmax: -6.50, ymin: -4.70, ymax: 7.70, note: derived lane rectangle}
-      - {name: lane_08, type: traversable, xmin: -3.90, xmax: -2.80, ymin: -4.70, ymax: 7.70, note: derived lane rectangle}
-      - {name: lane_09, type: traversable, xmin: 5.30, xmax: 11.40, ymin: -9.30, ymax: -7.80, note: derived lane rectangle}
-      - {name: lane_10, type: traversable, xmin: 1.50, xmax: 10.20, ymin: 1.70, ymax: 2.60, note: derived lane rectangle}
-      - {name: lane_11, type: traversable, xmin: 1.50, xmax: 10.20, ymin: -1.90, ymax: -1.10, note: derived lane rectangle}
+      - {name: lane_02, type: traversable, xmin: -11.30, xmax: 1.50, ymin: 7.70, ymax: 9.40, note: derived lane rectangle}
+      - {name: lane_03, type: traversable, xmin: 10.20, xmax: 11.40, ymin: -4.70, ymax: 9.40, note: derived lane rectangle}
+      - {name: lane_04, type: traversable, xmin: -11.30, xmax: -10.20, ymin: -7.20, ymax: 7.70, note: derived lane rectangle}
+      - {name: lane_05, type: traversable, xmin: -7.60, xmax: -6.30, ymin: -4.70, ymax: 7.70, note: derived lane rectangle}
+      - {name: lane_06, type: traversable, xmin: -3.70, xmax: -2.40, ymin: -4.70, ymax: 7.70, note: derived lane rectangle}
+      - {name: lane_07, type: traversable, xmin: 0.20, xmax: 1.50, ymin: -4.70, ymax: 7.70, note: derived lane rectangle}
+      - {name: lane_08, type: traversable, xmin: 1.50, xmax: 10.20, ymin: -2.00, ymax: -0.80, note: derived lane rectangle}
+      - {name: lane_09, type: traversable, xmin: 1.50, xmax: 10.20, ymin: 5.90, ymax: 7.10, note: derived lane rectangle}
+      - {name: lane_10, type: traversable, xmin: 1.50, xmax: 10.20, ymin: 2.00, ymax: 3.10, note: derived lane rectangle}
+      - {name: lane_11, type: traversable, xmin: 5.30, xmax: 11.40, ymin: -9.30, ymax: -7.80, note: derived lane rectangle}
       - {name: lane_12, type: traversable, xmin: -1.90, xmax: 2.30, ymin: -9.30, ymax: -7.80, note: derived lane rectangle}
       - {name: lane_13, type: traversable, xmin: -8.50, xmax: -4.90, ymin: -9.30, ymax: -7.80, note: derived lane rectangle}
       - {name: lane_14, type: traversable, xmin: -10.20, xmax: -8.50, ymin: -7.20, ymax: -4.70, note: derived lane rectangle}
       - {name: A1, type: non_driveable_obstacle, xmin: -10.17, xmax: -7.63, ymin: -4.72, ymax: 7.67, note: storage zone plus its 0.32 m keep-out envelope}
-      - {name: A2, type: non_driveable_obstacle, xmin: -6.47, xmax: -3.93, ymin: -4.72, ymax: 7.67, note: storage zone plus its 0.32 m keep-out envelope}
-      - {name: A3, type: non_driveable_obstacle, xmin: -2.77, xmax: -0.23, ymin: -4.72, ymax: 7.67, note: storage zone plus its 0.32 m keep-out envelope}
+      - {name: A2, type: non_driveable_obstacle, xmin: -6.27, xmax: -3.73, ymin: -4.72, ymax: 7.67, note: storage zone plus its 0.32 m keep-out envelope}
+      - {name: A3, type: non_driveable_obstacle, xmin: -2.37, xmax: 0.17, ymin: -4.72, ymax: 7.67, note: storage zone plus its 0.32 m keep-out envelope}
       - {name: B1, type: non_driveable_obstacle, xmin: 1.48, xmax: 9.95, ymin: 7.08, ymax: 9.62, note: storage zone plus its 0.32 m keep-out envelope}
-      - {name: Cs, type: non_driveable_obstacle, xmin: 1.48, xmax: 10.17, ymin: -4.72, ymax: -1.93, note: block_stack zone plus its 0.32 m keep-out envelope}
-      - {name: Cm, type: non_driveable_obstacle, xmin: 1.48, xmax: 10.17, ymin: -1.07, ymax: 1.72, note: block_stack zone plus its 0.32 m keep-out envelope}
-      - {name: Cn, type: non_driveable_obstacle, xmin: 1.48, xmax: 10.17, ymin: 2.58, ymax: 5.37, note: block_stack zone plus its 0.32 m keep-out envelope}
+      - {name: Cs, type: non_driveable_obstacle, xmin: 1.48, xmax: 10.17, ymin: -4.72, ymax: -1.96, note: block_stack zone plus its 0.32 m keep-out envelope}
+      - {name: Cm, type: non_driveable_obstacle, xmin: 1.48, xmax: 10.17, ymin: -0.80, ymax: 1.96, note: block_stack zone plus its 0.32 m keep-out envelope}
+      - {name: Cn, type: non_driveable_obstacle, xmin: 1.48, xmax: 10.17, ymin: 3.12, ymax: 5.88, note: block_stack zone plus its 0.32 m keep-out envelope}
       - {name: DOCK_OFFICE, type: non_driveable_obstacle, xmin: -11.67, xmax: -8.53, ymin: -9.67, ymax: -7.23, note: structure zone plus its 0.32 m keep-out envelope}
       - {name: STAGE_MID, type: non_driveable_obstacle, xmin: -4.92, xmax: -1.88, ymin: -9.67, ymax: -7.83, note: staging zone plus its 0.32 m keep-out envelope}
       - {name: STAGE_E, type: non_driveable_obstacle, xmin: 2.28, xmax: 5.32, ymin: -9.67, ymax: -7.83, note: staging zone plus its 0.32 m keep-out envelope}

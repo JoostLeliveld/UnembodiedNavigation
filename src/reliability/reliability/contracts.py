@@ -441,6 +441,12 @@ class CameraObservation:
 
     schema_version: str = SCHEMA_VERSION
     camera_id: str = ""
+    # Identity of the detector invocation that produced this observation. All
+    # cameras processed by one strict batch carry the same value. Older and
+    # single-camera producers may leave it empty, but evidence-grade batched
+    # fusion uses it to wait for a complete batch and to assimilate that batch
+    # exactly once.
+    source_batch_id: str = ""
     timestamp_s: float = 0.0
     pixel_uv: tuple[float, float] | None = None
     detection_valid: bool = False
@@ -473,6 +479,7 @@ class CameraObservation:
     def __post_init__(self) -> None:
         if self.schema_version != SCHEMA_VERSION:
             raise ContractValidationError(f"Unsupported schema_version {self.schema_version!r}")
+        object.__setattr__(self, "source_batch_id", str(self.source_batch_id or "").strip())
         object.__setattr__(
             self,
             "timestamp_s",

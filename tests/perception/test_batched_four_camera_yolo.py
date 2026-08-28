@@ -46,15 +46,13 @@ def test_batch_is_emitted_in_fixed_order_independent_of_callback_order() -> None
         batcher.offer(_frame("camera_D", 1_000_000_000, 0.00)),
         batcher.offer(_frame("camera_B", 1_000_000_000, 0.01)),
         batcher.offer(_frame("camera_A", 1_000_000_000, 0.02)),
-        batcher.offer(_frame("camera_C", 1_000_000_000, 0.03)),
+        batcher.offer(_frame("camera_E", 1_000_000_000, 0.03)),
+        batcher.offer(_frame("camera_C", 1_000_000_000, 0.04)),
     ]
 
-    assert [decision.status for decision in decisions] == [
-        "accepted_waiting",
-        "accepted_waiting",
-        "accepted_waiting",
-        "batch_ready",
-    ]
+    assert [decision.status for decision in decisions] == (
+        ["accepted_waiting"] * (len(CAMERA_ORDER) - 1) + ["batch_ready"]
+    )
     assert decisions[-1].batch is not None
     assert tuple(item.camera_id for item in decisions[-1].batch) == CAMERA_ORDER
     assert tuple(item.payload for item in decisions[-1].batch) == tuple(
@@ -66,34 +64,50 @@ def test_pending_frame_is_latest_only_and_a_used_stamp_is_never_reused() -> None
     batcher = FourCameraBatcher(max_stamp_skew_s=0.01, max_pending_wall_s=1.0)
     assert batcher.offer(_frame("camera_A", 100, 0.00)).status == "accepted_waiting"
     assert batcher.offer(_frame("camera_A", 200, 0.01)).status == "accepted_replaced"
-    for camera_id in ("camera_B", "camera_C"):
+    for camera_id in ("camera_B", "camera_C", "camera_D"):
         assert batcher.offer(_frame(camera_id, 200, 0.02)).batch is None
-    ready = batcher.offer(_frame("camera_D", 200, 0.03))
+    ready = batcher.offer(_frame("camera_E", 200, 0.03))
 
     assert ready.status == "batch_ready"
     assert ready.batch is not None
-    assert [item.stamp_ns for item in ready.batch] == [200, 200, 200, 200]
+    assert [item.stamp_ns for item in ready.batch] == [200] * len(CAMERA_ORDER)
     assert batcher.offer(_frame("camera_A", 200, 0.04)).status == "duplicate"
     assert batcher.offer(_frame("camera_A", 199, 0.05)).status == "out_of_order"
     assert batcher.pending_camera_ids == ()
 
 
-def test_excessive_stamp_skew_discards_old_frames_instead_of_batching_them() -> None:
+def test_frames_from_different_rounds_are_never_batched_together() -> None:
+    """A late frame must not be able to break the round that is still forming.
+
+    This used to assert that the batcher REJECTED the set for stamp skew and dropped
+    the odd camera out.  That rejection was the production failure: with one pending
+    slot per camera, a newer frame overwrote its camera mid-cycle and the set that
+    completed mixed one camera's round with another's.  In a live five-camera run
+    every batch was rejected this way and the node published nothing, while the
+    cameras themselves were delivering byte-identical stamps in 101 of 102 rounds.
+
+    Grouping by stamp makes the guarantee structural rather than a tolerance test:
+    frames a period apart land in different rounds, so they cannot be batched
+    together at all, and the earlier round completes when its missing frame arrives.
+    Staleness is still bounded, by wall-clock expiry.
+    """
     batcher = FourCameraBatcher(max_stamp_skew_s=0.05, max_pending_wall_s=1.0)
     batcher.offer(_frame("camera_A", 1_000_000_000, 0.00))
-    for camera_id in ("camera_B", "camera_C"):
+    for camera_id in ("camera_B", "camera_C", "camera_D"):
         batcher.offer(_frame(camera_id, 1_200_000_000, 0.01))
-    decision = batcher.offer(_frame("camera_D", 1_200_000_000, 0.02))
+    decision = batcher.offer(_frame("camera_E", 1_200_000_000, 0.02))
 
-    assert decision.status == "stamp_skew"
+    # the later round is one frame short, and the earlier round is untouched
+    assert decision.status == "accepted_waiting"
     assert decision.batch is None
-    assert decision.dropped_camera_ids == ("camera_A",)
-    assert batcher.pending_camera_ids == ("camera_B", "camera_C", "camera_D")
+    assert set(batcher.pending_camera_ids) == set(CAMERA_ORDER)
 
     ready = batcher.offer(_frame("camera_A", 1_200_000_000, 0.03))
     assert ready.status == "batch_ready"
     assert ready.batch is not None
-    assert [item.stamp_ns for item in ready.batch] == [1_200_000_000] * 4
+    assert [item.stamp_ns for item in ready.batch] == [1_200_000_000] * len(CAMERA_ORDER)
+    # and the stranded earlier round is gone, not left to surface as a later drop
+    assert batcher.pending_camera_ids == ()
 
 
 def test_pending_wall_timeout_prevents_a_paused_camera_frame_from_later_use() -> None:
@@ -101,12 +115,13 @@ def test_pending_wall_timeout_prevents_a_paused_camera_frame_from_later_use() ->
     batcher.offer(_frame("camera_A", 10, 0.00))
     batcher.offer(_frame("camera_B", 10, 0.01))
     batcher.offer(_frame("camera_C", 10, 0.02))
+    batcher.offer(_frame("camera_D", 10, 0.03))
 
-    decision = batcher.offer(_frame("camera_D", 10, 0.20))
+    decision = batcher.offer(_frame("camera_E", 10, 0.20))
 
     assert decision.batch is None
-    assert decision.dropped_camera_ids == ("camera_A", "camera_B", "camera_C")
-    assert batcher.pending_camera_ids == ("camera_D",)
+    assert decision.dropped_camera_ids == ("camera_A", "camera_B", "camera_C", "camera_D")
+    assert batcher.pending_camera_ids == ("camera_E",)
 
 
 def test_stamp_validation_is_exact_and_rejects_malformed_values() -> None:
@@ -125,12 +140,15 @@ def test_future_image_stamps_are_an_integrity_fault_not_a_zero_age_frame() -> No
 def test_result_validation_fails_closed_before_camera_identity_can_shift() -> None:
     valid = [_ValidResult() for _ in CAMERA_ORDER]
     assert validate_batch_results(valid) == tuple(valid)
+    # written as "one short" rather than a literal count, so the batch width can
+    # change without this test silently checking the wrong thing
+    short = valid[:-1]
     for malformed in (
         None,
-        valid[:3],
-        [*valid[:3], None],
-        [*valid[:3], object()],
-        [*valid[:3], _MissingBoxesResult()],
+        short,
+        [*short, None],
+        [*short, object()],
+        [*short, _MissingBoxesResult()],
         "not-results",
     ):
         with pytest.raises(BatchContractError):
@@ -150,10 +168,18 @@ def test_runtime_source_has_one_native_model_and_the_complete_operational_contra
     # spelling of the load path, which the torchscript metadata split changed.)
     assert source.count("= YOLO(") == 1
     assert source.count("torch.jit.load(") == 1
-    assert '"source": list(images_bgr)' in source
-    assert '"batch": len(images_bgr)' in source
-    # Native inference must run exactly once per A--D batch. Calling predict
-    # twice halves throughput while silently discarding the first result.
+    # One inference CYCLE per timestamp batch, but the cycle may be split into
+    # consecutive chunks: measured on this 4 GiB card, five 960-px images in one
+    # call reserve 2558 MiB and run out of memory beside Gazebo's five cameras,
+    # while chunks of two reserve 1418 MiB and fit. What must stay true is that
+    # every image is predicted exactly once and the results are reassembled in
+    # camera order -- so that is what is asserted, rather than the batch width of
+    # a single predict call.
+    assert source.count("self.model.predict(**kwargs)") == 1
+    assert '"source": group' in source
+    assert '"batch": len(group)' in source
+    assert "results.extend(list(part))" in source
+    assert "if len(results) != len(images_bgr):" in source
     assert source.count("else self._predict_batch(images)") == 1
     assert "use_torchscript" not in source
     assert "ground_truth" not in source

@@ -172,11 +172,12 @@ def test_schema_1_runs_still_align_from_the_10hz_truth_series(tmp_path):
     assert "schema 1" in result["truth_source"]
 
 
-def test_corrections_reports_detections_not_log_rows(tmp_path):
+def test_corrections_counts_detector_rounds_not_log_rows(tmp_path):
     run = _write_run(tmp_path)
     counts = A.corrections(run)
-    # 20 detector rounds x 2 cameras -> 40 distinct (camera, capture time) pairs.
-    assert counts["n_detections"] == 40
+    # One detector round is one chance to correct the belief, however many cameras
+    # saw the robot in it. 20 rounds x 2 cameras is 20 corrections, not 40.
+    assert counts["n_detector_rounds"] == 20
     # and the old number, which is log rows with a fresh correction, is different
     assert counts["n_state_publications"] == 60
     assert counts["state_fresh_rate_hz"] == pytest.approx(60.0 / counts["duration_s"])

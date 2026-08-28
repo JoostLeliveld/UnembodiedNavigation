@@ -34,8 +34,10 @@ if str(UNAV_COMMON_SRC) not in sys.path:
 from unav_common.preselected_route import (  # noqa: E402
     canonicalize_polyline_json,
     route_sha256,
+    sha256_file,
     validate_preselected_route,
 )
+from unav_common.manifest import git_provenance  # noqa: E402
 
 # Map condition ID to planner name (must match ALLOWED_PLANNERS in launch file).
 CONDITION_PLANNER = {
@@ -629,6 +631,17 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
     manifest = _load_run_manifest(Path(run_dir_str))
     if not manifest:
         return False, f'missing run_manifest.json in {run_dir_str}'
+    if int(manifest.get('logging_schema_version', 0) or 0) < 3:
+        return False, 'run predates logging schema 3 (batch identity / operational termination)'
+    if manifest.get('goal_termination_reference') != 'planner_belief':
+        return False, 'run did not use planner_belief for goal termination'
+    expected_provenance = cfg.get('_git_provenance', {}) or {}
+    for key in (
+        'git_sha', 'git_status_sha256', 'git_diff_sha256',
+        'git_untracked_content_sha256',
+    ):
+        if manifest.get(key) != expected_provenance.get(key):
+            return False, f'{key} differs from the executable checkout'
 
     task_name = str(entry.get('task', '') or '')
 
@@ -639,6 +652,13 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
     actual_yolo_model = str(manifest.get('yolo_model', '') or '')
     if _resolve_for_compare(actual_yolo_model) != _resolve_for_compare(expected_yolo_model):
         return False, f'yolo_model mismatch: run used {actual_yolo_model or "<missing>"}, config expects {expected_yolo_model}'
+    expected_model_hash = cfg.get('_yolo_model_sha256') or sha256_file(expected_yolo_model)
+    if manifest.get('yolo_model_sha256') != expected_model_hash:
+        return False, 'yolo_model content hash mismatch'
+    campaign_path = str(cfg.get('_campaign_config_path', '') or '')
+    expected_campaign_hash = cfg.get('_campaign_config_sha256')
+    if not campaign_path or manifest.get('campaign_config_sha256') != expected_campaign_hash:
+        return False, 'campaign config content hash mismatch'
 
     numeric_keys = (
         'horizon', 'dt', 'goal_success_radius', 'goal_success_hold_s',
@@ -673,11 +693,26 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'preselected_route_clearance_m',
         'preselected_route_endpoint_tolerance_m',
         'preselected_route_sample_step_m',
+        'manager_min_spatial_trust', 'manager_decision_rate_hz',
+        'manager_fusion_disagreement_gate_m',
+        'manager_bootstrap_min_cameras', 'manager_bootstrap_max_disagreement_m',
+        'manager_fusion_max_timestamp_spread_s',
+        'manager_commissioned_sigma_px', 'manager_fusion_common_mode_std_m',
+        'manager_fixed_offset_m',
+        'manager_correction_residual_interval_s',
+        'manager_correction_propagation_drift_std',
+        'manager_max_measurement_age_s', 'manager_age_decay_s',
+        'manager_min_association_confidence',
+        'manager_required_consecutive_better_frames',
+        'manager_max_cross_camera_disagreement_m',
     )
     for key in numeric_keys:
         expected = expected_value(key)
-        if expected is not None and key in manifest and not _float_close(manifest.get(key), expected):
-            return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")}, config expects {expected}'
+        if expected is not None:
+            if key not in manifest:
+                return False, f'{key} missing from run manifest'
+            if not _float_close(manifest.get(key), expected):
+                return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")}, config expects {expected}'
 
     bool_keys = (
         'use_nogo_cost',
@@ -699,11 +734,21 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'latency_compensate_plan_handoff',
         'use_truth_localization',
         'use_hit_miss_mixture',
+        'terminate_on_geom_collision',
+        'manager_require_source_batch_id',
+        'manager_commissioned_per_camera_sigma',
+        'manager_correction_timestamp_compensation',
+        'manager_admission_gate',
+        'manager_require_consistency_when_source_available',
+        'manager_fusion_mode', 'manager_require_gp_artifacts',
     )
     for key in bool_keys:
         expected = expected_value(key)
-        if expected is not None and key in manifest and bool(manifest.get(key)) != bool(expected):
-            return False, f'{key} mismatch: run used {manifest.get(key)}, config expects {expected}'
+        if expected is not None:
+            if key not in manifest:
+                return False, f'{key} missing from run manifest'
+            if bool(manifest.get(key)) != bool(expected):
+                return False, f'{key} mismatch: run used {manifest.get(key)}, config expects {expected}'
 
     string_keys = (
         'nogo_mode',
@@ -716,11 +761,30 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'state_correction_mode',
         'local_controller_type',
         'global_planner_mode',
+        'manager_gp_artifact_template', 'manager_camera_ids',
+        'manager_covariance_profile', 'manager_commissioned_calibration_path',
+        'manager_fusion_rule', 'manager_observation_model',
     )
     for key in string_keys:
         expected = expected_value(key)
-        if expected is not None and key in manifest and str(manifest.get(key, '')) != str(expected):
-            return False, f'{key} mismatch: run used {manifest.get(key, "<missing>")!r}, config expects {expected!r}'
+        if expected is not None:
+            if key not in manifest:
+                return False, f'{key} missing from run manifest'
+            actual = str(manifest.get(key, ''))
+            if key in ('manager_commissioned_calibration_path',):
+                matches = _resolve_for_compare(actual) == _resolve_for_compare(str(expected))
+            else:
+                matches = actual == str(expected)
+            if not matches:
+                return False, f'{key} mismatch: run used {actual!r}, config expects {expected!r}'
+
+    calibration_path = expected_value('manager_commissioned_calibration_path')
+    if calibration_path:
+        expected_calibration_hash = sha256_file(
+            _resolve_repo_path(str(calibration_path), strict=True)
+        )
+        if manifest.get('manager_commissioned_calibration_sha256') != expected_calibration_hash:
+            return False, 'manager commissioned calibration content hash mismatch'
 
     route_matches, route_reason = _verify_preselected_run_artifacts(
         Path(run_dir_str), cfg, task_name, condition_id, manifest=manifest
@@ -781,6 +845,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'planner:={planner}',
         f'seed:={seed}',
         f'log_dir:={log_dir}',
+        f'campaign_config_path:={cfg.get("_campaign_config_path", "")}',
         f'perception_backend:={cfg.get("perception_backend", "yolo")}',
         f'horizon:={cfg["horizon"]}',
         f'dt:={cfg["dt"]}',
@@ -837,6 +902,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'yolo_min_bbox_area_px:={cfg.get("yolo_min_bbox_area_px", 0.0)}',
         f'yolo_debug_frame_dir:={cfg.get("yolo_debug_frame_dir", "")}',
         f'yolo_use_torchscript:={str(cfg.get("yolo_use_torchscript", False)).lower()}',
+        f'yolo_compiled_model:={cfg.get("yolo_compiled_model", "")}',
         f'yolo_warmup_iters:={cfg.get("yolo_warmup_iters", 3)}',
         f'yolo_inference_in_callback:={str(cfg.get("yolo_inference_in_callback", True)).lower()}',
     ]
@@ -896,6 +962,9 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'manager_min_spatial_trust',
         'manager_decision_rate_hz',
         'manager_fusion_disagreement_gate_m',
+        'manager_require_source_batch_id',
+        'manager_bootstrap_min_cameras',
+        'manager_bootstrap_max_disagreement_m',
         'manager_fusion_max_timestamp_spread_s',
         'manager_covariance_profile',
         'manager_commissioned_calibration_path', 'manager_commissioned_sigma_px',
@@ -1014,6 +1083,14 @@ def main() -> int:
         return 1
 
     cfg = _load_config(config_path)
+    # Runtime provenance: the logger snapshots and hashes these exact bytes. Keep this
+    # out-of-band key separate from the scientific YAML fields consumed by validation.
+    cfg['_campaign_config_path'] = str(config_path)
+    cfg['_campaign_config_sha256'] = sha256_file(config_path)
+    cfg['_yolo_model_sha256'] = sha256_file(
+        _resolve_repo_path(cfg['yolo_model'], strict=True)
+    )
+    cfg['_git_provenance'] = git_provenance(str(REPO_ROOT))
     log_root = Path(args.log_root).expanduser().resolve()
     campaign_log_path = log_root / 'campaign_log.json'
     ros_log_dir = Path(os.environ.get('ROS_LOG_DIR') or (log_root / '_ros_logs')).expanduser().resolve()

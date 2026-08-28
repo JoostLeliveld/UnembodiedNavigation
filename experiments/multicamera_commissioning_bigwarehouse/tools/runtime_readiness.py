@@ -76,6 +76,7 @@ CAMERA_TOPICS: dict[str, str] = {
     "camera_B": "/perception/camera_observation/camera_B",
     "camera_C": "/perception/camera_observation/camera_C",
     "camera_D": "/perception/camera_observation/camera_D",
+    "camera_E": "/perception/camera_observation/camera_E",
 }
 CORE_TOPICS: dict[str, str] = {
     "clock": "/clock",
@@ -968,7 +969,9 @@ def _expected_contract_from_runtime_config(
         "launch_switch": "yolo_batched_four_camera",
         "model_format": "native_ultralytics",
         "model_instances": 1,
-        "batch_size": 4,
+        # derived from the contract rather than written as a literal, so the batch
+        # growing from A--D to A--E does not need this line edited again
+        "batch_size": len(BATCHED_CAMERA_ORDER),
         "camera_order": list(BATCHED_CAMERA_ORDER),
         "device": expected["shared_device"],
         "cpu_threads": expected["cpu_threads"],

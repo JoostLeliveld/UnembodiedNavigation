@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Dict, List
@@ -31,7 +32,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'bev_y_calibration_offset_m': '0.127',
     'bev_affine_calibration': '',
     'pixel_max_correction_jump_m': '0.0',
-    'pixel_correction_nis_threshold': '0.0',
+    'pixel_correction_nis_threshold': '9.21',
     'use_truth_localization': 'false',
     'cmd_publish_rate': '10.0',
     'command_noise_output_topic': '/cmd_vel',
@@ -133,7 +134,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'latency_compensate_plan_handoff': 'false',
     'simple_tracker_yaw_gate_rad': '0.6',
     'odom_heading_timeout_s': '0.75',
-    'heading_update_mode': 'camera_xy_only',
+    'heading_update_mode': 'coupled',
     'local_controller_type': 'turn_then_go',
     'debug_runtime': 'false',
     'auto_stop_on_goal': 'true',
@@ -159,6 +160,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'wait_for_belief_before_first_goal': 'false',
     'initial_belief_max_sigma_m': '0.0',
     'yolo_model': '',
+    'campaign_config_path': '',
     'yolo_device': '',
     'yolo_imgsz': '640',
     'yolo_conf_threshold': '0.25',
@@ -265,6 +267,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'task_name': _launch_value(context, 'task', PAPER_LAUNCH_DEFAULTS['task']).strip(),
         'comparison_method_id': _launch_value(context, 'comparison_method_id', '').strip(),
         'log_dir': _launch_value(context, 'log_dir', PAPER_LAUNCH_DEFAULTS['log_dir']).strip(),
+        'campaign_config_path': _launch_value(
+            context, 'campaign_config_path', PAPER_LAUNCH_DEFAULTS['campaign_config_path']
+        ).strip(),
         'seed': seed_value,
         'perception_backend': 'yolo',
         'sensor_pixel_noise_sigma': _SENSOR_PIXEL_NOISE_SIGMA,
@@ -293,9 +298,15 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'manager_fusion_disagreement_gate_m': float(
             _launch_value(context, 'manager_fusion_disagreement_gate_m', '0.6')
         ),
+        'manager_require_source_batch_id': _as_bool(_launch_value(
+            context, 'manager_require_source_batch_id', 'true')),
+        'manager_bootstrap_min_cameras': int(_launch_value(
+            context, 'manager_bootstrap_min_cameras', '2')),
+        'manager_bootstrap_max_disagreement_m': float(_launch_value(
+            context, 'manager_bootstrap_max_disagreement_m', '0.30')),
         'manager_require_gp_artifacts': _as_bool(_launch_value(context, 'manager_require_gp_artifacts', 'true')),
         'manager_fusion_max_timestamp_spread_s': float(
-            _launch_value(context, 'manager_fusion_max_timestamp_spread_s', '0.25')
+            _launch_value(context, 'manager_fusion_max_timestamp_spread_s', '0.05')
         ),
         'manager_covariance_profile': _launch_value(
             context, 'manager_covariance_profile', 'commissioned_sigma_px'
@@ -594,7 +605,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             )
         ),
         'terminate_on_geom_collision': _as_bool(
-            _launch_value(context, 'terminate_on_geom_collision', 'true')
+            _launch_value(context, 'terminate_on_geom_collision', 'false')
         ),
         'bridge_contacts': _as_bool(
             _launch_value(context, 'bridge_contacts', PAPER_LAUNCH_DEFAULTS['bridge_contacts'])
@@ -1268,6 +1279,14 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'state_source_theta': state_sources['state_source_theta'],
                 'state_estimator_mode': state_sources['state_estimator_mode'],
                 'state_correction_mode': cfg.get('state_correction_mode', 'fused'),
+                # The camera-manager settings that define the arm, from the SAME
+                # function that configures the manager. Recorded in the manifest so a
+                # result's arm identity does not live only in its directory name.
+                'manager_settings_json': json.dumps(
+                    dict(manager_arm_settings(cfg),
+                         manager_active=bool(cfg.get('multicam_belief', False))),
+                    sort_keys=True),
+                'campaign_config_path': cfg.get('campaign_config_path', ''),
                 'use_pixel_correction': cfg['use_pixel_correction'],
                 'pixel_timeout_s': cfg['pixel_timeout_s'],
                 'use_ambiguity': cfg['use_ambiguity'],
@@ -1306,6 +1325,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'use_hit_miss_mixture': cfg.get('use_hit_miss_mixture', False),
                 'nogo_mode': cfg.get('nogo_mode', 'keep_out'),
                 'yolo_model': cfg['yolo_model'],
+                'yolo_compiled_model': cfg.get('yolo_compiled_model', ''),
                 'yolo_device': cfg['yolo_device'],
                 'yolo_imgsz': cfg['yolo_imgsz'],
                 'yolo_conf_threshold': cfg['yolo_conf_threshold'],
@@ -1475,7 +1495,107 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     }
 
 
+def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
+    """The camera-manager settings that DEFINE an experiment arm, as plain scalars.
+
+    Read twice from this one place: to configure ``camera_manager_node``, and to
+    record in the run manifest. One source, so the manifest cannot disagree with what
+    actually ran.
+
+    Before this existed the manifest carried 152 keys and not one manager setting, so
+    the fusion rule, the observation model, the decision rate and the timestamp
+    compensation of every F1-F4 / O1-O2 result lived only in a directory name -- and
+    the campaign runner's reuse check silently skips any key the manifest lacks, so a
+    re-run could inherit a directory from a different arm.
+
+    JSON-serialisable on purpose: no launch Substitutions, no camera-model paths.
+    """
+
+    return {
+        'manager_decision_rate_hz': float(cfg.get('manager_decision_rate_hz', 5.0)),
+        'manager_require_gp_artifacts': bool(cfg.get('manager_require_gp_artifacts', True)),
+        'manager_fusion_mode': bool(cfg.get('manager_fusion_mode', True)),
+        'manager_publish_map_observations': bool(
+            cfg.get('manager_publish_map_observations',
+                    str(cfg.get('state_correction_mode', 'fused')) == 'per_camera')
+        ),
+        'manager_fusion_disagreement_gate_m': float(
+            cfg.get('manager_fusion_disagreement_gate_m', 0.6)),
+        'manager_require_source_batch_id': bool(
+            cfg.get('manager_require_source_batch_id', True)),
+        'manager_bootstrap_min_cameras': int(
+            cfg.get('manager_bootstrap_min_cameras', 2)),
+        'manager_bootstrap_max_disagreement_m': float(
+            cfg.get('manager_bootstrap_max_disagreement_m', 0.30)),
+        'manager_fusion_max_timestamp_spread_s': float(
+            cfg.get('manager_fusion_max_timestamp_spread_s', 0.05)),
+        'manager_covariance_profile': str(
+            cfg.get('manager_covariance_profile', 'commissioned_sigma_px')),
+        'manager_commissioned_calibration_path': str(
+            cfg.get('manager_commissioned_calibration_path', '') or ''),
+        'manager_commissioned_sigma_px': float(cfg.get('manager_commissioned_sigma_px', 0.0)),
+        'manager_commissioned_per_camera_sigma': bool(
+            cfg.get('manager_commissioned_per_camera_sigma', False)),
+        'manager_fusion_common_mode_std_m': float(
+            cfg.get('manager_fusion_common_mode_std_m', 0.0)),
+        'manager_fusion_rule': str(cfg.get('manager_fusion_rule', 'legacy')),
+        'manager_correction_timestamp_compensation': bool(
+            cfg.get('manager_correction_timestamp_compensation', False)),
+        'manager_admission_gate': bool(cfg.get('manager_admission_gate', True)),
+        'manager_correction_residual_interval_s': float(
+            cfg.get('manager_correction_residual_interval_s', 0.05)),
+        'manager_correction_propagation_drift_std': float(
+            cfg.get('manager_correction_propagation_drift_std', 0.05)),
+        'manager_observation_model': str(cfg.get('manager_observation_model', 'hull')),
+        'manager_fixed_offset_m': float(cfg.get('manager_fixed_offset_m', 0.0)),
+        'manager_min_spatial_trust': float(cfg.get('manager_min_spatial_trust', 0.15)),
+        'manager_max_measurement_age_s': float(
+            cfg.get('manager_max_measurement_age_s', cfg['pixel_timeout_s'])),
+        'manager_age_decay_s': float(cfg.get('manager_age_decay_s', cfg['pixel_timeout_s'])),
+        'manager_min_association_confidence': float(
+            cfg.get('manager_min_association_confidence', 0.30)),
+        'manager_required_consecutive_better_frames': int(
+            cfg.get('manager_required_consecutive_better_frames', 1)),
+        'manager_max_cross_camera_disagreement_m': float(
+            cfg.get('manager_max_cross_camera_disagreement_m', 1.0)),
+        'manager_require_consistency_when_source_available': bool(
+            cfg.get('manager_require_consistency_when_source_available', False)),
+        'manager_bias_floor_along_slope_m_per_m': float(
+            cfg.get('manager_bias_floor_along_slope_m_per_m', 0.0)),
+        'manager_bias_floor_across_slope_m_per_m': float(
+            cfg.get('manager_bias_floor_across_slope_m_per_m', 0.00035)),
+    }
+
+
+#: manager_arm_settings key -> the camera_manager_node parameter it sets.
+_MANAGER_PARAM_NAMES = {
+    'manager_correction_propagation_drift_std': 'correction_propagation_drift_std_m_per_s',
+}
+
+
+def _manager_node_parameters(cfg: Dict[str, object]) -> Dict[str, object]:
+    """The arm settings under the node's own parameter names."""
+
+    out = {}
+    for key, value in manager_arm_settings(cfg).items():
+        name = _MANAGER_PARAM_NAMES.get(key)
+        if name is None:
+            assert key.startswith('manager_'), key
+            name = key[len('manager_'):]
+        out[name] = value
+    return out
+
+
 def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
+    if str(cfg.get('yolo_runtime_backend', 'native')) != 'native':
+        raise RuntimeError(
+            'paper multicam evidence requires native strict batching; asynchronous '
+            'TorchScript batches do not have the all-camera batch identity contract'
+        )
+    if str(cfg.get('yolo_input_transport', 'ros')) != 'ros':
+        raise RuntimeError(
+            'paper multicam evidence requires the strict ROS camera batch transport'
+        )
     """Multi-camera belief front-end (multicam_belief mode).
 
     Replaces the single-camera ``yolo_robot_detector_node`` + ``pixel_to_bev``
@@ -1518,14 +1638,15 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
             # commissioning launch derived it the same way.
             'calibration_world': str(cfg['world']).replace('.world.sdf', ''),
             'model_path': cfg['yolo_model'],
-            'runtime_backend': 'native',
-            'device': '0',
+            'runtime_backend': cfg.get('yolo_runtime_backend', 'native'),
+            'compiled_model_path': cfg.get('yolo_compiled_model', ''),
+            'device': cfg['yolo_device'],
             'image_size': cfg['yolo_imgsz'],
             'confidence_threshold': cfg['yolo_conf_threshold'],
             'iou_threshold': cfg['yolo_iou_threshold'],
             'class_name': cfg['yolo_target_class'],
             'class_id': cfg['yolo_class_id'],
-            'use_masks': False,
+            'use_masks': cfg['yolo_use_masks'],
             'mask_min_area': cfg['yolo_min_mask_area_px'],
             'mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
             'min_bbox_area_px': cfg['yolo_min_bbox_area_px'],
@@ -1541,7 +1662,7 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
             'max_batch_stamp_skew_s': float(cfg.get('yolo_max_batch_stamp_skew_s', 0.25)),
             'max_pending_wall_s': 0.50,
             'synchronization_mode': 'strict',
-            'input_transport': 'ros',
+            'input_transport': cfg.get('yolo_input_transport', 'ros'),
             'camera_observation_r_visible_uv': float(cfg.get('r_visible_uv', 2.5)),
             'camera_observation_r_miss_uv': float(cfg.get('r_miss_uv', 40.0)),
         }],
@@ -1581,61 +1702,7 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
             'gp_artifact_template': str(cfg.get('manager_gp_artifact_template', '') or ''),
             'camera_ids': _mc_camera_ids,
             'camera_model_includes': _mc_model_includes,
-            'decision_rate_hz': float(cfg.get('manager_decision_rate_hz', 5.0)),
-            'require_gp_artifacts': bool(cfg.get('manager_require_gp_artifacts', True)),
-            # Covariance-weighted fusion of all in-view cameras (default) instead
-            # of hard single-camera selection, which destabilised the belief.
-            'fusion_mode': bool(cfg.get('manager_fusion_mode', True)),
-            # Per-camera map observations for the planner's sequential filter.
-            # Additive -- the fused/selected outputs are unchanged -- so it is on
-            # whenever the planner might want them, and the planner ignores them
-            # unless state_correction_mode=per_camera.
-            'publish_map_observations': bool(
-                cfg.get('manager_publish_map_observations',
-                        str(cfg.get('state_correction_mode', 'fused')) == 'per_camera')
-            ),
-            'fusion_disagreement_gate_m': float(cfg.get('manager_fusion_disagreement_gate_m', 0.6)),
-            'fusion_max_timestamp_spread_s': float(
-                cfg.get('manager_fusion_max_timestamp_spread_s', 0.25)
-            ),
-            'covariance_profile': str(
-                cfg.get('manager_covariance_profile', 'commissioned_sigma_px')
-            ),
-            # The commissioned profile reads the detector's noise from the artifact rather
-            # than carrying a remembered number through three config layers.
-            'commissioned_calibration_path': str(
-                cfg.get('manager_commissioned_calibration_path', '') or ''
-            ),
-            'commissioned_sigma_px': float(cfg.get('manager_commissioned_sigma_px', 0.0)),
-            'commissioned_per_camera_sigma': bool(
-                cfg.get('manager_commissioned_per_camera_sigma', False)),
-            'fusion_common_mode_std_m': float(
-                cfg.get('manager_fusion_common_mode_std_m', 0.0)),
-            'fusion_rule': str(cfg.get('manager_fusion_rule', 'legacy')),
-            'correction_timestamp_compensation': bool(
-                cfg.get('manager_correction_timestamp_compensation', False)),
-            'admission_gate': bool(cfg.get('manager_admission_gate', True)),
-            'correction_residual_interval_s': float(
-                cfg.get('manager_correction_residual_interval_s', 0.05)),
-            'correction_propagation_drift_std_m_per_s': float(
-                cfg.get('manager_correction_propagation_drift_std', 0.05)),
-            'observation_model': str(cfg.get('manager_observation_model', 'hull')),
-            'fixed_offset_m': float(cfg.get('manager_fixed_offset_m', 0.0)),
-            # Covariance the fused /state/bev correction reports to the planner
-            # EKF. At the higher ~5 Hz correction rate the fused observation is
-            'min_spatial_trust': float(cfg.get('manager_min_spatial_trust', 0.15)),
-            # Gates relaxed for the ~1 Hz four-detector regime: the shipped
-            # defaults (age 0.15 s, assoc 0.70, 3-frame hysteresis, 0.30 m
-            # disagreement) were tuned for a higher-rate pilot and reject every
-            # observation here. These are disclosed demo-commissioning values.
-            'max_measurement_age_s': float(cfg.get('manager_max_measurement_age_s', cfg['pixel_timeout_s'])),
-            'age_decay_s': float(cfg.get('manager_age_decay_s', cfg['pixel_timeout_s'])),
-            'min_association_confidence': float(cfg.get('manager_min_association_confidence', 0.30)),
-            'required_consecutive_better_frames': int(cfg.get('manager_required_consecutive_better_frames', 1)),
-            'max_cross_camera_disagreement_m': float(cfg.get('manager_max_cross_camera_disagreement_m', 1.0)),
-            'require_consistency_when_source_available': bool(
-                cfg.get('manager_require_consistency_when_source_available', False)
-            ),
+            **_manager_node_parameters(cfg),
         }],
     )
     return [batched, manager]

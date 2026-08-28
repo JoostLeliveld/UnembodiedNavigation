@@ -257,6 +257,61 @@ def propagate_correction_to_now(xy, covariance_m2, pose_then, pose_now, *,
     return (float(xy[0]) + dx, float(xy[1]) + dy), covariance, (dx, dy)
 
 
+def align_observations_to_common_time(
+    observations,
+    history,
+    *,
+    max_pose_delta_s: float,
+    drift_std_m_per_s: float,
+):
+    """Carry asynchronous camera observations to the newest capture instant.
+
+    Fusion requires all operands to describe the same state. Camera rendering
+    can be phase-shifted, so a detector batch may legitimately contain several
+    capture stamps; averaging those positions directly creates motion bias.
+    Absolute odometry drift cancels because only the displacement between two
+    nearby stamps is used.
+    """
+
+    if not observations:
+        return [], [], math.nan
+    target_s = max(float(observation.timestamp_s) for observation in observations)
+    aligned = []
+    rejected = []
+    for observation in observations:
+        source_s = float(observation.timestamp_s)
+        if target_s - source_s <= 1.0e-9:
+            aligned.append(replace(observation, timestamp_s=target_s))
+            continue
+        pose_then = _nearest_state_pose(
+            history, source_s, max_delta_s=max_pose_delta_s
+        )
+        pose_target = _nearest_state_pose(
+            history, target_s, max_delta_s=max_pose_delta_s
+        )
+        if pose_then is None or pose_target is None:
+            rejected.append(str(observation.camera_id))
+            continue
+        xy, covariance, _delta = propagate_correction_to_now(
+            observation.xy_m,
+            observation.covariance_m2,
+            pose_then,
+            pose_target,
+            drift_std_m_per_s=drift_std_m_per_s,
+            dt_s=max(target_s - source_s, 0.0),
+            residual_interval_s=0.0,
+        )
+        aligned.append(
+            replace(
+                observation,
+                timestamp_s=target_s,
+                xy_m=xy,
+                covariance_m2=covariance,
+            )
+        )
+    return aligned, sorted(rejected), target_s
+
+
 def _fusion_report_covariance(covariance_m2, *, common_mode_std_m: float = 0.0):
     """Add back the part of the error the cameras make TOGETHER, and nothing else.
 
@@ -479,6 +534,15 @@ class CameraManagerNode(Node):
             "map_observations_topic", "/reliability/camera_manager/map_observations"
         )
         self.declare_parameter("fusion_disagreement_gate_m", 0.6)
+        # Evidence-grade batched fusion waits for every subscribed camera's
+        # result from one detector invocation. This makes a manager timer rate
+        # higher than the detector rate safe: cached pixels are never reused.
+        self.declare_parameter("require_source_batch_id", False)
+        # With no belief yet the silhouette gate cannot be evaluated. Bootstrap
+        # is therefore a separate, explicit quorum rule instead of an unchecked
+        # exception to the normal admission gate.
+        self.declare_parameter("bootstrap_min_cameras", 2)
+        self.declare_parameter("bootstrap_max_disagreement_m", 0.30)
         # Bias floor, DESIGN_LOCK D5 layer 3, in metres of along-ray bias per metre of
         # range. 0.0 disables it, which is the historical behaviour and stays the default:
         # a floor changes what the filter is permitted to believe, so it is switched on by
@@ -504,7 +568,15 @@ class CameraManagerNode(Node):
         self.declare_parameter("silhouette_observation_correction", True)
         self.declare_parameter("bias_floor_along_slope_m_per_m", 0.0)
         self.declare_parameter("bias_floor_across_slope_m_per_m", 0.00035)
-        self.declare_parameter("fusion_max_timestamp_spread_s", 0.25)
+        # Views fused into one correction must come from the SAME detector round.
+        #
+        # The five wall cameras render at 5 Hz in the same simulation step, so a round
+        # carries one byte-identical stamp: measured 2667 of 2680 decisions on the
+        # frozen route. The 13 exceptions were rounds 200 ms apart fused as though
+        # simultaneous, because this tolerance was 0.25 s -- LONGER than the 0.20 s
+        # detector period, so a whole stale round could still qualify. At 0.05 s the
+        # window admits real jitter within a round and nothing from the round before.
+        self.declare_parameter("fusion_max_timestamp_spread_s", 0.05)
         # commissioned_sigma_px is the only profile: R_pix = sigma_px^2 I from the frozen
         # calibration, with each camera's own geometry turning it into an ellipse on the
         # floor. Kept as a parameter so a run's provenance states which sensor model it used.
@@ -637,6 +709,27 @@ class CameraManagerNode(Node):
         )
         self.handover_config = HandoverUncertaintyConfig()
         self._latest: dict[str, CameraObservation] = {}
+        self.require_source_batch_id = bool(
+            self.get_parameter("require_source_batch_id").value
+        )
+        self.bootstrap_min_cameras = int(
+            self.get_parameter("bootstrap_min_cameras").value
+        )
+        self.bootstrap_max_disagreement_m = float(
+            self.get_parameter("bootstrap_max_disagreement_m").value
+        )
+        if self.bootstrap_min_cameras < 1:
+            raise ValueError("bootstrap_min_cameras must be at least one")
+        if not math.isfinite(self.bootstrap_max_disagreement_m) or self.bootstrap_max_disagreement_m <= 0.0:
+            raise ValueError("bootstrap_max_disagreement_m must be finite and positive")
+        self._pending_source_batches: dict[str, dict[str, CameraObservation]] = {}
+        self._ready_source_batch_id: str | None = None
+        self._ready_source_batch_stamp_s = -math.inf
+        self._last_decided_source_batch_id: str | None = None
+        self._legacy_observation_generation = 0
+        #: Cameras whose reading had no prior pose to gate against this round.
+        #: Rebuilt by _map_observations; declared here so the attribute always exists.
+        self._bootstrap_camera_ids: set[str] = set()
         self._belief_query_history = deque(maxlen=400)
         #: Odometry, kept purely to measure how far the robot moved between the pose a
         #: correction describes and the pose it is used on. The belief can be used for this
@@ -829,7 +922,7 @@ class CameraManagerNode(Node):
             self._belief_query_callback,
             20,
         )
-        if self.timestamp_compensation:
+        if self.timestamp_compensation or self.fusion_mode:
             from nav_msgs.msg import Odometry  # noqa: PLC0415
             self.create_subscription(
                 Odometry, str(self.get_parameter("odometry_topic").value),
@@ -854,7 +947,38 @@ class CameraManagerNode(Node):
                     f"{expected_camera_id}: ignoring observation labelled {observation.camera_id!r}"
                 )
                 return
+            source_batch_id = str(observation.source_batch_id or "")
+            if source_batch_id:
+                pending = self._pending_source_batches.setdefault(source_batch_id, {})
+                pending[expected_camera_id] = observation
+                if all(camera_id in pending for camera_id in self.camera_ids):
+                    batch_stamp_s = max(
+                        float(item.timestamp_s) for item in pending.values()
+                    )
+                    if batch_stamp_s <= self._ready_source_batch_stamp_s:
+                        self._pending_source_batches.pop(source_batch_id, None)
+                        return
+                    self._latest = {
+                        camera_id: pending[camera_id] for camera_id in self.camera_ids
+                    }
+                    self._ready_source_batch_id = source_batch_id
+                    self._ready_source_batch_stamp_s = batch_stamp_s
+                    # Bound memory and ensure an older, late ROS delivery can
+                    # never become the next active batch.
+                    self._pending_source_batches = {
+                        source_batch_id: dict(self._latest)
+                    }
+                return
+            if self.require_source_batch_id:
+                self.get_logger().warn(
+                    f"{expected_camera_id}: rejected observation without source_batch_id"
+                )
+                return
             self._latest[expected_camera_id] = observation
+            self._legacy_observation_generation += 1
+            self._ready_source_batch_id = (
+                f"legacy:{self._legacy_observation_generation}"
+            )
 
         return callback
 
@@ -863,9 +987,15 @@ class CameraManagerNode(Node):
 
         stamp = (float(message.header.stamp.sec)
                  + 1.0e-9 * float(message.header.stamp.nanosec))
+        orientation = message.pose.pose.orientation
+        yaw = math.atan2(
+            2.0 * (float(orientation.w) * float(orientation.z)
+                   + float(orientation.x) * float(orientation.y)),
+            1.0 - 2.0 * (float(orientation.y) ** 2 + float(orientation.z) ** 2),
+        )
         self._odom_history.append(
             (stamp, (float(message.pose.pose.position.x),
-                     float(message.pose.pose.position.y), 0.0)))
+                     float(message.pose.pose.position.y), yaw)))
 
     def _belief_query_callback(self, message) -> None:
         if message.header.frame_id and message.header.frame_id != self.frame_id:
@@ -902,6 +1032,7 @@ class CameraManagerNode(Node):
 
     def _map_observations(self, now_s: float) -> list[MapObservation]:
         observations: list[MapObservation] = []
+        self._bootstrap_camera_ids = set()
         for camera_id, contract in self._latest.items():
             # The detector's noise is one commissioned number in PIXELS, identical for
             # every camera. Whatever pixel covariance the contract arrived with is
@@ -936,14 +1067,11 @@ class CameraManagerNode(Node):
                 continue
             if self.admission_gate:
                 if prior_pose is None:
-                    # Bootstrap. The check compares a detection against a box PREDICTED from
-                    # the believed pose, and at start-up there is no belief yet -- the belief
-                    # is what this first correction creates. Refusing here deadlocks the robot:
-                    # no correction, so no belief, so no prediction, so no correction. So the
-                    # first readings pass unchecked and are counted, and the check applies from
-                    # the moment a pose exists. The same readings are also uncorrected for the
-                    # hull at this point, which is the pre-existing bootstrap behaviour.
-                    self._gate_rejections["bootstrap_unchecked"] += 1
+                    # Defer to the explicit quorum rule in _decide_fused. A
+                    # single unchecked detection is never allowed to initialise
+                    # the recursive belief.
+                    self._bootstrap_camera_ids.add(camera_id)
+                    self._silhouette_status_by_camera[camera_id] = "bootstrap_pending_quorum"
                 else:
                   reasons = plausibility_reasons(
                       contract.bbox_xyxy, self.camera_models[camera_id],
@@ -1016,11 +1144,15 @@ class CameraManagerNode(Node):
         return observations
 
     def _decide(self) -> None:
+        source_batch_id = self._ready_source_batch_id
+        if source_batch_id is None or source_batch_id == self._last_decided_source_batch_id:
+            return
         now_s = self.get_clock().now().nanoseconds * 1.0e-9
         observations = self._map_observations(now_s)
         self._publish_map_observations(observations)
         if self.fusion_mode and self.active_pub is not None:
-            self._decide_fused(now_s, observations)
+            self._decide_fused(now_s, observations, source_batch_id=source_batch_id)
+            self._last_decided_source_batch_id = source_batch_id
             return
         decision = self.manager.select(timestamp_s=now_s, observations=observations)
         # The handover switch is REPORTED, never applied: the commissioned covariance is the
@@ -1040,6 +1172,7 @@ class CameraManagerNode(Node):
 
         payload = decision.to_dict()
         payload["authority"] = self.authority
+        payload["source_batch_id"] = source_batch_id
         payload["covariance_profile"] = self.covariance_profile
         payload["handover_diagnostic"] = diagnostic.to_dict()
         payload["gp_query_source_by_camera"] = dict(
@@ -1053,11 +1186,13 @@ class CameraManagerNode(Node):
         self.decision_pub.publish(message)
 
         if selected is None:
+            self._last_decided_source_batch_id = source_batch_id
             return
         pose = self._pose_message(selected)
         self.selected_pub.publish(pose)
         if self.active_pub is not None:
             self.active_pub.publish(pose)
+        self._last_decided_source_batch_id = source_batch_id
 
     def _publish_map_observations(self, observations: list[MapObservation]) -> None:
         """Emit the per-camera observations for a downstream sequential filter.
@@ -1080,7 +1215,7 @@ class CameraManagerNode(Node):
         camera's surveyed position and the observation it produced, because the measured
         bias tracks the camera's line of sight rather than the world frame.
         """
-        if self.bias_floor_along_slope <= 0.0:
+        if self.bias_floor_along_slope <= 0.0 and self.bias_floor_across_slope <= 0.0:
             return None
         from reliability.bias_floor import bias_floor_matrix, ray_bearing_rad
 
@@ -1103,7 +1238,13 @@ class CameraManagerNode(Node):
             )
         return floors or None
 
-    def _decide_fused(self, now_s: float, observations: list[MapObservation]) -> None:
+    def _decide_fused(
+        self,
+        now_s: float,
+        observations: list[MapObservation],
+        *,
+        source_batch_id: str,
+    ) -> None:
         # Camera callbacks retain one latest observation each. Fuse only views
         # that satisfy the same operational gates as selection and whose stamps
         # occupy one time neighbourhood; otherwise an old cached view is
@@ -1116,6 +1257,7 @@ class CameraManagerNode(Node):
         )
         if not fresh:
             payload = {"authority": self.authority, "fusion_mode": True,
+                       "source_batch_id": source_batch_id,
                        "accepted_camera_ids": [], "reasons": ["no_eligible_synchronous_observations"],
                        "scores_by_camera": scores,
                        "rejected_by_camera": {key: list(value) for key, value in rejected.items()},
@@ -1126,6 +1268,62 @@ class CameraManagerNode(Node):
                        "silhouette_correction_by_camera": dict(
                            self._silhouette_status_by_camera
                        )}
+            msg = String(); msg.data = json.dumps(payload, sort_keys=True)
+            self.decision_pub.publish(msg)
+            return
+        original_by_camera = {
+            str(observation.camera_id): observation for observation in fresh
+        }
+        history = self._odom_history if len(self._odom_history) > 2 \
+            else self._belief_query_history
+        fresh, common_time_rejected, common_capture_s = align_observations_to_common_time(
+            fresh,
+            history,
+            max_pose_delta_s=self.reliability_query_max_time_delta_s,
+            drift_std_m_per_s=self.propagation_drift_std,
+        )
+        for camera_id in common_time_rejected:
+            rejected[camera_id] = tuple(rejected.get(camera_id, ())) + (
+                "common_time_propagation_unavailable",
+            )
+        if self._belief_query_history:
+            # A belief exists, so a camera lacking a timestamp-matched prior
+            # cannot bypass the ordinary silhouette/admission checks.
+            fresh = [
+                observation for observation in fresh
+                if observation.camera_id not in self._bootstrap_camera_ids
+            ]
+        elif fresh:
+            # Initialisation is allowed only when several independent cameras
+            # agree tightly. This is the only prior-free operational gate.
+            spread = max(
+                math.hypot(
+                    float(a.xy_m[0]) - float(b.xy_m[0]),
+                    float(a.xy_m[1]) - float(b.xy_m[1]),
+                )
+                for a in fresh for b in fresh
+            )
+            if len(fresh) < self.bootstrap_min_cameras or spread > self.bootstrap_max_disagreement_m:
+                payload = {
+                    "authority": self.authority,
+                    "fusion_mode": True,
+                    "source_batch_id": source_batch_id,
+                    "accepted_camera_ids": [],
+                    "reasons": ["bootstrap_quorum_failed"],
+                    "bootstrap_camera_count": len(fresh),
+                    "bootstrap_spread_m": float(spread),
+                }
+                msg = String(); msg.data = json.dumps(payload, sort_keys=True)
+                self.decision_pub.publish(msg)
+                return
+        if not fresh:
+            payload = {
+                "authority": self.authority,
+                "fusion_mode": True,
+                "source_batch_id": source_batch_id,
+                "accepted_camera_ids": [],
+                "reasons": ["no_common_time_admitted_observations"],
+            }
             msg = String(); msg.data = json.dumps(payload, sort_keys=True)
             self.decision_pub.publish(msg)
             return
@@ -1143,6 +1341,7 @@ class CameraManagerNode(Node):
             payload = {
                 "authority": self.authority,
                 "fusion_mode": True,
+                "source_batch_id": source_batch_id,
                 "accepted_camera_ids": [],
                 "rejected_camera_ids": list(result.rejected_camera_ids),
                 "reasons": ["all_synchronous_observations_rejected"],
@@ -1163,7 +1362,7 @@ class CameraManagerNode(Node):
             decision_message.data = json.dumps(payload, sort_keys=True)
             self.decision_pub.publish(decision_message)
             return
-        ts = max(float(o.timestamp_s) for o in fresh)
+        ts = float(common_capture_s)
 
         # The fused correction describes where the robot was when those frames were taken.
         # Carry it forward to now, or it arrives as a systematic displacement backwards along
@@ -1172,27 +1371,36 @@ class CameraManagerNode(Node):
         mean_xy, propagated_cov = result.mean_xy, result.covariance_m2
         self._propagation_status = "disabled"
         if self.timestamp_compensation:
-            history = self._odom_history if len(self._odom_history) > 2 \
-                else self._belief_query_history
             pose_then = _nearest_state_pose(
                 history, ts, max_delta_s=self.reliability_query_max_time_delta_s)
             pose_now = _nearest_state_pose(
                 history, now_s, max_delta_s=self.reliability_query_max_time_delta_s)
             if pose_then is None or pose_now is None:
-                # Without both ends of the interval the motion is unknown. Publishing the
-                # uncorrected reading and saying so beats inventing a displacement.
-                self._propagation_status = "skipped_no_pose_history"
-            else:
-                mean_xy, propagated_cov, delta = propagate_correction_to_now(
-                    result.mean_xy, result.covariance_m2, pose_then, pose_now,
-                    drift_std_m_per_s=self.propagation_drift_std,
-                    dt_s=max(now_s - ts, 0.0),
-                    residual_interval_s=self.correction_residual_interval_s)
-                self._propagation_status = (
-                    f"applied age={max(now_s - ts, 0.0):.3f}s "
-                    f"dx={delta[0]:+.3f} dy={delta[1]:+.3f}")
-                # it now describes NOW, so it is stamped now
-                ts = now_s
+                # Timestamp compensation is part of the estimator contract. Publishing an
+                # uncompensated old measurement here creates a deterministic lag bias while
+                # still labelling the campaign "compensated", so fail closed for this batch.
+                payload = {
+                    "authority": self.authority,
+                    "fusion_mode": True,
+                    "source_batch_id": source_batch_id,
+                    "common_capture_stamp": float(common_capture_s),
+                    "accepted_camera_ids": [],
+                    "reasons": ["timestamp_compensation_pose_unavailable"],
+                    "would_accept_camera_ids": list(result.accepted_camera_ids),
+                }
+                msg = String(); msg.data = json.dumps(payload, sort_keys=True)
+                self.decision_pub.publish(msg)
+                return
+            mean_xy, propagated_cov, delta = propagate_correction_to_now(
+                result.mean_xy, result.covariance_m2, pose_then, pose_now,
+                drift_std_m_per_s=self.propagation_drift_std,
+                dt_s=max(now_s - ts, 0.0),
+                residual_interval_s=self.correction_residual_interval_s)
+            self._propagation_status = (
+                f"applied age={max(now_s - ts, 0.0):.3f}s "
+                f"dx={delta[0]:+.3f} dy={delta[1]:+.3f}")
+            # it now describes NOW, so it is stamped now
+            ts = now_s
 
         message = PoseWithCovarianceStamped()
         message.header.stamp.sec = int(ts)
@@ -1214,11 +1422,19 @@ class CameraManagerNode(Node):
         self.selected_pub.publish(message)
         self.active_pub.publish(message)
         payload = {"authority": self.authority, "fusion_mode": True,
+                   "source_batch_id": source_batch_id,
+                   "common_capture_stamp": float(common_capture_s),
+                   "common_time_rejected_camera_ids": common_time_rejected,
                    "accepted_camera_ids": list(result.accepted_camera_ids),
                    "rejected_camera_ids": list(result.rejected_camera_ids),
                    "fused_xy": [float(mean_xy[0]), float(mean_xy[1])],
                    "fused_xy_before_propagation": [float(result.mean_xy[0]),
                                                    float(result.mean_xy[1])],
+                   # The instant the fused answer describes -- `now` when propagation
+                   # applied, the newest capture time when it did not. Published so a
+                   # scorer can align the fused answer without guessing which of the
+                   # two it is; the per-camera `obs_stamp`s are a different instant.
+                   "fused_stamp": float(ts),
                    "propagation": self._propagation_status,
                    "gate_rejections": dict(self._gate_rejections),
                    "n_fresh": len(fresh),
@@ -1238,10 +1454,24 @@ class CameraManagerNode(Node):
                         # only truth a reading can be scored against is the truth at logging
                         # time, which is later by the whole detector-plus-manager delay -- and
                         # that delay reads as measurement error identically on every camera.
-                        "obs_stamp": float(o.timestamp_s),
-                        "xy": [float(o.xy_m[0]), float(o.xy_m[1])],
-                        "cov": [[float(o.covariance_m2[0][0]), float(o.covariance_m2[0][1])],
-                                [float(o.covariance_m2[1][0]), float(o.covariance_m2[1][1])]],
+                        "obs_stamp": float(
+                            original_by_camera[str(o.camera_id)].timestamp_s
+                        ),
+                        "xy": [
+                            float(original_by_camera[str(o.camera_id)].xy_m[0]),
+                            float(original_by_camera[str(o.camera_id)].xy_m[1]),
+                        ],
+                        "cov": [
+                            [float(original_by_camera[str(o.camera_id)].covariance_m2[0][0]),
+                             float(original_by_camera[str(o.camera_id)].covariance_m2[0][1])],
+                            [float(original_by_camera[str(o.camera_id)].covariance_m2[1][0]),
+                             float(original_by_camera[str(o.camera_id)].covariance_m2[1][1])],
+                        ],
+                        "aligned_xy": [float(o.xy_m[0]), float(o.xy_m[1])],
+                        "aligned_cov": [
+                            [float(o.covariance_m2[0][0]), float(o.covariance_m2[0][1])],
+                            [float(o.covariance_m2[1][0]), float(o.covariance_m2[1][1])],
+                        ],
                         "used": str(o.camera_id) in set(result.accepted_camera_ids),
                         **self._detection_extras_by_camera.get(str(o.camera_id), {})}
                        for o in fresh],

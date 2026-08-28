@@ -15,7 +15,13 @@ import threading
 from typing import Any, Sequence
 
 
-CAMERA_ORDER = ("camera_A", "camera_B", "camera_C", "camera_D")
+# warehouse_v2 has FIVE wall cameras and the fusion study needs them in one
+# inference cycle, so the batch is A--E as of 2026-08-21. The module keeps its
+# historical file name; the batch size is len(CAMERA_ORDER) everywhere and is not
+# written as a literal anywhere. Measured on this GPU before the change was made:
+# one batch of five 1280x720 frames at imgsz 960 takes 99 ms, against the 200 ms
+# the 5 Hz cameras allow, so five cameras still fit in the cadence.
+CAMERA_ORDER = ("camera_A", "camera_B", "camera_C", "camera_D", "camera_E")
 # A small ROS/Gazebo scheduling tolerance is allowed, but a materially future
 # image stamp is an integrity fault. Clamping it to zero would otherwise turn a
 # reversed or mismatched simulation clock into a plausible fresh observation.
@@ -98,7 +104,9 @@ def frame_age_at_publish_s(
     return max(age, 0.0)
 
 
-def validate_batch_results(results: Any, expected_size: int = 4) -> tuple[Any, ...]:
+def validate_batch_results(
+    results: Any, expected_size: int = len(CAMERA_ORDER)
+) -> tuple[Any, ...]:
     """Return a trustworthy ordered result tuple or fail the complete batch.
 
     Ultralytics returns one result per source image.  A missing entry would
@@ -135,8 +143,12 @@ class FourCameraBatcher:
         max_pending_wall_s: float = 0.50,
     ) -> None:
         order = tuple(str(camera_id) for camera_id in camera_order)
-        if len(order) != 4 or len(set(order)) != 4:
-            raise BatchContractError("camera_order must contain exactly four unique cameras")
+        expected = len(CAMERA_ORDER)
+        if len(order) != expected or len(set(order)) != expected:
+            raise BatchContractError(
+                f"camera_order must contain exactly {expected} unique cameras: "
+                f"{', '.join(CAMERA_ORDER)}"
+            )
         if not math.isfinite(max_stamp_skew_s) or float(max_stamp_skew_s) < 0.0:
             raise BatchContractError("max_stamp_skew_s must be finite and non-negative")
         if not math.isfinite(max_pending_wall_s) or float(max_pending_wall_s) <= 0.0:
@@ -145,6 +157,8 @@ class FourCameraBatcher:
         self.max_stamp_skew_ns = int(round(float(max_stamp_skew_s) * 1.0e9))
         self.max_pending_wall_s = float(max_pending_wall_s)
         self._pending: dict[str, PendingFrame] = {}
+        #: stamp bucket -> the frames of that round, at most one per camera
+        self._buckets: dict[int, dict[str, PendingFrame]] = {}
         self._last_seen_stamp_ns = {camera_id: -1 for camera_id in order}
         self._last_batched_stamp_ns = {camera_id: -1 for camera_id in order}
         self._lock = threading.Lock()
@@ -152,23 +166,35 @@ class FourCameraBatcher:
     @property
     def pending_camera_ids(self) -> tuple[str, ...]:
         with self._lock:
-            return tuple(camera_id for camera_id in self.camera_order if camera_id in self._pending)
+            waiting = {c for bucket in self._buckets.values() for c in bucket}
+            return tuple(camera_id for camera_id in self.camera_order if camera_id in waiting)
 
     @property
     def last_batched_stamp_ns(self) -> dict[str, int]:
         with self._lock:
             return dict(self._last_batched_stamp_ns)
 
+    def _bucket_key_locked(self, stamp_ns: int) -> int:
+        """The round this stamp belongs to: an existing one within tolerance, or its own."""
+        for key in self._buckets:
+            if abs(stamp_ns - key) <= self.max_stamp_skew_ns:
+                return key
+        return int(stamp_ns)
+
     def _expire_locked(self, now_wall_s: float) -> tuple[str, ...]:
-        dropped = tuple(
-            camera_id
-            for camera_id in self.camera_order
-            if camera_id in self._pending
-            and now_wall_s - self._pending[camera_id].receive_wall_s > self.max_pending_wall_s
-        )
-        for camera_id in dropped:
-            self._pending.pop(camera_id, None)
-        return dropped
+        dropped: list[str] = []
+        for key in list(self._buckets):
+            bucket = self._buckets[key]
+            for camera_id in [
+                cam for cam, frame in bucket.items()
+                if now_wall_s - frame.receive_wall_s > self.max_pending_wall_s
+            ]:
+                bucket.pop(camera_id, None)
+                dropped.append(camera_id)
+            if not bucket:
+                self._buckets.pop(key, None)
+        # report in camera order, once each, however many rounds they came from
+        return tuple(c for c in self.camera_order if c in set(dropped))
 
     def expire(self, now_wall_s: float) -> tuple[str, ...]:
         """Discard pending frames that can no longer form a fresh batch."""
@@ -201,14 +227,33 @@ class FourCameraBatcher:
             if frame.stamp_ns < last_seen:
                 return BatchDecision("out_of_order", dropped_camera_ids=expired)
 
-            replaced = frame.camera_id in self._pending
+            # Group by STAMP, not by camera.
+            #
+            # This used to be one slot per camera holding that camera's newest frame,
+            # which is correct only while the consumer keeps up with the cameras. It
+            # does not here: one inference cycle over five 1280x720 images outlasts
+            # the 200 ms camera period, so a newer frame for one camera overwrote its
+            # slot mid-cycle and the set that finally completed mixed one camera's
+            # round N+1 with another's round N. Their stamps then differed by a whole
+            # period and the batch was rejected for skew -- in a 55 s live run, every
+            # single batch, so the node published nothing at all.
+            #
+            # The cameras were never the problem: measured on the same rig, all five
+            # deliver 5.05 Hz on the simulation clock and 101 of 102 rounds carry
+            # byte-identical stamps. Keying the pending set by stamp makes a round
+            # complete or not on its own merits, and it cannot be broken by the
+            # arrival of the next one. `max_stamp_skew_ns` becomes the grouping
+            # tolerance rather than a rejection test.
             self._last_seen_stamp_ns[frame.camera_id] = frame.stamp_ns
-            self._pending[frame.camera_id] = frame
-            if len(self._pending) != len(self.camera_order):
+            key = self._bucket_key_locked(frame.stamp_ns)
+            replaced = frame.camera_id in self._buckets.setdefault(key, {})
+            self._buckets[key][frame.camera_id] = frame
+            if len(self._buckets[key]) != len(self.camera_order):
                 return BatchDecision(
                     "accepted_replaced" if replaced else "accepted_waiting",
                     dropped_camera_ids=expired,
                 )
+            self._pending = self._buckets[key]
 
             stamps = {camera_id: self._pending[camera_id].stamp_ns for camera_id in self.camera_order}
             newest_stamp = max(stamps.values())
@@ -238,6 +283,10 @@ class FourCameraBatcher:
                 )
 
             batch = tuple(self._pending.pop(camera_id) for camera_id in self.camera_order)
+            # a completed round makes every earlier round unreachable: discard them
+            # instead of leaving them to expire and be reported as drops later
+            for stale in [k for k in self._buckets if k <= key]:
+                self._buckets.pop(stale, None)
             for item in batch:
                 if item.stamp_ns <= self._last_batched_stamp_ns[item.camera_id]:
                     # This should be unreachable because last-seen stamps are

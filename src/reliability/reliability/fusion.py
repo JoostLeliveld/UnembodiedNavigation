@@ -235,8 +235,21 @@ def sequential_kalman_update_2d(
     *,
     nis_gate: float | None = 9.21,
     disagreement_gate_m: float | None = None,
+    belief_floors: Mapping[str, Sequence[Sequence[float]]] | None = None,
 ) -> SequentialFusionResult:
-    """Apply valid camera map observations sequentially with per-camera gates."""
+    """Apply valid camera map observations sequentially with per-camera gates.
+
+    `belief_floors` maps camera id to that sighting's bias floor
+    (`reliability.bias_floor.bias_floor_matrix`, D5 layer 3). Floors of the cameras that
+    were ACCEPTED are combined by `combine_floors` and applied once to the final
+    posterior, which keeps the result independent of the order observations arrive in --
+    flooring after each fold would leave the belief at the mercy of whichever camera came
+    last. A camera the gates rejected contributes no floor, because it contributed no
+    information to bound.
+
+    Default `None`, so behaviour is unchanged unless a caller asks: the floor changes what
+    the filter is allowed to believe, which is a method decision rather than a default.
+    """
 
     mean = _pair(prior_mean_xy, "prior_mean_xy")
     cov = _matrix_2x2(prior_cov_m2, "prior_cov_m2")
@@ -266,6 +279,14 @@ def sequential_kalman_update_2d(
         cov = _mat_mul(_mat_sub(((1.0, 0.0), (0.0, 1.0)), k), cov)
         cov = _symmetrize(cov)
         accepted.append(obs.camera_id)
+
+    if belief_floors and accepted:
+        from reliability.bias_floor import apply_belief_floor, combine_floors
+
+        chosen = [belief_floors[cam] for cam in accepted if cam in belief_floors]
+        if chosen:
+            cov = _symmetrize(apply_belief_floor(
+                cov, combine_floors([_matrix_2x2(f, "belief_floor") for f in chosen])))
 
     return SequentialFusionResult(
         mean_xy=mean,
@@ -308,6 +329,150 @@ def independent_measurement_fusion_2d(
     return mean, covariance
 
 
+def select_smallest_covariance(
+    observations: Iterable[MapObservation],
+) -> MapObservation | None:
+    """F1: the single most precise camera at this instant, by trace of its covariance.
+
+    The honest simple baseline for the fusion comparison: if one good camera is as good as
+    the network, the network claim is dead and the paper should say so.
+
+    Distinct from :func:`select_information_best`, which scores an observation against the
+    filter's current prior and therefore answers "which helps most now?" rather than "which
+    is most precise?". This one needs no prior, so it can be stated as a rule a reader can
+    reimplement.
+    """
+
+    best: MapObservation | None = None
+    best_trace = math.inf
+    for obs in observations:
+        if obs is None:
+            continue
+        trace = float(obs.covariance_m2[0][0] + obs.covariance_m2[1][1])
+        if trace < best_trace:
+            best, best_trace = obs, trace
+    return best
+
+
+def distance_angle_weights(
+    observations: Sequence[MapObservation],
+    camera_positions_m: Mapping[str, Sequence[float]],
+    *,
+    epsilon: float = 1e-6,
+) -> dict:
+    """F2's weights: nearer cameras with a steeper look count more.
+
+    ``q_c = max(cos alpha_c, 0) / (d_c^2 + eps)``, normalised. ``d_c`` is the horizontal
+    range from the camera to the reported position and ``alpha_c`` is the angle between the
+    camera's line of sight and the floor's normal, so a grazing view scores near zero and a
+    steep one near one.
+
+    This is the intuitive engineering answer, and it is deliberately FROZEN as written: its
+    job in the comparison is to be the honest simple baseline, not a tuned competitor. It
+    ignores the covariance entirely, which is the point -- knowing where the cameras are is
+    not the same as knowing how good their readings are.
+    """
+
+    items = tuple(observations)
+    if not items:
+        raise ContractValidationError("at least one map observation is required")
+    scores = {}
+    for obs in items:
+        position = camera_positions_m.get(obs.camera_id)
+        if position is None:
+            raise ContractValidationError(
+                f"no camera position for {obs.camera_id!r}; refusing to guess one"
+            )
+        cx, cy, cz = (float(position[0]), float(position[1]), float(position[2]))
+        dx, dy = obs.xy_m[0] - cx, obs.xy_m[1] - cy
+        horizontal_sq = dx * dx + dy * dy
+        slant = math.sqrt(horizontal_sq + cz * cz)
+        cos_alpha = abs(cz) / slant if slant > 0.0 else 0.0
+        scores[obs.camera_id] = max(cos_alpha, 0.0) / (horizontal_sq + epsilon)
+    total = sum(scores.values())
+    if total <= 0.0:
+        # every camera grazing: fall back to equal weights rather than dividing by zero
+        return {obs.camera_id: 1.0 / len(items) for obs in items}
+    return {camera_id: score / total for camera_id, score in scores.items()}
+
+
+def distance_angle_weighted_fusion_2d(
+    observations: Sequence[MapObservation],
+    camera_positions_m: Mapping[str, Sequence[float]],
+    *,
+    epsilon: float = 1e-6,
+) -> tuple[tuple[float, float], tuple[tuple[float, float], tuple[float, float]]]:
+    """F2: combine the positions with :func:`distance_angle_weights`.
+
+    The covariance reported is that of the weighted mean under independence,
+    ``sum w_c^2 Sigma_c``, so this arm can be scored for honesty exactly like the others
+    rather than being excused from the test.
+    """
+
+    items = tuple(observations)
+    weights = distance_angle_weights(items, camera_positions_m, epsilon=epsilon)
+    mean = (0.0, 0.0)
+    covariance = ((0.0, 0.0), (0.0, 0.0))
+    for obs in items:
+        w = weights[obs.camera_id]
+        mean = (mean[0] + w * obs.xy_m[0], mean[1] + w * obs.xy_m[1])
+        covariance = _mat_add(covariance, _mat_scale(obs.covariance_m2, w * w))
+    covariance = _symmetrize(covariance)
+    _validate_spd(covariance, "distance_angle_fused_covariance_m2")
+    return mean, covariance
+
+
+def network_pooled_fusion_2d(
+    observations: Sequence[MapObservation],
+    *,
+    exponents: Mapping[str, float] | None = None,
+) -> tuple[tuple[float, float], tuple[tuple[float, float], tuple[float, float]]]:
+    """F4: the camera network as ONE sensor -- geometric-mean (log-linear) pooling.
+
+    ``p_net(x) ~ prod_c N(x; mu_c, Sigma_c)^{w_c}``, which for Gaussians is
+    ``Sigma^-1 = sum_c w_c Sigma_c^-1`` and ``mu = Sigma sum_c w_c Sigma_c^-1 mu_c``.
+    The default is ``w_c = 1/N`` over the cameras present at this instant.
+
+    Two mechanisms, two jobs, and they must not be conflated:
+
+    * ``Sigma_c`` already carries camera quality -- a precise camera brings more
+      information, because that is what its geometry did to the detector's pixel noise.
+    * ``w_c = 1/N`` carries conservative POOLING. It refuses to claim N independent pieces
+      of evidence when the cameras share a robot, a detector, a hull model and a stock
+      arrangement, so their errors may be correlated in ways nothing here has measured.
+
+    So the exponent is never set from ``Sigma_c``: that would count quality twice. With
+    equal exponents the mean matches :func:`independent_measurement_fusion_2d` exactly and
+    only the stated covariance differs -- by a factor of N in area. Which of the two claims
+    is honest is an experimental question, not a modelling preference.
+    """
+
+    items = tuple(observations)
+    if not items:
+        raise ContractValidationError("at least one map observation is required")
+    if exponents is None:
+        exponents = {obs.camera_id: 1.0 / len(items) for obs in items}
+    information = ((0.0, 0.0), (0.0, 0.0))
+    information_vector = (0.0, 0.0)
+    for obs in items:
+        weight = float(exponents.get(obs.camera_id, 0.0))
+        if weight < 0.0:
+            raise ContractValidationError("pooling exponents must be non-negative")
+        precision = _mat_scale(_mat_inv_2x2(obs.covariance_m2), weight)
+        information = _mat_add(information, precision)
+        weighted = _mat_vec(precision, obs.xy_m)
+        information_vector = (
+            information_vector[0] + weighted[0],
+            information_vector[1] + weighted[1],
+        )
+    if abs(_det_2x2(information)) <= 0.0:
+        raise ContractValidationError("pooled information matrix is singular")
+    covariance = _symmetrize(_mat_inv_2x2(_symmetrize(information)))
+    mean = _mat_vec(covariance, information_vector)
+    _validate_spd(covariance, "network_pooled_covariance_m2")
+    return mean, covariance
+
+
 def camera_disagreement_m(observations: Sequence[MapObservation]) -> float:
     if len(observations) < 2:
         return 0.0
@@ -341,11 +506,23 @@ def joseph_update_2d(
     state_xy: Sequence[float],
     cov_xy: Sequence[Sequence[float]],
     observation: MapObservation,
+    *,
+    belief_floor: Sequence[Sequence[float]] | None = None,
 ) -> tuple[tuple[float, float], tuple[tuple[float, float], tuple[float, float]], float]:
     """Single position update in Joseph form: (I−KH)P(I−KH)ᵀ + KRKᵀ, H = I.
 
     Numerically stable at small R. Returns (state, covariance, nis) where
     nis is the innovation Mahalanobis distance d² = νᵀ S⁻¹ ν, S = P + R.
+
+    `belief_floor` is the optional bias floor of `DESIGN_LOCK.md` D5 layer 3, built by
+    `reliability.bias_floor.bias_floor_matrix` from the sighting's range and bearing. It
+    is applied to the POSTERIOR, which is the only place it does what it is for: added to
+    `R` instead, a persistent error would be treated as fresh noise on every frame and the
+    filter would still shrink it like 1/N, just from a larger start.
+
+    Default `None`, so behaviour is unchanged unless a caller asks for it -- the floor
+    changes what the filter is allowed to believe and that is a method decision, not a
+    default that should arrive silently with a library upgrade.
     """
 
     mean = _pair(state_xy, "state_xy")
@@ -365,7 +542,13 @@ def joseph_update_2d(
         _mat_mul(_mat_mul(i_minus_k, cov), _transpose(i_minus_k)),
         _mat_mul(_mat_mul(k, r_mat), _transpose(k)),
     )
-    return mean_post, _symmetrize(cov_post), float(nis)
+    cov_post = _symmetrize(cov_post)
+    if belief_floor is not None:
+        from reliability.bias_floor import apply_belief_floor
+
+        cov_post = _symmetrize(apply_belief_floor(cov_post, _matrix_2x2(
+            belief_floor, "belief_floor")))
+    return mean_post, cov_post, float(nis)
 
 
 def robust_reweight_covariance(
@@ -616,6 +799,10 @@ def _validate_spd(matrix: tuple[tuple[float, float], tuple[float, float]], field
         raise ContractValidationError(f"{field_name} must be symmetric")
     if a <= 0.0 or d <= 0.0 or a * d - b * c <= 0.0:
         raise ContractValidationError(f"{field_name} must be symmetric positive definite")
+
+
+def _mat_scale(a, k):
+    return ((a[0][0] * k, a[0][1] * k), (a[1][0] * k, a[1][1] * k))
 
 
 def _mat_add(a, b):

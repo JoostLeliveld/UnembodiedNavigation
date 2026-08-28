@@ -12,20 +12,46 @@ can share the byte-level validation logic in unit tests and command-line tools.
 from __future__ import annotations
 
 import hashlib
+from collections import namedtuple
 import json
 import math
 from pathlib import Path
 from typing import Any, Mapping
 
 
-RUNTIME_CONTRACT_SCHEMA_VERSION = "four_camera_detector_runtime_contract.v1"
+#: Every contract version this module can validate, and what is fixed in each.
+#:
+#: A contract is a RECORD of how a run was configured, so an old record must stay
+#: valid forever: the frozen four-camera commissioning campaign has ledgers that
+#: declare v1, and they have to keep validating after the live runtime moves on.
+#: Before this table existed, the validator only knew the current version, so any
+#: change to the live topology retroactively invalidated the frozen study's ledgers
+#: -- which is what happened when the batch went from A--D to A--E.
+#:
+#: `build_batched_runtime_contract` always emits the CURRENT version. Validation
+#: uses the version the payload itself declares.
+_ContractSchema = namedtuple("_ContractSchema", ("camera_order", "frame_policy"))
+_KNOWN_CONTRACT_SCHEMAS: dict[str, "_ContractSchema"] = {
+    # the frozen warehouse_full_4cam commissioning campaign
+    "four_camera_detector_runtime_contract.v1": _ContractSchema(
+        camera_order=("camera_A", "camera_B", "camera_C", "camera_D"),
+        frame_policy="strict_new_unique_stamp_latest_only_no_reuse",
+    ),
+    # current: warehouse_v2's five wall cameras, and pending frames grouped by
+    # stamp so a consumer slower than the frame rate cannot break a forming round
+    "four_camera_detector_runtime_contract.v2": _ContractSchema(
+        camera_order=("camera_A", "camera_B", "camera_C", "camera_D", "camera_E"),
+        frame_policy="strict_stamp_bucketed_round_no_reuse",
+    ),
+}
+RUNTIME_CONTRACT_SCHEMA_VERSION = "four_camera_detector_runtime_contract.v2"
 RUNTIME_CONTRACT_TOPIC = "/perception/four_camera_detector_runtime_contract"
 
 BATCHED_RUNTIME_MODE = "batched_four_camera"
 BATCHED_EXECUTABLE = "batched_four_camera_yolo_node"
 BATCHED_MODEL_FORMAT = "native_ultralytics"
-BATCHED_CAMERA_ORDER = ("camera_A", "camera_B", "camera_C", "camera_D")
-BATCHED_FRAME_POLICY = "strict_new_unique_stamp_latest_only_no_reuse"
+BATCHED_CAMERA_ORDER = _KNOWN_CONTRACT_SCHEMAS[RUNTIME_CONTRACT_SCHEMA_VERSION].camera_order
+BATCHED_FRAME_POLICY = _KNOWN_CONTRACT_SCHEMAS[RUNTIME_CONTRACT_SCHEMA_VERSION].frame_policy
 BATCHED_INFERENCE_TIMING_SEMANTICS = "full_batch_wall_ms_repeated_per_camera_result"
 BATCHED_FAULT_POLICY = "fatal_process_exit_and_launch_shutdown_no_synthetic_miss"
 BATCHED_SYNCHRONIZATION_MISS_POLICY = "no_output_detected_by_liveness_gate"
@@ -222,8 +248,12 @@ def validate_batched_runtime_contract(contract: Mapping[str, Any] | Any) -> dict
             "runtime contract schema mismatch: "
             f"missing={missing}, unexpected={unexpected}"
         )
-    if payload["schema_version"] != RUNTIME_CONTRACT_SCHEMA_VERSION:
-        raise RuntimeContractError("unsupported runtime contract schema_version")
+    schema = _KNOWN_CONTRACT_SCHEMAS.get(payload["schema_version"])
+    if schema is None:
+        raise RuntimeContractError(
+            "unsupported runtime contract schema_version "
+            f"{payload['schema_version']!r}; known: {sorted(_KNOWN_CONTRACT_SCHEMAS)}"
+        )
     if payload["runtime_mode"] != BATCHED_RUNTIME_MODE:
         raise RuntimeContractError("runtime contract is not the batched four-camera mode")
     if payload["executable"] != BATCHED_EXECUTABLE:
@@ -241,7 +271,7 @@ def validate_batched_runtime_contract(contract: Mapping[str, Any] | Any) -> dict
             raise RuntimeContractError(f"{field} must be a lowercase SHA-256 digest")
     for field, expected in (
         ("model_instances", 1),
-        ("batch_size", len(BATCHED_CAMERA_ORDER)),
+        ("batch_size", len(schema.camera_order)),
     ):
         actual = _positive_int(payload[field], field=field)
         if actual != expected:
@@ -258,10 +288,13 @@ def validate_batched_runtime_contract(contract: Mapping[str, Any] | Any) -> dict
     pending = _finite_float(payload["max_pending_wall_s"], field="max_pending_wall_s")
     if skew < 0.0 or pending <= 0.0:
         raise RuntimeContractError("runtime contract timing bounds are invalid")
-    if tuple(payload["camera_order"]) != BATCHED_CAMERA_ORDER:
-        raise RuntimeContractError("runtime contract camera order is not exact A--D")
+    if tuple(payload["camera_order"]) != schema.camera_order:
+        raise RuntimeContractError(
+            f"runtime contract camera order for {payload['schema_version']} is not "
+            "exactly " + ", ".join(schema.camera_order)
+        )
     fixed_strings = {
-        "frame_policy": BATCHED_FRAME_POLICY,
+        "frame_policy": schema.frame_policy,
         "inference_timing_semantics": BATCHED_INFERENCE_TIMING_SEMANTICS,
         "fault_policy": BATCHED_FAULT_POLICY,
         "synchronization_miss_policy": BATCHED_SYNCHRONIZATION_MISS_POLICY,

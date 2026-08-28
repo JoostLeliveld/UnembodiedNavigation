@@ -108,7 +108,17 @@ def generate_launch_description():
         DeclareLaunchArgument("spawn_yaw", default_value="1.5708"),
         DeclareLaunchArgument("yolo_model", default_value="", description="Local path to the trained YOLO model"),
         DeclareLaunchArgument("yolo_device", default_value=""),
-        DeclareLaunchArgument("yolo_imgsz", default_value="640"),
+                # 960, matching every trained model. Until 2026-08-21 this defaulted to 640
+        # while all five checkpoints were trained at imgsz 960, so inference ran at a
+        # resolution the weights had never seen. Measured on 200 real val frames with
+        # the frozen four-camera detector: the median bottom-edge error against the
+        # ground-truth box improves from 3.24 to 2.52 px (mask) and 2.88 to 2.40 px
+        # (box) going from 640 to 960, and recall is unchanged. 1280 is better again
+        # (2.83 / 2.02) but a five-image batch costs 164 ms against the 200 ms the
+        # 5 Hz cameras allow, leaving nothing for the rest of the stack; 960 costs
+        # 99 ms. The measurement matters because the MEASUREMENT is the mask's bottom
+        # edge, so inference resolution is a measurement parameter, not a speed knob.
+        DeclareLaunchArgument("yolo_imgsz", default_value="960"),
         DeclareLaunchArgument("yolo_conf_threshold", default_value="0.05"),
         DeclareLaunchArgument("yolo_iou_threshold", default_value="0.45"),
         DeclareLaunchArgument("yolo_target_class", default_value="robot"),

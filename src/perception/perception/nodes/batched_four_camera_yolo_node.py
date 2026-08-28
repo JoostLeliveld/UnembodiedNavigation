@@ -8,7 +8,7 @@ batch by repeating a previous image.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from pathlib import Path
 import threading
@@ -71,6 +71,7 @@ CAMERA_TOPICS = {
     "camera_B": "/external_camera_b/image_raw",
     "camera_C": "/external_camera_c/image_raw",
     "camera_D": "/external_camera_d/image_raw",
+    "camera_E": "/external_camera_e/image_raw",
 }
 
 
@@ -121,7 +122,12 @@ class BatchedFourCameraYoloNode(Node):
         self.declare_parameter("cpu_num_threads", 2)
         self.declare_parameter("cpu_num_interop_threads", 1)
         self.declare_parameter("opencv_num_threads", 1)
-        self.declare_parameter("image_size", 640)
+        # 960, which is what every checkpoint was trained at. See the launch files
+        # for the measurement behind it; the short version is that the measurement
+        # this node produces IS the bottom edge of the mask, the mask is built at the
+        # inference resolution, and a five-image batch at 960 costs 99 ms of the
+        # 200 ms the 5 Hz cameras allow.
+        self.declare_parameter("image_size", 960)
         self.declare_parameter("confidence_threshold", 0.25)
         # Anchor pre-filter passed to Ultralytics ``predict`` (``conf``). At the
         # default 0.0 every anchor survives to NMS and the segmentation head
@@ -149,8 +155,29 @@ class BatchedFourCameraYoloNode(Node):
         self.declare_parameter("async_coalesce_wall_s", 0.02)
         self.declare_parameter("input_transport", "ros")
         self.declare_parameter("runtime_trace_period_s", 0.0)
-        self.declare_parameter("camera_observation_r_visible_uv", 2.5)
+        # Per-axis pixel noise of a KEPT reading, pushed through the projection Jacobian
+        # as R_xy = sigma_px^2 J J^T. 2.5 px was never measured -- it was a conservative
+        # placeholder, and it is 4.3x too large for this reading. On 486 held-out fused
+        # poses of the warehouse_v2 shared-pose campaign, with the silhouette observation
+        # function and its plausibility gate, the calibrated value is 0.575 px; the filter
+        # then measures NEES 1.050 against a chi-square-2 median of 1.386, i.e. honest.
+        # Two cautions, both deliberate rather than hidden. (1) This is the noise of what
+        # SURVIVES the gate, so it belongs with the gate, not without it; ungated readings
+        # keep a 21 cm tail no scalar sigma can describe. (2) An honest R alone makes the
+        # filter WORSE -- NEES 5.611 against 2.078 for constant R -- because it sharpens a
+        # belief whose bias is still there. It is only correct together with the
+        # observation-function correction in reliability.silhouette_observation, which is
+        # why that one defaults to on.
+        self.declare_parameter("camera_observation_r_visible_uv", 0.575)
         self.declare_parameter("camera_observation_r_miss_uv", 40.0)
+        # Which world's camera calibration these observations claim. This used to be
+        # the literal "warehouse_full_4cam", so an observation captured in any other
+        # world silently carried the wrong calibration identity.
+        self.declare_parameter("calibration_world", "")
+        # How many images of the timestamp batch go through the GPU at once. 0 means
+        # the whole batch in one call. See _predict_batch for the memory measurement
+        # that makes this necessary rather than optional on a 4 GiB card.
+        self.declare_parameter("inference_chunk", 2)
 
         raw_model_path = str(self.get_parameter("model_path").value).strip()
         if not raw_model_path:
@@ -206,6 +233,17 @@ class BatchedFourCameraYoloNode(Node):
 
         self.image_size = int(self.get_parameter("image_size").value)
         self.confidence_threshold = float(self.get_parameter("confidence_threshold").value)
+        self.inference_chunk = int(self.get_parameter("inference_chunk").value)
+        if not 0 <= self.inference_chunk <= len(CAMERA_ORDER):
+            raise RuntimeError(
+                f"inference_chunk must be between 0 and {len(CAMERA_ORDER)}"
+            )
+        self.calibration_world = str(self.get_parameter("calibration_world").value or "").strip()
+        if not self.calibration_world:
+            raise RuntimeError(
+                "calibration_world must be set (for example 'warehouse_v2'): the "
+                "calibration identity of every published observation depends on it"
+            )
         self.predict_conf_floor = float(self.get_parameter("predict_conf_floor").value)
         self.iou_threshold = float(self.get_parameter("iou_threshold").value)
         self.class_name = str(self.get_parameter("class_name").value)
@@ -368,7 +406,7 @@ class BatchedFourCameraYoloNode(Node):
         self._observation_configs = {
             camera_id: SingleCameraAdapterConfig(
                 camera_id=camera_id,
-                calibration_id=f"warehouse_full_4cam_{camera_id}",
+                calibration_id=f"{self.calibration_world}_{camera_id}",
                 image_frame_id=camera_id,
                 r_visible_uv=self.r_visible_uv,
                 r_miss_uv=self.r_miss_uv,
@@ -386,7 +424,9 @@ class BatchedFourCameraYoloNode(Node):
                     else:
                         validate_batch_results(self._predict_batch(dummy_batch), len(CAMERA_ORDER))
                 except Exception as exc:
-                    raise RuntimeError(f"four-image detector warmup failed: {exc}") from exc
+                    raise RuntimeError(
+                        f"{len(CAMERA_ORDER)}-image detector warmup failed: {exc}"
+                    ) from exc
             self.get_logger().info(
                 f"four-image warmup: {self.warmup_iters} iterations in "
                 f"{(time.perf_counter() - warmup_start) * 1.0e3:.0f} ms"
@@ -558,22 +598,50 @@ class BatchedFourCameraYoloNode(Node):
         return float(self.get_clock().now().nanoseconds) * 1.0e-9
 
     def _predict_batch(self, images_bgr: list[np.ndarray]):
+        """One inference cycle over the whole timestamp batch, in camera order.
+
+        The cycle may be split into consecutive chunks, because activation memory --
+        not compute -- is what limits this machine. Measured on the 4 GiB P2000 with
+        Gazebo rendering five 1280x720 oblique cameras (which holds about 1.9 GiB of
+        the card), reserved GPU memory for one cycle of five images is:
+
+            imgsz 640: 708 MiB whole    | imgsz 960: 2558 MiB whole -> OOM in a live run
+            imgsz 960 in chunks of two: 1418 MiB, which fits
+            imgsz 1280: does not fit at any chunk size beside the simulator
+
+        Chunking changes nothing observable: the batch is still one strict
+        same-timestamp set, the results are still assembled in CAMERA_ORDER, and the
+        reported inference time is still the wall time of the complete cycle.
+        """
         if not 1 <= len(images_bgr) <= len(CAMERA_ORDER):
             raise BatchContractError(
                 f"predict requires between 1 and {len(CAMERA_ORDER)} images"
             )
-        kwargs = {
-            "source": list(images_bgr),
-            "imgsz": self.image_size,
-            "conf": self.predict_conf_floor,
-            "iou": self.iou_threshold,
-            "batch": len(images_bgr),
-            "stream": False,
-            "verbose": False,
-        }
-        if self.device:
-            kwargs["device"] = self.device
-        return self.model.predict(**kwargs)
+        chunk = self.inference_chunk if self.inference_chunk > 0 else len(images_bgr)
+        results: list[Any] = []
+        for start in range(0, len(images_bgr), chunk):
+            group = list(images_bgr[start:start + chunk])
+            kwargs = {
+                "source": group,
+                "imgsz": self.image_size,
+                "conf": self.predict_conf_floor,
+                "iou": self.iou_threshold,
+                "batch": len(group),
+                "stream": False,
+                "verbose": False,
+            }
+            if self.device:
+                kwargs["device"] = self.device
+            part = self.model.predict(**kwargs)
+            if part is None:
+                raise BatchContractError("batch inference returned no result sequence")
+            results.extend(list(part))
+        if len(results) != len(images_bgr):
+            raise BatchContractError(
+                f"chunked inference returned {len(results)} results for "
+                f"{len(images_bgr)} images"
+            )
+        return results
 
     def _predict_detection_only(self, images_bgr: list[np.ndarray]) -> list[dict[str, Any]]:
         """Return compiled bbox-bottom selections without constructing masks."""
@@ -848,6 +916,13 @@ class BatchedFourCameraYoloNode(Node):
         if not batch or len({item.camera_id for item in batch}) != len(batch):
             self._fatal("internal camera micro-batch identity violation")
 
+        # Stable identity for one physical detector invocation. The manager
+        # uses this to wait until every subscribed camera result has arrived
+        # and to prevent a high-rate decision timer from reusing the pixels.
+        source_batch_id = "strict:" + ",".join(
+            f"{item.camera_id}@{item.stamp_ns}" for item in batch
+        )
+
         # Startup clock race: before the first /clock tick under use_sim_time,
         # ``now()`` reads 0 while camera images already carry sim stamps (e.g.
         # 4.8 s), so publishing would trip the future-stamp integrity fault. The
@@ -924,7 +999,9 @@ class BatchedFourCameraYoloNode(Node):
         # this batch.  A malformed B/C/D result therefore cannot leave a
         # plausible partial A-only evidence row behind.
         for item, image, selection in zip(batch, images, prepared, strict=True):
-            self._publish_result(item, image, selection, timing)
+            self._publish_result(
+                item, image, selection, timing, source_batch_id=source_batch_id
+            )
 
     def _prepare_result(self, result: Any) -> dict[str, Any]:
         selection = select_best_detection(
@@ -965,6 +1042,8 @@ class BatchedFourCameraYoloNode(Node):
         image_bgr: np.ndarray,
         selection: dict[str, Any],
         timing: _BatchTiming,
+        *,
+        source_batch_id: str,
     ) -> None:
         if bool(selection.get("detected_after_threshold", False)):
             selected_u = float(selection.get("selected_u", math.nan))
@@ -972,7 +1051,13 @@ class BatchedFourCameraYoloNode(Node):
             if not math.isfinite(selected_u) or not math.isfinite(selected_v):
                 self._fatal(f"non-finite selected pixel for {item.camera_id}")
         self._write_debug_frame(item, image_bgr, selection)
-        self._publish_camera(item, image_bgr.shape[:2], selection, timing)
+        self._publish_camera(
+            item,
+            image_bgr.shape[:2],
+            selection,
+            timing,
+            source_batch_id=source_batch_id,
+        )
         if not bool(selection.get("detected_after_threshold", False)):
             return
 
@@ -996,6 +1081,8 @@ class BatchedFourCameraYoloNode(Node):
         image_shape: tuple[int, int],
         selection: dict[str, Any] | None,
         timing: _BatchTiming,
+        *,
+        source_batch_id: str,
     ) -> None:
         selection = dict(selection or {})
         stamp_s = item.stamp_ns * 1.0e-9
@@ -1106,7 +1193,9 @@ class BatchedFourCameraYoloNode(Node):
             frame_age_at_publish_s=frame_age_s,
         )
         output = self.outputs[item.camera_id]
-        observation_message = self._observation_message(item.camera_id, message)
+        observation_message = self._observation_message(
+            item.camera_id, message, source_batch_id=source_batch_id
+        )
         try:
             output.diagnostics_publisher.publish(message)
             output.observation_publisher.publish(observation_message)
@@ -1114,13 +1203,18 @@ class BatchedFourCameraYoloNode(Node):
             self._fatal(f"operational publish failed for {item.camera_id}: {exc}", exc)
 
     def _observation_message(
-        self, camera_id: str, diagnostics: Float64MultiArray
+        self,
+        camera_id: str,
+        diagnostics: Float64MultiArray,
+        *,
+        source_batch_id: str,
     ) -> String:
         try:
             observation = self._camera_observation_from_diagnostics(
                 diagnostics_from_message(diagnostics),
                 config=self._observation_configs[camera_id],
             )
+            observation = replace(observation, source_batch_id=source_batch_id)
             message = String()
             message.data = observation.to_json()
             return message

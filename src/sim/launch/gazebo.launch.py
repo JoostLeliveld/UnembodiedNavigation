@@ -43,6 +43,10 @@ def generate_launch_description():
     gz_resource_paths = [
         sim_pkg_share_parent,
         os.path.join(sim_pkg_share, "models"),
+        # Third-party Fuel assets (gitignored, fetched separately). Kept out of
+        # the tracked models dir because they are tens of MB each.
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.dirname(sim_pkg_share)))), "src", "sim", "models_external"),
         os.path.join(sim_pkg_share, "gazebo_worlds", "models"),
         os.path.join(sim_pkg_share, "gazebo_worlds"),
         os.path.join(sim_pkg_share, "robot_description"),

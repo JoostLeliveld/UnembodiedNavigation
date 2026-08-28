@@ -235,12 +235,12 @@ class UnicyclePlannerNode(Node):
         # Chi-squared (2-DOF) innovation gate: a pixel correction whose NIS exceeds
         # this threshold is rejected as a detector outlier. 0.0 = disabled; the
         # campaign sets 9.21 = chi2(2, 0.99).
-        _declare_if_not('pixel_correction_nis_threshold', 0.0)
+        _declare_if_not('pixel_correction_nis_threshold', 9.21)
         _declare_if_not('pixel_correction_approx', 'AUTO')
         _declare_if_not('skip_stale_pixel_correction', True)
         _declare_if_not('odom_topic', '/odom_noisy')
         _declare_if_not('use_odom_for_predict', True)
-        _declare_if_not('heading_update_mode', 'camera_xy_only')
+        _declare_if_not('heading_update_mode', 'coupled')
         # Spawn yaw (map_bev - odom). The single-camera path applies this in
         # pixel_to_bev_state_node (heading = odom_yaw + offset); the multicam
         # path replaces that node, so the planner must apply it itself or the
@@ -254,7 +254,7 @@ class UnicyclePlannerNode(Node):
         # than NIS-reject it (which locks the belief out of recovery). And cap the
         # motion-replay interval so a single far-future correction stamp cannot
         # jump the prediction tens of metres.
-        _declare_if_not('state_reanchor_m', 2.0)
+        _declare_if_not('state_reanchor_m', 0.0)
         _declare_if_not('state_max_predict_dt_s', 1.5)
         # Covariance added on a REJECTED /state/bev correction. A rejection must
         # never freeze the belief, so the stamp still advances and S grows -- but
@@ -738,7 +738,7 @@ class UnicyclePlannerNode(Node):
             try:
                 self._apply_state_correction(msg)
             except Exception as exc:
-                self.get_logger().warn(f"state correction update failed: {exc}")
+                self._fatal_experiment_stop("state correction update failed", exc)
 
     def _map_observations_cb(self, msg: String):
         if not (self.state_correction_ekf and self.state_correction_mode == 'per_camera'):
@@ -746,12 +746,11 @@ class UnicyclePlannerNode(Node):
         try:
             observations, _frame_id = map_observations_from_json(msg.data)
         except Exception as exc:
-            self._warn_stale_pixel_once(f"rejected map-observation batch: {exc}")
-            return
+            self._fatal_experiment_stop("malformed map-observation batch", exc)
         try:
             self._apply_map_observations(observations)
         except Exception as exc:
-            self.get_logger().warn(f"per-camera correction update failed: {exc}")
+            self._fatal_experiment_stop("per-camera correction update failed", exc)
 
     def _update_goal_progress_origin(self, msg: PoseStamped):
         signature = (
@@ -2123,9 +2122,14 @@ class UnicyclePlannerNode(Node):
         if dt_corr <= 1e-3:
             return None  # not newer than the belief we already hold
         if dt_corr > self.state_max_predict_dt_s:
-            # Implausible gap (stale belief / bad-stamp correction). Replaying it
-            # would jump the prediction tens of metres -> re-anchor instead.
-            self._reanchor_belief_to_xy(stamp_msg, z_xy, R, reason=f"dt={dt_corr:.1f}s")
+            # A bad stamp or long outage is not evidence that the measurement is true.
+            # Re-anchoring here used to bypass both NIS and the now-disabled re-anchor
+            # threshold. Without a replayable prior there is no statistically valid NIS,
+            # so this correction is rejected rather than granted a separate bypass.
+            self._inflate_belief_after_rejection(
+                f"correction replay gap {dt_corr:.1f}s exceeds "
+                f"{self.state_max_predict_dt_s:.1f}s"
+            )
             return None
 
         outcome = bc.apply_correction(
@@ -2207,11 +2211,6 @@ class UnicyclePlannerNode(Node):
                 S_upd[:2, 2] = 0.0
                 S_upd[2, :2] = 0.0
                 S_upd[2, 2] = float(S_pred[2, 2])
-            # Floor the posterior xy variance at half the measurement noise so
-            # the filter never becomes so confident that the next innovation
-            # trips the NIS gate -- the collapse that caused divergence at tight R.
-            S_upd[0, 0] = max(float(S_upd[0, 0]), 0.5 * float(R[0, 0]))
-            S_upd[1, 1] = max(float(S_upd[1, 1]), 0.5 * float(R[1, 1]))
             S_upd = self._regularize_state_covariance(S_upd)
             if np.min(np.linalg.eigvalsh(S_upd)) < self.cov_eig_floor:
                 S_upd = self.project_to_psd(S_upd, floor=self.cov_eig_floor)

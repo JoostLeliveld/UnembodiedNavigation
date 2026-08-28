@@ -159,6 +159,47 @@ def test_gp_query_rejects_state_outside_sync_window():
     ) is None
 
 
+def test_camera_observation_roundtrip_preserves_detector_batch_identity():
+    observation = CameraObservation(
+        camera_id="camera_A", timestamp_s=10.0, detection_valid=False,
+        source_batch_id="strict:camera_A@100,camera_B@101",
+    )
+    restored = CameraObservation.from_json(observation.to_json())
+    assert restored.source_batch_id == observation.source_batch_id
+
+
+def test_asynchronous_camera_positions_are_aligned_before_fusion():
+    from reliability.fusion import MapObservation
+    from reliability.nodes.camera_manager_node import align_observations_to_common_time
+
+    def quality(camera_id):
+        return CameraQuality(
+            camera_id=camera_id, p_available=1.0,
+            conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)),
+            association_confidence=1.0,
+        )
+    old = MapObservation(
+        camera_id="camera_A", timestamp_s=10.0, xy_m=(1.0, 2.0),
+        covariance_m2=((0.01, 0.0), (0.0, 0.01)), quality=quality("camera_A"),
+    )
+    new = MapObservation(
+        camera_id="camera_B", timestamp_s=10.1, xy_m=(1.02, 2.0),
+        covariance_m2=((0.01, 0.0), (0.0, 0.01)), quality=quality("camera_B"),
+    )
+    aligned, rejected, stamp = align_observations_to_common_time(
+        [old, new],
+        [(10.0, (0.0, 0.0, 0.0)), (10.1, (0.02, 0.0, 0.0))],
+        max_pose_delta_s=0.01,
+        drift_std_m_per_s=0.1,
+    )
+
+    assert rejected == []
+    assert stamp == pytest.approx(10.1)
+    assert aligned[0].xy_m == pytest.approx((1.02, 2.0))
+    assert aligned[0].timestamp_s == pytest.approx(10.1)
+    assert aligned[0].covariance_m2[0][0] == pytest.approx(0.0101)
+
+
 
 
 

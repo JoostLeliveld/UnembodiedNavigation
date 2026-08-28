@@ -36,13 +36,24 @@ sys.path.insert(0, str(REPO / "src/experiments"))
 sys.path.insert(0, str(REPO / "src/unav_common"))
 from experiments.core.world_profiles import load_world_profiles  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from warehouse_v2 import ARTERY, A_AISLE_X, C_AISLE_Y  # noqa: E402
+
 WORLD_KEY = "warehouse_v2.world.sdf"
 WORLD_SDF = REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
 PROFILES = REPO / "src/experiments/config/world_profiles.yaml"
 OUT = REPO / "logs/studies/warehouse_v2/route_tasks"
 
 RES = 0.10                  # grid resolution, m
-CLEARANCE_M = 0.25          # the planner's declared keep-in margin
+# 0.35 m: the planner's actual `nogo_safe_distance`, which is 0.275 m of robot
+# half-width plus a 0.075 m margin. It was 0.25 here while the world documentation
+# described 0.32 and the planner used 0.35 -- three numbers for one physical quantity,
+# and the route library was the one eroding least, so it offered corridors the planner
+# would refuse to drive. Measured cost of standardising: connected driveable area
+# 170.4 -> 145.1 m2, and the library holds at 92 tasks with 91 offering a real route
+# choice. In-place rotation still needs 0.486 m (the circumscribed radius), which is a
+# planner rule rather than a map erosion.
+CLEARANCE_M = 0.35
 MIN_SEPARATION_M = 8.0      # a task must be a real traverse, not a nudge
 G3_MIN_ROUTES = 2           # two genuinely distinct corridors is a real choice
 #: Two candidates count as different ROUTES only if they use different corridors.
@@ -59,22 +70,26 @@ CUT_RADII_M = (0.75, 1.30, 2.20)   # a cut must close a ~1.3 m eroded aisle
 #: Named places, chosen from the layout's own structure: the three dock doors,
 #: both ends of both section-A picking aisles, both ends of both section-C block
 #: aisles, the north cross aisle, and the artery. Snapped to the driveable mask.
+#: Aisle waypoints are DERIVED from the layout's aisle centrelines rather than
+#: typed in, so widening an aisle moves the route library with it instead of
+#: leaving a waypoint parked inside the new racking.
+_ARTERY_X = 0.5 * (ARTERY[0] + ARTERY[1])
 WAYPOINTS = {
     "dock_w":      (-8.50, -8.80),   # west dock door mouth
     "dock_m":      (-1.50, -8.80),   # centre dock door, under camera B
     "dock_e":      (5.50, -8.80),    # east dock door
     "apron_w":     (-11.00, -6.60),  # apron, west end by the dock office
-    "aisleA1_s":   (-7.05, -5.20),   # section A, aisle A1|A2, south mouth
-    "aisleA1_n":   (-7.05, 8.10),    # ... north mouth, into the cross aisle
-    "aisleA2_s":   (-3.35, -5.20),   # section A, aisle A2|A3, south mouth
-    "aisleA2_n":   (-3.35, 8.10),
-    "artery_s":    (0.60, -6.00),    # main north-south artery, south end
-    "artery_n":    (0.60, 6.20),     # ... north end
-    "aisleC_s_w":  (0.90, -1.50),    # section C, south block aisle, west end
-    "aisleC_s_e":  (10.60, -1.50),   # ... east end
-    "aisleC_n_w":  (0.90, 2.15),     # section C, north block aisle, west end
-    "aisleC_n_e":  (10.60, 2.15),
-    "xaisle_e":    (10.60, 6.30),    # east cross aisle, under camera D
+    "aisleA1_s":   (A_AISLE_X[0], -5.20),   # section A, aisle A1|A2, south mouth
+    "aisleA1_n":   (A_AISLE_X[0], 8.10),    # ... north mouth, into the cross aisle
+    "aisleA2_s":   (A_AISLE_X[1], -5.20),   # section A, aisle A2|A3, south mouth
+    "aisleA2_n":   (A_AISLE_X[1], 8.10),
+    "artery_s":    (_ARTERY_X, -6.00),      # main north-south artery, south end
+    "artery_n":    (_ARTERY_X, 6.20),       # ... north end
+    "aisleC_s_w":  (0.90, C_AISLE_Y[0]),    # section C, south block aisle, west end
+    "aisleC_s_e":  (10.60, C_AISLE_Y[0]),   # ... east end
+    "aisleC_n_w":  (0.90, C_AISLE_Y[1]),    # section C, north block aisle, west end
+    "aisleC_n_e":  (10.60, C_AISLE_Y[1]),
+    "xaisle_e":    (10.60, 6.48),    # east cross aisle, under camera D
     "bay_B_e":     (10.60, 8.60),    # north-east, east of section B racking
 }
 

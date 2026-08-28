@@ -104,12 +104,25 @@ def main(state: str = "A"):
         if sc[2] > 1.001:
             fails.append(f"{name}: vertical mesh scale {sc[2]:.3f} > 1 -- stretched")
     # every fill object must be dressed
+    # Every fill object must be dressed with something. Section C now holds three
+    # different kinds of goods, so "dressed" means one of three things: a mesh
+    # visual (cartons), primitive drums in the goods model, or included tote
+    # props. An undressed collision box is an invisible obstacle and is the
+    # failure this check exists to catch.
+    goods_links = set()
+    for m in w.findall("model"):
+        if m.get("name") == "warehouse_v2_goods":
+            goods_links = {ln.get("name") for ln in m.findall("link")}
+    include_names = {i.find("name").text for i in w.findall("include")}
     for o in fill:
         if o.zone == "DOCK_OFFICE":
             continue
         checks += 1
-        if not any(k.startswith(f"m_{o.name}") for k in vis):
-            fails.append(f"{o.name} has a collision box but no mesh visual")
+        dressed = (any(k.startswith(f"m_{o.name}") for k in vis)
+                   or any(k.startswith(f"drum_{o.name}") for k in goods_links)
+                   or any(k.startswith(f"tote_{o.name}") for k in goods_links))
+        if not dressed:
+            fails.append(f"{o.name} has a collision box but nothing drawn in it")
 
     # 4. cameras: pose in the SDF equals the layout, and inside the building
     inc = {i.find("name").text: [float(t) for t in i.find("pose").text.split()]
@@ -177,6 +190,68 @@ def main(state: str = "A"):
         if top > WALL_H:
             fails.append(f"{nm} top at {top:.2f} m pokes through the {WALL_H} m roof")
 
+    # 7. every fixture is actually switched on, and its lamp sits under its own
+    #    housing. Both were wrong until 2026-08-21: the lights were inside the
+    #    fitting at 7.10 m and weak enough (0.22 diffuse through a 1/2.17
+    #    attenuation at the 7.1 m drop) that the floor under a fixture measured no
+    #    brighter than the floor between fixtures. A structural check cannot
+    #    measure brightness, but it can refuse the two things that made the
+    #    fixtures decorative: a missing light and a light above its own housing.
+    lamp_lights = {
+        light.get("name"): [float(v) for v in light.find("pose").text.split()]
+        for light in w.findall("light")
+        if str(light.get("name", "")).startswith("lamp_light_")
+    }
+    lamp_includes = {nm: p for nm, p in inc.items() if nm.startswith("lamp_")}
+    checks += 1
+    if len(lamp_lights) != len(lamp_includes):
+        fails.append(
+            f"{len(lamp_includes)} fixtures but {len(lamp_lights)} fixture lights: "
+            "every fitting must have its lamp, or it renders as a fitting that is off"
+        )
+    for nm, pose in lamp_lights.items():
+        index = nm.rsplit("_", 1)[-1]
+        housing = lamp_includes.get(f"lamp_{index}")
+        checks += 1
+        if housing is None:
+            fails.append(f"{nm} has no fitting to hang in")
+            continue
+        housing_bottom = housing[2] + 12.50
+        if pose[2] > housing_bottom + 1e-6:
+            fails.append(
+                f"{nm} at z={pose[2]:.2f} sits inside its housing "
+                f"(bottom {housing_bottom:.2f} m); it must hang below it"
+            )
+        if abs(pose[0] - housing[0]) > 1e-6 or abs(pose[1] - housing[1]) > 1e-6:
+            fails.append(f"{nm} is not under its own fitting")
+        if pose[2] <= max(c.z for c in L.cameras):
+            fails.append(
+                f"{nm} at z={pose[2]:.2f} is at or below the "
+                f"{max(c.z for c in L.cameras):.2f} m camera mounts"
+            )
+    for light in w.findall("light"):
+        light_name = str(light.get("name", ""))
+        if not light_name.startswith("lamp_light_"):
+            continue
+        checks += 1
+        diffuse = light.find("diffuse")
+        first = float(diffuse.text.split()[0]) if diffuse is not None else 0.0
+        if first < 0.30:
+            fails.append(
+                f"{light_name} diffuse {first:.2f} is too weak to reach the floor "
+                "7 m below it; the fixtures were decorative at 0.22"
+            )
+    # the emissive face that makes a working fitting LOOK like it is working
+    glow = {m.get("name"): [float(v) for v in m.find("pose").text.split()]
+            for m in w.findall("model")
+            if str(m.get("name", "")).startswith("lamp_glow_")}
+    checks += 1
+    if len(glow) != len(lamp_includes):
+        fails.append(
+            f"{len(lamp_includes)} fittings but {len(glow)} emissive faces: Lamp_01 "
+            "ships as a passive housing, so without one a lit fixture renders grey"
+        )
+
     print(f"[state {state}: {spec['file']}] {checks} checks")
     if fails:
         print(f"FAIL ({len(fails)}):")
@@ -204,7 +279,7 @@ def paired_invariants():
     for model_name in (
         "warehouse_shell",
         "warehouse_v2_rack_frames",
-        "known_driveable_boundary",
+        "warehouse_v2_floor_markings",
     ):
         checks += 1
         elems = [worlds[state].find(f"model[@name='{model_name}']") for state in ("A", "B")]

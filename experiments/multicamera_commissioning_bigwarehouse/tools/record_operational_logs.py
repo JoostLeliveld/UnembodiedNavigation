@@ -104,7 +104,11 @@ DEFAULT_CAMERA_MODELS = {
 }
 EVIDENCE_ROLES = ("fit", "qualification", "diagnostic")
 DETECTOR_CAMERA_ORDER = tuple(DEFAULT_CAMERA_TOPICS)
-BATCHED_FRAME_POLICY = "strict_new_unique_stamp_latest_only_no_reuse"
+# imported rather than re-declared: a second copy of the frame policy is how the
+# recorder and the contract silently disagreed when the policy changed
+from perception.core.four_camera_runtime_contract import (  # noqa: E402
+    BATCHED_FRAME_POLICY,
+)
 DEFAULT_DETECTOR_CONTRACT_TIMEOUT_S = 60.0
 DETECTOR_RUNTIME_SOURCE_PATHS = {
     EXECUTABLE_SOURCE_KEY: REPO
@@ -281,7 +285,8 @@ def _validate_batched_cli_against_runtime_config(
         "launch_switch": "yolo_batched_four_camera",
         "model_format": "native_ultralytics",
         "model_instances": 1,
-        "batch_size": 4,
+        # from the contract, not a literal: the batch became A--E on 2026-08-21
+        "batch_size": len(BATCHED_CAMERA_ORDER),
         "camera_order": list(BATCHED_CAMERA_ORDER),
         "device": expected_contract["shared_device"],
         "cpu_threads": expected_contract["cpu_threads"],
@@ -1007,12 +1012,12 @@ def main() -> int:
         expected = {
             "executable": "batched_four_camera_yolo_node",
             "model_instances": 1,
-            "batch_size": 4,
+            "batch_size": len(BATCHED_CAMERA_ORDER),
             "yolo_batched_four_camera": True,
             "cpu_threads": 2,
             "interop_threads": 1,
             "opencv_threads": 1,
-            "frame_policy": BATCHED_FRAME_POLICY,
+            "frame_policy": "strict_new_unique_stamp_latest_only_no_reuse",
         }
         actual = {
             "executable": args.detector_executable,

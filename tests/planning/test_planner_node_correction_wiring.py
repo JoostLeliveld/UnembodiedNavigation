@@ -153,6 +153,10 @@ def make_node(
     node._last_correction_log = -1e9
     node._last_slow_correction_log = -1e9
 
+    # An integrity failure stops the run rather than degrading into a planner that
+    # silently never corrects again; the latch makes that stop happen once.
+    node._fatal_stop_triggered = False
+
     node._clock = _Clock(now_s)
     node._logger = _Logger()
     node.pixel_correction_diag_pub = _Publisher()

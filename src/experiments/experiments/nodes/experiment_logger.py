@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import csv
+import json
 import hashlib
 import math
 import os
@@ -71,6 +72,23 @@ def _sha256_text(text: str) -> str:
     return hashlib.sha256(str(text or '').encode('utf-8')).hexdigest()
 
 
+def _sha256_file(path: str):
+    candidate = str(path or '').strip()
+    if not candidate or not os.path.isfile(candidate):
+        return None
+    digest = hashlib.sha256()
+    try:
+        with open(candidate, 'rb') as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+    except OSError:
+        return None
+    return digest.hexdigest()
+
+
 def _split_prisms_by_prefix(prisms, prefix: str):
     token = str(prefix or '').strip()
     if not token:
@@ -95,6 +113,11 @@ class ExperimentLogger(Node):
         self.declare_parameter('state_source_theta', 'unknown')
         self.declare_parameter('state_estimator_mode', 'unknown')
         self.declare_parameter('state_correction_mode', 'fused')
+        # The camera-manager settings that define the experiment arm, as JSON, from the
+        # same launch helper that configures the manager. Folded into the manifest so a
+        # result's arm identity is recorded in the run rather than in its path.
+        self.declare_parameter('manager_settings_json', '')
+        self.declare_parameter('campaign_config_path', '')
         self.declare_parameter('use_pixel_correction', False)
         self.declare_parameter('pixel_timeout_s', 0.5)
         self.declare_parameter('use_ambiguity', False)
@@ -145,7 +168,7 @@ class ExperimentLogger(Node):
         # NOT terminate the run (only physical contact does). Lets a run continue past
         # a boundary graze so its natural outcome (goal / stuck / timeout) and full GT
         # trajectory are observed. Default True preserves the original behaviour.
-        self.declare_parameter('terminate_on_geom_collision', True)
+        self.declare_parameter('terminate_on_geom_collision', False)
         self.declare_parameter('use_command_noise', True)
         self.declare_parameter('command_noise_linear_slip_mean', 0.03)
         self.declare_parameter('command_noise_linear_slip_std', 0.06)
@@ -215,6 +238,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('use_hit_miss_mixture', False)
         self.declare_parameter('nogo_mode', 'keep_out')
         self.declare_parameter('yolo_model', '')
+        self.declare_parameter('yolo_compiled_model', '')
         self.declare_parameter('yolo_device', '')
         self.declare_parameter('yolo_imgsz', 640)
         self.declare_parameter('yolo_conf_threshold', 0.25)
@@ -259,6 +283,10 @@ class ExperimentLogger(Node):
         self.state_correction_mode = str(
             self.get_parameter('state_correction_mode').value
         )
+        self.manager_settings_json = str(
+            self.get_parameter('manager_settings_json').value or '')
+        self.campaign_config_path = str(
+            self.get_parameter('campaign_config_path').value or '')
         self.heading_update_mode = str(self.get_parameter('heading_update_mode').value)
         self.use_pixel_correction = bool(self.get_parameter('use_pixel_correction').value)
         self.pixel_timeout_s = float(self.get_parameter('pixel_timeout_s').value)
@@ -311,6 +339,11 @@ class ExperimentLogger(Node):
         self.collision_geometry_json = str(self.get_parameter('collision_geometry_json').value)
         self.robot_collision_radius_m = float(self.get_parameter('robot_collision_radius_m').value)
         self.terminate_on_geom_collision = bool(self.get_parameter('terminate_on_geom_collision').value)
+        if self.terminate_on_geom_collision:
+            raise RuntimeError(
+                'terminate_on_geom_collision=true leaks ground truth into experimental '
+                'termination; use the physical /world_contacts channel instead'
+            )
         self.use_command_noise = bool(self.get_parameter('use_command_noise').value)
         self.command_noise_linear_slip_mean = float(self.get_parameter('command_noise_linear_slip_mean').value)
         self.command_noise_linear_slip_std = float(self.get_parameter('command_noise_linear_slip_std').value)
@@ -433,6 +466,8 @@ class ExperimentLogger(Node):
         )
         self.nogo_mode = str(self.get_parameter('nogo_mode').value or 'keep_out')
         self.yolo_model = str(self.get_parameter('yolo_model').value)
+        self.yolo_compiled_model = str(
+            self.get_parameter('yolo_compiled_model').value or '')
         self.yolo_device = str(self.get_parameter('yolo_device').value)
         self.yolo_imgsz = int(self.get_parameter('yolo_imgsz').value)
         self.yolo_conf_threshold = float(self.get_parameter('yolo_conf_threshold').value)
@@ -520,8 +555,30 @@ class ExperimentLogger(Node):
         self._collision_prisms = tuple(collision_scene.prisms)
         self._wall_prisms = _split_prisms_by_prefix(self._collision_prisms, 'warehouse_walls/')
         self._obstacle_prisms = _split_prisms_by_prefix(self._collision_prisms, 'warehouse_rack_occluders/')
+        try:
+            manager_settings = json.loads(self.manager_settings_json or '{}')
+            if not isinstance(manager_settings, dict):
+                manager_settings = {}
+        except (ValueError, TypeError):
+            manager_settings = {}
+
         manifest_data = {
             'run_id': self.run_id,
+            # Which logging conventions this run was written under. Bumped when a
+            # column changes meaning, so an analysis can refuse a run it cannot score
+            # instead of silently mixing definitions.
+            #   1 = pre-2026-08-28. Errors scored against the truth held at LOG time;
+            #       final_goal_distance measured from wheel odometry; one
+            #       fusion_observations row per decision with no way to tell repeats
+            #       of one detection apart.
+            #   2 = errors scored against the truth at each estimate's own stamp,
+            #       final_goal_distance from ground truth, fusion_observations carries
+            #       obs_repeat / obs_seq / gt_*_at_obs / fused_stamp.
+            #   3 = detector batches are first-class identities; camera observations
+            #       record both capture-time and common-time values; experiment
+            #       termination uses the operational belief (never ground truth), and
+            #       contact-channel liveness is recorded explicitly.
+            'logging_schema_version': 3,
             'timestamp': datetime.now().isoformat(),
             'method': self.method or self.planner,
             'perception_backend': self.perception_backend,
@@ -584,6 +641,9 @@ class ExperimentLogger(Node):
             'use_hit_miss_mixture': self.use_hit_miss_mixture,
             'nogo_mode': self.nogo_mode,
             'yolo_model': self.yolo_model,
+            'yolo_model_sha256': _sha256_file(self.yolo_model),
+            'yolo_compiled_model': self.yolo_compiled_model,
+            'yolo_compiled_model_sha256': _sha256_file(self.yolo_compiled_model),
             'yolo_device': self.yolo_device,
             'yolo_imgsz': self.yolo_imgsz,
             'yolo_conf_threshold': self.yolo_conf_threshold,
@@ -664,6 +724,9 @@ class ExperimentLogger(Node):
             'latency_compensate_plan_handoff': self.latency_compensate_plan_handoff,
             'cmd_publish_rate': self.cmd_publish_rate,
             'auto_stop_on_goal': self.auto_stop_on_goal,
+            'goal_termination_reference': 'planner_belief',
+            'geometry_collision_termination': False,
+            'terminate_on_geom_collision': self.terminate_on_geom_collision,
             'goal_success_radius': self.goal_success_radius,
             'goal_success_hold_s': self.goal_success_hold_s,
             'goal_stable_radius': self.goal_stable_radius,
@@ -677,10 +740,22 @@ class ExperimentLogger(Node):
             'stuck_max_goal_improvement_m': self.stuck_max_goal_improvement_m,
             'stuck_cmd_fraction_min': self.stuck_cmd_fraction_min,
             'stuck_idle_cmd_fraction_max': self.stuck_idle_cmd_fraction_max,
+            **manager_settings,
         }
+        manifest_data['visibility_artifact_sha256'] = _sha256_file(
+            self.visibility_artifact_path)
+        manifest_data['manager_commissioned_calibration_sha256'] = _sha256_file(
+            str(manager_settings.get('manager_commissioned_calibration_path', '') or '')
+        )
+        manifest_data['campaign_config_path'] = self.campaign_config_path
+        manifest_data['campaign_config_sha256'] = _sha256_file(
+            self.campaign_config_path)
         self._manifest_data = dict(manifest_data)
         write_manifest(self.run_dir, self._manifest_data, repo_root)
-        snapshot_configs(self.run_dir, [self.world_profiles_path, self.tasks_yaml])
+        snapshot_configs(
+            self.run_dir,
+            [self.world_profiles_path, self.tasks_yaml, self.campaign_config_path],
+        )
 
         self.state_msg = None
         self.planner_belief_msg = None
@@ -691,11 +766,25 @@ class ExperimentLogger(Node):
         # which is DiffDrive wheel odometry and itself drifts in turns.
         self._gt_xy = None
         self._gt_yaw = None  # TRUE heading from /ground_truth_tf (for GT heading error)
-        # Buffer of (stamp_s, x, y, yaw) ground truth in the map_bev frame, so the
-        # camera measurement / state can be compared to truth AT THEIR OWN capture
-        # time (not the current log time). This separates true detector quality from
-        # the ~0.5 s measurement latency.
-        self._truth_buf = deque(maxlen=600)
+        self._gt_stamp = math.nan  # when the truth sample is valid, not the log clock
+        self._gt_stamp_source = 'none'
+        #: gaps between consecutive truth samples, so the residual alignment error left
+        #: by stamping at receipt is measured in every run instead of being assumed
+        self._gt_intervals = deque(maxlen=20000)
+        # Buffer of (stamp_s, x, y, yaw) GROUND TRUTH, so an estimate can be scored
+        # against the truth AT THE INSTANT IT DESCRIBES rather than at log time.
+        #
+        # Without this every error column paired a timestamped estimate with a LATER
+        # truth: the belief publishes at 10 Hz and the logger samples 10 Hz one cycle
+        # behind it, so `belief_error_gt_m` carried a fixed 100 ms of robot travel.
+        # Measured on the six-arm drives that is 2.3x the real median error (2.75 cm
+        # logged against 1.13 cm aligned) and 1.9x the NEES. The offset is nearly
+        # identical on every arm, so it looked like a property of the camera network.
+        self._gt_buf = deque(maxlen=2000)
+        # Buffer of (stamp_s, x, y, yaw) WHEEL ODOMETRY in the map_bev frame. Kept for
+        # the odometry-referenced diagnostics only. It is NOT truth: measured drift
+        # against the Gazebo pose is 24 cm median and 2.4 m worst on these drives.
+        self._odom_map_buf = deque(maxlen=600)
         self.obs_msg = None
         self.perception_diag = None
         self.heading_diag = None
@@ -750,6 +839,7 @@ class ExperimentLogger(Node):
         self._last_path_pose = None
         self._min_goal_distance = float('inf')
         self._contact_collision_seen = False
+        self._contact_messages_seen = 0
         self._geom_collision_seen = False
         self._collision_reason = ''
         self._first_crash_stamp = math.nan
@@ -817,10 +907,15 @@ class ExperimentLogger(Node):
         self.run_dir_pub.publish(run_dir_msg)
 
         goal_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        #: the manager's latest decision: which cameras went into the correction, and when
+        self.fusion_decision = None
+        self.fusion_decision_stamp = None
         self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
         self.create_subscription(Odometry, '/odom_noisy', self._odom_noisy_cb, 10)
         self.create_subscription(TFMessage, '/ground_truth_tf', self._ground_truth_cb, 50)
         self.create_subscription(PoseWithCovarianceStamped, '/state/bev', self._state_cb, 10)
+        self.create_subscription(
+            String, '/reliability/camera_manager/decision', self._fusion_decision_cb, 10)
         self.create_subscription(Float64MultiArray, '/state/heading_diagnostics', self._heading_diag_cb, 10)
         self.create_subscription(PoseWithCovarianceStamped, '/planner_belief', self._planner_belief_cb, 10)
         self.create_subscription(PoseStamped, '/perception/pixel_pose', self._obs_cb, 10)
@@ -906,6 +1001,7 @@ class ExperimentLogger(Node):
             'cmd_noise_linear_additive', 'cmd_noise_angular_additive',
             'cmd_noise_v_error', 'cmd_noise_w_error',
             'goal_x', 'goal_y', 'goal_dist',
+            'operational_goal_dist_m', 'goal_termination_reference',
             'plan_points', 'plan_length',
             'optimizer_success', 'optimizer_status', 'optimizer_nit', 'optimizer_nfev', 'optimizer_message',
             'plan_time_ms', 'solve_time_ms',
@@ -931,6 +1027,7 @@ class ExperimentLogger(Node):
             'exec_wp_dist_m', 'exec_desired_yaw', 'exec_yaw_error',
             'exec_tracking_yaw', 'exec_tracking_yaw_source',
             'collision_any', 'collision_contact', 'collision_geom', 'collision_reason', 'first_crash_stamp',
+            'contact_topic_publishers', 'contact_messages_seen',
             'min_wall_distance_m', 'min_obstacle_distance_m',
             'wall_penetration_m', 'obstacle_penetration_m',
             'off_map', 'inside_no_go', 'valid_run', 'invalid_reason',
@@ -948,12 +1045,79 @@ class ExperimentLogger(Node):
             'planner_diag_u_pred_v', 'planner_diag_u_pred_omega', 'planner_diag_Q_theta_theta',
             'planner_diag_odom_delta_theta', 'planner_diag_cmd_delta_theta',
             'planner_diag_heading_anchor_applied', 'planner_diag_state_bev_yaw_ignored',
-            # Ground-truth (vs TRUE Gazebo pose, not /odom wheel odometry):
-            'gt_available', 'gt_x', 'gt_y', 'gt_yaw',
+            # Ground-truth (vs TRUE Gazebo pose, not /odom wheel odometry).
+            #
+            # gt_x/gt_y/gt_yaw are the LATEST truth, valid at gt_stamp (its own stamp,
+            # not the log clock). belief_error_gt_m and state_error_gt_m are scored
+            # against the truth at the ESTIMATE's stamp, and gt_*_at_*_stamp are the
+            # exact truth they used so any analysis can re-derive them. The
+            # *_logtime_m twins are the old, latency-inflated definition, kept as a
+            # diagnostic and for comparison with pre-2026-08-28 runs.
+            'gt_available', 'gt_x', 'gt_y', 'gt_yaw', 'gt_stamp', 'gt_age_s',
             'belief_error_gt_m', 'state_error_gt_m', 'odom_map_gt_drift_m',
             'belief_yaw_error_gt_rad',
-            'seed'
+            'gt_x_at_belief_stamp', 'gt_y_at_belief_stamp',
+            'gt_x_at_state_stamp', 'gt_y_at_state_stamp',
+            'belief_error_gt_logtime_m', 'state_error_gt_logtime_m',
+            'seed',
+            # How many cameras actually went into the correction the filter just used, and
+            # which ones. Without this the fusion comparison cannot plot error and claimed
+            # uncertainty against the number of contributing cameras -- which is the axis the
+            # whole experiment turns on. Read from the manager's own decision message, so it
+            # is what happened rather than what the commissioned map expected.
+            'fusion_cameras_n', 'fusion_cameras', 'fusion_decision_age_s',
+            # candidates = cameras available to the rule; cameras = the ones it used. For a
+            # single-best rule those differ by construction, so the cross-arm plot is read
+            # against the candidates.
+            'fusion_candidates_n', 'fusion_candidates'
         ])
+
+        # One row per CAMERA per fused correction: where that camera put the robot, how sure
+        # it was, whether the arm's rule used it, and what the rule produced from them all.
+        # This is the mechanism the fusion figures draw; the main CSV only carries the result.
+        self.fusion_obs_path = os.path.join(self.run_dir, 'fusion_observations.csv')
+        self.fusion_obs_file = open(self.fusion_obs_path, 'w', newline='')
+        self.fusion_obs_writer = csv.writer(self.fusion_obs_file)
+        self.fusion_obs_writer.writerow([
+            # `stamp` is when the DECISION reached the logger. The manager decides at
+            # 20 Hz while the detector produces 5 Hz, so the same physical detection
+            # appears on about four consecutive decisions. Counting rows therefore
+            # counts each reading ~4x: measured 25656 rows for 6418 distinct readings
+            # across five drives. `obs_repeat` == 0 selects one row per detection;
+            # `obs_seq` numbers the distinct detections per camera. Every per-camera
+            # statistic (n, bias, spread, NEES, any likelihood) must filter on
+            # obs_repeat == 0, or it reports a quarter of its effective sample size as
+            # four times as many independent readings.
+            'stamp', 'decision_seq', 'source_batch_id', 'common_capture_stamp',
+            'camera', 'used', 'obs_x', 'obs_y',
+            'obs_cov_xx', 'obs_cov_xy', 'obs_cov_yy',
+            'aligned_x', 'aligned_y',
+            'aligned_cov_xx', 'aligned_cov_xy', 'aligned_cov_yy',
+            'n_candidates', 'n_used',
+            'fused_x', 'fused_y', 'fused_cov_xx', 'fused_cov_xy', 'fused_cov_yy',
+            # Three different instants, so three different truths. `obs_x/obs_y`
+            # describe the robot at `obs_stamp` (capture). `fused_x/fused_y` describe
+            # it at `fused_stamp`, because the manager propagates the fused correction
+            # forward and re-stamps it. `gt_x/gt_y` is the latest truth when the
+            # decision arrived here. Scoring a camera against `gt_x` charges it the
+            # whole pipeline delay -- ~200 ms, about 4.4 cm at 0.22 m/s -- and scoring
+            # a camera and the fused answer against the SAME `gt_x` is what made the
+            # fusion rule look better than the cameras it was combining.
+            'gt_x', 'gt_y', 'gt_stamp',
+            'gt_x_at_obs', 'gt_y_at_obs',
+            'fused_stamp', 'gt_x_at_fused', 'gt_y_at_fused',
+            'obs_seq', 'obs_repeat',
+            # What the detector said about this reading. Recorded so the question "does the
+            # detector's own confidence predict how wrong it was?" can be answered from a
+            # drive; nothing in the runtime weights anything by these.
+            'conf', 'conf_raw', 'bbox_h_px', 'bbox_w_px', 'range_m', 'obs_stamp',
+        ])
+        self._fusion_obs_last_stamp = None
+        self._fusion_decision_seq = 0
+        #: (camera, obs_stamp) -> how many times that detection has been written
+        self._obs_repeat_count = {}
+        #: camera -> how many DISTINCT detections it has contributed
+        self._obs_seq_by_camera = {}
 
         self.plan_file = None
         self.plan_writer = None
@@ -1152,24 +1316,25 @@ class ExperimentLogger(Node):
     def _remember_motion_sample(
         self,
         stamp: float,
-        true_ok: bool,
-        true_x: float,
-        true_y: float,
+        operational_x: float,
+        operational_y: float,
         goal_dist: float,
         cmd_v: float,
         cmd_w: float,
     ) -> None:
-        # Stuck / goal-stable detection uses the TRUE Gazebo pose ONLY (no /odom
-        # fallback): drifting wheel-odom would misreport displacement/progress.
-        if self._gt_xy is None:
-            return
-        gx, gy = self._gt_xy
-        if not (math.isfinite(stamp) and math.isfinite(gx) and math.isfinite(gy) and math.isfinite(goal_dist)):
+        # Use the same operational state available to the controller. Ground
+        # truth is evaluation-only and cannot decide when a run stops.
+        if not (
+            math.isfinite(stamp)
+            and math.isfinite(operational_x)
+            and math.isfinite(operational_y)
+            and math.isfinite(goal_dist)
+        ):
             return
         self._motion_history.append((
             float(stamp),
-            float(gx),
-            float(gy),
+            float(operational_x),
+            float(operational_y),
             float(goal_dist),
             1.0 if self._command_active(cmd_v, cmd_w) else 0.0,
         ))
@@ -1294,33 +1459,62 @@ class ExperimentLogger(Node):
 
     def _odom_cb(self, msg: Odometry):
         self.odom_msg = msg
-        ok, st, x, y, yaw = self._latest_truth_pose()
+        ok, st, x, y, yaw = self._latest_odom_map_pose()
         if ok and math.isfinite(st):
-            self._truth_buf.append((float(st), float(x), float(y), float(yaw)))
+            self._odom_map_buf.append((float(st), float(x), float(y), float(yaw)))
 
-    def _truth_at(self, stamp):
-        """Interpolate buffered map_bev-frame truth to `stamp`. Returns (ok,x,y,yaw)."""
-        buf = self._truth_buf
+    @staticmethod
+    def _interpolate_pose_buffer(buf, stamp):
+        """Interpolate a (stamp, x, y, yaw) buffer to `stamp`. Returns (ok,x,y,yaw).
+
+        `ok` is False outside the buffered interval as well as when the buffer is
+        empty: clamping to an endpoint would silently return a pose from a different
+        instant and score it as if it were aligned, which is the exact defect this
+        buffer exists to remove.
+        """
         if not buf or not math.isfinite(stamp):
             return False, math.nan, math.nan, math.nan
-        if stamp <= buf[0][0]:
-            return (True,) + buf[0][1:]
-        if stamp >= buf[-1][0]:
-            return (True,) + buf[-1][1:]
+        if stamp < buf[0][0] or stamp > buf[-1][0]:
+            return False, math.nan, math.nan, math.nan
         prev = buf[0]
         for cur in buf:
             if cur[0] >= stamp:
                 s0, x0, y0, yaw0 = prev
                 s1, x1, y1, yaw1 = cur
-                a = (stamp - s0) / max(s1 - s0, 1e-9)
+                if s1 <= s0:
+                    return True, x1, y1, yaw1
+                a = (stamp - s0) / (s1 - s0)
                 return (
                     True,
                     x0 + a * (x1 - x0),
                     y0 + a * (y1 - y0),
-                    self._wrap_angle(yaw0 + a * self._wrap_angle(yaw1 - yaw0)),
+                    ExperimentLogger._wrap_angle(
+                        yaw0 + a * ExperimentLogger._wrap_angle(yaw1 - yaw0)),
                 )
             prev = cur
-        return (True,) + buf[-1][1:]
+        return (True,) + tuple(buf[-1][1:])
+
+    def _gt_at(self, stamp):
+        """GROUND TRUTH interpolated to `stamp`. The reference every error must use."""
+        return self._interpolate_pose_buffer(self._gt_buf, stamp)
+
+    def _odom_map_at(self, stamp):
+        """Wheel odometry in map_bev interpolated to `stamp`. Diagnostic only."""
+        return self._interpolate_pose_buffer(self._odom_map_buf, stamp)
+
+    def _error_against_gt_at(self, x, y, stamp):
+        """Distance from (x, y) to the TRUE pose at the instant (x, y) describes.
+
+        Returns (error_m, gt_x, gt_y) with NaNs when the estimate, its stamp, or the
+        truth at that stamp is unavailable. Never falls back to the latest truth: a
+        silent fallback is what made every error column read 100 ms late.
+        """
+        if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(stamp)):
+            return math.nan, math.nan, math.nan
+        ok, gx, gy, _gyaw = self._gt_at(stamp)
+        if not ok:
+            return math.nan, math.nan, math.nan
+        return math.hypot(float(x) - gx, float(y) - gy), gx, gy
 
     def _odom_noisy_cb(self, msg: Odometry):
         self.odom_noisy_msg = msg
@@ -1329,13 +1523,116 @@ class ExperimentLogger(Node):
         # /world/<name>/dynamic_pose/info publishes every moving entity's world
         # pose. Keep the robot's. Holds last value while stationary (true pose
         # is constant then anyway).
+        #
+        # Every truth sample is TIMESTAMPED and buffered. Holding truth as a bare
+        # latest value was the root cause of every misaligned error column: the only
+        # instant it could then be paired with was the log clock.
+        #
+        # The transform's own stamp is preferred but is not available here: measured on
+        # warehouse_v2, the ros_gz bridge publishes /ground_truth_tf with header.stamp
+        # exactly 0 on every transform, because gz.msgs.Pose_V carries its time on the
+        # message header and not on the individual poses. So the sample is stamped at
+        # RECEIPT on the simulation clock, which leaves only the transport delay. Gazebo
+        # publishes dynamic_pose/info every world step (1 kHz here), so that delay is
+        # bounded by how far behind the bridge runs -- which is why the inter-sample
+        # interval is measured below and reported in the run summary rather than assumed.
+        receipt_s = float(self.get_clock().now().nanoseconds) * 1e-9
         for tr in msg.transforms:
             if tr.child_frame_id == 'turtlebot3':
-                self._gt_xy = (
-                    float(tr.transform.translation.x),
-                    float(tr.transform.translation.y),
-                )
-                self._gt_yaw = self._yaw_from_quaternion(tr.transform.rotation)
+                x = float(tr.transform.translation.x)
+                y = float(tr.transform.translation.y)
+                yaw = self._yaw_from_quaternion(tr.transform.rotation)
+                header_stamp = self._stamp_to_float(tr.header.stamp)
+                if math.isfinite(header_stamp) and header_stamp > 0.0:
+                    stamp = header_stamp
+                    self._gt_stamp_source = 'transform_header'
+                else:
+                    stamp = receipt_s
+                    self._gt_stamp_source = 'receipt_sim_clock'
+                self._gt_xy = (x, y)
+                self._gt_yaw = yaw
+                self._gt_stamp = stamp
+                if math.isfinite(stamp) and (
+                    not self._gt_buf or stamp > self._gt_buf[-1][0]
+                ):
+                    if self._gt_buf:
+                        self._gt_intervals.append(stamp - self._gt_buf[-1][0])
+                    self._gt_buf.append((stamp, x, y, yaw))
+
+    def _fusion_decision_cb(self, message) -> None:
+        """The camera manager's own account of which cameras went into this correction."""
+
+        try:
+            payload = json.loads(message.data)
+        except (ValueError, TypeError):
+            return
+        if not isinstance(payload, dict):
+            return
+        self.fusion_decision = payload
+        self.fusion_decision_stamp = self.get_clock().now().nanoseconds * 1.0e-9
+
+        observations = payload.get('observations')
+        if not observations or self.fusion_obs_writer is None:
+            return
+        stamp = self.fusion_decision_stamp
+        if self._fusion_obs_last_stamp is not None and stamp <= self._fusion_obs_last_stamp:
+            return
+        self._fusion_obs_last_stamp = stamp
+        self._fusion_decision_seq += 1
+        decision_seq = self._fusion_decision_seq
+        fused = payload.get('fused_xy') or [float('nan'), float('nan')]
+        fcov = payload.get('fused_cov') or [[float('nan')] * 2] * 2
+        gt = self._gt_xy if self._gt_xy is not None else (float('nan'), float('nan'))
+        gt_stamp = float(self._gt_stamp)
+        fused_stamp = float(payload.get('fused_stamp', float('nan')))
+        source_batch_id = str(payload.get('source_batch_id', '') or '')
+        common_capture_stamp = float(
+            payload.get('common_capture_stamp', float('nan')))
+        fok, fgx, fgy, _fyaw = self._gt_at(fused_stamp)
+        if not fok:
+            fgx = fgy = float('nan')
+        used_ids = payload.get('accepted_camera_ids') or []
+        for observation in observations:
+            cov = observation.get('cov') or [[float('nan')] * 2] * 2
+            xy = observation.get('xy') or [float('nan'), float('nan')]
+            aligned_cov = observation.get('aligned_cov') or [[float('nan')] * 2] * 2
+            aligned_xy = observation.get('aligned_xy') or [float('nan'), float('nan')]
+            camera = str(observation.get('camera', '')).replace('camera_', '')
+            obs_stamp = float(observation.get('obs_stamp', float('nan')))
+            # The truth at the instant THIS CAMERA saw the robot. Written here, once,
+            # so no downstream script has to re-derive it -- and so a script that
+            # forgets to is visibly using the wrong column rather than silently
+            # charging the pipeline delay to the sensor.
+            ook, ogx, ogy, _oyaw = self._gt_at(obs_stamp)
+            if not ook:
+                ogx = ogy = float('nan')
+            key = (camera, round(obs_stamp, 6) if math.isfinite(obs_stamp) else None)
+            repeat = self._obs_repeat_count.get(key, 0)
+            self._obs_repeat_count[key] = repeat + 1
+            if repeat == 0:
+                self._obs_seq_by_camera[camera] = (
+                    self._obs_seq_by_camera.get(camera, -1) + 1)
+            obs_seq = self._obs_seq_by_camera.get(camera, -1)
+            self.fusion_obs_writer.writerow([
+                stamp, decision_seq, source_batch_id, common_capture_stamp, camera,
+                1 if observation.get('used') else 0, xy[0], xy[1],
+                cov[0][0], cov[0][1], cov[1][1],
+                aligned_xy[0], aligned_xy[1],
+                aligned_cov[0][0], aligned_cov[0][1], aligned_cov[1][1],
+                len(observations), len(used_ids),
+                fused[0], fused[1], fcov[0][0], fcov[0][1], fcov[1][1],
+                gt[0], gt[1], gt_stamp,
+                ogx, ogy,
+                fused_stamp, fgx, fgy,
+                obs_seq, repeat,
+                observation.get('conf', float('nan')),
+                observation.get('conf_raw', float('nan')),
+                observation.get('bbox_h_px', float('nan')),
+                observation.get('bbox_w_px', float('nan')),
+                observation.get('range_m', float('nan')),
+                obs_stamp,
+            ])
+        self.fusion_obs_file.flush()
 
     def _state_cb(self, msg: PoseWithCovarianceStamped):
         self.state_msg = msg
@@ -1502,9 +1799,9 @@ class ExperimentLogger(Node):
             self._first_crash_stamp = float(stamp)
         if str(reason or '').strip():
             self._collision_reason = str(reason).strip()
-            self._record_invalid(self._collision_reason)
 
     def _contacts_cb(self, msg: Contacts):
+        self._contact_messages_seen += 1
         try:
             stamp = self._stamp_to_float(msg.header.stamp)
         except AttributeError:
@@ -1569,7 +1866,14 @@ class ExperimentLogger(Node):
         rel = self._wrap_angle(bearing_world - float(odom_map_yaw))
         return float(abs(math.degrees(rel)))
 
-    def _latest_truth_pose(self):
+    def _latest_odom_map_pose(self):
+        """Latest WHEEL ODOMETRY pose expressed in the map_bev frame.
+
+        Named for what it is. It was called `_latest_truth_pose` and is not truth:
+        `/odom` comes from the Gazebo DiffDrive plugin and accumulates about 1% of
+        distance travelled, measured at 24 cm median and 2.4 m worst on these drives.
+        Truth is `_gt_xy` / `_gt_buf`, from `/ground_truth_tf`.
+        """
         if self.odom_msg is None:
             return False, math.nan, math.nan, math.nan, math.nan
 
@@ -1668,7 +1972,7 @@ class ExperimentLogger(Node):
             return
 
         raw_ok, _raw_stamp, raw_x, raw_y, raw_yaw, source_frame = self._latest_raw_odom_pose()
-        true_ok, odom_map_stamp, odom_map_x, odom_map_y, odom_map_yaw = self._latest_truth_pose()
+        true_ok, odom_map_stamp, odom_map_x, odom_map_y, odom_map_yaw = self._latest_odom_map_pose()
         if not (raw_ok and true_ok):
             return
 
@@ -1775,7 +2079,7 @@ class ExperimentLogger(Node):
         if self.perception_writer is None:
             return
 
-        true_ok, _truth_stamp, true_x, true_y, true_yaw = self._latest_truth_pose()
+        true_ok, _truth_stamp, true_x, true_y, true_yaw = self._latest_odom_map_pose()
         state_ok, state_stamp, state_x, state_y, state_yaw = self._latest_state_pose()
         obs_ok, pixel_pose_stamp, pixel_pose_u, pixel_pose_v, pixel_pose_yaw = self._latest_pixel_pose()
 
@@ -1833,23 +2137,23 @@ class ExperimentLogger(Node):
                         pred_world_y_calibrated - true_y,
                     )
 
-        # Capture-time-truth errors: compare the measurement / state to truth AT THEIR
-        # OWN timestamp instead of the current log time. This removes the ~0.5 s
-        # latency inflation, so it reflects the TRUE detector / projection quality
-        # (e.g. ~0.04 m even in turns). The *_calibrated_m and state_pos_error columns
+        # Capture-time errors: compare the measurement / state to GROUND TRUTH at THEIR
+        # OWN timestamp instead of the current log time. This removes the pipeline
+        # latency, so it reflects the TRUE detector / projection quality.
+        #
+        # These used to interpolate the odometry buffer, which is wheel odometry, so
+        # they were scored against a reference up to 2.4 m from the real pose while
+        # the comment claimed they showed true detector quality. They now use the
+        # stamped ground-truth buffer. The *_calibrated_m and state_pos_error columns
         # above compare to log-time truth and are therefore LATENCY-INFLATED in turns.
         localization_error_captime_m = math.nan
-        if (obs_ok and math.isfinite(pred_world_x_calibrated)
-                and math.isfinite(pred_world_y_calibrated) and math.isfinite(pixel_pose_stamp)):
-            cok, ctx, cty, _cyaw = self._truth_at(pixel_pose_stamp)
-            if cok:
-                localization_error_captime_m = math.hypot(
-                    pred_world_x_calibrated - ctx, pred_world_y_calibrated - cty)
+        if obs_ok:
+            localization_error_captime_m, _cgx, _cgy = self._error_against_gt_at(
+                pred_world_x_calibrated, pred_world_y_calibrated, pixel_pose_stamp)
         state_error_captime_m = math.nan
-        if state_ok and math.isfinite(state_x) and math.isfinite(state_stamp):
-            sok, stx, sty, _syaw = self._truth_at(state_stamp)
-            if sok:
-                state_error_captime_m = math.hypot(state_x - stx, state_y - sty)
+        if state_ok:
+            state_error_captime_m, _sgx, _sgy = self._error_against_gt_at(
+                state_x, state_y, state_stamp)
 
         selected_pixel_source_code = float(diag.get('selected_pixel_source_code', math.nan))
         if selected_pixel_source_code >= 1.5:
@@ -1988,7 +2292,7 @@ class ExperimentLogger(Node):
         else:
             cov_x = cov_xy = cov_y = cov_yaw = math.nan
 
-        true_ok, odom_map_stamp, true_x, true_y, true_yaw = self._latest_truth_pose()
+        true_ok, odom_map_stamp, true_x, true_y, true_yaw = self._latest_odom_map_pose()
         (
             planner_belief_ok,
             planner_belief_stamp,
@@ -2275,6 +2579,22 @@ class ExperimentLogger(Node):
             goal_y = float(self.goal_msg.pose.position.y)
             goal_dist = math.hypot(goal_x - self._gt_xy[0], goal_y - self._gt_xy[1])
 
+        operational_goal_dist_m = math.nan
+        if (
+            self.goal_msg
+            and planner_belief_ok
+            and math.isfinite(planner_belief_x)
+            and math.isfinite(planner_belief_y)
+        ):
+            # This is the state the controller actually uses. It alone may
+            # drive automatic goal and stuck termination.
+            if not math.isfinite(goal_x):
+                goal_x = float(self.goal_msg.pose.position.x)
+                goal_y = float(self.goal_msg.pose.position.y)
+            operational_goal_dist_m = math.hypot(
+                goal_x - planner_belief_x, goal_y - planner_belief_y
+            )
+
         current_pose = None
         if self._gt_xy is not None:
             current_pose = (float(self._gt_xy[0]), float(self._gt_xy[1]))
@@ -2286,7 +2606,14 @@ class ExperimentLogger(Node):
             self._min_goal_distance = min(self._min_goal_distance, goal_dist)
             self._update_goal_region_state(now_stamp, goal_dist)
 
-        self._remember_motion_sample(now_stamp, true_ok, true_x, true_y, goal_dist, cmd_v, cmd_w)
+        self._remember_motion_sample(
+            now_stamp,
+            planner_belief_x,
+            planner_belief_y,
+            operational_goal_dist_m,
+            cmd_v,
+            cmd_w,
+        )
 
         plan_points = 0
         plan_length = 0.0
@@ -2489,10 +2816,6 @@ class ExperimentLogger(Node):
                 geom_reason.append('geometry:wall_penetration')
             if obstacle_penetration_m > 0.0:
                 geom_reason.append('geometry:obstacle_penetration')
-            if off_map >= 0.5:
-                self._record_invalid('off_map')
-            if inside_no_go >= 0.5:
-                self._record_invalid('inside_no_go')
             if geom_reason:
                 self._record_collision_event(
                     stamp=odom_map_stamp if math.isfinite(odom_map_stamp) else now_stamp,
@@ -2505,43 +2828,104 @@ class ExperimentLogger(Node):
         collision_geom = 1.0 if self._geom_collision_seen else 0.0
         collision_any = 1.0 if (collision_contact >= 0.5 or collision_geom >= 0.5) else 0.0
         collision_reason = self._collision_reason
-        if collision_any >= 0.5:
-            self._record_invalid(collision_reason or 'collision_any')
+        try:
+            contact_topic_publishers = int(self.count_publishers('/world_contacts'))
+        except Exception:
+            contact_topic_publishers = -1
         valid_run = 1.0 if self._valid_run else 0.0
         invalid_reason = self._invalid_reason
 
         # --- GROUND-TRUTH errors (vs TRUE Gazebo pose, not /odom) ---
-        # /odom ("truth_*") is DiffDrive wheel odometry and drifts in turns;
+        # /odom ("odom_map_*") is DiffDrive wheel odometry and drifts in turns;
         # these *_gt columns are the honest errors against the real pose.
+        #
+        # TIME ALIGNMENT IS THE WHOLE POINT HERE. `belief_error_gt_m` and
+        # `state_error_gt_m` score each estimate against the truth AT THE INSTANT THE
+        # ESTIMATE DESCRIBES, taken from the stamped ground-truth buffer. They used to
+        # use the latest held truth, i.e. the truth at LOG time, which is later by one
+        # full publish cycle: the belief publishes at 10 Hz and the logger samples
+        # 10 Hz behind it, so the column carried a fixed 100 ms of robot travel. That
+        # inflated the median belief error by 2.3x (2.75 cm vs 1.13 cm) and NEES by
+        # 1.9x on the six-arm drives, identically on every arm, so it read as a
+        # property of the camera network rather than of the logger.
+        #
+        # The `*_logtime_m` twins keep the old, misaligned definition so a run can be
+        # compared with the pre-2026-08-28 campaigns and so the size of the artefact
+        # stays visible in the data instead of living in a memo.
         gt_ok = self._gt_xy is not None
         gt_x = self._gt_xy[0] if gt_ok else math.nan
         gt_y = self._gt_xy[1] if gt_ok else math.nan
         gt_yaw = self._gt_yaw if (gt_ok and self._gt_yaw is not None) else math.nan
+        gt_stamp = float(self._gt_stamp)
+        gt_age_s = (max(now_stamp - gt_stamp, 0.0)
+                    if math.isfinite(gt_stamp) else math.nan)
         belief_error_gt_m = math.nan
         state_error_gt_m = math.nan
+        belief_error_gt_logtime_m = math.nan
+        state_error_gt_logtime_m = math.nan
+        gt_x_at_belief_stamp = math.nan
+        gt_y_at_belief_stamp = math.nan
+        gt_x_at_state_stamp = math.nan
+        gt_y_at_state_stamp = math.nan
         odom_map_gt_drift_m = math.nan
         belief_yaw_error_gt_rad = math.nan
+
+        # Aligned errors need only the stamped buffer, never the held latest value.
+        if planner_belief_ok:
+            (belief_error_gt_m, gt_x_at_belief_stamp,
+             gt_y_at_belief_stamp) = self._error_against_gt_at(
+                planner_belief_x, planner_belief_y, planner_belief_stamp)
+        if state_ok:
+            (state_error_gt_m, gt_x_at_state_stamp,
+             gt_y_at_state_stamp) = self._error_against_gt_at(
+                state_x, state_y, state_stamp)
+        if planner_belief_ok and math.isfinite(planner_belief_yaw):
+            byaw_ok, _bgx, _bgy, gt_yaw_at_belief = self._gt_at(planner_belief_stamp)
+            if byaw_ok:
+                belief_yaw_error_gt_rad = self._wrap_angle(
+                    planner_belief_yaw - gt_yaw_at_belief)
+
         if gt_ok:
-            if math.isfinite(gt_yaw) and planner_belief_ok and math.isfinite(planner_belief_yaw):
-                belief_yaw_error_gt_rad = self._wrap_angle(planner_belief_yaw - gt_yaw)
             if planner_belief_ok and math.isfinite(planner_belief_x):
-                belief_error_gt_m = math.hypot(planner_belief_x - gt_x, planner_belief_y - gt_y)
+                belief_error_gt_logtime_m = math.hypot(
+                    planner_belief_x - gt_x, planner_belief_y - gt_y)
             if state_ok and math.isfinite(state_x):
-                state_error_gt_m = math.hypot(state_x - gt_x, state_y - gt_y)
+                state_error_gt_logtime_m = math.hypot(state_x - gt_x, state_y - gt_y)
             if true_ok and math.isfinite(true_x):
                 odom_map_gt_drift_m = math.hypot(true_x - gt_x, true_y - gt_y)
-            if math.isfinite(belief_error_gt_m):
-                self._belief_error_gt_sum += belief_error_gt_m
-                self._belief_error_gt_count += 1
-                if after_first_cmd:
-                    self._belief_error_gt_after_first_cmd_sum += belief_error_gt_m
-                    self._belief_error_gt_after_first_cmd_count += 1
-            if math.isfinite(state_error_gt_m):
-                self._state_error_gt_sum += state_error_gt_m
-                self._state_error_gt_count += 1
-                if after_first_cmd:
-                    self._state_error_gt_after_first_cmd_sum += state_error_gt_m
-                    self._state_error_gt_after_first_cmd_count += 1
+        # Run-summary means accumulate the ALIGNED errors.
+        if math.isfinite(belief_error_gt_m):
+            self._belief_error_gt_sum += belief_error_gt_m
+            self._belief_error_gt_count += 1
+            if after_first_cmd:
+                self._belief_error_gt_after_first_cmd_sum += belief_error_gt_m
+                self._belief_error_gt_after_first_cmd_count += 1
+        if math.isfinite(state_error_gt_m):
+            self._state_error_gt_sum += state_error_gt_m
+            self._state_error_gt_count += 1
+            if after_first_cmd:
+                self._state_error_gt_after_first_cmd_sum += state_error_gt_m
+                self._state_error_gt_after_first_cmd_count += 1
+
+        fusion_cameras_n = float('nan')
+        fusion_cameras = ''
+        fusion_candidates_n = float('nan')
+        fusion_candidates = ''
+        fusion_decision_age_s = float('nan')
+        if self.fusion_decision is not None:
+            accepted = self.fusion_decision.get('accepted_camera_ids') or []
+            fusion_cameras_n = float(len(accepted))
+            fusion_cameras = '|'.join(str(c).replace('camera_', '') for c in accepted)
+            candidates = self.fusion_decision.get('synchronous_camera_ids')
+            if candidates is None:
+                n_fresh = self.fusion_decision.get('n_fresh')
+                fusion_candidates_n = float(n_fresh) if n_fresh is not None else float('nan')
+            else:
+                fusion_candidates_n = float(len(candidates))
+                fusion_candidates = '|'.join(
+                    str(c).replace('camera_', '') for c in candidates)
+            if self.fusion_decision_stamp is not None:
+                fusion_decision_age_s = float(stamp) - float(self.fusion_decision_stamp)
 
         self.writer.writerow([
             stamp,
@@ -2592,6 +2976,7 @@ class ExperimentLogger(Node):
             cmd_noise_linear_additive, cmd_noise_angular_additive,
             cmd_noise_v_error, cmd_noise_w_error,
             goal_x, goal_y, goal_dist,
+            operational_goal_dist_m, 'planner_belief',
             plan_points, plan_length,
             optimizer_success, optimizer_status, optimizer_nit, optimizer_nfev, optimizer_message,
             plan_time_ms, solve_time_ms,
@@ -2617,6 +3002,7 @@ class ExperimentLogger(Node):
             exec_wp_dist_m, exec_desired_yaw, exec_yaw_error,
             exec_tracking_yaw, exec_tracking_yaw_source,
             collision_any, collision_contact, collision_geom, collision_reason, self._first_crash_stamp,
+            contact_topic_publishers, self._contact_messages_seen,
             min_wall_distance_m, min_obstacle_distance_m,
             wall_penetration_m, obstacle_penetration_m,
             off_map, inside_no_go, valid_run, invalid_reason,
@@ -2632,16 +3018,20 @@ class ExperimentLogger(Node):
             planner_diag_u_pred_v, planner_diag_u_pred_omega, planner_diag_Q_theta_theta,
             planner_diag_odom_delta_theta, planner_diag_cmd_delta_theta,
             planner_diag_heading_anchor_applied, planner_diag_state_bev_yaw_ignored,
-            1.0 if gt_ok else 0.0, gt_x, gt_y, gt_yaw,
+            1.0 if gt_ok else 0.0, gt_x, gt_y, gt_yaw, gt_stamp, gt_age_s,
             belief_error_gt_m, state_error_gt_m, odom_map_gt_drift_m,
             belief_yaw_error_gt_rad,
+            gt_x_at_belief_stamp, gt_y_at_belief_stamp,
+            gt_x_at_state_stamp, gt_y_at_state_stamp,
+            belief_error_gt_logtime_m, state_error_gt_logtime_m,
             self.seed,
+            fusion_cameras_n, fusion_cameras, fusion_decision_age_s,
+            fusion_candidates_n, fusion_candidates,
         ])
         self.file.flush()
 
         if not self._stop_requested and (
             self._contact_collision_seen
-            or (self._geom_collision_seen and self.terminate_on_geom_collision)
         ):
             self._finish_run("collision", now_stamp)
             return
@@ -2649,6 +3039,10 @@ class ExperimentLogger(Node):
         if not self._stop_requested:
             if self._first_cmd_stamp is None:
                 if self._command_active(cmd_v, cmd_w):
+                    if contact_topic_publishers <= 0:
+                        self._record_invalid('contact_channel_no_publisher_at_first_command')
+                        self._finish_run('infra_invalid_contact_channel', now_stamp)
+                        return
                     self._first_cmd_stamp = now_stamp
                     self.get_logger().info(f"First command detected. Starting {self.run_timeout_after_first_cmd_s:.1f}s timeout.")
             else:
@@ -2657,10 +3051,14 @@ class ExperimentLogger(Node):
                     self._finish_run("timeout_after_first_cmd", now_stamp)
                     return
 
-        if not self._stop_requested and self._maybe_finish_for_goal(now_stamp, goal_dist, cmd_v, cmd_w):
+        if not self._stop_requested and self._maybe_finish_for_goal(
+            now_stamp, operational_goal_dist_m, cmd_v, cmd_w
+        ):
             return
 
-        if not self._stop_requested and self._maybe_finish_for_stuck(now_stamp, goal_dist):
+        if not self._stop_requested and self._maybe_finish_for_stuck(
+            now_stamp, operational_goal_dist_m
+        ):
             return
 
     def _finish_run(self, reason: str, stamp: float = None):
@@ -2765,14 +3163,28 @@ class ExperimentLogger(Node):
         else:
             goal_region_after_first_cmd_s = math.nan
 
+        # Distance to the goal at the end of the run, from the TRUE pose.
+        #
+        # This read `_latest_odom_map_pose()` -- wheel odometry -- while the
+        # goal-reached DECISION twenty lines up uses `_gt_xy`. So a run could be
+        # correctly recorded as `goal_reached` and simultaneously report having ended
+        # metres away: measured 0.44/0.62/2.46/0.75 m for F1/F4/O1/O2 against true
+        # distances of 0.03/0.03/0.07/0.13 m, the difference being exactly that run's
+        # accumulated wheel slip. The odometry-referenced number is kept beside it,
+        # named for what it is, because it is a useful drift diagnostic.
         final_goal_distance = math.nan
-        true_ok, _truth_stamp, true_x, true_y, _true_yaw = self._latest_truth_pose()
-        if true_ok and self.goal_msg:
+        final_goal_distance_odom = math.nan
+        odom_ok, _odom_stamp, odom_pose_x, odom_pose_y, _odom_yaw = (
+            self._latest_odom_map_pose())
+        if self.goal_msg:
             goal_x = float(self.goal_msg.pose.position.x)
             goal_y = float(self.goal_msg.pose.position.y)
-            dx = goal_x - true_x
-            dy = goal_y - true_y
-            final_goal_distance = math.hypot(dx, dy)
+            if self._gt_xy is not None:
+                final_goal_distance = math.hypot(
+                    goal_x - self._gt_xy[0], goal_y - self._gt_xy[1])
+            if odom_ok and math.isfinite(odom_pose_x):
+                final_goal_distance_odom = math.hypot(
+                    goal_x - odom_pose_x, goal_y - odom_pose_y)
 
         crashed = bool(self._contact_collision_seen or self._geom_collision_seen)
         min_wall_distance_m = self._min_wall_distance if math.isfinite(self._min_wall_distance) else math.inf
@@ -2782,15 +3194,36 @@ class ExperimentLogger(Node):
             and not crashed
             and self._valid_run
         )
+        try:
+            contact_topic_publishers = int(self.count_publishers('/world_contacts'))
+        except Exception:
+            contact_topic_publishers = -1
 
         summary = {
             'completed': True,
             'completion_reason': reason,
+            'termination_reference': 'planner_belief_or_physical_contact_or_timeout',
             'first_cmd_stamp': self._first_cmd_stamp if self._first_cmd_stamp is not None else math.nan,
             'stop_stamp': stamp,
             'elapsed_after_first_cmd_s': elapsed_after_first_cmd_s,
             'path_length_m': self._cumulative_path_length,
             'final_goal_distance': final_goal_distance,
+            'final_goal_distance_reference': 'ground_truth',
+            'goal_termination_reference': 'planner_belief',
+            # How well the truth reference itself is timed. `receipt_sim_clock` means
+            # the bridge gave no usable stamp and the sample is timed at arrival, so
+            # the residual alignment error is the transport delay -- bounded by, and
+            # visible in, the sample interval below.
+            'gt_stamp_source': self._gt_stamp_source,
+            'gt_sample_interval_median_s': (
+                float(np.median(self._gt_intervals)) if self._gt_intervals else math.nan),
+            'gt_sample_interval_p95_s': (
+                float(np.percentile(self._gt_intervals, 95))
+                if self._gt_intervals else math.nan),
+            'gt_sample_interval_max_s': (
+                float(np.max(self._gt_intervals)) if self._gt_intervals else math.nan),
+            'gt_samples': len(self._gt_buf),
+            'final_goal_distance_odom_m': final_goal_distance_odom,
             'minimum_goal_distance': self._min_goal_distance if math.isfinite(self._min_goal_distance) else math.nan,
             'goal_success_radius': self.goal_success_radius,
             'goal_success_hold_s': self.goal_success_hold_s,
@@ -2839,6 +3272,8 @@ class ExperimentLogger(Node):
             'collision_any': crashed,
             'collision_contact': bool(self._contact_collision_seen),
             'collision_geom': bool(self._geom_collision_seen),
+            'contact_topic_publishers': contact_topic_publishers,
+            'contact_messages_seen': int(self._contact_messages_seen),
             'collision_reason': self._collision_reason,
             'first_crash_stamp': self._first_crash_stamp,
             'min_wall_distance_m': min_wall_distance_m,

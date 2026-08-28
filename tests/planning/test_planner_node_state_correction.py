@@ -111,12 +111,41 @@ def test_ignores_a_correction_not_newer_than_the_belief():
     np.testing.assert_array_equal(node.belief_m, before)
 
 
-def test_reanchors_on_an_implausible_dt_without_replaying_it():
+def test_an_implausible_replay_gap_is_rejected_not_snapped_to():
+    """A gap this long means the prior cannot be replayed, so there is no valid
+    innovation to gate on. Snapping to the measurement here used to be the one path
+    that bypassed both the outlier gate and the re-anchor threshold: one camera's
+    word could move the belief anywhere, unchecked."""
     node = make_state_node(belief_stamp_s=5.0, now_s=10.0)
+    before = node.belief_m.copy()
+    before_S = node.belief_S.copy()
+
     # dt = 4.9 s > state_max_predict_dt_s; replaying would fling the prediction.
     node._apply_state_correction(state_msg(3.0, 4.0, seconds=9.9))
-    assert node.belief_m[0] == pytest.approx(3.0)
-    assert node.belief_m[1] == pytest.approx(4.0)
+
+    np.testing.assert_array_equal(node.belief_m, before)
+    # and it widens, so a rejection can never freeze the belief
+    assert node.belief_S[0, 0] > before_S[0, 0]
+    assert node.belief_S[1, 1] > before_S[1, 1]
+
+
+def test_the_belief_stamp_catches_up_so_a_long_gap_cannot_lock_corrections_out():
+    """The rejection above is only safe because the planning loop commits a bounded
+    prediction once the belief is older than pixel_timeout_s -- after which the gap
+    is small again and ordinary corrections are accepted."""
+    node = make_state_node(belief_stamp_s=5.0, now_s=10.0)
+    node._apply_state_correction(state_msg(3.0, 4.0, seconds=9.9))   # rejected, above
+
+    # what the planning loop does when the belief has gone stale
+    node._predict_belief_to_now(
+        node.belief_m, node.belief_S, node.last_cmd,
+        belief_age_s=5.0, now_msg=stamp(10.0), mutate=True,
+    )
+    assert node._stamp_to_float(node.belief_stamp) == pytest.approx(10.0)
+
+    # the next correction is now an ordinary one and lands
+    node._apply_state_correction(state_msg(3.0, 4.0, seconds=10.2))
+    assert node.belief_m[0] == pytest.approx(3.0, abs=0.5)
 
 
 def test_reanchors_when_the_belief_has_diverged():

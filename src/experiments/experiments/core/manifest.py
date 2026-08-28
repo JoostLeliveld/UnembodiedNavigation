@@ -4,6 +4,9 @@ from typing import Any, Dict, List, Optional
 from unav_common import manifest as common_manifest
 
 
+_GIT_PROVENANCE_CACHE: Dict[str, Dict[str, Any]] = {}
+
+
 def create_run_dir(log_dir: str, prefix: str = 'experiment') -> Dict[str, str]:
     run_id = common_manifest.generate_run_id(prefix)
     run_dir = os.path.join(log_dir, run_id)
@@ -22,7 +25,9 @@ def snapshot_configs(run_dir: str, paths: List[str]) -> Dict[str, Optional[str]]
 
 
 def write_manifest(run_dir: str, data: Dict[str, Any], repo_root: str) -> str:
-    git_sha = common_manifest.git_hash(repo_root)
     manifest = dict(data)
-    manifest['git_sha'] = git_sha
+    root = os.path.realpath(repo_root)
+    if root not in _GIT_PROVENANCE_CACHE:
+        _GIT_PROVENANCE_CACHE[root] = common_manifest.git_provenance(root)
+    manifest.update(_GIT_PROVENANCE_CACHE[root])
     return common_manifest.write_manifest(run_dir, manifest)

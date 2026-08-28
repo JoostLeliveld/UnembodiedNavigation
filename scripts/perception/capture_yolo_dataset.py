@@ -180,8 +180,11 @@ def _model_name_from_uri(uri: str) -> str:
 def _resolve_local_model_dir(model_name: str, sim_root: Path) -> Path:
     candidates = (
         sim_root / 'models' / model_name,
+        sim_root / 'models_external' / model_name,
         REPO_ROOT / 'src' / 'sim' / 'models' / model_name,
+        REPO_ROOT / 'src' / 'sim' / 'models_external' / model_name,
         REPO_ROOT / 'install' / 'sim' / 'share' / 'sim' / 'models' / model_name,
+        REPO_ROOT / 'install' / 'sim' / 'share' / 'sim' / 'models_external' / model_name,
     )
     for candidate in candidates:
         if candidate.is_dir():
@@ -650,7 +653,132 @@ def _border_fraction(mask_u8: np.ndarray, bbox: tuple[float, float, float, float
     return max(float(np.count_nonzero(mask & border)) / float(np.count_nonzero(mask)), edge_contact)
 
 
-def _robot_color_support_bgr(image_bgr: np.ndarray, bbox: tuple[float, float, float, float], pad_px: int = 4) -> float:
+#: The RGB support gate answers one question: do the pixels under the semantic label
+#: actually look like the robot? It is what catches a label box that has drifted onto
+#: the floor or a rack. The predicate is therefore a property of the ROBOT'S LIVERY and
+#: cannot be hard-coded: the TurtleBot3 Burger was red-and-blue, while ``warehouse_amr``
+#: is charcoal with a hazard-yellow band and no red or blue anywhere on it.
+#:
+#: Each profile lists the colour signatures that must ALL be present. A conjunction is
+#: what makes the gate mean something in this warehouse: floor markings, rack guards and
+#: rack-end protectors are hazard yellow too, so "some yellow is in the crop" is not
+#: evidence of a robot -- but "yellow AND a dark body in the same crop" is, because the
+#: painted floor has no dark body and a shadow has no yellow.
+def _sig_red(b, g, r):
+    return (r > 135) & (g < 135) & (b < 145) & ((r - g) > 30) & ((r - b) > 20)
+
+
+def _sig_blue(b, g, r):
+    return (b > 130) & (r < 155) & (g < 180) & ((b - r) > 20)
+
+
+def _sig_marker_red_or_blue(b, g, r):
+    return _sig_red(b, g, r) | _sig_blue(b, g, r)
+
+
+def _sig_hazard_yellow(b, g, r):
+    """Saturated warm yellow: the AMR's bumper band (0.85, 0.65, 0.05 linear)."""
+    return (r > 120) & (g > 80) & ((r - b) > 55) & ((g - b) > 35) & (r >= g)
+
+
+def _sig_dark_body(b, g, r):
+    """Charcoal chassis and black sensor pods, which the lit concrete floor lacks."""
+    mx = np.maximum(np.maximum(b, g), r)
+    mn = np.minimum(np.minimum(b, g), r)
+    return (mx < 105) & ((mx - mn) < 45)
+
+
+ROBOT_COLOR_SIGNATURES = {
+    'marker_red_or_blue': _sig_marker_red_or_blue,
+    'hazard_yellow': _sig_hazard_yellow,
+    'dark_body': _sig_dark_body,
+}
+
+#: The livery-agnostic alternative, and the reason it exists: a hand-tuned colour
+#: predicate has to be re-tuned for every robot and every lighting change, and both
+#: changed here at once. What the gate is really for is catching a label that does
+#: not agree with the pixels -- a stale RGB frame from before the teleport, or a
+#: label box that has drifted onto the floor. That can be tested without knowing
+#: anything about the livery: the pixels INSIDE the semantic mask should not look
+#: like the background immediately AROUND it. Measured per sample, so it adapts to
+#: the local floor, the local shadow and the local paint by construction.
+BACKGROUND_CONTRAST_SIGNATURE = 'background_contrast'
+BACKGROUND_CONTRAST_RING_PX = 10
+BACKGROUND_CONTRAST_MAHALANOBIS = 3.0
+
+
+def _label_background_contrast(
+    image_bgr: np.ndarray,
+    mask_u8: np.ndarray,
+    bbox: tuple[float, float, float, float],
+    ring_px: int = BACKGROUND_CONTRAST_RING_PX,
+) -> float:
+    """Fraction of masked pixels whose colour is not plausible background.
+
+    Background is estimated from a ring around the label's bounding box, so the
+    comparison is local: a robot standing on bright concrete and the same robot in
+    an aisle shadow are both measured against their own surroundings.
+    """
+    h, w = image_bgr.shape[:2]
+    x0, y0, x1, y1 = [int(round(v)) for v in bbox]
+    xi0, yi0 = max(0, x0), max(0, y0)
+    xi1, yi1 = min(w, x1), min(h, y1)
+    if xi1 <= xi0 or yi1 <= yi0:
+        return 0.0
+    xo0, yo0 = max(0, x0 - int(ring_px)), max(0, y0 - int(ring_px))
+    xo1, yo1 = min(w, x1 + int(ring_px)), min(h, y1 + int(ring_px))
+    outer = image_bgr[yo0:yo1, xo0:xo1].astype(float)
+    ring_select = np.ones(outer.shape[:2], dtype=bool)
+    ring_select[yi0 - yo0:yi1 - yo0, xi0 - xo0:xi1 - xo0] = False
+    ring = outer[ring_select]
+    inside_mask = mask_u8[yi0:yi1, xi0:xi1] > 0
+    inside = image_bgr[yi0:yi1, xi0:xi1].astype(float)[inside_mask]
+    if len(ring) < 30 or len(inside) < 10:
+        return 0.0
+    mu = np.median(ring, axis=0)
+    # The +4 floor on the diagonal keeps a perfectly flat background (a synthetic
+    # render of bare concrete has almost no colour variance) from making every
+    # pixel infinitely far away.
+    cov = np.cov(ring.T) + np.eye(3) * 4.0
+    delta = inside - mu
+    distance = np.sqrt(np.einsum('ij,jk,ik->i', delta, np.linalg.inv(cov), delta))
+    return float(np.mean(distance > BACKGROUND_CONTRAST_MAHALANOBIS))
+
+#: profile name -> the signatures that must all be present.
+ROBOT_COLOR_PROFILES: dict[str, tuple[str, ...]] = {
+    # TurtleBot3 Burger with the cyan/magenta marker disks (every dataset before
+    # 2026-08-20). Kept so an old capture can be reproduced exactly.
+    'marker_disks_red_blue': ('marker_red_or_blue',),
+    # warehouse_amr by its livery. Measured 2026-08-21 on real warehouse_v2 frames:
+    # the hazard band is only 0.2-5% of the crop at 12-19 m, and 'dark_body' also
+    # fires on shadowed concrete, so this profile is kept as a diagnostic and is NOT
+    # the default. Colour alone does not separate this robot from this floor.
+    'amr_charcoal_hazard': ('dark_body', 'hazard_yellow'),
+    # The default: livery-agnostic, and the only one that survives changing either
+    # the robot or the lighting.
+    'label_vs_background': (BACKGROUND_CONTRAST_SIGNATURE,),
+}
+DEFAULT_ROBOT_COLOR_PROFILE = 'label_vs_background'
+
+
+def _robot_color_support_parts(
+    image_bgr: np.ndarray,
+    bbox: tuple[float, float, float, float],
+    profile: str,
+    pad_px: int = 4,
+    mask_u8: np.ndarray | None = None,
+) -> dict[str, float]:
+    """Fraction of the crop matching each signature the profile requires."""
+    signatures = ROBOT_COLOR_PROFILES[profile]
+    parts: dict[str, float] = {}
+    if BACKGROUND_CONTRAST_SIGNATURE in signatures:
+        parts[BACKGROUND_CONTRAST_SIGNATURE] = (
+            _label_background_contrast(image_bgr, mask_u8, bbox)
+            if mask_u8 is not None else 0.0
+        )
+        signatures = tuple(s for s in signatures if s != BACKGROUND_CONTRAST_SIGNATURE)
+        if not signatures:
+            return parts
     h, w = image_bgr.shape[:2]
     x0, y0, x1, y1 = [int(round(v)) for v in bbox]
     x0 = max(0, x0 - int(pad_px))
@@ -658,14 +786,30 @@ def _robot_color_support_bgr(image_bgr: np.ndarray, bbox: tuple[float, float, fl
     x1 = min(w, x1 + int(pad_px))
     y1 = min(h, y1 + int(pad_px))
     if x1 <= x0 or y1 <= y0:
-        return 0.0
+        parts.update({name: 0.0 for name in signatures})
+        return parts
     crop = image_bgr[y0:y1, x0:x1]
     b = crop[:, :, 0].astype(int)
     g = crop[:, :, 1].astype(int)
     r = crop[:, :, 2].astype(int)
-    red = (r > 135) & (g < 135) & (b < 145) & ((r - g) > 30) & ((r - b) > 20)
-    blue = (b > 130) & (r < 155) & (g < 180) & ((b - r) > 20)
-    return float(np.count_nonzero(red | blue)) / float(max(crop.shape[0] * crop.shape[1], 1))
+    denominator = float(max(crop.shape[0] * crop.shape[1], 1))
+    parts.update({
+        name: float(np.count_nonzero(ROBOT_COLOR_SIGNATURES[name](b, g, r))) / denominator
+        for name in signatures
+    })
+    return parts
+
+
+def _robot_color_support_bgr(
+    image_bgr: np.ndarray,
+    bbox: tuple[float, float, float, float],
+    pad_px: int = 4,
+    profile: str = DEFAULT_ROBOT_COLOR_PROFILE,
+    mask_u8: np.ndarray | None = None,
+) -> float:
+    """The gate value: the WEAKEST required signature, so every one has to be present."""
+    parts = _robot_color_support_parts(image_bgr, bbox, profile, pad_px=pad_px, mask_u8=mask_u8)
+    return min(parts.values()) if parts else 0.0
 
 
 def _project_world_point(camera: ObliqueCameraModel, xyz: np.ndarray) -> np.ndarray | None:
@@ -687,18 +831,58 @@ def _project_robot_bbox(
     box_width: float,
     box_height: float,
 ) -> tuple[float, float, float, float] | None:
-    hx = 0.5 * float(box_length)
-    hy = 0.5 * float(box_width)
-    local = np.asarray([
-        [-hx, -hy, 0.0],
-        [-hx, hy, 0.0],
-        [hx, -hy, 0.0],
-        [hx, hy, 0.0],
-        [-hx, -hy, box_height],
-        [-hx, hy, box_height],
-        [hx, -hy, box_height],
-        [hx, hy, box_height],
-    ], dtype=float)
+    """Where the robot should appear, judged against its VISUAL HULL.
+
+    This used to project the bounding prism given by `box_length/width/height`, and
+    every occlusion number the capture recorded was measured against that prism. The
+    prism is wrong at exactly the edge that matters: the real chassis skirt starts at
+    z = 0.090 m, and only the wheels (r 0.100 at y = +-0.220) and the casters (r 0.040
+    at x = +-0.300) reach the floor, all inset from the footprint corners. So the
+    prism's predicted bottom row sits about **5.4 px too low**, which subtracted the
+    same 5.4 px from every `bottom_occlusion_px` and let clearly occluded sightings
+    through as `occlusion_state=clear`: on warehouse_v2_yolo_20260821, 272 of 2692
+    nominally clean rows had their bottom row more than 3 px above the true contact
+    row.
+
+    The hull is `unav_common.robot_hull.VISUAL_HULL`, the same solid the observation
+    model is scored against, so the capture and the study cannot disagree about the
+    robot. The `box_*` arguments are still accepted and are used only when a caller
+    explicitly asks for the legacy prism via `shape="prism"`, which nothing does by
+    default.
+    """
+    return _project_robot_shape(camera, x=x, y=y, yaw=yaw, z=z, shape="visual_hull",
+                                box_length=box_length, box_width=box_width,
+                                box_height=box_height)
+
+
+def _project_robot_shape(
+    camera: ObliqueCameraModel,
+    *,
+    x: float,
+    y: float,
+    yaw: float,
+    z: float,
+    shape: str = "visual_hull",
+    box_length: float = 0.80,
+    box_width: float = 0.55,
+    box_height: float = 0.35,
+) -> tuple[float, float, float, float] | None:
+    if shape == "visual_hull":
+        from unav_common.robot_hull import VISUAL_HULL
+        local = np.asarray(VISUAL_HULL, dtype=float)
+    else:
+        hx = 0.5 * float(box_length)
+        hy = 0.5 * float(box_width)
+        local = np.asarray([
+            [-hx, -hy, 0.0],
+            [-hx, hy, 0.0],
+            [hx, -hy, 0.0],
+            [hx, hy, 0.0],
+            [-hx, -hy, box_height],
+            [-hx, hy, box_height],
+            [hx, -hy, box_height],
+            [hx, hy, box_height],
+        ], dtype=float)
     c = math.cos(float(yaw))
     s = math.sin(float(yaw))
     rot = np.asarray([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]], dtype=float)
@@ -790,6 +974,7 @@ def validate_sample_quality(
     max_mask_border_fraction: float,
     min_rgb_robot_color_fraction: float,
     disable_rgb_color_check: bool,
+    robot_color_profile: str,
     camera: ObliqueCameraModel,
     x: float,
     y: float,
@@ -812,7 +997,12 @@ def validate_sample_quality(
     bbox_w = float(bbox[2] - bbox[0]) if bbox is not None else 0.0
     bbox_h = float(bbox[3] - bbox[1]) if bbox is not None else 0.0
     border_fraction = _border_fraction(raw_mask, bbox) if bbox is not None else 1.0
-    rgb_support = _robot_color_support_bgr(image_bgr, bbox) if bbox is not None else 0.0
+    rgb_support = (
+        _robot_color_support_bgr(
+            image_bgr, bbox, profile=str(robot_color_profile), mask_u8=raw_mask
+        )
+        if bbox is not None else 0.0
+    )
     expected_bbox = _project_robot_bbox(
         camera,
         x=float(x),
@@ -1553,10 +1743,13 @@ def main() -> int:
                         help='Grouped train/val split. spatial_cell (default) keeps every heading at one x/y in one split.')
     parser.add_argument('--spatial-block-size', type=int, default=2)
     parser.add_argument('--split-seed', type=int, default=0)
-    parser.add_argument('--robot-z', type=float, default=0.05)
-    parser.add_argument('--robot-box-length', type=float, default=0.22)
-    parser.add_argument('--robot-box-width', type=float, default=0.22)
-    parser.add_argument('--robot-box-height', type=float, default=0.20)
+    # warehouse_amr, the platform since 2026-08-20: 0.80 x 0.55 m body, deck top at
+    # 0.35 m, base_footprint on the floor. The previous defaults (0.22 x 0.22 x 0.20)
+    # were the TurtleBot3 Burger and would project a prism a quarter of the right size.
+    parser.add_argument('--robot-z', type=float, default=0.0)
+    parser.add_argument('--robot-box-length', type=float, default=0.80)
+    parser.add_argument('--robot-box-width', type=float, default=0.55)
+    parser.add_argument('--robot-box-height', type=float, default=0.35)
     parser.add_argument('--settle-s', type=float, default=0.80)
     parser.add_argument('--image-timeout-s', type=float, default=8.0)
     parser.add_argument('--sync-slop-ms', type=float, default=60.0)
@@ -1577,7 +1770,25 @@ def main() -> int:
     parser.add_argument('--max-mask-border-fraction', type=float, default=0.0)
     parser.add_argument('--bottom-band-px', type=float, default=3.0)
     parser.add_argument('--epsilon-ratio', type=float, default=0.010)
-    parser.add_argument('--min-rgb-robot-color-fraction', type=float, default=0.015)
+    parser.add_argument('--min-rgb-robot-color-fraction', type=float, default=0.0,
+                        help=('Minimum support for EVERY signature the livery profile '
+                              'requires. DEFAULT 0 = measured and recorded per sample, but '
+                              'not enforced. It is a diagnostic rather than a gate because '
+                              'the failure it was invented for -- a label map that does not '
+                              'match the RGB frame under it -- is already prevented twice by '
+                              'construction: only frames captured AFTER the teleport are '
+                              'candidates (--min-new-rgb-frames), and the RGB and label '
+                              'headers must agree within --sync-slop-ms. A third check that '
+                              'has to be re-tuned for every robot livery and every lighting '
+                              'change is a false-reject risk without a matching benefit: the '
+                              'red-or-blue version silently discarded every sample of '
+                              'warehouse_amr. Set it above 0 to enforce.'))
+    parser.add_argument('--robot-color-profile', default=DEFAULT_ROBOT_COLOR_PROFILE,
+                        choices=sorted(ROBOT_COLOR_PROFILES),
+                        help=('Which livery the RGB support gate should look for. '
+                              'marker_disks_red_blue reproduces every capture made before '
+                              '2026-08-20 (TurtleBot3 Burger with marker disks); '
+                              'amr_charcoal_hazard is warehouse_amr.'))
     parser.add_argument('--disable-rgb-color-check', action='store_true')
     parser.add_argument('--max-expected-center-error-px', type=float, default=90.0)
     parser.add_argument('--min-visible-height-fraction', type=float, default=0.55,
@@ -1713,8 +1924,19 @@ def main() -> int:
     traversable = [] if args.skip_region_filter else [
         r for r in known_regions if str(r.get('type', '')).strip().lower() == 'traversable'
     ]
+    #: Region types that describe where the robot MAY be rather than where it may not.
+    #: A ``site_boundary`` is the operating field -- an inclusion bound covering the whole
+    #: building -- so treating it as an obstacle rejects every pose in the world. That is
+    #: exactly what happened: the "everything that is not traversable is an obstacle" rule
+    #: was written on 2026-07-20, `site_boundary` entries were added to the profiles on
+    #: 2026-07-29, and no capture has been attempted since, so a total blocker sat latent
+    #: in every world that declares one (warehouse_full_4cam, warehouse_v2 and its
+    #: shipout pair). The 2026-07-24 four-camera capture predates the profile entry, which
+    #: is why it succeeded.
+    NON_BLOCKING_REGION_TYPES = {'traversable', 'site_boundary'}
     excluded_regions = [] if args.skip_collision_filter else [
-        r for r in known_regions if str(r.get('type', '')).strip().lower() != 'traversable'
+        r for r in known_regions
+        if str(r.get('type', '')).strip().lower() not in NON_BLOCKING_REGION_TYPES
     ]
     collision_prisms = ()
     if not args.skip_collision_filter:
@@ -1939,6 +2161,7 @@ def main() -> int:
                         max_mask_border_fraction=float(args.max_mask_border_fraction),
                         min_rgb_robot_color_fraction=float(args.min_rgb_robot_color_fraction),
                         disable_rgb_color_check=bool(args.disable_rgb_color_check),
+                        robot_color_profile=str(args.robot_color_profile),
                         camera=camera,
                         x=x,
                         y=y,
@@ -2363,6 +2586,8 @@ def main() -> int:
             'min_mask_bbox_h': float(args.min_mask_bbox_h),
             'max_mask_border_fraction': float(args.max_mask_border_fraction),
             'min_rgb_robot_color_fraction': float(args.min_rgb_robot_color_fraction),
+            'robot_color_profile': str(args.robot_color_profile),
+            'robot_color_signatures': list(ROBOT_COLOR_PROFILES[str(args.robot_color_profile)]),
             'max_expected_center_error_px': float(args.max_expected_center_error_px),
             'min_visible_height_fraction': float(args.min_visible_height_fraction),
             'max_bottom_occlusion_px': float(args.max_bottom_occlusion_px),

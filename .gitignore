@@ -58,3 +58,7 @@ figures/EXP-DYN-ORACLE/
 experiments/warehouse_v2_sketches/frames/
 experiments/warehouse_v2_sketches/figures/
 experiments/usable_observation/supervisor_comparison/10_monocular_depth_results/*/predictions/
+
+# Third-party Fuel assets: large, redistributable under their own licences,
+# fetched by scripts/sim/fetch_external_models.sh rather than tracked here.
+src/sim/models_external/

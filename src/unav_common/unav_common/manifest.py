@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import shutil
 import subprocess
@@ -27,6 +28,64 @@ def git_hash(repo_root: str) -> Optional[str]:
         return result.stdout.strip()
     except (FileNotFoundError, PermissionError, OSError, subprocess.CalledProcessError):
         return None
+
+
+def _git_bytes(repo_root: str, *args: str) -> Optional[bytes]:
+    try:
+        result = subprocess.run(
+            ["git", "-C", repo_root, *args],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        return bytes(result.stdout)
+    except (FileNotFoundError, PermissionError, OSError, subprocess.CalledProcessError):
+        return None
+
+
+def git_provenance(repo_root: str) -> Dict[str, Any]:
+    """Return compact, content-sensitive provenance for a possibly dirty checkout.
+
+    A commit SHA alone is not reproducibility evidence when the executable source was
+    modified. The hashes deliberately cover both the tracked diff and the contents of
+    untracked, non-ignored files without embedding a potentially enormous patch in every run.
+    """
+
+    status = _git_bytes(repo_root, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+    diff = _git_bytes(repo_root, "diff", "--binary", "HEAD", "--")
+    untracked = _git_bytes(
+        repo_root, "ls-files", "--others", "--exclude-standard", "-z"
+    )
+    provenance: Dict[str, Any] = {
+        "git_sha": git_hash(repo_root),
+        "git_dirty": bool(status),
+        "git_status_sha256": hashlib.sha256(status).hexdigest() if status is not None else None,
+        "git_diff_sha256": hashlib.sha256(diff).hexdigest() if diff is not None else None,
+    }
+    if untracked is None:
+        provenance["git_untracked_content_sha256"] = None
+        provenance["git_untracked_file_count"] = None
+        return provenance
+    digest = hashlib.sha256()
+    count = 0
+    for encoded_path in filter(None, untracked.split(b"\0")):
+        path = os.path.join(repo_root, os.fsdecode(encoded_path))
+        try:
+            with open(path, "rb") as handle:
+                digest.update(encoded_path)
+                digest.update(b"\0")
+                while True:
+                    chunk = handle.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+                digest.update(b"\0")
+            count += 1
+        except (OSError, ValueError):
+            digest.update(encoded_path + b"\0<unreadable>\0")
+    provenance["git_untracked_content_sha256"] = digest.hexdigest()
+    provenance["git_untracked_file_count"] = count
+    return provenance
 
 
 def snapshot_file(src_path: str, dest_dir: str, dest_name: Optional[str] = None) -> Optional[str]:

@@ -246,13 +246,17 @@ def test_fused_mode_ignores_a_per_camera_batch():
     np.testing.assert_array_equal(node.belief_m, before)
 
 
-def test_a_corrupt_batch_warns_and_does_not_disturb_the_belief():
+def test_a_corrupt_batch_stops_the_run_instead_of_quietly_never_correcting():
+    """A malformed batch used to be a warning. That let a drive keep going with an
+    estimator that had stopped updating, and the run still scored as valid."""
     from std_msgs.msg import String
 
     node = make_per_camera_node(belief_xy=(0.0, 0.0))
     before = node.belief_m.copy()
     msg = String()
     msg.data = '{"schema": "nope", "observations": []}'
-    node._map_observations_cb(msg)
+    with pytest.raises(RuntimeError, match="map-observation batch"):
+        node._map_observations_cb(msg)
     np.testing.assert_array_equal(node.belief_m, before)
+    assert node._fatal_stop_triggered
     assert any('map-observation batch' in m for _, m in node._logger.messages)

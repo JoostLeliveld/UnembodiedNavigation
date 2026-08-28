@@ -54,6 +54,7 @@ def _base_kwargs(camera: ObliqueCameraModel) -> dict:
         'max_mask_border_fraction': 0.0,
         'min_rgb_robot_color_fraction': 0.01,
         'disable_rgb_color_check': False,
+        'robot_color_profile': 'label_vs_background',
         'camera': camera,
         'x': 0.0,
         'y': 0.0,
@@ -406,3 +407,52 @@ def test_diagnostic_transport_completion_marker_is_not_training_eligible(
         (output / '.complete').read_text(encoding='utf-8')
     )
     assert completion['training_eligible'] is False
+
+
+def test_grey_robot_passes_the_livery_agnostic_gate_but_not_the_marker_gate() -> None:
+    """The regression test for a capture pipeline that rejected its own robot.
+
+    Every dataset before 2026-08-20 was captured with a red-and-blue TurtleBot3, so
+    the RGB support gate looked for red or blue pixels. ``warehouse_amr`` is charcoal,
+    grey and hazard yellow, and measured on real warehouse_v2 frames the red-or-blue
+    fraction inside its label box is 0.0000 to 0.0034 -- below the 0.015 default, so
+    the gate would have thrown away essentially every sample of the robot it was
+    supposed to be capturing. The gate that survives changing the robot compares the
+    pixels under the label with the background around it instead.
+    """
+    camera = _camera()
+    image = np.zeros((360, 640, 3), dtype=np.uint8)
+    image[:, :] = (150, 152, 154)                      # lit concrete, no red, no blue
+    labels = np.zeros((360, 640), dtype=np.uint32)
+    x0, y0, x1, y1 = _draw_robot_patch(
+        camera=camera, image_bgr=image, labels=labels, draw_rgb=False
+    )
+    cv2.rectangle(image, (x0, y0), (x1, y1), (44, 42, 40), thickness=-1)   # charcoal
+
+    agnostic = validate_sample_quality(
+        image_bgr=image, labels=labels,
+        **{**_base_kwargs(camera), 'robot_color_profile': 'label_vs_background'},
+    )
+    assert agnostic.accepted, agnostic.reason
+
+    marker = validate_sample_quality(
+        image_bgr=image, labels=labels,
+        **{**_base_kwargs(camera), 'robot_color_profile': 'marker_disks_red_blue'},
+    )
+    assert not marker.accepted
+    assert marker.reason == 'rgb_robot_not_visible'
+
+
+def test_marker_livery_still_passes_its_own_profile() -> None:
+    """The old profile must keep working, so an old capture stays reproducible."""
+    camera = _camera()
+    image = np.zeros((360, 640, 3), dtype=np.uint8)
+    labels = np.zeros((360, 640), dtype=np.uint32)
+    _draw_robot_patch(camera=camera, image_bgr=image, labels=labels)
+
+    result = validate_sample_quality(
+        image_bgr=image, labels=labels,
+        **{**_base_kwargs(camera), 'robot_color_profile': 'marker_disks_red_blue'},
+    )
+    assert result.accepted, result.reason
+    assert result.rgb_robot_color_fraction > 0.01

@@ -175,7 +175,7 @@ def corrections(run: Path, table: list[dict] | None = None) -> dict:
     `state_stamp` changed. The manager publishes at 20 Hz and the logger samples at
     10 Hz, so that number is neither the corrections published nor the camera readings
     behind them -- it is the fraction of the log that had a fresh correction, times the
-    duration. `n_detections` is the honest count where the run logs capture times.
+    duration. `n_detector_rounds` is the honest count where the run logs capture times.
     """
     table = rows(run) if table is None else table
     state_s = np.array([_float(r, "state_stamp") for r in table])
@@ -187,12 +187,12 @@ def corrections(run: Path, table: list[dict] | None = None) -> dict:
     finite_log = log_s[np.isfinite(log_s)]
     duration_s = float(finite_log[-1] - finite_log[0]) if finite_log.size > 1 else math.nan
 
-    n_detections = None
+    n_detector_rounds = None
     obs = observations(run)
     if obs:
         source_batches = {o["source_batch_id"] for o in obs if o["source_batch_id"]}
         if source_batches:
-            n_detections = len(source_batches)
+            n_detector_rounds = len(source_batches)
         else:
             # Legacy fallback: a tuple of the camera capture stamps identifies one
             # detector round more honestly than counting each camera as a round.
@@ -202,7 +202,7 @@ def corrections(run: Path, table: list[dict] | None = None) -> dict:
                 if math.isfinite(item["obs_stamp"]):
                     by_decision.setdefault(decision, set()).add(
                         round(item["obs_stamp"], 6))
-            n_detections = len({
+            n_detector_rounds = len({
                 tuple(sorted(stamps)) for stamps in by_decision.values() if stamps
             }) or None
 
@@ -211,7 +211,7 @@ def corrections(run: Path, table: list[dict] | None = None) -> dict:
         n_state_publications_note=(
             "log rows with a fresh /state/bev stamp, at the 10 Hz log rate -- an "
             "availability fraction, not a count of corrections"),
-        n_detections=n_detections,
+        n_detector_rounds=n_detector_rounds,
         duration_s=duration_s,
         state_fresh_rate_hz=(float(unique.size) / duration_s
                              if duration_s and math.isfinite(duration_s) else math.nan),

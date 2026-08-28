@@ -124,6 +124,15 @@ def generate_launch_description():
         description="Render the opt-in cyan/magenta pose-keypoint marker disks",
     )
     show_pose_markers = LaunchConfiguration("show_pose_markers")
+    robot_model_arg = DeclareLaunchArgument(
+        "robot_model",
+        default_value="warehouse_amr",
+        description=(
+            "Robot URDF stem. 'warehouse_amr' is the 0.80 x 0.55 m low-deck AMR "
+            "used from 2026-08-20; 'turtlebot3_burger' reproduces earlier runs."
+        ),
+    )
+    robot_model = LaunchConfiguration("robot_model")
     bridge_scan_arg = DeclareLaunchArgument(
         "bridge_scan",
         default_value="true",
@@ -269,6 +278,7 @@ def generate_launch_description():
             "use_sim_time": use_sim_time,
             "use_lidar": use_lidar,
             "show_pose_markers": show_pose_markers,
+            "robot_model": robot_model,
         }.items(),
     )
 
@@ -563,6 +573,7 @@ def generate_launch_description():
         use_sim_time_arg,
         use_lidar_arg,
         show_pose_markers_arg,
+        robot_model_arg,
         bridge_scan_arg,
         world_arg,
         world_name_arg,

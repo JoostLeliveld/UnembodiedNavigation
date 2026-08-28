@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fine-tune a YOLO segmentation model with reproducible provenance.
+"""Fine-tune a YOLO detection or segmentation model with reproducible provenance.
 
 The output directory is immutable: a failed attempt remains as evidence and a
 retry must use a new directory.  A training request manifest is written before
@@ -50,10 +50,15 @@ def _resolve_dataset_root(data_yaml: Path, data: dict) -> Path:
     return raw_root.expanduser().resolve()
 
 
-def _validate_dataset(data_yaml: Path) -> dict:
+def _validate_dataset(data_yaml: Path, expected_task: str | None = None) -> dict:
     """Validate image/label pairing and return an immutable dataset fingerprint."""
 
     data = yaml.safe_load(data_yaml.read_text(encoding='utf-8')) or {}
+    declared_task = str(data.get('task', '')).strip().lower()
+    if expected_task and declared_task != expected_task:
+        raise RuntimeError(
+            f'Dataset task is {declared_task!r}, expected {expected_task!r}: {data_yaml}'
+        )
     root = _resolve_dataset_root(data_yaml, data)
     inventory: list[dict[str, str | int]] = []
     split_counts: dict[str, int] = {}
@@ -173,9 +178,10 @@ def _validate_training_grade_fourcam_dataset(dataset: dict) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description='Fine-tune YOLO11n-seg on a local dataset.')
+    parser = argparse.ArgumentParser(description='Fine-tune YOLO on a local dataset.')
     parser.add_argument('--data', required=True, help='Path to data.yaml')
-    parser.add_argument('--base-model', required=True, help='Base YOLO segmentation model, e.g. yolo11n-seg.pt')
+    parser.add_argument('--base-model', required=True, help='Base YOLO model matching --task.')
+    parser.add_argument('--task', choices=('detect', 'segment'), default='segment')
     parser.add_argument('--epochs', type=int, default=30)
     parser.add_argument('--imgsz', type=int, default=640)
     parser.add_argument('--out', required=True, help='Output run folder')
@@ -208,7 +214,7 @@ def main() -> int:
     if out_dir.exists():
         raise RuntimeError(f'Output folder already exists: {out_dir}')
 
-    dataset = _validate_dataset(data_yaml)
+    dataset = _validate_dataset(data_yaml, expected_task=str(args.task))
     require_training_grade = bool(
         args.require_training_grade_multicam_dataset
         or args.require_training_grade_fourcam_dataset
@@ -224,6 +230,7 @@ def main() -> int:
         'started_utc': _timestamp(),
         'base_model': str(base_model),
         'base_model_sha256': _sha256_file(base_model),
+        'task': str(args.task),
         'dataset': dataset,
         'multicam_training_provenance': multicam_provenance,
         # Preserve the historical key for downstream readers of older
@@ -262,6 +269,11 @@ def main() -> int:
     train_root = out_dir / 'ultralytics_run'
     try:
         model = YOLO(str(base_model))
+        if str(getattr(model, 'task', '')).strip().lower() != str(args.task):
+            raise RuntimeError(
+                f'Base model task is {getattr(model, "task", None)!r}, '
+                f'expected {args.task!r}'
+            )
         results = model.train(
             data=str(data_yaml),
             epochs=int(args.epochs),
@@ -305,6 +317,7 @@ def main() -> int:
 
     manifest = {
         'base_model': str(base_model),
+        'task': str(args.task),
         'dataset_yaml': str(data_yaml),
         'dataset': dataset,
         'base_model_sha256': _sha256_file(base_model),

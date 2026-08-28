@@ -421,25 +421,122 @@ tasks:
       x: 5.5
       y: 8.0
   warehouse_v2.world.sdf: &warehouse_v2_tasks
+  - name: fusion_network_traverse
+    description: >-
+      Primary fusion traverse for the six-arm fusion comparison: the west dock door,
+      3.4 m from camera A, to the east cross aisle under camera D. Every arm drives
+      this one route, so the only thing that differs between arms is how the cameras'
+      readings are combined. The start moved here from aisle A2|A3's south mouth on
+      2026-08-26 because that start left camera A with 4.8 m and camera C with 1.4 m
+      of the traverse: on this route all five cameras contribute (A 7.2, B 14.0,
+      C 3.4, D 17.2, E 18.6 m at a 25% commissioned usable-sighting rate or better)
+      and the number of simultaneously watching cameras spans 0 to 4, which is the
+      axis the fusion arms are compared along. Of the 30.4 m, 2.6 m expects no camera,
+      9.4 m one, 9.2 m two, 5.0 m three and 4.4 m four. The lane geometry offers six
+      corridor-distinct candidates (30.4-35.0 m); the shortest is driven, and the
+      choice is stated rather than optimised because route choice is not the treatment
+      in this experiment. Camera C is a corner camera looking south-east across the
+      west aisles: the candidates that give it 9-21 m spend their length in the
+      single-camera west aisles and collapse the two-plus-camera share from 61% to
+      21-26%, so C's share is 3.4 m by deliberate trade.
+    tier: preregistered_geometry_only
+    claim: calibrated_bias_aware_multicamera_fusion
+    focus: five_camera_network_handover_and_overlap
+    route_library_task: dock_w__xaisle_e
+    start:
+      # (-8.10, -8.80) was the dock-door mouth cell, and the robot could not drive from it:
+      # the 0.80 m long AMR has its rear at x = -8.50, which is inside office_step (a 0.12 m
+      # step spanning x -8.88..-8.44). Spawned interpenetrating, the solver held it while the
+      # wheels turned -- odometry advanced 1.15 m in 10 s while ground truth moved 9 mm, and
+      # the run was flagged stuck. This start is the frozen route's own first point, 0.60 m
+      # from the nearest declared boundary, so spawn and route agree exactly.
+      x: -7.90
+      y: -8.70
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 10.60
+      y: 6.50
+  - name: fusion_overlap_rich
+    description: >-
+      The SAME endpoints as fusion_network_traverse through the best-covered corridor the
+      lane geometry offers (candidate 1 of dock_w__xaisle_e): 31.4 m with two or more cameras
+      for 92% of the way and only 0.4 m of driving with none. Paired with
+      fusion_overlap_sparse, which shares these endpoints and this length through the
+      worst-covered corridor, so the pair separates how a fusion rule behaves from how a
+      particular corridor behaves.
+    tier: preregistered_geometry_only
+    claim: calibrated_bias_aware_multicamera_fusion
+    focus: five_camera_network_sustained_overlap
+    route_library_task: dock_w__xaisle_e
+    start:
+      x: -7.90
+      y: -8.70
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 10.60
+      y: 6.50
+  - name: fusion_overlap_sparse
+    description: >-
+      The SAME endpoints and length as fusion_overlap_rich through the worst-covered corridor
+      that still clears the planner's own 0.35 m margin (candidate 3 of dock_w__xaisle_e):
+      30.8 m with two or more cameras for 45% of the way, 18% with no camera at all, and a
+      3.2 m stretch driven blind. The contrast with fusion_overlap_rich is the control.
+    tier: preregistered_geometry_only
+    claim: calibrated_bias_aware_multicamera_fusion
+    focus: five_camera_network_sparse_coverage
+    route_library_task: dock_w__xaisle_e
+    start:
+      x: -7.90
+      y: -8.70
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 10.60
+      y: 6.50
+  - name: fusion_long_traverse
+    description: >-
+      Twice the distance, to see whether an over-claim compounds: the west dock door out to
+      the east cross aisle and back west to the dock apron, 63 m in one polyline. The robot
+      revisits the middle of the warehouse with a belief that has already been corrected and
+      has already drifted once, which a 30 m one-way traverse cannot show.
+    tier: preregistered_geometry_only
+    claim: calibrated_bias_aware_multicamera_fusion
+    focus: five_camera_network_long_run
+    route_library_task: dock_w__xaisle_e__aisleC_s_w__apron_w
+    start:
+      x: -7.90
+      y: -8.70
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -10.70
+      y: -6.60
   - name: fusion_overlap_primary
     description: >-
       Geometry-frozen primary fusion traverse from the south mouth of section-A
-      aisle A1|A2 to the east end of the north block-storage aisle. The arm-neutral
+      aisle A2|A3 to the east end of the north block-storage aisle. The arm-neutral
       route generator produces three corridor-distinct choices (geometry only);
       the camera-layout gate requires every choice to retain substantial peak-state
-      two-camera opportunity before detector capture is allowed.
+      two-camera opportunity before detector capture is allowed. The start moved one
+      aisle east (A1|A2 -> A2|A3) on 2026-08-23: at the planner's real 0.35 m
+      clearance the A1 mouth opens a fourth route through the poorly covered block
+      aisles with only 24.7% two-camera visibility, which fails that gate. The goal is
+      the north block-aisle centreline, so these endpoints are exactly the ones the
+      gate measures.
     tier: preregistered_geometry_only
     claim: calibrated_bias_aware_multicamera_fusion
     focus: overlap_connected_five_camera_network
-    route_library_task: aisleA1_s__aisleC_n_e
+    route_library_task: aisleA2_s__aisleC_n_e
     start:
-      x: -7.05
+      x: -3.05
       y: -5.20
       z: 0.05
       yaw: 1.5708
     goal:
       x: 10.60
-      y: 2.15
+      y: 2.54
   - name: apron_to_north_cross_aisle
     description: >-
       Straight commissioning traverse from the dock apron through the central

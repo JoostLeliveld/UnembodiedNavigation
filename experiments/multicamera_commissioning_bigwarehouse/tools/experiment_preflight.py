@@ -27,7 +27,7 @@ import yaml
 
 
 REPO = Path(__file__).resolve().parents[3]
-for relative in ("src/unav_common",):
+for relative in ("src/unav_common", "src/perception"):
     location = str(REPO / relative)
     if location not in sys.path:
         sys.path.insert(0, location)
@@ -35,6 +35,9 @@ for relative in ("src/unav_common",):
 from unav_common.occlusion_geometry import (  # noqa: E402
     parse_collision_scene_from_world,
     signed_distance_to_union_xy,
+)
+from perception.core.four_camera_runtime_contract import (  # noqa: E402
+    BATCHED_CAMERA_ORDER,
 )
 
 
@@ -311,16 +314,20 @@ def main() -> int:
         model_instances = int(runtime_config.get("model_instances", 0))
         batch_size = int(runtime_config.get("batch_size", 0))
         camera_order = list(runtime_config.get("camera_order", []))
-        expected_camera_order = ["camera_A", "camera_B", "camera_C", "camera_D"]
+        # Taken from the contract module rather than written out here, so the batch
+        # growing from A--D to A--E on 2026-08-21 could not leave this check pinned
+        # to a width the runtime no longer uses.
+        expected_camera_order = list(BATCHED_CAMERA_ORDER)
         if (
             model_instances != 1
-            or batch_size != 4
+            or batch_size != len(expected_camera_order)
             or camera_order != expected_camera_order
             or runtime_config.get("runtime_executable") != "batched_four_camera_yolo_node"
             or runtime_config.get("model_format") != "native_ultralytics"
         ):
             failures.append(
-                "batched detector allocation must be one native model and one ordered A-D batch"
+                "batched detector allocation must be one native model and one ordered "
+                + f"{expected_camera_order[0][-1]}--{expected_camera_order[-1][-1]} batch"
             )
         if not shared_device:
             failures.append("batched detector device must be explicit for reproducible provenance")
