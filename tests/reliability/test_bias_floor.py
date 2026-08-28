@@ -264,3 +264,18 @@ def test_the_camera_manager_can_apply_the_floor_and_defaults_to_off():
     helper = source[source.index("def _bias_floors"):source.index("def _decide_fused")]
     assert "model.cam_pos" in helper and "ray_bearing_rad" in helper
     assert "math.hypot" in helper, "range must come from the geometry, not a constant"
+
+
+def test_one_positive_slope_is_a_configuration_error_not_a_runtime_crash():
+    """A floor with a zero axis is not a covariance.
+
+    The manager used to accept along=0 with across>0, build a singular floor, and die
+    at the first fusion with "every floor must be positive definite" -- minutes into a
+    run, after the simulator had started. It is a configuration mistake and belongs at
+    start-up.
+    """
+    from reliability.bias_floor import bias_floor_matrix, combine_floors, BiasFloorError
+
+    singular = bias_floor_matrix(10.0, 0.3, along_slope=0.0, across_slope=0.00035)
+    with pytest.raises(BiasFloorError, match="positive definite"):
+        combine_floors([singular])

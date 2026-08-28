@@ -300,3 +300,81 @@ def test_projection_is_plain_inverse_perspective_mapping():
             f"{deleted} was deleted on 2026-08-07; reintroducing it re-opens a "
             "measured-harmful degree of freedom"
         )
+
+
+# --------------------------------------------------------------------------
+# Starting the belief: the only gate that runs without a prior
+# --------------------------------------------------------------------------
+
+def _bootstrap_observation(camera_id, x, y=0.0):
+    from reliability.fusion import MapObservation
+
+    return MapObservation(
+        camera_id=camera_id,
+        timestamp_s=1.0,
+        xy_m=(float(x), float(y)),
+        covariance_m2=((0.04, 0.0), (0.0, 0.04)),
+        quality=CameraQuality(camera_id=camera_id),
+    )
+
+
+def test_bootstrap_admits_the_disagreement_the_observation_model_itself_creates():
+    """Two CORRECT readings of the same robot are not in the same place.
+
+    The box bottom-centre lands short along each camera's own bearing by a
+    commissioned 0.204-0.456 m, so two cameras can put the same stationary robot
+    0.91 m apart with no error at all. Measured on the frozen capture, the
+    closest-agreeing pair at a position is a median 0.27 m apart. A gate tighter
+    than the model's own spread rejects the truth and the robot never starts.
+    """
+    from reliability.nodes.camera_manager_node import _largest_agreeing_group
+
+    two_correct_readings = [
+        _bootstrap_observation("camera_A", 0.0),
+        _bootstrap_observation("camera_B", 0.6),
+    ]
+    assert len(_largest_agreeing_group(two_correct_readings, 0.91)) == 2
+    assert len(_largest_agreeing_group(two_correct_readings, 0.30)) == 0
+
+
+def test_bootstrap_takes_the_agreeing_group_and_leaves_the_odd_camera_out():
+    """One camera locked onto something else must not block start-up.
+
+    Requiring every camera in view to agree makes a single mis-association a
+    deadlock: no belief, so no prediction, so no correction, so no belief.
+    """
+    from reliability.nodes.camera_manager_node import _largest_agreeing_group
+
+    group = _largest_agreeing_group(
+        [
+            _bootstrap_observation("camera_A", 0.0),
+            _bootstrap_observation("camera_B", 0.3),
+            _bootstrap_observation("camera_C", 0.5),
+            _bootstrap_observation("camera_D", 7.0),   # a different aisle
+        ],
+        0.91,
+    )
+    assert sorted(o.camera_id for o in group) == ["camera_A", "camera_B", "camera_C"]
+
+
+def test_bootstrap_refuses_a_single_camera_however_confident():
+    """The belief may never be started on one camera's unchecked word."""
+    from reliability.nodes.camera_manager_node import _largest_agreeing_group
+
+    assert _largest_agreeing_group([_bootstrap_observation("camera_A", 0.0)], 0.91) == []
+
+
+def test_bootstrap_group_choice_does_not_depend_on_arrival_order():
+    from reliability.nodes.camera_manager_node import _largest_agreeing_group
+
+    readings = [
+        _bootstrap_observation("camera_A", 0.0),
+        _bootstrap_observation("camera_B", 0.4),
+        _bootstrap_observation("camera_C", 9.0),
+        _bootstrap_observation("camera_D", 9.3),
+    ]
+    first = sorted(o.camera_id for o in _largest_agreeing_group(readings, 0.91))
+    second = sorted(
+        o.camera_id for o in _largest_agreeing_group(list(reversed(readings)), 0.91)
+    )
+    assert first == second

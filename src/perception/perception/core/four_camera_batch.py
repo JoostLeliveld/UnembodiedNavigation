@@ -170,6 +170,20 @@ class FourCameraBatcher:
             return tuple(camera_id for camera_id in self.camera_order if camera_id in waiting)
 
     @property
+    def bucket_report(self) -> tuple[tuple[int, tuple[str, ...]], ...]:
+        """Which cameras each open round is still waiting on.
+
+        A round that never completes is otherwise silent: the batcher returns
+        "accepted_waiting" and the node publishes nothing, with no warning to
+        say which camera never arrived.
+        """
+        with self._lock:
+            return tuple(
+                (key, tuple(c for c in self.camera_order if c in bucket))
+                for key, bucket in sorted(self._buckets.items())
+            )
+
+    @property
     def last_batched_stamp_ns(self) -> dict[str, int]:
         with self._lock:
             return dict(self._last_batched_stamp_ns)

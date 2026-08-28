@@ -33,6 +33,12 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'bev_affine_calibration': '',
     'pixel_max_correction_jump_m': '0.0',
     'pixel_correction_nis_threshold': '9.21',
+    # How the belief recovers when a correction is refused or cannot be replayed.
+    # Declared here so every run's provenance states its recovery policy instead of
+    # inheriting whatever the runtime default happened to be that week.
+    'state_reanchor_m': '0.0',
+    'state_max_predict_dt_s': '1.5',
+    'state_reject_inflate_m2': '0.05',
     'use_truth_localization': 'false',
     'cmd_publish_rate': '10.0',
     'command_noise_output_topic': '/cmd_vel',
@@ -364,6 +370,14 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'bev_affine_calibration': _launch_value(context, 'bev_affine_calibration', PAPER_LAUNCH_DEFAULTS['bev_affine_calibration']),
         'pixel_max_correction_jump_m': float(_launch_value(context, 'pixel_max_correction_jump_m', PAPER_LAUNCH_DEFAULTS['pixel_max_correction_jump_m'])),
         'pixel_correction_nis_threshold': float(_launch_value(context, 'pixel_correction_nis_threshold', PAPER_LAUNCH_DEFAULTS['pixel_correction_nis_threshold'])),
+        'state_reanchor_m': float(_launch_value(
+            context, 'state_reanchor_m', PAPER_LAUNCH_DEFAULTS['state_reanchor_m'])),
+        'state_max_predict_dt_s': float(_launch_value(
+            context, 'state_max_predict_dt_s',
+            PAPER_LAUNCH_DEFAULTS['state_max_predict_dt_s'])),
+        'state_reject_inflate_m2': float(_launch_value(
+            context, 'state_reject_inflate_m2',
+            PAPER_LAUNCH_DEFAULTS['state_reject_inflate_m2'])),
         'use_truth_localization': _as_bool(_launch_value(context, 'use_truth_localization', PAPER_LAUNCH_DEFAULTS['use_truth_localization'])),
         'pixel_correction_approx': _launch_value(
             context,
@@ -1340,6 +1354,9 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'bev_y_calibration_offset_m': cfg['bev_y_calibration_offset_m'],
                 'bev_affine_calibration': cfg.get('bev_affine_calibration', ''),
                 'pixel_correction_nis_threshold': cfg['pixel_correction_nis_threshold'],
+                'state_reanchor_m': cfg['state_reanchor_m'],
+                'state_max_predict_dt_s': cfg['state_max_predict_dt_s'],
+                'state_reject_inflate_m2': cfg['state_reject_inflate_m2'],
                 'world_profiles_path': cfg['world_profiles_path'],
                 'tasks_yaml': cfg['tasks_yaml'],
                 'auto_stop_on_goal': cfg['auto_stop_on_goal'],
@@ -1562,8 +1579,11 @@ def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
             cfg.get('manager_require_consistency_when_source_available', False)),
         'manager_bias_floor_along_slope_m_per_m': float(
             cfg.get('manager_bias_floor_along_slope_m_per_m', 0.0)),
+        # Both zero means the bias floor is off, which is the default. A single
+        # positive slope is a floor with a zero axis; the manager refuses it at
+        # start-up rather than dying at the first fusion.
         'manager_bias_floor_across_slope_m_per_m': float(
-            cfg.get('manager_bias_floor_across_slope_m_per_m', 0.00035)),
+            cfg.get('manager_bias_floor_across_slope_m_per_m', 0.0)),
     }
 
 
@@ -1663,6 +1683,10 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
             'max_pending_wall_s': 0.50,
             'synchronization_mode': 'strict',
             'input_transport': cfg.get('yolo_input_transport', 'ros'),
+            # 0 disables. Non-zero periodically reports frames per camera, batcher
+            # decisions and which cameras each unfinished round still waits on --
+            # the only way to see a detector that has stopped producing batches.
+            'runtime_trace_period_s': float(cfg.get('yolo_runtime_trace_period_s', 0.0)),
             'camera_observation_r_visible_uv': float(cfg.get('r_visible_uv', 2.5)),
             'camera_observation_r_miss_uv': float(cfg.get('r_miss_uv', 40.0)),
         }],
@@ -1835,6 +1859,9 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'bev_affine_calibration': cfg.get('bev_affine_calibration', ''),
             'pixel_max_correction_jump_m': cfg['pixel_max_correction_jump_m'],
             'pixel_correction_nis_threshold': cfg['pixel_correction_nis_threshold'],
+            'state_reanchor_m': cfg['state_reanchor_m'],
+            'state_max_predict_dt_s': cfg['state_max_predict_dt_s'],
+            'state_reject_inflate_m2': cfg['state_reject_inflate_m2'],
             'use_truth_localization': cfg['use_truth_localization'],
             'odom_topic': odom_topic,
             'use_odom_for_predict': cfg['use_odom_for_predict'],

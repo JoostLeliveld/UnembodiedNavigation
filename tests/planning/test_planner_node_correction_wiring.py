@@ -153,6 +153,11 @@ def make_node(
     node._last_correction_log = -1e9
     node._last_slow_correction_log = -1e9
 
+    # Heading comes from map-frame odometry; its variance is that odometry's drift
+    # since the run began. None here means no odometry has arrived yet.
+    node._odom_origin_stamp_s = None
+    node.process_noise_theta = 0.02
+
     # An integrity failure stops the run rather than degrading into a planner that
     # silently never corrects again; the latch makes that stop happen once.
     node._fatal_stop_triggered = False

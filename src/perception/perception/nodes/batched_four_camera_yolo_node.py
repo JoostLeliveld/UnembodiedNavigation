@@ -331,6 +331,11 @@ class BatchedFourCameraYoloNode(Node):
             self._async_input_group = ReentrantCallbackGroup()
             self._async_processing_group = MutuallyExclusiveCallbackGroup()
         self._warning_counts: dict[str, int] = {}
+        #: strict-path liveness: frames offered per camera and what the batcher
+        #: decided. Without these a batcher that never completes a round is silent.
+        self._strict_frames: dict[str, int] = {}
+        self._strict_decisions: dict[str, int] = {}
+        self._strict_batches = 0
 
         # The source checkpoint remains mandatory in every mode. The compiled
         # path is an asynchronous diagnostic candidate and is separately
@@ -750,6 +755,11 @@ class BatchedFourCameraYoloNode(Node):
         except Exception as exc:
             self._fatal(f"malformed input contract for {camera_id}: {exc}", exc)
 
+        self._strict_frames[camera_id] = self._strict_frames.get(camera_id, 0) + 1
+        self._strict_decisions[decision.status] = (
+            self._strict_decisions.get(decision.status, 0) + 1
+        )
+
         if decision.status in {"duplicate", "out_of_order", "stamp_skew"}:
             self._warn_bounded(
                 camera_id + ":" + decision.status,
@@ -762,6 +772,7 @@ class BatchedFourCameraYoloNode(Node):
                 f"expired pending frames: {decision.dropped_camera_ids}",
             )
         if decision.batch is not None:
+            self._strict_batches += 1
             self._process_batch(decision.batch)
 
     def _gz_image_callback(self, camera_id: str, msg: Any) -> None:
@@ -899,6 +910,20 @@ class BatchedFourCameraYoloNode(Node):
     def _log_runtime_trace(self) -> None:
         """Emit low-rate local counters without subscribing to image topics."""
 
+        if self.synchronization_mode == "strict":
+            waiting = "; ".join(
+                f"{stamp_ns * 1.0e-9:.3f}s<-{','.join(cameras)}"
+                for stamp_ns, cameras in self.batcher.bucket_report
+            )
+            self.get_logger().info(
+                "runtime_trace "
+                f"transport={self.input_transport} mode=strict "
+                f"frames={self._strict_frames} "
+                f"decisions={self._strict_decisions} "
+                f"batches={self._strict_batches} "
+                f"open_rounds=[{waiting}]"
+            )
+            return
         self.get_logger().info(
             "runtime_trace "
             f"transport={self.input_transport} direct_gz_received={self._direct_gz_received} "

@@ -224,6 +224,11 @@ class ExperimentLogger(Node):
         self.declare_parameter('latency_compensate_plan_handoff', False)
         self.declare_parameter('cmd_publish_rate', 10.0)
         self.declare_parameter('heading_update_mode', 'camera_xy_only')
+        # Recovery policy. Recorded because it decides what the belief does when a
+        # correction is refused, which is not visible in any error column.
+        self.declare_parameter('state_reanchor_m', 0.0)
+        self.declare_parameter('state_max_predict_dt_s', 1.5)
+        self.declare_parameter('state_reject_inflate_m2', 0.05)
         self.declare_parameter('use_nogo_cost', False)
         self.declare_parameter('nogo_penalty_type', 'warning_band')
         self.declare_parameter('nogo_weight', 0.0)
@@ -288,6 +293,11 @@ class ExperimentLogger(Node):
         self.campaign_config_path = str(
             self.get_parameter('campaign_config_path').value or '')
         self.heading_update_mode = str(self.get_parameter('heading_update_mode').value)
+        self.state_reanchor_m = float(self.get_parameter('state_reanchor_m').value)
+        self.state_max_predict_dt_s = float(
+            self.get_parameter('state_max_predict_dt_s').value)
+        self.state_reject_inflate_m2 = float(
+            self.get_parameter('state_reject_inflate_m2').value)
         self.use_pixel_correction = bool(self.get_parameter('use_pixel_correction').value)
         self.pixel_timeout_s = float(self.get_parameter('pixel_timeout_s').value)
         self.use_ambiguity = bool(self.get_parameter('use_ambiguity').value)
@@ -591,6 +601,9 @@ class ExperimentLogger(Node):
             'state_estimator_mode': self.state_estimator_mode,
             'state_correction_mode': self.state_correction_mode,
             'heading_update_mode': self.heading_update_mode,
+            'state_reanchor_m': self.state_reanchor_m,
+            'state_max_predict_dt_s': self.state_max_predict_dt_s,
+            'state_reject_inflate_m2': self.state_reject_inflate_m2,
             'use_pixel_correction': self.use_pixel_correction,
             'pixel_timeout_s': self.pixel_timeout_s,
             'use_ambiguity': self.use_ambiguity,

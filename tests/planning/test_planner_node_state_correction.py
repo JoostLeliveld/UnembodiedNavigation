@@ -531,3 +531,56 @@ def test_coupled_mode_lets_a_position_fix_move_the_heading():
     assert coupled.belief_S[0, 2] != 0.0                       # correlation kept
     assert coupled.belief_S[2, 2] < S_pred[2, 2]               # heading actually sharpened
     assert np.min(np.linalg.eigvalsh(coupled.belief_S)) > 0.0  # still a covariance matrix
+
+
+# --------------------------------------------------------------------------
+# The heading prior must describe the heading it actually holds
+# --------------------------------------------------------------------------
+
+def test_bootstrap_heading_variance_is_the_odometry_drift_not_pi_squared():
+    """The belief's heading MEAN is map-frame odometry, so its variance is odometry's.
+
+    Calling it non-informative while using it as the mean is a contradiction, and with
+    a coupled update it is a costly one: an xy measurement against a pi^2 heading prior
+    swings the heading by more than 90 degrees on the first correction. On the frozen
+    route that put the belief 112 degrees out and drove the robot into a rack 1.7 m in.
+    """
+    node = make_state_node(belief_stamp_s=9.9, now_s=10.0)
+    node.belief_m = None
+    node.belief_S = None
+    node.belief_stamp = None
+    node._odom_origin_stamp_s = 0.0          # odometry began at t=0
+    node.process_noise_theta = 0.02          # rad per root second, as the campaign runs
+
+    node._apply_state_correction(state_msg(1.0, 2.0, seconds=9.95))
+
+    # 0.02^2 rad^2/s of drift over 9.95 s, and nowhere near pi^2
+    assert node.belief_S[2, 2] == pytest.approx(0.02 ** 2 * 9.95, rel=1e-6)
+    assert node.belief_S[2, 2] < 0.01
+    assert node.belief_m[2] == pytest.approx(0.25)   # the map-frame odom heading
+
+
+def test_heading_variance_falls_back_to_non_informative_without_odometry():
+    """No odometry means no heading knowledge, and the belief must say so."""
+    node = make_state_node()
+    node.belief_m = None
+    node.belief_S = None
+    node.belief_stamp = None
+    node._odom_origin_stamp_s = None
+
+    node._apply_state_correction(state_msg(1.0, 2.0, seconds=9.95))
+
+    assert node.belief_S[2, 2] == pytest.approx(math.pi ** 2)
+
+
+def test_heading_variance_never_exceeds_knowing_nothing():
+    node = make_state_node(belief_stamp_s=9.9, now_s=10.0)
+    node.belief_m = None
+    node.belief_S = None
+    node.belief_stamp = None
+    node._odom_origin_stamp_s = -1.0e7        # an absurdly long drive
+    node.process_noise_theta = 0.02
+
+    node._apply_state_correction(state_msg(1.0, 2.0, seconds=9.95))
+
+    assert node.belief_S[2, 2] == pytest.approx(math.pi ** 2)

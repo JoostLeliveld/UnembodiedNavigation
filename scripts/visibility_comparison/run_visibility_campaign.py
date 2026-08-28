@@ -693,6 +693,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'preselected_route_clearance_m',
         'preselected_route_endpoint_tolerance_m',
         'preselected_route_sample_step_m',
+        'state_reanchor_m', 'state_max_predict_dt_s', 'state_reject_inflate_m2',
         'manager_min_spatial_trust', 'manager_decision_rate_hz',
         'manager_fusion_disagreement_gate_m',
         'manager_bootstrap_min_cameras', 'manager_bootstrap_max_disagreement_m',
@@ -905,6 +906,16 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'yolo_compiled_model:={cfg.get("yolo_compiled_model", "")}',
         f'yolo_warmup_iters:={cfg.get("yolo_warmup_iters", 3)}',
         f'yolo_inference_in_callback:={str(cfg.get("yolo_inference_in_callback", True)).lower()}',
+        # 0 disables. Non-zero makes the detector report, at that period, how many
+        # frames each camera delivered, what the batcher decided, and which cameras
+        # each unfinished round is still waiting on -- the only way to see a batcher
+        # that has silently stopped producing batches.
+        f'yolo_runtime_trace_period_s:={cfg.get("yolo_runtime_trace_period_s", 0.0)}',
+        # Recovery policy: what the belief does when a correction is refused or
+        # cannot be replayed. Passed explicitly so it lands in the run manifest.
+        f'state_reanchor_m:={cfg.get("state_reanchor_m", 0.0)}',
+        f'state_max_predict_dt_s:={cfg.get("state_max_predict_dt_s", 1.5)}',
+        f'state_reject_inflate_m2:={cfg.get("state_reject_inflate_m2", 0.05)}',
     ]
     if global_mode == 'preselected_route':
         cmd.append(f'comparison_method_id:=closed_loop_{condition_id}')

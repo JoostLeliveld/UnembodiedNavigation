@@ -240,7 +240,11 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('skip_stale_pixel_correction', True)
         _declare_if_not('odom_topic', '/odom_noisy')
         _declare_if_not('use_odom_for_predict', True)
-        _declare_if_not('heading_update_mode', 'coupled')
+        # The long-standing behaviour stays the default. `coupled` is the better
+        # estimator -- it keeps the posterior the update produced instead of deleting
+        # the position-heading cross terms -- but it is still under test, so every
+        # campaign declares its choice rather than inheriting one.
+        _declare_if_not('heading_update_mode', 'camera_xy_only')
         # Spawn yaw (map_bev - odom). The single-camera path applies this in
         # pixel_to_bev_state_node (heading = odom_yaw + offset); the multicam
         # path replaces that node, so the planner must apply it itself or the
@@ -505,6 +509,9 @@ class UnicyclePlannerNode(Node):
             float(self.get_parameter('max_predict_speed_mps').value), 0.0
         )
         self._latest_odom_yaw = None
+        #: stamp of the first odometry message, where the map-frame heading is the
+        #: commissioned spawn heading and its drift has not started accumulating.
+        self._odom_origin_stamp_s = None
         self.heading_update_mode = str(self.get_parameter('heading_update_mode').value).strip().lower()
         if self.heading_update_mode not in ('camera_xy_only', 'coupled'):
             raise RuntimeError(
@@ -891,6 +898,8 @@ class UnicyclePlannerNode(Node):
             stamp_s = self._stamp_to_float(msg.header.stamp)
         except (AttributeError, TypeError, ValueError):
             stamp_s = self.get_clock().now().nanoseconds * 1e-9
+        if self._odom_origin_stamp_s is None:
+            self._odom_origin_stamp_s = float(stamp_s)
         with self._data_lock:
             self.odom_vel = np.array([v_odom, w_odom], dtype=float)
             self._odom_log.append((stamp_s, v_odom, w_odom))
@@ -1752,6 +1761,37 @@ class UnicyclePlannerNode(Node):
             return None
         return float(wrap_angle(self._latest_odom_yaw + self.odom_yaw_offset_rad))
 
+    def _map_frame_heading_variance(self, stamp_msg) -> float:
+        """How wrong the map-frame odometry heading can be, at this instant.
+
+        The belief's heading mean is taken from map-frame odometry, so its variance has
+        to describe that same quantity. Calling it non-informative (pi^2) while using it
+        as the mean is a contradiction, and a costly one: with a coupled update, an xy
+        measurement against a pi^2 heading prior swings the heading by more than 90
+        degrees on the first correction, and the robot then predicts its own motion in
+        the wrong direction and drives into a rack. Measured on the frozen route: the
+        belief heading jumped 0.28 -> 2.69 rad on one correction and stayed ~112 degrees
+        wrong until the run ended in a collision 1.7 m later.
+
+        The heading starts at the commissioned spawn heading -- the same knowledge the
+        camera_xy_only mode leans on every update -- and drifts from there at the
+        filter's own heading process noise. So the variance is that drift, integrated
+        since odometry began, and it is bounded by the non-informative value so this can
+        never claim more than knowing nothing.
+        """
+        floor_var = float(math.radians(0.5) ** 2)
+        origin = self._odom_origin_stamp_s
+        if origin is None:
+            return NONINFORMATIVE_YAW_VAR
+        try:
+            elapsed_s = float(self._stamp_to_float(stamp_msg)) - float(origin)
+        except (AttributeError, TypeError, ValueError):
+            return NONINFORMATIVE_YAW_VAR
+        if not math.isfinite(elapsed_s) or elapsed_s < 0.0:
+            return NONINFORMATIVE_YAW_VAR
+        drift_var = float(self.process_noise_theta) ** 2 * elapsed_s
+        return float(min(NONINFORMATIVE_YAW_VAR, max(floor_var, drift_var)))
+
     def _anchor_belief_yaw_for_planning(self, m0, S0, now_msg, mutate=True):
         """Heading anchor.
 
@@ -1918,10 +1958,13 @@ class UnicyclePlannerNode(Node):
         the correction is trustworthy, so snap to it rather than dead-reckon."""
         m = np.array([float(z_xy[0]), float(z_xy[1]), 0.0], dtype=float)
         h = self._map_frame_heading()
+        yaw_var = NONINFORMATIVE_YAW_VAR
         if h is not None:
             m[2] = h
+            # The heading mean came from odometry, so the variance describes odometry.
+            yaw_var = self._map_frame_heading_variance(stamp_msg)
         R = np.asarray(R, dtype=float)
-        S = np.diag([0.0, 0.0, NONINFORMATIVE_YAW_VAR]).astype(float)
+        S = np.diag([0.0, 0.0, yaw_var]).astype(float)
         S[:2, :2] = R[:2, :2]
         S = self._regularize_state_covariance(S)
         with self._data_lock:

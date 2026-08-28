@@ -147,7 +147,14 @@ manager_require_gp_artifacts: false
 manager_decision_rate_hz: 5.0
 manager_require_source_batch_id: true
 manager_bootstrap_min_cameras: 2
-manager_bootstrap_max_disagreement_m: 0.30
+# Two cameras place the SAME robot this far apart with no error at all: the box
+# bottom-centre lands short along each camera's own bearing, by a commissioned
+# 0.204-0.456 m. Two correct readings can therefore differ by twice the largest of
+# those, 0.91 m, so anything tighter rejects the truth. Measured on the frozen
+# capture (250 positions seen by 2+ cameras): the closest-agreeing pair at a
+# position is a median 0.27 m apart and at worst 0.88 m, so 0.91 m admits every
+# correct start while still refusing a camera that has locked onto something else.
+manager_bootstrap_max_disagreement_m: 0.91
 manager_fusion_disagreement_gate_m: 0.6
 # Below the 0.20 s detector period, so a stale round can never be fused as if it
 # were simultaneous. At 0.25 s it could, and did: 13 of 2661 decisions on the
@@ -157,6 +164,15 @@ state_correction_mode: fused
 state_correction_ekf: true
 heading_update_mode: coupled
 pixel_correction_nis_threshold: 9.21
+
+# Recovery policy: what the belief does when a correction is refused. Declared here so
+# the manifest states it. Re-anchor is OFF: snapping the belief to a measurement was the
+# one path that bypassed both the outlier gate and the re-anchor threshold, so one
+# camera's word could move the belief anywhere unchecked. A refused correction widens the
+# belief instead, which reopens the gate on its own without granting a bypass.
+state_reanchor_m: 0.0
+state_max_predict_dt_s: 1.5
+state_reject_inflate_m2: 0.05
 
 # ---------------------------------------------------------------------------
 # the route: frozen, hash-bound, identical for every arm

@@ -29,6 +29,7 @@ projection, GP trust artifacts.  Ground truth cannot enter this node
 from __future__ import annotations
 
 import collections
+import itertools
 from collections import deque
 from dataclasses import replace
 import json
@@ -312,6 +313,44 @@ def align_observations_to_common_time(
     return aligned, sorted(rejected), target_s
 
 
+def _group_spread_m(observations) -> float:
+    """The widest disagreement between any two of these readings, in metres."""
+    if len(observations) < 2:
+        return 0.0
+    return max(
+        math.hypot(float(a.xy_m[0]) - float(b.xy_m[0]),
+                   float(a.xy_m[1]) - float(b.xy_m[1]))
+        for a, b in itertools.combinations(observations, 2)
+    )
+
+
+def _largest_agreeing_group(observations, max_disagreement_m: float):
+    """The biggest set of readings that all agree with each other, within the bound.
+
+    Used only to start the belief, where there is no prior to gate against. Ties are
+    broken by the tightest group so the initial pose comes from the readings that agree
+    best, and by camera id so the choice cannot depend on arrival order.
+    """
+    best: list = []
+    best_spread = math.inf
+    for size in range(len(observations), 1, -1):
+        if size < len(best):
+            break
+        for candidate in itertools.combinations(observations, size):
+            spread = _group_spread_m(candidate)
+            if spread > max_disagreement_m:
+                continue
+            group = list(candidate)
+            key = (len(group), -spread,
+                   tuple(sorted(str(o.camera_id) for o in group)))
+            if not best or key > (len(best), -best_spread,
+                                  tuple(sorted(str(o.camera_id) for o in best))):
+                best, best_spread = group, spread
+        if best:
+            break
+    return best
+
+
 def _fusion_report_covariance(covariance_m2, *, common_mode_std_m: float = 0.0):
     """Add back the part of the error the cameras make TOGETHER, and nothing else.
 
@@ -566,8 +605,13 @@ class CameraManagerNode(Node):
         # correction off, every covariance this node states is a covariance for a
         # measurement that is not the quantity the filter thinks it is.
         self.declare_parameter("silhouette_observation_correction", True)
+        # The bias floor is one decision, not two. It is a covariance floor in the ray
+        # frame -- along the camera's line of sight and across it -- so a single positive
+        # slope describes an ellipse with a zero axis, which is not a covariance any
+        # filter can use. Both zero means off, which is the default: a floor changes what
+        # the filter is permitted to believe, so it is switched on deliberately.
         self.declare_parameter("bias_floor_along_slope_m_per_m", 0.0)
-        self.declare_parameter("bias_floor_across_slope_m_per_m", 0.00035)
+        self.declare_parameter("bias_floor_across_slope_m_per_m", 0.0)
         # Views fused into one correction must come from the SAME detector round.
         #
         # The five wall cameras render at 5 Hz in the same simulation step, so a round
@@ -778,6 +822,15 @@ class CameraManagerNode(Node):
             self.get_parameter("bias_floor_across_slope_m_per_m").value)
         if self.bias_floor_along_slope < 0.0 or self.bias_floor_across_slope < 0.0:
             raise RuntimeError("bias floor slopes must be non-negative")
+        if (self.bias_floor_along_slope > 0.0) != (self.bias_floor_across_slope > 0.0):
+            # Refused here rather than at the first fusion, where it surfaced as a
+            # singular floor and killed the manager mid-run.
+            raise RuntimeError(
+                "the bias floor needs both slopes positive or both zero: "
+                f"along={self.bias_floor_along_slope}, "
+                f"across={self.bias_floor_across_slope}. One positive slope is an "
+                "ellipse with a zero axis, which no filter can use."
+            )
         self.fusion_max_timestamp_spread_s = float(
             self.get_parameter("fusion_max_timestamp_spread_s").value
         )
@@ -1294,16 +1347,17 @@ class CameraManagerNode(Node):
                 if observation.camera_id not in self._bootstrap_camera_ids
             ]
         elif fresh:
-            # Initialisation is allowed only when several independent cameras
-            # agree tightly. This is the only prior-free operational gate.
-            spread = max(
-                math.hypot(
-                    float(a.xy_m[0]) - float(b.xy_m[0]),
-                    float(a.xy_m[1]) - float(b.xy_m[1]),
-                )
-                for a in fresh for b in fresh
-            )
-            if len(fresh) < self.bootstrap_min_cameras or spread > self.bootstrap_max_disagreement_m:
+            # Initialisation is allowed only when several independent cameras agree.
+            # This is the only prior-free operational gate, so it decides both whether
+            # to start and where.
+            #
+            # It looks for the largest group that mutually agrees, not for unanimity.
+            # Requiring every camera in view to agree lets one mis-associated camera
+            # block start-up entirely, which is the opposite of what a quorum is for.
+            agreeing = _largest_agreeing_group(
+                fresh, self.bootstrap_max_disagreement_m)
+            spread = _group_spread_m(fresh)
+            if len(agreeing) < self.bootstrap_min_cameras:
                 payload = {
                     "authority": self.authority,
                     "fusion_mode": True,
@@ -1311,11 +1365,22 @@ class CameraManagerNode(Node):
                     "accepted_camera_ids": [],
                     "reasons": ["bootstrap_quorum_failed"],
                     "bootstrap_camera_count": len(fresh),
+                    "bootstrap_agreeing_count": len(agreeing),
                     "bootstrap_spread_m": float(spread),
+                    "bootstrap_max_disagreement_m": float(self.bootstrap_max_disagreement_m),
                 }
                 msg = String(); msg.data = json.dumps(payload, sort_keys=True)
                 self.decision_pub.publish(msg)
                 return
+            # Only the agreeing group initialises the belief; a camera outside it is
+            # not evidence about where the robot is.
+            outside = sorted(
+                str(o.camera_id) for o in fresh if o not in agreeing)
+            for camera_id in outside:
+                rejected[camera_id] = tuple(rejected.get(camera_id, ())) + (
+                    "outside_bootstrap_agreeing_group",
+                )
+            fresh = agreeing
         if not fresh:
             payload = {
                 "authority": self.authority,
