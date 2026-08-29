@@ -87,6 +87,34 @@ before anything is concluded — the tail may simply be the alignment defect.
 
 ---
 
+### 7. Does the method survive an operational driving speed?
+
+Measured on 2026-08-29, one drive per speed, same route, same arm (F4), same seed —
+indicative, not a result:
+
+| speed | belief error | corrections per metre | longest blind stretch | sim time |
+|---|---|---|---|---|
+| 0.22 m/s | 2.92 cm | 22.2 | 13.2 s | 148 s |
+| 0.44 m/s | 3.45 cm | 11.5 | 6.8 s | 77 s |
+| 1.00 m/s | 7.49 cm | 5.3 | 3.0 s | 39 s |
+
+All three reached the goal with no contact, so the speed is drivable. The error grows
+faster than the speed: the detector runs at a fixed 5 Hz, so corrections per metre fall
+by four while the distance travelled between them rises from 4.4 cm to 20 cm.
+
+Two things follow. **The current 0.22 m/s is inherited from the TurtleBot3 Burger**, not
+chosen for the 0.80 x 0.55 m AMR, and it is far below what a warehouse AMR actually
+drives. And **availability is a property of metres, not seconds** — a faster robot has
+strictly less of it, which is the same quantity the planning work is built on.
+
+This also fixes the speed for the fusion comparison. The difference between fusion arms
+is about 0.3 cm; the penalty for driving at 1 m/s is 4.6 cm. Speed must be held constant
+across arms, at 0.22 m/s, or it swamps the effect being measured.
+
+What is not known: whether the degradation is the correction rate alone, or also motion
+blur and a wider prediction-to-detection disagreement at the admission gate. Separating
+those needs the detector rate varied independently of the speed.
+
 ## Known limitations of the current implementation
 
 **The covariance update is only valid at unit gain.** `belief_correction.compute_update` uses
