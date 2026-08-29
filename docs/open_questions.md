@@ -135,6 +135,22 @@ What is not known: whether the degradation is the correction rate alone, or also
 blur and a wider prediction-to-detection disagreement at the admission gate. Separating
 those needs the detector rate varied independently of the speed.
 
+### 8. Is the route corridor too tight to be a fair test?
+
+The frozen routes were validated at 0.354 m of lane clearance against a 0.275 m robot
+half-width, leaving a **7.9 cm margin**. Measured over 101 stretches between corrections
+on the 1 m/s drives, the belief loses **2.45 cm per blind metre**, so **3.2 m of driving
+without a correction exhausts that margin**. Ten of 24 drives ended in contact; the five
+hull-arm failures all had blind stretches of 4.0-4.8 m.
+
+That is the availability argument as a safety outcome, and it is the strongest form of it.
+But it also means the routes are operating with almost no tolerance, so a collision rate
+is currently a statement about the corridor as much as about the localization. Before a
+collision rate is reported as a result, decide whether the declared lanes should be
+widened to something a warehouse would actually paint — the nearest physical obstacle at
+these corners is 0.95-1.59 m away, so the 0.354 m figure is a property of the declared
+lane graph, not of the building.
+
 ## Known limitations of the current implementation
 
 **The covariance update is only valid at unit gain.** `belief_correction.compute_update` uses
