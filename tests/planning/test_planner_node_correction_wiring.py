@@ -129,6 +129,9 @@ def make_node(
     node.pixel_meas = np.array(meas, dtype=float)
 
     node.dt = 0.25
+    # The vehicle's speed ceiling. Used to bound how far the robot could have gone
+    # across a gap the belief may not replay, so the covariance can state that.
+    node.v_max = 0.22
     node.pixel_timeout_s = pixel_timeout_s
     node.skip_stale_pixel_correction = True
     node.pixel_max_correction_jump_m = max_jump_m

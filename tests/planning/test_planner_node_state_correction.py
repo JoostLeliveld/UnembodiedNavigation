@@ -126,22 +126,60 @@ def test_source_batch_gets_one_terminal_assimilation_record():
     assert payload['accepted'] is True
 
 
-def test_an_implausible_replay_gap_is_rejected_not_snapped_to():
+def test_an_implausible_replay_gap_is_rejected_but_the_clock_still_advances():
     """A gap this long means the prior cannot be replayed, so there is no valid
     innovation to gate on. Snapping to the measurement here used to be the one path
-    that bypassed both the outlier gate and the re-anchor threshold: one camera's
-    word could move the belief anywhere, unchecked."""
+    that bypassed both the outlier gate and the re-anchor threshold: one camera's word
+    could move the belief anywhere, unchecked.
+
+    The measurement is refused, but the belief STAMP must still advance. Refusing
+    without advancing is an absorbing state: the gap grows by one detector period every
+    cycle, so every later correction is refused for the same reason. Measured on a live
+    drive before this was fixed -- one 1.4 s startup gap produced 158 consecutive
+    refusals, the drive finished on odometry alone, and it ended in a collision.
+    Widening the covariance does not help, because the gate is on dt, not on covariance.
+    """
     node = make_state_node(belief_stamp_s=5.0, now_s=10.0)
-    before = node.belief_m.copy()
     before_S = node.belief_S.copy()
+    measurement = np.array([3.0, 4.0], dtype=float)
 
     # dt = 4.9 s > state_max_predict_dt_s; replaying would fling the prediction.
     node._apply_state_correction(state_msg(3.0, 4.0, seconds=9.9))
 
-    np.testing.assert_array_equal(node.belief_m, before)
-    # and it widens, so a rejection can never freeze the belief
+    # refused: the belief did not snap to what the camera said
+    assert np.linalg.norm(node.belief_m[:2] - measurement) > 1.0
+    # widened
     assert node.belief_S[0, 0] > before_S[0, 0]
     assert node.belief_S[1, 1] > before_S[1, 1]
+    # and, crucially, the clock moved, so the next correction is gateable
+    assert node._stamp_to_float(node.belief_stamp) == pytest.approx(9.9)
+
+
+def test_a_refused_correction_never_locks_the_filter_out():
+    """The absorbing state, end to end: refuse once, then feed the ordinary 5 Hz
+    stream and require that it starts being accepted again."""
+    node = make_state_node(belief_stamp_s=5.0, now_s=10.0)
+
+    # one long gap, refused
+    node._apply_state_correction(state_msg(3.0, 4.0, seconds=9.9))
+
+    assert np.linalg.norm(node.belief_m[:2]) < 0.5, "must not snap to the refused reading"
+    widened = node.belief_S[0, 0]
+
+    # then the detector's normal cadence resumes, all agreeing on x = 0.30
+    for i in range(1, 6):
+        t_s = 9.9 + 0.2 * i
+        node._clock.seconds = t_s + 0.05
+        node._apply_state_correction(state_msg(0.30, 0.0, seconds=t_s))
+
+    # the belief converged on the cameras and its uncertainty came back down, which can
+    # only happen if those corrections were assimilated rather than refused in turn
+    assert node.belief_m[0] == pytest.approx(0.30, abs=0.02), (
+        f"belief x is {node.belief_m[0]:.3f}, not the 0.30 every later camera reported: "
+        "the filter never recovered from one refused correction"
+    )
+    assert node.belief_S[0, 0] < widened / 10.0
+    assert node._stamp_to_float(node.belief_stamp) == pytest.approx(10.9)
 
 
 def test_planning_prediction_is_read_only_so_delayed_correction_still_lands():

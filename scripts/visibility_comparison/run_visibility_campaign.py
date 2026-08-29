@@ -40,6 +40,13 @@ from unav_common.preselected_route import (  # noqa: E402
 from unav_common.manifest import git_provenance  # noqa: E402
 
 # Map condition ID to planner name (must match ALLOWED_PLANNERS in launch file).
+#: Every terminal outcome a correction may have; mirrors the planner and the logger.
+#: An outcome outside this set means a correction went unaccounted, which is what
+#: invalidates a run -- not a refusal that recorded its reason.
+KNOWN_ASSIMILATION_STATUSES = frozenset({
+    'accepted', 'accepted_bootstrap', 'reanchored', 'rejected', 'dropped',
+})
+
 CONDITION_PLANNER = {
     'C0': 'geometric_shortest_path',
     'C1': 'constant_R_efe',
@@ -1029,6 +1036,10 @@ def _read_run_summary(run_dir: Path) -> dict | None:
     summary_path = run_dir / 'run_summary.json'
     if not summary_path.is_file():
         return None
+    try:
+        return json.loads(summary_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
 def _verify_correction_assimilations(run_dir: Path) -> tuple[bool, str]:
@@ -1066,15 +1077,25 @@ def _verify_correction_assimilations(run_dir: Path) -> tuple[bool, str]:
             f'{len(correction_batches - assimilation_batches)} missing, '
             f'{len(assimilation_batches - correction_batches)} extra'
         )
-    dropped = [row for row in assimilation_rows if row.get('status') == 'dropped']
-    if dropped:
-        reasons = sorted({str(row.get('reason', '') or 'unknown') for row in dropped})
-        return False, f'{len(dropped)} correction(s) dropped: {reasons}'
+    unknown = sorted({
+        str(row.get('status', '') or 'empty') for row in assimilation_rows
+        if str(row.get('status', '') or '') not in KNOWN_ASSIMILATION_STATUSES
+    })
+    if unknown:
+        return False, f'unclassifiable assimilation status: {unknown}'
+    unreasoned = [
+        row for row in assimilation_rows
+        if row.get('status') in ('dropped', 'rejected')
+        and not str(row.get('reason', '') or '').strip()
+    ]
+    if unreasoned:
+        return False, f'{len(unreasoned)} refusal(s) with no recorded reason'
+    # A refusal WITH a reason is not a broken chain: the filter declined a measurement it
+    # could not causally bridge -- usually a camera outage longer than the replay cap --
+    # said why, and carried on. The refusal rate and the longest gap are reported in the
+    # run summary. Failing the run on them would discard 90% of drives and, worse, would
+    # discard them by coverage, keeping only the well-covered route.
     return True, ''
-    try:
-        return json.loads(summary_path.read_text(encoding='utf-8'))
-    except (OSError, json.JSONDecodeError):
-        return None
 
 
 def _find_latest_run_dir(log_dir: Path) -> Path | None:

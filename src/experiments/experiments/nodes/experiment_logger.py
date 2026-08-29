@@ -96,6 +96,15 @@ def _split_prisms_by_prefix(prisms, prefix: str):
     return tuple(prism for prism in tuple(prisms or ()) if str(prism.name).startswith(token))
 
 
+#: Every terminal outcome a correction may have. The planner publishes exactly one of
+#: these per detector batch; anything else means a correction went unaccounted, which is
+#: what invalidates a run. `accepted_bootstrap` seeds the belief, `reanchored` recovers a
+#: diverged one, `rejected` failed a gate, `dropped` was refused before a prediction
+#: existed (a stale stamp, or an outage longer than the replay cap).
+KNOWN_ASSIMILATION_STATUSES = frozenset({
+    "accepted", "accepted_bootstrap", "reanchored", "rejected", "dropped",
+})
+
 class ExperimentLogger(Node):
     def __init__(self):
         super().__init__('experiment_logger')
@@ -879,6 +888,13 @@ class ExperimentLogger(Node):
         self._inside_no_go_seen = False
         self._valid_run = True
         self._invalid_reason = ''
+        #: reason -> count, for the refusal rate reported beside the accuracy
+        self._assimilation_dropped_reasons: dict[str, int] = {}
+        #: The worst stretch this drive went without a usable correction, in seconds.
+        #: A property of the camera network on this route, and a headline for the
+        #: availability work -- not a defect.
+        self._longest_correction_gap_s = 0.0
+        self._last_correction_stamp_s = None
 
         self._efe_risk_sum = 0.0
         self._efe_ambiguity_sum = 0.0
@@ -906,7 +922,7 @@ class ExperimentLogger(Node):
         self._odom_map_vs_odom_yaw_error_sum = 0.0
         self._odom_map_vs_state_yaw_error_sum = 0.0
         self._odom_map_vs_belief_yaw_error_sum = 0.0
-        self._truth_odom_yaw_error_count = 0
+        self._odom_map_vs_odom_yaw_error_count = 0
         self._truth_state_yaw_error_count = 0
         self._truth_belief_yaw_error_count = 0
         self._odom_map_vs_odom_yaw_error_after_first_cmd_sum = 0.0
@@ -1786,12 +1802,41 @@ class ExperimentLogger(Node):
             self._record_invalid('duplicate_source_batch_assimilation')
             return
         self._assimilation_source_batches.add(source_batch_id)
+        try:
+            corr_stamp_s = float(payload.get('correction_stamp'))
+        except (TypeError, ValueError):
+            corr_stamp_s = math.nan
+        if math.isfinite(corr_stamp_s):
+            if self._last_correction_stamp_s is not None:
+                gap = corr_stamp_s - self._last_correction_stamp_s
+                if gap > self._longest_correction_gap_s:
+                    self._longest_correction_gap_s = float(gap)
+            self._last_correction_stamp_s = corr_stamp_s
         status = str(payload.get('status', '') or '').strip()
         reason = str(payload.get('reason', '') or '').strip()
         self._assimilation_count += 1
-        if status == 'dropped':
+        if status not in KNOWN_ASSIMILATION_STATUSES:
+            # An outcome the analysis cannot classify is the failure this check exists
+            # for: it means a correction went somewhere unaccounted.
+            self._record_invalid(f'unknown_assimilation_status:{status or "empty"}')
+        elif status == 'dropped':
+            # A REFUSAL is not a broken evidence chain. The filter declined a measurement
+            # it could not causally bridge -- most often a camera outage longer than the
+            # replay cap -- recorded why, and carried on. That is the same class of event
+            # as a NIS rejection, which has never invalidated a run.
+            #
+            # What would invalidate the run is a correction with no outcome, two outcomes,
+            # or an unclassifiable one; those are checked above and on completion. The
+            # refusal RATE and the longest gap are reported instead, because a warehouse
+            # with a 17 s blind stretch is a finding about the camera network, not a
+            # faulty drive -- and discarding those runs would throw away exactly the
+            # low-coverage routes the comparison needs.
             self._assimilation_dropped_count += 1
-            self._record_invalid(f'correction_dropped:{reason or "unknown"}')
+            if not reason:
+                self._record_invalid('correction_dropped_without_reason')
+            self._assimilation_dropped_reasons[reason] = (
+                self._assimilation_dropped_reasons.get(reason, 0) + 1
+            )
         self.assimilation_writer.writerow([
             source_batch_id,
             payload.get('correction_stamp', math.nan),
@@ -2490,7 +2535,7 @@ class ExperimentLogger(Node):
         if true_ok and odom_ok and math.isfinite(odom_yaw):
             yaw_error_odom_map_vs_odom_rad = float(self._wrap_angle(odom_yaw - true_yaw))
             self._odom_map_vs_odom_yaw_error_sum += abs(yaw_error_odom_map_vs_odom_rad)
-            self._truth_odom_yaw_error_count += 1
+            self._odom_map_vs_odom_yaw_error_count += 1
             if after_first_cmd:
                 self._odom_map_vs_odom_yaw_error_after_first_cmd_sum += abs(yaw_error_odom_map_vs_odom_rad)
                 self._odom_map_vs_odom_yaw_error_after_first_cmd_count += 1
@@ -3206,8 +3251,8 @@ class ExperimentLogger(Node):
             if self._state_error_gt_after_first_cmd_count > 0 else math.nan
         )
         mean_abs_odom_map_vs_odom_yaw_error_rad = (
-            self._odom_map_vs_odom_yaw_error_sum / self._truth_odom_yaw_error_count
-            if self._truth_odom_yaw_error_count > 0 else math.nan
+            self._odom_map_vs_odom_yaw_error_sum / self._odom_map_vs_odom_yaw_error_count
+            if self._odom_map_vs_odom_yaw_error_count > 0 else math.nan
         )
         mean_abs_odom_map_vs_state_yaw_error_rad = (
             self._odom_map_vs_state_yaw_error_sum / self._truth_state_yaw_error_count
@@ -3369,6 +3414,15 @@ class ExperimentLogger(Node):
             'correction_assimilation_count': int(self._assimilation_count),
             'correction_assimilation_dropped_count': int(
                 self._assimilation_dropped_count),
+            # Refusals are reported, not treated as faults. The rate says how much of the
+            # drive the cameras actually carried; the longest gap says how blind the worst
+            # stretch of this route was. Both belong beside the accuracy, not in place of
+            # a validity verdict.
+            'correction_dropped_reasons': dict(self._assimilation_dropped_reasons),
+            'correction_dropped_fraction': (
+                float(self._assimilation_dropped_count) / float(self._assimilation_count)
+                if self._assimilation_count else 0.0),
+            'longest_correction_gap_s': float(self._longest_correction_gap_s),
             'frame_sanity': dict(self._frame_sanity),
             'run_dir': self.run_dir
         }

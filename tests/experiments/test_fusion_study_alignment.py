@@ -232,3 +232,71 @@ def test_nees_matches_the_explicit_quadratic_form():
 def test_landed_mask_scores_a_held_message_once():
     stamps = np.array([1.0, 1.0, 1.0, 2.0, 2.0, 3.0])
     assert A.landed_mask(stamps).tolist() == [True, False, False, True, False, True]
+
+
+def test_read_run_summary_actually_reads_the_summary():
+    """It once fell off the end and returned None for every run.
+
+    Its body had been orphaned into the previous function, where it was unreachable.
+    Every completed drive was then recorded `no_summary` / `infra_invalid` no matter how
+    well it drove, so a whole campaign could finish with zero usable runs and nothing in
+    the log saying why.
+    """
+    import json as _json
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]
+                            / "scripts" / "visibility_comparison"))
+    import run_visibility_campaign as rvc
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run = _Path(tmp)
+        assert rvc._read_run_summary(run) is None, "no file means None"
+        (run / "run_summary.json").write_text(
+            _json.dumps({"completed": True, "completion_reason": "goal_reached"}))
+        got = rvc._read_run_summary(run)
+        assert got is not None, "a present summary must actually be read"
+        assert got["completion_reason"] == "goal_reached"
+
+
+def test_a_reasoned_refusal_does_not_invalidate_a_drive():
+    """A camera outage longer than the replay cap is a property of the warehouse.
+
+    Failing the run on it would discard 90% of drives, and would discard them BY
+    coverage: the well-covered route would survive and the sparse and long routes would
+    not, deleting the comparison the study exists to make. What must still fail is a
+    correction with no outcome, two outcomes, or an unclassifiable one.
+    """
+    import csv as _csv
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]
+                            / "scripts" / "visibility_comparison"))
+    import run_visibility_campaign as rvc
+    import tempfile
+
+    def write(run, statuses):
+        with open(run / "fusion_observations.csv", "w", newline="") as fh:
+            w = _csv.writer(fh); w.writerow(["source_batch_id"])
+            for i in range(len(statuses)): w.writerow([f"b{i}"])
+        with open(run / "correction_assimilations.csv", "w", newline="") as fh:
+            w = _csv.writer(fh); w.writerow(["source_batch_id", "status", "reason"])
+            for i, s in enumerate(statuses):
+                w.writerow([f"b{i}", s, "replay_gap_too_large" if s == "dropped" else "accepted"])
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run = _Path(tmp)
+        write(run, ["accepted", "accepted", "dropped"])
+        ok, why = rvc._verify_correction_assimilations(run)
+        assert ok, f"a reasoned refusal must not invalidate the drive: {why}"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run = _Path(tmp)
+        with open(run / "fusion_observations.csv", "w", newline="") as fh:
+            w = _csv.writer(fh); w.writerow(["source_batch_id"]); w.writerow(["b0"])
+        with open(run / "correction_assimilations.csv", "w", newline="") as fh:
+            w = _csv.writer(fh); w.writerow(["source_batch_id", "status", "reason"])
+            w.writerow(["b0", "teleported", ""])
+        ok, why = rvc._verify_correction_assimilations(run)
+        assert not ok and "unclassifiable" in why, why

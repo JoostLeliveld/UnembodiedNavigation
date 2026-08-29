@@ -31,8 +31,20 @@ camera-reading RMSE with a belief median or call either one simply "localization
   `correction_assimilations.csv` with the same `source_batch_id`.
 - Only `accepted`, `accepted_bootstrap`, or `reanchored` assimilation rows are belief-update
   events. NIS rejections and dropped corrections are not post-correction beliefs.
-- Any `dropped` correction, duplicate assimilation, missing assimilation, or extra
-  assimilation invalidates the run.
+- A run is invalid when a correction is **unaccounted for**: a missing assimilation, a
+  duplicate one, an extra one, an unclassifiable status, or a refusal with no recorded
+  reason. The five valid statuses are `accepted`, `accepted_bootstrap`, `reanchored`,
+  `rejected`, `dropped`.
+- A **refusal that records its reason does not invalidate the run.** The filter declining a
+  measurement it cannot causally bridge is a gate decision, the same class of event as a NIS
+  rejection, which has never invalidated a run. The commonest cause is a camera outage longer
+  than the replay cap — a property of the warehouse, not a fault in the drive. Measured on
+  the 2026-08-29 drives, 90% of runs contain such an outage and the median longest one is
+  13–17 s on three of the four routes; failing the run on it would discard those drives *by
+  coverage*, keeping only the well-covered route and deleting the comparison.
+- **Report `correction_dropped_fraction` and `longest_correction_gap_s` beside the accuracy.**
+  How much of a drive the cameras actually carried, and how blind its worst stretch was, are
+  results — not preconditions.
 - Aggregate within each drive first, then compare the five paired seeds. Logger ticks and
   detector frames are not independent replicates.
 

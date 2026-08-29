@@ -1348,6 +1348,12 @@ class UnicyclePlannerNode(Node):
                 else 0.0
             ),
             max_predict_speed_mps=float(self.max_predict_speed_mps),
+            # The fused metric path uses the configured ceiling, so the node's own
+            # pre-check and this gate chain cannot disagree. The pixel path passes 0
+            # and keeps its derived value, leaving that baseline unchanged.
+            max_predict_dt_s=(
+                float(self.state_max_predict_dt_s) if metric_measurement else 0.0
+            ),
         )
 
     def _log_pixel_shape_error_once(self, message: str):
@@ -2223,6 +2229,44 @@ class UnicyclePlannerNode(Node):
             f"correction rejected ({reason}); inflating {inflate:.3f} m^2"
         )
 
+    def _advance_belief_over_outage(self, stamp_msg, dt_s: float) -> None:
+        """Move the committed belief forward to a correction that will be refused.
+
+        Only the clock and the ordinary motion model are applied here: the measurement
+        is not used, no gate is bypassed, and ground truth is not consulted. This is the
+        same bounded prediction planning already reads, committed rather than discarded,
+        so that refusing one correction cannot make every later correction unrefusable.
+
+        The prediction is capped at ``state_max_predict_dt_s`` because a longer odometry
+        replay is what the cap exists to prevent; past the cap the mean is held and only
+        the covariance grows, which is the honest statement that the belief no longer
+        knows where the robot is.
+        """
+        with self._data_lock:
+            m0 = None if self.belief_m is None else np.asarray(self.belief_m, dtype=float).copy()
+            S0 = None if self.belief_S is None else np.asarray(self.belief_S, dtype=float).copy()
+            last_cmd = np.asarray(self.last_cmd, dtype=float).copy()
+        if m0 is None or S0 is None:
+            return
+        capped_s = min(float(dt_s), float(self.state_max_predict_dt_s))
+        try:
+            m1, S1 = self._predict_belief_to_now(m0, S0, last_cmd, capped_s, stamp_msg)
+        except Exception:
+            m1, S1 = m0, S0
+        if float(dt_s) > capped_s:
+            # Beyond the replay cap the motion is genuinely unknown. Grow the position
+            # covariance by what the vehicle could have travelled in the uncovered time,
+            # which is a kinematic bound from the speed limit, not a fitted constant.
+            uncovered_s = float(dt_s) - capped_s
+            reach_m = float(self.v_max) * uncovered_s
+            S1 = np.asarray(S1, dtype=float).copy()
+            S1[0, 0] += reach_m ** 2
+            S1[1, 1] += reach_m ** 2
+        with self._data_lock:
+            self.belief_m = np.asarray(m1, dtype=float).copy()
+            self.belief_S = self._regularize_state_covariance(S1)
+            self.belief_stamp = stamp_msg
+
     def _publish_correction_assimilation(
         self,
         *,
@@ -2336,6 +2380,14 @@ class UnicyclePlannerNode(Node):
             # Re-anchoring here used to bypass both NIS and the now-disabled re-anchor
             # threshold. Without a replayable prior there is no statistically valid NIS,
             # so this correction is rejected rather than granted a separate bypass.
+            #
+            # The MEASUREMENT is refused; the CLOCK still moves. Leaving the belief
+            # stamped at an older instant than the corrections still arriving makes this
+            # an absorbing state: the gap grows by one period every cycle, so every later
+            # correction is refused for the same reason and the drive finishes on
+            # odometry alone. Measured, before this: one 1.4 s startup gap turned into
+            # 158 consecutive refusals and a collision.
+            self._advance_belief_over_outage(stamp_msg, dt_corr)
             self._inflate_belief_after_rejection(
                 f"correction replay gap {dt_corr:.1f}s exceeds "
                 f"{self.state_max_predict_dt_s:.1f}s"
@@ -2478,7 +2530,18 @@ class UnicyclePlannerNode(Node):
             return
 
         if outcome.m_pred is None or outcome.S_pred is None:
-            return   # rejected before a prediction existed; nothing to advance
+            # Refused before a prediction was formed, so there is no posterior to hold.
+            # The clock must still move when the belief is BEHIND the correction, for the
+            # absorbing-state reason above. When it is not behind (a stale or
+            # not-newer correction) the belief is already current and must not be touched.
+            dt_behind = (
+                self._stamp_to_float(stamp_msg)
+                - self._stamp_to_float(self.belief_stamp)
+                if self.belief_stamp is not None else 0.0
+            )
+            if dt_behind > 1e-3:
+                self._advance_belief_over_outage(stamp_msg, dt_behind)
+            return
 
         # Hold the PREDICTION (not the rejected posterior), but ADVANCE THE STAMP
         # and inflate, so a rejection can never freeze the belief. The inflation
@@ -2545,8 +2608,14 @@ class UnicyclePlannerNode(Node):
             'belief_age_s': float(belief_age_s),
         }
 
-    def _resolve_truth_belief_for_planning(self):
-        """DIAGNOSTIC: return ground-truth pose as the belief with tiny covariance."""
+    def _resolve_diagnostic_odom_belief_for_planning(self):
+        """DIAGNOSTIC: use raw ODOMETRY as the belief, with a near-zero covariance.
+
+        Not ground truth -- the simulator's pose never reaches this node. This exists to
+        take the estimator out of the loop so the controller can be looked at on its own,
+        and it makes the belief a lie by construction (odometry drifts; the stated
+        covariance says it does not). Never true in a comparison run.
+        """
         with self._data_lock:
             diagnostic_pose = self.diagnostic_odom_pose
         if diagnostic_pose is None:
@@ -2562,7 +2631,7 @@ class UnicyclePlannerNode(Node):
         self._reset_prediction_diagnostics()
         now_msg = self.get_clock().now().to_msg()
         if self.use_diagnostic_odom_localization:
-            m0, S0, meta = self._resolve_truth_belief_for_planning()
+            m0, S0, meta = self._resolve_diagnostic_odom_belief_for_planning()
         elif self.use_pixel_correction:
             m0, S0, meta = self._resolve_pixel_corrected_belief_for_planning(now_msg)
         elif self.state_correction_ekf:

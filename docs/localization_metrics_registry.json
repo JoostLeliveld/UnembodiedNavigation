@@ -25,5 +25,27 @@
     "experiment.csv",
     "fusion_observations.csv",
     "correction_assimilations.csv"
-  ]
+  ],
+  "run_validity": {
+    "invalid_when": [
+      "missing_assimilation",
+      "duplicate_assimilation",
+      "extra_assimilation",
+      "unclassifiable_status",
+      "refusal_without_reason"
+    ],
+    "valid_statuses": [
+      "accepted",
+      "accepted_bootstrap",
+      "reanchored",
+      "rejected",
+      "dropped"
+    ],
+    "reasoned_refusal_invalidates": false,
+    "report_beside_accuracy": [
+      "correction_dropped_fraction",
+      "longest_correction_gap_s"
+    ],
+    "decided": "2026-08-29"
+  }
 }

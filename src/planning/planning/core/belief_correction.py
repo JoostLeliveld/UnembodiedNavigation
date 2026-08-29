@@ -137,12 +137,25 @@ class CorrectionGates:
     max_predict_speed_mps: float = 0.0
     predict_margin_m: float = 0.05
 
+    #: The one ceiling on how far the belief may be replayed forward to meet a
+    #: correction. When positive it IS the ceiling, so the caller's configured and
+    #: manifest-recorded limit is the only one in force. 0 falls back to the value
+    #: derived from the pixel timeout and the planner timestep, which is the paper-1
+    #: pixel-path behaviour and is kept so that baseline is unchanged.
+    #:
+    #: Two ceilings on one quantity is how a drive dies quietly: the derived one was
+    #: 1.0 s while the campaign declared 1.5 s, so a 1.4 s startup gap was refused by a
+    #: limit that appeared in no config and no manifest.
+    max_predict_dt_s: float = 0.0
+
     @property
     def future_tolerance_s(self) -> float:
         return max(float(self.pixel_timeout_s), 0.25)
 
     @property
     def max_dt_s(self) -> float:
+        if float(self.max_predict_dt_s) > 0.0:
+            return float(self.max_predict_dt_s)
         return max(2.0 * float(self.pixel_timeout_s), 4.0 * float(self.dt_nominal_s), 0.5)
 
     def age_is_invalid(self, age: float) -> bool:
