@@ -135,21 +135,47 @@ What is not known: whether the degradation is the correction rate alone, or also
 blur and a wider prediction-to-detection disagreement at the admission gate. Separating
 those needs the detector rate varied independently of the speed.
 
-### 8. Is the route corridor too tight to be a fair test?
+### 8. Heading is unobservable from the measurement, and it is what ends drives
 
-The frozen routes were validated at 0.354 m of lane clearance against a 0.275 m robot
-half-width, leaving a **7.9 cm margin**. Measured over 101 stretches between corrections
-on the 1 m/s drives, the belief loses **2.45 cm per blind metre**, so **3.2 m of driving
-without a correction exhausts that margin**. Ten of 24 drives ended in contact; the five
-hull-arm failures all had blind stretches of 4.0-4.8 m.
+Assumption A8 in `HOW_IT_WORKS.md` — *"the heading used in h is good enough to treat as
+known"* — is listed there as the one untested assumption. It is now tested, at 1 m/s, and it
+fails.
 
-That is the availability argument as a safety outcome, and it is the strongest form of it.
-But it also means the routes are operating with almost no tolerance, so a collision rate
-is currently a statement about the corridor as much as about the localization. Before a
-collision rate is reported as a result, decide whether the declared lanes should be
-widened to something a warehouse would actually paint — the nearest physical obstacle at
-these corners is 0.95-1.59 m away, so the 0.354 m figure is a property of the declared
-lane graph, not of the building.
+Eleven of 24 drives in `drives_realistic_speed_n1_20260829` did not finish. All 24 completed
+as runs: no crash, no timeout, every correction accounted for. Each collision is one Gazebo
+contact-sensor message on a named object, and all 35 occluders are in the planner's
+collision map, so this is not a robot driving into unmapped geometry.
+
+**Nine of ten collisions had 11–101° of heading error at contact.** At 13° a metre of travel
+puts the robot 0.22 m off course.
+
+The margin is larger than it looks: the *declared lane* leaves 0.354 m, but the nearest
+*physical* obstacle along each route is 0.80–0.98 m, so after the 0.275 m half-width there is
+**0.52–0.70 m** before contact. Drift between corrections cannot reach that — at 2.45 cm per
+blind metre it would take 21 m, and the longest blind stretch was 4.8 m.
+
+The error is odometry's, not the camera's. On one failure, odometry heading reached −16.0°
+while the belief held −13.4°, so the camera update is marginally *correcting* heading. And it
+arrives in one window: 8.2° of commanded rotation in one 4 s window, 7.3° in the next, then
+**95.9°** — across which odometry heading goes from −4.1° to −16.0°. A 96° turn cost about
+12°, consistent with the configured encoder angular slip over a fast rotation.
+
+**The camera cannot fix it, by construction.** One degree of heading moves the predicted
+bottom-centre 0.06 px against the detector's own 0.76 px of noise, and the admission gate
+cannot see it because heading barely changes the box's *shape*. Neither `camera_xy_only` nor
+`coupled` can supply information the measurement does not contain.
+
+What follows:
+
+- **No collision number from this campaign is a statement about the fusion rule.** The arms
+  differ in how they combine positions; none of them observes heading.
+- Speed is the amplifier: the same slip per turn costs 4.5x the lateral distance at 1 m/s
+  that it does at 0.22 m/s. `turn_then_go` makes it worse by turning sharply at speed.
+- Either the vehicle needs a heading-observable feature — a genuinely orientation-sensitive
+  measurement, validated as its own module — or the controller must not accumulate this much
+  slip, or the claim must be restricted to speeds where it does not matter.
+- One case is a different failure and is unexplained: F3 on `fusion_long_traverse` ended
+  3.6 m from the truth with heading correct to 0.8° and its worst gap 0.4 s.
 
 ## Known limitations of the current implementation
 
