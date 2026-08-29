@@ -276,6 +276,9 @@ class ExperimentLogger(Node):
         self.declare_parameter('run_timeout_after_first_cmd_s', 75.0)
         self.declare_parameter('first_cmd_linear_eps', 0.02)
         self.declare_parameter('first_cmd_angular_eps', 0.10)
+        self.declare_parameter('v_max', 0.22)
+        self.declare_parameter('use_odom_for_predict', True)
+        self.declare_parameter('local_controller_type', 'turn_then_go')
         self.declare_parameter('stuck_window_s', 8.0)
         self.declare_parameter('stuck_max_displacement_m', 0.08)
         self.declare_parameter('stuck_max_goal_improvement_m', 0.05)
@@ -522,6 +525,10 @@ class ExperimentLogger(Node):
         self.run_timeout_after_first_cmd_s = float(self.get_parameter('run_timeout_after_first_cmd_s').value)
         self.first_cmd_linear_eps = float(self.get_parameter('first_cmd_linear_eps').value)
         self.first_cmd_angular_eps = float(self.get_parameter('first_cmd_angular_eps').value)
+        self.v_max = float(self.get_parameter('v_max').value)
+        self.use_odom_for_predict = bool(self.get_parameter('use_odom_for_predict').value)
+        self.local_controller_type = str(
+            self.get_parameter('local_controller_type').value)
         self.stuck_window_s = float(self.get_parameter('stuck_window_s').value)
         self.stuck_max_displacement_m = float(self.get_parameter('stuck_max_displacement_m').value)
         self.stuck_max_goal_improvement_m = float(self.get_parameter('stuck_max_goal_improvement_m').value)
@@ -766,6 +773,9 @@ class ExperimentLogger(Node):
             'goal_stable_radius': self.goal_stable_radius,
             'goal_stable_hold_s': self.goal_stable_hold_s,
             'goal_stable_max_displacement_m': self.goal_stable_max_displacement_m,
+            'v_max': self.v_max,
+            'use_odom_for_predict': self.use_odom_for_predict,
+            'local_controller_type': self.local_controller_type,
             'run_timeout_after_first_cmd_s': self.run_timeout_after_first_cmd_s,
             'first_cmd_linear_eps': self.first_cmd_linear_eps,
             'first_cmd_angular_eps': self.first_cmd_angular_eps,

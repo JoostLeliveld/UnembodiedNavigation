@@ -1308,6 +1308,15 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'use_sim_time': True,
                 'log_dir': cfg['log_dir'],
                 'seed': cfg['seed'],
+                # Three settings that change what a drive IS and were reaching the
+                # planner without reaching the manifest: how fast the robot may go
+                # (so how much odometry drift accumulates between corrections and how
+                # far it travels during an outage), whether the belief is predicted
+                # from odometry or from the commanded velocity, and which local
+                # controller tracks the route.
+                'v_max': cfg['v_max'],
+                'use_odom_for_predict': cfg['use_odom_for_predict'],
+                'local_controller_type': cfg['local_controller_type'],
                 'method': cfg['comparison_method_id'] or cfg['planner'],
                 'perception_backend': cfg['perception_backend'],
                 'world': cfg['world'],
