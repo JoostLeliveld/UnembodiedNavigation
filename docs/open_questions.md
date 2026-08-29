@@ -102,6 +102,26 @@ All three reached the goal with no contact, so the speed is drivable. The error 
 faster than the speed: the detector runs at a fixed 5 Hz, so corrections per metre fall
 by four while the distance travelled between them rises from 4.4 cm to 20 cm.
 
+**The sensor is almost speed-invariant; the belief is not.** Each quantity scored at the
+instant it describes, same drives:
+
+| speed | camera reading | its 95th percentile | fused correction | belief |
+|---|---|---|---|---|
+| 0.22 m/s | 1.28 cm | 9.2 cm | 0.70 cm | 2.92 cm |
+| 0.44 m/s | 1.29 cm | 10.8 cm | 0.81 cm | 3.45 cm |
+| 1.00 m/s | 1.82 cm | 9.1 cm | 1.09 cm | 7.49 cm |
+
+Between 0.22 and 0.44 m/s the camera reading does not change at all. At 1 m/s it worsens
+1.4x while the belief worsens 2.6x, and the reading's 95th percentile is unchanged at all
+three speeds — so the sensor's tail is speed-invariant and only its median shifts, which
+is what 20 cm of travel per frame would do.
+
+So the degradation is overwhelmingly a **sampling-rate** effect, not a sensor effect: a
+slightly worse reading taken 4.4x less often per metre (1394 readings to 317) gives a
+2.6x worse belief. It is a property of the detector's rate against the vehicle's speed,
+not of the cameras, the projection or the fusion rule — and it is therefore addressable
+by raising the correction rate rather than by changing the measurement model.
+
 Two things follow. **The current 0.22 m/s is inherited from the TurtleBot3 Burger**, not
 chosen for the 0.80 x 0.55 m AMR, and it is far below what a warehouse AMR actually
 drives. And **availability is a property of metres, not seconds** — a faster robot has
