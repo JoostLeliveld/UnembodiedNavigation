@@ -186,10 +186,25 @@ def _selected_runs(arm: str, task: str = TASKS[0]) -> list[Path]:
             "manager_commissioned_calibration_sha256",
         )))
         selected.append(run.resolve())
-    if seeds != {0, 1, 2, 3, 4}:
+    # The manifest declares which seeds it froze, so a deliberately small set is
+    # allowed and an accidentally incomplete one is still caught. Hardcoding 0..4 made
+    # every design except five-seed unscoreable, including a single-seed first look.
+    declared = frozen.get("seeds")
+    if declared is None:
         raise SystemExit(
-            f"{task}/{arm}: frozen seeds are {sorted(seeds)}; expected exactly 0..4"
+            f"{FROZEN_RUNS}: declare the seed set as a top-level \"seeds\" list. "
+            "An implicit seed count is how a partial campaign gets reported as a whole one."
         )
+    expected_seeds = {int(s) for s in declared}
+    if seeds != expected_seeds:
+        raise SystemExit(
+            f"{task}/{arm}: frozen seeds are {sorted(seeds)}; "
+            f"the manifest declares {sorted(expected_seeds)}"
+        )
+    if len(expected_seeds) < 2:
+        print(f"  NOTE {task}/{arm}: one seed. Time samples within a drive are correlated, "
+              "so this shows the shape of a result and cannot support a comparison "
+              "between arms.")
     if len(provenance) != 1:
         raise SystemExit(f"{task}/{arm}: selected runs do not share one source/artifact identity")
     return selected
