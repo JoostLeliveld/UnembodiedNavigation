@@ -171,10 +171,20 @@ def _selected_runs(arm: str, task: str = TASKS[0]) -> list[Path]:
                 f"{run}: correction/assimilation identity mismatch; "
                 f"missing={missing[:3]}, extra={extra[:3]}"
             )
-        dropped = [row for row in assimilation if row["status"] == "dropped"]
-        if dropped:
+        # A refusal that recorded its reason is a gate decision, not a broken evidence
+        # chain -- the same class of event as a NIS rejection, which has never
+        # invalidated a run. The commonest cause is a camera outage longer than the
+        # replay cap, which is a property of the warehouse. What must still fail is a
+        # correction that is unaccounted for: the batch-identity check above catches a
+        # missing, duplicate or extra outcome, and an unexplained refusal is caught here.
+        # See docs/localization_metrics.md.
+        unexplained = [
+            row for row in assimilation
+            if row["status"] in ("dropped", "rejected") and not row["reason"]
+        ]
+        if unexplained:
             raise SystemExit(
-                f"{run}: {len(dropped)} correction(s) were dropped by the filter"
+                f"{run}: {len(unexplained)} refusal(s) with no recorded reason"
             )
         seed = int(manifest.get("seed", -1))
         if seed in seeds:

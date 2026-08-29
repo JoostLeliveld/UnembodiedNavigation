@@ -104,7 +104,27 @@ def per_arm(task):
 
 def main() -> int:
     args = sys.argv[1:]
-    task = next((a.split("=", 1)[1] for a in args if a.startswith("--task=")), TASKS[0])
+    # Accept "--task NAME" as well as "--task=NAME", and refuse anything unrecognised.
+    # Silently ignoring an argument here meant asking for one route and being handed
+    # another route's figures, with the same filenames and no warning.
+    task = TASKS[0]
+    rest = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a.startswith("--task="):
+            task = a.split("=", 1)[1]
+        elif a == "--task":
+            if i + 1 >= len(args):
+                raise SystemExit("--task needs a route name")
+            task = args[i + 1]; i += 1
+        elif a == "--partial":
+            rest.append(a)
+        else:
+            raise SystemExit(f"unknown argument {a!r}; use --task=<route> and --partial")
+        i += 1
+    if task not in TASKS:
+        raise SystemExit(f"unknown route {task!r}; choose one of {', '.join(TASKS)}")
     OUT = STORY_ROOT / task / "compare"
     OUT.mkdir(parents=True, exist_ok=True)
     route = task.replace("fusion_", "").replace("_", " ")
