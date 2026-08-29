@@ -14,6 +14,14 @@ Every figure writes to `logs/studies/deck_figures/<subject>/` under its own name
 **Nothing here recomputes a commissioning number.** If a figure disagrees with
 `calibration.json`, the figure is wrong.
 
+**Nothing here draws a result that has not been measured.** `planning/02_camera_density`
+was removed on 2026-08-29: it plotted blind-driving-against-camera-count and the detour
+cost — the shape of the answer to the paper's headline planning question — from numbers
+its own caption called "predicted ... not yet from driven runs", and it read them from a
+scratch file that no longer exists, so it could not be regenerated or checked. The
+question it illustrated is alive in `PLAN.md` section 8; it gets a figure when there are
+driven planning episodes behind it.
+
 ---
 
 ## `observation/` — the box is not the robot
@@ -54,7 +62,6 @@ Same shape: three on why one number cannot be right, three on the fix.
 | `availability/02_where_sightings_are_lost` | only 29% of chances become a measurement, and why |
 | `availability/03_three_places` | three real frames: clear, half hidden, buried |
 | `planning/01_two_routes` | two routes, camera handovers, how far the robot drives unseen |
-| `planning/02_camera_density` | blind driving against camera count, and what the detour costs |
 | `confidence/01_why_not_confidence` | why the planner cannot route on detector confidence |
 | `confidence/02_confidence_vs_covariance` | post-geometry pixel residual spread and held-out covariance models |
 | `confidence/03_confidence_role_split` | confidence is stronger for admission than as a direct covariance dial |
