@@ -117,3 +117,15 @@ def test_batch_mode_camera_set_comes_from_the_runtime_contract_not_a_literal():
 
     bringup = (ROOT / "src/sim/launch/bringup_sim.launch.py").read_text()
     assert 'world_name = LaunchConfiguration("world_name").perform(context)' in bringup
+
+
+def test_fusion_campaign_cannot_merge_adjacent_capture_rounds():
+    campaign = yaml.safe_load((
+        ROOT / "scripts/visibility_comparison/fusion_on_fixed_routes_campaign.yaml"
+    ).read_text())
+    camera_period_s = 0.20
+    assert 0.0 <= campaign["yolo_max_batch_stamp_skew_s"] < camera_period_s
+    assert campaign["manager_fusion_max_timestamp_spread_s"] < camera_period_s
+    assert campaign["require_state_correction_envelope"] is True
+    assert campaign["stale_belief_inflate_m2_per_s"] == 0.0
+    assert campaign["stale_belief_inflate_cap_m2"] == 0.0

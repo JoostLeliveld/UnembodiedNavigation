@@ -245,6 +245,9 @@ def generate_launch_description():
         DeclareLaunchArgument('yolo_min_mask_area_px', default_value='12.0'),
         DeclareLaunchArgument('yolo_mask_bottom_band_px', default_value='3.0'),
         DeclareLaunchArgument('yolo_min_bbox_area_px', default_value='0.0'),
+        DeclareLaunchArgument(
+            'yolo_max_batch_stamp_skew_s', default_value='0.05',
+            description='Capture-stamp grouping tolerance; must remain below the 0.20 s camera period.'),
         DeclareLaunchArgument('yolo_debug_frame_dir', default_value=''),
         DeclareLaunchArgument('yolo_use_torchscript', default_value='false',
                               description='Load the TorchScript export of the model (single C++ forward dispatch; bit-identical detections)'),
@@ -260,6 +263,10 @@ def generate_launch_description():
         DeclareLaunchArgument('yolo_inference_in_callback', default_value='true',
                               description='Run inference synchronously in the image callback (single thread, no GIL contention)'),
         DeclareLaunchArgument('use_pixel_correction', default_value='true'),
+        DeclareLaunchArgument('use_diagnostic_odom_localization', default_value='false',
+                              description='DIAGNOSTIC ONLY: feed raw odometry (not ground '
+                                          'truth) to the planner as its belief, bypassing '
+                                          'the cameras. Never true in a comparison run.'),
         DeclareLaunchArgument('multicam_belief', default_value='false',
                               description='Multi-camera belief mode: replace the single-cam detector+pixel_to_bev '
                                           'with the batched 4-cam detector + active camera_manager -> /state/bev.'),
@@ -347,6 +354,15 @@ def generate_launch_description():
         DeclareLaunchArgument('manager_require_consistency_when_source_available', default_value='false'),
         DeclareLaunchArgument('state_correction_ekf', default_value='',
                               description='Multicam: fuse /state/bev via latency-compensated EKF (paper belief filter) instead of hard-reset. Empty=multicam default ON.'),
+        DeclareLaunchArgument(
+            'require_state_correction_envelope', default_value='false',
+            description='Require source-batch-identified fused corrections for the EKF.'),
+        DeclareLaunchArgument(
+            'stale_belief_inflate_m2_per_s', default_value='0.0',
+            description='Optional declared xy covariance penalty per stale second.'),
+        DeclareLaunchArgument(
+            'stale_belief_inflate_cap_m2', default_value='0.0',
+            description='Cap for the optional stale-belief covariance penalty.'),
         DeclareLaunchArgument('multicam_scheduled', default_value='false',
                               description='Reliability-aware scheduled detector: one inference/cycle on the coverage-best camera -> /state/bev.'),
         DeclareLaunchArgument('scheduled_coverage_artifact', default_value='',

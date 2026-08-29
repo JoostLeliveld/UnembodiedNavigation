@@ -143,8 +143,12 @@ def test_a_stale_observation_in_the_batch_is_dropped_not_applied_backwards():
         observation("camera_A", 0.05, 0.0, seconds=9.90),   # older than the belief
         observation("camera_B", 0.05, 0.0, seconds=9.97),
     ])
-    assert len(node.pixel_correction_diag_pub.published) == 1
-    assert node.pixel_correction_diag_pub.published[0][IDX_CAMERA_INDEX] == 1.0
+    diagnostics = node.pixel_correction_diag_pub.published
+    assert len(diagnostics) == 2, "a dropped observation must remain visible"
+    assert diagnostics[0][IDX_CAMERA_INDEX] == 0.0
+    assert diagnostics[0][IDX_REJECT_CODE] == bc.REJECT_CODES['not_newer_than_belief']
+    assert diagnostics[1][IDX_CAMERA_INDEX] == 1.0
+    assert diagnostics[1][IDX_ACCEPTED] == 1.0
 
 
 def test_one_bad_camera_is_rejected_while_the_others_are_accepted():

@@ -265,26 +265,21 @@ actual error                        ●───●───●───●     
                 cameras watching:   1    2    3    4
 ```
 
-**Measured, 2026-08-26, six drives, all six arms reached the goal.** From one camera to four,
-the correction the network publishes:
+**This slide has no numbers on it yet, and saying so is the honest move.** Every drive
+measured before 2026-08-29 went through a logging chain that could not identify which camera
+reading produced which filter update — the analysis inferred it from timestamps. Those drives
+are diagnostic evidence and no accuracy, calibration or arm-ordering number from them is a
+current result. See `docs/localization_metrics_registry.json`.
 
-| rule | claimed precision improves | actually improves |
-|---|---|---|
-| precisions add | **4.15x** | 1.10x |
-| network, divided by N | **2.07x** | 1.11x |
+What the slide will show once the repaired campaign has run: the two curves above, measured,
+with the sample count and seed count on the axis. The prediction worth stating out loud
+beforehand, because it is falsifiable:
 
-> Adding cameras is worth about a tenth off the error. The standard rule claims four times the
-> precision for it.
+> The rule you pick will barely move where the robot thinks it is. It should move how much
+> that belief deserves to be trusted.
 
-Downstream, the truth sits inside the belief's own 95% ellipse 57% of the time for the network
-rule against 39% for precisions-add — while their median errors differ by 0.12 cm. **The rule
-you pick barely moves where the robot thinks it is; it moves how much that belief deserves to
-be trusted.**
-
-Say the caveat in the same breath: **neither is honest.** 57% is not 95%. And the correction
-itself lands ~8 cm from the truth while claiming 0.6–2.5 cm, against 1.49 cm measured on a
-static robot — so the missing piece is heading error and motion, not the pooling rule. That is
-a covariance-model finding, and it comes before the planner.
+If both rules turn out equally honest, `1/N` was unnecessary — and that is a result too, not a
+failed experiment. Say which outcome you are expecting before the audience sees the data.
 
 Say this before anyone asks how the arms are compared: **six live drives, one per arm, each
 written up on its own before any of them are put on the same axes.** The arms do not see the
@@ -297,10 +292,16 @@ One drive each is not a variance claim, and no figure here implies one. Each arm
 and how far it wandered from the commanded route are reported next to its error, so nobody has
 to take "same route" on trust.
 
-## Slide 8d — Two defects the drives found, and what they cost
+## Slide 8d — What the drives found wrong with the pipeline
 
-**This is the slide that makes the rest defensible.** Everything measured before it was
-measured through two faults, both found by asking why a camera reading was a metre wrong.
+**This is the slide that makes the rest defensible**, and the reason slide 8c has no numbers
+yet. Driving the pipeline — rather than commissioning it on placed poses — exposed a series of
+faults, each found by asking why one camera reading was a metre wrong. The two below are the
+ones with a measured cost. The rest are recorded in `docs/open_questions.md`.
+
+The measured costs quoted here come from the same pre-repair drives as slide 8c, so treat them
+as the size of an effect, not as a result: they say why the pipeline was rebuilt, not how well
+it now performs.
 
 **1. The admission check was never called.** The four checks — tall enough, right width, contact
 point where predicted, not touching the frame edge — exist, are unit-tested, have the same

@@ -1,75 +1,47 @@
-# The six-arm fusion comparison, on one frozen route.
+# Does letting a position correction move the heading help?
 #
-# WHAT DIFFERS BETWEEN ARMS, AND NOTHING ELSE: how several cameras become one measurement
-# (F1-F4) and what a detector's box is taken to mean (O1, O2). Same world, same route, same
-# controller, same frozen detector, same commissioned pixel noise.
+# The camera measures position only. The question is what the filter does with the
+# position-heading cross-covariance it already carries:
 #
-#   F1  hull        single best camera, smallest trace(Sigma_c)
-#   F2  hull        weighted by distance and viewing angle -- the untuned heuristic
-#   F3  hull        independent Gaussian fusion, precisions add
-#   F4  hull        the network as one sensor: precisions add, divided by N   <- proposed
-#   O1  raw box     the box bottom-centre IS the robot, network fusion
-#   O2  fixed offset  ... pushed 0.309 m away from the camera, network fusion
+#   H0  camera_xy_only  heading and its cross terms are replaced by the odometry model,
+#                       so a camera correction moves x, y and nothing else
+#   H1  coupled         the update's own posterior is kept, so heading may move through
+#                       the cross-covariance
 #
-# The arms are NOT paired and NOT averaged: one drive each, its own folder, its own
-# storyline (experiments/fusion_on_fixed_routes/OUTLINE.md). Whether repeats are needed is a
-# decision to take after reading one drive each.
+# Neither arm is a camera heading measurement, and the paper may not describe H1 as one:
+# the box bottom-centre is only weakly heading-sensitive. What this ablation measures is
+# whether the coupling helps or whether it feeds position error into heading.
 #
-# Design: experiments/fusion_on_fixed_routes/README.md
+# Everything else is the canonical fusion campaign, unchanged, on its 30 m route.
+# Design: docs/open_questions.md, question 1.
+
 world: warehouse_v2.world.sdf
 launch_file: warehouse_primary_comparison.launch.py
 
 conditions:
-  # The treatment lives here: the runner resolves route > condition > task > campaign.
-  F1:
-    label: F1_single_best_camera_by_trace
-    manager_fusion_rule: best_single
-    manager_observation_model: hull
-  F2:
-    label: F2_distance_and_angle_heuristic
-    manager_fusion_rule: distance_angle
-    manager_observation_model: hull
-  F3:
-    label: F3_independent_precisions_add
-    manager_fusion_rule: independent
-    manager_observation_model: hull
-  F4:
-    label: F4_network_pooled_one_over_N
+  H0:
+    label: H0_heading_anchored_to_odometry
+    heading_update_mode: camera_xy_only
     manager_fusion_rule: network
     manager_observation_model: hull
-  O1:
-    label: O1_raw_box_bottom_centre_is_the_robot
+  H1:
+    label: H1_heading_coupled_through_the_covariance
+    heading_update_mode: coupled
     manager_fusion_rule: network
-    manager_observation_model: raw_box
-  O2:
-    label: O2_fixed_offset_from_the_camera
-    manager_fusion_rule: network
-    manager_observation_model: fixed_offset
-    # ONE commissioned number, measured over the 3351 admitted commissioning sightings: the
-    # box bottom-centre lands a mean 30.9 cm from the robot's centre (median 30.4, range
-    # 20.4-45.6). A constant cannot follow the 11 cm that gap swings as the robot turns --
-    # which is the point of this arm.
-    manager_fixed_offset_m: 0.309
+    manager_observation_model: hull
 
 tasks:
-  # A/B against the main campaign: same route, same four hull arms, the ONLY change
-  # being that each correction is carried forward from the pose it describes to the
-  # pose it is used on. Offline on the main campaign's logs this took the correction
-  # error from 8.17 cm to 2.32 cm; this is the live check.
   fusion_network_traverse:
-    conditions: [O1, O2]
-    seeds: [0]
+    # the mixed corridor — 30.622 m, 10 vertices, measured clearance 0.3538 m
+    conditions: [H0, H1]
+    seeds: [0, 1, 2, 3, 4]
     preselected_routes:
-      F1: &frozen_route
+      H0: &route_ablation
         preselected_route_json: '[[-7.900000000000015,-8.700000000000005],[-7.000000000000018,-8.700000000000005],[-4.800000000000026,-6.500000000000012],[-1.1000000000000387,-6.500000000000012],[0.7999999999999545,-4.600000000000019],[0.7999999999999545,-2.2000000000000277],[1.5999999999999517,-1.4000000000000306],[10.099999999999923,-1.4000000000000306],[10.799999999999919,-0.700000000000033],[10.59999999999992,6.499999999999943]]'
         preselected_route_sha256: 9d4a3a35d8d7254bfa6d59110f295ca0df648262227367e027c924c62bf34b76
         preselected_route_source_path: experiments/fusion_on_fixed_routes/routes/fusion_network_traverse.json
         preselected_route_source_sha256: c7c0322b930e2c22ac0b7d09b6ea8df0725f545da467519dd1ffecbab21cf3ed
-      F2: *frozen_route
-      F3: *frozen_route
-      F4: *frozen_route
-      O1: *frozen_route
-      O2: *frozen_route
+      H1: *route_ablation
 
 # ---------------------------------------------------------------------------
 # the sensor: frozen detector, one commissioned pixel-noise number
@@ -84,6 +56,7 @@ yolo_target_class: robot
 yolo_class_id: 0
 yolo_use_masks: false
 yolo_min_bbox_area_px: 0.0
+yolo_max_batch_stamp_skew_s: 0.05
 # The detector node stamps this sigma (px) onto every observation it publishes. The manager's
 # commissioned_sigma_px profile overrides it from calibration.json anyway, but leaving the old
 # 2.5 px here would put two different claims about the same detector in one run's provenance.
@@ -97,9 +70,7 @@ manager_commissioned_calibration_path: logs/studies/measurement_commissioning/ca
 # No reliability field is consulted anywhere in this experiment: availability predicts the
 # future and this experiment is entirely about measurements that have already arrived.
 manager_require_gp_artifacts: false
-# 5 Hz leaves up to 200 ms between deciding and using a correction, which the
-# propagation cannot see. 20 Hz cuts that to 50 ms.
-manager_decision_rate_hz: 20.0
+manager_decision_rate_hz: 5.0
 manager_require_source_batch_id: true
 manager_bootstrap_min_cameras: 2
 # Two cameras place the SAME robot this far apart with no error at all: the box
@@ -120,12 +91,26 @@ state_correction_ekf: true
 heading_update_mode: coupled
 pixel_correction_nis_threshold: 9.21
 
+# Recovery policy: what the belief does when a correction is refused. Declared here so
+# the manifest states it. Re-anchor is OFF: snapping the belief to a measurement was the
+# one path that bypassed both the outlier gate and the re-anchor threshold, so one
+# camera's word could move the belief anywhere unchecked. A refused correction widens the
+# belief instead, which reopens the gate on its own without granting a bypass.
+state_reanchor_m: 0.0
+state_max_predict_dt_s: 1.5
+state_reject_inflate_m2: 0.05
+stale_belief_inflate_m2_per_s: 0.0
+stale_belief_inflate_cap_m2: 0.0
+require_state_correction_envelope: true
+
 # ---------------------------------------------------------------------------
 # the route: frozen, hash-bound, identical for every arm
 # ---------------------------------------------------------------------------
 use_hierarchical: true
 global_planner_mode: preselected_route
-use_truth_localization: false
+# The planner's belief comes from the cameras and odometry, never from the
+# simulator's pose. This diagnostic bypass would replace it with raw odometry.
+use_diagnostic_odom_localization: false
 # The measured minimum along this polyline is 0.354 m; the grid erosion that produced it was
 # 0.50 m, because a polyline joining 0.10 m cell centres cuts diagonal corners.
 # freeze_route.py measures this on the SIMPLIFIED polyline -- the one actually driven -- and
@@ -191,21 +176,6 @@ headless: true
 use_rviz: false
 reset_world: false
 debug_runtime: true
-# 24 runs need 24 consecutive domain ids inside 0..232, so the base moves down.
-ros_domain_id_base: 200
-
-# THE TREATMENT OF THIS CAMPAIGN.
-# The admission check, which the live pipeline had never run. Commissioning refuses
-# 30% of detections this way; those refused readings have a median error of 24 cm
-# and a worst of 122 cm, against 1.44 cm for the ones it keeps.
-manager_admission_gate: true
-# The leftover interval between carrying a correction forward and consuming it leaves a
-# displacement along the direction of travel: measured -1.72 cm with 1.89 cm of spread, i.e. a
-# bias as large as its own noise. The filter shrinks straight through it -- the belief's ellipse
-# reaches 1.12 cm on the axis where its error is 2.63 cm. Declared here as uncertainty along
-# travel rather than pretended away. 0.0 reproduces the previous behaviour.
-manager_correction_residual_interval_s: 0.05
-manager_correction_timestamp_compensation: true
-manager_correction_propagation_drift_std: 0.05
-# Propagate using odometry rather than the corrected belief: the belief jumps when a
-# correction lands, and that jitter goes straight into the displacement estimate.
+# 10 runs need that many consecutive domain ids inside 0..232,
+# and they must not overlap the 80..200 block the main fusion campaign uses.
+ros_domain_id_base: 10

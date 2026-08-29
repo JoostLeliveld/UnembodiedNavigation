@@ -1,8 +1,8 @@
-"""Single-model, deterministic four-camera YOLO inference runtime.
+"""Single-model, deterministic multicamera YOLO inference runtime.
 
-This node is intentionally specific to the commissioned A--D camera contract.
+This node is intentionally specific to the commissioned camera registry.
 It holds at most one not-yet-used frame per camera and invokes one native
-Ultralytics model with a four-image source list in A--D order.  It never fills a
+Ultralytics model with one image per registered camera in contract order. It never fills a
 batch by repeating a previous image.
 """
 
@@ -109,7 +109,7 @@ class _BatchTiming:
 
 
 class BatchedFourCameraYoloNode(Node):
-    """Run one native YOLO model over strict or diagnostic A--D inputs."""
+    """Run one native YOLO model over strict or diagnostic contract-ordered inputs."""
 
     def __init__(self) -> None:
         super().__init__("batched_four_camera_yolo_node")
@@ -149,7 +149,7 @@ class BatchedFourCameraYoloNode(Node):
         self.declare_parameter("pixel_noise_sigma", 0.0)
         self.declare_parameter("seed", 0)
         self.declare_parameter("warmup_iters", 3)
-        self.declare_parameter("max_batch_stamp_skew_s", 0.10)
+        self.declare_parameter("max_batch_stamp_skew_s", 0.05)
         self.declare_parameter("max_pending_wall_s", 0.50)
         self.declare_parameter("synchronization_mode", "strict")
         self.declare_parameter("async_coalesce_wall_s", 0.02)
@@ -456,7 +456,7 @@ class BatchedFourCameraYoloNode(Node):
         else:
             self.get_logger().warn(
                 "asynchronous shared-model mode is diagnostic-only: it does not "
-                "publish the strict four-camera runtime contract and is therefore "
+                "publish the strict multicamera runtime contract and is therefore "
                 "ineligible for evidence recording"
             )
 
@@ -529,7 +529,7 @@ class BatchedFourCameraYoloNode(Node):
                 )
 
         self.get_logger().info(
-            "Batched four-camera YOLO started "
+            "Batched multicamera YOLO started "
             f"(model={model_load_path}, backend={self.runtime_backend}, "
             f"device={self.device or 'auto'}, "
             f"batch_order={','.join(CAMERA_ORDER)}, batch_size={len(CAMERA_ORDER)}, "
@@ -591,10 +591,10 @@ class BatchedFourCameraYoloNode(Node):
             self.runtime_contract_publisher.publish(message)
         except Exception as exc:
             raise RuntimeError(
-                "could not publish the required four-camera detector runtime contract"
+                "could not publish the required multicamera detector runtime contract"
             ) from exc
         self.get_logger().info(
-            "published retained four-camera detector runtime contract "
+            "published retained multicamera detector runtime contract "
             f"sha256={self.runtime_contract['contract_sha256']} "
             f"topic={RUNTIME_CONTRACT_TOPIC}"
         )
@@ -934,7 +934,7 @@ class BatchedFourCameraYoloNode(Node):
 
     def _process_batch(self, batch: tuple[PendingFrame, ...]) -> None:
         if tuple(item.camera_id for item in batch) != CAMERA_ORDER:
-            self._fatal("internal four-camera batch order violation")
+            self._fatal("internal multicamera batch order violation")
         self._process_frames(batch)
 
     def _process_frames(self, batch: tuple[PendingFrame, ...]) -> None:
@@ -959,7 +959,7 @@ class BatchedFourCameraYoloNode(Node):
         if self._clock_s() + MAX_FUTURE_IMAGE_STAMP_S < latest_source_stamp_s:
             self._warn_bounded(
                 "strict_clock_wait",
-                "waiting for simulation clock before publishing four-camera batch",
+                "waiting for simulation clock before publishing multicamera batch",
             )
             return
 
@@ -977,7 +977,7 @@ class BatchedFourCameraYoloNode(Node):
                     )
                 images.append(image)
         except Exception as exc:
-            self._fatal(f"four-camera image conversion failed: {exc}", exc)
+            self._fatal(f"multicamera image conversion failed: {exc}", exc)
 
         predict_start_stamp_s = self._clock_s()
         predict_start_wall_s = time.perf_counter()
@@ -991,7 +991,7 @@ class BatchedFourCameraYoloNode(Node):
         except Exception as exc:
             elapsed_ms = max((time.perf_counter() - predict_start_wall_s) * 1.0e3, 0.0)
             self._fatal(
-                f"four-camera batch inference failed after {elapsed_ms:.1f} ms: {exc}",
+                f"multicamera batch inference failed after {elapsed_ms:.1f} ms: {exc}",
                 exc,
             )
 
@@ -1007,7 +1007,7 @@ class BatchedFourCameraYoloNode(Node):
         try:
             results = None if selections is not None else validate_batch_results(raw_results, len(batch))
         except BatchContractError as exc:
-            self._fatal(f"malformed four-camera results: {exc}", exc)
+            self._fatal(f"malformed multicamera results: {exc}", exc)
         for index, (item, image) in enumerate(zip(batch, images, strict=True)):
             try:
                 prepared.append(

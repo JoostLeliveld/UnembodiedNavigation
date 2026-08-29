@@ -7,7 +7,7 @@ lens fogs. Can the network re-measure itself from an ordinary drive, with no gro
 **Serves:** the operational-covariance contribution of the fusion paper
 (`../fusion_on_fixed_routes/`). Outputs in `logs/studies/learned_measurement_covariance/`.
 
-## The two scripts
+## The scripts
 
 `estimate_r.py` — the estimator. At each instant where several cameras report, take each
 camera's distance from the average of them all. What the cameras get wrong *together* cancels
@@ -22,14 +22,17 @@ emits a calibration artifact in the same shape as the commissioning one, so poin
 
     python3 estimate_r.py --write=out.json <drive dir> [<drive dir> ...]
 
-`measure_delay.py` — separates the sensor's own error from the pipeline's delay. Every earlier
-measurement compared a reading to the truth at *logging* time, which is later than the camera's
-capture time by the whole detector-and-manager delay. That delay is identical on every camera,
-so it looks exactly like measurement error and gets charged to each camera's noise. Since
-2026-08-27 the capture time is logged (`obs_stamp` in `fusion_observations.csv`) and the two
-can be told apart.
+`per_camera_error.py` and `fig_per_camera_error.py` — each camera's lean, its spread, and
+whether the covariance it states matches the errors it actually makes. Both read runs through
+`../fusion_on_fixed_routes/aligned.py`.
 
-    python3 measure_delay.py <drive dir> [<drive dir> ...]
+**Settled, so there is no script for it any more.** A reading used to be compared with the
+truth at *logging* time, which is later than the camera's capture time by the whole
+detector-and-manager delay. That delay is the same on every camera, so it looked exactly like
+measurement error and was charged to each camera's noise. It is now handled in two places
+instead of measured after the fact: the capture time is logged (`obs_stamp` in
+`fusion_observations.csv`), and `aligned.py` scores every quantity at the instant that
+quantity describes. Any script that reads these CSVs without it reintroduces the problem.
 
 ## What it cannot do, and this is permanent
 

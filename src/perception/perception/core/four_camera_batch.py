@@ -1,4 +1,4 @@
-"""ROS-independent synchronization for the fixed four-camera detector.
+"""ROS-independent synchronization for the fixed multicamera detector.
 
 The runtime deliberately does not approximate-time synchronize by reusing the
 last image from a slow camera.  A batch is emitted only when every camera has
@@ -139,7 +139,7 @@ class FourCameraBatcher:
         self,
         *,
         camera_order: Sequence[str] = CAMERA_ORDER,
-        max_stamp_skew_s: float = 0.10,
+        max_stamp_skew_s: float = 0.05,
         max_pending_wall_s: float = 0.50,
     ) -> None:
         order = tuple(str(camera_id) for camera_id in camera_order)
@@ -220,7 +220,7 @@ class FourCameraBatcher:
             return self._expire_locked(now_wall_s)
 
     def offer(self, frame: PendingFrame) -> BatchDecision:
-        """Offer a frame and possibly return a deterministic A--D batch."""
+        """Offer a frame and possibly return a deterministic contract-ordered batch."""
 
         if frame.camera_id not in self._last_seen_stamp_ns:
             raise BatchContractError(f"unknown camera_id: {frame.camera_id!r}")

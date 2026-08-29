@@ -194,7 +194,7 @@ def test_runtime_source_has_one_native_model_and_the_complete_operational_contra
         "malformed input contract",
         "image conversion failed",
         "batch inference failed",
-        "malformed four-camera results",
+        "malformed multicamera results",
         "malformed result contract",
         "CameraObservation contract failed",
     ):

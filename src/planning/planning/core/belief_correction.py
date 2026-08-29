@@ -23,9 +23,11 @@ Deliberately ROS-free and side-effect-free: it takes numpy arrays and returns a
 :class:`CorrectionOutcome`. Committing the belief, publishing diagnostics,
 throttling and belief bootstrap stay in the node, because they touch ROS state.
 
-NOTE: ``R_eff`` is supplied by the measurement source and is used as given. This
-module must never rescale or reweight it -- ``R_plan``/the visibility term is
-frozen method (see ``docs/multicam_handoff_2026-07-29.md`` §5).
+INVARIANT: ``R_eff`` is supplied by the measurement source and is used exactly as
+given. This module must never rescale or reweight it. A measurement's stated
+uncertainty is the measurement model's claim; silently adjusting it here would make
+the covariance a property of the filter rather than of the sensor, and no downstream
+calibration number would mean anything.
 """
 
 from __future__ import annotations
@@ -54,6 +56,12 @@ class RejectReason(str, Enum):
     UPDATE_FAILED = 'update_failed'
     JUMP_TOO_LARGE = 'jump_too_large'
     NIS_TOO_LARGE = 'nis_too_large'
+    #: The correction describes an instant at or before the committed belief.
+    #: A causal filter cannot apply it without smoothing; record it explicitly.
+    NOT_NEWER = 'not_newer_than_belief'
+    #: The motion history cannot safely bridge the committed belief to this
+    #: correction. This used to be a silent early return in the metric path.
+    REPLAY_GAP = 'replay_gap_too_large'
     #: The belief diverged from a fresh, reliable correction. Not a plain
     #: rejection: the caller is expected to RE-ANCHOR (see `recover` below),
     #: because rejecting would lock the belief out of recovery.
@@ -72,6 +80,8 @@ REJECT_CODES: dict[str, float] = {
     RejectReason.JUMP_TOO_LARGE.value: 5.0,
     RejectReason.NIS_TOO_LARGE.value: 6.0,
     RejectReason.DIVERGED.value: 7.0,
+    RejectReason.NOT_NEWER.value: 8.0,
+    RejectReason.REPLAY_GAP.value: 9.0,
 }
 
 #: How the caller should treat the belief after a non-accepted outcome.
@@ -416,6 +426,12 @@ def compute_update(m_pred, lin: Linearization, *, cov_eig_floor: float,
     gain_scale = float(lin.gain_scale)
     next_m = m_pred + gain_scale * (K @ innov)
     next_m[2] = wrap_angle(next_m[2])
+    # LIMITATION: this is the standard Kalman covariance form, which is correct only at
+    # the optimal gain, i.e. gain_scale == 1. Every fused camera correction passes 1.0, so
+    # the fusion experiment is unaffected. Only PixelMeasurementSource scales the gain (by
+    # the visibility GP's predicted visibility), and on that path the covariance below is
+    # inconsistent with the mean above. Switch that path to Joseph form before driving it
+    # again. docs/open_questions.md, "Known limitations".
     next_S = np.asarray(lin.S_eff, dtype=float) - gain_scale * (Gamma @ Sigma_inv @ Gamma.T)
     next_S = 0.5 * (next_S + next_S.T)
     eig_min = np.min(np.linalg.eigvalsh(next_S))

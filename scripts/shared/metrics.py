@@ -14,9 +14,10 @@ RULES
 - Do NOT re-implement any of these inline, even for a quick check.
 - Existing finished studies keep their inline copies untouched (their numbers
   are published in VALIDATION/RESULTS docs; do not silently change them).
-- For campaign-log LOADING (which columns are trustworthy), the canonical
-  module is scripts/geometry_visibility/campaign_metrics.py — see the
-  campaign-metrics skill. This file is only about scoring.
+- This file is only about scoring. For LOADING a fusion-study run, the one
+  sanctioned reader is experiments/fusion_on_fixed_routes/aligned.py; for
+  per-timestep column safety on a campaign CSV, scripts/geometry_visibility/
+  campaign_metrics.py (diagnostic scope: no time alignment, no deduplication).
 """
 from __future__ import annotations
 

@@ -131,6 +131,7 @@ yolo_target_class: robot
 yolo_class_id: 0
 yolo_use_masks: false
 yolo_min_bbox_area_px: 0.0
+yolo_max_batch_stamp_skew_s: 0.05
 # The detector node stamps this sigma (px) onto every observation it publishes. The manager's
 # commissioned_sigma_px profile overrides it from calibration.json anyway, but leaving the old
 # 2.5 px here would put two different claims about the same detector in one run's provenance.
@@ -173,13 +174,18 @@ pixel_correction_nis_threshold: 9.21
 state_reanchor_m: 0.0
 state_max_predict_dt_s: 1.5
 state_reject_inflate_m2: 0.05
+stale_belief_inflate_m2_per_s: 0.0
+stale_belief_inflate_cap_m2: 0.0
+require_state_correction_envelope: true
 
 # ---------------------------------------------------------------------------
 # the route: frozen, hash-bound, identical for every arm
 # ---------------------------------------------------------------------------
 use_hierarchical: true
 global_planner_mode: preselected_route
-use_truth_localization: false
+# The planner's belief comes from the cameras and odometry, never from the
+# simulator's pose. This diagnostic bypass would replace it with raw odometry.
+use_diagnostic_odom_localization: false
 # The measured minimum along this polyline is 0.354 m; the grid erosion that produced it was
 # 0.50 m, because a polyline joining 0.10 m cell centres cuts diagonal corners.
 # freeze_route.py measures this on the SIMPLIFIED polyline -- the one actually driven -- and

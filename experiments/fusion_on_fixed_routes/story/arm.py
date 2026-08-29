@@ -27,7 +27,7 @@ sys.path.insert(0, str(HERE.parents[2] / "deck_figures"))
 sys.path.insert(0, str(HERE.parents[1]))
 import aligned as A  # noqa: E402
 import style as D                                          # noqa: E402
-from score import FOLDER, TASKS, _latest_run, _route_polyline, score, story_dir  # noqa: E402
+from score import FOLDER, TASKS, showcase_run, _route_polyline, score, story_dir  # noqa: E402
 
 ARM_TITLE = {
     "F1": "F1 — the single best camera",
@@ -40,7 +40,7 @@ ARM_TITLE = {
 
 
 def load(arm, task=TASKS[0]):
-    run = _latest_run(arm, task)
+    run = showcase_run(arm, task)
     rows = list(csv.DictReader(open(run / "experiment.csv")))
 
     def col(key):

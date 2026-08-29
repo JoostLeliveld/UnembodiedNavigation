@@ -3,8 +3,8 @@
 ``experiment_logger`` writes its header and its per-timestep row as two separate
 list literals ~1700 lines apart. Insert a column into one and not the other and
 nothing raises -- every column after the insertion point silently shifts, so a
-whole campaign's CSVs decode into the wrong fields. Given the campaign-metrics
-column traps this repo already documents, that failure mode is expensive.
+whole campaign's CSVs decode into the wrong fields -- with no error, on every run of
+a campaign that takes hours.
 
 Parsed with ``ast`` rather than imported, so no ROS runtime is needed.
 """
@@ -63,8 +63,9 @@ def test_header_and_row_lengths_agree(writer):
 def test_experiment_csv_still_carries_the_correction_diagnostic_columns():
     """The shared correction chain's reason codes must reach the CSV.
 
-    'No rejection diagnostics' is precisely why the multicam belief-jump bug was
-    invisible until CSV forensics (docs/multicam_vs_paper1_correction_parity.md).
+    A refused correction must say why it was refused. Without a reason code a gate
+    that is silently doing nothing and a gate that is working look identical in the
+    log, which is how a broken gate survives a whole campaign.
     """
     header_src = LOGGER_PATH.read_text()
     for column in (

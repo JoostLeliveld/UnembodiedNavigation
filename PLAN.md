@@ -81,12 +81,25 @@ signal it has been over-built, not that it deserves more slides.
 | Commission the sensor | **done** | `experiments/measurement_commissioning/` |
 | Freeze what "usable sighting" means | **mostly** — false positives unmeasured | `observation.py: GATE` |
 | Remove the systematic offset | **done** — 0.48 cm → 0.19 cm | `logs/studies/measurement_commissioning/calibration.json` |
-| Estimate measurement covariance | **partial** — one number works; ladder not re-run on the frozen pipeline | — |
+| Estimate measurement covariance | **partial** — one number works offline; the live ladder has a config and no drives | `scripts/visibility_comparison/measurement_covariance_ablation_campaign.yaml` |
 | Test whether confidence predicts quality | **not started** — data is already on disk | — |
 | Learn the availability map | **not started** — needs its own truth-free dataset, not the commissioning capture | — |
 | Validate availability on held-out routes | **needs driving** | — |
-| Validate fusion on one fixed route | **done, one drive per arm** — six arms all reached the goal; the fusion rule moves honesty, not accuracy | `logs/studies/fusion_on_fixed_routes/RESULTS.md` |
+| Validate fusion on fixed routes | **repair gate** — all pre-schema-4 drives are diagnostic only; no paper result is frozen | `docs/localization_metrics_registry.json` |
+| Measure the operational heading drift | **has a config, needs drives** | `scripts/visibility_comparison/heading_update_ablation_campaign.yaml` |
 | Run the planner comparison | **needs everything above** | — |
+
+The three campaign configs are the whole live experimental surface. Each is built on the same
+repaired runtime and differs only in its arms:
+
+| config | arms | question |
+|---|---|---|
+| `fusion_on_fixed_routes_campaign.yaml` | F1–F4, O1, O2 × 4 routes × 5 seeds | how several cameras become one measurement, and what a detector's box means |
+| `measurement_covariance_ablation_campaign.yaml` | K0–K2 × 5 seeds | how much the per-camera covariance needs to know |
+| `heading_update_ablation_campaign.yaml` | H0, H1 × 5 seeds | whether a position correction should move the heading |
+
+What is unresolved, and what is a known implementation limit, is in
+[`docs/open_questions.md`](docs/open_questions.md).
 
 ---
 
@@ -322,6 +335,15 @@ own storyline ahead of the arms, since it is what every arm's measurement means.
 Availability is **not** used to downweight a measurement that has already arrived. It
 predicts the future; it does not judge the present. Worth saying explicitly in the paper.
 
+**Current status, 2026-08-29: STOP AND RERUN.** The pre-schema-4 drives combined some
+adjacent camera rounds, silently dropped delayed corrections, and inferred filter updates
+from timestamps. They are retained only as diagnostic evidence. No accuracy, calibration,
+coverage, collision-rate, or arm-ordering number from those drives is a current result.
+The repaired campaign must produce schema 4 runs and pass exact source-batch assimilation
+checks before `frozen_runs.json` may be created.
+
+<!-- RETIRED HISTORICAL NOTES. These explain why repairs were attempted; they are not results.
+
 **Driven, 2026-08-26. All six arms reached the goal.** Full results:
 `logs/studies/fusion_on_fixed_routes/RESULTS.md`.
 
@@ -393,6 +415,8 @@ predicts the future; it does not judge the present. Worth saying explicitly in t
     median, 2–4x worse than any other camera at the same range; camera A reads 87.9 cm out
     below 6 m. Both need chasing, after the timestamp fix.
 
+-->
+
 ### 8. Planning (sentence 5)
 
 For a candidate future place, the planner asks each camera how likely a sighting is and how
@@ -455,17 +479,19 @@ if the false-positive check fails.
 
 ## The heading architecture, and the one gate that validates it
 
-**Locked.** The heading in the observation model comes from the robot's own operational
-estimator — odometry-driven — never from ground truth. The camera update moves `x, y` and
-nothing else. This is not a preference: the runtime raises a `RuntimeError` if
-`heading_update_mode` is anything but `camera_xy_only`, in both
-`unicycle_planner_node.py` and `visibility_launch_common.py`.
+**Locked for the repaired fusion campaign.** The heading in the observation model comes
+from the robot's operational estimator, never from ground truth. The camera measurement is
+still position-only. With `heading_update_mode: coupled`, that position update may change
+heading through the filter's existing position-heading cross-covariance; it is not a direct
+camera heading measurement. The same coupled mean and covariance are now used recursively
+and for planning. `camera_xy_only` remains supported and consistently replaces both heading
+mean and its cross-covariances with the odometry-heading model.
 
-**The failure mode it creates.** A camera sees one residual containing position error and
-heading error together. Forbidden to move the heading, the filter explains all of it by
-moving `x, y` — so **a wrong heading is silently absorbed as a position correction**, and
-the admission check cannot catch it, because the bottom-centre barely moves in pixels when
-the heading changes.
+**The remaining failure mode.** A camera sees one residual containing position error and
+heading error together. In `camera_xy_only`, all of it is explained by moving `x, y`. In
+`coupled`, some can update heading through the motion model's cross-covariance, but the
+bottom-centre is only weakly heading-sensitive. The admission check therefore cannot be
+treated as a heading gate.
 
 **Both halves of that follow from the same small sensitivity.** Weak sensitivity means a few
 degrees of heading error disturbs the prediction less than the detector's own noise. It also
@@ -486,18 +512,13 @@ observations recover heading.**
 **Break-even is about 14°** — that is where heading error starts disturbing the prediction
 more than the detector's own noise already does.
 
-**The missing half** is the operational heading error itself, which needs a driven
-trajectory: log the estimator's own heading, record ground truth separately, and use it only
-afterwards to score the drift. Then read the answer off the table.
-
-- **Heading holds to a few degrees** → keep `camera_xy_only`. The paper says the operational
-  estimator supplied heading while the cameras corrected translational drift. Simple, and
-  defensible.
-- **Heading drifts near 10–20°** → the filter is turning orientation error into position
-  correction. Either heading enters the camera update, or a heading-sensitive feature such
-  as the box width is added. Both are new modules with their own validation.
-
-**Resolve this before complicating the covariance, the availability map or the planner.**
+**The missing half must be re-earned on schema-4 drives.** Log the estimator heading and
+joint covariance, record ground truth separately, and score heading at its own stamp. The
+paper may say only that position observations indirectly constrain heading through the
+dynamic covariance; it may not claim that box bottom-centres measure orientation. If the
+schema-4 drives show operational drift near the 14° sensitivity break-even, add a genuinely
+heading-sensitive feature as a separately validated module rather than increasing coupling
+by hand.
 
 **And state the claim at the right strength.** This method corrects drift around an already
 initialized estimate. It is not built for recovery from an arbitrary starting pose: a

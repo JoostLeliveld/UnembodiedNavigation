@@ -95,4 +95,4 @@ normal_runtime_forbidden_config_values:
     - gazebo
     - oracle
   forbidden_true_flags:
-    - use_truth_localization
+    - use_diagnostic_odom_localization

@@ -31,7 +31,8 @@ SPEED_M_S = 1.0
 BELIEF_LAG_S = 0.1
 
 
-def _write_run(tmp_path: Path, *, schema: int = 2, repeats: int = 4) -> Path:
+def _write_run(tmp_path: Path, *, schema: int = 2, repeats: int = 4,
+               rejected_batch: int | None = None) -> Path:
     """A drive where the belief is exactly right, but logged BELIEF_LAG_S late.
 
     Any scorer that pairs the belief with the truth on the log row will read
@@ -70,7 +71,7 @@ def _write_run(tmp_path: Path, *, schema: int = 2, repeats: int = 4) -> Path:
     # Two cameras, a 5 Hz detector, and a manager republishing each round `repeats`
     # times 50 ms apart -- the live 20 Hz-against-5 Hz ratio.
     obs_columns = [
-        "stamp", "camera", "used", "obs_x", "obs_y",
+        "stamp", "source_batch_id", "camera", "used", "obs_x", "obs_y",
         "obs_cov_xx", "obs_cov_xy", "obs_cov_yy", "n_candidates", "n_used",
         "fused_x", "fused_y", "fused_cov_xx", "fused_cov_xy", "fused_cov_yy",
         "gt_x", "gt_y", "gt_x_at_obs", "gt_y_at_obs", "fused_stamp",
@@ -83,7 +84,8 @@ def _write_run(tmp_path: Path, *, schema: int = 2, repeats: int = 4) -> Path:
             decision = round(capture + 0.05 * (repeat + 1), 4)
             for camera, bias_m in (("A", 0.02), ("B", -0.02)):
                 obs_rows.append({
-                    "stamp": decision, "camera": camera, "used": 1,
+                    "stamp": decision, "source_batch_id": f"batch-{k}",
+                    "camera": camera, "used": 1,
                     "obs_x": capture * SPEED_M_S + bias_m, "obs_y": 0.0,
                     "obs_cov_xx": 1e-4, "obs_cov_xy": 0.0, "obs_cov_yy": 1e-4,
                     "n_candidates": 2, "n_used": 2,
@@ -99,6 +101,28 @@ def _write_run(tmp_path: Path, *, schema: int = 2, repeats: int = 4) -> Path:
         writer = csv.DictWriter(handle, fieldnames=obs_columns)
         writer.writeheader()
         writer.writerows(obs_rows)
+    if schema >= 4:
+        assimilation_columns = [
+            "source_batch_id", "correction_stamp", "apply_stamp", "status",
+            "reason", "accepted", "nis", "belief_stamp_after",
+        ]
+        with open(run / "correction_assimilations.csv", "w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=assimilation_columns)
+            writer.writeheader()
+            for k in range(20):
+                capture = round(1.2 + 0.2 * k, 4)
+                decision = round(capture + 0.05, 4)
+                rejected = k == rejected_batch
+                writer.writerow({
+                    "source_batch_id": f"batch-{k}",
+                    "correction_stamp": decision,
+                    "apply_stamp": decision + 0.01,
+                    "status": "rejected" if rejected else "accepted",
+                    "reason": "nis_too_large" if rejected else "accepted",
+                    "accepted": 0 if rejected else 1,
+                    "nis": 12.0 if rejected else 1.0,
+                    "belief_stamp_after": decision,
+                })
     return run
 
 
@@ -181,6 +205,14 @@ def test_corrections_counts_detector_rounds_not_log_rows(tmp_path):
     # and the old number, which is log rows with a fresh correction, is different
     assert counts["n_state_publications"] == 60
     assert counts["state_fresh_rate_hz"] == pytest.approx(60.0 / counts["duration_s"])
+
+
+def test_belief_events_require_an_accepted_source_batch_assimilation(tmp_path):
+    run = _write_run(tmp_path, schema=4, rejected_batch=7)
+    events = A.belief_at_fusion_events(run)
+    assert len(events) == 19
+    assert "batch-7" not in {event["source_batch_id"] for event in events}
+    assert {event["assimilation_status"] for event in events} == {"accepted"}
 
 
 def test_nees_targets_are_not_interchangeable():

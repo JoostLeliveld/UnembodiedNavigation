@@ -69,7 +69,9 @@ class _Publisher:
         self.published = []
 
     def publish(self, msg):
-        self.published.append(list(msg.data))
+        self.published.append(
+            msg.data if isinstance(msg.data, str) else list(msg.data)
+        )
 
 
 class _Camera:
@@ -165,6 +167,7 @@ def make_node(
     node._clock = _Clock(now_s)
     node._logger = _Logger()
     node.pixel_correction_diag_pub = _Publisher()
+    node.correction_assimilation_pub = _Publisher()
     node.get_clock = lambda: node._clock
     node.get_logger = lambda: node._logger
     return node

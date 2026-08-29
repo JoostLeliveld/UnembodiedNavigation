@@ -17,6 +17,17 @@ proposing work.
 [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) is the start-to-finish walkthrough of the pipeline with
 the glossary. Read it before reading any study.
 
+[`docs/`](docs/) holds three contracts, not prose:
+[`localization_metrics.md`](docs/localization_metrics.md) — which quantities may be compared
+and what makes a drive scoreable; [`open_questions.md`](docs/open_questions.md) — what is
+unresolved and which implementation limits are known;
+[`reproducibility_inputs.md`](docs/reproducibility_inputs.md) — the hashed detector and
+calibration bytes a machine needs to produce evidence at all.
+
+**No fusion result is currently frozen.** Every drive so far predates the schema-4 logging
+that identifies which detector batch produced which filter update, so all of them are
+diagnostic. See [`docs/localization_metrics_registry.json`](docs/localization_metrics_registry.json).
+
 ## The pipeline
 
 ```text
@@ -66,6 +77,17 @@ python3 scripts/visibility_comparison/run_visibility_campaign.py \
   --config scripts/visibility_comparison/fusion_on_fixed_routes_campaign.yaml \
   --dry-run
 ```
+
+There are three campaign configs and each one names its arms in its own header:
+
+| config | runs | what varies |
+|---|---|---|
+| `fusion_on_fixed_routes_campaign.yaml` | 120 | the fusion rule (F1–F4) and what a detector's box means (O1, O2), over four routes |
+| `measurement_covariance_ablation_campaign.yaml` | 15 | how much the per-camera covariance knows (K0–K2) |
+| `heading_update_ablation_campaign.yaml` | 10 | whether a position correction may move the heading (H0, H1) |
+
+Every arm drives the same frozen, hash-bound route through the same controller, so the arm is
+the only thing that differs.
 
 Drop `--dry-run` to execute. Output lands in
 `logs/visibility_comparison/<campaign>/<task>/<condition>/<seed>/experiment_*/`.

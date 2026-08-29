@@ -27,7 +27,7 @@ sys.path.insert(0, str(HERE.parents[1] / "deck_figures"))
 sys.path.insert(0, str(HERE.parent))
 import style as D                                        # noqa: E402
 import aligned as A  # noqa: E402
-from score import FOLDER, TASKS, _latest_run, _selected_runs, score, story_dir   # noqa: E402
+from score import FOLDER, TASKS, showcase_run, _selected_runs, score, story_dir   # noqa: E402
 sys.path.insert(0, str(HERE.parent / "story"))
 from fusion_examples import draw_moment, load as load_moments   # noqa: E402
 

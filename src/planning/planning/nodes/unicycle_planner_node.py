@@ -1,5 +1,6 @@
 """Thin ROS 2 wrapper around unicycle planners."""
 
+import json
 import math
 import time
 import threading
@@ -218,6 +219,15 @@ class UnicyclePlannerNode(Node):
         _declare_if_not(
             'map_observations_topic', '/reliability/camera_manager/map_observations'
         )
+        # Evidence-grade fused corrections use an envelope carrying the detector
+        # batch identity beside the pose/covariance. The Pose topic remains for
+        # visualisation and legacy consumers, but a paper run never infers
+        # assimilation identity from a timestamp.
+        _declare_if_not(
+            'state_correction_envelope_topic',
+            '/reliability/camera_manager/fused_correction',
+        )
+        _declare_if_not('require_state_correction_envelope', False)
         _declare_if_not('pixel_topic', '/perception/pixel_pose')
         _declare_if_not('cmd_topic', '/cmd_vel')
         _declare_if_not('cmd_publish_rate', 10.0)
@@ -226,12 +236,12 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('bev_y_calibration_offset_m', 0.0)
         _declare_if_not('bev_affine_calibration', '')
         _declare_if_not('pixel_max_correction_jump_m', 0.0)
-        # DIAGNOSTIC ONLY: feed ground-truth pose (TF odom->plan_frame of raw
-        # /odom) as the planner belief, bypassing perception entirely. Used to
-        # isolate the controller from the estimator. MUST be false for any
-        # comparison/paper run.
-        _declare_if_not('use_truth_localization', False)
-        _declare_if_not('truth_odom_topic', '/odom')
+        # DIAGNOSTIC ONLY: feed transformed raw ODOMETRY -- not ground truth -- as the
+        # planner belief, bypassing perception entirely, to isolate the controller from
+        # the estimator. MUST be false for any comparison or paper run; the campaign
+        # runner and the leakage firewall both refuse a run that sets it true.
+        _declare_if_not('use_diagnostic_odom_localization', False)
+        _declare_if_not('diagnostic_odom_topic', '/odom')
         # Chi-squared (2-DOF) innovation gate: a pixel correction whose NIS exceeds
         # this threshold is rejected as a detector outlier. 0.0 = disabled; the
         # campaign sets 9.21 = chi2(2, 0.99).
@@ -268,6 +278,11 @@ class UnicyclePlannerNode(Node):
         # sized so repeated rejections still recover, via the state_reanchor_m
         # guard, without blinding the gate after a single one.
         _declare_if_not('state_reject_inflate_m2', 0.05)
+        # Optional extra covariance growth after the ordinary process model.
+        # Zero is the evidence-grade default: an empirical staleness penalty must
+        # never hide in control flow or be absent from the run manifest.
+        _declare_if_not('stale_belief_inflate_m2_per_s', 0.0)
+        _declare_if_not('stale_belief_inflate_cap_m2', 0.0)
         # Jump limiter for the METRIC (/state/bev, per-camera) path. Default OFF,
         # and deliberately separate from pixel_max_correction_jump_m.
         #
@@ -454,6 +469,16 @@ class UnicyclePlannerNode(Node):
                 f"got {self.state_correction_mode!r}"
             )
         self.map_observations_topic = str(self.get_parameter('map_observations_topic').value)
+        self.state_correction_envelope_topic = str(
+            self.get_parameter('state_correction_envelope_topic').value
+        ).strip()
+        self.require_state_correction_envelope = _as_bool(
+            self.get_parameter('require_state_correction_envelope').value
+        )
+        if self.require_state_correction_envelope and not self.state_correction_envelope_topic:
+            raise RuntimeError(
+                "require_state_correction_envelope=true needs a non-empty envelope topic"
+            )
         self.pixel_topic = self.get_parameter('pixel_topic').value
         self.cmd_topic = str(self.get_parameter('cmd_topic').value).strip() or '/cmd_vel'
         self.cmd_publish_rate = max(0.1, float(self.get_parameter('cmd_publish_rate').value))
@@ -479,10 +504,12 @@ class UnicyclePlannerNode(Node):
         self.pixel_max_correction_jump_m = float(
             self.get_parameter('pixel_max_correction_jump_m').value
         )
-        self.use_truth_localization = _as_bool(
-            self.get_parameter('use_truth_localization').value
+        self.use_diagnostic_odom_localization = _as_bool(
+            self.get_parameter('use_diagnostic_odom_localization').value
         )
-        self.truth_odom_topic = str(self.get_parameter('truth_odom_topic').value)
+        self.diagnostic_odom_topic = (
+            str(self.get_parameter('diagnostic_odom_topic').value).strip() or '/odom'
+        )
         self.pixel_correction_nis_threshold = float(
             self.get_parameter('pixel_correction_nis_threshold').value
         )
@@ -501,6 +528,12 @@ class UnicyclePlannerNode(Node):
         self.state_max_predict_dt_s = float(self.get_parameter('state_max_predict_dt_s').value)
         self.state_reject_inflate_m2 = max(
             float(self.get_parameter('state_reject_inflate_m2').value), 0.0
+        )
+        self.stale_belief_inflate_m2_per_s = max(
+            float(self.get_parameter('stale_belief_inflate_m2_per_s').value), 0.0
+        )
+        self.stale_belief_inflate_cap_m2 = max(
+            float(self.get_parameter('stale_belief_inflate_cap_m2').value), 0.0
         )
         self.state_max_correction_jump_m = max(
             float(self.get_parameter('state_max_correction_jump_m').value), 0.0
@@ -558,6 +591,19 @@ class UnicyclePlannerNode(Node):
             PoseWithCovarianceStamped, '/state/bev', self._state_cb, qos_profile=state_qos,
             callback_group=self._io_group
         )
+        self.state_correction_envelope_sub = None
+        if (
+            self.state_correction_ekf
+            and self.state_correction_mode == 'fused'
+            and self.require_state_correction_envelope
+        ):
+            self.state_correction_envelope_sub = self.create_subscription(
+                String,
+                self.state_correction_envelope_topic,
+                self._state_correction_envelope_cb,
+                qos_profile=state_qos,
+                callback_group=self._io_group,
+            )
         self.map_observations_sub = None
         if self.state_correction_ekf and self.state_correction_mode == 'per_camera':
             self.map_observations_sub = self.create_subscription(
@@ -592,25 +638,26 @@ class UnicyclePlannerNode(Node):
             callback_group=self._io_group
         )
 
-        # DIAGNOSTIC: ground-truth localization path (TF odom->plan_frame of raw odom).
-        self.truth_pose = None  # (x, y, yaw) in plan frame
-        self.truth_pose_stamp = None
+        # DIAGNOSTIC: transformed raw-odometry localization path.
+        self.diagnostic_odom_pose = None  # (x, y, yaw) in plan frame
+        self.diagnostic_odom_pose_stamp = None
         self._tf_buffer = None
         self._tf_listener = None
-        self.truth_odom_sub = None
-        if self.use_truth_localization:
+        self.diagnostic_odom_sub = None
+        if self.use_diagnostic_odom_localization:
             import tf2_ros
             from tf2_geometry_msgs import do_transform_pose  # noqa: F401  (registers PoseStamped)
             self._tf_buffer = tf2_ros.Buffer()
             self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
             self._do_transform_pose = do_transform_pose
-            self.truth_odom_sub = self.create_subscription(
-                Odometry, self.truth_odom_topic, self._truth_odom_cb,
+            self.diagnostic_odom_sub = self.create_subscription(
+                Odometry, self.diagnostic_odom_topic, self._diagnostic_odom_cb,
                 qos_profile=state_qos, callback_group=self._io_group,
             )
             self.get_logger().warn(
-                "*** use_truth_localization=TRUE — planner belief is GROUND TRUTH "
-                "(perception bypassed). DIAGNOSTIC ONLY, not valid for comparison runs. ***"
+                "*** use_diagnostic_odom_localization=TRUE — planner belief is "
+                "transformed raw odometry (perception bypassed). DIAGNOSTIC ONLY; "
+                "not valid for comparison runs. ***"
             )
 
         # Publishers
@@ -627,6 +674,9 @@ class UnicyclePlannerNode(Node):
         self.pixel_correction_diag_pub = self.create_publisher(
             Float64MultiArray, '/planner/pixel_correction_diagnostics', 10
         )
+        self.correction_assimilation_pub = self.create_publisher(
+            String, '/planner/correction_assimilation', 10
+        )
 
         # State
         self.state_msg = None
@@ -637,6 +687,7 @@ class UnicyclePlannerNode(Node):
         self._latest_detection_diag = None
         self._last_correction_log = 0.0
         self._last_correction_stamp = None
+        self._seen_state_source_batch_ids = set()
         self._last_stale_log = 0.0
         self._last_shape_mismatch_log = 0.0
         self._last_runtime_log = 0.0
@@ -741,11 +792,59 @@ class UnicyclePlannerNode(Node):
         # In per_camera mode the belief is corrected from the per-camera
         # observations instead; applying the fused pose too would fold the same
         # measurements in twice.
-        if self.state_correction_ekf and self.state_correction_mode == 'fused':
+        if (
+            self.state_correction_ekf
+            and self.state_correction_mode == 'fused'
+            and not self.require_state_correction_envelope
+        ):
             try:
                 self._apply_state_correction(msg)
             except Exception as exc:
                 self._fatal_experiment_stop("state correction update failed", exc)
+
+    def _state_correction_envelope_cb(self, msg: String):
+        """Apply one fused correction with its physical detector-batch identity.
+
+        The pose-only topic cannot carry ``source_batch_id``. Evidence-grade runs
+        therefore consume this envelope and leave ``/state/bev`` as a display and
+        compatibility topic. Duplicate batch identities fail closed before they can
+        enter the recursive belief twice.
+        """
+        if not (
+            self.state_correction_ekf
+            and self.state_correction_mode == 'fused'
+            and self.require_state_correction_envelope
+        ):
+            return
+        try:
+            payload = json.loads(msg.data)
+            if not isinstance(payload, dict):
+                raise ValueError("correction envelope must be a JSON object")
+            source_batch_id = str(payload.get('source_batch_id', '') or '').strip()
+            if not source_batch_id:
+                raise ValueError("correction envelope has no source_batch_id")
+            correction_stamp = float(payload['correction_stamp'])
+            xy = np.asarray(payload['xy'], dtype=float).reshape(-1)
+            covariance = np.asarray(payload['covariance_m2'], dtype=float)
+            if xy.size != 2 or covariance.shape != (2, 2):
+                raise ValueError("correction envelope needs xy[2] and covariance_m2[2][2]")
+            if not (math.isfinite(correction_stamp) and np.isfinite(xy).all()
+                    and np.isfinite(covariance).all()):
+                raise ValueError("correction envelope contains non-finite values")
+            with self._data_lock:
+                duplicate = source_batch_id in self._seen_state_source_batch_ids
+            if duplicate:
+                raise ValueError(f"duplicate source_batch_id {source_batch_id!r}")
+            self._apply_metric_correction(
+                self._float_to_stamp(correction_stamp),
+                xy,
+                covariance,
+                source_batch_id=source_batch_id,
+            )
+            with self._data_lock:
+                self._seen_state_source_batch_ids.add(source_batch_id)
+        except Exception as exc:
+            self._fatal_experiment_stop("fused correction envelope failed", exc)
 
     def _map_observations_cb(self, msg: String):
         if not (self.state_correction_ekf and self.state_correction_mode == 'per_camera'):
@@ -907,7 +1006,7 @@ class UnicyclePlannerNode(Node):
             while self._odom_log and self._odom_log[0][0] < cutoff:
                 self._odom_log.pop(0)
 
-    def _truth_odom_cb(self, msg: Odometry):
+    def _diagnostic_odom_cb(self, msg: Odometry):
         """DIAGNOSTIC: transform raw odom (truth) into the plan frame via TF."""
         source_frame = (msg.header.frame_id or 'odom').strip() or 'odom'
         plan_frame = self._resolve_plan_frame_id()
@@ -923,8 +1022,8 @@ class UnicyclePlannerNode(Node):
         y = float(pose_world.position.y)
         yaw = self._yaw_from_quaternion(pose_world.orientation)
         with self._data_lock:
-            self.truth_pose = (x, y, yaw)
-            self.truth_pose_stamp = msg.header.stamp
+            self.diagnostic_odom_pose = (x, y, yaw)
+            self.diagnostic_odom_pose_stamp = msg.header.stamp
 
     @staticmethod
     def _stamp_to_float(stamp) -> float:
@@ -1652,7 +1751,12 @@ class UnicyclePlannerNode(Node):
         self._latest_odom_delta_theta = 0.0
         self._latest_cmd_delta_theta = 0.0
 
-    def _predict_belief_to_now(self, m0, S0, last_cmd, belief_age_s: float, now_msg, mutate=True):
+    def _predict_belief_to_now(self, m0, S0, last_cmd, belief_age_s: float, now_msg):
+        """Project a belief for planning/monitoring without committing it.
+
+        Only a correction callback may advance ``belief_stamp``. This causal
+        boundary is what keeps detector-latency corrections applicable.
+        """
         if belief_age_s <= 0.0:
             self._latest_prediction_dt = 0.0
             self._latest_prediction_source = 0.0
@@ -1720,11 +1824,6 @@ class UnicyclePlannerNode(Node):
             m0, S0 = self.planner.predict(
                 m0, S0, np.array([0.0, 0.0], dtype=float), dt=belief_age_s
             )
-            if mutate:
-                with self._data_lock:
-                    self.belief_m = m0.copy()
-                    self.belief_S = S0.copy()
-                    self.belief_stamp = now_msg
             return m0, S0
 
         if previous:
@@ -1747,11 +1846,6 @@ class UnicyclePlannerNode(Node):
         self._latest_u_pred_v = float(current_cmd[0])
         self._latest_u_pred_omega = float(current_cmd[1])
 
-        if mutate:
-            with self._data_lock:
-                self.belief_m = m0.copy()
-                self.belief_S = S0.copy()
-                self.belief_stamp = now_msg
         return m0, S0
 
     def _map_frame_heading(self):
@@ -1792,7 +1886,7 @@ class UnicyclePlannerNode(Node):
         drift_var = float(self.process_noise_theta) ** 2 * elapsed_s
         return float(min(NONINFORMATIVE_YAW_VAR, max(floor_var, drift_var)))
 
-    def _anchor_belief_yaw_for_planning(self, m0, S0, now_msg, mutate=True):
+    def _anchor_belief_yaw_for_planning(self, m0, S0, now_msg):
         """Heading anchor.
 
         Single-camera path (use_pixel_correction): pixel_to_bev already bakes the
@@ -1804,13 +1898,38 @@ class UnicyclePlannerNode(Node):
         """
         self._heading_anchor_applied = False
         self._state_bev_yaw_ignored = True
-        if not self.use_pixel_correction:
+        if (
+            not self.use_pixel_correction
+            and self.heading_update_mode == 'camera_xy_only'
+        ):
             h = self._map_frame_heading()
             if h is not None:
                 m0 = np.asarray(m0, dtype=float).copy()
+                S0 = np.asarray(S0, dtype=float).copy()
                 m0[2] = h
+                # The returned mean now uses an external odometry heading, not
+                # the recursively predicted camera-coupled heading. Transform
+                # the covariance to the same model instead of pairing two means
+                # with one covariance.
+                S0[:2, 2] = 0.0
+                S0[2, :2] = 0.0
+                S0[2, 2] = self._map_frame_heading_variance(now_msg)
+                S0 = self._regularize_state_covariance(S0)
                 self._heading_anchor_applied = True
         return m0, S0
+
+    def _inflate_stale_planning_covariance(self, S0, belief_age_s: float):
+        """Apply the explicitly configured prediction-only uncertainty penalty."""
+        staleness_s = max(float(belief_age_s) - float(self.pixel_timeout_s), 0.0)
+        rate = float(self.stale_belief_inflate_m2_per_s)
+        cap = float(self.stale_belief_inflate_cap_m2)
+        if staleness_s <= 0.0 or rate <= 0.0 or cap <= 0.0:
+            return S0
+        inflate = min(staleness_s * rate, cap)
+        result = np.asarray(S0, dtype=float).copy()
+        result[0, 0] += inflate
+        result[1, 1] += inflate
+        return self._regularize_state_covariance(result)
 
     def _resolve_pixel_corrected_belief_for_planning(self, now_msg):
         snapshot = self._belief_snapshot_for_planning()
@@ -1830,39 +1949,25 @@ class UnicyclePlannerNode(Node):
             now_msg, snapshot['pixel_stamp']
         )
 
-        # When the belief stamp is much older than pixel_timeout_s, replaying
-        # the full odom window produces unstable predictions: the replay
-        # length grows each tick, and truncated ring-buffer entries cause the
-        # predicted position to oscillate rather than drift smoothly.  Fix:
-        # commit a bounded prediction (up to pixel_timeout_s) to the internal
-        # belief so that subsequent planning calls start from a recent state
-        # instead of re-replaying from the stale correction stamp.
+        # Planning is a read-only projection of the committed filter state.
+        # Advancing the committed stamp here used to make a delayed camera
+        # correction look older than the belief and silently discard it.
         if belief_age_s > self.pixel_timeout_s:
             self._warn_stale_pixel_once(
                 f"Pixel belief stale (age {belief_age_s:.2f}s); planning on prediction-only belief"
             )
-            # Predict the belief forward using a capped window, then commit
-            # the result so the next planning call sees a fresh stamp.
             m0, S0 = self._predict_belief_to_now(
                 snapshot['m'], snapshot['S'], snapshot['last_cmd'],
-                belief_age_s, now_msg, mutate=True,
+                belief_age_s, now_msg,
             )
-            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg, mutate=True)
-            # Inflate xy covariance so nogo_belief_kappa grows and the planner
-            # becomes conservative. Without YOLO the heading drifts, which
-            # causes growing xy error; 0.3 m²/s inflation matches the observed
-            # drift rate (~0.6 m/s × sin(heading_err) at typical conditions).
-            staleness_s = belief_age_s - float(self.pixel_timeout_s)
-            inflate = min(staleness_s * 0.3, 1.5)
-            S0 = S0.copy()
-            S0[0, 0] += inflate
-            S0[1, 1] += inflate
+            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg)
+            S0 = self._inflate_stale_planning_covariance(S0, belief_age_s)
         else:
             m0, S0 = self._predict_belief_to_now(
                 snapshot['m'], snapshot['S'], snapshot['last_cmd'],
-                belief_age_s, now_msg, mutate=False,
+                belief_age_s, now_msg,
             )
-            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg, mutate=False)
+            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg)
 
         return m0, S0, {
             'measurement_available': bool(measurement_available),
@@ -1890,22 +1995,15 @@ class UnicyclePlannerNode(Node):
                 return None, None, {}
             if belief_age_s > self.pixel_timeout_s:
                 m0, S0 = self._predict_belief_to_now(
-                    belief_m, belief_S, last_cmd, belief_age_s, now_msg, mutate=True
+                    belief_m, belief_S, last_cmd, belief_age_s, now_msg
                 )
-                m0, S0 = self._anchor_belief_yaw_for_planning(
-                    m0, S0, now_msg, mutate=True
-                )
-                inflate = min((belief_age_s - self.pixel_timeout_s) * 0.3, 1.5)
-                S0 = S0.copy()
-                S0[0, 0] += inflate
-                S0[1, 1] += inflate
+                m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg)
+                S0 = self._inflate_stale_planning_covariance(S0, belief_age_s)
             else:
                 m0, S0 = self._predict_belief_to_now(
-                    belief_m, belief_S, last_cmd, belief_age_s, now_msg, mutate=False
+                    belief_m, belief_S, last_cmd, belief_age_s, now_msg
                 )
-                m0, S0 = self._anchor_belief_yaw_for_planning(
-                    m0, S0, now_msg, mutate=False
-                )
+                m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg)
             return m0, S0, {
                 'measurement_available': False,
                 'belief_age_s': float(belief_age_s),
@@ -2125,28 +2223,76 @@ class UnicyclePlannerNode(Node):
             f"correction rejected ({reason}); inflating {inflate:.3f} m^2"
         )
 
+    def _publish_correction_assimilation(
+        self,
+        *,
+        source_batch_id: str,
+        stamp_msg,
+        status: str,
+        reason: str,
+        outcome=None,
+    ) -> None:
+        """Publish one terminal filter outcome for one detector source batch."""
+        if not source_batch_id:
+            return
+        with self._data_lock:
+            belief_stamp = self.belief_stamp
+        payload = {
+            'schema_version': 1,
+            'source_batch_id': str(source_batch_id),
+            'correction_stamp': float(self._stamp_to_float(stamp_msg)),
+            'status': str(status),
+            'reason': str(reason),
+            'belief_stamp_after': (
+                float(self._stamp_to_float(belief_stamp))
+                if belief_stamp is not None else math.nan
+            ),
+            'apply_stamp': float(self.get_clock().now().nanoseconds) * 1e-9,
+            'nis': float(getattr(outcome, 'nis', math.nan)),
+            'accepted': bool(status in ('accepted', 'accepted_bootstrap', 'reanchored')),
+        }
+        message = String()
+        message.data = json.dumps(payload, sort_keys=True)
+        self.correction_assimilation_pub.publish(message)
+
     def _apply_metric_correction(self, stamp_msg, z_xy, R, *,
                                  camera_index=math.nan, label="fused",
+                                 source_batch_id="",
                                  allow_reanchor=True, inflate_on_reject=True):
         """Fold one metric xy correction into the belief as a proper EKF update,
         running the SAME gate chain as the single-camera pixel path
         (``planning.core.belief_correction``).
 
-        A real recursive Bayesian filter, not a hard reset: predict the belief to
-        the correction (image) stamp via motion replay (latency compensation),
-        then a covariance-weighted Kalman update in map-xy (H = [I2 | 0]).
-        Heading stays camera_xy_only.
+        A recursive Bayesian update, not a hard reset: predict the belief to the
+        correction's own (capture) stamp by replaying the motion between them, then
+        apply a covariance-weighted Kalman update in map-xy with H = [I2 | 0].
 
-        Previously the multicam path was a separately written chain, and every
-        parity gap in ``docs/multicam_vs_paper1_correction_parity.md`` came from
-        that fork: the jump limiter was configured but never read, and the NIS
-        gate inflated S by +1.0 m² on reject, which neutered it for the next
-        correction. Both are now the shared implementation. A rejection still
-        advances the belief stamp and inflates -- mildly -- so it can never
-        *freeze* the belief, the runaway the separate chain existed to avoid.
+        The measurement is position only. Whether heading moves is decided by
+        ``heading_update_mode``: under ``coupled`` the update's own posterior is kept,
+        so heading may change through the position-heading cross-covariance; under
+        ``camera_xy_only`` heading and its cross terms are replaced by the odometry
+        model. Neither is a camera heading measurement.
+
+        This path and the single-camera pixel path share one implementation, so a
+        gate configured for one cannot be silently absent from the other. A rejection
+        advances the belief stamp and inflates the covariance mildly, so a refused
+        correction can never freeze the belief.
         """
         age = self._stamp_age_s(stamp_msg)
         if not self._metric_correction_is_fresh(age):
+            self._publish_pixel_correction_rejection(
+                stamp_msg,
+                reason=bc.RejectReason.STALE_AGE,
+                age=age,
+                measurement_space=bc.SPACE_MAP_XY,
+                camera_index=camera_index,
+            )
+            self._publish_correction_assimilation(
+                source_batch_id=source_batch_id,
+                stamp_msg=stamp_msg,
+                status='dropped',
+                reason=bc.RejectReason.STALE_AGE.value,
+            )
             return None
         with self._data_lock:
             has_belief = (
@@ -2159,11 +2305,32 @@ class UnicyclePlannerNode(Node):
         # Bootstrap the belief from the first fresh correction.
         if not has_belief:
             self._reanchor_belief_to_xy(stamp_msg, z_xy, R)
+            self._publish_correction_assimilation(
+                source_batch_id=source_batch_id,
+                stamp_msg=stamp_msg,
+                status='accepted_bootstrap',
+                reason='bootstrap',
+            )
             return None
 
         dt_corr = self._stamp_to_float(stamp_msg) - self._stamp_to_float(belief_stamp)
         if dt_corr <= 1e-3:
-            return None  # not newer than the belief we already hold
+            self._publish_pixel_correction_rejection(
+                stamp_msg,
+                reason=bc.RejectReason.NOT_NEWER,
+                age=age,
+                dt_s=dt_corr,
+                belief_input_stamp_s=self._stamp_to_float(belief_stamp),
+                measurement_space=bc.SPACE_MAP_XY,
+                camera_index=camera_index,
+            )
+            self._publish_correction_assimilation(
+                source_batch_id=source_batch_id,
+                stamp_msg=stamp_msg,
+                status='dropped',
+                reason=bc.RejectReason.NOT_NEWER.value,
+            )
+            return None
         if dt_corr > self.state_max_predict_dt_s:
             # A bad stamp or long outage is not evidence that the measurement is true.
             # Re-anchoring here used to bypass both NIS and the now-disabled re-anchor
@@ -2172,6 +2339,21 @@ class UnicyclePlannerNode(Node):
             self._inflate_belief_after_rejection(
                 f"correction replay gap {dt_corr:.1f}s exceeds "
                 f"{self.state_max_predict_dt_s:.1f}s"
+            )
+            self._publish_pixel_correction_rejection(
+                stamp_msg,
+                reason=bc.RejectReason.REPLAY_GAP,
+                age=age,
+                dt_s=dt_corr,
+                belief_input_stamp_s=self._stamp_to_float(belief_stamp),
+                measurement_space=bc.SPACE_MAP_XY,
+                camera_index=camera_index,
+            )
+            self._publish_correction_assimilation(
+                source_batch_id=source_batch_id,
+                stamp_msg=stamp_msg,
+                status='dropped',
+                reason=bc.RejectReason.REPLAY_GAP.value,
             )
             return None
 
@@ -2198,6 +2380,24 @@ class UnicyclePlannerNode(Node):
             stamp_msg, R, outcome, label=label, inflate_on_reject=inflate_on_reject
         )
         self._publish_correction_outcome(stamp_msg, outcome, camera_index=camera_index)
+        if outcome.accepted:
+            assimilation_status = 'accepted'
+        elif outcome.recover == bc.RECOVER_REANCHOR:
+            assimilation_status = 'reanchored'
+        else:
+            assimilation_status = 'rejected'
+        reason = (
+            outcome.reason.value
+            if isinstance(outcome.reason, bc.RejectReason)
+            else str(outcome.reason)
+        )
+        self._publish_correction_assimilation(
+            source_batch_id=source_batch_id,
+            stamp_msg=stamp_msg,
+            status=assimilation_status,
+            reason=reason,
+            outcome=outcome,
+        )
         return outcome
 
     def _metric_correction_is_fresh(self, age: float) -> bool:
@@ -2331,18 +2531,15 @@ class UnicyclePlannerNode(Node):
             belief_age_s = 0.0
         if belief_age_s > self.pixel_timeout_s:
             m0, S0 = self._predict_belief_to_now(
-                belief_m, belief_S, last_cmd, belief_age_s, now_msg, mutate=True
+                belief_m, belief_S, last_cmd, belief_age_s, now_msg
             )
-            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg, mutate=True)
-            inflate = min((belief_age_s - float(self.pixel_timeout_s)) * 0.3, 1.5)
-            S0 = S0.copy()
-            S0[0, 0] += inflate
-            S0[1, 1] += inflate
+            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg)
+            S0 = self._inflate_stale_planning_covariance(S0, belief_age_s)
         else:
             m0, S0 = self._predict_belief_to_now(
-                belief_m, belief_S, last_cmd, belief_age_s, now_msg, mutate=False
+                belief_m, belief_S, last_cmd, belief_age_s, now_msg
             )
-            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg, mutate=False)
+            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg)
         return m0, S0, {
             'measurement_available': measurement_available,
             'belief_age_s': float(belief_age_s),
@@ -2351,10 +2548,11 @@ class UnicyclePlannerNode(Node):
     def _resolve_truth_belief_for_planning(self):
         """DIAGNOSTIC: return ground-truth pose as the belief with tiny covariance."""
         with self._data_lock:
-            truth = self.truth_pose
-        if truth is None:
+            diagnostic_pose = self.diagnostic_odom_pose
+        if diagnostic_pose is None:
             return None, None, {}
-        m0 = np.array([truth[0], truth[1], truth[2]], dtype=float)
+        m0 = np.array(
+            [diagnostic_pose[0], diagnostic_pose[1], diagnostic_pose[2]], dtype=float)
         S0 = np.diag([1e-4, 1e-4, 1e-4]).astype(float)
         return m0, S0, {'measurement_available': True, 'belief_age_s': 0.0}
 
@@ -2363,7 +2561,7 @@ class UnicyclePlannerNode(Node):
         self._state_bev_yaw_ignored = False
         self._reset_prediction_diagnostics()
         now_msg = self.get_clock().now().to_msg()
-        if self.use_truth_localization:
+        if self.use_diagnostic_odom_localization:
             m0, S0, meta = self._resolve_truth_belief_for_planning()
         elif self.use_pixel_correction:
             m0, S0, meta = self._resolve_pixel_corrected_belief_for_planning(now_msg)
@@ -2467,7 +2665,7 @@ class UnicyclePlannerNode(Node):
                 # only changes the monitoring/logging belief. read-only: mutate=False.
                 now_msg = self.get_clock().now().to_msg()
                 m, S = self._predict_belief_to_now(
-                    m, S, predict_vel, age_s, now_msg, mutate=False,
+                    m, S, predict_vel, age_s, now_msg,
                 )
             except Exception:
                 return

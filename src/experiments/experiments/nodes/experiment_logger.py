@@ -229,6 +229,9 @@ class ExperimentLogger(Node):
         self.declare_parameter('state_reanchor_m', 0.0)
         self.declare_parameter('state_max_predict_dt_s', 1.5)
         self.declare_parameter('state_reject_inflate_m2', 0.05)
+        self.declare_parameter('stale_belief_inflate_m2_per_s', 0.0)
+        self.declare_parameter('stale_belief_inflate_cap_m2', 0.0)
+        self.declare_parameter('require_state_correction_envelope', False)
         self.declare_parameter('use_nogo_cost', False)
         self.declare_parameter('nogo_penalty_type', 'warning_band')
         self.declare_parameter('nogo_weight', 0.0)
@@ -253,6 +256,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('yolo_use_masks', True)
         self.declare_parameter('yolo_min_mask_area_px', 12.0)
         self.declare_parameter('yolo_mask_bottom_band_px', 3.0)
+        self.declare_parameter('yolo_max_batch_stamp_skew_s', 0.05)
         self.declare_parameter('show_pose_markers', False)
         self.declare_parameter('diagnostics_match_tolerance_s', 1e-3)
         self.declare_parameter('bev_y_calibration_offset_m', 0.0)
@@ -268,11 +272,6 @@ class ExperimentLogger(Node):
         self.declare_parameter('stuck_max_goal_improvement_m', 0.05)
         self.declare_parameter('stuck_cmd_fraction_min', 0.50)
         self.declare_parameter('stuck_idle_cmd_fraction_max', 0.10)
-        self.declare_parameter('cam_pos', [-3.0, -3.0, 6.0])
-        self.declare_parameter('look_at', [1.5, 1.5, 0.0])
-        self.declare_parameter('img_width', 1280)
-        self.declare_parameter('img_height', 720)
-        self.declare_parameter('fov_h_rad', 1.5708)
 
         log_dir = self.get_parameter('log_dir').value
         self.seed = int(self.get_parameter('seed').value)
@@ -298,6 +297,12 @@ class ExperimentLogger(Node):
             self.get_parameter('state_max_predict_dt_s').value)
         self.state_reject_inflate_m2 = float(
             self.get_parameter('state_reject_inflate_m2').value)
+        self.stale_belief_inflate_m2_per_s = float(
+            self.get_parameter('stale_belief_inflate_m2_per_s').value)
+        self.stale_belief_inflate_cap_m2 = float(
+            self.get_parameter('stale_belief_inflate_cap_m2').value)
+        self.require_state_correction_envelope = bool(
+            self.get_parameter('require_state_correction_envelope').value)
         self.use_pixel_correction = bool(self.get_parameter('use_pixel_correction').value)
         self.pixel_timeout_s = float(self.get_parameter('pixel_timeout_s').value)
         self.use_ambiguity = bool(self.get_parameter('use_ambiguity').value)
@@ -487,6 +492,8 @@ class ExperimentLogger(Node):
         self.yolo_use_masks = bool(self.get_parameter('yolo_use_masks').value)
         self.yolo_min_mask_area_px = float(self.get_parameter('yolo_min_mask_area_px').value)
         self.yolo_mask_bottom_band_px = float(self.get_parameter('yolo_mask_bottom_band_px').value)
+        self.yolo_max_batch_stamp_skew_s = float(
+            self.get_parameter('yolo_max_batch_stamp_skew_s').value)
         self.show_pose_markers = bool(self.get_parameter('show_pose_markers').value)
         self.diagnostics_match_tolerance_s = float(
             self.get_parameter('diagnostics_match_tolerance_s').value
@@ -514,11 +521,10 @@ class ExperimentLogger(Node):
             self.get_parameter('stuck_idle_cmd_fraction_max').value
         )
 
-        # Camera model is built below from the world profile (the single source of
-        # truth shared with the state/planner nodes), NOT from the cam_pos/look_at
-        # node parameters — those are never passed by the launch, so reading them
-        # silently selected stale defaults ([-3,-3,6]/[1.5,1.5,0]) and corrupted the
-        # pred_world homography diagnostic. See profile-based build after load_profile.
+        # The camera model comes from the world profile and from nowhere else, so the
+        # logger's projection is the same one the state and planner nodes use. There is
+        # deliberately no node parameter for the camera pose or intrinsics: a second way
+        # to say where a camera is, is a second thing that can disagree.
 
         run_info = create_run_dir(log_dir)
         self.run_id = run_info['run_id']
@@ -588,7 +594,9 @@ class ExperimentLogger(Node):
             #       record both capture-time and common-time values; experiment
             #       termination uses the operational belief (never ground truth), and
             #       contact-channel liveness is recorded explicitly.
-            'logging_schema_version': 3,
+            #   4 = every published fused correction carries source_batch_id through
+            #       the filter and produces one terminal assimilation record.
+            'logging_schema_version': 4,
             'timestamp': datetime.now().isoformat(),
             'method': self.method or self.planner,
             'perception_backend': self.perception_backend,
@@ -604,6 +612,9 @@ class ExperimentLogger(Node):
             'state_reanchor_m': self.state_reanchor_m,
             'state_max_predict_dt_s': self.state_max_predict_dt_s,
             'state_reject_inflate_m2': self.state_reject_inflate_m2,
+            'stale_belief_inflate_m2_per_s': self.stale_belief_inflate_m2_per_s,
+            'stale_belief_inflate_cap_m2': self.stale_belief_inflate_cap_m2,
+            'require_state_correction_envelope': self.require_state_correction_envelope,
             'use_pixel_correction': self.use_pixel_correction,
             'pixel_timeout_s': self.pixel_timeout_s,
             'use_ambiguity': self.use_ambiguity,
@@ -666,6 +677,7 @@ class ExperimentLogger(Node):
             'yolo_use_masks': self.yolo_use_masks,
             'yolo_min_mask_area_px': self.yolo_min_mask_area_px,
             'yolo_mask_bottom_band_px': self.yolo_mask_bottom_band_px,
+            'yolo_max_batch_stamp_skew_s': self.yolo_max_batch_stamp_skew_s,
             'show_pose_markers': self.show_pose_markers,
             'diagnostics_match_tolerance_s': self.diagnostics_match_tolerance_s,
             'bev_y_calibration_offset_m': self.bev_y_calibration_offset_m,
@@ -802,6 +814,9 @@ class ExperimentLogger(Node):
         self.perception_diag = None
         self.heading_diag = None
         self.pixel_correction_diag = None
+        self._assimilation_source_batches = set()
+        self._assimilation_count = 0
+        self._assimilation_dropped_count = 0
         self.cmd_msg = None
         self.cmd_raw_msg = None
         self.cmd_noise_diag = None
@@ -954,6 +969,12 @@ class ExperimentLogger(Node):
             Float64MultiArray,
             '/planner/pixel_correction_diagnostics',
             self._pixel_correction_diag_cb,
+            10,
+        )
+        self.create_subscription(
+            String,
+            '/planner/correction_assimilation',
+            self._correction_assimilation_cb,
             10,
         )
         self.create_subscription(String, '/planner/diagnostics_text', self._planner_diag_text_cb, 10)
@@ -1131,6 +1152,17 @@ class ExperimentLogger(Node):
         self._obs_repeat_count = {}
         #: camera -> how many DISTINCT detections it has contributed
         self._obs_seq_by_camera = {}
+
+        # One terminal filter outcome per detector batch. This is the causal
+        # join used by scoring and run-validity checks.
+        self.assimilation_path = os.path.join(
+            self.run_dir, 'correction_assimilations.csv')
+        self.assimilation_file = open(self.assimilation_path, 'w', newline='')
+        self.assimilation_writer = csv.writer(self.assimilation_file)
+        self.assimilation_writer.writerow([
+            'source_batch_id', 'correction_stamp', 'apply_stamp',
+            'status', 'reason', 'accepted', 'nis', 'belief_stamp_after',
+        ])
 
         self.plan_file = None
         self.plan_writer = None
@@ -1737,6 +1769,41 @@ class ExperimentLogger(Node):
     def _pixel_correction_diag_cb(self, msg: Float64MultiArray):
         self.pixel_correction_diag = msg
 
+    def _correction_assimilation_cb(self, msg: String):
+        try:
+            payload = json.loads(msg.data)
+        except (TypeError, ValueError):
+            self._record_invalid('malformed_correction_assimilation')
+            return
+        if not isinstance(payload, dict):
+            self._record_invalid('malformed_correction_assimilation')
+            return
+        source_batch_id = str(payload.get('source_batch_id', '') or '').strip()
+        if not source_batch_id:
+            self._record_invalid('assimilation_missing_source_batch_id')
+            return
+        if source_batch_id in self._assimilation_source_batches:
+            self._record_invalid('duplicate_source_batch_assimilation')
+            return
+        self._assimilation_source_batches.add(source_batch_id)
+        status = str(payload.get('status', '') or '').strip()
+        reason = str(payload.get('reason', '') or '').strip()
+        self._assimilation_count += 1
+        if status == 'dropped':
+            self._assimilation_dropped_count += 1
+            self._record_invalid(f'correction_dropped:{reason or "unknown"}')
+        self.assimilation_writer.writerow([
+            source_batch_id,
+            payload.get('correction_stamp', math.nan),
+            payload.get('apply_stamp', math.nan),
+            status,
+            reason,
+            1 if bool(payload.get('accepted', False)) else 0,
+            payload.get('nis', math.nan),
+            payload.get('belief_stamp_after', math.nan),
+        ])
+        self.assimilation_file.flush()
+
     @staticmethod
     def extract_planar_covariances(cov):
         if cov is None or len(cov) < 36:
@@ -1777,6 +1844,8 @@ class ExperimentLogger(Node):
             5: 'jump_too_large',
             6: 'nis_too_large',
             7: 'diverged',
+            8: 'not_newer_than_belief',
+            9: 'replay_gap_too_large',
         }.get(value, 'unknown')
 
     @staticmethod
@@ -3297,6 +3366,9 @@ class ExperimentLogger(Node):
             'inside_no_go': bool(self._inside_no_go_seen),
             'valid_run': bool(self._valid_run),
             'invalid_reason': self._invalid_reason,
+            'correction_assimilation_count': int(self._assimilation_count),
+            'correction_assimilation_dropped_count': int(
+                self._assimilation_dropped_count),
             'frame_sanity': dict(self._frame_sanity),
             'run_dir': self.run_dir
         }
@@ -3334,6 +3406,10 @@ class ExperimentLogger(Node):
                 self.plan_file.close()
             if self.perception_file is not None:
                 self.perception_file.close()
+            if getattr(self, 'fusion_obs_file', None) is not None:
+                self.fusion_obs_file.close()
+            if getattr(self, 'assimilation_file', None) is not None:
+                self.assimilation_file.close()
         finally:
             super().destroy_node()
 

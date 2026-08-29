@@ -217,24 +217,28 @@ Not to build a replay comparison — to be able to explain a surprise afterwards
 | `Sigma_c` from one `sigma_px` | `experiments/measurement_commissioning/{observation,uncertainty}.py` (`jacobian`, `ground_covariance`) | **done, frozen** |
 | hull observation model, live | `reliability/silhouette_observation.py`, `camera_manager_node.py` (`silhouette_observation_correction`) | **done** |
 | F3 independent fusion | `reliability/fusion.py: independent_measurement_fusion_2d` | **done, wired** |
-| F1 best single by `tr(Sigma_c)` | — | **build**: small selector; `select_information_best` is prior-dependent and is not this rule |
-| F2 distance-and-angle weights | — | **build**, frozen coefficients, no tuning |
-| F4 network pooling, `w = 1/N` | — | **build**: `(1/N) sum Sigma_c^-1`, one function beside F3 |
-| a covariance profile that states `Sigma_c` | `camera_manager_node.py` (`covariance_profile`) | **build**: the two existing profiles are pre-clean-sheet (a metric floor, and a 2.5/40 px blend); neither is the commissioned `sigma_px` pipeline |
-| O2 fixed-offset mode | — | **build**, as a mode of the same node |
-| the campaign driver: 6 arms x 5 seeds, one live drive each, with the logs listed above | — | **build** |
+| F1 best single by `tr(Sigma_c)` | `reliability/fusion.py: select_smallest_covariance` | **done, wired** |
+| F2 distance-and-angle weights | `reliability/fusion.py: distance_angle_weighted_fusion_2d` | **done, wired**, frozen coefficients, no tuning |
+| F4 network pooling, `w = 1/N` | `reliability/fusion.py: network_pooled_fusion_2d` | **done, wired** |
+| a covariance profile that states `Sigma_c` | `camera_manager_node.py` (`covariance_profile: commissioned_sigma_px`) | **done, and the only supported profile** — the pre-clean-sheet metric-floor and 2.5/40 px profiles are gone |
+| O1 raw box / O2 fixed offset | `camera_manager_node.py` (`observation_model`) | **done, wired** |
+| the campaign driver: 6 arms x 4 routes x 5 seeds | `scripts/visibility_comparison/fusion_on_fixed_routes_campaign.yaml` | **done** |
+| schema-4 logging: one assimilation row per detector batch | `experiments/nodes/experiment_logger.py`, `unicycle_planner_node.py` | **done, and required by `score.py`** |
 | empty-warehouse frames (false positives) | — | **missing, and owed before this study**, per `PLAN.md` |
+| a frozen run selection | `logs/studies/fusion_on_fixed_routes/frozen_runs.json` | **missing — this is the gate.** No number may be reported until it exists |
 
-Two of those are worth flagging before anything is driven:
+Two things to hold on to before reading any output:
 
-1. **The covariance the node currently states is not the commissioned one.** Until a profile
-   exists that states `Sigma_c = J^-1 R_pix J^-T`, every arm would be compared through a
-   retired noise model, and RQ2a's honesty metric would measure that instead of the fusion
-   rule.
+1. **No fusion result is currently frozen.** Every drive so far is `logging_schema_version` 3
+   and is diagnostic only; `score.py` refuses anything older than schema 4 and refuses a run
+   whose corrections and assimilations do not correspond exactly. See
+   `docs/localization_metrics_registry.json`.
 2. **The operational heading error is still unmeasured**, and it enters the position error at
-   about 0.23 cm per degree through the hull prediction (`heading_gate.py`). This drive is the
-   first artefact that can measure it — log the estimator's heading and score it separately,
-   because it is invisible in every commissioned number so far.
+   about 0.23 cm per degree through the hull prediction (`heading_gate.py`). These drives are
+   the first artefact that can measure it — log the estimator's heading and score it
+   separately, because it is invisible in every commissioned number so far. The
+   `camera_xy_only` versus `coupled` comparison has its own config,
+   `scripts/visibility_comparison/heading_update_ablation_campaign.yaml`.
 
 ---
 

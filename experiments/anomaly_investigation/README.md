@@ -1,5 +1,11 @@
 # Anomaly investigation: why a camera reading is 130 cm wrong
 
+> **CLOSED, and kept for its method.** The defect it found — an admission gate with no caller
+> in the runtime — was fixed on 2026-08-27. The gate now runs, so the readings this folder
+> examines cannot occur any more, and the numbers below describe a pipeline that no longer
+> exists. What is worth keeping is the technique: when a statistic looks wrong, look at the
+> frame the detector actually saw.
+
 **A camera reading should not be a metre out. These were.** This folder finds out why, using
 the actual detector views rather than statistics.
 

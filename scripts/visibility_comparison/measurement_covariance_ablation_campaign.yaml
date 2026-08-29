@@ -1,62 +1,59 @@
-# Better commissioning: does what commissioning MEASURES change what the robot does?
+# How much does the per-camera measurement covariance need to know?
 #
-# Commissioning already produces a per-camera detector noise and the runtime pools it into one
-# number. On the four hull drives of 2026-08-27, one camera needed about three times the
-# variance of another, so the pooled number cannot be right for both.
+# Rung by rung, stopping as soon as the next one fails to earn itself. Same route, same
+# fusion rule (network pooling), same observation model (hull) -- only what the covariance
+# is allowed to say about each camera changes:
 #
-#   K0  pooled detector noise, one number for all five cameras   <- what the runtime has always done
-#   K2  each camera's own noise, measured from the drive with no ground truth
+#   K0  one commissioned pixel-noise number, shared by every camera
+#   K1  one pixel-noise number per camera, from the commissioning capture
+#   K2  one pixel-noise number per camera, re-measured from the drives with no ground truth
 #
-# Nothing else differs: same world, same route, same controller, same detector, same fusion
-# rule (network, divided by N) and the same hull observation model.
+# The offline ladder on the commissioning capture said K0 wins and K1 is a tie. This asks
+# whether that survives a driving robot, where the belief steers which sightings are
+# admitted at all.
 #
-# Both arms log the observation's own CAPTURE time, which no previous drive did. Without it a
-# reading can only be scored against the truth at logging time -- later by the whole
-# detector-and-manager delay, and that delay reads as measurement error identically on every
-# camera. It is what made the per-camera noise look 4-25x understated when it is not.
+# Everything else is the canonical fusion campaign, unchanged, on its 30 m route.
+# Design: PLAN.md section 4.
+
 world: warehouse_v2.world.sdf
 launch_file: warehouse_primary_comparison.launch.py
 
 conditions:
   K0:
-    label: K0_pooled_detector_noise
+    label: K0_one_pooled_pixel_noise_number
     manager_fusion_rule: network
     manager_observation_model: hull
     manager_commissioned_per_camera_sigma: false
-  K3:
-    label: K3_shared_error_added_back
+  K1:
+    label: K1_one_pixel_noise_number_per_camera
     manager_fusion_rule: network
     manager_observation_model: hull
     manager_commissioned_per_camera_sigma: true
-    # THE TREATMENT. Each camera's own stated ellipse is about right -- measured against the
-    # truth at the moment the camera saw the robot, four of five are slightly padded. But the
-    # cameras do not err independently: combining two of them produced an answer 3.8x more
-    # confident than it deserved. This is the part they get wrong TOGETHER, added back after
-    # they are combined. Measured on the K0 and K2 drives of 2026-08-27 as 3.40 and 3.01 cm;
-    # 3.2 cm is the midpoint, and it is a commissioned constant, not a live signal.
-    manager_fusion_common_mode_std_m: 0.032
   K2:
-    label: K2_recommissioned_from_the_drive
+    label: K2_pixel_noise_recommissioned_from_the_drives
     manager_fusion_rule: network
     manager_observation_model: hull
     manager_commissioned_per_camera_sigma: true
-    # Not commissioning's numbers -- the network's own, measured from how far each camera sat
-    # from what the others saw on the four hull drives of 2026-08-27. No ground truth was used
-    # to produce this file. It says camera B needs 2.23 px where commissioning gave it 0.82.
+    # Not the commissioning capture's numbers -- the network's own, measured from how far
+    # each camera sat from what the others saw while driving. No ground truth is used to
+    # produce this file, which is the point: it is a calibration a deployed warehouse could
+    # actually perform. It must be REGENERATED from schema-4 drives before this arm runs;
+    # the file below was fitted on the superseded pipeline.
     manager_commissioned_calibration_path: logs/studies/learned_measurement_covariance/recommissioned.json
 
 tasks:
   fusion_network_traverse:
-    conditions: [K3]
-    seeds: [0]
+    # the mixed corridor — 30.622 m, 10 vertices, measured clearance 0.3538 m
+    conditions: [K0, K1, K2]
+    seeds: [0, 1, 2, 3, 4]
     preselected_routes:
-      K0: &frozen_route
+      K0: &route_ablation
         preselected_route_json: '[[-7.900000000000015,-8.700000000000005],[-7.000000000000018,-8.700000000000005],[-4.800000000000026,-6.500000000000012],[-1.1000000000000387,-6.500000000000012],[0.7999999999999545,-4.600000000000019],[0.7999999999999545,-2.2000000000000277],[1.5999999999999517,-1.4000000000000306],[10.099999999999923,-1.4000000000000306],[10.799999999999919,-0.700000000000033],[10.59999999999992,6.499999999999943]]'
         preselected_route_sha256: 9d4a3a35d8d7254bfa6d59110f295ca0df648262227367e027c924c62bf34b76
         preselected_route_source_path: experiments/fusion_on_fixed_routes/routes/fusion_network_traverse.json
         preselected_route_source_sha256: c7c0322b930e2c22ac0b7d09b6ea8df0725f545da467519dd1ffecbab21cf3ed
-      K2: *frozen_route
-      K3: *frozen_route
+      K1: *route_ablation
+      K2: *route_ablation
 
 # ---------------------------------------------------------------------------
 # the sensor: frozen detector, one commissioned pixel-noise number
@@ -71,6 +68,7 @@ yolo_target_class: robot
 yolo_class_id: 0
 yolo_use_masks: false
 yolo_min_bbox_area_px: 0.0
+yolo_max_batch_stamp_skew_s: 0.05
 # The detector node stamps this sigma (px) onto every observation it publishes. The manager's
 # commissioned_sigma_px profile overrides it from calibration.json anyway, but leaving the old
 # 2.5 px here would put two different claims about the same detector in one run's provenance.
@@ -84,9 +82,7 @@ manager_commissioned_calibration_path: logs/studies/measurement_commissioning/ca
 # No reliability field is consulted anywhere in this experiment: availability predicts the
 # future and this experiment is entirely about measurements that have already arrived.
 manager_require_gp_artifacts: false
-# 5 Hz leaves up to 200 ms between deciding and using a correction, which the
-# propagation cannot see. 20 Hz cuts that to 50 ms.
-manager_decision_rate_hz: 20.0
+manager_decision_rate_hz: 5.0
 manager_require_source_batch_id: true
 manager_bootstrap_min_cameras: 2
 # Two cameras place the SAME robot this far apart with no error at all: the box
@@ -107,12 +103,26 @@ state_correction_ekf: true
 heading_update_mode: coupled
 pixel_correction_nis_threshold: 9.21
 
+# Recovery policy: what the belief does when a correction is refused. Declared here so
+# the manifest states it. Re-anchor is OFF: snapping the belief to a measurement was the
+# one path that bypassed both the outlier gate and the re-anchor threshold, so one
+# camera's word could move the belief anywhere unchecked. A refused correction widens the
+# belief instead, which reopens the gate on its own without granting a bypass.
+state_reanchor_m: 0.0
+state_max_predict_dt_s: 1.5
+state_reject_inflate_m2: 0.05
+stale_belief_inflate_m2_per_s: 0.0
+stale_belief_inflate_cap_m2: 0.0
+require_state_correction_envelope: true
+
 # ---------------------------------------------------------------------------
 # the route: frozen, hash-bound, identical for every arm
 # ---------------------------------------------------------------------------
 use_hierarchical: true
 global_planner_mode: preselected_route
-use_truth_localization: false
+# The planner's belief comes from the cameras and odometry, never from the
+# simulator's pose. This diagnostic bypass would replace it with raw odometry.
+use_diagnostic_odom_localization: false
 # The measured minimum along this polyline is 0.354 m; the grid erosion that produced it was
 # 0.50 m, because a polyline joining 0.10 m cell centres cuts diagonal corners.
 # freeze_route.py measures this on the SIMPLIFIED polyline -- the one actually driven -- and
@@ -178,21 +188,6 @@ headless: true
 use_rviz: false
 reset_world: false
 debug_runtime: true
-# 24 runs need 24 consecutive domain ids inside 0..232, so the base moves down.
-ros_domain_id_base: 200
-
-# THE TREATMENT OF THIS CAMPAIGN.
-# The admission check, which the live pipeline had never run. Commissioning refuses
-# 30% of detections this way; those refused readings have a median error of 24 cm
-# and a worst of 122 cm, against 1.44 cm for the ones it keeps.
-manager_admission_gate: true
-# The leftover interval between carrying a correction forward and consuming it leaves a
-# displacement along the direction of travel: measured -1.72 cm with 1.89 cm of spread, i.e. a
-# bias as large as its own noise. The filter shrinks straight through it -- the belief's ellipse
-# reaches 1.12 cm on the axis where its error is 2.63 cm. Declared here as uncertainty along
-# travel rather than pretended away. 0.0 reproduces the previous behaviour.
-manager_correction_residual_interval_s: 0.05
-manager_correction_timestamp_compensation: true
-manager_correction_propagation_drift_std: 0.05
-# Propagate using odometry rather than the corrected belief: the belief jumps when a
-# correction lands, and that jitter goes straight into the displacement estimate.
+# 15 runs need that many consecutive domain ids inside 0..232,
+# and they must not overlap the 80..200 block the main fusion campaign uses.
+ros_domain_id_base: 30

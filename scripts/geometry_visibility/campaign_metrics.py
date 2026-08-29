@@ -1,29 +1,40 @@
-#!/usr/bin/env python3
-"""Canonical, self-checking metrics loader for visibility-comparison campaign logs.
+"""Column-safety loader for per-run campaign CSVs. NOT the fusion-study loader.
 
-WHY THIS EXISTS
----------------
-Each per-run CSV has ~216 columns with SIX overlapping position fields. Picking the
-wrong one silently yields garbage — e.g. `state_x/state_y` is STALE (updates rarely,
-frozen for long spans) so ||state - gt|| reaches 4.5 m while the true belief error is
-<0.35 m. Using it as "belief" produced a fake heavy-tailed error and a bogus
-"spreading helps" result. This module exposes ONLY verified-canonical fields and
-asserts them on load, so analysis code cannot grab a stale column.
+SCOPE, and read this before using it
+------------------------------------
+This module does one job: pick the right column out of a campaign `experiment.csv`,
+which has ~216 of them and six overlapping position fields. It asserts on load that
+the belief column still reproduces the logged belief-error column, so analysis code
+cannot silently grab a stale field.
 
-CANONICAL FIELDS (use these):
+It does NOT time-align anything and it does NOT deduplicate. It reads a row as the row
+was written. That is fine for a per-timestep diagnostic and WRONG for any measurement
+statement, because:
+
+  * the logger writes the belief and the reference at different points in the cycle, so
+    a row pairs an estimate with a reference that describes a different instant;
+  * a held detector reading is re-logged on every manager decision, so a row count is
+    not an observation count.
+
+**For anything that becomes a number in the paper -- camera reading error, fused
+correction error, belief error, calibration, coverage -- use
+`experiments/fusion_on_fixed_routes/aligned.py` instead.** It scores each quantity at
+the instant that quantity describes and counts each detector batch once. See
+`docs/localization_metrics.md`.
+
+CANONICAL FIELDS (use these, not their neighbours):
   belief          = planner_belief_x / planner_belief_y   (== est_x/est_y)
-  truth           = gt_x / gt_y                            (GT-bridge ground truth)
-  belief_error_m  = belief_error_gt_m                      (== ||belief - truth||, verified)
-  reported_sigma_m= state_sigma_major_m                    (reported 1σ major axis;
-                    NOTE: OVERCONFIDENT — median ~0.017 m vs actual error median ~0.05 m)
+  reference       = gt_x / gt_y                            (ground truth, EVALUATION ONLY)
+  belief_error_m  = belief_error_gt_m                      (== ||belief - reference||)
+  reported_sigma_m= state_sigma_major_m                    (the belief's stated 1-sigma
+                    major axis, as claimed -- whether that claim is honest is a result,
+                    not an assumption)
   detection       = perception.csv: detected {0,1}, yolo_score_raw
 
-DO NOT USE as belief/truth:
-  state_x / state_y (experiment or perception) -> STALE (frozen); ||state-gt|| up to 4.5 m
-  truth_x / truth_y                            -> wheel-odom truth (pre-GT-bridge); use gt_*
-
-See docs/campaign_log_metrics.md. Every loader runs assert_canonical() which fails
-loudly if planner_belief stops reproducing the belief_error_gt_m column.
+NEVER USE as belief or reference:
+  state_x / state_y   -> stale; frozen for long spans, so ||state - gt|| reaches metres
+  truth_x / truth_y   -> WHEEL ODOMETRY despite the name. Diagnostic only, never a
+                         reference. Use gt_*.
 """
 from __future__ import annotations
 import csv, glob, pathlib

@@ -39,7 +39,10 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'state_reanchor_m': '0.0',
     'state_max_predict_dt_s': '1.5',
     'state_reject_inflate_m2': '0.05',
-    'use_truth_localization': 'false',
+    'stale_belief_inflate_m2_per_s': '0.0',
+    'stale_belief_inflate_cap_m2': '0.0',
+    'require_state_correction_envelope': 'false',
+    'use_diagnostic_odom_localization': 'false',
     'cmd_publish_rate': '10.0',
     'command_noise_output_topic': '/cmd_vel',
     'min_state_cov': '1e-6',
@@ -177,6 +180,9 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'yolo_min_mask_area_px': '12.0',
     'yolo_mask_bottom_band_px': '3.0',
     'yolo_min_bbox_area_px': '0.0',
+    # Five-Hz camera rounds are 0.20 s apart. This must stay strictly below
+    # one period so adjacent physical capture rounds can never merge.
+    'yolo_max_batch_stamp_skew_s': '0.05',
     'log_dir': 'logs/experiments',
 }
 
@@ -378,7 +384,18 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'state_reject_inflate_m2': float(_launch_value(
             context, 'state_reject_inflate_m2',
             PAPER_LAUNCH_DEFAULTS['state_reject_inflate_m2'])),
-        'use_truth_localization': _as_bool(_launch_value(context, 'use_truth_localization', PAPER_LAUNCH_DEFAULTS['use_truth_localization'])),
+        'stale_belief_inflate_m2_per_s': float(_launch_value(
+            context, 'stale_belief_inflate_m2_per_s',
+            PAPER_LAUNCH_DEFAULTS['stale_belief_inflate_m2_per_s'])),
+        'stale_belief_inflate_cap_m2': float(_launch_value(
+            context, 'stale_belief_inflate_cap_m2',
+            PAPER_LAUNCH_DEFAULTS['stale_belief_inflate_cap_m2'])),
+        'require_state_correction_envelope': _as_bool(_launch_value(
+            context, 'require_state_correction_envelope',
+            PAPER_LAUNCH_DEFAULTS['require_state_correction_envelope'])),
+        'use_diagnostic_odom_localization': _as_bool(_launch_value(
+            context, 'use_diagnostic_odom_localization',
+            PAPER_LAUNCH_DEFAULTS['use_diagnostic_odom_localization'])),
         'pixel_correction_approx': _launch_value(
             context,
             'pixel_correction_approx',
@@ -710,6 +727,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'yolo_min_mask_area_px': float(_launch_value(context, 'yolo_min_mask_area_px', PAPER_LAUNCH_DEFAULTS['yolo_min_mask_area_px'])),
         'yolo_mask_bottom_band_px': float(_launch_value(context, 'yolo_mask_bottom_band_px', PAPER_LAUNCH_DEFAULTS['yolo_mask_bottom_band_px'])),
         'yolo_min_bbox_area_px': float(_launch_value(context, 'yolo_min_bbox_area_px', PAPER_LAUNCH_DEFAULTS['yolo_min_bbox_area_px'])),
+        'yolo_max_batch_stamp_skew_s': float(_launch_value(
+            context, 'yolo_max_batch_stamp_skew_s',
+            PAPER_LAUNCH_DEFAULTS['yolo_max_batch_stamp_skew_s'])),
         'yolo_debug_frame_dir': _launch_value(context, 'yolo_debug_frame_dir', ''),
         'yolo_use_torchscript': _as_bool(_launch_value(context, 'yolo_use_torchscript', 'false')),
         'yolo_runtime_backend': _launch_value(context, 'yolo_runtime_backend', 'native').strip().lower(),
@@ -722,6 +742,11 @@ def parse_common_launch_config(context) -> Dict[str, object]:
     if cfg['heading_update_mode'] not in ('camera_xy_only', 'coupled'):
         raise RuntimeError(
             "heading_update_mode must be 'camera_xy_only' or 'coupled'")
+    if not (0.0 <= cfg['yolo_max_batch_stamp_skew_s'] < 0.20):
+        raise RuntimeError(
+            "yolo_max_batch_stamp_skew_s must be non-negative and strictly below "
+            "the 0.20 s camera period; otherwise adjacent capture rounds can merge"
+        )
     if (
         cfg['enable_logging']
         and (
@@ -1349,6 +1374,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'yolo_use_masks': cfg['yolo_use_masks'],
                 'yolo_min_mask_area_px': cfg['yolo_min_mask_area_px'],
                 'yolo_mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
+                'yolo_max_batch_stamp_skew_s': cfg['yolo_max_batch_stamp_skew_s'],
                 'show_pose_markers': False,
                 'diagnostics_match_tolerance_s': 1e-3,
                 'bev_y_calibration_offset_m': cfg['bev_y_calibration_offset_m'],
@@ -1357,6 +1383,9 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'state_reanchor_m': cfg['state_reanchor_m'],
                 'state_max_predict_dt_s': cfg['state_max_predict_dt_s'],
                 'state_reject_inflate_m2': cfg['state_reject_inflate_m2'],
+                'stale_belief_inflate_m2_per_s': cfg['stale_belief_inflate_m2_per_s'],
+                'stale_belief_inflate_cap_m2': cfg['stale_belief_inflate_cap_m2'],
+                'require_state_correction_envelope': cfg['require_state_correction_envelope'],
                 'world_profiles_path': cfg['world_profiles_path'],
                 'tasks_yaml': cfg['tasks_yaml'],
                 'auto_stop_on_goal': cfg['auto_stop_on_goal'],
@@ -1619,7 +1648,7 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
     """Multi-camera belief front-end (multicam_belief mode).
 
     Replaces the single-camera ``yolo_robot_detector_node`` + ``pixel_to_bev``
-    with the batched four-camera detector and the ``camera_manager`` running in
+    with the batched multicamera detector and the ``camera_manager`` running in
     ``authority=active`` mode. The manager selects the best available camera
     per frame and republishes the world-frame correction to ``/state/bev`` --
     the same topic the planner's ``_state_cb`` consumes -- so no planner change
@@ -1674,12 +1703,12 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
             # 0.25 reporting threshold this changes no reported detection but cuts
             # batch inference ~140 ms -> ~39 ms, which frees the P2000 to render
             # the four oblique cameras faster: measured 3.3 Hz -> 4.9 Hz per
-            # camera (batched, all four in lockstep). See scheduled note.
+            # camera (batched, all registered cameras in lockstep). See scheduled note.
             'predict_conf_floor': float(cfg.get('yolo_predict_conf_floor', 0.05)),
             'warmup_iters': int(cfg.get('yolo_warmup_iters', 3)),
-            # 0.25 s tolerates the phase offset between the four 5 Hz cameras;
-            # at 0.10 s most 4-way batches were dropped as stamp_skew.
-            'max_batch_stamp_skew_s': float(cfg.get('yolo_max_batch_stamp_skew_s', 0.25)),
+            # Capture stamp, not callback arrival time, defines a round. Keep
+            # this below the 0.20 s camera period so round N and N+1 cannot merge.
+            'max_batch_stamp_skew_s': cfg['yolo_max_batch_stamp_skew_s'],
             'max_pending_wall_s': 0.50,
             'synchronization_mode': 'strict',
             'input_transport': cfg.get('yolo_input_transport', 'ros'),
@@ -1691,7 +1720,7 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
             'camera_observation_r_miss_uv': float(cfg.get('r_miss_uv', 40.0)),
         }],
     )
-    # Which cameras the fusion manager uses. Empty -> all four (default); restrict
+    # Which cameras the fusion manager uses. Empty -> all registered cameras; restrict
     # to one (e.g. "camera_A") for a single-camera localization baseline in the
     # fused-vs-single comparison. camera_model_includes must stay aligned 1:1 with
     # camera_ids (the manager asserts this), so derive it from the same selection.
@@ -1862,7 +1891,10 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'state_reanchor_m': cfg['state_reanchor_m'],
             'state_max_predict_dt_s': cfg['state_max_predict_dt_s'],
             'state_reject_inflate_m2': cfg['state_reject_inflate_m2'],
-            'use_truth_localization': cfg['use_truth_localization'],
+            'stale_belief_inflate_m2_per_s': cfg['stale_belief_inflate_m2_per_s'],
+            'stale_belief_inflate_cap_m2': cfg['stale_belief_inflate_cap_m2'],
+            'require_state_correction_envelope': cfg['require_state_correction_envelope'],
+            'use_diagnostic_odom_localization': cfg['use_diagnostic_odom_localization'],
             'odom_topic': odom_topic,
             'use_odom_for_predict': cfg['use_odom_for_predict'],
             'heading_update_mode': cfg['heading_update_mode'],

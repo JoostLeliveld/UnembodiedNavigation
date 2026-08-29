@@ -1,16 +1,14 @@
-"""The multicam /state/bev path runs the same guarded chain as paper 1.
+"""The fused correction path runs the same guarded chain as the pixel path.
 
-Step 2 of the consolidation pointed ``_apply_state_correction`` at
-``planning.core.belief_correction`` via ``FusedMapMeasurementSource``. These
-tests pin the three gaps the parity audit confirmed
-(docs/multicam_vs_paper1_correction_parity.md PART 1):
+``_apply_state_correction`` reaches ``planning.core.belief_correction`` through
+``FusedMapMeasurementSource``, so both measurement paths share one gate chain. These
+tests pin the three properties that made a second, separately written chain dangerous:
 
-1. the jump limiter was configured but never read on this path;
-2. the NIS gate inflated S by +1.0 m^2 on reject, which neutered it for the very
-   next correction -- the mechanism behind the measured 1.87 m one-sample belief
-   jump;
-3. there were no reason-coded rejection diagnostics, which is why (1) and (2)
-   stayed invisible until CSV forensics.
+1. the jump limiter must actually be read on this path, not merely configured;
+2. a NIS rejection must not inflate S so far that the gate is open for the next
+   correction -- a self-widening gate stops rejecting anything;
+3. every rejection must carry a reason code, or a gate doing nothing is
+   indistinguishable in the log from a gate that is working.
 
 Plus the behaviours the separate chain got RIGHT, which must survive the merge:
 bootstrap, re-anchor on divergence, and never freezing the belief on a rejection.
@@ -18,6 +16,7 @@ bootstrap, re-anchor on divergence, and never freezing the belief on a rejection
 
 from __future__ import annotations
 
+import json
 import math
 import threading
 
@@ -67,6 +66,7 @@ def make_state_node(*, belief_xy=(0.0, 0.0), belief_cov=0.05, now_s=10.0,
     )
     node.state_correction_ekf = True
     node.state_correction_mode = 'fused'
+    node.use_pixel_correction = False
     node.state_reanchor_m = STATE_REANCHOR_M
     node.state_max_predict_dt_s = 1.5
     node.state_reject_inflate_m2 = REJECT_INFLATE_M2
@@ -109,6 +109,21 @@ def test_ignores_a_correction_not_newer_than_the_belief():
     before = node.belief_m.copy()
     node._apply_state_correction(state_msg(1.0, 0.0, seconds=9.95))
     np.testing.assert_array_equal(node.belief_m, before)
+    diag = only_diag(node)
+    assert diag[IDX_REJECT_CODE] == bc.REJECT_CODES['not_newer_than_belief']
+
+
+def test_source_batch_gets_one_terminal_assimilation_record():
+    node = make_state_node()
+    node._apply_metric_correction(
+        stamp(9.95), np.array([0.05, 0.0]), np.eye(2) * 0.03,
+        source_batch_id='strict:camera_A@9950000000',
+    )
+    assert len(node.correction_assimilation_pub.published) == 1
+    payload = json.loads(node.correction_assimilation_pub.published[0])
+    assert payload['source_batch_id'] == 'strict:camera_A@9950000000'
+    assert payload['status'] == 'accepted'
+    assert payload['accepted'] is True
 
 
 def test_an_implausible_replay_gap_is_rejected_not_snapped_to():
@@ -129,23 +144,36 @@ def test_an_implausible_replay_gap_is_rejected_not_snapped_to():
     assert node.belief_S[1, 1] > before_S[1, 1]
 
 
-def test_the_belief_stamp_catches_up_so_a_long_gap_cannot_lock_corrections_out():
-    """The rejection above is only safe because the planning loop commits a bounded
-    prediction once the belief is older than pixel_timeout_s -- after which the gap
-    is small again and ordinary corrections are accepted."""
-    node = make_state_node(belief_stamp_s=5.0, now_s=10.0)
-    node._apply_state_correction(state_msg(3.0, 4.0, seconds=9.9))   # rejected, above
+def test_planning_prediction_is_read_only_so_delayed_correction_still_lands():
+    """A planning tick at now must not move the committed belief past an image
+    that is still travelling through the detector pipeline."""
+    node = make_state_node(belief_stamp_s=9.6, now_s=10.0)
+    before_stamp = node._stamp_to_float(node.belief_stamp)
 
-    # what the planning loop does when the belief has gone stale
     node._predict_belief_to_now(
         node.belief_m, node.belief_S, node.last_cmd,
-        belief_age_s=5.0, now_msg=stamp(10.0), mutate=True,
+        belief_age_s=0.4, now_msg=stamp(10.0),
     )
-    assert node._stamp_to_float(node.belief_stamp) == pytest.approx(10.0)
+    assert node._stamp_to_float(node.belief_stamp) == pytest.approx(before_stamp)
 
-    # the next correction is now an ordinary one and lands
-    node._apply_state_correction(state_msg(3.0, 4.0, seconds=10.2))
-    assert node.belief_m[0] == pytest.approx(3.0, abs=0.5)
+    node._apply_state_correction(state_msg(0.05, 0.0, seconds=9.8))
+    assert node._stamp_to_float(node.belief_stamp) == pytest.approx(9.8)
+    assert node.belief_m[0] > 0.0
+
+
+def test_coupled_heading_is_not_replaced_only_for_planning():
+    node = make_state_node(odom_yaw=1.2)
+    node.heading_update_mode = 'coupled'
+    mean = np.array([1.0, 2.0, 0.35])
+    covariance = np.array([
+        [0.2, 0.0, 0.03],
+        [0.0, 0.2, -0.02],
+        [0.03, -0.02, 0.1],
+    ])
+    anchored_m, anchored_S = node._anchor_belief_yaw_for_planning(
+        mean, covariance, stamp(10.0))
+    np.testing.assert_allclose(anchored_m, mean)
+    np.testing.assert_allclose(anchored_S, covariance)
 
 
 def test_reanchors_when_the_belief_has_diverged():

@@ -16,8 +16,8 @@ Two kinds of coverage here:
   closed-form map-xy update the multicam path used -- proving the one shared
   ``compute_update`` reproduces *both* stacks.
 
-Only ``pixel_corr_*`` diagnostic columns are read from the campaign CSVs; no
-position columns, so the campaign-metrics column traps do not apply here.
+Only ``pixel_corr_*`` diagnostic columns are read from the campaign CSVs; no position
+columns, so the column-choice hazards of the campaign logs do not apply here.
 """
 
 from __future__ import annotations

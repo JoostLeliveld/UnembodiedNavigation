@@ -1,9 +1,13 @@
 # Repository instructions: how to talk about a number
 
 Before answering any question involving camera accuracy, localization error, belief error,
-calibration, coverage, RMSE, bias, or a comparison of runs, read [`PLAN.md`](PLAN.md) and
-load the run through
+calibration, coverage, RMSE, bias, or a comparison of runs, read [`PLAN.md`](PLAN.md),
+[`docs/localization_metrics.md`](docs/localization_metrics.md), and
+[`docs/localization_metrics_registry.json`](docs/localization_metrics_registry.json), then load the run through
 [`experiments/fusion_on_fixed_routes/aligned.py`](experiments/fusion_on_fixed_routes/aligned.py).
+
+[`docs/open_questions.md`](docs/open_questions.md) says what is unresolved and which
+implementation limits are known. Check it before presenting anything as settled.
 
 ## The clean sheet
 

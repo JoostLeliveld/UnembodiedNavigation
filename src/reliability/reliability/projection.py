@@ -5,8 +5,9 @@ box bottom-centre ray is intersected with the floor plane.  There are no paramet
 contact-plane constant and no per-camera calibration.
 
 That is not a simplification for its own sake, it is the measured optimum.  On 1844 real
-detections (``logs/studies/pixel_ground_path/e7_ipm_zero_parameter/RESULTS.md``, 2026-08-07)
-every fitted correction this module used to support scored **worse** than applying none:
+detections, every fitted correction this module once supported scored **worse** than
+applying none (2026-08-07; that study predates the 2026-08-25 clean sheet, so the numbers
+below are the reason the parameters were removed, not a current result):
 
     raw IPM, 0 parameters   66.6 mm     <- this code
     v4, 2 parameters        70.1 mm

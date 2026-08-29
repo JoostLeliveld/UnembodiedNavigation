@@ -144,8 +144,10 @@ def _selected_runs(arm: str, task: str = TASKS[0]) -> list[Path]:
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise SystemExit(f"invalid frozen run {run}: {exc}")
-        if int(manifest.get("logging_schema_version", 0) or 0) < 3:
-            raise SystemExit(f"{run}: schema 3 or newer is required")
+        if int(manifest.get("logging_schema_version", 0) or 0) < 4:
+            raise SystemExit(
+                f"{run}: schema 4 or newer is required for source-batch assimilation"
+            )
         if manifest.get("task") != task:
             raise SystemExit(f"{run}: task identity mismatch")
         actual = (manifest.get("manager_fusion_rule"),
@@ -156,6 +158,24 @@ def _selected_runs(arm: str, task: str = TASKS[0]) -> list[Path]:
             raise SystemExit(f"{run}: ground-truth-independent termination is required")
         if not summary.get("completed") or not summary.get("valid_run", False):
             raise SystemExit(f"{run}: frozen evidence must be completed and valid")
+        assimilation = A.assimilations(run)
+        correction_batches = {
+            row["source_batch_id"] for row in A.fused_answers(run)
+            if row["source_batch_id"]
+        }
+        assimilation_batches = {row["source_batch_id"] for row in assimilation}
+        if assimilation_batches != correction_batches:
+            missing = sorted(correction_batches - assimilation_batches)
+            extra = sorted(assimilation_batches - correction_batches)
+            raise SystemExit(
+                f"{run}: correction/assimilation identity mismatch; "
+                f"missing={missing[:3]}, extra={extra[:3]}"
+            )
+        dropped = [row for row in assimilation if row["status"] == "dropped"]
+        if dropped:
+            raise SystemExit(
+                f"{run}: {len(dropped)} correction(s) were dropped by the filter"
+            )
         seed = int(manifest.get("seed", -1))
         if seed in seeds:
             raise SystemExit(f"{run}: duplicate seed {seed} in {task}/{arm}")
@@ -175,8 +195,12 @@ def _selected_runs(arm: str, task: str = TASKS[0]) -> list[Path]:
     return selected
 
 
-def _latest_run(arm: str, task: str = TASKS[0]) -> Path:
-    """Compatibility helper for storyline panels: return the explicitly named showcase."""
+def showcase_run(arm: str, task: str = TASKS[0]) -> Path:
+    """The one drive a storyline panel illustrates, named explicitly in the manifest.
+
+    Never "the latest": it must be one of the frozen runs, and if the manifest does not
+    name a showcase the first frozen run is used so the choice is still reproducible.
+    """
 
     runs = _selected_runs(arm, task)
     frozen = json.loads(FROZEN_RUNS.read_text(encoding="utf-8"))

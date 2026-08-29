@@ -62,14 +62,15 @@ CONDITION_PLANNER = {
     'F4': 'geometric_shortest_path',
     'O1': 'geometric_shortest_path',
     'O2': 'geometric_shortest_path',
-    # Commissioning arms: same frozen route and the same fusion rule, differing only in
-    # what the commissioning artifact is allowed to say about the cameras.
+    # Measurement-covariance arms: same frozen route and fusion rule, differing only in
+    # how much the per-camera covariance is allowed to say about each camera.
+    # measurement_covariance_ablation_campaign.yaml.
     'K0': 'geometric_shortest_path',
     'K1': 'geometric_shortest_path',
     'K2': 'geometric_shortest_path',
-    'K3': 'geometric_shortest_path',
     # Heading arms: the same frozen route and fusion rule, differing only in whether the
-    # camera update is allowed to move the heading through the position-heading covariance.
+    # camera update is allowed to move the heading through the position-heading
+    # covariance. heading_update_ablation_campaign.yaml.
     'H0': 'geometric_shortest_path',
     'H1': 'geometric_shortest_path',
 }
@@ -425,11 +426,14 @@ def _validate_preselected_campaign_routes(cfg: dict, config_path: Path) -> None:
                     "preselected_route requires use_hierarchical=true"
                 )
             if _as_bool(
-                _effective_value(cfg, task_name, condition_id, 'use_truth_localization')
+                _effective_value(
+                    cfg, task_name, condition_id, 'use_diagnostic_odom_localization')
             ):
                 raise RuntimeError(
-                    f"Task {task_name!r} condition {condition_id!r}: control from "
-                    "ground truth is forbidden by the closed-loop contract"
+                    f"Task {task_name!r} condition {condition_id!r}: "
+                    "use_diagnostic_odom_localization feeds raw odometry to the planner "
+                    "as its belief, bypassing the cameras entirely. It is a controller "
+                    "diagnostic and can never produce a closed-loop result."
                 )
             identity_keys = PRESELECTED_ROUTE_KEYS[:4]
             missing = [key for key in identity_keys if not str(route_cfg.get(key, '') or '')]
@@ -631,8 +635,8 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
     manifest = _load_run_manifest(Path(run_dir_str))
     if not manifest:
         return False, f'missing run_manifest.json in {run_dir_str}'
-    if int(manifest.get('logging_schema_version', 0) or 0) < 3:
-        return False, 'run predates logging schema 3 (batch identity / operational termination)'
+    if int(manifest.get('logging_schema_version', 0) or 0) < 4:
+        return False, 'run predates logging schema 4 (source-batch assimilation)'
     if manifest.get('goal_termination_reference') != 'planner_belief':
         return False, 'run did not use planner_belief for goal termination'
     expected_provenance = cfg.get('_git_provenance', {}) or {}
@@ -694,6 +698,8 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'preselected_route_endpoint_tolerance_m',
         'preselected_route_sample_step_m',
         'state_reanchor_m', 'state_max_predict_dt_s', 'state_reject_inflate_m2',
+        'stale_belief_inflate_m2_per_s', 'stale_belief_inflate_cap_m2',
+        'yolo_max_batch_stamp_skew_s',
         'manager_min_spatial_trust', 'manager_decision_rate_hz',
         'manager_fusion_disagreement_gate_m',
         'manager_bootstrap_min_cameras', 'manager_bootstrap_max_disagreement_m',
@@ -733,10 +739,11 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'local_use_belief_nogo_cost',
         'local_replan_on_waypoint_change',
         'latency_compensate_plan_handoff',
-        'use_truth_localization',
+        'use_diagnostic_odom_localization',
         'use_hit_miss_mixture',
         'terminate_on_geom_collision',
         'manager_require_source_batch_id',
+        'require_state_correction_envelope',
         'manager_commissioned_per_camera_sigma',
         'manager_correction_timestamp_compensation',
         'manager_admission_gate',
@@ -901,6 +908,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'yolo_min_mask_area_px:={cfg.get("yolo_min_mask_area_px", 12.0)}',
         f'yolo_mask_bottom_band_px:={cfg.get("yolo_mask_bottom_band_px", 3.0)}',
         f'yolo_min_bbox_area_px:={cfg.get("yolo_min_bbox_area_px", 0.0)}',
+        f'yolo_max_batch_stamp_skew_s:={cfg.get("yolo_max_batch_stamp_skew_s", 0.05)}',
         f'yolo_debug_frame_dir:={cfg.get("yolo_debug_frame_dir", "")}',
         f'yolo_use_torchscript:={str(cfg.get("yolo_use_torchscript", False)).lower()}',
         f'yolo_compiled_model:={cfg.get("yolo_compiled_model", "")}',
@@ -916,6 +924,9 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'state_reanchor_m:={cfg.get("state_reanchor_m", 0.0)}',
         f'state_max_predict_dt_s:={cfg.get("state_max_predict_dt_s", 1.5)}',
         f'state_reject_inflate_m2:={cfg.get("state_reject_inflate_m2", 0.05)}',
+        f'stale_belief_inflate_m2_per_s:={cfg.get("stale_belief_inflate_m2_per_s", 0.0)}',
+        f'stale_belief_inflate_cap_m2:={cfg.get("stale_belief_inflate_cap_m2", 0.0)}',
+        f'require_state_correction_envelope:={str(cfg.get("require_state_correction_envelope", False)).lower()}',
     ]
     if global_mode == 'preselected_route':
         cmd.append(f'comparison_method_id:=closed_loop_{condition_id}')
@@ -934,7 +945,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'use_pixel_correction', 'pixel_topic', 'command_noise_output_topic',
         'pixel_timeout_s', 'skip_stale_pixel_correction',
         'bev_y_calibration_offset_m', 'bev_affine_calibration', 'pixel_max_correction_jump_m',
-        'pixel_correction_nis_threshold', 'use_truth_localization',
+        'pixel_correction_nis_threshold', 'use_diagnostic_odom_localization',
         'debug_runtime',
         'optimizer_ftol', 'optimizer_gtol', 'optimizer_warm_start',
         'optimizer_initial_routes_json',
@@ -1018,6 +1029,48 @@ def _read_run_summary(run_dir: Path) -> dict | None:
     summary_path = run_dir / 'run_summary.json'
     if not summary_path.is_file():
         return None
+
+
+def _verify_correction_assimilations(run_dir: Path) -> tuple[bool, str]:
+    """Every published fused correction must have one terminal filter outcome."""
+    observations_path = run_dir / 'fusion_observations.csv'
+    assimilations_path = run_dir / 'correction_assimilations.csv'
+    if not observations_path.is_file():
+        return False, 'missing fusion_observations.csv'
+    if not assimilations_path.is_file():
+        return False, 'missing correction_assimilations.csv'
+    try:
+        correction_batches = {
+            str(row.get('source_batch_id', '') or '').strip()
+            for row in csv.DictReader(open(observations_path, encoding='utf-8'))
+            if str(row.get('source_batch_id', '') or '').strip()
+        }
+        assimilation_rows = list(csv.DictReader(
+            open(assimilations_path, encoding='utf-8')))
+    except (OSError, csv.Error) as exc:
+        return False, f'cannot read correction evidence: {exc}'
+    assimilation_ids = [
+        str(row.get('source_batch_id', '') or '').strip()
+        for row in assimilation_rows
+    ]
+    if any(not value for value in assimilation_ids):
+        return False, 'assimilation row without source_batch_id'
+    if len(assimilation_ids) != len(set(assimilation_ids)):
+        return False, 'duplicate source_batch assimilation'
+    assimilation_batches = set(assimilation_ids)
+    if not correction_batches:
+        return False, 'no fused corrections were published'
+    if assimilation_batches != correction_batches:
+        return False, (
+            'correction/assimilation batch mismatch: '
+            f'{len(correction_batches - assimilation_batches)} missing, '
+            f'{len(assimilation_batches - correction_batches)} extra'
+        )
+    dropped = [row for row in assimilation_rows if row.get('status') == 'dropped']
+    if dropped:
+        reasons = sorted({str(row.get('reason', '') or 'unknown') for row in dropped})
+        return False, f'{len(dropped)} correction(s) dropped: {reasons}'
+    return True, ''
     try:
         return json.loads(summary_path.read_text(encoding='utf-8'))
     except (OSError, json.JSONDecodeError):
@@ -1256,10 +1309,13 @@ def main() -> int:
         summary = _read_run_summary(run_dir) if run_dir else None
         route_artifact_ok = True
         route_artifact_reason = ''
+        assimilation_ok = True
+        assimilation_reason = ''
         if run_dir is not None:
             route_artifact_ok, route_artifact_reason = _verify_preselected_run_artifacts(
                 run_dir, cfg, task_name, condition_id
             )
+            assimilation_ok, assimilation_reason = _verify_correction_assimilations(run_dir)
 
         if no_first_cmd_timeout:
             outcome = 'infra_invalid'
@@ -1273,6 +1329,10 @@ def main() -> int:
             outcome = 'infra_invalid'
             completion_reason = 'wrong_route_artifact'
             print(f'  INFRA INVALID: {route_artifact_reason}')
+        elif not assimilation_ok:
+            outcome = 'infra_invalid'
+            completion_reason = 'correction_assimilation_invalid'
+            print(f'  INFRA INVALID: {assimilation_reason}')
         elif not summary.get('completed', False) and timed_out:
             outcome = 'infra_invalid'
             completion_reason = 'wall_clock_timeout'
@@ -1303,6 +1363,8 @@ def main() -> int:
             'run_dir': str(run_dir) if run_dir else None,
             'route_artifact_verified': route_artifact_ok if run_dir else False,
             'route_artifact_verification_reason': route_artifact_reason,
+            'correction_assimilation_verified': assimilation_ok if run_dir else False,
+            'correction_assimilation_verification_reason': assimilation_reason,
         })
         campaign_log[key] = run_entry
         _save_run_log(campaign_log_path, campaign_log)

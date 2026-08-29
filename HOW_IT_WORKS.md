@@ -127,9 +127,12 @@ saw.
 
 ### The belief
 
-The robot carries a position, a heading, and a covariance. The heading comes from odometry
-and **the camera update is not allowed to change it** — the code raises an error if
-configured otherwise. So the camera corrects translation only.
+The robot carries a position, a heading, and one joint covariance. The camera measurement
+contains position only. In the repaired fusion campaign, a position correction can also
+update heading indirectly through position-heading cross-covariance (`coupled` mode); the
+camera never publishes or observes heading directly. A separate `camera_xy_only` mode
+anchors heading to odometry and removes the corresponding cross-covariances. Planning and
+recursive filtering use the same selected mode.
 
 ### When a camera frame arrives
 

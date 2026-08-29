@@ -27,12 +27,12 @@ sys.path.insert(0, str(HERE.parents[2] / "deck_figures"))
 sys.path.insert(0, str(HERE.parents[1]))
 import aligned as A                                    # noqa: E402
 import style as D                                      # noqa: E402
-from score import FOLDER, TASKS, _latest_run, story_dir   # noqa: E402
+from score import FOLDER, TASKS, showcase_run, story_dir   # noqa: E402
 from arm import ARM_TITLE                              # noqa: E402
 
 
 def load(arm, task=TASKS[0]):
-    run = _latest_run(arm, task)
+    run = showcase_run(arm, task)
     path = run / "fusion_observations.csv"
     if not path.exists():
         raise SystemExit(f"{arm}: no fusion_observations.csv in {run} — that drive predates "

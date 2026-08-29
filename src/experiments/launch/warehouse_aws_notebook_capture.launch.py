@@ -16,11 +16,12 @@ configured to publish `camera_observation` JSON on
 `/perception/camera_observation/camera_A`.
 
 `camera_A` is this world's only camera, `external_camera` in the world file. The name is
-kept because every downstream loader, scorer and figure in `experiments/filter_notebook`
-is keyed on `camera_<X>`; calling it anything else would fork those.
+kept because every downstream loader, scorer and figure is keyed on `camera_<X>`; calling
+it anything else would fork all of them.
 
-Two-world rule: this world is where method development belongs
-(`research/06_world_camera_design.md`), which is the point of running the notebook here.
+This is the single-camera development world. It is not the world any current study runs
+in -- those use `warehouse_v2` with five cameras -- so nothing captured here is evidence
+for a claim about the camera network.
 """
 
 from launch import LaunchDescription

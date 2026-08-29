@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "current_as_of": "2026-08-29",
+  "historical_boundary": {
+    "superseded_before": "2026-08-25",
+    "minimum_paper_logging_schema": 4
+  },
+  "fusion_on_fixed_routes": {
+    "status": "invalidated_pending_rerun",
+    "invalidated_local_campaign": "logs/studies/fusion_on_fixed_routes/drives_full_20260829",
+    "paper_selection": null,
+    "required_selection_file": "logs/studies/fusion_on_fixed_routes/frozen_runs.json",
+    "reasons": [
+      "adjacent_5hz_capture_rounds_could_merge",
+      "delayed_corrections_could_be_silently_dropped",
+      "analysis_inferred_assimilation_from_timestamps",
+      "planning_heading_mean_differed_from_recursive_heading_mean"
+    ],
+    "permitted_use": "diagnostic_only"
+  },
+  "required_loader": "experiments/fusion_on_fixed_routes/aligned.py",
+  "required_runtime_evidence": [
+    "run_manifest.json",
+    "run_summary.json",
+    "experiment.csv",
+    "fusion_observations.csv",
+    "correction_assimilations.csv"
+  ]
+}

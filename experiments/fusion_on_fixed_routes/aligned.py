@@ -263,6 +263,33 @@ def observations(run: Path) -> list[dict]:
     return out
 
 
+def assimilations(run: Path) -> list[dict]:
+    """Terminal recursive-filter outcome keyed by physical detector batch."""
+    path = Path(run) / "correction_assimilations.csv"
+    if not path.is_file():
+        return []
+    out = []
+    seen = set()
+    for row in csv.DictReader(open(path)):
+        source_batch_id = str(row.get("source_batch_id", "") or "").strip()
+        if not source_batch_id:
+            raise ValueError(f"{path}: assimilation without source_batch_id")
+        if source_batch_id in seen:
+            raise ValueError(f"{path}: duplicate assimilation for {source_batch_id}")
+        seen.add(source_batch_id)
+        out.append({
+            "source_batch_id": source_batch_id,
+            "correction_stamp": _float(row, "correction_stamp"),
+            "apply_stamp": _float(row, "apply_stamp"),
+            "belief_stamp_after": _float(row, "belief_stamp_after"),
+            "status": str(row.get("status", "") or "").strip(),
+            "reason": str(row.get("reason", "") or "").strip(),
+            "accepted": str(row.get("accepted", "")).strip() == "1",
+            "nis": _float(row, "nis"),
+        })
+    return out
+
+
 def readings(run: Path, *, admitted_only: bool = True, dedupe: bool = True,
              require_capture_time: bool = True) -> list[dict]:
     """One entry per camera reading, scored against the truth when the camera saw it.
@@ -379,6 +406,18 @@ def belief_at_fusion_events(run: Path, table: list[dict] | None = None) -> list[
     must never turn a 5 Hz correction into two experimental observations.
     """
 
+    assimilation_rows = assimilations(run)
+    if schema_version(run) >= 4 and not assimilation_rows:
+        raise ValueError(
+            f"{run}: schema 4 run has no source-batch assimilation records"
+        )
+    accepted_by_batch = {
+        row["source_batch_id"]: row
+        for row in assimilation_rows
+        if row["accepted"]
+        and row["status"] in {"accepted", "accepted_bootstrap", "reanchored"}
+    }
+
     table = rows(run) if table is None else table
     belief = aligned_error_cm(run, "belief", table)
     cov = np.array([[[_float(r, "planner_cov_x"), _float(r, "planner_cov_xy")],
@@ -390,6 +429,8 @@ def belief_at_fusion_events(run: Path, table: list[dict] | None = None) -> list[
     stamps = belief["stamp"][valid_indices]
     out = []
     for event in fused_answers(run):
+        if assimilation_rows and event["source_batch_id"] not in accepted_by_batch:
+            continue
         target = float(event["fused_stamp"])
         after = np.flatnonzero(stamps > target + 1.0e-9)
         if not after.size:
@@ -403,6 +444,10 @@ def belief_at_fusion_events(run: Path, table: list[dict] | None = None) -> list[
             continue
         out.append({
             "source_batch_id": event["source_batch_id"],
+            "assimilation_status": (
+                accepted_by_batch[event["source_batch_id"]]["status"]
+                if assimilation_rows else "legacy_timestamp_inference"
+            ),
             "n_candidates": event["n_candidates"],
             "error_cm": float(belief["aligned_cm"][idx]),
             "stated_sigma_cm": float(

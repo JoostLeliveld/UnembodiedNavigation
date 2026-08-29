@@ -162,7 +162,7 @@ def test_manifest_declares_its_logging_schema():
     """Runs carry the conventions they were written under, so a scorer can refuse
     a drive it cannot score instead of silently mixing two definitions of a column.
     Bump this deliberately, together with the comment block that says what changed."""
-    assert "'logging_schema_version': 3" in _source()
+    assert "'logging_schema_version': 4" in _source()
 
 
 def test_schema_3_records_batch_identity_contact_liveness_and_belief_stopping():

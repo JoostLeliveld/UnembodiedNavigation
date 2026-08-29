@@ -354,15 +354,20 @@ def _largest_agreeing_group(observations, max_disagreement_m: float):
 def _fusion_report_covariance(covariance_m2, *, common_mode_std_m: float = 0.0):
     """Add back the part of the error the cameras make TOGETHER, and nothing else.
 
-    Every fusion rule here treats the cameras as making independent mistakes, so combining them shrinks
-    the stated ellipse as though the shared part shrank too -- and it does not. Measured on
-    the drives of 2026-08-27: each camera's own stated ellipse is about right, and the moment
-    two are combined the result is 3.8x overconfident. Adding the shared part back after the
-    combination is the correction, and unlike a per-camera inflation it cannot be washed out
-    by adding more cameras.
+    Every fusion rule here treats the cameras as making independent mistakes, so combining
+    them shrinks the stated ellipse as though the shared part shrank too -- and it does not.
+    Adding the shared part back AFTER the combination is the correction. Unlike inflating
+    each camera's own R, it cannot be washed out by adding more cameras, which is the whole
+    point: a shared error is exactly the thing that does not average away.
 
-    This is a COMMISSIONED constant, measured once against ground truth on a commissioning
-    drive, exactly as the detector's pixel noise is. It is not read from any live signal.
+    ``common_mode_std_m`` is intended to be a COMMISSIONED constant, measured once with every
+    quantity scored at the instant it describes, exactly as the detector's pixel noise is. It
+    is never read from a live signal.
+
+    **No commissioned value currently exists, and the default 0.0 asserts independence.**
+    A previous value was withdrawn because it was fitted to a fused answer scored a quarter
+    of a second after the instant it described, so it measured the robot's own travel rather
+    than any shared camera error. See docs/open_questions.md, question 2.
     """
 
     shared = max(float(common_mode_std_m), 0.0) ** 2
@@ -372,16 +377,15 @@ def _fusion_report_covariance(covariance_m2, *, common_mode_std_m: float = 0.0):
     )
 
 
-FUSION_RULE_LEGACY = "legacy"
 FUSION_RULE_BEST_SINGLE = "best_single"
 FUSION_RULE_DISTANCE_ANGLE = "distance_angle"
 FUSION_RULE_INDEPENDENT = "independent"
 FUSION_RULE_NETWORK = "network"
-#: The four arms of the fusion comparison, plus the historical default. Every rule sees the
-#: same admitted observations and the same disagreement gate, so the rule is the only thing
-#: that differs between arms -- the gate is shared method, not a treatment.
+#: The four arms of the fusion comparison. Every rule sees the same admitted observations
+#: and the same disagreement gate, so the rule is the only thing that differs between arms
+#: -- the gate is shared method, not a treatment. There is deliberately no default: a run
+#: that forgets to name a rule must fail, not silently receive one of the treatments.
 SUPPORTED_FUSION_RULES = (
-    FUSION_RULE_LEGACY,
     FUSION_RULE_BEST_SINGLE,
     FUSION_RULE_DISTANCE_ANGLE,
     FUSION_RULE_INDEPENDENT,
@@ -402,7 +406,7 @@ def _combine_by_rule(accepted, *, rule: str, camera_positions_m):
         mean, covariance = distance_angle_weighted_fusion_2d(accepted, camera_positions_m)
     elif rule == FUSION_RULE_NETWORK:
         mean, covariance = network_pooled_fusion_2d(accepted)
-    elif rule in (FUSION_RULE_INDEPENDENT, FUSION_RULE_LEGACY):
+    elif rule == FUSION_RULE_INDEPENDENT:
         mean, covariance = independent_measurement_fusion_2d(accepted)
     else:
         raise ValueError(f"unsupported fusion_rule {rule!r}")
@@ -413,7 +417,7 @@ def _gated_fusion(
     observations: list[MapObservation],
     *,
     disagreement_gate_m: float,
-    rule: str = FUSION_RULE_LEGACY,
+    rule: str,
     camera_positions_m=None,
     belief_floors=None,
 ) -> SequentialFusionResult:
@@ -540,10 +544,9 @@ class CameraManagerNode(Node):
         self.declare_parameter("gp_artifact_template", "")
         self.declare_parameter("decision_rate_hz", 5.0)
         # Projection takes no parameters: it is inverse perspective mapping, the
-        # box-bottom ray intersected with the floor plane.  The contact-plane
-        # constant and the projection_calibration artifact were deleted 2026-08-07
-        # because every fitted correction measured worse than none -- see
-        # logs/studies/pixel_ground_path/e7_ipm_zero_parameter/RESULTS.md.
+        # box-bottom ray intersected with the floor plane. There is no contact-plane
+        # constant and no per-camera projection calibration, because every fitted
+        # correction measured worse than applying none. See reliability/projection.py.
         self.declare_parameter("require_gp_artifacts", True)
         self.declare_parameter("frame_id", "map_bev")
         self.declare_parameter("authority", "shadow")
@@ -571,6 +574,9 @@ class CameraManagerNode(Node):
         self.declare_parameter("publish_map_observations", False)
         self.declare_parameter(
             "map_observations_topic", "/reliability/camera_manager/map_observations"
+        )
+        self.declare_parameter(
+            "fused_correction_topic", "/reliability/camera_manager/fused_correction"
         )
         self.declare_parameter("fusion_disagreement_gate_m", 0.6)
         # Evidence-grade batched fusion waits for every subscribed camera's
@@ -629,18 +635,24 @@ class CameraManagerNode(Node):
         # only to override it deliberately, and say so in the run's provenance.
         self.declare_parameter("commissioned_calibration_path", "")
         self.declare_parameter("commissioned_sigma_px", 0.0)
-        # Use each camera's own commissioned noise instead of the pooled one. Commissioning
-        # already measures both; pooling them is a choice, and on these cameras a wrong one.
+        # Use each camera's own commissioned pixel noise instead of the pooled one.
+        # Commissioning measures both; which to use is an open ablation, not a settled
+        # choice -- on the commissioning capture the pooled number and the per-camera one
+        # were a tie, and whether that survives a driving robot is untested.
         self.declare_parameter("commissioned_per_camera_sigma", False)
-        # The part of the error the cameras make TOGETHER, in metres, added back after they
-        # are combined. 0 reproduces the previous behaviour, in which fusing two cameras
-        # produced an answer 3.8x more confident than it had any right to be.
+        # The error the cameras make TOGETHER, as a standard deviation in metres, added to
+        # the fused covariance AFTER combining. Independent fusion shrinks the stated
+        # uncertainty like 1/N; a shared error does not shrink at all, so without this term
+        # the fused answer grows confidently wrong as cameras are added. 0 means the model
+        # claims the cameras err independently.
+        #
+        # No commissioned value exists. A previous one (0.032) is withdrawn: it was fitted
+        # to a fused answer scored a quarter-second after the instant it described, so it
+        # was measuring the robot's own travel. See docs/open_questions.md, question 2.
         self.declare_parameter("fusion_common_mode_std_m", 0.0)
         # What the detector's box is taken to mean. hull = predict the box from the robot's
         # shape (the frozen method); raw_box = the box bottom-centre IS the robot;
         # fixed_offset = the same point pushed a fixed distance away from the camera.
-        # Which rule turns several cameras into one measurement. "legacy" keeps the
-        # historical behaviour of this node exactly; the other four are the fusion arms.
         # A correction describes where the robot WAS. Off (the historical behaviour) it is
         # applied as if it described now, which measured 8.2 cm of lag bias at 0.22 m/s.
         self.declare_parameter("correction_timestamp_compensation", False)
@@ -653,7 +665,9 @@ class CameraManagerNode(Node):
         # than noise, so it is declared as uncertainty in that direction instead of being
         # pretended away. Measured on this pipeline: ~50 ms.
         self.declare_parameter("correction_residual_interval_s", 0.05)
-        self.declare_parameter("fusion_rule", FUSION_RULE_LEGACY)
+        # Which rule turns several cameras into one measurement -- the treatment of the
+        # fusion comparison. Named explicitly by every campaign; see SUPPORTED_FUSION_RULES.
+        self.declare_parameter("fusion_rule", FUSION_RULE_INDEPENDENT)
         # The admission check. It compares the detected box against the box the robot's own
         # shape predicts -- tall enough, right width, bottom edge where the contact point should
         # be, not touching the frame edge -- and it needs no ground truth. Commissioning ran it
@@ -770,7 +784,11 @@ class CameraManagerNode(Node):
         self._ready_source_batch_id: str | None = None
         self._ready_source_batch_stamp_s = -math.inf
         self._last_decided_source_batch_id: str | None = None
-        self._legacy_observation_generation = 0
+        # Counter for observations that arrive with no detector batch identity. Only
+        # reachable when require_source_batch_id is false; a paper run sets it true,
+        # because a correction that cannot be traced to one detector invocation
+        # cannot be counted exactly once.
+        self._unidentified_observation_generation = 0
         #: Cameras whose reading had no prior pose to gate against this round.
         #: Rebuilt by _map_observations; declared here so the attribute always exists.
         self._bootstrap_camera_ids: set[str] = set()
@@ -808,6 +826,12 @@ class CameraManagerNode(Node):
             self.map_observations_pub = self.create_publisher(
                 String, str(self.get_parameter("map_observations_topic").value), 10
             )
+        # PoseWithCovarianceStamped cannot carry the physical detector-batch
+        # identity. Publish the evidence-grade correction contract beside the
+        # legacy/display pose topic.
+        self.fused_correction_pub = self.create_publisher(
+            String, str(self.get_parameter("fused_correction_topic").value), 10
+        )
         self.fusion_disagreement_gate_m = float(self.get_parameter("fusion_disagreement_gate_m").value)
         self.silhouette_correction = bool(
             self.get_parameter("silhouette_observation_correction").value)
@@ -911,7 +935,7 @@ class CameraManagerNode(Node):
                 f"fusion_rule must be one of {SUPPORTED_FUSION_RULES}, "
                 f"got {self.fusion_rule!r}"
             )
-        if self.fusion_rule != FUSION_RULE_LEGACY and not self.fusion_mode:
+        if not self.fusion_mode:
             raise ValueError(
                 f"fusion_rule={self.fusion_rule} needs fusion_mode=true; with selection "
                 "only one camera is ever used and the rule would never run"
@@ -1028,9 +1052,9 @@ class CameraManagerNode(Node):
                 )
                 return
             self._latest[expected_camera_id] = observation
-            self._legacy_observation_generation += 1
+            self._unidentified_observation_generation += 1
             self._ready_source_batch_id = (
-                f"legacy:{self._legacy_observation_generation}"
+                f"unidentified:{self._unidentified_observation_generation}"
             )
 
         return callback
@@ -1484,6 +1508,23 @@ class CameraManagerNode(Node):
         cov[7] = report_covariance[1][1]
         cov[35] = NONINFORMATIVE_YAW_VAR
         message.pose.covariance = cov
+        envelope = String()
+        envelope.data = json.dumps({
+            "schema_version": 1,
+            "source_batch_id": source_batch_id,
+            "frame_id": self.frame_id,
+            "common_capture_stamp": float(common_capture_s),
+            "correction_stamp": float(ts),
+            "xy": [float(mean_xy[0]), float(mean_xy[1])],
+            "covariance_m2": [
+                [float(report_covariance[0][0]), float(report_covariance[0][1])],
+                [float(report_covariance[1][0]), float(report_covariance[1][1])],
+            ],
+            "accepted_camera_ids": list(result.accepted_camera_ids),
+        }, sort_keys=True)
+        # Publish identity before the compatibility pose. Evidence-grade planners
+        # consume only this envelope, so cross-topic delivery order is irrelevant.
+        self.fused_correction_pub.publish(envelope)
         self.selected_pub.publish(message)
         self.active_pub.publish(message)
         payload = {"authority": self.authority, "fusion_mode": True,

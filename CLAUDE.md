@@ -43,9 +43,15 @@ it takes a covariance floor that repeated looks cannot shrink.
 ## The clean sheet (2026-08-25)
 
 Every study before that date is superseded. **Do not reuse any of their numbers.** The
-retired control plane (`research/`, `figures/`, `paper_artifacts/`, `docs/`) and the studies
-it indexed were deleted on 2026-08-28; they are recoverable from git history and nowhere
-else. If you need one, read it from history and re-derive, never quote.
+retired control plane (`research/`, `figures/`, `paper_artifacts/` and the old `docs/`) and
+the studies it indexed were deleted on 2026-08-28; they are recoverable from git history and
+nowhere else. If you need one, read it from history and re-derive, never quote.
+
+`docs/` was rebuilt on 2026-08-29 and holds three contracts, not prose:
+[`localization_metrics.md`](docs/localization_metrics.md) (which quantities may be compared
+and what makes a drive scoreable), [`reproducibility_inputs.md`](docs/reproducibility_inputs.md)
+(the hashed detector and calibration bytes) and [`open_questions.md`](docs/open_questions.md)
+(what is unresolved). Read the first before quoting any number.
 
 ## Talk and write in plain terms
 
