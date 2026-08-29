@@ -8,6 +8,21 @@ camera can be quietly miscalibrated.
 The question is not "can the robot see itself". It is **"how good is this particular
 sighting, and does knowing that change how the robot should drive?"**
 
+## What is being worked on right now
+
+Three paper directions have been explored and switching between them is why this repository
+looks like three projects. **The active one is fusion.**
+
+| | direction | status |
+|---|---|---|
+| **B** | **Fusion on a fixed route** — how several cameras become one measurement, and what covariance that is entitled to claim | **ACTIVE** |
+| A | Availability-aware planning — where the cameras can support localization, and routing on it | parked, blocked on data |
+| C | Learned bias correction — a network that beats the analytic hull model | parked deliberately |
+
+`PLAN.md` opens with what each one is, what exists for it, and why the parked two are parked.
+Do not mix their artifacts: direction C's learned correction competes with the observation
+model direction B holds constant.
+
 ## Start here
 
 [`PLAN.md`](PLAN.md) is the plan of record — the sentences the paper has to earn, what is

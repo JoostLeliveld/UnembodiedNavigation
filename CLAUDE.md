@@ -2,6 +2,16 @@
 
 ROS 2 + Gazebo thesis repo: external-camera reliability for warehouse robot navigation.
 
+## The active direction: FUSION
+
+Three paper directions exist in this repository — **B fusion on a fixed route (ACTIVE)**,
+A availability-aware planning (parked, blocked on data that does not exist), and C learned
+bias correction (parked deliberately, because it competes with the observation model B holds
+constant). `PLAN.md` opens with the map.
+
+**Assume any question is about B unless told otherwise**, and never present a parked
+direction's artifacts as a current result.
+
 ## What this actually does (read this first)
 
 📌 **[`PLAN.md`](PLAN.md) is the plan of record** — the sentences the paper has to earn, what

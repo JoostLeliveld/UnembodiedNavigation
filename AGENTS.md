@@ -9,6 +9,13 @@ calibration, coverage, RMSE, bias, or a comparison of runs, read [`PLAN.md`](PLA
 [`docs/open_questions.md`](docs/open_questions.md) says what is unresolved and which
 implementation limits are known. Check it before presenting anything as settled.
 
+## Which paper a number belongs to
+
+Three directions exist: **B fusion on a fixed route is ACTIVE**; A availability-aware
+planning and C learned bias correction are parked. `PLAN.md` opens with the map. State which
+direction a number serves before reporting it — a figure from a parked direction is not a
+current result, and C's learned correction is not the observation model B is measuring.
+
 ## The clean sheet
 
 Every study dated before **2026-08-25** is superseded. Do not reuse any of its numbers, and

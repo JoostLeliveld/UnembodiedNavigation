@@ -1,8 +1,77 @@
 # The paper: plan of record
 
-Locked 2026-08-25. This is what the work is for. Anything not serving one of the five
-sentences below belongs in a study README or an appendix, not in the paper and not in a
-status report.
+## Three candidate papers, and which one is live
+
+Three directions have been explored, and switching between them is the main reason this
+repository is hard to read. They are listed here so that never has to be reconstructed
+again. **Only one is active at a time. Work on a parked direction is not wrong, but it is
+not the current paper, and its artifacts must not be presented as one.**
+
+| | direction | what it claims | status |
+|---|---|---|---|
+| **B** | **Fusion on a fixed route** | how several cameras should become one measurement, and what covariance that is entitled to claim | **ACTIVE — 2026-08-29** |
+| A | Availability-aware planning | where in a warehouse the cameras can support localization, and routing on that model | parked |
+| C | Learned bias / shape correction | a network that corrects the detector's reading better than the analytic hull model | parked |
+
+### B — Fusion on a fixed route  ← THE CURRENT PAPER
+
+Advised by the supervisors. One frozen route, driven identically, with the arms differing
+only in how the cameras are combined:
+
+- **best single camera** — use the one camera with the smallest stated covariance
+- **precision-weighted** — the cameras err independently, so `Sigma^-1 = sum Sigma_c^-1`
+- **the whole network as one camera** — refuse to claim N independent pieces of evidence
+
+`R` is the **shared input to all three**, commissioned once and never varied by arm; the arm
+is the only treatment. Because the second and third arms produce the *same position* and
+differ only in the covariance they claim, **this experiment is about the honesty of a stated
+uncertainty, not about accuracy.** Error cannot separate them. The discriminating measurement
+is NEES and ellipse coverage against the number of cameras contributing.
+
+Two further arms ask what a detector's box *means* — the raw box bottom-centre, and a fixed
+offset — against the projected-hull model the other arms use.
+
+Detail: **section 7** below, and `experiments/fusion_on_fixed_routes/README.md`.
+Config: `scripts/visibility_comparison/fusion_realistic_speed_n1_campaign.yaml`.
+
+### A — Availability-aware planning  (parked)
+
+The original framing, and the one the five sentences below were written for. A commissioned
+field `p_c(x, y, theta)` for whether a usable sighting arrives, learned truth-free from
+operational data, then routing that prefers places where corrections will arrive. Sentences
+2 and 5 carry it.
+
+Machinery that exists: `scripts/reliability/run_observation_gp.py`,
+`build_planner_p_use_artifacts.py`, `scripts/visibility_comparison/fit_belief_aware_gp.py`,
+`src/experiments/data/visibility_gp/`. A mono-depth visibility variant was built as apparatus
+and never registered as an arm.
+
+**Blocked on data that does not exist**: driven operational logs whose usable-sighting labels
+are computed the way the runtime computes them, with no ground truth. Sections 6 and 8 below.
+
+### C — Learned bias / shape correction  (parked)
+
+A network that maps a detection to a position better than projecting the robot's shape does.
+Machinery: `scripts/perception/{build,train,evaluate}_{residual_bias,shape_update,center_keypoint,contour_update}*`.
+
+Best measured result, `logs/perception_evaluations/warehouse_v2_shape_update_compare_20260828_r3`,
+a set-pose held-out study: analytic hull 3.11 cm mean, `mlp_without_shape` 2.04 cm. So the
+learned correction beats the analytic model by about a third — but that study used an oracle
+commanded heading and is marked provisional, and nothing from it is wired into the runtime.
+
+**Parked deliberately**, not abandoned: it competes with the frozen observation model that
+direction B holds constant. Introducing it while B is running would change the measurement
+under the experiment.
+
+---
+
+Locked 2026-08-25. Anything not serving one of the five sentences below belongs in a study
+README or an appendix, not in the paper and not in a status report.
+
+> **The five sentences were written for direction A.** Sentence 4 is the one direction B
+> serves. Sentence 4's second clause — *"without producing overconfident fusion"* — is
+> contradicted by measurement: see `docs/open_questions.md` and
+> `logs/studies/estimator_consistency/RESULTS.md`. It cannot be written as it stands.
 
 ---
 
