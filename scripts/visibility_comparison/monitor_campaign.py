@@ -5,13 +5,17 @@ the whole campaign is wasted. Safe to call repeatedly while the campaign runs.
 
 Per run it reports: did the global solve produce a plan, the chosen route, the
 first-command sim stamp, the execution outcome (goal / collision / stuck /
-interrupted), validity, and the post-first-command truth-belief error. It then
-prints headline C1-vs-C2 counts and an ANOMALY list:
+interrupted), validity, the post-first-command belief error against GROUND TRUTH, the
+fraction of corrections the filter refused and the longest stretch with no usable
+correction. It then prints per-condition counts and an ANOMALY list:
   * compute-fail   : ran but never produced a plan/command (the dominant past
                      failure; if many, the machine is contended -> restart fresh)
   * route-mismatch : online chosen route != the offline expected route (needs
-                     scripts/paper_figures/offline_plan_sanity.json present)
+                     an offline route-sanity artifact present; skipped when absent)
   * invalid        : run_summary.valid_run is False for a non-outcome reason
+
+This is a triage view, never evidence. Scoring goes through
+experiments/fusion_on_fixed_routes/aligned.py against a frozen run manifest.
 
 Usage:
     python monitor_campaign.py logs/visibility_comparison/robustness_campaign_v2
@@ -61,7 +65,13 @@ def collect(log_root: Path):
             crashed=bool(rs.get("crashed")), collision=bool(rs.get("collision_any")),
             fgoal=_num(rs.get("final_goal_distance")),
             valid=rs.get("valid_run"), invalid=(rs.get("invalid_reason") or "")[:18],
-            tbe=_num(rs.get("mean_belief_error_odom_after_first_cmd_m"), 3),
+            # Against GROUND TRUTH. The odometry column next to it in run_summary is
+            # belief-vs-wheel-odometry, which is not an error at all -- it read 0.297 m
+            # where thetrue error was 0.032 m, a ninefold overstatement, under a heading
+            # that said "truth".
+            gt_err=_num(rs.get("mean_belief_error_gt_after_first_cmd_m"), 3),
+            drop_frac=_num(rs.get("correction_dropped_fraction"), 3),
+            blind_s=_num(rs.get("longest_correction_gap_s"), 1),
         ))
     return rows, off
 
@@ -78,24 +88,25 @@ def main():
     if not rows:
         print(f"No runs found yet under {log_root}"); return
 
-    hdr = f"{'tsk':4} {'c':2} {'s':1} {'plan':4} {'route':16} {'offline':16} {'fcmd':5} {'completion':18} {'col':3} {'fgl':5} {'val':3} {'tbe':5}"
+    hdr = (f"{'tsk':4} {'c':3} {'s':1} {'plan':4} {'route':16} {'fcmd':5} "
+           f"{'completion':18} {'col':3} {'fgl':5} {'val':3} {'gt_err_m':8} "
+           f"{'refused':7} {'blind_s':7}")
     print(hdr); print("-" * len(hdr))
     for r in rows:
         rm = "" if (r["off"] == "?" or not r["has_plan"]) else ("" if r["route"] == r["off"] else " <-MISMATCH")
-        print(f"{r['task']:4} {r['cond'][1]:2} {r['seed']:1} {str(r['has_plan'])[0]:4} {r['route'][:16]:16} "
-              f"{r['off'][:16]:16} {str(r['fcmd']):5} {r['completion']:18} {str(r['collision'])[0]:3} "
-              f"{str(r['fgoal']):5} {str(r['valid'])[0] if r['valid'] is not None else '?':3} {str(r['tbe']):5}{rm}")
+        print(f"{r['task'][:4]:4} {r['cond']:3} {r['seed']:1} {str(r['has_plan'])[0]:4} "
+              f"{r['route'][:16]:16} {str(r['fcmd']):5} {r['completion']:18} "
+              f"{str(r['collision'])[0]:3} {str(r['fgoal']):5} "
+              f"{str(r['valid'])[0] if r['valid'] is not None else '?':3} "
+              f"{str(r['gt_err']):8} {str(r['drop_frac']):7} {str(r['blind_s']):7}{rm}")
 
-    # ---- headline C1 vs C2 ----
-    def counts(cond):
-        rs = [r for r in rows if r["cond"] == cond]
+    # ---- per-condition counts, whatever conditions this campaign actually has ----
+    print()
+    for c in sorted({r["cond"] for r in rows}):
+        rs = [r for r in rows if r["cond"] == c]
         goal = sum(1 for r in rs if r["completion"].startswith("goal_reached"))
         coll = sum(1 for r in rs if r["collision"])
-        return len(rs), goal, coll
-    print()
-    for c in ("C1", "C2"):
-        n, g, col = counts(c)
-        print(f"  {c}: {n} runs | goal_reached {g} | collisions {col}")
+        print(f"  {c}: {len(rs)} runs | goal_reached {goal} | collisions {coll}")
 
     # ---- anomalies ----
     def _id(r, suffix=""):
@@ -111,7 +122,7 @@ def main():
     print(f"  route-mismatch vs offline:      {len(mismatch)}" + (f"  -> {mm_ids}" if mm_ids else ""))
     print(f"  invalid (non-outcome):          {len(invalid)}" + (f"  -> {iv_ids}" if iv_ids else ""))
     if not OFFLINE.exists():
-        print("  (offline_plan_sanity.json absent -> route-mismatch check skipped; run plot_offline_plan_sanity.py)")
+        print("  (no offline route artifact -> route-mismatch check skipped)")
 
     # ---- progress vs expected ----
     per = defaultdict(int)

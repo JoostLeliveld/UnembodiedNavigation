@@ -217,6 +217,19 @@ def propagate_correction_to_now(xy, covariance_m2, pose_then, pose_now, *,
                                 residual_interval_s: float = 0.0):
     """Carry a correction forward from the pose it describes to the pose it will be used on.
 
+    OFF by default, and off in every current campaign. There are two ways to stop a
+    correction being applied to the wrong instant, and only one may be in force at a time:
+    move the MEASUREMENT forward to the belief (this function), or move the BELIEF back to
+    the measurement's own stamp (what the planner does, by replaying motion to
+    ``correction_stamp``). The planner owns it now, so this stays available as the
+    alternative arm rather than as the default.
+
+    Switching it on without switching the planner's replay off would align twice. It also
+    re-stamps the fused correction to `now`, which is what made a fused answer look 3.2 cm
+    from the truth when it was scored at the instant it actually described: with this off,
+    fused_stamp == common_capture_stamp exactly (verified on 1389 readings of a live drive,
+    2026-08-29).
+
     A camera correction describes where the robot WAS when the frame was taken. Measured on 24
     drives, the correction the filter holds is ~400 ms old and the error it appears to have is
     almost entirely that staleness: scored against the pose 0.35 s earlier the same corrections
