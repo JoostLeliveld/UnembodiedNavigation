@@ -165,6 +165,33 @@ bottom-centre 0.06 px against the detector's own 0.76 px of noise, and the admis
 cannot see it because heading barely changes the box's *shape*. Neither `camera_xy_only` nor
 `coupled` can supply information the measurement does not contain.
 
+### Why heading grew in some drives and not others: two mechanisms
+
+**1. Odometry slip scales with rotation per METRE, not with total rotation.**
+Across the 24 drives, the correlation between peak heading error and *rotation per metre* is
+**+0.77**; against *total* rotation it is **-0.20**. F1 on the long route turned 1 411 deg —
+more than any other drive — and peaked at 9.2 deg, and it finished. Slip accumulates per
+turn while camera corrections accrue per metre, so turning hard in a short distance outruns
+the correction rate. `turn_then_go` at 1 m/s is the worst case for this.
+
+**2. The coupled heading update is a gain on the observation model, in both directions.**
+
+| arm group | peak odometry heading error | peak belief heading error | |
+|---|---|---|---|
+| hull, F1-F4 | 12.5 deg | **9.8 deg** | the camera **corrects** heading |
+| raw box / fixed offset, O1-O2 | 9.5 deg | **42.6 deg** | the camera **injects** heading error |
+
+With `heading_update_mode: coupled`, a position correction moves heading through the
+position-heading cross-covariance. When the observation model is right, so is the nudge:
+F1 on the long route took odometry's 24.0 deg down to 9.2 deg. When the observation model is
+wrong by 20-30 cm, the corrections are systematically wrong and drag heading with them:
+O1 on the long route went from 7.6 deg of odometry error to **108.6 deg** of belief error.
+
+The filter has no way to tell the two cases apart, and the loop closes on itself — bad
+heading makes a worse hull prediction, which makes worse corrections, which makes worse
+heading. F4 on the long route shows a hull arm caught in it too (odometry 9.5 deg, belief
+50.8 deg), so this is not exclusive to the deliberately-broken arms.
+
 What follows:
 
 - **No collision number from this campaign is a statement about the fusion rule.** The arms
