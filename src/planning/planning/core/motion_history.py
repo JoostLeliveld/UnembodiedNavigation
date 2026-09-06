@@ -6,6 +6,7 @@ not a missing-motion interval. These checks use only the recorded input clock.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 
 def covers_interval(entries, start_s: float, end_s: float, max_gap_s: float) -> bool:
@@ -38,3 +39,38 @@ def covers_interval(entries, start_s: float, end_s: float, max_gap_s: float) -> 
             return False
         previous = t
     return True
+
+
+@dataclass(frozen=True)
+class MotionHistorySnapshot:
+    """One immutable view of both motion buffers plus the selected source.
+
+    Coverage is checked against the entries that will actually be replayed. When
+    those are two separate reads of live state, a trim or append in between makes
+    the check describe a history the prediction never sees. Both lists are frozen
+    because prediction may fall back from odometry to commands: freezing only the
+    preferred list would leave that fallback reading mutable state.
+
+    This carries temporal support, not a claim that the motion is calibrated.
+    """
+
+    odom: tuple
+    cmd: tuple
+    use_odom: bool
+
+    @classmethod
+    def capture(cls, odom_entries, cmd_entries, use_odom: bool) -> "MotionHistorySnapshot":
+        """Freeze both buffers into tuples of primitive floats.
+
+        Must be called while the caller holds the lock that guards the buffers.
+        """
+        return cls(
+            odom=tuple((float(t), float(v), float(w)) for t, v, w in odom_entries),
+            cmd=tuple((float(t), float(v), float(w)) for t, v, w in cmd_entries),
+            use_odom=bool(use_odom),
+        )
+
+    @property
+    def selected(self) -> tuple:
+        """The entries the configured source would replay."""
+        return self.odom if self.use_odom else self.cmd

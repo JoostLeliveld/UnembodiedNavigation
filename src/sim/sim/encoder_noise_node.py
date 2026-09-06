@@ -148,6 +148,9 @@ class EncoderNoiseNode(Node):
         self._pose_y: float | None = None
         self._pose_theta: float | None = None
         self._last_stamp = None
+        # Interval anchor in integer nanoseconds. Advanced only after an interval
+        # has actually been integrated, or by the deliberate large-gap rebase.
+        self._last_stamp_ns = None
         self._pose_cov = self._initial_pose_covariance()
         # Jacobian of [x, y, yaw] with respect to a constant residual encoder
         # scale error.  Keeping it separately avoids adding a fully correlated
@@ -249,29 +252,70 @@ class EncoderNoiseNode(Node):
         message.twist.covariance = twist_cov
 
     def _odom_cb(self, msg: Odometry) -> None:
-        stamp = msg.header.stamp
+        """Integrate one encoder interval, or leave every field untouched.
+
+        Validate before mutating. An old or duplicate message previously moved
+        ``_last_stamp`` before the ``dt <= 0`` gate returned, so it rebased the
+        interval anchor and the following genuine message integrated a shortened
+        interval -- silently deleting real motion from the encoder estimate.
+
+        The stamp is copied rather than aliased: the incoming message is owned by
+        the executor and must not become this node's interval anchor by reference.
+
+        This node runs on a single-threaded executor with the default callback
+        group, so no cross-callback lock is required here.
+        """
+        try:
+            stamp_ns = int(msg.header.stamp.sec) * 1_000_000_000 + int(msg.header.stamp.nanosec)
+            pose_x = float(msg.pose.pose.position.x)
+            pose_y = float(msg.pose.pose.position.y)
+            pose_theta = float(_yaw_from_quaternion(msg.pose.pose.orientation))
+        except (AttributeError, TypeError, ValueError):
+            return
+        if not all(math.isfinite(x) for x in (pose_x, pose_y, pose_theta)):
+            return
+        stamp = Time(nanoseconds=stamp_ns).to_msg()
 
         # First message: initialise encoder pose from Gazebo truth.
-        if self._last_stamp is None:
-            self._pose_x = msg.pose.pose.position.x
-            self._pose_y = msg.pose.pose.position.y
-            self._pose_theta = _yaw_from_quaternion(msg.pose.pose.orientation)
+        if getattr(self, '_last_stamp_ns', None) is None:
+            self._pose_x = pose_x
+            self._pose_y = pose_y
+            self._pose_theta = pose_theta
+            self._last_stamp_ns = stamp_ns
             self._last_stamp = stamp
             return
 
-        # Compute dt.
-        try:
-            dt = (Time.from_msg(stamp) - Time.from_msg(self._last_stamp)).nanoseconds * 1e-9
-        except Exception:
-            dt = 0.0
-        self._last_stamp = stamp
+        dt = (stamp_ns - self._last_stamp_ns) * 1e-9
 
-        if dt <= 0.0 or dt > self.max_dt_s:
+        if dt <= 0.0:
+            # Old or duplicate input. It must not move the anchor, the pose, the
+            # covariance, the slip states or the random generator.
+            return
+
+        if dt > self.max_dt_s:
+            # A positive large gap DOES rebase the interval baseline, deliberately:
+            # holding the old baseline forever would make every later interval
+            # exceed the cap and freeze the encoder permanently. This is an interval
+            # baseline reset, NOT evidence that the pose is supported across the
+            # gap -- the omitted motion remains an unresolved validity defect.
+            self._last_stamp_ns = stamp_ns
+            self._last_stamp = stamp
             return
 
         # True velocity from Gazebo (reflects actuation noise already applied).
-        v_true = float(msg.twist.twist.linear.x)
-        w_true = float(msg.twist.twist.angular.z)
+        try:
+            v_true = float(msg.twist.twist.linear.x)
+            w_true = float(msg.twist.twist.angular.z)
+        except (AttributeError, TypeError, ValueError):
+            return
+        if not (math.isfinite(v_true) and math.isfinite(w_true)):
+            return
+
+        # From here the interval is valid and will be integrated exactly once.
+        # Committing the anchor here rather than earlier keeps a refused message
+        # from consuming the interval.
+        self._last_stamp_ns = stamp_ns
+        self._last_stamp = stamp
 
         stop = (abs(v_true) <= self.stop_linear_deadband
                 and abs(w_true) <= self.stop_angular_deadband)

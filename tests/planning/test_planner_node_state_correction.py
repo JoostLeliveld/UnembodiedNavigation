@@ -24,6 +24,7 @@ import numpy as np
 import pytest
 
 from geometry_msgs.msg import PoseWithCovarianceStamped
+from std_msgs.msg import String
 
 from planning.core import belief_correction as bc
 
@@ -650,3 +651,112 @@ def test_heading_variance_never_exceeds_knowing_nothing():
     node._apply_state_correction(state_msg(1.0, 2.0, seconds=9.95))
 
     assert node.belief_S[2, 2] == pytest.approx(math.pi ** 2)
+
+
+def _envelope(*, source_batch_id, correction_stamp, xy, var=0.03, frame_id='map_bev'):
+    """One state-correction envelope, carrying batch identity and capture time."""
+    message = String()
+    message.data = json.dumps(dict(
+        schema_version=1, frame_id=frame_id,
+        source_batch_id=source_batch_id, correction_stamp=float(correction_stamp),
+        xy=[float(xy[0]), float(xy[1])],
+        covariance_m2=[[float(var), 0.], [0., float(var)]]))
+    return message
+
+
+def _envelope_node(*, now_s=10.0):
+    from planning.planners.base_planner import UnicyclePlannerBase
+    planner = object.__new__(UnicyclePlannerBase)
+    planner.dt = .25
+    planner.process_noise_xy = .01
+    planner.process_noise_theta = .02
+    planner.coherent_drift = False
+
+    node = make_state_node(now_s=now_s)
+    node.planner = planner
+    node.heading_update_mode = 'coupled'
+    node.belief_m = node.belief_S = node.belief_stamp = None
+    node.require_state_correction_envelope = True
+    node._seen_state_source_batch_ids = set()
+    node.state_reanchor_m = 0.
+    node.stale_belief_inflate_m2_per_s = 0.
+    node.stale_belief_inflate_cap_m2 = 0.
+    node._resolve_plan_frame_id = lambda: 'map_bev'
+    node._fatal_experiment_stop = lambda *a: (_ for _ in ()).throw(AssertionError(a))
+    return node
+
+
+def test_envelope_mode_does_not_bootstrap_from_the_compatibility_pose():
+    """The anonymous pose must not initialize the estimator under the envelope contract.
+
+    The compatibility pose carries no source batch identity and no capture time.
+    Bootstrapping from it initialized the belief from an anonymous measurement and
+    recorded no identified event, so the envelope that followed was then judged
+    'not newer than belief' and dropped -- the physical bootstrap disappeared from
+    the ledger entirely.
+    """
+    node = _envelope_node()
+    node._state_cb(state_msg(1., 2., seconds=9.95))
+    assert node.belief_m is None
+
+    m, S, meta = node._resolve_state_belief_ekf(stamp(10.))
+    assert m is None and S is None
+    assert meta['measurement_available'] is False
+    assert node.belief_m is None
+    assert not node.correction_assimilation_pub.published
+
+
+def test_the_envelope_itself_bootstraps_and_records_one_identified_event():
+    node = _envelope_node()
+    node._state_cb(state_msg(1., 2., seconds=9.95))
+    node._resolve_state_belief_ekf(stamp(10.))
+
+    node._state_correction_envelope_cb(_envelope(
+        source_batch_id='camera_A+camera_B@9950000000',
+        correction_stamp=9.95, xy=(1., 2.)))
+
+    assert node.belief_m is not None
+    np.testing.assert_allclose(node.belief_m[:2], [1., 2.], atol=1e-9)
+    events = [json.loads(p) for p in node.correction_assimilation_pub.published]
+    assert len(events) == 1
+    assert events[0]['status'] == 'accepted_bootstrap'
+    assert events[0]['source_batch_id'] == 'camera_A+camera_B@9950000000'
+    assert events[0]['correction_stamp'] == pytest.approx(9.95)
+
+
+def test_the_reverse_delivery_order_gives_the_same_initialized_state():
+    node = _envelope_node()
+    node._state_correction_envelope_cb(_envelope(
+        source_batch_id='camera_A+camera_B@9950000000',
+        correction_stamp=9.95, xy=(1., 2.)))
+    node._state_cb(state_msg(1., 2., seconds=9.95))
+    node._resolve_state_belief_ekf(stamp(10.))
+
+    np.testing.assert_allclose(node.belief_m[:2], [1., 2.], atol=1e-9)
+    events = [json.loads(p) for p in node.correction_assimilation_pub.published]
+    assert len([e for e in events if e['accepted']]) == 1
+
+
+def test_an_invalid_envelope_plus_a_usable_pose_still_does_not_initialize():
+    node = _envelope_node()
+    stops = []
+    node._fatal_experiment_stop = lambda *a: stops.append(a)
+    node._state_cb(state_msg(1., 2., seconds=9.95))
+
+    bad = String()
+    bad.data = json.dumps(dict(schema_version=1, frame_id='map_bev',
+                               source_batch_id='', correction_stamp=9.95))
+    node._state_correction_envelope_cb(bad)
+    node._resolve_state_belief_ekf(stamp(10.))
+
+    assert node.belief_m is None
+    assert not any(json.loads(p)['accepted']
+                   for p in node.correction_assimilation_pub.published)
+
+
+def test_legacy_non_envelope_mode_keeps_its_compatibility_bootstrap():
+    node = _envelope_node()
+    node.require_state_correction_envelope = False
+    node._state_cb(state_msg(1., 2., seconds=9.95))
+    node._resolve_state_belief_ekf(stamp(10.))
+    np.testing.assert_allclose(node.belief_m[:2], [1., 2.], atol=1e-9)

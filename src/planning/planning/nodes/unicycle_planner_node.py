@@ -27,6 +27,7 @@ from reliability.fusion import map_observations_from_json
 
 from planning.core.efe_utils import wrap_angle
 from planning.core import belief_correction as bc
+from planning.core.motion_history import MotionHistorySnapshot, covers_interval
 
 PIXEL_DIAG_K_THETA_U_IDX = 42
 PIXEL_DIAG_K_THETA_V_IDX = 43
@@ -563,6 +564,16 @@ class UnicyclePlannerNode(Node):
         #: stamp of the first odometry message, where the map-frame heading is the
         #: commissioned spawn heading and its drift has not started accumulating.
         self._odom_origin_stamp_s = None
+        # Highest odometry stamp already folded into the estimator fields, in
+        # integer nanoseconds. Kept private and checked under ``_data_lock`` so
+        # two callbacks cannot both pass an earlier unlocked check.
+        self._odom_accepted_stamp_ns = None
+        # Diagnosis counters for refused odometry. These name a local input
+        # disposition; they do not imply the retained history has complete
+        # temporal support.
+        self._odom_refused_old = 0
+        self._odom_refused_duplicate = 0
+        self._odom_refused_invalid = 0
         self.heading_update_mode = str(self.get_parameter('heading_update_mode').value).strip().lower()
         if self.heading_update_mode not in ('camera_xy_only', 'coupled'):
             raise RuntimeError(
@@ -880,9 +891,14 @@ class UnicyclePlannerNode(Node):
         if not (self.state_correction_ekf and self.state_correction_mode == 'per_camera'):
             return
         try:
-            observations, _frame_id = map_observations_from_json(msg.data)
+            observations, frame_id = map_observations_from_json(msg.data)
+            if frame_id != self.belief_frame_id:
+                raise ValueError(
+                    f"map-observation frame {frame_id!r} does not match belief frame {self.belief_frame_id!r}"
+                )
         except Exception as exc:
             self._fatal_experiment_stop("malformed map-observation batch", exc)
+            return
         try:
             self._apply_map_observations(observations)
         except Exception as exc:
@@ -1030,19 +1046,56 @@ class UnicyclePlannerNode(Node):
         return math.atan2(siny_cosp, cosy_cosp)
 
     def _odom_cb(self, msg: Odometry):
-        yaw = self._yaw_from_quaternion(msg.pose.pose.orientation)
-        v_odom = float(msg.twist.twist.linear.x)
-        w_odom = float(msg.twist.twist.angular.z)
-        self._latest_odom_yaw = float(yaw)
+        """Fold one odometry event into the estimator, or refuse all of it.
+
+        Parse into locals first, then commit yaw, velocity, origin, history and
+        watermark together under one lock. Previously yaw and the origin were
+        written outside the lock and no ordering was enforced, so a late message
+        could pair its yaw with another event's velocity and append backwards
+        history that replay then integrated as real motion.
+
+        Late input is refused rather than inserted in order: retrospective
+        insertion would alter a history an accepted correction has already been
+        computed from, without rewinding and replaying that correction. Refusing
+        old input does NOT establish that the remaining history has complete
+        temporal support; that validity question is separate and still open.
+        """
         try:
-            stamp_s = self._stamp_to_float(msg.header.stamp)
+            yaw = float(self._yaw_from_quaternion(msg.pose.pose.orientation))
+            v_odom = float(msg.twist.twist.linear.x)
+            w_odom = float(msg.twist.twist.angular.z)
         except (AttributeError, TypeError, ValueError):
-            stamp_s = self.get_clock().now().nanoseconds * 1e-9
-        if self._odom_origin_stamp_s is None:
-            self._odom_origin_stamp_s = float(stamp_s)
+            self._odom_refused_invalid = getattr(self, '_odom_refused_invalid', 0) + 1
+            return
+        if not all(math.isfinite(x) for x in (yaw, v_odom, w_odom)):
+            self._odom_refused_invalid = getattr(self, '_odom_refused_invalid', 0) + 1
+            return
+        try:
+            stamp_ns = int(msg.header.stamp.sec) * 1_000_000_000 + int(msg.header.stamp.nanosec)
+        except (AttributeError, TypeError, ValueError):
+            # Do not invent a receipt-time measurement stamp: a wall-clock stamp
+            # would place unstamped motion at the wrong point in the history.
+            self._odom_refused_invalid = getattr(self, '_odom_refused_invalid', 0) + 1
+            return
+        stamp_s = stamp_ns * 1e-9
+
         with self._data_lock:
+            accepted = getattr(self, '_odom_accepted_stamp_ns', None)
+            if accepted is not None and stamp_ns <= accepted:
+                # An exact duplicate and a conflicting equal-stamp message both add
+                # no motion and no process noise. The first event at a timestamp is
+                # the one retained.
+                if stamp_ns == accepted:
+                    self._odom_refused_duplicate = getattr(self, '_odom_refused_duplicate', 0) + 1
+                else:
+                    self._odom_refused_old = getattr(self, '_odom_refused_old', 0) + 1
+                return
+            self._latest_odom_yaw = yaw
             self.odom_vel = np.array([v_odom, w_odom], dtype=float)
+            if getattr(self, '_odom_origin_stamp_s', None) is None:
+                self._odom_origin_stamp_s = float(stamp_s)
             self._odom_log.append((stamp_s, v_odom, w_odom))
+            self._odom_accepted_stamp_ns = stamp_ns
             cutoff = stamp_s - self._CMD_LOG_MAX_S
             while self._odom_log and self._odom_log[0][0] < cutoff:
                 self._odom_log.pop(0)
@@ -1800,11 +1853,17 @@ class UnicyclePlannerNode(Node):
         self._latest_odom_delta_theta = 0.0
         self._latest_cmd_delta_theta = 0.0
 
-    def _predict_belief_to_now(self, m0, S0, last_cmd, belief_age_s: float, now_msg):
+    def _predict_belief_to_now(self, m0, S0, last_cmd, belief_age_s: float, now_msg,
+                               *, motion_snapshot=None):
         """Project a belief for planning/monitoring without committing it.
 
         Only a correction callback may advance ``belief_stamp``. This causal
         boundary is what keeps detector-latency corrections applicable.
+
+        ``motion_snapshot`` lets a caller that already checked temporal support
+        replay exactly the entries it checked. Without it the check and the
+        replay are two separate reads of a live buffer, so a concurrent trim
+        between them makes the check describe a history this never sees.
         """
         if belief_age_s <= 0.0:
             self._latest_prediction_dt = 0.0
@@ -1821,9 +1880,13 @@ class UnicyclePlannerNode(Node):
         except (AttributeError, TypeError, ValueError):
             now_s = self.get_clock().now().nanoseconds * 1e-9
         t_start = now_s - belief_age_s
-        with self._data_lock:
-            odom_entries = list(self._odom_log)
-            cmd_entries = list(self._cmd_log)
+        if motion_snapshot is None:
+            with self._data_lock:
+                motion_snapshot = MotionHistorySnapshot.capture(
+                    self._odom_log, self._cmd_log, self.use_odom_for_predict)
+        odom_entries = motion_snapshot.odom
+        cmd_entries = motion_snapshot.cmd
+        use_odom = motion_snapshot.use_odom
 
         # Collect odom and cmd delta yaw
         relevant_odom = [(t, v, w) for t, v, w in odom_entries if t_start < t <= now_s]
@@ -1846,11 +1909,11 @@ class UnicyclePlannerNode(Node):
             cmd_delta += relevant_cmd[-1][2] * (now_s - pt)
         self._latest_cmd_delta_theta = float(cmd_delta)
 
-        entries = odom_entries if self.use_odom_for_predict else cmd_entries
+        entries = odom_entries if use_odom else cmd_entries
         previous = [(t, v, w) for t, v, w in entries if t <= t_start]
         relevant = [(t, v, w) for t, v, w in entries if t_start < t <= now_s]
-        source_code = 1.0 if (self.use_odom_for_predict and (previous or relevant)) else 2.0
-        if self.use_odom_for_predict and not previous and not relevant:
+        source_code = 1.0 if (use_odom and (previous or relevant)) else 2.0
+        if use_odom and not previous and not relevant:
             entries = cmd_entries
             previous = [(t, v, w) for t, v, w in entries if t <= t_start]
             relevant = [(t, v, w) for t, v, w in entries if t_start < t <= now_s]
@@ -2305,22 +2368,27 @@ class UnicyclePlannerNode(Node):
         The existing conservative fallback remains for unsupported motion history;
         its reach inflation is a recovery heuristic, not calibrated sensor noise.
         """
-        from planning.core.motion_history import covers_interval
-
         with self._data_lock:
             m0 = None if self.belief_m is None else np.asarray(self.belief_m, dtype=float).copy()
             S0 = None if self.belief_S is None else np.asarray(self.belief_S, dtype=float).copy()
             last_cmd = np.asarray(self.last_cmd, dtype=float).copy()
             belief_stamp = self.belief_stamp
-            entries = list(self._odom_log if self.use_odom_for_predict else self._cmd_log)
+            # Freeze the anchor and the motion in ONE locked read. Checking coverage
+            # on one read and replaying from a second lets a concurrent trim drop the
+            # very entries the check accepted, committing an advanced stamp over
+            # motion that was never replayed.
+            motion = MotionHistorySnapshot.capture(
+                self._odom_log, self._cmd_log, self.use_odom_for_predict)
         if m0 is None or S0 is None:
             return
         from_s = self._stamp_to_float(belief_stamp)
         to_s = self._stamp_to_float(stamp_msg)
-        supported = covers_interval(entries, from_s, to_s, float(self.state_max_predict_dt_s))
+        supported = covers_interval(
+            motion.selected, from_s, to_s, float(self.state_max_predict_dt_s))
         replayed_s = float(dt_s) if supported else min(float(dt_s), float(self.state_max_predict_dt_s))
         try:
-            m1, S1 = self._predict_belief_to_now(m0, S0, last_cmd, replayed_s, stamp_msg)
+            m1, S1 = self._predict_belief_to_now(
+                m0, S0, last_cmd, replayed_s, stamp_msg, motion_snapshot=motion)
         except Exception:
             m1, S1 = m0, S0
             replayed_s = 0.0
@@ -2654,7 +2722,15 @@ class UnicyclePlannerNode(Node):
         self._state_bev_yaw_ignored = True
         if not has_belief:
             # No correction has bootstrapped the belief yet.
-            if state_ref is not None and self._state_msg_is_fresh(state_ref):
+            #
+            # Under the mandatory envelope contract the compatibility pose is not an
+            # admissible bootstrap: it carries no source batch identity and no capture
+            # time, so assimilating it would initialize the estimator from an anonymous
+            # measurement and record no identified event. Wait for the envelope
+            # callback instead. The explicitly configured legacy non-envelope path
+            # keeps its existing fused fallback.
+            if (state_ref is not None and self._state_msg_is_fresh(state_ref)
+                    and not self.require_state_correction_envelope):
                 self._apply_state_correction(state_ref)
                 with self._data_lock:
                     belief_m = None if self.belief_m is None else self.belief_m.copy()
@@ -2841,12 +2917,20 @@ class UnicyclePlannerNode(Node):
     def _publish_plan_and_metrics(self, result, goal_xy, m0, S0, *, belief_meta=None):
         frame_id = self._resolve_plan_frame_id()
         stamp = self.get_clock().now().to_msg()
-        path = self._build_path_message(
-            result, goal_xy, append_goal=True, frame_id=frame_id, stamp=stamp
-        )
         preview_path = self._build_path_message(
             result, goal_xy, append_goal=False, frame_id=frame_id, stamp=stamp
         )
+        # Both retained topics need the same rollout. Construct its ROS poses
+        # once; the displayed path only adds the mission-goal marker.
+        path = Path()
+        path.header = preview_path.header
+        path.poses = list(preview_path.poses)
+        goal_pose = PoseStamped()
+        goal_pose.header = path.header
+        goal_pose.pose.position.x = float(goal_xy[0])
+        goal_pose.pose.position.y = float(goal_xy[1])
+        goal_pose.pose.orientation.w = 1.0
+        path.poses.append(goal_pose)
         self.path_pub.publish(path)
         self.plan_preview_pub.publish(preview_path)
 
@@ -2961,13 +3045,28 @@ class UnicyclePlannerNode(Node):
             1.0 if self._state_bev_yaw_ignored else 0.0,
         ]
         self.planner_diag_pub.publish(diag)
-        diag_text = String()
         diag_parts = [str(getattr(result, 'optimizer_message', '') or '').strip()]
         invalid_reason = str(getattr(result, 'invalid_reason', '') or '').strip()
         if invalid_reason:
             diag_parts.append(f'invalid_reason={invalid_reason}')
-        diag_text.data = ' | '.join(part for part in diag_parts if part)
-        self.planner_diag_text_pub.publish(diag_text)
+        self._publish_planner_status_text(' | '.join(part for part in diag_parts if part))
+
+    def _publish_planner_status_text(self, text):
+        """Publish status transitions promptly, with a 1 Hz unchanged heartbeat.
+
+        Numeric diagnostics and per-event assimilation evidence keep their full
+        cadence. The heartbeat also supplies late-joining volatile subscribers.
+        """
+        now_s = float(self.get_clock().now().nanoseconds) * 1e-9
+        previous_s = getattr(self, '_last_status_text_stamp_s', -math.inf)
+        if (text == getattr(self, '_last_status_text', None)
+                and 0.0 <= now_s - previous_s < 1.0):
+            return
+        message = String()
+        message.data = text
+        self.planner_diag_text_pub.publish(message)
+        self._last_status_text = text
+        self._last_status_text_stamp_s = now_s
 
     def _snapshot_plan_inputs(self):
         with self._data_lock:
