@@ -21,7 +21,7 @@ from planning.nodes.unicycle_planner_node import UnicyclePlannerNode
 from planning.planners.base_planner import UnicyclePlannerBase, extract_waypoints
 from planning.core.dynamics import unicycle_step
 from planning.core.efe_utils import wrap_angle
-from planning.core.tracker_guard import checked_tracker_controls
+from planning.core.tracker_guard import ControlSafetyResult, SafetyFailure, checked_tracker_controls
 
 
 def _preview_corner_speed_limit(
@@ -320,6 +320,16 @@ class EfeAgentNode(UnicyclePlannerNode):
         self._last_local_plan_target = None
         self._pending_plan_started_at = None
         self._pending_plan_started_active_remaining_s = 0.0
+        # Incremented under ``_data_lock`` by every explicit ordinary safe stop,
+        # atomically with clearing the tape and publishing zero. A planning
+        # request captures the value it started under; a result whose generation
+        # no longer matches has been cancelled and must not install, publish or
+        # clear anyone else's tape. The fatal latch is separate and stays latched.
+        self._command_stop_generation = 0
+        # The request context of the planning call currently in flight, set by the
+        # ``_plan_once`` wrapper and cleared in its ``finally``. The existing
+        # mutually exclusive planning group makes this scoped context single-writer.
+        self._active_plan_request = None
         self._last_latency_skip_steps = 0
         self._last_latency_skip_s = 0.0
         self._current_wp_idx = math.nan
@@ -603,7 +613,120 @@ class EfeAgentNode(UnicyclePlannerNode):
         elapsed_s = max((self.get_clock().now() - started_at).nanoseconds * 1e-9, 0.0)
         return max(float(controls.shape[0]) * max(float(self.dt), 1e-3) - elapsed_s, 0.0)
 
+    def _capture_plan_request(self):
+        """Freeze the cancellation context before any expensive planning work.
+
+        Captured BEFORE the planning callback snapshots goal/belief or predicts,
+        so the generation belongs to the request, not to whatever the world looked
+        like once the solve finished.
+        """
+        with self._data_lock:
+            return {
+                'stop_generation': int(self._command_stop_generation),
+                'started_at': self.get_clock().now(),
+            }
+
+    def _install_control_tape(self, controls, *, original_len, started_at=None,
+                              latency_skip_steps=0, latency_skip_s=0.0,
+                              log_prefix='Rejected local control tape at install'):
+        """The single ownership boundary both execution routes install through.
+
+        Generation comparison, expiry, tape replacement and the immediate
+        publication are one transaction. Keeping two copies of this let the LOCAL
+        and direct paths drift apart, which is how the computation-age gate ended
+        up assigned on one route and read on neither.
+
+        Returns 'cancelled', 'expired' or 'installed'.
+        """
+        controls = np.asarray(controls, dtype=float)
+        request = getattr(self, '_active_plan_request', None)
+        with self._data_lock:
+            # Generation FIRST: a cancelled result must not reach the stop below,
+            # which would erase a replacement tape another owner already installed.
+            if not self._plan_request_is_current(request):
+                return 'cancelled'
+            # The age is read here, under the install lock, so safety validation
+            # and scheduling time count against the tape that actually installs.
+            expired, why = self._plan_request_expired(request, controls.shape[0])
+            if not expired:
+                self._active_controls = controls.copy()
+                self._active_plan_started_at = (
+                    self.get_clock().now() if started_at is None else started_at)
+                self._active_controls_original_len = int(original_len)
+                self._last_latency_skip_steps = int(latency_skip_steps)
+                self._last_latency_skip_s = float(latency_skip_s)
+                if controls.size > 0:
+                    self._publish_command(float(controls[0, 0]), float(controls[0, 1]))
+                return 'installed'
+        # Fail closed for a current-generation over-age result.
+        self._warn_once_about_expired_tape(f'{log_prefix}: {why}')
+        self._publish_safe_stop_command()
+        return 'expired'
+
+    def _warn_once_about_expired_tape(self, message: str) -> None:
+        """Log outside the install lock, and never let logging break a safe stop."""
+        try:
+            self.get_logger().warn(message)
+        except Exception:
+            pass
+
+    def _plan_request_expired(self, request, control_count) -> tuple:
+        """Whether the computation took longer than the tape it produced covers.
+
+        The existing rule -- ``age > steps * max(dt, 1e-3)`` -- with the strict
+        ``>`` preserved. It is evaluated on the tape that will actually install
+        (the LOCAL safe prefix, not the full solver output), and independently of
+        whether latency compensation is enabled: elapsed time is not evidence of
+        executed motion, so this must not silently activate that separate path.
+
+        A backward clock jump during computation rejects the request even when no
+        old tape existed for the timer to invalidate. That is deliberate, and it
+        is not complete filter-epoch reset handling.
+        """
+        if request is None:
+            # Missing execution context must not silently disable validation.
+            return True, 'missing_request_context'
+        started_at = request.get('started_at')
+        if started_at is None:
+            return True, 'missing_request_start_time'
+        age_s = (self.get_clock().now() - started_at).nanoseconds * 1e-9
+        if not math.isfinite(age_s):
+            return True, 'nonfinite_computation_age'
+        if age_s < 0.0:
+            return True, f'negative_computation_age:{age_s:.3f}'
+        tape_duration_s = float(int(control_count)) * max(float(self.dt), 1e-3)
+        if age_s > tape_duration_s:
+            return True, f'stale_control_tape:{age_s:.3f}>{tape_duration_s:.3f}'
+        return False, ''
+
+    def _plan_request_is_current(self, request) -> bool:
+        """Whether this result may still install. Caller must hold ``_data_lock``.
+
+        A request captured after an ordinary stop is genuinely new and may resume;
+        only work that began before the stop is cancelled.
+        """
+        if request is None:
+            return True
+        return int(request['stop_generation']) == int(self._command_stop_generation)
+
     def _plan_once(self):
+        """Wrap both execution routes in one cancellation context.
+
+        Ordinary safe stops previously cleared the current tape but had no
+        generation counter, so a solve that began before the stop could still
+        install afterwards and drive the robot away from a commanded stop.
+        """
+        request = self._capture_plan_request()
+        with self._data_lock:
+            self._active_plan_request = request
+        try:
+            return self._plan_once_impl()
+        finally:
+            with self._data_lock:
+                if self._active_plan_request is request:
+                    self._active_plan_request = None
+
+    def _plan_once_impl(self):
         if not self.use_hierarchical:
             return super()._plan_once()
 
@@ -955,14 +1078,14 @@ class EfeAgentNode(UnicyclePlannerNode):
             self.get_logger().info(f'[hierarchical] checked rotation recovery: {reason}')
         # Execute only the safe leading prefix; the tracker replans next cycle.
         controls = controls[:n_safe]
-        with self._data_lock:
-            self._active_controls = controls.copy()
-            self._active_plan_started_at = self.get_clock().now()
-            self._active_controls_original_len = int(controls.shape[0])
-            self._last_latency_skip_steps = 0
-            self._last_latency_skip_s = 0.0
-            if controls.size > 0:
-                self._publish_command(float(controls[0, 0]), float(controls[0, 1]))
+        # The safe PREFIX is what installs, so it is also what the age gate must
+        # measure: a four-step solve truncated to one step covers a quarter of the
+        # time the untruncated tape would have.
+        self._install_control_tape(
+            controls,
+            original_len=int(controls.shape[0]),
+            log_prefix='[hierarchical] local control tape expired before install',
+        )
         return
 
     def _simple_local_plan(self, m0: np.ndarray, target: np.ndarray) -> np.ndarray:
@@ -1138,7 +1261,7 @@ class EfeAgentNode(UnicyclePlannerNode):
                 break
         return controls
 
-    def _simple_plan_safe_to_execute(self, controls: np.ndarray, m0: np.ndarray) -> tuple[int, str]:
+    def _simple_plan_safe_to_execute(self, controls: np.ndarray, m0: np.ndarray) -> ControlSafetyResult:
         """Recovery-aware feasibility gate for the non-optimizing waypoint tracker.
 
         Returns the number of LEADING control steps safe to execute (>=1 -> publish
@@ -1155,12 +1278,14 @@ class EfeAgentNode(UnicyclePlannerNode):
         """
         controls = np.asarray(controls, dtype=float)
         if controls.ndim != 2 or controls.shape[0] == 0 or controls.shape[1] != 2:
-            return 0, 'empty_or_malformed_controls'
+            return ControlSafetyResult(0, 'empty_or_malformed_controls', SafetyFailure.INVALID_INPUT)
         if not np.all(np.isfinite(controls)):
-            return 0, 'nonfinite_controls'
+            return ControlSafetyResult(0, 'nonfinite_controls', SafetyFailure.INVALID_INPUT)
 
         RECOVERY_EPS = 5e-3
         start = np.asarray(m0[:3], dtype=float)
+        if start.shape != (3,) or not np.isfinite(start).all() or not math.isfinite(self.dt) or self.dt <= 0.0:
+            return ControlSafetyResult(0, 'invalid_state_or_timestep', SafetyFailure.INVALID_INPUT)
         if self.planner.collision_cost_model is not None:
             start_coll = self.planner.collision_signed_distance_state_np(start)
         else:
@@ -1170,21 +1295,33 @@ class EfeAgentNode(UnicyclePlannerNode):
             start_nogo = nogo.clearance_state_np(start)
         else:
             start_nogo = float('inf')
+        # +inf represents an unconstrained/empty scene. NaN and -inf cannot
+        # establish a safe prefix and must not silently disable the gate.
+        if any(math.isnan(clearance) or clearance == -math.inf for clearance in (start_coll, start_nogo)):
+            return ControlSafetyResult(0, 'invalid_initial_clearance', SafetyFailure.INVALID_GEOMETRY)
         coll_floor = (min(start_coll, 0.0) - RECOVERY_EPS) if math.isfinite(start_coll) else -math.inf
         nogo_floor = (min(start_nogo, 0.0) - RECOVERY_EPS) if math.isfinite(start_nogo) else -math.inf
 
         state = start.copy()
         for i, u in enumerate(controls):
             state = unicycle_step(state, u, float(self.dt))
+            if not np.isfinite(state).all():
+                return ControlSafetyResult(i, 'nonfinite_predicted_state', SafetyFailure.INVALID_INPUT)
             if self.planner.collision_cost_model is not None:
                 clearance = self.planner.collision_signed_distance_state_np(state)
+                if math.isnan(clearance) or clearance == -math.inf:
+                    return ControlSafetyResult(i, 'invalid_collision_clearance', SafetyFailure.INVALID_GEOMETRY)
                 if math.isfinite(clearance) and clearance < 0.0 and clearance < coll_floor:
-                    return i, f'collision_geometry_violation_step_{i}:{clearance:.3f}'
+                    return ControlSafetyResult(i, f'collision_geometry_violation_step_{i}:{clearance:.3f}',
+                                               SafetyFailure.COLLISION)
             if nogo is not None and nogo.enabled:
                 clearance = nogo.clearance_state_np(state)
+                if math.isnan(clearance) or clearance == -math.inf:
+                    return ControlSafetyResult(i, 'invalid_driveable_clearance', SafetyFailure.INVALID_GEOMETRY)
                 if math.isfinite(clearance) and clearance < 0.0 and clearance < nogo_floor:
-                    return i, f'driveable_clearance_violation_step_{i}:{clearance:.3f}'
-        return controls.shape[0], ''
+                    return ControlSafetyResult(i, f'driveable_clearance_violation_step_{i}:{clearance:.3f}',
+                                               SafetyFailure.DRIVEABLE_CLEARANCE)
+        return ControlSafetyResult(controls.shape[0])
 
     def _publish_command(self, v_cmd: float, w_cmd: float):
         cmd = Twist()
@@ -1328,6 +1465,13 @@ class EfeAgentNode(UnicyclePlannerNode):
 
     def _after_plan_result(self, result):
         # Keep following the current planned control sequence until replanning replaces it.
+        request = getattr(self, '_active_plan_request', None)
+        with self._data_lock:
+            # A result cancelled by an ordinary stop is discarded entirely,
+            # including its rejection and stop side effects: it must neither
+            # publish nonzero nor clear a newer replacement tape.
+            if not self._plan_request_is_current(request):
+                return
         safe, reason = self._result_safe_to_execute(result)
         if not safe:
             self.get_logger().warn(
@@ -1358,20 +1502,32 @@ class EfeAgentNode(UnicyclePlannerNode):
             if fractional_s > 0.0:
                 started_at = started_at - Duration(seconds=fractional_s)
             controls = controls[skip_steps:]
-        with self._data_lock:
-            self._active_controls = controls.copy()
-            self._active_plan_started_at = started_at
-            self._active_controls_original_len = int(result.controls.shape[0])
-            self._last_latency_skip_steps = int(skip_steps)
-            self._last_latency_skip_s = float(latency_s)
-            if controls.size == 0:
-                return
-            self._publish_command(controls[0, 0], controls[0, 1])
+        # A stop can occur after _result_safe_to_execute returns, so that call is
+        # not the ownership barrier; the shared installation transaction is.
+        self._install_control_tape(
+            controls,
+            original_len=int(result.controls.shape[0]),
+            started_at=started_at,
+            latency_skip_steps=int(skip_steps),
+            latency_skip_s=float(latency_s),
+            log_prefix='Rejected local control tape at install',
+        )
+        return
 
     def _publish_safe_stop_command(self):
+        """Stop, and cancel any planning work that began before this moment.
+
+        Clearing the tape alone was not enough: an in-flight solve could install
+        its result immediately afterwards, so the stop lasted only until the
+        solver returned. Bumping the generation inside the same locked block
+        makes the cancellation atomic with the stop itself. The fatal latch is
+        independent and remains latched.
+        """
         if not hasattr(self, 'cmd_pub'):
             return
         with self._data_lock:
+            self._command_stop_generation = int(
+                getattr(self, '_command_stop_generation', 0)) + 1
             self._active_controls = None
             self._active_plan_started_at = None
             self._active_controls_original_len = 0
