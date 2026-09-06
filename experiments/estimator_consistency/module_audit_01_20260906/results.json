@@ -1,0 +1,560 @@
+{
+  "alias_hazard": {
+    "classification": "API hazard; no current production post-commit mutator found",
+    "result_mutation_changes_anchor": true,
+    "shared_covariance": true,
+    "shared_mean": true
+  },
+  "almost_simultaneous_camera": {
+    "accepted_and_reason_codes": [
+      [
+        1.0,
+        0.0
+      ],
+      [
+        0.0,
+        8.0
+      ]
+    ],
+    "camera_separation_s": 0.0005,
+    "committed_stamp": 9.95,
+    "expected": "A and B each accepted once, with 0.0005 s supported prediction"
+  },
+  "complete_trace": {
+    "H": [
+      [
+        1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0
+      ]
+    ],
+    "K": [
+      [
+        0.7283391260836498,
+        -0.00910055926385076
+      ],
+      [
+        -0.010685933630838694,
+        0.7059308003724202
+      ],
+      [
+        0.023314775595011838,
+        -0.017104293248262854
+      ]
+    ],
+    "R": [
+      [
+        0.015,
+        0.003
+      ],
+      [
+        0.003,
+        0.025
+      ]
+    ],
+    "applied_nis": 0.009300646714162038,
+    "diagnostics": [
+      10.0,
+      1.0,
+      0.2,
+      0.5999999999999996,
+      null,
+      1.0,
+      0.020000000000000018,
+      -0.010000000000000009,
+      0.016362996957734226,
+      0.0006373384443828511,
+      0.0,
+      null,
+      null,
+      0.0006373384443828511,
+      1.069385658998027,
+      -1.9657902611385139,
+      0.5200000000000004,
+      1.0840434471123386,
+      -1.9730632878148548,
+      0.5206373384443832,
+      1.089385658998027,
+      -1.9757902611385139,
+      1.069385658998027,
+      -1.9657902611385139,
+      0.015,
+      0.025,
+      null,
+      null,
+      0.0,
+      0.009300646714162038,
+      1.0,
+      0.0,
+      10.200000000000001,
+      9.4,
+      3.0,
+      0.5999999999999996,
+      0.0,
+      9.21,
+      null,
+      null,
+      null,
+      1.0,
+      0.023314775595011838,
+      -0.017104293248262858,
+      1.0,
+      0.0,
+      null
+    ],
+    "full_covariance_max_abs_error": 6.938893903907228e-18,
+    "initial_P": [
+      [
+        0.04,
+        0.005,
+        0.002
+      ],
+      [
+        0.005,
+        0.06,
+        -0.003
+      ],
+      [
+        0.002,
+        -0.003,
+        0.025
+      ]
+    ],
+    "initial_m": [
+      1.0,
+      -2.0,
+      0.4
+    ],
+    "initial_stamp": 9.4,
+    "innovation": [
+      0.020000000000000018,
+      -0.010000000000000009
+    ],
+    "innovation_covariance": [
+      [
+        0.0549410286899791,
+        0.008205224541926428
+      ],
+      [
+        0.008205224541926428,
+        0.08471584085197881
+      ]
+    ],
+    "odom_log": [
+      [
+        9.35,
+        0.2,
+        0.0
+      ],
+      [
+        9.6,
+        0.0,
+        0.8
+      ],
+      [
+        9.75,
+        0.15,
+        0.0
+      ],
+      [
+        10.0,
+        0.0,
+        0.0
+      ]
+    ],
+    "posterior_P": [
+      [
+        0.010897785213463193,
+        0.00195750339665468,
+        0.000298408754180389
+      ],
+      [
+        0.0019575033966546806,
+        0.01761621220841799,
+        -0.0003576630044215358
+      ],
+      [
+        0.00029840875418038904,
+        -0.0003576630044215358,
+        0.02519189522851796
+      ]
+    ],
+    "posterior_m": [
+      1.0840434471123386,
+      -1.9730632878148548,
+      0.5206373384443832
+    ],
+    "reads_did_not_commit": true,
+    "steps": [
+      {
+        "F": [
+          [
+            1.0,
+            0.0,
+            -0.015576733692345968
+          ],
+          [
+            0.0,
+            1.0,
+            0.03684243976011528
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "P": [
+          [
+            0.03996073246839402,
+            0.005113226216091667,
+            0.001609958588343657
+          ],
+          [
+            0.005113226216091667,
+            0.05981594862494258,
+            -0.002077465308406713
+          ],
+          [
+            0.001609958588343657,
+            -0.002077465308406713,
+            0.02508
+          ]
+        ],
+        "Q": [
+          [
+            1.697353735033885e-05,
+            7.158257312389346e-06,
+            -6.230693476938366e-07
+          ],
+          [
+            7.158257312389348e-06,
+            3.069129316327741e-06,
+            1.4736975904046062e-06
+          ],
+          [
+            -6.230693476938366e-07,
+            1.4736975904046062e-06,
+            7.999999999999972e-05
+          ]
+        ],
+        "end": 9.6,
+        "m": [
+          1.0368424397601153,
+          -1.984423266307654,
+          0.4
+        ],
+        "start": 9.4,
+        "u": [
+          0.2,
+          0.0
+        ]
+      },
+      {
+        "F": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "P": [
+          [
+            0.039973457768714124,
+            0.005118606386773414,
+            0.001609958588343657
+          ],
+          [
+            0.005118606386773414,
+            0.05981822332462247,
+            -0.002077465308406713
+          ],
+          [
+            0.001609958588343657,
+            -0.002077465308406713,
+            0.025140000000000003
+          ]
+        ],
+        "Q": [
+          [
+            1.2725300320103771e-05,
+            5.380170681746434e-06,
+            0.0
+          ],
+          [
+            5.380170681746435e-06,
+            2.274699679896265e-06,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            6.0000000000000144e-05
+          ]
+        ],
+        "end": 9.75,
+        "m": [
+          1.0368424397601153,
+          -1.984423266307654,
+          0.5200000000000004
+        ],
+        "start": 9.6,
+        "u": [
+          0.0,
+          0.8
+        ]
+      },
+      {
+        "F": [
+          [
+            1.0,
+            0.0,
+            -0.018633005169140137
+          ],
+          [
+            0.0,
+            1.0,
+            0.03254321923791186
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "P": [
+          [
+            0.0399410286899791,
+            0.005205224541926427,
+            0.001140593188133017
+          ],
+          [
+            0.005205224541926427,
+            0.05971584085197881,
+            -0.001257701615803713
+          ],
+          [
+            0.001140593188133017,
+            -0.001257701615803713,
+            0.025240000000000002
+          ]
+        ],
+        "Q": [
+          [
+            1.883932617813083e-05,
+            1.0759840241465718e-05,
+            -9.316502584570069e-07
+          ],
+          [
+            1.0759840241465718e-05,
+            6.207548821869172e-06,
+            1.6271609618955931e-06
+          ],
+          [
+            -9.316502584570069e-07,
+            1.6271609618955931e-06,
+            0.0001
+          ]
+        ],
+        "end": 10.0,
+        "m": [
+          1.069385658998027,
+          -1.9657902611385139,
+          0.5200000000000004
+        ],
+        "start": 9.75,
+        "u": [
+          0.15,
+          0.0
+        ]
+      }
+    ],
+    "terminal_event": {
+      "accepted": true,
+      "apply_stamp": 10.200000000000001,
+      "belief_stamp_after": 10.0,
+      "correction_stamp": 10.0,
+      "nis": 0.009300646714162038,
+      "reason": "accepted",
+      "schema_version": 1,
+      "source_batch_id": "audit:camera_A+camera_B@10000000000",
+      "status": "accepted"
+    },
+    "z": [
+      1.089385658998027,
+      -1.9757902611385139
+    ]
+  },
+  "encoder_order_and_gap": {
+    "long_gap": {
+      "expected_heading": 1.2,
+      "input_stamps": [
+        0.0,
+        0.1,
+        1.1,
+        1.2
+      ],
+      "observed_heading": 0.2,
+      "omitted_turn": 1.0,
+      "published_stamp": 1.2,
+      "published_yaw_variance": 0.00027
+    },
+    "out_of_order": {
+      "expected_heading": 0.3,
+      "input_stamps": [
+        0.0,
+        0.2,
+        0.1,
+        0.3
+      ],
+      "observed_heading": 0.4,
+      "published_stamp": 0.3
+    }
+  },
+  "frame_and_white_noise_checks": {
+    "jacobian_max_abs_error": 8.22666379463044e-11,
+    "straight_white_covariance_partition_max_abs_error": 2.6020852139652106e-18,
+    "straight_white_lateral_variance": 0.0008066666666666667
+  },
+  "missing_prefix_and_empty_history": {
+    "empty_history_correction_prior_x": 0.01999999999999993,
+    "empty_history_publication_x": 0.0,
+    "known_script_expected_x": 0.12,
+    "partial_history_prior_x": 0.060000000000000143,
+    "partial_replay": {
+      "cmd_replay_count": 1.0,
+      "cmd_replay_duration_s": 0.5999999999999996,
+      "cmd_replay_used_fallback": 0.0,
+      "motion_replay_source_code": 1.0
+    }
+  },
+  "out_of_order_motion": {
+    "arrival_stamps": [
+      9.4,
+      9.7,
+      9.5
+    ],
+    "expected_Q_theta": 0.00024,
+    "expected_x": 0.12,
+    "integrated_durations": [
+      0.29999999999999893,
+      0.5
+    ],
+    "interval_duration": 0.6,
+    "observed_Q_theta": 0.00032000000000000084,
+    "observed_x": 0.1599999999999998,
+    "replay": {
+      "cmd_replay_count": 2.0,
+      "cmd_replay_duration_s": 0.5999999999999996,
+      "cmd_replay_used_fallback": 0.0,
+      "motion_replay_source_code": 1.0
+    },
+    "resulting_stamp": 10.0
+  },
+  "outage_support_snapshot_race": {
+    "checked_full_history": true,
+    "committed_stamp": 59.9,
+    "expected_heading": 0.2,
+    "first_remaining_motion_stamp": 0.3,
+    "observed_heading": 0.0,
+    "terminal_event": {
+      "accepted": false,
+      "apply_stamp": 60.2,
+      "belief_stamp_after": 59.9,
+      "correction_stamp": 59.9,
+      "nis": null,
+      "reason": "replay_gap_too_large",
+      "schema_version": 1,
+      "source_batch_id": "audit:outage-snapshot",
+      "status": "dropped"
+    }
+  },
+  "per_camera_nonrejection_inflation": {
+    "actual_bootstrap_variance": 0.08,
+    "configured_once_per_batch_inflation": 0.05,
+    "single_camera_bootstrap_R": 0.03,
+    "single_long_gap_batch_inflation_added": 0.1000000000000003,
+    "stale_drop_stamp_after": 10.0,
+    "stale_drop_variance_added": 0.05
+  },
+  "pixel_refusal_freezes_anchor": {
+    "anchor_stamp_after": 9.9,
+    "reason_code": 5.0,
+    "rejected_stamp": 9.95
+  },
+  "probe_sha256": "fc4b8a662660d03a2117a71b9fd90c0bdf523217d9efcabab19df677e2aa7742",
+  "quorum_information_reuse": {
+    "R_each": 0.03,
+    "actual_xy_variance": 0.01,
+    "assimilation_count": 0,
+    "cameras": 2,
+    "diagnostics_count": 2,
+    "equivalent_information_terms": 3.0,
+    "independent_two_reading_bootstrap_variance": 0.015
+  },
+  "source_provenance": {
+    "experiments.core.visibility_launch_common": {
+      "frozen_protocol_match": null,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/experiments/experiments/core/visibility_launch_common.py",
+      "resolved_source": "src/experiments/experiments/core/visibility_launch_common.py",
+      "sha256": "de61a0fe93250d3207629ddb37d10d5d04b8e605452725b831b74882d2b98817"
+    },
+    "planning.core.belief_correction": {
+      "frozen_protocol_match": true,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/core/belief_correction.py",
+      "resolved_source": "src/planning/planning/core/belief_correction.py",
+      "sha256": "cf263b7d64785cd00200e99ae4196fbbc6cc0ef73e4226cee164a897481ec22f"
+    },
+    "planning.core.dynamics": {
+      "frozen_protocol_match": true,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/core/dynamics.py",
+      "resolved_source": "src/planning/planning/core/dynamics.py",
+      "sha256": "7a6bde9ddfbc2b100b328fd5d1ae870438a57f1f95e2f7f91e8a6b51859a4107"
+    },
+    "planning.core.motion_history": {
+      "frozen_protocol_match": true,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/core/motion_history.py",
+      "resolved_source": "src/planning/planning/core/motion_history.py",
+      "sha256": "4e2f71eb96d2a03304336ebc50b28e2e518cb01b87b20be312c7bf80122b7923"
+    },
+    "planning.nodes.efe_agent_node": {
+      "frozen_protocol_match": false,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/nodes/efe_agent_node.py",
+      "resolved_source": "src/planning/planning/nodes/efe_agent_node.py",
+      "sha256": "a575ba53e74a835ee955625b14e5718c09939fc36d206ef8b35b4a0c405818ae"
+    },
+    "planning.nodes.unicycle_planner_node": {
+      "frozen_protocol_match": true,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/nodes/unicycle_planner_node.py",
+      "resolved_source": "src/planning/planning/nodes/unicycle_planner_node.py",
+      "sha256": "56100b37b8e9351d1cee3d4e089357503e53838db428c4261e0bf1a11f76514f"
+    },
+    "planning.planners.base_planner": {
+      "frozen_protocol_match": null,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/planners/base_planner.py",
+      "resolved_source": "src/planning/planning/planners/base_planner.py",
+      "sha256": "abe6edffd6ac66998088c71884e256d56f7f3dbc798bf5684a86a623d4edffdb"
+    },
+    "sim.encoder_noise_node": {
+      "frozen_protocol_match": null,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/sim/sim/encoder_noise_node.py",
+      "resolved_source": "src/sim/sim/encoder_noise_node.py",
+      "sha256": "e6a04fffdcad57a83d11c64c73a4c39726fdb0eb7e515500a98a6377839af497"
+    }
+  }
+}

@@ -8,7 +8,7 @@
   04_worst_moment     the single worst moment, in the place it happened
 
 Beat 1 -- what this arm's rule does -- is the shared mechanism figure
-logs/studies/fusion_on_fixed_routes/00_hull_observation/03_three_rules_one_moment.png,
+logs/studies/fusion_on_fixed_routes/00_hull_observation/03_four_rules_one_moment.png,
 which draws all four rules on one real moment rather than six near-identical pictures.
 """
 from __future__ import annotations

@@ -113,6 +113,7 @@ class UnicyclePlannerBase:
         visibility_geometry_json='',
         collision_geometry_json='',
         visibility_artifact_path='',
+        camera_network_artifact_path='',
         r_visible_uv=2.5,
         r_miss_uv=120.0,
         visibility_sigma_kappa=1.0,
@@ -223,6 +224,17 @@ class UnicyclePlannerBase:
         self.use_visibility_model = bool(use_visibility_model)
         self._visibility_min_prob = 1e-4
         self.visibility_model = None
+        self.camera_network = None
+        network_path = str(camera_network_artifact_path or '').strip()
+        if network_path:
+            if not self.use_visibility_model:
+                raise ValueError('camera network requires use_visibility_model=True')
+            if str(visibility_artifact_path or '').strip():
+                raise ValueError('choose a camera-network artifact or a single-camera field, not both')
+            if use_hit_miss_mixture:
+                raise ValueError('IWAI network score proxy is not the hit/miss measurement model')
+            from planning.core.camera_network import CameraNetworkModel
+            self.camera_network = CameraNetworkModel(network_path)
         self.use_nogo_cost = bool(use_nogo_cost)
         self.nogo_penalty_type = str(nogo_penalty_type or 'warning_band').strip().lower()
         self.nogo_weight = float(max(nogo_weight, 0.0))
@@ -258,7 +270,7 @@ class UnicyclePlannerBase:
         ])
         self.R = self.R_visible.copy()
 
-        if self.use_visibility_model:
+        if self.use_visibility_model and self.camera_network is None:
             vis_cfg = GPVisibilityMapConfig(
                 artifact_path=str(visibility_artifact_path or ''),
                 camera_pos=tuple(np.asarray(camera_params['cam_pos'], dtype=float).tolist()),
@@ -386,7 +398,8 @@ class UnicyclePlannerBase:
         step_dt = self.dt if dt is None else float(dt)
         return unicycle_process_noise(
             self.process_noise_xy, self.process_noise_theta, step_dt,
-            theta=theta, v=v, base_dt=self.dt
+            theta=theta, v=v, base_dt=self.dt,
+            coherent_drift=getattr(self, 'coherent_drift', False),
         )
 
     def predict(self, m, S, u, dt=None):
@@ -514,6 +527,9 @@ class UnicyclePlannerBase:
         # This function is planner-facing only.
         # It defines predictive observability/trust for route evaluation.
         # It must not be used as the sole source of measurement-update trust.
+        if self.camera_network is not None:
+            return self.camera_network.planning_diagnostics(
+                m, S, self.camera.H, self.visibility_sigma_kappa)
         p_vis = self.visibility_probability_belief(m, S)
         p_vis_eff = self._visibility_effective_score(p_vis)
         if (not self.use_visibility_model) or (self.visibility_model is None):
@@ -927,6 +943,7 @@ class UnicyclePlannerBase:
             float(self.dt),
             int(np.asarray(goal_obs, dtype=float).shape[0]),
             tuple(self.visibility_model.signature) if self.visibility_model is not None else (),
+            tuple(self.camera_network.signature) if self.camera_network is not None else (),
         )
 
     def _get_casadi_valgrad(
@@ -1008,6 +1025,9 @@ class UnicyclePlannerBase:
                 p_vis_state=p_vis_ca,
                 nogo_cost=nogo_cost_ca,
                 nogo_belief_cost=nogo_belief_cost_ca,
+                R_plan_state=(None if self.camera_network is None else
+                    self.camera_network.make_proxy_covariance_casadi(
+                        self.camera.H, self.visibility_sigma_kappa)),
             )
             self._casadi_valgrad_cache[cache_key] = valgrad
             self._runtime_debug_print(
@@ -1019,6 +1039,8 @@ class UnicyclePlannerBase:
 
     def observation_model_with_visibility(self, m_pred, S_pred):
         """Visibility-aware measurement shaping used by objective and correction."""
+        if self.camera_network is not None:
+            raise RuntimeError('camera-network planning proxy is not a fresh measurement; use metric map updates')
         S_pred = np.asarray(S_pred, dtype=float)
         if (not self.use_visibility_model) or (self.visibility_model is None):
             R_eff = np.asarray(self.R_visible, dtype=float)

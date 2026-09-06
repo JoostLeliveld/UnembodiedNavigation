@@ -1,0 +1,839 @@
+{
+  "same_event_same_prior_R_Q_actual_nodes": {
+    "direct": {
+      "mean": [
+        0.014248975118980227,
+        0.011591027630426286,
+        0.09639157741313877
+      ],
+      "covariance": [
+        [
+          0.004311139427095245,
+          -0.0005768103198361913,
+          0.0006187826864727727
+        ],
+        [
+          -0.0005768103198361913,
+          0.003409364143455521,
+          -0.0005198650941806832
+        ],
+        [
+          0.0006187826864727727,
+          -0.0005198650941806832,
+          0.02939156707176994
+        ]
+      ],
+      "stamp": 9.95,
+      "seen_batches": [],
+      "terminal": [],
+      "errors": [],
+      "replay_intervals": [
+        0.049999999999998934,
+        0.0,
+        0.0
+      ]
+    },
+    "independent": {
+      "mean": [
+        0.014248975118980227,
+        0.011591027630426281,
+        0.09639157741313875
+      ],
+      "covariance": [
+        [
+          0.00431113942709524,
+          -0.000576810319836191,
+          0.0006187826864727732
+        ],
+        [
+          -0.000576810319836191,
+          0.0034093641434555164,
+          -0.000519865094180683
+        ],
+        [
+          0.0006187826864727732,
+          -0.000519865094180683,
+          0.029391567071769945
+        ]
+      ],
+      "stamp": 9.95,
+      "seen_batches": [
+        "synthetic"
+      ],
+      "terminal": [
+        {
+          "accepted": true,
+          "apply_stamp": 10.0,
+          "belief_stamp_after": 9.95,
+          "correction_stamp": 9.95,
+          "nis": 0.027752339964413505,
+          "reason": "accepted",
+          "schema_version": 1,
+          "source_batch_id": "synthetic",
+          "status": "accepted"
+        }
+      ],
+      "errors": [],
+      "replay_intervals": [
+        0.049999999999998934
+      ]
+    },
+    "robust": {
+      "mean": [
+        0.015369766203830008,
+        0.00686610104531055,
+        0.0971525330251153
+      ],
+      "covariance": [
+        [
+          0.01098850676818642,
+          -0.0009816642914447782,
+          0.0015131113070788562
+        ],
+        [
+          -0.0009816642914447782,
+          0.008644362595541452,
+          -0.0012575306865946483
+        ],
+        [
+          0.0015131113070788562,
+          -0.0012575306865946483,
+          0.029600993684305354
+        ]
+      ],
+      "stamp": 9.95,
+      "seen_batches": [
+        "synthetic"
+      ],
+      "terminal": [
+        {
+          "accepted": true,
+          "apply_stamp": 10.0,
+          "belief_stamp_after": 9.95,
+          "correction_stamp": 9.95,
+          "nis": 0.023401930242971238,
+          "reason": "accepted",
+          "schema_version": 1,
+          "source_batch_id": "synthetic",
+          "status": "accepted"
+        }
+      ],
+      "errors": [],
+      "replay_intervals": [
+        0.049999999999998934
+      ]
+    },
+    "maximum_independent_covariance_difference": 5.204170427930421e-18
+  },
+  "repeated_direct_delivery": {
+    "changed_covariance": false,
+    "terminal_records": 0
+  },
+  "wrong_frame_direct_callback": {
+    "mean": [
+      0.014248975118980227,
+      0.011591027630426286,
+      0.09639157741313877
+    ],
+    "covariance": [
+      [
+        0.004311139427095245,
+        -0.0005768103198361913,
+        0.0006187826864727727
+      ],
+      [
+        -0.0005768103198361913,
+        0.003409364143455521,
+        -0.0005198650941806832
+      ],
+      [
+        0.0006187826864727727,
+        -0.0005198650941806832,
+        0.02939156707176994
+      ]
+    ],
+    "stamp": 9.95,
+    "seen_batches": [],
+    "terminal": [],
+    "errors": [],
+    "replay_intervals": [
+      0.049999999999998934,
+      0.0,
+      0.0
+    ]
+  },
+  "fused_envelope_validation": {
+    "schema": {
+      "mean": [
+        0.01,
+        -0.02,
+        0.1
+      ],
+      "covariance": [
+        [
+          0.05,
+          0.01,
+          0.005
+        ],
+        [
+          0.01,
+          0.04,
+          -0.004
+        ],
+        [
+          0.005,
+          -0.004,
+          0.03
+        ]
+      ],
+      "stamp": 9.9,
+      "seen_batches": [],
+      "terminal": [],
+      "errors": [
+        [
+          "fused correction envelope failed",
+          "unsupported correction envelope schema"
+        ]
+      ],
+      "replay_intervals": []
+    },
+    "frame": {
+      "mean": [
+        0.01,
+        -0.02,
+        0.1
+      ],
+      "covariance": [
+        [
+          0.05,
+          0.01,
+          0.005
+        ],
+        [
+          0.01,
+          0.04,
+          -0.004
+        ],
+        [
+          0.005,
+          -0.004,
+          0.03
+        ]
+      ],
+      "stamp": 9.9,
+      "seen_batches": [],
+      "terminal": [],
+      "errors": [
+        [
+          "fused correction envelope failed",
+          "correction envelope frame differs from robot belief frame"
+        ]
+      ],
+      "replay_intervals": []
+    },
+    "indefinite": {
+      "mean": [
+        0.01,
+        -0.02,
+        0.1
+      ],
+      "covariance": [
+        [
+          0.05,
+          0.01,
+          0.005
+        ],
+        [
+          0.01,
+          0.04,
+          -0.004
+        ],
+        [
+          0.005,
+          -0.004,
+          0.03
+        ]
+      ],
+      "stamp": 9.9,
+      "seen_batches": [],
+      "terminal": [],
+      "errors": [
+        [
+          "fused correction envelope failed",
+          "Matrix is not positive definite"
+        ]
+      ],
+      "replay_intervals": []
+    },
+    "asymmetric": {
+      "mean": [
+        0.01,
+        -0.02,
+        0.1
+      ],
+      "covariance": [
+        [
+          0.05,
+          0.01,
+          0.005
+        ],
+        [
+          0.01,
+          0.04,
+          -0.004
+        ],
+        [
+          0.005,
+          -0.004,
+          0.03
+        ]
+      ],
+      "stamp": 9.9,
+      "seen_batches": [],
+      "terminal": [],
+      "errors": [
+        [
+          "fused correction envelope failed",
+          "correction envelope covariance is not symmetric"
+        ]
+      ],
+      "replay_intervals": []
+    },
+    "duplicate_camera_list": {
+      "mean": [
+        0.019508875495075382,
+        0.013442782779521576,
+        0.09681133768213547
+      ],
+      "covariance": [
+        [
+          0.014155132129510986,
+          0.0009725237721279548,
+          0.001655721722047844
+        ],
+        [
+          0.0009725237721279548,
+          0.013182608357383035,
+          -0.0016066092715553812
+        ],
+        [
+          0.001655721722047844,
+          -0.0016066092715553812,
+          0.029664747715176965
+        ]
+      ],
+      "stamp": 9.95,
+      "seen_batches": [
+        "synthetic"
+      ],
+      "terminal": [
+        {
+          "accepted": true,
+          "apply_stamp": 10.0,
+          "belief_stamp_after": 9.95,
+          "correction_stamp": 9.95,
+          "nis": 0.0416386053036584,
+          "reason": "accepted",
+          "schema_version": 1,
+          "source_batch_id": "synthetic",
+          "status": "accepted"
+        }
+      ],
+      "errors": [],
+      "replay_intervals": [
+        0.049999999999998934
+      ]
+    },
+    "empty_camera_list": {
+      "mean": [
+        0.019508875495075382,
+        0.013442782779521576,
+        0.09681133768213547
+      ],
+      "covariance": [
+        [
+          0.014155132129510986,
+          0.0009725237721279548,
+          0.001655721722047844
+        ],
+        [
+          0.0009725237721279548,
+          0.013182608357383035,
+          -0.0016066092715553812
+        ],
+        [
+          0.001655721722047844,
+          -0.0016066092715553812,
+          0.029664747715176965
+        ]
+      ],
+      "stamp": 9.95,
+      "seen_batches": [
+        "synthetic"
+      ],
+      "terminal": [
+        {
+          "accepted": true,
+          "apply_stamp": 10.0,
+          "belief_stamp_after": 9.95,
+          "correction_stamp": 9.95,
+          "nis": 0.0416386053036584,
+          "reason": "accepted",
+          "schema_version": 1,
+          "source_batch_id": "synthetic",
+          "status": "accepted"
+        }
+      ],
+      "errors": [],
+      "replay_intervals": [
+        0.049999999999998934
+      ]
+    },
+    "common_time_after_correction": {
+      "mean": [
+        0.019508875495075382,
+        0.013442782779521576,
+        0.09681133768213547
+      ],
+      "covariance": [
+        [
+          0.014155132129510986,
+          0.0009725237721279548,
+          0.001655721722047844
+        ],
+        [
+          0.0009725237721279548,
+          0.013182608357383035,
+          -0.0016066092715553812
+        ],
+        [
+          0.001655721722047844,
+          -0.0016066092715553812,
+          0.029664747715176965
+        ]
+      ],
+      "stamp": 9.95,
+      "seen_batches": [
+        "synthetic"
+      ],
+      "terminal": [
+        {
+          "accepted": true,
+          "apply_stamp": 10.0,
+          "belief_stamp_after": 9.95,
+          "correction_stamp": 9.95,
+          "nis": 0.0416386053036584,
+          "reason": "accepted",
+          "schema_version": 1,
+          "source_batch_id": "synthetic",
+          "status": "accepted"
+        }
+      ],
+      "errors": [],
+      "replay_intervals": [
+        0.049999999999998934
+      ]
+    },
+    "boolean_schema": {
+      "mean": [
+        0.019508875495075382,
+        0.013442782779521576,
+        0.09681133768213547
+      ],
+      "covariance": [
+        [
+          0.014155132129510986,
+          0.0009725237721279548,
+          0.001655721722047844
+        ],
+        [
+          0.0009725237721279548,
+          0.013182608357383035,
+          -0.0016066092715553812
+        ],
+        [
+          0.001655721722047844,
+          -0.0016066092715553812,
+          0.029664747715176965
+        ]
+      ],
+      "stamp": 9.95,
+      "seen_batches": [
+        "synthetic"
+      ],
+      "terminal": [
+        {
+          "accepted": true,
+          "apply_stamp": 10.0,
+          "belief_stamp_after": 9.95,
+          "correction_stamp": 9.95,
+          "nis": 0.0416386053036584,
+          "reason": "accepted",
+          "schema_version": 1,
+          "source_batch_id": "synthetic",
+          "status": "accepted"
+        }
+      ],
+      "errors": [],
+      "replay_intervals": [
+        0.049999999999998934
+      ]
+    }
+  },
+  "manager_capture_vs_common_time_payload": {
+    "accepted_camera_ids": [
+      "camera_A",
+      "camera_B"
+    ],
+    "authority": "active",
+    "common_capture_stamp": 9.99,
+    "common_mode_std_m": 0.0,
+    "common_time_rejected_camera_ids": [],
+    "covariance_profile": "synthetic_full_R",
+    "fused_cov": [
+      [
+        0.010001999600079981,
+        4.930380854767685e-32
+      ],
+      [
+        4.930380854767685e-32,
+        0.010001999600079981
+      ]
+    ],
+    "fused_stamp": 9.99,
+    "fused_xy": [
+      1.0087999999999997,
+      1.9999999999999998
+    ],
+    "fused_xy_before_propagation": [
+      1.0087999999999997,
+      1.9999999999999998
+    ],
+    "fusion_mode": true,
+    "gate_rejections": {},
+    "gp_query_source_by_camera": {},
+    "max_timestamp_spread_s": 0.05,
+    "n_fresh": 2,
+    "observations": [
+      {
+        "aligned_cov": [
+          [
+            0.010004,
+            0.0
+          ],
+          [
+            0.0,
+            0.010004
+          ]
+        ],
+        "aligned_xy": [
+          1.0088,
+          2.0
+        ],
+        "camera": "camera_A",
+        "cov": [
+          [
+            0.01,
+            0.0
+          ],
+          [
+            0.0,
+            0.01
+          ]
+        ],
+        "obs_stamp": 9.95,
+        "used": true,
+        "xy": [
+          1.0,
+          2.0
+        ]
+      },
+      {
+        "aligned_cov": [
+          [
+            0.01,
+            0.0
+          ],
+          [
+            0.0,
+            0.01
+          ]
+        ],
+        "aligned_xy": [
+          1.0088,
+          2.0
+        ],
+        "camera": "camera_B",
+        "cov": [
+          [
+            0.01,
+            0.0
+          ],
+          [
+            0.0,
+            0.01
+          ]
+        ],
+        "obs_stamp": 9.99,
+        "used": true,
+        "xy": [
+          1.0088,
+          2.0
+        ]
+      }
+    ],
+    "propagation": "disabled",
+    "rejected_by_camera": {},
+    "rejected_camera_ids": [],
+    "scores_by_camera": {
+      "camera_A": 0.7165313105737858,
+      "camera_B": 0.9355069850316191
+    },
+    "silhouette_correction_by_camera": {},
+    "source_batch_id": "synthetic_batch",
+    "synchronous_camera_ids": [
+      "camera_A",
+      "camera_B"
+    ],
+    "time_skew_rejected_camera_ids": []
+  },
+  "manager_two_valid_odom_poses_ignored_for_belief_jump": {
+    "accepted_camera_ids": [
+      "camera_A",
+      "camera_B"
+    ],
+    "authority": "active",
+    "common_capture_stamp": 9.99,
+    "common_mode_std_m": 0.0,
+    "common_time_rejected_camera_ids": [],
+    "covariance_profile": "synthetic_full_R",
+    "fused_cov": [
+      [
+        0.04826135654055517,
+        -8.684647667780107e-21
+      ],
+      [
+        -8.684647667780107e-21,
+        0.010001999600079981
+      ]
+    ],
+    "fused_stamp": 9.99,
+    "fused_xy": [
+      1.2043608878224352,
+      1.9999999999999998
+    ],
+    "fused_xy_before_propagation": [
+      1.2043608878224352,
+      1.9999999999999998
+    ],
+    "fusion_mode": true,
+    "gate_rejections": {},
+    "gp_query_source_by_camera": {},
+    "max_timestamp_spread_s": 0.05,
+    "n_fresh": 2,
+    "observations": [
+      {
+        "aligned_cov": [
+          [
+            0.010004,
+            0.0
+          ],
+          [
+            0.0,
+            0.010004
+          ]
+        ],
+        "aligned_xy": [
+          1.4,
+          2.0
+        ],
+        "camera": "camera_A",
+        "cov": [
+          [
+            0.01,
+            0.0
+          ],
+          [
+            0.0,
+            0.01
+          ]
+        ],
+        "obs_stamp": 9.95,
+        "used": true,
+        "xy": [
+          1.0,
+          2.0
+        ]
+      },
+      {
+        "aligned_cov": [
+          [
+            0.01,
+            0.0
+          ],
+          [
+            0.0,
+            0.01
+          ]
+        ],
+        "aligned_xy": [
+          1.0088,
+          2.0
+        ],
+        "camera": "camera_B",
+        "cov": [
+          [
+            0.01,
+            0.0
+          ],
+          [
+            0.0,
+            0.01
+          ]
+        ],
+        "obs_stamp": 9.99,
+        "used": true,
+        "xy": [
+          1.0088,
+          2.0
+        ]
+      }
+    ],
+    "propagation": "disabled",
+    "rejected_by_camera": {},
+    "rejected_camera_ids": [],
+    "scores_by_camera": {
+      "camera_A": 0.7165313105737858,
+      "camera_B": 0.9355069850316191
+    },
+    "silhouette_correction_by_camera": {},
+    "source_batch_id": "synthetic_batch",
+    "synchronous_camera_ids": [
+      "camera_A",
+      "camera_B"
+    ],
+    "time_skew_rejected_camera_ids": []
+  },
+  "manager_partial_publication": {
+    "after_failure": {
+      "envelopes": 1,
+      "decisions": 0,
+      "decided_id": null
+    },
+    "envelopes_after_retry": 2,
+    "envelope_ids": [
+      "synthetic_batch",
+      "synthetic_batch"
+    ]
+  },
+  "filter_partial_publication_after_commit": {
+    "mean": [
+      0.019508875495075382,
+      0.013442782779521576,
+      0.09681133768213547
+    ],
+    "covariance": [
+      [
+        0.014155132129510986,
+        0.0009725237721279548,
+        0.001655721722047844
+      ],
+      [
+        0.0009725237721279548,
+        0.013182608357383035,
+        -0.0016066092715553812
+      ],
+      [
+        0.001655721722047844,
+        -0.0016066092715553812,
+        0.029664747715176965
+      ]
+    ],
+    "stamp": 9.95,
+    "seen_batches": [],
+    "terminal": [],
+    "errors": [
+      [
+        "fused correction envelope failed",
+        "synthetic diagnostic publish failure after commit"
+      ]
+    ],
+    "replay_intervals": [
+      0.049999999999998934
+    ]
+  },
+  "filter_retry_after_commit_failure": {
+    "mean": [
+      0.019508875495075382,
+      0.013442782779521576,
+      0.09681133768213547
+    ],
+    "covariance": [
+      [
+        0.014155132129510986,
+        0.0009725237721279548,
+        0.001655721722047844
+      ],
+      [
+        0.0009725237721279548,
+        0.013182608357383035,
+        -0.0016066092715553812
+      ],
+      [
+        0.001655721722047844,
+        -0.0016066092715553812,
+        0.029664747715176965
+      ]
+    ],
+    "stamp": 9.95,
+    "seen_batches": [
+      "synthetic"
+    ],
+    "terminal": [
+      {
+        "accepted": false,
+        "apply_stamp": 10.0,
+        "belief_stamp_after": 9.95,
+        "correction_stamp": 9.95,
+        "nis": "nan",
+        "reason": "not_newer_than_belief",
+        "schema_version": 1,
+        "source_batch_id": "synthetic",
+        "status": "dropped"
+      }
+    ],
+    "errors": [
+      [
+        "fused correction envelope failed",
+        "synthetic diagnostic publish failure after commit"
+      ]
+    ],
+    "replay_intervals": [
+      0.049999999999998934
+    ]
+  },
+  "reverified_01_untracked_bootstrap": {
+    "consumed_xy": [
+      1.0,
+      2.0
+    ],
+    "ledger_event": {
+      "accepted": false,
+      "apply_stamp": 10.0,
+      "belief_stamp_after": 9.95,
+      "correction_stamp": 9.95,
+      "nis": null,
+      "reason": "not_newer_than_belief",
+      "schema_version": 1,
+      "source_batch_id": "synthetic-bootstrap",
+      "status": "dropped"
+    }
+  },
+  "reverified_10_same_clock_batches": {
+    "delivered_distinct_batches": 2,
+    "logged_rows": 1,
+    "logged_batch_ids": [
+      "synthetic-0"
+    ]
+  }
+}

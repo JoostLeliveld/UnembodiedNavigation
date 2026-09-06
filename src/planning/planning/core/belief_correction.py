@@ -434,18 +434,21 @@ def compute_update(m_pred, lin: Linearization, *, cov_eig_floor: float,
     if innov.size >= 3:
         innov[2] = wrap_angle(innov[2])
     Sigma_y = (Sigma_y + Sigma_y.T) / 2.0
-    Sigma_inv = np.linalg.pinv(Sigma_y)
-    K = Gamma @ Sigma_inv
+    try:
+        K = np.linalg.solve(Sigma_y, Gamma.T).T
+    except np.linalg.LinAlgError:
+        _report(on_shape_error, "Singular innovation covariance; skipping correction.")
+        return None
     gain_scale = float(lin.gain_scale)
     next_m = m_pred + gain_scale * (K @ innov)
     next_m[2] = wrap_angle(next_m[2])
-    # LIMITATION: this is the standard Kalman covariance form, which is correct only at
-    # the optimal gain, i.e. gain_scale == 1. Every fused camera correction passes 1.0, so
-    # the fusion experiment is unaffected. Only PixelMeasurementSource scales the gain (by
-    # the visibility GP's predicted visibility), and on that path the covariance below is
-    # inconsistent with the mean above. Switch that path to Joseph form before driving it
-    # again. docs/open_questions.md, "Known limitations".
-    next_S = np.asarray(lin.S_eff, dtype=float) - gain_scale * (Gamma @ Sigma_inv @ Gamma.T)
+    # Joseph covariance expressed through the joint state/measurement moments. This
+    # also applies to moment-matched nonlinear observations without inventing an H.
+    # The gain used by the mean must also be used by every covariance term.
+    effective_K = gain_scale * K
+    next_S = (np.asarray(lin.S_eff, dtype=float)
+              - effective_K @ Gamma.T - Gamma @ effective_K.T
+              + effective_K @ Sigma_y @ effective_K.T)
     next_S = 0.5 * (next_S + next_S.T)
     eig_min = np.min(np.linalg.eigvalsh(next_S))
     if eig_min < cov_eig_floor:

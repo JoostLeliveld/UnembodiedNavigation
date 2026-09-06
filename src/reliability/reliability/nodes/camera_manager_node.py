@@ -43,8 +43,8 @@ from reliability.fusion import (
     SequentialFusionResult,
     distance_angle_weighted_fusion_2d,
     independent_measurement_fusion_2d,
+    joint_network_estimate_2d,
     map_observations_to_json,
-    network_pooled_fusion_2d,
     select_smallest_covariance,
 )
 from reliability.handover import HandoverUncertaintyConfig, handover_adjusted_observation
@@ -89,15 +89,40 @@ NONINFORMATIVE_YAW_VAR = float(math.pi**2)
 #: claim under test, so nothing downstream may floor or inflate it except the commissioned
 #: bias floor.
 COMMISSIONED_COVARIANCE = "commissioned_sigma_px"
-SUPPORTED_COVARIANCE_PROFILES = (COMMISSIONED_COVARIANCE,)
+#: The commissioned WORLD-PLANE covariance. Where `commissioned_sigma_px` states the
+#: detector's pixel noise and lets the projection geometry decide what it is worth in
+#: centimetres, this profile states the residual scatter measured directly on the warehouse
+#: floor, conditioned on the detector's own confidence.
+#:
+#: The distinction is not cosmetic. Pixel noise describes where the detector puts the box
+#: EDGE given the robot; it says nothing about the gap between that edge and the point the
+#: observation model predicts, which is a shape and viewing-geometry effect. Measured on
+#: 3,163 held-out readings the pixel route states 0.7 cm where the error is 19.1 cm -- about
+#: 300x too confident in variance -- while this table states 10.5 cm and is calibrated.
+#: See logs/studies/perception_bayesian_gaussian/RESULTS.md.
+#: All-lowercase deliberately: the launch layer normalises this parameter with
+#: `.strip().lower()` so a config typo cannot select a profile by accident, which silently
+#: turned "commissioned_world_R" into an unrecognised value and killed every run.
+COMMISSIONED_WORLD_COVARIANCE = "commissioned_world_r"
+COMMISSIONED_REFERENCE_COVARIANCE = "commissioned_reference_r"
+SUPPORTED_COVARIANCE_PROFILES = (COMMISSIONED_COVARIANCE, COMMISSIONED_WORLD_COVARIANCE,
+                                 COMMISSIONED_REFERENCE_COVARIANCE)
 #: How a detector's box is turned into a statement about where the robot is.
 OBSERVATION_MODEL_HULL = "hull"                  # predict the box from the robot's shape
 OBSERVATION_MODEL_RAW_BOX = "raw_box"            # the box bottom-centre IS the robot
 OBSERVATION_MODEL_FIXED_OFFSET = "fixed_offset"  # ... plus one fixed push away from the camera
+#: The packaged neural box-feature correction, run forward on runtime-only inputs.
+OBSERVATION_MODEL_LEARNED_NN = "learned_nn"
+#: The same correction, plus a usability estimate that sets this reading's covariance and
+#: refuses a reading it judges unusable. Refusing rather than inflating is deliberate: the
+#: occluded regime carries a large MEAN error, and no covariance describes a wrong mean.
+OBSERVATION_MODEL_LEARNED_NN_GATED = "learned_nn_gated"
 SUPPORTED_OBSERVATION_MODELS = (
     OBSERVATION_MODEL_HULL,
     OBSERVATION_MODEL_RAW_BOX,
     OBSERVATION_MODEL_FIXED_OFFSET,
+    OBSERVATION_MODEL_LEARNED_NN,
+    OBSERVATION_MODEL_LEARNED_NN_GATED,
 )
 
 
@@ -132,6 +157,44 @@ def load_commissioned_sigma_px_by_camera(calibration_path: str) -> dict[str, flo
             raise ValueError(f"sigma_px for {camera_id} in {calibration_path} is not positive")
         out[str(camera_id)] = sigma
     return out
+
+
+def load_commissioned_world_covariance(commissioning_path: str):
+    """The commissioned world-plane covariance table, read from its study artifact.
+
+    Returns ``(bias_by_camera, table, confidence_edges, floor_m)`` where ``table`` maps
+    ``(camera_id, band_index)`` to a 2x2 covariance in m^2. Read rather than typed in, so an
+    arm cannot be driven against a remembered number.
+    """
+
+    payload = json.loads(Path(commissioning_path).read_text())
+    block = payload["models"]["radial"]
+    edges = [float(v) for v in payload["confidence_edges"]]
+    bias = {camera: tuple(tuple(float(x) for x in row) for row in theta)
+            for camera, theta in block["bias_parameters"].items()}
+    table = {}
+    for key, entry in block["commissioned"].items():
+        camera_id, _, band = key.partition("|")
+        index = int(band.lstrip("q"))
+        matrix = entry["R_pred"]
+        table[(camera_id, index)] = (
+            (float(matrix[0][0]), float(matrix[0][1])),
+            (float(matrix[1][0]), float(matrix[1][1])),
+        )
+    if not table:
+        raise ValueError(f"{commissioning_path} contains no commissioned covariance bands")
+    return bias, table, edges, float(payload.get("belief_lean_floor_m", 0.0))
+
+
+def commissioned_world_band(confidence: float, edges) -> int:
+    """Which frozen confidence band a reading falls in."""
+
+    index = 0
+    for edge in edges:
+        if float(confidence) < edge:
+            break
+        index += 1
+    return index
 
 
 def commissioned_pixel_covariance(sigma_px: float):
@@ -393,7 +456,7 @@ def _fusion_report_covariance(covariance_m2, *, common_mode_std_m: float = 0.0):
 FUSION_RULE_BEST_SINGLE = "best_single"
 FUSION_RULE_DISTANCE_ANGLE = "distance_angle"
 FUSION_RULE_INDEPENDENT = "independent"
-FUSION_RULE_NETWORK = "network"
+FUSION_RULE_JOINT_NETWORK = "joint_network"
 #: The four arms of the fusion comparison. Every rule sees the same admitted observations
 #: and the same disagreement gate, so the rule is the only thing that differs between arms
 #: -- the gate is shared method, not a treatment. There is deliberately no default: a run
@@ -402,7 +465,7 @@ SUPPORTED_FUSION_RULES = (
     FUSION_RULE_BEST_SINGLE,
     FUSION_RULE_DISTANCE_ANGLE,
     FUSION_RULE_INDEPENDENT,
-    FUSION_RULE_NETWORK,
+    FUSION_RULE_JOINT_NETWORK,
 )
 
 
@@ -417,8 +480,8 @@ def _combine_by_rule(accepted, *, rule: str, camera_positions_m):
         if camera_positions_m is None:
             raise ValueError("the distance_angle rule needs camera positions")
         mean, covariance = distance_angle_weighted_fusion_2d(accepted, camera_positions_m)
-    elif rule == FUSION_RULE_NETWORK:
-        mean, covariance = network_pooled_fusion_2d(accepted)
+    elif rule == FUSION_RULE_JOINT_NETWORK:
+        mean, covariance = joint_network_estimate_2d(accepted)
     elif rule == FUSION_RULE_INDEPENDENT:
         mean, covariance = independent_measurement_fusion_2d(accepted)
     else:
@@ -648,6 +711,9 @@ class CameraManagerNode(Node):
         # only to override it deliberately, and say so in the run's provenance.
         self.declare_parameter("commissioned_calibration_path", "")
         self.declare_parameter("commissioned_sigma_px", 0.0)
+        #: Path to the commissioned world-plane covariance artifact, required by
+        #: covariance_profile=commissioned_world_R.
+        self.declare_parameter("commissioned_world_covariance_path", "")
         # Use each camera's own commissioned pixel noise instead of the pooled one.
         # Commissioning measures both; which to use is an open ablation, not a settled
         # choice -- on the commissioning capture the pooled number and the per-camera one
@@ -690,6 +756,15 @@ class CameraManagerNode(Node):
         self.declare_parameter("admission_gate", True)
         self.declare_parameter("observation_model", OBSERVATION_MODEL_HULL)
         self.declare_parameter("fixed_offset_m", 0.0)
+        # Where the packaged neural box correction lives. Required by the learned models
+        # and ignored by every other one.
+        self.declare_parameter("learned_correction_path", "")
+        # Usability gate for `learned_nn_gated`. A reading whose estimated usability falls
+        # below `reject` is refused; between `reject` and `good` its covariance is widened
+        # toward `soft_sigma_m`; above `good` it keeps the commissioned covariance.
+        self.declare_parameter("learned_gate_reject", 0.5)
+        self.declare_parameter("learned_gate_good", 0.8)
+        self.declare_parameter("learned_gate_soft_sigma_m", 0.10)
         self.declare_parameter("min_spatial_trust", defaults.min_spatial_trust)
         self.declare_parameter("min_association_confidence", defaults.min_association_confidence)
         self.declare_parameter("max_measurement_age_s", defaults.max_measurement_age_s)
@@ -926,6 +1001,34 @@ class CameraManagerNode(Node):
             f"each camera's geometry; no floor and no handover inflation"
         )
 
+        # The commissioned world-plane covariance, used instead of the projected pixel
+        # noise when that profile is selected. Loaded unconditionally only when asked for,
+        # so the pixel arms keep their exact previous behaviour.
+        self.commissioned_world_bias: dict = {}
+        self.commissioned_world_table: dict = {}
+        self.commissioned_world_edges: list = []
+        if self.covariance_profile == COMMISSIONED_WORLD_COVARIANCE:
+            world_path = str(
+                self.get_parameter("commissioned_world_covariance_path").value).strip()
+            if not world_path:
+                raise ValueError(
+                    "covariance_profile=commissioned_world_R needs "
+                    "commissioned_world_covariance_path; refusing to invent the "
+                    "measurement covariance"
+                )
+            (self.commissioned_world_bias, self.commissioned_world_table,
+             self.commissioned_world_edges, _floor) = (
+                load_commissioned_world_covariance(world_path))
+            widths = sorted(
+                math.sqrt((m[0][0] + m[1][1]) / 2.0)
+                for m in self.commissioned_world_table.values())
+            self.get_logger().info(
+                f"covariance_profile=commissioned_world_R: {len(self.commissioned_world_table)} "
+                f"(camera, confidence band) covariances from {world_path}; stated "
+                f"standard deviation spans {widths[0]*100:.1f}-{widths[-1]*100:.1f} cm, "
+                f"and the projected pixel noise is not used"
+            )
+
         self.timestamp_compensation = bool(
             self.get_parameter("correction_timestamp_compensation").value)
         self.propagation_drift_std = float(
@@ -970,6 +1073,42 @@ class CameraManagerNode(Node):
                 f"{SUPPORTED_OBSERVATION_MODELS}, got {self.observation_model!r}"
             )
         self.fixed_offset_m = float(self.get_parameter("fixed_offset_m").value)
+        self.learned_gate_reject = float(self.get_parameter("learned_gate_reject").value)
+        self.learned_gate_good = float(self.get_parameter("learned_gate_good").value)
+        self.learned_gate_soft_sigma_m = float(
+            self.get_parameter("learned_gate_soft_sigma_m").value)
+        #: Set only for the learned models; None means no learned correction is loaded.
+        self.learned_correction = None
+        self.reference_calibration = None
+        self._learned_gate_counts = collections.Counter()
+        if self.observation_model in (OBSERVATION_MODEL_LEARNED_NN,
+                                      OBSERVATION_MODEL_LEARNED_NN_GATED):
+            artifact = str(self.get_parameter("learned_correction_path").value or "")
+            if not artifact:
+                raise ValueError(
+                    f"observation_model={self.observation_model} needs "
+                    f"learned_correction_path; the model is a commissioned artifact, not a "
+                    f"default")
+            from reliability.learned_box_correction import LearnedBoxCorrection
+            # Fail at startup, not per reading: a drive that silently ran without the
+            # correction would look like the arm it is meant to be compared against.
+            self.learned_correction = LearnedBoxCorrection(artifact)
+            self.get_logger().warn(
+                f"observation_model={self.observation_model}: neural box correction loaded "
+                f"from {artifact}"
+                + (f"; usability gate reject<{self.learned_gate_reject} "
+                   f"soft<{self.learned_gate_good}"
+                   if self.observation_model == OBSERVATION_MODEL_LEARNED_NN_GATED else ""))
+        if self.covariance_profile == COMMISSIONED_REFERENCE_COVARIANCE:
+            if self.observation_model != OBSERVATION_MODEL_LEARNED_NN:
+                raise ValueError('commissioned_reference_r requires observation_model=learned_nn')
+            from reliability.reference_calibration import ReferenceCalibration
+            self.reference_calibration = ReferenceCalibration(
+                str(self.get_parameter('commissioned_world_covariance_path').value),
+                str(self.get_parameter('learned_correction_path').value), self.camera_models.keys())
+            self.get_logger().info(
+                f'NN reference calibration {self.reference_calibration.sha256}: '
+                'subtract residual mean after NN, use frozen full metric R')
         if self.observation_model == OBSERVATION_MODEL_FIXED_OFFSET:
             if not math.isfinite(self.fixed_offset_m) or self.fixed_offset_m <= 0.0:
                 raise ValueError(
@@ -985,13 +1124,23 @@ class CameraManagerNode(Node):
                     "asks for the hull model with the hull correction switched off"
                 )
         else:
+            # The hull correction is off for every other model. The learned models replace
+            # it with their own correction rather than leaving the reading uncorrected, so
+            # they must not be described as the robot-centre assumption.
             self.silhouette_correction = False
+            if self.observation_model == OBSERVATION_MODEL_FIXED_OFFSET:
+                detail = (f", so every reading is the box bottom-centre after a fixed "
+                          f"{self.fixed_offset_m * 100:.1f} cm push away from the camera")
+            elif self.observation_model == OBSERVATION_MODEL_LEARNED_NN:
+                detail = ", replaced by the learned neural box correction"
+            elif self.observation_model == OBSERVATION_MODEL_LEARNED_NN_GATED:
+                detail = (", replaced by the learned neural box correction with a "
+                          "usability gate on admission and covariance")
+            else:
+                detail = ", so every reading is treated as the robot's centre"
             self.get_logger().warn(
-                f"observation_model={self.observation_model}: the hull prediction is OFF, so "
-                f"every reading is treated as the robot's centre"
-                + (f" after a fixed {self.fixed_offset_m * 100:.1f} cm push away from the camera"
-                   if self.observation_model == OBSERVATION_MODEL_FIXED_OFFSET else "")
-            )
+                f"observation_model={self.observation_model}: the hull prediction is OFF"
+                + detail)
 
         if self.fusion_mode:
             self.get_logger().warn("fusion_mode=true: publishing covariance-weighted FUSION of all in-view cameras to /state/bev")
@@ -1120,6 +1269,45 @@ class CameraManagerNode(Node):
             ):
                 self._belief_query_history.append((timestamp_s, pose))
 
+    def _reading_usability(self, camera_id: str, world_xy, contract,
+                           prior_pose) -> float:
+        """How much of the robot this reading appears to be looking at, in [0, 1].
+
+        The signature of a hidden robot is a detected box far smaller than the box the
+        robot's own shape predicts at the believed pose. That ratio is available online --
+        the prediction comes from the filter, not from truth -- and it is what separated
+        usable from unusable readings offline: below roughly 0.8 the localization error
+        stops being a few centimetres and becomes tens of centimetres.
+
+        Returns 1.0 when the ratio cannot be formed, so a missing prediction never causes
+        a silent refusal; the admission gate upstream is what handles unusable geometry.
+        """
+        bbox = contract.bbox_xyxy
+        if bbox is None or prior_pose is None:
+            return 1.0
+        try:
+            from unav_common.robot_hull import VISUAL_HULL, silhouette_box
+            predicted = silhouette_box(
+                self.camera_models[camera_id],
+                float(prior_pose[0]), float(prior_pose[1]), float(prior_pose[2]),
+                VISUAL_HULL)
+        except Exception:
+            return 1.0
+        if predicted is None:
+            return 1.0
+        predicted_area = (float(predicted[2]) - float(predicted[0])) * (
+            float(predicted[3]) - float(predicted[1]))
+        detected_area = (float(bbox[2]) - float(bbox[0])) * (
+            float(bbox[3]) - float(bbox[1]))
+        if predicted_area <= 0.0 or detected_area < 0.0:
+            return 1.0
+        ratio = detected_area / predicted_area
+        if not math.isfinite(ratio):
+            return 1.0
+        # A box LARGER than predicted is not evidence of occlusion, so the ratio is
+        # capped rather than rewarded.
+        return float(min(max(ratio, 0.0), 1.0))
+
     def _map_observations(self, now_s: float) -> list[MapObservation]:
         observations: list[MapObservation] = []
         self._bootstrap_camera_ids = set()
@@ -1137,7 +1325,43 @@ class CameraManagerNode(Node):
             if projected is None:
                 continue
             world_xy, covariance_m2 = projected
-            source = "live_contract:commissioned_sigma_px"
+            # commissioned_world_R replaces the projected pixel covariance with the
+            # residual scatter measured on the warehouse floor for this camera at this
+            # detector confidence, and subtracts the systematic offset commissioned with
+            # it. Both come from the same artifact, so a corrected reading is never paired
+            # with an uncorrected covariance.
+            if self.covariance_profile == COMMISSIONED_WORLD_COVARIANCE:
+                # `detector_score` is the YOLO confidence, the same quantity the offline
+                # confidence bands were fitted on (set from the detector's own score in
+                # scheduled_camera_detector_node).
+                band = commissioned_world_band(
+                    contract.detector_score, self.commissioned_world_edges)
+                entry = self.commissioned_world_table.get((camera_id, band))
+                theta = self.commissioned_world_bias.get(camera_id)
+                if entry is None or theta is None:
+                    # No commissioned statement for this camera and confidence: refuse
+                    # rather than fall back on a covariance measured somewhere else.
+                    self._gate_rejections["no_commissioned_world_covariance"] += 1
+                    continue
+                covariance_m2 = entry
+                if contract.bbox_xyxy is not None:
+                    height = max(
+                        1.0, float(contract.bbox_xyxy[3]) - float(contract.bbox_xyxy[1]))
+                    features = (1.0, 1.0 / height)
+                    world_xy = (
+                        float(world_xy[0])
+                        - (features[0] * theta[0][0] + features[1] * theta[1][0]),
+                        float(world_xy[1])
+                        - (features[0] * theta[0][1] + features[1] * theta[1][1]),
+                    )
+            # The UNCORRECTED back-projection, kept before any observation model rewrites
+            # `world_xy`. Recorded so a drive can be re-interpreted offline: without it the
+            # only reading in the log is the one the steering model already corrected, so a
+            # different interpretation cannot be replayed on the same drive and every
+            # comparison would have to run its own trajectory. Diagnostic only -- nothing
+            # downstream reads it, and no arm is driven against it.
+            raw_world_xy = (float(world_xy[0]), float(world_xy[1]))
+            source = f"live_contract:{self.covariance_profile}"
             prior_pose = _nearest_state_pose(
                 self._belief_query_history,
                 contract.timestamp_s,
@@ -1200,18 +1424,81 @@ class CameraManagerNode(Node):
                     world_xy, self.camera_models[camera_id].cam_pos, self.fixed_offset_m)
                 source = f"{source}:fixed_offset"
                 silhouette_status = "fixed_offset_applied"
+            elif self.learned_correction is not None:
+                # The learned correction needs no belief pose, so unlike the hull it still
+                # works on the first reading and through a belief outage.
+                corrected_xy = self.learned_correction.correct(
+                    camera_id, world_xy, contract.bbox_xyxy,
+                    float(contract.detector_score))
+                if corrected_xy is None:
+                    # A reading the model cannot describe is refused rather than passed
+                    # through uncorrected, which would silently mix two interpretations.
+                    self._gate_rejections["learned_correction_unavailable"] += 1
+                    self._silhouette_status_by_camera[camera_id] = (
+                        "refused_learned_correction_unavailable")
+                    continue
+                world_xy = corrected_xy
+                if getattr(self, 'reference_calibration', None) is not None:
+                    world_xy, covariance_m2 = self.reference_calibration.apply(camera_id, world_xy)
+                source = f"{source}:learned_nn"
+                silhouette_status = "learned_nn_applied"
+                if self.observation_model == OBSERVATION_MODEL_LEARNED_NN_GATED:
+                    quality = self._reading_usability(
+                        camera_id, world_xy, contract, prior_pose)
+                    if quality < self.learned_gate_reject:
+                        self._learned_gate_counts["refused"] += 1
+                        self._gate_rejections["learned_gate_unusable"] += 1
+                        self._silhouette_status_by_camera[camera_id] = (
+                            f"refused_learned_gate_q{quality:.2f}")
+                        continue
+                    if quality < self.learned_gate_good:
+                        # Widen this reading's own covariance rather than dropping it: it
+                        # still carries information, just less than a clean one.
+                        span = max(self.learned_gate_good - self.learned_gate_reject, 1e-6)
+                        weight = (self.learned_gate_good - quality) / span
+                        inflate = self.learned_gate_soft_sigma_m ** 2 * weight
+                        covariance_m2 = (
+                            (covariance_m2[0][0] + inflate, covariance_m2[0][1]),
+                            (covariance_m2[1][0], covariance_m2[1][1] + inflate),
+                        )
+                        self._learned_gate_counts["softened"] += 1
+                        silhouette_status = f"learned_nn_softened_q{quality:.2f}"
+                    else:
+                        self._learned_gate_counts["admitted"] += 1
+                    source = f"{source}:gated"
             else:
                 silhouette_status = "disabled_robot_centre_assumption"
             self._silhouette_status_by_camera[camera_id] = silhouette_status
             bbox = contract.bbox_xyxy
             cam_pos = self.camera_models[camera_id].cam_pos
+            # The box the hull model PREDICTS from the pose the correction was made from.
+            # It is computed inside the admission gate and thrown away, so the height ratio
+            # -- detected over predicted -- could never be reconstructed from a drive log.
+            # Diagnostic only: nothing downstream reads it.
+            pred_h_px = pred_w_px = float("nan")
+            if prior_pose is not None:
+                try:
+                    from unav_common.robot_hull import VISUAL_HULL, silhouette_box
+                    predicted = silhouette_box(
+                        self.camera_models[camera_id],
+                        float(prior_pose[0]), float(prior_pose[1]), float(prior_pose[2]),
+                        VISUAL_HULL)
+                    if predicted is not None:
+                        pred_h_px = float(predicted[3] - predicted[1])
+                        pred_w_px = float(predicted[2] - predicted[0])
+                except Exception:  # diagnostics must never break a correction
+                    pass
             self._detection_extras_by_camera[camera_id] = {
                 "conf": float(contract.detector_score),
                 "conf_raw": float(contract.detector_score_raw),
                 "bbox_h_px": (float(bbox[3] - bbox[1]) if bbox is not None else float("nan")),
                 "bbox_w_px": (float(bbox[2] - bbox[0]) if bbox is not None else float("nan")),
+                "pred_h_px": pred_h_px,
+                "pred_w_px": pred_w_px,
                 "range_m": float(math.hypot(world_xy[0] - float(cam_pos[0]),
                                             world_xy[1] - float(cam_pos[1]))),
+                "raw_obs_x": raw_world_xy[0],
+                "raw_obs_y": raw_world_xy[1],
             }
             base = MapObservation(
                 camera_id=camera_id,

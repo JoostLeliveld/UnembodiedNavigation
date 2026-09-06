@@ -1,0 +1,43 @@
+{
+  "schema": "camera_observation_repeat_panel.v1",
+  "selection_basis": "Predeclared from frozen one-shot field capture to span Camera B range, image position, and robot heading while retaining a YOLO box.",
+  "camera_of_interest": "camera_B",
+  "poses": [
+    {
+      "stratum": "near",
+      "x": -1.3375000000000004,
+      "y": -7.4111111111111105,
+      "yaw": 5.497787143782138
+    },
+    {
+      "stratum": "medium",
+      "x": 0.6687499999999993,
+      "y": -2.9000000000000004,
+      "yaw": 1.5707963267948966
+    },
+    {
+      "stratum": "far",
+      "x": 0.6687499999999993,
+      "y": 4.188888888888888,
+      "yaw": 5.497787143782138
+    },
+    {
+      "stratum": "image_centre",
+      "x": 0.0,
+      "y": -5.477777777777778,
+      "yaw": 1.5707963267948966
+    },
+    {
+      "stratum": "image_edge",
+      "x": -7.356249999999999,
+      "y": -8.7,
+      "yaw": 2.356194490192345
+    },
+    {
+      "stratum": "changed_heading",
+      "x": 0.0,
+      "y": -5.477777777777778,
+      "yaw": 4.71238898038469
+    }
+  ]
+}

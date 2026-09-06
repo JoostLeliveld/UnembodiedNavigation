@@ -20,10 +20,13 @@ import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "measurement_commissioning"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src/reliability"))
 from _hull_common import (CAMS, OUT, SIGMA_PX, crop, ellipse, moment,   # noqa: E402
                           solve_position)
 import style as D                                                       # noqa: E402
 from admission import gate                                              # noqa: E402
+from reliability.contracts import CameraQuality                         # noqa: E402
+from reliability.fusion import MapObservation, joint_network_estimate_2d  # noqa: E402
 
 (TX, TY, YAW), M = moment()
 TRUTH = np.array([TX, TY])
@@ -283,8 +286,18 @@ def rules(kept):
     vec = sum(np.linalg.inv(cov[c]) @ est[c] for c in kept)
     S3 = np.linalg.inv(info)
     out["F3  precisions add"] = (S3 @ vec, S3, f"all {n} cameras, independent")
-    out["F4  precisions add, divided by N"] = (S3 @ vec, np.linalg.inv(info / n),
-                                               f"all {n} cameras, exponent 1/{n}")
+    batch = [MapObservation(
+        camera_id=c,
+        timestamp_s=0.0,
+        xy_m=tuple(est[c]),
+        covariance_m2=tuple(tuple(row) for row in cov[c]),
+        quality=CameraQuality(camera_id=c),
+        source="commissioning_figure",
+    ) for c in kept]
+    joint_mean, joint_covariance = joint_network_estimate_2d(batch)
+    out["F4  joint network estimator"] = (
+        np.asarray(joint_mean), np.asarray(joint_covariance),
+        f"one robust estimate from all {n} cameras")
     return out
 
 
@@ -315,20 +328,20 @@ for ax, (name, (mu, S, note)) in zip(axes, RULES.items()):
 axes[0].set_ylabel("centimetres from the true position", fontsize=12.5)
 
 c3 = math.sqrt(np.trace(RULES["F3  precisions add"][1]) / 2) * 100
-c4 = math.sqrt(np.trace(RULES["F4  precisions add, divided by N"][1]) / 2) * 100
+c4 = math.sqrt(np.trace(RULES["F4  joint network estimator"][1]) / 2) * 100
 fig.suptitle("The same three readings, four ways of combining them",
              x=0.004, ha="left", fontsize=21, color=D.INK)
 fig.text(0.004, -0.055,
          f"The one moment from the previous figures: cameras "
          f"{', '.join(c[-1] for c in KEPT)} kept, camera {DROPPED[0][-1]} refused.  Thin ellipses are the "
          f"individual cameras; the thick one is what each rule hands the filter.\n"
-         f"F3 and F4 put the estimate in the SAME place — they differ only in how much they claim to know: "
-         f"± {c3:.1f} cm against ± {c4:.1f} cm, a factor of √{len(KEPT)}.  Which of those two claims is honest "
-         f"is exactly what the drives decide.\n"
+         f"F3 assumes the views are independent. F4 solves one robust batch problem and then fits one "
+         f"network ellipse from both within-view uncertainty and the disagreement visible in this batch "
+         f"(± {c3:.1f} cm against ± {c4:.1f} cm here).\n"
          f"MECHANISM ONLY. One moment out of a 30 m route is not evidence about any rule: a single reading can "
          f"flatter a bad rule and embarrass a good one.  Nothing here is an experimental result.",
          fontsize=12, color=D.INK2, va="top", linespacing=1.55)
-fig.savefig(OUT / "03_three_rules_one_moment.png", dpi=170, bbox_inches="tight")
+fig.savefig(OUT / "03_four_rules_one_moment.png", dpi=170, bbox_inches="tight")
 for name, (mu, S, _n) in RULES.items():
     print(f"03: {name:38s} claims {math.sqrt(np.trace(S)/2)*100:4.1f} cm, "
           f"is {np.linalg.norm(cm(mu)):4.1f} cm out")

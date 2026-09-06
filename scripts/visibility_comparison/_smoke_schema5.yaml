@@ -1,0 +1,87 @@
+# Throwaway one-run smoke: verify schema-5 pred_h_px populates before the campaign.
+world: warehouse_v2.world.sdf
+launch_file: warehouse_primary_comparison.launch.py
+conditions:
+  F4:
+    label: F4_joint_network_estimator
+    manager_fusion_rule: joint_network
+    manager_observation_model: hull
+tasks:
+  fusion_overlap_rich:
+    conditions:
+    - F4
+    seeds:
+    - 0
+    preselected_routes:
+      F4:
+        preselected_route_json: '[[-7.900000000000015,-8.700000000000005],[-6.8000000000000185,-8.700000000000005],[-4.800000000000026,-7.20000000000001],[8.199999999999928,-7.20000000000001],[10.799999999999919,-4.600000000000019],[10.59999999999992,6.499999999999943]]'
+        preselected_route_sha256: 07a785688734c5207497d206e584383b529924b989806d5febee7f935957336c
+        preselected_route_source_path: experiments/fusion_on_fixed_routes/routes/fusion_overlap_rich.json
+        preselected_route_source_sha256: f88f1a83b2ba5c1c16ded226887007d418e39db5263569e3bcaa0a0dd01572ef
+perception_backend: yolo
+yolo_model: logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt
+yolo_device: '0'
+yolo_imgsz: 960
+yolo_conf_threshold: 0.25
+yolo_iou_threshold: 0.45
+yolo_target_class: robot
+yolo_class_id: 0
+yolo_use_masks: false
+yolo_min_bbox_area_px: 0.0
+yolo_max_batch_stamp_skew_s: 0.05
+r_visible_uv: 0.7642679454946852
+r_miss_uv: 40.0
+multicam_belief: true
+manager_fusion_mode: true
+manager_covariance_profile: commissioned_sigma_px
+manager_commissioned_calibration_path: logs/studies/measurement_commissioning/calibration.json
+manager_require_gp_artifacts: false
+manager_decision_rate_hz: 5.0
+manager_require_source_batch_id: true
+manager_bootstrap_min_cameras: 2
+manager_bootstrap_max_disagreement_m: 0.91
+manager_fusion_disagreement_gate_m: 0.6
+manager_fusion_max_timestamp_spread_s: 0.05
+state_correction_mode: fused
+state_correction_ekf: true
+heading_update_mode: coupled
+pixel_correction_nis_threshold: 9.21
+state_reanchor_m: 0.0
+state_max_predict_dt_s: 1.5
+state_reject_inflate_m2: 0.05
+stale_belief_inflate_m2_per_s: 0.0
+stale_belief_inflate_cap_m2: 0.0
+require_state_correction_envelope: true
+use_hierarchical: true
+global_planner_mode: preselected_route
+use_diagnostic_odom_localization: false
+preselected_route_clearance_m: 0.35
+preselected_route_endpoint_tolerance_m: 0.25
+preselected_route_sample_step_m: 0.04
+v_max: 0.22
+horizon: 20
+dt: 0.25
+goal_success_radius: 0.35
+goal_success_hold_s: 2.0
+run_timeout_after_first_cmd_s: 600
+local_controller_type: turn_then_go
+robot_collision_radius_m: 0.275
+use_nogo_cost: true
+nogo_penalty_type: warning_band
+nogo_safe_distance: 0.35
+local_nogo_safe_distance: 0.3
+nogo_warning_band: 0.05
+nogo_weight: 40.0
+use_belief_nogo_cost: false
+terminate_on_geom_collision: false
+use_odom_for_predict: true
+odom_topic: /odom_noisy
+use_command_noise: true
+use_encoder_noise: true
+process_noise_xy: 0.01
+process_noise_theta: 0.02
+headless: true
+use_rviz: false
+reset_world: false
+debug_runtime: true
+ros_domain_id_base: 80

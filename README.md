@@ -10,24 +10,32 @@ sighting, and does knowing that change how the robot should drive?"**
 
 ## What is being worked on right now
 
-Three paper directions have been explored and switching between them is why this repository
-looks like three projects. **The active one is fusion.**
+The paper now follows one ordered chain from sensor characterization to planning:
 
-| | direction | status |
-|---|---|---|
-| **B** | **Fusion on a fixed route** — how several cameras become one measurement, and what covariance that is entitled to claim | **ACTIVE** |
-| A | Availability-aware planning — where the cameras can support localization, and routing on it | parked, blocked on data |
-| C | Learned bias correction — a network that beats the analytic hull model | parked deliberately |
+```text
+camera/YOLO bias and noise
+  -> conditional covariance and probability of a usable observation
+  -> camera selection or fusion
+  -> expected belief evolution in the existing planner
+```
 
-`PLAN.md` opens with what each one is, what exists for it, and why the parked two are parked.
-Do not mix their artifacts: direction C's learned correction competes with the observation
-model direction B holds constant.
+**Current scope: the IWAI camera-network extension and a commissioning audit for a
+12-page AIES thesis.** The network planner, full-route preflight and live calibration
+interface are implemented. Integration trials exposed tracking and estimator defects;
+the corrected runtime is being evaluated separately from sensor-model improvements.
+[`docs/ICRA_STATUS.md`](docs/ICRA_STATUS.md) is the current evidence/status account and
+[`docs/runtime_integrity_audit.md`](docs/runtime_integrity_audit.md) records repairs,
+retained failures and remaining filtering/command policies. The metrics registry controls
+which exact runs may be compared; these pilots do not establish a GP navigation benefit.
 
 ## Start here
 
 [`PLAN.md`](PLAN.md) is the plan of record — the sentences the paper has to earn, what is
 done, what is still owed, and which dataset may serve which purpose. Read it before
 proposing work.
+
+[`docs/NEXT_MEETING.md`](docs/NEXT_MEETING.md) is the slide-by-slide plan for the first
+conceptual measurement-model meeting.
 
 [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) is the start-to-finish walkthrough of the pipeline with
 the glossary. Read it before reading any study.
@@ -39,9 +47,10 @@ unresolved and which implementation limits are known;
 [`reproducibility_inputs.md`](docs/reproducibility_inputs.md) — the hashed detector and
 calibration bytes a machine needs to produce evidence at all.
 
-**No fusion result is currently frozen.** Every drive so far predates the schema-4 logging
-that identifies which detector batch produced which filter update, so all of them are
-diagnostic. See [`docs/localization_metrics_registry.json`](docs/localization_metrics_registry.json).
+**No fusion result is currently frozen.** The registry's paper selection is null; existing
+campaigns remain diagnostic until an exact, provenance-homogeneous selection satisfies the
+logging and assimilation contract. See
+[`docs/localization_metrics_registry.json`](docs/localization_metrics_registry.json).
 
 ## The pipeline
 

@@ -68,23 +68,38 @@ class ObservabilityGP:
         self._yb = np.clip(agg.y, 1e-4, 1.0 - 1e-4)
         self._covb = agg.cov
         self._alpha = self.noise_var / np.clip(agg.count, 1.0, None)
+        self._predictor = None if self.belief_aware else fbag._fit_latent_gp_model(
+            self._Xb, fbag._logit(self._yb), self._alpha, length_scale=self.length_scale)
         return self
 
     def predict_proba(self, xy: np.ndarray) -> np.ndarray:
+        mu, _sigma = self.predict_latent(xy)
+        return np.clip(_sigmoid(mu), 1e-4, 1.0 - 1e-4)
+
+    def predict_latent(self, xy: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Retain map-function uncertainty; this is not camera measurement R.
+
+        The legacy probability remains sigmoid(mu). Callers that integrate the
+        link can compare that approximation without changing existing behavior.
+        """
         xy = np.asarray(xy, dtype=float)
         if self._degenerate:
-            return np.clip(np.full(len(xy), self._const), 1e-4, 1.0 - 1e-4)
+            p = float(np.clip(self._const, 1e-4, 1.0 - 1e-4))
+            return np.full(len(xy), np.log(p/(1-p))), np.zeros(len(xy))
         fbag = _fbag()
         if self.belief_aware:
-            mu, _sigma, _jit = fbag._fit_predict_expected_kernel_gp(
+            mu, sigma, _jit = fbag._fit_predict_expected_kernel_gp(
                 self._Xb, self._yb, self._covb, self._alpha, xy,
                 query_cov=None, length_scale=self.length_scale,
             )
         else:
-            mu, _sigma = fbag._fit_predict_gp(
-                self._Xb, self._yb, self._alpha, xy, length_scale=self.length_scale
-            )
-        return np.clip(_sigmoid(mu), 1e-4, 1.0 - 1e-4)
+            predictor = getattr(self, "_predictor", None)
+            if predictor is None:  # compatibility with previously serialized wrappers
+                mu, sigma = fbag._fit_predict_gp(
+                    self._Xb, self._yb, self._alpha, xy, length_scale=self.length_scale)
+            else:
+                mu, sigma = predictor.predict(xy, return_std=True)
+        return mu, sigma
 
 
 @dataclass

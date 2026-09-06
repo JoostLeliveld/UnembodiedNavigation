@@ -19,6 +19,7 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -54,6 +55,10 @@ CONDITION_PLANNER = {
     # Same visibility-aware planner and field as C2; the condition-level
     # use_hit_miss_mixture override selects the Bernoulli observation model.
     'C3': 'visibility_aware_efe',
+    # Same IWAI objective/controller, three explicit network score-field artifacts.
+    'P0': 'visibility_aware_efe',
+    'P1': 'visibility_aware_efe',
+    'P2': 'visibility_aware_efe',
     # Prospective closed-loop successor: these are route arms, not new planner
     # objectives. Both execute through the same geometry/local-tracker path.
     'gp': 'geometric_shortest_path',
@@ -75,11 +80,19 @@ CONDITION_PLANNER = {
     'K0': 'geometric_shortest_path',
     'K1': 'geometric_shortest_path',
     'K2': 'geometric_shortest_path',
+    # Where the measurement covariance is COMMISSIONED: W0 propagates the detector's pixel
+    # noise through each camera's geometry, W1 states the residual scatter measured directly
+    # on the warehouse floor per camera and detector confidence. Same frozen route, same
+    # fusion rule. commissioned_world_covariance_campaign.yaml.
+    'W0': 'geometric_shortest_path',
+    'W1': 'geometric_shortest_path',
     # Heading arms: the same frozen route and fusion rule, differing only in whether the
     # camera update is allowed to move the heading through the position-heading
     # covariance. heading_update_ablation_campaign.yaml.
     'H0': 'geometric_shortest_path',
     'H1': 'geometric_shortest_path',
+    # Existing learned-mean campaigns use the same preselected-route controller.
+    'N1': 'geometric_shortest_path',
 }
 
 PRESELECTED_ROUTE_KEYS = (
@@ -101,6 +114,12 @@ def _load_config(path: Path) -> dict:
 
 
 def _validate_config(cfg: dict, path: Path) -> None:
+    cleanup_mode = cfg.get('cleanup_mode', 'legacy_global')
+    if cleanup_mode not in ('legacy_global', 'isolated'):
+        raise ValueError('cleanup_mode must be legacy_global or isolated')
+    if cleanup_mode == 'isolated':
+        if cfg.get('ros_domain_id_base') is None or cfg.get('cleanup_sim_stragglers', False):
+            raise ValueError('isolated cleanup requires ros_domain_id_base and no global straggler cleanup')
     for key in ('world', 'launch_file', 'conditions', 'tasks',
                 'yolo_model', 'horizon', 'dt', 'goal_success_radius',
                 'run_timeout_after_first_cmd_s'):
@@ -151,6 +170,7 @@ def _validate_config(cfg: dict, path: Path) -> None:
     ]
     needs_gp = any(
         CONDITION_PLANNER[condition_id] == 'visibility_aware_efe'
+        and not _effective_value(cfg, task_name, condition_id, 'camera_network_artifact_path')
         and str(_effective_value(cfg, task_name, condition_id, 'global_planner_mode') or 'efe')
         != 'preselected_route'
         for task_name, condition_id in active_cells
@@ -161,6 +181,17 @@ def _validate_config(cfg: dict, path: Path) -> None:
                 f"Campaign config {path} requires a filled gp_artifact for its "
                 "visibility-aware global-planner condition"
             )
+
+    for task_name, condition_id in active_cells:
+        network = _effective_value(cfg, task_name, condition_id, 'camera_network_artifact_path')
+        if network:
+            if cfg.get('gp_artifact') or _effective_value(cfg, task_name, condition_id, 'visibility_artifact_path'):
+                raise RuntimeError('choose one network artifact or legacy GP artifact for this campaign')
+            if CONDITION_PLANNER[condition_id] != 'visibility_aware_efe' or str(
+                _effective_value(cfg, task_name, condition_id, 'global_planner_mode') or 'efe'
+            ) == 'preselected_route':
+                raise RuntimeError('network field requires a solved visibility-aware global plan')
+            _resolve_repo_path(str(network), strict=True)
 
     if any(
         str(_effective_value(cfg, task_name, condition_id, 'global_planner_mode') or '')
@@ -288,6 +319,34 @@ def _run_key(task: str, condition: str, seed: int) -> str:
     return f'{task}__{condition}__seed{seed}'
 
 
+def _pids_with_run_token(token: str, proc_root: Path = Path('/proc')) -> list[int]:
+    """Find only descendants carrying this run's inherited environment marker."""
+    if not token or '\x00' in token:
+        raise ValueError('nonempty run token required for scoped cleanup')
+    marker = f'UNAV_CAMPAIGN_RUN_TOKEN={token}'.encode()
+    pids = []
+    for proc in proc_root.iterdir():
+        if not proc.name.isdigit() or int(proc.name) == os.getpid():
+            continue
+        try:
+            if marker in (proc / 'environ').read_bytes().split(b'\x00'):
+                pids.append(int(proc.name))
+        except (OSError, PermissionError):
+            continue
+    return pids
+
+
+def _cleanup_owned_run(token: str) -> None:
+    """Reap reparented Gazebo children without touching other ROS experiments."""
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in _pids_with_run_token(token):
+            try:
+                os.kill(pid, sig)
+            except ProcessLookupError:
+                pass
+        time.sleep(0.5)
+
+
 def _load_run_log(log_path: Path) -> dict:
     if not log_path.is_file():
         return {}
@@ -299,7 +358,22 @@ def _load_run_log(log_path: Path) -> dict:
 
 def _save_run_log(log_path: Path, log: dict) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_path.write_text(json.dumps(log, indent=2, default=str), encoding='utf-8')
+    # A stopped writer must not truncate the only campaign ledger. The temporary
+    # file is on the same filesystem so replacement is atomic.
+    payload = json.dumps(log, indent=2, default=str)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8',
+                dir=log_path.parent, prefix=log_path.name + '.', suffix='.tmp',
+                delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, log_path)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def _resolve_repo_path(path_str: str, *, strict: bool = False) -> Path:
@@ -778,7 +852,10 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'global_planner_mode',
         'manager_gp_artifact_template', 'manager_camera_ids',
         'manager_covariance_profile', 'manager_commissioned_calibration_path',
+        'manager_commissioned_world_covariance_path',
         'manager_fusion_rule', 'manager_observation_model',
+        'manager_learned_correction_path', 'manager_learned_gate_reject',
+        'manager_learned_gate_good', 'manager_learned_gate_soft_sigma_m',
     )
     for key in string_keys:
         expected = expected_value(key)
@@ -786,7 +863,8 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
             if key not in manifest:
                 return False, f'{key} missing from run manifest'
             actual = str(manifest.get(key, ''))
-            if key in ('manager_commissioned_calibration_path',):
+            if key in ('manager_commissioned_calibration_path',
+                       'manager_commissioned_world_covariance_path'):
                 matches = _resolve_for_compare(actual) == _resolve_for_compare(str(expected))
             else:
                 matches = actual == str(expected)
@@ -801,6 +879,14 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         if manifest.get('manager_commissioned_calibration_sha256') != expected_calibration_hash:
             return False, 'manager commissioned calibration content hash mismatch'
 
+    world_covariance_path = expected_value('manager_commissioned_world_covariance_path')
+    if world_covariance_path:
+        expected_world_hash = sha256_file(
+            _resolve_repo_path(str(world_covariance_path), strict=True)
+        )
+        if manifest.get('manager_commissioned_world_covariance_sha256') != expected_world_hash:
+            return False, 'manager commissioned world covariance content hash mismatch'
+
     route_matches, route_reason = _verify_preselected_run_artifacts(
         Path(run_dir_str), cfg, task_name, condition_id, manifest=manifest
     )
@@ -813,6 +899,16 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         CONDITION_PLANNER.get(condition_id) == 'visibility_aware_efe'
         and str(expected_value('global_planner_mode') or 'efe') != 'preselected_route'
     ):
+        network = expected_value('camera_network_artifact_path')
+        if network:
+            expected = _resolve_repo_path(str(network), strict=True)
+            if _resolve_for_compare(manifest.get('camera_network_artifact_path', '')) != _resolve_for_compare(str(expected)):
+                return False, 'camera network artifact path mismatch'
+            if manifest.get('camera_network_artifact_sha256') != sha256_file(expected):
+                return False, 'camera network artifact content hash mismatch'
+            if manifest.get('visibility_artifact_path'):
+                return False, 'network run unexpectedly also used a legacy visibility artifact'
+            return True, ''
         actual = str(manifest.get('visibility_artifact_path', '') or '')
         expected = str(_resolve_repo_path(cfg['gp_artifact'], strict=False))
         if _resolve_for_compare(actual) != _resolve_for_compare(expected):
@@ -846,7 +942,8 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         _effective_value(cfg, task_name, condition_id, 'global_planner_mode') or 'efe'
     ).strip().lower()
     gp_artifact = None
-    if planner == 'visibility_aware_efe' and global_mode != 'preselected_route':
+    network_artifact = _effective_value(cfg, task_name, condition_id, 'camera_network_artifact_path')
+    if planner == 'visibility_aware_efe' and global_mode != 'preselected_route' and not network_artifact:
         gp_artifact = str(_resolve_repo_path(cfg['gp_artifact'], strict=True))
     yolo_model = str(_resolve_repo_path(cfg['yolo_model'], strict=True))
     odom_topic = str(cfg.get('odom_topic', '/odom_noisy'))
@@ -943,6 +1040,8 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
     # camera-model-free and must not receive it.
     if gp_artifact is not None:
         cmd.append(f'visibility_artifact_path:={gp_artifact}')
+    if network_artifact:
+        cmd.append(f'camera_network_artifact_path:={_resolve_repo_path(str(network_artifact), strict=True)}')
 
     for key in (
         'observation_risk_scale', 'ambiguity_term_scale',
@@ -997,9 +1096,12 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'manager_fusion_max_timestamp_spread_s',
         'manager_covariance_profile',
         'manager_commissioned_calibration_path', 'manager_commissioned_sigma_px',
+        'manager_commissioned_world_covariance_path',
         'manager_commissioned_per_camera_sigma',
         'manager_fusion_common_mode_std_m',
         'manager_fusion_rule', 'manager_observation_model', 'manager_fixed_offset_m',
+        'manager_learned_correction_path', 'manager_learned_gate_reject',
+        'manager_learned_gate_good', 'manager_learned_gate_soft_sigma_m',
         'manager_correction_timestamp_compensation', 'manager_admission_gate',
         'manager_correction_residual_interval_s',
         'manager_correction_propagation_drift_std',
@@ -1206,7 +1308,8 @@ def main() -> int:
     if args.dry_run:
         print('DRY RUN — no processes will be started.\n')
 
-    if not args.dry_run:
+    isolated = cfg.get('cleanup_mode', 'legacy_global') == 'isolated'
+    if not args.dry_run and not isolated:
         _force_fresh()
 
     campaign_log = dict(existing_log)
@@ -1238,7 +1341,7 @@ def main() -> int:
         if args.dry_run:
             continue
 
-        if run_idx > 0:
+        if run_idx > 0 and not isolated:
             _force_fresh()
 
         run_entry: dict = {
@@ -1273,6 +1376,13 @@ def main() -> int:
         run_env = dict(child_env)
         if ros_domain_id is not None:
             run_env['ROS_DOMAIN_ID'] = ros_domain_id
+        run_token = f'unav_{os.getpid()}_{time.time_ns()}_{run_idx}'
+        if isolated:
+            run_env.update(UNAV_CAMPAIGN_RUN_TOKEN=run_token,
+                           IGN_PARTITION=run_token, GZ_PARTITION=run_token)
+            run_entry['transport_partition'] = run_token
+            run_entry['cleanup_mode'] = 'isolated'
+            _save_run_log(campaign_log_path, campaign_log)
 
         process = subprocess.Popen(cmd, start_new_session=True, env=run_env)
         pgid = os.getpgid(process.pid)
@@ -1323,7 +1433,10 @@ def main() -> int:
             if recorder_pgid is not None:
                 _terminate_process_group(recorder_pgid)
             _terminate_process_group(pgid)
-            _force_fresh()
+            if isolated:
+                _cleanup_owned_run(run_token)
+            else:
+                _force_fresh()
 
         # Read run summary written by experiment_logger
         run_dir = _find_latest_run_dir(run_log_dir)

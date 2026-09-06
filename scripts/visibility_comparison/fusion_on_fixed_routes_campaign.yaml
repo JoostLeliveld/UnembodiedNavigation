@@ -7,9 +7,9 @@
 #   F1  hull        single best camera, smallest trace(Sigma_c)
 #   F2  hull        weighted by distance and viewing angle -- the untuned heuristic
 #   F3  hull        independent Gaussian fusion, precisions add
-#   F4  hull        the network as one sensor: precisions add, divided by N   <- proposed
-#   O1  raw box     the box bottom-centre IS the robot, network fusion
-#   O2  fixed offset  ... pushed 0.309 m away from the camera, network fusion
+#   F4  hull        one robust batch estimate, then one Gaussian             <- proposed
+#   O1  raw box     the box bottom-centre IS the robot, joint network estimate
+#   O2  fixed offset  ... pushed 0.309 m away, joint network estimate
 #
 # Five paired seeds are run for every arm and route. A seed fixes the shared actuation and
 # encoder-noise realization, so within-seed arm contrasts remove much of the nuisance motion
@@ -34,16 +34,16 @@ conditions:
     manager_fusion_rule: independent
     manager_observation_model: hull
   F4:
-    label: F4_network_pooled_one_over_N
-    manager_fusion_rule: network
+    label: F4_joint_network_estimator
+    manager_fusion_rule: joint_network
     manager_observation_model: hull
   O1:
     label: O1_raw_box_bottom_centre_is_the_robot
-    manager_fusion_rule: network
+    manager_fusion_rule: joint_network
     manager_observation_model: raw_box
   O2:
     label: O2_fixed_offset_from_the_camera
-    manager_fusion_rule: network
+    manager_fusion_rule: joint_network
     manager_observation_model: fixed_offset
     # ONE commissioned number, measured over the 3351 admitted commissioning sightings: the
     # box bottom-centre lands a mean 30.9 cm from the robot's centre (median 30.4, range

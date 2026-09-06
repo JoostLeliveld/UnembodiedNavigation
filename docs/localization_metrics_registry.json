@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "current_as_of": "2026-08-29",
+  "current_as_of": "2026-09-06",
   "historical_boundary": {
     "superseded_before": "2026-08-25",
     "minimum_paper_logging_schema": 4
@@ -47,5 +47,125 @@
       "longest_correction_gap_s"
     ],
     "decided": "2026-08-29"
+  },
+  "icra_commissioning_development": {
+    "status": "development_only",
+    "study_root": "logs/studies/icra_commissioning_20260905",
+    "static_selection": "logs/studies/icra_commissioning_20260905/manifest.json",
+    "driving_selection": "logs/studies/icra_commissioning_20260905/driving_manifest.json",
+    "fresh_execution_selection": "logs/studies/icra_commissioning_20260905/validation_manifest.json",
+    "baseline_selection": "logs/studies/icra_commissioning_20260905/baseline_manifest.json",
+    "required_loader": "experiments/fusion_on_fixed_routes/aligned.py",
+    "permitted_use": "separate diagnostic comparisons; no replicated paper-facing fusion or navigation-improvement claim"
+  },
+  "thesis_commissioning_pilot": {
+    "status": "complete_pilot_diagnostic",
+    "selection": "logs/studies/icra_commissioning_20260905/thesis_evidence/selection.json",
+    "required_loader": "experiments/fusion_on_fixed_routes/aligned.py",
+    "runs": 6,
+    "routes": 2,
+    "seeds_per_route": 3,
+    "permitted_use": "paired within-run replay and per-run pilot diagnostics; no significance, physical-validation, complete-route ranking or commissioned navigation-improvement claim",
+    "replay_timing": "capture-time idealization; live processing latency and refusal policy not reproduced",
+    "thesis_project": "../papers/master_thesis",
+    "camera_subset_diagnostic": {
+      "protocol": "logs/studies/icra_commissioning_20260905/thesis_network_pilot/protocol.json",
+      "results": "logs/studies/icra_commissioning_20260905/thesis_network_pilot/results.json",
+      "status": "exploratory_pilot_not_confirmatory",
+      "arms": "all 5 singles, 10 pairs and full network; constant and calibrated-score R",
+      "controls": "common camera-opportunity/odometry propagation grid and common odometry scoring timestamps",
+      "permitted_use": "same registered six-run pilot; exhaustive exploration, no post-hoc best-subset confirmation"
+    }
+  },
+  "network_planner_setup": {
+    "status": "software_and_model_probe_only",
+    "export_manifest": "logs/studies/icra_commissioning_20260905/network_planner/manifest.json",
+    "protocol": "logs/studies/icra_commissioning_20260905/network_planner/probe_reviewed/protocol.json",
+    "results": "logs/studies/icra_commissioning_20260905/network_planner/probe_reviewed/results.json",
+    "live_campaign_config": "experiments/icra_commissioning/network_planner_pilot.yaml",
+    "live_campaign_status": "dry_run_only_not_executed",
+    "permitted_use": "fitted field visualization, solver behavior, same-problem model-only diagnostics; no observed localization error, calibrated uncertainty, route-ranking validation or navigation-performance claim",
+    "planner_representation": "IWAI detector-score precision proxy in one fixed camera cost chart",
+    "forecast_representation": "separate one-step independent hit/miss branch reference using q and conditional R",
+    "current_outputs": "probe_reviewed uses the circumscribed current robot body and 0.55 m lane clearance; initial probe preserved",
+    "full_route_results": "logs/studies/icra_commissioning_20260905/network_navigation_evidence/preflight_results.json",
+    "full_route_status": "three_feasible_solutions_same_upper_corridor_iteration_limit"
+  },
+  "network_navigation_pilot": {
+    "status": "complete_three_run_pilot_all_stuck",
+    "protocol": "logs/studies/icra_commissioning_20260905/network_navigation_evidence/protocol.json",
+    "selection": "logs/studies/icra_commissioning_20260905/network_navigation_evidence/selection.json",
+    "config": "experiments/icra_commissioning/network_navigation_pilot.yaml",
+    "required_loader": "experiments/fusion_on_fixed_routes/aligned.py",
+    "planned_arms": [
+      "P0",
+      "P1",
+      "P2"
+    ],
+    "seeds_per_arm": 1,
+    "permitted_use": "per-run diagnostic outcomes and aligned accuracy; no replicate-based effect or calibrated forecast claim",
+    "live_camera_model": "same frozen bbox NN, post-NN residual offset and full constant camera R in every arm",
+    "fusion_limit": "current robust joint_network covariance differs from planner independent precision sum",
+    "single_run_failure_diagnosis": "logs/studies/icra_commissioning_20260905/network_navigation_evidence/diagnostics/P0_selection.json",
+    "results": "logs/studies/icra_commissioning_20260905/network_navigation_evidence/results.json"
+  },
+  "network_navigation_tracking_pilot": {
+    "status": "complete_three_run_pilot_one_stuck_two_collisions",
+    "protocol": "logs/studies/icra_commissioning_20260905/network_navigation_tracking_evidence/protocol.json",
+    "selection": "logs/studies/icra_commissioning_20260905/network_navigation_tracking_evidence/selection.json",
+    "config": "experiments/icra_commissioning/network_navigation_tracking_pilot.yaml",
+    "required_loader": "experiments/fusion_on_fixed_routes/aligned.py",
+    "planned_arms": [
+      "P0",
+      "P1",
+      "P2"
+    ],
+    "seeds_per_arm": 1,
+    "permitted_use": "separate pilot of tracker configuration correction; within-pilot field comparison; no significance or learned-covariance gain attributed to handoff fix",
+    "change": "waypoint_spacing_m 1.0 to 0.2; waypoint_arrival_radius_m 0.35 to 0.1",
+    "kinematic_diagnostic": "logs/studies/icra_commissioning_20260905/network_navigation_evidence/diagnostics/P0_tracker.json",
+    "results": "logs/studies/icra_commissioning_20260905/network_navigation_tracking_evidence/results.json",
+    "runtime_failure_diagnosis": "logs/studies/icra_commissioning_20260905/network_navigation_tracking_evidence/diagnostics/outage_diagnostic.json"
+  },
+  "network_navigation_runtime_pilot": {
+    "status": "complete_three_run_pilot_one_stuck_two_goals",
+    "protocol": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_evidence/protocol.json",
+    "selection": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_evidence/selection.json",
+    "results": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_evidence/results.json",
+    "config": "experiments/icra_commissioning/network_navigation_runtime_pilot.yaml",
+    "required_loader": "experiments/fusion_on_fixed_routes/aligned.py",
+    "planned_arms": [
+      "P0",
+      "P1",
+      "P2"
+    ],
+    "seeds_per_arm": 1,
+    "permitted_use": "separate correctness-repair pilot; per-run diagnostics; no learned-field gain, statistical significance or calibrated forecast claim",
+    "changes": "verified full motion replay; serialized state/command transactions; consistent publication stamp; declared angular limits; envelope validation; same-time per-camera dedup; actuator watchdog",
+    "fixed": "NN, post-NN offset, full constant camera R, Q, robust fusion, mission and controller algorithm",
+    "policy_limits": "first-return camera-gap refusal and rejection inflation retained; noise is sampled per command message; robust fusion differs from independent planner precision",
+    "audit": "docs/runtime_integrity_audit.md",
+    "tests_at_collection": "150 passed; 3 absent archived traces skipped",
+    "outcomes": {
+      "P0": "stuck",
+      "P1": "goal_reached",
+      "P2": "goal_reached"
+    }
+  },
+  "network_navigation_recovery_pilot": {
+    "status": "collecting_separate_controller_followup",
+    "protocol": "logs/studies/icra_commissioning_20260905/network_navigation_recovery_evidence/protocol.json",
+    "config": "experiments/icra_commissioning/network_navigation_recovery_pilot.yaml",
+    "selection": "logs/studies/icra_commissioning_20260905/network_navigation_recovery_evidence/selection.json",
+    "results": "logs/studies/icra_commissioning_20260905/network_navigation_recovery_evidence/results.json",
+    "required_loader": "experiments/fusion_on_fixed_routes/aligned.py",
+    "planned_arms": [
+      "P0"
+    ],
+    "seeds_per_arm": 1,
+    "change": "opt-in turn_then_go_recovery with unchanged clearance gate; additional command fatal-stop/negative-age guards and idle diagnostic correction",
+    "fixed": "uniform field, camera NN/bias/R, Q, robust fusion and mission",
+    "permitted_use": "one development controller follow-up; no learned-field effect, general success rate or calibrated sensor-model claim",
+    "tests_at_collection": "159 passed; 3 absent archived traces skipped"
   }
 }

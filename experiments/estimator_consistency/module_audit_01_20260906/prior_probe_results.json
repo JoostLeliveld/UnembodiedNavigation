@@ -1,0 +1,108 @@
+{
+  "backdated_heading": {
+    "bootstrap_yaw": 1.0,
+    "capture_stamp": 9.8,
+    "capture_yaw_from_scripted_motion": 0.8,
+    "latest_odom_stamp": 10.0,
+    "latest_odom_yaw": 1.0,
+    "predicted_yaw_now": 1.1999999999999993
+  },
+  "coherent_wrapper": {
+    "declared_total_cross_variance": 0.0006235009000000001,
+    "runtime_coherent_cross_variance": 1.2470018000000464e-05,
+    "steps": 50,
+    "variance_ratio": 49.999999999998145,
+    "white_Q_composition_with_F_passes": true
+  },
+  "duplicate_pixel": {
+    "duplicate_xy_variance": 0.014285714285714287,
+    "first_xy_variance": 0.022222222222222223,
+    "stamp_after_old_delivery": 9.9,
+    "stamp_before_old_delivery": 9.95
+  },
+  "encoder_covariance_at_stop": {
+    "covariance_before": 0.0001,
+    "covariance_x_after": 0.00011599999999999985,
+    "covariance_yaw_after": 0.000499999999999999,
+    "generator_stop_branch_injects_no_noise": true,
+    "stationary_duration_s": 10.0
+  },
+  "premature_event_belief": {
+    "apply_stamp": 1.5,
+    "capture_stamp": 1.0,
+    "chosen_belief_stamp": 1.1,
+    "scorer_label": "accepted",
+    "synthetic_error_cm": 100.0
+  },
+  "q_diagnostic": {
+    "applied_heading_process_variance": 3.999999999999986e-05,
+    "dt": 0.25,
+    "logged_Q_theta_theta": 0.00016,
+    "ratio": 4.000000000000014
+  },
+  "same_clock_batches": {
+    "delivered_distinct_batches": 2,
+    "logged_batch_ids": [
+      "synthetic-0"
+    ],
+    "logged_rows": 1
+  },
+  "source_sha256": {
+    "experiments/fusion_on_fixed_routes/aligned.py": "dabd8b9167af3f11ee21c7a42dbd795b847300c63ac0c69af3cc0167d3965f80",
+    "src/experiments/experiments/nodes/experiment_logger.py": "6c03281600ad906020fee19af04e5454846bdf2b9c653da6f63266d767e678e3",
+    "src/planning/planning/core/belief_correction.py": "cf263b7d64785cd00200e99ae4196fbbc6cc0ef73e4226cee164a897481ec22f",
+    "src/planning/planning/core/dynamics.py": "7a6bde9ddfbc2b100b328fd5d1ae870438a57f1f95e2f7f91e8a6b51859a4107",
+    "src/planning/planning/core/motion_history.py": "4e2f71eb96d2a03304336ebc50b28e2e518cb01b87b20be312c7bf80122b7923",
+    "src/planning/planning/nodes/unicycle_planner_node.py": "56100b37b8e9351d1cee3d4e089357503e53838db428c4261e0bf1a11f76514f",
+    "src/planning/planning/planners/base_planner.py": "abe6edffd6ac66998088c71884e256d56f7f3dbc798bf5684a86a623d4edffdb",
+    "src/sim/sim/actuation_noise_node.py": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f",
+    "src/sim/sim/encoder_noise_node.py": "e6a04fffdcad57a83d11c64c73a4c39726fdb0eb7e515500a98a6377839af497"
+  },
+  "stale_motion": {
+    "accepted": true,
+    "coverage": false,
+    "interval": [
+      9.9,
+      10.0
+    ],
+    "last_odom_stamp": 1.0,
+    "predicted_x": 0.01999999999999993,
+    "replay": {
+      "cmd_replay_count": 0.0,
+      "cmd_replay_duration_s": 0.09999999999999964,
+      "cmd_replay_used_fallback": 0.0,
+      "motion_replay_source_code": 1.0
+    }
+  },
+  "stale_quorum": {
+    "belief_stamp_after": 9.0,
+    "belief_stamp_before": 10.0,
+    "belief_x_after": 3.01,
+    "now": 12.0,
+    "old_camera_stamp": 9.0
+  },
+  "unsupported_heading": {
+    "heading_variance_added": 0.0005999999999999964,
+    "replay_cap_s": 1.5,
+    "total_gap_s": 10.0,
+    "unknown_motion_s": 8.5,
+    "xy_variance_added": 3.4970500000000007
+  },
+  "untracked_bootstrap": {
+    "consumed_xy": [
+      1.0,
+      2.0
+    ],
+    "ledger_event": {
+      "accepted": false,
+      "apply_stamp": 10.0,
+      "belief_stamp_after": 9.95,
+      "correction_stamp": 9.95,
+      "nis": null,
+      "reason": "not_newer_than_belief",
+      "schema_version": 1,
+      "source_batch_id": "synthetic-bootstrap",
+      "status": "dropped"
+    }
+  }
+}

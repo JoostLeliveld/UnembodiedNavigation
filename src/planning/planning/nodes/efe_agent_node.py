@@ -21,6 +21,7 @@ from planning.nodes.unicycle_planner_node import UnicyclePlannerNode
 from planning.planners.base_planner import UnicyclePlannerBase, extract_waypoints
 from planning.core.dynamics import unicycle_step
 from planning.core.efe_utils import wrap_angle
+from planning.core.tracker_guard import checked_tracker_controls
 
 
 def _preview_corner_speed_limit(
@@ -935,30 +936,33 @@ class EfeAgentNode(UnicyclePlannerNode):
         self._current_tracking_yaw = float(m_track[2])
         self._current_tracking_yaw_source = float(tracking_yaw_source)
 
-        controls = self._dispatch_local_controller(m_track, target)
-        n_safe, reason = self._simple_plan_safe_to_execute(controls, m_track)
+        decision = checked_tracker_controls(
+            self._dispatch_local_controller(m_track, target), m_track, target,
+            dt=float(self.dt), w_min=float(self.w_min), w_max=float(self.w_max),
+            safety_check=self._simple_plan_safe_to_execute,
+            allow_rotation_recovery=self.local_controller_type == 'turn_then_go_recovery',
+        )
+        controls, n_safe, reason = decision.controls, decision.safe_steps, decision.reason
         if n_safe <= 0:
             # The immediate step itself leaves the region (not a recovery move)
             # -> genuinely unsafe, safe-stop.
             self.get_logger().warn(
                 f"[hierarchical] simple local control rejected at step 0: {reason}; safe-stopping"
             )
-            with self._data_lock:
-                self._active_controls = None
-                self._active_plan_started_at = None
-                self._active_controls_original_len = 0
-            self._publish_command(0.0, 0.0)
+            self._publish_safe_stop_command()
             return
+        if decision.rotation_recovery:
+            self.get_logger().info(f'[hierarchical] checked rotation recovery: {reason}')
         # Execute only the safe leading prefix; the tracker replans next cycle.
         controls = controls[:n_safe]
         with self._data_lock:
             self._active_controls = controls.copy()
             self._active_plan_started_at = self.get_clock().now()
             self._active_controls_original_len = int(controls.shape[0])
-        self._last_latency_skip_steps = 0
-        self._last_latency_skip_s = 0.0
-        if controls.size > 0:
-            self._publish_command(float(controls[0, 0]), float(controls[0, 1]))
+            self._last_latency_skip_steps = 0
+            self._last_latency_skip_s = 0.0
+            if controls.size > 0:
+                self._publish_command(float(controls[0, 0]), float(controls[0, 1]))
         return
 
     def _simple_local_plan(self, m0: np.ndarray, target: np.ndarray) -> np.ndarray:
@@ -966,7 +970,7 @@ class EfeAgentNode(UnicyclePlannerNode):
         H = int(self.local_horizon)
         dt = float(self.dt)
         v_max = float(self.v_max)
-        w_max = 1.5
+        w_min, w_max = float(self.w_min), float(self.w_max)
 
         # Rotate-in-place when badly misaligned, then translate. Without this
         # gate the exp(-|yaw_err|) taper still gives ~0.13 m/s at 90 deg, so the
@@ -986,7 +990,7 @@ class EfeAgentNode(UnicyclePlannerNode):
                 break
             desired_yaw = math.atan2(dy, dx)
             yaw_err = wrap_angle(desired_yaw - state[2])
-            w = float(np.clip(2.0 * yaw_err, -w_max, w_max))
+            w = float(np.clip(2.0 * yaw_err, w_min, w_max))
             if abs(yaw_err) > yaw_gate:
                 v = 0.0  # rotate in place until aligned
             else:
@@ -1186,8 +1190,35 @@ class EfeAgentNode(UnicyclePlannerNode):
         cmd = Twist()
         cmd.linear.x = float(v_cmd)
         cmd.angular.z = float(w_cmd)
-        self.cmd_pub.publish(cmd)
-        self.last_cmd = np.array([cmd.linear.x, cmd.angular.z], dtype=float)
+        with self._data_lock:
+            # An in-flight solve may finish after a different callback declares
+            # a fatal integrity stop. Publication is the final ownership boundary.
+            if getattr(self, '_fatal_stop_triggered', False):
+                cmd = Twist()
+                self._active_controls = None
+                self._active_plan_started_at = None
+                self._active_controls_original_len = 0
+                self._publish_idle_execution_diagnostics()
+            self.cmd_pub.publish(cmd)
+            self.last_cmd = np.array([cmd.linear.x, cmd.angular.z], dtype=float)
+
+    def _publish_idle_execution_diagnostics(self):
+        """A stopped tape must not leave a held nonzero execution diagnostic."""
+        if not hasattr(self, 'active_execution_diag_pub'):
+            return
+        target = getattr(self, '_current_wp_target', (math.nan, math.nan))
+        diag = Float64MultiArray()
+        diag.data = [0.]*9 + [
+            float(getattr(self, '_current_wp_idx', math.nan)),
+            float(getattr(self, '_current_wp_count', math.nan)),
+            float(target[0]), float(target[1]),
+            float(getattr(self, '_current_wp_dist', math.nan)),
+            float(getattr(self, '_current_desired_yaw', math.nan)),
+            float(getattr(self, '_current_yaw_error', math.nan)),
+            float(getattr(self, '_current_tracking_yaw', math.nan)),
+            float(getattr(self, '_current_tracking_yaw_source', math.nan)),
+        ]
+        self.active_execution_diag_pub.publish(diag)
 
     def _result_safe_to_execute(self, result) -> tuple[bool, str]:
         """Return whether a solver result may replace the active control tape.
@@ -1241,23 +1272,33 @@ class EfeAgentNode(UnicyclePlannerNode):
         return True, ''
 
     def _publish_active_plan_command(self):
+        # Snapshot, expiry, publication and tape replacement share one ownership
+        # boundary. A timer must not resurrect a tape after a concurrent stop.
         with self._data_lock:
+            self._publish_active_plan_command_locked()
+
+    def _publish_active_plan_command_locked(self):
+        with self._data_lock:
+            controls_ref = self._active_controls
             controls = None if self._active_controls is None else self._active_controls.copy()
             started_at = self._active_plan_started_at
             original_len = int(self._active_controls_original_len)
         if controls is None or controls.size == 0 or started_at is None:
             return
 
-        elapsed_s = max((self.get_clock().now() - started_at).nanoseconds * 1e-9, 0.0)
+        elapsed_s = (self.get_clock().now() - started_at).nanoseconds * 1e-9
+        if self._active_controls is not controls_ref or self._active_plan_started_at is not started_at:
+            return
+        if not math.isfinite(elapsed_s) or elapsed_s < 0.0:
+            # A reset does not make the previous epoch's tape new again.
+            self._publish_safe_stop_command()
+            return
         step_dt = max(float(self.dt), 1e-3)
         if elapsed_s >= controls.shape[0] * step_dt:
             # Do not keep replaying the terminal control of an exhausted local plan.
             # A slow or failed replan should leave the robot stopped, not coasting
             # into a boundary on stale controls.
-            with self._data_lock:
-                self._active_controls = None
-                self._active_plan_started_at = None
-            self._publish_command(0.0, 0.0)
+            self._publish_safe_stop_command()
             return
         step_idx = min(int(elapsed_s / step_dt), controls.shape[0] - 1)
         u = controls[step_idx]
@@ -1310,9 +1351,9 @@ class EfeAgentNode(UnicyclePlannerNode):
                     self._active_controls = None
                     self._active_plan_started_at = None
                     self._active_controls_original_len = int(controls.shape[0])
-                self._last_latency_skip_steps = int(skip_steps)
-                self._last_latency_skip_s = float(latency_s)
-                self._publish_command(0.0, 0.0)
+                    self._last_latency_skip_steps = int(skip_steps)
+                    self._last_latency_skip_s = float(latency_s)
+                    self._publish_command(0.0, 0.0)
                 return
             if fractional_s > 0.0:
                 started_at = started_at - Duration(seconds=fractional_s)
@@ -1321,11 +1362,11 @@ class EfeAgentNode(UnicyclePlannerNode):
             self._active_controls = controls.copy()
             self._active_plan_started_at = started_at
             self._active_controls_original_len = int(result.controls.shape[0])
-        self._last_latency_skip_steps = int(skip_steps)
-        self._last_latency_skip_s = float(latency_s)
-        if controls.size == 0:
-            return
-        self._publish_command(controls[0, 0], controls[0, 1])
+            self._last_latency_skip_steps = int(skip_steps)
+            self._last_latency_skip_s = float(latency_s)
+            if controls.size == 0:
+                return
+            self._publish_command(controls[0, 0], controls[0, 1])
 
     def _publish_safe_stop_command(self):
         if not hasattr(self, 'cmd_pub'):
@@ -1334,7 +1375,8 @@ class EfeAgentNode(UnicyclePlannerNode):
             self._active_controls = None
             self._active_plan_started_at = None
             self._active_controls_original_len = 0
-        self._publish_command(0.0, 0.0)
+            self._publish_command(0.0, 0.0)
+            self._publish_idle_execution_diagnostics()
 
 
 def main(args=None):

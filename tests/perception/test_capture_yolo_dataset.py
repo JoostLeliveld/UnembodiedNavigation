@@ -275,6 +275,15 @@ def test_capture_source_does_not_retry_deterministic_label_quality_failures() ->
     assert 'Only capture/synchronization exceptions' in source
 
 
+def test_observation_capture_retains_rejected_rgb_frames_without_making_them_training_samples() -> None:
+    source = (SCRIPT_DIR / 'capture_yolo_dataset.py').read_text(encoding='utf-8')
+
+    assert '--save-observation-frames' in source
+    assert "out_dir / 'observation_frames'" in source
+    assert "'observation_image': observation_image_rel" in source
+    assert 'including samples rejected by the semantic-label quality gate' in source
+
+
 def test_capture_transport_contract_requires_local_isolation_and_marks_override_diagnostic() -> None:
     isolated = {
         'ROS_LOCALHOST_ONLY': '1',

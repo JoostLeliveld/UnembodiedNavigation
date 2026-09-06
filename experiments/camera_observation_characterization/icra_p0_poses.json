@@ -1,0 +1,24 @@
+{
+  "schema": "camera_observation_characterization_icra_p0.v1",
+  "purpose": "Small all-camera transport, timing, provenance, and static-determinism gate before the P1 transects.",
+  "poses": [
+    {
+      "x": -0.669,
+      "y": -8.056,
+      "yaw": 0.0,
+      "stratum": "p0_near_overlap"
+    },
+    {
+      "x": 0.669,
+      "y": -6.122,
+      "yaw": 1.570796,
+      "stratum": "p0_mid_overlap"
+    },
+    {
+      "x": -2.006,
+      "y": 8.7,
+      "yaw": 3.141593,
+      "stratum": "p0_opposite_aisle"
+    }
+  ]
+}

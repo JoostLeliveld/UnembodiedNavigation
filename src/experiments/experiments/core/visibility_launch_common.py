@@ -325,6 +325,9 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         ).strip().lower(),
         'manager_commissioned_calibration_path': _launch_value(
             context, 'manager_commissioned_calibration_path', ''
+        ),
+        'manager_commissioned_world_covariance_path': _launch_value(
+            context, 'manager_commissioned_world_covariance_path', ''
         ).strip(),
         'manager_commissioned_sigma_px': float(
             _launch_value(context, 'manager_commissioned_sigma_px', '0.0')
@@ -349,6 +352,18 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         ).strip().lower(),
         'manager_fixed_offset_m': float(
             _launch_value(context, 'manager_fixed_offset_m', '0.0')
+        ),
+        'manager_learned_correction_path': _launch_value(
+            context, 'manager_learned_correction_path', ''
+        ).strip(),
+        'manager_learned_gate_reject': float(
+            _launch_value(context, 'manager_learned_gate_reject', '0.5')
+        ),
+        'manager_learned_gate_good': float(
+            _launch_value(context, 'manager_learned_gate_good', '0.8')
+        ),
+        'manager_learned_gate_soft_sigma_m': float(
+            _launch_value(context, 'manager_learned_gate_soft_sigma_m', '0.10')
         ),
         'manager_max_measurement_age_s': float(
             _launch_value(context, 'manager_max_measurement_age_s', '1.25')
@@ -616,6 +631,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'collision_geometry_json': _launch_value(context, 'collision_geometry_json', ''),
         'driveable_geometry_json': _launch_value(context, 'driveable_geometry_json', ''),
         'visibility_artifact_path': _launch_value(context, 'visibility_artifact_path', ''),
+        'camera_network_artifact_path': _launch_value(context, 'camera_network_artifact_path', ''),
         'use_nogo_cost': _launch_value(context, 'use_nogo_cost', str(VISIBILITY_FALLBACK_DEFAULTS['use_nogo_cost'])).strip().lower(),
         'nogo_penalty_type': _launch_value(context, 'nogo_penalty_type', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_penalty_type'])).strip().lower(),
         'nogo_weight': float(_launch_value(context, 'nogo_weight', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_weight']))),
@@ -826,6 +842,19 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         cfg['use_ambiguity'] = True
         cfg['use_obs_risk'] = True
     visibility_artifact_path = str(cfg.get('visibility_artifact_path', '') or '').strip()
+    camera_network_artifact_path = str(cfg.get('camera_network_artifact_path', '') or '').strip()
+    if camera_network_artifact_path:
+        if visibility_artifact_path:
+            raise RuntimeError('choose one planner field: visibility_artifact_path or camera_network_artifact_path')
+        if planner != 'visibility_aware_efe' or str(cfg.get('global_planner_mode', 'efe')).strip().lower() == 'preselected_route':
+            raise RuntimeError('camera_network_artifact_path requires a solved visibility_aware_efe plan')
+        if _as_bool(cfg.get('use_pixel_correction', False)):
+            raise RuntimeError('camera network planning requires metric camera corrections')
+        if _as_bool(cfg.get('use_hit_miss_mixture', False)):
+            raise RuntimeError('the IWAI network score proxy is not a hit/miss probability')
+        camera_network_artifact_path = resolve_profile_asset_path(cfg['world_profiles_path'], camera_network_artifact_path)
+        if not Path(camera_network_artifact_path).is_file():
+            raise RuntimeError(f'camera_network_artifact_path does not exist: {camera_network_artifact_path}')
     # Only an actually solved visibility-aware global plan consumes this GP.
     # A preselected route may retain the same local/filter configuration, but
     # its route is hash-bound and no global EFE objective is evaluated.
@@ -834,14 +863,15 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         and str(cfg.get('global_planner_mode', 'efe')).strip().lower()
         != 'preselected_route'
     ):
-        if not visibility_artifact_path:
+        if not visibility_artifact_path and not camera_network_artifact_path:
             raise RuntimeError(
-                "visibility_artifact_path must be provided explicitly — "
+                "visibility_artifact_path or camera_network_artifact_path must be provided explicitly — "
                 "no fallback to world profile defaults is allowed."
             )
-        visibility_artifact_path = resolve_profile_asset_path(cfg['world_profiles_path'], visibility_artifact_path)
-        if not Path(visibility_artifact_path).exists():
-            raise RuntimeError(f"visibility_artifact_path does not exist: {visibility_artifact_path}")
+        if visibility_artifact_path:
+            visibility_artifact_path = resolve_profile_asset_path(cfg['world_profiles_path'], visibility_artifact_path)
+            if not Path(visibility_artifact_path).exists():
+                raise RuntimeError(f"visibility_artifact_path does not exist: {visibility_artifact_path}")
 
     cam_pos = [camera_pose[0], camera_pose[1], camera_pose[2]]
     roll, pitch, yaw = camera_pose[3], camera_pose[4], camera_pose[5]
@@ -1046,6 +1076,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         'collision_geometry_json': collision_geometry_json,
         'driveable_geometry_json': driveable_geometry_json,
         'visibility_artifact_path': visibility_artifact_path,
+        'camera_network_artifact_path': camera_network_artifact_path,
         'preselected_route_validation_json': preselected_route_validation_json,
     })
     return cfg
@@ -1341,6 +1372,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'use_obs_risk': cfg['use_obs_risk'],
                 'use_visibility_model': cfg['use_visibility_model'],
                 'visibility_artifact_path': cfg['visibility_artifact_path'],
+                'camera_network_artifact_path': cfg.get('camera_network_artifact_path', ''),
                 'risk_weight_obs': cfg['risk_weight_obs'],
                 'ambiguity_weight': cfg['ambiguity_weight'],
                 'goal_sigma_uv': cfg['goal_sigma_uv'],
@@ -1588,6 +1620,8 @@ def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
             cfg.get('manager_covariance_profile', 'commissioned_sigma_px')),
         'manager_commissioned_calibration_path': str(
             cfg.get('manager_commissioned_calibration_path', '') or ''),
+        'manager_commissioned_world_covariance_path': str(
+            cfg.get('manager_commissioned_world_covariance_path', '') or ''),
         'manager_commissioned_sigma_px': float(cfg.get('manager_commissioned_sigma_px', 0.0)),
         'manager_commissioned_per_camera_sigma': bool(
             cfg.get('manager_commissioned_per_camera_sigma', False)),
@@ -1603,6 +1637,14 @@ def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
             cfg.get('manager_correction_propagation_drift_std', 0.05)),
         'manager_observation_model': str(cfg.get('manager_observation_model', 'hull')),
         'manager_fixed_offset_m': float(cfg.get('manager_fixed_offset_m', 0.0)),
+        # The learned box correction and its usability gate. Empty path means no learned
+        # model, which every non-learned observation model requires.
+        'manager_learned_correction_path': str(
+            cfg.get('manager_learned_correction_path', '')),
+        'manager_learned_gate_reject': float(cfg.get('manager_learned_gate_reject', 0.5)),
+        'manager_learned_gate_good': float(cfg.get('manager_learned_gate_good', 0.8)),
+        'manager_learned_gate_soft_sigma_m': float(
+            cfg.get('manager_learned_gate_soft_sigma_m', 0.10)),
         'manager_min_spatial_trust': float(cfg.get('manager_min_spatial_trust', 0.15)),
         'manager_max_measurement_age_s': float(
             cfg.get('manager_max_measurement_age_s', cfg['pixel_timeout_s'])),
@@ -1938,6 +1980,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'driveable_geometry_json': cfg.get('driveable_geometry_json', ''),
             'nogo_mode': cfg.get('nogo_mode', 'keep_out'),
             'visibility_artifact_path': cfg['visibility_artifact_path'],
+            'camera_network_artifact_path': cfg.get('camera_network_artifact_path', ''),
             'use_nogo_cost': cfg['resolved_use_nogo_cost'],
             'nogo_penalty_type': cfg['nogo_penalty_type'],
             'nogo_weight': cfg['nogo_weight'],

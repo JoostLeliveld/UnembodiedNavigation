@@ -1,0 +1,17 @@
+........................................................................ [ 24%]
+........................................................................ [ 49%]
+........................................................................ [ 74%]
+........................................................................ [ 99%]
+..                                                                       [100%]
+=============================== warnings summary ===============================
+tests/planning/test_camera_network.py: 30 warnings
+  Warning: Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)
+
+tests/reliability/test_reference_calibration.py::test_actual_manager_matches_frozen_offline_mean_and_R
+  Warning: Pandas requires version '2.8.4' or newer of 'numexpr' (version '2.8.1' currently installed).
+
+tests/reliability/test_reference_calibration.py::test_actual_manager_matches_frozen_offline_mean_and_R
+  Warning: Pandas requires version '1.3.6' or newer of 'bottleneck' (version '1.3.2' currently installed).
+
+-- Docs: https://docs.pytest.org/en/stable/warnings.html
+290 passed, 32 warnings in 14.90s

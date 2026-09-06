@@ -422,54 +422,107 @@ def distance_angle_weighted_fusion_2d(
     return mean, covariance
 
 
-def network_pooled_fusion_2d(
+def joint_network_estimate_2d(
     observations: Sequence[MapObservation],
     *,
-    exponents: Mapping[str, float] | None = None,
+    huber_delta: float = 2.5,
+    max_iterations: int = 25,
+    convergence_m: float = 1.0e-9,
 ) -> tuple[tuple[float, float], tuple[tuple[float, float], tuple[float, float]]]:
-    """F4: the camera network as ONE sensor -- geometric-mean (log-linear) pooling.
+    """F4: estimate once from the simultaneous camera batch, then Gaussianise.
 
-    ``p_net(x) ~ prod_c N(x; mu_c, Sigma_c)^{w_c}``, which for Gaussians is
-    ``Sigma^-1 = sum_c w_c Sigma_c^-1`` and ``mu = Sigma sum_c w_c Sigma_c^-1 mu_c``.
-    The default is ``w_c = 1/N`` over the cameras present at this instant.
+    The old F4 multiplied per-camera Gaussian densities with exponents ``1/N``. That made
+    its point estimate identical to independent fusion and changed only the covariance by
+    a fixed factor. This estimator instead treats the admitted camera batch as one
+    distributed sensor:
 
-    Two mechanisms, two jobs, and they must not be conflated:
+    1. solve one robust generalized least-squares problem over all equivalent position
+       residuals using Huber IRLS;
+    2. *after* that point has been found, form one network-level Gaussian approximation
+       with a finite-sample sandwich covariance.
 
-    * ``Sigma_c`` already carries camera quality -- a precise camera brings more
-      information, because that is what its geometry did to the detector's pixel noise.
-    * ``w_c = 1/N`` carries conservative POOLING. It refuses to claim N independent pieces
-      of evidence when the cameras share a robot, a detector, a hull model and a stock
-      arrangement, so their errors may be correlated in ways nothing here has measured.
-
-    So the exponent is never set from ``Sigma_c``: that would count quality twice. With
-    equal exponents the mean matches :func:`independent_measurement_fusion_2d` exactly and
-    only the stated covariance differs -- by a factor of N in area. Which of the two claims
-    is honest is an experimental question, not a modelling preference.
+    The sandwich contains both each view's propagated detector uncertainty and the
+    between-view residual outer products. Consequently identical equal-quality readings
+    retain one camera's covariance rather than shrinking by ``1/N``, while disagreement
+    widens the network ellipse in the direction in which the cameras disagree. This is a
+    runtime covariance model, not a claim of calibration: its scale still has to be frozen
+    on commissioning data and tested on held-out routes.
     """
 
     items = tuple(observations)
     if not items:
         raise ContractValidationError("at least one map observation is required")
-    if exponents is None:
-        exponents = {obs.camera_id: 1.0 / len(items) for obs in items}
+    delta = float(huber_delta)
+    if not math.isfinite(delta) or delta <= 0.0:
+        raise ContractValidationError("huber_delta must be finite and positive")
+    iterations = int(max_iterations)
+    if iterations <= 0:
+        raise ContractValidationError("max_iterations must be positive")
+    tolerance = float(convergence_m)
+    if not math.isfinite(tolerance) or tolerance < 0.0:
+        raise ContractValidationError("convergence_m must be finite and non-negative")
+    if len(items) == 1:
+        return items[0].xy_m, items[0].covariance_m2
+
+    # A component-wise median gives the robust solve a start that a single overconfident
+    # camera cannot choose. Sorting also makes the result independent of message order.
+    xs = sorted(obs.xy_m[0] for obs in items)
+    ys = sorted(obs.xy_m[1] for obs in items)
+
+    def median(values):
+        middle = len(values) // 2
+        if len(values) % 2:
+            return float(values[middle])
+        return 0.5 * float(values[middle - 1] + values[middle])
+
+    mean = (median(xs), median(ys))
+    precisions = [_mat_inv_2x2(obs.covariance_m2) for obs in items]
+    for _ in range(iterations):
+        information = ((0.0, 0.0), (0.0, 0.0))
+        information_vector = (0.0, 0.0)
+        for obs, precision in zip(items, precisions):
+            residual = (obs.xy_m[0] - mean[0], obs.xy_m[1] - mean[1])
+            distance = math.sqrt(max(_quad_form(residual, precision), 0.0))
+            weight = 1.0 if distance <= delta else delta / distance
+            weighted_precision = _mat_scale(precision, weight)
+            information = _mat_add(information, weighted_precision)
+            contribution = _mat_vec(weighted_precision, obs.xy_m)
+            information_vector = (
+                information_vector[0] + contribution[0],
+                information_vector[1] + contribution[1],
+            )
+        information = _symmetrize(information)
+        updated = _mat_vec(_mat_inv_2x2(information), information_vector)
+        if math.hypot(updated[0] - mean[0], updated[1] - mean[1]) <= tolerance:
+            mean = updated
+            break
+        mean = updated
+
+    # Re-evaluate the weights at the converged point. B is the robust score's second
+    # moment. Multiplying the sandwich by the effective batch size removes the usual
+    # independent-sample contraction: this batch is one sensor report, not N reports.
     information = ((0.0, 0.0), (0.0, 0.0))
-    information_vector = (0.0, 0.0)
-    for obs in items:
-        weight = float(exponents.get(obs.camera_id, 0.0))
-        if weight < 0.0:
-            raise ContractValidationError("pooling exponents must be non-negative")
-        precision = _mat_scale(_mat_inv_2x2(obs.covariance_m2), weight)
-        information = _mat_add(information, precision)
-        weighted = _mat_vec(precision, obs.xy_m)
-        information_vector = (
-            information_vector[0] + weighted[0],
-            information_vector[1] + weighted[1],
+    score_second_moment = ((0.0, 0.0), (0.0, 0.0))
+    weights = []
+    for obs, precision in zip(items, precisions):
+        residual = (obs.xy_m[0] - mean[0], obs.xy_m[1] - mean[1])
+        distance = math.sqrt(max(_quad_form(residual, precision), 0.0))
+        weight = 1.0 if distance <= delta else delta / distance
+        weights.append(weight)
+        information = _mat_add(information, _mat_scale(precision, weight))
+        local_second_moment = _mat_add(obs.covariance_m2, _outer(residual))
+        contribution = _mat_mul(_mat_mul(precision, local_second_moment), precision)
+        score_second_moment = _mat_add(
+            score_second_moment, _mat_scale(contribution, weight * weight)
         )
-    if abs(_det_2x2(information)) <= 0.0:
-        raise ContractValidationError("pooled information matrix is singular")
-    covariance = _symmetrize(_mat_inv_2x2(_symmetrize(information)))
-    mean = _mat_vec(covariance, information_vector)
-    _validate_spd(covariance, "network_pooled_covariance_m2")
+    information_inverse = _mat_inv_2x2(_symmetrize(information))
+    effective_batch_size = sum(weights) ** 2 / sum(weight * weight for weight in weights)
+    covariance = _mat_scale(
+        _mat_mul(_mat_mul(information_inverse, score_second_moment), information_inverse),
+        effective_batch_size,
+    )
+    covariance = _symmetrize(covariance)
+    _validate_spd(covariance, "joint_network_covariance_m2")
     return mean, covariance
 
 
@@ -836,6 +889,15 @@ def _quad_form_inverse_2x2(v, a):
     inv = _mat_inv_2x2(a)
     iv = _mat_vec(inv, v)
     return float(v[0] * iv[0] + v[1] * iv[1])
+
+
+def _quad_form(v, a):
+    av = _mat_vec(a, v)
+    return float(v[0] * av[0] + v[1] * av[1])
+
+
+def _outer(v):
+    return ((v[0] * v[0], v[0] * v[1]), (v[1] * v[0], v[1] * v[1]))
 
 
 def _transpose(a):

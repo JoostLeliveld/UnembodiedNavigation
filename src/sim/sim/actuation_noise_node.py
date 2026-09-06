@@ -24,6 +24,7 @@ class ActuationNoiseNode(Node):
         self.declare_parameter('output_topic', '/cmd_vel')
         self.declare_parameter('diagnostics_topic', '/cmd_vel_noise/diagnostics')
         self.declare_parameter('seed', 0)
+        self.declare_parameter('command_timeout_s', 0.5)
 
         # Fractional speed loss and temporally correlated slip/noise.
         self.declare_parameter('linear_slip_mean', 0.03)
@@ -61,15 +62,21 @@ class ActuationNoiseNode(Node):
         self.linear_max = float(self.get_parameter('linear_max').value)
         self.angular_min = float(self.get_parameter('angular_min').value)
         self.angular_max = float(self.get_parameter('angular_max').value)
+        self.command_timeout_s = float(self.get_parameter('command_timeout_s').value)
+        if not math.isfinite(self.command_timeout_s) or self.command_timeout_s <= 0.0:
+            raise ValueError('command_timeout_s must be finite and positive')
+        self._last_input_stamp_s = None
+        self._watchdog_stopped = True
 
         seed = int(self.get_parameter('seed').value)
         self._rng = random.Random(seed)
         self._linear_slip_state = 0.0
         self._angular_slip_state = 0.0
 
-        self._pub = self.create_publisher(Twist, output_topic, 10)
+        self._pub = self.create_publisher(Twist, output_topic, 1)
         self._diag_pub = self.create_publisher(Float64MultiArray, diagnostics_topic, 10)
-        self.create_subscription(Twist, input_topic, self._cmd_cb, 10)
+        self.create_subscription(Twist, input_topic, self._cmd_cb, 1)
+        self.create_timer(min(0.1, self.command_timeout_s/2.), self._watchdog_tick)
 
         self.get_logger().info(
             'Actuation noise node started: '
@@ -77,7 +84,8 @@ class ActuationNoiseNode(Node):
             f'linear_slip_mean={self.linear_slip_mean:.3f}, linear_slip_std={self.linear_slip_std:.3f}, '
             f'linear_additive_std={self.linear_additive_std:.3f} m/s, '
             f'angular_slip_std={self.angular_slip_std:.3f}, '
-            f'angular_additive_std={self.angular_additive_std:.3f} rad/s'
+            f'angular_additive_std={self.angular_additive_std:.3f} rad/s, '
+            f'command_timeout={self.command_timeout_s:.3f}s (simulation clock)'
         )
 
     @staticmethod
@@ -98,6 +106,12 @@ class ActuationNoiseNode(Node):
     def _cmd_cb(self, msg: Twist) -> None:
         v_cmd = float(msg.linear.x)
         w_cmd = float(msg.angular.z)
+        if not (math.isfinite(v_cmd) and math.isfinite(w_cmd)):
+            self._pub.publish(Twist())
+            self._watchdog_stopped = True
+            self.get_logger().error('Non-finite input command: publishing zero velocity')
+            return
+        self._last_input_stamp_s = self.get_clock().now().nanoseconds * 1e-9
 
         stop_cmd = (
             abs(v_cmd) <= self.stop_linear_deadband
@@ -153,6 +167,7 @@ class ActuationNoiseNode(Node):
         noisy.linear.x = float(v_out)
         noisy.angular.z = float(w_out)
         self._pub.publish(noisy)
+        self._watchdog_stopped = bool(stop_cmd)
 
         stamp = float(self.get_clock().now().nanoseconds) * 1e-9
         diag = Float64MultiArray()
@@ -171,6 +186,20 @@ class ActuationNoiseNode(Node):
             float(self._angular_slip_state),
         ]
         self._diag_pub.publish(diag)
+
+    def _watchdog_tick(self):
+        """Stop from this separate process if the planner stops sending commands.
+
+        Twist has no source timestamp: this bounds silence after receipt, not
+        arbitrary transport delay. Use the same simulated clock as robot motion.
+        """
+        if self._last_input_stamp_s is None or self._watchdog_stopped:
+            return
+        elapsed = self.get_clock().now().nanoseconds * 1e-9 - self._last_input_stamp_s
+        if elapsed > self.command_timeout_s or elapsed < 0.0:
+            self._pub.publish(Twist())
+            self._watchdog_stopped = True
+            self.get_logger().warn(f'Command watchdog stop: input age {elapsed:.3f}s')
 
 
 def main(args=None):

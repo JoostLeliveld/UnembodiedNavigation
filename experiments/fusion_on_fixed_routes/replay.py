@@ -35,7 +35,10 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "src/planning"))
+sys.path.insert(0, str(REPO / "src/reliability"))
 from planning.core.dynamics import unicycle_process_noise  # noqa: E402
+from reliability.contracts import CameraQuality  # noqa: E402
+from reliability.fusion import MapObservation, joint_network_estimate_2d  # noqa: E402
 
 DRIVES = REPO / "logs/studies/fusion_on_fixed_routes"
 OUT = DRIVES / "replay"
@@ -130,8 +133,17 @@ def combine(readings, rule: str):
     mean = np.linalg.solve(information, sum(np.linalg.solve(c, m) for c, m in zip(covs, means)))
     if rule == "independent":
         return mean, np.linalg.inv(information)
-    if rule == "network":                       # precisions pooled, then divided by N
-        return mean, np.linalg.inv(information / len(readings))
+    if rule == "joint_network":
+        batch = [MapObservation(
+            camera_id=reading["camera"],
+            timestamp_s=float(reading["cap"]),
+            xy_m=tuple(reading["xy"]),
+            covariance_m2=tuple(tuple(row) for row in reading["cov"]),
+            quality=CameraQuality(camera_id=reading["camera"]),
+            source="offline_replay",
+        ) for reading in readings]
+        joint_mean, joint_covariance = joint_network_estimate_2d(batch)
+        return np.asarray(joint_mean), np.asarray(joint_covariance)
     raise ValueError(rule)
 
 
@@ -270,7 +282,7 @@ def main():
         for rule, name in (("best_single", "all five: the most confident one"),
                            ("distance_angle", "all five: weighted by distance"),
                            ("independent", "all five: precisions add"),
-                           ("network", "all five: precisions pooled, then / N")):
+                           ("joint_network", "all five: one robust batch estimate")):
             arms[name] = summarise(steps, replay(steps, attached, rule, belief_floor_m=floor))
         arms["all five: precisions add, NO floor"] = summarise(
             steps, replay(steps, attached, "independent"))

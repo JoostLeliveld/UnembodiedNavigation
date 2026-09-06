@@ -1,0 +1,17 @@
+{"observed": {"each_message_coherent": true, "latest_message_regresses": true, "published_stamps": [10.2, 10.0]}, "probe": "publication_overtakes", "reproduction_passed": true}
+{"observed": {"anchor_stamp_unchanged": 9.0, "correction_applied": true, "superseded_prediction_published": false}, "probe": "same_stamp_supersession_guard", "reproduction_passed": true}
+{"observed": {"frame": "map_bev", "full_planar_covariance_preserved": true, "stamp": 10.0}, "probe": "full_covariance_snapshot", "reproduction_passed": true}
+{"observed": {"belief_coordinates_frame": "map_bev", "published_frame": "camera_optical"}, "probe": "frame_from_different_event", "reproduction_passed": true}
+{"observed": {"manager_kept_x": 0.0, "manager_retained_revisions": 1, "published_x": [0.0, 0.0625], "stamp": 10.0}, "probe": "equal_time_revision_lost_by_consumer", "reproduction_passed": true}
+{"observed": {"log_stamps": [11.0, 10.0], "replay_x": 2.0, "reports_fallback": 0.0, "timestamp_order_reference_x": 3.0, "velocity_sample_time": 10.0, "yaw_sample_time": 11.0}, "probe": "odometry_callback_finishes_out_of_order", "reproduction_passed": true}
+{"observed": {"actually_replayed_buffer_supported": false, "checked_supported": true, "committed_motion": 59.8, "committed_stamp": 60.9, "expected_motion": 59.9}, "probe": "coverage_check_and_replay_use_different_buffers", "reproduction_passed": true}
+{"observed": {"committed_x": 0.0625, "input_anchor": 9.9, "recursive_anchor_after_correction": 9.95, "returned_anchor": 9.95, "returned_x": 0.0}, "probe": "planner_metadata_from_superseding_update", "reproduction_passed": true}
+{"observed": {"anonymous_bootstrap_x": 0.1, "identified_event_status": "dropped", "reason": "not_newer_than_belief"}, "probe": "planning_bootstrap_bypasses_envelope", "reproduction_passed": true}
+{"observed": {"first_new_epoch_correction": "not_newer_than_belief", "odom_stamps": [100.0, 1.0], "planning_age": 0.0, "published_messages": 0, "retained_anchor": 100.0, "retained_identity": true, "ros_now": 1.0}, "probe": "backward_reset_keeps_epoch_state", "reproduction_passed": true}
+{"observed": {"previous_epoch_status": "batch_ready", "reset_frame_status": "out_of_order"}, "probe": "camera_batch_reset", "reproduction_passed": true}
+{"observed": {"goal_header": 1780000000.0, "planner_compares_goal_stamp": false, "readiness_survives_invalid_input": true, "ros_now": 0.1, "waypoint_advanced_using_unvalidated_belief": true}, "probe": "mission_clock_and_readiness", "reproduction_passed": true}
+{"observed": {"backward_system_jump_postpones_repeats": true, "sent_counts": [0, 1, 1, 2], "startup_delay_uses_system_elapsed": true, "system_now": [99.0, 103.0, 90.0, 104.0]}, "probe": "mission_system_clock_jumps", "reproduction_passed": true}
+{"observed": {"data_lock_free": true, "one_calculating": true, "one_waiting_on_correction_lock": true, "queued_odom_cannot_execute_until_release": true, "workers": 2}, "probe": "correction_worker_starvation", "reproduction_passed": true}
+{"observed": {"assimilation_count": 1, "duplicate_fails_closed": true}, "probe": "simultaneous_duplicate_envelopes", "reproduction_passed": true}
+{"observed": {"actual_pixel_capture": 9.95, "applied_measurement_x": 0.2, "timer_target": 9.9}, "probe": "pixel_timer_reads_new_measurement_with_old_stamp", "reproduction_passed": true}
+{"observed": {"accepted_as_fresh": true, "active_ros_clock_path": false, "clock_domain_mismatch_reported_age": 0.0}, "probe": "clock_domain_error_fails_open", "reproduction_passed": true}

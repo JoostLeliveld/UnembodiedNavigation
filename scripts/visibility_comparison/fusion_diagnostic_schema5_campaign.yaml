@@ -1,0 +1,268 @@
+# DIAGNOSTIC campaign: one seed per cell (24 runs) at the fusion speed of 0.22 m/s.
+#
+# Purpose is NOT a frozen fusion result. It exists to produce schema-5 drives that
+# carry pred_h_px / pred_w_px, so that:
+#   * Q5 (why 21%% of boxes are taller than predicted) becomes answerable at all;
+#   * the near-range covariance floor found in docs/ANSWERS.md Q6 can be re-fitted
+#     on repaired drives at the speed the paper will use, instead of on the
+#     pre-repair commissioning drives where the two-term model was rejected;
+#   * Q2's shared-error estimate gets batches at 0.22 m/s rather than 1 m/s.
+#
+# The frozen 120-run campaign comes AFTER the floor is commissioned, because the
+# floor changes the per-camera weights and therefore what the fusion arms do.
+#
+# The six-arm fusion comparison, on one frozen route.
+#
+# WHAT DIFFERS BETWEEN ARMS, AND NOTHING ELSE: how several cameras become one measurement
+# (F1-F4) and what a detector's box is taken to mean (O1, O2). Same world, same route, same
+# controller, same frozen detector, same commissioned pixel noise.
+#
+#   F1  hull        single best camera, smallest trace(Sigma_c)
+#   F2  hull        weighted by distance and viewing angle -- the untuned heuristic
+#   F3  hull        independent Gaussian fusion, precisions add
+#   F4  hull        one robust batch estimate, then one Gaussian             <- proposed
+#   O1  raw box     the box bottom-centre IS the robot, joint network estimate
+#   O2  fixed offset  ... pushed 0.309 m away, joint network estimate
+#
+# Five paired seeds are run for every arm and route. A seed fixes the shared actuation and
+# encoder-noise realization, so within-seed arm contrasts remove much of the nuisance motion
+# variation. Claims are aggregated across seeds; no individual drive is a paper result.
+#
+# Design: experiments/fusion_on_fixed_routes/README.md
+world: warehouse_v2.world.sdf
+launch_file: warehouse_primary_comparison.launch.py
+
+conditions:
+  # The treatment lives here: the runner resolves route > condition > task > campaign.
+  F1:
+    label: F1_single_best_camera_by_trace
+    manager_fusion_rule: best_single
+    manager_observation_model: hull
+  F2:
+    label: F2_distance_and_angle_heuristic
+    manager_fusion_rule: distance_angle
+    manager_observation_model: hull
+  F3:
+    label: F3_independent_precisions_add
+    manager_fusion_rule: independent
+    manager_observation_model: hull
+  F4:
+    label: F4_joint_network_estimator
+    manager_fusion_rule: joint_network
+    manager_observation_model: hull
+  O1:
+    label: O1_raw_box_bottom_centre_is_the_robot
+    manager_fusion_rule: joint_network
+    manager_observation_model: raw_box
+  O2:
+    label: O2_fixed_offset_from_the_camera
+    manager_fusion_rule: joint_network
+    manager_observation_model: fixed_offset
+    # ONE commissioned number, measured over the 3351 admitted commissioning sightings: the
+    # box bottom-centre lands a mean 30.9 cm from the robot's centre (median 30.4, range
+    # 20.4-45.6). A constant cannot follow the 11 cm that gap swings as the robot turns --
+    # which is the point of this arm.
+    manager_fixed_offset_m: 0.309
+
+tasks:
+  # FOUR routes, the same six arms on each. One route cannot separate how a fusion
+  # rule behaves from how a corridor behaves, and 30 m cannot show whether an
+  # over-claim compounds. rich and sparse share endpoints and length with the
+  # original and differ only in coverage; long_traverse is twice the distance.
+  # Every arm is bound to each route by hash — one anchor per route, six references.
+  fusion_network_traverse:
+    # the mixed corridor — 30.622 m, 10 vertices, measured clearance 0.3538 m
+    conditions: [F1, F2, F3, F4, O1, O2]
+    seeds: [0]
+    preselected_routes:
+      F1: &route_network_traverse
+        preselected_route_json: '[[-7.900000000000015,-8.700000000000005],[-7.000000000000018,-8.700000000000005],[-4.800000000000026,-6.500000000000012],[-1.1000000000000387,-6.500000000000012],[0.7999999999999545,-4.600000000000019],[0.7999999999999545,-2.2000000000000277],[1.5999999999999517,-1.4000000000000306],[10.099999999999923,-1.4000000000000306],[10.799999999999919,-0.700000000000033],[10.59999999999992,6.499999999999943]]'
+        preselected_route_sha256: 9d4a3a35d8d7254bfa6d59110f295ca0df648262227367e027c924c62bf34b76
+        preselected_route_source_path: experiments/fusion_on_fixed_routes/routes/fusion_network_traverse.json
+        preselected_route_source_sha256: c7c0322b930e2c22ac0b7d09b6ea8df0725f545da467519dd1ffecbab21cf3ed
+      F2: *route_network_traverse
+      F3: *route_network_traverse
+      F4: *route_network_traverse
+      O1: *route_network_traverse
+      O2: *route_network_traverse
+  fusion_overlap_rich:
+    # same endpoints, the best-covered corridor — 31.379 m, 6 vertices, measured clearance 0.3539 m
+    conditions: [F1, F2, F3, F4, O1, O2]
+    seeds: [0]
+    preselected_routes:
+      F1: &route_overlap_rich
+        preselected_route_json: '[[-7.900000000000015,-8.700000000000005],[-6.8000000000000185,-8.700000000000005],[-4.800000000000026,-7.20000000000001],[8.199999999999928,-7.20000000000001],[10.799999999999919,-4.600000000000019],[10.59999999999992,6.499999999999943]]'
+        preselected_route_sha256: 07a785688734c5207497d206e584383b529924b989806d5febee7f935957336c
+        preselected_route_source_path: experiments/fusion_on_fixed_routes/routes/fusion_overlap_rich.json
+        preselected_route_source_sha256: f88f1a83b2ba5c1c16ded226887007d418e39db5263569e3bcaa0a0dd01572ef
+      F2: *route_overlap_rich
+      F3: *route_overlap_rich
+      F4: *route_overlap_rich
+      O1: *route_overlap_rich
+      O2: *route_overlap_rich
+  fusion_overlap_sparse:
+    # same endpoints, the worst-covered corridor that clears — 30.83 m, 8 vertices, measured clearance 0.3538 m
+    conditions: [F1, F2, F3, F4, O1, O2]
+    seeds: [0]
+    preselected_routes:
+      F1: &route_overlap_sparse
+        preselected_route_json: '[[-7.900000000000015,-8.700000000000005],[-7.000000000000018,-8.700000000000005],[-4.800000000000026,-6.500000000000012],[-1.1000000000000387,-6.500000000000012],[0.7999999999999545,-4.600000000000019],[0.7999999999999545,5.699999999999944],[1.5999999999999517,6.499999999999943],[10.59999999999992,6.499999999999943]]'
+        preselected_route_sha256: c6c03fd537dfd59876c9a057370c24a2e24b4544183c50fc6326a855d252dbe3
+        preselected_route_source_path: experiments/fusion_on_fixed_routes/routes/fusion_overlap_sparse.json
+        preselected_route_source_sha256: afeb6af3e5d12b989e594544b4de47c51738b488a4d863297ddf9cfef7a6c142
+      F2: *route_overlap_sparse
+      F3: *route_overlap_sparse
+      F4: *route_overlap_sparse
+      O1: *route_overlap_sparse
+      O2: *route_overlap_sparse
+  fusion_long_traverse:
+    # twice the distance, out and back — 63.276 m, 19 vertices, measured clearance 0.3536 m
+    conditions: [F1, F2, F3, F4, O1, O2]
+    seeds: [0]
+    preselected_routes:
+      F1: &route_long_traverse
+        preselected_route_json: '[[-7.900000000000015,-8.700000000000005],[-7.000000000000018,-8.700000000000005],[-4.800000000000026,-6.500000000000012],[-1.1000000000000387,-6.500000000000012],[0.7999999999999545,-4.600000000000019],[0.7999999999999545,-2.2000000000000277],[1.5999999999999517,-1.4000000000000306],[10.099999999999923,-1.4000000000000306],[10.799999999999919,-0.700000000000033],[10.799999999999919,6.29999999999994],[10.59999999999992,6.499999999999943],[10.799999999999919,3.199999999999953],[10.199999999999921,2.5999999999999552],[1.5999999999999517,2.5999999999999552],[0.9999999999999538,1.9999999999999574],[0.8999999999999542,-4.5000000000000195],[0.19999999999995666,-5.200000000000017],[-9.30000000000001,-5.200000000000017],[-10.700000000000005,-6.600000000000012]]'
+        preselected_route_sha256: c99cfd4bb4df478b952dd0444c6c959da1562c6a283a175d488eb923ab83d579
+        preselected_route_source_path: experiments/fusion_on_fixed_routes/routes/fusion_long_traverse.json
+        preselected_route_source_sha256: 41900137efc8e0a1fe53a0438999af89e7bfd098777a4ac78d81394cc0023b61
+      F2: *route_long_traverse
+      F3: *route_long_traverse
+      F4: *route_long_traverse
+      O1: *route_long_traverse
+      O2: *route_long_traverse
+
+# ---------------------------------------------------------------------------
+# the sensor: frozen detector, one commissioned pixel-noise number
+# ---------------------------------------------------------------------------
+perception_backend: yolo
+yolo_model: logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt
+yolo_device: '0'
+yolo_imgsz: 960
+yolo_conf_threshold: 0.25
+yolo_iou_threshold: 0.45
+yolo_target_class: robot
+yolo_class_id: 0
+yolo_use_masks: false
+yolo_min_bbox_area_px: 0.0
+yolo_max_batch_stamp_skew_s: 0.05
+# The detector node stamps this sigma (px) onto every observation it publishes. The manager's
+# commissioned_sigma_px profile overrides it from calibration.json anyway, but leaving the old
+# 2.5 px here would put two different claims about the same detector in one run's provenance.
+r_visible_uv: 0.7642679454946852
+r_miss_uv: 40.0
+
+multicam_belief: true
+manager_fusion_mode: true
+manager_covariance_profile: commissioned_sigma_px
+manager_commissioned_calibration_path: logs/studies/measurement_commissioning/calibration.json
+# No reliability field is consulted anywhere in this experiment: availability predicts the
+# future and this experiment is entirely about measurements that have already arrived.
+manager_require_gp_artifacts: false
+manager_decision_rate_hz: 5.0
+manager_require_source_batch_id: true
+manager_bootstrap_min_cameras: 2
+# Two cameras place the SAME robot this far apart with no error at all: the box
+# bottom-centre lands short along each camera's own bearing, by a commissioned
+# 0.204-0.456 m. Two correct readings can therefore differ by twice the largest of
+# those, 0.91 m, so anything tighter rejects the truth. Measured on the frozen
+# capture (250 positions seen by 2+ cameras): the closest-agreeing pair at a
+# position is a median 0.27 m apart and at worst 0.88 m, so 0.91 m admits every
+# correct start while still refusing a camera that has locked onto something else.
+manager_bootstrap_max_disagreement_m: 0.91
+manager_fusion_disagreement_gate_m: 0.6
+# Below the 0.20 s detector period, so a stale round can never be fused as if it
+# were simultaneous. At 0.25 s it could, and did: 13 of 2661 decisions on the
+# frozen route combined readings 200 ms apart.
+manager_fusion_max_timestamp_spread_s: 0.05
+state_correction_mode: fused
+state_correction_ekf: true
+heading_update_mode: coupled
+pixel_correction_nis_threshold: 9.21
+
+# Recovery policy: what the belief does when a correction is refused. Declared here so
+# the manifest states it. Re-anchor is OFF: snapping the belief to a measurement was the
+# one path that bypassed both the outlier gate and the re-anchor threshold, so one
+# camera's word could move the belief anywhere unchecked. A refused correction widens the
+# belief instead, which reopens the gate on its own without granting a bypass.
+state_reanchor_m: 0.0
+state_max_predict_dt_s: 1.5
+state_reject_inflate_m2: 0.05
+stale_belief_inflate_m2_per_s: 0.0
+stale_belief_inflate_cap_m2: 0.0
+require_state_correction_envelope: true
+
+# ---------------------------------------------------------------------------
+# the route: frozen, hash-bound, identical for every arm
+# ---------------------------------------------------------------------------
+use_hierarchical: true
+global_planner_mode: preselected_route
+# The planner's belief comes from the cameras and odometry, never from the
+# simulator's pose. This diagnostic bypass would replace it with raw odometry.
+use_diagnostic_odom_localization: false
+# The measured minimum along this polyline is 0.354 m; the grid erosion that produced it was
+# 0.50 m, because a polyline joining 0.10 m cell centres cuts diagonal corners.
+# freeze_route.py measures this on the SIMPLIFIED polyline -- the one actually driven -- and
+# against the same geometry the launch gate uses.
+#
+# The route is 10 vertices, not the generator's 284. The preselected-route contract executes
+# every coordinate as a waypoint, so 0.10 m grid steps became turn_then_go waypoints: the
+# robot tried to face points a hand's width away, span in place at 20.8 m of 30.7, and was
+# flagged stuck. Simplifying to the corners the route actually turns at (0.20 m
+# Douglas-Peucker) fixes the cause instead of loosening the stuck detector.
+preselected_route_clearance_m: 0.35
+preselected_route_endpoint_tolerance_m: 0.25
+preselected_route_sample_step_m: 0.04
+
+# ---------------------------------------------------------------------------
+# driving
+# ---------------------------------------------------------------------------
+v_max: 0.22
+horizon: 20
+dt: 0.25
+goal_success_radius: 0.35
+goal_success_hold_s: 2.0
+# Sim-time budget after the first command. 63 m at 0.22 m/s is about 310 s, so 600 is ample
+# and this was never the binding limit.
+#
+# THE BINDING LIMIT IS THE RUNNER'S OWN WALL CLOCK: --run-timeout, default 420 s, which killed
+# five healthy long-route drives at 44.5 m of 63.3 m and recorded them infra_invalid (correctly
+# — they are not results). It is a CLI flag rather than part of this config, so changing it
+# does not invalidate runs already in the log. Drive the long route with:
+#     --run-timeout 900
+run_timeout_after_first_cmd_s: 600
+# turn_then_go, for a measured reason. The worry was in-place rotation: the robot's
+# circumscribed radius is 0.486 m and the route's tightest point is 0.354 m from the DECLARED
+# LANE boundary. But the declared lanes are far narrower than the physical aisles -- at that
+# same corner the nearest real obstacle is 1.585 m away, and at the route's turns 0.95-1.00 m,
+# against a 0.275 m robot half-width. So a pirouette has about a metre of real room.
+# pure_pursuit was tried first and failed measurably: it cut the corner at (0.06, -4.71), left
+# the declared lane (0.010 m from its boundary, 0.374 m from anything physical), and the local
+# controller then refused every step with driveable_clearance_violation_step_0 -- the robot
+# drove 9.1 m of 30.7 and stopped. Tracking the polyline waypoint to waypoint keeps it on the
+# route the gate validated.
+local_controller_type: turn_then_go
+# The AMR is 0.80 x 0.55 m: half-width 0.275 m, not the 0.125 m Burger default.
+robot_collision_radius_m: 0.275
+use_nogo_cost: true
+nogo_penalty_type: warning_band
+nogo_safe_distance: 0.35
+# The local tracker's own keep-in margin, set 5 cm below the route's validated 0.354 m of lane
+# clearance so ordinary tracking error cannot put it in violation. It is a margin inside a
+# declared corridor that is itself conservative by roughly a metre.
+local_nogo_safe_distance: 0.30
+nogo_warning_band: 0.05
+nogo_weight: 40.0
+use_belief_nogo_cost: false
+terminate_on_geom_collision: false
+use_odom_for_predict: true
+odom_topic: /odom_noisy
+use_command_noise: true
+use_encoder_noise: true
+process_noise_xy: 0.01
+process_noise_theta: 0.02
+headless: true
+use_rviz: false
+reset_world: false
+debug_runtime: true
+# 120 runs need 120 consecutive domain ids inside 0..232.
+ros_domain_id_base: 80

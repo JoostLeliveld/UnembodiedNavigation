@@ -1,660 +1,385 @@
+> **Current approved execution plan (2026-09-06):**
+> [ICRA_STATUS.md — work map, thesis scope and ICRA direction](docs/ICRA_STATUS.md).
+> The user has authorized the commissioning-to-fusion-to-navigation study, with the existing
+> metric-reference NN retained. The 2026-09-06 user clarification sets a 12-page,
+> two-column AIES thesis. The scope is IWAI extended to a camera network with a compact
+> commissioning audit. Official AIES criteria are verified: appendices are not assessed.
+> The exhaustive six-run camera-subset pilot is complete and remains diagnostic;
+> `../papers/master_thesis/thesis.pdf` is a long-form source bank, not the required format.
+> A separate ICRA paper remains conditional on evidence. The staged 2026-08-31 plan below
+> is preserved as historical rationale; its "only active stage" statement is superseded.
+> The IWAI network planner adapter, three fitted fields and short optimization probe are
+> implemented. See the [code plan](experiments/icra_commissioning/planner_implementation_plan.md)
+> and [paper map](../papers/master_thesis/planning/paper_map.md). Complete-route feasibility
+> and live camera-model equivalence pass their scoped checks. Two integration pilots expose
+> tracking/filter failures; the separately frozen corrected runtime is under live test.
+> See [runtime_integrity_audit.md](docs/runtime_integrity_audit.md). Fusion/forecast
+> equivalence and independent matched navigation effects remain required evidence.
+
 # The paper: plan of record
 
-## Three candidate papers, and which one is live
+Current as of 2026-08-31. This replaces the earlier split between a fusion paper, an
+availability-planning paper, and a learned-correction paper.
 
-Three directions have been explored, and switching between them is the main reason this
-repository is hard to read. They are listed here so that never has to be reconstructed
-again. **Only one is active at a time. Work on a parked direction is not wrong, but it is
-not the current paper, and its artifacts must not be presented as one.**
+## The paper in one sentence
 
-| | direction | what it claims | status |
-|---|---|---|---|
-| **B** | **Fusion on a fixed route** | how several cameras should become one measurement, and what covariance that is entitled to claim | **ACTIVE — 2026-08-29** |
-| A | Availability-aware planning | where in a warehouse the cameras can support localization, and routing on that model | parked |
-| C | Learned bias / shape correction | a network that corrects the detector's reading better than the analytic hull model | parked |
+We characterize how each fixed warehouse camera turns YOLO output into a robot-position
+observation, separate conditional measurement noise from the probability of obtaining a
+usable observation, combine the resulting per-camera information, and give that observation
+model to an otherwise unchanged belief-aware planner.
 
-### B — Fusion on a fixed route  ← THE CURRENT PAPER
+The short conceptual sentence is:
 
-Advised by the supervisors. One frozen route, driven identically, with the arms differing
-only in how the cameras are combined:
+> **Fusion constructs the observation model; the planner evaluates its consequence.**
 
-- **best single camera** — use the one camera with the smallest stated covariance
-- **precision-weighted** — the cameras err independently, so `Sigma^-1 = sum Sigma_c^-1`
-- **the whole network as one camera** — refuse to claim N independent pieces of evidence
+The paper is not “a different objective function,” “a Gaussian process for `R`,” or
+“precision-weighted fusion.” The contribution is the complete, measurable interface from
+camera evidence to expected belief evolution:
 
-`R` is the **shared input to all three**, commissioned once and never varied by arm; the arm
-is the only treatment. Because the second and third arms produce the *same position* and
-differ only in the covariance they claim, **this experiment is about the honesty of a stated
-uncertainty, not about accuracy.** Error cannot separate them. The discriminating measurement
-is NEES and ellipse coverage against the number of cameras contributing.
-
-Two further arms ask what a detector's box *means* — the raw box bottom-centre, and a fixed
-offset — against the projected-hull model the other arms use.
-
-Detail: **section 7** below, and `experiments/fusion_on_fixed_routes/README.md`.
-Config: `scripts/visibility_comparison/fusion_realistic_speed_n1_campaign.yaml`.
-
-### A — Availability-aware planning  (parked)
-
-The original framing, and the one the five sentences below were written for. A commissioned
-field `p_c(x, y, theta)` for whether a usable sighting arrives, learned truth-free from
-operational data, then routing that prefers places where corrections will arrive. Sentences
-2 and 5 carry it.
-
-Machinery that exists: `scripts/reliability/run_observation_gp.py`,
-`build_planner_p_use_artifacts.py`, `scripts/visibility_comparison/fit_belief_aware_gp.py`,
-`src/experiments/data/visibility_gp/`. A mono-depth visibility variant was built as apparatus
-and never registered as an arm.
-
-**Blocked on data that does not exist**: driven operational logs whose usable-sighting labels
-are computed the way the runtime computes them, with no ground truth. Sections 6 and 8 below.
-
-### C — Learned bias / shape correction  (parked)
-
-A network that maps a detection to a position better than projecting the robot's shape does.
-Machinery: `scripts/perception/{build,train,evaluate}_{residual_bias,shape_update,center_keypoint,contour_update}*`.
-
-Best measured result, `logs/perception_evaluations/warehouse_v2_shape_update_compare_20260828_r3`,
-a set-pose held-out study: analytic hull 3.11 cm mean, `mlp_without_shape` 2.04 cm. So the
-learned correction beats the analytic model by about a third — but that study used an oracle
-commanded heading and is marked provisional, and nothing from it is wired into the runtime.
-
-**Parked deliberately**, not abandoned: it competes with the frozen observation model that
-direction B holds constant. Introducing it while B is running would change the measurement
-under the experiment.
-
----
-
-Locked 2026-08-25. Anything not serving one of the five sentences below belongs in a study
-README or an appendix, not in the paper and not in a status report.
-
-> **The five sentences were written for direction A.** Sentence 4 is the one direction B
-> serves. Sentence 4's second clause — *"without producing overconfident fusion"* — is
-> contradicted by measurement: see `docs/open_questions.md` and
-> `logs/studies/estimator_consistency/RESULTS.md`. It cannot be written as it stands.
-
----
-
-## The five sentences we are trying to earn
-
-1. **The fixed infrastructure-camera detector provides usable robot observations reliably
-   enough to support localization experiments.**
-2. **A commissioned spatial availability model predicts usable camera observations on
-   held-out states better than uniform and geometry-only assumptions.**
-3. **Detector confidence [does / does not] provide additional predictive information about
-   localization measurement quality once observation geometry is accounted for.**
-4. **Calibrated external-camera observations improve localization over onboard estimation
-   alone without producing overconfident fusion.**
-5. **Planning with predicted camera support reduces localization degradation and long
-   observation outages relative to uniform, geometry-based and previous
-   confidence-based planning, at a modest navigation-cost increase.**
-
-Sentence 3 is deliberately written with both outcomes available. Either is a result.
-
----
-
-## The idea in plain terms
-
-A robot's wheels drift, so it cannot trust its own sense of position for long. The
-warehouse has fixed cameras that can see it and tell it where it is — but not everywhere,
-and not equally well. Racks block views, distance blurs the measurement, and some corners
-no camera reaches.
-
-So the robot should choose its route knowing **where the cameras can help it**, instead of
-assuming they always can.
-
-> **Availability determines whether a correction is likely to arrive.
-> The measurement covariance determines how much to trust it once it has.**
-
-```
-RUNTIME    an observation is received  ->  position + its covariance  ->  fusion
-
-PLANNING   a place we have not reached ->  how likely a sighting is,
-                                           and how good it would be
-                                       ->  expected future uncertainty
+```text
+YOLO observation interpretation
+        -> per-camera bias and conditional noise
+        -> probability of a usable future observation
+        -> per-camera expected information
+        -> camera selection or fusion
+        -> the existing planner's observation-dependent belief prediction
 ```
 
-Two separate things have to be commissioned for each camera:
+## What is active now
 
-- **How often will this camera give me a usable sighting here?** — a probability, known
-  *before* driving there, which is what makes route planning possible.
-- **How accurate is a sighting when I do get one?** — a covariance, used when a
-  measurement actually arrives.
+**Sensor characterization is the only active experimental stage.** We do not choose a bias
+correction, an operational estimator for `R`, a fusion rule, or a planning treatment until
+the warehouse-wide residual structure is visible.
 
-Keeping those apart is the conceptual core. The planner asks the first question about
-places it has not been yet. The filter asks the second about measurements it already has.
+All earlier fusion drives remain diagnostic or historical, and the previous generated deck
+plots have been retired. There is still no frozen paper-facing fusion selection under
+`docs/localization_metrics_registry.json`.
 
----
+## The contribution, if the evidence supports it
 
-## Contribution versus engineering
+1. **Per-camera observation characterization.** Show where each runtime-plausible YOLO
+   observation method is biased, noisy, anisotropic, non-Gaussian, or unavailable instead of
+   assuming uniform measurement quality.
+2. **Observation interface and camera aggregation.** Separate the covariance of an
+   observation that actually arrived from the probability that one will arrive, then turn
+   the per-camera quantities into an effective observation-information model through camera
+   selection or fusion.
+3. **Planning evidence.** Substitute only that observation model into the existing IWAI
+   belief-aware planner and test whether navigation outcomes change, while freezing the
+   dynamics, horizon, safety constraints, action costs, goal objective, belief propagation,
+   and tuning.
 
-Be explicit about this, in the paper and in every conversation about it.
+Fusion is part of contribution 2, but ordinary Gaussian precision addition is not claimed as
+novel by itself. Learned bias correction is not presumed to be a contribution; it enters only
+if the characterization stage shows a material, structured bias and a realistic calibration
+method removes it on held-out data.
 
-**The contribution:** modelling where in a warehouse the camera network can actually
-support localization, and planning routes using that model.
+## Quantities that must never be collapsed into one `R`
 
-**Supporting engineering, not contributions:** the camera-and-detector sensor, the bias
-correction, the covariance calibration, standard fusion, and whatever interpolates the
-availability map.
+For camera `i`, observation method `m`, state `s = (x,y)`, and heading `theta`, write
 
-Practical consequence: **do not spend ten minutes defending the bias model.** It is one
-sentence and a backup figure. The same goes for the covariance ladder, the gate thresholds
-and the choice of interpolator. If a supporting module needs a long defence, that is a
-signal it has been over-built, not that it deserves more slides.
+```text
+z_i,m = h_i,m(x) + b_i,m(s, theta) + v_i,m,
+v_i,m ~ N(0, R_hit,i,m(s, theta)).
+```
 
-## Status
+The components have different meanings:
 
-| stage | state | where |
+| quantity | meaning | where it may be used |
 |---|---|---|
-| Train the detector | **done, frozen** | `logs/perception_models/..._halfopen_20260825_r1`, sha `efff1949…` |
-| Commission the sensor | **done** | `experiments/measurement_commissioning/` |
-| Freeze what "usable sighting" means | **mostly** — false positives unmeasured | `observation.py: GATE` |
-| Remove the systematic offset | **done** — 0.48 cm → 0.19 cm | `logs/studies/measurement_commissioning/calibration.json` |
-| Estimate measurement covariance | **partial** — one number works offline; the live ladder has a config and no drives | `scripts/visibility_comparison/measurement_covariance_ablation_campaign.yaml` |
-| Test whether confidence predicts quality | **not started** — data is already on disk | — |
-| Learn the availability map | **not started** — needs its own truth-free dataset, not the commissioning capture | — |
-| Validate availability on held-out routes | **needs driving** | — |
-| Validate fusion on fixed routes | **repair gate** — all pre-schema-4 drives are diagnostic only; no paper result is frozen | `docs/localization_metrics_registry.json` |
-| Measure the operational heading drift | **has a config, needs drives** | `scripts/visibility_comparison/heading_update_ablation_campaign.yaml` |
-| Run the planner comparison | **needs everything above** | — |
+| `b_i,m(s,theta)` | systematic reading error | offline characterization; later realistic calibration only if justified |
+| `R_hit,i,m` | random covariance conditional on a usable observation arriving | filter update for an actual observation |
+| `q_i,m(s,theta)` | probability of a usable observation arriving | future-observation model for planning |
+| `P` | robot belief covariance | filter and planner state; never measurement noise |
+| `R_plan` / expected information | information the planner expects before knowing whether a future observation will arrive | planner prediction only |
 
-The three campaign configs are the whole live experimental surface. Each is built on the same
-repaired runtime and differs only in its arms:
+A missed detection creates no filter update. It is not a fictitious measurement with a very
+large covariance.
 
-| config | arms | question |
-|---|---|---|
-| `fusion_on_fixed_routes_campaign.yaml` | F1–F4, O1, O2 × 4 routes × 5 seeds | how several cameras become one measurement, and what a detector's box means |
-| `measurement_covariance_ablation_campaign.yaml` | K0–K2 × 5 seeds | how much the per-camera covariance needs to know |
-| `heading_update_ablation_campaign.yaml` | H0, H1 × 5 seeds | whether a position correction should move the heading |
+## Stage 1 — characterize every camera and observation method
 
-What is unresolved, and what is a known implementation limit, is in
-[`docs/open_questions.md`](docs/open_questions.md).
+### 1.1 Freeze one sensor output and vary only its interpretation
 
----
+The observation source is fixed: **one frozen YOLO detector producing a bounding box**. The
+capture and YOLO result are shared. We do not compare segmentation, keypoint, residual-network,
+or shape-network detectors in this study.
 
-## Two datasets, and why they can never be one
+What varies is how the same box is interpreted downstream:
 
-The two things commissioning produces have opposite requirements. Keeping them apart is a
-design decision, not bookkeeping.
-
-| | **bias correction** | **availability map** |
-|---|---|---|
-| needs ground truth? | **yes, unavoidably** — the offset *is* reading minus truth | **no** — "did a usable sighting arrive?" is answerable at runtime |
-| how much data | ~70 surveyed spots | 80–250+ positions, and still improving at 250 |
-| how it is collected | once, deliberately, robot placed on marked spots | continuously, during ordinary operation |
-| can it be updated later? | only by repeating the survey | yes, it grows as the robot works |
-
-So the expensive dataset is the one that needs no truth, and the one that needs truth is
-small. That is a good deployment story — but it only holds if the two are never merged.
-
-**And they are not interchangeable, measured.** The admission check compares a detection
-against a box predicted from the robot's pose. During commissioning that pose is exact; at
-runtime it is the robot's own estimate. Re-judging the same detections with a deliberately
-wrong pose (`availability_robustness.py`):
-
-| pose error | usable rate | wrongly kept | wrongly dropped |
-|---|---|---|---|
-| none | 0.699 | — | — |
-| 10 cm / 2° | 0.561 | 0.9 % | 14.6 % |
-| 25 cm / 5° | 0.420 | 1.3 % | 29.2 % |
-
-**A truth-free availability map measures lower availability than a truth-based one** — 0.56
-against 0.70 at a realistic belief quality. Commissioning availability with ground truth and
-then deploying would leave the planner a map that is optimistic by a fifth.
-
-Two consequences worth stating in the paper:
-
-- **The gate fails safe.** Wrongly-kept stays near 1 % while wrongly-dropped climbs to 29 %.
-  Under pose error it discards good sightings rather than admitting bad ones — a bad sighting
-  corrupts the estimate, a lost one only costs availability.
-- **Availability is not purely a property of the building.** It depends on how well localized
-  the robot already is: better belief → the predicted box matches better → more sightings
-  admitted → better belief. So the map must be learned at the belief quality the robot will
-  actually have, which is another reason it comes from operational data rather than a
-  truth-based survey.
-
-## The data, and the rule that keeps it honest
-
-**Detector training data ≠ commissioning data ≠ final planning data.** Nothing may serve
-two of those roles.
-
-| dataset | role | state |
-|---|---|---|
-| `warehouse_v2_yolo_20260821` | trained the detector | exists |
-| `warehouse_v2_yolo_shared_20260822` | **bias and covariance only** — needs ground truth, ~70 spots would do | exists, 11 585 trials |
-| driven operational logs | **availability only** — no ground truth, labels computed the way the runtime computes them | **missing** |
-| pictures of the empty warehouse | false-positive check | **missing** |
-| driven routes | operational validation and fusion | **missing** |
-| planning episodes | final evaluation | **missing** |
-
-Ground truth is used to form residuals and to score results. It never becomes an input the
-online planner or filter can see.
-
----
-
-## The stages, and what each has to show
-
-### 1. The sensor works (sentence 1)
-
-Frozen detector, characterized and reported rather than tuned. **Done:** finds the robot
-93 % of the time, 98 % close in, 85 % beyond 20 m, 56 % when more than 70 % of it is
-hidden. More than one box in 0.33 % of frames.
-
-**Open:** false positives. The commissioning capture kept one empty frame per camera, so
-"does it report a robot where there is none" is unknown — and that is half the definition
-of a usable sighting. A handful of empty-warehouse pictures closes it. Do this before the
-availability model, because it changes what the availability model is counting.
-
-**Do not quote the training mAP.** Its held-out places sit a median 0.70 m from training
-places against a 0.67 m grid, so it measures memorisation of the grid. The 93 % figure,
-measured on a separate capture, is the honest one.
-
-### 2. "Usable sighting" is frozen before anything is learned
-
-A sighting counts when the detector fires above a fixed confidence threshold, the
-projection to a floor position succeeds, and it passes checks that compare the detection
-against the prediction — height, width, bottom edge, frame edge. **All four are available
-at runtime**: none needs ground truth or the segmentation mask.
-
-Partial occlusion needs no special handling. A hidden robot is missed more often, which
-lowers the availability probability. A sighting that arrives but is noisier is handled by
-the covariance. Something grossly wrong is caught by the admission checks.
-
-No ground-truth error threshold may ever define usability.
-
-### 3. The observation model, and the leftover offset (supports sentence 4)
-
-**Two different things, and only the second is a bias.**
-
-**The observation model** is the box-versus-centre problem. The bottom-centre of a
-detector's box lands **24–35 cm** from the robot's true centre, swinging **11 cm** as the
-robot turns, because a 0.80 x 0.55 m footprint presents 27.5 to 48.5 cm of half-extent along
-the viewing ray. It is **not fitted and not corrected** — it is removed by predicting the
-box the same way the detector measures it, so that both sides are the same physical
-quantity. That is the largest error in the whole chain, and because the prediction needs a
-heading, **heading error feeds straight into any RMSE measured against the true robot
-centre** at roughly 0.23 cm per degree. Worse, it barely moves the predicted *pixel*, so the
-admission check cannot catch it.
-
-**The leftover offset** is what remains once that is right: half a centimetre. Measure it
-during commissioning, subtract it, move on.
-
-**Done.** The leftover offset was 0.53 cm; after correction 0.29 cm, against 2.2 cm of
-random scatter. One sentence in the paper, one figure in the appendix. The observation model
-gets a figure in the main deck, because it is worth 30 cm rather than 0.5.
-
-Worth carrying forward: the offset comes from mildly occluded sightings the gate admits,
-and those get commoner with distance — so it is a property of *this stock arrangement*,
-not of the cameras, and must be re-measured if the warehouse is restocked.
-
-### 4. Measurement covariance, simplest first
-
-The ladder, in order, stopping as soon as the next rung fails to earn itself:
-
-1. one covariance per camera
-2. plus dependence on distance
-3. plus dependence on viewing angle
-
-**Already indicated, to be confirmed on the frozen pipeline:** a single noise number pushed
-through the imaging geometry beat a per-camera constant decisively, and also beat a fitted
-spatial map with a thousand times as many parameters. Geometry already knows the shape of
-the error, so there may be little for data to learn. Confirm, then stop.
-
-### 5. Confidence gets a fair trial (sentence 3)
-
-Confidence was central to the previous method, so it is tested rather than dropped. It has
-three possible roles and they are not the same:
-
-- **Admission** — a fixed threshold decides whether a detection counts. Standard. Keep.
-- **Baseline** — the previous confidence-based method stays intact as a comparison, so
-  nobody can say an informative signal was quietly discarded.
-- **Covariance predictor** — does confidence say anything about how accurate a sighting
-  turned out to be, *after* accounting for camera and viewing geometry?
-
-The experiment compares four covariance models on held-out sightings: camera only;
-confidence; distance and angle; distance, angle and confidence. Scored by how well each
-predicts the errors actually observed, plus whether its stated ellipses contain the truth
-as often as claimed.
-
-**This can run today** — the confidence value is already recorded for every sighting in
-`logs/studies/measurement_commissioning/sightings.csv`.
-
-**Why confidence probably cannot go in the planner regardless of the outcome:** it only
-exists *after* an image has been processed. When planning a route through a place the robot
-has not reached, there is no confidence value to consult. What commissioning can supply for
-a future place is the probability of getting a sighting at all, and the expected quality if
-one arrives. That is a principled reason for confidence to appear in fusion but not in
-planning — much stronger than a preference.
-
-### 6. The availability map (sentence 2)
-
-For every camera and every commissioned place: did a usable sighting happen? Fit the
-probability of that across the floor.
-
-The claim is not "we used a Gaussian process". It is: **we empirically commissioned the
-spatial probability that each camera will provide a usable sighting.** The fitting method
-is an implementation detail and must be compared against simpler ideas:
-
-| model | what it assumes |
+| ID | handling of the same YOLO bounding box |
 |---|---|
-| constant | everywhere equally reliable |
-| geometry | field of view, range, viewing angle — no data |
-| previous method | the old confidence-based reliability map |
-| **proposed** | measured probability of a usable sighting |
+| `M0_raw_box_ipm` | take the bounding-box bottom-centre and back-project it to the floor |
+| `M1_fixed_offset` | apply the existing fixed camera-ray offset to the raw result |
+| `M2_analytic_hull` | compare the detected box with the projected robot hull used by the current manager |
 
-Headline metric: **Brier score on held-out places**, because the output is a probability and
-what matters for planning is that it is *calibrated*, not merely well-ranked. Supporting:
-calibration curve, predicted-versus-actual detection rate. Report ranking measures only in
-the appendix.
+Each map must therefore use the same captured image and the same YOLO box for all three
+panels. Differences between maps are consequences of interpretation, not different sensor
+inputs. Evaluation-only semantic masks and commanded ground-truth poses may define references
+and explain occlusion, but never become method inputs.
 
-Evaluate on held-out places or held-out routes — never on samples interleaved with the
-fitted ones at grid spacing, which tests interpolation rather than prediction.
+### 1.2 Capture design
 
-One headline number and one map. Then stop.
+Use a controlled factorial design in two deliberately separate captures:
 
-### 7. Fusion on one fixed route (sentence 4)
+```text
+field capture: drivable warehouse grid x five cameras x eight headings x one RGB image
+repeat panel: predeclared state strata x the repetitions justified by a variance/power pilot
+```
 
-Before asking a planner to seek camera coverage, show the coverage is worth seeking. Full
-design: [`experiments/fusion_on_fixed_routes/README.md`](experiments/fusion_on_fixed_routes/README.md).
+The field capture answers where errors and detector misses occur; the repeat panel answers
+how readings vary when state is held fixed. Random poses may extend coverage but may not
+replace the grid or repeated headings. The manifests must record the world, camera
+calibration hashes, detector artifact, method registry, exact position IDs, heading IDs,
+repetition IDs, and every failed detection. Split by position for validation; never
+interleave neighbouring samples from the same grid cell across fit and evaluation sets.
 
-**Two names, kept apart.** `R_pix = sigma_px^2 I` is the detector's noise, in pixels, one
-commissioned number. `Sigma_c = J_c^-1 R_pix J_c^-T` is what that camera then knows about the
-robot's position, in metres. Distance and viewing angle are already inside `Sigma_c`, because
-they are what changes `J_c` — so **nothing in the proposed method penalises range or angle by
-hand.** They appear once, as the heuristic baseline.
+The field capture is frozen at
+`logs/perception_datasets/warehouse_v2_bbox_characterization_20260831`: 386 drivable floor
+positions, eight headings, five cameras, 3,088 robot poses, and 15,440 attempted camera views,
+with zero failed capture batches. The frozen YOLO artifact returns 6,412 boxes before any
+post-detection admission gate. Every `M0`–`M2` interpretation is derived from the same selected
+box and image hash. This is the primary source for the first conceptual figures.
 
-**One route, six arms.** Task `fusion_network_traverse`: the west dock door, 3.4 m from
-camera A, to the east cross aisle under camera D — 30.62 m, all five cameras contributing,
-and the number of cameras watching at once spanning 0 to 4 (2.4 / 9.6 / 9.2 / 5.2 / 4.4 m).
-The polyline is frozen by sha256, so every arm executes the same coordinates.
-Every arm drives it identically, so the fusion rule is the only difference. Figure:
-`logs/studies/deck_figures/fusion/01_the_route.png`.
+This capture supports **observed and heading-marginalized error fields, box-return maps, and
+pooled histograms**. It cannot identify a local conditional mean and covariance separately:
+at a specific camera-position-heading cell, one residual is a sample, not a mean bias vector.
+Therefore these figures are field characterization, followed by a separately frozen repeat
+panel for conditional covariance.
 
-| run | observation model | fusion rule |
-|---|---|---|
-| 1 | hull | single best camera, smallest `tr(Sigma_c)` |
-| 2 | hull | distance-and-angle weights — the untuned heuristic |
-| 3 | hull | independent Gaussian fusion, `Sigma^-1 = sum Sigma_c^-1` |
-| **4** | **hull** | **network pooling, `Sigma^-1 = (1/N) sum Sigma_c^-1`** |
-| 5 | raw box bottom-centre | network pooling |
-| 6 | fixed box-to-centre offset | network pooling |
+Use a two-tier recapture rather than repeating every warehouse pose dozens of times:
 
-Runs 1–4 answer *which fusion rule*; runs 4–6 answer *what a detector's box means*. Run 4
-serves both, so it is six runs and not eight.
+1. a whole-warehouse grid with eight headings and a small fixed number of repeats, which
+   establishes the field and misses;
+2. a predeclared stratified repeat panel spanning cameras, range, viewing angle, occlusion,
+   and image position, with enough repeats to estimate conditional covariance and tails.
 
-`Sigma_c` carries camera quality and the `1/N` exponent carries conservative pooling — two
-jobs, two mechanisms, and the exponent is never also set from `Sigma_c`.
+Freeze both repeat counts after a pilot variance/power calculation, before looking at method
+rankings. This keeps the design concrete without committing to an arbitrary image count now.
 
-Headline: **position error in centimetres**, median and 95th. Beside it, always: whether the
-stated uncertainty is honest. **The plot the experiment exists for:** error and *claimed*
-uncertainty against the number of cameras contributing at that moment. If independent fusion
-grows overconfident from two cameras on while network pooling stays honest, that is the
-evidence for treating the network as one sensor; if both stay honest, `1/N` was unnecessary
-and that is also a result.
+### 1.3 Residuals and units
 
-**Six live closed-loop drives, one per arm, each with its own folder and its own storyline**
-(`experiments/fusion_on_fixed_routes/OUTLINE.md`). The arms do not see the same detections,
-because fusion feeds the belief, the belief predicts the box and the box decides admission.
-That coupling is the method: an arm that only wins on another arm's admitted detections has not
-won anything a robot could use. Nothing is paired or averaged across arms yet, so each arm's
-path length and deviation from the commanded route are reported beside its error, and repeats
-are a decision to take after one drive each. The predicted-bounding-box hull method gets its
-own storyline ahead of the arms, since it is what every arm's measurement means.
+Keep the image-space and ground-plane views together, but do not mix their covariances.
 
-Availability is **not** used to downweight a measurement that has already arrived. It
-predicts the future; it does not judge the present. Worth saying explicitly in the paper.
+```text
+e_uv = [u_YOLO - u_expected, v_YOLO - v_expected]       pixels
+e_xy = p_method - p_GT                                   metres
+```
 
-**Current status, 2026-08-29: STOP AND RERUN.** The pre-schema-4 drives combined some
-adjacent camera rounds, silently dropped delayed corrections, and inferred filter updates
-from timestamps. They are retained only as diagnostic evidence. No accuracy, calibration,
-coverage, collision-rate, or arm-ordering number from those drives is a current result.
-The repaired campaign must produce schema 4 runs and pass exact source-batch assimilation
-checks before `frozen_runs.json` may be created.
+Image-space residuals diagnose the detector and are the natural units for a pixel covariance.
+Ground-plane residuals show the physical consequence and form the warehouse vector field.
+Every plotted residual must name its method, camera, reference, admission rule, sample count,
+and whether it is unconditional or conditional on a usable detection.
 
-<!-- RETIRED HISTORICAL NOTES. These explain why repairs were attempted; they are not results.
+### 1.4 Required figures
 
-**Driven, 2026-08-26. All six arms reached the goal.** Full results:
-`logs/studies/fusion_on_fixed_routes/RESULTS.md`.
+For every camera-method pair, produce the same diagnostics from one manifest-bound table:
 
-- **THE HEADLINE CHANGED. Fix the covariance model and the fusion rule stops mattering.**
-  Three modelling failures were found by asking why a reading was a metre wrong: a correction
-  applied 400 ms stale, an admission check with no runtime caller, and a residual bias declared
-  nowhere. Fixing all three lifts every arm's calibration by 15-26 points and **collapses the
-  advantage of dividing by N from +28.7 points to +3.6**:
+1. **Warehouse error vector field:** for the one-sample field capture, show observed arrows or
+   a clearly labelled heading-median arrow; call it a mean bias vector only after repetitions
+   exist. Background = support or usable-detection probability; camera pose and aim shown.
+2. **Magnitude and spread map:** median or RMSE and a local covariance ellipse, kept distinct
+   from the mean arrow.
+3. **Residual histograms:** `e_u`, `e_v`, along-ray, and cross-ray residuals, with global and
+   location-conditioned views visibly separated.
+4. **Two-dimensional residual scatter and ellipse:** reveals correlation, anisotropy,
+   multimodality, and outliers hidden by marginal histograms.
+5. **Heading small multiples:** the vector field or signed residual for each of the eight
+   headings; a pooled heading plot alone is insufficient.
+6. **Mechanism plots:** residual versus range, viewing angle, image position, box truncation,
+   and detector confidence.
+7. **Detection/miss map:** every attempted capture counts, so detector reliability is not
+   confused with accuracy conditional on a hit.
+8. **Q-Q plot or equivalent tail diagnostic:** globally and within sufficiently populated
+   conditional cells.
 
-  | arm | both defects live | + timing | + check | + floor |
-  |---|---|---|---|---|
-  | F1 single best | 43.4% | 52.3% | 51.2% | **66.0%** |
-  | F2 distance and angle | 45.9% | 48.5% | 53.5% | **68.2%** |
-  | F3 precisions add | 26.0% | 39.2% | 43.0% | **69.4%** |
-  | F4 network / N | 54.8% | 50.1% | 54.9% | **73.0%** |
+A pooled warehouse histogram is a mixture over position and heading. It may be heavy-tailed
+even when the residual is approximately Gaussian conditional on state. Therefore the paper
+must show both `p(e)` and `p(e | x,y,theta,camera,method)` and must not reject or accept a
+Gaussian model from the pooled histogram alone.
 
-  Most of what read as a pooling result was a conservative claim absorbing those failures. The
-  defensible contribution is the measurement model, not the rule. Still not honest: 73% against
-  95%. `experiments/anomaly_investigation/`.
-- **The fusion rule barely moves accuracy and clearly moves honesty.** Confirmed on **four
-  routes, 24 drives**, including a pair that share start, goal and length and differ only in
-  coverage (92% vs 45% two-camera) and a 63 m out-and-back. Median error stays inside
-  2.5–4.5 cm for all four fusion arms with no consistent ordering; **F4 is the most honest on
-  every route** (55/60/50/46%) against F3's 26/40/39/38%. No arm is honest — 95% is the target.
-- **Coverage buys the tail, not the median.** On the well-covered corridor the 95th percentile
-  falls from 49–57 cm to 19–28 cm while medians barely move.
-- **Two of 24 drives ended in contact, both on the 63 m route**, after drifting 0.62 m and
-  0.79 m off a corridor whose physical clearance never drops below 0.495 m. The belief
-  excursions that look merely ugly at 30 m become collisions at 63 m. One drive per arm, so
-  this ranks nothing — it is an argument for fixing the covariance before the planner.
-- **Fusing can be worse than the best camera already on the table** — in 10–22% of corrections,
-  most often under precisions-add. A camera claiming a tiny ellipse and sitting a metre off
-  drags a precision-weighted mean with it, even when a camera 6 cm from the truth is in the
-  same fusion. F3 and F4 share that rate to within a point, because dividing by N changes the
-  claim and not the estimate.
-- **Every rule over-claims as cameras are added.** From one camera to four, the published
-  correction claims 4.15x more precision under precisions-add while actually improving 1.10x;
-  dividing by N halves the over-claim to 2.07x. Neither reaches honest, so the paper's claim is
-  "conservative pooling narrows the over-claim", not "it fixes it".
-- **The observation model is worth 7.4x the median error**: hull 3.12 cm, fixed offset
-  17.46 cm, raw box 23.08 cm — same rule, same route.
-- **TWO runtime defects invalidated the absolute numbers of the fusion study, and both are
-  fixed.** (a) The admission check — `plausibility_reasons()`, same thresholds as commissioning,
-  unit-tested — **had no caller in the runtime**, so 30% of detections that should have been
-  refused became corrections; their median error is 24 cm and their worst 122 cm. (b) A
-  correction was applied ~400 ms stale. With both fixed a published correction is **1.79 cm
-  median, 9.1 cm p95**, against commissioning's 1.44 / 9.2 — the operational sensor now matches
-  the commissioned one. `experiments/anomaly_investigation/`.
-  - The gate is not free: it converts bad measurements into ABSENT ones. Corrections drop 7%
-    and the worst outage grows from 5 s to 13 s, which is an argument for the availability work.
-  - **A measurement bug of my own**: `state_error_gt_m` re-scores a held correction while the
-    robot moves, reporting the robot's travel as sensor error. Corrections must be scored once,
-    when published. Every correction-level number measured before this is inflated.
-- **The 8 cm correction error is explained, and it is not the covariance model.** The
-  correction is **400 ms old** by its own timestamp and is applied as if current: at 0.22 m/s
-  that is 8.8 cm of travel, the error sits 7.3 cm *behind* the robot along its heading, and
-  scoring the same corrections against the pose 0.35 s earlier collapses the median from
-  **8.17 cm to 2.48 cm**. Odometry, which has no camera pipeline, bottoms out at 0.1 s, so
-  ground truth is not the late one. Heading is not detectable at a standstill and there is no
-  belief-to-correction feedback: standing still, a good camera reads 0.9–3.3 cm with the belief
-  a metre wrong. `logs/studies/fusion_on_fixed_routes/latency/README.md`.
-  - **So sigma_px IS about right** for the measurement at its own timestamp, and the fix is to
-    apply the correction at that timestamp (odometry forward-prediction, or a delayed-state
-    update) rather than to inflate R. A bias is not a covariance.
-  - **The honesty numbers must be re-earned after that fix.** Every arm shares the defect, so
-    the ordering may survive, but the absolute calibration figures are not yet properties of
-    the fusion rules.
-  - **The tail is a different problem**: p95 is untouched by the lag. Camera C reads 17.3 cm
-    median, 2–4x worse than any other camera at the same range; camera A reads 87.9 cm out
-    below 6 m. Both need chasing, after the timestamp fix.
+### 1.5 The first decision gate: bias before covariance
 
--->
+For each camera-method pair estimate
 
-### 8. Planning (sentence 5)
+```text
+b_i,m(s,theta) = E[e_i,m | s,theta].
+```
 
-For a candidate future place, the planner asks each camera how likely a sighting is and how
-good it would be, then works out what the robot's uncertainty would become either way and
-weights the two outcomes by that probability. **Probability that a sighting happens is kept
-separate from how good it is if it does.** That separation is the conceptual centre of the
-paper.
+Then make one of four decisions:
 
-| planner | what it assumes about the cameras |
+| observed structure | consequence |
 |---|---|
-| P0 shortest path | ignores them |
-| P1 uniform | same support everywhere |
-| P2 geometry | field of view and range only |
-| P3 previous method | the old confidence-based map |
-| P4 proposed | measured availability plus calibrated covariance |
+| smooth systematic field explained by calibration/projection | test a realistic camera, homography, affine, or surveyed-point recalibration |
+| method- and heading-dependent field | repair or reject the observation interpretation; do not hide it in `R` |
+| mean small relative to local spread, but spread changes with state | keep the method and move to conditional covariance modelling |
+| multimodal or heavy-tailed even after conditioning | revise admission/outlier modelling; a single Gaussian `R` is not adequate |
 
-Plus the ablation that could simplify the whole method: **availability alone** versus
-**availability plus conditioned covariance**. If they tie, say so — "availability is the
-dominant quantity and elaborate state-dependent covariance is unnecessary" is a cleaner
-contribution, not a failed experiment.
+A dense map built directly from Gazebo truth may characterize the available structure and
+serve as an oracle bound. It may not become a hidden operational correction or reliability
+input. Any correction advanced toward the main method must be something a real warehouse
+could commission and must improve a spatially held-out evaluation.
 
-Obstacle and keep-out costs stay completely separate from all of this.
+## Stage 2 — choose the simplest conditional measurement covariance
 
-**Scenarios must contain a real choice.** Routes of roughly equal length with clearly
-different camera support are the most convincing, because they isolate localization support
-from path length. Also include camera-to-camera handovers, overlap zones, and long stretches
-with poor support.
+Only after the bias gate, fit the covariance of measurements that actually arrive and pass
+the frozen usability rule. Start at the simplest rung and stop when the next one does not
+earn itself on held-out data:
 
-**Metrics.** Headline: localization error in centimetres. Mechanism: **the longest stretch
-with no usable sighting**, in seconds — better than "time visible", because a robot may only
-need occasional well-timed corrections. Cost: extra distance or time, as a percentage. The
-result a reviewer can absorb in one line is *"X % lower localization error for Y % extra
-travel."*
+```text
+R0 = sigma^2 I
+R1 = one isotropic covariance per camera
+R2 = one full 2x2 covariance per camera
+R3 = camera + range/viewing-angle dependence
+R4 = spatial/heading-dependent covariance
+```
 
-### 9. Why a network beats one camera
+Compare predicted and observed residual ellipses, held-out likelihood or another proper
+score, 95% containment, and sharpness. Always report unconditional detection coverage beside
+conditional accuracy so admission cannot make a method look good by dropping difficult
+cases.
 
-Compare the best single camera against all five. The mechanisms are redundancy,
-complementary coverage, differing quality, and handover as the robot moves.
+The offline ground-truth residual covariance is the evaluation reference, not an online
+input.
 
-**Do not claim multiple cameras cancel bias.** Two cameras with offsets fuse to a weighted
-combination of those offsets, which does not vanish. Measured here: a heading error is
-shared by every camera, and fusing all of them removes 1 % of it.
+## Stage 3 — test a truth-free operational estimate of `R_hit`
 
----
+For a delivered measurement, log the pre-fit innovation and post-fit residual:
 
-## What still has to be collected
+```text
+nu_k = z_k - h(x_k^-)
+mu_k = z_k - h(x_k^+).
+```
 
-1. **Pictures of the empty warehouse** — enough to characterize false positives and close
-   the definition of a usable sighting. Small.
-2. **Driven routes**, recording the robot's own position estimate, the detector output, the
-   sightings actually received, timestamps, and reference position kept separate for
-   scoring only.
-3. **Planning episodes**, entirely separate from anything used to fit the availability map
-   or the covariance.
+Maintain histories per camera and method. Start with covariance matching or a sliding-window
+pre/post-residual estimate; do not begin with a full variational Bayesian filter. The
+innovation covariance also contains projected belief uncertainty, so `Var(nu)` may not be
+called `R` without removing that term.
 
-**Not needed:** another detector dataset. The detector is frozen and adequate. Retrain only
-if the false-positive check fails.
+Validate the truth-free estimate against the Stage 2 empirical covariance on held-out runs.
+Ground truth scores whether the estimator recovered a sensible covariance, but the estimator
+itself may not read ground truth. A Bayesian inverse-Wishart treatment is an optional later
+extension only if uncertainty in the covariance estimate matters to the main conclusion.
 
----
+## Stage 4 — learn whether a usable future observation will arrive
 
-## The heading architecture, and the one gate that validates it
+For each camera separately learn
 
-**Locked for the repaired fusion campaign.** The heading in the observation model comes
-from the robot's operational estimator, never from ground truth. The camera measurement is
-still position-only. With `heading_update_mode: coupled`, that position update may change
-heading through the filter's existing position-heading cross-covariance; it is not a direct
-camera heading measurement. The same coupled mean and covariance are now used recursively
-and for planning. `camera_xy_only` remains supported and consistently replaces both heading
-mean and its cross-covariances with the odometry-heading model.
+```text
+q_i(s,theta) = P(usable observation from camera i | s,theta).
+```
 
-**The remaining failure mode.** A camera sees one residual containing position error and
-heading error together. In `camera_xy_only`, all of it is explained by moving `x, y`. In
-`coupled`, some can update heading through the motion model's cross-covariance, but the
-bottom-centre is only weakly heading-sensitive. The admission check therefore cannot be
-treated as a heading gate.
+This is a probability-of-use map, not an error map and not `R`. Its labels must be computable
+from operational detector, gate, and filter evidence without ground truth. Compare it on
+held-out positions or routes against:
 
-**Both halves of that follow from the same small sensitivity.** Weak sensitivity means a few
-degrees of heading error disturbs the prediction less than the detector's own noise. It also
-means the bottom-centre carries almost no information with which to *correct* a bad heading.
-So: good for `x, y`, weak for heading — and **the paper must not claim that bottom-centre
-observations recover heading.**
+- a constant probability;
+- geometry-only visibility;
+- the prior confidence-based method;
+- the proposed commissioned model.
 
-**Half the gate is measured** (`heading_gate.py`, on the commissioning capture):
+Use a proper probability score such as Brier score plus calibration plots. The fitting tool
+(GP or otherwise) is implementation detail; the claim is the calibrated spatial probability
+of receiving a usable observation.
 
-| heading error | prediction moves | vs detector noise | position error absorbed |
-|---|---|---|---|
-| 1° | 0.06 px | 0.08 | 0.23 cm |
-| 3° | 0.19 px | 0.24 | 0.73 cm |
-| 5° | 0.33 px | 0.44 | 1.24 cm |
-| 10° | 0.64 px | 0.84 | 2.29 cm |
-| 20° | 0.98 px | 1.29 | 3.22 cm |
+## Stage 5 — selection, fusion, and the planner-facing model
 
-**Break-even is about 14°** — that is where heading error starts disturbing the prediction
-more than the detector's own noise already does.
+When an observation actually arrives, the filter uses that camera's `R_hit,i`. For planning,
+the robot does not yet know which future observations will arrive. An initial expected-
+information approximation is
 
-**The missing half must be re-earned on schema-4 drives.** Log the estimator heading and
-joint covariance, record ground truth separately, and score heading at its own stamp. The
-paper may say only that position observations indirectly constrain heading through the
-dynamic covariance; it may not claim that box bottom-centres measure orientation. If the
-schema-4 drives show operational drift near the 14° sensitivity break-even, add a genuinely
-heading-sensitive feature as a separately validated module rather than increasing coupling
-by hand.
+```text
+J_i(s) = q_i(s) H_i(s)^T R_hit,i(s)^-1 H_i(s).
+```
 
-**And state the claim at the right strength.** This method corrects drift around an already
-initialized estimate. It is not built for recovery from an arbitrary starting pose: a
-sufficiently wrong estimate puts the predicted box in the wrong part of the image, the
-admission check rejects it, and nothing is corrected. Say "external camera measurements
-correct drift around an operational state estimate", not "the cameras relocalize the robot".
+The camera aggregation interface is explicit:
 
-## Metrics: three different error numbers, and never confusing them
+```text
+{q_i, R_hit,i, H_i} per camera
+        -> J_i
+        -> A(J_1, ..., J_N)        selection or fusion
+        -> effective expected observation information
+        -> predicted posterior belief
+        -> existing IWAI objective
+```
 
-The word "error" covers three quantities in this work. They differ by more than a factor of
-two and only one of them is the paper's headline.
+For selection, `A` keeps the most informative valid camera. For conditionally independent
+fusion, `A` sums information. Independence is a hypothesis to test, not an entitlement:
+shared timing, heading, shape, calibration, and detector errors must be measured before
+precision addition is treated as calibrated.
 
-| | what it is | measured? | value |
-|---|---|---|---|
-| **single-sighting measurement error** | how far one camera reading lands from the truth, if the prior were exactly right | **yes** | 1.49 cm median, 3.50 cm RMSE |
-| **localization error** | how far the robot's own belief lands from the truth, over a run | **not yet** — needs driving | the headline |
-| **belief consistency** | whether the stated uncertainty is honest | partly | see the ladder |
+`R_plan = R_hit/q` is only an information-equivalent shorthand in the scalar/common-`H`
+case. The state-information expression above is the general definition and avoids comparing
+pixel covariances from different viewpoints as though they were in the same coordinates.
 
-**Never quote the first as the second.** The filter fuses many sightings, so localization
-error can be *lower*; it also carries odometry drift and heading error, so it can be
-*higher*. They are not comparable and a reviewer will notice if they are conflated.
+## Stage 6 — keep the planner fixed
 
-### What makes the comparison valid at all
+The baseline and proposed conditions use the same planner and objective structure. Only the
+future observation model supplied to belief propagation changes:
 
-The filter estimates the robot's centre and ground truth reports the robot's centre. That is
-**verified, not assumed**: the visual hull's origin sits 0.5 mm from the centre of its own
-bounding box, and the pose logged as `robot_x, robot_y` is the pose commanded to the
-simulator. Same point on both sides. It is also *why* the commissioned residual is 0.5 cm
-rather than tens of centimetres — a frame mismatch would have shown up immediately as a large
-constant offset.
+```text
+baseline: J_IWAI(constant observation model)
+method:   J_IWAI(state-dependent effective camera information)
+```
 
-**Re-check this whenever the robot description changes.** A base frame moved to the wheel
-axle would put a fixed offset into every reported RMSE and nothing else would look wrong.
+Do not add a direct `-lambda * q(s)` visibility reward, a new route heuristic, camera-switching
+costs, obstacle costs, a new uncertainty objective, or different tuning in the proposed arm.
+If several of those change together, the camera model's planning consequence is no longer
+identifiable.
 
-### What the localization error will be made of
+The planned ablation ladder is:
 
-| contribution | size | visible during commissioning? |
+| condition | observation assumption | question |
 |---|---|---|
-| pixel noise, through the geometry | 0.9 cm near a camera, 4.0 cm far | yes |
-| heading error, through the observation model | ~0.23 cm per degree | **no** |
-| the leftover commissioned offset | 0.29 cm | yes |
-| odometry drift between corrections | unmeasured | no |
+| `C0_constant` | one constant observation model | original uniform assumption |
+| `C1_camera_constant` | calibrated constant `R_hit` per camera | is camera identity enough? |
+| `C2_spatial_expected` | per-camera `q(s)` and conditional `R_hit` | does spatial reliability matter? |
+| `C3_selection` | choose the most informative expected camera | is selection sufficient? |
+| `C4_fusion` | combine justified per-camera information | does multi-camera information add value honestly? |
 
-**The second row is the one to watch.** Commissioning used the true pose, so heading error
-contributes nothing to any number measured so far — not the residual, not the admission rate,
-not the covariance. It appears for the first time in the localization error. If the reported
-RMSE comes out worse than the single-sighting numbers suggest, heading is the first suspect,
-and `heading_gate.py` converts a measured heading drift straight into the centimetres it
-would explain.
+Do not run this ladder until Stages 1–5 have frozen the observation interface and the fusion
+independence assumptions.
 
-### Requirements for reporting it
+## Paper order
 
-1. **Say which of the three numbers you mean**, every time.
-2. **Same reference point on both sides** — re-verify if the robot description changes.
-3. **Report consistency beside accuracy.** A filter that widens its ellipse passes any
-   calibration test and is useless; a filter that is accurate but overconfident is dangerous.
-   Neither number means anything alone.
-4. **Ground truth scores the result and never enters the estimate.** It forms residuals and
-   computes metrics; it is not an input to the filter or the planner.
-5. **Report the heading contribution separately**, because it is invisible everywhere else.
-6. **Percentiles as well as RMSE.** The single-sighting median is 1.49 cm and the RMSE is
-   3.50 cm — a factor of 2.4, because the far-range tail dominates the square. Quoting only
-   one of them misrepresents the sensor in opposite directions.
+The paper follows the evidence in the order a reader needs it:
 
-## The largest open risk
+1. Problem: external cameras are neither uniformly available nor uniformly informative.
+2. Observation methods: what a YOLO output is being treated as physically.
+3. Characterization: warehouse vector fields, histograms, heading/range structure, and misses.
+4. Bias decision: correction, rejection, or zero-mean approximation.
+5. Conditional measurement model: `R_hit` for an observation that arrives.
+6. Operational estimation: whether pre/post residuals recover `R_hit` without truth.
+7. Availability model: per-camera `q(s,theta)` for a future observation.
+8. Camera aggregation: selection/fusion in state-information space.
+9. Planner integration: unchanged IWAI machinery, changed observation input only.
+10. Experiments: characterization, covariance validation, fusion calibration, and planning
+    outcomes, with limitations stated at the layer they affect.
 
-Everything commissioned so far was measured while the system was *told* exactly where the
-robot was. In operation it must work from its own estimate — which changes the predicted
-box, and therefore changes which sightings pass the admission checks. This is untested,
-it is offline, and it uses data already on disk. It should be settled before any driving.
+## Evidence and reporting rules
+
+The repository contracts remain in force:
+
+- Studies before 2026-08-25 are superseded.
+- A camera reading is scored at `obs_stamp`, a fused correction at `fused_stamp`, and a belief
+  at `planner_belief_stamp`.
+- Never compare reading error, fused-correction error, and belief error as though they were
+  the same quantity.
+- Count a physical detection once, aggregate within a drive first, and compare replicated
+  drives or held-out positions—not logger ticks.
+- Use exact, frozen manifests; never pool `latest` directories or arbitrary globs.
+- `gt_*` is an offline reference only. It may characterize and score; it may not enter the
+  online estimator, admission rule, reliability learner, planner, goal decision, or stuck
+  decision.
+- Report dropped-correction fraction and longest correction gap beside belief accuracy.
+- Report calibration and sharpness together; a covariance can obtain coverage merely by
+  becoming uninformatively large.
+
+The executable run-alignment contract remains
+`experiments/fusion_on_fixed_routes/aligned.py`; see `docs/localization_metrics.md` and
+`docs/localization_metrics_registry.json` before reporting a run result.
+
+## Immediate deliverable
+
+The next meeting is not a fusion-results meeting. It is a conceptual measurement-model
+meeting. The required deck and the decisions it must obtain are specified in
+[`docs/NEXT_MEETING.md`](docs/NEXT_MEETING.md).

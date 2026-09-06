@@ -3,12 +3,13 @@
 Offline tooling around the ROS/Gazebo runtime: capture data, train the detector, run
 campaigns, fit models.
 
-**Organised by which paper direction each family serves.** `PLAN.md` opens with the map of
-the three; only one is active at a time, and a parked direction's output is not a current
-result. This file was rewritten on 2026-08-29 because six of the seven scripts it used to
-list had been deleted.
+**Organised by the stage each family serves.** The active stage is camera/YOLO
+characterization. A script's existence does not make its output a current result; `PLAN.md`
+defines the gates between characterization, covariance estimation, availability, fusion,
+and planning. This file was rewritten on 2026-08-29 because six of the seven scripts it used
+to list had been deleted.
 
-## B — Fusion on a fixed route  (ACTIVE)
+## Fusion on a fixed route  (downstream; diagnostic until the earlier gates pass)
 
 | purpose | file |
 |---|---|
@@ -32,7 +33,7 @@ The detector is trained once and never retrained after anything is measured agai
 | detector training | `perception/train_yolo_detector.sh`, `train_yolo_seg.py` |
 | the pipeline, written down | `perception/YOLO_DATASET_PIPELINE.md` |
 
-## C — Learned bias / shape correction  (PARKED)
+## Learned bias / shape correction  (decision-gated)
 
 A network that maps a detection to a position better than projecting the robot's shape does.
 Best measured result is a set-pose held-out study with an oracle commanded heading, marked
@@ -45,11 +46,11 @@ provisional: analytic hull 3.11 cm mean against 2.04 cm for `mlp_without_shape`.
 | centre keypoint | `perception/{build_center_keypoint_dataset,train_center_keypoint,evaluate_center_keypoint}.py` |
 | contour update | `perception/{build_contour_update_dataset,contour_update_model}.py` |
 
-**Nothing here is wired into the runtime, deliberately.** It competes with the projected-hull
-observation model that direction B holds constant; introducing it mid-campaign would change
-the measurement under the experiment.
+**Nothing here is wired into the runtime.** A learned method may enter the characterization
+registry only when its artifact, held-out split, required online inputs, and runtime output
+are frozen. It becomes a correction candidate only if the bias gate justifies correction.
 
-## A — Availability-aware planning  (PARKED)
+## Availability-aware planning  (downstream; waiting on operational labels)
 
 | purpose | file |
 |---|---|
@@ -59,9 +60,9 @@ the measurement under the experiment.
 | belief-aware GP variants | `visibility_comparison/fit_belief_aware_gp.py` |
 
 **Blocked on data that does not exist**: driven operational logs whose usable-sighting labels
-are computed the way the runtime computes them, with no ground truth. Commissioning with
-ground truth and deploying would leave the planner a map optimistic by about a fifth — see
-`PLAN.md`, "Two datasets, and why they can never be one".
+are computed the way the runtime computes them, with no ground truth. Ground-truth
+characterization may evaluate this stage but may not supply its online labels; see `PLAN.md`,
+"Stage 4".
 
 ## Shared
 

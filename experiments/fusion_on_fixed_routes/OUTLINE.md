@@ -36,7 +36,7 @@ logs/studies/fusion_on_fixed_routes/
   01_best_single_camera/     drive/  figures/  numbers.json  story.md
   02_distance_angle/
   03_independent_fusion/
-  04_network_fusion/
+  04_joint_network_estimator/
   05_raw_box/
   06_fixed_offset/
   compare/                   only cross-arm figures live here
@@ -100,9 +100,9 @@ The six arms, in the order their folders are numbered:
 | `01_best_single_camera` | hull + single best camera by `tr(Σ_c)` | "one good camera is enough" — or it is not |
 | `02_distance_angle` | hull + distance-and-angle weights | knowing where the cameras are is not the same as knowing how good they are |
 | `03_independent_fusion` | hull + precisions add | the standard answer, and whether it grows overconfident with camera count |
-| `04_network_fusion` | hull + precisions add, divided by N | the network as one sensor: less claimed, and honest |
-| `05_raw_box` | box bottom-centre *is* the robot + network fusion | what ignoring the observation model costs a filter |
-| `06_fixed_offset` | box bottom-centre + one fixed offset + network fusion | whether a constant would have done |
+| `04_joint_network_estimator` | hull + one robust batch estimate, then one Gaussian | the network as one sensor: disagreement becomes uncertainty |
+| `05_raw_box` | box bottom-centre *is* the robot + joint network estimate | what ignoring the observation model costs a filter |
+| `06_fixed_offset` | box bottom-centre + one fixed offset + joint network estimate | whether a constant would have done |
 
 ---
 
@@ -145,7 +145,7 @@ Audited, not assumed — this is the critical path.
 |---|---|---|---|
 | 1 | ~~the launch path refuses any camera set that is not exactly A–D~~ | `visibility_launch_common.py` | **done.** The guard now validates against the perception layer's own `BATCHED_CAMERA_ORDER` (contract v2, five cameras), the manager's model-include map is derived from the world profile, and the camera bridges are derived from it too — camera E had no image bridge on this path |
 | 2 | ~~no covariance profile states the commissioned `Σ_c`~~ | `camera_manager_node.py` | **done.** `covariance_profile=commissioned_sigma_px` reads σ_px from `calibration.json` and states `R_pix = σ_px² I` with no floor and no handover inflation. Confirmed live: *"R_pix = (0.7643 px)² I … pushed through each camera's geometry"* |
-| 3 | ~~F1, F2, F4 do not exist~~ | `reliability/fusion.py`, `camera_manager_node.py` | **done.** `select_smallest_covariance`, `distance_angle_weighted_fusion_2d`, `network_pooled_fusion_2d`, plus one `fusion_rule` parameter behind the shared disagreement gate. 26 tests |
+| 3 | ~~F1, F2, F4 do not exist~~ | `reliability/fusion.py`, `camera_manager_node.py` | **done.** `select_smallest_covariance`, `distance_angle_weighted_fusion_2d`, `joint_network_estimate_2d`, plus one `fusion_rule` parameter behind the shared disagreement gate. |
 | 4 | ~~no fixed-offset observation mode~~ | `camera_manager_node.py` | **done.** `observation_model = hull \| raw_box \| fixed_offset`, the last pushing the reading a fixed distance away from its camera. The distance is one commissioned number: 30.9 cm, the mean box-bottom-centre-to-centre gap over 3351 admitted sightings |
 | 5 | ~~no campaign driver for these arms~~ | `scripts/visibility_comparison/fusion_on_fixed_routes_campaign.yaml`, `freeze_route.py` | **done.** Six arms as campaign conditions on one hash-bound route; `--dry-run` exercises the same route and clearance gate as launch |
 | 6 | empty-warehouse frames for the false-positive check | — | owed by `PLAN.md` before availability; **does not block these drives**, and is called out so it is not forgotten |

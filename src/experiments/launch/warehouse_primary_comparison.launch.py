@@ -19,6 +19,7 @@ PLANNER_DESCRIPTION = (
 
 def _planner_precision_arguments():
     return [
+        DeclareLaunchArgument('camera_network_artifact_path', default_value=''),
         DeclareLaunchArgument('horizon', default_value='40'),
         DeclareLaunchArgument('dt', default_value='0.25'),
         DeclareLaunchArgument('v_max', default_value='0.22'),
@@ -294,9 +295,17 @@ def generate_launch_description():
         DeclareLaunchArgument('manager_covariance_profile', default_value='commissioned_sigma_px',
                               description='The sensor model. commissioned_sigma_px states '
                                           'R_pix = sigma_px^2 I from the frozen calibration and lets '
-                                          'each camera geometry size the ellipse on the floor. It is '
-                                          'the only profile; nothing downstream floors or inflates '
-                                          'what it states.'),
+                                          'each camera geometry size the ellipse on the floor. '
+                                          'commissioned_world_R instead states the residual scatter '
+                                          'measured directly on the floor per camera and detector '
+                                          'confidence, and applies the offset commissioned with it; '
+                                          'the pixel route understates the held-out error about 300x '
+                                          'in variance. Nothing downstream floors or inflates either.'),
+        DeclareLaunchArgument('manager_commissioned_world_covariance_path', default_value='',
+                              description='commissioning.json the commissioned_world_R profile reads '
+                                          'its per-camera per-confidence covariance and offset from. '
+                                          'Required by that profile: the covariance is read, never '
+                                          'typed in.'),
         DeclareLaunchArgument('manager_commissioned_calibration_path', default_value='',
                               description='calibration.json the commissioned_sigma_px profile reads '
                                           'sigma_px from. Required by that profile: the detector noise '
@@ -345,6 +354,19 @@ def generate_launch_description():
         DeclareLaunchArgument('manager_fixed_offset_m', default_value='0.0',
                               description='The one commissioned number the fixed_offset observation '
                                           'model uses, in metres.'),
+        DeclareLaunchArgument('manager_learned_correction_path', default_value='',
+                              description='Packaged neural box-correction artifact. Required by the '
+                                          'learned_nn and learned_nn_gated observation models and '
+                                          'ignored by every other one.'),
+        DeclareLaunchArgument('manager_learned_gate_reject', default_value='0.5',
+                              description='learned_nn_gated: refuse a reading whose estimated '
+                                          'usability falls below this.'),
+        DeclareLaunchArgument('manager_learned_gate_good', default_value='0.8',
+                              description='learned_nn_gated: above this the reading keeps the '
+                                          'commissioned covariance; between the two it is widened.'),
+        DeclareLaunchArgument('manager_learned_gate_soft_sigma_m', default_value='0.10',
+                              description='learned_nn_gated: extra sigma, in metres, added at the '
+                                          'reject end of the intermediate usability band.'),
         DeclareLaunchArgument('manager_max_measurement_age_s', default_value='1.25',
                               description='Maximum correction age admitted by selection or fusion; should not exceed planner freshness.'),
         DeclareLaunchArgument('manager_age_decay_s', default_value='1.25'),

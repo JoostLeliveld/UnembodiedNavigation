@@ -250,7 +250,9 @@ def test_compute_update_matches_legacy_pixel_formula():
         Sigma_y = B @ B.T + 0.5 * np.eye(2)
         meas = rng.normal(size=2)
         mu_y = rng.normal(size=2)
-        gain_scale = float(rng.uniform(0.5, 1.0))
+        # Unit gain preserves the historical optimal-Kalman arithmetic. Scaled
+        # gains are checked against Joseph form separately, not the old defect.
+        gain_scale = 1.0
 
         lin = bc.Linearization(
             z=meas, mu_y=mu_y, Gamma=Gamma, Sigma_y=Sigma_y,

@@ -22,12 +22,12 @@ conditions:
   H0:
     label: H0_heading_anchored_to_odometry
     heading_update_mode: camera_xy_only
-    manager_fusion_rule: network
+    manager_fusion_rule: joint_network
     manager_observation_model: hull
   H1:
     label: H1_heading_coupled_through_the_covariance
     heading_update_mode: coupled
-    manager_fusion_rule: network
+    manager_fusion_rule: joint_network
     manager_observation_model: hull
 
 tasks:

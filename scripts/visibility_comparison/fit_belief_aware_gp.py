@@ -401,6 +401,13 @@ def _fit_predict_latent_gp(
     *,
     length_scale: float,
 ) -> tuple[np.ndarray, np.ndarray]:
+    gp = _fit_latent_gp_model(X_fit, latent_fit, alpha, length_scale=length_scale)
+    mu_f, sigma_f = gp.predict(np.asarray(query_X, dtype=float), return_std=True)
+    return np.asarray(mu_f, dtype=float), np.clip(np.asarray(sigma_f, dtype=float), 0.0, None)
+
+
+def _fit_latent_gp_model(X_fit, latent_fit, alpha, *, length_scale):
+    """Canonical fitted regressor, reusable across queries without refactorization."""
     from sklearn.gaussian_process import GaussianProcessRegressor
     from sklearn.gaussian_process.kernels import RBF
 
@@ -411,8 +418,7 @@ def _fit_predict_latent_gp(
         normalize_y=True,
         optimizer=None,
     ).fit(np.asarray(X_fit, dtype=float), np.asarray(latent_fit, dtype=float))
-    mu_f, sigma_f = gp.predict(np.asarray(query_X, dtype=float), return_std=True)
-    return np.asarray(mu_f, dtype=float), np.clip(np.asarray(sigma_f, dtype=float), 0.0, None)
+    return gp
 
 
 def _interp_grid(xs: np.ndarray, ys: np.ndarray, grid: np.ndarray, X: np.ndarray) -> np.ndarray:

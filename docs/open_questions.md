@@ -1,8 +1,21 @@
 # What is unresolved
 
+> **2026-09-06 update:** this document preserves the earlier question history. Current
+> thesis decisions are in [ICRA_STATUS.md](ICRA_STATUS.md); verified runtime defects and
+> outstanding command/filter policies are in [runtime_integrity_audit.md](runtime_integrity_audit.md).
+> The registry now names separate diagnostic selections. The old fixed-route campaign
+> below is still invalidated; its numbers do not become current through these repairs.
+
 Current as of 2026-08-29. Each entry says what is not known, why it matters, and what would
 settle it. Everything here was checked against the code and the drives on disk on that date;
 re-check before acting on any of it.
+
+> **Six of these were answered on 2026-08-31. The answers live in
+> [`ANSWERS.md`](ANSWERS.md)** — Q1 (heading drift), Q2 (shared error), Q6 (the tail),
+> Q7 (speed), Q8 (what ends drives, *revised*), and the F3 outlier. Q5 was unblocked by adding
+> `pred_h_px` to the observation log (schema 5) and is waiting on the drives that carry it.
+> Q3 and Q4 remain open. **Entries below are kept as the original statement of each question;
+> where `ANSWERS.md` disagrees, `ANSWERS.md` is current.**
 
 Companion to [`PLAN.md`](../PLAN.md) (what the paper has to earn),
 [`HOW_IT_WORKS.md`](../HOW_IT_WORKS.md) (how the pipeline works) and
@@ -26,7 +39,7 @@ complete, provenance-homogeneous set of its runs, there is no fusion number to r
 
 ## Open questions, in order of how much they could move a conclusion
 
-### 1. How far does the operational heading actually drift?
+### 1. How far does the operational heading actually drift? — **ANSWERED, see `ANSWERS.md` Q1**
 
 The camera measures position only. In `coupled` mode a position correction may move heading
 through the position–heading cross-covariance; the bottom-centre is only weakly
@@ -41,7 +54,7 @@ that log the estimator heading and its joint covariance and score heading at its
 This matters beyond heading: heading error is shared by every camera, so if it is large, the
 independence assumption fails in the one way fusion cannot survive (see question 2).
 
-### 2. How much of the cameras' error is shared?
+### 2. How much of the cameras' error is shared? — **ANSWERED, see `ANSWERS.md` Q2**
 
 If several cameras err the same way — through the robot-shape model, the projection, common
 timing, or a shared heading error — then adding precisions makes the fused covariance
@@ -74,20 +87,25 @@ drops the usable rate from 0.70 to 0.56. So the availability map must be learned
 quality the robot will actually have. The truth-free operational dataset that needs does not
 exist yet.
 
-### 5. Why are 21% of admitted boxes taller than the projected shape predicts?
+### 5. Why are 21% of admitted boxes taller than the projected shape predicts? — **ANSWERED, see `ANSWERS.md` Q5**
 
 They carry about 1.2 cm more lean than the rest, and occlusion does not explain it. Never
 chased. It is a property of the observation model, so it would move every arm equally.
 
-### 6. What owns the tail?
+### 6. What owns the tail? — **ANSWERED, see `ANSWERS.md` Q6**
 
 On the pre-repair drives, camera C read several times worse than any other camera at the same
 range, and camera A was worst closer than 6 m. Both need re-measuring on schema-4 drives
 before anything is concluded — the tail may simply be the alignment defect.
 
+**Answered, and it was neither.** Re-measured on 4,459 schema-4 readings: the tail is a
+NEAR-range effect (9.3% under 6 m, 0.1% beyond 16 m) caused by a ~1.0 cm range-independent
+error floor the pixel-noise covariance model omits. Camera B — the *closest* and most accurate
+camera — carries the worst tail rate at 10.6%. See `ANSWERS.md` Q6.
+
 ---
 
-### 7. Does the method survive an operational driving speed?
+### 7. Does the method survive an operational driving speed? — **ANSWERED, see `ANSWERS.md` Q7**
 
 Measured on 2026-08-29, one drive per speed, same route, same arm (F4), same seed —
 indicative, not a result:
@@ -135,7 +153,7 @@ What is not known: whether the degradation is the correction rate alone, or also
 blur and a wider prediction-to-detection disagreement at the admission gate. Separating
 those needs the detector rate varied independently of the speed.
 
-### 8. Heading is unobservable from the measurement, and it is what ends drives
+### 8. Heading is unobservable from the measurement, and it is what ends drives — **REVISED, see `ANSWERS.md` Q8**
 
 Assumption A8 in `HOW_IT_WORKS.md` — *"the heading used in h is good enough to treat as
 known"* — is listed there as the one untested assumption. It is now tested, at 1 m/s, and it
@@ -206,14 +224,12 @@ What follows:
 
 ## Known limitations of the current implementation
 
-**The covariance update is only valid at unit gain.** `belief_correction.compute_update` uses
-`next_S = S_eff − gain_scale · Γ Σ⁻¹ Γᵀ`, which is the Kalman form and is correct only when
-`gain_scale == 1`. The fused metric path — the one every fusion arm uses — always passes 1.0,
-so the active experiment is unaffected. `gain_scale` is set to something else only by
-`PixelMeasurementSource`, which scales the gain by the visibility GP's predicted visibility.
-That path is the previous confidence-based method, retained as a planning baseline. If it is
-driven again, the covariance it reports is inconsistent with its own mean and the update
-should be switched to Joseph form first.
+**Scaled-gain covariance: historical defect, repaired.** The older implementation used
+`next_S = S_eff − gain_scale · Γ Σ⁻¹ Γᵀ`, valid only at unit gain. The current
+`belief_correction.compute_update` uses the Joseph form with its actual gain. The active
+metric path retains unit gain. Regression checks cover the current implementation;
+three locked historical pixel traces are absent, so those replay checks remain skipped.
+This numerical repair does not validate the pixel path's noise interpretation.
 
 **`used == 1` is not a clean per-camera sample.** A reading is admitted partly by agreeing
 with the other cameras, which is close to agreeing with the truth. Report admitted and

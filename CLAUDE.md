@@ -2,15 +2,16 @@
 
 ROS 2 + Gazebo thesis repo: external-camera reliability for warehouse robot navigation.
 
-## The active direction: FUSION
+## The active direction: characterize before modelling
 
-Three paper directions exist in this repository — **B fusion on a fixed route (ACTIVE)**,
-A availability-aware planning (parked, blocked on data that does not exist), and C learned
-bias correction (parked deliberately, because it competes with the observation model B holds
-constant). `PLAN.md` opens with the map.
+The paper follows one staged chain: **camera/YOLO characterization -> bias gate -> conditional
+measurement covariance -> truth-free covariance estimation -> per-camera availability ->
+selection/fusion -> an otherwise unchanged belief-aware planner**. The current stage is the
+first one. `PLAN.md` defines the gates, and `docs/NEXT_MEETING.md` defines the immediate
+presentation.
 
-**Assume any question is about B unless told otherwise**, and never present a parked
-direction's artifacts as a current result.
+Never present an existing fusion, planning, or learned-correction artifact as a current
+result merely because it exists. It must pass the preceding gate and the evidence contract.
 
 ## What this actually does (read this first)
 

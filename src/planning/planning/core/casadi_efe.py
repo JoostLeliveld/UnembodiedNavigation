@@ -511,6 +511,7 @@ def visibility_aware_unicycle_efe_ca(
     nogo_belief_cost=None,
     R_cond_state=None,
     obs_bias_state=None,
+    R_plan_state=None,
 ):
     """
     Core Expected Free Energy functional for a unicycle agent.
@@ -611,7 +612,10 @@ def visibility_aware_unicycle_efe_ca(
             continue
 
         # --- FROZEN precision-blend path (do not modify) ----------------------
-        R_plan = _blend_observation_covariance_ca(p_vis_eff, params)
+        # An opt-in network supplies a full covariance in the SAME fixed camera
+        # cost chart. With no adapter, the published single-camera path is unchanged.
+        R_plan = (_blend_observation_covariance_ca(p_vis_eff, params)
+                  if R_plan_state is None else R_plan_state(m, S))
         if approx == 'ET1':
             mu, Sigma, Gamma = et1_ca(m, S, R_plan, g, dg)
         elif approx == 'ET2':
@@ -670,11 +674,14 @@ def make_efe_valgrad_fn(
     nogo_belief_cost=None,
     R_cond_state=None,
     obs_bias_state=None,
+    R_plan_state=None,
 ):
     _require_casadi()
     approx = str(approx or 'ET1').upper()
     if approx not in ('ET1', 'ET2'):
         raise RuntimeError("CasADi EFE path supports only ET1 or ET2")
+    if R_plan_state is not None and params.use_hit_miss_mixture:
+        raise RuntimeError('network score proxy cannot be used as a Bernoulli hit/miss likelihood')
     if (R_cond_state is not None or obs_bias_state is not None) and not params.use_hit_miss_mixture:
         # Fail loudly rather than silently ignoring them: the frozen precision-blend
         # path has no place to put a spatially varying R_cond or a bias term, and a
@@ -734,6 +741,7 @@ def make_efe_valgrad_fn(
         nogo_belief_cost=nogo_belief_cost,
         R_cond_state=R_cond_state,
         obs_bias_state=obs_bias_state,
+        R_plan_state=R_plan_state,
     )
     gradient = ca.gradient(objective, u_flat)
     valgrad = ca.Function(

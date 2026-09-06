@@ -22,6 +22,7 @@ from std_msgs.msg import Float64MultiArray, String
 from tf2_geometry_msgs import do_transform_pose
 
 from experiments.core.manifest import create_run_dir, snapshot_configs, write_manifest
+from experiments.core.camera_opportunity_log import CameraOpportunityLog
 from experiments.core.world_profiles import load_profile, compute_look_at_from_pose
 from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
@@ -146,6 +147,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('frame_sanity_start_tolerance_yaw_rad', 0.5)
         self.declare_parameter('use_visibility_model', False)
         self.declare_parameter('visibility_artifact_path', '')
+        self.declare_parameter('camera_network_artifact_path', '')
         self.declare_parameter('risk_weight_obs', 1.0)
         self.declare_parameter('ambiguity_weight', 1.0)
         self.declare_parameter('goal_sigma_uv', 2.0)
@@ -336,6 +338,7 @@ class ExperimentLogger(Node):
         self.frame_sanity_start_tolerance_yaw_rad = float(self.get_parameter('frame_sanity_start_tolerance_yaw_rad').value)
         self.use_visibility_model = bool(self.get_parameter('use_visibility_model').value)
         self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value)
+        self.camera_network_artifact_path = str(self.get_parameter('camera_network_artifact_path').value)
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
         self.ambiguity_weight = float(self.get_parameter('ambiguity_weight').value)
         self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
@@ -612,7 +615,20 @@ class ExperimentLogger(Node):
             #       contact-channel liveness is recorded explicitly.
             #   4 = every published fused correction carries source_batch_id through
             #       the filter and produces one terminal assimilation record.
-            'logging_schema_version': 4,
+            #   5 = fusion_observations.csv carries pred_h_px / pred_w_px, the box
+            #       the hull model predicted from the pose the correction was made
+            #       from, so the height ratio is reconstructable from a drive.
+            #   6 = fusion_observations.csv carries raw_obs_x / raw_obs_y, the
+            #       UNCORRECTED back-projection of the same box. obs_x/obs_y is what
+            #       the runtime observation model decided the reading means; these are
+            #       what the camera saw. With both, one drive supports replaying any
+            #       interpretation on identical readings instead of needing a separate
+            #       drive per interpretation.
+            #   7 = raw per-camera opportunities (including misses and refusals
+            #       upstream of manager selection) retained in camera_opportunities.jsonl.
+            'logging_schema_version': 7,
+            'camera_opportunity_log': 'camera_opportunities.jsonl',
+            'camera_opportunity_scope': 'all received detector outputs; not all scheduled sensor frames',
             'timestamp': datetime.now().isoformat(),
             'method': self.method or self.planner,
             'perception_backend': self.perception_backend,
@@ -637,6 +653,7 @@ class ExperimentLogger(Node):
             'use_obs_risk': self.use_obs_risk,
             'use_visibility_model': self.use_visibility_model,
             'visibility_artifact_path': self.visibility_artifact_path,
+            'camera_network_artifact_path': self.camera_network_artifact_path,
             'risk_weight_obs': self.risk_weight_obs,
             'ambiguity_weight': self.ambiguity_weight,
             'goal_sigma_uv': self.goal_sigma_uv,
@@ -788,8 +805,19 @@ class ExperimentLogger(Node):
         }
         manifest_data['visibility_artifact_sha256'] = _sha256_file(
             self.visibility_artifact_path)
+        manifest_data['camera_network_artifact_sha256'] = _sha256_file(
+            self.camera_network_artifact_path)
+        if self.camera_network_artifact_path:
+            manifest_data['planner_field_semantics'] = 'IWAI detector-score precision proxy; not a measurement covariance or calibrated posterior'
+            manifest_data['planner_p_vis_semantics'] = 'mean expected detector score across artifact cameras; not probability of a usable observation'
         manifest_data['manager_commissioned_calibration_sha256'] = _sha256_file(
             str(manager_settings.get('manager_commissioned_calibration_path', '') or '')
+        )
+        # The commissioned world-plane covariance table, hashed for the same reason: a drive
+        # must not be scoreable against a table that has since been refitted.
+        manifest_data['manager_commissioned_world_covariance_sha256'] = _sha256_file(
+            str(manager_settings.get(
+                'manager_commissioned_world_covariance_path', '') or '')
         )
         manifest_data['campaign_config_path'] = self.campaign_config_path
         manifest_data['campaign_config_sha256'] = _sha256_file(
@@ -1170,7 +1198,18 @@ class ExperimentLogger(Node):
             # What the detector said about this reading. Recorded so the question "does the
             # detector's own confidence predict how wrong it was?" can be answered from a
             # drive; nothing in the runtime weights anything by these.
-            'conf', 'conf_raw', 'bbox_h_px', 'bbox_w_px', 'range_m', 'obs_stamp',
+            'conf', 'conf_raw', 'bbox_h_px', 'bbox_w_px',
+            # The box the hull model predicted from the pose the correction was made
+            # from. Detected over predicted is the height ratio; without this column it
+            # cannot be reconstructed from a drive.
+            'pred_h_px', 'pred_w_px',
+            # The UNCORRECTED back-projection of the same box, before the runtime
+            # observation model rewrote it. `obs_x/obs_y` is what the steering model
+            # decided the reading means; these two are what the camera actually saw. With
+            # both, one recorded drive supports replaying any interpretation on identical
+            # readings, instead of needing a separate drive per interpretation.
+            'raw_obs_x', 'raw_obs_y',
+            'range_m', 'obs_stamp',
         ])
         self._fusion_obs_last_stamp = None
         self._fusion_decision_seq = 0
@@ -1292,6 +1331,18 @@ class ExperimentLogger(Node):
                 'camera_relative_bearing_deg',
                 'seed',
             ])
+
+        self.camera_opportunity_file = open(
+            os.path.join(self.run_dir, 'camera_opportunities.jsonl'), 'w', encoding='utf-8')
+        self.camera_opportunity_log = CameraOpportunityLog(self.camera_opportunity_file)
+        self._camera_opportunity_subscriptions = [
+            self.create_subscription(
+                String, f'/perception/camera_observation/{camera}',
+                lambda msg, c=camera: self.camera_opportunity_log.append(
+                    c, msg.data, self.get_clock().now().nanoseconds * 1e-9),
+                100)
+            for camera in ('camera_A', 'camera_B', 'camera_C', 'camera_D', 'camera_E')
+        ]
 
         rate = float(self.get_parameter('log_rate').value)
         self.create_timer(1.0 / max(rate, 0.1), self._log_once)
@@ -1700,6 +1751,10 @@ class ExperimentLogger(Node):
                 observation.get('conf_raw', float('nan')),
                 observation.get('bbox_h_px', float('nan')),
                 observation.get('bbox_w_px', float('nan')),
+                observation.get('pred_h_px', float('nan')),
+                observation.get('pred_w_px', float('nan')),
+                observation.get('raw_obs_x', float('nan')),
+                observation.get('raw_obs_y', float('nan')),
                 observation.get('range_m', float('nan')),
                 obs_stamp,
             ])
@@ -3474,6 +3529,8 @@ class ExperimentLogger(Node):
                 self.fusion_obs_file.close()
             if getattr(self, 'assimilation_file', None) is not None:
                 self.assimilation_file.close()
+            if getattr(self, 'camera_opportunity_file', None) is not None:
+                self.camera_opportunity_file.close()
         finally:
             super().destroy_node()
 

@@ -33,7 +33,7 @@ from fusion_examples import draw_moment, load as load_moments   # noqa: E402
 
 STORY_ROOT = D.REPO / "logs/studies/fusion_on_fixed_routes"
 LABEL = {"F1": "single best\ncamera", "F2": "distance and\nangle weights",
-         "F3": "precisions\nadd", "F4": "network,\ndivided by N",
+         "F3": "precisions\nadd", "F4": "joint network\nestimator",
          "O1": "raw box as\nthe robot", "O2": "box plus a\nfixed offset"}
 COLOUR = {"F1": D.MUTED, "F2": D.OLD, "F3": D.BAD, "F4": D.GOOD,
           "O1": "#b06a3b", "O2": "#7a6a3b"}
@@ -246,7 +246,7 @@ def main() -> int:
         ax.set_title("What the detector's box was taken to mean, measured in a filter",
                      loc="left", fontsize=17, color=D.INK)
         fig.text(0.005, -0.05,
-                 "Same fusion rule (the network, divided by N), same route: only the meaning "
+                 "Same joint network estimator, same route: only the meaning "
                  "of the box differs.\nCommissioning measured that gap at 24-36 cm on single "
                  "sightings; this is what it costs a filter that fuses many of them.\n"
                  "Each violin contains five per-run median errors (paired seeds).",

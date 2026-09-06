@@ -1,0 +1,431 @@
+{
+  "local_stop": {
+    "origin": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "target": [
+      1.0,
+      0.0
+    ],
+    "published": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.2,
+        0.1
+      ]
+    ],
+    "current_belief": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "current_goal_x": 1.0,
+    "installed_at": 10.0
+  },
+  "local_fatal": {
+    "origin": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "target": [
+      1.0,
+      0.0
+    ],
+    "published": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.2,
+        0.1
+      ]
+    ],
+    "current_belief": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "current_goal_x": 1.0,
+    "installed_at": 10.0
+  },
+  "local_correction": {
+    "origin": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "target": [
+      1.0,
+      0.0
+    ],
+    "published": [
+      [
+        0.2,
+        0.1
+      ]
+    ],
+    "current_belief": [
+      0.0,
+      2.0,
+      1.0
+    ],
+    "current_goal_x": 1.0,
+    "installed_at": 10.0
+  },
+  "local_goal": {
+    "origin": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "target": [
+      1.0,
+      0.0
+    ],
+    "published": [
+      [
+        0.2,
+        0.1
+      ]
+    ],
+    "current_belief": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "current_goal_x": -1.0,
+    "installed_at": 10.0
+  },
+  "local_delayed": {
+    "origin": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "target": [
+      1.0,
+      0.0
+    ],
+    "published": [
+      [
+        0.2,
+        0.1
+      ]
+    ],
+    "current_belief": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "current_goal_x": 1.0,
+    "installed_at": 11.0
+  },
+  "solver_after_stop": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.2,
+      0.3
+    ]
+  ],
+  "solver_after_fatal": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.2,
+      0.3
+    ]
+  ],
+  "full_solver_correction": {
+    "published": [
+      [
+        0.2,
+        0.1
+      ]
+    ],
+    "current_belief": [
+      0.0,
+      2.0,
+      1.0
+    ],
+    "current_goal_x": 1.0,
+    "installed_at": 10.0,
+    "pending_start": null
+  },
+  "full_solver_goal": {
+    "published": [
+      [
+        0.2,
+        0.1
+      ]
+    ],
+    "current_belief": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "current_goal_x": -1.0,
+    "installed_at": 10.0,
+    "pending_start": null
+  },
+  "full_solver_delay": {
+    "published": [
+      [
+        0.2,
+        0.1
+      ]
+    ],
+    "current_belief": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "current_goal_x": 1.0,
+    "installed_at": 20.0,
+    "pending_start": null
+  },
+  "planner_clock_reset": {
+    "published": [
+      [
+        0.2,
+        0.1
+      ]
+    ],
+    "age": 0.0
+  },
+  "fractional_expiry": {
+    "times": [
+      10.0,
+      10.1,
+      10.2,
+      10.3
+    ],
+    "published": [
+      [
+        0.2,
+        0.1
+      ],
+      [
+        0.2,
+        0.1
+      ],
+      [
+        0.2,
+        0.1
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ],
+    "intended_expiry": 10.25
+  },
+  "base_missing_latency_start": {
+    "published": [
+      [
+        0.2,
+        0.3
+      ]
+    ],
+    "skip": 0.0
+  },
+  "latency_after_stop": {
+    "published": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.15,
+        0.0
+      ]
+    ],
+    "skipped_steps": 2,
+    "assumed_motion_s": 0.6000000000000001,
+    "installed_at": 10.5
+  },
+  "latency_fractional_boundary": [
+    0.05,
+    0.0
+  ],
+  "acceptance_missing_bounds_and_rollout_fields": [
+    [
+      2.0,
+      3.0
+    ]
+  ],
+  "reset_receipt_first": [
+    [
+      0.18567297802325874,
+      -0.035313563005277715
+    ],
+    [
+      0.1879768032501669,
+      0.00968621667133112
+    ]
+  ],
+  "reset_watchdog_first": [
+    [
+      0.18567297802325874,
+      -0.035313563005277715
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.1879768032501669,
+      0.00968621667133112
+    ]
+  ],
+  "expiry_leaves_nonzero_execution_diagnostic": {
+    "published": [
+      [
+        0.2,
+        0.1
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ],
+    "last_diagnostic_command": [
+      0.2,
+      0.1
+    ]
+  },
+  "adapter_silence": {
+    "output": [
+      [
+        0.18567297802325874,
+        -0.035313563005277715
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ],
+    "diagnostics": 1,
+    "last_receipt": 10.0,
+    "stopped": true
+  },
+  "adapter_reset": {
+    "output": [
+      [
+        0.18567297802325874,
+        -0.035313563005277715
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ],
+    "diagnostics": 1,
+    "last_receipt": 10.0,
+    "stopped": true
+  },
+  "adapter_pause": {
+    "output": [
+      [
+        0.18567297802325874,
+        -0.035313563005277715
+      ]
+    ],
+    "diagnostics": 1,
+    "last_receipt": 10.0,
+    "stopped": false
+  },
+  "adapter_restart": {
+    "output": [],
+    "diagnostics": 0,
+    "last_receipt": null,
+    "stopped": true
+  },
+  "adapter_backlog": {
+    "output": [
+      [
+        0.18567297802325874,
+        -0.035313563005277715
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.1879768032501669,
+        0.00968621667133112
+      ]
+    ],
+    "diagnostics": 2,
+    "last_receipt": 10.610000000000001,
+    "stopped": false
+  },
+  "adapter_nonfinite": {
+    "output": [
+      [
+        0.18567297802325874,
+        -0.035313563005277715
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ],
+    "diagnostics": 1,
+    "last_receipt": 10.0,
+    "stopped": true
+  },
+  "adapter_clip": {
+    "output": [
+      [
+        0.18567297802325874,
+        -0.035313563005277715
+      ],
+      [
+        0.22,
+        1.0
+      ]
+    ],
+    "diagnostics": 2,
+    "last_receipt": 10.0,
+    "stopped": false
+  },
+  "cadence_10hz": {
+    "deliveries": 10,
+    "integral_v_dt_m": 0.1924132937401481,
+    "integral_w_dt_rad": 0.003784996596832647
+  },
+  "cadence_20hz": {
+    "deliveries": 20,
+    "integral_v_dt_m": 0.193584986380107,
+    "integral_w_dt_rad": -0.002032524013079694
+  },
+  "cadence_10hz_duplicates": {
+    "deliveries": 20,
+    "integral_v_dt_m": 0.19675892355566654,
+    "integral_w_dt_rad": 0.0005187289388138827
+  },
+  "cadence_10hz_plus_4hz": {
+    "deliveries": 14,
+    "integral_v_dt_m": 0.19224505109714596,
+    "integral_w_dt_rad": 0.014883433969484935
+  },
+  "logger_mixed_command_events": {
+    "cmd_v": 0.0,
+    "cmd_raw_v": 0.2,
+    "cmd_raw_stamp": 10.1,
+    "cmd_noise_v_error": -0.2
+  }
+}
+31 deterministic cases completed

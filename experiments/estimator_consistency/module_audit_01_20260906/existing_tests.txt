@@ -1,0 +1,21 @@
+..................sss................................................... [ 50%]
+.....................F................................................   [100%]
+=================================== FAILURES ===================================
+____ test_inflight_plan_cannot_publish_motion_after_a_fatal_integrity_stop _____
+
+    def test_inflight_plan_cannot_publish_motion_after_a_fatal_integrity_stop():
+        node = command_node()
+        node._fatal_stop_triggered = True
+        node._pending_plan_started_at = None
+        node.latency_compensate_plan_handoff = False
+        node._result_safe_to_execute = lambda result: (True, '')
+        node._after_plan_result(SimpleNamespace(controls=np.array([[.2, .3]])))
+        assert node.cmd_pub.messages
+>       assert all(m.linear.x == m.angular.z == 0. for m in node.cmd_pub.messages)
+E       assert False
+E        +  where False = all(<generator object test_inflight_plan_cannot_publish_motion_after_a_fatal_integrity_stop.<locals>.<genexpr> at 0x75e2ffd94d60>)
+
+tests/planning/test_runtime_transactions.py:182: AssertionError
+=========================== short test summary info ============================
+FAILED tests/planning/test_runtime_transactions.py::test_inflight_plan_cannot_publish_motion_after_a_fatal_integrity_stop
+1 failed, 138 passed, 3 skipped in 3.12s

@@ -1,7 +1,7 @@
 # How much does the per-camera measurement covariance need to know?
 #
 # Rung by rung, stopping as soon as the next one fails to earn itself. Same route, same
-# fusion rule (network pooling), same observation model (hull) -- only what the covariance
+# fusion rule (joint network estimator), same observation model (hull) -- only what the covariance
 # is allowed to say about each camera changes:
 #
 #   K0  one commissioned pixel-noise number, shared by every camera
@@ -21,17 +21,17 @@ launch_file: warehouse_primary_comparison.launch.py
 conditions:
   K0:
     label: K0_one_pooled_pixel_noise_number
-    manager_fusion_rule: network
+    manager_fusion_rule: joint_network
     manager_observation_model: hull
     manager_commissioned_per_camera_sigma: false
   K1:
     label: K1_one_pixel_noise_number_per_camera
-    manager_fusion_rule: network
+    manager_fusion_rule: joint_network
     manager_observation_model: hull
     manager_commissioned_per_camera_sigma: true
   K2:
     label: K2_pixel_noise_recommissioned_from_the_drives
-    manager_fusion_rule: network
+    manager_fusion_rule: joint_network
     manager_observation_model: hull
     manager_commissioned_per_camera_sigma: true
     # Not the commissioning capture's numbers -- the network's own, measured from how far

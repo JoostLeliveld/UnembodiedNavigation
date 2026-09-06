@@ -60,7 +60,22 @@ def observation(camera_id, x, y, *, seconds, var=0.03):
 def make_per_camera_node(**kwargs):
     node = make_state_node(**kwargs)
     node.state_correction_mode = 'per_camera'
+    node._seen_map_observation_stamps = {}
     return node
+
+
+def test_simultaneous_distinct_cameras_both_contribute_once():
+    node = make_per_camera_node(belief_cov=.05, belief_stamp_s=9.9)
+    node.heading_update_mode = 'coupled'
+    batch = [observation('camera_A', 0., 0., seconds=9.95, var=.01),
+             observation('camera_B', 0., 0., seconds=9.95, var=.01)]
+    node._apply_map_observations(batch)
+    expected = 1./(1./.05 + 2./.01)
+    np.testing.assert_allclose(node.belief_S[:2, :2], np.eye(2)*expected, atol=1e-10)
+    assert all(d[IDX_ACCEPTED] == 1. for d in node.pixel_correction_diag_pub.published)
+    before = node.belief_S.copy()
+    node._apply_map_observations(batch)
+    np.testing.assert_array_equal(node.belief_S, before)
 
 
 # --------------------------------------------------------------------------

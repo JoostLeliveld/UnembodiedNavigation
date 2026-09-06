@@ -121,6 +121,7 @@ def make_node(
 ):
     node = object.__new__(UnicyclePlannerNode)
     node._data_lock = threading.RLock()
+    node._correction_lock = threading.RLock()
     node.belief_m = np.array([belief_xy[0], belief_xy[1], 0.0], dtype=float)
     node.belief_S = np.eye(3) * belief_cov
     node.belief_stamp = stamp(belief_stamp_s)

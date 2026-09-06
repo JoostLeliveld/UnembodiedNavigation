@@ -1,0 +1,3433 @@
+{
+  "source_identity": {
+    "src/reliability/reliability/fusion.py": {
+      "sha256": "3970ddb0d8f4b92b879a192cc98630a84e9ccceb496bf6ae4bd299c8022b8609",
+      "registered_protocol_sha256": "3970ddb0d8f4b92b879a192cc98630a84e9ccceb496bf6ae4bd299c8022b8609",
+      "matches_protocol": true
+    },
+    "src/reliability/reliability/contracts.py": {
+      "sha256": "416b34b274d1525356829d5df09a36832cb74e08fa2a6d190e7321c41a09b1eb",
+      "registered_protocol_sha256": null,
+      "matches_protocol": null
+    },
+    "src/reliability/reliability/camera_manager.py": {
+      "sha256": "41fb3146ea83b17bca13616c4687d588d7265e64723466abd6706b80d9035dd4",
+      "registered_protocol_sha256": null,
+      "matches_protocol": null
+    },
+    "src/reliability/reliability/covariance_mapping.py": {
+      "sha256": "43d2867df113d73e378f8c531726d5605b50c8505c71c225fc708957406a7bfd",
+      "registered_protocol_sha256": null,
+      "matches_protocol": null
+    },
+    "src/reliability/reliability/bias_floor.py": {
+      "sha256": "177aa57ae4c340d57ea44aeb4c5a6ad82908abee94fdbcb248615d211cc4f581",
+      "registered_protocol_sha256": null,
+      "matches_protocol": null
+    },
+    "src/reliability/reliability/replay.py": {
+      "sha256": "0fce80b1c25e751a78725f47095607087cfae839b8941dd4ff3f40bb0bbcc38e",
+      "registered_protocol_sha256": null,
+      "matches_protocol": null
+    },
+    "src/reliability/reliability/projection.py": {
+      "sha256": "fcbb865293096086d71738fc084677a22cabf9c579a2ba3c666ddb7d5325b119",
+      "registered_protocol_sha256": null,
+      "matches_protocol": null
+    },
+    "src/reliability/reliability/reference_calibration.py": {
+      "sha256": "442d2ad7876f6a95f537917acb358cce1ea0e3e5cf68ca71fef6e58bd7ac3542",
+      "registered_protocol_sha256": "442d2ad7876f6a95f537917acb358cce1ea0e3e5cf68ca71fef6e58bd7ac3542",
+      "matches_protocol": true
+    },
+    "src/reliability/reliability/nodes/camera_manager_node.py": {
+      "sha256": "5e11bd202de065a448154cc18192e63c507b2da058051a34e9ac14929d14c9a6",
+      "registered_protocol_sha256": "5e11bd202de065a448154cc18192e63c507b2da058051a34e9ac14929d14c9a6",
+      "matches_protocol": true
+    },
+    "src/planning/planning/nodes/unicycle_planner_node.py": {
+      "sha256": "56100b37b8e9351d1cee3d4e089357503e53838db428c4261e0bf1a11f76514f",
+      "registered_protocol_sha256": "56100b37b8e9351d1cee3d4e089357503e53838db428c4261e0bf1a11f76514f",
+      "matches_protocol": true
+    },
+    "src/planning/planning/core/camera_network.py": {
+      "sha256": "3fa1dc1c86a2ed81627445371d63cba044160ab1728ffc1a3c4416e0be7f06b2",
+      "registered_protocol_sha256": null,
+      "matches_protocol": null
+    },
+    "experiments/fusion_on_fixed_routes/aligned.py": {
+      "sha256": "dabd8b9167af3f11ee21c7a42dbd795b847300c63ac0c69af3cc0167d3965f80",
+      "registered_protocol_sha256": null,
+      "matches_protocol": null
+    },
+    "experiments/icra_commissioning/network_navigation_runtime_pilot.yaml": {
+      "sha256": "72d7318718c9510f5b4bb570927be0650f16e4c0186440562e6c8a2cf167d380",
+      "registered_protocol_sha256": "72d7318718c9510f5b4bb570927be0650f16e4c0186440562e6c8a2cf167d380",
+      "matches_protocol": true
+    }
+  },
+  "rules": {
+    "zero": {
+      "inputs": [],
+      "rules": {
+        "best_single": {
+          "error": "ValueError",
+          "message": "at least one observation is required"
+        },
+        "distance_angle": {
+          "error": "ValueError",
+          "message": "at least one observation is required"
+        },
+        "independent": {
+          "error": "ValueError",
+          "message": "at least one observation is required"
+        },
+        "joint_network": {
+          "error": "ValueError",
+          "message": "at least one observation is required"
+        }
+      }
+    },
+    "one": {
+      "inputs": [
+        {
+          "camera_id": "camera_A",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            1.0,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.003
+            ],
+            [
+              0.003,
+              0.04
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_A",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        }
+      ],
+      "rules": {
+        "best_single": {
+          "mean": [
+            1.0,
+            2.0
+          ],
+          "covariance": [
+            [
+              0.01,
+              0.003
+            ],
+            [
+              0.003,
+              0.04
+            ]
+          ],
+          "used": [
+            "camera_A"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              1.0,
+              2.0
+            ],
+            "covariance": [
+              [
+                0.01,
+                0.003
+              ],
+              [
+                0.003,
+                0.04
+              ]
+            ],
+            "used": [
+              "camera_A"
+            ],
+            "rejected": []
+          }
+        },
+        "distance_angle": {
+          "mean": [
+            1.0,
+            2.0
+          ],
+          "covariance": [
+            [
+              0.01,
+              0.003
+            ],
+            [
+              0.003,
+              0.04
+            ]
+          ],
+          "used": [
+            "camera_A"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              1.0,
+              2.0
+            ],
+            "covariance": [
+              [
+                0.01,
+                0.003
+              ],
+              [
+                0.003,
+                0.04
+              ]
+            ],
+            "used": [
+              "camera_A"
+            ],
+            "rejected": []
+          }
+        },
+        "independent": {
+          "mean": [
+            0.9999999999999998,
+            1.9999999999999996
+          ],
+          "covariance": [
+            [
+              0.009999999999999998,
+              0.002999999999999999
+            ],
+            [
+              0.002999999999999999,
+              0.039999999999999994
+            ]
+          ],
+          "used": [
+            "camera_A"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.9999999999999998,
+              1.9999999999999996
+            ],
+            "covariance": [
+              [
+                0.009999999999999998,
+                0.002999999999999999
+              ],
+              [
+                0.002999999999999999,
+                0.039999999999999994
+              ]
+            ],
+            "used": [
+              "camera_A"
+            ],
+            "rejected": []
+          }
+        },
+        "joint_network": {
+          "mean": [
+            1.0,
+            2.0
+          ],
+          "covariance": [
+            [
+              0.01,
+              0.003
+            ],
+            [
+              0.003,
+              0.04
+            ]
+          ],
+          "used": [
+            "camera_A"
+          ],
+          "rejected": [],
+          "weights": [
+            1.0
+          ],
+          "effective_camera_count": 1.0,
+          "optimizer_mean": [
+            1.0,
+            2.0
+          ],
+          "optimizer_gradient_norm": 0.0,
+          "mean_difference_m": 0.0,
+          "with_runtime_metric_gate": {
+            "mean": [
+              1.0,
+              2.0
+            ],
+            "covariance": [
+              [
+                0.01,
+                0.003
+              ],
+              [
+                0.003,
+                0.04
+              ]
+            ],
+            "used": [
+              "camera_A"
+            ],
+            "rejected": []
+          }
+        }
+      }
+    },
+    "identical_three": {
+      "inputs": [
+        {
+          "camera_id": "camera_A",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            1.0,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.003
+            ],
+            [
+              0.003,
+              0.04
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_A",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_B",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            1.0,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.003
+            ],
+            [
+              0.003,
+              0.04
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_B",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_C",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            1.0,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.003
+            ],
+            [
+              0.003,
+              0.04
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_C",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        }
+      ],
+      "rules": {
+        "best_single": {
+          "mean": [
+            1.0,
+            2.0
+          ],
+          "covariance": [
+            [
+              0.01,
+              0.003
+            ],
+            [
+              0.003,
+              0.04
+            ]
+          ],
+          "used": [
+            "camera_A"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              1.0,
+              2.0
+            ],
+            "covariance": [
+              [
+                0.01,
+                0.003
+              ],
+              [
+                0.003,
+                0.04
+              ]
+            ],
+            "used": [
+              "camera_A"
+            ],
+            "rejected": []
+          }
+        },
+        "distance_angle": {
+          "mean": [
+            1.0,
+            2.0
+          ],
+          "covariance": [
+            [
+              0.003333333333333334,
+              0.0010000000000000002
+            ],
+            [
+              0.0010000000000000002,
+              0.013333333333333336
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B",
+            "camera_C"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              1.0,
+              2.0
+            ],
+            "covariance": [
+              [
+                0.003333333333333334,
+                0.0010000000000000002
+              ],
+              [
+                0.0010000000000000002,
+                0.013333333333333336
+              ]
+            ],
+            "used": [
+              "camera_A",
+              "camera_B",
+              "camera_C"
+            ],
+            "rejected": []
+          }
+        },
+        "independent": {
+          "mean": [
+            1.0,
+            2.0
+          ],
+          "covariance": [
+            [
+              0.0033333333333333335,
+              0.001
+            ],
+            [
+              0.001,
+              0.013333333333333334
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B",
+            "camera_C"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              1.0,
+              2.0
+            ],
+            "covariance": [
+              [
+                0.0033333333333333335,
+                0.001
+              ],
+              [
+                0.001,
+                0.013333333333333334
+              ]
+            ],
+            "used": [
+              "camera_A",
+              "camera_B",
+              "camera_C"
+            ],
+            "rejected": []
+          }
+        },
+        "joint_network": {
+          "mean": [
+            1.0,
+            2.0
+          ],
+          "covariance": [
+            [
+              0.01,
+              0.003
+            ],
+            [
+              0.003,
+              0.04
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B",
+            "camera_C"
+          ],
+          "rejected": [],
+          "weights": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "effective_camera_count": 3.0,
+          "optimizer_mean": [
+            1.0,
+            2.0
+          ],
+          "optimizer_gradient_norm": 0.0,
+          "mean_difference_m": 0.0,
+          "with_runtime_metric_gate": {
+            "mean": [
+              1.0,
+              2.0
+            ],
+            "covariance": [
+              [
+                0.01,
+                0.003
+              ],
+              [
+                0.003,
+                0.04
+              ]
+            ],
+            "used": [
+              "camera_A",
+              "camera_B",
+              "camera_C"
+            ],
+            "rejected": []
+          }
+        }
+      }
+    },
+    "unequal_full_covariances": {
+      "inputs": [
+        {
+          "camera_id": "camera_A",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            0.02,
+            0.03
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.004
+            ],
+            [
+              0.004,
+              0.02
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_A",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_B",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            0.06,
+            -0.01
+          ],
+          "covariance_m2": [
+            [
+              0.03,
+              -0.012
+            ],
+            [
+              -0.012,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_B",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_C",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            -0.02,
+            0.02
+          ],
+          "covariance_m2": [
+            [
+              0.025,
+              0.009
+            ],
+            [
+              0.009,
+              0.04
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_C",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        }
+      ],
+      "rules": {
+        "best_single": {
+          "mean": [
+            0.02,
+            0.03
+          ],
+          "covariance": [
+            [
+              0.01,
+              0.004
+            ],
+            [
+              0.004,
+              0.02
+            ]
+          ],
+          "used": [
+            "camera_A"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.02,
+              0.03
+            ],
+            "covariance": [
+              [
+                0.01,
+                0.004
+              ],
+              [
+                0.004,
+                0.02
+              ]
+            ],
+            "used": [
+              "camera_A"
+            ],
+            "rejected": []
+          }
+        },
+        "distance_angle": {
+          "mean": [
+            0.0028920029108476485,
+            0.019816754403635436
+          ],
+          "covariance": [
+            [
+              0.00899602172321675,
+              0.0029655999602083848
+            ],
+            [
+              0.0029655999602083848,
+              0.014315120824341039
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B",
+            "camera_C"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.0028920029108476485,
+              0.019816754403635436
+            ],
+            "covariance": [
+              [
+                0.00899602172321675,
+                0.0029655999602083848
+              ],
+              [
+                0.0029655999602083848,
+                0.014315120824341039
+              ]
+            ],
+            "used": [
+              "camera_A",
+              "camera_B",
+              "camera_C"
+            ],
+            "rejected": []
+          }
+        },
+        "independent": {
+          "mean": [
+            0.013243436754176614,
+            0.014703792097586847
+          ],
+          "covariance": [
+            [
+              0.004789260143198091,
+              -0.0007937947494033413
+            ],
+            [
+              -0.0007937947494033413,
+              0.0037830814107663747
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B",
+            "camera_C"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.013243436754176614,
+              0.014703792097586847
+            ],
+            "covariance": [
+              [
+                0.004789260143198091,
+                -0.0007937947494033413
+              ],
+              [
+                -0.0007937947494033413,
+                0.0037830814107663747
+              ]
+            ],
+            "used": [
+              "camera_A",
+              "camera_B",
+              "camera_C"
+            ],
+            "rejected": []
+          }
+        },
+        "joint_network": {
+          "mean": [
+            0.013243436754176614,
+            0.014703792097586847
+          ],
+          "covariance": [
+            [
+              0.014658746863998259,
+              -0.0025360974993038354
+            ],
+            [
+              -0.0025360974993038354,
+              0.011473373648603447
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B",
+            "camera_C"
+          ],
+          "rejected": [],
+          "weights": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "effective_camera_count": 3.0,
+          "optimizer_mean": [
+            0.013243436754176614,
+            0.014703792097586847
+          ],
+          "optimizer_gradient_norm": 4.965068306494546e-16,
+          "mean_difference_m": 0.0,
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.013243436754176614,
+              0.014703792097586847
+            ],
+            "covariance": [
+              [
+                0.014658746863998259,
+                -0.0025360974993038354
+              ],
+              [
+                -0.0025360974993038354,
+                0.011473373648603447
+              ]
+            ],
+            "used": [
+              "camera_A",
+              "camera_B",
+              "camera_C"
+            ],
+            "rejected": []
+          }
+        }
+      }
+    },
+    "symmetric_disagreement": {
+      "inputs": [
+        {
+          "camera_id": "camera_A",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            -0.1,
+            0.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_A",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_B",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            0.0,
+            0.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_B",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_C",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            0.1,
+            0.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_C",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        }
+      ],
+      "rules": {
+        "best_single": {
+          "mean": [
+            -0.1,
+            0.0
+          ],
+          "covariance": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "used": [
+            "camera_A"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              -0.1,
+              0.0
+            ],
+            "covariance": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "used": [
+              "camera_A"
+            ],
+            "rejected": []
+          }
+        },
+        "distance_angle": {
+          "mean": [
+            0.0,
+            0.0
+          ],
+          "covariance": [
+            [
+              0.009996002598400954,
+              0.0
+            ],
+            [
+              0.0,
+              0.009996002598400954
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B",
+            "camera_C"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.0,
+              0.0
+            ],
+            "covariance": [
+              [
+                0.009996002598400954,
+                0.0
+              ],
+              [
+                0.0,
+                0.009996002598400954
+              ]
+            ],
+            "used": [
+              "camera_A",
+              "camera_B",
+              "camera_C"
+            ],
+            "rejected": []
+          }
+        },
+        "independent": {
+          "mean": [
+            0.0,
+            0.0
+          ],
+          "covariance": [
+            [
+              0.0033333333333333335,
+              -0.0
+            ],
+            [
+              -0.0,
+              0.0033333333333333335
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B",
+            "camera_C"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.0,
+              0.0
+            ],
+            "covariance": [
+              [
+                0.0033333333333333335,
+                -0.0
+              ],
+              [
+                -0.0,
+                0.0033333333333333335
+              ]
+            ],
+            "used": [
+              "camera_A",
+              "camera_B",
+              "camera_C"
+            ],
+            "rejected": []
+          }
+        },
+        "joint_network": {
+          "mean": [
+            0.0,
+            0.0
+          ],
+          "covariance": [
+            [
+              0.016666666666666673,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B",
+            "camera_C"
+          ],
+          "rejected": [],
+          "weights": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "effective_camera_count": 3.0,
+          "optimizer_mean": [
+            0.0,
+            0.0
+          ],
+          "optimizer_gradient_norm": 0.0,
+          "mean_difference_m": 0.0,
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.0,
+              0.0
+            ],
+            "covariance": [
+              [
+                0.016666666666666673,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "used": [
+              "camera_A",
+              "camera_B",
+              "camera_C"
+            ],
+            "rejected": []
+          }
+        }
+      }
+    },
+    "one_extreme_outlier": {
+      "inputs": [
+        {
+          "camera_id": "camera_A",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            0.0,
+            0.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_A",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_B",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            0.0,
+            0.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_B",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_C",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            2.0,
+            0.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_C",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        }
+      ],
+      "rules": {
+        "best_single": {
+          "mean": [
+            0.0,
+            0.0
+          ],
+          "covariance": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "used": [
+            "camera_A"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.0,
+              0.0
+            ],
+            "covariance": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "used": [
+              "camera_A"
+            ],
+            "rejected": [
+              "camera_C"
+            ]
+          }
+        },
+        "distance_angle": {
+          "mean": [
+            2.321190877518976e-07,
+            0.0
+          ],
+          "covariance": [
+            [
+              0.004999998839404763,
+              0.0
+            ],
+            [
+              0.0,
+              0.004999998839404763
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B",
+            "camera_C"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.0,
+              0.0
+            ],
+            "covariance": [
+              [
+                0.005,
+                0.0
+              ],
+              [
+                0.0,
+                0.005
+              ]
+            ],
+            "used": [
+              "camera_A",
+              "camera_B"
+            ],
+            "rejected": [
+              "camera_C"
+            ]
+          }
+        },
+        "independent": {
+          "mean": [
+            0.6666666666666667,
+            0.0
+          ],
+          "covariance": [
+            [
+              0.0033333333333333335,
+              -0.0
+            ],
+            [
+              -0.0,
+              0.0033333333333333335
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B",
+            "camera_C"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.0,
+              0.0
+            ],
+            "covariance": [
+              [
+                0.005,
+                -0.0
+              ],
+              [
+                -0.0,
+                0.005
+              ]
+            ],
+            "used": [
+              "camera_A",
+              "camera_B"
+            ],
+            "rejected": [
+              "camera_C"
+            ]
+          }
+        },
+        "joint_network": {
+          "mean": [
+            0.12499999997271515,
+            0.0
+          ],
+          "covariance": [
+            [
+              0.05646200439853715,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B",
+            "camera_C"
+          ],
+          "rejected": [],
+          "weights": [
+            1.0,
+            1.0,
+            0.13333333333139308
+          ],
+          "effective_camera_count": 2.255506607925991,
+          "optimizer_mean": [
+            0.1249999999779782,
+            0.0
+          ],
+          "optimizer_gradient_norm": 4.404359543741521e-09,
+          "mean_difference_m": 5.263053881598978e-12,
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.0,
+              0.0
+            ],
+            "covariance": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "used": [
+              "camera_A",
+              "camera_B"
+            ],
+            "rejected": [
+              "camera_C"
+            ]
+          }
+        }
+      }
+    },
+    "all_metric_gate_rejected": {
+      "inputs": [
+        {
+          "camera_id": "camera_A",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            -1.0,
+            0.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_A",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_B",
+          "timestamp_s": 10.0,
+          "xy_m": [
+            1.0,
+            0.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_B",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        }
+      ],
+      "rules": {
+        "best_single": {
+          "mean": [
+            -1.0,
+            0.0
+          ],
+          "covariance": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "used": [
+            "camera_A"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.0,
+              0.0
+            ],
+            "covariance": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "used": [],
+            "rejected": [
+              "camera_A",
+              "camera_B"
+            ]
+          }
+        },
+        "distance_angle": {
+          "mean": [
+            0.0,
+            0.0
+          ],
+          "covariance": [
+            [
+              0.005,
+              0.0
+            ],
+            [
+              0.0,
+              0.005
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.0,
+              0.0
+            ],
+            "covariance": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "used": [],
+            "rejected": [
+              "camera_A",
+              "camera_B"
+            ]
+          }
+        },
+        "independent": {
+          "mean": [
+            0.0,
+            0.0
+          ],
+          "covariance": [
+            [
+              0.005,
+              -0.0
+            ],
+            [
+              -0.0,
+              0.005
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B"
+          ],
+          "rejected": [],
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.0,
+              0.0
+            ],
+            "covariance": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "used": [],
+            "rejected": [
+              "camera_A",
+              "camera_B"
+            ]
+          }
+        },
+        "joint_network": {
+          "mean": [
+            0.0,
+            0.0
+          ],
+          "covariance": [
+            [
+              1.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "used": [
+            "camera_A",
+            "camera_B"
+          ],
+          "rejected": [],
+          "weights": [
+            0.25,
+            0.25
+          ],
+          "effective_camera_count": 2.0,
+          "optimizer_mean": [
+            0.0,
+            0.0
+          ],
+          "optimizer_gradient_norm": 0.0,
+          "mean_difference_m": 0.0,
+          "with_runtime_metric_gate": {
+            "mean": [
+              0.0,
+              0.0
+            ],
+            "covariance": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "used": [],
+            "rejected": [
+              "camera_A",
+              "camera_B"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "all_grazing_equal_weight_fallback": [
+    [
+      1.0,
+      2.0
+    ],
+    [
+      [
+        0.005,
+        0.0
+      ],
+      [
+        0.0,
+        0.005
+      ]
+    ]
+  ],
+  "unequal_R_at_identical_mean": {
+    "one_good": {
+      "mean": [
+        1.0,
+        2.0
+      ],
+      "covariance": [
+        [
+          0.01,
+          0.0
+        ],
+        [
+          0.0,
+          0.01
+        ]
+      ],
+      "used": [
+        "camera_A"
+      ],
+      "rejected": []
+    },
+    "plus_uninformative": {
+      "mean": [
+        1.0,
+        2.0
+      ],
+      "covariance": [
+        [
+          0.0199999980000002,
+          0.0
+        ],
+        [
+          0.0,
+          0.0199999980000002
+        ]
+      ],
+      "used": [
+        "camera_A",
+        "camera_B"
+      ],
+      "rejected": []
+    }
+  },
+  "permutations": {
+    "best_single": {
+      "max_mean_difference_m": 0.0,
+      "max_covariance_difference_m2": 0.0
+    },
+    "distance_angle": {
+      "max_mean_difference_m": 6.938893903907228e-18,
+      "max_covariance_difference_m2": 6.938893903907228e-18
+    },
+    "independent": {
+      "max_mean_difference_m": 3.469446951953614e-18,
+      "max_covariance_difference_m2": 0.0
+    },
+    "joint_network": {
+      "max_mean_difference_m": 3.469446951953614e-18,
+      "max_covariance_difference_m2": 3.469446951953614e-18
+    }
+  },
+  "best_single_tie": [
+    {
+      "mean": [
+        0.0,
+        0.0
+      ],
+      "covariance": [
+        [
+          0.01,
+          0.0
+        ],
+        [
+          0.0,
+          0.01
+        ]
+      ],
+      "used": [
+        "camera_A"
+      ],
+      "rejected": []
+    },
+    {
+      "mean": [
+        0.2,
+        0.0
+      ],
+      "covariance": [
+        [
+          0.01,
+          0.0
+        ],
+        [
+          0.0,
+          0.01
+        ]
+      ],
+      "used": [
+        "camera_B"
+      ],
+      "rejected": []
+    }
+  ],
+  "duplicate_raw_helpers": {
+    "best_single": {
+      "mean": [
+        1.0,
+        2.0
+      ],
+      "covariance": [
+        [
+          0.01,
+          0.0
+        ],
+        [
+          0.0,
+          0.01
+        ]
+      ],
+      "used": [
+        "camera_A"
+      ],
+      "rejected": []
+    },
+    "distance_angle": {
+      "mean": [
+        2.0,
+        4.0
+      ],
+      "covariance": [
+        [
+          0.02,
+          0.0
+        ],
+        [
+          0.0,
+          0.02
+        ]
+      ],
+      "used": [
+        "camera_A",
+        "camera_A"
+      ],
+      "rejected": []
+    },
+    "independent": {
+      "mean": [
+        1.0,
+        2.0
+      ],
+      "covariance": [
+        [
+          0.005,
+          -0.0
+        ],
+        [
+          -0.0,
+          0.005
+        ]
+      ],
+      "used": [
+        "camera_A",
+        "camera_A"
+      ],
+      "rejected": []
+    },
+    "joint_network": {
+      "mean": [
+        1.0,
+        2.0
+      ],
+      "covariance": [
+        [
+          0.01,
+          0.0
+        ],
+        [
+          0.0,
+          0.01
+        ]
+      ],
+      "used": [
+        "camera_A",
+        "camera_A"
+      ],
+      "rejected": []
+    }
+  },
+  "manager_duplicate_count": 1,
+  "conflicting_duplicate_callback_order": [
+    [
+      200.0,
+      500.0
+    ],
+    [
+      100.0,
+      500.0
+    ]
+  ],
+  "time_compensation": {
+    "exact_supported": {
+      "observations": [
+        {
+          "camera_id": "camera_A",
+          "timestamp_s": 10.04,
+          "xy_m": [
+            1.0088,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.010004,
+              0.0
+            ],
+            [
+              0.0,
+              0.010004
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_A",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_B",
+          "timestamp_s": 10.04,
+          "xy_m": [
+            1.0088,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_B",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        }
+      ],
+      "rejected": [],
+      "target": 10.04
+    },
+    "one_stale_pose": {
+      "observations": [
+        {
+          "camera_id": "camera_A",
+          "timestamp_s": 10.04,
+          "xy_m": [
+            1.0,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.010004,
+              0.0
+            ],
+            [
+              0.0,
+              0.010004
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_A",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_B",
+          "timestamp_s": 10.04,
+          "xy_m": [
+            1.0088,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_B",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        }
+      ],
+      "rejected": [],
+      "target": 10.04
+    },
+    "one_future_pose": {
+      "observations": [
+        {
+          "camera_id": "camera_A",
+          "timestamp_s": 10.04,
+          "xy_m": [
+            1.0,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.010004,
+              0.0
+            ],
+            [
+              0.0,
+              0.010004
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_A",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_B",
+          "timestamp_s": 10.04,
+          "xy_m": [
+            1.0088,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_B",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        }
+      ],
+      "rejected": [],
+      "target": 10.04
+    },
+    "missing": {
+      "observations": [
+        {
+          "camera_id": "camera_B",
+          "timestamp_s": 10.04,
+          "xy_m": [
+            1.0088,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_B",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        }
+      ],
+      "rejected": [
+        "camera_A"
+      ],
+      "target": 10.04
+    },
+    "belief_correction_jump": {
+      "observations": [
+        {
+          "camera_id": "camera_A",
+          "timestamp_s": 10.04,
+          "xy_m": [
+            1.4,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.010004,
+              0.0
+            ],
+            [
+              0.0,
+              0.010004
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_A",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_B",
+          "timestamp_s": 10.04,
+          "xy_m": [
+            1.0088,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_B",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        }
+      ],
+      "rejected": [],
+      "target": 10.04
+    },
+    "wrong_frame_rotation": {
+      "observations": [
+        {
+          "camera_id": "camera_A",
+          "timestamp_s": 10.04,
+          "xy_m": [
+            1.0088,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.010004,
+              0.0
+            ],
+            [
+              0.0,
+              0.010004
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_A",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        },
+        {
+          "camera_id": "camera_B",
+          "timestamp_s": 10.04,
+          "xy_m": [
+            1.0088,
+            2.0
+          ],
+          "covariance_m2": [
+            [
+              0.01,
+              0.0
+            ],
+            [
+              0.0,
+              0.01
+            ]
+          ],
+          "quality": {
+            "schema_version": "phase0.v1",
+            "camera_id": "camera_B",
+            "p_available": 1.0,
+            "conditional_cov_uv": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ],
+            "association_confidence": 1.0,
+            "epistemic_score": 0.0,
+            "stale": false,
+            "source_model": ""
+          },
+          "source": ""
+        }
+      ],
+      "rejected": [],
+      "target": 10.04
+    },
+    "same_history_different_callback_order": [
+      [
+        0.0034375,
+        0.0
+      ],
+      [
+        0.0103125,
+        0.0
+      ]
+    ],
+    "frame_oracle_90_degree_spawn": {
+      "odom_delta": [
+        0.0088,
+        0.0
+      ],
+      "map_delta": [
+        0.0,
+        0.0088
+      ],
+      "received_frame": "odom",
+      "published_frame": "map_bev"
+    },
+    "missing_equal_time": [
+      {
+        "camera_id": "camera_A",
+        "timestamp_s": 10.0,
+        "xy_m": [
+          1.0,
+          2.0
+        ],
+        "covariance_m2": [
+          [
+            0.01,
+            0.0
+          ],
+          [
+            0.0,
+            0.01
+          ]
+        ],
+        "quality": {
+          "schema_version": "phase0.v1",
+          "camera_id": "camera_A",
+          "p_available": 1.0,
+          "conditional_cov_uv": [
+            [
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0
+            ]
+          ],
+          "association_confidence": 1.0,
+          "epistemic_score": 0.0,
+          "stale": false,
+          "source_model": ""
+        },
+        "source": ""
+      },
+      {
+        "camera_id": "camera_B",
+        "timestamp_s": 10.0,
+        "xy_m": [
+          1.0,
+          2.0
+        ],
+        "covariance_m2": [
+          [
+            0.01,
+            0.0
+          ],
+          [
+            0.0,
+            0.01
+          ]
+        ],
+        "quality": {
+          "schema_version": "phase0.v1",
+          "camera_id": "camera_B",
+          "p_available": 1.0,
+          "conditional_cov_uv": [
+            [
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0
+            ]
+          ],
+          "association_confidence": 1.0,
+          "epistemic_score": 0.0,
+          "stale": false,
+          "source_model": ""
+        },
+        "source": ""
+      }
+    ]
+  },
+  "three_floor_permutations": [
+    {
+      "order": [
+        0,
+        1,
+        2
+      ],
+      "covariance": [
+        [
+          0.0015049884344921333,
+          0.0005312054766319038
+        ],
+        [
+          0.0005312054766319038,
+          0.0010906277767285069
+        ]
+      ]
+    },
+    {
+      "order": [
+        0,
+        2,
+        1
+      ],
+      "covariance": [
+        [
+          0.0010495881405897032,
+          0.00015565746233244448
+        ],
+        [
+          0.00015565746233244448,
+          0.0009958935616809295
+        ]
+      ]
+    },
+    {
+      "order": [
+        1,
+        0,
+        2
+      ],
+      "covariance": [
+        [
+          0.00150498843449213,
+          0.0005312054766319024
+        ],
+        [
+          0.0005312054766319024,
+          0.0010906277767285064
+        ]
+      ]
+    },
+    {
+      "order": [
+        1,
+        2,
+        0
+      ],
+      "covariance": [
+        [
+          0.0012805457111603976,
+          0.0005699166226889279
+        ],
+        [
+          0.0005699166226889278,
+          0.0013150705000602365
+        ]
+      ]
+    },
+    {
+      "order": [
+        2,
+        0,
+        1
+      ],
+      "covariance": [
+        [
+          0.0010495881405897026,
+          0.00015565746233244394
+        ],
+        [
+          0.0001556574623324447,
+          0.0009958935616809308
+        ]
+      ]
+    },
+    {
+      "order": [
+        2,
+        1,
+        0
+      ],
+      "covariance": [
+        [
+          0.0012805457111604041,
+          0.0005699166226889348
+        ],
+        [
+          0.0005699166226889348,
+          0.001315070500060236
+        ]
+      ]
+    }
+  ],
+  "measurement_floor_is_not_posterior_floor": {
+    "floor": [
+      [
+        0.01,
+        0.0
+      ],
+      [
+        0.0,
+        0.01
+      ]
+    ],
+    "fused_covariance": [
+      [
+        0.010000000000000002,
+        0.0
+      ],
+      [
+        0.0,
+        0.010000000000000002
+      ]
+    ],
+    "posterior_after_100": [
+      [
+        9.99900009999e-05,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        9.99900009999e-05,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "expected_planar_variance": 9.999000099990002e-05
+  },
+  "malformed_and_limiting_inputs": {
+    "indefinite": {
+      "error": "ContractValidationError",
+      "message": "covariance_m2 must be symmetric positive definite"
+    },
+    "asymmetric": {
+      "error": "ContractValidationError",
+      "message": "covariance_m2 must be symmetric"
+    },
+    "singular": {
+      "error": "ContractValidationError",
+      "message": "covariance_m2 must be symmetric positive definite"
+    },
+    "nonfinite": {
+      "error": "ContractValidationError",
+      "message": "covariance_m2 must be finite"
+    },
+    "nan_timestamp": {
+      "returned": {
+        "camera_id": "",
+        "timestamp_s": "nan",
+        "xy_m": [
+          1.0,
+          2.0
+        ],
+        "covariance_m2": [
+          [
+            0.01,
+            0.0
+          ],
+          [
+            0.0,
+            0.01
+          ]
+        ],
+        "quality": {
+          "schema_version": "phase0.v1",
+          "camera_id": "",
+          "p_available": 1.0,
+          "conditional_cov_uv": [
+            [
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0
+            ]
+          ],
+          "association_confidence": 1.0,
+          "epistemic_score": 0.0,
+          "stale": false,
+          "source_model": ""
+        },
+        "source": ""
+      }
+    },
+    "negative_timestamp": {
+      "returned": {
+        "camera_id": "",
+        "timestamp_s": -1.0,
+        "xy_m": [
+          1.0,
+          2.0
+        ],
+        "covariance_m2": [
+          [
+            0.01,
+            0.0
+          ],
+          [
+            0.0,
+            0.01
+          ]
+        ],
+        "quality": {
+          "schema_version": "phase0.v1",
+          "camera_id": "",
+          "p_available": 1.0,
+          "conditional_cov_uv": [
+            [
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0
+            ]
+          ],
+          "association_confidence": 1.0,
+          "epistemic_score": 0.0,
+          "stale": false,
+          "source_model": ""
+        },
+        "source": ""
+      }
+    },
+    "wrong_frame_direct_batch": {
+      "returned": "camera_optical"
+    },
+    "valid_SPD_variance_1e-06": {
+      "error": "ContractValidationError",
+      "message": "matrix is singular"
+    },
+    "valid_SPD_variance_1e-07": {
+      "error": "ContractValidationError",
+      "message": "matrix is singular"
+    },
+    "valid_SPD_variance_1000000.0": {
+      "error": "ContractValidationError",
+      "message": "matrix is singular"
+    },
+    "indefinite_belief_silently_floored": {
+      "returned": [
+        [
+          0.010000000000000002,
+          0.0
+        ],
+        [
+          0.0,
+          0.010000000000000002
+        ]
+      ]
+    },
+    "one_zero_slope": {
+      "error": "BiasFloorError",
+      "message": "every floor must be positive definite"
+    },
+    "bootstrap_min_one_helper": []
+  },
+  "GP_replaces_full_R": {
+    "before": {
+      "camera_id": "camera_A",
+      "timestamp_s": 10.0,
+      "xy_m": [
+        1.0,
+        2.0
+      ],
+      "covariance_m2": [
+        [
+          0.016,
+          0.0006
+        ],
+        [
+          0.0006,
+          0.009
+        ]
+      ],
+      "quality": {
+        "schema_version": "phase0.v1",
+        "camera_id": "camera_A",
+        "p_available": 1.0,
+        "conditional_cov_uv": [
+          [
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0
+          ]
+        ],
+        "association_confidence": 1.0,
+        "epistemic_score": 0.0,
+        "stale": false,
+        "source_model": ""
+      },
+      "source": ""
+    },
+    "after": {
+      "camera_id": "camera_A",
+      "timestamp_s": 10.0,
+      "xy_m": [
+        1.0,
+        2.0
+      ],
+      "covariance_m2": [
+        [
+          0.01744,
+          0.0
+        ],
+        [
+          0.0,
+          0.01744
+        ]
+      ],
+      "quality": {
+        "schema_version": "phase0.v1",
+        "camera_id": "camera_A",
+        "p_available": 0.9,
+        "conditional_cov_uv": [
+          [
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0
+          ]
+        ],
+        "association_confidence": 1.0,
+        "epistemic_score": 0.0,
+        "stale": false,
+        "source_model": "audit_fake_gp"
+      },
+      "source": "audit_fake_gp"
+    }
+  },
+  "equivalence_and_dependence": {
+    "initial_mean": [
+      0.01,
+      -0.02,
+      0.1
+    ],
+    "initial_covariance": [
+      [
+        0.05,
+        0.01,
+        0.005
+      ],
+      [
+        0.01,
+        0.04,
+        -0.004
+      ],
+      [
+        0.005,
+        -0.004,
+        0.03
+      ]
+    ],
+    "common_Q": [
+      [
+        0.0001,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0001,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0004
+      ]
+    ],
+    "direct": [
+      [
+        0.014248975118980227,
+        0.011591027630426284,
+        0.09639157741313877
+      ],
+      [
+        [
+          0.004311139427095244,
+          -0.0005768103198361906,
+          0.0006187826864727727
+        ],
+        [
+          -0.0005768103198361906,
+          0.003409364143455521,
+          -0.0005198650941806832
+        ],
+        [
+          0.000618782686472773,
+          -0.0005198650941806834,
+          0.029391567071769945
+        ]
+      ]
+    ],
+    "independent_fused": [
+      [
+        0.014248975118980229,
+        0.011591027630426288,
+        0.09639157741313875
+      ],
+      [
+        [
+          0.004311139427095242,
+          -0.0005768103198361903,
+          0.0006187826864727726
+        ],
+        [
+          -0.0005768103198361902,
+          0.0034093641434555207,
+          -0.0005198650941806832
+        ],
+        [
+          0.0006187826864727727,
+          -0.0005198650941806832,
+          0.029391567071769945
+        ]
+      ]
+    ],
+    "robust_fused": [
+      [
+        0.015369766203830008,
+        0.00686610104531055,
+        0.0971525330251153
+      ],
+      [
+        [
+          0.010988506768186426,
+          -0.0009816642914447786,
+          0.001513111307078856
+        ],
+        [
+          -0.0009816642914447788,
+          0.008644362595541452,
+          -0.0012575306865946476
+        ],
+        [
+          0.0015131113070788562,
+          -0.0012575306865946479,
+          0.029600993684305354
+        ]
+      ]
+    ],
+    "independent_max_difference": 1.3877787807814457e-17,
+    "correlated_cameras": {
+      "marginal_R": [
+        [
+          0.04,
+          0.0
+        ],
+        [
+          0.0,
+          0.04
+        ]
+      ],
+      "cross_camera_C": [
+        [
+          0.03,
+          0.0
+        ],
+        [
+          0.0,
+          0.03
+        ]
+      ],
+      "independent_report": [
+        [
+          0.013333333333333334,
+          0.0
+        ],
+        [
+          0.0,
+          0.013333333333333334
+        ]
+      ],
+      "true_covariance_of_average": [
+        [
+          0.03333333333333333,
+          0.0
+        ],
+        [
+          0.0,
+          0.03333333333333333
+        ]
+      ],
+      "joint_identical_report": [
+        [
+          0.04,
+          0.0
+        ],
+        [
+          0.0,
+          0.04
+        ]
+      ]
+    },
+    "shared_motion": {
+      "camera_marginal_after_alignment": [
+        [
+          0.0425,
+          0.0
+        ],
+        [
+          0.0,
+          0.0425
+        ]
+      ],
+      "cross_camera_after_alignment": [
+        [
+          0.0025,
+          0.0
+        ],
+        [
+          0.0,
+          0.0025
+        ]
+      ],
+      "prior_measurement_cross_covariance": [
+        [
+          0.0025,
+          0.0
+        ],
+        [
+          0.0,
+          0.0025
+        ]
+      ],
+      "naive_average_covariance": [
+        [
+          0.014166666666666668,
+          0.0
+        ],
+        [
+          0.0,
+          0.014166666666666668
+        ]
+      ],
+      "true_average_covariance": [
+        [
+          0.015833333333333335,
+          0.0
+        ],
+        [
+          0.0,
+          0.015833333333333335
+        ]
+      ]
+    },
+    "sequential_gate_order": [
+      {
+        "mean_xy": [
+          -0.20833333333333331,
+          0.0
+        ],
+        "covariance_m2": [
+          [
+            0.008333333333333337,
+            0.0
+          ],
+          [
+            0.0,
+            0.008333333333333337
+          ]
+        ],
+        "accepted_camera_ids": [
+          "camera_A"
+        ],
+        "rejected_camera_ids": [
+          "camera_B"
+        ],
+        "nis_by_camera": {
+          "camera_A": 1.0416666666666665,
+          "camera_B": 11.45833333333333
+        }
+      },
+      {
+        "mean_xy": [
+          0.20833333333333331,
+          0.0
+        ],
+        "covariance_m2": [
+          [
+            0.008333333333333337,
+            0.0
+          ],
+          [
+            0.0,
+            0.008333333333333337
+          ]
+        ],
+        "accepted_camera_ids": [
+          "camera_B"
+        ],
+        "rejected_camera_ids": [
+          "camera_A"
+        ],
+        "nis_by_camera": {
+          "camera_B": 1.0416666666666665,
+          "camera_A": 11.45833333333333
+        }
+      }
+    ],
+    "staggered_Q": {
+      "initial_variance": 0.1,
+      "R": 0.04,
+      "Q_interval": 0.01,
+      "direct_final_variance": 0.019636363636363636,
+      "naive_common_time_variance": 0.018487394957983194
+    }
+  },
+  "IRLS_iteration_cap": {
+    "inputs": [
+      {
+        "camera_id": "camera_A",
+        "timestamp_s": 10.0,
+        "xy_m": [
+          -0.17727081586261784,
+          -0.19941694910930402
+        ],
+        "covariance_m2": [
+          [
+            0.016407818069833924,
+            0.0005725417678756317
+          ],
+          [
+            0.0005725417678756317,
+            0.008932404500495586
+          ]
+        ],
+        "quality": {
+          "schema_version": "phase0.v1",
+          "camera_id": "camera_A",
+          "p_available": 1.0,
+          "conditional_cov_uv": [
+            [
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0
+            ]
+          ],
+          "association_confidence": 1.0,
+          "epistemic_score": 0.0,
+          "stale": false,
+          "source_model": ""
+        },
+        "source": ""
+      },
+      {
+        "camera_id": "camera_B",
+        "timestamp_s": 10.0,
+        "xy_m": [
+          -0.22061737111128787,
+          -0.04943132470561806
+        ],
+        "covariance_m2": [
+          [
+            0.033313103557099315,
+            0.012617474882541087
+          ],
+          [
+            0.012617474882541087,
+            0.27909081853677753
+          ]
+        ],
+        "quality": {
+          "schema_version": "phase0.v1",
+          "camera_id": "camera_B",
+          "p_available": 1.0,
+          "conditional_cov_uv": [
+            [
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0
+            ]
+          ],
+          "association_confidence": 1.0,
+          "epistemic_score": 0.0,
+          "stale": false,
+          "source_model": ""
+        },
+        "source": ""
+      },
+      {
+        "camera_id": "camera_C",
+        "timestamp_s": 10.0,
+        "xy_m": [
+          0.004093433062157981,
+          0.04814761686704322
+        ],
+        "covariance_m2": [
+          [
+            0.137744246431263,
+            0.04088366985291611
+          ],
+          [
+            0.04088366985291611,
+            0.05974336960786123
+          ]
+        ],
+        "quality": {
+          "schema_version": "phase0.v1",
+          "camera_id": "camera_C",
+          "p_available": 1.0,
+          "conditional_cov_uv": [
+            [
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0
+            ]
+          ],
+          "association_confidence": 1.0,
+          "epistemic_score": 0.0,
+          "stale": false,
+          "source_model": ""
+        },
+        "source": ""
+      },
+      {
+        "camera_id": "camera_D",
+        "timestamp_s": 10.0,
+        "xy_m": [
+          0.4459502550909534,
+          0.26339572729237776
+        ],
+        "covariance_m2": [
+          [
+            0.07159611549808421,
+            -0.0033037056597186158
+          ],
+          [
+            -0.0033037056597186158,
+            0.15616849683571918
+          ]
+        ],
+        "quality": {
+          "schema_version": "phase0.v1",
+          "camera_id": "camera_D",
+          "p_available": 1.0,
+          "conditional_cov_uv": [
+            [
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0
+            ]
+          ],
+          "association_confidence": 1.0,
+          "epistemic_score": 0.0,
+          "stale": false,
+          "source_model": ""
+        },
+        "source": ""
+      },
+      {
+        "camera_id": "camera_E",
+        "timestamp_s": 10.0,
+        "xy_m": [
+          0.10996130649704644,
+          0.44006413291369645
+        ],
+        "covariance_m2": [
+          [
+            0.019588972463263844,
+            0.0017188480908663917
+          ],
+          [
+            0.0017188480908663917,
+            0.008336133891310105
+          ]
+        ],
+        "quality": {
+          "schema_version": "phase0.v1",
+          "camera_id": "camera_E",
+          "p_available": 1.0,
+          "conditional_cov_uv": [
+            [
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0
+            ]
+          ],
+          "association_confidence": 1.0,
+          "epistemic_score": 0.0,
+          "stale": false,
+          "source_model": ""
+        },
+        "source": ""
+      }
+    ],
+    "runtime": {
+      "mean": [
+        -0.035711794126116136,
+        0.12441810755752847
+      ],
+      "covariance": [
+        [
+          0.07550711164394858,
+          0.0695914932335864
+        ],
+        [
+          0.0695914932335864,
+          0.1978921990794663
+        ]
+      ],
+      "used": [
+        "camera_A",
+        "camera_B",
+        "camera_C",
+        "camera_D",
+        "camera_E"
+      ],
+      "rejected": []
+    },
+    "independent_optimizer_mean": [
+      -0.03545608724822011,
+      0.12513243464782292
+    ],
+    "optimizer_gradient_norm": 4.189529226675416e-15,
+    "runtime_gradient_norm": 0.022813205439350785,
+    "runtime_mean_difference_m": 0.0007587154930089895,
+    "objective_excess": 8.503397102899157e-06,
+    "longer_solve": [
+      [
+        -0.03545608893431998,
+        0.12513242993746357
+      ],
+      [
+        [
+          0.07552918780158335,
+          0.06960159138936928
+        ],
+        [
+          0.06960159138936928,
+          0.19786160674906092
+        ]
+      ]
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+........................................................................ [ 92%]
+.FFF..                                                                   [100%]
+=================================== FAILURES ===================================
+____ test_inflight_plan_cannot_publish_motion_after_a_fatal_integrity_stop _____
+
+    def test_inflight_plan_cannot_publish_motion_after_a_fatal_integrity_stop():
+        node = command_node()
+        node._fatal_stop_triggered = True
+        node._pending_plan_started_at = None
+        node.latency_compensate_plan_handoff = False
+        node._result_safe_to_execute = lambda result: (True, '')
+        node._after_plan_result(SimpleNamespace(controls=np.array([[.2, .3]])))
+        assert node.cmd_pub.messages
+>       assert all(m.linear.x == m.angular.z == 0. for m in node.cmd_pub.messages)
+E       assert False
+E        +  where False = all(<generator object test_inflight_plan_cannot_publish_motion_after_a_fatal_integrity_stop.<locals>.<genexpr> at 0x7b011909fae0>)
+
+tests/planning/test_runtime_transactions.py:182: AssertionError
+_________ test_clock_rewind_cannot_restart_the_pre_reset_command_tape __________
+
+    def test_clock_rewind_cannot_restart_the_pre_reset_command_tape():
+        node = command_node()
+        node._clock.seconds = 0.
+        node._publish_active_plan_command()
+>       assert node._active_controls is None
+E       assert array([[0.2, 0.1]]) is None
+E        +  where array([[0.2, 0.1]]) = <planning.nodes.efe_agent_node.EfeAgentNode object at 0x7b01190b0c40>._active_controls
+
+tests/planning/test_runtime_transactions.py:190: AssertionError
+_____________ test_safe_stop_clears_the_held_execution_diagnostic ______________
+
+    def test_safe_stop_clears_the_held_execution_diagnostic():
+        node = command_node()
+        node._publish_safe_stop_command()
+>       assert node.active_execution_diag_pub.messages
+E       assert []
+E        +  where [] = <test_runtime_transactions.Publisher object at 0x7b01181e42e0>.messages
+E        +    where <test_runtime_transactions.Publisher object at 0x7b01181e42e0> = <planning.nodes.efe_agent_node.EfeAgentNode object at 0x7b01181e6230>.active_execution_diag_pub
+
+tests/planning/test_runtime_transactions.py:198: AssertionError
+=============================== warnings summary ===============================
+tests/reliability/test_reference_calibration.py::test_actual_manager_matches_frozen_offline_mean_and_R
+  Warning: Pandas requires version '2.8.4' or newer of 'numexpr' (version '2.8.1' currently installed).
+
+tests/reliability/test_reference_calibration.py::test_actual_manager_matches_frozen_offline_mean_and_R
+  Warning: Pandas requires version '1.3.6' or newer of 'bottleneck' (version '1.3.2' currently installed).
+
+-- Docs: https://docs.pytest.org/en/stable/warnings.html
+=========================== short test summary info ============================
+FAILED tests/planning/test_runtime_transactions.py::test_inflight_plan_cannot_publish_motion_after_a_fatal_integrity_stop
+FAILED tests/planning/test_runtime_transactions.py::test_clock_rewind_cannot_restart_the_pre_reset_command_tape
+FAILED tests/planning/test_runtime_transactions.py::test_safe_stop_clears_the_held_execution_diagnostic
+3 failed, 75 passed, 2 warnings in 2.09s

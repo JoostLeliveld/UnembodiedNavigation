@@ -1,0 +1,611 @@
+{
+  "blind_turn_complete": {
+    "supported": true,
+    "first": {
+      "accepted": false,
+      "apply_stamp": 10.01,
+      "belief_stamp_after": 10.0,
+      "correction_stamp": 10.0,
+      "nis": null,
+      "reason": "replay_gap_too_large",
+      "schema_version": 1,
+      "source_batch_id": "return",
+      "status": "dropped",
+      "m": [
+        0.39999999999999997,
+        1.2000000000000002,
+        1.5707963267948963
+      ],
+      "Pdiag": [
+        0.10100000000000031,
+        0.10100000000000031,
+        0.05399999999999984
+      ]
+    },
+    "next": {
+      "accepted": true,
+      "apply_stamp": 10.21,
+      "belief_stamp_after": 10.2,
+      "correction_stamp": 10.2,
+      "nis": 1.8041498308077104e-30,
+      "reason": "accepted",
+      "schema_version": 1,
+      "source_batch_id": "next",
+      "status": "accepted",
+      "m": [
+        0.4,
+        1.24,
+        1.5707963267948963
+      ],
+      "Pdiag": [
+        0.009099261394343361,
+        0.009099261394343361,
+        0.05407999999999984
+      ]
+    }
+  },
+  "blind_turn_incomplete": {
+    "supported": false,
+    "first": {
+      "accepted": false,
+      "apply_stamp": 10.01,
+      "belief_stamp_after": 10.0,
+      "correction_stamp": 10.0,
+      "nis": null,
+      "reason": "replay_gap_too_large",
+      "schema_version": 1,
+      "source_batch_id": "return",
+      "status": "dropped",
+      "m": [
+        0.20000000000000004,
+        0.0,
+        0.0
+      ],
+      "Pdiag": [
+        3.5970500000000003,
+        3.5970500000000003,
+        0.050599999999999985
+      ]
+    },
+    "next": {
+      "accepted": true,
+      "apply_stamp": 10.21,
+      "belief_stamp_after": 10.2,
+      "correction_stamp": 10.2,
+      "nis": 0.4333711294762785,
+      "reason": "accepted",
+      "schema_version": 1,
+      "source_batch_id": "next",
+      "status": "accepted",
+      "m": [
+        0.3995564266842617,
+        1.2365623068030285,
+        0.0
+      ],
+      "Pdiag": [
+        0.0099722766677659,
+        0.0099722766677659,
+        0.05067999999999998
+      ]
+    }
+  },
+  "persistent_outlier": {
+    "first_acceptance_event": 10,
+    "events": [
+      {
+        "accepted": false,
+        "apply_stamp": 0.21000000000000002,
+        "belief_stamp_after": 0.2,
+        "correction_stamp": 0.2,
+        "nis": 200.0,
+        "reason": "nis_too_large",
+        "schema_version": 1,
+        "source_batch_id": "outlier-1",
+        "status": "rejected",
+        "m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pdiag": [
+          0.060000000000000005,
+          0.060000000000000005,
+          0.01
+        ]
+      },
+      {
+        "accepted": false,
+        "apply_stamp": 0.41000000000000003,
+        "belief_stamp_after": 0.4,
+        "correction_stamp": 0.4,
+        "nis": 57.14285714285714,
+        "reason": "nis_too_large",
+        "schema_version": 1,
+        "source_batch_id": "outlier-2",
+        "status": "rejected",
+        "m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pdiag": [
+          0.11000000000000001,
+          0.11000000000000001,
+          0.01
+        ]
+      },
+      {
+        "accepted": false,
+        "apply_stamp": 0.61,
+        "belief_stamp_after": 0.6000000000000001,
+        "correction_stamp": 0.6000000000000001,
+        "nis": 33.33333333333333,
+        "reason": "nis_too_large",
+        "schema_version": 1,
+        "source_batch_id": "outlier-3",
+        "status": "rejected",
+        "m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pdiag": [
+          0.16000000000000003,
+          0.16000000000000003,
+          0.01
+        ]
+      },
+      {
+        "accepted": false,
+        "apply_stamp": 0.81,
+        "belief_stamp_after": 0.8,
+        "correction_stamp": 0.8,
+        "nis": 23.529411764705877,
+        "reason": "nis_too_large",
+        "schema_version": 1,
+        "source_batch_id": "outlier-4",
+        "status": "rejected",
+        "m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pdiag": [
+          0.21000000000000002,
+          0.21000000000000002,
+          0.01
+        ]
+      },
+      {
+        "accepted": false,
+        "apply_stamp": 1.01,
+        "belief_stamp_after": 1.0,
+        "correction_stamp": 1.0,
+        "nis": 18.18181818181818,
+        "reason": "nis_too_large",
+        "schema_version": 1,
+        "source_batch_id": "outlier-5",
+        "status": "rejected",
+        "m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pdiag": [
+          0.26,
+          0.26,
+          0.01
+        ]
+      },
+      {
+        "accepted": false,
+        "apply_stamp": 1.21,
+        "belief_stamp_after": 1.2,
+        "correction_stamp": 1.2,
+        "nis": 14.814814814814813,
+        "reason": "nis_too_large",
+        "schema_version": 1,
+        "source_batch_id": "outlier-6",
+        "status": "rejected",
+        "m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pdiag": [
+          0.31,
+          0.31,
+          0.01
+        ]
+      },
+      {
+        "accepted": false,
+        "apply_stamp": 1.4100000000000001,
+        "belief_stamp_after": 1.4,
+        "correction_stamp": 1.4,
+        "nis": 12.5,
+        "reason": "nis_too_large",
+        "schema_version": 1,
+        "source_batch_id": "outlier-7",
+        "status": "rejected",
+        "m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pdiag": [
+          0.36,
+          0.36,
+          0.01
+        ]
+      },
+      {
+        "accepted": false,
+        "apply_stamp": 1.61,
+        "belief_stamp_after": 1.6,
+        "correction_stamp": 1.6,
+        "nis": 10.81081081081081,
+        "reason": "nis_too_large",
+        "schema_version": 1,
+        "source_batch_id": "outlier-8",
+        "status": "rejected",
+        "m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pdiag": [
+          0.41,
+          0.41,
+          0.01
+        ]
+      },
+      {
+        "accepted": false,
+        "apply_stamp": 1.81,
+        "belief_stamp_after": 1.8,
+        "correction_stamp": 1.8,
+        "nis": 9.523809523809524,
+        "reason": "nis_too_large",
+        "schema_version": 1,
+        "source_batch_id": "outlier-9",
+        "status": "rejected",
+        "m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pdiag": [
+          0.45999999999999996,
+          0.45999999999999996,
+          0.01
+        ]
+      },
+      {
+        "accepted": true,
+        "apply_stamp": 2.009999999,
+        "belief_stamp_after": 2.0,
+        "correction_stamp": 2.0,
+        "nis": 8.51063829787234,
+        "reason": "accepted",
+        "schema_version": 1,
+        "source_batch_id": "outlier-10",
+        "status": "accepted",
+        "m": [
+          1.957446808510638,
+          0.0,
+          0.0
+        ],
+        "Pdiag": [
+          0.009787234042553217,
+          0.009787234042553217,
+          0.01
+        ]
+      }
+    ]
+  },
+  "rejection_then_valid": [
+    {
+      "accepted": false,
+      "apply_stamp": 0.21000000000000002,
+      "belief_stamp_after": 0.2,
+      "correction_stamp": 0.2,
+      "nis": 200.0,
+      "reason": "nis_too_large",
+      "schema_version": 1,
+      "source_batch_id": "reject-1",
+      "status": "rejected",
+      "m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "Pdiag": [
+        0.060000000000000005,
+        0.060000000000000005,
+        0.01
+      ]
+    },
+    {
+      "accepted": false,
+      "apply_stamp": 0.41000000000000003,
+      "belief_stamp_after": 0.4,
+      "correction_stamp": 0.4,
+      "nis": 57.14285714285714,
+      "reason": "nis_too_large",
+      "schema_version": 1,
+      "source_batch_id": "reject-2",
+      "status": "rejected",
+      "m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "Pdiag": [
+        0.11000000000000001,
+        0.11000000000000001,
+        0.01
+      ]
+    },
+    {
+      "accepted": false,
+      "apply_stamp": 0.61,
+      "belief_stamp_after": 0.6000000000000001,
+      "correction_stamp": 0.6000000000000001,
+      "nis": 33.33333333333333,
+      "reason": "nis_too_large",
+      "schema_version": 1,
+      "source_batch_id": "reject-3",
+      "status": "rejected",
+      "m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "Pdiag": [
+        0.16000000000000003,
+        0.16000000000000003,
+        0.01
+      ]
+    },
+    {
+      "accepted": false,
+      "apply_stamp": 0.81,
+      "belief_stamp_after": 0.8,
+      "correction_stamp": 0.8,
+      "nis": 23.529411764705877,
+      "reason": "nis_too_large",
+      "schema_version": 1,
+      "source_batch_id": "reject-4",
+      "status": "rejected",
+      "m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "Pdiag": [
+        0.21000000000000002,
+        0.21000000000000002,
+        0.01
+      ]
+    },
+    {
+      "accepted": true,
+      "apply_stamp": 1.01,
+      "belief_stamp_after": 1.0,
+      "correction_stamp": 1.0,
+      "nis": 0.0,
+      "reason": "accepted",
+      "schema_version": 1,
+      "source_batch_id": "valid-recovery",
+      "status": "accepted",
+      "m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "Pdiag": [
+        0.00954545454545458,
+        0.00954545454545458,
+        0.01
+      ]
+    }
+  ],
+  "per_camera_bootstrap_inflation": {
+    "Pxx": 0.060000000000000005,
+    "Rxx": 0.01
+  },
+  "one_camera_quorum": {
+    "mean": [
+      3.0,
+      0.0,
+      0.25
+    ],
+    "seen": {
+      "A": 9.95
+    }
+  },
+  "same_time_order": {
+    "camera_id_order_results": [
+      [
+        0.49999999999999994,
+        0.0,
+        0.0
+      ],
+      [
+        -0.49999999999999994,
+        0.0,
+        0.0
+      ]
+    ],
+    "exact_duplicate_no_covariance_change": true
+  },
+  "same_batch_arrival_permutation_invariant": true,
+  "direct_gap_extra_batch_inflation": 0.04999999999999982,
+  "stale_batch_inflation": 0.05,
+  "foreign_frame_direct_accepted": [
+    0.03125,
+    0.0,
+    0.0
+  ],
+  "nonfinite_direct_stamp_claimed_before_failure": true,
+  "future_anchor": {
+    "accepted": false,
+    "apply_stamp": 10.110000000000001,
+    "belief_stamp_after": 10.4,
+    "correction_stamp": 10.1,
+    "nis": null,
+    "reason": "not_newer_than_belief",
+    "schema_version": 1,
+    "source_batch_id": "present",
+    "status": "dropped",
+    "m": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "Pdiag": [
+      0.008333333333333338,
+      0.008333333333333338,
+      0.05
+    ]
+  },
+  "nearest_pose_uses_later_state": [
+    1.0,
+    0.0,
+    1.0
+  ],
+  "bootstrap_min_one_helper_empty": true,
+  "two_camera_disagreement": [
+    {
+      "separation_m": 0.9,
+      "used": [
+        "A",
+        "B"
+      ],
+      "mean": [
+        0.45,
+        0.0
+      ]
+    },
+    {
+      "separation_m": 1.3,
+      "used": [],
+      "mean": [
+        0.65,
+        0.0
+      ]
+    }
+  ],
+  "configured_prediction_limit": 1.5,
+  "terminal_branch_accounting": {
+    "accepted": {
+      "status": "accepted",
+      "reason": "accepted"
+    },
+    "bootstrap": {
+      "status": "accepted_bootstrap",
+      "reason": "bootstrap"
+    },
+    "stale": {
+      "status": "dropped",
+      "reason": "stale_age"
+    },
+    "old": {
+      "status": "dropped",
+      "reason": "not_newer_than_belief"
+    },
+    "gap": {
+      "status": "dropped",
+      "reason": "replay_gap_too_large"
+    },
+    "nis": {
+      "status": "rejected",
+      "reason": "nis_too_large"
+    },
+    "reanchor": {
+      "status": "reanchored",
+      "reason": "diverged"
+    }
+  },
+  "useful_geometry_refused_by_wrong_prior": [
+    {
+      "camera": "camera_A",
+      "pose": [
+        -8,
+        0,
+        0.0
+      ],
+      "perfect_box": [
+        330.1534145099531,
+        150.60016117700482,
+        400.4272449449509,
+        195.95337092404003
+      ],
+      "correct_prior_reasons": [],
+      "wrong_position_reasons": [
+        "width_mismatch"
+      ],
+      "wrong_heading_reasons": [
+        "width_mismatch"
+      ]
+    }
+  ],
+  "registered_ledger_accounting": {
+    "selection": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_evidence/selection.json",
+    "selection_sha256": "66b928fbaf8f470332acff23922003822fcb58113d4bd085180ade5c54c0cfd0",
+    "runs": [
+      {
+        "arm": "P0",
+        "run": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_pilot/fusion_network_traverse/P0/seed210/experiment_20260906_213015",
+        "published_unique_batches": 813,
+        "terminal_rows": 813,
+        "status_counts": {
+          "accepted": 740,
+          "accepted_bootstrap": 1,
+          "dropped": 72
+        },
+        "reasoned_refusals_valid": true
+      },
+      {
+        "arm": "P1",
+        "run": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_pilot/fusion_network_traverse/P1/seed210/experiment_20260906_214913",
+        "published_unique_batches": 779,
+        "terminal_rows": 779,
+        "status_counts": {
+          "accepted": 699,
+          "accepted_bootstrap": 1,
+          "dropped": 79
+        },
+        "reasoned_refusals_valid": true
+      },
+      {
+        "arm": "P2",
+        "run": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_pilot/fusion_network_traverse/P2/seed210/experiment_20260906_220801",
+        "published_unique_batches": 598,
+        "terminal_rows": 598,
+        "status_counts": {
+          "accepted": 500,
+          "accepted_bootstrap": 1,
+          "dropped": 97
+        },
+        "reasoned_refusals_valid": true
+      }
+    ]
+  },
+  "source_sha256": {
+    "src/reliability/reliability/observation_gates.py": "ba557f14e8a8894a0f234423b6fa425c130d71e92dccddf2e9ad08f489dc9f26",
+    "src/reliability/reliability/observation_opportunity.py": "b85a19982885ff7c528546c65169262d594f0ac4185369997e2b2ecc203dce86",
+    "src/reliability/reliability/camera_manager.py": "41fb3146ea83b17bca13616c4687d588d7265e64723466abd6706b80d9035dd4",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "5e11bd202de065a448154cc18192e63c507b2da058051a34e9ac14929d14c9a6",
+    "src/reliability/reliability/silhouette_observation.py": "b79d203d002c9aac1ce38c46f94fece8538eacb81eb9661658c5ba62dad00f75",
+    "src/planning/planning/core/belief_correction.py": "cf263b7d64785cd00200e99ae4196fbbc6cc0ef73e4226cee164a897481ec22f",
+    "src/planning/planning/nodes/unicycle_planner_node.py": "56100b37b8e9351d1cee3d4e089357503e53838db428c4261e0bf1a11f76514f",
+    "experiments/icra_commissioning/network_navigation_runtime_pilot.yaml": "72d7318718c9510f5b4bb570927be0650f16e4c0186440562e6c8a2cf167d380"
+  },
+  "resolved_imports": {
+    "planning.nodes.unicycle_planner_node": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/planning/planning/nodes/unicycle_planner_node.py",
+    "planning.core.belief_correction": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/planning/planning/core/belief_correction.py",
+    "reliability.nodes.camera_manager_node": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/reliability/reliability/nodes/camera_manager_node.py"
+  }
+}

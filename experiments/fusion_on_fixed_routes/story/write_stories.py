@@ -24,7 +24,7 @@ WHAT = {
  "F1": "At every correction it kept the camera with the smallest ellipse and discarded the rest.",
  "F2": "It weighted the cameras by range and viewing angle alone — never by their covariance — with the coefficients frozen before the drive.",
  "F3": "It added the cameras' precisions, the standard answer for independent measurements.",
- "F4": "It added the same precisions and then divided by the number of cameras, refusing to claim N independent votes from one robot seen by one detector.",
+ "F4": "It solved one robust problem over the simultaneous camera batch, then formed one network-level Gaussian from within-camera uncertainty and between-camera disagreement.",
  "O1": "It kept the network rule but took the detector's box bottom-centre to be the robot itself.",
  "O2": "It kept the network rule and pushed that same point 30.9 cm away from its camera — one commissioned number, the mean gap over 3351 admitted sightings.",
 }
@@ -48,15 +48,10 @@ second camera claimed a far smaller ellipse and precision-weighting handed it th
 
 That is also why its fused answer is worse than the best camera it had more often than any
 other fusion rule.""",
- "F4": """Dividing by N does not move the estimate at all — it and F3 produce the same
-position, which is why their "worse than the best available camera" rates match to a point.
-What it changes is the claim, and that is where it wins: the truth sits inside its stated 95%
-ellipse far more often than under precisions-add, and it has the lowest worst-case error of the
-six.
-
-It is still not honest. Conservative pooling narrows the over-claim; it does not close it, and
-the figures say why: the readings themselves are further from the truth than any of these rules
-believes.""",
+ "F4": """This arm is no longer normalized Gaussian pooling. It can move away from the F3
+solution when one admitted view has a large normalized residual, and its ellipse grows in the
+direction of observed cross-camera disagreement. A verdict belongs here only after fresh runs
+whose manifests name `joint_network`; the scorer deliberately rejects the old `network` runs.""",
  "O1": """The observation model is worth several times the median error, and it is worth it
 every metre rather than occasionally — this arm is steadily wrong, so its 95th percentile is
 the best of the six while its median is the worst.

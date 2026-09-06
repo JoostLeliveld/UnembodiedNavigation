@@ -245,6 +245,10 @@ def observations(run: Path) -> list[dict]:
             conf=_float(row, "conf"),
             bbox_h_px=_float(row, "bbox_h_px"),
             bbox_w_px=_float(row, "bbox_w_px"),
+            # schema 5 onward: the box the hull model predicted from the pose the
+            # correction was made from. NaN on schema <= 4 drives, which never logged it.
+            pred_h_px=_float(row, "pred_h_px"),
+            pred_w_px=_float(row, "pred_w_px"),
             range_m=_float(row, "range_m"),
             obs_repeat=_float(row, "obs_repeat"),
         )

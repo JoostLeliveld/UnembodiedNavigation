@@ -1,0 +1,218 @@
+{
+  "meaning": "Passing means the documented baseline behavior reproduced, including defects.",
+  "source_sha256": {
+    "src/planning/planning/nodes/unicycle_planner_node.py": "56100b37b8e9351d1cee3d4e089357503e53838db428c4261e0bf1a11f76514f",
+    "src/planning/planning/nodes/efe_agent_node.py": "a575ba53e74a835ee955625b14e5718c09939fc36d206ef8b35b4a0c405818ae",
+    "src/planning/planning/core/motion_history.py": "4e2f71eb96d2a03304336ebc50b28e2e518cb01b87b20be312c7bf80122b7923",
+    "src/planning/planning/core/belief_correction.py": "cf263b7d64785cd00200e99ae4196fbbc6cc0ef73e4226cee164a897481ec22f",
+    "src/experiments/experiments/nodes/goal_mission_node.py": "f2b208e86c332049f9bab4dbd843875d484d3de582d723048adcc7e75b6d8817",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "5e11bd202de065a448154cc18192e63c507b2da058051a34e9ac14929d14c9a6",
+    "src/perception/perception/core/four_camera_batch.py": "ec218997d78edd17972a9ec4c3067535345797d70483365fee7c024cee4fec95",
+    "src/perception/perception/nodes/batched_four_camera_yolo_node.py": "1f18372d4229e769a464ccc343ad31dc3f06ba7631bb1b5c9ecfd8652d344523",
+    "src/experiments/experiments/core/visibility_launch_common.py": "de61a0fe93250d3207629ddb37d10d5d04b8e605452725b831b74882d2b98817",
+    "src/experiments/experiments/nodes/experiment_logger.py": "6c03281600ad906020fee19af04e5454846bdf2b9c653da6f63266d767e678e3",
+    "tests/planning/test_runtime_transactions.py": "809eb2d9daee550a5777b4d957cf1539a9485c6747b16dea837db8673238d238",
+    "experiments/icra_commissioning/network_navigation_runtime_pilot.yaml": "72d7318718c9510f5b4bb570927be0650f16e4c0186440562e6c8a2cf167d380"
+  },
+  "changed_since_audit_start": [
+    "src/planning/planning/nodes/efe_agent_node.py",
+    "tests/planning/test_runtime_transactions.py"
+  ],
+  "executed_source_paths": {
+    "UnicyclePlannerNode": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/planning/planning/nodes/unicycle_planner_node.py",
+    "CameraManagerNode": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/reliability/reliability/nodes/camera_manager_node.py",
+    "GoalMissionNode": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/experiments/nodes/goal_mission_node.py",
+    "FourCameraBatcher": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/perception/perception/core/four_camera_batch.py"
+  },
+  "probes": [
+    {
+      "probe": "publication_overtakes",
+      "reproduction_passed": true,
+      "observed": {
+        "published_stamps": [
+          10.2,
+          10.0
+        ],
+        "each_message_coherent": true,
+        "latest_message_regresses": true
+      }
+    },
+    {
+      "probe": "same_stamp_supersession_guard",
+      "reproduction_passed": true,
+      "observed": {
+        "anchor_stamp_unchanged": 9.0,
+        "correction_applied": true,
+        "superseded_prediction_published": false
+      }
+    },
+    {
+      "probe": "full_covariance_snapshot",
+      "reproduction_passed": true,
+      "observed": {
+        "full_planar_covariance_preserved": true,
+        "frame": "map_bev",
+        "stamp": 10.0
+      }
+    },
+    {
+      "probe": "frame_from_different_event",
+      "reproduction_passed": true,
+      "observed": {
+        "belief_coordinates_frame": "map_bev",
+        "published_frame": "camera_optical"
+      }
+    },
+    {
+      "probe": "equal_time_revision_lost_by_consumer",
+      "reproduction_passed": true,
+      "observed": {
+        "stamp": 10.0,
+        "published_x": [
+          0.0,
+          0.0625
+        ],
+        "manager_kept_x": 0.0,
+        "manager_retained_revisions": 1
+      }
+    },
+    {
+      "probe": "odometry_callback_finishes_out_of_order",
+      "reproduction_passed": true,
+      "observed": {
+        "log_stamps": [
+          11.0,
+          10.0
+        ],
+        "velocity_sample_time": 10.0,
+        "yaw_sample_time": 11.0,
+        "replay_x": 2.0,
+        "timestamp_order_reference_x": 3.0,
+        "reports_fallback": 0.0
+      }
+    },
+    {
+      "probe": "coverage_check_and_replay_use_different_buffers",
+      "reproduction_passed": true,
+      "observed": {
+        "checked_supported": true,
+        "actually_replayed_buffer_supported": false,
+        "committed_stamp": 60.9,
+        "expected_motion": 59.9,
+        "committed_motion": 59.8
+      }
+    },
+    {
+      "probe": "planner_metadata_from_superseding_update",
+      "reproduction_passed": true,
+      "observed": {
+        "input_anchor": 9.9,
+        "returned_anchor": 9.95,
+        "returned_x": 0.0,
+        "committed_x": 0.0625,
+        "recursive_anchor_after_correction": 9.95
+      }
+    },
+    {
+      "probe": "planning_bootstrap_bypasses_envelope",
+      "reproduction_passed": true,
+      "observed": {
+        "anonymous_bootstrap_x": 0.1,
+        "identified_event_status": "dropped",
+        "reason": "not_newer_than_belief"
+      }
+    },
+    {
+      "probe": "backward_reset_keeps_epoch_state",
+      "reproduction_passed": true,
+      "observed": {
+        "ros_now": 1.0,
+        "retained_anchor": 100.0,
+        "planning_age": 0.0,
+        "published_messages": 0,
+        "odom_stamps": [
+          100.0,
+          1.0
+        ],
+        "retained_identity": true,
+        "first_new_epoch_correction": "not_newer_than_belief"
+      }
+    },
+    {
+      "probe": "camera_batch_reset",
+      "reproduction_passed": true,
+      "observed": {
+        "previous_epoch_status": "batch_ready",
+        "reset_frame_status": "out_of_order"
+      }
+    },
+    {
+      "probe": "mission_clock_and_readiness",
+      "reproduction_passed": true,
+      "observed": {
+        "goal_header": 1780000000.0,
+        "ros_now": 0.1,
+        "readiness_survives_invalid_input": true,
+        "waypoint_advanced_using_unvalidated_belief": true,
+        "planner_compares_goal_stamp": false
+      }
+    },
+    {
+      "probe": "mission_system_clock_jumps",
+      "reproduction_passed": true,
+      "observed": {
+        "system_now": [
+          99.0,
+          103.0,
+          90.0,
+          104.0
+        ],
+        "sent_counts": [
+          0,
+          1,
+          1,
+          2
+        ],
+        "startup_delay_uses_system_elapsed": true,
+        "backward_system_jump_postpones_repeats": true
+      }
+    },
+    {
+      "probe": "correction_worker_starvation",
+      "reproduction_passed": true,
+      "observed": {
+        "workers": 2,
+        "one_calculating": true,
+        "one_waiting_on_correction_lock": true,
+        "data_lock_free": true,
+        "queued_odom_cannot_execute_until_release": true
+      }
+    },
+    {
+      "probe": "simultaneous_duplicate_envelopes",
+      "reproduction_passed": true,
+      "observed": {
+        "assimilation_count": 1,
+        "duplicate_fails_closed": true
+      }
+    },
+    {
+      "probe": "pixel_timer_reads_new_measurement_with_old_stamp",
+      "reproduction_passed": true,
+      "observed": {
+        "timer_target": 9.9,
+        "actual_pixel_capture": 9.95,
+        "applied_measurement_x": 0.2
+      }
+    },
+    {
+      "probe": "clock_domain_error_fails_open",
+      "reproduction_passed": true,
+      "observed": {
+        "clock_domain_mismatch_reported_age": 0.0,
+        "accepted_as_fresh": true,
+        "active_ros_clock_path": false
+      }
+    }
+  ]
+}

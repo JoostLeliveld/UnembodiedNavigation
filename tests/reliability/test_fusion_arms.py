@@ -2,8 +2,8 @@
 
 One test per property the arms are compared on, so a rule cannot be quietly changed into
 another rule: F1 picks the most precise camera without a prior, F2 ignores covariance and
-weights on geometry alone, F3 and F4 agree on the position and disagree only about how much
-they claim to know, and that disagreement is exactly N.
+weights on geometry alone, F3 assumes independent Gaussian readings, and F4 solves the
+camera batch jointly before it constructs one network-level Gaussian.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from reliability.fusion import (
     distance_angle_weighted_fusion_2d,
     distance_angle_weights,
     independent_measurement_fusion_2d,
-    network_pooled_fusion_2d,
+    joint_network_estimate_2d,
     select_smallest_covariance,
 )
 
@@ -85,42 +85,52 @@ class TestDistanceAngleHeuristic:
         assert cov[0][0] > 0.0 and cov[1][1] > 0.0
 
 
-class TestIndependentVersusNetwork:
-    def test_same_position(self, three_readings):
-        mean_ind, _ = independent_measurement_fusion_2d(three_readings)
-        mean_net, _ = network_pooled_fusion_2d(three_readings)
-        assert mean_net == pytest.approx(mean_ind, abs=1e-12)
-
-    def test_network_claims_exactly_n_times_the_covariance(self, three_readings):
-        _m, cov_ind = independent_measurement_fusion_2d(three_readings)
-        _n, cov_net = network_pooled_fusion_2d(three_readings)
-        n = len(three_readings)
-        for i in range(2):
-            for j in range(2):
-                assert cov_net[i][j] == pytest.approx(n * cov_ind[i][j], rel=1e-12)
-
-    def test_one_camera_leaves_both_rules_identical(self, three_readings):
+class TestJointNetworkEstimator:
+    def test_one_camera_is_one_network_report(self, three_readings):
         single = three_readings[:1]
-        net = network_pooled_fusion_2d(single)[1]
-        ind = independent_measurement_fusion_2d(single)[1]
-        assert _flat(net) == pytest.approx(_flat(ind), abs=1e-15)
+        mean, covariance = joint_network_estimate_2d(single)
+        assert mean == single[0].xy_m
+        assert _flat(covariance) == pytest.approx(_flat(single[0].covariance_m2), abs=1e-15)
 
-    def test_explicit_exponents_are_honoured(self, three_readings):
-        equal = network_pooled_fusion_2d(three_readings)[1]
-        stated = network_pooled_fusion_2d(
-            three_readings,
-            exponents={o.camera_id: 1.0 / len(three_readings) for o in three_readings})[1]
-        assert _flat(stated) == pytest.approx(_flat(equal), rel=1e-12)
+    def test_identical_equal_quality_views_do_not_shrink_by_n(self):
+        readings = [obs(camera_id, 1.0, 2.0, 0.1, 0.2)
+                    for camera_id in ("camera_A", "camera_B", "camera_E")]
+        mean, covariance = joint_network_estimate_2d(readings)
+        assert mean == pytest.approx((1.0, 2.0))
+        assert _flat(covariance) == pytest.approx([0.01, 0.0, 0.0, 0.04])
 
-    def test_negative_exponent_is_refused(self, three_readings):
-        with pytest.raises(ContractValidationError):
-            network_pooled_fusion_2d(three_readings,
-                                     exponents={"camera_A": -1.0, "camera_B": 1.0,
-                                                "camera_E": 1.0})
+    def test_disagreement_widens_the_direction_of_disagreement(self):
+        agreed = [obs(camera_id, 0.0, 0.0, 0.1, 0.1)
+                  for camera_id in ("camera_A", "camera_B", "camera_E")]
+        spread = [obs("camera_A", -0.1, 0.0, 0.1, 0.1),
+                  obs("camera_B", 0.0, 0.0, 0.1, 0.1),
+                  obs("camera_E", 0.1, 0.0, 0.1, 0.1)]
+        covariance_agreed = joint_network_estimate_2d(agreed)[1]
+        covariance_spread = joint_network_estimate_2d(spread)[1]
+        assert covariance_spread[0][0] > covariance_agreed[0][0]
+        assert covariance_spread[1][1] == pytest.approx(covariance_agreed[1][1])
+
+    def test_robust_joint_solution_is_not_independent_pooling(self):
+        readings = [obs("camera_A", 0.0, 0.0, 0.1, 0.1),
+                    obs("camera_B", 0.0, 0.0, 0.1, 0.1),
+                    obs("camera_E", 2.0, 0.0, 0.1, 0.1)]
+        independent = independent_measurement_fusion_2d(readings)[0]
+        joint = joint_network_estimate_2d(readings)[0]
+        assert joint[0] < independent[0]
+
+    def test_result_is_independent_of_message_order(self, three_readings):
+        forward = joint_network_estimate_2d(three_readings)
+        reverse = joint_network_estimate_2d(list(reversed(three_readings)))
+        assert forward[0] == pytest.approx(reverse[0], abs=1e-12)
+        assert _flat(forward[1]) == pytest.approx(_flat(reverse[1]), abs=1e-12)
 
     def test_no_observations_is_refused(self):
         with pytest.raises(ContractValidationError):
-            network_pooled_fusion_2d([])
+            joint_network_estimate_2d([])
+
+    def test_invalid_huber_threshold_is_refused(self, three_readings):
+        with pytest.raises(ContractValidationError):
+            joint_network_estimate_2d(three_readings, huber_delta=0.0)
 
 
 class TestCommissionedCovarianceProfile:
@@ -208,28 +218,29 @@ class TestOneGateFourRules:
                                rule=FUSION_RULE_BEST_SINGLE)
         assert result.accepted_camera_ids == ("camera_B",)
 
-    def test_network_and_independent_agree_on_position(self):
+    def test_joint_network_has_a_distinct_post_fit_covariance(self):
         from reliability.nodes.camera_manager_node import (
-            FUSION_RULE_INDEPENDENT, FUSION_RULE_NETWORK, _gated_fusion)
+            FUSION_RULE_INDEPENDENT, FUSION_RULE_JOINT_NETWORK, _gated_fusion)
 
         ind = _gated_fusion(self._fresh(), disagreement_gate_m=0.6,
                             rule=FUSION_RULE_INDEPENDENT)
-        net = _gated_fusion(self._fresh(), disagreement_gate_m=0.6, rule=FUSION_RULE_NETWORK)
+        net = _gated_fusion(self._fresh(), disagreement_gate_m=0.6,
+                            rule=FUSION_RULE_JOINT_NETWORK)
+        # With no Huber downweighting, both correctly solve the same GLS normal equations.
         assert net.mean_xy == pytest.approx(ind.mean_xy, abs=1e-12)
-        assert _flat(net.covariance_m2) == pytest.approx(
-            [3.0 * v for v in _flat(ind.covariance_m2)], rel=1e-12)
+        assert _flat(net.covariance_m2) != pytest.approx(_flat(ind.covariance_m2), rel=1e-12)
 
     def test_every_rule_drops_the_same_outlier(self):
         from reliability.nodes.camera_manager_node import (
             FUSION_RULE_BEST_SINGLE, FUSION_RULE_DISTANCE_ANGLE, FUSION_RULE_INDEPENDENT,
-            FUSION_RULE_NETWORK, _gated_fusion)
+            FUSION_RULE_JOINT_NETWORK, _gated_fusion)
 
         # camera_D reads 0.6 m away from the others: the same gate must reject it whichever
         # rule follows, or the gate becomes part of the treatment
         readings = self._fresh() + [obs("camera_D", 0.62, 0.0, 0.060, 0.019)]
         positions = dict(CAMERA_POSITIONS, camera_D=(11.45, 7.2, 5.0))
         for rule in (FUSION_RULE_BEST_SINGLE, FUSION_RULE_DISTANCE_ANGLE,
-                     FUSION_RULE_INDEPENDENT, FUSION_RULE_NETWORK):
+                     FUSION_RULE_INDEPENDENT, FUSION_RULE_JOINT_NETWORK):
             result = _gated_fusion(readings, disagreement_gate_m=0.30, rule=rule,
                                    camera_positions_m=positions)
             assert "camera_D" in result.rejected_camera_ids, rule

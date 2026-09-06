@@ -1,0 +1,59 @@
+{
+  "run": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_pilot/fusion_network_traverse/P0/seed210/experiment_20260906_213015",
+  "selection_sha256": "66b928fbaf8f470332acff23922003822fcb58113d4bd085180ade5c54c0cfd0",
+  "checked": 1112,
+  "max_abs_difference_raw_z_R": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "malformed_logged_inputs": 0,
+  "trace": {
+    "source_batch_id": "strict:camera_A@3400000000,camera_B@3400000000,camera_C@3400000000,camera_D@3400000000,camera_E@3400000000",
+    "camera": "camera_B",
+    "calibration_id": "warehouse_v2_camera_B",
+    "image_frame_id": "camera_B",
+    "box": [
+      1.519744873046875,
+      371.282958984375,
+      128.50892639160156,
+      459.311767578125
+    ],
+    "pixel": [
+      65.01433563232422,
+      459.311767578125
+    ],
+    "capture_stamp_s": 3.4000000000000004,
+    "image_receive_stamp_s": 3.427,
+    "inference_start_stamp_s": 3.4760000000000004,
+    "inference_finish_stamp_s": 3.4760000000000004,
+    "publish_stamp_s": 3.4760000000000004,
+    "logger_receive_stamp_s": 3.693,
+    "raw": [
+      -7.688169241891988,
+      -8.998425588167592
+    ],
+    "nn": [
+      -7.90728915859307,
+      -8.672935428956375
+    ],
+    "bias": [
+      -0.020673684090573307,
+      -0.0399250047235681
+    ],
+    "z": [
+      -7.886615474502497,
+      -8.633010424232808
+    ],
+    "R": [
+      [
+        0.033313103557099315,
+        0.012617474882541087
+      ],
+      [
+        0.012617474882541087,
+        0.27909081853677753
+      ]
+    ]
+  }
+}

@@ -47,7 +47,7 @@ TASKS = ("fusion_network_traverse", "fusion_overlap_rich", "fusion_overlap_spars
 #: arm id -> its own folder, so each method's numbers live with its own figures
 FOLDER = {
     "F1": "01_best_single_camera", "F2": "02_distance_angle",
-    "F3": "03_independent_fusion", "F4": "04_network_fusion",
+    "F3": "03_independent_fusion", "F4": "04_joint_network_estimator",
     "O1": "05_raw_box", "O2": "06_fixed_offset",
 }
 
@@ -130,8 +130,9 @@ def _selected_runs(arm: str, task: str = TASKS[0]) -> list[Path]:
         raise SystemExit(f"{FROZEN_RUNS}: {task}/{arm} analysis must be a non-empty list")
     expected = {
         "F1": ("best_single", "hull"), "F2": ("distance_angle", "hull"),
-        "F3": ("independent", "hull"), "F4": ("network", "hull"),
-        "O1": ("network", "raw_box"), "O2": ("network", "fixed_offset"),
+        "F3": ("independent", "hull"), "F4": ("joint_network", "hull"),
+        "O1": ("joint_network", "raw_box"),
+        "O2": ("joint_network", "fixed_offset"),
     }[arm]
     selected, seeds, provenance = [], set(), set()
     for value in values:

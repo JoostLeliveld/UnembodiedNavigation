@@ -1591,7 +1591,7 @@ def _fixed_fieldnames() -> list[str]:
         'camera_id', 'camera_model', 'camera_range_m', 'camera_range_bin', 'min_mask_area_applied_px',
         'sample_kind', 'sample_index', 'attempt', 'split', 'accepted', 'rejection_reason',
         'geometry_certified_no_opportunity', 'no_opportunity_reason', 'semantic_robot_pixels',
-        'image', 'label', 'mask', 'preview',
+        'image', 'label', 'mask', 'preview', 'observation_image',
         'robot_x', 'robot_y', 'robot_yaw',
         'image_stamp_s', 'label_stamp_s', 'stamp_delta_s',
         'set_pose_latency_s', 'settle_s', 'pair_wait_s',
@@ -1627,6 +1627,7 @@ def _diagnostic_row(
     label_rel: str = '',
     mask_rel: str = '',
     preview_rel: str = '',
+    observation_image_rel: str = '',
 ) -> dict:
     row = {
         'sample_kind': str(sample_kind),
@@ -1644,6 +1645,7 @@ def _diagnostic_row(
         'label': label_rel,
         'mask': mask_rel,
         'preview': preview_rel,
+        'observation_image': observation_image_rel,
         'robot_x': float(x),
         'robot_y': float(y),
         'robot_yaw': float(yaw),
@@ -1760,6 +1762,16 @@ def main() -> int:
     parser.add_argument('--preview-count', type=int, default=160)
     parser.add_argument('--rejected-preview-count', type=int, default=80)
     parser.add_argument('--save-masks', action='store_true', help='Save accepted binary masks for provenance.')
+    parser.add_argument(
+        '--save-observation-frames',
+        action='store_true',
+        help=(
+            'Retain one synchronized RGB frame for every successfully captured planned pose, '
+            'including samples rejected by the semantic-label quality gate. Accepted rows '
+            'reuse their normal image path; rejected rows are written under observation_frames/. '
+            'This is for detector miss/error characterization, not detector training.'
+        ),
+    )
     parser.add_argument('--min-mask-area', type=float, default=80.0)
     parser.add_argument('--far-range-start-m', type=float, default=12.0,
                         help='Ground range at which the explicit small-object mask threshold applies.')
@@ -2089,6 +2101,8 @@ def main() -> int:
             (out_dir / 'masks' / split).mkdir(parents=True, exist_ok=False)
     (out_dir / 'audit' / 'accepted').mkdir(parents=True, exist_ok=True)
     (out_dir / 'audit' / 'rejected').mkdir(parents=True, exist_ok=True)
+    if bool(args.save_observation_frames):
+        (out_dir / 'observation_frames').mkdir(parents=True, exist_ok=True)
     output_guard = _CaptureOutputGuard(
         out_dir,
         camera_id=camera_id,
@@ -2235,6 +2249,10 @@ def main() -> int:
                             label_rel=str(label_path.relative_to(out_dir)),
                             mask_rel=mask_rel,
                             preview_rel=preview_rel,
+                            observation_image_rel=(
+                                str(image_path.relative_to(out_dir))
+                                if bool(args.save_observation_frames) else ''
+                            ),
                         ))
                         accepted += 1
                         accepted_hashes.append(quality.image_sha1)
@@ -2242,6 +2260,17 @@ def main() -> int:
                         sample_accepted = True
                         break
                     rejected_counts[quality.reason] += 1
+                    observation_image_rel = ''
+                    if bool(args.save_observation_frames):
+                        observation_path = (
+                            out_dir / 'observation_frames'
+                            / f'sample_{sample_index:06d}_try{attempt}.png'
+                        )
+                        if not cv2.imwrite(str(observation_path), pair.image_bgr):
+                            raise RuntimeError(
+                                f'Failed to write observation frame {observation_path}'
+                            )
+                        observation_image_rel = str(observation_path.relative_to(out_dir))
                     if len(rejected_preview_paths) < max(int(args.rejected_preview_count), 0):
                         overlay = _draw_overlay(
                             pair.image_bgr,
@@ -2267,6 +2296,7 @@ def main() -> int:
                         y=y,
                         yaw=yaw,
                         settle_s=float(args.settle_s),
+                        observation_image_rel=observation_image_rel,
                     ))
                     # In the fixed world, label-quality failures at an exact
                     # commanded pose are deterministic. Repeating them used to
@@ -2596,6 +2626,7 @@ def main() -> int:
             'min_accepted_samples': int(args.min_accepted_samples),
             'min_accept_fraction': float(args.min_accept_fraction),
             'negative_samples_per_camera': int(negative_target),
+            'save_observation_frames': bool(args.save_observation_frames),
             'negative_split': 'train',
             'negative_semantic_robot_pixels': 0,
             'negative_no_opportunity_reasons': [
@@ -2627,6 +2658,9 @@ def main() -> int:
             'Deterministic label-quality rejections are attempted once; max_sample_attempts applies to transient capture/synchronization exceptions.',
             'Partial silhouettes are accepted only when occlusion_policy=visible-mask-positive; '
             'those rows have localization_qualified=0 and must not calibrate a bottom-point projection.',
+            'When save_observation_frames is enabled, observation_image names the RGB input '
+            'for every successfully synchronized planned pose, whether or not semantic-label '
+            'quality admitted it to the detector-training dataset.',
         ],
     }
     failures = []

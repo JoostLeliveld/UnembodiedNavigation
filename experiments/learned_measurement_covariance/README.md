@@ -4,7 +4,8 @@
 truth, on a stationary robot. Deployments drift: a camera is knocked, a rack is restocked, a
 lens fogs. Can the network re-measure itself from an ordinary drive, with no ground truth?
 
-**Serves:** the operational-covariance contribution of the fusion paper
+**Serves:** Stages 2–3 of the active plan: conditional measurement covariance and its
+truth-free operational estimate
 (`../fusion_on_fixed_routes/`). Outputs in `logs/studies/learned_measurement_covariance/`.
 
 ## The scripts

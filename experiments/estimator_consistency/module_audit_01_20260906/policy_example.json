@@ -1,0 +1,72 @@
+{
+  "scope": "One-run terminal-event diagnostic, not a policy-effect estimate",
+  "selection_path": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_evidence/selection.json",
+  "selection_sha256": "66b928fbaf8f470332acff23922003822fcb58113d4bd085180ade5c54c0cfd0",
+  "run": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_pilot/fusion_network_traverse/P2/seed210/experiment_20260906_220801",
+  "ledger_sha256": "334bfadcf79cb32ef3c8744224f743139daf447bec24ef56e9e3354354caab5e",
+  "selection_rule": "Longest apply-time gap between accepted terminal events in selected P2 seed 210",
+  "before": {
+    "source_batch_id": "strict:camera_A@158800000000,camera_B@158800000000,camera_C@158800000000,camera_D@158800000000,camera_E@158800000000",
+    "correction_stamp": 158.8,
+    "apply_stamp": 159.209,
+    "belief_stamp_after": 158.8,
+    "status": "accepted",
+    "reason": "accepted",
+    "accepted": true,
+    "nis": 0.013582090394603792
+  },
+  "after": {
+    "source_batch_id": "strict:camera_A@232000000000,camera_B@232000000000,camera_C@232000000000,camera_D@232000000000,camera_E@232000000000",
+    "correction_stamp": 232.0,
+    "apply_stamp": 232.40400000000002,
+    "belief_stamp_after": 232.0,
+    "status": "accepted",
+    "reason": "accepted",
+    "accepted": true,
+    "nis": 0.8148939844943361
+  },
+  "acceptance_gap_s": 73.19500000000002,
+  "events_after_previous_acceptance": [
+    {
+      "source_batch_id": "strict:camera_A@187000000000,camera_B@187000000000,camera_C@187000000000,camera_D@187000000000,camera_E@187000000000",
+      "correction_stamp": 187.0,
+      "apply_stamp": 187.44,
+      "belief_stamp_after": 187.0,
+      "status": "dropped",
+      "reason": "replay_gap_too_large",
+      "accepted": false,
+      "nis": null
+    },
+    {
+      "source_batch_id": "strict:camera_A@231400000000,camera_B@231400000000,camera_C@231400000000,camera_D@231400000000,camera_E@231400000000",
+      "correction_stamp": 231.4,
+      "apply_stamp": 232.00000000000003,
+      "belief_stamp_after": 187.0,
+      "status": "dropped",
+      "reason": "stale_age",
+      "accepted": false,
+      "nis": null
+    },
+    {
+      "source_batch_id": "strict:camera_A@231800000000,camera_B@231800000000,camera_C@231800000000,camera_D@231800000000,camera_E@231800000000",
+      "correction_stamp": 231.8,
+      "apply_stamp": 232.252,
+      "belief_stamp_after": 231.8,
+      "status": "dropped",
+      "reason": "replay_gap_too_large",
+      "accepted": false,
+      "nis": null
+    },
+    {
+      "source_batch_id": "strict:camera_A@232000000000,camera_B@232000000000,camera_C@232000000000,camera_D@232000000000,camera_E@232000000000",
+      "correction_stamp": 232.0,
+      "apply_stamp": 232.40400000000002,
+      "belief_stamp_after": 232.0,
+      "status": "accepted",
+      "reason": "accepted",
+      "accepted": true,
+      "nis": 0.8148939844943361
+    }
+  ],
+  "limit": "Actual motion-support snapshots and alternative gate outcomes are not logged"
+}

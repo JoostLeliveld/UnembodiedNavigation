@@ -1,0 +1,193 @@
+# RESUME SLICE: the W1 arm only. W0 seeds 0-1 completed in an earlier session and their
+# run_summary.json files are valid; the campaign process died before writing campaign_log.json,
+# so --resume cannot see them. This file runs the arm that has no completed runs yet.
+#
+# Does commissioning the covariance on the warehouse floor beat propagating detector
+# pixel noise -- on a DRIVING robot, where the belief steers which sightings are admitted?
+#
+# The offline answer is unambiguous: on 3,163 held-out readings the pixel route states
+# 0.7 cm where the error is 19.1 cm (average squared Mahalanobis 610 against an ideal 2.0),
+# while the commissioned world-plane table states 10.5 cm and reads 2.09. This campaign
+# asks whether that survives the closed loop, which the offline test cannot answer because
+# there the sequence of readings is fixed and here the belief chooses it.
+#
+#   W0  one pixel-noise number per camera, pushed through each camera's geometry
+#       (the deployed route, and the winner of the earlier K-ladder)
+#   W1  the commissioned world-plane covariance and offset, per camera and per detector
+#       confidence, read from the study artifact
+#
+# Same route, same fusion rule, same observation model, same detector. The ONLY difference
+# is what the covariance is allowed to say, and W1 also applies the offset commissioned
+# alongside it -- a corrected reading is never paired with an uncorrected covariance.
+#
+# Design: logs/studies/perception_bayesian_gaussian/RESULTS.md, decisions D012-D013.
+
+world: warehouse_v2.world.sdf
+launch_file: warehouse_primary_comparison.launch.py
+
+conditions:
+  W0:
+    label: W0_pixel_noise_per_camera_through_geometry
+    manager_fusion_rule: joint_network
+    manager_observation_model: hull
+    manager_covariance_profile: commissioned_sigma_px
+    manager_commissioned_per_camera_sigma: true
+  W1:
+    label: W1_commissioned_world_plane_covariance
+    manager_fusion_rule: joint_network
+    manager_observation_model: hull
+    manager_covariance_profile: commissioned_world_r
+    manager_commissioned_world_covariance_path: logs/studies/perception_bayesian_gaussian/results/06_commissioning/commissioning.json
+    # The pixel calibration is still read for provenance; this profile does not consult it
+    # when sizing the ellipse.
+    manager_commissioned_per_camera_sigma: true
+
+tasks:
+  fusion_network_traverse:
+    # the mixed corridor -- 30.622 m, 10 vertices, measured clearance 0.3538 m
+    conditions: [W1]
+    seeds: [0, 1, 2, 3, 4]
+    preselected_routes:
+      W0: &route_world_R
+        preselected_route_json: '[[-7.900000000000015,-8.700000000000005],[-7.000000000000018,-8.700000000000005],[-4.800000000000026,-6.500000000000012],[-1.1000000000000387,-6.500000000000012],[0.7999999999999545,-4.600000000000019],[0.7999999999999545,-2.2000000000000277],[1.5999999999999517,-1.4000000000000306],[10.099999999999923,-1.4000000000000306],[10.799999999999919,-0.700000000000033],[10.59999999999992,6.499999999999943]]'
+        preselected_route_sha256: 9d4a3a35d8d7254bfa6d59110f295ca0df648262227367e027c924c62bf34b76
+        preselected_route_source_path: experiments/fusion_on_fixed_routes/routes/fusion_network_traverse.json
+        preselected_route_source_sha256: c7c0322b930e2c22ac0b7d09b6ea8df0725f545da467519dd1ffecbab21cf3ed
+      W1: *route_world_R
+
+# ---------------------------------------------------------------------------
+# the sensor: frozen detector, one commissioned pixel-noise number
+# ---------------------------------------------------------------------------
+perception_backend: yolo
+yolo_model: logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt
+yolo_device: '0'
+yolo_imgsz: 960
+yolo_conf_threshold: 0.25
+yolo_iou_threshold: 0.45
+yolo_target_class: robot
+yolo_class_id: 0
+yolo_use_masks: false
+yolo_min_bbox_area_px: 0.0
+yolo_max_batch_stamp_skew_s: 0.05
+# The detector node stamps this sigma (px) onto every observation it publishes. The manager's
+# commissioned_sigma_px profile overrides it from calibration.json anyway, but leaving the old
+# 2.5 px here would put two different claims about the same detector in one run's provenance.
+r_visible_uv: 0.7642679454946852
+r_miss_uv: 40.0
+
+multicam_belief: true
+manager_fusion_mode: true
+manager_covariance_profile: commissioned_sigma_px
+manager_commissioned_calibration_path: logs/studies/measurement_commissioning/calibration.json
+# No reliability field is consulted anywhere in this experiment: availability predicts the
+# future and this experiment is entirely about measurements that have already arrived.
+manager_require_gp_artifacts: false
+manager_decision_rate_hz: 5.0
+manager_require_source_batch_id: true
+manager_bootstrap_min_cameras: 2
+# Two cameras place the SAME robot this far apart with no error at all: the box
+# bottom-centre lands short along each camera's own bearing, by a commissioned
+# 0.204-0.456 m. Two correct readings can therefore differ by twice the largest of
+# those, 0.91 m, so anything tighter rejects the truth. Measured on the frozen
+# capture (250 positions seen by 2+ cameras): the closest-agreeing pair at a
+# position is a median 0.27 m apart and at worst 0.88 m, so 0.91 m admits every
+# correct start while still refusing a camera that has locked onto something else.
+manager_bootstrap_max_disagreement_m: 0.91
+manager_fusion_disagreement_gate_m: 0.6
+# Below the 0.20 s detector period, so a stale round can never be fused as if it
+# were simultaneous. At 0.25 s it could, and did: 13 of 2661 decisions on the
+# frozen route combined readings 200 ms apart.
+manager_fusion_max_timestamp_spread_s: 0.05
+state_correction_mode: fused
+state_correction_ekf: true
+heading_update_mode: coupled
+pixel_correction_nis_threshold: 9.21
+
+# Recovery policy: what the belief does when a correction is refused. Declared here so
+# the manifest states it. Re-anchor is OFF: snapping the belief to a measurement was the
+# one path that bypassed both the outlier gate and the re-anchor threshold, so one
+# camera's word could move the belief anywhere unchecked. A refused correction widens the
+# belief instead, which reopens the gate on its own without granting a bypass.
+state_reanchor_m: 0.0
+state_max_predict_dt_s: 1.5
+state_reject_inflate_m2: 0.05
+stale_belief_inflate_m2_per_s: 0.0
+stale_belief_inflate_cap_m2: 0.0
+require_state_correction_envelope: true
+
+# ---------------------------------------------------------------------------
+# the route: frozen, hash-bound, identical for every arm
+# ---------------------------------------------------------------------------
+use_hierarchical: true
+global_planner_mode: preselected_route
+# The planner's belief comes from the cameras and odometry, never from the
+# simulator's pose. This diagnostic bypass would replace it with raw odometry.
+use_diagnostic_odom_localization: false
+# The measured minimum along this polyline is 0.354 m; the grid erosion that produced it was
+# 0.50 m, because a polyline joining 0.10 m cell centres cuts diagonal corners.
+# freeze_route.py measures this on the SIMPLIFIED polyline -- the one actually driven -- and
+# against the same geometry the launch gate uses.
+#
+# The route is 10 vertices, not the generator's 284. The preselected-route contract executes
+# every coordinate as a waypoint, so 0.10 m grid steps became turn_then_go waypoints: the
+# robot tried to face points a hand's width away, span in place at 20.8 m of 30.7, and was
+# flagged stuck. Simplifying to the corners the route actually turns at (0.20 m
+# Douglas-Peucker) fixes the cause instead of loosening the stuck detector.
+preselected_route_clearance_m: 0.35
+preselected_route_endpoint_tolerance_m: 0.25
+preselected_route_sample_step_m: 0.04
+
+# ---------------------------------------------------------------------------
+# driving
+# ---------------------------------------------------------------------------
+v_max: 0.22
+horizon: 20
+dt: 0.25
+goal_success_radius: 0.35
+goal_success_hold_s: 2.0
+# Sim-time budget after the first command. 63 m at 0.22 m/s is about 310 s, so 600 is ample
+# and this was never the binding limit.
+#
+# THE BINDING LIMIT IS THE RUNNER'S OWN WALL CLOCK: --run-timeout, default 420 s, which killed
+# five healthy long-route drives at 44.5 m of 63.3 m and recorded them infra_invalid (correctly
+# — they are not results). It is a CLI flag rather than part of this config, so changing it
+# does not invalidate runs already in the log. Drive the long route with:
+#     --run-timeout 900
+run_timeout_after_first_cmd_s: 600
+# turn_then_go, for a measured reason. The worry was in-place rotation: the robot's
+# circumscribed radius is 0.486 m and the route's tightest point is 0.354 m from the DECLARED
+# LANE boundary. But the declared lanes are far narrower than the physical aisles -- at that
+# same corner the nearest real obstacle is 1.585 m away, and at the route's turns 0.95-1.00 m,
+# against a 0.275 m robot half-width. So a pirouette has about a metre of real room.
+# pure_pursuit was tried first and failed measurably: it cut the corner at (0.06, -4.71), left
+# the declared lane (0.010 m from its boundary, 0.374 m from anything physical), and the local
+# controller then refused every step with driveable_clearance_violation_step_0 -- the robot
+# drove 9.1 m of 30.7 and stopped. Tracking the polyline waypoint to waypoint keeps it on the
+# route the gate validated.
+local_controller_type: turn_then_go
+# The AMR is 0.80 x 0.55 m: half-width 0.275 m, not the 0.125 m Burger default.
+robot_collision_radius_m: 0.275
+use_nogo_cost: true
+nogo_penalty_type: warning_band
+nogo_safe_distance: 0.35
+# The local tracker's own keep-in margin, set 5 cm below the route's validated 0.354 m of lane
+# clearance so ordinary tracking error cannot put it in violation. It is a margin inside a
+# declared corridor that is itself conservative by roughly a metre.
+local_nogo_safe_distance: 0.30
+nogo_warning_band: 0.05
+nogo_weight: 40.0
+use_belief_nogo_cost: false
+terminate_on_geom_collision: false
+use_odom_for_predict: true
+odom_topic: /odom_noisy
+use_command_noise: true
+use_encoder_noise: true
+process_noise_xy: 0.01
+process_noise_theta: 0.02
+headless: true
+use_rviz: false
+reset_world: false
+debug_runtime: true
+# 15 runs need that many consecutive domain ids inside 0..232,
+# and they must not overlap the 80..200 block the main fusion campaign uses.
+ros_domain_id_base: 55

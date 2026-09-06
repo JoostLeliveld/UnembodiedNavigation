@@ -110,7 +110,8 @@ commissioned model *expects* the route to meet — not a recorded drive.
 ## The six runs
 
 All six use the same route, the same controller, the same frozen detector and the same
-`sigma_px`. Runs 1–4 all use the hull observation model; runs 4–6 all use network fusion, so
+`sigma_px`. Runs 1–4 all use the hull observation model; runs 4–6 all use the joint network
+estimator, so
 run 4 is one run serving both questions.
 
 | run | observation model | fusion rule | what it is there to answer |
@@ -118,7 +119,7 @@ run 4 is one run serving both questions.
 | **1** | hull | **F1** single best camera, smallest `tr(Sigma_c)` | why fuse at all, if you can just pick the best camera? |
 | **2** | hull | **F2** distance-and-angle weights | does covariance modelling beat knowing where the cameras are? |
 | **3** | hull | **F3** independent Gaussian fusion | the standard principled baseline |
-| **4** | **hull** | **F4** network fusion, exponents 1/N | **the proposed method** |
+| **4** | **hull** | **F4** joint network estimator | **the proposed method** |
 | **5** | raw box bottom-centre | F4 | what ignoring the observation model costs |
 | **6** | fixed box-to-centre offset | F4 | whether a constant offset would have done |
 
@@ -142,20 +143,23 @@ Its covariance is the weighted combination, so it can be scored for honesty like
 `independent_measurement_fusion_2d` in `src/reliability/reliability/fusion.py`. It shrinks
 its stated covariance like `1/N`, which is exactly the claim on trial.
 
-**F4 — the network as one sensor.** Gaussian pooling with conservative exponents:
+**F4 — the network as one sensor.** The simultaneous batch is solved once with robust
+generalized least squares. Only after that point is found do we approximate the network
+output as a Gaussian:
 
 ```
-p_net(x) ~ prod_c N(x; mu_c, Sigma_c)^{w_c}      w_c = 1/N      Sigma_geo^-1 = (1/N) sum_c Sigma_c^-1
+mu_net = argmin_mu sum_c Huber(||mu_c - mu||_{Sigma_c^-1})
+Sigma_net = finite-sample sandwich(within-camera covariance + between-camera disagreement)
 ```
 
-Two things do two separate jobs, and that separation is the point:
+This has three defining properties:
 
-- **`Sigma_c` handles camera quality.** A precise camera already carries more information.
-- **`w_c = 1/N` handles pooling.** It stops the network claiming N independent pieces of
-  evidence when the cameras' errors may be correlated — same robot, same detector, same
-  hull, same stock arrangement.
+- one camera returns its own reading and covariance;
+- identical equal-quality cameras do not manufacture `1/N` confidence;
+- disagreement widens the final ellipse in the direction of disagreement.
 
-So the exponent must **not** also be set from `Sigma_c`. Quality is counted once.
+The post-fit covariance scale is a commissioning quantity and must be tested on held-out
+routes. It is not declared calibrated by the construction alone.
 
 ### The three box interpretations
 
@@ -219,7 +223,7 @@ Not to build a replay comparison — to be able to explain a surprise afterwards
 | F3 independent fusion | `reliability/fusion.py: independent_measurement_fusion_2d` | **done, wired** |
 | F1 best single by `tr(Sigma_c)` | `reliability/fusion.py: select_smallest_covariance` | **done, wired** |
 | F2 distance-and-angle weights | `reliability/fusion.py: distance_angle_weighted_fusion_2d` | **done, wired**, frozen coefficients, no tuning |
-| F4 network pooling, `w = 1/N` | `reliability/fusion.py: network_pooled_fusion_2d` | **done, wired** |
+| F4 joint network estimator | `reliability/fusion.py: joint_network_estimate_2d` | **done, wired** |
 | a covariance profile that states `Sigma_c` | `camera_manager_node.py` (`covariance_profile: commissioned_sigma_px`) | **done, and the only supported profile** — the pre-clean-sheet metric-floor and 2.5/40 px profiles are gone |
 | O1 raw box / O2 fixed offset | `camera_manager_node.py` (`observation_model`) | **done, wired** |
 | the campaign driver: 6 arms x 4 routes x 5 seeds | `scripts/visibility_comparison/fusion_on_fixed_routes_campaign.yaml` | **done** |
@@ -261,7 +265,7 @@ that widens its ellipse passes any calibration test and is useless.
 The bins exist on this route: 9.4 m at one camera, 9.2 m at two, 5.0 m at three, 4.4 m at
 four. If F3's claimed uncertainty keeps shrinking with camera count while its error does not,
 and F4's claim stays honest, that is the evidence for treating the camera network as one
-sensor. If both stay honest, the simpler rule wins and the paper says `1/N` was unnecessary —
+sensor. If both stay honest, the simpler rule wins —
 that is a clean result, not a failed one.
 
 **Supporting:** worst error, longest stretch with no admitted sighting (seconds), and the
