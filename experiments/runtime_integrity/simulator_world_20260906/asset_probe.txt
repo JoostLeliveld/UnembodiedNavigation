@@ -1,0 +1,42 @@
+[bringup_sim] contact bridge: bridging 46 contact sensors from warehouse_v2.world.sdf -> /world_contacts
+[bringup_sim] contact bridge: bridging 46 contact sensors from warehouse_v2.world.sdf -> /world_contacts
+{
+  "world_realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+  "world_sha256": "cb872fd438bd3275ac75da44c12013c01c91c95287ce29edaf6bd0f09073f3e3",
+  "collision_prism_count": 46,
+  "max_collision_bound_difference_m": 0.0,
+  "spawn": {
+    "pose": {
+      "x": -7.9,
+      "y": -8.7,
+      "z": 0.05,
+      "yaw": 0.0
+    },
+    "centre_inside_driveable": true,
+    "body_inside_driveable": true,
+    "exact_body_clearance_m": 0.5799999999999982,
+    "circle_clearance_m": 0.49458780402630864,
+    "body_intersects": false,
+    "lane_centre_clearance_m": 0.5999999999999996
+  },
+  "start_full_turn_min_clearance_m": 0.4946056622878636,
+  "tf_contract": {
+    "rsp_parent": "base_footprint",
+    "rsp_child": "base_link",
+    "diff_parent": "odom",
+    "diff_child": "base_link",
+    "rsp_origin": "0 0 0.010",
+    "joint_state_publisher_plugin_present": false,
+    "camera_A_sdf_forward_world": [
+      0.508671156524786,
+      0.5086730249817057,
+      -0.6946260923516315
+    ],
+    "camera_A_tf_z_world": [
+      0.4911739181971949,
+      0.4911757223830516,
+      0.7193709695451315
+    ],
+    "optical_axis_disagreement_deg": 90.00000000000001
+  }
+}

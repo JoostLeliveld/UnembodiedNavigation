@@ -1,0 +1,107 @@
+{
+  "src/planning/planning/nodes/unicycle_planner_node.py": {
+    "snapshot": "e6566d3ef0956f58f4a523dc2353c61d015b57c9b5a6bb8d897109bc1f0defba",
+    "current": "b3e78d48b56b84f84aecdb8e6d84d1941a715aa946941bbdc166d59e1ed4418b",
+    "same": false
+  },
+  "src/planning/planning/nodes/efe_agent_node.py": {
+    "snapshot": "f3750f4a4dcb0969de7bd114b696f1dd536d1a10d47f14b80c53a755fae4bd45",
+    "current": "c2546f81863703e133f30c6342077f599a0ee48e650888f21e41431da6239296",
+    "same": false
+  },
+  "src/planning/planning/core/motion_history.py": {
+    "snapshot": "ac5ea439b956f3425a784447c384b828c8ce48075f7dabd0e6e96bb1b460a1c5",
+    "current": "ac5ea439b956f3425a784447c384b828c8ce48075f7dabd0e6e96bb1b460a1c5",
+    "same": true
+  },
+  "src/planning/planning/core/belief_correction.py": {
+    "snapshot": "0f5f0b32f561ad1326fec098dedd93a975c14904dc5e4602341afd53c432ee12",
+    "current": "0f5f0b32f561ad1326fec098dedd93a975c14904dc5e4602341afd53c432ee12",
+    "same": true
+  },
+  "src/experiments/experiments/nodes/goal_mission_node.py": {
+    "snapshot": "deedad91515c4bd13c368e6cb13a718b963fd142377ca84b1ce4f68bcb91a755",
+    "current": "deedad91515c4bd13c368e6cb13a718b963fd142377ca84b1ce4f68bcb91a755",
+    "same": true
+  },
+  "src/reliability/reliability/nodes/camera_manager_node.py": {
+    "snapshot": "8788520eb3a194767b2631430df5db26ca3704124924f81ca08517ab350d04e6",
+    "current": "8788520eb3a194767b2631430df5db26ca3704124924f81ca08517ab350d04e6",
+    "same": true
+  },
+  "src/perception/perception/core/four_camera_batch.py": {
+    "snapshot": "047cc9871d7cff5f2c87a35be89bfef9475e976918016541bb85c966a171ca92",
+    "current": "047cc9871d7cff5f2c87a35be89bfef9475e976918016541bb85c966a171ca92",
+    "same": true
+  },
+  "tests/planning/test_runtime_transactions.py": {
+    "snapshot": "809eb2d9daee550a5777b4d957cf1539a9485c6747b16dea837db8673238d238",
+    "current": "809eb2d9daee550a5777b4d957cf1539a9485c6747b16dea837db8673238d238",
+    "same": true
+  },
+  "tests/planning/test_command_installation.py": {
+    "snapshot": "e2a997066163dc89456f995868d1158b5ffffa1670d36b07c98f57b5b7166e35",
+    "current": "e2a997066163dc89456f995868d1158b5ffffa1670d36b07c98f57b5b7166e35",
+    "same": true
+  },
+  "tests/planning/test_outage_motion_replay.py": {
+    "snapshot": "5b237951eb9c2fb605a6bbf4e8085ad9c8ef4f8f46af300fd9b7d85d332718e6",
+    "current": "5b237951eb9c2fb605a6bbf4e8085ad9c8ef4f8f46af300fd9b7d85d332718e6",
+    "same": true
+  },
+  "tests/planning/test_planner_node_state_correction.py": {
+    "snapshot": "6e8e7d44cc666d809c209971aa460bca114ece823ca439831084c09f9bbda65a",
+    "current": "6e8e7d44cc666d809c209971aa460bca114ece823ca439831084c09f9bbda65a",
+    "same": true
+  },
+  "tests/planning/test_planner_node_correction_wiring.py": {
+    "snapshot": "5a6b06007c0479fe36a1bcfb1cb5564e762b1bc38dcf9b3764904c78b579ef5e",
+    "current": "5a6b06007c0479fe36a1bcfb1cb5564e762b1bc38dcf9b3764904c78b579ef5e",
+    "same": true
+  },
+  "tests/sim/test_encoder_input_chronology.py": {
+    "snapshot": "06bd7970feb9053081641c846c9d1cee8caedeb3599d37ce9de5d187d3c480b7",
+    "current": "06bd7970feb9053081641c846c9d1cee8caedeb3599d37ce9de5d187d3c480b7",
+    "same": true
+  },
+  "src/experiments/experiments/core/visibility_launch_common.py": {
+    "snapshot": "dab696fbf073485eeb466bfd43d1116c4a382dac99f0ec29208a0cf1b3ed65e6",
+    "current": "be80369af8f80b70a07e824554baa1dcc12022064d1ec255a04c1bee7754c0e8",
+    "same": false
+  },
+  "experiments/icra_commissioning/network_navigation_runtime_pilot.yaml": {
+    "snapshot": "72d7318718c9510f5b4bb570927be0650f16e4c0186440562e6c8a2cf167d380",
+    "current": "72d7318718c9510f5b4bb570927be0650f16e4c0186440562e6c8a2cf167d380",
+    "same": true
+  },
+  "experiments/runtime_integrity/timing_callbacks_20260906/probe.py": {
+    "snapshot": "7fddaec28d795ad131e457396b2b525be186db4243c92607a4d739effa14e115",
+    "current": "7fddaec28d795ad131e457396b2b525be186db4243c92607a4d739effa14e115",
+    "same": true
+  },
+  "src/perception/perception/nodes/batched_four_camera_yolo_node.py": {
+    "snapshot": "f8fdbeaa603fe9be62d4892c1c78c037e8574f54288169f3af23da1ec23d0819",
+    "current": "f8fdbeaa603fe9be62d4892c1c78c037e8574f54288169f3af23da1ec23d0819",
+    "same": true
+  },
+  "src/experiments/experiments/nodes/experiment_logger.py": {
+    "snapshot": "10c57ede5d42a88950a2fcc684925b5090feb30104c3df113b607ba3a00cbd7c",
+    "current": "10c57ede5d42a88950a2fcc684925b5090feb30104c3df113b607ba3a00cbd7c",
+    "same": true
+  },
+  "src/experiments/experiments/nodes/goal_marker_node.py": {
+    "snapshot": "a8c6130d57b2a50f59f886708e753ebeb1862c39f245ed790d21955d9d677f27",
+    "current": "a8c6130d57b2a50f59f886708e753ebeb1862c39f245ed790d21955d9d677f27",
+    "same": true
+  },
+  "docs/module_audits/01_repair_package_a_implemented.md": {
+    "snapshot": "079f17b861307a7d7c7bd66b1f176b25196f5b7cc51ea86d2a2ecca6092875a3",
+    "current": "079f17b861307a7d7c7bd66b1f176b25196f5b7cc51ea86d2a2ecca6092875a3",
+    "same": true
+  },
+  "docs/module_audits/03_command_execution_repair_implemented.md": {
+    "snapshot": "5da48cc0cf14281f1b742cd365e67160544499e18ca8e9b3a2993dd98ac5547d",
+    "current": "5da48cc0cf14281f1b742cd365e67160544499e18ca8e9b3a2993dd98ac5547d",
+    "same": true
+  }
+}

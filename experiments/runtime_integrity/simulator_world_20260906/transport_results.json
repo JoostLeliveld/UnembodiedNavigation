@@ -1,0 +1,601 @@
+{
+  "partition": "audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4",
+  "world": "audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4",
+  "command": [
+    "ign",
+    "gazebo",
+    "-s",
+    "-v",
+    "4",
+    "--iterations",
+    "8000",
+    "--record-path",
+    "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/private_logs/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4",
+    "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/transport.fixture.sdf",
+    "--force-version",
+    "6"
+  ],
+  "server_returncode": 0,
+  "actions": [
+    {
+      "args": [
+        "topic",
+        "-l"
+      ],
+      "wall_monotonic": 273206.053086769,
+      "duration_s": 2.1219803799758665,
+      "returncode": 0,
+      "stdout": "/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/sdf\n/clock\n/gazebo/resource_paths\n/model/turtlebot3/odometry\n/model/turtlebot3/tf\n/stats\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/changed_state\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/clock\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/dynamic_pose/info\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/log/clock\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/door_head_0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/door_head_1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/door_head_2/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_east/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_north/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_south_0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_south_1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_south_2/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_south_3/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_west/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/dock_office/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b1e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b1w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b2e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b2w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b3e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b3w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b1e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b1w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b2e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b2w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b3e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b3w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b1e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b1w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b2e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b2w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b3e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b3w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_B1b1n/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_B1b1s/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_B1b2n/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_B1b2s/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cm_p0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cm_p1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cm_p2/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cn_p0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cn_p1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cn_p2/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cs_p0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cs_p1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cs_p2/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_STAGE_E0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_STAGE_E1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_STAGE_MID0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_STAGE_MID1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/pose/info\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/scene/deletion\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/scene/info\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/state\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/stats\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "service",
+        "-s",
+        "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/control",
+        "--reqtype",
+        "ignition.msgs.WorldControl",
+        "--reptype",
+        "ignition.msgs.Boolean",
+        "--timeout",
+        "1000",
+        "--req",
+        "pause: false"
+      ],
+      "wall_monotonic": 273208.175101569,
+      "duration_s": 0.3347768950043246,
+      "returncode": 0,
+      "stdout": "data: true\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "topic",
+        "-t",
+        "/model/turtlebot3/cmd_vel",
+        "-m",
+        "ignition.msgs.Twist",
+        "-p",
+        "linear: {x: 0.2}"
+      ],
+      "wall_monotonic": 273209.010030255,
+      "duration_s": 0.9550236120121554,
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "service",
+        "-s",
+        "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/control",
+        "--reqtype",
+        "ignition.msgs.WorldControl",
+        "--reptype",
+        "ignition.msgs.Boolean",
+        "--timeout",
+        "1000",
+        "--req",
+        "pause: true"
+      ],
+      "wall_monotonic": 273210.765910549,
+      "duration_s": 0.3419298520311713,
+      "returncode": 0,
+      "stdout": "data: true\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "service",
+        "-s",
+        "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/control",
+        "--reqtype",
+        "ignition.msgs.WorldControl",
+        "--reptype",
+        "ignition.msgs.Boolean",
+        "--timeout",
+        "1000",
+        "--req",
+        "pause: false"
+      ],
+      "wall_monotonic": 273211.508100559,
+      "duration_s": 0.5006693070172332,
+      "returncode": 0,
+      "stdout": "data: true\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "service",
+        "-s",
+        "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/control",
+        "--reqtype",
+        "ignition.msgs.WorldControl",
+        "--reptype",
+        "ignition.msgs.Boolean",
+        "--timeout",
+        "1000",
+        "--req",
+        "reset: {all: true}"
+      ],
+      "wall_monotonic": 273212.509028289,
+      "duration_s": 0.3457758449949324,
+      "returncode": 0,
+      "stdout": "data: true\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "service",
+        "-s",
+        "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/control",
+        "--reqtype",
+        "ignition.msgs.WorldControl",
+        "--reptype",
+        "ignition.msgs.Boolean",
+        "--timeout",
+        "1000",
+        "--req",
+        "pause: false"
+      ],
+      "wall_monotonic": 273213.355023501,
+      "duration_s": 0.3275366120506078,
+      "returncode": 0,
+      "stdout": "data: true\n\n",
+      "stderr": ""
+    }
+  ],
+  "initial_advertised_topics": [
+    "/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/sdf",
+    "/clock",
+    "/gazebo/resource_paths",
+    "/model/turtlebot3/odometry",
+    "/model/turtlebot3/tf",
+    "/stats",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/changed_state",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/clock",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/dynamic_pose/info",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/log/clock",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/door_head_0/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/door_head_1/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/door_head_2/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_east/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_north/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_south_0/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_south_1/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_south_2/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_south_3/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_west/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/dock_office/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b1e/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b1w/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b2e/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b2w/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b3e/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b3w/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b1e/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b1w/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b2e/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b2w/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b3e/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b3w/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b1e/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b1w/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b2e/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b2w/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b3e/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b3w/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_B1b1n/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_B1b1s/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_B1b2n/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_B1b2s/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cm_p0/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cm_p1/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cm_p2/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cn_p0/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cn_p1/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cn_p2/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cs_p0/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cs_p1/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cs_p2/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_STAGE_E0/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_STAGE_E1/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_STAGE_MID0/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_STAGE_MID1/sensor/contact/contact",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/pose/info",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/scene/deletion",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/scene/info",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/state",
+    "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/stats"
+  ],
+  "streams": {
+    "odom": {
+      "topic": "/model/turtlebot3/odometry",
+      "count": 223,
+      "first": {
+        "header": {
+          "stamp": {
+            "nsec": 20000000
+          },
+          "data": [
+            {
+              "key": "frame_id",
+              "value": [
+                "odom"
+              ]
+            },
+            {
+              "key": "child_frame_id",
+              "value": [
+                "base_link"
+              ]
+            }
+          ]
+        },
+        "pose": {
+          "position": {
+            "x": 2.768001074057542e-32,
+            "y": 1.594938695959674e-70
+          },
+          "orientation": {
+            "z": 5.4713918736498024e-39,
+            "w": 1
+          }
+        },
+        "twist": {
+          "linear": {
+            "x": 1.3840005069361152e-30
+          },
+          "angular": {
+            "z": 4.787467867672693e-37
+          }
+        }
+      },
+      "last": {
+        "header": {
+          "stamp": {
+            "sec": "1",
+            "nsec": 220000000
+          },
+          "data": [
+            {
+              "key": "frame_id",
+              "value": [
+                "odom"
+              ]
+            },
+            {
+              "key": "child_frame_id",
+              "value": [
+                "base_link"
+              ]
+            }
+          ]
+        },
+        "pose": {
+          "position": {
+            "x": 0.5975999999910186,
+            "y": -2.1167784986723187e-12
+          },
+          "orientation": {
+            "z": -1.8124390927700646e-12,
+            "w": 1
+          }
+        },
+        "twist": {
+          "linear": {
+            "x": 0.19999999999935625
+          },
+          "angular": {}
+        }
+      },
+      "rewinds": [
+        {
+          "index": 161,
+          "before": {
+            "header": {
+              "stamp": {
+                "sec": "3",
+                "nsec": 220000000
+              },
+              "data": [
+                {
+                  "key": "frame_id",
+                  "value": [
+                    "odom"
+                  ]
+                },
+                {
+                  "key": "child_frame_id",
+                  "value": [
+                    "base_link"
+                  ]
+                }
+              ]
+            },
+            "pose": {
+              "position": {
+                "x": 0.3529999999918547,
+                "y": -1.2376353616414103e-12
+              },
+              "orientation": {
+                "z": -1.771499618737e-12,
+                "w": 1
+              }
+            },
+            "twist": {
+              "linear": {
+                "x": 0.19999999999931184
+              },
+              "angular": {}
+            }
+          },
+          "after": {
+            "header": {
+              "stamp": {},
+              "data": [
+                {
+                  "key": "frame_id",
+                  "value": [
+                    "odom"
+                  ]
+                },
+                {
+                  "key": "child_frame_id",
+                  "value": [
+                    "base_link"
+                  ]
+                }
+              ]
+            },
+            "pose": {
+              "position": {
+                "x": 0.35359999999185265,
+                "y": -1.2397611611838872e-12
+              },
+              "orientation": {
+                "z": -1.771499618737e-12,
+                "w": 1
+              }
+            },
+            "twist": {
+              "linear": {
+                "x": 0.1799937926747376
+              },
+              "angular": {}
+            }
+          }
+        }
+      ],
+      "max_reported_linear_velocity": 0.19999999999957796
+    },
+    "native_tf": {
+      "topic": "/model/turtlebot3/tf",
+      "count": 223,
+      "first": {
+        "pose": [
+          {
+            "header": {
+              "stamp": {
+                "nsec": 20000000
+              },
+              "data": [
+                {
+                  "key": "frame_id",
+                  "value": [
+                    "odom"
+                  ]
+                },
+                {
+                  "key": "child_frame_id",
+                  "value": [
+                    "base_link"
+                  ]
+                }
+              ]
+            },
+            "position": {
+              "x": 2.768001074057542e-32,
+              "y": 1.594938695959674e-70
+            },
+            "orientation": {
+              "z": 5.4713918736498024e-39,
+              "w": 1
+            }
+          }
+        ]
+      },
+      "last": {
+        "pose": [
+          {
+            "header": {
+              "stamp": {
+                "sec": "1",
+                "nsec": 220000000
+              },
+              "data": [
+                {
+                  "key": "frame_id",
+                  "value": [
+                    "odom"
+                  ]
+                },
+                {
+                  "key": "child_frame_id",
+                  "value": [
+                    "base_link"
+                  ]
+                }
+              ]
+            },
+            "position": {
+              "x": 0.5975999999910186,
+              "y": -2.1167784986723187e-12
+            },
+            "orientation": {
+              "z": -1.8124390927700646e-12,
+              "w": 1
+            }
+          }
+        ]
+      }
+    },
+    "configured_tf": {
+      "topic": "/model/turtlebot3/odometry_tf",
+      "count": 0,
+      "first": null,
+      "last": null
+    },
+    "joint_states": {
+      "topic": "/model/turtlebot3/joint_states",
+      "count": 0,
+      "first": null,
+      "last": null
+    },
+    "ground_truth": {
+      "topic": "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/dynamic_pose/info",
+      "count": 372,
+      "first": {
+        "header": {
+          "stamp": {}
+        },
+        "pose": [
+          {
+            "name": "turtlebot3",
+            "id": 147,
+            "position": {
+              "x": -7.9,
+              "y": -8.7,
+              "z": 0.05
+            },
+            "orientation": {
+              "w": 1
+            }
+          },
+          {
+            "name": "base_footprint",
+            "id": 148,
+            "position": {},
+            "orientation": {
+              "w": 1
+            }
+          },
+          {
+            "name": "wheel_left_link",
+            "id": 162,
+            "position": {
+              "y": 0.22000000000000064,
+              "z": 0.10000000000000002
+            },
+            "orientation": {
+              "x": -0.7071080798594738,
+              "w": 0.7071054825112361
+            }
+          },
+          {
+            "name": "wheel_right_link",
+            "id": 165,
+            "position": {
+              "y": -0.22000000000000064,
+              "z": 0.10000000000000002
+            },
+            "orientation": {
+              "x": -0.7071080798594738,
+              "w": 0.7071054825112361
+            }
+          }
+        ]
+      },
+      "last": {
+        "header": {
+          "stamp": {
+            "sec": "1",
+            "nsec": 223000000
+          }
+        },
+        "pose": [
+          {
+            "name": "turtlebot3",
+            "id": 147,
+            "position": {
+              "x": -7.304054441803022,
+              "y": -8.6999999999335,
+              "z": 7.977331328875923e-08
+            },
+            "orientation": {
+              "x": -5.958226337434027e-10,
+              "y": 1.3304634157677984e-07,
+              "z": -1.1345461280050413e-10,
+              "w": 0.9999999999999911
+            }
+          },
+          {
+            "name": "base_footprint",
+            "id": 148,
+            "position": {},
+            "orientation": {
+              "w": 1
+            }
+          },
+          {
+            "name": "wheel_left_link",
+            "id": 162,
+            "position": {
+              "x": 8.881784197001252e-16,
+              "y": 0.21999999999999886,
+              "z": 0.10000000000000002
+            },
+            "orientation": {
+              "x": -0.6991052704926114,
+              "y": -0.10608325679391944,
+              "z": -0.10608286712907478,
+              "w": 0.69910270254028
+            }
+          },
+          {
+            "name": "wheel_right_link",
+            "id": 165,
+            "position": {
+              "x": 8.881784197001252e-16,
+              "y": -0.2200000000000042,
+              "z": 0.1
+            },
+            "orientation": {
+              "x": -0.6991052704917655,
+              "y": -0.10608325679949449,
+              "z": -0.10608286713464979,
+              "w": 0.699102702539434
+            }
+          }
+        ]
+      }
+    },
+    "clock": {
+      "topic": "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/clock",
+      "count": 5714,
+      "first": {
+        "system": {
+          "sec": "1788728538",
+          "nsec": 510690036
+        },
+        "real": {},
+        "sim": {}
+      },
+      "last": {
+        "system": {
+          "sec": "1788728545",
+          "nsec": 359330618
+        },
+        "real": {
+          "sec": "1",
+          "nsec": 328923310
+        },
+        "sim": {
+          "sec": "1",
+          "nsec": 229000000
+        }
+      }
+    }
+  },
+  "scope": "Single native Twist and private physics fixture; no planner or adapter was connected. A held target after source silence is a downstream property."
+}

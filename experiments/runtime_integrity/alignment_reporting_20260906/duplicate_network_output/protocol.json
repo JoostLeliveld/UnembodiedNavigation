@@ -1,0 +1,136 @@
+{
+  "status": "exploratory_pilot_not_confirmatory",
+  "selection": "experiments/runtime_integrity/alignment_reporting_20260906/duplicate_network_selection.json",
+  "selection_sha256": "8e43b732bbeb7b1cdd81f5d75010c624ed7ea012ab43acaa5d77ca3e687f87ba",
+  "model_sha256": "84454e296a9a5c83dd07bd5756b877bf614addd4fc1c3b18b9abff27789adb1c",
+  "arms": [
+    {
+      "name": "A",
+      "cameras": [
+        "camera_A"
+      ]
+    },
+    {
+      "name": "B",
+      "cameras": [
+        "camera_B"
+      ]
+    },
+    {
+      "name": "C",
+      "cameras": [
+        "camera_C"
+      ]
+    },
+    {
+      "name": "D",
+      "cameras": [
+        "camera_D"
+      ]
+    },
+    {
+      "name": "E",
+      "cameras": [
+        "camera_E"
+      ]
+    },
+    {
+      "name": "A+B",
+      "cameras": [
+        "camera_A",
+        "camera_B"
+      ]
+    },
+    {
+      "name": "A+C",
+      "cameras": [
+        "camera_A",
+        "camera_C"
+      ]
+    },
+    {
+      "name": "A+D",
+      "cameras": [
+        "camera_A",
+        "camera_D"
+      ]
+    },
+    {
+      "name": "A+E",
+      "cameras": [
+        "camera_A",
+        "camera_E"
+      ]
+    },
+    {
+      "name": "B+C",
+      "cameras": [
+        "camera_B",
+        "camera_C"
+      ]
+    },
+    {
+      "name": "B+D",
+      "cameras": [
+        "camera_B",
+        "camera_D"
+      ]
+    },
+    {
+      "name": "B+E",
+      "cameras": [
+        "camera_B",
+        "camera_E"
+      ]
+    },
+    {
+      "name": "C+D",
+      "cameras": [
+        "camera_C",
+        "camera_D"
+      ]
+    },
+    {
+      "name": "C+E",
+      "cameras": [
+        "camera_C",
+        "camera_E"
+      ]
+    },
+    {
+      "name": "D+E",
+      "cameras": [
+        "camera_D",
+        "camera_E"
+      ]
+    },
+    {
+      "name": "A+B+C+D+E",
+      "cameras": [
+        "camera_A",
+        "camera_B",
+        "camera_C",
+        "camera_D",
+        "camera_E"
+      ]
+    }
+  ],
+  "covariance": [
+    "constant",
+    "confidence"
+  ],
+  "mean": "frozen bbox-feature NN and the same fitted per-camera mean offset",
+  "motion": "measured /odom_noisy, supplied Q xy=0.01 theta=0.02; unchanged recursion",
+  "prediction_grid": "union of measured odometry and ALL simultaneous camera-opportunity timestamps",
+  "scoring_grid": "same odometry timestamps against time-interpolated simulator GT in each run",
+  "observations": "same valid detector outputs with finite ground projection; no replay innovation gate",
+  "timing": "capture-time idealization; live processing/refusals are not replayed",
+  "inference": "per-run comparisons only; exhaustive subsets are exploratory, not a selected best-camera test",
+  "sources": {
+    "experiments/icra_commissioning/network_replay.py": "cc9624da338380647bfe5baac58d6833dbcca173d82c816196a8cc7ba4f4d73d",
+    "experiments/icra_commissioning/replay.py": "2910ab2e45b3ecbe5a73f645723acbc3ca5a5bc78f50a93172c5a9c14cacf4b9",
+    "experiments/icra_commissioning/field_driving.py": "cbb3ff81030bfcc4ac8a437f7e0be21e2df1ffd21b062ee0b0e48f67b9b4f083",
+    "experiments/icra_commissioning/model.py": "5295e358e2d2334aef62ee1503068039b09ecbcb59c3df6faa16740302609fce",
+    "experiments/fusion_on_fixed_routes/aligned.py": "dabd8b9167af3f11ee21c7a42dbd795b847300c63ac0c69af3cc0167d3965f80"
+  }
+}

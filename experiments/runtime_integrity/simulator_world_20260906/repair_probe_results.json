@@ -1,0 +1,45 @@
+{
+  "probe_date": "2026-09-07",
+  "isolation": {
+    "active_world_ros_domain": 217,
+    "active_world_gazebo_partition": "module14_guard_measure",
+    "known_contact_ros_domain": 219,
+    "known_contact_gazebo_partition": "module14_contact_known"
+  },
+  "native_topics_observed": [
+    "/model/turtlebot3/cmd_vel_guard_input",
+    "/model/turtlebot3/cmd_vel_applied",
+    "/model/turtlebot3/actuation_outcome",
+    "/model/turtlebot3/odometry",
+    "/model/turtlebot3/tf",
+    "/model/turtlebot3/joint_states"
+  ],
+  "command_silence_probe": {
+    "command_linear_mps": 0.2,
+    "command_count": 6,
+    "final_forwarded_command_sim_stamp_ns": 16299000000,
+    "timeout_zero_sim_stamp_ns": 16800000000,
+    "physics_timeout_elapsed_s": 0.501,
+    "post_silence_displacement_m": 0.0864000000063117,
+    "observation": "Motion after command silence was bounded below the 0.1 m distance implied by 0.2 m/s for the 0.5 s timeout. The native zero is forwarding evidence; physical stopping is inferred separately from the terminal odometry sample."
+  },
+  "known_contact_probe": {
+    "spawn": {"x": 11.8, "y": 0.0, "z": 0.05, "yaw": 0.0},
+    "source_stamp_ns": 14342000000,
+    "collision1_id": 204,
+    "collision1_name": "warehouse_shell::wall_east::collision",
+    "collision2_id": 999,
+    "collision2_name": "turtlebot3::base_footprint::base_footprint_fixed_joint_lump__base_link_collision",
+    "contact_position_count": 4,
+    "status_sequence": 38,
+    "configured_source_count": 47,
+    "delivery_count_at_status": 30832,
+    "contact_count_at_status": 64031,
+    "silence_is_no_contact": false
+  },
+  "test_results": {
+    "focused_pytest": "20 passed",
+    "command_guard_gtest": "5 passed",
+    "command_guard_colcon_result": "6 tests, 0 errors, 0 failures, 0 skipped"
+  }
+}

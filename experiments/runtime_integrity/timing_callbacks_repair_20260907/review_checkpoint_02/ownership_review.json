@@ -1,0 +1,250 @@
+{
+  "recursive_assignments": {
+    "__init__": [
+      {
+        "line": 766,
+        "target": "self.belief_m"
+      },
+      {
+        "line": 767,
+        "target": "self.belief_S"
+      },
+      {
+        "line": 768,
+        "target": "self.belief_stamp"
+      }
+    ],
+    "_commit_belief": [
+      {
+        "line": 891,
+        "target": "self.belief_m"
+      },
+      {
+        "line": 891,
+        "target": "self.belief_S"
+      },
+      {
+        "line": 894,
+        "target": "self.belief_stamp"
+      }
+    ]
+  },
+  "callback_registrations": [
+    {
+      "line": 653,
+      "args": [
+        "PoseWithCovarianceStamped",
+        "'/state/bev'",
+        "self._state_cb"
+      ],
+      "callback_group": "self._correction_group"
+    },
+    {
+      "line": 663,
+      "args": [
+        "String",
+        "self.state_correction_envelope_topic",
+        "self._state_correction_envelope_cb"
+      ],
+      "callback_group": "self._correction_group"
+    },
+    {
+      "line": 672,
+      "args": [
+        "String",
+        "self.map_observations_topic",
+        "self._map_observations_cb"
+      ],
+      "callback_group": "self._correction_group"
+    },
+    {
+      "line": 683,
+      "args": [
+        "PoseStamped",
+        "'/goal_bev'",
+        "self._goal_cb"
+      ],
+      "callback_group": "self._io_group"
+    },
+    {
+      "line": 687,
+      "args": [
+        "PoseStamped",
+        "self.pixel_topic",
+        "self._pixel_cb"
+      ],
+      "callback_group": "self._correction_group"
+    },
+    {
+      "line": 691,
+      "args": [
+        "Float64MultiArray",
+        "DETECTION_DIAGNOSTICS_TOPIC",
+        "self._detection_diag_cb"
+      ],
+      "callback_group": "self._io_group"
+    },
+    {
+      "line": 695,
+      "args": [
+        "Twist",
+        "self.cmd_topic",
+        "self._cmd_cb"
+      ],
+      "callback_group": "self._io_group"
+    },
+    {
+      "line": 699,
+      "args": [
+        "Odometry",
+        "self.odom_topic",
+        "self._odom_cb"
+      ],
+      "callback_group": "self._io_group"
+    },
+    {
+      "line": 716,
+      "args": [
+        "Odometry",
+        "self.diagnostic_odom_topic",
+        "self._diagnostic_odom_cb"
+      ],
+      "callback_group": "self._io_group"
+    },
+    {
+      "line": 786,
+      "args": [
+        "self._plan_period_s",
+        "self._plan_once"
+      ],
+      "callback_group": "self._plan_group"
+    },
+    {
+      "line": 789,
+      "args": [
+        "self._belief_publish_period_s",
+        "self._belief_publish_tick"
+      ],
+      "callback_group": "self._io_group"
+    },
+    {
+      "line": 797,
+      "args": [
+        "correction_period",
+        "self._pixel_correction_timer_cb"
+      ],
+      "callback_group": "self._correction_group"
+    }
+  ],
+  "method_lines": {
+    "_as_bool": 88,
+    "_serialized_correction": 58,
+    "call": 61,
+    "__init__": 74,
+    "_ensure_belief_runtime_locked": 817,
+    "_stamp_ns": 843,
+    "_ns_stamp": 850,
+    "_observe_belief_clock_locked": 855,
+    "_commit_belief": 875,
+    "_motion_snapshot_locked": 897,
+    "_run_motion_replay": 902,
+    "_publish_invalid_belief": 916,
+    "_current_belief_context": 944,
+    "_belief_context_is_current": 963,
+    "_freeze_outcome": 972,
+    "_outcome_json_value": 980,
+    "_retain_correction_outcome_locked": 987,
+    "_publish_safe_stop_command": 1037,
+    "_fatal_experiment_stop": 1041,
+    "_state_cb": 1073,
+    "_state_correction_envelope_cb": 1096,
+    "_map_observations_cb": 1152,
+    "_update_goal_progress_origin": 1170,
+    "_warm_start_shift_steps_for_rate": 1190,
+    "_construct_planner": 1196,
+    "_build_planner_instance": 1220,
+    "_current_goal_progress_index": 1284,
+    "_goal_cb": 1296,
+    "_cmd_cb": 1312,
+    "_yaw_from_quaternion": 1330,
+    "_odom_cb": 1335,
+    "_diagnostic_odom_cb": 1409,
+    "_stamp_to_float": 1429,
+    "_detection_diag_cb": 1432,
+    "_state_msg_to_belief": 1440,
+    "_xy_covariance_from_pose": 1456,
+    "_state_msg_age_s": 1486,
+    "_state_msg_is_fresh": 1492,
+    "_regularize_state_covariance": 1497,
+    "_init_belief_from_state": 1502,
+    "_matching_detection_diag_locked": 1533,
+    "_pixel_cb": 1548,
+    "_pixel_correction_timer_cb": 1582,
+    "_stamp_age_s": 1591,
+    "_warn_stale_pixel_once": 1597,
+    "_pixel_correction_is_throttled": 1603,
+    "_replay_cmd_log_interval": 1618,
+    "_pixel_correction_dt_s": 1637,
+    "_snapshot_pixel_correction_inputs": 1650,
+    "_correction_gates": 1667,
+    "_log_pixel_shape_error_once": 1704,
+    "_publish_pixel_correction_diagnostics": 1712,
+    "_publish_pixel_correction_rejection": 1824,
+    "_correction_reject_warning": 1888,
+    "_publish_correction_outcome": 1902,
+    "_apply_pixel_correction": 1973,
+    "_belief_snapshot_for_planning": 2044,
+    "_belief_age_for_planning": 2055,
+    "_pixel_measurement_available_for_planning": 2062,
+    "_reset_prediction_diagnostics": 2073,
+    "_predict_belief_to_now": 2082,
+    "_map_frame_heading": 2109,
+    "_map_frame_heading_variance": 2132,
+    "_anchor_belief_yaw_for_planning": 2163,
+    "_inflate_stale_planning_covariance": 2195,
+    "_resolve_pixel_corrected_belief_for_planning": 2208,
+    "_resolve_state_belief_for_planning": 2217,
+    "_reanchor_belief_to_correction": 2220,
+    "_reanchor_belief_to_xy": 2232,
+    "_state_measurement_cov": 2242,
+    "_snapshot_metric_correction_inputs": 2251,
+    "_apply_state_correction": 2263,
+    "_apply_map_observations": 2275,
+    "_observation_covariance": 2377,
+    "_reanchor_on_camera_quorum": 2385,
+    "_inflate_belief_after_rejection": 2429,
+    "_advance_belief_over_outage": 2443,
+    "_publish_correction_assimilation": 2467,
+    "_apply_metric_correction": 2478,
+    "_metric_correction_is_fresh": 2556,
+    "_float_to_stamp": 2564,
+    "_commit_metric_correction_outcome": 2570,
+    "_resolve_state_belief_ekf": 2611,
+    "_resolve_diagnostic_odom_belief_for_planning": 2648,
+    "_resolve_belief_for_planning": 2665,
+    "_resolve_plan_frame_id": 2690,
+    "_pose_covariance_from_state_covariance": 2696,
+    "_build_path_message": 2709,
+    "_belief_publish_tick": 2732,
+    "_build_belief_message": 2779,
+    "_publish_plan_and_metrics": 2790,
+    "_after_plan_result": 2837,
+    "_publish_planner_diagnostics": 2841,
+    "_publish_planner_status_text": 2927,
+    "_snapshot_plan_inputs": 2944,
+    "_validate_plan_frames": 2955,
+    "_goal_xy_from_msg": 2965,
+    "_call_planner": 2971,
+    "_publish_plan_result_bundle": 3004,
+    "_warn_on_plan_health": 3009,
+    "_pixel_age_for_debug": 3025,
+    "_log_plan_debug_once": 3033,
+    "_plan_once": 3066,
+    "_declare_if_not": 82,
+    "g": 1204,
+    "g_default": 1207,
+    "finish": 2490,
+    "dropped": 2507,
+    "advance": 2528
+  }
+}

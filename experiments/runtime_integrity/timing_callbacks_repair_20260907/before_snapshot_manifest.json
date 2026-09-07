@@ -1,0 +1,35 @@
+{
+  "note": "EFE changed after execution and before snapshot copy; tests exercise the base node, not EFE execution. Runtime execution hashes are in before_repairs.json. Do not claim the later EFE copy is the exact pre-repair file.",
+  "files": {
+    "src/planning/planning/nodes/unicycle_planner_node.py": {
+      "sha256_at_test": "87974788d5932d9328d1247dbfba527397b84170f87561812e1b508492cad97c",
+      "sha256_at_snapshot_copy": "87974788d5932d9328d1247dbfba527397b84170f87561812e1b508492cad97c",
+      "same": true
+    },
+    "src/planning/planning/nodes/efe_agent_node.py": {
+      "sha256_at_test": "5be341059f903a0ed166f7b5a64b458be67d2744ef9c855c7121e28fe6e0ed16",
+      "sha256_at_snapshot_copy": "d5c0e20e521f1b8776ca9306e1f7160422ce03d404d6757b2903e23460a94656",
+      "same": false
+    },
+    "src/planning/planning/core/motion_history.py": {
+      "sha256_at_test": "ac5ea439b956f3425a784447c384b828c8ce48075f7dabd0e6e96bb1b460a1c5",
+      "sha256_at_snapshot_copy": "ac5ea439b956f3425a784447c384b828c8ce48075f7dabd0e6e96bb1b460a1c5",
+      "same": true
+    },
+    "src/planning/planning/core/belief_correction.py": {
+      "sha256_at_test": "0f5f0b32f561ad1326fec098dedd93a975c14904dc5e4602341afd53c432ee12",
+      "sha256_at_snapshot_copy": "0f5f0b32f561ad1326fec098dedd93a975c14904dc5e4602341afd53c432ee12",
+      "same": true
+    },
+    "src/reliability/reliability/nodes/camera_manager_node.py": {
+      "sha256_at_test": "8788520eb3a194767b2631430df5db26ca3704124924f81ca08517ab350d04e6",
+      "sha256_at_snapshot_copy": "8788520eb3a194767b2631430df5db26ca3704124924f81ca08517ab350d04e6",
+      "same": true
+    },
+    "tests/planning/test_timing_publication_invariants.py": {
+      "sha256_at_test": "6beb92b52c5f3b030c9f4bed2e020651a8a08b854d07eb0cdc2f2d6faaa34dc9",
+      "sha256_at_snapshot_copy": "6beb92b52c5f3b030c9f4bed2e020651a8a08b854d07eb0cdc2f2d6faaa34dc9",
+      "same": true
+    }
+  }
+}

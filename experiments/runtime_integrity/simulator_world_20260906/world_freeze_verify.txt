@@ -1,0 +1,10 @@
+WAREHOUSE_V2 FREEZE: PASS
+  freeze: WHV2-GEOMETRY-V2
+  refrozen 2026-08-21: 2026-08-21 lighting fix: the sixteen fixtures were contributing nothing (floor under a fixture m
+  refrozen 2026-08-21: 2026-08-21 lighting fix (see previous entry); this re-freeze only picks up world_freeze.py's own
+  refrozen 2026-08-23: planner clearance corrected 0.25 -> 0.35 m; primary fusion task moved to the A2|A3 south mouth s
+  refrozen 2026-08-26: 2026-08-26 task added, world untouched: fusion_network_traverse (west dock door -> east cross ai
+  refrozen 2026-08-26: 2026-08-26 task start moved, world untouched: fusion_network_traverse spawns at (-7.90,-8.70) in
+  refrozen 2026-08-26: 2026-08-26 three routes added, world untouched: fusion_overlap_rich and fusion_overlap_sparse sh
+  state A: warehouse_v2 sha256=cb872fd438bd... cameras=5
+  state B: warehouse_v2_shipout sha256=bf84cf05b351... cameras=5

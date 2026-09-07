@@ -1,0 +1,1821 @@
+{
+  "kind": "current_revalidation_after_A_B_and_typed_guard",
+  "cases": 35,
+  "source_sha256": {
+    "src/planning/planning/nodes/efe_agent_node.py": "f3750f4a4dcb0969de7bd114b696f1dd536d1a10d47f14b80c53a755fae4bd45",
+    "src/planning/planning/nodes/unicycle_planner_node.py": "e6566d3ef0956f58f4a523dc2353c61d015b57c9b5a6bb8d897109bc1f0defba",
+    "src/planning/planning/planners/base_planner.py": "135901442b985455048589547ae88ab1724763da4d707c3a532b536e84d321eb",
+    "src/planning/planning/core/tracker_guard.py": "f32e7d21a8a75683b5196330b38c16d00634d8e5942796615b4c89c287e4f260",
+    "src/experiments/experiments/nodes/goal_mission_node.py": "deedad91515c4bd13c368e6cb13a718b963fd142377ca84b1ce4f68bcb91a755",
+    "src/experiments/experiments/nodes/experiment_logger.py": "10c57ede5d42a88950a2fcc684925b5090feb30104c3df113b607ba3a00cbd7c",
+    "src/unav_common/unav_common/preselected_route.py": "dc374896ac427ae0352518d80c04a582ffa378e33f9dbd5c73e983fc45e11e6a",
+    "src/unav_common/unav_common/lane_graph_routes.py": "3a917e61fb06077661486d8f871b5c1d7edd58118fb8e52f1b0b105a1974238a",
+    "src/sim/sim/actuation_noise_node.py": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f",
+    "src/experiments/experiments/core/visibility_launch_common.py": "dab696fbf073485eeb466bfd43d1116c4a382dac99f0ec29208a0cf1b3ed65e6",
+    "scripts/visibility_comparison/run_visibility_campaign.py": "f2074f95ac00f659d1969d60c0440040d4dfc634d8629e82ebfd5eebe1a47fb4"
+  },
+  "results": {
+    "mission_negative_variance": {
+      "ready": true,
+      "waypoint": 1,
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0
+    },
+    "mission_indefinite_xy": {
+      "ready": true,
+      "waypoint": 1,
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0
+    },
+    "mission_wrong_frame": {
+      "ready": true,
+      "waypoint": 1,
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0
+    },
+    "mission_stale": {
+      "ready": true,
+      "waypoint": 1,
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0
+    },
+    "mission_nan_position": {
+      "ready": true,
+      "waypoint": 0,
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0
+    },
+    "during_local_goal": {
+      "commands": [
+        [
+          0.22,
+          0.0
+        ]
+      ],
+      "tape_present": true,
+      "latest_goal": -2.0
+    },
+    "during_local_belief": {
+      "commands": [
+        [
+          0.22,
+          0.0
+        ]
+      ],
+      "tape_present": true,
+      "latest_goal": 1.0
+    },
+    "during_local_ordinary_stop": {
+      "commands": [
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "tape_present": false,
+      "latest_goal": 1.0
+    },
+    "during_local_fatal_stop": {
+      "commands": [
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "tape_present": false,
+      "latest_goal": 1.0
+    },
+    "installation_age_0.25": {
+      "disposition": "installed",
+      "commands": [
+        [
+          0.2,
+          0.0
+        ]
+      ]
+    },
+    "installation_age_0.2501": {
+      "disposition": "expired",
+      "commands": [
+        [
+          0.0,
+          0.0
+        ]
+      ]
+    },
+    "goal_move_0.999": {
+      "route_goal": [
+        1.0,
+        0.0
+      ],
+      "commands": [
+        [
+          0.0,
+          0.0
+        ]
+      ]
+    },
+    "goal_move_1.0": {
+      "route_goal": [
+        1.0,
+        0.0
+      ],
+      "commands": [
+        [
+          0.0,
+          0.0
+        ]
+      ]
+    },
+    "goal_move_1.001": {
+      "route_goal": [
+        2.001,
+        0.0
+      ],
+      "commands": []
+    },
+    "invalid_global_result_after_goal_and_belief_change": {
+      "route": [
+        [
+          1.0,
+          0.0
+        ]
+      ],
+      "route_goal": [
+        1.0,
+        0.0
+      ],
+      "latest_goal": -2.0
+    },
+    "belief_update_active_tape": [
+      [
+        0.22,
+        0.0
+      ],
+      [
+        0.22,
+        0.0
+      ]
+    ],
+    "wrong_frame_handoff": {
+      "index": 1,
+      "commands": [
+        [
+          0.22,
+          0.0
+        ]
+      ]
+    },
+    "short_duplicate_sharp_route": {
+      "index": 4,
+      "commands": [
+        [
+          0.2113781816426279,
+          0.07995737424658009
+        ]
+      ]
+    },
+    "renewed_recovery_allowance": {
+      "initial_penetration_m": 0.001,
+      "final_penetration_m": 0.1328592450491349,
+      "steps": [
+        {
+          "penetration_m": 0.001,
+          "reason": "collision_geometry_violation_step_1:-0.010",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.0053953081683044985,
+          "reason": "collision_geometry_violation_step_1:-0.014",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.009790616336608996,
+          "reason": "collision_geometry_violation_step_1:-0.019",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.014185924504913495,
+          "reason": "collision_geometry_violation_step_1:-0.023",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.018581232673217995,
+          "reason": "collision_geometry_violation_step_1:-0.027",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.022976540841522494,
+          "reason": "collision_geometry_violation_step_1:-0.032",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.027371849009826994,
+          "reason": "collision_geometry_violation_step_1:-0.036",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.03176715717813149,
+          "reason": "collision_geometry_violation_step_1:-0.041",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.036162465346435996,
+          "reason": "collision_geometry_violation_step_1:-0.045",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.04055777351474049,
+          "reason": "collision_geometry_violation_step_1:-0.049",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -5.551115123125783e-17
+          ]
+        },
+        {
+          "penetration_m": 0.04495308168304499,
+          "reason": "collision_geometry_violation_step_1:-0.054",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.04934838985134948,
+          "reason": "collision_geometry_violation_step_1:-0.058",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.05374369801965398,
+          "reason": "collision_geometry_violation_step_1:-0.063",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.058139006187958475,
+          "reason": "collision_geometry_violation_step_1:-0.067",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.06253431435626297,
+          "reason": "collision_geometry_violation_step_1:-0.071",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.06692962252456747,
+          "reason": "collision_geometry_violation_step_1:-0.076",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.07132493069287196,
+          "reason": "collision_geometry_violation_step_1:-0.080",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.07572023886117646,
+          "reason": "collision_geometry_violation_step_1:-0.085",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.08011554702948095,
+          "reason": "collision_geometry_violation_step_1:-0.089",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.08451085519778545,
+          "reason": "collision_geometry_violation_step_1:-0.093",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.08890616336608995,
+          "reason": "collision_geometry_violation_step_1:-0.098",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.09330147153439444,
+          "reason": "collision_geometry_violation_step_1:-0.102",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.09769677970269894,
+          "reason": "collision_geometry_violation_step_1:-0.106",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.10209208787100343,
+          "reason": "collision_geometry_violation_step_1:-0.111",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.10648739603930793,
+          "reason": "collision_geometry_violation_step_1:-0.115",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.11088270420761243,
+          "reason": "collision_geometry_violation_step_1:-0.120",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.11527801237591692,
+          "reason": "collision_geometry_violation_step_1:-0.124",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.11967332054422142,
+          "reason": "collision_geometry_violation_step_1:-0.128",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.12406862871252591,
+          "reason": "collision_geometry_violation_step_1:-0.133",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.1284639368808304,
+          "reason": "collision_geometry_violation_step_1:-0.137",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        }
+      ]
+    },
+    "geometry_nan": {
+      "safe_steps": 0,
+      "failure": "invalid_geometry",
+      "reason": "invalid_initial_clearance"
+    },
+    "geometry_negative_infinity": {
+      "safe_steps": 0,
+      "failure": "invalid_geometry",
+      "reason": "invalid_initial_clearance"
+    },
+    "geometry_empty_scene_positive_infinity": {
+      "safe_steps": 12,
+      "failure": "none",
+      "reason": ""
+    },
+    "logger_inside": {
+      "snapshot": {
+        "reason": "goal_reached",
+        "decision_stamp": 12.0,
+        "belief_stamp": 12.0,
+        "belief_frame": "map_bev",
+        "belief_pose": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "operational_goal_distance_m": 0.349,
+        "command": [
+          0.0,
+          0.0
+        ]
+      },
+      "summary": {
+        "completed": true,
+        "completion_reason": "goal_reached",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "first_cmd_stamp": 0.0,
+        "stop_stamp": 12.0,
+        "elapsed_after_first_cmd_s": 12.0,
+        "path_length_m": 0.0,
+        "final_goal_distance": NaN,
+        "final_goal_distance_reference": "ground_truth",
+        "goal_termination_reference": "planner_belief",
+        "gt_stamp_source": "unavailable_in_synthetic_probe",
+        "gt_sample_interval_median_s": NaN,
+        "gt_sample_interval_p95_s": NaN,
+        "gt_sample_interval_max_s": NaN,
+        "gt_samples": 0,
+        "final_goal_distance_odom_m": NaN,
+        "minimum_goal_distance": NaN,
+        "goal_success_radius": 0.35,
+        "goal_success_hold_s": 2.0,
+        "goal_stable_radius": 0.2,
+        "goal_stable_hold_s": 2.0,
+        "goal_stable_max_displacement_m": 0.04,
+        "goal_region_entered": false,
+        "goal_region_first_stamp": NaN,
+        "goal_region_after_first_cmd_s": NaN,
+        "goal_region_success": false,
+        "stuck_window_s": 8.0,
+        "stuck_max_displacement_m": 0.08,
+        "stuck_max_goal_improvement_m": 0.05,
+        "stuck_cmd_fraction_min": 0.5,
+        "stuck_idle_cmd_fraction_max": 0.1,
+        "mean_solve_time_ms": NaN,
+        "mean_efe_risk": NaN,
+        "mean_efe_ambiguity": NaN,
+        "mean_efe_control": NaN,
+        "mean_efe_obstacle": NaN,
+        "mean_p_vis_plan": NaN,
+        "mean_p_vis_plan_eff": NaN,
+        "fraction_time_p_vis_below_0_2": NaN,
+        "fraction_time_p_vis_eff_below_0_2": NaN,
+        "mean_r_plan_u_std": NaN,
+        "mean_r_plan_v_std": NaN,
+        "max_r_plan_std": NaN,
+        "mean_state_error_odom_m": NaN,
+        "mean_belief_error_odom_m": NaN,
+        "mean_state_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_gt_m": NaN,
+        "mean_state_error_gt_m": NaN,
+        "mean_belief_error_gt_after_first_cmd_m": NaN,
+        "mean_state_error_gt_after_first_cmd_m": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad": NaN,
+        "crashed": false,
+        "collision_any": false,
+        "collision_contact": false,
+        "collision_geom": false,
+        "contact_topic_publishers": 1,
+        "contact_messages_seen": 0,
+        "collision_reason": "",
+        "first_crash_stamp": NaN,
+        "min_wall_distance_m": Infinity,
+        "min_obstacle_distance_m": Infinity,
+        "max_wall_penetration_m": 0.0,
+        "max_obstacle_penetration_m": 0.0,
+        "off_map": false,
+        "inside_no_go": false,
+        "valid_run": true,
+        "invalid_reason": "",
+        "correction_assimilation_count": 0,
+        "correction_assimilation_dropped_count": 0,
+        "correction_dropped_reasons": {},
+        "correction_dropped_fraction": 0.0,
+        "longest_correction_gap_s": 0.0,
+        "frame_sanity": {},
+        "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/09_tracking_evidence/post_repair/goal_inside"
+      },
+      "log": [
+        [
+          "info",
+          "Goal reached (dist=0.349 m <= 0.350 m) and held for 2.00 s."
+        ],
+        [
+          "info",
+          "Ending run. Reason: goal_reached."
+        ]
+      ],
+      "history_samples": 2
+    },
+    "logger_on_boundary": {
+      "snapshot": {
+        "reason": "goal_reached",
+        "decision_stamp": 12.0,
+        "belief_stamp": 12.0,
+        "belief_frame": "map_bev",
+        "belief_pose": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "operational_goal_distance_m": 0.35,
+        "command": [
+          0.0,
+          0.0
+        ]
+      },
+      "summary": {
+        "completed": true,
+        "completion_reason": "goal_reached",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "first_cmd_stamp": 0.0,
+        "stop_stamp": 12.0,
+        "elapsed_after_first_cmd_s": 12.0,
+        "path_length_m": 0.0,
+        "final_goal_distance": NaN,
+        "final_goal_distance_reference": "ground_truth",
+        "goal_termination_reference": "planner_belief",
+        "gt_stamp_source": "unavailable_in_synthetic_probe",
+        "gt_sample_interval_median_s": NaN,
+        "gt_sample_interval_p95_s": NaN,
+        "gt_sample_interval_max_s": NaN,
+        "gt_samples": 0,
+        "final_goal_distance_odom_m": NaN,
+        "minimum_goal_distance": NaN,
+        "goal_success_radius": 0.35,
+        "goal_success_hold_s": 2.0,
+        "goal_stable_radius": 0.2,
+        "goal_stable_hold_s": 2.0,
+        "goal_stable_max_displacement_m": 0.04,
+        "goal_region_entered": false,
+        "goal_region_first_stamp": NaN,
+        "goal_region_after_first_cmd_s": NaN,
+        "goal_region_success": false,
+        "stuck_window_s": 8.0,
+        "stuck_max_displacement_m": 0.08,
+        "stuck_max_goal_improvement_m": 0.05,
+        "stuck_cmd_fraction_min": 0.5,
+        "stuck_idle_cmd_fraction_max": 0.1,
+        "mean_solve_time_ms": NaN,
+        "mean_efe_risk": NaN,
+        "mean_efe_ambiguity": NaN,
+        "mean_efe_control": NaN,
+        "mean_efe_obstacle": NaN,
+        "mean_p_vis_plan": NaN,
+        "mean_p_vis_plan_eff": NaN,
+        "fraction_time_p_vis_below_0_2": NaN,
+        "fraction_time_p_vis_eff_below_0_2": NaN,
+        "mean_r_plan_u_std": NaN,
+        "mean_r_plan_v_std": NaN,
+        "max_r_plan_std": NaN,
+        "mean_state_error_odom_m": NaN,
+        "mean_belief_error_odom_m": NaN,
+        "mean_state_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_gt_m": NaN,
+        "mean_state_error_gt_m": NaN,
+        "mean_belief_error_gt_after_first_cmd_m": NaN,
+        "mean_state_error_gt_after_first_cmd_m": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad": NaN,
+        "crashed": false,
+        "collision_any": false,
+        "collision_contact": false,
+        "collision_geom": false,
+        "contact_topic_publishers": 1,
+        "contact_messages_seen": 0,
+        "collision_reason": "",
+        "first_crash_stamp": NaN,
+        "min_wall_distance_m": Infinity,
+        "min_obstacle_distance_m": Infinity,
+        "max_wall_penetration_m": 0.0,
+        "max_obstacle_penetration_m": 0.0,
+        "off_map": false,
+        "inside_no_go": false,
+        "valid_run": true,
+        "invalid_reason": "",
+        "correction_assimilation_count": 0,
+        "correction_assimilation_dropped_count": 0,
+        "correction_dropped_reasons": {},
+        "correction_dropped_fraction": 0.0,
+        "longest_correction_gap_s": 0.0,
+        "frame_sanity": {},
+        "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/09_tracking_evidence/post_repair/goal_on_boundary"
+      },
+      "log": [
+        [
+          "info",
+          "Goal reached (dist=0.350 m <= 0.350 m) and held for 2.00 s."
+        ],
+        [
+          "info",
+          "Ending run. Reason: goal_reached."
+        ]
+      ],
+      "history_samples": 2
+    },
+    "logger_outside": {
+      "snapshot": null,
+      "summary": null,
+      "log": [],
+      "history_samples": 2
+    },
+    "logger_stale": {
+      "snapshot": {
+        "reason": "goal_reached",
+        "decision_stamp": 12.0,
+        "belief_stamp": 0.0,
+        "belief_frame": "map_bev",
+        "belief_pose": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "operational_goal_distance_m": 0.349,
+        "command": [
+          0.0,
+          0.0
+        ]
+      },
+      "summary": {
+        "completed": true,
+        "completion_reason": "goal_reached",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "first_cmd_stamp": 0.0,
+        "stop_stamp": 12.0,
+        "elapsed_after_first_cmd_s": 12.0,
+        "path_length_m": 0.0,
+        "final_goal_distance": NaN,
+        "final_goal_distance_reference": "ground_truth",
+        "goal_termination_reference": "planner_belief",
+        "gt_stamp_source": "unavailable_in_synthetic_probe",
+        "gt_sample_interval_median_s": NaN,
+        "gt_sample_interval_p95_s": NaN,
+        "gt_sample_interval_max_s": NaN,
+        "gt_samples": 0,
+        "final_goal_distance_odom_m": NaN,
+        "minimum_goal_distance": NaN,
+        "goal_success_radius": 0.35,
+        "goal_success_hold_s": 2.0,
+        "goal_stable_radius": 0.2,
+        "goal_stable_hold_s": 2.0,
+        "goal_stable_max_displacement_m": 0.04,
+        "goal_region_entered": false,
+        "goal_region_first_stamp": NaN,
+        "goal_region_after_first_cmd_s": NaN,
+        "goal_region_success": false,
+        "stuck_window_s": 8.0,
+        "stuck_max_displacement_m": 0.08,
+        "stuck_max_goal_improvement_m": 0.05,
+        "stuck_cmd_fraction_min": 0.5,
+        "stuck_idle_cmd_fraction_max": 0.1,
+        "mean_solve_time_ms": NaN,
+        "mean_efe_risk": NaN,
+        "mean_efe_ambiguity": NaN,
+        "mean_efe_control": NaN,
+        "mean_efe_obstacle": NaN,
+        "mean_p_vis_plan": NaN,
+        "mean_p_vis_plan_eff": NaN,
+        "fraction_time_p_vis_below_0_2": NaN,
+        "fraction_time_p_vis_eff_below_0_2": NaN,
+        "mean_r_plan_u_std": NaN,
+        "mean_r_plan_v_std": NaN,
+        "max_r_plan_std": NaN,
+        "mean_state_error_odom_m": NaN,
+        "mean_belief_error_odom_m": NaN,
+        "mean_state_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_gt_m": NaN,
+        "mean_state_error_gt_m": NaN,
+        "mean_belief_error_gt_after_first_cmd_m": NaN,
+        "mean_state_error_gt_after_first_cmd_m": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad": NaN,
+        "crashed": false,
+        "collision_any": false,
+        "collision_contact": false,
+        "collision_geom": false,
+        "contact_topic_publishers": 1,
+        "contact_messages_seen": 0,
+        "collision_reason": "",
+        "first_crash_stamp": NaN,
+        "min_wall_distance_m": Infinity,
+        "min_obstacle_distance_m": Infinity,
+        "max_wall_penetration_m": 0.0,
+        "max_obstacle_penetration_m": 0.0,
+        "off_map": false,
+        "inside_no_go": false,
+        "valid_run": true,
+        "invalid_reason": "",
+        "correction_assimilation_count": 0,
+        "correction_assimilation_dropped_count": 0,
+        "correction_dropped_reasons": {},
+        "correction_dropped_fraction": 0.0,
+        "longest_correction_gap_s": 0.0,
+        "frame_sanity": {},
+        "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/09_tracking_evidence/post_repair/goal_stale"
+      },
+      "log": [
+        [
+          "info",
+          "Goal reached (dist=0.349 m <= 0.350 m) and held for 2.00 s."
+        ],
+        [
+          "info",
+          "Ending run. Reason: goal_reached."
+        ]
+      ],
+      "history_samples": 2
+    },
+    "logger_wrong_frame": {
+      "snapshot": {
+        "reason": "goal_reached",
+        "decision_stamp": 12.0,
+        "belief_stamp": 12.0,
+        "belief_frame": "odom",
+        "belief_pose": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "operational_goal_distance_m": 0.349,
+        "command": [
+          0.0,
+          0.0
+        ]
+      },
+      "summary": {
+        "completed": true,
+        "completion_reason": "goal_reached",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "first_cmd_stamp": 0.0,
+        "stop_stamp": 12.0,
+        "elapsed_after_first_cmd_s": 12.0,
+        "path_length_m": 0.0,
+        "final_goal_distance": NaN,
+        "final_goal_distance_reference": "ground_truth",
+        "goal_termination_reference": "planner_belief",
+        "gt_stamp_source": "unavailable_in_synthetic_probe",
+        "gt_sample_interval_median_s": NaN,
+        "gt_sample_interval_p95_s": NaN,
+        "gt_sample_interval_max_s": NaN,
+        "gt_samples": 0,
+        "final_goal_distance_odom_m": NaN,
+        "minimum_goal_distance": NaN,
+        "goal_success_radius": 0.35,
+        "goal_success_hold_s": 2.0,
+        "goal_stable_radius": 0.2,
+        "goal_stable_hold_s": 2.0,
+        "goal_stable_max_displacement_m": 0.04,
+        "goal_region_entered": false,
+        "goal_region_first_stamp": NaN,
+        "goal_region_after_first_cmd_s": NaN,
+        "goal_region_success": false,
+        "stuck_window_s": 8.0,
+        "stuck_max_displacement_m": 0.08,
+        "stuck_max_goal_improvement_m": 0.05,
+        "stuck_cmd_fraction_min": 0.5,
+        "stuck_idle_cmd_fraction_max": 0.1,
+        "mean_solve_time_ms": NaN,
+        "mean_efe_risk": NaN,
+        "mean_efe_ambiguity": NaN,
+        "mean_efe_control": NaN,
+        "mean_efe_obstacle": NaN,
+        "mean_p_vis_plan": NaN,
+        "mean_p_vis_plan_eff": NaN,
+        "fraction_time_p_vis_below_0_2": NaN,
+        "fraction_time_p_vis_eff_below_0_2": NaN,
+        "mean_r_plan_u_std": NaN,
+        "mean_r_plan_v_std": NaN,
+        "max_r_plan_std": NaN,
+        "mean_state_error_odom_m": NaN,
+        "mean_belief_error_odom_m": NaN,
+        "mean_state_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_gt_m": NaN,
+        "mean_state_error_gt_m": NaN,
+        "mean_belief_error_gt_after_first_cmd_m": NaN,
+        "mean_state_error_gt_after_first_cmd_m": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad": NaN,
+        "crashed": false,
+        "collision_any": false,
+        "collision_contact": false,
+        "collision_geom": false,
+        "contact_topic_publishers": 1,
+        "contact_messages_seen": 0,
+        "collision_reason": "",
+        "first_crash_stamp": NaN,
+        "min_wall_distance_m": Infinity,
+        "min_obstacle_distance_m": Infinity,
+        "max_wall_penetration_m": 0.0,
+        "max_obstacle_penetration_m": 0.0,
+        "off_map": false,
+        "inside_no_go": false,
+        "valid_run": true,
+        "invalid_reason": "",
+        "correction_assimilation_count": 0,
+        "correction_assimilation_dropped_count": 0,
+        "correction_dropped_reasons": {},
+        "correction_dropped_fraction": 0.0,
+        "longest_correction_gap_s": 0.0,
+        "frame_sanity": {},
+        "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/09_tracking_evidence/post_repair/goal_wrong_frame"
+      },
+      "log": [
+        [
+          "info",
+          "Goal reached (dist=0.349 m <= 0.350 m) and held for 2.00 s."
+        ],
+        [
+          "info",
+          "Ending run. Reason: goal_reached."
+        ]
+      ],
+      "history_samples": 2
+    },
+    "logger_negative_covariance": {
+      "snapshot": {
+        "reason": "goal_reached",
+        "decision_stamp": 12.0,
+        "belief_stamp": 12.0,
+        "belief_frame": "map_bev",
+        "belief_pose": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "operational_goal_distance_m": 0.349,
+        "command": [
+          0.0,
+          0.0
+        ]
+      },
+      "summary": {
+        "completed": true,
+        "completion_reason": "goal_reached",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "first_cmd_stamp": 0.0,
+        "stop_stamp": 12.0,
+        "elapsed_after_first_cmd_s": 12.0,
+        "path_length_m": 0.0,
+        "final_goal_distance": NaN,
+        "final_goal_distance_reference": "ground_truth",
+        "goal_termination_reference": "planner_belief",
+        "gt_stamp_source": "unavailable_in_synthetic_probe",
+        "gt_sample_interval_median_s": NaN,
+        "gt_sample_interval_p95_s": NaN,
+        "gt_sample_interval_max_s": NaN,
+        "gt_samples": 0,
+        "final_goal_distance_odom_m": NaN,
+        "minimum_goal_distance": NaN,
+        "goal_success_radius": 0.35,
+        "goal_success_hold_s": 2.0,
+        "goal_stable_radius": 0.2,
+        "goal_stable_hold_s": 2.0,
+        "goal_stable_max_displacement_m": 0.04,
+        "goal_region_entered": false,
+        "goal_region_first_stamp": NaN,
+        "goal_region_after_first_cmd_s": NaN,
+        "goal_region_success": false,
+        "stuck_window_s": 8.0,
+        "stuck_max_displacement_m": 0.08,
+        "stuck_max_goal_improvement_m": 0.05,
+        "stuck_cmd_fraction_min": 0.5,
+        "stuck_idle_cmd_fraction_max": 0.1,
+        "mean_solve_time_ms": NaN,
+        "mean_efe_risk": NaN,
+        "mean_efe_ambiguity": NaN,
+        "mean_efe_control": NaN,
+        "mean_efe_obstacle": NaN,
+        "mean_p_vis_plan": NaN,
+        "mean_p_vis_plan_eff": NaN,
+        "fraction_time_p_vis_below_0_2": NaN,
+        "fraction_time_p_vis_eff_below_0_2": NaN,
+        "mean_r_plan_u_std": NaN,
+        "mean_r_plan_v_std": NaN,
+        "max_r_plan_std": NaN,
+        "mean_state_error_odom_m": NaN,
+        "mean_belief_error_odom_m": NaN,
+        "mean_state_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_gt_m": NaN,
+        "mean_state_error_gt_m": NaN,
+        "mean_belief_error_gt_after_first_cmd_m": NaN,
+        "mean_state_error_gt_after_first_cmd_m": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad": NaN,
+        "crashed": false,
+        "collision_any": false,
+        "collision_contact": false,
+        "collision_geom": false,
+        "contact_topic_publishers": 1,
+        "contact_messages_seen": 0,
+        "collision_reason": "",
+        "first_crash_stamp": NaN,
+        "min_wall_distance_m": Infinity,
+        "min_obstacle_distance_m": Infinity,
+        "max_wall_penetration_m": 0.0,
+        "max_obstacle_penetration_m": 0.0,
+        "off_map": false,
+        "inside_no_go": false,
+        "valid_run": true,
+        "invalid_reason": "",
+        "correction_assimilation_count": 0,
+        "correction_assimilation_dropped_count": 0,
+        "correction_dropped_reasons": {},
+        "correction_dropped_fraction": 0.0,
+        "longest_correction_gap_s": 0.0,
+        "frame_sanity": {},
+        "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/09_tracking_evidence/post_repair/goal_negative_covariance"
+      },
+      "log": [
+        [
+          "info",
+          "Goal reached (dist=0.349 m <= 0.350 m) and held for 2.00 s."
+        ],
+        [
+          "info",
+          "Ending run. Reason: goal_reached."
+        ]
+      ],
+      "history_samples": 2
+    },
+    "logger_indefinite_covariance": {
+      "snapshot": {
+        "reason": "goal_reached",
+        "decision_stamp": 12.0,
+        "belief_stamp": 12.0,
+        "belief_frame": "map_bev",
+        "belief_pose": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "operational_goal_distance_m": 0.349,
+        "command": [
+          0.0,
+          0.0
+        ]
+      },
+      "summary": {
+        "completed": true,
+        "completion_reason": "goal_reached",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "first_cmd_stamp": 0.0,
+        "stop_stamp": 12.0,
+        "elapsed_after_first_cmd_s": 12.0,
+        "path_length_m": 0.0,
+        "final_goal_distance": NaN,
+        "final_goal_distance_reference": "ground_truth",
+        "goal_termination_reference": "planner_belief",
+        "gt_stamp_source": "unavailable_in_synthetic_probe",
+        "gt_sample_interval_median_s": NaN,
+        "gt_sample_interval_p95_s": NaN,
+        "gt_sample_interval_max_s": NaN,
+        "gt_samples": 0,
+        "final_goal_distance_odom_m": NaN,
+        "minimum_goal_distance": NaN,
+        "goal_success_radius": 0.35,
+        "goal_success_hold_s": 2.0,
+        "goal_stable_radius": 0.2,
+        "goal_stable_hold_s": 2.0,
+        "goal_stable_max_displacement_m": 0.04,
+        "goal_region_entered": false,
+        "goal_region_first_stamp": NaN,
+        "goal_region_after_first_cmd_s": NaN,
+        "goal_region_success": false,
+        "stuck_window_s": 8.0,
+        "stuck_max_displacement_m": 0.08,
+        "stuck_max_goal_improvement_m": 0.05,
+        "stuck_cmd_fraction_min": 0.5,
+        "stuck_idle_cmd_fraction_max": 0.1,
+        "mean_solve_time_ms": NaN,
+        "mean_efe_risk": NaN,
+        "mean_efe_ambiguity": NaN,
+        "mean_efe_control": NaN,
+        "mean_efe_obstacle": NaN,
+        "mean_p_vis_plan": NaN,
+        "mean_p_vis_plan_eff": NaN,
+        "fraction_time_p_vis_below_0_2": NaN,
+        "fraction_time_p_vis_eff_below_0_2": NaN,
+        "mean_r_plan_u_std": NaN,
+        "mean_r_plan_v_std": NaN,
+        "max_r_plan_std": NaN,
+        "mean_state_error_odom_m": NaN,
+        "mean_belief_error_odom_m": NaN,
+        "mean_state_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_gt_m": NaN,
+        "mean_state_error_gt_m": NaN,
+        "mean_belief_error_gt_after_first_cmd_m": NaN,
+        "mean_state_error_gt_after_first_cmd_m": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad": NaN,
+        "crashed": false,
+        "collision_any": false,
+        "collision_contact": false,
+        "collision_geom": false,
+        "contact_topic_publishers": 1,
+        "contact_messages_seen": 0,
+        "collision_reason": "",
+        "first_crash_stamp": NaN,
+        "min_wall_distance_m": Infinity,
+        "min_obstacle_distance_m": Infinity,
+        "max_wall_penetration_m": 0.0,
+        "max_obstacle_penetration_m": 0.0,
+        "off_map": false,
+        "inside_no_go": false,
+        "valid_run": true,
+        "invalid_reason": "",
+        "correction_assimilation_count": 0,
+        "correction_assimilation_dropped_count": 0,
+        "correction_dropped_reasons": {},
+        "correction_dropped_fraction": 0.0,
+        "longest_correction_gap_s": 0.0,
+        "frame_sanity": {},
+        "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/09_tracking_evidence/post_repair/goal_indefinite_covariance"
+      },
+      "log": [
+        [
+          "info",
+          "Goal reached (dist=0.349 m <= 0.350 m) and held for 2.00 s."
+        ],
+        [
+          "info",
+          "Ending run. Reason: goal_reached."
+        ]
+      ],
+      "history_samples": 2
+    },
+    "logger_future_stamp": {
+      "snapshot": {
+        "reason": "goal_reached",
+        "decision_stamp": 12.0,
+        "belief_stamp": 100.0,
+        "belief_frame": "map_bev",
+        "belief_pose": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "operational_goal_distance_m": 0.349,
+        "command": [
+          0.0,
+          0.0
+        ]
+      },
+      "summary": {
+        "completed": true,
+        "completion_reason": "goal_reached",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "first_cmd_stamp": 0.0,
+        "stop_stamp": 12.0,
+        "elapsed_after_first_cmd_s": 12.0,
+        "path_length_m": 0.0,
+        "final_goal_distance": NaN,
+        "final_goal_distance_reference": "ground_truth",
+        "goal_termination_reference": "planner_belief",
+        "gt_stamp_source": "unavailable_in_synthetic_probe",
+        "gt_sample_interval_median_s": NaN,
+        "gt_sample_interval_p95_s": NaN,
+        "gt_sample_interval_max_s": NaN,
+        "gt_samples": 0,
+        "final_goal_distance_odom_m": NaN,
+        "minimum_goal_distance": NaN,
+        "goal_success_radius": 0.35,
+        "goal_success_hold_s": 2.0,
+        "goal_stable_radius": 0.2,
+        "goal_stable_hold_s": 2.0,
+        "goal_stable_max_displacement_m": 0.04,
+        "goal_region_entered": false,
+        "goal_region_first_stamp": NaN,
+        "goal_region_after_first_cmd_s": NaN,
+        "goal_region_success": false,
+        "stuck_window_s": 8.0,
+        "stuck_max_displacement_m": 0.08,
+        "stuck_max_goal_improvement_m": 0.05,
+        "stuck_cmd_fraction_min": 0.5,
+        "stuck_idle_cmd_fraction_max": 0.1,
+        "mean_solve_time_ms": NaN,
+        "mean_efe_risk": NaN,
+        "mean_efe_ambiguity": NaN,
+        "mean_efe_control": NaN,
+        "mean_efe_obstacle": NaN,
+        "mean_p_vis_plan": NaN,
+        "mean_p_vis_plan_eff": NaN,
+        "fraction_time_p_vis_below_0_2": NaN,
+        "fraction_time_p_vis_eff_below_0_2": NaN,
+        "mean_r_plan_u_std": NaN,
+        "mean_r_plan_v_std": NaN,
+        "max_r_plan_std": NaN,
+        "mean_state_error_odom_m": NaN,
+        "mean_belief_error_odom_m": NaN,
+        "mean_state_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_gt_m": NaN,
+        "mean_state_error_gt_m": NaN,
+        "mean_belief_error_gt_after_first_cmd_m": NaN,
+        "mean_state_error_gt_after_first_cmd_m": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad": NaN,
+        "crashed": false,
+        "collision_any": false,
+        "collision_contact": false,
+        "collision_geom": false,
+        "contact_topic_publishers": 1,
+        "contact_messages_seen": 0,
+        "collision_reason": "",
+        "first_crash_stamp": NaN,
+        "min_wall_distance_m": Infinity,
+        "min_obstacle_distance_m": Infinity,
+        "max_wall_penetration_m": 0.0,
+        "max_obstacle_penetration_m": 0.0,
+        "off_map": false,
+        "inside_no_go": false,
+        "valid_run": true,
+        "invalid_reason": "",
+        "correction_assimilation_count": 0,
+        "correction_assimilation_dropped_count": 0,
+        "correction_dropped_reasons": {},
+        "correction_dropped_fraction": 0.0,
+        "longest_correction_gap_s": 0.0,
+        "frame_sanity": {},
+        "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/09_tracking_evidence/post_repair/goal_future_stamp"
+      },
+      "log": [
+        [
+          "info",
+          "Goal reached (dist=0.349 m <= 0.350 m) and held for 2.00 s."
+        ],
+        [
+          "info",
+          "Ending run. Reason: goal_reached."
+        ]
+      ],
+      "history_samples": 2
+    },
+    "changed_goal_inherits_hold": {
+      "snapshot": {
+        "reason": "goal_reached",
+        "decision_stamp": 12.0,
+        "belief_stamp": 12.0,
+        "belief_frame": "map_bev",
+        "belief_pose": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "operational_goal_distance_m": 0.3,
+        "command": [
+          0.0,
+          0.0
+        ]
+      },
+      "summary": {
+        "completed": true,
+        "completion_reason": "goal_reached",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "first_cmd_stamp": 0.0,
+        "stop_stamp": 12.0,
+        "elapsed_after_first_cmd_s": 12.0,
+        "path_length_m": 0.0,
+        "final_goal_distance": NaN,
+        "final_goal_distance_reference": "ground_truth",
+        "goal_termination_reference": "planner_belief",
+        "gt_stamp_source": "unavailable_in_synthetic_probe",
+        "gt_sample_interval_median_s": NaN,
+        "gt_sample_interval_p95_s": NaN,
+        "gt_sample_interval_max_s": NaN,
+        "gt_samples": 0,
+        "final_goal_distance_odom_m": NaN,
+        "minimum_goal_distance": NaN,
+        "goal_success_radius": 0.35,
+        "goal_success_hold_s": 2.0,
+        "goal_stable_radius": 0.2,
+        "goal_stable_hold_s": 2.0,
+        "goal_stable_max_displacement_m": 0.04,
+        "goal_region_entered": false,
+        "goal_region_first_stamp": NaN,
+        "goal_region_after_first_cmd_s": NaN,
+        "goal_region_success": false,
+        "stuck_window_s": 8.0,
+        "stuck_max_displacement_m": 0.08,
+        "stuck_max_goal_improvement_m": 0.05,
+        "stuck_cmd_fraction_min": 0.5,
+        "stuck_idle_cmd_fraction_max": 0.1,
+        "mean_solve_time_ms": NaN,
+        "mean_efe_risk": NaN,
+        "mean_efe_ambiguity": NaN,
+        "mean_efe_control": NaN,
+        "mean_efe_obstacle": NaN,
+        "mean_p_vis_plan": NaN,
+        "mean_p_vis_plan_eff": NaN,
+        "fraction_time_p_vis_below_0_2": NaN,
+        "fraction_time_p_vis_eff_below_0_2": NaN,
+        "mean_r_plan_u_std": NaN,
+        "mean_r_plan_v_std": NaN,
+        "max_r_plan_std": NaN,
+        "mean_state_error_odom_m": NaN,
+        "mean_belief_error_odom_m": NaN,
+        "mean_state_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_gt_m": NaN,
+        "mean_state_error_gt_m": NaN,
+        "mean_belief_error_gt_after_first_cmd_m": NaN,
+        "mean_state_error_gt_after_first_cmd_m": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad": NaN,
+        "crashed": false,
+        "collision_any": false,
+        "collision_contact": false,
+        "collision_geom": false,
+        "contact_topic_publishers": 1,
+        "contact_messages_seen": 0,
+        "collision_reason": "",
+        "first_crash_stamp": NaN,
+        "min_wall_distance_m": Infinity,
+        "min_obstacle_distance_m": Infinity,
+        "max_wall_penetration_m": 0.0,
+        "max_obstacle_penetration_m": 0.0,
+        "off_map": false,
+        "inside_no_go": false,
+        "valid_run": true,
+        "invalid_reason": "",
+        "correction_assimilation_count": 0,
+        "correction_assimilation_dropped_count": 0,
+        "correction_dropped_reasons": {},
+        "correction_dropped_fraction": 0.0,
+        "longest_correction_gap_s": 0.0,
+        "frame_sanity": {},
+        "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/09_tracking_evidence/post_repair/goal_change_hold"
+      },
+      "log": [
+        [
+          "info",
+          "Goal reached (dist=0.300 m <= 0.350 m) and held for 2.00 s."
+        ],
+        [
+          "info",
+          "Ending run. Reason: goal_reached."
+        ]
+      ],
+      "history_samples": 2
+    },
+    "stuck_rotation": {
+      "snapshot": {
+        "reason": "stuck",
+        "decision_stamp": 8,
+        "belief_stamp": 8.0,
+        "belief_frame": "map_bev",
+        "belief_pose": [
+          0.0,
+          0.0,
+          0.029203673205103534
+        ],
+        "operational_goal_distance_m": 1.0,
+        "command": [
+          0.0,
+          0.2
+        ]
+      },
+      "summary": {
+        "completed": true,
+        "completion_reason": "stuck",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "first_cmd_stamp": 0.0,
+        "stop_stamp": 8,
+        "elapsed_after_first_cmd_s": 8.0,
+        "path_length_m": 0.0,
+        "final_goal_distance": NaN,
+        "final_goal_distance_reference": "ground_truth",
+        "goal_termination_reference": "planner_belief",
+        "gt_stamp_source": "unavailable_in_synthetic_probe",
+        "gt_sample_interval_median_s": NaN,
+        "gt_sample_interval_p95_s": NaN,
+        "gt_sample_interval_max_s": NaN,
+        "gt_samples": 0,
+        "final_goal_distance_odom_m": NaN,
+        "minimum_goal_distance": NaN,
+        "goal_success_radius": 0.35,
+        "goal_success_hold_s": 2.0,
+        "goal_stable_radius": 0.2,
+        "goal_stable_hold_s": 2.0,
+        "goal_stable_max_displacement_m": 0.04,
+        "goal_region_entered": false,
+        "goal_region_first_stamp": NaN,
+        "goal_region_after_first_cmd_s": NaN,
+        "goal_region_success": false,
+        "stuck_window_s": 8.0,
+        "stuck_max_displacement_m": 0.08,
+        "stuck_max_goal_improvement_m": 0.05,
+        "stuck_cmd_fraction_min": 0.5,
+        "stuck_idle_cmd_fraction_max": 0.1,
+        "mean_solve_time_ms": NaN,
+        "mean_efe_risk": NaN,
+        "mean_efe_ambiguity": NaN,
+        "mean_efe_control": NaN,
+        "mean_efe_obstacle": NaN,
+        "mean_p_vis_plan": NaN,
+        "mean_p_vis_plan_eff": NaN,
+        "fraction_time_p_vis_below_0_2": NaN,
+        "fraction_time_p_vis_eff_below_0_2": NaN,
+        "mean_r_plan_u_std": NaN,
+        "mean_r_plan_v_std": NaN,
+        "max_r_plan_std": NaN,
+        "mean_state_error_odom_m": NaN,
+        "mean_belief_error_odom_m": NaN,
+        "mean_state_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_gt_m": NaN,
+        "mean_state_error_gt_m": NaN,
+        "mean_belief_error_gt_after_first_cmd_m": NaN,
+        "mean_state_error_gt_after_first_cmd_m": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad": NaN,
+        "crashed": false,
+        "collision_any": false,
+        "collision_contact": false,
+        "collision_geom": false,
+        "contact_topic_publishers": 1,
+        "contact_messages_seen": 0,
+        "collision_reason": "",
+        "first_crash_stamp": NaN,
+        "min_wall_distance_m": Infinity,
+        "min_obstacle_distance_m": Infinity,
+        "max_wall_penetration_m": 0.0,
+        "max_obstacle_penetration_m": 0.0,
+        "off_map": false,
+        "inside_no_go": false,
+        "valid_run": true,
+        "invalid_reason": "",
+        "correction_assimilation_count": 0,
+        "correction_assimilation_dropped_count": 0,
+        "correction_dropped_reasons": {},
+        "correction_dropped_fraction": 0.0,
+        "longest_correction_gap_s": 0.0,
+        "frame_sanity": {},
+        "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/09_tracking_evidence/post_repair/stuck_rotation"
+      },
+      "log": [
+        [
+          "info",
+          "Stuck termination (active): displacement=0.000 m <= 0.080 m, goal_improvement=0.000 m <= 0.050 m, cmd_fraction=1.00, active_threshold=0.50, idle_threshold=0.10."
+        ],
+        [
+          "info",
+          "Ending run. Reason: stuck."
+        ]
+      ],
+      "history_samples": 9
+    },
+    "stuck_idle_replan": {
+      "snapshot": {
+        "reason": "stuck",
+        "decision_stamp": 8,
+        "belief_stamp": 8.0,
+        "belief_frame": "map_bev",
+        "belief_pose": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "operational_goal_distance_m": 1.0,
+        "command": [
+          0.0,
+          0.0
+        ]
+      },
+      "summary": {
+        "completed": true,
+        "completion_reason": "stuck",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "first_cmd_stamp": 0.0,
+        "stop_stamp": 8,
+        "elapsed_after_first_cmd_s": 8.0,
+        "path_length_m": 0.0,
+        "final_goal_distance": NaN,
+        "final_goal_distance_reference": "ground_truth",
+        "goal_termination_reference": "planner_belief",
+        "gt_stamp_source": "unavailable_in_synthetic_probe",
+        "gt_sample_interval_median_s": NaN,
+        "gt_sample_interval_p95_s": NaN,
+        "gt_sample_interval_max_s": NaN,
+        "gt_samples": 0,
+        "final_goal_distance_odom_m": NaN,
+        "minimum_goal_distance": NaN,
+        "goal_success_radius": 0.35,
+        "goal_success_hold_s": 2.0,
+        "goal_stable_radius": 0.2,
+        "goal_stable_hold_s": 2.0,
+        "goal_stable_max_displacement_m": 0.04,
+        "goal_region_entered": false,
+        "goal_region_first_stamp": NaN,
+        "goal_region_after_first_cmd_s": NaN,
+        "goal_region_success": false,
+        "stuck_window_s": 8.0,
+        "stuck_max_displacement_m": 0.08,
+        "stuck_max_goal_improvement_m": 0.05,
+        "stuck_cmd_fraction_min": 0.5,
+        "stuck_idle_cmd_fraction_max": 0.1,
+        "mean_solve_time_ms": NaN,
+        "mean_efe_risk": NaN,
+        "mean_efe_ambiguity": NaN,
+        "mean_efe_control": NaN,
+        "mean_efe_obstacle": NaN,
+        "mean_p_vis_plan": NaN,
+        "mean_p_vis_plan_eff": NaN,
+        "fraction_time_p_vis_below_0_2": NaN,
+        "fraction_time_p_vis_eff_below_0_2": NaN,
+        "mean_r_plan_u_std": NaN,
+        "mean_r_plan_v_std": NaN,
+        "max_r_plan_std": NaN,
+        "mean_state_error_odom_m": NaN,
+        "mean_belief_error_odom_m": NaN,
+        "mean_state_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_gt_m": NaN,
+        "mean_state_error_gt_m": NaN,
+        "mean_belief_error_gt_after_first_cmd_m": NaN,
+        "mean_state_error_gt_after_first_cmd_m": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad": NaN,
+        "crashed": false,
+        "collision_any": false,
+        "collision_contact": false,
+        "collision_geom": false,
+        "contact_topic_publishers": 1,
+        "contact_messages_seen": 0,
+        "collision_reason": "",
+        "first_crash_stamp": NaN,
+        "min_wall_distance_m": Infinity,
+        "min_obstacle_distance_m": Infinity,
+        "max_wall_penetration_m": 0.0,
+        "max_obstacle_penetration_m": 0.0,
+        "off_map": false,
+        "inside_no_go": false,
+        "valid_run": true,
+        "invalid_reason": "",
+        "correction_assimilation_count": 0,
+        "correction_assimilation_dropped_count": 0,
+        "correction_dropped_reasons": {},
+        "correction_dropped_fraction": 0.0,
+        "longest_correction_gap_s": 0.0,
+        "frame_sanity": {},
+        "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/09_tracking_evidence/post_repair/stuck_idle_replan"
+      },
+      "log": [
+        [
+          "info",
+          "Stuck termination (idle): displacement=0.000 m <= 0.080 m, goal_improvement=0.000 m <= 0.050 m, cmd_fraction=0.00, active_threshold=0.50, idle_threshold=0.10."
+        ],
+        [
+          "info",
+          "Ending run. Reason: stuck."
+        ]
+      ],
+      "history_samples": 9
+    },
+    "stuck_stale_belief": {
+      "snapshot": {
+        "reason": "stuck",
+        "decision_stamp": 8,
+        "belief_stamp": 0.0,
+        "belief_frame": "map_bev",
+        "belief_pose": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "operational_goal_distance_m": 1.0,
+        "command": [
+          0.22,
+          0.0
+        ]
+      },
+      "summary": {
+        "completed": true,
+        "completion_reason": "stuck",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "first_cmd_stamp": 0.0,
+        "stop_stamp": 8,
+        "elapsed_after_first_cmd_s": 8.0,
+        "path_length_m": 0.0,
+        "final_goal_distance": NaN,
+        "final_goal_distance_reference": "ground_truth",
+        "goal_termination_reference": "planner_belief",
+        "gt_stamp_source": "unavailable_in_synthetic_probe",
+        "gt_sample_interval_median_s": NaN,
+        "gt_sample_interval_p95_s": NaN,
+        "gt_sample_interval_max_s": NaN,
+        "gt_samples": 0,
+        "final_goal_distance_odom_m": NaN,
+        "minimum_goal_distance": NaN,
+        "goal_success_radius": 0.35,
+        "goal_success_hold_s": 2.0,
+        "goal_stable_radius": 0.2,
+        "goal_stable_hold_s": 2.0,
+        "goal_stable_max_displacement_m": 0.04,
+        "goal_region_entered": false,
+        "goal_region_first_stamp": NaN,
+        "goal_region_after_first_cmd_s": NaN,
+        "goal_region_success": false,
+        "stuck_window_s": 8.0,
+        "stuck_max_displacement_m": 0.08,
+        "stuck_max_goal_improvement_m": 0.05,
+        "stuck_cmd_fraction_min": 0.5,
+        "stuck_idle_cmd_fraction_max": 0.1,
+        "mean_solve_time_ms": NaN,
+        "mean_efe_risk": NaN,
+        "mean_efe_ambiguity": NaN,
+        "mean_efe_control": NaN,
+        "mean_efe_obstacle": NaN,
+        "mean_p_vis_plan": NaN,
+        "mean_p_vis_plan_eff": NaN,
+        "fraction_time_p_vis_below_0_2": NaN,
+        "fraction_time_p_vis_eff_below_0_2": NaN,
+        "mean_r_plan_u_std": NaN,
+        "mean_r_plan_v_std": NaN,
+        "max_r_plan_std": NaN,
+        "mean_state_error_odom_m": NaN,
+        "mean_belief_error_odom_m": NaN,
+        "mean_state_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_odom_after_first_cmd_m": NaN,
+        "mean_belief_error_gt_m": NaN,
+        "mean_state_error_gt_m": NaN,
+        "mean_belief_error_gt_after_first_cmd_m": NaN,
+        "mean_state_error_gt_after_first_cmd_m": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_rad": NaN,
+        "mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad": NaN,
+        "mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad": NaN,
+        "crashed": false,
+        "collision_any": false,
+        "collision_contact": false,
+        "collision_geom": false,
+        "contact_topic_publishers": 1,
+        "contact_messages_seen": 0,
+        "collision_reason": "",
+        "first_crash_stamp": NaN,
+        "min_wall_distance_m": Infinity,
+        "min_obstacle_distance_m": Infinity,
+        "max_wall_penetration_m": 0.0,
+        "max_obstacle_penetration_m": 0.0,
+        "off_map": false,
+        "inside_no_go": false,
+        "valid_run": true,
+        "invalid_reason": "",
+        "correction_assimilation_count": 0,
+        "correction_assimilation_dropped_count": 0,
+        "correction_dropped_reasons": {},
+        "correction_dropped_fraction": 0.0,
+        "longest_correction_gap_s": 0.0,
+        "frame_sanity": {},
+        "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/09_tracking_evidence/post_repair/stuck_stale_belief"
+      },
+      "log": [
+        [
+          "info",
+          "Stuck termination (active): displacement=0.000 m <= 0.080 m, goal_improvement=0.000 m <= 0.050 m, cmd_fraction=1.00, active_threshold=0.50, idle_threshold=0.10."
+        ],
+        [
+          "info",
+          "Ending run. Reason: stuck."
+        ]
+      ],
+      "history_samples": 9
+    },
+    "summary_without_stop": {
+      "logger": {
+        "snapshot": {
+          "reason": "goal_reached",
+          "decision_stamp": 12.0,
+          "belief_stamp": 12.0,
+          "belief_frame": "map_bev",
+          "belief_pose": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "operational_goal_distance_m": 0.3,
+          "command": [
+            0.22,
+            0.0
+          ]
+        },
+        "summary": {
+          "completed": true,
+          "completion_reason": "goal_reached",
+          "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+          "first_cmd_stamp": 0.0,
+          "stop_stamp": 12.0,
+          "elapsed_after_first_cmd_s": 12.0,
+          "path_length_m": 0.0,
+          "final_goal_distance": NaN,
+          "final_goal_distance_reference": "ground_truth",
+          "goal_termination_reference": "planner_belief",
+          "gt_stamp_source": "unavailable_in_synthetic_probe",
+          "gt_sample_interval_median_s": NaN,
+          "gt_sample_interval_p95_s": NaN,
+          "gt_sample_interval_max_s": NaN,
+          "gt_samples": 0,
+          "final_goal_distance_odom_m": NaN,
+          "minimum_goal_distance": NaN,
+          "goal_success_radius": 0.35,
+          "goal_success_hold_s": 2.0,
+          "goal_stable_radius": 0.2,
+          "goal_stable_hold_s": 2.0,
+          "goal_stable_max_displacement_m": 0.04,
+          "goal_region_entered": false,
+          "goal_region_first_stamp": NaN,
+          "goal_region_after_first_cmd_s": NaN,
+          "goal_region_success": false,
+          "stuck_window_s": 8.0,
+          "stuck_max_displacement_m": 0.08,
+          "stuck_max_goal_improvement_m": 0.05,
+          "stuck_cmd_fraction_min": 0.5,
+          "stuck_idle_cmd_fraction_max": 0.1,
+          "mean_solve_time_ms": NaN,
+          "mean_efe_risk": NaN,
+          "mean_efe_ambiguity": NaN,
+          "mean_efe_control": NaN,
+          "mean_efe_obstacle": NaN,
+          "mean_p_vis_plan": NaN,
+          "mean_p_vis_plan_eff": NaN,
+          "fraction_time_p_vis_below_0_2": NaN,
+          "fraction_time_p_vis_eff_below_0_2": NaN,
+          "mean_r_plan_u_std": NaN,
+          "mean_r_plan_v_std": NaN,
+          "max_r_plan_std": NaN,
+          "mean_state_error_odom_m": NaN,
+          "mean_belief_error_odom_m": NaN,
+          "mean_state_error_odom_after_first_cmd_m": NaN,
+          "mean_belief_error_odom_after_first_cmd_m": NaN,
+          "mean_belief_error_gt_m": NaN,
+          "mean_state_error_gt_m": NaN,
+          "mean_belief_error_gt_after_first_cmd_m": NaN,
+          "mean_state_error_gt_after_first_cmd_m": NaN,
+          "mean_abs_odom_map_vs_odom_yaw_error_rad": NaN,
+          "mean_abs_odom_map_vs_state_yaw_error_rad": NaN,
+          "mean_abs_odom_map_vs_belief_yaw_error_rad": NaN,
+          "mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad": NaN,
+          "mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad": NaN,
+          "mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad": NaN,
+          "crashed": false,
+          "collision_any": false,
+          "collision_contact": false,
+          "collision_geom": false,
+          "contact_topic_publishers": 1,
+          "contact_messages_seen": 0,
+          "collision_reason": "",
+          "first_crash_stamp": NaN,
+          "min_wall_distance_m": Infinity,
+          "min_obstacle_distance_m": Infinity,
+          "max_wall_penetration_m": 0.0,
+          "max_obstacle_penetration_m": 0.0,
+          "off_map": false,
+          "inside_no_go": false,
+          "valid_run": true,
+          "invalid_reason": "",
+          "correction_assimilation_count": 0,
+          "correction_assimilation_dropped_count": 0,
+          "correction_dropped_reasons": {},
+          "correction_dropped_fraction": 0.0,
+          "longest_correction_gap_s": 0.0,
+          "frame_sanity": {},
+          "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/09_tracking_evidence/post_repair/summary_without_stop"
+        },
+        "log": [
+          [
+            "info",
+            "Goal reached (dist=0.300 m <= 0.350 m) and held for 2.00 s."
+          ],
+          [
+            "info",
+            "Ending run. Reason: goal_reached."
+          ]
+        ],
+        "history_samples": 2
+      },
+      "subsequent_commands": [
+        [
+          0.22,
+          0.0
+        ],
+        [
+          0.22,
+          0.0
+        ]
+      ]
+    }
+  },
+  "limit": "Current production methods with fake scheduling/transport. Snapshot is not a hermetic dependency bundle or physical navigation result."
+}

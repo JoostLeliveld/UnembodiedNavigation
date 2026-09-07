@@ -1,0 +1,27 @@
+{
+  "owner": "05_geometry",
+  "ready": true,
+  "source_sha256": {
+    "src/reliability/reliability/observation_geometry.py": "af4f455cb2a4145ee56f45385e3f21d4bb2b4106452696cbfcf071424b04d1c2",
+    "src/unav_common/unav_common/camera_model.py": "1d207b849887f271542eb79fee01f96ee1239e252d8c69a9bff081c0ac8afa2e",
+    "src/reliability/reliability/projection.py": "d581f04da7d0a478d479c43a7394c8f8339525a877233abb40b4715263286238",
+    "src/state/state/core/pixel_to_bev.py": "e607ae4a7c2bb24f7d9c52b49da07e0783385e821d9c29fdf524710a99dd477f",
+    "src/state/state/nodes/pixel_to_bev_state_node.py": "13516f92f2b51bf8308631f93ea58334413ccd67f7c9a81964144f52dfbc7ef2",
+    "tests/reliability/test_observation_geometry_05.py": "15381e8d899452e53314b3139aee9a19c3707b5d2b94aba7a5a77a9cc4dabad8",
+    "tests/state/test_pixel_covariance_publication_05.py": "d6078cad5b37656e5a675c1eebe107f1c1e3bbf4c5a5d5283b11a34802d2df01"
+  },
+  "source_stable_during_tests": true,
+  "commands": [
+    ["python3", "-m", "pytest", "-q", "tests/reliability/test_observation_geometry_05.py", "tests/state/test_pixel_to_bev_at_z.py", "tests/reliability/test_silhouette_observation.py", "tests/reliability/test_reference_calibration.py", "tests/test_learned_box_correction.py", "tests/reliability/test_camera_manager_node.py"],
+    ["python3", "-m", "pytest", "-q", "tests/state/test_pixel_covariance_publication_05.py", "tests/reliability/test_observation_geometry_05.py", "tests/state/test_pixel_to_bev_at_z.py"]
+  ],
+  "exit_code": 0,
+  "output": ["108 passed, 2 optional dependency warnings", "53 passed"],
+  "normalized_from": [
+    "docs/module_audits/05_geometry_helpers_implemented.md",
+    "docs/module_audits/05_optional_covariance_publication_implemented.md",
+    "docs/module_audits/05_repair_evidence/identity.json",
+    "docs/module_audits/05_repair_evidence/node_identity.json"
+  ],
+  "scope": "Pure geometry/calibration validation and optional pixel covariance publication. Active manager and artifact-provenance integration remain separate."
+}

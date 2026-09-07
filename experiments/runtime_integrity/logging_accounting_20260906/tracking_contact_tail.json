@@ -1,0 +1,35 @@
+{
+  "final_csv_row": {
+    "cmd_v": "0.18621598791250704",
+    "cmd_w": "-0.3103056791235549",
+    "collision_contact": "1.0",
+    "contact_messages_seen": "17",
+    "stamp": "165.20000000000002"
+  },
+  "final_csv_row_number": 1640,
+  "logging_schema": 7,
+  "rows_after_summary_stop": 1,
+  "run": "logs/studies/icra_commissioning_20260905/network_navigation_tracking_pilot/fusion_network_traverse/P1/seed210/experiment_20260906_210032",
+  "scope": "Registered prior tracking pilot; contact/summary accounting only",
+  "selection": "logs/studies/icra_commissioning_20260905/network_navigation_tracking_evidence/selection.json",
+  "selection_sha256": "4674ac6bc773f2e401e67d6799af4033b694915ec926cdaaea647528d5d2973f",
+  "summary": {
+    "collision_contact": true,
+    "completed": true,
+    "completion_reason": "collision",
+    "contact_messages_seen": 1,
+    "first_crash_stamp": 165.184,
+    "stop_stamp": 165.184
+  },
+  "verified_files": {
+    "camera_opportunities.jsonl": true,
+    "correction_assimilations.csv": true,
+    "experiment.csv": true,
+    "fusion_observations.csv": true,
+    "global_plan.csv": true,
+    "global_plan_meta.json": true,
+    "global_waypoints.csv": true,
+    "run_manifest.json": true,
+    "run_summary.json": true
+  }
+}

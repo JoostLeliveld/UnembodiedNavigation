@@ -1,0 +1,159 @@
+{
+  "partition": "audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4",
+  "server_returncode": 0,
+  "streams": {
+    "odom": {
+      "count": 223,
+      "topic": "/model/turtlebot3/odometry"
+    },
+    "native_tf": {
+      "count": 223,
+      "topic": "/model/turtlebot3/tf"
+    },
+    "configured_tf": {
+      "count": 0,
+      "topic": "/model/turtlebot3/odometry_tf"
+    },
+    "joint_states": {
+      "count": 0,
+      "topic": "/model/turtlebot3/joint_states"
+    },
+    "ground_truth": {
+      "count": 372,
+      "topic": "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/dynamic_pose/info"
+    },
+    "clock": {
+      "count": 5714,
+      "topic": "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/clock"
+    }
+  },
+  "actions": [
+    {
+      "args": [
+        "topic",
+        "-l"
+      ],
+      "wall_monotonic": 273206.053086769,
+      "duration_s": 2.1219803799758665,
+      "returncode": 0,
+      "stdout": "/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/sdf\n/clock\n/gazebo/resource_paths\n/model/turtlebot3/odometry\n/model/turtlebot3/tf\n/stats\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/changed_state\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/clock\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/dynamic_pose/info\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/log/clock\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/door_head_0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/door_head_1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/door_head_2/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_east/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_north/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_south_0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_south_1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_south_2/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_south_3/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_shell/link/wall_west/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/dock_office/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b1e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b1w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b2e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b2w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b3e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A1b3w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b1e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b1w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b2e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b2w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b3e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A2b3w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b1e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b1w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b2e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b2w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b3e/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_A3b3w/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_B1b1n/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_B1b1s/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_B1b2n/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_B1b2s/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cm_p0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cm_p1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cm_p2/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cn_p0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cn_p1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cn_p2/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cs_p0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cs_p1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_Cs_p2/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_STAGE_E0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_STAGE_E1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_STAGE_MID0/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/model/warehouse_v2_occluders/link/obs_STAGE_MID1/sensor/contact/contact\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/pose/info\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/scene/deletion\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/scene/info\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/state\n/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/stats\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "service",
+        "-s",
+        "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/control",
+        "--reqtype",
+        "ignition.msgs.WorldControl",
+        "--reptype",
+        "ignition.msgs.Boolean",
+        "--timeout",
+        "1000",
+        "--req",
+        "pause: false"
+      ],
+      "wall_monotonic": 273208.175101569,
+      "duration_s": 0.3347768950043246,
+      "returncode": 0,
+      "stdout": "data: true\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "topic",
+        "-t",
+        "/model/turtlebot3/cmd_vel",
+        "-m",
+        "ignition.msgs.Twist",
+        "-p",
+        "linear: {x: 0.2}"
+      ],
+      "wall_monotonic": 273209.010030255,
+      "duration_s": 0.9550236120121554,
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "service",
+        "-s",
+        "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/control",
+        "--reqtype",
+        "ignition.msgs.WorldControl",
+        "--reptype",
+        "ignition.msgs.Boolean",
+        "--timeout",
+        "1000",
+        "--req",
+        "pause: true"
+      ],
+      "wall_monotonic": 273210.765910549,
+      "duration_s": 0.3419298520311713,
+      "returncode": 0,
+      "stdout": "data: true\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "service",
+        "-s",
+        "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/control",
+        "--reqtype",
+        "ignition.msgs.WorldControl",
+        "--reptype",
+        "ignition.msgs.Boolean",
+        "--timeout",
+        "1000",
+        "--req",
+        "pause: false"
+      ],
+      "wall_monotonic": 273211.508100559,
+      "duration_s": 0.5006693070172332,
+      "returncode": 0,
+      "stdout": "data: true\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "service",
+        "-s",
+        "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/control",
+        "--reqtype",
+        "ignition.msgs.WorldControl",
+        "--reptype",
+        "ignition.msgs.Boolean",
+        "--timeout",
+        "1000",
+        "--req",
+        "reset: {all: true}"
+      ],
+      "wall_monotonic": 273212.509028289,
+      "duration_s": 0.3457758449949324,
+      "returncode": 0,
+      "stdout": "data: true\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "service",
+        "-s",
+        "/world/audit14_transport_0301abbe3fd64d4b8d902ee3bdadf5d4/control",
+        "--reqtype",
+        "ignition.msgs.WorldControl",
+        "--reptype",
+        "ignition.msgs.Boolean",
+        "--timeout",
+        "1000",
+        "--req",
+        "pause: false"
+      ],
+      "wall_monotonic": 273213.355023501,
+      "duration_s": 0.3275366120506078,
+      "returncode": 0,
+      "stdout": "data: true\n\n",
+      "stderr": ""
+    }
+  ]
+}

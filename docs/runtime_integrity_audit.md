@@ -1,5 +1,13 @@
 # Runtime integrity audit
 
+> **Repair status, 2026-09-07:** this document retains the earlier pilot and repair
+> boundaries. All 15 module audits are delivered; their combined verdict was
+> [NOT ACCEPTED](module_audits/15_end_to_end_acceptance.md). The user authorized the
+> remaining correctness repairs, tracked in [IMPLEMENTATION_PROGRESS.md](module_audits/IMPLEMENTATION_PROGRESS.md).
+> Component fixes and passing tests do not yet establish complete runtime acceptance.
+> New belief, correction and event schemas require a successor source/configuration
+> freeze. The old protocols and captured outputs remain unchanged.
+
 2026-09-06. Technical audit supporting [ICRA_STATUS.md](ICRA_STATUS.md), the single
 current research account. Baselines, failed attempts and source snapshots are retained.
 This audit concerns software correctness and filtering policy; repairs are not evidence
@@ -57,7 +65,7 @@ preserves the exact selection and event list. No counterfactual acceptance is as
 | Controller and actuator disagree on angular limits | Simple tracker hard-codes ±1.5 rad/s; the node and actuation stage declare ±1.0 rad/s. Both turning directions fail a bounds test. | Predict and execute using declared `w_min/w_max`. Same controller algorithm. Updated ideal-motion checks complete all three saved routes. |
 | Simultaneous per-camera observations lose information | The optional direct path advances the timestamp on camera A, then rejects camera B at the same timestamp as old. | Distinct deduplicated cameras may update the same instant with zero additional motion prediction. Repeated camera/timestamp delivery adds no information or covariance inflation. This path remains an optional comparison. |
 | Fused envelope checks shape but not meaning or SPD | The receiver accepted arbitrary schema/frame and finite indefinite/asymmetric covariance. | Validate schema, belief frame, symmetry and Cholesky factorization before filtering. Malformed inputs trigger the existing integrity stop. |
-| Planner silence has no independent stop in the actuation adapter | The adapter only reacts to incoming commands; no watchdog was configured in the robot description. | Separate-process watchdog stops after 0.5 simulated seconds without input, with latest-value command queues. This bounds silence after receipt; unstamped Twist cannot expose arbitrary transport delay. |
+| Planner silence has no independent stop in the actuation adapter | The adapter only reacts to incoming commands; no watchdog was configured in the robot description. | The separate-process adapter watchdog requests zero when elapsed input age exceeds 0.5 simulated seconds. Its timer, clock, scheduling and output path must remain live; 0.5 seconds is not a hard physical-stop bound. Unstamped Twist cannot expose arbitrary upstream transport delay. The native guard and independent physical verification belong to the 2026-09-07 successor repair. |
 
 The focused verification passed **150 tests**, with three archived pixel-trace tests
 skipped because their locked campaign is absent. The seven new state/command transaction
@@ -77,6 +85,11 @@ see [03_command_execution.md](module_audits/03_command_execution.md). No fatal e
 was observed in the baseline pilot; these are software findings, not its failure causes.
 
 ## Runtime that should own the experiment
+
+This diagram states the intended ownership architecture. Implemented boundaries and
+remaining integration work are listed in the repair tracker above. A command publication
+is not an acknowledgement from the actuator, and an operational goal decision is not
+physical rest.
 
 ```mermaid
 flowchart LR
@@ -157,7 +170,17 @@ final P0 published belief, the same-waypoint ideal-motion continuation reaches t
 35 cm goal region after one rotation recovery and 1.75 s of nominal motion. The original
 controller is immediately refused. This is a deterministic controller probe, not an
 estimate of a live trajectory's improvement. A separate full-route P0 follow-up is configured
-in `network_navigation_recovery_pilot.yaml` and is collecting under its own protocol/root.
+in `network_navigation_recovery_pilot.yaml` has now completed under its own protocol/root.
+It reached the goal and the retained console records one checked rotation activation.
+The 1,826 unique belief timestamps have 5.54 cm median / 19.35 cm p95 planar error,
+2.00 degrees p95 heading error, and 100% nominal planar 95%-ellipse coverage against
+aligned `gt_stamp`. Its longest accepted-correction gap is 28.796 s and 164/453
+corrections are dropped (155 stale, nine camera-gap refusals). These are development
+diagnostics; 100% coverage does not establish calibrated uncertainty. No contact was
+recorded. The activation is a live branch check, not a paired causal improvement estimate:
+the solver route, timings and per-message noise realization can differ between drives.
+The separate [follow-up result](../logs/studies/icra_commissioning_20260905/network_navigation_recovery_evidence/recovery_result.md)
+retains its source, event and camera-model checks.
 
 The next useful extraction is a small ROS-free filter engine with one immutable input
 event and one output record per update. Reuse `belief_correction.py` and existing dynamics.
@@ -203,12 +226,39 @@ Run the commands in
 [`planner_implementation_plan.md`](../experiments/icra_commissioning/planner_implementation_plan.md).
 The current corrected protocol is
 [`network_navigation_runtime_evidence/protocol.json`](../logs/studies/icra_commissioning_20260905/network_navigation_runtime_evidence/protocol.json).
-Its source snapshot freezes all code used by the repair baseline. The previous node and
+Its source snapshot freezes the files listed in that historical protocol; it does not
+establish complete imported-source or transitive physical-asset coverage. The previous node and
 controller are retained with the failure diagnosis; earlier metrics are not silently
 reinterpreted as corrected-runtime results.
 
-Before attributing any gain to commissioning: finish the corrected matched pilot, verify
-event accounting and source/model identity, inspect failures, then collect independent
+Before attributing any gain to commissioning: the three corrected baseline drives and
+one guarded-controller follow-up are complete, with separate frozen selections and
+camera-model/event checks. Repair the remaining causal and event-accounting boundaries
+identified below, then collect independent
 replications and a route-discriminating camera-loss/occlusion family. Before a calibrated
 future-information claim: align runtime fusion, availability selection, motion support
 and update cadence with the planner forecast, then validate against held-out drives.
+
+## Additional module-audit findings and repair order
+
+The module audits execute controlled probes on source-pinned implementations. They identify
+reachable defects, not their frequency or contribution to the recorded navigation failures.
+The scoped regression passes above do not mean the entire runtime is correct. In particular,
+the Joseph update is sound in the tested coupled path; its surrounding event handling still
+has the following gaps. Keep these fixes separate from the frozen pilots.
+
+| Priority | Required change | Evidence and acceptance check |
+|---|---|---|
+| 1 | One immutable, finite, time-ordered motion snapshot for support checking and replay | [01](module_audits/01_state_estimation.md), [02](module_audits/02_timing_and_callbacks.md): out-of-order callbacks can integrate an interval twice; eviction between support check and replay can lose a verified turn. Same physical inputs in different callback orders must give the same supported prediction. |
+| 1 | Identified-envelope startup only; commit state, revision, seen ID and terminal outcome atomically | [01](module_audits/01_state_estimation.md), [07](module_audits/07_multicamera_fusion.md): compatibility-pose startup bypasses identity; a post-commit publisher exception can lose the truthful outcome. Delivery order and publication failure must not change whether evidence was consumed. |
+| 1 | Preserve every detector opportunity through a terminal admission/fusion disposition | [04](module_audits/04_camera_acquisition_and_batching.md): incomplete batches lack bounded completion and malformed chunk counts can misassign results. A missing camera or failed detector must yield bounded, identified outcomes. The separate acquisition task began repairs after the follow-up finished; those changes are not evaluated by this pilot. |
+| 2 | Monotonic belief publication with epoch/revision; invalidate old plans after reset, stop or goal revision | [02](module_audits/02_timing_and_callbacks.md), [03](module_audits/03_command_execution.md): older predictions of the same anchor can publish last; in-flight ordinary-stop/reset plans can survive. Test publication reordering and delayed plan completion. The fatal-stop latch is already repaired. |
+| 2 | Common-time compensation from supported, frame-correct motion only | [07](module_audits/07_multicamera_fusion.md): nearest-pose differences and a corrected-belief fallback do not establish physical displacement. The aggregation algebra has no robot prior, but admission and time alignment can depend on belief. Test staggered captures, unsupported endpoints, heading/frame rotations and a belief correction with no physical motion. |
+| 2 | Complete the direct-camera identity/ledger interface before a fusion ablation | [07](module_audits/07_multicamera_fusion.md): the optional path still lacks equivalent frame and terminal-event validation. The repaired same-time update alone does not make this switch a controlled fusion comparison. |
+
+After these mechanical checks, change the total-camera-gap refusal using the verified
+motion support contract, then assess rejection recovery, camera dependence and forecast
+calibration. An end-to-end acceptance test must trace a physical frame to either exactly
+one applied update or one explicit terminal reason, and trace a command to the belief
+revision and motion interval it was checked against. This is the experiment's prerequisite,
+not an additional camera-learning contribution.

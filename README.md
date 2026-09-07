@@ -22,7 +22,9 @@ camera/YOLO bias and noise
 **Current scope: the IWAI camera-network extension and a commissioning audit for a
 12-page AIES thesis.** The network planner, full-route preflight and live calibration
 interface are implemented. Integration trials exposed tracking and estimator defects;
-the corrected runtime is being evaluated separately from sensor-model improvements.
+the corrected pilot finished with one stuck run and two goals, and a separate guarded-
+controller follow-up reached the goal. These are diagnostic runtime checks, separate from
+sensor-model improvements; remaining event-handling defects are still being repaired.
 [`docs/ICRA_STATUS.md`](docs/ICRA_STATUS.md) is the current evidence/status account and
 [`docs/runtime_integrity_audit.md`](docs/runtime_integrity_audit.md) records repairs,
 retained failures and remaining filtering/command policies. The metrics registry controls
@@ -37,8 +39,8 @@ proposing work.
 [`docs/NEXT_MEETING.md`](docs/NEXT_MEETING.md) is the slide-by-slide plan for the first
 conceptual measurement-model meeting.
 
-[`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) is the start-to-finish walkthrough of the pipeline with
-the glossary. Read it before reading any study.
+[`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) preserves the earlier pixel-model investigation and
+glossary. Its scope note distinguishes that model from the active metric pipeline below.
 
 [`docs/`](docs/) holds three contracts, not prose:
 [`localization_metrics.md`](docs/localization_metrics.md) — which quantities may be compared
@@ -55,14 +57,18 @@ logging and assimilation contract. See
 ## The pipeline
 
 ```text
-wheel odometry (drifts)  ─┐
-                          ├─► EKF: predict, then update through a gate chain ─► belief ─► planner
-camera image                                                                   (mean +      (route +
-  ─► YOLO box                                                                  covariance)   clearance)
-  ─► bottom-centre pixel ─► ray ─► floor plane  = position   (plain IPM, zero fitted parameters)
-  ─► pixel uncertainty pushed through J         = covariance (R_xy = J R_uv Jᵀ)
-  ─► the cameras reconciled by camera_manager
+camera image -> YOLO box -> IPM and box features -> frozen metric NN
+             -> residual offset correction and full commissioned metric R
+             -> per-camera admission -> robust camera fusion -> robot correction
+wheel odometry -> motion prediction --------------------------> recursive belief
+recursive belief (mean, full covariance, frame, time) ---------> planner
 ```
+
+This is the metric-reference camera path used by the registered navigation pilots.
+Plain IPM and pixel-covariance projection remain separately configured alternatives.
+The 2026-09-07 repairs add explicit state revision, motion support and event accounting;
+their [implementation tracker](docs/module_audits/IMPLEMENTATION_PROGRESS.md) records
+remaining integration gates. They have not yet passed complete runtime acceptance.
 
 The central object is the **belief**: a position *and* a stated uncertainty. Much of this
 work is about whether that stated uncertainty is honest, not about whether the position is
@@ -102,7 +108,8 @@ python3 scripts/visibility_comparison/run_visibility_campaign.py \
   --dry-run
 ```
 
-There are three campaign configs and each one names its arms in its own header:
+The following are historical fixed-route campaign recipes, not the current navigation
+acceptance plan. Each config names its arms in its own header:
 
 | config | runs | what varies |
 |---|---|---|
@@ -110,16 +117,20 @@ There are three campaign configs and each one names its arms in its own header:
 | `measurement_covariance_ablation_campaign.yaml` | 15 | how much the per-camera covariance knows (K0–K2) |
 | `heading_update_ablation_campaign.yaml` | 10 | whether a position correction may move the heading (H0, H1) |
 
-Every arm drives the same frozen, hash-bound route through the same controller, so the arm is
-the only thing that differs.
+Those recipes prescribe common routes. Current navigation pilots also use GLOBAL EFE
+planning; their exact configurations and separate controller-recovery treatment are named
+in the [registry](docs/localization_metrics_registry.json). Common controller/source identity
+must be verified from each selected protocol, rather than assumed across campaigns.
 
 Drop `--dry-run` to execute. Output lands in
 `logs/visibility_comparison/<campaign>/<task>/<condition>/<seed>/experiment_*/`.
 `run_summary.json` appears only when a run ends.
 
-Reuse is fail-closed: a run is only reused when its manifest matches the current config,
-the detector and calibration bytes, the campaign file, and the source tree it was produced
-from. A changed checkout means a rerun, not a silent mixture.
+Reuse requires matching configuration, source/assets and complete valid event evidence.
+The [campaign audit](docs/module_audits/13_configuration_provenance_campaigns.md)
+and [repair tracker](docs/module_audits/IMPLEMENTATION_PROGRESS.md) distinguish the
+implemented checks from pending integration verification. Historical manifests do not
+gain complete source or physical-asset coverage merely because current validation improves.
 
 ## Reporting results
 

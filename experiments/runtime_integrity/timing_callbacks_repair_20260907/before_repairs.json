@@ -1,0 +1,28 @@
+{
+  "command": [
+    "python3",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/planning/test_timing_publication_invariants.py",
+    "--tb=short",
+    "--junitxml=/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/timing_callbacks_repair_20260907/before_repairs.xml"
+  ],
+  "returncode": 1,
+  "source_before": {
+    "src/planning/planning/nodes/unicycle_planner_node.py": "87974788d5932d9328d1247dbfba527397b84170f87561812e1b508492cad97c",
+    "src/planning/planning/nodes/efe_agent_node.py": "5be341059f903a0ed166f7b5a64b458be67d2744ef9c855c7121e28fe6e0ed16",
+    "src/planning/planning/core/motion_history.py": "ac5ea439b956f3425a784447c384b828c8ce48075f7dabd0e6e96bb1b460a1c5",
+    "src/planning/planning/core/belief_correction.py": "0f5f0b32f561ad1326fec098dedd93a975c14904dc5e4602341afd53c432ee12",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "8788520eb3a194767b2631430df5db26ca3704124924f81ca08517ab350d04e6",
+    "tests/planning/test_timing_publication_invariants.py": "6beb92b52c5f3b030c9f4bed2e020651a8a08b854d07eb0cdc2f2d6faaa34dc9"
+  },
+  "source_after": {
+    "src/planning/planning/nodes/unicycle_planner_node.py": "87974788d5932d9328d1247dbfba527397b84170f87561812e1b508492cad97c",
+    "src/planning/planning/nodes/efe_agent_node.py": "5be341059f903a0ed166f7b5a64b458be67d2744ef9c855c7121e28fe6e0ed16",
+    "src/planning/planning/core/motion_history.py": "ac5ea439b956f3425a784447c384b828c8ce48075f7dabd0e6e96bb1b460a1c5",
+    "src/planning/planning/core/belief_correction.py": "0f5f0b32f561ad1326fec098dedd93a975c14904dc5e4602341afd53c432ee12",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "8788520eb3a194767b2631430df5db26ca3704124924f81ca08517ab350d04e6",
+    "tests/planning/test_timing_publication_invariants.py": "6beb92b52c5f3b030c9f4bed2e020651a8a08b854d07eb0cdc2f2d6faaa34dc9"
+  }
+}

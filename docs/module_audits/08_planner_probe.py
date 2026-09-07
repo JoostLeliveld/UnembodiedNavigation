@@ -2,7 +2,7 @@
 
 Assertions distinguish demonstrated implementation behaviour (including defects)
 from an acceptance test for a repaired system. Run from the repository root:
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 docs/module_audits/08_planner_probe.py
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 docs/module_audits/08_planner_probe.py --frozen-baseline
 """
 from pathlib import Path
 import hashlib
@@ -19,6 +19,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 import conftest
 sys.path[:0] = [str(ROOT / 'tests/planning'), str(ROOT / 'experiments/icra_commissioning')]
+FROZEN = '--frozen-baseline' in sys.argv
+if FROZEN:
+    import runpy
+    runpy.run_path(str(Path(__file__).with_name('08_snapshot_support.py')))
 import numpy as np
 import casadi as ca
 import scipy
@@ -49,8 +53,9 @@ SOURCES = [
     ('export_network_planner.py', 'verify_network_planner.py', 'future.py', 'network_route_probe.py',
      'network_navigation_runtime_pilot.yaml', 'network_navigation_recovery_pilot.yaml')]
 digest = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
-HASHES = {p: digest(ROOT / p) for p in SOURCES}
-OUT = dict(scope='synthetic software/model checks; saved planned routes, no drive metrics',
+SOURCE_ROOT = Path(__file__).with_name('08_source_snapshot') if FROZEN else ROOT
+HASHES = {p: digest(SOURCE_ROOT / p) for p in SOURCES}
+OUT = dict(scope='synthetic software/model checks; saved planned routes, no drive metrics', frozen_baseline=FROZEN,
            versions=dict(python=sys.version, numpy=np.__version__, scipy=scipy.__version__, casadi=ca.__version__),
            sources=HASHES, cases={})
 C = OUT['cases']
@@ -327,7 +332,7 @@ with tempfile.TemporaryDirectory(prefix='planner_audit08_') as td:
                 route_installed=(n._hier_phase=='LOCAL') if global_mode else None,
                 commands=[[v.linear.x,v.angular.z] for v in n.cmd_pub.messages],pending_start_missing=n._pending_plan_started_at is None)
 
-OUT['source_changes_during_probe'] = {p:dict(before=h,after=digest(ROOT/p)) for p,h in HASHES.items() if digest(ROOT/p)!=h}
+OUT['source_changes_during_probe'] = {p:dict(before=h,after=digest(SOURCE_ROOT/p)) for p,h in HASHES.items() if digest(SOURCE_ROOT/p)!=h}
 OUT['probe_sha256'] = digest(__file__)
 Path(__file__).with_name('08_planner_probe_results.json').write_text(json.dumps(OUT,indent=2)+'\n')
 print('COMPLETED',len(C),'cases; source changes:',OUT['source_changes_during_probe'],flush=True)

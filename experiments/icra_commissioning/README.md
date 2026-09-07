@@ -6,7 +6,7 @@ campaign selections or claim a paper-facing fusion result. The current task maps
 evidence into a 12-page, two-column AIES thesis; see the current status above.
 
 The [planner implementation plan](planner_implementation_plan.md) and
-[whole-paper map](../../../papers/master_thesis/planning/paper_map.md) describe the current
+[whole-paper map](../../../papers/Thesis/planning/paper_map.md) describe the current
 IWAI network extension. `export_network_planner.py` produces uniform, geometry and GP
 score fields; `network_route_probe.py` resolves and exercises the full live-planner
 configuration. `network_navigation_pilot.yaml` executes the three matched fields with
@@ -17,8 +17,8 @@ tests a reproduced waypoint handoff failure. Both remain one-seed integration pi
 The approved staged plan, GP decision and evidence gates are maintained in
 [`docs/ICRA_STATUS.md`](../../docs/ICRA_STATUS.md).
 Earlier conceptual diagrams are preserved below. Current implementation diagrams are in
-`../papers/master_thesis/planning/` relative to the repository root and are regenerated
-from the workspace root with `python3 papers/master_thesis/planning/build_maps.py`.
+`../papers/Thesis/planning/` relative to the repository root and are regenerated
+from the workspace root with `python3 papers/Thesis/planning/build_maps.py`.
 Generate the earlier conceptual thesis block diagrams (vector PDF, SVG, PNG and combined plan) with
 `MPLCONFIGDIR=/tmp/icra_mpl python3 experiments/icra_commissioning/thesis_plan.py`.
 Outputs are under `logs/studies/icra_commissioning_20260905/thesis_plan/` and contain no

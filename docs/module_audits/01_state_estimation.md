@@ -1,5 +1,7 @@
 # State estimation, stochastic process and measurement-update audit
 
+> Current-source follow-up (2026-09-07): [unicycle verification and remaining repair packages](01_unicycle_current_verification.md). Package A (`5e844a89`) repairs R02, the active R03 bootstrap bypass, and chronological parts of R01/R06. The report below and its probes preserve the earlier source snapshot; do not interpret those repaired findings as still current. The follow-up verifies 28 deterministic cases and 130 focused passing tests, and records the remaining defects explicitly.
+
 2026-09-06. Report first; no production-code, Q/R, configuration or recovery-policy edits made by this audit.
 
 Confirmed current defects remain in motion support, input ordering, startup event identity and event logging. The tested coupled mean/Joseph covariance calculation is correct. The strongest additional reproductions are out-of-order odometry integrating an interval twice, a coverage-check/replay race losing a verified turn, encoder timestamps changing before input validation, and optional quorum recovery using the same camera evidence again.

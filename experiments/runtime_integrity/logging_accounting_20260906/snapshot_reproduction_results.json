@@ -1,0 +1,14 @@
+{
+  "snapshot": "3c4ddeae4a7427bf374514dad6a1d65dc728a91c",
+  "scope": "Original audit source; later repairs are separate",
+  "probe_returncode": 0,
+  "matching_outputs": {
+    "results.json": true,
+    "selected_run_accounting.json": true,
+    "source_manifest.json": true
+  },
+  "regressions": {
+    "returncode": 0,
+    "output": "........................................................................ [ 80%]\n..................                                                       [100%]\n90 passed in 1.57s\n"
+  }
+}

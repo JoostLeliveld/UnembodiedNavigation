@@ -1,0 +1,14 @@
+Investigation 08; run 2026-09-06 against the source hashes in 08_planner_probe_results.json.
+Command:
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MPLCONFIGDIR=/tmp/icra_mpl python3 -m pytest -q tests/planning/test_camera_network.py tests/planning/test_efe_hit_miss_mixture.py tests/visibility_comparison/test_network_planner_config.py tests/planning/test_runtime_transactions.py tests/planning/test_tracker_guard.py
+
+Tool-returned transcript:
+...................................................                      [100%]
+=============================== warnings summary ===============================
+tests/planning/test_camera_network.py: 30 warnings
+  Warning: Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+51 passed, 30 warnings in 4.91s
+
+This checks the stated existing regressions, not the absence of the new defects.

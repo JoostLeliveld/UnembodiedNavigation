@@ -1,0 +1,216 @@
+{
+  "local_ordinary_stop": {
+    "commands": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.2,
+        0.1
+      ]
+    ],
+    "belief": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "installed": true,
+    "installed_time": 10.0
+  },
+  "local_fatal": {
+    "commands": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ],
+    "belief": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "installed": false,
+    "installed_time": null
+  },
+  "local_correction": {
+    "commands": [
+      [
+        0.2,
+        0.1
+      ]
+    ],
+    "belief": [
+      0.0,
+      2.0,
+      1.0
+    ],
+    "installed": true,
+    "installed_time": 10.0
+  },
+  "local_goal": {
+    "commands": [
+      [
+        0.2,
+        0.1
+      ]
+    ],
+    "belief": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "installed": true,
+    "installed_time": 10.0
+  },
+  "local_delay": {
+    "commands": [
+      [
+        0.2,
+        0.1
+      ]
+    ],
+    "belief": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "installed": true,
+    "installed_time": 11.0
+  },
+  "adapter_silence": {
+    "commands": [
+      [
+        0.18567297802325874,
+        -0.035313563005277715
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ],
+    "diagnostics": 1
+  },
+  "adapter_restart": {
+    "commands": [],
+    "diagnostics": 0
+  },
+  "adapter_backlog": {
+    "commands": [
+      [
+        0.18567297802325874,
+        -0.035313563005277715
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.1879768032501669,
+        0.00968621667133112
+      ]
+    ],
+    "diagnostics": 2
+  },
+  "adapter_reset_receipt_first": {
+    "commands": [
+      [
+        0.18567297802325874,
+        -0.035313563005277715
+      ],
+      [
+        0.1879768032501669,
+        0.00968621667133112
+      ]
+    ],
+    "diagnostics": 2
+  },
+  "adapter_reset_watchdog_first": {
+    "commands": [
+      [
+        0.18567297802325874,
+        -0.035313563005277715
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.1879768032501669,
+        0.00968621667133112
+      ]
+    ],
+    "diagnostics": 2
+  },
+  "adapter_clip": {
+    "commands": [
+      [
+        0.18567297802325874,
+        -0.035313563005277715
+      ],
+      [
+        0.22,
+        1.0
+      ]
+    ],
+    "diagnostics": 2
+  },
+  "adapter_stop": {
+    "commands": [
+      [
+        0.18567297802325874,
+        -0.035313563005277715
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ],
+    "diagnostics": 2
+  },
+  "tape_to_adapter_expiry": {
+    "publisher": [
+      [
+        0.2,
+        0.1
+      ],
+      [
+        0.2,
+        0.1
+      ],
+      [
+        0.2,
+        0.1
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ],
+    "adapter": [
+      [
+        0.18567297802325874,
+        0.06679607798273525
+      ],
+      [
+        0.1879768032501669,
+        0.11184824107100277
+      ],
+      [
+        0.17908088400143263,
+        0.11054749485225229
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ],
+    "nominal_tape_end": 10.25,
+    "zero_requested_at": 10.3,
+    "physical_motion": "not simulated; adapter outputs are not applied velocities"
+  }
+}

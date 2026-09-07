@@ -1,0 +1,152 @@
+/home/joostleliveld/.config/matplotlib is not a writable directory
+Matplotlib created a temporary cache directory at /tmp/matplotlib-aqrb2ksi because there was an issue with the default path (/home/joostleliveld/.config/matplotlib); it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better support multiprocessing.
+/home/joostleliveld/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+/home/joostleliveld/.local/lib/python3.10/site-packages/pandas/core/computation/expressions.py:21: UserWarning: Pandas requires version '2.8.4' or newer of 'numexpr' (version '2.8.1' currently installed).
+  from pandas.core.computation.check import NUMEXPR_INSTALLED
+/home/joostleliveld/.local/lib/python3.10/site-packages/pandas/core/arrays/masked.py:61: UserWarning: Pandas requires version '1.3.6' or newer of 'bottleneck' (version '1.3.2' currently installed).
+  from pandas.core import (
+/tmp/module12_boundary_qt8mo2p8/roundtrip.json 0a462258197b42537bafaf989642bb85b348c077e0557d8cdf5b890709cfe22d
+{
+  "real_reference_export_roundtrip": {
+    "identical_json": true,
+    "identical_bytes": true
+  },
+  "reference_loader": {
+    "version": {
+      "accepted": false,
+      "error": "ValueError: reference calibration schema must be camera_reference_calibration.v1"
+    },
+    "units": {
+      "accepted": false,
+      "error": "ValueError: reference calibration covariance_units must be m2"
+    },
+    "NN_hash": {
+      "accepted": false,
+      "error": "ValueError: reference calibration mean checkpoint hash differs"
+    },
+    "missing_camera": {
+      "accepted": false,
+      "error": "ValueError: reference calibration missing camera_B"
+    },
+    "nonfinite_R": {
+      "accepted": false,
+      "error": "ValueError: nonfinite or wrong-shaped calibration for camera_B"
+    },
+    "missing_provenance": {
+      "accepted": true,
+      "value": [
+        [
+          0.020673684090573307,
+          0.0399250047235681
+        ],
+        [
+          [
+            0.033313103557099315,
+            0.012617474882541087
+          ],
+          [
+            0.012617474882541087,
+            0.27909081853677753
+          ]
+        ]
+      ]
+    },
+    "forged_provenance": {
+      "accepted": true,
+      "value": [
+        [
+          0.020673684090573307,
+          0.0399250047235681
+        ],
+        [
+          [
+            0.033313103557099315,
+            0.012617474882541087
+          ],
+          [
+            0.012617474882541087,
+            0.27909081853677753
+          ]
+        ]
+      ]
+    },
+    "unknown_camera": {
+      "accepted": false,
+      "error": "ValueError: reference calibration missing camera_Z"
+    },
+    "nonfinite_input": {
+      "accepted": false,
+      "error": "ValueError: reference reading must be finite XY metres"
+    }
+  },
+  "network_loader": {
+    "version": {
+      "accepted": false,
+      "error": "ValueError: unsupported camera-network artifact schema"
+    },
+    "units": {
+      "accepted": false,
+      "error": "ValueError: network covariance must be map_bev square metres"
+    },
+    "missing_provenance": {
+      "accepted": true,
+      "value": {
+        "score": [
+          0.00044800305534724793,
+          0.35303372677804007,
+          0.0003324064041606858,
+          0.9329517451541746,
+          0.743615098308824
+        ],
+        "availability": [
+          0.08719575156680617,
+          0.8520154632952139,
+          0.11811984663734848,
+          0.9295833956862739,
+          0.9608808483930183
+        ]
+      }
+    },
+    "forged_provenance": {
+      "accepted": true,
+      "value": {
+        "score": [
+          0.00044800305534724793,
+          0.35303372677804007,
+          0.0003324064041606858,
+          0.9329517451541746,
+          0.743615098308824
+        ],
+        "availability": [
+          0.08719575156680617,
+          0.8520154632952139,
+          0.11811984663734848,
+          0.9295833956862739,
+          0.9608808483930183
+        ]
+      }
+    },
+    "unknown_camera": {
+      "accepted": false,
+      "error": "ValueError: camera mask contains an unknown camera"
+    },
+    "nonfinite_input": {
+      "accepted": false,
+      "error": "ValueError: network query requires finite predicted [x,y,yaw]"
+    },
+    "camera_permutation_max_difference": 0.0
+  },
+  "degenerate_gp_nonfinite_query": {
+    "accepted": true,
+    "value": [
+      0.9999
+    ]
+  },
+  "provisional_dataset_short_backend": {
+    "source_positive_rows": 2,
+    "output_rows": 1,
+    "status": "complete_provisional_residual_dataset",
+    "completion_marker_written": true
+  }
+}

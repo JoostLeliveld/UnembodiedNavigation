@@ -1,0 +1,866 @@
+{
+  "capture_resume": {
+    "none": {
+      "writer_accepted": true,
+      "writer_error": null,
+      "preflight_ready": true,
+      "failed_checks": [],
+      "start_pose_id": 1,
+      "retained_rows": 5
+    },
+    "duplicate_camera": {
+      "writer_accepted": true,
+      "writer_error": null,
+      "preflight_ready": false,
+      "failed_checks": [
+        "complete_camera_batches"
+      ],
+      "start_pose_id": 1,
+      "retained_rows": 5
+    },
+    "missing_camera": {
+      "writer_accepted": false,
+      "writer_error": "RuntimeError: resume index contains an incomplete five-camera pose batch",
+      "preflight_ready": false,
+      "failed_checks": [
+        "complete_camera_batches"
+      ],
+      "start_pose_id": null,
+      "retained_rows": null
+    },
+    "pose_gap": {
+      "writer_accepted": true,
+      "writer_error": null,
+      "preflight_ready": false,
+      "failed_checks": [
+        "contiguous_pose_prefix",
+        "all_repetitions_present"
+      ],
+      "start_pose_id": 2,
+      "retained_rows": 5
+    },
+    "timing": {
+      "writer_accepted": true,
+      "writer_error": null,
+      "preflight_ready": false,
+      "failed_checks": [
+        "capture_stamps_coherent"
+      ],
+      "start_pose_id": 1,
+      "retained_rows": 5
+    },
+    "corrupt_image": {
+      "writer_accepted": true,
+      "writer_error": null,
+      "preflight_ready": false,
+      "failed_checks": [
+        "all_indexed_images_verified",
+        "space_for_remaining_without_deduplication"
+      ],
+      "start_pose_id": 1,
+      "retained_rows": 5
+    },
+    "changed_code": {
+      "writer_accepted": true,
+      "writer_error": null,
+      "preflight_ready": false,
+      "failed_checks": [
+        "capture_helper_unchanged"
+      ],
+      "start_pose_id": 1,
+      "retained_rows": 5
+    },
+    "changed_geometry": {
+      "writer_accepted": true,
+      "writer_error": null,
+      "preflight_ready": true,
+      "failed_checks": [],
+      "start_pose_id": 1,
+      "retained_rows": 5
+    },
+    "changed_noise": {
+      "writer_accepted": true,
+      "writer_error": null,
+      "preflight_ready": true,
+      "failed_checks": [],
+      "start_pose_id": 1,
+      "retained_rows": 5
+    },
+    "mixed_pose": {
+      "writer_accepted": true,
+      "writer_error": null,
+      "preflight_ready": true,
+      "failed_checks": [],
+      "start_pose_id": 1,
+      "retained_rows": 5
+    },
+    "partial_success": {
+      "writer_accepted": true,
+      "writer_error": null,
+      "preflight_ready": false,
+      "failed_checks": [
+        "all_rows_successful",
+        "all_indexed_images_verified"
+      ],
+      "start_pose_id": 1,
+      "retained_rows": 5
+    },
+    "complete_repeats": {
+      "writer_accepted": false,
+      "writer_error": "RuntimeError: resume index contains an incomplete five-camera pose batch",
+      "preflight_ready": false,
+      "failed_checks": [
+        "resume_implementation_supports_repeats"
+      ],
+      "start_pose_id": null,
+      "retained_rows": null
+    },
+    "empty_prefix": {
+      "writer_accepted": true,
+      "writer_error": null,
+      "preflight_ready": false,
+      "failed_checks": [
+        "all_rows_successful",
+        "complete_camera_batches",
+        "space_for_remaining_without_deduplication"
+      ],
+      "start_pose_id": 0,
+      "retained_rows": 0
+    }
+  },
+  "capture_freshness": {
+    "commands": [
+      {
+        "pose": [
+          0,
+          0,
+          0
+        ],
+        "sim_stamp_s": 100.0
+      },
+      {
+        "pose": [
+          10,
+          0,
+          0
+        ],
+        "sim_stamp_s": 100.0
+      }
+    ],
+    "both_captures_stamp_s": 99,
+    "duplicate_callbacks_satisfy_min_new_rgb": true,
+    "different_pose_timestamp_window_accepted": true,
+    "permutations_preserve_camera_pixels": 120
+  },
+  "lossless_converter_interruption": {
+    "failure": {
+      "accepted": false,
+      "error": "RuntimeError: injected codec interruption"
+    },
+    "indexed_files_missing": [
+      "0.png"
+    ],
+    "verified_pixels_survive_in_webp": true
+  },
+  "detector_input_identity_and_denominator": {
+    "capture_rows": 3,
+    "detector_rows": 2,
+    "reported_attempt_rows": 2,
+    "capture_failure_omitted": true,
+    "real_miss_retained": true,
+    "changed_pixels_accepted_with_old_hash": true,
+    "positive_on_known_synthetic_empty_image_retained_as_detection": true
+  },
+  "splits": {
+    "adjacent_positions_distance_m": 0.002,
+    "checkerboard_splits": {
+      "0": "test",
+      "1": "train"
+    },
+    "identical_image_allowed_across_sides": true,
+    "fraction_zero_grouped": [
+      "train",
+      "train",
+      "val",
+      "val"
+    ],
+    "fraction_one_grouped": [
+      "train",
+      "train",
+      "val",
+      "val"
+    ]
+  },
+  "small_oof_fallback": {
+    "rows": 4,
+    "fit_calls": 0,
+    "returns_in_sample_residuals_as_oof": true
+  },
+  "legacy_exporter": {
+    "rows": 3,
+    "duplicate_rows_kept": true,
+    "joined_belief_stamp_s": 1.05,
+    "perception_receipt_stamp_s": 1.0,
+    "miss_retained": true,
+    "stats": {
+      "rows_seen": 3,
+      "kept": 3,
+      "dropped_belief_nan": 0,
+      "dropped_stamp_tol": 0,
+      "dropped_min_spacing": 0
+    },
+    "frame_expected_and_received_assumed": true
+  },
+  "provisional_heading_features": {
+    "implicit_commanded_yaw_changes_features": true,
+    "explicit_online_heading_works_without_truth": true,
+    "disable_heading_still_requires_robot_yaw": true,
+    "nonfinite_score_returns_nonfinite_features": true
+  },
+  "operational_residuals": {
+    "unique_records": 2,
+    "duplicated_records": 20,
+    "shrinkage_before": 0.8333333333333334,
+    "shrinkage_after_duplicates": 0.3333333333333333,
+    "default_empty_anchor_list_claims_held_out": true,
+    "affine_uv_expected_residual": [
+      0,
+      0
+    ],
+    "affine_uv_observed_residual": [
+      640.0,
+      360.0
+    ]
+  },
+  "frozen_capture": {
+    "schema": "bbox_characterization_capture.v1",
+    "rows": 15440,
+    "poses": 3088,
+    "positions": 386,
+    "hits": 6412,
+    "misses": 9028,
+    "unique_decoded_hashes": 7138,
+    "source_batch_ids_present": false,
+    "exact_camera_batches": true,
+    "poses_with_span_above_005s": 978,
+    "max_span_s": 0.20000000000004547,
+    "reported_span_matches_recomputed": true,
+    "duplicate_hit_hash_groups": 3,
+    "cross_split_hash_groups": 5,
+    "cross_split_hit_hash_groups": 0,
+    "cross_commissioning_role_hit_hash_groups": 0,
+    "test_to_train_position_distance_m": {
+      "min": 0.6444444444444422,
+      "median": 0.6444444444444457,
+      "max": 1.3375000000000004
+    },
+    "role_opportunities": {
+      "covariance_fit": 2720,
+      "mean_train": 7800,
+      "evaluation": 2760,
+      "selection": 2160
+    },
+    "role_hits": {
+      "covariance_fit": 1172,
+      "mean_train": 3249,
+      "evaluation": 1172,
+      "selection": 819
+    }
+  },
+  "frozen_pixels": {
+    "scope": "all indexed unique paths",
+    "checked_paths": 7138,
+    "problems": []
+  },
+  "frozen_inference": {
+    "rows": 6412,
+    "max_feature_difference": 3.552713678800501e-15,
+    "max_nn_xy_difference_m": 3.552713678800501e-15,
+    "max_reference_z_R_difference": 3.552713678800501e-15,
+    "no_fitting": true
+  },
+  "sample_trace": {
+    "capture": {
+      "pose_id": "0",
+      "position_id": "0",
+      "x_idx": "4",
+      "y_idx": "0",
+      "heading_id": "0",
+      "repetition_id": "0",
+      "camera_id": "camera_B",
+      "camera_model": "external_camera_b",
+      "image": "camera_B/images/pose_000000_r00.png",
+      "capture_status": "ok",
+      "capture_error": "",
+      "robot_x": "-8.024999999999999",
+      "robot_y": "-8.7",
+      "robot_yaw": "0.0",
+      "camera_range_m": "6.60424295434382",
+      "image_stamp_s": "40.400000000000006",
+      "label_stamp_s": "",
+      "stamp_delta_s": "nan",
+      "batch_image_span_s": "0.2",
+      "image_sha1": "c4b089a9f19824814360785a9b2fe76e9ca3d5b8",
+      "semantic_robot_pixels": "",
+      "line_of_sight": "",
+      "mask_x0": "",
+      "mask_y0": "",
+      "mask_x1": "",
+      "mask_y1": "",
+      "mask_bottom_u": "",
+      "mask_bottom_v": "",
+      "expected_x0": "-8.643723231716539",
+      "expected_y0": "367.6588148762875",
+      "expected_x1": "121.62202707034032",
+      "expected_y1": "455.0879594009546",
+      "nominal_in_frame": "1"
+    },
+    "interpretation": {
+      "pose_id": "0",
+      "position_id": "0",
+      "heading_id": "0",
+      "repetition_id": "0",
+      "camera_id": "camera_B",
+      "image": "camera_B/images/pose_000000_r00.png",
+      "image_sha1": "c4b089a9f19824814360785a9b2fe76e9ca3d5b8",
+      "robot_x": "-8.024999999999999",
+      "robot_y": "-8.7",
+      "robot_yaw": "0.0",
+      "camera_range_m": "6.60424295434382",
+      "nominal_in_frame": "1",
+      "detected": "1",
+      "confidence": "0.9600066542625427",
+      "n_candidates": "2",
+      "x0": "0.6729227900505066",
+      "y0": "366.19384765625",
+      "x1": "120.63645935058594",
+      "y1": "454.72119140625",
+      "u_bbox_bottom": "60.65469107031822",
+      "v_bbox_bottom": "454.72119140625",
+      "raw_valid": "1",
+      "raw_x": "-7.773459460156418",
+      "raw_y": "-8.982721594219168",
+      "raw_dx": "0.2515405398435808",
+      "raw_dy": "-0.28272159421916854",
+      "raw_error_m": "0.37842323266764194",
+      "raw_along_m": "-0.292187622703024",
+      "raw_across_m": "0.24047980406217798",
+      "fixed_valid": "1",
+      "fixed_x": "-8.080347397612226",
+      "fixed_y": "-8.946655074507387",
+      "fixed_dx": "-0.055347397612226956",
+      "fixed_dy": "-0.24665507450738744",
+      "fixed_error_m": "0.25278856818038825",
+      "fixed_along_m": "0.01658836511309572",
+      "fixed_across_m": "0.2522437042733979",
+      "hull_valid": "1",
+      "hull_x": "-7.9933915683017265",
+      "hull_y": "-8.680888852298287",
+      "hull_dx": "0.0316084316982721",
+      "hull_dy": "0.01911114770171274",
+      "hull_error_m": "0.03693682337317345",
+      "hull_along_m": "-0.028277525140507725",
+      "hull_across_m": "-0.023763638038586724",
+      "split": "test",
+      "learned_valid": "1",
+      "learned_x": "-8.021914167904596",
+      "learned_y": "-8.666687710070942",
+      "learned_dx": "0.0030858320954028073",
+      "learned_dy": "0.033312289929057215",
+      "learned_error_m": "0.033454910253034376",
+      "learned_along_m": "0.0020961496118233804",
+      "learned_across_m": "-0.0333891775406858",
+      "nn_valid": "1",
+      "nn_x": "-7.9915362765310665",
+      "nn_y": "-8.637136688434255",
+      "nn_dx": "0.033463723468932116",
+      "nn_dy": "0.06286331156574398",
+      "nn_error_m": "0.07121528438065076",
+      "nn_along_m": "-0.02335320170743884",
+      "nn_across_m": "-0.06727737137722188"
+    },
+    "role": "covariance_fit",
+    "features": [
+      6.316634629757904,
+      0.15831214857496462,
+      0.0937215129379183,
+      0.12295464409722222,
+      1.3551015028679818,
+      0.04738647739868611,
+      0.6315572102864583,
+      0.5254895957530965,
+      0.8508000263018609,
+      0.9600066542625427,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "raw_xy": [
+      -7.773459460156418,
+      -8.982721594219168
+    ],
+    "nn_xy": [
+      -7.9915362765310665,
+      -8.637136688434255
+    ],
+    "reference_xy": [
+      -7.970862592440493,
+      -8.597211683710688
+    ],
+    "R_m2": [
+      [
+        0.033313103557099315,
+        0.012617474882541087
+      ],
+      [
+        0.012617474882541087,
+        0.27909081853677753
+      ]
+    ],
+    "mean_hash": "5da33c63a2bb46b3367e13acbb4eb96cab57388b5854a71db98676df176aad9d"
+  },
+  "artifact_input_and_roundtrips": {
+    "unknown_camera_returns_none": true,
+    "nonfinite_raw_returns_none": true,
+    "nonfinite_score_returns_none": true,
+    "missing_bbox_returns_none": true,
+    "unknown_version": {
+      "accepted": false,
+      "error": "ValueError: learned box correction has schema 'v999', this runtime understands 'box_feature_bias_correction.joblib.v1'; refusing to run a model whose feature contract may differ"
+    },
+    "missing_feature_metadata": {
+      "accepted": false,
+      "error": "ValueError: learned box-correction feature order does not match this runtime.\n  artifact: []\n  runtime : ['range_m', 'inv_range', 'box_w_frac', 'box_h_frac', 'box_aspect', 'u_frac', 'v_frac', 'bearing_cos', 'bearing_sin', 'confidence', 'is_camera_A', 'is_camera_B', 'is_camera_C', 'is_camera_D', 'is_camera_E']"
+    },
+    "missing_target": {
+      "accepted": true,
+      "value": [
+        -7.9915362765310665,
+        -8.637136688434255
+      ]
+    },
+    "missing_B_geometry": {
+      "accepted": true,
+      "value": null
+    },
+    "foreign_camera_geometry": {
+      "accepted": true,
+      "value": [
+        -7.910159518544823,
+        -8.583581072705924
+      ]
+    },
+    "reference_camera_permutations_equal": 120,
+    "frozen_field_pickle_roundtrip_max_q_difference": 0.0,
+    "field_nan_pose_rejected": true,
+    "frozen_field_to_npz_max_q_difference_at_supported_grid_nodes": {
+      "uniform": 0.0,
+      "geometry": 0.0,
+      "gp": 0.0
+    }
+  },
+  "artifact_preservation": {
+    "changed_frozen_files": []
+  },
+  "provenance": {
+    "sha256": {
+      "experiments/camera_observation_characterization/capture_bbox_grid.py": "94d1d6d5eddea30d4b0db74b4410dcacaf216933ac705e7c0eb4e797a8be7f37",
+      "experiments/camera_observation_characterization/audit_capture_resume.py": "412654b104a2531515912335de21669a0dabec1157243929e1ca84894a381627",
+      "experiments/camera_observation_characterization/run_bbox_detector.py": "79bf84968e8ad7fe9416741a530650a5038c21074459eaf468b4dbc943526dbe",
+      "experiments/camera_observation_characterization/derive_interpretations.py": "6357a608726de45cfa58ee8b6b878e4a3c10530c7d9a8ec1f9f854089cc14501",
+      "experiments/camera_observation_characterization/reencode_capture_lossless.py": "49e7a6298a0905be056819ae78ebcf1c20a82230f38ca4ff6a6741903db62795",
+      "experiments/camera_observation_characterization/fit_bias_updates.py": "1616d267debbe96bba49791529e635178257fa50611d60d18b97468636bf2a7d",
+      "experiments/camera_observation_characterization/package_bias_model.py": "c6a38db98cbe6e987d5df7f831c8f29657f7b3fc1529b1e5226cd605f7ea067b",
+      "experiments/camera_observation_characterization/learn_measurement_covariance.py": "77d9e963f03eb69c0c0a2a54293cb45b5fb6a5a39221d45be8df31181973af39",
+      "scripts/perception/dataset_split_utils.py": "15e4cc61d19868156d57536e5382724353f8506fcea31ca21cdae60ce12f9b61",
+      "scripts/perception/build_residual_bias_dataset.py": "371d090ca84e12e142e84f5cc70b336db8ce1229ece3c4893893670bdb255fd2",
+      "scripts/perception/residual_bias_model.py": "365c7fa434b62b151c60ff4bbeca079f228b9703e1c1ecfac22a2cdf9f99a18a",
+      "scripts/perception/train_residual_bias.py": "216c3b0bcb98d35b7abe0806127c32d2c8285eb438e4d09f359868c819b30909",
+      "experiments/icra_commissioning/model.py": "5295e358e2d2334aef62ee1503068039b09ecbcb59c3df6faa16740302609fce",
+      "experiments/icra_commissioning/commissioned_field.py": "ac1b0be03a6d7d2d19d396e352b3982ff46075e097c0391b1206ef09c77b8bf1",
+      "experiments/icra_commissioning/study.py": "3c5c258354c8cd453d80e01d66efa613bfac05c7e330b1b90a307c355c7cb3c4",
+      "experiments/icra_commissioning/field_study.py": "07ee3875a8a7bc639ee100ad86ea80fabb5eb43d40ea45edb55c187b436058e0",
+      "experiments/icra_commissioning/export_reference_calibration.py": "0d630189a2f71b2d1bf3e549b4bdb18fe4f0abd35948c1e8154deac5fb338c14",
+      "experiments/icra_commissioning/export_network_planner.py": "2827ecc2951df0f7ec6d9e47fff23b52d2df55c8beb34d394b3c817af388deda",
+      "src/reliability/reliability/observation_exporter.py": "a768bb52e48679382f5e56c53c71f1c49ed60038824ad568dbb07361530b1748",
+      "src/reliability/reliability/observation_gp.py": "831770708245478ca31a5ff67172148340564066564e41c5eb0c0169f8d19a8c",
+      "src/reliability/reliability/operational_residual.py": "3767d9cb0ef7cb221d366519653be888da3a53f11cfa246beaaeca2af30009a0",
+      "src/reliability/reliability/learned_box_correction.py": "d382b5c37d74aa8087aa22b3a010feb6c4a28b03dc92afa3a9f8298e8e824659",
+      "src/reliability/reliability/reference_calibration.py": "442d2ad7876f6a95f537917acb358cce1ea0e3e5cf68ca71fef6e58bd7ac3542",
+      "src/planning/planning/core/camera_network.py": "3fa1dc1c86a2ed81627445371d63cba044160ab1728ffc1a3c4416e0be7f06b2",
+      "scripts/visibility_comparison/fit_belief_aware_gp.py": "2586bc874af5504b79b99eecd2d5ae7b3662a9ce505d49b490816c7306e5dfb6",
+      "src/reliability/reliability/nodes/camera_manager_node.py": "8788520eb3a194767b2631430df5db26ca3704124924f81ca08517ab350d04e6",
+      "logs/perception_models/box_feature_bias_correction_20260831/models.joblib": "5da33c63a2bb46b3367e13acbb4eb96cab57388b5854a71db98676df176aad9d",
+      "logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt": "efff1949c1b8cdeeb11438b36de80f6cf8daeef5f3a4682cfce8ae7dfe314f34",
+      "logs/studies/icra_commissioning_20260905/models.joblib": "84454e296a9a5c83dd07bd5756b877bf614addd4fc1c3b18b9abff27789adb1c",
+      "logs/studies/icra_commissioning_20260905/manifest.json": "46fe4a4486ca7ee50465b0362bfd0987982564765dd964474ed3946cb94fcafb",
+      "logs/studies/icra_commissioning_20260905/field_study/field.joblib": "00cd08656e2e8afc4416496be838a5dee905a8e739a2231f62d0166afb515963",
+      "logs/studies/icra_commissioning_20260905/field_study/manifest.json": "5a3a9066e31c3102e8b05de8495c64de4829be8023e838b9a555b8213f8dacae",
+      "logs/studies/icra_commissioning_20260905/field_study/selection.json": "03a334717d68d977c1a62b8198d0e4020a49468e7caca5d641b79c4476afd67b",
+      "logs/studies/icra_commissioning_20260905/network_planner/manifest.json": "db6d3a7d47e9c998285e3768622276c63956664bfc9988d6d4062cb1184949ea",
+      "logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json": "0a462258197b42537bafaf989642bb85b348c077e0557d8cdf5b890709cfe22d",
+      "logs/studies/measurement_commissioning/calibration.json": "de578957683905763c5890e686345dee56cd583f5a5ade05b5050adc593ecc30",
+      "logs/studies/icra_commissioning_20260905/network_planner/uniform.npz": "9a312f1970c1689c1c830c12059e484fd285d97cb70c2e4d51b0a361319565ec",
+      "logs/studies/icra_commissioning_20260905/network_planner/geometry.npz": "7a3f1c535c91373112b22205ac1d54435242ed0326cc2028473ef19f15755fd1",
+      "logs/studies/icra_commissioning_20260905/network_planner/gp.npz": "2564739e96dc30d48cf0846cebdc0f4f1019ad7e612dc9b21441b9a914b24930",
+      "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/capture_index.csv": "444eacca6ddcb210b7012d42305abe9d56d4bbf103b10687cc7daf0581ca729c",
+      "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/capture_manifest.json": "d1b4d9ee3eefe6ce10a2b06d58d509c8a5f0114c57d2be08c69b76eb6474b1d8",
+      "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bbox_observations.csv": "fb96041eb4795667a71a4160210f6f53dac69b6e8d94e49aa6e09c78f737cd86",
+      "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bbox_detector_manifest.json": "3e4e60715259a021f4e2094214332f0a12cda41d3066f5a1051a15ddc95950a0",
+      "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/observation_interpretations.csv": "407993f8fab6de16df79531267f665db6447df1072e2106e7c917cebf58c3366",
+      "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/observation_interpretations_manifest.json": "13456a0934e5b309a52a5da13895d9b7a288ebdd26823a0eda4ceb537da0f88d",
+      "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bias_update_interpretations.csv": "2ef381a377b0ada5943ceeb96fcc3a5f2b670a805a1b5f3dc3f4944768fe6cc2",
+      "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bias_update_interpretations_manifest.json": "42615f41aba4533a85bf259bd717a49d13e46860508603de08f0e9528d6b57a8"
+    },
+    "references": [
+      {
+        "manifest": "logs/perception_models/box_feature_bias_correction_20260831/summary.json",
+        "field": "source_hashes",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bias_update_interpretations.csv",
+        "expected": "2ef381a377b0ada5943ceeb96fcc3a5f2b670a805a1b5f3dc3f4944768fe6cc2",
+        "actual": "2ef381a377b0ada5943ceeb96fcc3a5f2b670a805a1b5f3dc3f4944768fe6cc2",
+        "matches": true
+      },
+      {
+        "manifest": "logs/perception_models/box_feature_bias_correction_20260831/summary.json",
+        "field": "source_hashes",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bias_update_interpretations_manifest.json",
+        "expected": "42615f41aba4533a85bf259bd717a49d13e46860508603de08f0e9528d6b57a8",
+        "actual": "42615f41aba4533a85bf259bd717a49d13e46860508603de08f0e9528d6b57a8",
+        "matches": true
+      },
+      {
+        "manifest": "logs/perception_models/box_feature_bias_correction_20260831/summary.json",
+        "field": "source_hashes",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/capture_manifest.json",
+        "expected": "d1b4d9ee3eefe6ce10a2b06d58d509c8a5f0114c57d2be08c69b76eb6474b1d8",
+        "actual": "d1b4d9ee3eefe6ce10a2b06d58d509c8a5f0114c57d2be08c69b76eb6474b1d8",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/box_feature_bias_correction_20260831/models.joblib",
+        "expected": "5da33c63a2bb46b3367e13acbb4eb96cab57388b5854a71db98676df176aad9d",
+        "actual": "5da33c63a2bb46b3367e13acbb4eb96cab57388b5854a71db98676df176aad9d",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/capture_manifest.json",
+        "expected": "d1b4d9ee3eefe6ce10a2b06d58d509c8a5f0114c57d2be08c69b76eb6474b1d8",
+        "actual": "d1b4d9ee3eefe6ce10a2b06d58d509c8a5f0114c57d2be08c69b76eb6474b1d8",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/capture_index.csv",
+        "expected": "444eacca6ddcb210b7012d42305abe9d56d4bbf103b10687cc7daf0581ca729c",
+        "actual": "444eacca6ddcb210b7012d42305abe9d56d4bbf103b10687cc7daf0581ca729c",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/observation_interpretations.csv",
+        "expected": "407993f8fab6de16df79531267f665db6447df1072e2106e7c917cebf58c3366",
+        "actual": "407993f8fab6de16df79531267f665db6447df1072e2106e7c917cebf58c3366",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/observation_interpretations_manifest.json",
+        "expected": "13456a0934e5b309a52a5da13895d9b7a288ebdd26823a0eda4ceb537da0f88d",
+        "actual": "13456a0934e5b309a52a5da13895d9b7a288ebdd26823a0eda4ceb537da0f88d",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bias_update_interpretations.csv",
+        "expected": "2ef381a377b0ada5943ceeb96fcc3a5f2b670a805a1b5f3dc3f4944768fe6cc2",
+        "actual": "2ef381a377b0ada5943ceeb96fcc3a5f2b670a805a1b5f3dc3f4944768fe6cc2",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bias_update_interpretations_manifest.json",
+        "expected": "42615f41aba4533a85bf259bd717a49d13e46860508603de08f0e9528d6b57a8",
+        "actual": "42615f41aba4533a85bf259bd717a49d13e46860508603de08f0e9528d6b57a8",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/box_feature_bias_correction_20260831/models.joblib",
+        "expected": "5da33c63a2bb46b3367e13acbb4eb96cab57388b5854a71db98676df176aad9d",
+        "actual": "5da33c63a2bb46b3367e13acbb4eb96cab57388b5854a71db98676df176aad9d",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/capture_manifest.json",
+        "expected": "d1b4d9ee3eefe6ce10a2b06d58d509c8a5f0114c57d2be08c69b76eb6474b1d8",
+        "actual": "d1b4d9ee3eefe6ce10a2b06d58d509c8a5f0114c57d2be08c69b76eb6474b1d8",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/capture_index.csv",
+        "expected": "444eacca6ddcb210b7012d42305abe9d56d4bbf103b10687cc7daf0581ca729c",
+        "actual": "444eacca6ddcb210b7012d42305abe9d56d4bbf103b10687cc7daf0581ca729c",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/observation_interpretations.csv",
+        "expected": "407993f8fab6de16df79531267f665db6447df1072e2106e7c917cebf58c3366",
+        "actual": "407993f8fab6de16df79531267f665db6447df1072e2106e7c917cebf58c3366",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/observation_interpretations_manifest.json",
+        "expected": "13456a0934e5b309a52a5da13895d9b7a288ebdd26823a0eda4ceb537da0f88d",
+        "actual": "13456a0934e5b309a52a5da13895d9b7a288ebdd26823a0eda4ceb537da0f88d",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bias_update_interpretations.csv",
+        "expected": "2ef381a377b0ada5943ceeb96fcc3a5f2b670a805a1b5f3dc3f4944768fe6cc2",
+        "actual": "2ef381a377b0ada5943ceeb96fcc3a5f2b670a805a1b5f3dc3f4944768fe6cc2",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bias_update_interpretations_manifest.json",
+        "expected": "42615f41aba4533a85bf259bd717a49d13e46860508603de08f0e9528d6b57a8",
+        "actual": "42615f41aba4533a85bf259bd717a49d13e46860508603de08f0e9528d6b57a8",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/icra_commissioning_20260905/manifest.json",
+        "expected": "46fe4a4486ca7ee50465b0362bfd0987982564765dd964474ed3946cb94fcafb",
+        "actual": "46fe4a4486ca7ee50465b0362bfd0987982564765dd964474ed3946cb94fcafb",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/icra_commissioning_20260905/models.joblib",
+        "expected": "84454e296a9a5c83dd07bd5756b877bf614addd4fc1c3b18b9abff27789adb1c",
+        "actual": "84454e296a9a5c83dd07bd5756b877bf614addd4fc1c3b18b9abff27789adb1c",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "files",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/icra_commissioning/field_requirements.yaml",
+        "expected": "77d17fcf5744fc33fd64ba62121abd57b80e1068c08d24f41caf535361491918",
+        "actual": "77d17fcf5744fc33fd64ba62121abd57b80e1068c08d24f41caf535361491918",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "sources",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/icra_commissioning/field_study.py",
+        "expected": "07ee3875a8a7bc639ee100ad86ea80fabb5eb43d40ea45edb55c187b436058e0",
+        "actual": "07ee3875a8a7bc639ee100ad86ea80fabb5eb43d40ea45edb55c187b436058e0",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "sources",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/icra_commissioning/commissioned_field.py",
+        "expected": "ac1b0be03a6d7d2d19d396e352b3982ff46075e097c0391b1206ef09c77b8bf1",
+        "actual": "ac1b0be03a6d7d2d19d396e352b3982ff46075e097c0391b1206ef09c77b8bf1",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "sources",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/reliability/reliability/observation_gp.py",
+        "expected": "831770708245478ca31a5ff67172148340564066564e41c5eb0c0169f8d19a8c",
+        "actual": "831770708245478ca31a5ff67172148340564066564e41c5eb0c0169f8d19a8c",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "field": "sources",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/fit_belief_aware_gp.py",
+        "expected": "2586bc874af5504b79b99eecd2d5ae7b3662a9ce505d49b490816c7306e5dfb6",
+        "actual": "2586bc874af5504b79b99eecd2d5ae7b3662a9ce505d49b490816c7306e5dfb6",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/network_planner/manifest.json",
+        "field": "sources",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/icra_commissioning_20260905/manifest.json",
+        "expected": "46fe4a4486ca7ee50465b0362bfd0987982564765dd964474ed3946cb94fcafb",
+        "actual": "46fe4a4486ca7ee50465b0362bfd0987982564765dd964474ed3946cb94fcafb",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/network_planner/manifest.json",
+        "field": "sources",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/icra_commissioning_20260905/field_study/field.joblib",
+        "expected": "00cd08656e2e8afc4416496be838a5dee905a8e739a2231f62d0166afb515963",
+        "actual": "00cd08656e2e8afc4416496be838a5dee905a8e739a2231f62d0166afb515963",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/network_planner/manifest.json",
+        "field": "sources",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/icra_commissioning_20260905/field_study/selection.json",
+        "expected": "03a334717d68d977c1a62b8198d0e4020a49468e7caca5d641b79c4476afd67b",
+        "actual": "03a334717d68d977c1a62b8198d0e4020a49468e7caca5d641b79c4476afd67b",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/network_planner/manifest.json",
+        "field": "sources",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+        "expected": "5a3a9066e31c3102e8b05de8495c64de4829be8023e838b9a555b8213f8dacae",
+        "actual": "5a3a9066e31c3102e8b05de8495c64de4829be8023e838b9a555b8213f8dacae",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/network_planner/manifest.json",
+        "field": "sources",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/icra_commissioning_20260905/models.joblib",
+        "expected": "84454e296a9a5c83dd07bd5756b877bf614addd4fc1c3b18b9abff27789adb1c",
+        "actual": "84454e296a9a5c83dd07bd5756b877bf614addd4fc1c3b18b9abff27789adb1c",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/network_planner/manifest.json",
+        "field": "sources",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/icra_commissioning/export_network_planner.py",
+        "expected": "2827ecc2951df0f7ec6d9e47fff23b52d2df55c8beb34d394b3c817af388deda",
+        "actual": "2827ecc2951df0f7ec6d9e47fff23b52d2df55c8beb34d394b3c817af388deda",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/network_planner/manifest.json",
+        "field": "sources",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/reliability/reliability/observation_gp.py",
+        "expected": "831770708245478ca31a5ff67172148340564066564e41c5eb0c0169f8d19a8c",
+        "actual": "831770708245478ca31a5ff67172148340564066564e41c5eb0c0169f8d19a8c",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/network_planner/manifest.json",
+        "field": "sources",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/scripts/visibility_comparison/fit_belief_aware_gp.py",
+        "expected": "2586bc874af5504b79b99eecd2d5ae7b3662a9ce505d49b490816c7306e5dfb6",
+        "actual": "2586bc874af5504b79b99eecd2d5ae7b3662a9ce505d49b490816c7306e5dfb6",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json",
+        "field": "source_hashes",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/icra_commissioning_20260905/manifest.json",
+        "expected": "46fe4a4486ca7ee50465b0362bfd0987982564765dd964474ed3946cb94fcafb",
+        "actual": "46fe4a4486ca7ee50465b0362bfd0987982564765dd964474ed3946cb94fcafb",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json",
+        "field": "source_hashes",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/icra_commissioning_20260905/network_planner/manifest.json",
+        "expected": "db6d3a7d47e9c998285e3768622276c63956664bfc9988d6d4062cb1184949ea",
+        "actual": "db6d3a7d47e9c998285e3768622276c63956664bfc9988d6d4062cb1184949ea",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json",
+        "field": "source_hashes",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/icra_commissioning_20260905/models.joblib",
+        "expected": "84454e296a9a5c83dd07bd5756b877bf614addd4fc1c3b18b9abff27789adb1c",
+        "actual": "84454e296a9a5c83dd07bd5756b877bf614addd4fc1c3b18b9abff27789adb1c",
+        "matches": true
+      },
+      {
+        "manifest": "logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json",
+        "field": "source_hashes",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/icra_commissioning/export_reference_calibration.py",
+        "expected": "0d630189a2f71b2d1bf3e549b4bdb18fe4f0abd35948c1e8154deac5fb338c14",
+        "actual": "0d630189a2f71b2d1bf3e549b4bdb18fe4f0abd35948c1e8154deac5fb338c14",
+        "matches": true
+      },
+      {
+        "manifest": "capture/detector",
+        "field": "world",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+        "expected": "cb872fd438bd3275ac75da44c12013c01c91c95287ce29edaf6bd0f09073f3e3",
+        "actual": "cb872fd438bd3275ac75da44c12013c01c91c95287ce29edaf6bd0f09073f3e3",
+        "matches": true
+      },
+      {
+        "manifest": "capture/detector",
+        "field": "profiles",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/config/world_profiles.yaml",
+        "expected": "3559f0a78b562bcad7cb7cbb476acfcc48442e14eedb017e8002fb1ae3f4f5fb",
+        "actual": "742cb32c69ea9f48ecdf1ce899e9bf8cd45949be863312369b85cb67a79405cd",
+        "matches": false
+      },
+      {
+        "manifest": "capture/detector",
+        "field": "detector_weights",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt",
+        "expected": "efff1949c1b8cdeeb11438b36de80f6cf8daeef5f3a4682cfce8ae7dfe314f34",
+        "actual": "efff1949c1b8cdeeb11438b36de80f6cf8daeef5f3a4682cfce8ae7dfe314f34",
+        "matches": true
+      },
+      {
+        "manifest": "capture/detector",
+        "field": "capture_index",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/capture_index.csv",
+        "expected": "444eacca6ddcb210b7012d42305abe9d56d4bbf103b10687cc7daf0581ca729c",
+        "actual": "444eacca6ddcb210b7012d42305abe9d56d4bbf103b10687cc7daf0581ca729c",
+        "matches": true
+      },
+      {
+        "manifest": "capture/detector",
+        "field": "detector_output",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bbox_observations.csv",
+        "expected": "fb96041eb4795667a71a4160210f6f53dac69b6e8d94e49aa6e09c78f737cd86",
+        "actual": "fb96041eb4795667a71a4160210f6f53dac69b6e8d94e49aa6e09c78f737cd86",
+        "matches": true
+      }
+    ],
+    "imported_sources": {
+      "model": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/icra_commissioning/model.py",
+      "commissioned_field": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/icra_commissioning/commissioned_field.py",
+      "F": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/camera_observation_characterization/fit_bias_updates.py"
+    }
+  },
+  "provenance_check_summary": {
+    "checked": 41,
+    "mismatches": [
+      {
+        "manifest": "capture/detector",
+        "field": "profiles",
+        "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/config/world_profiles.yaml",
+        "expected": "3559f0a78b562bcad7cb7cbb476acfcc48442e14eedb017e8002fb1ae3f4f5fb",
+        "actual": "742cb32c69ea9f48ecdf1ce899e9bf8cd45949be863312369b85cb67a79405cd",
+        "matches": false
+      }
+    ]
+  }
+}

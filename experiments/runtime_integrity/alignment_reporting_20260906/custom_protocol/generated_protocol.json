@@ -1,0 +1,36 @@
+{
+  "kind": "matched_integration_pilot",
+  "task": "fusion_network_traverse",
+  "seeds": [
+    210
+  ],
+  "arms": [
+    "P0"
+  ],
+  "comparison": "Change only the future detector-score field; keep mean, camera R, fusion, Q and controller fixed.",
+  "primary_outputs": [
+    "termination including failures",
+    "route choice",
+    "time and travel cost",
+    "aligned belief median and p95 position error",
+    "planar coverage",
+    "correction gaps"
+  ],
+  "scope": "One seed per arm is descriptive; static calibration and robust runtime fusion do not establish forecast calibration.",
+  "sources": {
+    "experiments/runtime_integrity/alignment_reporting_20260906/navigation_fixture/custom_config.yaml": "0f4d58704eb8393e9e5bd4b63b3d1b2ec56fa3a94987652dbf403c4761cfb8fd",
+    "src/reliability/reliability/reference_calibration.py": "442d2ad7876f6a95f537917acb358cce1ea0e3e5cf68ca71fef6e58bd7ac3542",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "8557cb29f2e2e38e3cc8546441b93028f64b22458d776e9ba9e60e96f92f014a",
+    "src/reliability/reliability/fusion.py": "438170dbd11cb64f6f2fe1978ca98f6cba1030eef6017ad73026ef0c253ee4ba",
+    "src/planning/planning/nodes/unicycle_planner_node.py": "1191b8879b8515d7d2bd176015538cacd0bb9ed196af49da80d6cd8705bd8995",
+    "src/planning/planning/nodes/efe_agent_node.py": "a575ba53e74a835ee955625b14e5718c09939fc36d206ef8b35b4a0c405818ae",
+    "src/planning/planning/core/belief_correction.py": "cf263b7d64785cd00200e99ae4196fbbc6cc0ef73e4226cee164a897481ec22f",
+    "src/planning/planning/core/dynamics.py": "7a6bde9ddfbc2b100b328fd5d1ae870438a57f1f95e2f7f91e8a6b51859a4107",
+    "src/planning/planning/core/motion_history.py": "4e2f71eb96d2a03304336ebc50b28e2e518cb01b87b20be312c7bf80122b7923",
+    "src/planning/planning/core/tracker_guard.py": "5e5f21a0c1ccd5f835c18d3d83d80765fb2f65ac7e4ed6187a0df2277503e8af",
+    "src/sim/sim/actuation_noise_node.py": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f",
+    "scripts/visibility_comparison/run_visibility_campaign.py": "02373892837810cf135f86e515b02aae2b55743be8f97a2f6b9b385d920689d0",
+    "experiments/runtime_integrity/alignment_reporting_20260906/navigation_fixture/network_planner/reference_calibration.json": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+    "experiments/icra_commissioning/network_navigation_analysis.py": "504c08f1ca4d6e3f91cb8a3552ce31384e1183c26d4bb3d981279af3e245cfd4"
+  }
+}

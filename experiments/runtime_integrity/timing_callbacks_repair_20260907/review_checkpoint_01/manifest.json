@@ -1,0 +1,42 @@
+{
+  "utc": "2026-09-07T08:05:57.504376+00:00",
+  "command": [
+    "python3",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/planning/test_timing_publication_invariants.py",
+    "--tb=short",
+    "--junitxml=/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/timing_callbacks_repair_20260907/review_checkpoint_01/tests.xml"
+  ],
+  "returncode": 0,
+  "source_before": {
+    "src/planning/planning/nodes/unicycle_planner_node.py": "d2998cd94cf380052fb4d1e6e75ba40e2a5258d95d788ca807fcbc79291ca8dc",
+    "src/planning/planning/nodes/efe_agent_node.py": "6aa2779b14b6135702b336c2c6f76fd8fd3eafa94a99f5cf70931dc7eecd74f3",
+    "src/planning/planning/core/belief_state.py": "56edc020181c1923a8c08bbb295c361f2e7332005b3f48787b6e41250d75363c",
+    "src/planning/planning/core/motion_history.py": "785ac70e7d4307970f39a765b99ad0a5deacfdb1469e6b5cfd012c47aff5a731",
+    "src/planning/planning/core/belief_correction.py": "2bf162356a77e740fcf78b23442687f0765b5e2d7e06cc75bfde1d88efc1db57",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "3f101479f7beec8444b7b05dcbc5b98937ce649ebcc53c4694cead7c7392c63e",
+    "src/reliability/reliability/manager_state.py": "f913114b362ed9ae3641b0a298cd8905ba8a871953823ad870a7b18161486718",
+    "src/unav_common/unav_common/operational_belief.py": "410206d5d7d26c553021374601ef6ea8370ba972d68c53df48961f26499e05ee",
+    "tests/planning/test_timing_publication_invariants.py": "d37b6517857ad7282169ad05d5e9592aa9779795747aeb5d4066f6368dd7dab2",
+    "tests/planning/test_runtime_transactions.py": "cda9923c1a15be55d9d7d5714df47f9d964c3f1fc4811f34606405094c1fa458",
+    "tests/planning/test_planner_node_correction_wiring.py": "2e9e0e3ab0ec3f89598b0f94d2dd403e5332e3b43f6bd8bbbba3f4b4e20a6397",
+    "tests/planning/test_planner_node_state_correction.py": "ea2f6b153ef67d383d569782c99bd7b61d3d4ac3623e7b3a82dc2c2eb93110d3"
+  },
+  "source_after": {
+    "src/planning/planning/nodes/unicycle_planner_node.py": "d2998cd94cf380052fb4d1e6e75ba40e2a5258d95d788ca807fcbc79291ca8dc",
+    "src/planning/planning/nodes/efe_agent_node.py": "6aa2779b14b6135702b336c2c6f76fd8fd3eafa94a99f5cf70931dc7eecd74f3",
+    "src/planning/planning/core/belief_state.py": "56edc020181c1923a8c08bbb295c361f2e7332005b3f48787b6e41250d75363c",
+    "src/planning/planning/core/motion_history.py": "785ac70e7d4307970f39a765b99ad0a5deacfdb1469e6b5cfd012c47aff5a731",
+    "src/planning/planning/core/belief_correction.py": "2bf162356a77e740fcf78b23442687f0765b5e2d7e06cc75bfde1d88efc1db57",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "3f101479f7beec8444b7b05dcbc5b98937ce649ebcc53c4694cead7c7392c63e",
+    "src/reliability/reliability/manager_state.py": "f913114b362ed9ae3641b0a298cd8905ba8a871953823ad870a7b18161486718",
+    "src/unav_common/unav_common/operational_belief.py": "07c0048eb19217e7120f780177fc12d68ff121d2f64d6395c4d8fea16a971876",
+    "tests/planning/test_timing_publication_invariants.py": "d37b6517857ad7282169ad05d5e9592aa9779795747aeb5d4066f6368dd7dab2",
+    "tests/planning/test_runtime_transactions.py": "cda9923c1a15be55d9d7d5714df47f9d964c3f1fc4811f34606405094c1fa458",
+    "tests/planning/test_planner_node_correction_wiring.py": "2e9e0e3ab0ec3f89598b0f94d2dd403e5332e3b43f6bd8bbbba3f4b4e20a6397",
+    "tests/planning/test_planner_node_state_correction.py": "ea2f6b153ef67d383d569782c99bd7b61d3d4ac3623e7b3a82dc2c2eb93110d3"
+  },
+  "sources_unchanged": false
+}

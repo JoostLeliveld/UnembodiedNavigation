@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/callback_probe.py", line 179, in <module>
+    if __name__=='__main__':main()
+  File "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/callback_probe.py", line 101, in main
+    for _ in range(3):n._publish_latest()
+  File "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/sim/clock_throttle_node.py", line 73, in _publish_latest
+    now = time.monotonic()
+NameError: name 'time' is not defined. Did you mean: 'Time'?

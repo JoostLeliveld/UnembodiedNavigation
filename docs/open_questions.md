@@ -1,5 +1,14 @@
 # What is unresolved
 
+> **Evidence scope, 2026-09-07:** the questions, answers and numerical statements below
+> retain their historical populations and runtime identities. Neither this file nor
+> `ANSWERS.md` overrides the current metrics contract or registry. Exact diagnostic
+> selections now exist separately from the null paper-facing fixed-route selection.
+> The [combined module audit](module_audits/15_end_to_end_acceptance.md) and
+> [repair tracker](module_audits/IMPLEMENTATION_PROGRESS.md) state the current motion,
+> command, ledger and verification gaps. Repaired runtime behavior does not retroactively
+> validate old logs or establish a camera-model improvement.
+
 > **2026-09-06 update:** this document preserves the earlier question history. Current
 > thesis decisions are in [ICRA_STATUS.md](ICRA_STATUS.md); verified runtime defects and
 > outstanding command/filter policies are in [runtime_integrity_audit.md](runtime_integrity_audit.md).

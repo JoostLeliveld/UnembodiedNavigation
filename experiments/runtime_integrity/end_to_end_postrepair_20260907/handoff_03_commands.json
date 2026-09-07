@@ -1,0 +1,23 @@
+{
+  "owner": "03_commands",
+  "ready": true,
+  "source_sha256": {
+    "src/planning/planning/nodes/efe_agent_node.py": "6aa2779b14b6135702b336c2c6f76fd8fd3eafa94a99f5cf70931dc7eecd74f3",
+    "tests/planning/test_global_route_installation.py": "345d514c735cd7613b97520e29263fd91bd77368d6de7da69f0d7f78f3cb1045"
+  },
+  "source_stable_during_tests": true,
+  "command": [
+    "python3", "-m", "pytest", "-q",
+    "tests/planning/test_global_route_installation.py",
+    "tests/planning/test_command_installation.py",
+    "tests/planning/test_preselected_route.py",
+    "tests/planning/test_tracker_guard.py",
+    "tests/planning/test_no_renewable_penetration.py",
+    "tests/sim/test_command_watchdog.py"
+  ],
+  "exit_code": 0,
+  "output": "79 passed in 0.89s",
+  "remaining_integration_failures": 3,
+  "normalized_from": ["docs/module_audits/03_remaining_repairs_20260907.md"],
+  "scope": "03-owned GLOBAL/request/tape installation boundary. Three expanded shared 01 transaction failures remain visible for combined acceptance."
+}

@@ -1,0 +1,125 @@
+FFFFFFFFF.FFFF                                                           [100%]
+=================================== FAILURES ===================================
+_________ test_a_slow_public_prediction_cannot_replace_a_newer_target __________
+tests/planning/test_timing_publication_invariants.py:155: in test_a_slow_public_prediction_cannot_replace_a_newer_target
+    assert targets and targets[-1] == pytest.approx(10.2)
+E   assert ([10.2, 10.0] and 10.0 == 10.2 ± 1.0e-05)
+E    +  where 10.2 ± 1.0e-05 = <function approx at 0x7275a12b3250>(10.2)
+E    +    where <function approx at 0x7275a12b3250> = pytest.approx
+____________ test_rewind_invalidates_a_prediction_already_in_flight ____________
+tests/planning/test_timing_publication_invariants.py:177: in test_rewind_invalidates_a_prediction_already_in_flight
+    assert not n.planner_belief_pub.messages, 'pre-reset work published in the new clock epoch'
+E   AssertionError: pre-reset work published in the new clock epoch
+E   assert not [geometry_msgs.msg.PoseWithCovarianceStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=100, nan...    ,\n       0.    , 0.    , 0.    , 0.    , 0.    , 0.    , 0.    , 0.    ,\n       0.    , 0.    , 0.    , 0.0501])))]
+E    +  where [geometry_msgs.msg.PoseWithCovarianceStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=100, nan...    ,\n       0.    , 0.    , 0.    , 0.    , 0.    , 0.    , 0.    , 0.    ,\n       0.    , 0.    , 0.    , 0.0501])))] = <test_runtime_transactions.Publisher object at 0x727595167c10>.messages
+E    +    where <test_runtime_transactions.Publisher object at 0x727595167c10> = <planning.nodes.unicycle_planner_node.UnicyclePlannerNode object at 0x727595167be0>.planner_belief_pub
+___________ test_future_anchor_never_becomes_a_fresh_planning_belief ___________
+tests/planning/test_timing_publication_invariants.py:185: in test_future_anchor_never_becomes_a_fresh_planning_belief
+    assert mean is None and covariance is None, 'future anchor was returned as age-zero state'
+E   AssertionError: future anchor was returned as age-zero state
+E   assert (array([0., 0., 0.]) is None)
+______________ test_clock_domain_conversion_failure_is_not_fresh _______________
+tests/planning/test_timing_publication_invariants.py:196: in test_clock_domain_conversion_failure_is_not_fresh
+    assert not n._metric_correction_is_fresh(age), 'failed time conversion was treated as age zero'
+E   AssertionError: failed time conversion was treated as age zero
+E   assert not True
+E    +  where True = <bound method UnicyclePlannerNode._metric_correction_is_fresh of <planning.nodes.unicycle_planner_node.UnicyclePlannerNode object at 0x7275951ef3a0>>(0.0)
+E    +    where <bound method UnicyclePlannerNode._metric_correction_is_fresh of <planning.nodes.unicycle_planner_node.UnicyclePlannerNode object at 0x7275951ef3a0>> = <planning.nodes.unicycle_planner_node.UnicyclePlannerNode object at 0x7275951ef3a0>._metric_correction_is_fresh
+__________ test_command_receipt_and_held_value_have_one_commit_order ___________
+tests/planning/test_timing_publication_invariants.py:238: in test_command_receipt_and_held_value_have_one_commit_order
+    assert times == sorted(times), 'command history is callback completion order'
+E   AssertionError: command history is callback completion order
+E   assert [11.0, 10.0] == [10.0, 11.0]
+E     At index 0 diff: 11.0 != 10.0
+E     Full diff:
+E     - [10.0, 11.0]
+E     + [11.0, 10.0]
+___________ test_nonfinite_command_cannot_mutate_motion_inputs[nan] ____________
+tests/planning/test_timing_publication_invariants.py:249: in test_nonfinite_command_cannot_mutate_motion_inputs
+    np.testing.assert_array_equal(n.last_cmd, before)
+/usr/lib/python3.10/contextlib.py:79: in inner
+    return func(*args, **kwds)
+E   AssertionError: 
+E   Arrays are not equal
+E   
+E   x and y nan location mismatch:
+E    x: array([nan,  0.])
+E    y: array([0., 0.])
+___________ test_nonfinite_command_cannot_mutate_motion_inputs[inf] ____________
+tests/planning/test_timing_publication_invariants.py:249: in test_nonfinite_command_cannot_mutate_motion_inputs
+    np.testing.assert_array_equal(n.last_cmd, before)
+/usr/lib/python3.10/contextlib.py:79: in inner
+    return func(*args, **kwds)
+E   AssertionError: 
+E   Arrays are not equal
+E   
+E   x and y +inf location mismatch:
+E    x: array([inf,  0.])
+E    y: array([0., 0.])
+___________ test_nonfinite_command_cannot_mutate_motion_inputs[-inf] ___________
+tests/planning/test_timing_publication_invariants.py:249: in test_nonfinite_command_cannot_mutate_motion_inputs
+    np.testing.assert_array_equal(n.last_cmd, before)
+/usr/lib/python3.10/contextlib.py:79: in inner
+    return func(*args, **kwds)
+E   AssertionError: 
+E   Arrays are not equal
+E   
+E   x and y -inf location mismatch:
+E    x: array([-inf,   0.])
+E    y: array([0., 0.])
+________________ test_goal_and_progress_signature_are_one_event ________________
+tests/planning/test_timing_publication_invariants.py:293: in test_goal_and_progress_signature_are_one_event
+    assert n._goal_signature == signature, 'goal and progress state came from different callbacks'
+E   AssertionError: goal and progress state came from different callbacks
+E   assert ('map_bev', 1.0, 0.0) == ('map_bev', 2.0, 0.0)
+E     At index 1 diff: 1.0 != 2.0
+E     Full diff:
+E     - ('map_bev', 2.0, 0.0)
+E     ?             ^
+E     + ('map_bev', 1.0, 0.0)
+E     ?             ^
+__________ test_compatibility_message_cannot_relabel_committed_belief __________
+tests/planning/test_timing_publication_invariants.py:338: in test_compatibility_message_cannot_relabel_committed_belief
+    assert all(msg.header.frame_id == 'map_bev' for msg in n.planner_belief_pub.messages)
+E   assert False
+E    +  where False = all(<generator object test_compatibility_message_cannot_relabel_committed_belief.<locals>.<genexpr> at 0x72759487d930>)
+______ test_correction_during_planning_cannot_change_only_input_metadata _______
+tests/planning/test_timing_publication_invariants.py:369: in test_correction_during_planning_cannot_change_only_input_metadata
+    assert anchor == pytest.approx(9.9), 'old prediction was relabelled with the newer anchor'
+E   AssertionError: old prediction was relabelled with the newer anchor
+E   assert 9.95 == 9.9 ± 9.9e-06
+E    +  where 9.9 ± 9.9e-06 = <function approx at 0x7275a12b3250>(9.9)
+E    +    where <function approx at 0x7275a12b3250> = pytest.approx
+_______ test_diagnostic_failure_cannot_forget_a_committed_batch_identity _______
+tests/planning/test_timing_publication_invariants.py:385: in test_diagnostic_failure_cannot_forget_a_committed_batch_identity
+    assert 'committed' in n._seen_state_source_batch_ids, 'posterior committed without its identity'
+E   AssertionError: posterior committed without its identity
+E   assert 'committed' in set()
+E    +  where set() = <planning.nodes.unicycle_planner_node.UnicyclePlannerNode object at 0x72759480b820>._seen_state_source_batch_ids
+_________ test_same_state_time_does_not_make_a_new_belief_a_duplicate __________
+tests/planning/test_timing_publication_invariants.py:409: in test_same_state_time_does_not_make_a_new_belief_a_duplicate
+    assert manager._belief_query_history[-1][1][0] == pytest.approx(second.pose.pose.position.x), \
+E   AssertionError: equal timestamp hid a newer posterior from the belief consumer
+E   assert 0.01999999999999993 == 0.07627108057464105 ± 7.6e-08
+E    +  where 0.07627108057464105 ± 7.6e-08 = <function approx at 0x7275a12b3250>(0.07627108057464105)
+E    +    where <function approx at 0x7275a12b3250> = pytest.approx
+E    +    and   0.07627108057464105 = geometry_msgs.msg.Point(x=0.07627108057464105, y=0.0, z=0.0).x
+E    +      where geometry_msgs.msg.Point(x=0.07627108057464105, y=0.0, z=0.0) = geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.07627108057464105, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)).position
+E    +        where geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.07627108057464105, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)) = geometry_msgs.msg.PoseWithCovariance(pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.0762710805746410...      , 0.        , 0.        ,\n       0.        , 0.        , 0.        , 0.        , 0.        ,\n       0.0501    ])).pose
+E    +          where geometry_msgs.msg.PoseWithCovariance(pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.0762710805746410...      , 0.        , 0.        ,\n       0.        , 0.        , 0.        , 0.        , 0.        ,\n       0.0501    ])) = geometry_msgs.msg.PoseWithCovarianceStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=10, nanos...     , 0.        , 0.        ,\n       0.        , 0.        , 0.        , 0.        , 0.        ,\n       0.0501    ]))).pose
+- generated xml file: /home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/timing_callbacks_repair_20260907/before_repairs.xml -
+=========================== short test summary info ============================
+FAILED tests/planning/test_timing_publication_invariants.py::test_a_slow_public_prediction_cannot_replace_a_newer_target
+FAILED tests/planning/test_timing_publication_invariants.py::test_rewind_invalidates_a_prediction_already_in_flight
+FAILED tests/planning/test_timing_publication_invariants.py::test_future_anchor_never_becomes_a_fresh_planning_belief
+FAILED tests/planning/test_timing_publication_invariants.py::test_clock_domain_conversion_failure_is_not_fresh
+FAILED tests/planning/test_timing_publication_invariants.py::test_command_receipt_and_held_value_have_one_commit_order
+FAILED tests/planning/test_timing_publication_invariants.py::test_nonfinite_command_cannot_mutate_motion_inputs[nan]
+FAILED tests/planning/test_timing_publication_invariants.py::test_nonfinite_command_cannot_mutate_motion_inputs[inf]
+FAILED tests/planning/test_timing_publication_invariants.py::test_nonfinite_command_cannot_mutate_motion_inputs[-inf]
+FAILED tests/planning/test_timing_publication_invariants.py::test_goal_and_progress_signature_are_one_event
+FAILED tests/planning/test_timing_publication_invariants.py::test_compatibility_message_cannot_relabel_committed_belief
+FAILED tests/planning/test_timing_publication_invariants.py::test_correction_during_planning_cannot_change_only_input_metadata
+FAILED tests/planning/test_timing_publication_invariants.py::test_diagnostic_failure_cannot_forget_a_committed_batch_identity
+FAILED tests/planning/test_timing_publication_invariants.py::test_same_state_time_does_not_make_a_new_belief_a_duplicate
+13 failed, 1 passed in 1.10s

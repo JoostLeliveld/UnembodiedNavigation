@@ -1,0 +1,19 @@
+{
+  "stage": "deterministic",
+  "ready": false,
+  "problems": [
+    "owner not ready: 01_state",
+    "owner not ready: 02_timing",
+    "owner not ready: 06_admission",
+    "owner not ready: 07_manager",
+    "owner not ready: 08_planner",
+    "owner not ready: 09_mission",
+    "owner not ready: 10_logger",
+    "owner not ready: 11_offline",
+    "owner not ready: 12_capture",
+    "owner not ready: 13_campaign",
+    "owner not ready: 14_physical",
+    "READY.json absent"
+  ],
+  "ready_record": null
+}

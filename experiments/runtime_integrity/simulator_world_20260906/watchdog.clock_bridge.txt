@@ -1,0 +1,2 @@
+[INFO] [1788729481.939215324] [audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd_clock_bridge]: Creating GZ->ROS Bridge: [/world/audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd/clock (gz.msgs.Clock) -> /world/audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd/clock (rosgraph_msgs/msg/Clock)] (Lazy 0)
+[INFO] [1788729494.437662887] [rclcpp]: signal_handler(SIGINT/SIGTERM)

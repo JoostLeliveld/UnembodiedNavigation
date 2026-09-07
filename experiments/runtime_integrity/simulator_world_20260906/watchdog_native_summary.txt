@@ -1,0 +1,18 @@
+{
+  "before_clock_bridge_loss": {
+    "from": "before_clock_bridge_loss",
+    "to": "clock_bridge_lost_physics_running",
+    "sim_interval_s": 1.004,
+    "dx_m": 0.1799586993120874,
+    "dy_m": -0.0015982263507243744,
+    "distance_m": 0.17996579615462055
+  },
+  "before_adapter_death": {
+    "from": "before_adapter_death",
+    "to": "fresh_adapter_without_new_input",
+    "sim_interval_s": 1.428,
+    "dx_m": 0.25098776521817623,
+    "dy_m": -0.010750760973262885,
+    "distance_m": 0.25121790770309066
+  }
+}

@@ -1,0 +1,3 @@
+[INFO] [1788729481.911404941] [audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd_cmd_bridge]: Creating ROS->GZ Bridge: [/model/turtlebot3/cmd_vel (geometry_msgs/msg/Twist) -> /model/turtlebot3/cmd_vel (gz.msgs.Twist)] (Lazy 0)
+[INFO] [1788729485.169033885] [audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd_cmd_bridge]: Passing message from ROS geometry_msgs/msg/Twist to Gazebo gz.msgs.Twist (showing msg only once per type)
+[INFO] [1788729494.323717858] [rclcpp]: signal_handler(SIGINT/SIGTERM)

@@ -215,8 +215,8 @@ def logger(out, name):
     n.get_clock = lambda: n._clock
     n.log = _Logger()
     n.get_logger = lambda: n.log
-    n.publishers = 1
-    n.count_publishers = lambda _: n.publishers
+    n.audit_publishers = 1
+    n.count_publishers = lambda _: n.audit_publishers
     n.terminal_snapshot = None
     real_finish = n._finish_run
     def finish(reason, t=None):
@@ -241,7 +241,7 @@ def tick(n, t, v=0., w=0., pubs=None):
     d = operational_distance(n)
     ok, _, x, y, *_ = n._latest_planner_belief_pose()
     n._remember_motion_sample(t, x, y, d, v, w)
-    terminal_dispatch(n, t, d, v, w, n.publishers if pubs is None else pubs)
+    terminal_dispatch(n, t, d, v, w, n.audit_publishers if pubs is None else pubs)
 
 
 def outcome(n):
@@ -355,20 +355,29 @@ def run(out):
         state_frame=n.state_msg.header.frame_id, goal_frame=n.goal_msg.header.frame_id, commands=commands(n))
     assert n._wp_idx == 1 and commands(n)[-1][0] > 0.
 
+    for label, x in (('within_controller_stop', .951), ('outside_controller_stop', .949)):
+        n = tracker(state=(x, 0., 0.))
+        n._plan_once()
+        results['final_' + label] = dict(index=n._wp_idx, count=len(n._waypoints),
+            distance=1.-x, commands=commands(n), tape_length=len(n._active_controls))
+    assert results['final_within_controller_stop']['commands'][-1] == [0., 0.]
+
     # The 5 mm allowance is re-based on every plan, allowing persistent creep.
     n = tracker()
     n.planner.collision_cost_model = object()
     n.planner.collision_signed_distance_state_np = lambda s: -float(s[0])
-    pose = np.array([.001, 0., 0.])
+    n.planner.collision_signed_distance_state_np = lambda s: -float(s[1])
+    pose = np.array([0., .001, .08])
+    target = np.array([10., .001 + 10.*math.tan(.08)])
     records = []
-    tape = np.tile([.016, 0.], (12, 1))
     for _ in range(30):
+        tape = n._simple_local_plan(pose, target)
         safe, why = n._simple_plan_safe_to_execute(tape, pose)
         assert safe == 1
-        records.append([float(pose[0]), safe, why])
+        records.append([float(pose[1]), safe, why, tape[0].tolist()])
         pose = unicycle_step(pose, tape[0], .25)
     results['recovery_allowance_ratchet'] = dict(start_penetration_m=.001,
-        final_penetration_m=float(pose[0]), steps=records)
+        final_penetration_m=float(pose[1]), steps=records)
     n.planner.collision_signed_distance_state_np = lambda s: math.nan
     results['nonfinite_clearance_fails_open'] = n._simple_plan_safe_to_execute(tape, pose)
     assert results['nonfinite_clearance_fails_open'][0] == 12
@@ -382,7 +391,10 @@ def run(out):
             frame='odom' if mode == 'wrong_frame' else 'map_bev',
             variance=-1. if mode == 'negative_covariance' else .01,
             cross=.02 if mode == 'indefinite_covariance' else 0.)
-        tick(n, 10.); tick(n, 12.)
+        tick(n, 10.)
+        if mode not in ('stale', 'future_stamp'):
+            n.planner_belief_msg.header.stamp = stamp(12.)
+        tick(n, 12.)
         assert n._stop_requested == (mode != 'outside')
         results['logger_goal_' + mode] = outcome(n)
 
@@ -390,6 +402,7 @@ def run(out):
     n.goal_msg = goal(.30, 0.)
     tick(n, 10.)
     n._goal_cb(goal(-.30, 0.))
+    n.planner_belief_msg.header.stamp = stamp(12.)
     tick(n, 12.)
     assert n._stop_requested
     results['logger_goal_change_inherits_hold'] = outcome(n)
@@ -398,7 +411,7 @@ def run(out):
         n = logger(out, 'stuck_' + mode)
         for t in range(9):
             x = .3*math.sin(math.pi*t/4.) if mode == 'oscillation' else 0.
-            yaw = .2*t if mode == 'rotation' else 0.
+            yaw = -math.pi/2.+.2*t if mode == 'rotation' else 0.
             n.planner_belief_msg = belief(x=x, yaw=yaw, t=0. if mode == 'stale_belief' else t)
             cmd = (0., .2) if mode == 'rotation' else ((0., 0.) if mode == 'idle_replan' else (.22, 0.))
             if mode == 'mixed_activity': cmd = (.22, 0.) if t % 4 == 0 else (0., 0.)
@@ -412,13 +425,13 @@ def run(out):
     n._first_cmd_stamp = None
     n.goal_msg = goal(.3, 0.)
     tick(n, 10., .22, 0., pubs=1)
-    n.publishers = 0
+    n.audit_publishers = 0
     tick(n, 12., 0., 0., pubs=0)
     assert n._stop_requested and n._valid_run and n._contact_messages_seen == 0
     results['silent_contact_publisher_then_disappears'] = outcome(n)
     n = logger(out, 'contact_no_publisher')
     n._first_cmd_stamp = None
-    n.publishers = 0
+    n.audit_publishers = 0
     tick(n, 10., .22, 0.)
     assert n.terminal_snapshot['reason'] == 'infra_invalid_contact_channel'
     results['no_contact_publisher_first_command'] = outcome(n)
@@ -450,17 +463,22 @@ def run(out):
             adapter.get_logger = lambda: _Logger()
             adapter._watchdog_tick()
         record = logger(out, 'stop_' + cause)
+        record.audit_command = (0., 0.)
         if cause == 'contact':
+            record.planner_belief_msg.header.stamp = stamp(8.123)
             record._contacts_cb(NS(header=NS(stamp=stamp(8.123)), contacts=[NS(
                 collision1=NS(name='turtlebot3::base_link::collision'),
                 collision2=NS(name='warehouse_rack::link::collision'))]))
         elif cause == 'timeout':
             record.stuck_window_s = 0.
+            record.planner_belief_msg.header.stamp = stamp(600.)
             tick(record, 600.)
         else:
             # Model unchanged belief and stopped output; live fatal teardown may
             # instead interrupt logger. This isolates its absence of cause input.
-            for t in range(9): tick(record, t)
+            for t in range(9):
+                record.planner_belief_msg.header.stamp = stamp(t)
+                tick(record, t)
         results['stop_cause_' + cause] = dict(origin_commands=commands(n),
             adapter_commands=[[m.linear.x, m.angular.z] for m in applied],
             **outcome(record))
@@ -469,12 +487,33 @@ def run(out):
     n = tracker(); n._plan_once()
     record = logger(out, 'success_while_moving')
     record.goal_msg = goal(.3, 0.)
-    tick(record, 10., .22, 0.); tick(record, 12., .22, 0.)
+    tick(record, 10., .22, 0.)
+    record.planner_belief_msg.header.stamp = stamp(12.)
+    tick(record, 12., .22, 0.)
     before = len(commands(n))
     n._clock.seconds = 12.1; n._publish_active_plan_command()
     results['summary_not_physical_stop'] = dict(**outcome(record),
         additional_commands=commands(n)[before:], tape_retained=n._active_controls is not None)
     assert commands(n)[-1][0] > 0. and record._stop_requested
+
+    record = logger(out, 'geometry_and_success')
+    record.goal_msg = goal(.3, 0.)
+    record._record_collision_event(stamp=9., reason='geometry:obstacle_penetration', contact=False, geom=True)
+    tick(record, 10.)
+    record.planner_belief_msg.header.stamp = stamp(12.)
+    tick(record, 12.)
+    results['geometry_does_not_terminate_but_sets_crashed'] = outcome(record)
+    assert record.terminal_snapshot['reason'] == 'goal_reached'
+    assert results['geometry_does_not_terminate_but_sets_crashed']['summary']['crashed']
+
+    # This map has a horizontal corridor at y=0; the generator partitions only
+    # negative and positive centre y, despite no need for a special zero origin.
+    corridor = dict(name='centre', xmin=-2., xmax=2., ymin=-.5, ymax=.5, zmin=0., zmax=1.)
+    zero = generate_route_seeds(json.dumps({'prisms': [corridor]}), (-1., 0.), (1., 0.))
+    corridor['ymin'], corridor['ymax'] = .5, 1.5
+    shifted = generate_route_seeds(json.dumps({'prisms': [corridor]}), (-1., 1.), (1., 1.))
+    results['zero_y_corridor_omitted'] = dict(at_zero=zero, shifted_one_metre=shifted)
+    assert not zero and shifted
 
     assert hashes() == initial_hashes, 'Audited runtime sources changed during probe'
     payload = dict(kind='deterministic_software_audit_observed_behaviour_not_repaired_invariants',

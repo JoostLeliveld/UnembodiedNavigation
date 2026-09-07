@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "desired_invariant_groups": [
+    {
+      "name": "state_timing_transactions",
+      "command": ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/planning/test_timing_publication_invariants.py", "tests/planning/test_runtime_transactions.py", "tests/planning/test_outage_motion_replay.py", "tests/planning/test_planner_node_state_correction.py", "tests/sim/test_encoder_input_chronology.py"]
+    },
+    {
+      "name": "sensor_manager_fusion",
+      "command": ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/perception/test_camera_acquisition_audit_04.py", "tests/perception/test_detector_outcome_transport_04.py", "tests/reliability/test_source_batch_buffer.py", "tests/reliability/test_observation_geometry_05.py", "tests/reliability/test_manager_integrity_07.py", "tests/reliability/test_fusion_contracts.py", "tests/reliability/test_boolean_contracts.py"]
+    },
+    {
+      "name": "planner_route_command_mission",
+      "command": ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/planning/test_command_installation.py", "tests/planning/test_global_route_installation.py", "tests/planning/test_correction_validation.py", "tests/planning/test_admission_recovery_06.py", "tests/planning/test_no_renewable_penetration.py", "tests/planning/test_route_seed_origin.py", "tests/planning/test_rectangular_footprint.py", "tests/planning/test_casadi_cache.py", "tests/planning/test_camera_network.py", "tests/experiments/test_mission_goal_contract.py", "tests/experiments/test_goal_mission_traffic.py", "tests/experiments/test_navigation_parameter_contract.py"]
+    },
+    {
+      "name": "ledger_logger_offline",
+      "command": ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_correction_ledger.py", "tests/experiments/test_logger_event_accounting_repair.py", "tests/experiments/test_camera_opportunity_log.py", "tests/experiments/test_logger_time_alignment.py", "tests/experiments/test_alignment_repairs_11.py"]
+    },
+    {
+      "name": "configuration_capture_provenance",
+      "command": ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_common_config.py", "tests/experiments/test_launch_config_semantics.py", "tests/experiments/test_low_cpu_world.py", "tests/visibility_comparison/test_network_planner_config.py"]
+    },
+    {
+      "name": "simulator_pure_contracts",
+      "command": ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/sim/test_command_watchdog.py", "tests/sim/test_clock_throttle_traffic.py", "tests/sim/test_physical_collision_closure.py"]
+    },
+    {
+      "name": "cross_chain_synthetic",
+      "command": ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "experiments/runtime_integrity/end_to_end_postrepair_20260907/test_cross_chain_contracts.py"]
+    }
+  ],
+  "excluded_baseline_reproductions": [
+    "experiments/runtime_integrity/end_to_end_20260906/audit.py",
+    "experiments/runtime_integrity/timing_callbacks_revalidation_20260907/probe.py",
+    "docs/module_audits/08_current_result_checks.py"
+  ],
+  "physical_integration": {
+    "command": null,
+    "owner": "14_physical",
+    "reason": "Waiting for the final actuator guard wiring and the owner's private source-bound physical command. This field must not be invented by audit 15."
+  },
+  "recorded_cross_chain": {
+    "command": ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "experiments/runtime_integrity/end_to_end_postrepair_20260907/test_recorded_cross_chain_evidence.py"],
+    "fixture_from_ready_key": "cross_chain_fixture",
+    "owner": "15_cross_chain"
+  }
+}

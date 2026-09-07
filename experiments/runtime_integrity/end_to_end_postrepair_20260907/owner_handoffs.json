@@ -1,0 +1,96 @@
+{
+  "snapshot_time": "2026-09-07T10:02:12+02:00",
+  "source": "docs/module_audits/IMPLEMENTATION_PROGRESS.md",
+  "historical_acceptance": "docs/module_audits/15_end_to_end_acceptance.md",
+  "owners": {
+    "coordinator_ledger": {
+      "ready": true,
+      "status": "source-bound handoff complete: 79 dedicated tests pass and recorded production/test hashes match; consumer adapters remain with 10/11/13",
+      "handoff": "docs/module_audits/coordinator_ledger_handoff.json",
+      "evidence": ["docs/module_audits/coordinator_ledger_handoff.json", "tests/test_correction_ledger.py"]
+    },
+    "01_state": {
+      "ready": false,
+      "status": "canonical repair API documented; central belief record, epoch/revision, support and terminal accounting implementation still underway",
+      "evidence": ["docs/module_audits/01_state_repair_api.md", "docs/module_audits/01_unicycle_current_verification.md"]
+    },
+    "02_timing": {
+      "ready": false,
+      "status": "23/23 current diagnostic cases pass, but operational_belief.py drifted during execution; stable source-bound rerun pending",
+      "evidence": ["docs/module_audits/02_current_source_handoff.md", "tests/planning/test_timing_publication_invariants.py"]
+    },
+    "03_commands": {
+      "ready": true,
+      "status": "03-owned handoff complete: current owned hashes match and 79 focused tests pass; three shared 01 transaction failures remain in combined gate",
+      "handoff": "experiments/runtime_integrity/end_to_end_postrepair_20260907/handoff_03_commands.json",
+      "evidence": ["docs/module_audits/03_remaining_repairs_20260907.md", "tests/planning/test_global_route_installation.py"]
+    },
+    "04_acquisition": {
+      "ready": true,
+      "status": "04-owned source-bound handoff complete: 97 scoped tests pass and five current hashes match; downstream manager/logger integration remains separate",
+      "handoff": "experiments/runtime_integrity/end_to_end_postrepair_20260907/handoff_04_acquisition.json",
+      "evidence": ["tests/perception/test_detector_outcome_transport_04.py"]
+    },
+    "05_geometry": {
+      "ready": true,
+      "status": "05-owned helper and optional-node handoff complete: current hashes match, 108 helper and 53 node-scope tests pass; manager/artifact integration remains separate",
+      "handoff": "experiments/runtime_integrity/end_to_end_postrepair_20260907/handoff_05_geometry.json",
+      "evidence": ["docs/module_audits/05_geometry_helpers_implemented.md", "docs/module_audits/05_optional_covariance_publication_implemented.md", "tests/reliability/test_observation_geometry_05.py"]
+    },
+    "06_admission": {
+      "ready": false,
+      "status": "20/20 packet reported passing; final independent review and hash-stable handoff pending",
+      "evidence": ["tests/planning/test_admission_recovery_06.py"]
+    },
+    "07_manager": {
+      "ready": false,
+      "status": "canonical malformed/nullable quarantine and schema-2 journal integration reported passing; source-bound handoff pending",
+      "evidence": ["tests/reliability/test_manager_integrity_07.py"]
+    },
+    "08_planner": {
+      "ready": false,
+      "status": "139-test prior verification complete; final result contract and planner repairs underway",
+      "evidence": ["docs/module_audits/08_final_verification.json"]
+    },
+    "09_mission": {
+      "ready": false,
+      "status": "route/goal helpers implemented; coherent-belief consumer integration pending",
+      "evidence": ["tests/experiments/test_mission_goal_contract.py", "tests/planning/test_no_renewable_penetration.py"]
+    },
+    "10_logger": {
+      "ready": false,
+      "status": "raw delivery, terminal accounting, drain and atomic summary underway",
+      "evidence": ["tests/experiments/test_logger_event_accounting_repair.py"]
+    },
+    "11_offline": {
+      "ready": false,
+      "status": "ledger/reference/posterior/selection consumers underway",
+      "evidence": ["tests/experiments/test_alignment_repairs_11.py"]
+    },
+    "12_capture": {
+      "ready": false,
+      "status": "31 focused passes reported for profile recovery and transactional capture; export integrity closure underway",
+      "evidence": ["docs/module_audits/12_repair_evidence"]
+    },
+    "13_campaign": {
+      "ready": false,
+      "status": "component report delivered with focused passes and three-arm dry construction; hash-complete handoff and 07/10/12/14 joins pending",
+      "evidence": ["tests/experiments/test_launch_config_semantics.py"]
+    },
+    "14_physical": {
+      "ready": false,
+      "status": "guard/wiring and initial timeout/contact probes reported; owner is preparing source-bound multi-failure private harness with sustained rest evidence",
+      "evidence": ["src/sim_command_guard", "tests/sim/test_physical_collision_closure.py"]
+    },
+    "15_cross_chain": {
+      "ready": false,
+      "status": "successor harness prepared; independent synthetic and recorded cross-chain assertions underway; waiting for all source-bound owner handoffs",
+      "evidence": ["experiments/runtime_integrity/end_to_end_postrepair_20260907"]
+    },
+    "documentation_I14": {
+      "ready": false,
+      "status": "coordinator landed metrics identity/epoch clarification plus README and HOW_IT_WORKS scope corrections; remaining runtime docs and thesis/caption author review stay open",
+      "evidence": ["docs/module_audits/15_end_to_end_acceptance.md"]
+    }
+  }
+}

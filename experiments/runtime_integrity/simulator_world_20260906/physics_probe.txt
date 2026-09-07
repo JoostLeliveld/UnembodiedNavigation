@@ -1,0 +1,98 @@
+[
+  {
+    "case": "clear",
+    "partition": "audit14_263e75f05f9646758060a711b43ce456",
+    "world": "audit14_263e75f05f9646758060a711b43ce456_clear",
+    "robot_pose": [
+      -7.9,
+      -8.7,
+      0.05
+    ],
+    "fixture_sha256": "a3c8b95654797ea0d82219b4f1ad388da0444f0eb56d4aebfb03b7c9bb3851da",
+    "command": [
+      "ign",
+      "gazebo",
+      "-r",
+      "-s",
+      "-v",
+      "4",
+      "--iterations",
+      "2500",
+      "--record-path",
+      "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/private_logs/audit14_263e75f05f9646758060a711b43ce456_clear",
+      "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/clear.fixture.sdf",
+      "--force-version",
+      "6"
+    ],
+    "returncode": 0,
+    "sensor_topic": "/world/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A2b3e/sensor/contact/contact",
+    "subscriber_command": [
+      "ign",
+      "topic",
+      "-e",
+      "--json-output",
+      "-t",
+      "/world/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A2b3e/sensor/contact/contact",
+      "-d",
+      "5"
+    ],
+    "subscriber_returncode": 0,
+    "contact_bytes": 0,
+    "errors": [
+      "\u001b[1;36m[Dbg] [SystemManager.cc:73] \u001b[0m\u001b[1;36mLoaded system [\u001b[0m\u001b[1;36mgz::sim::systems::Physics\u001b[0m\u001b[1;36m] for entity [\u001b[0m\u001b[1;36m1\u001b[0m\u001b[1;36m]\u001b[0m\u001b[1;36m\u001b[0m",
+      "\u001b[1;36m[Dbg] [SystemManager.cc:73] \u001b[0m\u001b[1;36mLoaded system [\u001b[0m\u001b[1;36mgz::sim::systems::UserCommands\u001b[0m\u001b[1;36m] for entity [\u001b[0m\u001b[1;36m1\u001b[0m\u001b[1;36m]\u001b[0m\u001b[1;36m\u001b[0m",
+      "\u001b[1;36m[Dbg] [SystemManager.cc:73] \u001b[0m\u001b[1;36mLoaded system [\u001b[0m\u001b[1;36mgz::sim::systems::Contact\u001b[0m\u001b[1;36m] for entity [\u001b[0m\u001b[1;36m1\u001b[0m\u001b[1;36m]\u001b[0m\u001b[1;36m\u001b[0m",
+      "\u001b[1;36m[Dbg] [SystemManager.cc:73] \u001b[0m\u001b[1;36mLoaded system [\u001b[0m\u001b[1;36mignition::gazebo::systems::Label\u001b[0m\u001b[1;36m] for entity [\u001b[0m\u001b[1;36m147\u001b[0m\u001b[1;36m]\u001b[0m\u001b[1;36m\u001b[0m",
+      "\u001b[1;36m[Dbg] [SystemManager.cc:73] \u001b[0m\u001b[1;36mLoaded system [\u001b[0m\u001b[1;36mgz::sim::systems::DiffDrive\u001b[0m\u001b[1;36m] for entity [\u001b[0m\u001b[1;36m147\u001b[0m\u001b[1;36m]\u001b[0m\u001b[1;36m\u001b[0m",
+      "\u001b[1;36m[Dbg] [SystemManager.cc:73] \u001b[0m\u001b[1;36mLoaded system [\u001b[0m\u001b[1;36mgz::sim::systems::LogRecord\u001b[0m\u001b[1;36m] for entity [\u001b[0m\u001b[1;36m1\u001b[0m\u001b[1;36m]\u001b[0m\u001b[1;36m\u001b[0m"
+    ]
+  },
+  {
+    "case": "contact",
+    "partition": "audit14_263e75f05f9646758060a711b43ce456",
+    "world": "audit14_263e75f05f9646758060a711b43ce456_contact",
+    "robot_pose": [
+      -5.31,
+      5.393,
+      0.05
+    ],
+    "fixture_sha256": "f0c9eebdae786f770b99ae502df4afdb64d7f8ac92636d900d2e685defdf22b2",
+    "command": [
+      "ign",
+      "gazebo",
+      "-r",
+      "-s",
+      "-v",
+      "4",
+      "--iterations",
+      "2500",
+      "--record-path",
+      "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/private_logs/audit14_263e75f05f9646758060a711b43ce456_contact",
+      "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/contact.fixture.sdf",
+      "--force-version",
+      "6"
+    ],
+    "returncode": 0,
+    "sensor_topic": "/world/audit14_263e75f05f9646758060a711b43ce456_contact/model/warehouse_v2_occluders/link/obs_A2b3e/sensor/contact/contact",
+    "subscriber_command": [
+      "ign",
+      "topic",
+      "-e",
+      "--json-output",
+      "-t",
+      "/world/audit14_263e75f05f9646758060a711b43ce456_contact/model/warehouse_v2_occluders/link/obs_A2b3e/sensor/contact/contact",
+      "-d",
+      "5"
+    ],
+    "subscriber_returncode": 0,
+    "contact_bytes": 1503329,
+    "errors": [
+      "\u001b[1;36m[Dbg] [SystemManager.cc:73] \u001b[0m\u001b[1;36mLoaded system [\u001b[0m\u001b[1;36mgz::sim::systems::Physics\u001b[0m\u001b[1;36m] for entity [\u001b[0m\u001b[1;36m1\u001b[0m\u001b[1;36m]\u001b[0m\u001b[1;36m\u001b[0m",
+      "\u001b[1;36m[Dbg] [SystemManager.cc:73] \u001b[0m\u001b[1;36mLoaded system [\u001b[0m\u001b[1;36mgz::sim::systems::UserCommands\u001b[0m\u001b[1;36m] for entity [\u001b[0m\u001b[1;36m1\u001b[0m\u001b[1;36m]\u001b[0m\u001b[1;36m\u001b[0m",
+      "\u001b[1;36m[Dbg] [SystemManager.cc:73] \u001b[0m\u001b[1;36mLoaded system [\u001b[0m\u001b[1;36mgz::sim::systems::Contact\u001b[0m\u001b[1;36m] for entity [\u001b[0m\u001b[1;36m1\u001b[0m\u001b[1;36m]\u001b[0m\u001b[1;36m\u001b[0m",
+      "\u001b[1;36m[Dbg] [SystemManager.cc:73] \u001b[0m\u001b[1;36mLoaded system [\u001b[0m\u001b[1;36mignition::gazebo::systems::Label\u001b[0m\u001b[1;36m] for entity [\u001b[0m\u001b[1;36m147\u001b[0m\u001b[1;36m]\u001b[0m\u001b[1;36m\u001b[0m",
+      "\u001b[1;36m[Dbg] [SystemManager.cc:73] \u001b[0m\u001b[1;36mLoaded system [\u001b[0m\u001b[1;36mgz::sim::systems::DiffDrive\u001b[0m\u001b[1;36m] for entity [\u001b[0m\u001b[1;36m147\u001b[0m\u001b[1;36m]\u001b[0m\u001b[1;36m\u001b[0m",
+      "\u001b[1;36m[Dbg] [SystemManager.cc:73] \u001b[0m\u001b[1;36mLoaded system [\u001b[0m\u001b[1;36mgz::sim::systems::LogRecord\u001b[0m\u001b[1;36m] for entity [\u001b[0m\u001b[1;36m1\u001b[0m\u001b[1;36m]\u001b[0m\u001b[1;36m\u001b[0m"
+    ]
+  }
+]

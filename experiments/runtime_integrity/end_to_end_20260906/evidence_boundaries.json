@@ -1,0 +1,211 @@
+{
+  "registry_sha256": "8259f4138e5998f44dab9a03b381e511df030401ea74742dd9627f6d93bcea2a",
+  "historical_boundary": {
+    "superseded_before": "2026-08-25",
+    "minimum_paper_logging_schema": 4
+  },
+  "invalidated": {
+    "status": "invalidated_pending_rerun",
+    "invalidated_local_campaign": "logs/studies/fusion_on_fixed_routes/drives_full_20260829",
+    "paper_selection": null,
+    "required_selection_file": "logs/studies/fusion_on_fixed_routes/frozen_runs.json",
+    "reasons": [
+      "adjacent_5hz_capture_rounds_could_merge",
+      "delayed_corrections_could_be_silently_dropped",
+      "analysis_inferred_assimilation_from_timestamps",
+      "planning_heading_mean_differed_from_recursive_heading_mean"
+    ],
+    "permitted_use": "diagnostic_only"
+  },
+  "selections": {
+    "thesis_commissioning_pilot": {
+      "status_at_inspection": "complete_pilot_diagnostic",
+      "permitted_use": "paired within-run replay and per-run pilot diagnostics; no significance, physical-validation, complete-route ranking or commissioned navigation-improvement claim",
+      "selection": "logs/studies/icra_commissioning_20260905/thesis_evidence/selection.json",
+      "present": true,
+      "selection_sha256": "d4ae8716e6b446dc5df02a98abf1da1b5cca0bbc3259e4fb721c9382b09bacd8",
+      "runs": [
+        {
+          "run": "logs/studies/icra_commissioning_20260905/field_pilot/fusion_overlap_rich/N1/seed110/experiment_20260905_181145",
+          "arm": null,
+          "seed": 110,
+          "outcome": "goal_reached",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "04ef0757363897d24f95fcc9a6160ddc1b16a0df078477a84c44bce47f01c29d"
+        },
+        {
+          "run": "logs/studies/icra_commissioning_20260905/field_pilot/fusion_overlap_rich/N1/seed111/experiment_20260905_182525",
+          "arm": null,
+          "seed": 111,
+          "outcome": "goal_reached",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "5c7a08872a9782230f42445d1f767b2a85fa68212f41bd7c54489cbab8872f9f"
+        },
+        {
+          "run": "logs/studies/icra_commissioning_20260905/field_pilot_remaining/fusion_overlap_rich/N1/seed112/experiment_20260906_130709",
+          "arm": null,
+          "seed": 112,
+          "outcome": "goal_reached",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "d9217a108e5d49cd233ab6af490eecac54efd04621e3365cd6375ba0d88a5b7d"
+        },
+        {
+          "run": "logs/studies/icra_commissioning_20260905/field_pilot_remaining/fusion_network_traverse/N1/seed110/experiment_20260906_132227",
+          "arm": null,
+          "seed": 110,
+          "outcome": "collision",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "8419ee7dba668616cd558b227528e8f5c966b4bfe9bb1e84b8268a8f4dbb63fd"
+        },
+        {
+          "run": "logs/studies/icra_commissioning_20260905/field_pilot_remaining/fusion_network_traverse/N1/seed111/experiment_20260906_132909",
+          "arm": null,
+          "seed": 111,
+          "outcome": "collision",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "882226f4799be8abc5102209bd5435c991c37926ecc935e510fda22bbd5710d8"
+        },
+        {
+          "run": "logs/studies/icra_commissioning_20260905/field_pilot_remaining/fusion_network_traverse/N1/seed112/experiment_20260906_133550",
+          "arm": null,
+          "seed": 112,
+          "outcome": "collision",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "c692b02bcf306eeab32932a3a0375adb11569e1f91c1be7fe76ed708d5bd81a8"
+        }
+      ]
+    },
+    "network_navigation_pilot": {
+      "status_at_inspection": "complete_three_run_pilot_all_stuck",
+      "permitted_use": "per-run diagnostic outcomes and aligned accuracy; no replicate-based effect or calibrated forecast claim",
+      "selection": "logs/studies/icra_commissioning_20260905/network_navigation_evidence/selection.json",
+      "present": true,
+      "selection_sha256": "a0a35a51c4ef90fcd8f576c6cba9b636252569b9e997b3f9f045fda42465995a",
+      "runs": [
+        {
+          "run": "logs/studies/icra_commissioning_20260905/network_navigation_pilot/fusion_network_traverse/P0/seed210/experiment_20260906_201018",
+          "arm": "P0",
+          "seed": 210,
+          "outcome": "stuck",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "cd282098c795964e9e4a0a5d89add0bd90435f109273cfd3d5fdd587d12ca386"
+        },
+        {
+          "run": "logs/studies/icra_commissioning_20260905/network_navigation_pilot/fusion_network_traverse/P1/seed210/experiment_20260906_202110",
+          "arm": "P1",
+          "seed": 210,
+          "outcome": "stuck",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "04fd6a238baa43f4b042c54e5a354df62265ae9e28d8351ed4ed2d52a17a8f52"
+        },
+        {
+          "run": "logs/studies/icra_commissioning_20260905/network_navigation_pilot/fusion_network_traverse/P2/seed210/experiment_20260906_203330",
+          "arm": "P2",
+          "seed": 210,
+          "outcome": "stuck",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "12710dae0fa2b1f0907c6a504a489d281f0cc1fe3eafaee8b130b15c6a0d387d"
+        }
+      ]
+    },
+    "network_navigation_tracking_pilot": {
+      "status_at_inspection": "complete_three_run_pilot_one_stuck_two_collisions",
+      "permitted_use": "separate pilot of tracker configuration correction; within-pilot field comparison; no significance or learned-covariance gain attributed to handoff fix",
+      "selection": "logs/studies/icra_commissioning_20260905/network_navigation_tracking_evidence/selection.json",
+      "present": true,
+      "selection_sha256": "4674ac6bc773f2e401e67d6799af4033b694915ec926cdaaea647528d5d2973f",
+      "runs": [
+        {
+          "run": "logs/studies/icra_commissioning_20260905/network_navigation_tracking_pilot/fusion_network_traverse/P0/seed210/experiment_20260906_204507",
+          "arm": "P0",
+          "seed": 210,
+          "outcome": "stuck",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "70fde1902abeebf79cf66bea4d8a6368985a90a03eb131bdb53a161b40a1dadc"
+        },
+        {
+          "run": "logs/studies/icra_commissioning_20260905/network_navigation_tracking_pilot/fusion_network_traverse/P1/seed210/experiment_20260906_210032",
+          "arm": "P1",
+          "seed": 210,
+          "outcome": "collision",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "0389449d30958c01200c984cc0863e9c767a745094ac4dace0a112916cedc4a3"
+        },
+        {
+          "run": "logs/studies/icra_commissioning_20260905/network_navigation_tracking_pilot/fusion_network_traverse/P2/seed210/experiment_20260906_211343",
+          "arm": "P2",
+          "seed": 210,
+          "outcome": "collision",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "dd478aaf8e804aaf046914823e4e05372db18f2c8845c5815b50438bd6dd186a"
+        }
+      ]
+    },
+    "network_navigation_runtime_pilot": {
+      "status_at_inspection": "complete_three_run_pilot_one_stuck_two_goals",
+      "permitted_use": "separate correctness-repair pilot; per-run diagnostics; no learned-field gain, statistical significance or calibrated forecast claim",
+      "selection": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_evidence/selection.json",
+      "present": true,
+      "selection_sha256": "66b928fbaf8f470332acff23922003822fcb58113d4bd085180ade5c54c0cfd0",
+      "runs": [
+        {
+          "run": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_pilot/fusion_network_traverse/P0/seed210/experiment_20260906_213015",
+          "arm": "P0",
+          "seed": 210,
+          "outcome": "stuck",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "50a7118e4d30c63f7073327ada07d7ad3989b8cf22bfcf56e7dcf71f300fc821"
+        },
+        {
+          "run": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_pilot/fusion_network_traverse/P1/seed210/experiment_20260906_214913",
+          "arm": "P1",
+          "seed": 210,
+          "outcome": "goal_reached",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "2480a2286544967846a9febf47ce0b1616e26cef5f219ac7bb435f93f6cd53db"
+        },
+        {
+          "run": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_pilot/fusion_network_traverse/P2/seed210/experiment_20260906_220801",
+          "arm": "P2",
+          "seed": 210,
+          "outcome": "goal_reached",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "8276baf514294a15e0c6b1cca9762b94056691acac075ff6819268a251c9e339"
+        }
+      ]
+    },
+    "network_navigation_recovery_pilot": {
+      "status_at_inspection": "collecting_separate_controller_followup",
+      "permitted_use": "one development controller follow-up; no learned-field effect, general success rate or calibrated sensor-model claim",
+      "selection": "logs/studies/icra_commissioning_20260905/network_navigation_recovery_evidence/selection.json",
+      "present": true,
+      "selection_sha256": "a52ffedd64b15d34649a898bfd68a579ed1e44a11ee0ee45433ac9809764fce7",
+      "runs": [
+        {
+          "run": "logs/studies/icra_commissioning_20260905/network_navigation_recovery_pilot/fusion_network_traverse/P0/seed210/experiment_20260906_223453",
+          "arm": "P0",
+          "seed": 210,
+          "outcome": "goal_reached",
+          "schema": 7,
+          "file_hashes_match": true,
+          "summary_sha256": "977d3f04813b3e0f05661bcf3bd14de7a757a389cb9c56246262fc0580ac5599"
+        }
+      ]
+    }
+  }
+}

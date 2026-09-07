@@ -1,0 +1,347 @@
+{
+  "partition": "audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd",
+  "phases": [
+    {
+      "label": "ready",
+      "wall_monotonic_s": 274153.991929212,
+      "last": {
+        "clock": {
+          "kind": "clock",
+          "receipt_monotonic_s": 274153.991842413,
+          "stamp_s": 0.805
+        },
+        "odom": {
+          "kind": "odom",
+          "receipt_monotonic_s": 274153.986309338,
+          "stamp_s": 0.8,
+          "frame": "odom",
+          "child": "base_link",
+          "x": -1.2562256800110384e-15,
+          "y": 4.391741054331196e-32,
+          "v": -4.513925353962708e-17,
+          "w": -2.727978379310969e-18
+        }
+      },
+      "event_count": 82
+    },
+    {
+      "label": "ordinary_silence_after_0_9_wall_s",
+      "wall_monotonic_s": 274154.906391149,
+      "last": {
+        "clock": {
+          "kind": "clock",
+          "receipt_monotonic_s": 274154.891882902,
+          "stamp_s": 1.705
+        },
+        "odom": {
+          "kind": "odom",
+          "receipt_monotonic_s": 274154.906359995,
+          "stamp_s": 1.7200000000000002,
+          "frame": "odom",
+          "child": "base_link",
+          "x": 0.09283166527234679,
+          "y": -0.0008195755080764759,
+          "v": 0.0,
+          "w": 0.0
+        },
+        "output": {
+          "kind": "output",
+          "receipt_monotonic_s": 274154.492473555,
+          "v": 0.0,
+          "w": 0.0
+        }
+      },
+      "event_count": 175
+    },
+    {
+      "label": "paused_after_command",
+      "wall_monotonic_s": 274156.045175985,
+      "last": {
+        "clock": {
+          "kind": "clock",
+          "receipt_monotonic_s": 274155.332606789,
+          "stamp_s": 2.044
+        },
+        "odom": {
+          "kind": "odom",
+          "receipt_monotonic_s": 274155.335944665,
+          "stamp_s": 2.04,
+          "frame": "odom",
+          "child": "base_link",
+          "x": 0.15260050183542906,
+          "y": -0.0017829337169963458,
+          "v": 0.18797680324950106,
+          "w": 0.009686216666476339
+        },
+        "output": {
+          "kind": "output",
+          "receipt_monotonic_s": 274154.907033799,
+          "v": 0.1879768032501669,
+          "w": 0.00968621667133112
+        }
+      },
+      "event_count": 196
+    },
+    {
+      "label": "resumed_after_pause",
+      "wall_monotonic_s": 274157.091875253,
+      "last": {
+        "clock": {
+          "kind": "clock",
+          "receipt_monotonic_s": 274157.091851263,
+          "stamp_s": 2.7560000000000002
+        },
+        "odom": {
+          "kind": "odom",
+          "receipt_monotonic_s": 274157.075272779,
+          "stamp_s": 2.74,
+          "frame": "odom",
+          "child": "base_link",
+          "x": 0.18605722203732533,
+          "y": -0.0022418043853675656,
+          "v": 0.0,
+          "w": 0.0
+        },
+        "output": {
+          "kind": "output",
+          "receipt_monotonic_s": 274156.552521602,
+          "v": 0.0,
+          "w": 0.0
+        }
+      },
+      "event_count": 269
+    },
+    {
+      "label": "before_clock_bridge_loss",
+      "wall_monotonic_s": 274157.195278619,
+      "last": {
+        "clock": {
+          "kind": "clock",
+          "receipt_monotonic_s": 274157.191906435,
+          "stamp_s": 2.856
+        },
+        "odom": {
+          "kind": "odom",
+          "receipt_monotonic_s": 274157.195257687,
+          "stamp_s": 2.8600000000000003,
+          "frame": "odom",
+          "child": "base_link",
+          "x": 0.20432204272837654,
+          "y": -0.002470292875484233,
+          "v": 0.17908088400073882,
+          "w": 0.006731614869270118
+        },
+        "output": {
+          "kind": "output",
+          "receipt_monotonic_s": 274157.092499291,
+          "v": 0.17908088400143263,
+          "w": 0.006731614866042566
+        }
+      },
+      "event_count": 281
+    },
+    {
+      "label": "clock_bridge_lost_physics_running",
+      "wall_monotonic_s": 274158.195592164,
+      "last": {
+        "clock": {
+          "kind": "clock",
+          "receipt_monotonic_s": 274157.212209294,
+          "stamp_s": 2.8600000000000003
+        },
+        "odom": {
+          "kind": "odom",
+          "receipt_monotonic_s": 274158.195512206,
+          "stamp_s": 3.8600000000000003,
+          "frame": "odom",
+          "child": "base_link",
+          "x": 0.38339565467316566,
+          "y": -0.004046178812454395,
+          "v": 0.1790808840007596,
+          "w": 0.006731614861492248
+        },
+        "output": {
+          "kind": "output",
+          "receipt_monotonic_s": 274157.092499291,
+          "v": 0.17908088400143263,
+          "w": 0.006731614866042566
+        }
+      },
+      "event_count": 332
+    },
+    {
+      "label": "clock_bridge_restored",
+      "wall_monotonic_s": 274159.012822788,
+      "last": {
+        "clock": {
+          "kind": "clock",
+          "receipt_monotonic_s": 274159.012774507,
+          "stamp_s": 4.676
+        },
+        "odom": {
+          "kind": "odom",
+          "receipt_monotonic_s": 274158.995391998,
+          "stamp_s": 4.66,
+          "frame": "odom",
+          "child": "base_link",
+          "x": 0.38661906404977286,
+          "y": -0.004063500272215854,
+          "v": 0.0,
+          "w": 0.0
+        },
+        "output": {
+          "kind": "output",
+          "receipt_monotonic_s": 274158.212504256,
+          "v": 0.0,
+          "w": 0.0
+        }
+      },
+      "event_count": 414
+    },
+    {
+      "label": "before_reset",
+      "wall_monotonic_s": 274159.115577685,
+      "last": {
+        "clock": {
+          "kind": "clock",
+          "receipt_monotonic_s": 274159.111931408,
+          "stamp_s": 4.776
+        },
+        "odom": {
+          "kind": "odom",
+          "receipt_monotonic_s": 274159.115520765,
+          "stamp_s": 4.78,
+          "frame": "odom",
+          "child": "base_link",
+          "x": 0.40721053346338726,
+          "y": -0.004145209946621999,
+          "v": 0.20187880142072956,
+          "w": 0.0263705478661694
+        },
+        "output": {
+          "kind": "output",
+          "receipt_monotonic_s": 274159.01380374,
+          "v": 0.20187880142138814,
+          "w": 0.026370547871575317
+        }
+      },
+      "event_count": 426
+    },
+    {
+      "label": "after_reset_no_new_command",
+      "wall_monotonic_s": 274160.776902095,
+      "last": {
+        "clock": {
+          "kind": "clock",
+          "receipt_monotonic_s": 274160.771870325,
+          "stamp_s": 1.195
+        },
+        "odom": {
+          "kind": "odom",
+          "receipt_monotonic_s": 274160.776871326,
+          "stamp_s": 1.2,
+          "frame": "odom",
+          "child": "base_link",
+          "x": 0.4837220651569801,
+          "y": -0.003963570822731397,
+          "v": 0.0,
+          "w": 0.0
+        },
+        "output": {
+          "kind": "output",
+          "receipt_monotonic_s": 274159.593039565,
+          "v": 0.0,
+          "w": 0.0
+        }
+      },
+      "event_count": 545
+    },
+    {
+      "label": "before_adapter_death",
+      "wall_monotonic_s": 274160.877124431,
+      "last": {
+        "clock": {
+          "kind": "clock",
+          "receipt_monotonic_s": 274160.871838187,
+          "stamp_s": 1.295
+        },
+        "odom": {
+          "kind": "odom",
+          "receipt_monotonic_s": 274160.877102368,
+          "stamp_s": 1.3,
+          "frame": "odom",
+          "child": "base_link",
+          "x": 0.5011242657516285,
+          "y": -0.003889329809137558,
+          "v": 0.17757537680584967,
+          "w": -0.06336866625595243
+        },
+        "output": {
+          "kind": "output",
+          "receipt_monotonic_s": 274160.777533388,
+          "v": 0.17757537680652144,
+          "w": -0.06336866626062593
+        }
+      },
+      "event_count": 556
+    },
+    {
+      "label": "fresh_adapter_without_new_input",
+      "wall_monotonic_s": 274162.29962059,
+      "last": {
+        "clock": {
+          "kind": "clock",
+          "receipt_monotonic_s": 274162.291903059,
+          "stamp_s": 2.712
+        },
+        "odom": {
+          "kind": "odom",
+          "receipt_monotonic_s": 274162.299586569,
+          "stamp_s": 2.72,
+          "frame": "odom",
+          "child": "base_link",
+          "x": 0.7529541452928861,
+          "y": -0.014934273000929402,
+          "v": 0.17757537680576085,
+          "w": -0.06336866625716359
+        },
+        "output": {
+          "kind": "output",
+          "receipt_monotonic_s": 274160.777533388,
+          "v": 0.17757537680652144,
+          "w": -0.06336866626062593
+        }
+      },
+      "event_count": 688
+    },
+    {
+      "label": "explicit_final_zero",
+      "wall_monotonic_s": 274162.60055753,
+      "last": {
+        "clock": {
+          "kind": "clock",
+          "receipt_monotonic_s": 274162.592264989,
+          "stamp_s": 3.011
+        },
+        "odom": {
+          "kind": "odom",
+          "receipt_monotonic_s": 274162.600532191,
+          "stamp_s": 3.02,
+          "frame": "odom",
+          "child": "base_link",
+          "x": 0.7533078940086131,
+          "y": -0.014965799301606362,
+          "v": 0.0,
+          "w": 0.0
+        },
+        "output": {
+          "kind": "output",
+          "receipt_monotonic_s": 274162.300366538,
+          "v": 0.0,
+          "w": 0.0
+        }
+      },
+      "event_count": 719
+    }
+  ]
+}

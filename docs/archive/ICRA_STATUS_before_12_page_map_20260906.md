@@ -7,12 +7,12 @@ was explicitly resumed by the user; a separate ICRA manuscript remains condition
 This is the current status account. Earlier execution/protocol documents retain historical
 proposals; the metrics registry still does not authorize a replicated paper-facing fusion result.
 
-Open [`../../papers/master_thesis/thesis.pdf`](../../papers/master_thesis/thesis.pdf).
+Open [`../../papers/Thesis/thesis.pdf`](../../papers/Thesis/thesis.pdf).
 Exact commands and measurement contract: `experiments/icra_commissioning/README.md`.
 
 ## Active thesis and completed pilot
 
-The active editable thesis is `../../papers/master_thesis/main.tex`. It separates Kouw's
+The active editable thesis is `../../papers/Thesis/main.tex`. It separates Kouw's
 preceding sensor-ambiguity work, the published IWAI navigation contribution, the new
 commissioning experiments, and the additional claim a possible ICRA paper would need.
 The camera-ready IWAI archive remains unchanged. The thesis contains methods, protocol,
@@ -50,9 +50,9 @@ they do not validate complete-route ranking against a completed overlap route.
 
 Regenerate selected evidence in the robot repository with
 `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 experiments/icra_commissioning/thesis_evidence.py --static`.
-From the workspace root, run `python3 papers/master_thesis/build_evidence.py`, then
-`python3 papers/master_thesis/build.py`. Figure hashes, input hashes and selected execution
-IDs are recorded in `papers/master_thesis/generated/evidence_manifest.json`.
+From the workspace root, run `python3 papers/Thesis/build_evidence.py`, then
+`python3 papers/Thesis/build.py`. Figure hashes, input hashes and selected execution
+IDs are recorded in `papers/Thesis/generated/evidence_manifest.json`.
 
 The immediate scientific next action is delayed-arrival replay with the runtime refusal
 policy, followed by independently validated future predictions. A new navigation-improvement

@@ -1,0 +1,15 @@
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 0.4, "camera_id": "camera_A", "source_batch_id": "b0", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 0.4, "camera_id": "camera_B", "source_batch_id": "b0", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 0.4, "camera_id": "camera_C", "source_batch_id": "b0", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 0.4, "camera_id": "camera_D", "source_batch_id": "b0", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 0.4, "camera_id": "camera_E", "source_batch_id": "b0", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 0.8, "camera_id": "camera_A", "source_batch_id": "b1", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 0.8, "camera_id": "camera_B", "source_batch_id": "b1", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 0.8, "camera_id": "camera_C", "source_batch_id": "b1", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 0.8, "camera_id": "camera_D", "source_batch_id": "b1", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 0.8, "camera_id": "camera_E", "source_batch_id": "b1", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 1.2, "camera_id": "camera_A", "source_batch_id": "b2", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 1.2, "camera_id": "camera_B", "source_batch_id": "b2", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 1.2, "camera_id": "camera_C", "source_batch_id": "b2", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 1.2, "camera_id": "camera_D", "source_batch_id": "b2", "detection_valid": false}}
+{"valid_contract": true, "duplicate": false, "observation": {"timestamp_s": 1.2, "camera_id": "camera_E", "source_batch_id": "b2", "detection_valid": false}}

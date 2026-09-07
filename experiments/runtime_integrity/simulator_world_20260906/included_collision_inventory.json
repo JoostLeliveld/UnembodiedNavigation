@@ -1,0 +1,325 @@
+[
+  {
+    "include": "lamp_0",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      -7.05,
+      -2.4,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_1",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      -7.05,
+      1.5,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_2",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      -7.05,
+      5.4,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_3",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      -3.35,
+      -2.4,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_4",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      -3.35,
+      1.5,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_5",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      -3.35,
+      5.4,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_6",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      0.62,
+      -6.5,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_7",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      0.62,
+      -1.5,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_8",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      0.62,
+      3.5,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_9",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      0.62,
+      8.0,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_10",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      3.6,
+      -1.5,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_11",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      8.4,
+      -1.5,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_12",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      3.6,
+      2.15,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_13",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      8.4,
+      2.15,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_14",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      -9.0,
+      -6.9,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "lamp_15",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+    "include_pose": [
+      6.0,
+      -6.9,
+      -5.5,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "forklift_parked",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/dyn_forklift/model.sdf",
+    "include_pose": [
+      3.6,
+      -8.75,
+      0.0,
+      0.0,
+      0.0,
+      3.1416
+    ],
+    "collisions": [
+      "<collision name=\"body_collision\"><pose>-0.300 0.000 0.600 0 0 0</pose><geometry><box><size>1.600 0.980 1.050</size></box></geometry></collision>",
+      "<collision name=\"cab_mast_collision\"><pose>0.520 0.000 1.045 0 0 0</pose><geometry><box><size>0.140 0.900 2.090</size></box></geometry></collision>",
+      "<collision name=\"overhead_guard_collision\"><pose>0.050 0.000 2.050 0 0 0</pose><geometry><box><size>1.100 0.900 0.080</size></box></geometry></collision>",
+      "<collision name=\"fork_left_collision\"><pose>1.120 -0.260 0.060 0 0 0</pose><geometry><box><size>1.100 0.140 0.070</size></box></geometry></collision>",
+      "<collision name=\"fork_right_collision\"><pose>1.120 0.260 0.060 0 0 0</pose><geometry><box><size>1.100 0.140 0.070</size></box></geometry></collision>",
+      "<collision name=\"wheel_front_collision\"><pose>0.300 0.000 0.160 0 0 0</pose><geometry><box><size>0.320 1.020 0.320</size></box></geometry></collision>",
+      "<collision name=\"wheel_rear_collision\"><pose>-0.900 0.000 0.160 0 0 0</pose><geometry><box><size>0.320 0.800 0.320</size></box></geometry></collision>"
+    ]
+  },
+  {
+    "include": "pallet_jack",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_PalletJackB_01/model.sdf",
+    "include_pose": [
+      -8.69,
+      -9.0,
+      0.0,
+      0.0,
+      0.0,
+      1.5708
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_PalletJackB_01/meshes/aws_robomaker_warehouse_PalletJackB_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.2</mu>\n              <mu2>0.2</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "bin_office",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_TrashCanC_01/model.sdf",
+    "include_pose": [
+      -8.71,
+      -7.45,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "collisions": [
+      "<collision name=\"collision\">\n        <geometry>\n          <mesh>\n            <uri>model://aws_robomaker_warehouse_TrashCanC_01/meshes/aws_robomaker_warehouse_TrashCanC_01_collision.DAE</uri>\n            <scale>1 1 1</scale>\n          </mesh>\n        </geometry>\n\t\t<surface>\n          <friction>\n            <ode>\n              <mu>0.4</mu>\n              <mu2>0.4</mu2>\n              <fdir1>0 0 0</fdir1>\n              <slip1>0</slip1>\n              <slip2>0</slip2>\n            </ode>\n        </friction>\n          </surface>\n      </collision>\n      "
+    ]
+  },
+  {
+    "include": "pallet_loose_1",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/dyn_pallet_box/model.sdf",
+    "include_pose": [
+      -3.98,
+      -8.65,
+      0.0,
+      0.0,
+      0.0,
+      0.12
+    ],
+    "collisions": [
+      "<collision name=\"base_collision\"><pose>0.000 0.000 0.070 0 0 0</pose><geometry><box><size>1.200 0.800 0.140</size></box></geometry></collision>",
+      "<collision name=\"load_collision\"><pose>0.000 0.000 0.815 0 0 0</pose><geometry><box><size>1.060 0.720 1.350</size></box></geometry></collision>"
+    ]
+  },
+  {
+    "include": "pallet_loose_2",
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/dyn_pallet_box/model.sdf",
+    "include_pose": [
+      4.45,
+      -8.63,
+      0.0,
+      0.0,
+      0.0,
+      -0.2
+    ],
+    "collisions": [
+      "<collision name=\"base_collision\"><pose>0.000 0.000 0.070 0 0 0</pose><geometry><box><size>1.200 0.800 0.140</size></box></geometry></collision>",
+      "<collision name=\"load_collision\"><pose>0.000 0.000 0.815 0 0 0</pose><geometry><box><size>1.060 0.720 1.350</size></box></geometry></collision>"
+    ]
+  }
+]

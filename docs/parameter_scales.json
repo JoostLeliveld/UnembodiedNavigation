@@ -1,0 +1,91 @@
+{
+  "scope": "analytic configuration/model probe; not observed navigation",
+  "nogo_penalties": [
+    {
+      "clearance_m": 0.1,
+      "cost": 0.0
+    },
+    {
+      "clearance_m": 0.05,
+      "cost": 0.0
+    },
+    {
+      "clearance_m": 0.025,
+      "cost": 11.157177565710489
+    },
+    {
+      "clearance_m": 0.0,
+      "cost": 34.657359027997266
+    },
+    {
+      "clearance_m": -0.001,
+      "cost": 75.65729335333172
+    },
+    {
+      "clearance_m": -0.005,
+      "cost": 1039.6496257764832
+    },
+    {
+      "clearance_m": -0.01,
+      "cost": 4044.5999019652554
+    },
+    {
+      "clearance_m": -0.05,
+      "cost": 100080.47189562171
+    }
+  ],
+  "lane_width_scales": [
+    {
+      "width_m": 1.0,
+      "centre_clearance_m": -0.050000000000000044,
+      "zero_penalty_centre": false
+    },
+    {
+      "width_m": 1.1,
+      "centre_clearance_m": 0.0,
+      "zero_penalty_centre": false
+    },
+    {
+      "width_m": 1.2,
+      "centre_clearance_m": 0.04999999999999993,
+      "zero_penalty_centre": true
+    },
+    {
+      "width_m": 1.8,
+      "centre_clearance_m": 0.35,
+      "zero_penalty_centre": true
+    }
+  ],
+  "discount_scales": [
+    {
+      "dt_s": 0.25,
+      "half_weight_time_s": 8.577404622880161,
+      "weight_after_100_steps": 0.13261955589475294,
+      "weight_after_200_steps": 0.0175879466057215
+    },
+    {
+      "dt_s": 1.0,
+      "half_weight_time_s": 34.309618491520645,
+      "weight_after_100_steps": 0.13261955589475294,
+      "weight_after_200_steps": 0.0175879466057215
+    }
+  ],
+  "speed_scales": [
+    {
+      "v_max_mps": 0.22,
+      "nominal_capture_spacing_m": 0.044,
+      "local_step_m": 0.055,
+      "local_3s_reach_m": 0.66,
+      "global_200s_reach_m": 44.0,
+      "watchdog_0_5s_travel_m": 0.11
+    },
+    {
+      "v_max_mps": 0.44,
+      "nominal_capture_spacing_m": 0.088,
+      "local_step_m": 0.11,
+      "local_3s_reach_m": 1.32,
+      "global_200s_reach_m": 88.0,
+      "watchdog_0_5s_travel_m": 0.22
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "completed": false,
+  "completion_reason": "interrupted",
+  "valid_run": true,
+  "invalid_reason": "",
+  "frame_sanity": {},
+  "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end_20260906/shutdown_failure"
+}

@@ -1,0 +1,719 @@
+{"kind": "clock", "receipt_monotonic_s": 274153.188541929, "stamp_s": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274153.191893688, "stamp_s": 0.005}
+{"kind": "odom", "receipt_monotonic_s": 274153.206680545, "stamp_s": 0.02, "frame": "odom", "child": "base_link", "x": 2.768001074057542e-32, "y": 1.594938695959674e-70, "v": 1.3840005069361152e-30, "w": 4.787467867672693e-37}
+{"kind": "clock", "receipt_monotonic_s": 274153.21187236, "stamp_s": 0.025}
+{"kind": "odom", "receipt_monotonic_s": 274153.226715742, "stamp_s": 0.04, "frame": "odom", "child": "base_link", "x": 5.53600201269813e-32, "y": 5.414272437339047e-70, "v": 1.3840004617971328e-30, "w": 5.471391823887783e-37}
+{"kind": "clock", "receipt_monotonic_s": 274153.231845489, "stamp_s": 0.045000000000000005}
+{"kind": "odom", "receipt_monotonic_s": 274153.24632971, "stamp_s": 0.060000000000000005, "frame": "odom", "child": "base_link", "x": 8.304002921246065e-32, "y": 1.1779828590488142e-69, "v": 1.3840004617971328e-30, "w": 6.839239835842e-37}
+{"kind": "clock", "receipt_monotonic_s": 274153.252165893, "stamp_s": 0.065}
+{"kind": "odom", "receipt_monotonic_s": 274153.266216203, "stamp_s": 0.08, "frame": "odom", "child": "base_link", "x": 1.107200390502564e-31, "y": 2.0497564466534457e-69, "v": 1.3840004918897879e-30, "w": 4.103543886576594e-37}
+{"kind": "clock", "receipt_monotonic_s": 274153.271920494, "stamp_s": 0.085}
+{"kind": "odom", "receipt_monotonic_s": 274153.286385743, "stamp_s": 0.1, "frame": "odom", "child": "base_link", "x": 1.3840004858712568e-31, "y": 3.178045375970994e-69, "v": 1.3840004918897873e-30, "w": 4.103543811933565e-37}
+{"kind": "clock", "receipt_monotonic_s": 274153.291840171, "stamp_s": 0.10500000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274153.306461683, "stamp_s": 0.12000000000000001, "frame": "odom", "child": "base_link", "x": -5.8575060907947224e-18, "y": 3.4152838586548737e-37, "v": -4.758041877296953e-17, "w": -8.377458697834765e-20}
+{"kind": "clock", "receipt_monotonic_s": 274153.312165456, "stamp_s": 0.125}
+{"kind": "odom", "receipt_monotonic_s": 274153.326583559, "stamp_s": 0.14, "frame": "odom", "child": "base_link", "x": -6.780815396033755e-18, "y": 4.365123824543126e-37, "v": -4.562510485739228e-17, "w": -2.1982698116488676e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.332083458, "stamp_s": 0.14500000000000002}
+{"kind": "odom", "receipt_monotonic_s": 274153.346721099, "stamp_s": 0.16, "frame": "odom", "child": "base_link", "x": -7.664040332708639e-18, "y": 5.331850288805485e-37, "v": -4.367933531191076e-17, "w": -1.1508709631400258e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.351829453, "stamp_s": 0.165}
+{"kind": "odom", "receipt_monotonic_s": 274153.366356891, "stamp_s": 0.18000000000000002, "frame": "odom", "child": "base_link", "x": -8.50534082333326e-18, "y": 6.307932748431948e-37, "v": -4.1495420252040124e-17, "w": -2.9491425906283616e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.372613124, "stamp_s": 0.185}
+{"kind": "odom", "receipt_monotonic_s": 274153.386851037, "stamp_s": 0.2, "frame": "odom", "child": "base_link", "x": -9.306725428994148e-18, "y": 7.31933070244344e-37, "v": -3.9559126799859383e-17, "w": -4.587260744552135e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.391904575, "stamp_s": 0.20500000000000002}
+{"kind": "odom", "receipt_monotonic_s": 274153.407199792, "stamp_s": 0.22, "frame": "odom", "child": "base_link", "x": -1.0067097670393458e-17, "y": 8.348421545013688e-37, "v": -3.749612652652559e-17, "w": -2.730446785411935e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.411939086, "stamp_s": 0.225}
+{"kind": "odom", "receipt_monotonic_s": 274153.426533022, "stamp_s": 0.24000000000000002, "frame": "odom", "child": "base_link", "x": -1.0785618968912083e-17, "y": 9.368804848370802e-37, "v": -3.542756141030547e-17, "w": -1.9371238729531135e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.432409362, "stamp_s": 0.24500000000000002}
+{"kind": "odom", "receipt_monotonic_s": 274153.446539526, "stamp_s": 0.26, "frame": "odom", "child": "base_link", "x": -1.1463252114272417e-17, "y": 1.0370823141642621e-36, "v": -3.339375796952381e-17, "w": -2.734356453849341e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.452077199, "stamp_s": 0.265}
+{"kind": "odom", "receipt_monotonic_s": 274153.467549198, "stamp_s": 0.28, "frame": "odom", "child": "base_link", "x": -1.209974895792749e-17, "y": 1.1353123985817899e-36, "v": -3.125722067087921e-17, "w": -1.3142937764572605e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.471912917, "stamp_s": 0.28500000000000003}
+{"kind": "odom", "receipt_monotonic_s": 274153.486209168, "stamp_s": 0.30000000000000004, "frame": "odom", "child": "base_link", "x": -1.2696377724931155e-17, "y": 1.2313288331973321e-36, "v": -2.9335141307548166e-17, "w": -1.8101881656556796e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.492298482, "stamp_s": 0.305}
+{"kind": "odom", "receipt_monotonic_s": 274153.506286951, "stamp_s": 0.32, "frame": "odom", "child": "base_link", "x": -1.3251999579846007e-17, "y": 1.3255246025704416e-36, "v": -2.7242567043767346e-17, "w": -2.821040058054322e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.511839329, "stamp_s": 0.325}
+{"kind": "odom", "receipt_monotonic_s": 274153.526266858, "stamp_s": 0.34, "frame": "odom", "child": "base_link", "x": -1.3765732072642559e-17, "y": 1.4162433449263827e-36, "v": -2.5102996940835355e-17, "w": -2.683257644893134e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.531899112, "stamp_s": 0.34500000000000003}
+{"kind": "odom", "receipt_monotonic_s": 274153.546260138, "stamp_s": 0.36000000000000004, "frame": "odom", "child": "base_link", "x": -1.4236208097765807e-17, "y": 1.5019854728908839e-36, "v": -2.3070278387687015e-17, "w": -3.4471302715425924e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.551883768, "stamp_s": 0.36500000000000005}
+{"kind": "odom", "receipt_monotonic_s": 274153.566327655, "stamp_s": 0.38, "frame": "odom", "child": "base_link", "x": -1.4666778287136585e-17, "y": 1.5832550147798006e-36, "v": -2.1037174165787564e-17, "w": -4.897158588840199e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.571826493, "stamp_s": 0.385}
+{"kind": "odom", "receipt_monotonic_s": 274153.586826137, "stamp_s": 0.4, "frame": "odom", "child": "base_link", "x": -1.5057666116578485e-17, "y": 1.660393541917487e-36, "v": -1.9077948394974105e-17, "w": -6.294270819145801e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.591817143, "stamp_s": 0.405}
+{"kind": "odom", "receipt_monotonic_s": 274153.606273258, "stamp_s": 0.42000000000000004, "frame": "odom", "child": "base_link", "x": -1.5406056827649988e-17, "y": 1.732483420886931e-36, "v": -1.680715929253394e-17, "w": -4.951441240959643e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.612505587, "stamp_s": 0.42500000000000004}
+{"kind": "odom", "receipt_monotonic_s": 274153.626241543, "stamp_s": 0.44, "frame": "odom", "child": "base_link", "x": -1.5714475170715973e-17, "y": 1.7985076388689458e-36, "v": -1.491432736668004e-17, "w": -1.5768116568220412e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.631797603, "stamp_s": 0.445}
+{"kind": "odom", "receipt_monotonic_s": 274153.646443082, "stamp_s": 0.46, "frame": "odom", "child": "base_link", "x": -1.5981082857141345e-17, "y": 1.8577884276824763e-36, "v": -1.2711953447524338e-17, "w": -3.552940834449591e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.651829802, "stamp_s": 0.465}
+{"kind": "odom", "receipt_monotonic_s": 274153.666308396, "stamp_s": 0.48000000000000004, "frame": "odom", "child": "base_link", "x": -1.6206969781126498e-17, "y": 1.909537801947428e-36, "v": -1.0806427737118806e-17, "w": -3.9905751440678968e-19}
+{"kind": "clock", "receipt_monotonic_s": 274153.671856398, "stamp_s": 0.48500000000000004}
+{"kind": "odom", "receipt_monotonic_s": 274153.686271866, "stamp_s": 0.5, "frame": "odom", "child": "base_link", "x": -4.1129242592080985e-16, "y": 4.513073910391412e-33, "v": -1.8863882006722972e-14, "w": -1.0715129554773238e-15}
+{"kind": "clock", "receipt_monotonic_s": 274153.692259298, "stamp_s": 0.505}
+{"kind": "odom", "receipt_monotonic_s": 274153.706456786, "stamp_s": 0.52, "frame": "odom", "child": "base_link", "x": -6.917559687291368e-16, "y": 1.3096513729244353e-32, "v": -1.261826807265779e-14, "w": -7.170902364118049e-16}
+{"kind": "clock", "receipt_monotonic_s": 274153.711864522, "stamp_s": 0.525}
+{"kind": "odom", "receipt_monotonic_s": 274153.726201786, "stamp_s": 0.54, "frame": "odom", "child": "base_link", "x": -8.793593386945173e-16, "y": 2.1332521218851842e-32, "v": -8.44039279302666e-15, "w": -4.796201477322561e-16}
+{"kind": "clock", "receipt_monotonic_s": 274153.731835943, "stamp_s": 0.545}
+{"kind": "odom", "receipt_monotonic_s": 274153.746468399, "stamp_s": 0.56, "frame": "odom", "child": "base_link", "x": -1.004839937272296e-15, "y": 2.795673925804649e-32, "v": -5.645340310197467e-15, "w": -3.2027681671889807e-16}
+{"kind": "clock", "receipt_monotonic_s": 274153.751904367, "stamp_s": 0.5650000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274153.767228652, "stamp_s": 0.5800000000000001, "frame": "odom", "child": "base_link", "x": -1.08877339173005e-15, "y": 3.288662926207217e-32, "v": -3.776287860919643e-15, "w": -2.1429187209681367e-16}
+{"kind": "clock", "receipt_monotonic_s": 274153.771835104, "stamp_s": 0.5850000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274153.786181627, "stamp_s": 0.6000000000000001, "frame": "odom", "child": "base_link", "x": -1.1449110114066708e-15, "y": 3.640719672596006e-32, "v": -2.5258402284296272e-15, "w": -1.4368198594531942e-16}
+{"kind": "clock", "receipt_monotonic_s": 274153.792075093, "stamp_s": 0.605}
+{"kind": "odom", "receipt_monotonic_s": 274153.806353337, "stamp_s": 0.62, "frame": "odom", "child": "base_link", "x": -1.182457384510298e-15, "y": 3.8861786415004053e-32, "v": -1.6891613052310875e-15, "w": -9.577252262160379e-17}
+{"kind": "clock", "receipt_monotonic_s": 274153.811904536, "stamp_s": 0.625}
+{"kind": "odom", "receipt_monotonic_s": 274153.826301429, "stamp_s": 0.64, "frame": "odom", "child": "base_link", "x": -1.2075681235140574e-15, "y": 4.0548061144338175e-32, "v": -1.1296902548405956e-15, "w": -6.396026442332849e-17}
+{"kind": "clock", "receipt_monotonic_s": 274153.831904866, "stamp_s": 0.645}
+{"kind": "odom", "receipt_monotonic_s": 274153.848606194, "stamp_s": 0.66, "frame": "odom", "child": "base_link", "x": -1.224359262820402e-15, "y": 4.169559033870224e-32, "v": -7.552213878658964e-16, "w": -4.264621906725328e-17}
+{"kind": "clock", "receipt_monotonic_s": 274153.852095584, "stamp_s": 0.665}
+{"kind": "odom", "receipt_monotonic_s": 274153.866539567, "stamp_s": 0.68, "frame": "odom", "child": "base_link", "x": -1.235589551087631e-15, "y": 4.2472001808739285e-32, "v": -5.052825359363453e-16, "w": -2.8831709711569593e-17}
+{"kind": "clock", "receipt_monotonic_s": 274153.871996595, "stamp_s": 0.685}
+{"kind": "odom", "receipt_monotonic_s": 274153.886503927, "stamp_s": 0.7000000000000001, "frame": "odom", "child": "base_link", "x": -1.2431011010429483e-15, "y": 4.299534348233751e-32, "v": -3.3792451485194397e-16, "w": -1.92181519942556e-17}
+{"kind": "clock", "receipt_monotonic_s": 274153.891956558, "stamp_s": 0.7050000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274153.906341564, "stamp_s": 0.7200000000000001, "frame": "odom", "child": "base_link", "x": -1.2481227795441628e-15, "y": 4.33469958188801e-32, "v": -2.2568874691418613e-16, "w": -1.2516795444073419e-17}
+{"kind": "clock", "receipt_monotonic_s": 274153.912627916, "stamp_s": 0.7250000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274153.926278138, "stamp_s": 0.74, "frame": "odom", "child": "base_link", "x": -1.2514791945149708e-15, "y": 4.3582826082832894e-32, "v": -1.509798932428261e-16, "w": -8.663838616017426e-18}
+{"kind": "clock", "receipt_monotonic_s": 274153.931912109, "stamp_s": 0.745}
+{"kind": "odom", "receipt_monotonic_s": 274153.946882803, "stamp_s": 0.76, "frame": "odom", "child": "base_link", "x": -1.253721753856308e-15, "y": 4.3740746940164526e-32, "v": -1.0096517382460852e-16, "w": -5.428311956367952e-18}
+{"kind": "clock", "receipt_monotonic_s": 274153.951997476, "stamp_s": 0.765}
+{"kind": "odom", "receipt_monotonic_s": 274153.966260263, "stamp_s": 0.78, "frame": "odom", "child": "base_link", "x": -1.2552211053584053e-15, "y": 4.38464904546697e-32, "v": -6.745817253761925e-17, "w": -4.057462832616828e-18}
+{"kind": "clock", "receipt_monotonic_s": 274153.972093232, "stamp_s": 0.785}
+{"kind": "odom", "receipt_monotonic_s": 274153.986309338, "stamp_s": 0.8, "frame": "odom", "child": "base_link", "x": -1.2562256800110384e-15, "y": 4.391741054331196e-32, "v": -4.513925353962708e-17, "w": -2.727978379310969e-18}
+{"kind": "clock", "receipt_monotonic_s": 274153.991842413, "stamp_s": 0.805}
+{"kind": "output", "receipt_monotonic_s": 274153.992599923, "v": 0.18567297802325874, "w": -0.035313563005277715}
+{"kind": "odom", "receipt_monotonic_s": 274154.006856707, "stamp_s": 0.8200000000000001, "frame": "odom", "child": "base_link", "x": 0.002413748625266902, "y": -5.540474289295938e-07, "v": 0.18567297770592275, "w": -0.035313563169188794}
+{"kind": "clock", "receipt_monotonic_s": 274154.011813651, "stamp_s": 0.8250000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274154.026584418, "stamp_s": 0.8400000000000001, "frame": "odom", "child": "base_link", "x": 0.0061272068816743686, "y": -3.570163267726546e-06, "v": 0.18567297802257474, "w": -0.03531356300139069}
+{"kind": "clock", "receipt_monotonic_s": 274154.032209377, "stamp_s": 0.8450000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274154.046593375, "stamp_s": 0.8600000000000001, "frame": "odom", "child": "base_link", "x": 0.009840662083714454, "y": -9.208986978394857e-06, "v": 0.18567297802257463, "w": -0.035313563001394446}
+{"kind": "clock", "receipt_monotonic_s": 274154.051882549, "stamp_s": 0.8650000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274154.067417005, "stamp_s": 0.88, "frame": "odom", "child": "base_link", "x": 0.013554112377044587, "y": -1.7470515749653458e-05, "v": 0.18567297802257374, "w": -0.03531356300139839}
+{"kind": "clock", "receipt_monotonic_s": 274154.072047617, "stamp_s": 0.885}
+{"kind": "odom", "receipt_monotonic_s": 274154.086645033, "stamp_s": 0.9, "frame": "odom", "child": "base_link", "x": 0.017267555909324946, "y": -2.8354745459733422e-05, "v": 0.18567297802257327, "w": -0.03531356300140075}
+{"kind": "clock", "receipt_monotonic_s": 274154.091902304, "stamp_s": 0.905}
+{"kind": "odom", "receipt_monotonic_s": 274154.106610612, "stamp_s": 0.92, "frame": "odom", "child": "base_link", "x": 0.02098099082821908, "y": -4.186167067987924e-05, "v": 0.18567297802257327, "w": -0.03531356300140075}
+{"kind": "clock", "receipt_monotonic_s": 274154.111843481, "stamp_s": 0.925}
+{"kind": "odom", "receipt_monotonic_s": 274154.126826335, "stamp_s": 0.9400000000000001, "frame": "odom", "child": "base_link", "x": 0.024694415281394797, "y": -5.7991284672592174e-05, "v": 0.18567297802257238, "w": -0.03531356300140943}
+{"kind": "clock", "receipt_monotonic_s": 274154.132033749, "stamp_s": 0.9450000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274154.146394117, "stamp_s": 0.9600000000000001, "frame": "odom", "child": "base_link", "x": 0.028407827416525196, "y": -7.674357939163643e-05, "v": 0.18567297802257188, "w": -0.03531356300141967}
+{"kind": "clock", "receipt_monotonic_s": 274154.15187851, "stamp_s": 0.9650000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274154.16666674, "stamp_s": 0.9800000000000001, "frame": "odom", "child": "base_link", "x": 0.03212122538128946, "y": -9.811854548320954e-05, "v": 0.18567297802257188, "w": -0.035313563001419676}
+{"kind": "clock", "receipt_monotonic_s": 274154.171903023, "stamp_s": 0.9850000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274154.186675645, "stamp_s": 1.0, "frame": "odom", "child": "base_link", "x": 0.03583460732337388, "y": -0.0001221161722859355, "v": 0.18567297802257188, "w": -0.035313563001419676}
+{"kind": "clock", "receipt_monotonic_s": 274154.191969028, "stamp_s": 1.005}
+{"kind": "odom", "receipt_monotonic_s": 274154.206403964, "stamp_s": 1.02, "frame": "odom", "child": "base_link", "x": 0.039547971390472725, "y": -0.00014873644782794707, "v": 0.18567297802257188, "w": -0.03531356300141967}
+{"kind": "clock", "receipt_monotonic_s": 274154.211965155, "stamp_s": 1.025}
+{"kind": "odom", "receipt_monotonic_s": 274154.22678312, "stamp_s": 1.04, "frame": "odom", "child": "base_link", "x": 0.04326131573028914, "y": -0.00017797935883155552, "v": 0.1856729780225705, "w": -0.03531356300142598}
+{"kind": "clock", "receipt_monotonic_s": 274154.231836854, "stamp_s": 1.045}
+{"kind": "odom", "receipt_monotonic_s": 274154.246379232, "stamp_s": 1.06, "frame": "odom", "child": "base_link", "x": 0.046974638490536146, "y": -0.0002098448907091604, "v": 0.18567297802256907, "w": -0.035313563001432284}
+{"kind": "clock", "receipt_monotonic_s": 274154.25196337, "stamp_s": 1.065}
+{"kind": "odom", "receipt_monotonic_s": 274154.266355575, "stamp_s": 1.08, "frame": "odom", "child": "base_link", "x": 0.050687937818937524, "y": -0.00024433302756561413, "v": 0.18567297802256633, "w": -0.035313563001419676}
+{"kind": "clock", "receipt_monotonic_s": 274154.271752406, "stamp_s": 1.085}
+{"kind": "odom", "receipt_monotonic_s": 274154.286126044, "stamp_s": 1.1, "frame": "odom", "child": "base_link", "x": 0.0544012118632288, "y": -0.00028144375219875894, "v": 0.18567297802256633, "w": -0.035313563001419676}
+{"kind": "clock", "receipt_monotonic_s": 274154.29185226, "stamp_s": 1.105}
+{"kind": "odom", "receipt_monotonic_s": 274154.307155444, "stamp_s": 1.12, "frame": "odom", "child": "base_link", "x": 0.05811445877115804, "y": -0.00032117704609536577, "v": 0.18567297802256633, "w": -0.035313563001419676}
+{"kind": "clock", "receipt_monotonic_s": 274154.31181036, "stamp_s": 1.125}
+{"kind": "odom", "receipt_monotonic_s": 274154.326369516, "stamp_s": 1.1400000000000001, "frame": "odom", "child": "base_link", "x": 0.06182767669048689, "y": -0.00036353288943696425, "v": 0.18567297802256907, "w": -0.03531356300143229}
+{"kind": "clock", "receipt_monotonic_s": 274154.332705477, "stamp_s": 1.145}
+{"kind": "odom", "receipt_monotonic_s": 274154.346345649, "stamp_s": 1.16, "frame": "odom", "child": "base_link", "x": 0.06554086376899151, "y": -0.00040851126109516943, "v": 0.18567297802257188, "w": -0.035313563001444906}
+{"kind": "clock", "receipt_monotonic_s": 274154.351855289, "stamp_s": 1.165}
+{"kind": "odom", "receipt_monotonic_s": 274154.366299349, "stamp_s": 1.18, "frame": "odom", "child": "base_link", "x": 0.06925401815446325, "y": -0.00045611213863405096, "v": 0.1856729780225684, "w": -0.03531356300146067}
+{"kind": "clock", "receipt_monotonic_s": 274154.3717968, "stamp_s": 1.185}
+{"kind": "odom", "receipt_monotonic_s": 274154.386376811, "stamp_s": 1.2, "frame": "odom", "child": "base_link", "x": 0.07296713799470987, "y": -0.0005063354983094984, "v": 0.18567297802256638, "w": -0.035313563001470136}
+{"kind": "clock", "receipt_monotonic_s": 274154.391790254, "stamp_s": 1.205}
+{"kind": "odom", "receipt_monotonic_s": 274154.40685982, "stamp_s": 1.22, "frame": "odom", "child": "base_link", "x": 0.07668022143755635, "y": -0.0005591813150687017, "v": 0.18567297802256638, "w": -0.035313563001470136}
+{"kind": "clock", "receipt_monotonic_s": 274154.412462283, "stamp_s": 1.225}
+{"kind": "odom", "receipt_monotonic_s": 274154.426306416, "stamp_s": 1.24, "frame": "odom", "child": "base_link", "x": 0.08039326663084592, "y": -0.0006146495625512543, "v": 0.18567297802256635, "w": -0.035313563001470136}
+{"kind": "clock", "receipt_monotonic_s": 274154.431816832, "stamp_s": 1.245}
+{"kind": "odom", "receipt_monotonic_s": 274154.44653921, "stamp_s": 1.26, "frame": "odom", "child": "base_link", "x": 0.08410627172244092, "y": -0.0006727402130885955, "v": 0.18567297802256635, "w": -0.035313563001470136}
+{"kind": "clock", "receipt_monotonic_s": 274154.451891776, "stamp_s": 1.2650000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274154.46653304, "stamp_s": 1.28, "frame": "odom", "child": "base_link", "x": 0.08781923486022358, "y": -0.0007334532377045929, "v": 0.18567297802256635, "w": -0.035313563001470136}
+{"kind": "clock", "receipt_monotonic_s": 274154.472573264, "stamp_s": 1.2850000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274154.486533986, "stamp_s": 1.3, "frame": "odom", "child": "base_link", "x": 0.09153215419209702, "y": -0.0007967886061137913, "v": 0.18567297802256635, "w": -0.035313563001470136}
+{"kind": "clock", "receipt_monotonic_s": 274154.491871873, "stamp_s": 1.305}
+{"kind": "output", "receipt_monotonic_s": 274154.492473555, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274154.50799023, "stamp_s": 1.32, "frame": "odom", "child": "base_link", "x": 0.09283166527041686, "y": -0.0008195755080423984, "v": 3.1723443316700184e-10, "w": 1.4069869007245342e-10}
+{"kind": "clock", "receipt_monotonic_s": 274154.511880517, "stamp_s": 1.325}
+{"kind": "odom", "receipt_monotonic_s": 274154.526226921, "stamp_s": 1.34, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.000819575508076478, "v": -2.7755575615628914e-15, "w": 6.308085367188389e-14}
+{"kind": "clock", "receipt_monotonic_s": 274154.532310604, "stamp_s": 1.345}
+{"kind": "odom", "receipt_monotonic_s": 274154.546333056, "stamp_s": 1.36, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.000819575508076478, "v": 0.0, "w": 5.046468293750711e-14}
+{"kind": "clock", "receipt_monotonic_s": 274154.551879798, "stamp_s": 1.365}
+{"kind": "odom", "receipt_monotonic_s": 274154.567302756, "stamp_s": 1.38, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764767, "v": -5.551115123125783e-15, "w": 2.5232341468753555e-14}
+{"kind": "clock", "receipt_monotonic_s": 274154.571950878, "stamp_s": 1.385}
+{"kind": "odom", "receipt_monotonic_s": 274154.586600632, "stamp_s": 1.4, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.591898405, "stamp_s": 1.405}
+{"kind": "odom", "receipt_monotonic_s": 274154.606868075, "stamp_s": 1.42, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.611963033, "stamp_s": 1.425}
+{"kind": "odom", "receipt_monotonic_s": 274154.626416101, "stamp_s": 1.44, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.6319201, "stamp_s": 1.445}
+{"kind": "odom", "receipt_monotonic_s": 274154.646477137, "stamp_s": 1.46, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.651914577, "stamp_s": 1.465}
+{"kind": "odom", "receipt_monotonic_s": 274154.666449079, "stamp_s": 1.48, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.672014816, "stamp_s": 1.485}
+{"kind": "odom", "receipt_monotonic_s": 274154.686387028, "stamp_s": 1.5, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.691873263, "stamp_s": 1.505}
+{"kind": "odom", "receipt_monotonic_s": 274154.706601257, "stamp_s": 1.52, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.711863307, "stamp_s": 1.525}
+{"kind": "odom", "receipt_monotonic_s": 274154.726175084, "stamp_s": 1.54, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.73192945, "stamp_s": 1.545}
+{"kind": "odom", "receipt_monotonic_s": 274154.746796485, "stamp_s": 1.56, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.75190254, "stamp_s": 1.565}
+{"kind": "odom", "receipt_monotonic_s": 274154.766239445, "stamp_s": 1.58, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.771757626, "stamp_s": 1.585}
+{"kind": "odom", "receipt_monotonic_s": 274154.786238506, "stamp_s": 1.6, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.79183212, "stamp_s": 1.605}
+{"kind": "odom", "receipt_monotonic_s": 274154.806314999, "stamp_s": 1.62, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.811854219, "stamp_s": 1.625}
+{"kind": "odom", "receipt_monotonic_s": 274154.826538034, "stamp_s": 1.6400000000000001, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.83183532, "stamp_s": 1.645}
+{"kind": "odom", "receipt_monotonic_s": 274154.846275117, "stamp_s": 1.6600000000000001, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.851870769, "stamp_s": 1.665}
+{"kind": "odom", "receipt_monotonic_s": 274154.866427812, "stamp_s": 1.6800000000000002, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.872025706, "stamp_s": 1.685}
+{"kind": "odom", "receipt_monotonic_s": 274154.886389243, "stamp_s": 1.7000000000000002, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274154.891882902, "stamp_s": 1.705}
+{"kind": "odom", "receipt_monotonic_s": 274154.906359995, "stamp_s": 1.7200000000000002, "frame": "odom", "child": "base_link", "x": 0.09283166527234679, "y": -0.0008195755080764759, "v": 0.0, "w": 0.0}
+{"kind": "output", "receipt_monotonic_s": 274154.907033799, "v": 0.1879768032501669, "w": 0.00968621667133112}
+{"kind": "clock", "receipt_monotonic_s": 274154.911829785, "stamp_s": 1.725}
+{"kind": "odom", "receipt_monotonic_s": 274154.926478503, "stamp_s": 1.74, "frame": "odom", "child": "base_link", "x": 0.0962147254935525, "y": -0.0008790206585740025, "v": 0.18797680293222502, "w": 0.0096862164854816}
+{"kind": "clock", "receipt_monotonic_s": 274154.931814141, "stamp_s": 1.745}
+{"kind": "odom", "receipt_monotonic_s": 274154.947765226, "stamp_s": 1.76, "frame": "odom", "child": "base_link", "x": 0.09997369339123693, "y": -0.0009443790336138351, "v": 0.18797680324974048, "w": 0.009686216670390506}
+{"kind": "clock", "receipt_monotonic_s": 274154.951856809, "stamp_s": 1.7650000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274154.966395387, "stamp_s": 1.78, "frame": "odom", "child": "base_link", "x": 0.10373267388079284, "y": -0.001009009203899144, "v": 0.18797680324945248, "w": 0.009686216682435796}
+{"kind": "clock", "receipt_monotonic_s": 274154.971971826, "stamp_s": 1.7850000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274154.986351447, "stamp_s": 1.8, "frame": "odom", "child": "base_link", "x": 0.10749166682024723, "y": -0.001072911166986682, "v": 0.18797680324947258, "w": 0.0096862166745223}
+{"kind": "clock", "receipt_monotonic_s": 274154.991836076, "stamp_s": 1.8050000000000002}
+{"kind": "clock", "receipt_monotonic_s": 274155.332606789, "stamp_s": 2.044}
+{"kind": "odom", "receipt_monotonic_s": 274155.332938527, "stamp_s": 1.86, "frame": "odom", "child": "base_link", "x": 0.11876871892729604, "y": -0.0012602477892112403, "v": 0.18797680324947125, "w": 0.009686216674686313}
+{"kind": "odom", "receipt_monotonic_s": 274155.333558242, "stamp_s": 1.88, "frame": "odom", "child": "base_link", "x": 0.12252776025563214, "y": -0.0013212368997965944, "v": 0.18797680324946778, "w": 0.009686216674702082}
+{"kind": "odom", "receipt_monotonic_s": 274155.333967678, "stamp_s": 1.9, "frame": "odom", "child": "base_link", "x": 0.12628681332850672, "y": -0.0013814977914676653, "v": 0.18797680324947885, "w": 0.009686216674752546}
+{"kind": "odom", "receipt_monotonic_s": 274155.334307207, "stamp_s": 1.92, "frame": "odom", "child": "base_link", "x": 0.1300458780048456, "y": -0.0014410304619599742, "v": 0.18797680324946847, "w": 0.009686216674806165}
+{"kind": "odom", "receipt_monotonic_s": 274155.334578009, "stamp_s": 1.94, "frame": "odom", "child": "base_link", "x": 0.13380495414357405, "y": -0.001499834909041617, "v": 0.18797680324946775, "w": 0.009686216674803011}
+{"kind": "odom", "receipt_monotonic_s": 274155.334843425, "stamp_s": 1.96, "frame": "odom", "child": "base_link", "x": 0.1375640416036178, "y": -0.0015579111305026455, "v": 0.1879768032494983, "w": 0.009686216666388024}
+{"kind": "odom", "receipt_monotonic_s": 274155.335148004, "stamp_s": 1.98, "frame": "odom", "child": "base_link", "x": 0.14132314024390089, "y": -0.0016152591241680077, "v": 0.18797680324949, "w": 0.009686216666425874}
+{"kind": "odom", "receipt_monotonic_s": 274155.335414913, "stamp_s": 2.0, "frame": "odom", "child": "base_link", "x": 0.1450822499233479, "y": -0.0016718788878851817, "v": 0.18797680324949, "w": 0.009686216666425874}
+{"kind": "odom", "receipt_monotonic_s": 274155.335679686, "stamp_s": 2.02, "frame": "odom", "child": "base_link", "x": 0.14884137050088278, "y": -0.0017277704195253457, "v": 0.18797680324949825, "w": 0.009686216666463722}
+{"kind": "odom", "receipt_monotonic_s": 274155.335944665, "stamp_s": 2.04, "frame": "odom", "child": "base_link", "x": 0.15260050183542906, "y": -0.0017829337169963458, "v": 0.18797680324950106, "w": 0.009686216666476339}
+{"kind": "clock", "receipt_monotonic_s": 274156.380570176, "stamp_s": 2.044}
+{"kind": "clock", "receipt_monotonic_s": 274156.391988148, "stamp_s": 2.057}
+{"kind": "odom", "receipt_monotonic_s": 274156.394380734, "stamp_s": 2.06, "frame": "odom", "child": "base_link", "x": 0.15635964378590983, "y": -0.0018373687782232424, "v": 0.18797680324949, "w": 0.009686216666526802}
+{"kind": "clock", "receipt_monotonic_s": 274156.411895176, "stamp_s": 2.077}
+{"kind": "odom", "receipt_monotonic_s": 274156.414421393, "stamp_s": 2.08, "frame": "odom", "child": "base_link", "x": 0.16011879621124792, "y": -0.0018910756011637604, "v": 0.18797680324949, "w": 0.009686216666526802}
+{"kind": "clock", "receipt_monotonic_s": 274156.432490558, "stamp_s": 2.097}
+{"kind": "odom", "receipt_monotonic_s": 274156.436155698, "stamp_s": 2.1, "frame": "odom", "child": "base_link", "x": 0.16387795897036556, "y": -0.0019440541838055502, "v": 0.18797680324949, "w": 0.009686216666526802}
+{"kind": "clock", "receipt_monotonic_s": 274156.451963779, "stamp_s": 2.116}
+{"kind": "odom", "receipt_monotonic_s": 274156.455258228, "stamp_s": 2.12, "frame": "odom", "child": "base_link", "x": 0.16763713192218466, "y": -0.00199630452415779, "v": 0.18797680324949, "w": 0.009686216666526802}
+{"kind": "clock", "receipt_monotonic_s": 274156.471896624, "stamp_s": 2.136}
+{"kind": "odom", "receipt_monotonic_s": 274156.475252834, "stamp_s": 2.14, "frame": "odom", "child": "base_link", "x": 0.1713963149256268, "y": -0.0020478266202597897, "v": 0.18797680324949276, "w": 0.00968621666653942}
+{"kind": "clock", "receipt_monotonic_s": 274156.49182051, "stamp_s": 2.156}
+{"kind": "odom", "receipt_monotonic_s": 274156.495414995, "stamp_s": 2.16, "frame": "odom", "child": "base_link", "x": 0.17515550783961334, "y": -0.0020986204701787066, "v": 0.18797680324950106, "w": 0.00968621666657727}
+{"kind": "clock", "receipt_monotonic_s": 274156.512031557, "stamp_s": 2.176}
+{"kind": "odom", "receipt_monotonic_s": 274156.515478368, "stamp_s": 2.18, "frame": "odom", "child": "base_link", "x": 0.17891471052306493, "y": -0.0021486860720078818, "v": 0.18797680324949276, "w": 0.009686216666615117}
+{"kind": "clock", "receipt_monotonic_s": 274156.53186062, "stamp_s": 2.196}
+{"kind": "odom", "receipt_monotonic_s": 274156.535676772, "stamp_s": 2.2, "frame": "odom", "child": "base_link", "x": 0.18267392283490208, "y": -0.0021980234238684667, "v": 0.18797680324949, "w": 0.009686216666627733}
+{"kind": "clock", "receipt_monotonic_s": 274156.551917354, "stamp_s": 2.216}
+{"kind": "output", "receipt_monotonic_s": 274156.552521602, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274156.555352242, "stamp_s": 2.22, "frame": "odom", "child": "base_link", "x": 0.18605722203177702, "y": -0.002241804385296254, "v": 0.150381442655044, "w": 0.007748973397890673}
+{"kind": "clock", "receipt_monotonic_s": 274156.571888609, "stamp_s": 2.236}
+{"kind": "odom", "receipt_monotonic_s": 274156.575364234, "stamp_s": 2.24, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 2.354616501776263e-10, "w": 1.2124140075736085e-10}
+{"kind": "clock", "receipt_monotonic_s": 274156.59238873, "stamp_s": 2.2560000000000002}
+{"kind": "odom", "receipt_monotonic_s": 274156.595552929, "stamp_s": 2.26, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": -6.938893903907228e-15, "w": 6.938893903907228e-14}
+{"kind": "clock", "receipt_monotonic_s": 274156.611944059, "stamp_s": 2.276}
+{"kind": "odom", "receipt_monotonic_s": 274156.616017366, "stamp_s": 2.2800000000000002, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": -1.1102230246251565e-14, "w": 5.046468293750711e-14}
+{"kind": "clock", "receipt_monotonic_s": 274156.631934632, "stamp_s": 2.2960000000000003}
+{"kind": "odom", "receipt_monotonic_s": 274156.63525391, "stamp_s": 2.3, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.651874158, "stamp_s": 2.316}
+{"kind": "odom", "receipt_monotonic_s": 274156.655339753, "stamp_s": 2.32, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.67190135, "stamp_s": 2.336}
+{"kind": "odom", "receipt_monotonic_s": 274156.675325409, "stamp_s": 2.34, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.691899275, "stamp_s": 2.356}
+{"kind": "odom", "receipt_monotonic_s": 274156.695506194, "stamp_s": 2.36, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.712055737, "stamp_s": 2.376}
+{"kind": "odom", "receipt_monotonic_s": 274156.715264169, "stamp_s": 2.38, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.731861694, "stamp_s": 2.396}
+{"kind": "odom", "receipt_monotonic_s": 274156.735413603, "stamp_s": 2.4, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.751831175, "stamp_s": 2.416}
+{"kind": "odom", "receipt_monotonic_s": 274156.755363371, "stamp_s": 2.42, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.772093553, "stamp_s": 2.436}
+{"kind": "odom", "receipt_monotonic_s": 274156.775825431, "stamp_s": 2.44, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.791938555, "stamp_s": 2.456}
+{"kind": "odom", "receipt_monotonic_s": 274156.796085692, "stamp_s": 2.46, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.811866305, "stamp_s": 2.476}
+{"kind": "odom", "receipt_monotonic_s": 274156.815260919, "stamp_s": 2.48, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.831858576, "stamp_s": 2.496}
+{"kind": "odom", "receipt_monotonic_s": 274156.835264679, "stamp_s": 2.5, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.851966731, "stamp_s": 2.516}
+{"kind": "odom", "receipt_monotonic_s": 274156.85536205, "stamp_s": 2.52, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.872107451, "stamp_s": 2.536}
+{"kind": "odom", "receipt_monotonic_s": 274156.875514141, "stamp_s": 2.54, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.891894547, "stamp_s": 2.556}
+{"kind": "odom", "receipt_monotonic_s": 274156.895357314, "stamp_s": 2.56, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.911840835, "stamp_s": 2.576}
+{"kind": "odom", "receipt_monotonic_s": 274156.915427655, "stamp_s": 2.58, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.931877804, "stamp_s": 2.596}
+{"kind": "odom", "receipt_monotonic_s": 274156.935306036, "stamp_s": 2.6, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.951858693, "stamp_s": 2.616}
+{"kind": "odom", "receipt_monotonic_s": 274156.955199276, "stamp_s": 2.62, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.972678734, "stamp_s": 2.636}
+{"kind": "odom", "receipt_monotonic_s": 274156.975386823, "stamp_s": 2.64, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274156.991860396, "stamp_s": 2.656}
+{"kind": "odom", "receipt_monotonic_s": 274156.996143915, "stamp_s": 2.66, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274157.011909988, "stamp_s": 2.676}
+{"kind": "odom", "receipt_monotonic_s": 274157.015451072, "stamp_s": 2.68, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274157.03182278, "stamp_s": 2.696}
+{"kind": "odom", "receipt_monotonic_s": 274157.035272257, "stamp_s": 2.7, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274157.051901192, "stamp_s": 2.716}
+{"kind": "odom", "receipt_monotonic_s": 274157.055272626, "stamp_s": 2.72, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274157.072019397, "stamp_s": 2.736}
+{"kind": "odom", "receipt_monotonic_s": 274157.075272779, "stamp_s": 2.74, "frame": "odom", "child": "base_link", "x": 0.18605722203732533, "y": -0.0022418043853675656, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274157.091851263, "stamp_s": 2.7560000000000002}
+{"kind": "output", "receipt_monotonic_s": 274157.092499291, "v": 0.17908088400143263, "w": 0.006731614866042566}
+{"kind": "odom", "receipt_monotonic_s": 274157.096294749, "stamp_s": 2.76, "frame": "odom", "child": "base_link", "x": 0.18641535425473735, "y": -0.0022464050925888627, "v": 0.0358161767442175, "w": 0.0013463229512988334}
+{"kind": "clock", "receipt_monotonic_s": 274157.111851558, "stamp_s": 2.776}
+{"kind": "odom", "receipt_monotonic_s": 274157.115505246, "stamp_s": 2.7800000000000002, "frame": "odom", "child": "base_link", "x": 0.18999667982299442, "y": -0.002292146975740994, "v": 0.17908088374996717, "w": 0.006731614682311084}
+{"kind": "clock", "receipt_monotonic_s": 274157.131871763, "stamp_s": 2.7960000000000003}
+{"kind": "odom", "receipt_monotonic_s": 274157.135428839, "stamp_s": 2.8, "frame": "odom", "child": "base_link", "x": 0.19357801152281442, "y": -0.002337406696473362, "v": 0.17908088400100522, "w": 0.006731614865031084}
+{"kind": "clock", "receipt_monotonic_s": 274157.151895134, "stamp_s": 2.816}
+{"kind": "odom", "receipt_monotonic_s": 274157.155425193, "stamp_s": 2.8200000000000003, "frame": "odom", "child": "base_link", "x": 0.1971593492835931, "y": -0.0023821842538776605, "v": 0.1790808840007374, "w": 0.00673161486916288}
+{"kind": "clock", "receipt_monotonic_s": 274157.171907183, "stamp_s": 2.8360000000000003}
+{"kind": "odom", "receipt_monotonic_s": 274157.176189873, "stamp_s": 2.84, "frame": "odom", "child": "base_link", "x": 0.20074069304041822, "y": -0.0024264796471497227, "v": 0.17908088400073466, "w": 0.006731614869251194}
+{"kind": "clock", "receipt_monotonic_s": 274157.191906435, "stamp_s": 2.856}
+{"kind": "odom", "receipt_monotonic_s": 274157.195257687, "stamp_s": 2.8600000000000003, "frame": "odom", "child": "base_link", "x": 0.20432204272837654, "y": -0.002470292875484233, "v": 0.17908088400073882, "w": 0.006731614869270118}
+{"kind": "clock", "receipt_monotonic_s": 274157.212209294, "stamp_s": 2.8600000000000003}
+{"kind": "odom", "receipt_monotonic_s": 274157.215297558, "stamp_s": 2.88, "frame": "odom", "child": "base_link", "x": 0.20790339828255278, "y": -0.0025136239380870256, "v": 0.1790808840007374, "w": 0.006731614869263811}
+{"kind": "odom", "receipt_monotonic_s": 274157.235546552, "stamp_s": 2.9, "frame": "odom", "child": "base_link", "x": 0.21148475963803226, "y": -0.0025564728341720857, "v": 0.1790808840007596, "w": 0.0067316148693647385}
+{"kind": "odom", "receipt_monotonic_s": 274157.255348301, "stamp_s": 2.92, "frame": "odom", "child": "base_link", "x": 0.21506612672989975, "y": -0.0025988395629621018, "v": 0.1790808840007374, "w": 0.006731614869465667}
+{"kind": "odom", "receipt_monotonic_s": 274157.2760769, "stamp_s": 2.94, "frame": "odom", "child": "base_link", "x": 0.21864749949323956, "y": -0.002640724123692999, "v": 0.1790808840007374, "w": 0.006731614869465667}
+{"kind": "odom", "receipt_monotonic_s": 274157.295578544, "stamp_s": 2.96, "frame": "odom", "child": "base_link", "x": 0.2222288778631363, "y": -0.0026821265155998354, "v": 0.1790808840007374, "w": 0.006731614869465667}
+{"kind": "odom", "receipt_monotonic_s": 274157.315433867, "stamp_s": 2.98, "frame": "odom", "child": "base_link", "x": 0.22581026177467442, "y": -0.0027230467379383227, "v": 0.1790808840007374, "w": 0.006731614869465667}
+{"kind": "odom", "receipt_monotonic_s": 274157.335348044, "stamp_s": 3.0, "frame": "odom", "child": "base_link", "x": 0.2293916511629382, "y": -0.0027634847899609587, "v": 0.17908088400075683, "w": 0.006731614869553981}
+{"kind": "odom", "receipt_monotonic_s": 274157.355422426, "stamp_s": 3.02, "frame": "odom", "child": "base_link", "x": 0.23297304596301202, "y": -0.002803440670936657, "v": 0.1790808840007596, "w": 0.006731614861088529}
+{"kind": "odom", "receipt_monotonic_s": 274157.375725678, "stamp_s": 3.04, "frame": "odom", "child": "base_link", "x": 0.23655444610998014, "y": -0.002842914380144641, "v": 0.1790808840007596, "w": 0.006731614861088529}
+{"kind": "odom", "receipt_monotonic_s": 274157.395288429, "stamp_s": 3.06, "frame": "odom", "child": "base_link", "x": 0.24013585153892647, "y": -0.002881905916865577, "v": 0.17908088400075822, "w": 0.006731614861094838}
+{"kind": "odom", "receipt_monotonic_s": 274157.415425571, "stamp_s": 3.08, "frame": "odom", "child": "base_link", "x": 0.2437172621849343, "y": -0.0029204152803959833, "v": 0.1790808840007374, "w": 0.0067316148611894595}
+{"kind": "odom", "receipt_monotonic_s": 274157.43529923, "stamp_s": 3.1, "frame": "odom", "child": "base_link", "x": 0.2472986779830884, "y": -0.0029584424700361115, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.456331272, "stamp_s": 3.12, "frame": "odom", "child": "base_link", "x": 0.25088009886847246, "y": -0.002995987485097883, "v": 0.17908088400075958, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.475462728, "stamp_s": 3.14, "frame": "odom", "child": "base_link", "x": 0.2544615247761699, "y": -0.003033050324896347, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.495658677, "stamp_s": 3.16, "frame": "odom", "child": "base_link", "x": 0.2580429556412643, "y": -0.0030696309887669445, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.515480019, "stamp_s": 3.18, "frame": "odom", "child": "base_link", "x": 0.26162439139883925, "y": -0.003105729476039225, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.53549518, "stamp_s": 3.2, "frame": "odom", "child": "base_link", "x": 0.2652058319839783, "y": -0.003141345786063415, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.555710707, "stamp_s": 3.22, "frame": "odom", "child": "base_link", "x": 0.26878727733176455, "y": -0.0031764799181956465, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.575696012, "stamp_s": 3.24, "frame": "odom", "child": "base_link", "x": 0.27236872737728135, "y": -0.0032111318717920503, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.595469927, "stamp_s": 3.26, "frame": "odom", "child": "base_link", "x": 0.2759501820556117, "y": -0.0032453016462323874, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.615473511, "stamp_s": 3.2800000000000002, "frame": "odom", "child": "base_link", "x": 0.2795316413018389, "y": -0.003278989240890511, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.635440652, "stamp_s": 3.3, "frame": "odom", "child": "base_link", "x": 0.2831131050510458, "y": -0.0033121946551609503, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.655394867, "stamp_s": 3.32, "frame": "odom", "child": "base_link", "x": 0.2866945732383154, "y": -0.003344917888441186, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.675455846, "stamp_s": 3.34, "frame": "odom", "child": "base_link", "x": 0.2902760457987303, "y": -0.0033771589401346063, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.695842736, "stamp_s": 3.36, "frame": "odom", "child": "base_link", "x": 0.29385752266737347, "y": -0.0034089178096593682, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.715473117, "stamp_s": 3.38, "frame": "odom", "child": "base_link", "x": 0.2974390037793275, "y": -0.0034401944964395346, "v": 0.1790808840007596, "w": 0.006731614861290388}
+{"kind": "odom", "receipt_monotonic_s": 274157.73549875, "stamp_s": 3.4, "frame": "odom", "child": "base_link", "x": 0.3010204890696749, "y": -0.0034709889999106347, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274157.755368005, "stamp_s": 3.42, "frame": "odom", "child": "base_link", "x": 0.3046019784734981, "y": -0.0035013013195087823, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274157.77555074, "stamp_s": 3.44, "frame": "odom", "child": "base_link", "x": 0.30818347192587986, "y": -0.0035311314546876953, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274157.7963924, "stamp_s": 3.46, "frame": "odom", "child": "base_link", "x": 0.3117649693619025, "y": -0.0035604794049098327, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274157.815438199, "stamp_s": 3.48, "frame": "odom", "child": "base_link", "x": 0.3153464707166482, "y": -0.0035893451696376523, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274157.835462012, "stamp_s": 3.5, "frame": "odom", "child": "base_link", "x": 0.31892797592519906, "y": -0.003617728748351336, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274157.855444, "stamp_s": 3.52, "frame": "odom", "child": "base_link", "x": 0.3225094849226374, "y": -0.0036456301405340145, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274157.876030824, "stamp_s": 3.54, "frame": "odom", "child": "base_link", "x": 0.32609099764404537, "y": -0.003673049345683592, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274157.895437273, "stamp_s": 3.56, "frame": "odom", "child": "base_link", "x": 0.3296725140245048, "y": -0.003699986363297968, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274157.915430302, "stamp_s": 3.58, "frame": "odom", "child": "base_link", "x": 0.33325403399909787, "y": -0.0037264411928957185, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274157.935325329, "stamp_s": 3.6, "frame": "odom", "child": "base_link", "x": 0.3368355575029063, "y": -0.003752413833989514, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274157.955346508, "stamp_s": 3.62, "frame": "odom", "child": "base_link", "x": 0.3404170844710119, "y": -0.00377790428611565, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274157.976279946, "stamp_s": 3.64, "frame": "odom", "child": "base_link", "x": 0.3439986148384965, "y": -0.00380291254880747, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274157.99532632, "stamp_s": 3.66, "frame": "odom", "child": "base_link", "x": 0.3475801485404417, "y": -0.0038274386216130864, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274158.015567507, "stamp_s": 3.68, "frame": "odom", "child": "base_link", "x": 0.3511616855119294, "y": -0.0038514825040865163, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274158.03534997, "stamp_s": 3.7, "frame": "odom", "child": "base_link", "x": 0.354743225688041, "y": -0.0038750441957965454, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274158.05541257, "stamp_s": 3.72, "frame": "odom", "child": "base_link", "x": 0.3583247690038581, "y": -0.003898123696309008, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274158.075415257, "stamp_s": 3.74, "frame": "odom", "child": "base_link", "x": 0.3619063153944621, "y": -0.003920721005213361, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274158.096313268, "stamp_s": 3.76, "frame": "odom", "child": "base_link", "x": 0.3654878647949342, "y": -0.0039428361220961135, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274158.115507195, "stamp_s": 3.7800000000000002, "frame": "odom", "child": "base_link", "x": 0.36906941714035596, "y": -0.003964469046552633, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274158.135504095, "stamp_s": 3.8, "frame": "odom", "child": "base_link", "x": 0.37265097236580863, "y": -0.003985619778198963, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274158.15540641, "stamp_s": 3.8200000000000003, "frame": "odom", "child": "base_link", "x": 0.3762325304063736, "y": -0.004006288316645237, "v": 0.1790808840007374, "w": 0.006731614861391319}
+{"kind": "odom", "receipt_monotonic_s": 274158.175486054, "stamp_s": 3.84, "frame": "odom", "child": "base_link", "x": 0.37981409119713233, "y": -0.004026474661519049, "v": 0.1790808840007596, "w": 0.006731614861492248}
+{"kind": "odom", "receipt_monotonic_s": 274158.195512206, "stamp_s": 3.8600000000000003, "frame": "odom", "child": "base_link", "x": 0.38339565467316566, "y": -0.004046178812454395, "v": 0.1790808840007596, "w": 0.006731614861492248}
+{"kind": "clock", "receipt_monotonic_s": 274158.211879937, "stamp_s": 3.876}
+{"kind": "output", "receipt_monotonic_s": 274158.212504256, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274158.215298288, "stamp_s": 3.88, "frame": "odom", "child": "base_link", "x": 0.3866190640446046, "y": -0.004063500272188392, "v": 0.14326470727608343, "w": 0.005385291919560923}
+{"kind": "clock", "receipt_monotonic_s": 274158.231907368, "stamp_s": 3.896}
+{"kind": "odom", "receipt_monotonic_s": 274158.235283561, "stamp_s": 3.9, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 1.9954871088856407e-10, "w": 1.0202697272890502e-10}
+{"kind": "clock", "receipt_monotonic_s": 274158.251905129, "stamp_s": 3.916}
+{"kind": "odom", "receipt_monotonic_s": 274158.255256962, "stamp_s": 3.92, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.272101608, "stamp_s": 3.936}
+{"kind": "odom", "receipt_monotonic_s": 274158.275430201, "stamp_s": 3.94, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.29192359, "stamp_s": 3.956}
+{"kind": "odom", "receipt_monotonic_s": 274158.295848426, "stamp_s": 3.96, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.312028737, "stamp_s": 3.976}
+{"kind": "odom", "receipt_monotonic_s": 274158.31526908, "stamp_s": 3.98, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.331922301, "stamp_s": 3.996}
+{"kind": "odom", "receipt_monotonic_s": 274158.335258036, "stamp_s": 4.0, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.351945189, "stamp_s": 4.016}
+{"kind": "odom", "receipt_monotonic_s": 274158.355266045, "stamp_s": 4.02, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.372232028, "stamp_s": 4.036}
+{"kind": "odom", "receipt_monotonic_s": 274158.375347141, "stamp_s": 4.04, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.3918323, "stamp_s": 4.056}
+{"kind": "odom", "receipt_monotonic_s": 274158.395385812, "stamp_s": 4.06, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.411805751, "stamp_s": 4.076}
+{"kind": "odom", "receipt_monotonic_s": 274158.415267078, "stamp_s": 4.08, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.431912468, "stamp_s": 4.096}
+{"kind": "odom", "receipt_monotonic_s": 274158.435260424, "stamp_s": 4.1, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.451941624, "stamp_s": 4.116}
+{"kind": "odom", "receipt_monotonic_s": 274158.455272189, "stamp_s": 4.12, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.472145493, "stamp_s": 4.136}
+{"kind": "odom", "receipt_monotonic_s": 274158.475496268, "stamp_s": 4.14, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.491829615, "stamp_s": 4.156}
+{"kind": "odom", "receipt_monotonic_s": 274158.495379307, "stamp_s": 4.16, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.511957884, "stamp_s": 4.176}
+{"kind": "odom", "receipt_monotonic_s": 274158.515376295, "stamp_s": 4.18, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.531931086, "stamp_s": 4.196}
+{"kind": "odom", "receipt_monotonic_s": 274158.535391015, "stamp_s": 4.2, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.552165997, "stamp_s": 4.216}
+{"kind": "odom", "receipt_monotonic_s": 274158.555422695, "stamp_s": 4.22, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.571888613, "stamp_s": 4.236}
+{"kind": "odom", "receipt_monotonic_s": 274158.576063233, "stamp_s": 4.24, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.591888183, "stamp_s": 4.256}
+{"kind": "odom", "receipt_monotonic_s": 274158.59537076, "stamp_s": 4.26, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.611891891, "stamp_s": 4.276}
+{"kind": "odom", "receipt_monotonic_s": 274158.615372128, "stamp_s": 4.28, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.631846477, "stamp_s": 4.296}
+{"kind": "odom", "receipt_monotonic_s": 274158.635325636, "stamp_s": 4.3, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.652099524, "stamp_s": 4.316}
+{"kind": "odom", "receipt_monotonic_s": 274158.655600489, "stamp_s": 4.32, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.671870707, "stamp_s": 4.336}
+{"kind": "odom", "receipt_monotonic_s": 274158.675242499, "stamp_s": 4.34, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.691920857, "stamp_s": 4.356}
+{"kind": "odom", "receipt_monotonic_s": 274158.695433567, "stamp_s": 4.36, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.71192643, "stamp_s": 4.376}
+{"kind": "odom", "receipt_monotonic_s": 274158.715273945, "stamp_s": 4.38, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.732401394, "stamp_s": 4.396}
+{"kind": "odom", "receipt_monotonic_s": 274158.735502211, "stamp_s": 4.4, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.751856667, "stamp_s": 4.416}
+{"kind": "odom", "receipt_monotonic_s": 274158.755324287, "stamp_s": 4.42, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.771986491, "stamp_s": 4.436}
+{"kind": "odom", "receipt_monotonic_s": 274158.77529068, "stamp_s": 4.44, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.791909172, "stamp_s": 4.456}
+{"kind": "odom", "receipt_monotonic_s": 274158.795357323, "stamp_s": 4.46, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.812580765, "stamp_s": 4.476}
+{"kind": "odom", "receipt_monotonic_s": 274158.815523556, "stamp_s": 4.48, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.831834433, "stamp_s": 4.496}
+{"kind": "odom", "receipt_monotonic_s": 274158.836284738, "stamp_s": 4.5, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.851862032, "stamp_s": 4.516}
+{"kind": "odom", "receipt_monotonic_s": 274158.855336288, "stamp_s": 4.52, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.871884901, "stamp_s": 4.536}
+{"kind": "odom", "receipt_monotonic_s": 274158.875224905, "stamp_s": 4.54, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.891840678, "stamp_s": 4.556}
+{"kind": "odom", "receipt_monotonic_s": 274158.895317679, "stamp_s": 4.5600000000000005, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.912138927, "stamp_s": 4.5760000000000005}
+{"kind": "odom", "receipt_monotonic_s": 274158.915324834, "stamp_s": 4.58, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.931832029, "stamp_s": 4.596}
+{"kind": "odom", "receipt_monotonic_s": 274158.936586805, "stamp_s": 4.6, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.951838226, "stamp_s": 4.616}
+{"kind": "odom", "receipt_monotonic_s": 274158.955226957, "stamp_s": 4.62, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.971928637, "stamp_s": 4.636}
+{"kind": "odom", "receipt_monotonic_s": 274158.97525984, "stamp_s": 4.64, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274158.991866786, "stamp_s": 4.656}
+{"kind": "odom", "receipt_monotonic_s": 274158.995391998, "stamp_s": 4.66, "frame": "odom", "child": "base_link", "x": 0.38661906404977286, "y": -0.004063500272215854, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274159.012774507, "stamp_s": 4.676}
+{"kind": "output", "receipt_monotonic_s": 274159.01380374, "v": 0.20187880142138814, "w": 0.026370547871575317}
+{"kind": "odom", "receipt_monotonic_s": 274159.016034821, "stamp_s": 4.68, "frame": "odom", "child": "base_link", "x": 0.3870228160097872, "y": -0.004065634782894775, "v": 0.04037576022678513, "w": 0.005274109551589579}
+{"kind": "clock", "receipt_monotonic_s": 274159.031863196, "stamp_s": 4.696}
+{"kind": "odom", "receipt_monotonic_s": 274159.035379646, "stamp_s": 4.7, "frame": "odom", "child": "base_link", "x": 0.39106034158489256, "y": -0.0040858087009297585, "v": 0.20187880110965617, "w": 0.026370547672738276}
+{"kind": "clock", "receipt_monotonic_s": 274159.051879238, "stamp_s": 4.716}
+{"kind": "odom", "receipt_monotonic_s": 274159.055331484, "stamp_s": 4.72, "frame": "odom", "child": "base_link", "x": 0.39509787724452117, "y": -0.004103853181068995, "v": 0.2018788014209738, "w": 0.026370547870307508}
+{"kind": "clock", "receipt_monotonic_s": 274159.071864518, "stamp_s": 4.736}
+{"kind": "odom", "receipt_monotonic_s": 274159.075299929, "stamp_s": 4.74, "frame": "odom", "child": "base_link", "x": 0.39913542185962425, "y": -0.004119768218249715, "v": 0.20187880142070735, "w": 0.02637054786606848}
+{"kind": "clock", "receipt_monotonic_s": 274159.091971931, "stamp_s": 4.756}
+{"kind": "odom", "receipt_monotonic_s": 274159.095401667, "stamp_s": 4.76, "frame": "odom", "child": "base_link", "x": 0.40317297430694404, "y": -0.004133553808045777, "v": 0.20187880142072956, "w": 0.0263705478661694}
+{"kind": "clock", "receipt_monotonic_s": 274159.111931408, "stamp_s": 4.776}
+{"kind": "odom", "receipt_monotonic_s": 274159.115520765, "stamp_s": 4.78, "frame": "odom", "child": "base_link", "x": 0.40721053346338726, "y": -0.004145209946621999, "v": 0.20187880142072956, "w": 0.0263705478661694}
+{"kind": "clock", "receipt_monotonic_s": 274159.477884628, "stamp_s": 5.041}
+{"kind": "odom", "receipt_monotonic_s": 274159.478170878, "stamp_s": 4.88, "frame": "odom", "child": "base_link", "x": 0.42739839057401396, "y": -0.004171548778450512, "v": 0.20187880142072956, "w": 0.026370547866573123}
+{"kind": "odom", "receipt_monotonic_s": 274159.478478723, "stamp_s": 4.9, "frame": "odom", "child": "base_link", "x": 0.43143596640012105, "y": -0.004170428162349026, "v": 0.20187880142072956, "w": 0.026370547866573123}
+{"kind": "odom", "receipt_monotonic_s": 274159.478748782, "stamp_s": 4.92, "frame": "odom", "child": "base_link", "x": 0.4354735410736521, "y": -0.004167178084770829, "v": 0.20187880142072956, "w": 0.026370547866573123}
+{"kind": "odom", "receipt_monotonic_s": 274159.479029243, "stamp_s": 4.94, "frame": "odom", "child": "base_link", "x": 0.43951111347150623, "y": -0.004161798546619396, "v": 0.20187880142072956, "w": 0.026370547866573123}
+{"kind": "odom", "receipt_monotonic_s": 274159.479310236, "stamp_s": 4.96, "frame": "odom", "child": "base_link", "x": 0.4435486824705825, "y": -0.0041542895493906235, "v": 0.2018788014206907, "w": 0.02637054786674975}
+{"kind": "odom", "receipt_monotonic_s": 274159.479594293, "stamp_s": 4.98, "frame": "odom", "child": "base_link", "x": 0.4475862469477812, "y": -0.0041446510951745055, "v": 0.20187880142068515, "w": 0.02637054786677498}
+{"kind": "odom", "receipt_monotonic_s": 274159.47985695, "stamp_s": 5.0, "frame": "odom", "child": "base_link", "x": 0.4516238057800048, "y": -0.00413288318665083, "v": 0.20187880142068515, "w": 0.02637054786677498}
+{"kind": "odom", "receipt_monotonic_s": 274159.480144332, "stamp_s": 5.02, "frame": "odom", "child": "base_link", "x": 0.4556613578441564, "y": -0.0041189858270943664, "v": 0.20187880142068515, "w": 0.02637054786677498}
+{"kind": "odom", "receipt_monotonic_s": 274159.480416234, "stamp_s": 5.04, "frame": "odom", "child": "base_link", "x": 0.45969890201714125, "y": -0.004102959020368886, "v": 0.20187880142068515, "w": 0.02637054786677498}
+{"kind": "odom", "receipt_monotonic_s": 274159.480689454, "stamp_s": 0.0, "frame": "odom", "child": "base_link", "x": 0.46010265595718647, "y": -0.004101239220269447, "v": 0.18168691654143201, "w": 0.02373296995873027}
+{"kind": "clock", "receipt_monotonic_s": 274159.492352832, "stamp_s": 0.015000000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274159.497192716, "stamp_s": 0.02, "frame": "odom", "child": "base_link", "x": 0.46414019015271585, "y": -0.004082870026831808, "v": 0.20187880142068515, "w": 0.02637054786677498}
+{"kind": "clock", "receipt_monotonic_s": 274159.511847686, "stamp_s": 0.035}
+{"kind": "odom", "receipt_monotonic_s": 274159.517270627, "stamp_s": 0.04, "frame": "odom", "child": "base_link", "x": 0.46817771409858694, "y": -0.004062371396272145, "v": 0.20187880142068515, "w": 0.02637054786677498}
+{"kind": "clock", "receipt_monotonic_s": 274159.531767375, "stamp_s": 0.055}
+{"kind": "odom", "receipt_monotonic_s": 274159.536866507, "stamp_s": 0.060000000000000005, "frame": "odom", "child": "base_link", "x": 0.4722152266717125, "y": -0.004039743334292618, "v": 0.20187880142068515, "w": 0.02637054786677498}
+{"kind": "clock", "receipt_monotonic_s": 274159.55175741, "stamp_s": 0.07500000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274159.557026707, "stamp_s": 0.08, "frame": "odom", "child": "base_link", "x": 0.4762527267490089, "y": -0.004014985847187786, "v": 0.20187880142068515, "w": 0.02637054786677498}
+{"kind": "clock", "receipt_monotonic_s": 274159.571839092, "stamp_s": 0.095}
+{"kind": "odom", "receipt_monotonic_s": 274159.576782773, "stamp_s": 0.1, "frame": "odom", "child": "base_link", "x": 0.48029021320739573, "y": -0.003988098941843765, "v": 0.20187880142068515, "w": 0.02637054786677498}
+{"kind": "clock", "receipt_monotonic_s": 274159.592225305, "stamp_s": 0.115}
+{"kind": "output", "receipt_monotonic_s": 274159.593039565, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274159.597350237, "stamp_s": 0.12000000000000001, "frame": "odom", "child": "base_link", "x": 0.4837220651513756, "y": -0.003963570822772712, "v": 0.14131516110314768, "w": 0.01845938355733081}
+{"kind": "clock", "receipt_monotonic_s": 274159.611850263, "stamp_s": 0.135}
+{"kind": "odom", "receipt_monotonic_s": 274159.616838934, "stamp_s": 0.14, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 2.4317770019877116e-10, "w": 1.9920933589580932e-10}
+{"kind": "clock", "receipt_monotonic_s": 274159.631884808, "stamp_s": 0.155}
+{"kind": "odom", "receipt_monotonic_s": 274159.637084888, "stamp_s": 0.16, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274159.651771338, "stamp_s": 0.17500000000000002}
+{"kind": "odom", "receipt_monotonic_s": 274159.656934143, "stamp_s": 0.18000000000000002, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274159.671878933, "stamp_s": 0.195}
+{"kind": "odom", "receipt_monotonic_s": 274159.67694732, "stamp_s": 0.2, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274159.692027891, "stamp_s": 0.21500000000000002}
+{"kind": "odom", "receipt_monotonic_s": 274159.697405061, "stamp_s": 0.22, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274159.711865424, "stamp_s": 0.23500000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274159.717220197, "stamp_s": 0.24000000000000002, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274159.73193224, "stamp_s": 0.255}
+{"kind": "clock", "receipt_monotonic_s": 274160.074223987, "stamp_s": 0.49400000000000005}
+{"kind": "odom", "receipt_monotonic_s": 274160.074638975, "stamp_s": 0.30000000000000004, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274160.075097075, "stamp_s": 0.32, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274160.075405226, "stamp_s": 0.34, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274160.075908776, "stamp_s": 0.36000000000000004, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274160.07625323, "stamp_s": 0.38, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274160.076707709, "stamp_s": 0.4, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274160.077218404, "stamp_s": 0.42000000000000004, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274160.077591998, "stamp_s": 0.44, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274160.078050795, "stamp_s": 0.46, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274160.078349394, "stamp_s": 0.48000000000000004, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "odom", "receipt_monotonic_s": 274160.078829552, "stamp_s": 0.5, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.092064524, "stamp_s": 0.515}
+{"kind": "odom", "receipt_monotonic_s": 274160.097115202, "stamp_s": 0.52, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.111845558, "stamp_s": 0.535}
+{"kind": "odom", "receipt_monotonic_s": 274160.117011028, "stamp_s": 0.54, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.131825628, "stamp_s": 0.555}
+{"kind": "odom", "receipt_monotonic_s": 274160.136917208, "stamp_s": 0.56, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.151965373, "stamp_s": 0.5750000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274160.156869544, "stamp_s": 0.5800000000000001, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.171958828, "stamp_s": 0.5950000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274160.177013294, "stamp_s": 0.6000000000000001, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.19179741, "stamp_s": 0.615}
+{"kind": "odom", "receipt_monotonic_s": 274160.197867051, "stamp_s": 0.62, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.212092287, "stamp_s": 0.635}
+{"kind": "odom", "receipt_monotonic_s": 274160.217096332, "stamp_s": 0.64, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.231975058, "stamp_s": 0.655}
+{"kind": "odom", "receipt_monotonic_s": 274160.236997587, "stamp_s": 0.66, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.251932523, "stamp_s": 0.675}
+{"kind": "odom", "receipt_monotonic_s": 274160.257017553, "stamp_s": 0.68, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.271970345, "stamp_s": 0.6950000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274160.276950639, "stamp_s": 0.7000000000000001, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.291854972, "stamp_s": 0.7150000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274160.297098326, "stamp_s": 0.7200000000000001, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.311890602, "stamp_s": 0.7350000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274160.317596146, "stamp_s": 0.74, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.331937213, "stamp_s": 0.755}
+{"kind": "odom", "receipt_monotonic_s": 274160.336923309, "stamp_s": 0.76, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.35185855, "stamp_s": 0.775}
+{"kind": "odom", "receipt_monotonic_s": 274160.356947703, "stamp_s": 0.78, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.371849516, "stamp_s": 0.795}
+{"kind": "odom", "receipt_monotonic_s": 274160.376945777, "stamp_s": 0.8, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.391849085, "stamp_s": 0.8150000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274160.396978547, "stamp_s": 0.8200000000000001, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.412205455, "stamp_s": 0.8350000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274160.417090913, "stamp_s": 0.8400000000000001, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.432005698, "stamp_s": 0.8550000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274160.437841957, "stamp_s": 0.8600000000000001, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.451928587, "stamp_s": 0.875}
+{"kind": "odom", "receipt_monotonic_s": 274160.456869325, "stamp_s": 0.88, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.471965559, "stamp_s": 0.895}
+{"kind": "odom", "receipt_monotonic_s": 274160.476900476, "stamp_s": 0.9, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.492016043, "stamp_s": 0.915}
+{"kind": "odom", "receipt_monotonic_s": 274160.496977084, "stamp_s": 0.92, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.512566594, "stamp_s": 0.934}
+{"kind": "odom", "receipt_monotonic_s": 274160.516952223, "stamp_s": 0.9400000000000001, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.531876053, "stamp_s": 0.9550000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274160.537245708, "stamp_s": 0.9600000000000001, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.551892864, "stamp_s": 0.9750000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274160.557038511, "stamp_s": 0.9800000000000001, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.571840745, "stamp_s": 0.9950000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274160.576862698, "stamp_s": 1.0, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.592061001, "stamp_s": 1.014}
+{"kind": "odom", "receipt_monotonic_s": 274160.596989697, "stamp_s": 1.02, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.61199834, "stamp_s": 1.035}
+{"kind": "odom", "receipt_monotonic_s": 274160.617343569, "stamp_s": 1.04, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.63180592, "stamp_s": 1.055}
+{"kind": "odom", "receipt_monotonic_s": 274160.637141896, "stamp_s": 1.06, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.651884975, "stamp_s": 1.075}
+{"kind": "odom", "receipt_monotonic_s": 274160.656871396, "stamp_s": 1.08, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.671841127, "stamp_s": 1.095}
+{"kind": "odom", "receipt_monotonic_s": 274160.676891664, "stamp_s": 1.1, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.691933484, "stamp_s": 1.115}
+{"kind": "odom", "receipt_monotonic_s": 274160.697068085, "stamp_s": 1.12, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.712653013, "stamp_s": 1.135}
+{"kind": "odom", "receipt_monotonic_s": 274160.717279938, "stamp_s": 1.1400000000000001, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.731865841, "stamp_s": 1.155}
+{"kind": "odom", "receipt_monotonic_s": 274160.737836329, "stamp_s": 1.16, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.751857711, "stamp_s": 1.175}
+{"kind": "odom", "receipt_monotonic_s": 274160.756921955, "stamp_s": 1.18, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274160.771870325, "stamp_s": 1.195}
+{"kind": "odom", "receipt_monotonic_s": 274160.776871326, "stamp_s": 1.2, "frame": "odom", "child": "base_link", "x": 0.4837220651569801, "y": -0.003963570822731397, "v": 0.0, "w": 0.0}
+{"kind": "output", "receipt_monotonic_s": 274160.777533388, "v": 0.17757537680652144, "w": -0.06336866626062593}
+{"kind": "clock", "receipt_monotonic_s": 274160.791913984, "stamp_s": 1.215}
+{"kind": "odom", "receipt_monotonic_s": 274160.796927751, "stamp_s": 1.22, "frame": "odom", "child": "base_link", "x": 0.4869183478413987, "y": -0.003941832869056888, "v": 0.17757537648853683, "w": -0.06336866641529468}
+{"kind": "clock", "receipt_monotonic_s": 274160.812115281, "stamp_s": 1.235}
+{"kind": "odom", "receipt_monotonic_s": 274160.817194742, "stamp_s": 1.24, "frame": "odom", "child": "base_link", "x": 0.49046979951345215, "y": -0.00392195553637848, "v": 0.17757537680611613, "w": -0.06336866625998963}
+{"kind": "clock", "receipt_monotonic_s": 274160.831796187, "stamp_s": 1.255}
+{"kind": "odom", "receipt_monotonic_s": 274160.837577786, "stamp_s": 1.26, "frame": "odom", "child": "base_link", "x": 0.49402127352576247, "y": -0.00390657923357027, "v": 0.17757537680588853, "w": -0.06336866624825657}
+{"kind": "clock", "receipt_monotonic_s": 274160.851754316, "stamp_s": 1.275}
+{"kind": "odom", "receipt_monotonic_s": 274160.857431462, "stamp_s": 1.28, "frame": "odom", "child": "base_link", "x": 0.49757276417332974, "y": -0.003895703985333653, "v": 0.17757537680584967, "w": -0.06336866625595244}
+{"kind": "clock", "receipt_monotonic_s": 274160.871838187, "stamp_s": 1.295}
+{"kind": "odom", "receipt_monotonic_s": 274160.877102368, "stamp_s": 1.3, "frame": "odom", "child": "base_link", "x": 0.5011242657516285, "y": -0.003889329809137558, "v": 0.17757537680584967, "w": -0.06336866625595243}
+{"kind": "clock", "receipt_monotonic_s": 274161.092456918, "stamp_s": 1.5150000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274161.092697021, "stamp_s": 1.32, "frame": "odom", "child": "base_link", "x": 0.5046757725561124, "y": -0.00388745671522041, "v": 0.17757537680580526, "w": -0.06336866625615431}
+{"kind": "odom", "receipt_monotonic_s": 274161.093048529, "stamp_s": 1.34, "frame": "odom", "child": "base_link", "x": 0.5082272788822279, "y": -0.003890084706590348, "v": 0.17757537680580526, "w": -0.06336866625615431}
+{"kind": "odom", "receipt_monotonic_s": 274161.093368928, "stamp_s": 1.36, "frame": "odom", "child": "base_link", "x": 0.5117787790254219, "y": -0.0038972137790264792, "v": 0.17757537680584967, "w": -0.06336866625635616}
+{"kind": "odom", "receipt_monotonic_s": 274161.093760508, "stamp_s": 1.38, "frame": "odom", "child": "base_link", "x": 0.5153302672811503, "y": -0.0039088439210776624, "v": 0.17757537680584967, "w": -0.06336866625635616}
+{"kind": "odom", "receipt_monotonic_s": 274161.094173977, "stamp_s": 1.4, "frame": "odom", "child": "base_link", "x": 0.5188817379448886, "y": -0.00392497511406342, "v": 0.17757537680584967, "w": -0.06336866625635616}
+{"kind": "odom", "receipt_monotonic_s": 274161.09446936, "stamp_s": 1.42, "frame": "odom", "child": "base_link", "x": 0.5224331853121404, "y": -0.0039456073320733144, "v": 0.17757537680584967, "w": -0.06336866625635616}
+{"kind": "odom", "receipt_monotonic_s": 274161.094795713, "stamp_s": 1.44, "frame": "odom", "child": "base_link", "x": 0.5259846036784472, "y": -0.003970740541966946, "v": 0.17757537680584967, "w": -0.06336866625635616}
+{"kind": "odom", "receipt_monotonic_s": 274161.095203772, "stamp_s": 1.46, "frame": "odom", "child": "base_link", "x": 0.5295359873393967, "y": -0.004000374703374578, "v": 0.17757537680584967, "w": -0.06336866625635616}
+{"kind": "odom", "receipt_monotonic_s": 274161.095521679, "stamp_s": 1.48, "frame": "odom", "child": "base_link", "x": 0.5330873305906313, "y": -0.004034509768696735, "v": 0.17757537680580526, "w": -0.063368666256558}
+{"kind": "odom", "receipt_monotonic_s": 274161.095883949, "stamp_s": 1.5, "frame": "odom", "child": "base_link", "x": 0.5366386277278605, "y": -0.004073145683104443, "v": 0.17757537680580526, "w": -0.063368666256558}
+{"kind": "odom", "receipt_monotonic_s": 274161.098055171, "stamp_s": 1.52, "frame": "odom", "child": "base_link", "x": 0.5401898730468666, "y": -0.004116282384539358, "v": 0.17757537680580526, "w": -0.063368666256558}
+{"kind": "clock", "receipt_monotonic_s": 274161.111861174, "stamp_s": 1.533}
+{"kind": "odom", "receipt_monotonic_s": 274161.11861018, "stamp_s": 1.54, "frame": "odom", "child": "base_link", "x": 0.5437410608435157, "y": -0.004163919803714081, "v": 0.17757537680580526, "w": -0.063368666256558}
+{"kind": "clock", "receipt_monotonic_s": 274161.132194346, "stamp_s": 1.553}
+{"kind": "odom", "receipt_monotonic_s": 274161.138581208, "stamp_s": 1.56, "frame": "odom", "child": "base_link", "x": 0.5472921854137657, "y": -0.0042160578641115744, "v": 0.17757537680580526, "w": -0.063368666256558}
+{"kind": "clock", "receipt_monotonic_s": 274161.152076723, "stamp_s": 1.573}
+{"kind": "odom", "receipt_monotonic_s": 274161.158374188, "stamp_s": 1.58, "frame": "odom", "child": "base_link", "x": 0.550843241053676, "y": -0.004272696481985458, "v": 0.17757537680580526, "w": -0.063368666256558}
+{"kind": "clock", "receipt_monotonic_s": 274161.171952113, "stamp_s": 1.593}
+{"kind": "odom", "receipt_monotonic_s": 274161.178506591, "stamp_s": 1.6, "frame": "odom", "child": "base_link", "x": 0.5543942220594175, "y": -0.0043338355663612655, "v": 0.17757537680580526, "w": -0.063368666256558}
+{"kind": "clock", "receipt_monotonic_s": 274161.191976191, "stamp_s": 1.613}
+{"kind": "odom", "receipt_monotonic_s": 274161.199711968, "stamp_s": 1.62, "frame": "odom", "child": "base_link", "x": 0.5579451227272808, "y": -0.004399475019035346, "v": 0.17757537680584967, "w": -0.06336866625675987}
+{"kind": "clock", "receipt_monotonic_s": 274161.211995856, "stamp_s": 1.633}
+{"kind": "odom", "receipt_monotonic_s": 274161.21838377, "stamp_s": 1.6400000000000001, "frame": "odom", "child": "base_link", "x": 0.5614959373536849, "y": -0.004469614734574957, "v": 0.17757537680584967, "w": -0.06336866625675987}
+{"kind": "clock", "receipt_monotonic_s": 274161.231855501, "stamp_s": 1.653}
+{"kind": "odom", "receipt_monotonic_s": 274161.238333207, "stamp_s": 1.6600000000000001, "frame": "odom", "child": "base_link", "x": 0.565046660235187, "y": -0.004544254600319525, "v": 0.17757537680584967, "w": -0.06336866625675987}
+{"kind": "clock", "receipt_monotonic_s": 274161.252152271, "stamp_s": 1.673}
+{"kind": "odom", "receipt_monotonic_s": 274161.25832544, "stamp_s": 1.6800000000000002, "frame": "odom", "child": "base_link", "x": 0.5685972856684921, "y": -0.0046233944963794136, "v": 0.17757537680584967, "w": -0.06336866625675987}
+{"kind": "clock", "receipt_monotonic_s": 274161.271872408, "stamp_s": 1.693}
+{"kind": "odom", "receipt_monotonic_s": 274161.278625946, "stamp_s": 1.7000000000000002, "frame": "odom", "child": "base_link", "x": 0.5721478079504617, "y": -0.004707034295638131, "v": 0.17757537680584967, "w": -0.06336866625675987}
+{"kind": "clock", "receipt_monotonic_s": 274161.291893097, "stamp_s": 1.713}
+{"kind": "odom", "receipt_monotonic_s": 274161.298332921, "stamp_s": 1.7200000000000002, "frame": "odom", "child": "base_link", "x": 0.5756982213781224, "y": -0.004795173863749851, "v": 0.17757537680584967, "w": -0.06336866625675987}
+{"kind": "clock", "receipt_monotonic_s": 274161.312535362, "stamp_s": 1.733}
+{"kind": "odom", "receipt_monotonic_s": 274161.318322045, "stamp_s": 1.74, "frame": "odom", "child": "base_link", "x": 0.5792485202486767, "y": -0.004887813059142211, "v": 0.17757537680584967, "w": -0.06336866625675987}
+{"kind": "clock", "receipt_monotonic_s": 274161.331975839, "stamp_s": 1.7530000000000001}
+{"kind": "odom", "receipt_monotonic_s": 274161.338591653, "stamp_s": 1.76, "frame": "odom", "child": "base_link", "x": 0.58279869885951, "y": -0.004984951733014442, "v": 0.17757537680584967, "w": -0.06336866625675987}
+{"kind": "clock", "receipt_monotonic_s": 274161.35184606, "stamp_s": 1.772}
+{"kind": "odom", "receipt_monotonic_s": 274161.359649298, "stamp_s": 1.78, "frame": "odom", "child": "base_link", "x": 0.5863487515082021, "y": -0.005086589729339246, "v": 0.17757537680584967, "w": -0.06336866625675987}
+{"kind": "clock", "receipt_monotonic_s": 274161.371844468, "stamp_s": 1.791}
+{"kind": "odom", "receipt_monotonic_s": 274161.379784629, "stamp_s": 1.8, "frame": "odom", "child": "base_link", "x": 0.5898986724925338, "y": -0.005192726884862156, "v": 0.17757537680584967, "w": -0.06336866625675987}
+{"kind": "clock", "receipt_monotonic_s": 274161.391951457, "stamp_s": 1.812}
+{"kind": "odom", "receipt_monotonic_s": 274161.400036008, "stamp_s": 1.82, "frame": "odom", "child": "base_link", "x": 0.5934484561104973, "y": -0.005303363029102125, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.411856828, "stamp_s": 1.832}
+{"kind": "odom", "receipt_monotonic_s": 274161.419825915, "stamp_s": 1.84, "frame": "odom", "child": "base_link", "x": 0.5969980966603071, "y": -0.005418497984351004, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.431871295, "stamp_s": 1.852}
+{"kind": "odom", "receipt_monotonic_s": 274161.439834556, "stamp_s": 1.86, "frame": "odom", "child": "base_link", "x": 0.6005475884404066, "y": -0.005538131565675366, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.451961952, "stamp_s": 1.872}
+{"kind": "odom", "receipt_monotonic_s": 274161.460027354, "stamp_s": 1.88, "frame": "odom", "child": "base_link", "x": 0.6040969257494778, "y": -0.005662263580915531, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.471841985, "stamp_s": 1.892}
+{"kind": "odom", "receipt_monotonic_s": 274161.479883037, "stamp_s": 1.9, "frame": "odom", "child": "base_link", "x": 0.6076461028864517, "y": -0.005790893830686533, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.491879261, "stamp_s": 1.912}
+{"kind": "odom", "receipt_monotonic_s": 274161.499585816, "stamp_s": 1.92, "frame": "odom", "child": "base_link", "x": 0.6111951141505156, "y": -0.005924022108377484, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.512033904, "stamp_s": 1.932}
+{"kind": "odom", "receipt_monotonic_s": 274161.519935352, "stamp_s": 1.94, "frame": "odom", "child": "base_link", "x": 0.6147439538411241, "y": -0.006061648200153452, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.531858074, "stamp_s": 1.952}
+{"kind": "odom", "receipt_monotonic_s": 274161.539715132, "stamp_s": 1.96, "frame": "odom", "child": "base_link", "x": 0.6182926162580064, "y": -0.006203771884954524, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.551840858, "stamp_s": 1.972}
+{"kind": "odom", "receipt_monotonic_s": 274161.559490491, "stamp_s": 1.98, "frame": "odom", "child": "base_link", "x": 0.6218410957011772, "y": -0.006350392934496741, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.571906621, "stamp_s": 1.992}
+{"kind": "odom", "receipt_monotonic_s": 274161.579718712, "stamp_s": 2.0, "frame": "odom", "child": "base_link", "x": 0.6253893864709446, "y": -0.0065015111132717815, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.591831723, "stamp_s": 2.012}
+{"kind": "odom", "receipt_monotonic_s": 274161.599552661, "stamp_s": 2.02, "frame": "odom", "child": "base_link", "x": 0.6289374828679202, "y": -0.006657126178549141, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.611938203, "stamp_s": 2.032}
+{"kind": "odom", "receipt_monotonic_s": 274161.620099061, "stamp_s": 2.04, "frame": "odom", "child": "base_link", "x": 0.6324853791930278, "y": -0.00681723788037396, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.63183035, "stamp_s": 2.052}
+{"kind": "odom", "receipt_monotonic_s": 274161.639710825, "stamp_s": 2.06, "frame": "odom", "child": "base_link", "x": 0.6360330697475125, "y": -0.006981845961569507, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.651872972, "stamp_s": 2.072}
+{"kind": "odom", "receipt_monotonic_s": 274161.659631265, "stamp_s": 2.08, "frame": "odom", "child": "base_link", "x": 0.6395805488329496, "y": -0.007150950157735933, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.671872325, "stamp_s": 2.092}
+{"kind": "odom", "receipt_monotonic_s": 274161.679820057, "stamp_s": 2.1, "frame": "odom", "child": "base_link", "x": 0.6431278107512541, "y": -0.007324550197253083, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.691908954, "stamp_s": 2.112}
+{"kind": "odom", "receipt_monotonic_s": 274161.699548791, "stamp_s": 2.12, "frame": "odom", "child": "base_link", "x": 0.6466748498046904, "y": -0.007502645801277676, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.711914077, "stamp_s": 2.132}
+{"kind": "odom", "receipt_monotonic_s": 274161.719491005, "stamp_s": 2.14, "frame": "odom", "child": "base_link", "x": 0.6502216602958804, "y": -0.0076852366837467465, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.731830703, "stamp_s": 2.152}
+{"kind": "odom", "receipt_monotonic_s": 274161.739688222, "stamp_s": 2.16, "frame": "odom", "child": "base_link", "x": 0.6537682365278128, "y": -0.007872322551376394, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.751852196, "stamp_s": 2.172}
+{"kind": "odom", "receipt_monotonic_s": 274161.759699039, "stamp_s": 2.18, "frame": "odom", "child": "base_link", "x": 0.6573145728038531, "y": -0.008063903103662702, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.771916202, "stamp_s": 2.192}
+{"kind": "odom", "receipt_monotonic_s": 274161.780080972, "stamp_s": 2.2, "frame": "odom", "child": "base_link", "x": 0.6608606634277521, "y": -0.008259978032882385, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.791905721, "stamp_s": 2.212}
+{"kind": "odom", "receipt_monotonic_s": 274161.799537664, "stamp_s": 2.22, "frame": "odom", "child": "base_link", "x": 0.6644065027036554, "y": -0.00846054702409309, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.812450426, "stamp_s": 2.232}
+{"kind": "odom", "receipt_monotonic_s": 274161.819502759, "stamp_s": 2.24, "frame": "odom", "child": "base_link", "x": 0.6679520849361121, "y": -0.008665609755133686, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.831862273, "stamp_s": 2.252}
+{"kind": "odom", "receipt_monotonic_s": 274161.840425749, "stamp_s": 2.26, "frame": "odom", "child": "base_link", "x": 0.6714974044300842, "y": -0.008875165896625545, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.851881593, "stamp_s": 2.2720000000000002}
+{"kind": "odom", "receipt_monotonic_s": 274161.859516212, "stamp_s": 2.2800000000000002, "frame": "odom", "child": "base_link", "x": 0.6750424554909554, "y": -0.0090892151119719, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.871853861, "stamp_s": 2.292}
+{"kind": "odom", "receipt_monotonic_s": 274161.879654354, "stamp_s": 2.3, "frame": "odom", "child": "base_link", "x": 0.6785872324245409, "y": -0.009307757057359702, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.892298145, "stamp_s": 2.312}
+{"kind": "odom", "receipt_monotonic_s": 274161.899716571, "stamp_s": 2.32, "frame": "odom", "child": "base_link", "x": 0.6821317295370964, "y": -0.009530791381759022, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.911934728, "stamp_s": 2.332}
+{"kind": "odom", "receipt_monotonic_s": 274161.920287814, "stamp_s": 2.34, "frame": "odom", "child": "base_link", "x": 0.6856759411353268, "y": -0.00975831772692459, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.931881215, "stamp_s": 2.352}
+{"kind": "odom", "receipt_monotonic_s": 274161.939497484, "stamp_s": 2.36, "frame": "odom", "child": "base_link", "x": 0.6892198615263958, "y": -0.009990335727395805, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.951878723, "stamp_s": 2.372}
+{"kind": "odom", "receipt_monotonic_s": 274161.959729185, "stamp_s": 2.38, "frame": "odom", "child": "base_link", "x": 0.6927634850179344, "y": -0.010226845010496718, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.971935293, "stamp_s": 2.392}
+{"kind": "odom", "receipt_monotonic_s": 274161.979648148, "stamp_s": 2.4, "frame": "odom", "child": "base_link", "x": 0.6963068059180506, "y": -0.010467845196337916, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274161.991840123, "stamp_s": 2.412}
+{"kind": "odom", "receipt_monotonic_s": 274161.999784193, "stamp_s": 2.42, "frame": "odom", "child": "base_link", "x": 0.6998498185353389, "y": -0.01071333589781714, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274162.011991294, "stamp_s": 2.432}
+{"kind": "odom", "receipt_monotonic_s": 274162.019769822, "stamp_s": 2.44, "frame": "odom", "child": "base_link", "x": 0.7033925171788885, "y": -0.010963316720617722, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274162.031916693, "stamp_s": 2.452}
+{"kind": "odom", "receipt_monotonic_s": 274162.039685681, "stamp_s": 2.46, "frame": "odom", "child": "base_link", "x": 0.7069348961582932, "y": -0.01121778726321264, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274162.052104758, "stamp_s": 2.472}
+{"kind": "odom", "receipt_monotonic_s": 274162.059524472, "stamp_s": 2.48, "frame": "odom", "child": "base_link", "x": 0.7104769497836603, "y": -0.011476747116861712, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274162.071867969, "stamp_s": 2.492}
+{"kind": "odom", "receipt_monotonic_s": 274162.081063068, "stamp_s": 2.5, "frame": "odom", "child": "base_link", "x": 0.714018672365619, "y": -0.011740195865615007, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274162.091884307, "stamp_s": 2.512}
+{"kind": "odom", "receipt_monotonic_s": 274162.099652439, "stamp_s": 2.52, "frame": "odom", "child": "base_link", "x": 0.7175600582153314, "y": -0.012008133086311634, "v": 0.17757537680580526, "w": -0.06336866625696173}
+{"kind": "clock", "receipt_monotonic_s": 274162.112027318, "stamp_s": 2.532}
+{"kind": "odom", "receipt_monotonic_s": 274162.119720169, "stamp_s": 2.54, "frame": "odom", "child": "base_link", "x": 0.7211011016444985, "y": -0.012280558348581636, "v": 0.17757537680576085, "w": -0.06336866625716359}
+{"kind": "clock", "receipt_monotonic_s": 274162.132373342, "stamp_s": 2.552}
+{"kind": "odom", "receipt_monotonic_s": 274162.139614725, "stamp_s": 2.56, "frame": "odom", "child": "base_link", "x": 0.7246417969653736, "y": -0.012557471214845748, "v": 0.17757537680576085, "w": -0.06336866625716359}
+{"kind": "clock", "receipt_monotonic_s": 274162.151946532, "stamp_s": 2.572}
+{"kind": "odom", "receipt_monotonic_s": 274162.160589681, "stamp_s": 2.58, "frame": "odom", "child": "base_link", "x": 0.7281821384907681, "y": -0.012838871240317339, "v": 0.17757537680576085, "w": -0.06336866625716359}
+{"kind": "clock", "receipt_monotonic_s": 274162.171867465, "stamp_s": 2.592}
+{"kind": "odom", "receipt_monotonic_s": 274162.179553976, "stamp_s": 2.6, "frame": "odom", "child": "base_link", "x": 0.7317221205340622, "y": -0.013124757973001852, "v": 0.17757537680576085, "w": -0.06336866625716359}
+{"kind": "clock", "receipt_monotonic_s": 274162.191858474, "stamp_s": 2.612}
+{"kind": "odom", "receipt_monotonic_s": 274162.199538471, "stamp_s": 2.62, "frame": "odom", "child": "base_link", "x": 0.7352617374092129, "y": -0.013415130953697785, "v": 0.17757537680576085, "w": -0.06336866625716359}
+{"kind": "clock", "receipt_monotonic_s": 274162.212405673, "stamp_s": 2.632}
+{"kind": "odom", "receipt_monotonic_s": 274162.219529937, "stamp_s": 2.64, "frame": "odom", "child": "base_link", "x": 0.7388009834307637, "y": -0.013709989715997645, "v": 0.17757537680576085, "w": -0.06336866625716359}
+{"kind": "clock", "receipt_monotonic_s": 274162.231963172, "stamp_s": 2.652}
+{"kind": "odom", "receipt_monotonic_s": 274162.239713205, "stamp_s": 2.66, "frame": "odom", "child": "base_link", "x": 0.7423398529138543, "y": -0.014009333786289789, "v": 0.17757537680576085, "w": -0.06336866625716359}
+{"kind": "clock", "receipt_monotonic_s": 274162.251907195, "stamp_s": 2.672}
+{"kind": "odom", "receipt_monotonic_s": 274162.260226835, "stamp_s": 2.68, "frame": "odom", "child": "base_link", "x": 0.7458783401742292, "y": -0.014313162683756585, "v": 0.17757537680576085, "w": -0.06336866625716359}
+{"kind": "clock", "receipt_monotonic_s": 274162.271789392, "stamp_s": 2.692}
+{"kind": "odom", "receipt_monotonic_s": 274162.279566541, "stamp_s": 2.7, "frame": "odom", "child": "base_link", "x": 0.749416439528246, "y": -0.014621475920377493, "v": 0.17757537680576085, "w": -0.06336866625716359}
+{"kind": "clock", "receipt_monotonic_s": 274162.291903059, "stamp_s": 2.712}
+{"kind": "odom", "receipt_monotonic_s": 274162.299586569, "stamp_s": 2.72, "frame": "odom", "child": "base_link", "x": 0.7529541452928861, "y": -0.014934273000929402, "v": 0.17757537680576085, "w": -0.06336866625716359}
+{"kind": "output", "receipt_monotonic_s": 274162.300366538, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.312062901, "stamp_s": 2.732}
+{"kind": "odom", "receipt_monotonic_s": 274162.319787717, "stamp_s": 2.74, "frame": "odom", "child": "base_link", "x": 0.7533078940083521, "y": -0.014965799301583076, "v": 3.161082506863977e-10, "w": 5.0489915278975865e-11}
+{"kind": "clock", "receipt_monotonic_s": 274162.331887086, "stamp_s": 2.752}
+{"kind": "odom", "receipt_monotonic_s": 274162.341035347, "stamp_s": 2.76, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.351870854, "stamp_s": 2.771}
+{"kind": "odom", "receipt_monotonic_s": 274162.360513603, "stamp_s": 2.7800000000000002, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.371878753, "stamp_s": 2.791}
+{"kind": "odom", "receipt_monotonic_s": 274162.380585713, "stamp_s": 2.8, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.392460103, "stamp_s": 2.811}
+{"kind": "odom", "receipt_monotonic_s": 274162.400463346, "stamp_s": 2.8200000000000003, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.411873059, "stamp_s": 2.831}
+{"kind": "odom", "receipt_monotonic_s": 274162.420743834, "stamp_s": 2.84, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.431956296, "stamp_s": 2.851}
+{"kind": "odom", "receipt_monotonic_s": 274162.440636571, "stamp_s": 2.8600000000000003, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.451907451, "stamp_s": 2.871}
+{"kind": "odom", "receipt_monotonic_s": 274162.460532055, "stamp_s": 2.88, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.471913324, "stamp_s": 2.891}
+{"kind": "odom", "receipt_monotonic_s": 274162.48047246, "stamp_s": 2.9, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.491987968, "stamp_s": 2.911}
+{"kind": "odom", "receipt_monotonic_s": 274162.500421097, "stamp_s": 2.92, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.511840271, "stamp_s": 2.931}
+{"kind": "odom", "receipt_monotonic_s": 274162.520753181, "stamp_s": 2.94, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.531845267, "stamp_s": 2.951}
+{"kind": "odom", "receipt_monotonic_s": 274162.540470129, "stamp_s": 2.96, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.551803606, "stamp_s": 2.971}
+{"kind": "odom", "receipt_monotonic_s": 274162.560468276, "stamp_s": 2.98, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.571844081, "stamp_s": 2.991}
+{"kind": "odom", "receipt_monotonic_s": 274162.580861381, "stamp_s": 3.0, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}
+{"kind": "clock", "receipt_monotonic_s": 274162.592264989, "stamp_s": 3.011}
+{"kind": "odom", "receipt_monotonic_s": 274162.600532191, "stamp_s": 3.02, "frame": "odom", "child": "base_link", "x": 0.7533078940086131, "y": -0.014965799301606362, "v": 0.0, "w": 0.0}

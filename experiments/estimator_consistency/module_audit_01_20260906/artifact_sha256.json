@@ -1,0 +1,13 @@
+{
+  "docs/module_audits/01_state_estimation.md": "6476ac4e6d7a3d2822e8d39b8a6acfa175aac0b8ba2814f201fb3b98515528bd",
+  "experiments/estimator_consistency/module_audit_01_20260906/existing_tests.txt": "4e782951aacb23cf75ea375b3bb2522bec385606342834f8f5cd556e397308b9",
+  "experiments/estimator_consistency/module_audit_01_20260906/fatal_stop_followup.txt": "f110ea65f6d33cdc6322b155f056abd01a7abd63e18b0f61e05569402024ad9d",
+  "experiments/estimator_consistency/module_audit_01_20260906/policy_example.json": "cffb50c2876d1c899e61f0ba3eeaf54169cfc457006e9055a5d0b64b439aa7d6",
+  "experiments/estimator_consistency/module_audit_01_20260906/policy_example.py": "2fee303a3c37b5723c4c67d09615068e4d1b4d951967e2f28db4f08fdc10d3ec",
+  "experiments/estimator_consistency/module_audit_01_20260906/prior_probe_results.json": "094c5b3e23e4a1e534c03c173205c03a9bcf6242670f52e0492c3e0add54f507",
+  "experiments/estimator_consistency/module_audit_01_20260906/probe.py": "fc4b8a662660d03a2117a71b9fd90c0bdf523217d9efcabab19df677e2aa7742",
+  "experiments/estimator_consistency/module_audit_01_20260906/results.json": "c77df8a35a3cc3f4941851f2f71a2f4da98f8306b8c9eeeb7f4d83c1574ccbe1",
+  "experiments/estimator_consistency/module_audit_01_20260906/source_sha256.json": "67025756ff3b2782994e32fb8d2f628ab11a8727ee860872a1178eb9068f762f",
+  "experiments/estimator_consistency/module_audit_01_20260906/wiring.json": "5bf11a0415fde721f1d4644b4cb26963a0c84f8a41194ced8c87d3738b1ff003",
+  "experiments/estimator_consistency/module_audit_01_20260906/wiring.py": "7e1efd43ff77bebdbfd72b47039d3f62002521a6ba6fda10b8d3264740d73489"
+}

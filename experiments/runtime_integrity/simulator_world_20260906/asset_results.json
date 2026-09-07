@@ -1,0 +1,2509 @@
+{
+  "scope": "Read-only launch expansion, synthetic geometry, exact manifest-selected log evidence; no accuracy rescore",
+  "sources": {
+    "src/sim/launch/bringup_sim.launch.py": "4d50fe35a9ff1c63275c58ad897ee6661b135d1dd3108446ab4cf38d1306d6a9",
+    "src/sim/launch/gazebo.launch.py": "ef7af80549374f5d664c3dd249e15811ac071f9286e97b103f5616abbe47b88a",
+    "src/sim/launch/robot_description.launch.py": "6899e75f7191d42ca7925567235b9e2620f05541a87263f9f9bb541adb6778c6",
+    "src/sim/sim/reset_world.py": "9f7fa8728b9587ee52542d39baf620764eec864d020fa105d01e6f9af68f9d01",
+    "src/sim/sim/wait_for_clock.py": "fdcb2c78520598ac3c487d44d70f0f96a9906211ea5ce6258c576dc17a3f45c9",
+    "src/sim/sim/wait_for_odom.py": "4cbab6e7a17a6cc777b92d4a48b318c0d4da5ee4dd020a760a5a503f5af688e4",
+    "src/sim/sim/clock_throttle_node.py": "29777dda7aba4681019b8ab24982e87100a6f0c686ff6735e89eaed7ab98ec55",
+    "src/sim/sim/encoder_noise_node.py": "e6a04fffdcad57a83d11c64c73a4c39726fdb0eb7e515500a98a6377839af497",
+    "src/sim/sim/actuation_noise_node.py": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f",
+    "src/sim/robot_description/urdf/warehouse_amr.urdf.xacro": "318d5e186f630b1044ed7bca373e65e66b80e4c1d0511010ddcae2f6ec0aaac4",
+    "src/experiments/experiments/core/visibility_launch_common.py": "de61a0fe93250d3207629ddb37d10d5d04b8e605452725b831b74882d2b98817",
+    "src/experiments/experiments/core/world_profiles.py": "e4e8d61721e74c9cb003fac035dfdb17c1c93fd500be404f8a8c8219e1495424",
+    "src/experiments/experiments/nodes/experiment_logger.py": "6c03281600ad906020fee19af04e5454846bdf2b9c653da6f63266d767e678e3",
+    "src/unav_common/unav_common/geometry.py": "ae2e908d659f5785cc3094aa73d407fab55f129920aa7fa0643117d23e503604",
+    "src/unav_common/unav_common/robot_hull.py": "5f1349ff7019f761cf5ac2d56609c01763702734c7306562cfa0b869f177699b",
+    "src/unav_common/unav_common/occlusion_geometry.py": "1d99eecf14435a0efb6e167c3e829d94eea3fe614972b83869873214b949a6e4",
+    "src/experiments/config/world_profiles.yaml": "3559f0a78b562bcad7cb7cbb476acfcc48442e14eedb017e8002fb1ae3f4f5fb",
+    "src/experiments/config/tasks.yaml": "acba215a433545e0137e37a0b45ca839e313103a53e7870c76f79958184f0f33"
+  },
+  "sim_share": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim",
+  "world_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+  "world_realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+  "world_sha256": "cb872fd438bd3275ac75da44c12013c01c91c95287ce29edaf6bd0f09073f3e3",
+  "freeze_id": "WHV2-GEOMETRY-V2",
+  "profile_freeze_id": "WHV2-GEOMETRY-V1",
+  "frozen_source_keys": [
+    "experiments/warehouse_v2_sketches/camera_layout_decision.json",
+    "experiments/warehouse_v2_sketches/camera_layout_gate.py",
+    "experiments/warehouse_v2_sketches/coverage.py",
+    "experiments/warehouse_v2_sketches/make_world.py",
+    "experiments/warehouse_v2_sketches/route_tasks.py",
+    "experiments/warehouse_v2_sketches/sim_up.sh",
+    "experiments/warehouse_v2_sketches/verify_world.py",
+    "experiments/warehouse_v2_sketches/warehouse_v2.py",
+    "experiments/warehouse_v2_sketches/world_freeze.py"
+  ],
+  "launch_command": [
+    "ros2",
+    "launch",
+    "experiments",
+    "warehouse_primary_comparison.launch.py",
+    "world:=warehouse_v2.world.sdf",
+    "task:=fusion_network_traverse",
+    "planner:=visibility_aware_efe",
+    "seed:=210",
+    "log_dir:=/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/unused_log_destination",
+    "perception_backend:=yolo",
+    "horizon:=20",
+    "dt:=0.25",
+    "goal_success_radius:=0.35",
+    "goal_success_hold_s:=2.0",
+    "run_timeout_after_first_cmd_s:=600",
+    "auto_stop_on_goal:=true",
+    "headless:=true",
+    "use_rviz:=false",
+    "reset_world:=false",
+    "r_visible_uv:=0.7642679454946852",
+    "r_miss_uv:=40.0",
+    "discount_gamma:=0.98",
+    "v_max:=0.22",
+    "max_predict_speed_mps:=0.0",
+    "state_correction_mode:=fused",
+    "state_max_correction_jump_m:=0.0",
+    "process_noise_xy:=0.01",
+    "process_noise_theta:=0.02",
+    "control_weight:=0.0",
+    "optimizer_maxiter:=80",
+    "optimizer_maxfun:=500",
+    "optimizer_multistart:=false",
+    "optimizer_multistart_include_direct:=false",
+    "optimizer_terminal_goal_tolerance_m:=0.35",
+    "use_command_noise:=true",
+    "use_encoder_noise:=true",
+    "use_odom_for_predict:=true",
+    "odom_topic:=/odom_noisy",
+    "command_noise_linear_slip_mean:=0.03",
+    "command_noise_linear_slip_std:=0.06",
+    "command_noise_angular_slip_std:=0.04",
+    "command_noise_linear_additive_std:=0.008",
+    "command_noise_angular_additive_std:=0.035",
+    "command_noise_correlation_alpha:=0.85",
+    "encoder_noise_linear_slip_mean:=0.02",
+    "encoder_noise_linear_slip_std:=0.05",
+    "encoder_noise_angular_slip_mean:=0.0",
+    "encoder_noise_angular_slip_std:=0.03",
+    "encoder_noise_linear_additive_std:=0.004",
+    "encoder_noise_angular_additive_std:=0.02",
+    "encoder_noise_correlation_alpha:=0.8",
+    "odom_heading_timeout_s:=0.75",
+    "yolo_model:=/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt",
+    "yolo_device:=cpu",
+    "yolo_imgsz:=960",
+    "yolo_conf_threshold:=0.25",
+    "yolo_iou_threshold:=0.45",
+    "yolo_target_class:=robot",
+    "yolo_class_id:=0",
+    "yolo_use_masks:=false",
+    "yolo_min_mask_area_px:=12.0",
+    "yolo_mask_bottom_band_px:=3.0",
+    "yolo_min_bbox_area_px:=0.0",
+    "yolo_max_batch_stamp_skew_s:=0.05",
+    "yolo_use_torchscript:=false",
+    "yolo_warmup_iters:=3",
+    "yolo_inference_in_callback:=true",
+    "yolo_runtime_trace_period_s:=0.0",
+    "state_reanchor_m:=0.0",
+    "state_max_predict_dt_s:=1.5",
+    "state_reject_inflate_m2:=0.05",
+    "stale_belief_inflate_m2_per_s:=0.0",
+    "stale_belief_inflate_cap_m2:=0.0",
+    "require_state_correction_envelope:=true",
+    "camera_network_artifact_path:=/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/icra_commissioning_20260905/network_planner/uniform.npz",
+    "heading_update_mode:=coupled",
+    "use_pixel_correction:=False",
+    "pixel_correction_nis_threshold:=9.21",
+    "use_diagnostic_odom_localization:=False",
+    "debug_runtime:=False",
+    "optimizer_ftol:=1e-06",
+    "optimizer_gtol:=1e-05",
+    "optimizer_terminal_goal_tolerance_m:=0.35",
+    "optimizer_route_seed_mode:=lane_graph",
+    "use_hierarchical:=True",
+    "global_horizon:=200",
+    "global_dt:=1.0",
+    "local_use_ambiguity:=False",
+    "local_use_obs_risk:=False",
+    "global_optimizer_multistart:=True",
+    "local_use_visibility_model:=False",
+    "local_nogo_safe_distance:=0.55",
+    "waypoint_spacing_m:=0.2",
+    "waypoint_arrival_radius_m:=0.1",
+    "local_controller_type:=turn_then_go",
+    "use_nogo_cost:=True",
+    "nogo_mode:=keep_in",
+    "nogo_penalty_type:=warning_band",
+    "nogo_weight:=40.0",
+    "nogo_safe_distance:=0.55",
+    "nogo_warning_band:=0.05",
+    "use_belief_nogo_cost:=False",
+    "use_hit_miss_mixture:=False",
+    "robot_collision_radius_m:=0.48541219597369",
+    "terminate_on_geom_collision:=False",
+    "global_planner_mode:=efe",
+    "multicam_belief:=True",
+    "manager_decision_rate_hz:=5.0",
+    "manager_fusion_disagreement_gate_m:=0.6",
+    "manager_require_source_batch_id:=True",
+    "manager_bootstrap_min_cameras:=2",
+    "manager_bootstrap_max_disagreement_m:=0.91",
+    "manager_fusion_max_timestamp_spread_s:=0.05",
+    "manager_covariance_profile:=commissioned_reference_r",
+    "manager_commissioned_calibration_path:=logs/studies/measurement_commissioning/calibration.json",
+    "manager_commissioned_world_covariance_path:=logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json",
+    "manager_fusion_rule:=joint_network",
+    "manager_observation_model:=learned_nn",
+    "manager_fixed_offset_m:=0.0",
+    "manager_learned_correction_path:=logs/perception_models/box_feature_bias_correction_20260831/models.joblib",
+    "manager_camera_ids:=camera_A,camera_B,camera_C,camera_D,camera_E",
+    "manager_fusion_mode:=True",
+    "manager_require_gp_artifacts:=False",
+    "state_correction_ekf:=True"
+  ],
+  "sim_launch_arguments": {
+    "use_sim_time": "true",
+    "use_lidar": "false",
+    "show_pose_markers": "false",
+    "bridge_scan": "false",
+    "headless": "true",
+    "world": "warehouse_v2.world.sdf",
+    "world_name": "warehouse_v2",
+    "spawn_x": "-7.9",
+    "spawn_y": "-8.7",
+    "spawn_z": "0.05",
+    "spawn_yaw": "0.0",
+    "reset_world": "false",
+    "bridge_contacts": "true",
+    "bridge_camera_a": "true",
+    "bridge_camera_b": "true",
+    "bridge_camera_c": "true",
+    "bridge_camera_d": "true",
+    "bridge_camera_e": "true"
+  },
+  "launch_variants": {
+    "true": {
+      "arguments": {
+        "gz_args": "-r -s --headless-rendering /home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+        "gz_version": "6"
+      },
+      "environment": {
+        "GZ_SIM_RESOURCE_PATH": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models:/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds/models:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/robot_description:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim",
+        "IGN_GAZEBO_RESOURCE_PATH": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models:/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds/models:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/robot_description:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim",
+        "__NV_PRIME_RENDER_OFFLOAD": "1",
+        "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+        "__EGL_VENDOR_LIBRARY_FILENAMES": "/usr/share/glvnd/egl_vendor.d/10_nvidia.json"
+      },
+      "robot_description_sha256": "f590fca5f5adcb9e7891fada80800ce1ff1eced764b5d55af51d97f153afbb7d",
+      "contact_bridge_count": 1,
+      "robot_model": "warehouse_amr"
+    },
+    "false": {
+      "arguments": {
+        "gz_args": "-r /home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+        "gz_version": "6"
+      },
+      "environment": {
+        "GZ_SIM_RESOURCE_PATH": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models:/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds/models:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/robot_description:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim",
+        "IGN_GAZEBO_RESOURCE_PATH": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models:/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds/models:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/robot_description:/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim",
+        "__NV_PRIME_RENDER_OFFLOAD": "1",
+        "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+        "__EGL_VENDOR_LIBRARY_FILENAMES": "/usr/share/glvnd/egl_vendor.d/10_nvidia.json"
+      },
+      "robot_description_sha256": "f590fca5f5adcb9e7891fada80800ce1ff1eced764b5d55af51d97f153afbb7d",
+      "contact_bridge_count": 1,
+      "robot_model": "warehouse_amr"
+    }
+  },
+  "models": [
+    {
+      "name": "lamp_0",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        -7.05,
+        -2.4,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_1",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        -7.05,
+        1.5,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_2",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        -7.05,
+        5.4,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_3",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        -3.35,
+        -2.4,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_4",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        -3.35,
+        1.5,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_5",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        -3.35,
+        5.4,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_6",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        0.62,
+        -6.5,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_7",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        0.62,
+        -1.5,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_8",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        0.62,
+        3.5,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_9",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        0.62,
+        8.0,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_10",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        3.6,
+        -1.5,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_11",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        8.4,
+        -1.5,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_12",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        3.6,
+        2.15,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_13",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        8.4,
+        2.15,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_14",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        -9.0,
+        -6.9,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "lamp_15",
+      "uri": "model://aws_robomaker_warehouse_Lamp_01",
+      "pose": [
+        6.0,
+        -6.9,
+        -5.5,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/model.sdf",
+      "sha256": "556f7386e882049b1fa1077c9540fa81f742204bd2ecb83ca7fc1980e026d40c",
+      "sensors": []
+    },
+    {
+      "name": "forklift_parked",
+      "uri": "model://dyn_forklift",
+      "pose": [
+        3.6,
+        -8.75,
+        0.0,
+        0.0,
+        0.0,
+        3.1416
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/dyn_forklift/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/dyn_forklift/model.sdf",
+      "sha256": "888ff6efa8efb1960a9b05012f0394be67625206bc96e671e20eca1959ee80dd",
+      "sensors": []
+    },
+    {
+      "name": "pallet_jack",
+      "uri": "model://aws_robomaker_warehouse_PalletJackB_01",
+      "pose": [
+        -8.69,
+        -9.0,
+        0.0,
+        0.0,
+        0.0,
+        1.5708
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_PalletJackB_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_PalletJackB_01/model.sdf",
+      "sha256": "4bec46c75a1cac0eb6b7cd602ddab52e3b6b31907131debea04e88e9d2119ccd",
+      "sensors": []
+    },
+    {
+      "name": "bin_office",
+      "uri": "model://aws_robomaker_warehouse_TrashCanC_01",
+      "pose": [
+        -8.71,
+        -7.45,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_TrashCanC_01/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_TrashCanC_01/model.sdf",
+      "sha256": "89587275b53139c3489f978d3951377e83cc4ad33406440ccfcea9ca9ea5568b",
+      "sensors": []
+    },
+    {
+      "name": "pallet_loose_1",
+      "uri": "model://dyn_pallet_box",
+      "pose": [
+        -3.98,
+        -8.65,
+        0.0,
+        0.0,
+        0.0,
+        0.12
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/dyn_pallet_box/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/dyn_pallet_box/model.sdf",
+      "sha256": "35caa894d91f3b72bcd3b4153a7f682b8b967420f0b8e66cc7652746c7056ba7",
+      "sensors": []
+    },
+    {
+      "name": "pallet_loose_2",
+      "uri": "model://dyn_pallet_box",
+      "pose": [
+        4.45,
+        -8.63,
+        0.0,
+        0.0,
+        0.0,
+        -0.2
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/dyn_pallet_box/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/dyn_pallet_box/model.sdf",
+      "sha256": "35caa894d91f3b72bcd3b4153a7f682b8b967420f0b8e66cc7652746c7056ba7",
+      "sensors": []
+    },
+    {
+      "name": "external_camera",
+      "uri": "model://external_camera",
+      "pose": [
+        -11.45,
+        -9.45,
+        5.0,
+        0.0,
+        0.7679,
+        0.7854
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/external_camera/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/external_camera/model.sdf",
+      "sha256": "aa08c4d6862540a2d0c73a0f806c42cc5aadbec6b9211265d066df5e7b30cf2a",
+      "sensors": [
+        {
+          "name": "camera",
+          "type": "camera",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera/image_raw",
+          "rate_hz": "5",
+          "always_on": "1",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        },
+        {
+          "name": "depth_camera",
+          "type": "depth_camera",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera/depth",
+          "rate_hz": "5",
+          "always_on": "0",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        },
+        {
+          "name": "segmentation_camera",
+          "type": "segmentation",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera/segmentation",
+          "rate_hz": "1",
+          "always_on": "0",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        }
+      ]
+    },
+    {
+      "name": "external_camera_b",
+      "uri": "model://external_camera_b",
+      "pose": [
+        -1.5,
+        -9.72,
+        5.0,
+        0.0,
+        0.8378,
+        2.0071
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/external_camera_b/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/external_camera_b/model.sdf",
+      "sha256": "8f8ee1da38f7da25a1feb036e18617c5d3155f4e832a1970fec6f97426ab855b",
+      "sensors": [
+        {
+          "name": "camera",
+          "type": "camera",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera_b/image_raw",
+          "rate_hz": "5",
+          "always_on": "1",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        },
+        {
+          "name": "depth_camera",
+          "type": "depth_camera",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera_b/depth",
+          "rate_hz": "5",
+          "always_on": "0",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        },
+        {
+          "name": "segmentation_camera",
+          "type": "segmentation",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera_b/segmentation",
+          "rate_hz": "1",
+          "always_on": "0",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        }
+      ]
+    },
+    {
+      "name": "external_camera_c",
+      "uri": "model://external_camera_c",
+      "pose": [
+        -6.95,
+        9.45,
+        5.0,
+        0.0,
+        0.6632,
+        -1.0472
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/external_camera_c/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/external_camera_c/model.sdf",
+      "sha256": "ab4a45b1d9aaf0135b7e31148e05b598a4ab7048b8a2871edb5ebfb6c656c716",
+      "sensors": [
+        {
+          "name": "camera",
+          "type": "camera",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera_c/image_raw",
+          "rate_hz": "5",
+          "always_on": "1",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        },
+        {
+          "name": "depth_camera",
+          "type": "depth_camera",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera_c/depth",
+          "rate_hz": "5",
+          "always_on": "0",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        },
+        {
+          "name": "segmentation_camera",
+          "type": "segmentation",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera_c/segmentation",
+          "rate_hz": "1",
+          "always_on": "0",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        }
+      ]
+    },
+    {
+      "name": "external_camera_d",
+      "uri": "model://external_camera_d",
+      "pose": [
+        11.45,
+        7.2,
+        5.0,
+        0.0,
+        0.6632,
+        -2.4435
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/external_camera_d/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/external_camera_d/model.sdf",
+      "sha256": "bf14a2ac8135acb8081bf388ea8c5ae30a6c83a4c22ae8561416252ea82248da",
+      "sensors": [
+        {
+          "name": "camera",
+          "type": "camera",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera_d/image_raw",
+          "rate_hz": "5",
+          "always_on": "1",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        },
+        {
+          "name": "depth_camera",
+          "type": "depth_camera",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera_d/depth",
+          "rate_hz": "5",
+          "always_on": "0",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        },
+        {
+          "name": "segmentation_camera",
+          "type": "segmentation",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera_d/segmentation",
+          "rate_hz": "1",
+          "always_on": "0",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        }
+      ]
+    },
+    {
+      "name": "external_camera_e",
+      "uri": "model://external_camera_e",
+      "pose": [
+        11.45,
+        -9.45,
+        5.0,
+        0.0,
+        0.733,
+        2.3038
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/external_camera_e/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/external_camera_e/model.sdf",
+      "sha256": "1b7ad159fbaa510d5ddae0f2d7ab9a1e1d4f9999132d961cf819289b9f7ab03b",
+      "sensors": [
+        {
+          "name": "camera",
+          "type": "camera",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera_e/image_raw",
+          "rate_hz": "5",
+          "always_on": "1",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        },
+        {
+          "name": "depth_camera",
+          "type": "depth_camera",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera_e/depth",
+          "rate_hz": "5",
+          "always_on": "0",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        },
+        {
+          "name": "segmentation_camera",
+          "type": "segmentation",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "external_camera_e/segmentation",
+          "rate_hz": "1",
+          "always_on": "0",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        }
+      ]
+    },
+    {
+      "name": "presentation_overview_camera",
+      "uri": "model://presentation_overview_camera",
+      "pose": [
+        0.0,
+        0.0,
+        19.0,
+        0.0,
+        1.5708,
+        1.5708
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/presentation_overview_camera/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/presentation_overview_camera/model.sdf",
+      "sha256": "a7dc392f3676feb115408e27ef0ae9fa3100196df55b0403f02b75f0e6dc16fc",
+      "sensors": [
+        {
+          "name": "camera",
+          "type": "camera",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "presentation_overview_camera/image_raw",
+          "rate_hz": "1",
+          "always_on": "1",
+          "width": "1280",
+          "height": "720",
+          "hfov_rad": "1.5708"
+        }
+      ]
+    },
+    {
+      "name": "plan_view_camera",
+      "uri": "model://plan_view_camera",
+      "pose": [
+        0.0,
+        0.0,
+        42.0,
+        0.0,
+        1.5708,
+        1.5708
+      ],
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/plan_view_camera/model.sdf",
+      "realpath": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/plan_view_camera/model.sdf",
+      "sha256": "31c120fbcc7462437c7cf17385496ea8974d56b97966a482e8077100f300e86d",
+      "sensors": [
+        {
+          "name": "camera",
+          "type": "camera",
+          "pose": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "topic": "plan_view_camera/image_raw",
+          "rate_hz": "1",
+          "always_on": "1",
+          "width": "1600",
+          "height": "1200",
+          "hfov_rad": "0.90"
+        }
+      ]
+    }
+  ],
+  "model_uri_dependencies": {
+    "model://aws_robomaker_warehouse_Lamp_01": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_Lamp_01",
+      "sha256": null
+    },
+    "model://dyn_forklift": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/dyn_forklift",
+      "sha256": null
+    },
+    "model://aws_robomaker_warehouse_PalletJackB_01": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_PalletJackB_01",
+      "sha256": null
+    },
+    "model://aws_robomaker_warehouse_TrashCanC_01": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/aws_robomaker_warehouse_TrashCanC_01",
+      "sha256": null
+    },
+    "model://dyn_pallet_box": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/dyn_pallet_box",
+      "sha256": null
+    },
+    "model://warehouse_pbr/materials/textures/concrete_albedo.png": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external/warehouse_pbr/materials/textures/concrete_albedo.png",
+      "sha256": "cfad2c674b48894c7544ee43484a9568daeced29434064f78393a0a943ea38ea"
+    },
+    "model://warehouse_pbr/materials/textures/concrete_normal.png": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external/warehouse_pbr/materials/textures/concrete_normal.png",
+      "sha256": "a06477f877e0ad75357e2bfd96b1c9ce7a6e40a30feec4ad56dfe2241d6936ff"
+    },
+    "model://warehouse_pbr/materials/textures/concrete_roughness.png": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external/warehouse_pbr/materials/textures/concrete_roughness.png",
+      "sha256": "31ccb3bf4eabbffeb0d953b78f2f7812943c586dbc4344051c18ad0e21761e0a"
+    },
+    "model://aws_robomaker_warehouse_ShelfD_01/meshes/aws_robomaker_warehouse_ShelfD_01_visual.DAE": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_ShelfD_01/meshes/aws_robomaker_warehouse_ShelfD_01_visual.DAE",
+      "sha256": "00db7593f7babfbefb05d28715bb82b6f78edacd0eadedfabe95411776b417ca"
+    },
+    "model://aws_robomaker_warehouse_ShelfE_01/meshes/aws_robomaker_warehouse_ShelfE_01_visual.DAE": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_ShelfE_01/meshes/aws_robomaker_warehouse_ShelfE_01_visual.DAE",
+      "sha256": "fda6508ff115732a52f12577363cb759f408040aa1ac54a9fc69fe85f7ad451e"
+    },
+    "model://aws_robomaker_warehouse_ClutteringA_01/meshes/aws_robomaker_warehouse_ClutteringA_01_visual.DAE": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_ClutteringA_01/meshes/aws_robomaker_warehouse_ClutteringA_01_visual.DAE",
+      "sha256": "ccf14ca50f55bc5db59b94d8947307a1c2729ffc4f2d36a6f26a0dbe1476c1d8"
+    },
+    "model://aws_robomaker_warehouse_ClutteringC_01/meshes/aws_robomaker_warehouse_ClutteringC_01_visual.DAE": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_ClutteringC_01/meshes/aws_robomaker_warehouse_ClutteringC_01_visual.DAE",
+      "sha256": "0817b2b4b7155ce091bbbba1fe7039434e6698cea23730999571076e21d26154"
+    },
+    "model://warehouse_pbr/materials/textures/metal_albedo.png": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external/warehouse_pbr/materials/textures/metal_albedo.png",
+      "sha256": "01c92355535a746db5ffa4cfe9c986e87193bfaed6ecfa99ecaffccf8d336eec"
+    },
+    "model://warehouse_pbr/materials/textures/metal_normal.png": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external/warehouse_pbr/materials/textures/metal_normal.png",
+      "sha256": "264aaa5e9e418fd1d7c6a969308a8e81d8ad6e7dea2dfc7d2eea965773f03539"
+    },
+    "model://warehouse_pbr/materials/textures/metal_roughness.png": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external/warehouse_pbr/materials/textures/metal_roughness.png",
+      "sha256": "0db7e32e807a9ec743d97223057a65448f74fe387de82b41a3939ad0f6d889f7"
+    },
+    "model://warehouse_pbr/materials/textures/metal_metalness.png": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external/warehouse_pbr/materials/textures/metal_metalness.png",
+      "sha256": "b4cdf116d1edb968aceab2a95faef861ea9ee1e1712bbcd689ff0b2b8214fcae"
+    },
+    "model://Large_Crate/meshes/LargeCrate.dae": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external/Large_Crate/meshes/LargeCrate.dae",
+      "sha256": "2a559b3e1aee343436f8c3bad0a3322b4c072bd20f1038e1adf8960bf8ce205c"
+    },
+    "model://warehouse_pbr/materials/textures/tote_grey_albedo.png": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external/warehouse_pbr/materials/textures/tote_grey_albedo.png",
+      "sha256": "fefa3fa18f85ef54521ea8b8bb236a0609cbba5bb041e115eff71af23c6553de"
+    },
+    "model://Large_Crate/materials/textures/Crate_Normal.jpg": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external/Large_Crate/materials/textures/Crate_Normal.jpg",
+      "sha256": "f22e4bb925b0ec258bdbab2c9741ddcd15873fe08663415aa54f9e7aac34e2e1"
+    },
+    "model://Large_Crate/materials/textures/Crate_Roughness.jpg": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external/Large_Crate/materials/textures/Crate_Roughness.jpg",
+      "sha256": "ba7109b28ec3488266c1564a764aefc7cea36e5de14886285b4b5891e28f442e"
+    },
+    "model://Large_Crate/materials/textures/Crate_Albedo.jpg": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external/Large_Crate/materials/textures/Crate_Albedo.jpg",
+      "sha256": "6a89576bfc376f400419789118eca686d6986d67863669f461665c0ffa6ad610"
+    },
+    "model://warehouse_pbr/materials/textures/tote_blue_albedo.png": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models_external/warehouse_pbr/materials/textures/tote_blue_albedo.png",
+      "sha256": "e7cf41d2793786387fff93cd3603cbcc453fa0fad5e04bd08b95db9a21d7dd26"
+    },
+    "model://external_camera": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/external_camera",
+      "sha256": null
+    },
+    "model://external_camera_b": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/external_camera_b",
+      "sha256": null
+    },
+    "model://external_camera_c": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/external_camera_c",
+      "sha256": null
+    },
+    "model://external_camera_d": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/external_camera_d",
+      "sha256": null
+    },
+    "model://external_camera_e": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/external_camera_e",
+      "sha256": null
+    },
+    "model://presentation_overview_camera": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/presentation_overview_camera",
+      "sha256": null
+    },
+    "model://plan_view_camera": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/models/plan_view_camera",
+      "sha256": null
+    },
+    "model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_collision.DAE",
+      "sha256": "262dccf5d5ff7d1859db119ff438c975bdf14e09fdcb8d36184c8afeca6f7be0"
+    },
+    "model://aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_visual.DAE": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_Lamp_01/meshes/aws_robomaker_warehouse_Lamp_01_visual.DAE",
+      "sha256": "5718de01253a33d8ed99695560033e99a282abe93030e8ab41be24e16d6f990d"
+    },
+    "model://aws_robomaker_warehouse_PalletJackB_01/meshes/aws_robomaker_warehouse_PalletJackB_01_collision.DAE": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_PalletJackB_01/meshes/aws_robomaker_warehouse_PalletJackB_01_collision.DAE",
+      "sha256": "ca7886559e76cad6700c37f726b2285abdaa7364265042a639ebc70c31b9993e"
+    },
+    "model://aws_robomaker_warehouse_PalletJackB_01/meshes/aws_robomaker_warehouse_PalletJackB_01_visual.DAE": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_PalletJackB_01/meshes/aws_robomaker_warehouse_PalletJackB_01_visual.DAE",
+      "sha256": "40822b3463520932bf793d2340ca111ca383757f5cc3799dd0f9edc76936974e"
+    },
+    "model://aws_robomaker_warehouse_TrashCanC_01/meshes/aws_robomaker_warehouse_TrashCanC_01_collision.DAE": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_TrashCanC_01/meshes/aws_robomaker_warehouse_TrashCanC_01_collision.DAE",
+      "sha256": "83741a96a3181a38c68cedd03a43c723275dfc448bffaaae8af8674d3572540e"
+    },
+    "model://aws_robomaker_warehouse_TrashCanC_01/meshes/aws_robomaker_warehouse_TrashCanC_01_visual.DAE": {
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/models/aws_robomaker_warehouse_TrashCanC_01/meshes/aws_robomaker_warehouse_TrashCanC_01_visual.DAE",
+      "sha256": "62e98f8a895e99ad5a199e34e3425d96253fa10284f27dafffdcd6eb5920c394"
+    }
+  },
+  "resolved_nodes": [
+    {
+      "package": "sim",
+      "executable": "actuation_noise_node",
+      "parameters": [
+        {
+          "use_sim_time": true,
+          "enabled": true,
+          "input_topic": "/cmd_vel_raw",
+          "output_topic": "/cmd_vel",
+          "diagnostics_topic": "/cmd_vel_noise/diagnostics",
+          "seed": 210,
+          "linear_slip_mean": 0.03,
+          "linear_slip_std": 0.06,
+          "angular_slip_mean": 0.0,
+          "angular_slip_std": 0.04,
+          "linear_additive_std": 0.008,
+          "angular_additive_std": 0.035,
+          "correlation_alpha": 0.85,
+          "linear_min": 0.0,
+          "linear_max": 0.22,
+          "angular_min": -1.0,
+          "angular_max": 1.0
+        }
+      ],
+      "remappings": []
+    },
+    {
+      "package": "sim",
+      "executable": "encoder_noise_node",
+      "parameters": [
+        {
+          "use_sim_time": true,
+          "enabled": true,
+          "input_topic": "/odom",
+          "output_topic": "/odom_noisy",
+          "seed": 210,
+          "linear_slip_mean": 0.02,
+          "linear_slip_std": 0.05,
+          "angular_slip_mean": 0.0,
+          "angular_slip_std": 0.03,
+          "linear_additive_std": 0.004,
+          "angular_additive_std": 0.02,
+          "correlation_alpha": 0.8
+        }
+      ],
+      "remappings": []
+    },
+    {
+      "package": "planning",
+      "executable": "efe_agent",
+      "parameters": [
+        {
+          "use_sim_time": true,
+          "cmd_topic": "/cmd_vel_raw",
+          "cmd_publish_rate": 10.0,
+          "plan_rate": 2.0,
+          "belief_publish_rate": 10.0,
+          "horizon": 20,
+          "dt": 0.25,
+          "v_max": 0.22,
+          "max_predict_speed_mps": 0.22,
+          "control_weight": 0.0,
+          "use_pixel_correction": false,
+          "state_correction_ekf": true,
+          "state_correction_mode": "fused",
+          "state_max_correction_jump_m": 0.0,
+          "pixel_topic": "/perception/pixel_pose",
+          "pixel_timeout_s": 0.5,
+          "pixel_correction_min_interval_s": 0.0,
+          "pixel_correction_approx": "AUTO",
+          "skip_stale_pixel_correction": true,
+          "bev_y_calibration_offset_m": 0.127,
+          "bev_affine_calibration": "",
+          "pixel_max_correction_jump_m": 0.0,
+          "pixel_correction_nis_threshold": 9.21,
+          "state_reanchor_m": 0.0,
+          "state_max_predict_dt_s": 1.5,
+          "state_reject_inflate_m2": 0.05,
+          "stale_belief_inflate_m2_per_s": 0.0,
+          "stale_belief_inflate_cap_m2": 0.0,
+          "require_state_correction_envelope": true,
+          "use_diagnostic_odom_localization": false,
+          "odom_topic": "/odom_noisy",
+          "use_odom_for_predict": true,
+          "heading_update_mode": "coupled",
+          "odom_yaw_offset_rad": 0.0,
+          "local_controller_type": "turn_then_go",
+          "min_state_cov": 1e-06,
+          "debug_runtime": false,
+          "process_noise_xy": 0.01,
+          "process_noise_theta": 0.02,
+          "obs_noise_uv": 2.0,
+          "goal_sigma_uv": 2.0,
+          "risk_weight_obs": 1.0,
+          "ambiguity_weight": 3.0,
+          "r_visible_uv": 0.7642679454946852,
+          "r_miss_uv": 40.0,
+          "visibility_sigma_kappa": 1.0,
+          "goal_prior_u_std_start": 80.0,
+          "goal_prior_v_std_start": 80.0,
+          "goal_prior_u_std_final": 4.0,
+          "goal_prior_v_std_final": 4.0,
+          "goal_tightening_power": 0.45,
+          "goal_progress_n_steps": 90,
+          "observation_risk_scale": 1.25,
+          "ambiguity_term_scale": 1.0,
+          "discount_gamma": 0.98,
+          "use_visibility_model": true,
+          "visibility_target_height_m": 0.0,
+          "visibility_geometry_json": "{\"source_world\":\"/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf\",\"model_name\":\"warehouse_v2_occluders\",\"prisms\":[{\"name\":\"warehouse_v2_occluders/obs_A1b1w:collision\",\"xmin\":-9.85,\"xmax\":-8.97,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b1e:collision\",\"xmin\":-8.83,\"xmax\":-7.95,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b2w:collision\",\"xmin\":-9.85,\"xmax\":-8.97,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b2e:collision\",\"xmin\":-8.83,\"xmax\":-7.95,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b3w:collision\",\"xmin\":-9.85,\"xmax\":-8.97,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b3e:collision\",\"xmin\":-8.83,\"xmax\":-7.95,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b1w:collision\",\"xmin\":-5.95,\"xmax\":-5.069999999999999,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b1e:collision\",\"xmin\":-4.930000000000001,\"xmax\":-4.05,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b2w:collision\",\"xmin\":-5.95,\"xmax\":-5.069999999999999,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_A2b2e:collision\",\"xmin\":-4.930000000000001,\"xmax\":-4.05,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_A2b3w:collision\",\"xmin\":-5.95,\"xmax\":-5.069999999999999,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b3e:collision\",\"xmin\":-4.930000000000001,\"xmax\":-4.05,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b1w:collision\",\"xmin\":-2.0500000000000003,\"xmax\":-1.1700000000000002,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b1e:collision\",\"xmin\":-1.03,\"xmax\":-0.14999999999999997,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b2w:collision\",\"xmin\":-2.0500000000000003,\"xmax\":-1.1700000000000002,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b2e:collision\",\"xmin\":-1.03,\"xmax\":-0.14999999999999997,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b3w:collision\",\"xmin\":-2.0500000000000003,\"xmax\":-1.1700000000000002,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_A3b3e:collision\",\"xmin\":-1.03,\"xmax\":-0.14999999999999997,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b1s:collision\",\"xmin\":1.7995,\"xmax\":5.7165,\"ymin\":7.3999999999999995,\"ymax\":8.28,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b1n:collision\",\"xmin\":1.7995,\"xmax\":5.7165,\"ymin\":8.42,\"ymax\":9.299999999999999,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b2s:collision\",\"xmin\":5.7165,\"xmax\":9.6335,\"ymin\":7.3999999999999995,\"ymax\":8.28,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b2n:collision\",\"xmin\":5.7165,\"xmax\":9.6335,\"ymin\":8.42,\"ymax\":9.299999999999999,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_Cs_p0:collision\",\"xmin\":2.109,\"xmax\":4.255,\"ymin\":-4.3315,\"ymax\":-2.3484999999999996,\"zmin\":0.0,\"zmax\":1.058},{\"name\":\"warehouse_v2_occluders/obs_Cs_p1:collision\",\"xmin\":4.752000000000001,\"xmax\":6.898,\"ymin\":-4.3315,\"ymax\":-2.3484999999999996,\"zmin\":0.0004999999999999449,\"zmax\":2.1155},{\"name\":\"warehouse_v2_occluders/obs_Cs_p2:collision\",\"xmin\":7.395,\"xmax\":9.541,\"ymin\":-4.3315,\"ymax\":-2.3484999999999996,\"zmin\":0.0004999999999999449,\"zmax\":3.1734999999999998},{\"name\":\"warehouse_v2_occluders/obs_Cm_p0:collision\",\"xmin\":2.582,\"xmax\":3.782,\"ymin\":-0.020000000000000018,\"ymax\":1.18,\"zmin\":0.0,\"zmax\":2.64},{\"name\":\"warehouse_v2_occluders/obs_Cm_p1:collision\",\"xmin\":5.2250000000000005,\"xmax\":6.425,\"ymin\":-0.020000000000000018,\"ymax\":1.18,\"zmin\":0.0,\"zmax\":0.88},{\"name\":\"warehouse_v2_occluders/obs_Cm_p2:collision\",\"xmin\":7.868,\"xmax\":9.068,\"ymin\":-0.020000000000000018,\"ymax\":1.18,\"zmin\":0.0,\"zmax\":1.76},{\"name\":\"warehouse_v2_occluders/obs_Cn_p0:collision\",\"xmin\":2.102,\"xmax\":4.2620000000000005,\"ymin\":3.675,\"ymax\":5.325,\"zmin\":0.0,\"zmax\":1.96},{\"name\":\"warehouse_v2_occluders/obs_Cn_p1:collision\",\"xmin\":4.745,\"xmax\":6.905,\"ymin\":3.675,\"ymax\":5.325,\"zmin\":0.0,\"zmax\":0.98},{\"name\":\"warehouse_v2_occluders/obs_Cn_p2:collision\",\"xmin\":7.388,\"xmax\":9.548,\"ymin\":3.675,\"ymax\":5.325,\"zmin\":0.0,\"zmax\":1.47},{\"name\":\"warehouse_v2_occluders/dock_office:collision\",\"xmin\":-11.32,\"xmax\":-8.879999999999999,\"ymin\":-9.319999999999999,\"ymax\":-7.579999999999999,\"zmin\":0.0,\"zmax\":2.8},{\"name\":\"warehouse_v2_occluders/obs_STAGE_MID0:collision\",\"xmin\":-4.375,\"xmax\":-3.425,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.72},{\"name\":\"warehouse_v2_occluders/obs_STAGE_MID1:collision\",\"xmin\":-3.325,\"xmax\":-2.375,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.72},{\"name\":\"warehouse_v2_occluders/obs_STAGE_E0:collision\",\"xmin\":2.8249999999999997,\"xmax\":3.775,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.06},{\"name\":\"warehouse_v2_occluders/obs_STAGE_E1:collision\",\"xmin\":3.8749999999999996,\"xmax\":4.824999999999999,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.06}]}",
+          "collision_geometry_json": "{\"source_world\":\"/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf\",\"model_name\":\"warehouse_shell,warehouse_v2_occluders\",\"prisms\":[{\"name\":\"warehouse_shell/wall_east:collision\",\"xmin\":11.9,\"xmax\":12.1,\"ymin\":-10.0,\"ymax\":10.0,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/wall_west:collision\",\"xmin\":-12.1,\"xmax\":-11.9,\"ymin\":-10.0,\"ymax\":10.0,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/wall_north:collision\",\"xmin\":-12.0,\"xmax\":12.0,\"ymin\":9.9,\"ymax\":10.1,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/wall_south_0:collision\",\"xmin\":-12.0,\"xmax\":-10.100000000000001,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/wall_south_1:collision\",\"xmin\":-6.9,\"xmax\":-3.1,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/wall_south_2:collision\",\"xmin\":0.10000000000000009,\"xmax\":3.9,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/wall_south_3:collision\",\"xmin\":7.1000000000000005,\"xmax\":12.0,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/door_head_0:collision\",\"xmin\":-10.1,\"xmax\":-6.9,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":4.5,\"zmax\":9.0},{\"name\":\"warehouse_shell/door_head_1:collision\",\"xmin\":-3.1,\"xmax\":0.10000000000000009,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":4.5,\"zmax\":9.0},{\"name\":\"warehouse_shell/door_head_2:collision\",\"xmin\":3.9,\"xmax\":7.1,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":4.5,\"zmax\":9.0},{\"name\":\"warehouse_v2_occluders/obs_A1b1w:collision\",\"xmin\":-9.85,\"xmax\":-8.97,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b1e:collision\",\"xmin\":-8.83,\"xmax\":-7.95,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b2w:collision\",\"xmin\":-9.85,\"xmax\":-8.97,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b2e:collision\",\"xmin\":-8.83,\"xmax\":-7.95,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b3w:collision\",\"xmin\":-9.85,\"xmax\":-8.97,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b3e:collision\",\"xmin\":-8.83,\"xmax\":-7.95,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b1w:collision\",\"xmin\":-5.95,\"xmax\":-5.069999999999999,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b1e:collision\",\"xmin\":-4.930000000000001,\"xmax\":-4.05,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b2w:collision\",\"xmin\":-5.95,\"xmax\":-5.069999999999999,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_A2b2e:collision\",\"xmin\":-4.930000000000001,\"xmax\":-4.05,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_A2b3w:collision\",\"xmin\":-5.95,\"xmax\":-5.069999999999999,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b3e:collision\",\"xmin\":-4.930000000000001,\"xmax\":-4.05,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b1w:collision\",\"xmin\":-2.0500000000000003,\"xmax\":-1.1700000000000002,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b1e:collision\",\"xmin\":-1.03,\"xmax\":-0.14999999999999997,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b2w:collision\",\"xmin\":-2.0500000000000003,\"xmax\":-1.1700000000000002,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b2e:collision\",\"xmin\":-1.03,\"xmax\":-0.14999999999999997,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b3w:collision\",\"xmin\":-2.0500000000000003,\"xmax\":-1.1700000000000002,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_A3b3e:collision\",\"xmin\":-1.03,\"xmax\":-0.14999999999999997,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b1s:collision\",\"xmin\":1.7995,\"xmax\":5.7165,\"ymin\":7.3999999999999995,\"ymax\":8.28,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b1n:collision\",\"xmin\":1.7995,\"xmax\":5.7165,\"ymin\":8.42,\"ymax\":9.299999999999999,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b2s:collision\",\"xmin\":5.7165,\"xmax\":9.6335,\"ymin\":7.3999999999999995,\"ymax\":8.28,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b2n:collision\",\"xmin\":5.7165,\"xmax\":9.6335,\"ymin\":8.42,\"ymax\":9.299999999999999,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_Cs_p0:collision\",\"xmin\":2.109,\"xmax\":4.255,\"ymin\":-4.3315,\"ymax\":-2.3484999999999996,\"zmin\":0.0,\"zmax\":1.058},{\"name\":\"warehouse_v2_occluders/obs_Cs_p1:collision\",\"xmin\":4.752000000000001,\"xmax\":6.898,\"ymin\":-4.3315,\"ymax\":-2.3484999999999996,\"zmin\":0.0004999999999999449,\"zmax\":2.1155},{\"name\":\"warehouse_v2_occluders/obs_Cs_p2:collision\",\"xmin\":7.395,\"xmax\":9.541,\"ymin\":-4.3315,\"ymax\":-2.3484999999999996,\"zmin\":0.0004999999999999449,\"zmax\":3.1734999999999998},{\"name\":\"warehouse_v2_occluders/obs_Cm_p0:collision\",\"xmin\":2.582,\"xmax\":3.782,\"ymin\":-0.020000000000000018,\"ymax\":1.18,\"zmin\":0.0,\"zmax\":2.64},{\"name\":\"warehouse_v2_occluders/obs_Cm_p1:collision\",\"xmin\":5.2250000000000005,\"xmax\":6.425,\"ymin\":-0.020000000000000018,\"ymax\":1.18,\"zmin\":0.0,\"zmax\":0.88},{\"name\":\"warehouse_v2_occluders/obs_Cm_p2:collision\",\"xmin\":7.868,\"xmax\":9.068,\"ymin\":-0.020000000000000018,\"ymax\":1.18,\"zmin\":0.0,\"zmax\":1.76},{\"name\":\"warehouse_v2_occluders/obs_Cn_p0:collision\",\"xmin\":2.102,\"xmax\":4.2620000000000005,\"ymin\":3.675,\"ymax\":5.325,\"zmin\":0.0,\"zmax\":1.96},{\"name\":\"warehouse_v2_occluders/obs_Cn_p1:collision\",\"xmin\":4.745,\"xmax\":6.905,\"ymin\":3.675,\"ymax\":5.325,\"zmin\":0.0,\"zmax\":0.98},{\"name\":\"warehouse_v2_occluders/obs_Cn_p2:collision\",\"xmin\":7.388,\"xmax\":9.548,\"ymin\":3.675,\"ymax\":5.325,\"zmin\":0.0,\"zmax\":1.47},{\"name\":\"warehouse_v2_occluders/dock_office:collision\",\"xmin\":-11.32,\"xmax\":-8.879999999999999,\"ymin\":-9.319999999999999,\"ymax\":-7.579999999999999,\"zmin\":0.0,\"zmax\":2.8},{\"name\":\"warehouse_v2_occluders/obs_STAGE_MID0:collision\",\"xmin\":-4.375,\"xmax\":-3.425,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.72},{\"name\":\"warehouse_v2_occluders/obs_STAGE_MID1:collision\",\"xmin\":-3.325,\"xmax\":-2.375,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.72},{\"name\":\"warehouse_v2_occluders/obs_STAGE_E0:collision\",\"xmin\":2.8249999999999997,\"xmax\":3.775,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.06},{\"name\":\"warehouse_v2_occluders/obs_STAGE_E1:collision\",\"xmin\":3.8749999999999996,\"xmax\":4.824999999999999,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.06}]}",
+          "driveable_geometry_json": "{\"prisms\": [{\"name\": \"lane_01\", \"xmin\": -8.5, \"xmax\": 11.4, \"ymin\": -7.8, \"ymax\": -4.7, \"zmin\": 0.0, \"zmax\": 0.1}, {\"name\": \"lane_02\", \"xmin\": -11.3, \"xmax\": 1.5, \"ymin\": 7.7, \"ymax\": 9.4, \"zmin\": 0.0, \"zmax\": 0.1}, {\"name\": \"lane_03\", \"xmin\": 10.2, \"xmax\": 11.4, \"ymin\": -4.7, \"ymax\": 9.4, \"zmin\": 0.0, \"zmax\": 0.1}, {\"name\": \"lane_04\", \"xmin\": -11.3, \"xmax\": -10.2, \"ymin\": -7.2, \"ymax\": 7.7, \"zmin\": 0.0, \"zmax\": 0.1}, {\"name\": \"lane_05\", \"xmin\": -7.6, \"xmax\": -6.3, \"ymin\": -4.7, \"ymax\": 7.7, \"zmin\": 0.0, \"zmax\": 0.1}, {\"name\": \"lane_06\", \"xmin\": -3.7, \"xmax\": -2.4, \"ymin\": -4.7, \"ymax\": 7.7, \"zmin\": 0.0, \"zmax\": 0.1}, {\"name\": \"lane_07\", \"xmin\": 0.2, \"xmax\": 1.5, \"ymin\": -4.7, \"ymax\": 7.7, \"zmin\": 0.0, \"zmax\": 0.1}, {\"name\": \"lane_08\", \"xmin\": 1.5, \"xmax\": 10.2, \"ymin\": -2.0, \"ymax\": -0.8, \"zmin\": 0.0, \"zmax\": 0.1}, {\"name\": \"lane_09\", \"xmin\": 1.5, \"xmax\": 10.2, \"ymin\": 5.9, \"ymax\": 7.1, \"zmin\": 0.0, \"zmax\": 0.1}, {\"name\": \"lane_10\", \"xmin\": 1.5, \"xmax\": 10.2, \"ymin\": 2.0, \"ymax\": 3.1, \"zmin\": 0.0, \"zmax\": 0.1}, {\"name\": \"lane_11\", \"xmin\": 5.3, \"xmax\": 11.4, \"ymin\": -9.3, \"ymax\": -7.8, \"zmin\": 0.0, \"zmax\": 0.1}, {\"name\": \"lane_12\", \"xmin\": -1.9, \"xmax\": 2.3, \"ymin\": -9.3, \"ymax\": -7.8, \"zmin\": 0.0, \"zmax\": 0.1}, {\"name\": \"lane_13\", \"xmin\": -8.5, \"xmax\": -4.9, \"ymin\": -9.3, \"ymax\": -7.8, \"zmin\": 0.0, \"zmax\": 0.1}, {\"name\": \"lane_14\", \"xmin\": -10.2, \"xmax\": -8.5, \"ymin\": -7.2, \"ymax\": -4.7, \"zmin\": 0.0, \"zmax\": 0.1}], \"model_name\": \"driveable_region\"}",
+          "nogo_mode": "keep_in",
+          "visibility_artifact_path": "",
+          "camera_network_artifact_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/icra_commissioning_20260905/network_planner/uniform.npz",
+          "use_nogo_cost": true,
+          "nogo_penalty_type": "warning_band",
+          "nogo_weight": 40.0,
+          "nogo_safe_distance": 0.55,
+          "nogo_logbarrier_eps": 0.001,
+          "nogo_warning_band": 0.05,
+          "nogo_near_weight": 50.0,
+          "use_belief_nogo_cost": false,
+          "nogo_belief_kappa": 1.0,
+          "use_hit_miss_mixture": false,
+          "robot_collision_radius_m": 0.48541219597369,
+          "optimizer_maxiter": 80,
+          "optimizer_maxfun": 500,
+          "optimizer_ftol": 1e-06,
+          "optimizer_gtol": 1e-05,
+          "optimizer_warm_start": true,
+          "optimizer_multistart": false,
+          "optimizer_multistart_include_direct": false,
+          "optimizer_initial_routes_json": "",
+          "optimizer_terminal_goal_tolerance_m": 0.35,
+          "optimizer_route_seed_mode": "lane_graph",
+          "use_hierarchical": true,
+          "global_planner_mode": "efe",
+          "preselected_route_json": "",
+          "preselected_route_sha256": "",
+          "preselected_route_source_path": "",
+          "preselected_route_source_sha256": "",
+          "preselected_route_validation_json": "",
+          "global_horizon": 200,
+          "global_dt": 1.0,
+          "local_horizon": 12,
+          "local_plan_rate": 4.0,
+          "local_optimizer_maxiter": 60,
+          "global_use_ambiguity": true,
+          "local_use_ambiguity": false,
+          "local_use_obs_risk": false,
+          "global_optimizer_multistart": true,
+          "local_optimizer_multistart": true,
+          "local_use_visibility_model": false,
+          "local_use_belief_nogo_cost": false,
+          "local_nogo_penalty_type": "",
+          "local_nogo_weight": -1.0,
+          "local_nogo_safe_distance": 0.55,
+          "local_goal_prior_u_std_start": -1.0,
+          "local_goal_prior_v_std_start": -1.0,
+          "local_goal_prior_u_std_final": -1.0,
+          "local_goal_prior_v_std_final": -1.0,
+          "waypoint_spacing_m": 0.2,
+          "waypoint_arrival_radius_m": 0.1,
+          "local_replan_min_remaining_s": 0.0,
+          "local_replan_on_waypoint_change": false,
+          "latency_compensate_plan_handoff": false,
+          "simple_tracker_yaw_gate_rad": 0.6,
+          "cam_pos": [
+            -11.45,
+            -9.45,
+            5.0
+          ],
+          "look_at": [
+            -7.788525415862955,
+            -5.788511966491125,
+            0.0
+          ],
+          "img_width": 1280,
+          "img_height": 720,
+          "fov_h_rad": 1.5708,
+          "approx_method": "ET1",
+          "use_ambiguity": true,
+          "use_obs_risk": true
+        }
+      ],
+      "remappings": []
+    },
+    {
+      "package": "sim",
+      "executable": "wait_for_odom",
+      "parameters": [
+        {
+          "topic": "/odom",
+          "timeout_s": 60.0,
+          "min_messages": 1,
+          "require_pose_match": false,
+          "expected_x": 0.0,
+          "expected_y": 0.0,
+          "expected_yaw": 0.0,
+          "position_tolerance": 0.25,
+          "yaw_tolerance": 0.5
+        }
+      ],
+      "remappings": []
+    }
+  ],
+  "shared_nodes": {
+    "wait_for_odom": {
+      "package": "sim",
+      "executable": "wait_for_odom",
+      "parameters": [
+        {
+          "topic": "/odom",
+          "timeout_s": 60.0,
+          "min_messages": 1,
+          "require_pose_match": false,
+          "expected_x": 0.0,
+          "expected_y": 0.0,
+          "expected_yaw": 0.0,
+          "position_tolerance": 0.25,
+          "yaw_tolerance": 0.5
+        }
+      ],
+      "remappings": []
+    },
+    "command_noise_node": {
+      "package": "sim",
+      "executable": "actuation_noise_node",
+      "parameters": [
+        {
+          "use_sim_time": true,
+          "enabled": true,
+          "input_topic": "/cmd_vel_raw",
+          "output_topic": "/cmd_vel",
+          "diagnostics_topic": "/cmd_vel_noise/diagnostics",
+          "seed": 210,
+          "linear_slip_mean": 0.03,
+          "linear_slip_std": 0.06,
+          "angular_slip_mean": 0.0,
+          "angular_slip_std": 0.04,
+          "linear_additive_std": 0.008,
+          "angular_additive_std": 0.035,
+          "correlation_alpha": 0.85,
+          "linear_min": 0.0,
+          "linear_max": 0.22,
+          "angular_min": -1.0,
+          "angular_max": 1.0
+        }
+      ],
+      "remappings": []
+    },
+    "encoder_noise_node": {
+      "package": "sim",
+      "executable": "encoder_noise_node",
+      "parameters": [
+        {
+          "use_sim_time": true,
+          "enabled": true,
+          "input_topic": "/odom",
+          "output_topic": "/odom_noisy",
+          "seed": 210,
+          "linear_slip_mean": 0.02,
+          "linear_slip_std": 0.05,
+          "angular_slip_mean": 0.0,
+          "angular_slip_std": 0.03,
+          "linear_additive_std": 0.004,
+          "angular_additive_std": 0.02,
+          "correlation_alpha": 0.8
+        }
+      ],
+      "remappings": []
+    },
+    "logger_node": {
+      "package": "experiments",
+      "executable": "experiment_logger",
+      "parameters": [
+        {
+          "use_sim_time": true,
+          "log_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/unused_log_destination",
+          "seed": 210,
+          "v_max": 0.22,
+          "use_odom_for_predict": true,
+          "local_controller_type": "turn_then_go",
+          "method": "visibility_aware_efe",
+          "perception_backend": "yolo",
+          "world": "warehouse_v2.world.sdf",
+          "task": "fusion_network_traverse",
+          "planner": "visibility_aware_efe",
+          "state_source_x": "yolo_mask_or_bbox_homography",
+          "state_source_y": "yolo_mask_or_bbox_homography",
+          "state_source_theta": "none",
+          "state_estimator_mode": "yolo_camera_xy_only_no_direct_theta",
+          "state_correction_mode": "fused",
+          "manager_settings_json": "{\"manager_active\": true, \"manager_admission_gate\": true, \"manager_age_decay_s\": 1.25, \"manager_bias_floor_across_slope_m_per_m\": 0.0, \"manager_bias_floor_along_slope_m_per_m\": 0.0, \"manager_bootstrap_max_disagreement_m\": 0.91, \"manager_bootstrap_min_cameras\": 2, \"manager_commissioned_calibration_path\": \"logs/studies/measurement_commissioning/calibration.json\", \"manager_commissioned_per_camera_sigma\": false, \"manager_commissioned_sigma_px\": 0.0, \"manager_commissioned_world_covariance_path\": \"logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json\", \"manager_correction_propagation_drift_std\": 0.05, \"manager_correction_residual_interval_s\": 0.05, \"manager_correction_timestamp_compensation\": false, \"manager_covariance_profile\": \"commissioned_reference_r\", \"manager_decision_rate_hz\": 5.0, \"manager_fixed_offset_m\": 0.0, \"manager_fusion_common_mode_std_m\": 0.0, \"manager_fusion_disagreement_gate_m\": 0.6, \"manager_fusion_max_timestamp_spread_s\": 0.05, \"manager_fusion_mode\": true, \"manager_fusion_rule\": \"joint_network\", \"manager_learned_correction_path\": \"logs/perception_models/box_feature_bias_correction_20260831/models.joblib\", \"manager_learned_gate_good\": 0.8, \"manager_learned_gate_reject\": 0.5, \"manager_learned_gate_soft_sigma_m\": 0.1, \"manager_max_cross_camera_disagreement_m\": 1.0, \"manager_max_measurement_age_s\": 1.25, \"manager_min_association_confidence\": 0.3, \"manager_min_spatial_trust\": 0.15, \"manager_observation_model\": \"learned_nn\", \"manager_publish_map_observations\": false, \"manager_require_consistency_when_source_available\": false, \"manager_require_gp_artifacts\": false, \"manager_require_source_batch_id\": true, \"manager_required_consecutive_better_frames\": 1}",
+          "campaign_config_path": "",
+          "use_pixel_correction": false,
+          "pixel_timeout_s": 0.5,
+          "use_ambiguity": true,
+          "use_obs_risk": true,
+          "use_visibility_model": true,
+          "visibility_artifact_path": "",
+          "camera_network_artifact_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/icra_commissioning_20260905/network_planner/uniform.npz",
+          "risk_weight_obs": 1.0,
+          "ambiguity_weight": 3.0,
+          "goal_sigma_uv": 2.0,
+          "r_visible_uv": 0.7642679454946852,
+          "r_miss_uv": 40.0,
+          "visibility_sigma_kappa": 1.0,
+          "goal_prior_u_std_start": 80.0,
+          "goal_prior_v_std_start": 80.0,
+          "goal_prior_u_std_final": 4.0,
+          "goal_prior_v_std_final": 4.0,
+          "goal_tightening_power": 0.45,
+          "goal_progress_n_steps": 90,
+          "observation_risk_scale": 1.25,
+          "ambiguity_term_scale": 1.0,
+          "discount_gamma": 0.98,
+          "visibility_target_height_m": 0.0,
+          "visibility_geometry_json": "{\"source_world\":\"/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf\",\"model_name\":\"warehouse_v2_occluders\",\"prisms\":[{\"name\":\"warehouse_v2_occluders/obs_A1b1w:collision\",\"xmin\":-9.85,\"xmax\":-8.97,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b1e:collision\",\"xmin\":-8.83,\"xmax\":-7.95,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b2w:collision\",\"xmin\":-9.85,\"xmax\":-8.97,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b2e:collision\",\"xmin\":-8.83,\"xmax\":-7.95,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b3w:collision\",\"xmin\":-9.85,\"xmax\":-8.97,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b3e:collision\",\"xmin\":-8.83,\"xmax\":-7.95,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b1w:collision\",\"xmin\":-5.95,\"xmax\":-5.069999999999999,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b1e:collision\",\"xmin\":-4.930000000000001,\"xmax\":-4.05,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b2w:collision\",\"xmin\":-5.95,\"xmax\":-5.069999999999999,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_A2b2e:collision\",\"xmin\":-4.930000000000001,\"xmax\":-4.05,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_A2b3w:collision\",\"xmin\":-5.95,\"xmax\":-5.069999999999999,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b3e:collision\",\"xmin\":-4.930000000000001,\"xmax\":-4.05,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b1w:collision\",\"xmin\":-2.0500000000000003,\"xmax\":-1.1700000000000002,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b1e:collision\",\"xmin\":-1.03,\"xmax\":-0.14999999999999997,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b2w:collision\",\"xmin\":-2.0500000000000003,\"xmax\":-1.1700000000000002,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b2e:collision\",\"xmin\":-1.03,\"xmax\":-0.14999999999999997,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b3w:collision\",\"xmin\":-2.0500000000000003,\"xmax\":-1.1700000000000002,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_A3b3e:collision\",\"xmin\":-1.03,\"xmax\":-0.14999999999999997,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b1s:collision\",\"xmin\":1.7995,\"xmax\":5.7165,\"ymin\":7.3999999999999995,\"ymax\":8.28,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b1n:collision\",\"xmin\":1.7995,\"xmax\":5.7165,\"ymin\":8.42,\"ymax\":9.299999999999999,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b2s:collision\",\"xmin\":5.7165,\"xmax\":9.6335,\"ymin\":7.3999999999999995,\"ymax\":8.28,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b2n:collision\",\"xmin\":5.7165,\"xmax\":9.6335,\"ymin\":8.42,\"ymax\":9.299999999999999,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_Cs_p0:collision\",\"xmin\":2.109,\"xmax\":4.255,\"ymin\":-4.3315,\"ymax\":-2.3484999999999996,\"zmin\":0.0,\"zmax\":1.058},{\"name\":\"warehouse_v2_occluders/obs_Cs_p1:collision\",\"xmin\":4.752000000000001,\"xmax\":6.898,\"ymin\":-4.3315,\"ymax\":-2.3484999999999996,\"zmin\":0.0004999999999999449,\"zmax\":2.1155},{\"name\":\"warehouse_v2_occluders/obs_Cs_p2:collision\",\"xmin\":7.395,\"xmax\":9.541,\"ymin\":-4.3315,\"ymax\":-2.3484999999999996,\"zmin\":0.0004999999999999449,\"zmax\":3.1734999999999998},{\"name\":\"warehouse_v2_occluders/obs_Cm_p0:collision\",\"xmin\":2.582,\"xmax\":3.782,\"ymin\":-0.020000000000000018,\"ymax\":1.18,\"zmin\":0.0,\"zmax\":2.64},{\"name\":\"warehouse_v2_occluders/obs_Cm_p1:collision\",\"xmin\":5.2250000000000005,\"xmax\":6.425,\"ymin\":-0.020000000000000018,\"ymax\":1.18,\"zmin\":0.0,\"zmax\":0.88},{\"name\":\"warehouse_v2_occluders/obs_Cm_p2:collision\",\"xmin\":7.868,\"xmax\":9.068,\"ymin\":-0.020000000000000018,\"ymax\":1.18,\"zmin\":0.0,\"zmax\":1.76},{\"name\":\"warehouse_v2_occluders/obs_Cn_p0:collision\",\"xmin\":2.102,\"xmax\":4.2620000000000005,\"ymin\":3.675,\"ymax\":5.325,\"zmin\":0.0,\"zmax\":1.96},{\"name\":\"warehouse_v2_occluders/obs_Cn_p1:collision\",\"xmin\":4.745,\"xmax\":6.905,\"ymin\":3.675,\"ymax\":5.325,\"zmin\":0.0,\"zmax\":0.98},{\"name\":\"warehouse_v2_occluders/obs_Cn_p2:collision\",\"xmin\":7.388,\"xmax\":9.548,\"ymin\":3.675,\"ymax\":5.325,\"zmin\":0.0,\"zmax\":1.47},{\"name\":\"warehouse_v2_occluders/dock_office:collision\",\"xmin\":-11.32,\"xmax\":-8.879999999999999,\"ymin\":-9.319999999999999,\"ymax\":-7.579999999999999,\"zmin\":0.0,\"zmax\":2.8},{\"name\":\"warehouse_v2_occluders/obs_STAGE_MID0:collision\",\"xmin\":-4.375,\"xmax\":-3.425,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.72},{\"name\":\"warehouse_v2_occluders/obs_STAGE_MID1:collision\",\"xmin\":-3.325,\"xmax\":-2.375,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.72},{\"name\":\"warehouse_v2_occluders/obs_STAGE_E0:collision\",\"xmin\":2.8249999999999997,\"xmax\":3.775,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.06},{\"name\":\"warehouse_v2_occluders/obs_STAGE_E1:collision\",\"xmin\":3.8749999999999996,\"xmax\":4.824999999999999,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.06}]}",
+          "collision_geometry_json": "{\"source_world\":\"/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf\",\"model_name\":\"warehouse_shell,warehouse_v2_occluders\",\"prisms\":[{\"name\":\"warehouse_shell/wall_east:collision\",\"xmin\":11.9,\"xmax\":12.1,\"ymin\":-10.0,\"ymax\":10.0,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/wall_west:collision\",\"xmin\":-12.1,\"xmax\":-11.9,\"ymin\":-10.0,\"ymax\":10.0,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/wall_north:collision\",\"xmin\":-12.0,\"xmax\":12.0,\"ymin\":9.9,\"ymax\":10.1,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/wall_south_0:collision\",\"xmin\":-12.0,\"xmax\":-10.100000000000001,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/wall_south_1:collision\",\"xmin\":-6.9,\"xmax\":-3.1,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/wall_south_2:collision\",\"xmin\":0.10000000000000009,\"xmax\":3.9,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/wall_south_3:collision\",\"xmin\":7.1000000000000005,\"xmax\":12.0,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":0.0,\"zmax\":9.0},{\"name\":\"warehouse_shell/door_head_0:collision\",\"xmin\":-10.1,\"xmax\":-6.9,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":4.5,\"zmax\":9.0},{\"name\":\"warehouse_shell/door_head_1:collision\",\"xmin\":-3.1,\"xmax\":0.10000000000000009,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":4.5,\"zmax\":9.0},{\"name\":\"warehouse_shell/door_head_2:collision\",\"xmin\":3.9,\"xmax\":7.1,\"ymin\":-10.1,\"ymax\":-9.9,\"zmin\":4.5,\"zmax\":9.0},{\"name\":\"warehouse_v2_occluders/obs_A1b1w:collision\",\"xmin\":-9.85,\"xmax\":-8.97,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b1e:collision\",\"xmin\":-8.83,\"xmax\":-7.95,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b2w:collision\",\"xmin\":-9.85,\"xmax\":-8.97,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b2e:collision\",\"xmin\":-8.83,\"xmax\":-7.95,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b3w:collision\",\"xmin\":-9.85,\"xmax\":-8.97,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A1b3e:collision\",\"xmin\":-8.83,\"xmax\":-7.95,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b1w:collision\",\"xmin\":-5.95,\"xmax\":-5.069999999999999,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b1e:collision\",\"xmin\":-4.930000000000001,\"xmax\":-4.05,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b2w:collision\",\"xmin\":-5.95,\"xmax\":-5.069999999999999,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_A2b2e:collision\",\"xmin\":-4.930000000000001,\"xmax\":-4.05,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_A2b3w:collision\",\"xmin\":-5.95,\"xmax\":-5.069999999999999,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A2b3e:collision\",\"xmin\":-4.930000000000001,\"xmax\":-4.05,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b1w:collision\",\"xmin\":-2.0500000000000003,\"xmax\":-1.1700000000000002,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b1e:collision\",\"xmin\":-1.03,\"xmax\":-0.14999999999999997,\"ymin\":-4.4005,\"ymax\":-0.48350000000000026,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b2w:collision\",\"xmin\":-2.0500000000000003,\"xmax\":-1.1700000000000002,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b2e:collision\",\"xmin\":-1.03,\"xmax\":-0.14999999999999997,\"ymin\":-0.4834999999999998,\"ymax\":3.4335,\"zmin\":0.0,\"zmax\":5.226},{\"name\":\"warehouse_v2_occluders/obs_A3b3w:collision\",\"xmin\":-2.0500000000000003,\"xmax\":-1.1700000000000002,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_A3b3e:collision\",\"xmin\":-1.03,\"xmax\":-0.14999999999999997,\"ymin\":3.4345,\"ymax\":7.3515,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b1s:collision\",\"xmin\":1.7995,\"xmax\":5.7165,\"ymin\":7.3999999999999995,\"ymax\":8.28,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b1n:collision\",\"xmin\":1.7995,\"xmax\":5.7165,\"ymin\":8.42,\"ymax\":9.299999999999999,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b2s:collision\",\"xmin\":5.7165,\"xmax\":9.6335,\"ymin\":7.3999999999999995,\"ymax\":8.28,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_B1b2n:collision\",\"xmin\":5.7165,\"xmax\":9.6335,\"ymin\":8.42,\"ymax\":9.299999999999999,\"zmin\":-0.0004999999999999449,\"zmax\":2.6125},{\"name\":\"warehouse_v2_occluders/obs_Cs_p0:collision\",\"xmin\":2.109,\"xmax\":4.255,\"ymin\":-4.3315,\"ymax\":-2.3484999999999996,\"zmin\":0.0,\"zmax\":1.058},{\"name\":\"warehouse_v2_occluders/obs_Cs_p1:collision\",\"xmin\":4.752000000000001,\"xmax\":6.898,\"ymin\":-4.3315,\"ymax\":-2.3484999999999996,\"zmin\":0.0004999999999999449,\"zmax\":2.1155},{\"name\":\"warehouse_v2_occluders/obs_Cs_p2:collision\",\"xmin\":7.395,\"xmax\":9.541,\"ymin\":-4.3315,\"ymax\":-2.3484999999999996,\"zmin\":0.0004999999999999449,\"zmax\":3.1734999999999998},{\"name\":\"warehouse_v2_occluders/obs_Cm_p0:collision\",\"xmin\":2.582,\"xmax\":3.782,\"ymin\":-0.020000000000000018,\"ymax\":1.18,\"zmin\":0.0,\"zmax\":2.64},{\"name\":\"warehouse_v2_occluders/obs_Cm_p1:collision\",\"xmin\":5.2250000000000005,\"xmax\":6.425,\"ymin\":-0.020000000000000018,\"ymax\":1.18,\"zmin\":0.0,\"zmax\":0.88},{\"name\":\"warehouse_v2_occluders/obs_Cm_p2:collision\",\"xmin\":7.868,\"xmax\":9.068,\"ymin\":-0.020000000000000018,\"ymax\":1.18,\"zmin\":0.0,\"zmax\":1.76},{\"name\":\"warehouse_v2_occluders/obs_Cn_p0:collision\",\"xmin\":2.102,\"xmax\":4.2620000000000005,\"ymin\":3.675,\"ymax\":5.325,\"zmin\":0.0,\"zmax\":1.96},{\"name\":\"warehouse_v2_occluders/obs_Cn_p1:collision\",\"xmin\":4.745,\"xmax\":6.905,\"ymin\":3.675,\"ymax\":5.325,\"zmin\":0.0,\"zmax\":0.98},{\"name\":\"warehouse_v2_occluders/obs_Cn_p2:collision\",\"xmin\":7.388,\"xmax\":9.548,\"ymin\":3.675,\"ymax\":5.325,\"zmin\":0.0,\"zmax\":1.47},{\"name\":\"warehouse_v2_occluders/dock_office:collision\",\"xmin\":-11.32,\"xmax\":-8.879999999999999,\"ymin\":-9.319999999999999,\"ymax\":-7.579999999999999,\"zmin\":0.0,\"zmax\":2.8},{\"name\":\"warehouse_v2_occluders/obs_STAGE_MID0:collision\",\"xmin\":-4.375,\"xmax\":-3.425,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.72},{\"name\":\"warehouse_v2_occluders/obs_STAGE_MID1:collision\",\"xmin\":-3.325,\"xmax\":-2.375,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.72},{\"name\":\"warehouse_v2_occluders/obs_STAGE_E0:collision\",\"xmin\":2.8249999999999997,\"xmax\":3.775,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.06},{\"name\":\"warehouse_v2_occluders/obs_STAGE_E1:collision\",\"xmin\":3.8749999999999996,\"xmax\":4.824999999999999,\"ymin\":-9.25,\"ymax\":-8.25,\"zmin\":0.0,\"zmax\":1.06}]}",
+          "perception_use_geometry_occlusion": true,
+          "use_nogo_cost": false,
+          "nogo_penalty_type": "warning_band",
+          "nogo_weight": 40.0,
+          "nogo_safe_distance": 0.55,
+          "nogo_logbarrier_eps": 0.001,
+          "nogo_warning_band": 0.05,
+          "nogo_near_weight": 50.0,
+          "use_belief_nogo_cost": false,
+          "nogo_belief_kappa": 1.0,
+          "use_hit_miss_mixture": false,
+          "nogo_mode": "keep_in",
+          "yolo_model": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt",
+          "yolo_compiled_model": "",
+          "yolo_device": "cpu",
+          "yolo_imgsz": 960,
+          "yolo_conf_threshold": 0.25,
+          "yolo_iou_threshold": 0.45,
+          "yolo_target_class": "robot",
+          "yolo_class_id": 0,
+          "yolo_use_masks": false,
+          "yolo_min_mask_area_px": 12.0,
+          "yolo_mask_bottom_band_px": 3.0,
+          "yolo_max_batch_stamp_skew_s": 0.05,
+          "show_pose_markers": false,
+          "diagnostics_match_tolerance_s": 0.001,
+          "bev_y_calibration_offset_m": 0.127,
+          "bev_affine_calibration": "",
+          "pixel_correction_nis_threshold": 9.21,
+          "state_reanchor_m": 0.0,
+          "state_max_predict_dt_s": 1.5,
+          "state_reject_inflate_m2": 0.05,
+          "stale_belief_inflate_m2_per_s": 0.0,
+          "stale_belief_inflate_cap_m2": 0.0,
+          "require_state_correction_envelope": true,
+          "world_profiles_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/experiments/share/experiments/config/world_profiles.yaml",
+          "tasks_yaml": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/experiments/share/experiments/config/tasks.yaml",
+          "auto_stop_on_goal": true,
+          "goal_success_radius": 0.35,
+          "goal_success_hold_s": 2.0,
+          "goal_stable_radius": 0.2,
+          "goal_stable_hold_s": 2.0,
+          "goal_stable_max_displacement_m": 0.04,
+          "plan_rate": 2.0,
+          "cmd_publish_rate": 10.0,
+          "horizon": 20,
+          "dt": 0.25,
+          "control_weight": 0.0,
+          "process_noise_xy": 0.01,
+          "process_noise_theta": 0.02,
+          "obs_noise_uv": 2.0,
+          "optimizer_maxiter": 80,
+          "optimizer_maxfun": 500,
+          "optimizer_ftol": 1e-06,
+          "optimizer_gtol": 1e-05,
+          "optimizer_warm_start": true,
+          "optimizer_multistart": false,
+          "optimizer_multistart_include_direct": false,
+          "optimizer_initial_routes_json": "",
+          "optimizer_terminal_goal_tolerance_m": 0.35,
+          "optimizer_route_seed_mode": "lane_graph",
+          "use_hierarchical": true,
+          "global_planner_mode": "efe",
+          "preselected_route_json": "",
+          "preselected_route_sha256": "",
+          "preselected_route_source_path": "",
+          "preselected_route_source_sha256": "",
+          "preselected_route_clearance_m": 0.25,
+          "preselected_route_endpoint_tolerance_m": 0.25,
+          "preselected_route_sample_step_m": 0.04,
+          "preselected_route_validation_json": "",
+          "global_horizon": 200,
+          "global_dt": 1.0,
+          "local_horizon": 12,
+          "local_plan_rate": 4.0,
+          "local_optimizer_maxiter": 60,
+          "global_use_ambiguity": true,
+          "local_use_ambiguity": false,
+          "local_use_obs_risk": false,
+          "global_optimizer_multistart": true,
+          "local_optimizer_multistart": true,
+          "local_use_visibility_model": false,
+          "local_use_belief_nogo_cost": false,
+          "local_nogo_penalty_type": "",
+          "local_nogo_weight": -1.0,
+          "local_nogo_safe_distance": 0.55,
+          "local_goal_prior_u_std_start": -1.0,
+          "local_goal_prior_v_std_start": -1.0,
+          "local_goal_prior_u_std_final": -1.0,
+          "local_goal_prior_v_std_final": -1.0,
+          "waypoint_spacing_m": 0.2,
+          "waypoint_arrival_radius_m": 0.1,
+          "local_replan_min_remaining_s": 0.0,
+          "local_replan_on_waypoint_change": false,
+          "latency_compensate_plan_handoff": false,
+          "simple_tracker_yaw_gate_rad": 0.6,
+          "heading_update_mode": "coupled",
+          "run_timeout_after_first_cmd_s": 600.0,
+          "first_cmd_linear_eps": 0.02,
+          "first_cmd_angular_eps": 0.1,
+          "stuck_window_s": 8.0,
+          "stuck_max_displacement_m": 0.08,
+          "stuck_max_goal_improvement_m": 0.05,
+          "stuck_cmd_fraction_min": 0.5,
+          "stuck_idle_cmd_fraction_max": 0.1,
+          "robot_collision_radius_m": 0.48541219597369,
+          "terminate_on_geom_collision": false,
+          "use_command_noise": true,
+          "odom_topic": "/odom_noisy",
+          "command_noise_linear_slip_mean": 0.03,
+          "command_noise_linear_slip_std": 0.06,
+          "command_noise_angular_slip_mean": 0.0,
+          "command_noise_angular_slip_std": 0.04,
+          "command_noise_linear_additive_std": 0.008,
+          "command_noise_angular_additive_std": 0.035,
+          "command_noise_correlation_alpha": 0.85,
+          "encoder_noise_linear_slip_mean": 0.02,
+          "encoder_noise_linear_slip_std": 0.05,
+          "encoder_noise_angular_slip_mean": 0.0,
+          "encoder_noise_angular_slip_std": 0.03,
+          "encoder_noise_linear_additive_std": 0.004,
+          "encoder_noise_angular_additive_std": 0.02,
+          "encoder_noise_correlation_alpha": 0.8,
+          "cam_pos": [
+            -11.45,
+            -9.45,
+            5.0
+          ],
+          "look_at": [
+            -7.788525415862955,
+            -5.788511966491125,
+            0.0
+          ],
+          "img_width": 1280,
+          "img_height": 720,
+          "fov_h_rad": 1.5708
+        }
+      ],
+      "remappings": []
+    }
+  },
+  "contacts": [
+    {
+      "model": "warehouse_shell",
+      "link": "wall_east",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_shell",
+      "link": "wall_west",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_shell",
+      "link": "wall_north",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_shell",
+      "link": "wall_south_0",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_shell",
+      "link": "wall_south_1",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_shell",
+      "link": "wall_south_2",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_shell",
+      "link": "wall_south_3",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_shell",
+      "link": "door_head_0",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_shell",
+      "link": "door_head_1",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_shell",
+      "link": "door_head_2",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A1b1w",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A1b1e",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A1b2w",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A1b2e",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A1b3w",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A1b3e",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A2b1w",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A2b1e",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A2b2w",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A2b2e",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A2b3w",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A2b3e",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A3b1w",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A3b1e",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A3b2w",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A3b2e",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A3b3w",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_A3b3e",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_B1b1s",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_B1b1n",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_B1b2s",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_B1b2n",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_Cs_p0",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_Cs_p1",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_Cs_p2",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_Cm_p0",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_Cm_p1",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_Cm_p2",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_Cn_p0",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_Cn_p1",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_Cn_p2",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "dock_office",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_STAGE_MID0",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_STAGE_MID1",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_STAGE_E0",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    },
+    {
+      "model": "warehouse_v2_occluders",
+      "link": "obs_STAGE_E1",
+      "sensor": "contact",
+      "collisions": [
+        "collision"
+      ],
+      "rate": "60",
+      "explicit_topic": null
+    }
+  ],
+  "collision_prism_count": 46,
+  "max_collision_bound_difference_m": 0.0,
+  "driveable_geometry": {
+    "prisms": [
+      {
+        "name": "lane_01",
+        "xmin": -8.5,
+        "xmax": 11.4,
+        "ymin": -7.8,
+        "ymax": -4.7,
+        "zmin": 0.0,
+        "zmax": 0.1
+      },
+      {
+        "name": "lane_02",
+        "xmin": -11.3,
+        "xmax": 1.5,
+        "ymin": 7.7,
+        "ymax": 9.4,
+        "zmin": 0.0,
+        "zmax": 0.1
+      },
+      {
+        "name": "lane_03",
+        "xmin": 10.2,
+        "xmax": 11.4,
+        "ymin": -4.7,
+        "ymax": 9.4,
+        "zmin": 0.0,
+        "zmax": 0.1
+      },
+      {
+        "name": "lane_04",
+        "xmin": -11.3,
+        "xmax": -10.2,
+        "ymin": -7.2,
+        "ymax": 7.7,
+        "zmin": 0.0,
+        "zmax": 0.1
+      },
+      {
+        "name": "lane_05",
+        "xmin": -7.6,
+        "xmax": -6.3,
+        "ymin": -4.7,
+        "ymax": 7.7,
+        "zmin": 0.0,
+        "zmax": 0.1
+      },
+      {
+        "name": "lane_06",
+        "xmin": -3.7,
+        "xmax": -2.4,
+        "ymin": -4.7,
+        "ymax": 7.7,
+        "zmin": 0.0,
+        "zmax": 0.1
+      },
+      {
+        "name": "lane_07",
+        "xmin": 0.2,
+        "xmax": 1.5,
+        "ymin": -4.7,
+        "ymax": 7.7,
+        "zmin": 0.0,
+        "zmax": 0.1
+      },
+      {
+        "name": "lane_08",
+        "xmin": 1.5,
+        "xmax": 10.2,
+        "ymin": -2.0,
+        "ymax": -0.8,
+        "zmin": 0.0,
+        "zmax": 0.1
+      },
+      {
+        "name": "lane_09",
+        "xmin": 1.5,
+        "xmax": 10.2,
+        "ymin": 5.9,
+        "ymax": 7.1,
+        "zmin": 0.0,
+        "zmax": 0.1
+      },
+      {
+        "name": "lane_10",
+        "xmin": 1.5,
+        "xmax": 10.2,
+        "ymin": 2.0,
+        "ymax": 3.1,
+        "zmin": 0.0,
+        "zmax": 0.1
+      },
+      {
+        "name": "lane_11",
+        "xmin": 5.3,
+        "xmax": 11.4,
+        "ymin": -9.3,
+        "ymax": -7.8,
+        "zmin": 0.0,
+        "zmax": 0.1
+      },
+      {
+        "name": "lane_12",
+        "xmin": -1.9,
+        "xmax": 2.3,
+        "ymin": -9.3,
+        "ymax": -7.8,
+        "zmin": 0.0,
+        "zmax": 0.1
+      },
+      {
+        "name": "lane_13",
+        "xmin": -8.5,
+        "xmax": -4.9,
+        "ymin": -9.3,
+        "ymax": -7.8,
+        "zmin": 0.0,
+        "zmax": 0.1
+      },
+      {
+        "name": "lane_14",
+        "xmin": -10.2,
+        "xmax": -8.5,
+        "ymin": -7.2,
+        "ymax": -4.7,
+        "zmin": 0.0,
+        "zmax": 0.1
+      }
+    ],
+    "model_name": "driveable_region"
+  },
+  "spawn": {
+    "pose": {
+      "x": -7.9,
+      "y": -8.7,
+      "z": 0.05,
+      "yaw": 0.0
+    },
+    "centre_inside_driveable": true,
+    "body_inside_driveable": true,
+    "exact_body_clearance_m": 0.5799999999999982,
+    "circle_clearance_m": 0.49458780402630864,
+    "body_intersects": false,
+    "lane_centre_clearance_m": 0.5999999999999996
+  },
+  "start_full_turn_min_clearance_m": 0.4946056622878636,
+  "tight_turn_rectangles": [
+    {
+      "yaw": 0.0,
+      "rect_fits_0_9m_lane": true,
+      "lateral_half_extent_m": 0.275
+    },
+    {
+      "yaw": 0.7853981633974483,
+      "rect_fits_0_9m_lane": false,
+      "lateral_half_extent_m": 0.47729707730091964
+    },
+    {
+      "yaw": 0.9685089806599324,
+      "rect_fits_0_9m_lane": false,
+      "lateral_half_extent_m": 0.48541219597369
+    },
+    {
+      "yaw": 1.5707963267948966,
+      "rect_fits_0_9m_lane": true,
+      "lateral_half_extent_m": 0.4
+    }
+  ],
+  "physical_body_circumradius_m": 0.48541219597369,
+  "visual_hull_bounds_m": [
+    [
+      -0.406,
+      -0.281,
+      0.0
+    ],
+    [
+      0.40700000000000003,
+      0.281,
+      0.4
+    ]
+  ],
+  "tf_contract": {
+    "rsp_parent": "base_footprint",
+    "rsp_child": "base_link",
+    "diff_parent": "odom",
+    "diff_child": "base_link",
+    "rsp_origin": "0 0 0.010",
+    "joint_state_publisher_plugin_present": false,
+    "camera_A_sdf_forward_world": [
+      0.508671156524786,
+      0.5086730249817057,
+      -0.6946260923516315
+    ],
+    "camera_A_tf_z_world": [
+      0.4911739181971949,
+      0.4911757223830516,
+      0.7193709695451315
+    ],
+    "optical_axis_disagreement_deg": 90.00000000000001
+  },
+  "selected_runs": [
+    {
+      "campaign": "runtime",
+      "arm": "P0",
+      "run": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_pilot/fusion_network_traverse/P0/seed210/experiment_20260906_213015",
+      "selection_sha256": "66b928fbaf8f470332acff23922003822fcb58113d4bd085180ade5c54c0cfd0",
+      "verified_files": {
+        "run_manifest.json": "31d1714f817919c989862539c80ec7aaa4b9e6cddb8c7c51b55125c2cb8d314a",
+        "run_summary.json": "50a7118e4d30c63f7073327ada07d7ad3989b8cf22bfcf56e7dcf71f300fc821",
+        "experiment.csv": "64d9daf304e064930f0fbd6573a200b362d5636731d88ae2ae1f51fe1332b72d",
+        "fusion_observations.csv": "bdf79f810e9629def34196ed573eb5333bb9ef43d009853f0d0654881366bbfe",
+        "correction_assimilations.csv": "61fe08439a528efb2074efc6ebd9ffebcf9b192db70a1b83619db450d477b029",
+        "camera_opportunities.jsonl": "5951645a5c5fc309e86e8a9dd5abf49d8335ba6ddd30bdb1b2018729e91fdfaf",
+        "global_plan.csv": "5c4d769d4ee9c5b81ab84325d0d45eecf8faad202a37afc6c033b7441f86067a",
+        "global_waypoints.csv": "108d151d72028402ee33e2fe55e08ee32c22e217bafb6d848d927c7dfd17a628",
+        "global_plan_meta.json": "caeba2b90fdcc63e8d1f2303b4b91898f074f79eeaa2d64cb8f833384b460394"
+      },
+      "summary": {
+        "completion_reason": "stuck",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "gt_stamp_source": "receipt_sim_clock",
+        "crashed": false,
+        "collision_any": false,
+        "collision_contact": false,
+        "collision_geom": false,
+        "contact_topic_publishers": 46,
+        "contact_messages_seen": 0,
+        "collision_reason": "",
+        "first_crash_stamp": NaN,
+        "valid_run": true
+      },
+      "first_row": {
+        "stamp": "1.083",
+        "odom_stamp": "1.08",
+        "odom_map_stamp": "1.08",
+        "odom_noisy_stamp": "nan",
+        "planner_belief_stamp": "nan",
+        "gt_stamp": "0.0",
+        "gt_available": "1.0",
+        "contact_topic_publishers": "46",
+        "contact_messages_seen": "0",
+        "collision_contact": "0.0",
+        "collision_geom": "0.0",
+        "collision_reason": "",
+        "first_crash_stamp": "nan",
+        "cmd_v": "0.0",
+        "cmd_w": "0.0"
+      },
+      "first_command_row": {
+        "stamp": "49.0",
+        "odom_stamp": "49.0",
+        "odom_map_stamp": "49.0",
+        "odom_noisy_stamp": "49.0",
+        "planner_belief_stamp": "48.902",
+        "gt_stamp": "48.994",
+        "gt_available": "1.0",
+        "contact_topic_publishers": "46",
+        "contact_messages_seen": "0",
+        "collision_contact": "0.0",
+        "collision_geom": "0.0",
+        "collision_reason": "",
+        "first_crash_stamp": "nan",
+        "cmd_v": "0.18779981380000732",
+        "cmd_w": "0.13621383240746446"
+      },
+      "last_row": {
+        "stamp": "240.30100000000002",
+        "odom_stamp": "240.3",
+        "odom_map_stamp": "240.3",
+        "odom_noisy_stamp": "240.3",
+        "planner_belief_stamp": "240.2",
+        "gt_stamp": "240.299",
+        "gt_available": "1.0",
+        "contact_topic_publishers": "46",
+        "contact_messages_seen": "0",
+        "collision_contact": "0.0",
+        "collision_geom": "0.0",
+        "collision_reason": "",
+        "first_crash_stamp": "nan",
+        "cmd_v": "0.0",
+        "cmd_w": "0.0"
+      },
+      "row_count": 2394,
+      "manifest_has_world_hash": false,
+      "manifest_has_robot_hash": false
+    },
+    {
+      "campaign": "runtime",
+      "arm": "P1",
+      "run": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_pilot/fusion_network_traverse/P1/seed210/experiment_20260906_214913",
+      "selection_sha256": "66b928fbaf8f470332acff23922003822fcb58113d4bd085180ade5c54c0cfd0",
+      "verified_files": {
+        "run_manifest.json": "8aa50e2dba62f3ead3b93bd527b73a52878e7bab3b2b1965a5f2c9947e82d8b1",
+        "run_summary.json": "2480a2286544967846a9febf47ce0b1616e26cef5f219ac7bb435f93f6cd53db",
+        "experiment.csv": "0c4059f2603dcba9733b81561f55673d8d49834523a72576575a91b4e2dcd8cb",
+        "fusion_observations.csv": "f3aa9ed68ae13d4d0c8ab8053d0f1fc32514756d7052c3f48df8e13eda9510c3",
+        "correction_assimilations.csv": "dc851897dc569618a2ee6bce3707c23b85edf93afdba86e61f792b703c3359b1",
+        "camera_opportunities.jsonl": "24a4716931f35de0d22cafb25045b8f3189efea1629e69202b3923943193f587",
+        "global_plan.csv": "2283d609a0d9599d4eae8d3469cad464f14b234f3172f74b5a894987fe2ede76",
+        "global_waypoints.csv": "d690e270acc75e9b732881e8ef392cc517e8fff457c949218faf322b7e05df03",
+        "global_plan_meta.json": "3109735d9eb6e8fc6f7f919c780fe530767937b35ba2ff101769a40975be285c"
+      },
+      "summary": {
+        "completion_reason": "goal_reached",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "gt_stamp_source": "receipt_sim_clock",
+        "crashed": false,
+        "collision_any": false,
+        "collision_contact": false,
+        "collision_geom": false,
+        "contact_topic_publishers": 46,
+        "contact_messages_seen": 0,
+        "collision_reason": "",
+        "first_crash_stamp": NaN,
+        "valid_run": true
+      },
+      "first_row": {
+        "stamp": "0.7330000000000001",
+        "odom_stamp": "nan",
+        "odom_map_stamp": "nan",
+        "odom_noisy_stamp": "nan",
+        "planner_belief_stamp": "nan",
+        "gt_stamp": "0.7330000000000001",
+        "gt_available": "1.0",
+        "contact_topic_publishers": "46",
+        "contact_messages_seen": "0",
+        "collision_contact": "0.0",
+        "collision_geom": "0.0",
+        "collision_reason": "",
+        "first_crash_stamp": "nan",
+        "cmd_v": "0.0",
+        "cmd_w": "0.0"
+      },
+      "first_command_row": {
+        "stamp": "47.2",
+        "odom_stamp": "47.2",
+        "odom_map_stamp": "47.2",
+        "odom_noisy_stamp": "47.2",
+        "planner_belief_stamp": "47.101",
+        "gt_stamp": "47.195",
+        "gt_available": "1.0",
+        "contact_topic_publishers": "46",
+        "contact_messages_seen": "0",
+        "collision_contact": "0.0",
+        "collision_geom": "0.0",
+        "collision_reason": "",
+        "first_crash_stamp": "nan",
+        "cmd_v": "0.18781949270618586",
+        "cmd_w": "0.13600117966209163"
+      },
+      "last_row": {
+        "stamp": "231.30200000000002",
+        "odom_stamp": "231.3",
+        "odom_map_stamp": "231.3",
+        "odom_noisy_stamp": "231.3",
+        "planner_belief_stamp": "231.203",
+        "gt_stamp": "231.298",
+        "gt_available": "1.0",
+        "contact_topic_publishers": "46",
+        "contact_messages_seen": "0",
+        "collision_contact": "0.0",
+        "collision_geom": "0.0",
+        "collision_reason": "",
+        "first_crash_stamp": "nan",
+        "cmd_v": "0.0",
+        "cmd_w": "0.0"
+      },
+      "row_count": 2307,
+      "manifest_has_world_hash": false,
+      "manifest_has_robot_hash": false
+    },
+    {
+      "campaign": "tracking",
+      "arm": "P1",
+      "run": "logs/studies/icra_commissioning_20260905/network_navigation_tracking_pilot/fusion_network_traverse/P1/seed210/experiment_20260906_210032",
+      "selection_sha256": "4674ac6bc773f2e401e67d6799af4033b694915ec926cdaaea647528d5d2973f",
+      "verified_files": {
+        "run_manifest.json": "db717b7b3966f071c8e16a3e61ed54f5defbdbbd0a8780a582b4a08b4d48588e",
+        "run_summary.json": "0389449d30958c01200c984cc0863e9c767a745094ac4dace0a112916cedc4a3",
+        "experiment.csv": "125e4b8a9aace6ac66dd3c73dcc8ba207c33ae84f217b0e4f371df44beb61a23",
+        "fusion_observations.csv": "ecf91282af2655df5d698dbd7c32670dfc77a7e700831f921def24d5c86c3646",
+        "correction_assimilations.csv": "5fc893bb4af5890f7f93ac5944e340f0d4a79398fc1739ae8d47aaf5f1c2583f",
+        "camera_opportunities.jsonl": "08924cd7f9db132b977d05c0a0b20caf6735f4b0698ebbe00c4dac66fca1b91c",
+        "global_plan.csv": "fac1a6da4e90ff935ee3ed96d7c963dbfe992447e2a42c6bb547fed764860ec6",
+        "global_waypoints.csv": "42def042379d431c64a7ab7f4c7d424cf5acf60c37349872764a75cd289bdac7",
+        "global_plan_meta.json": "35e452a47751e9f4678f343fbe755a314fb1df2593cbde438d677c86fa4e9b2b"
+      },
+      "summary": {
+        "completion_reason": "collision",
+        "termination_reference": "planner_belief_or_physical_contact_or_timeout",
+        "gt_stamp_source": "receipt_sim_clock",
+        "crashed": true,
+        "collision_any": true,
+        "collision_contact": true,
+        "collision_geom": false,
+        "contact_topic_publishers": 46,
+        "contact_messages_seen": 1,
+        "collision_reason": "contact:warehouse_v2_occluders::obs_A2b3e::collision",
+        "first_crash_stamp": 165.184,
+        "valid_run": true
+      },
+      "first_row": {
+        "stamp": "1.4740000000000002",
+        "odom_stamp": "1.46",
+        "odom_map_stamp": "1.46",
+        "odom_noisy_stamp": "nan",
+        "planner_belief_stamp": "nan",
+        "gt_stamp": "0.0",
+        "gt_available": "1.0",
+        "contact_topic_publishers": "46",
+        "contact_messages_seen": "0",
+        "collision_contact": "0.0",
+        "collision_geom": "0.0",
+        "collision_reason": "",
+        "first_crash_stamp": "nan",
+        "cmd_v": "0.0",
+        "cmd_w": "0.0"
+      },
+      "first_command_row": {
+        "stamp": "50.0",
+        "odom_stamp": "50.0",
+        "odom_map_stamp": "50.0",
+        "odom_noisy_stamp": "50.0",
+        "planner_belief_stamp": "49.901",
+        "gt_stamp": "49.995000000000005",
+        "gt_available": "1.0",
+        "contact_topic_publishers": "46",
+        "contact_messages_seen": "0",
+        "collision_contact": "0.0",
+        "collision_geom": "0.0",
+        "collision_reason": "",
+        "first_crash_stamp": "nan",
+        "cmd_v": "0.1874785218974053",
+        "cmd_w": "0.13968888900741047"
+      },
+      "last_row": {
+        "stamp": "165.20000000000002",
+        "odom_stamp": "165.2",
+        "odom_map_stamp": "165.2",
+        "odom_noisy_stamp": "165.18",
+        "planner_belief_stamp": "165.102",
+        "gt_stamp": "165.20000000000002",
+        "gt_available": "1.0",
+        "contact_topic_publishers": "46",
+        "contact_messages_seen": "17",
+        "collision_contact": "1.0",
+        "collision_geom": "0.0",
+        "collision_reason": "contact:warehouse_v2_occluders::obs_A2b3e::collision",
+        "first_crash_stamp": "165.184",
+        "cmd_v": "0.18621598791250704",
+        "cmd_w": "-0.3103056791235549"
+      },
+      "row_count": 1639,
+      "manifest_has_world_hash": false,
+      "manifest_has_robot_hash": false
+    }
+  ]
+}

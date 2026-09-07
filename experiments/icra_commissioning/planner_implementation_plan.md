@@ -1,7 +1,7 @@
 # Planner implementation and experiment plan
 
 Scope: complete the IWAI camera-network extension first, then add the smallest commissioning
-analysis that explains its navigation behavior. [The paper map](../../../papers/master_thesis/planning/paper_map.md)
+analysis that explains its navigation behavior. [The paper map](../../../papers/Thesis/planning/paper_map.md)
 assigns the evidence to the 12-page thesis. [ICRA_STATUS.md](../../docs/ICRA_STATUS.md)
 is the single current decision/status account. This file specifies interfaces, code and gates.
 
@@ -192,6 +192,20 @@ turn with full measured odometry, missing-history support, simultaneous cameras,
 events, state/command interleavings, covariance/frame validation and the actuator watchdog.
 The focused packet passes 150 tests; three absent archived pixel traces are skipped.
 
+The frozen corrected pilot is complete: P0 stuck near the final waypoint, P1 and P2 reached
+the goal. A separate opt-in `turn_then_go_recovery` P0 follow-up also reached the goal with
+one logged checked-rotation activation. Its source passed 159 focused tests with the same
+three skips. Q, NN, bias and camera R remain fixed; this is a controller check, not a field
+effect. Preserve the separate selections and the failed attempts. The full results and
+current repair priorities are in the runtime audit; the additional module audits identify
+causal/event defects beyond those scoped test passes.
+
+Implement next in dependency order: immutable ordered motion replay; exclusive identified
+startup and atomic update outcome; bounded camera-batch terminal accounting; monotonic
+belief/command revisions; then a supported-history admission ablation. Only after those
+checks should a field-effect campaign resume. Keep future q/R prediction and the existing
+IWAI score objective explicitly separate until their runtime correspondence is validated.
+
 Analyze full-pose and heading errors as well as planar coverage. Log a reason for every
 refusal and stop. A correct refusal can reveal a planner/controller or support mismatch;
 disable no gate solely to obtain a successful drive. Keep both failed pilot selections.
@@ -247,6 +261,10 @@ python3 scripts/visibility_comparison/run_visibility_campaign.py --config experi
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 experiments/icra_commissioning/network_navigation_analysis.py navigation
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 experiments/icra_commissioning/network_navigation_analysis.py navigation --config experiments/icra_commissioning/network_navigation_tracking_pilot.yaml --campaign logs/studies/icra_commissioning_20260905/network_navigation_tracking_pilot --out logs/studies/icra_commissioning_20260905/network_navigation_tracking_evidence
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 experiments/icra_commissioning/network_navigation_analysis.py navigation --config experiments/icra_commissioning/network_navigation_runtime_pilot.yaml --campaign logs/studies/icra_commissioning_20260905/network_navigation_runtime_pilot --out logs/studies/icra_commissioning_20260905/network_navigation_runtime_evidence
+# Separate completed controller follow-up and evidence reports.
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 experiments/icra_commissioning/network_navigation_analysis.py navigation --config experiments/icra_commissioning/network_navigation_recovery_pilot.yaml --campaign logs/studies/icra_commissioning_20260905/network_navigation_recovery_pilot --out logs/studies/icra_commissioning_20260905/network_navigation_recovery_evidence
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 experiments/icra_commissioning/network_runtime_report.py
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 experiments/icra_commissioning/network_recovery_report.py
 ```
 
 Launching an older YAML against current source does not reproduce the old runtime.

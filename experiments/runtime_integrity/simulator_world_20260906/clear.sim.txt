@@ -1,0 +1,101 @@
+[1;32m[Msg] [0m[1;32mIgnition Gazebo Server v[0m[1;32m6.17.1[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mLoading SDF world file[[0m[1;32m/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/clear.fixture.sdf[0m[1;32m].[0m
+[1;32m[Msg] [0m[1;32mServing entity system service on [[0m[1;32m/[0m[1;32mentity/system/add[0m[1;32m][0m[1;32m[0m
+[1;36m[Dbg] [Physics.cc:804] [0m[1;36mLoaded [[0m[1;36mignition::physics::dartsim::Plugin[0m[1;36m] from library [[0m[1;36m/usr/lib/x86_64-linux-gnu/ign-physics-5/engine-plugins/libignition-physics-dartsim-plugin.so[0m[1;36m][0m[1;36m[0m
+[1;36m[Dbg] [SystemManager.cc:73] [0m[1;36mLoaded system [[0m[1;36mgz::sim::systems::Physics[0m[1;36m] for entity [[0m[1;36m1[0m[1;36m][0m[1;36m[0m
+[1;32m[Msg] [0m[1;32mCreate service on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear/create[0m[1;32m][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mRemove service on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear/remove[0m[1;32m][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mPose service on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear/set_pose[0m[1;32m][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mPose service on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear/set_pose_vector[0m[1;32m][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mLight configuration service on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear/light_config[0m[1;32m][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mPhysics service on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear/set_physics[0m[1;32m][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mSphericalCoordinates service on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear/set_spherical_coordinates[0m[1;32m][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mEnable collision service on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear/enable_collision[0m[1;32m][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mDisable collision service on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear/disable_collision[0m[1;32m][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mMaterial service on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear/visual_config[0m[1;32m][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mMaterial service on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear/wheel_slip[0m[1;32m][0m[1;32m[0m
+[1;36m[Dbg] [SystemManager.cc:73] [0m[1;36mLoaded system [[0m[1;36mgz::sim::systems::UserCommands[0m[1;36m] for entity [[0m[1;36m1[0m[1;36m][0m[1;36m[0m
+[1;36m[Dbg] [SystemManager.cc:73] [0m[1;36mLoaded system [[0m[1;36mgz::sim::systems::Contact[0m[1;36m] for entity [[0m[1;36m1[0m[1;36m][0m[1;36m[0m
+[1;36m[Dbg] [SystemManager.cc:73] [0m[1;36mLoaded system [[0m[1;36mignition::gazebo::systems::Label[0m[1;36m] for entity [[0m[1;36m147[0m[1;36m][0m[1;36m[0m
+[1;32m[Msg] [0m[1;32mDiffDrive subscribing to twist messages on [[0m[1;32m/model/turtlebot3/cmd_vel[0m[1;32m][0m[1;32m[0m
+[1;36m[Dbg] [SystemManager.cc:73] [0m[1;36mLoaded system [[0m[1;36mgz::sim::systems::DiffDrive[0m[1;36m] for entity [[0m[1;36m147[0m[1;36m][0m[1;36m[0m
+[1;32m[Msg] [0m[1;32mLoaded level [[0m[1;32m3[0m[1;32m][0m[1;32m[0m
+[1;36m[Dbg] [ServerConfig.cc:665] [0m[1;36mGenerating LogRecord SDF:[0m[1;36m[0m
+[1;36m[Dbg] [ServerConfig.cc:721] [0m[1;36m<plugin name='gz::sim::systems::LogRecord' filename='ignition-gazebo-log-system'>
+  <record_path>/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/private_logs/audit14_263e75f05f9646758060a711b43ce456_clear</record_path>
+  <record_resources>false</record_resources>
+</plugin>[0m
+[1;36m[0m
+[1;32m[Msg] [0m[1;32mRecording to log file [[0m[1;32m/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/private_logs/audit14_263e75f05f9646758060a711b43ce456_clear/state.tlog[0m[1;32m][0m[1;32m[0m
+[1;36m[Dbg] [LogRecord.cc:333] [0m[1;36mRecording default topic[[0m[1;36m/audit14_263e75f05f9646758060a711b43ce456_clear/sdf[0m[1;36m].[0m
+[1;36m[Dbg] [LogRecord.cc:334] [0m[1;36mRecording default topic[[0m[1;36m/world/audit14_263e75f05f9646758060a711b43ce456_clear/changed_state[0m[1;36m].[0m
+[1;36m[Dbg] [SystemManager.cc:73] [0m[1;36mLoaded system [[0m[1;36mgz::sim::systems::LogRecord[0m[1;36m] for entity [[0m[1;36m1[0m[1;36m][0m[1;36m[0m
+[1;32m[Msg] [0m[1;32mServing world controls on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear[0m[1;32m/control], [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear[0m[1;32m/control/state] and [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear[0m[1;32m/playback/control][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mServing GUI information on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear[0m[1;32m/[0m[1;32mgui/info[0m[1;32m][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mWorld [[0m[1;32maudit14_263e75f05f9646758060a711b43ce456_clear[0m[1;32m] initialized with [[0m[1;32mdefault_physics[0m[1;32m] physics profile.[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mServing world SDF generation service on [[0m[1;32m/world/audit14_263e75f05f9646758060a711b43ce456_clear[0m[1;32m/[0m[1;32mgenerate_world_sdf[0m[1;32m][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mServing world names on [[0m[1;32m/gazebo/worlds[0m[1;32m][0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mResource path add service on [[0m[1;32m/gazebo/resource_paths/add[0m[1;32m].[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mResource path get service on [[0m[1;32m/gazebo/resource_paths/get[0m[1;32m].[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mResource path resolve service on [[0m[1;32m/gazebo/resource_paths/resolve[0m[1;32m].[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mResource paths published on [[0m[1;32m/gazebo/resource_paths[0m[1;32m].[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mServer control service on [[0m[1;32m/server_control[0m[1;32m].[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mFound no publishers on /stats, adding root stats topic[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mFound no publishers on /clock, adding root clock topic[0m[1;32m[0m
+[1;36m[Dbg] [SimulationRunner.cc:501] [0m[1;36mCreating PostUpdate worker threads: [0m[1;36m4[0m[1;36m[0m
+[1;36m[Dbg] [SimulationRunner.cc:512] [0m[1;36mCreating postupdate worker thread ([0m[1;36m0[0m[1;36m)[0m[1;36m[0m
+[1;36m[Dbg] [SimulationRunner.cc:512] [0m[1;36mCreating postupdate worker thread ([0m[1;36m1[0m[1;36m)[0m[1;36m[0m
+[1;36m[Dbg] [SimulationRunner.cc:512] [0m[1;36mCreating postupdate worker thread ([0m[1;36m2[0m[1;36m)[0m[1;36m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_shell/link/wall_east/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_shell/link/wall_west/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_shell/link/wall_north/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_shell/link/wall_south_0/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_shell/link/wall_south_1/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_shell/link/wall_south_2/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_shell/link/wall_south_3/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_shell/link/door_head_0/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_shell/link/door_head_1/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_shell/link/door_head_2/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A1b1w/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A1b1e/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A1b2w/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A1b2e/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A1b3w/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A1b3e/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A2b1w/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A2b1e/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A2b2w/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A2b2e/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A2b3w/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A2b3e/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A3b1w/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A3b1e/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A3b2w/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A3b2e/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_A3b3w/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43[1;33m[Wrn] [Component.hh:127] [0m[1;33mTrying to serialize component with data type [[0m[1;33mSt10shared_ptrIN3sdf3v127ElementEE[0m[1;33m], which doesn't have [0m[1;33m`operator<<`. Component will not be serialized.[0m[1;33m[0m
+ce456_clear/model/warehouse_v2_occluders/link/obs_A3b3e/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_B1b1s/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_B1b1n/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_B1b2s/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_B1b2n/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_Cs_p0/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_Cs_p1/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_Cs_p2/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_Cm_p0/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_Cm_p1/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_Cm_p2/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_Cn_p0/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_Cn_p1/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_Cn_p2/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/dock_office/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_STAGE_MID0/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_STAGE_MID1/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_STAGE_E0/sensor/contact/contact[0m[1;32m[0m
+[1;32m[Msg] [0m[1;32mContact system publishing on [0m[1;32mworld/audit14_263e75f05f9646758060a711b43ce456_clear/model/warehouse_v2_occluders/link/obs_STAGE_E1/sensor/contact/contact[0m[1;32m[0m
+[1;36m[Dbg] [gz.cc:410] [0m[1;36mShutting down ign-gazebo-server[0m[1;36m[0m
+[1;36m[Dbg] [SimulationRunner.cc:528] [Dbg] [SimulationRunner.cc:528] [Dbg] [SimulationRunner.cc:528] [0m[1;36m[Dbg] [SimulationRunner.cc:528] [0m[1;36mExiting postupdate worker thread ([0m[1;36m2[0m[1;36m)[0m[1;36m[0m
+[1;36mExiting postupdate worker thread ([0m[1;36m1[0m[1;36m[Dbg] [SimulationRunner.cc:528] [Dbg] [SimulationRunner.cc:528] [0m[1;36mExiting postupdate worker thread ([0m[1;36m0[0m[1;36m))[0m[1;36m[0m
+[1;36m[0m
+[1;36m[0m
+[1;32m[Msg] [0m[1;32mStopping recording[0m[1;32m[0m

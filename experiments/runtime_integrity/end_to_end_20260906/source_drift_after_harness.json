@@ -1,0 +1,11 @@
+[
+  "experiments/runtime_integrity/alignment_reporting_20260906/navigation_fixture/config.yaml",
+  "experiments/runtime_integrity/logging_accounting_20260906/probe.py",
+  "experiments/runtime_integrity/logging_accounting_20260906/probe_stdout.json",
+  "src/experiments/experiments/core/visibility_launch_common.py",
+  "src/perception/perception/core/four_camera_batch.py",
+  "src/perception/perception/nodes/batched_four_camera_yolo_node.py",
+  "src/reliability/reliability/nodes/camera_manager_node.py",
+  "tests/perception/test_batched_four_camera_yolo.py",
+  "tests/perception/test_camera_acquisition_audit_04.py"
+]

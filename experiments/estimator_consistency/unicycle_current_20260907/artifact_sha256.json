@@ -1,0 +1,17 @@
+{
+  "docs/module_audits/01_state_estimation.md": "7d662e66eb116f6674fa6a44b0fc78b4c10cc7fe31894ee8cb3335c496fb0d77",
+  "docs/module_audits/01_unicycle_current_verification.md": "98915d37fc27127432b3cd12f2120d25f70d49b0855329c4645c8b4936c6a7aa",
+  "experiments/estimator_consistency/unicycle_current_20260907/final_focused_tests.txt": "6c9fa1b3bac724328a5fcc9fda0056a9bf532085cccdd1c8d7fef8f912089291",
+  "experiments/estimator_consistency/unicycle_current_20260907/final_results.json": "d5ea98f071285451f3667fa1afac6de669fdf8f831d578a4560fc9ba78e736fd",
+  "experiments/estimator_consistency/unicycle_current_20260907/final_source_identity.json": "022b97bd4a5784abeae598f50211672cea243018a8c9303795d43eeeff6dc8df",
+  "experiments/estimator_consistency/unicycle_current_20260907/final_source_snapshot.tar.gz": "aebf10b97d1b76a7a303e4f0a38d7fd5946015b6d23221e7507f85e107e56124",
+  "experiments/estimator_consistency/unicycle_current_20260907/final_wiring.json": "5bf11a0415fde721f1d4644b4cb26963a0c84f8a41194ced8c87d3738b1ff003",
+  "experiments/estimator_consistency/unicycle_current_20260907/focused_tests.txt": "d0a4978da1ccc65ea5bb0cb20bfc94c4124a970a4cfaa37a8ffb24f935ab053f",
+  "experiments/estimator_consistency/unicycle_current_20260907/post_final_source_drift.json": "d615fd84baed8e07963ba2ee14787a4ea900c446abf51bcee8633afd7d3e83a8",
+  "experiments/estimator_consistency/unicycle_current_20260907/probe.py": "637ea831accf6f2bd8955eb32ca9c8d982f9993f86ac96ae63408828b96c3735",
+  "experiments/estimator_consistency/unicycle_current_20260907/results.json": "aa95644fa886598226cad808e85b791bf30b3318954b630c3c7b7ef307e6c97f",
+  "experiments/estimator_consistency/unicycle_current_20260907/source_drift_after_verification.json": "1deddb3245e1397c53b1c79680f85006baba1bc04a8b7e8c8b798854c83f9e7c",
+  "experiments/estimator_consistency/unicycle_current_20260907/source_identity.json": "fd1e42eedd4ec8b8fec7f4b71f5b89a810bf2125e4220f4c5d6c687a31e3c97c",
+  "experiments/estimator_consistency/unicycle_current_20260907/source_snapshot.tar.gz": "07059f2e1c341219681913021e19f899e762028d99a545d7699faee19fcf9a9d",
+  "experiments/estimator_consistency/unicycle_current_20260907/wiring.json": "5bf11a0415fde721f1d4644b4cb26963a0c84f8a41194ced8c87d3738b1ff003"
+}

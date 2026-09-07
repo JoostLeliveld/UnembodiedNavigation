@@ -1,0 +1,23 @@
+{
+  "reviewed_at_utc": "2026-09-07T08:06:29.531662+00:00",
+  "exit_code": 0,
+  "source_stable_during_test": true,
+  "before": {
+    "src/planning/planning/nodes/unicycle_planner_node.py": "d2998cd94cf380052fb4d1e6e75ba40e2a5258d95d788ca807fcbc79291ca8dc",
+    "src/planning/planning/core/belief_correction.py": "2bf162356a77e740fcf78b23442687f0765b5e2d7e06cc75bfde1d88efc1db57",
+    "src/planning/planning/core/motion_history.py": "785ac70e7d4307970f39a765b99ad0a5deacfdb1469e6b5cfd012c47aff5a731",
+    "src/planning/planning/core/belief_state.py": "56edc020181c1923a8c08bbb295c361f2e7332005b3f48787b6e41250d75363c",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "3f101479f7beec8444b7b05dcbc5b98937ce649ebcc53c4694cead7c7392c63e",
+    "src/reliability/reliability/fusion.py": "427924c7483576601abec2fcc507d592a17a36d339311024426e53cac1d567aa",
+    "tests/planning/test_admission_recovery_06.py": "f1306f51a2b79d61b5238317a0206f7a3e5ecd287154336deab0d9ba971a7355"
+  },
+  "after": {
+    "src/planning/planning/nodes/unicycle_planner_node.py": "d2998cd94cf380052fb4d1e6e75ba40e2a5258d95d788ca807fcbc79291ca8dc",
+    "src/planning/planning/core/belief_correction.py": "2bf162356a77e740fcf78b23442687f0765b5e2d7e06cc75bfde1d88efc1db57",
+    "src/planning/planning/core/motion_history.py": "785ac70e7d4307970f39a765b99ad0a5deacfdb1469e6b5cfd012c47aff5a731",
+    "src/planning/planning/core/belief_state.py": "56edc020181c1923a8c08bbb295c361f2e7332005b3f48787b6e41250d75363c",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "3f101479f7beec8444b7b05dcbc5b98937ce649ebcc53c4694cead7c7392c63e",
+    "src/reliability/reliability/fusion.py": "427924c7483576601abec2fcc507d592a17a36d339311024426e53cac1d567aa",
+    "tests/planning/test_admission_recovery_06.py": "f1306f51a2b79d61b5238317a0206f7a3e5ecd287154336deab0d9ba971a7355"
+  }
+}

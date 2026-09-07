@@ -1,0 +1,9 @@
+{
+  "completed": true,
+  "completion_reason": "stuck",
+  "valid_run": true,
+  "mean_belief_error_gt_after_first_cmd_m": 0.032,
+  "mean_belief_error_odom_after_first_cmd_m": 0.297,
+  "correction_dropped_fraction": 0.1,
+  "longest_correction_gap_s": 2
+}

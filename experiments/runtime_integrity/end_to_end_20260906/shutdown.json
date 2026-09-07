@@ -1,0 +1,58 @@
+{
+  "False": {
+    "error": null,
+    "closed": {
+      "file": true,
+      "plan_file": true,
+      "perception_file": true,
+      "fusion_obs_file": true,
+      "assimilation_file": true,
+      "camera_opportunity_file": true
+    },
+    "persisted": {
+      "file": "buffered terminal event\n",
+      "plan_file": "buffered terminal event\n",
+      "perception_file": "buffered terminal event\n",
+      "fusion_obs_file": "buffered terminal event\n",
+      "assimilation_file": "buffered terminal event\n",
+      "camera_opportunity_file": "buffered terminal event\n"
+    },
+    "summary": {
+      "completed": false,
+      "completion_reason": "interrupted",
+      "valid_run": true,
+      "invalid_reason": "",
+      "frame_sanity": {},
+      "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end_20260906/shutdown_normal"
+    },
+    "base_destroyed": true
+  },
+  "True": {
+    "error": "OSError('audit15 injected first-handle close failure')",
+    "closed": {
+      "file": false,
+      "plan_file": false,
+      "perception_file": false,
+      "fusion_obs_file": false,
+      "assimilation_file": false,
+      "camera_opportunity_file": false
+    },
+    "persisted": {
+      "file": "",
+      "plan_file": "",
+      "perception_file": "",
+      "fusion_obs_file": "",
+      "assimilation_file": "",
+      "camera_opportunity_file": ""
+    },
+    "summary": {
+      "completed": false,
+      "completion_reason": "interrupted",
+      "valid_run": true,
+      "invalid_reason": "",
+      "frame_sanity": {},
+      "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end_20260906/shutdown_failure"
+    },
+    "base_destroyed": true
+  }
+}

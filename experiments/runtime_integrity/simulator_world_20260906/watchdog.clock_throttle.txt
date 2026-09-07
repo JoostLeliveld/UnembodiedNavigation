@@ -1,0 +1,19 @@
+[INFO] [1788729482.118029631] [audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd_clock_throttle]: Throttling /audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd/clock_full -> /audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd/clock at 50.0 Hz
+[INFO] [1788729484.090338182] [audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd_clock_throttle]: Received first input clock at t=0.000000s
+[INFO] [1788729484.108789537] [audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd_clock_throttle]: Published first throttled clock at t=0.000000s
+Traceback (most recent call last):
+  File "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/lib/sim/clock_throttle_node", line 33, in <module>
+    sys.exit(load_entry_point('sim', 'console_scripts', 'clock_throttle_node')())
+  File "/home/joostleliveld/Thesis/UnembodiedNavigation/build/sim/sim/clock_throttle_node.py", line 92, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 808, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 797, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 780, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 681, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException

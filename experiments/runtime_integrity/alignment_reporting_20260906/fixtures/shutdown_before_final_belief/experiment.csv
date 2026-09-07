@@ -1,0 +1,4 @@
+stamp,gt_available,gt_stamp,gt_x,gt_y,gt_yaw,planner_belief_stamp,planner_belief_x,planner_belief_y,planner_belief_yaw,planner_cov_x,planner_cov_xy,planner_cov_y,planner_belief_cov_x_theta,planner_belief_cov_y_theta,planner_belief_cov_theta_theta,state_available,state_stamp,state_x,state_y,odom_map_x,odom_map_y,odom_map_yaw,odom_v,odom_noisy_stamp,odom_noisy_v,odom_noisy_w,odom_map_gt_drift_m,truth_x,truth_y
+0,1,0,0,0,0,0,0.0,0,0,0.01,0,0.01,0,0,0.01,0,0.0,0.01,0,0,0,0,1,0,1,0,0,10,0
+0.9,1,0.9,0.9,0,0,0.9,0.9,0,0,0.01,0,0.01,0,0,0.01,1,0.8,0.81,0,0.9,0,0,1,0.9,1,0,0,10.9,0
+1,1,1,1,0,0,1,1.0,0,0,0.01,0,0.01,0,0,0.01,1,0.8,0.81,0,1,0,0,1,1,1,0,0,11,0

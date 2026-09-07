@@ -1,0 +1,20 @@
+{
+  "snapshot": "3c4ddeae4a7427bf374514dad6a1d65dc728a91c",
+  "scope": "Original audit source; not later batching repairs",
+  "regressions": {
+    "returncode": 0,
+    "output": "........................................................................ [ 48%]\n........................................................................ [ 96%]\n......                                                                   [100%]\n150 passed in 1.48s\n"
+  },
+  "07_fusion_probe": {
+    "assertions_passed": true,
+    "matches_saved_results": true
+  },
+  "07_fusion_node_probe": {
+    "assertions_passed": true,
+    "matches_saved_results": true
+  },
+  "07_registered_event_probe": {
+    "assertions_passed": true,
+    "matches_saved_results": true
+  }
+}

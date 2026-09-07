@@ -1,0 +1,23 @@
+{
+  "scope": "Follow-up acquisition edits landed after successful audit15 harness. Legacy probe fixtures fail before exercising the changed lifecycle. These failures do not establish runtime regression.",
+  "commands": {
+    "07_fusion_probe.py": {
+      "exit_code": 1,
+      "error": "AttributeError: SimpleNamespace has no _check_batch_clock"
+    },
+    "07_fusion_node_probe.py": {
+      "exit_code": 1,
+      "error": "AttributeError: SimpleNamespace has no _decide_once / _publish_batch_outcome"
+    },
+    "07_registered_event_probe.py": {
+      "exit_code": 0
+    }
+  },
+  "source_sha256": {
+    "src/reliability/reliability/nodes/camera_manager_node.py": "8557cb29f2e2e38e3cc8546441b93028f64b22458d776e9ba9e60e96f92f014a",
+    "src/reliability/reliability/source_batch_buffer.py": "c77199cdf4f798bba79722decd3950e5e582324be887e0b8e23c8cf8e209a4c6",
+    "src/perception/perception/core/four_camera_batch.py": "d8beed9eb16ca06f408d20420498de318bed4bd1412b71eba3d73871d09bdd30",
+    "src/perception/perception/nodes/batched_four_camera_yolo_node.py": "00a03c799531d300a961809d6081bcd7fa68bfb3cfd92607cb83ede3fe52d189",
+    "src/experiments/experiments/core/visibility_launch_common.py": "e91250b90167c21033505dccd6a7686448bbda86bf5e85fb4e729fa41eacdbf3"
+  }
+}

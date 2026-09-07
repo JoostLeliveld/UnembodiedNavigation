@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "seeds": [
+    0
+  ],
+  "runs": {
+    "fusion_network_traverse": {
+      "F4": [
+        "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/base"
+      ]
+    }
+  }
+}

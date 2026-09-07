@@ -5,14 +5,15 @@
 > two-column AIES thesis. The scope is IWAI extended to a camera network with a compact
 > commissioning audit. Official AIES criteria are verified: appendices are not assessed.
 > The exhaustive six-run camera-subset pilot is complete and remains diagnostic;
-> `../papers/master_thesis/thesis.pdf` is a long-form source bank, not the required format.
+> `../papers/Thesis/thesis.pdf` is a long-form source bank, not the required format.
 > A separate ICRA paper remains conditional on evidence. The staged 2026-08-31 plan below
 > is preserved as historical rationale; its "only active stage" statement is superseded.
 > The IWAI network planner adapter, three fitted fields and short optimization probe are
 > implemented. See the [code plan](experiments/icra_commissioning/planner_implementation_plan.md)
-> and [paper map](../papers/master_thesis/planning/paper_map.md). Complete-route feasibility
+> and [paper map](../papers/Thesis/planning/paper_map.md). Complete-route feasibility
 > and live camera-model equivalence pass their scoped checks. Two integration pilots expose
-> tracking/filter failures; the separately frozen corrected runtime is under live test.
+> tracking/filter failures. The corrected pilot finished with one stuck run and two goals;
+> a separate guarded-controller P0 follow-up reached the goal. All are diagnostic.
 > See [runtime_integrity_audit.md](docs/runtime_integrity_audit.md). Fusion/forecast
 > equivalence and independent matched navigation effects remain required evidence.
 

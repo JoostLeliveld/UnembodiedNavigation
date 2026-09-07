@@ -1,0 +1,121 @@
+{
+  "kind": "planning_only_revalidation_of_current_defects_and_preserved_invariant",
+  "time_utc": "2026-09-06T21:11:01.293811+00:00",
+  "source_sha256": {
+    "src/planning/planning/nodes/unicycle_planner_node.py": "1191b8879b8515d7d2bd176015538cacd0bb9ed196af49da80d6cd8705bd8995",
+    "src/planning/planning/core/motion_history.py": "4e2f71eb96d2a03304336ebc50b28e2e518cb01b87b20be312c7bf80122b7923",
+    "src/sim/sim/encoder_noise_node.py": "e6a04fffdcad57a83d11c64c73a4c39726fdb0eb7e515500a98a6377839af497"
+  },
+  "cases": {
+    "R02_outage_snapshot": {
+      "checked_full_history": true,
+      "expected_heading": 0.2,
+      "observed_heading": 0.0,
+      "first_remaining_motion_stamp": 0.3,
+      "committed_stamp": 59.9,
+      "terminal_event": {
+        "accepted": false,
+        "apply_stamp": 60.2,
+        "belief_stamp_after": 59.9,
+        "correction_stamp": 59.9,
+        "nis": null,
+        "reason": "replay_gap_too_large",
+        "schema_version": 1,
+        "source_batch_id": "audit:outage-snapshot",
+        "status": "dropped"
+      }
+    },
+    "R03_anonymous_bootstrap": {
+      "consumed_xy": [
+        1.0,
+        2.0
+      ],
+      "ledger_event": {
+        "accepted": false,
+        "apply_stamp": 10.0,
+        "belief_stamp_after": 9.95,
+        "correction_stamp": 9.95,
+        "nis": null,
+        "reason": "not_newer_than_belief",
+        "schema_version": 1,
+        "source_batch_id": "synthetic-bootstrap",
+        "status": "dropped"
+      }
+    },
+    "R01_unordered_replay": {
+      "arrival_stamps": [
+        9.4,
+        9.7,
+        9.5
+      ],
+      "interval_duration": 0.6,
+      "integrated_durations": [
+        0.29999999999999893,
+        0.5
+      ],
+      "expected_x": 0.12,
+      "observed_x": 0.1599999999999998,
+      "expected_Q_theta": 0.00024,
+      "observed_Q_theta": 0.00032000000000000084,
+      "replay": {
+        "cmd_replay_count": 2.0,
+        "cmd_replay_duration_s": 0.5999999999999996,
+        "cmd_replay_used_fallback": 0.0,
+        "motion_replay_source_code": 1.0
+      },
+      "resulting_stamp": 10.0
+    },
+    "R01_callback_atomicity": {
+      "log_stamps": [
+        11.0,
+        10.0
+      ],
+      "velocity_sample_time": 10.0,
+      "yaw_sample_time": 11.0,
+      "replay_x": 2.0,
+      "timestamp_order_reference_x": 3.0,
+      "reports_fallback": 0.0
+    },
+    "R06_encoder_order_and_gap": {
+      "out_of_order": {
+        "input_stamps": [
+          0.0,
+          0.2,
+          0.1,
+          0.3
+        ],
+        "expected_heading": 0.3,
+        "observed_heading": 0.4,
+        "published_stamp": 0.3
+      },
+      "long_gap": {
+        "input_stamps": [
+          0.0,
+          0.1,
+          1.1,
+          1.2
+        ],
+        "expected_heading": 1.2,
+        "observed_heading": 0.2,
+        "published_stamp": 1.2,
+        "omitted_turn": 1.0,
+        "published_yaw_variance": 0.00027
+      }
+    },
+    "preserved_complete_trace": {
+      "full_covariance_max_abs_error": 6.938893903907228e-18,
+      "terminal_event": {
+        "accepted": true,
+        "apply_stamp": 10.200000000000001,
+        "belief_stamp_after": 10.0,
+        "correction_stamp": 10.0,
+        "nis": 0.009300646714162038,
+        "reason": "accepted",
+        "schema_version": 1,
+        "source_batch_id": "audit:camera_A+camera_B@10000000000",
+        "status": "accepted"
+      },
+      "reads_did_not_commit": true
+    }
+  }
+}

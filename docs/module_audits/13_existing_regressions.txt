@@ -1,0 +1,100 @@
+........F                                                                [100%]
+=================================== FAILURES ===================================
+______________ test_no_tracked_source_reads_a_machine_local_path _______________
+
+    def test_no_tracked_source_reads_a_machine_local_path():
+        offenders: list[str] = []
+        for directory in SEARCH_DIRS:
+            root = REPO / directory
+            if not root.is_dir():
+                continue
+            for path in sorted(root.rglob("*")):
+                if path.suffix not in (".py", ".yaml", ".yml", ".json", ".sh"):
+                    continue
+                if "__pycache__" in path.parts or path.name == Path(__file__).name:
+                    continue
+                offenders.extend(_offending_lines(path))
+>       assert not offenders, (
+            "these read or write a path that exists only on one machine, so the artifact "
+            "they produce cannot be reproduced from the repository:\n  "
+            + "\n  ".join(offenders)
+        )
+E       AssertionError: these read or write a path that exists only on one machine, so the artifact they produce cannot be reproduced from the repository:
+E           experiments/camera_observation_characterization/icra_p1_geometry_poses.json:17: "world_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/gazebo_worlds/worlds/warehous
+E           experiments/camera_observation_characterization/icra_p1b_geometry_poses.json:17: "world_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/gazebo_worlds/worlds/warehous
+E           experiments/estimator_consistency/module_audit_01_20260906/results.json:513: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/experiments/experiments/core/v
+E           experiments/estimator_consistency/module_audit_01_20260906/results.json:519: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/core/belief_
+E           experiments/estimator_consistency/module_audit_01_20260906/results.json:525: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/core/dynamic
+E           experiments/estimator_consistency/module_audit_01_20260906/results.json:531: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/core/motion_
+E           experiments/estimator_consistency/module_audit_01_20260906/results.json:537: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/nodes/efe_ag
+E           experiments/estimator_consistency/module_audit_01_20260906/results.json:543: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/nodes/unicyc
+E           experiments/estimator_consistency/module_audit_01_20260906/results.json:549: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/planners/bas
+E           experiments/estimator_consistency/module_audit_01_20260906/results.json:555: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/sim/sim/encoder_noise_node.py"
+E           experiments/estimator_consistency/module_audit_01_20260906/wiring.py:40: args = campaign._build_launch_cmd(cfg, 'fusion_network_traverse', 'P0', 210, Path('/tmp/audit_unused
+E           experiments/icra_commissioning/export_network_planner.py:11: os.environ.setdefault('MPLCONFIGDIR', '/tmp/icra_mpl')
+E           experiments/icra_commissioning/field_driving.py:11: os.environ.setdefault('MPLCONFIGDIR','/tmp/icra_mpl')
+E           experiments/icra_commissioning/field_study.py:10: os.environ.setdefault('MPLCONFIGDIR','/tmp/icra_mpl')
+E           experiments/icra_commissioning/network_navigation_analysis.py:8: os.environ.setdefault('MPLCONFIGDIR', '/tmp/icra_mpl')
+E           experiments/icra_commissioning/network_replay.py:11: os.environ.setdefault('MPLCONFIGDIR', '/tmp/icra_mpl')
+E           experiments/icra_commissioning/network_route_probe.py:10: os.environ.setdefault('MPLCONFIGDIR', '/tmp/icra_mpl')
+E           experiments/icra_commissioning/network_route_probe.py:54: command = runner._build_launch_cmd(cfg, task, arm, seed, Path('/tmp/network_route_graph_only'))
+E           experiments/icra_commissioning/planner_probe.py:11: os.environ.setdefault('MPLCONFIGDIR','/tmp/icra_mpl')
+E           experiments/icra_commissioning/plot_network_sensor_audit.py:4: os.environ.setdefault('MPLCONFIGDIR', '/tmp/icra_mpl')
+E           experiments/icra_commissioning/thesis_plan.py:15: os.environ.setdefault("MPLCONFIGDIR", "/tmp/icra_mpl")
+E           experiments/icra_commissioning/tracker_preflight.py:10: os.environ.setdefault('MPLCONFIGDIR', '/tmp/icra_mpl')
+E           experiments/runtime_integrity/alignment_reporting_20260906/navigation_fixture/campaign_log.json:4: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_
+E           experiments/runtime_integrity/alignment_reporting_20260906/navigation_fixture/campaign_log.json:10: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_
+E           experiments/runtime_integrity/alignment_reporting_20260906/navigation_fixture/selection.json:14: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:27: "aligned": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/fusion_on_fixed_routes/align
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:28: "commissioning_replay": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/icra_commission
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:29: "fixed_route_replay": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/fusion_on_fixed_r
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:30: "field_driving": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/icra_commissioning/fie
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:31: "score": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/fusion_on_fixed_routes/score.p
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:32: "compare": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/fusion_on_fixed_routes/compa
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:71: "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:88: "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:104: "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_2
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:121: "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:137: "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_2
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:155: "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_2
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:167: "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:177: "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:205: "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_
+E           experiments/runtime_integrity/alignment_reporting_20260906/results.json:363: "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_
+E           experiments/runtime_integrity/alignment_reporting_20260906/synthetic_frozen_runs.json:9: "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_2
+E           experiments/runtime_integrity/end_to_end_20260906/alignment.json:70: "reason": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end_
+E           experiments/runtime_integrity/end_to_end_20260906/alignment.json:75: "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end_20260906/s
+E           experiments/runtime_integrity/end_to_end_20260906/alignment.json:79: "reason": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end_
+E           experiments/runtime_integrity/end_to_end_20260906/alignment.json:83: "reason": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end_
+E           experiments/runtime_integrity/end_to_end_20260906/component_probes.json:844: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/planning/planning/core/dynamics.
+E           experiments/runtime_integrity/end_to_end_20260906/component_probes.json:850: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/planning/planning/core/belief_co
+E           experiments/runtime_integrity/end_to_end_20260906/component_probes.json:856: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/planning/planning/core/motion_hi
+E           experiments/runtime_integrity/end_to_end_20260906/component_probes.json:862: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/planning/planning/planners/base_
+E           experiments/runtime_integrity/end_to_end_20260906/component_probes.json:868: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/planning/planning/nodes/unicycle
+E           experiments/runtime_integrity/end_to_end_20260906/component_probes.json:874: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/sim/encoder_noise_node.py",
+E           experiments/runtime_integrity/end_to_end_20260906/component_probes.json:880: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/experiments/core/vis
+E           experiments/runtime_integrity/end_to_end_20260906/component_probes.json:886: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/planning/planning/nodes/efe_agen
+E           experiments/runtime_integrity/end_to_end_20260906/shutdown.json:26: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end
+E           experiments/runtime_integrity/end_to_end_20260906/shutdown.json:54: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end
+E           experiments/runtime_integrity/end_to_end_20260906/shutdown_failure/run_summary.json:7: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end
+E           experiments/runtime_integrity/end_to_end_20260906/shutdown_normal/run_summary.json:7: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end
+E           experiments/runtime_integrity/logging_accounting_20260906/runs/duplicate_delivery/run_summary.json:102: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/logging_ac
+E           experiments/runtime_integrity/logging_accounting_20260906/runs/extra/run_summary.json:102: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/logging_ac
+E           experiments/runtime_integrity/logging_accounting_20260906/runs/held_commands_and_beliefs/run_summary.json:102: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/logging_ac
+E           experiments/runtime_integrity/logging_accounting_20260906/runs/malformed_delivery/run_summary.json:102: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/logging_ac
+E           experiments/runtime_integrity/logging_accounting_20260906/runs/mini_run/run_summary.json:104: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/logging_ac
+E           experiments/runtime_integrity/logging_accounting_20260906/runs/missing/run_summary.json:102: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/logging_ac
+E           experiments/runtime_integrity/logging_accounting_20260906/runs/post_summary_tail/run_summary.json:102: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/logging_ac
+E           experiments/runtime_integrity/logging_accounting_20260906/runs/receipt_collision/run_summary.json:102: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/logging_ac
+E           experiments/runtime_integrity/logging_accounting_20260906/runs/unknown_status/run_summary.json:102: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/logging_ac
+E           experiments/runtime_integrity/logging_accounting_20260906/runs/unreasoned_rejected/run_summary.json:102: "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/logging_ac
+E           experiments/runtime_integrity/timing_callbacks_20260906/results.json:22: "UnicyclePlannerNode": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/planning/planning/nodes/
+E           experiments/runtime_integrity/timing_callbacks_20260906/results.json:23: "CameraManagerNode": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/reliability/reliability/no
+E           experiments/runtime_integrity/timing_callbacks_20260906/results.json:24: "GoalMissionNode": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/experiments/node
+E           experiments/runtime_integrity/timing_callbacks_20260906/results.json:25: "FourCameraBatcher": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/perception/perception/core
+E       assert not ['experiments/camera_observation_characterization/icra_p1_geometry_poses.json:17: "world_path": "/home/joostleliveld/T...s.json:531: "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/core/motion_', ...]
+
+tests/test_no_machine_local_paths.py:78: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_no_machine_local_paths.py::test_no_tracked_source_reads_a_machine_local_path
+1 failed, 8 passed in 2.00s

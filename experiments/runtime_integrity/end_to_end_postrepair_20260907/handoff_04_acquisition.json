@@ -1,0 +1,29 @@
+{
+  "owner": "04_acquisition",
+  "ready": true,
+  "source_sha256": {
+    "src/perception/perception/core/four_camera_batch.py": "ca63fe44b518730dfdc5de30a1bd5a2b598430d3b19fd8d4deb7c7c31b179a06",
+    "src/perception/perception/core/detector_outcomes.py": "4d7992ae85ac675cfcd7d4ff50926663c975ccd245ff393d5a66b9e923236b78",
+    "src/perception/perception/nodes/batched_four_camera_yolo_node.py": "8b322377e4f87cd96cd69ebc7ad3cb2e9815f06b9fa778e4c917dbd22c9cc923",
+    "src/unav_common/unav_common/camera_outcomes.py": "14898b6c298582208259395a9bf2205ad3e2ffc06f60f16f0f6caf55d778c81a",
+    "tests/perception/test_detector_outcome_transport_04.py": "859f13430f725970b5f0ebeb753921fffe56741e34f8cf9648b65a7ff6308019"
+  },
+  "source_stable_during_tests": true,
+  "command": [
+    "python3", "-m", "pytest", "-q",
+    "tests/perception/test_detector_outcome_transport_04.py",
+    "tests/perception/test_batched_four_camera_yolo.py",
+    "tests/perception/test_scheduled_camera_registry.py",
+    "tests/reliability/test_single_camera_adapter.py",
+    "tests/reliability/test_fusion_contracts.py",
+    "tests/reliability/test_boolean_contracts.py"
+  ],
+  "exit_code": 0,
+  "output": "97 passed in 5.15s",
+  "normalized_from": [
+    "docs/module_audits/04_identity_and_outcome_transport.md",
+    "docs/module_audits/04_identity_transport_sha256.txt",
+    "docs/module_audits/04_identity_transport_tests.txt"
+  ],
+  "scope": "Detector-owned cycle/frame/physical-invocation identity and durable outcome transport. Manager/logger/runtime transport remain separate."
+}

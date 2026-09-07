@@ -1,7 +1,8 @@
 # Localization metrics contract
 
-Current as of 2026-08-29. This file defines which quantities may be compared and which
-runtime evidence makes a drive scoreable.
+This file defines which quantities may be compared and which runtime evidence makes a
+drive scoreable. The original contract is dated 2026-08-29; the versioned identity
+clarification below describes the 2026-09-07 repair and does not upgrade historical runs.
 
 ## Evidence boundary
 
@@ -24,11 +25,26 @@ camera-reading RMSE with a belief median or call either one simply "localization
 
 ## Event identity and weighting
 
-- One physical detector invocation is identified by `source_batch_id`.
+- For `camera_batch_outcome.v2`, `source_batch_id` identifies a logical camera cycle.
+  Each native detector call has a distinct `invocation_id`; observation members retain
+  it as `detector_invocation_id`. A cycle can contain several calls when inference is
+  chunked. Each received image has `source_frame_id`, binding producer epoch, camera,
+  integer capture timestamp and image-content digest. This is received-image identity,
+  not an unobserved hardware capture sequence. Every call and member must join explicitly
+  to its cycle and outcome; neither logger ticks nor held messages create new events.
+  The earlier statement that every `source_batch_id` was one physical invocation is
+  insufficient for chunked inference. Historical records lacking these fields retain
+  that evidence limitation; no missing invocation identities are inferred.
 - Camera capture timestamps inside one batch must span less than 0.20 seconds; the repaired
   campaign enforces 0.05 seconds at both detector and manager boundaries.
 - Every published fused correction must have exactly one row in
   `correction_assimilations.csv` with the same `source_batch_id`.
+  Schema-8 logging supplies an actual correction-publication ledger and raw delivery
+  evidence. Validate the complete publication/terminal ledger before reference filtering.
+  Exact integer timestamps must be preserved when supplied. A terminal belief epoch
+  identifies recursive state; a source epoch identifies the correction producer. These
+  independent epochs must not be equated. Canonical ledger epoch comparisons use the
+  publication's source epoch and the terminal's explicit `source_epoch`.
 - Only `accepted`, `accepted_bootstrap`, or `reanchored` assimilation rows are belief-update
   events. NIS rejections and dropped corrections are not post-correction beliefs.
 - A run is invalid when a correction is **unaccounted for**: a missing assimilation, a

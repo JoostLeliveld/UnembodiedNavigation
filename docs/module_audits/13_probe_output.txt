@@ -1,0 +1,62 @@
+typo_global: "accepted and omitted from launch"
+typo_task: "accepted and omitted from launch"
+typo_condition: "accepted and omitted from launch"
+typo_route: "accepted and omitted from launch"
+forward_tasks_yaml: {"declared": "/tmp/unav-audit13-rol0odj6/custom_tasks.yaml", "argument": "<omitted>"}
+forward_world_profiles: {"declared": "/tmp/unav-audit13-rol0odj6/custom_world.yaml", "argument": "<omitted>"}
+forward_state_correction_ekf: {"declared": false, "argument": "False"}
+forward_pixel_correction_nis_threshold: {"declared": 0, "argument": "0"}
+forward_pixel_timeout_s: {"declared": null, "argument": "<omitted>"}
+forward_manager_covariance_profile: {"declared": "", "argument": "<omitted>"}
+forward_enable_mission: {"declared": false, "argument": "<omitted>"}
+forward_yolo_predict_conf_floor: {"declared": 0.2, "argument": "<omitted>"}
+forward_simple_tracker_yaw_gate_rad: {"declared": 0.1, "argument": "<omitted>"}
+precedence: {"v_max": {"resolver": 0, "launch": "0.22"}, "use_encoder_noise": {"resolver": false, "launch": "true"}, "pixel_timeout_s": {"resolver": 0, "launch": "0"}}
+duplicate_seed_identity: ["fusion_network_traverse__C0__seed1", "fusion_network_traverse__C0__seed1", "fusion_network_traverse__C0__seed1"]
+unknown_task_dry_validation: "accepted by campaign validation"
+duplicate_yaml_key: "duplicate dt silently keeps last value 0.5"
+zero_route_validation_fallback: {"endpoint_tolerance_m": 0.25, "sample_step_m": 0.04, "declared_clearance_m": 0.25}
+resume_no_summary_or_csv: [true, ""]
+resume_partial: [true, ""]
+resume_malformed: [true, ""]
+resume_invalid: [true, ""]
+resume_failed: [true, ""]
+resume_wrong_cell_identity: [true, ""]
+quoted_false_resume: {"correct_false_manifest": [false, "use_command_noise mismatch: run used False, config expects false"], "incorrect_true_manifest": [true, ""]}
+model_replacement_cached: {"stale_cache": [true, ""], "fresh_process": [false, "yolo_model content hash mismatch"]}
+resume_learned_mean_replaced: [true, ""]
+resume_legacy_gp_replaced: [true, ""]
+network_replacement_rejected: [false, "camera network artifact content hash mismatch"]
+fresh_incomplete_goal: {"outcome": "goal_reached", "completion_reason": "goal_reached", "selected": "experiment_20000101_000000", "returncode_ignored": 17, "manifest_exists": false}
+fresh_invalid_goal: {"outcome": "goal_reached", "completion_reason": "goal_reached", "selected": "experiment_20000101_000000", "returncode_ignored": 17, "manifest_exists": false}
+fresh_interrupted: {"outcome": "interrupted", "completion_reason": "interrupted", "selected": "experiment_20000101_000000", "returncode_ignored": 17, "manifest_exists": false}
+fresh_empty_summary: {"outcome": "completed", "completion_reason": "", "selected": "experiment_20000101_000000", "returncode_ignored": 17, "manifest_exists": false}
+spawn_failure: {"error": "OSError: audit synthetic spawn failure", "outcome": null, "terminal_reason": null, "cleanup": [], "process_calls": 1}
+recorder_failure: {"error": "OSError: audit synthetic spawn failure", "outcome": null, "terminal_reason": null, "cleanup": [], "process_calls": 2}
+ledger_interrupted_replace: "old ledger preserved"
+ledger_concurrent_writers: {"old": {"outcome": "goal_reached"}, "completed_B": {"outcome": "goal_reached"}}
+ledger_malformed_resume: "malformed existing ledger becomes empty dictionary"
+ledger_fsync_targets: ["file"]
+duplicate_config_basename: {"snapshot_keys": ["same.yaml"], "retained": "source B"}
+same_second_run_ids: {"run_id": "experiment_20260906_010203", "run_dir": "/tmp/unav-audit13-rol0odj6/ids/experiment_20260906_010203"}
+manifest_interrupted_rewrite: "{\"partial\":"
+dirty_source_and_cache: {"fresh_tracked_change_detected": true, "fresh_untracked_change_detected": true, "second_manifest_keeps_first_hashes": true}
+installed_source_attestation_gap: {"imported": {"value": "stale installed", "path": "/tmp/unav-audit13-rol0odj6/installed/audit13_runtime.py"}, "git_provenance_unchanged_when_installed_code_changes": true}
+calibration_hash_load_race: {"recorded_hash_matches_loaded_file": false, "loaded_variance": 2.0, "variance_of_recorded_bytes": 1}
+simultaneous_tokens: {"ours": [8101], "theirs": [8103], "campaign_A_domain": "211", "campaign_B_domain": "211"}
+invalid_runner_cli_exit: 2
+invalid_launch_cli_task_alias: {"argument": "task_name:=nonexistent_task", "resolved_task": "fusion_overlap_primary"}
+invalid_launch_mode: "typo_efe silently resolved to efe"
+declared_prediction_cap: {"experiment_logger": 0.125, "visibility_aware_efe_agent": 0.125}
+explicit_false_ekf: "false reaches planner"
+multicam_zero_speed_cap: 0.22
+summary_wrong_shape: "JSON list accepted as summary object"
+reasoned_refusal_contract: [true, ""]
+path_resolution_policy: {"runner_subprocess_has_explicit_cwd": false, "tasks_yaml": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/experiments/share/experiments/config/tasks.yaml", "world_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf", "manager_mean_path": "logs/perception_models/box_feature_bias_correction_20260831/models.joblib", "detector_model_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt"}
+registered_run_manifest_reuse_check: {"selection_sha256": "66b928fbaf8f470332acff23922003822fcb58113d4bd085180ade5c54c0cfd0", "selected": "fusion_network_traverse__P0__seed210", "all_selected_hashes_match": true, "same_recorded_git_resume": [false, "use_encoder_noise missing from run manifest"]}
+registered_loader: "opened exact selected run through aligned.rows; no scores calculated"
+registered_correction_accounting: [true, ""]
+campaign_yaml_dry_checks: {"baseline_cpu.yaml": {"cells": 1, "validation_and_command_build": "passed", "cleanup_mode": "legacy_global", "ros_domain_id_base": 151}, "field_pilot_cpu.yaml": {"cells": 6, "validation_and_command_build": "passed", "cleanup_mode": "legacy_global", "ros_domain_id_base": 161}, "field_pilot_remaining_cpu.yaml": {"cells": 4, "validation_and_command_build": "passed", "cleanup_mode": "legacy_global", "ros_domain_id_base": 161}, "network_navigation_pilot.yaml": {"cells": 3, "validation_and_command_build": "passed", "cleanup_mode": "isolated", "ros_domain_id_base": 191}, "network_navigation_recovery
+setting_inventory: {"settings": 265, "parsed": 257, "node_parameter_sets": ["wait_for_odom", "actuation_noise_node", "encoder_noise_node", "yolo_robot_detector_node", "pixel_to_bev_state_node", "goal_mission_node", "goal_marker_node", "experiment_logger", "rviz2", "visibility_aware_efe_agent", "batched_four_camera_yolo", "camera_manager_active"]}
+node_inventory: {"parameters": 474, "note": "AST literal/direct-helper declarations plus launch overrides; dynamic loops and internal clamps require linked source inspection"}
+registered_provenance: {"protocol_sources": 13, "snapshots_matching": 13, "current_sources_matching": 8, "artifact_hashes": {"yolo_model": {"path": "logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt", "current_sha256": "efff1949c1b8cdeeb11438b36de80f6cf8daeef5f3a4682cfce8ae7dfe314f34", "recorded": "efff1949c1b8cdeeb11438b36de80f6cf8daeef5f3a4682cfce8ae7dfe314f34", "matches": true}, "camera_network_artifact_path": {"path": "logs/studies/icra_commissioning_20260905/network_planner/uniform.npz", "current_sha256": "9a312f1970c1689c1c830c12059e484fd285d97cb70c2e4d51b0a361319565ec", "recorded":

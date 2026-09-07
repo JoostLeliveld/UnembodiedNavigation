@@ -1,0 +1,179 @@
+{
+  "selection": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_evidence/selection.json",
+  "selected": "fusion_network_traverse__P0__seed210",
+  "protocol_sources": [
+    {
+      "path": "experiments/icra_commissioning/network_navigation_runtime_pilot.yaml",
+      "protocol_hash": "72d7318718c9510f5b4bb570927be0650f16e4c0186440562e6c8a2cf167d380",
+      "snapshot_exists": true,
+      "snapshot_matches": true,
+      "current_matches": true
+    },
+    {
+      "path": "src/reliability/reliability/reference_calibration.py",
+      "protocol_hash": "442d2ad7876f6a95f537917acb358cce1ea0e3e5cf68ca71fef6e58bd7ac3542",
+      "snapshot_exists": true,
+      "snapshot_matches": true,
+      "current_matches": true
+    },
+    {
+      "path": "src/reliability/reliability/nodes/camera_manager_node.py",
+      "protocol_hash": "5e11bd202de065a448154cc18192e63c507b2da058051a34e9ac14929d14c9a6",
+      "snapshot_exists": true,
+      "snapshot_matches": true,
+      "current_matches": false
+    },
+    {
+      "path": "src/reliability/reliability/fusion.py",
+      "protocol_hash": "3970ddb0d8f4b92b879a192cc98630a84e9ccceb496bf6ae4bd299c8022b8609",
+      "snapshot_exists": true,
+      "snapshot_matches": true,
+      "current_matches": true
+    },
+    {
+      "path": "src/planning/planning/nodes/unicycle_planner_node.py",
+      "protocol_hash": "56100b37b8e9351d1cee3d4e089357503e53838db428c4261e0bf1a11f76514f",
+      "snapshot_exists": true,
+      "snapshot_matches": true,
+      "current_matches": false
+    },
+    {
+      "path": "src/planning/planning/nodes/efe_agent_node.py",
+      "protocol_hash": "33e7c4d36e239a13b3e2e7de8e20ec24e830bab6bfd23d088893045e28d8c0fe",
+      "snapshot_exists": true,
+      "snapshot_matches": true,
+      "current_matches": false
+    },
+    {
+      "path": "src/planning/planning/core/belief_correction.py",
+      "protocol_hash": "cf263b7d64785cd00200e99ae4196fbbc6cc0ef73e4226cee164a897481ec22f",
+      "snapshot_exists": true,
+      "snapshot_matches": true,
+      "current_matches": true
+    },
+    {
+      "path": "src/planning/planning/core/dynamics.py",
+      "protocol_hash": "7a6bde9ddfbc2b100b328fd5d1ae870438a57f1f95e2f7f91e8a6b51859a4107",
+      "snapshot_exists": true,
+      "snapshot_matches": true,
+      "current_matches": true
+    },
+    {
+      "path": "src/planning/planning/core/motion_history.py",
+      "protocol_hash": "4e2f71eb96d2a03304336ebc50b28e2e518cb01b87b20be312c7bf80122b7923",
+      "snapshot_exists": true,
+      "snapshot_matches": true,
+      "current_matches": true
+    },
+    {
+      "path": "src/sim/sim/actuation_noise_node.py",
+      "protocol_hash": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f",
+      "snapshot_exists": true,
+      "snapshot_matches": true,
+      "current_matches": true
+    },
+    {
+      "path": "scripts/visibility_comparison/run_visibility_campaign.py",
+      "protocol_hash": "ec4b7dc26eaf2a9dcd2671705563382c8e765e2e5ff145f087bd58d29ea17af2",
+      "snapshot_exists": true,
+      "snapshot_matches": true,
+      "current_matches": false
+    },
+    {
+      "path": "logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json",
+      "protocol_hash": "0a462258197b42537bafaf989642bb85b348c077e0557d8cdf5b890709cfe22d",
+      "snapshot_exists": true,
+      "snapshot_matches": true,
+      "current_matches": true
+    },
+    {
+      "path": "experiments/icra_commissioning/network_navigation_analysis.py",
+      "protocol_hash": "41df8ee881a9d7d6ed9c560e028689d2158d2007f241f213436f4f3423a781f1",
+      "snapshot_exists": true,
+      "snapshot_matches": true,
+      "current_matches": false
+    }
+  ],
+  "artifacts": {
+    "yolo_model": {
+      "path": "logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt",
+      "current_sha256": "efff1949c1b8cdeeb11438b36de80f6cf8daeef5f3a4682cfce8ae7dfe314f34",
+      "recorded": "efff1949c1b8cdeeb11438b36de80f6cf8daeef5f3a4682cfce8ae7dfe314f34",
+      "matches": true
+    },
+    "camera_network_artifact_path": {
+      "path": "logs/studies/icra_commissioning_20260905/network_planner/uniform.npz",
+      "current_sha256": "9a312f1970c1689c1c830c12059e484fd285d97cb70c2e4d51b0a361319565ec",
+      "recorded": "9a312f1970c1689c1c830c12059e484fd285d97cb70c2e4d51b0a361319565ec",
+      "matches": true
+    },
+    "manager_commissioned_calibration_path": {
+      "path": "logs/studies/measurement_commissioning/calibration.json",
+      "current_sha256": "de578957683905763c5890e686345dee56cd583f5a5ade05b5050adc593ecc30",
+      "recorded": "de578957683905763c5890e686345dee56cd583f5a5ade05b5050adc593ecc30",
+      "matches": true
+    },
+    "manager_commissioned_world_covariance_path": {
+      "path": "logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json",
+      "current_sha256": "0a462258197b42537bafaf989642bb85b348c077e0557d8cdf5b890709cfe22d",
+      "recorded": "0a462258197b42537bafaf989642bb85b348c077e0557d8cdf5b890709cfe22d",
+      "matches": true
+    },
+    "manager_learned_correction_path": {
+      "path": "logs/perception_models/box_feature_bias_correction_20260831/models.joblib",
+      "current_sha256": "5da33c63a2bb46b3367e13acbb4eb96cab57388b5854a71db98676df176aad9d",
+      "recorded": null,
+      "matches": false
+    }
+  },
+  "current_import_resolution": {
+    "experiments.core.visibility_launch_common": {
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/experiments/experiments/core/visibility_launch_common.py",
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/experiments/core/visibility_launch_common.py",
+      "sha256": "f8c9b281433480b80f7b165fa14482100da40456c3c5733ee1c5f26e65a91db9"
+    },
+    "experiments.core.manifest": {
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/experiments/experiments/core/manifest.py",
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/experiments/core/manifest.py",
+      "sha256": "d5a69d9e1994d3ef545b5c28ae6e2661af9f00d50e64bceca3cf47329223cddb"
+    },
+    "planning.nodes.efe_agent_node": {
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/nodes/efe_agent_node.py",
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/planning/planning/nodes/efe_agent_node.py",
+      "sha256": "a575ba53e74a835ee955625b14e5718c09939fc36d206ef8b35b4a0c405818ae"
+    },
+    "planning.nodes.unicycle_planner_node": {
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/nodes/unicycle_planner_node.py",
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/planning/planning/nodes/unicycle_planner_node.py",
+      "sha256": "1191b8879b8515d7d2bd176015538cacd0bb9ed196af49da80d6cd8705bd8995"
+    },
+    "perception.nodes.batched_four_camera_yolo_node": {
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/perception/perception/nodes/batched_four_camera_yolo_node.py",
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/perception/perception/nodes/batched_four_camera_yolo_node.py",
+      "sha256": "3d7d7ad0826d4310ca1e11ad8af0d2ae32ec01f6cf2d55fe83782c1e7782bc89"
+    },
+    "reliability.nodes.camera_manager_node": {
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/reliability/reliability/nodes/camera_manager_node.py",
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/reliability/reliability/nodes/camera_manager_node.py",
+      "sha256": "8557cb29f2e2e38e3cc8546441b93028f64b22458d776e9ba9e60e96f92f014a"
+    },
+    "sim.actuation_noise_node": {
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/sim/sim/actuation_noise_node.py",
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/sim/actuation_noise_node.py",
+      "sha256": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f"
+    },
+    "unav_common.manifest": {
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/unav_common/unav_common/manifest.py",
+      "resolved": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/unav_common/unav_common/manifest.py",
+      "sha256": "f3f568e9edfcb97527629384f4421817286f0718086ef25ebe399dc4baa34e6e"
+    }
+  },
+  "current_package_shares": {
+    "experiments": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/experiments/share/experiments",
+    "sim": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim",
+    "perception": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/perception/share/perception",
+    "planning": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/planning/share/planning",
+    "reliability": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/reliability/share/reliability"
+  },
+  "execution_attestation": "Current symlink/import resolution and matching snapshot bytes cannot prove historical in-memory imports; no loaded-module attestation recorded."
+}

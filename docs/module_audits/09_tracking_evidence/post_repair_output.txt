@@ -1,0 +1,472 @@
+{
+  "cases": 35,
+  "results": {
+    "mission_negative_variance": {
+      "ready": true,
+      "waypoint": 1,
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0
+    },
+    "mission_indefinite_xy": {
+      "ready": true,
+      "waypoint": 1,
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0
+    },
+    "mission_wrong_frame": {
+      "ready": true,
+      "waypoint": 1,
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0
+    },
+    "mission_stale": {
+      "ready": true,
+      "waypoint": 1,
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0
+    },
+    "mission_nan_position": {
+      "ready": true,
+      "waypoint": 0,
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0
+    },
+    "during_local_goal": {
+      "commands": [
+        [
+          0.22,
+          0.0
+        ]
+      ],
+      "tape_present": true,
+      "latest_goal": -2.0
+    },
+    "during_local_belief": {
+      "commands": [
+        [
+          0.22,
+          0.0
+        ]
+      ],
+      "tape_present": true,
+      "latest_goal": 1.0
+    },
+    "during_local_ordinary_stop": {
+      "commands": [
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "tape_present": false,
+      "latest_goal": 1.0
+    },
+    "during_local_fatal_stop": {
+      "commands": [
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "tape_present": false,
+      "latest_goal": 1.0
+    },
+    "installation_age_0.25": {
+      "disposition": "installed",
+      "commands": [
+        [
+          0.2,
+          0.0
+        ]
+      ]
+    },
+    "installation_age_0.2501": {
+      "disposition": "expired",
+      "commands": [
+        [
+          0.0,
+          0.0
+        ]
+      ]
+    },
+    "goal_move_0.999": {
+      "route_goal": [
+        1.0,
+        0.0
+      ],
+      "commands": [
+        [
+          0.0,
+          0.0
+        ]
+      ]
+    },
+    "goal_move_1.0": {
+      "route_goal": [
+        1.0,
+        0.0
+      ],
+      "commands": [
+        [
+          0.0,
+          0.0
+        ]
+      ]
+    },
+    "goal_move_1.001": {
+      "route_goal": [
+        2.001,
+        0.0
+      ],
+      "commands": []
+    },
+    "invalid_global_result_after_goal_and_belief_change": {
+      "route": [
+        [
+          1.0,
+          0.0
+        ]
+      ],
+      "route_goal": [
+        1.0,
+        0.0
+      ],
+      "latest_goal": -2.0
+    },
+    "belief_update_active_tape": [
+      [
+        0.22,
+        0.0
+      ],
+      [
+        0.22,
+        0.0
+      ]
+    ],
+    "wrong_frame_handoff": {
+      "index": 1,
+      "commands": [
+        [
+          0.22,
+          0.0
+        ]
+      ]
+    },
+    "short_duplicate_sharp_route": {
+      "index": 4,
+      "commands": [
+        [
+          0.2113781816426279,
+          0.07995737424658009
+        ]
+      ]
+    },
+    "renewed_recovery_allowance": {
+      "initial_penetration_m": 0.001,
+      "final_penetration_m": 0.1328592450491349,
+      "steps": [
+        {
+          "penetration_m": 0.001,
+          "reason": "collision_geometry_violation_step_1:-0.010",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.0053953081683044985,
+          "reason": "collision_geometry_violation_step_1:-0.014",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.009790616336608996,
+          "reason": "collision_geometry_violation_step_1:-0.019",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.014185924504913495,
+          "reason": "collision_geometry_violation_step_1:-0.023",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.018581232673217995,
+          "reason": "collision_geometry_violation_step_1:-0.027",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.022976540841522494,
+          "reason": "collision_geometry_violation_step_1:-0.032",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.027371849009826994,
+          "reason": "collision_geometry_violation_step_1:-0.036",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.03176715717813149,
+          "reason": "collision_geometry_violation_step_1:-0.041",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.036162465346435996,
+          "reason": "collision_geometry_violation_step_1:-0.045",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.04055777351474049,
+          "reason": "collision_geometry_violation_step_1:-0.049",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -5.551115123125783e-17
+          ]
+        },
+        {
+          "penetration_m": 0.04495308168304499,
+          "reason": "collision_geometry_violation_step_1:-0.054",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.04934838985134948,
+          "reason": "collision_geometry_violation_step_1:-0.058",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.05374369801965398,
+          "reason": "collision_geometry_violation_step_1:-0.063",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.058139006187958475,
+          "reason": "collision_geometry_violation_step_1:-0.067",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.06253431435626297,
+          "reason": "collision_geometry_violation_step_1:-0.071",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.06692962252456747,
+          "reason": "collision_geometry_violation_step_1:-0.076",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.07132493069287196,
+          "reason": "collision_geometry_violation_step_1:-0.080",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.07572023886117646,
+          "reason": "collision_geometry_violation_step_1:-0.085",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.08011554702948095,
+          "reason": "collision_geometry_violation_step_1:-0.089",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.08451085519778545,
+          "reason": "collision_geometry_violation_step_1:-0.093",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.08890616336608995,
+          "reason": "collision_geometry_violation_step_1:-0.098",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.09330147153439444,
+          "reason": "collision_geometry_violation_step_1:-0.102",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.09769677970269894,
+          "reason": "collision_geometry_violation_step_1:-0.106",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.10209208787100343,
+          "reason": "collision_geometry_violation_step_1:-0.111",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.10648739603930793,
+          "reason": "collision_geometry_violation_step_1:-0.115",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.11088270420761243,
+          "reason": "collision_geometry_violation_step_1:-0.120",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.11527801237591692,
+          "reason": "collision_geometry_violation_step_1:-0.124",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.11967332054422142,
+          "reason": "collision_geometry_violation_step_1:-0.128",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            0.0
+          ]
+        },
+        {
+          "penetration_m": 0.12406862871252591,
+          "reason": "collision_geometry_violation_step_1:-0.133",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        },
+        {
+          "penetration_m": 0.1284639368808304,
+          "reason": "collision_geometry_violation_step_1:-0.137",
+          "failure": "collision",
+          "first_control": [
+            0.22,
+            -2.7755575615628914e-17
+          ]
+        }
+      ]
+    },
+    "geometry_nan": {
+      "safe_steps": 0,
+      "failure": "invalid_geometry",
+      "reason": "invalid_initial_clearance"
+    },
+    "geometry_negative_infinity": {
+      "safe_steps": 0,
+      "failure": "invalid_geometry",
+      "reason": "invalid_initial_clearance"
+    },
+    "geometry_empty_scene_positive_infinity": {
+      "safe_steps": 12,
+      "failure": "none",
+      "reason": ""
+    },
+    "changed_goal_inherits_hold": {
+      "reason": "goal_reached",
+      "decision_stamp": 12.0,
+      "belief_stamp": 12.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 0.3,
+      "command": [
+        0.0,
+        0.0
+      ]
+    }
+  }
+}

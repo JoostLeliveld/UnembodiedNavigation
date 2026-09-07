@@ -1,0 +1,16 @@
+{
+  "synthetic_cases": 59,
+  "synthetic_probe_exit_code": 0,
+  "watched_sources": 21,
+  "watched_source_changes_during_probe": 0,
+  "all_source_snapshots_match": true,
+  "registered_runs_inventoried": 9,
+  "existing_regression_command": "python3 -m pytest -q tests/experiments/test_fusion_study_alignment.py tests/test_network_replay.py",
+  "existing_regressions_at_initial_inspection": {
+    "passed": 17,
+    "failed": 0,
+    "skipped": 0,
+    "optional_dependency_warnings": 3
+  },
+  "report_sha256": "b5baba4ab098218d6370fdd1862564119feb231709998d35a5394379157249ef"
+}

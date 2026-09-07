@@ -1,0 +1,11 @@
+{
+  "completed": true,
+  "valid_run": true,
+  "completion_reason": "stuck",
+  "first_cmd_stamp": 0,
+  "stop_stamp": 2,
+  "elapsed_after_first_cmd_s": 2,
+  "final_goal_distance": 1,
+  "minimum_goal_distance": 1,
+  "final_goal_distance_reference": "ground_truth"
+}

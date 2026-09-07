@@ -1,0 +1,25 @@
+{
+  "groups": 19,
+  "head": "f9e1a312c9990c29223f91f487eeb6c5aa2e71d3",
+  "source_changes": {},
+  "incomplete_gap_m": 1.8900000000003632,
+  "global_still_installs_after": [
+    "belief",
+    "goal",
+    "config",
+    "clock",
+    "backward_clock",
+    "stop"
+  ],
+  "direct_still_installs_after": [
+    "belief",
+    "goal",
+    "config"
+  ],
+  "direct_refuses_after": [
+    "clock",
+    "backward_clock",
+    "stop"
+  ],
+  "missing_context_refused": true
+}

@@ -1,0 +1,175 @@
+{
+  "scope": "Synthetic callback inputs, fake transport and finish hook; no physical outcome measured",
+  "results": {
+    "clock_zero_is_ready": {
+      "ready": true,
+      "message_time_s": 0.0
+    },
+    "odom_readiness_has_no_epoch_frame_or_uniqueness": {
+      "wrong_pose_default_ready": true,
+      "three_identical_old_wrong_frame_messages_pose_gate_ready": true,
+      "now_s": 10.0,
+      "source_stamp_s": 100.0
+    },
+    "reset_failure_is_done": {
+      "done": true,
+      "service_success": false,
+      "logs": [
+        "Waiting for /world/default/control to reset world",
+        "World reset request sent",
+        "World reset reported failure"
+      ],
+      "requested_reset_all": true
+    },
+    "clock_republishes_after_source_loss_and_forwards_rewind": {
+      "outputs_s": [
+        100.0,
+        100.0,
+        1.0
+      ],
+      "new_upstream_samples": 2,
+      "wall_now_s": 900.0,
+      "duplicate_heartbeat_s": 1.0
+    },
+    "encoder_rewind_retains_prior_pose_noise_covariance": {
+      "before_x_m": 5.02,
+      "after_reset_x_m": 5.039999999999999,
+      "after_stamp_s": 0.2,
+      "fresh_instance_x_m": 0.020000000000000004,
+      "reset_cleared_covariance": false,
+      "reset_cleared_scale_jacobian": false
+    },
+    "encoder_nonfinite_velocity_is_published": {
+      "nan_pose": true,
+      "nan_velocity": true
+    },
+    "paused_watchdog_and_stale_twist_restart": {
+      "at_0_5s": 0.2,
+      "after_0_6s": 0.0,
+      "delayed_unstamped_input_resumes": 0.2
+    },
+    "receipt_before_watchdog_hides_reset": {
+      "output_v": 0.2,
+      "last_receipt": 1.0
+    },
+    "fresh_adapter_does_not_confirm_zero": {
+      "output_messages": 0
+    },
+    "known_contact": {
+      "messages_seen": 1,
+      "contact_flag": true,
+      "finish_calls": [
+        {
+          "reason": "collision",
+          "stamp": 9.9
+        }
+      ],
+      "reason": "contact:warehouse_shell::wall::collision",
+      "receipt_time_s": 10.0,
+      "payload_positions": 0
+    },
+    "known_empty_message": {
+      "messages_seen": 1,
+      "contact_flag": false,
+      "finish_calls": [],
+      "reason": "",
+      "receipt_time_s": 10.0,
+      "payload_positions": 0
+    },
+    "ground_contact": {
+      "messages_seen": 1,
+      "contact_flag": false,
+      "finish_calls": [],
+      "reason": "",
+      "receipt_time_s": 10.0,
+      "payload_positions": 0
+    },
+    "wrong_robot_substring": {
+      "messages_seen": 1,
+      "contact_flag": true,
+      "finish_calls": [
+        {
+          "reason": "collision",
+          "stamp": 9.9
+        }
+      ],
+      "reason": "contact:warehouse_shell::wall::collision",
+      "receipt_time_s": 10.0,
+      "payload_positions": 0
+    },
+    "unrelated_contact": {
+      "messages_seen": 1,
+      "contact_flag": false,
+      "finish_calls": [],
+      "reason": "",
+      "receipt_time_s": 10.0,
+      "payload_positions": 0
+    },
+    "missing_obstacle_identity": {
+      "messages_seen": 1,
+      "contact_flag": true,
+      "finish_calls": [
+        {
+          "reason": "collision",
+          "stamp": 9.9
+        }
+      ],
+      "reason": "contact:unknown",
+      "receipt_time_s": 10.0,
+      "payload_positions": 0
+    },
+    "ground_substring_masks_obstacle": {
+      "messages_seen": 1,
+      "contact_flag": false,
+      "finish_calls": [],
+      "reason": "",
+      "receipt_time_s": 10.0,
+      "payload_positions": 0
+    },
+    "old_epoch_contact": {
+      "messages_seen": 1,
+      "contact_flag": true,
+      "finish_calls": [
+        {
+          "reason": "collision",
+          "stamp": 100.0
+        }
+      ],
+      "reason": "contact:warehouse_shell::wall::collision",
+      "receipt_time_s": 10.0,
+      "payload_positions": 0
+    },
+    "zero_timestamp_contact": {
+      "messages_seen": 1,
+      "contact_flag": true,
+      "finish_calls": [
+        {
+          "reason": "collision",
+          "stamp": 0.0
+        }
+      ],
+      "reason": "contact:warehouse_shell::wall::collision",
+      "receipt_time_s": 10.0,
+      "payload_positions": 0
+    },
+    "no_messages": {
+      "messages_seen": 0,
+      "contact_flag": false
+    },
+    "tf_parent_conflict_after_topic_repair": {
+      "exception": "ConnectivityException",
+      "message": "Could not find a connection between 'map_bev' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.",
+      "frames": "odom: \n  parent: 'map_bev'\n  broadcaster: 'audit_static'\n  rate: 10000.000\n  most_recent_transform: 0.000000\n  oldest_transform: 0.000000\n  buffer_length: 0.000\nbase_link: \n  parent: 'odom'\n  broadcaster: 'audit_diffdrive'\n  rate: 10000.000\n  most_recent_transform: 10.000000\n  oldest_transform: 10.000000\n  buffer_length: 0.000\n"
+    }
+  },
+  "sources": {
+    "src/sim/sim/clock_throttle_node.py": "a7ef8261739df43c1cc881aaac740f2def4a4501e183b80f03171bd6079cf441",
+    "src/sim/sim/__init__.py": "9e110de6aaa8a7407bca66d8df483d63a01ed51c64e85fce789ac7efb1217d77",
+    "src/sim/sim/wait_for_clock.py": "fdcb2c78520598ac3c487d44d70f0f96a9906211ea5ce6258c576dc17a3f45c9",
+    "src/sim/sim/reset_world.py": "9f7fa8728b9587ee52542d39baf620764eec864d020fa105d01e6f9af68f9d01",
+    "src/sim/sim/encoder_noise_node.py": "e6a04fffdcad57a83d11c64c73a4c39726fdb0eb7e515500a98a6377839af497",
+    "src/sim/sim/wait_for_odom.py": "4cbab6e7a17a6cc777b92d4a48b318c0d4da5ee4dd020a760a5a503f5af688e4",
+    "src/sim/sim/actuation_noise_node.py": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f",
+    "src/experiments/experiments/nodes/experiment_logger.py": "6c03281600ad906020fee19af04e5454846bdf2b9c653da6f63266d767e678e3"
+  }
+}

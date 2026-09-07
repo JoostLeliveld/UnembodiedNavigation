@@ -1,0 +1,22 @@
+{
+  "logging_schema_version": 7,
+  "task": "fusion_network_traverse",
+  "seed": 0,
+  "run_id": "navigation_wrong_task",
+  "manager_fusion_rule": "joint_network",
+  "manager_observation_model": "hull",
+  "goal_termination_reference": "planner_belief",
+  "process_noise_xy": 0.01,
+  "process_noise_theta": 0.02,
+  "use_odom_for_predict": true,
+  "odom_topic": "/odom_noisy",
+  "task_start_pose": {
+    "x": 0,
+    "y": 0,
+    "yaw": 0
+  },
+  "campaign_config_sha256": "3b4019deb05a01347489da795e0258f6991e28dc51a796d5f31cde185e7af71d",
+  "manager_covariance_profile": "commissioned_reference_r",
+  "manager_commissioned_world_covariance_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+  "camera_network_artifact_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+}

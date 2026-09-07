@@ -1,0 +1,62 @@
+{
+  "src/perception/perception/nodes/batched_four_camera_yolo_node.py": {
+    "audited": "1f18372d4229e769a464ccc343ad31dc3f06ba7631bb1b5c9ecfd8652d344523",
+    "frozen_runtime_protocol": null,
+    "match": null
+  },
+  "src/reliability/reliability/nodes/camera_manager_node.py": {
+    "audited": "5e11bd202de065a448154cc18192e63c507b2da058051a34e9ac14929d14c9a6",
+    "frozen_runtime_protocol": "5e11bd202de065a448154cc18192e63c507b2da058051a34e9ac14929d14c9a6",
+    "match": true
+  },
+  "src/reliability/reliability/fusion.py": {
+    "audited": "3970ddb0d8f4b92b879a192cc98630a84e9ccceb496bf6ae4bd299c8022b8609",
+    "frozen_runtime_protocol": "3970ddb0d8f4b92b879a192cc98630a84e9ccceb496bf6ae4bd299c8022b8609",
+    "match": true
+  },
+  "src/planning/planning/nodes/unicycle_planner_node.py": {
+    "audited": "56100b37b8e9351d1cee3d4e089357503e53838db428c4261e0bf1a11f76514f",
+    "frozen_runtime_protocol": "56100b37b8e9351d1cee3d4e089357503e53838db428c4261e0bf1a11f76514f",
+    "match": true
+  },
+  "src/planning/planning/nodes/efe_agent_node.py": {
+    "audited": "a575ba53e74a835ee955625b14e5718c09939fc36d206ef8b35b4a0c405818ae",
+    "frozen_runtime_protocol": "33e7c4d36e239a13b3e2e7de8e20ec24e830bab6bfd23d088893045e28d8c0fe",
+    "match": false
+  },
+  "src/planning/planning/planners/base_planner.py": {
+    "audited": "abe6edffd6ac66998088c71884e256d56f7f3dbc798bf5684a86a623d4edffdb",
+    "frozen_runtime_protocol": null,
+    "match": null
+  },
+  "src/sim/sim/actuation_noise_node.py": {
+    "audited": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f",
+    "frozen_runtime_protocol": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f",
+    "match": true
+  },
+  "src/sim/sim/encoder_noise_node.py": {
+    "audited": "e6a04fffdcad57a83d11c64c73a4c39726fdb0eb7e515500a98a6377839af497",
+    "frozen_runtime_protocol": null,
+    "match": null
+  },
+  "src/experiments/experiments/nodes/experiment_logger.py": {
+    "audited": "6c03281600ad906020fee19af04e5454846bdf2b9c653da6f63266d767e678e3",
+    "frozen_runtime_protocol": null,
+    "match": null
+  },
+  "src/experiments/experiments/nodes/goal_mission_node.py": {
+    "audited": "f2b208e86c332049f9bab4dbd843875d484d3de582d723048adcc7e75b6d8817",
+    "frozen_runtime_protocol": null,
+    "match": null
+  },
+  "src/experiments/experiments/core/visibility_launch_common.py": {
+    "audited": "de61a0fe93250d3207629ddb37d10d5d04b8e605452725b831b74882d2b98817",
+    "frozen_runtime_protocol": null,
+    "match": null
+  },
+  "experiments/fusion_on_fixed_routes/aligned.py": {
+    "audited": "dabd8b9167af3f11ee21c7a42dbd795b847300c63ac0c69af3cc0167d3965f80",
+    "frozen_runtime_protocol": null,
+    "match": null
+  }
+}

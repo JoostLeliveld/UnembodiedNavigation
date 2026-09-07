@@ -1,0 +1,93 @@
+{
+  "scope": "one preselected complete static pose, five saved views; native CPU, no fit; not a detector accuracy evaluation",
+  "detector_sha256": "efff1949c1b8cdeeb11438b36de80f6cf8daeef5f3a4682cfce8ae7dfe314f34",
+  "source_sha256": "47676dc2e6686e727aca7c66cc73f5f9fce7cbcf36dceba082b67f7475e1015a",
+  "source_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/perception/perception/nodes/batched_four_camera_yolo_node.py",
+  "runtime_method_source": "def _predict_batch(self, images_bgr: list[np.ndarray]):\n    \"\"\"One inference cycle over the whole timestamp batch, in camera order.\n\n        The cycle may be split into consecutive chunks, because activation memory --\n        not compute -- is what limits this machine. Measured on the 4 GiB P2000 with\n        Gazebo rendering five 1280x720 oblique cameras (which holds about 1.9 GiB of\n        the card), reserved GPU memory for one cycle of five images is:\n\n            imgsz 640: 708 MiB whole    | imgsz 960: 2558 MiB whole -> OOM in a live run\n            imgsz 960 in chunks of two: 1418 MiB, which fits\n            imgsz 1280: does not fit at any chunk size beside the simulator\n\n        Chunking changes nothing observable: the batch is still one strict\n        same-timestamp set, the results are still assembled in CAMERA_ORDER, and the\n        reported inference time is still the wall time of the complete cycle.\n        \"\"\"\n    if not 1 <= len(images_bgr) <= len(CAMERA_ORDER):\n        raise BatchContractError(f'predict requires between 1 and {len(CAMERA_ORDER)} images')\n    chunk = self.inference_chunk if self.inference_chunk > 0 else len(images_bgr)\n    results: list[Any] = []\n    for start in range(0, len(images_bgr), chunk):\n        group = list(images_bgr[start:start + chunk])\n        kwargs = {'source': group, 'imgsz': self.image_size, 'conf': self.predict_conf_floor, 'iou': self.iou_threshold, 'batch': len(group), 'stream': False, 'verbose': False}\n        if self.device:\n            kwargs['device'] = self.device\n        cycle = getattr(self, '_active_cycle', None)\n        started_wall = time.perf_counter()\n        started_stamp = self._clock_s() if cycle is not None else None\n        try:\n            part = self.model.predict(**kwargs)\n            if part is None:\n                raise BatchContractError('batch inference returned no result sequence')\n            results.extend(validate_batch_results(part, len(group)))\n        except Exception as exc:\n            if cycle is not None:\n                self._publish_batch_outcome(dict(source_batch_id=cycle[0], invocation_id=f'{cycle[0]}/chunk/{start // chunk}', camera_ids=cycle[1][start:start + len(group)], status='inference_error', inference_start_stamp_s=started_stamp, reason=str(exc)))\n            raise\n        if cycle is not None:\n            self._publish_batch_outcome(dict(source_batch_id=cycle[0], invocation_id=f'{cycle[0]}/chunk/{start // chunk}', camera_ids=cycle[1][start:start + len(group)], status='inference_completed', inference_start_stamp_s=started_stamp, inference_finish_stamp_s=self._clock_s(), inference_wall_ms=(time.perf_counter() - started_wall) * 1000.0))\n    if len(results) != len(images_bgr):\n        raise BatchContractError(f'chunked inference returned {len(results)} results for {len(images_bgr)} images')\n    return results",
+  "torch_version": "2.5.1+cu118",
+  "ultralytics_version": "8.4.36",
+  "offline": {
+    "source": "saved lossless files",
+    "batch_size": 5,
+    "predict_confidence_floor": 0.001
+  },
+  "runtime": {
+    "source": "identical decoded BGR arrays",
+    "inference_chunk": 2,
+    "predict_confidence_floor": 0.05
+  },
+  "common": {
+    "image_size": 960,
+    "score_threshold": 0.25,
+    "iou": 0.45,
+    "device": "cpu",
+    "masks": false
+  },
+  "examples": [
+    {
+      "camera": "camera_A",
+      "pose_id": "0",
+      "image": "camera_A/images/pose_000000_r00.png",
+      "decoded_sha1": "0f1bb4c1e50685043fd25e68537d42f6c2b46ac5",
+      "saved_detected": false,
+      "offline_detected": false,
+      "runtime_detected": false,
+      "offline_candidate_count": 1,
+      "runtime_candidate_count": 0
+    },
+    {
+      "camera": "camera_B",
+      "pose_id": "0",
+      "image": "camera_B/images/pose_000000_r00.png",
+      "decoded_sha1": "c4b089a9f19824814360785a9b2fe76e9ca3d5b8",
+      "saved_detected": true,
+      "offline_detected": true,
+      "runtime_detected": true,
+      "offline_candidate_count": 2,
+      "runtime_candidate_count": 1,
+      "offline_runtime_max_box_delta_px": 0.0,
+      "saved_offline_max_box_delta_px": 1.0132789611816406e-05,
+      "offline_runtime_score_delta": 0.0,
+      "saved_offline_score_delta": 0.0
+    },
+    {
+      "camera": "camera_C",
+      "pose_id": "0",
+      "image": "camera_C/images/pose_000000_r00.png",
+      "decoded_sha1": "1e5f63a093efa668a7d7f9658df8a6266bd520cc",
+      "saved_detected": true,
+      "offline_detected": true,
+      "runtime_detected": true,
+      "offline_candidate_count": 1,
+      "runtime_candidate_count": 1,
+      "offline_runtime_max_box_delta_px": 0.0,
+      "saved_offline_max_box_delta_px": 7.62939453125e-06,
+      "offline_runtime_score_delta": 0.0,
+      "saved_offline_score_delta": 1.1920928955078125e-07
+    },
+    {
+      "camera": "camera_D",
+      "pose_id": "0",
+      "image": "camera_D/images/pose_000000_r00.png",
+      "decoded_sha1": "d1a1843199aa1c4a57f0bcab4c0e1140a4acb3bf",
+      "saved_detected": false,
+      "offline_detected": false,
+      "runtime_detected": false,
+      "offline_candidate_count": 7,
+      "runtime_candidate_count": 0
+    },
+    {
+      "camera": "camera_E",
+      "pose_id": "0",
+      "image": "camera_E/images/pose_000000_r00.png",
+      "decoded_sha1": "fd088bc82ee4eb41ed532c6617cb8fe7519464c3",
+      "saved_detected": false,
+      "offline_detected": false,
+      "runtime_detected": false,
+      "offline_candidate_count": 3,
+      "runtime_candidate_count": 0
+    }
+  ],
+  "unchanged_weights": true,
+  "unchanged_source": false
+}

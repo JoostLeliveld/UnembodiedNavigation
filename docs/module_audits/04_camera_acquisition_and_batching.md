@@ -1,5 +1,9 @@
 # 04 — Camera acquisition, scheduling and batch identity
 
+> **2026-09-07 identity/transport repair:** see [04_identity_and_outcome_transport.md](04_identity_and_outcome_transport.md) for version2 durable events, exact frame/member/invocation mapping and the current verification boundary.
+
+> Active-path repairs have since been implemented and tested. See the **Repair follow-up** at the end for the exact fixed/remaining boundary; the ranked findings below preserve the original audit.
+
 Reviewed 2026-09-06 against the shared working tree. **The active strict path prevents ordinary repeated delivery from becoming a second manager decision, but does not provide a complete end-to-end outcome ledger. Incomplete manager batches are unbounded, reset recovery is absent, and malformed chunk result counts can silently shift camera identity.** These are software findings, not diagnoses of the running pilot or measurements of camera accuracy.
 
 Read first: AGENTS.md, PLAN.md, localization metrics contract and registry, open questions and runtime integrity audit. Also checked the module investigation map, state-estimation module review and existing perception tests. Source identity is retained in [04_source_sha256.txt](04_source_sha256.txt). No runtime source, weights, selection rules, configurations, running processes or experimental outputs were changed. Coordinated with “Advance ICRA Localization Paper”; that thread confirmed runtime sources remain frozen during the three-arm pilot. Geometry investigation 05 owns geometry/model verification; investigation 07 owns fusion mathematics.
@@ -117,3 +121,45 @@ Documented repairs independently reverified here: A–E deterministic ordering; 
 4. Investigations10/12: expose buffer eviction, unscheduled input and source gaps separately from detector misses; current logger explicitly scopes opportunities to received detector outputs (`experiment_logger.py`:631), not all physical captures.
 5. Investigation05: decoder probe preserves coordinates, but original-dimension/calibration validation and backend coordinate contracts remain geometry work. No active bbox-coordinate mismatch established here.
 6. Investigation07: keep manager evidence scheduling, equal-time distinct-ID rejection and latest-complete supersession visible when testing fusion; no fusion mathematics changed.
+
+## Repair follow-up — 2026-09-06, after recovery campaign cleanup
+
+**The findings above describe the retained audit baseline, not the final repaired working tree.** The experiment owner released the shared-source freeze after the isolated recovery run and cleanup completed. Its protocol/source snapshot and all experimental results remain unchanged. This follow-up implements the active-path integrity repairs; it does not claim all seven findings are eliminated.
+
+### Implemented and verified
+
+- **F01:** extracted ROS-free `src/reliability/reliability/source_batch_buffer.py`. At most64 incomplete manager batches,2 s monotonic receipt deadline,256 bounded closed IDs. A steady250 ms timer expires transactions even if simulation pauses or no more images arrive. Timeout/capacity/supersession records name missing and received cameras. Per-camera capture high-water marks prevent old evidence re-entering even after closed-ID eviction. Out-of-order or same-stamp new-ID members are explicitly refused; this remains a monotonic capture-source contract, not support for distinct physical images sharing a stamp. A conflicting duplicate while pending aborts the transaction instead of choosing first/last payload. Complete duplicate delivery creates no new decision.
+- **F02:** active `visibility_launch_common.py::_multicam_perception_nodes` attaches launch Shutdown to detector **and manager** process exit. Detector cycle exceptions produce an identified `aborted` event. Manager `_decide` claims the ID before mapping/publication, records `decision_error` on exceptions and never retries partially published evidence. No fusion equations changed. Publication is still sequential and not atomic; missing prefixes close by receiver timeout. Abrupt process kill or a failed outcome publisher is not guaranteed a delivered terminal topic message.
+- **F03:** `_predict_batch` validates every chunk's length/interface before extending results. A short first chunk fails before any second call. Each actual strict native model call has a cycle-linked `/chunk/N` invocation ID, member list and start/finish timing outcome; whole-cycle duration semantics remain intact. Warmup calls do not emit operational inference events.
+- **F04, scoped repair:** detector IDs now include a random process session and increasing cycle sequence, followed by ordered exact camera capture stamps. Restarted detectors cannot generate the same cycle ID. A backward ROS clock jump exceeding5 ms raises an explicit coordinated-restart integrity failure in detector/manager, with active launch shutdown. This fixes silent reset lockout by refusing unsupported continuation. **Hot reset is not implemented:** the estimator and producer must restart together. Physical frame identity still relies on unique monotonic capture stamps within an epoch; adding a true producer frame/round sequence remains necessary to distinguish same-stamp physical captures.
+- **F05:** detector pending buckets capped at32. Expiry, capacity eviction, frame replacement, skew removal and superseded rounds emit identified events. A quarter-second steady timer expires strict pending state and names cameras with no recent callback; optional trace now labels present/missing cameras explicitly. Expiring any member closes that incomplete round; the old code removed individual expired members. Neither implementation may use an expired frame. These are explicit bounded-buffer/receipt policies for the new runtime, not changes retroactively applied to frozen runs.
+
+The normal all-five,0.05 s timestamp-window rule, inference image size, model weights, threshold/selection code, manager mean/R/Q and fusion mathematics are unchanged. Detector callbacks remain synchronous with depth-one image queues; no promise is made to process every capture or enforce an inference deadline. Scheduling under exceptional overload now has explicit limits/outcomes, and must be recorded as such in the next protocol.
+
+### Outcome surfaces and remaining limits
+
+New JSON topic `/perception/camera_batch_outcome` emits `selected`, `inference_completed`/`inference_error` per native chunk, and cycle `published`, `aborted` or `dropped_clock_wait`, plus pre-inference buffer-drop records. Cycle IDs and per-call IDs are separate. `/reliability/camera_manager/batch_outcome` emits receipt `complete`, `incomplete_timeout`, `incomplete_capacity`, `superseded_by_complete_batch`, `conflicting_duplicate`, member refusals, `superseded_before_decision`, `decision_completed`/`decision_error` and clock-reset failure. Both emit the same JSON into the captured process log, prefixed `camera_batch_outcome`.
+
+`decision_completed` means the manager decision routine returned; it does **not** mean a fused correction was published or accepted. Join its source ID to the existing decision reason/fused envelope. These events are additive; the existing CSV logger has not been changed to collect the new topics. Investigation10 should add a durable joined transaction ledger and distinguish delivery from publisher success. A missing entire detector publication is visible in the detector outcome/process log but cannot be reconstructed from manager observations alone. Hard crashes, DDS loss, blocked inference and steady-timer starvation during synchronous inference still need integration/liveness tests. Source-level shutdown wiring was tested, not an actual ROS process-kill scenario.
+
+**F06 and F07 remain:** timestamp-window grouping and optional scheduled/single-camera contract weaknesses were not altered. Tests that document their observed behaviour remain labelled baseline/policy probes. No automatic switch to subset inference, hot epoch reset, detector retraining or changed selection rules was introduced.
+
+### Files and evidence
+
+Production edits are restricted to:
+
+- `src/perception/perception/core/four_camera_batch.py`
+- `src/perception/perception/nodes/batched_four_camera_yolo_node.py`
+- `src/reliability/reliability/source_batch_buffer.py` (new)
+- `src/reliability/reliability/nodes/camera_manager_node.py` (receipt, clock and decision ownership wrapper)
+- `src/experiments/experiments/core/visibility_launch_common.py` (two exit handlers)
+
+Regression files: `tests/perception/test_camera_acquisition_audit_04.py`, `tests/perception/test_batched_four_camera_yolo.py` (chunk guard assertion updated), and new `tests/reliability/test_source_batch_buffer.py`. Baseline probes/results remain attributable to the original source hashes and repository history; repaired assertions test desired invariants rather than treating observed bugs as success.
+
+Validation: **101 tests passed**, plus compilation of all five production files. Exact output: [04_repair_test_results.txt](04_repair_test_results.txt); repaired source/test hashes: [04_repair_source_sha256.txt](04_repair_source_sha256.txt). Reproduction:
+
+```bash
+python3 -m pytest -q tests/perception/test_camera_acquisition_audit_04.py tests/perception/test_batched_four_camera_yolo.py tests/perception/test_scheduled_camera_registry.py tests/reliability/test_source_batch_buffer.py tests/reliability/test_camera_manager_node.py tests/reliability/test_fusion_arms.py tests/experiments/test_warehouse_v2_world_contract.py tests/visibility_comparison/test_network_planner_config.py
+```
+
+The suite includes bounded partial batches, expiry without arrivals, replay after closed-ID eviction, conflict abort, skewed successive rounds, distinct restart cycle IDs, per-chunk assignment/empty misses, explicit reset failure, manager publication-error no-retry, ordinary repeated delivery, existing fusion/manager tests and launch/config regressions. No live navigation or accuracy claim follows from these tests. A new source-frozen integration run remains required before using these repairs for scientific evidence.

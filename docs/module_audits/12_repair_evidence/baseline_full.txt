@@ -1,0 +1,34 @@
+capture_resume {"none": {"writer_accepted": true, "writer_error": null, "preflight_ready": true, "failed_checks": [], "start_pose_id": 1, "retained_rows": 5}, "duplicate_camera": {"writer_accepted": true, "writer_error": null, "preflight_ready": false, "failed_checks": ["complete_camera_batches"], "start_pose_id": 1, "retained_rows": 5}, "missing_camera": {"writer_accepted": false, "writer_error": "RuntimeError: resume index contains an incomplete five-camera pose batch", "preflight_ready": false, "failed_checks": ["complete_camera_batches"], "start_pose_id": null, "retained_rows": null}, "pose_gap": {"writer_accepted": true, "writer_error": null, "preflight_ready": false, "failed_checks": ["contiguous_pose_prefix", "all_repetitions_present"], "start_pose_id": 2, "retained_rows": 5}, "timing": {"writer_accepted": true, "writer_error": null, "preflight_ready": false, "failed_checks": ["capture_stamps_co
+capture_freshness {"commands": [{"pose": [0, 0, 0], "sim_stamp_s": 100.0}, {"pose": [10, 0, 0], "sim_stamp_s": 100.0}], "both_captures_stamp_s": 99, "duplicate_callbacks_satisfy_min_new_rgb": true, "different_pose_timestamp_window_accepted": true, "permutations_preserve_camera_pixels": 120}
+lossless_converter_interruption {"failure": {"accepted": false, "error": "RuntimeError: injected codec interruption"}, "indexed_files_missing": ["0.png"], "verified_pixels_survive_in_webp": true}
+inferred 2/2 unique images
+{
+  "rows": 2,
+  "unique_images": 2,
+  "detected": 1,
+  "output": "/tmp/module12_cgh0zjm2/detector/bbox_observations.csv"
+}
+detector_input_identity_and_denominator {"capture_rows": 3, "detector_rows": 2, "reported_attempt_rows": 2, "capture_failure_omitted": true, "real_miss_retained": true, "changed_pixels_accepted_with_old_hash": true, "positive_on_known_synthetic_empty_image_retained_as_detection": true}
+/home/joostleliveld/.local/lib/python3.10/site-packages/pandas/core/computation/expressions.py:21: UserWarning: Pandas requires version '2.8.4' or newer of 'numexpr' (version '2.8.1' currently installed).
+  from pandas.core.computation.check import NUMEXPR_INSTALLED
+/home/joostleliveld/.local/lib/python3.10/site-packages/pandas/core/arrays/masked.py:61: UserWarning: Pandas requires version '1.3.6' or newer of 'bottleneck' (version '1.3.2' currently installed).
+  from pandas.core import (
+splits {"adjacent_positions_distance_m": 0.002, "checkerboard_splits": {"0": "test", "1": "train"}, "identical_image_allowed_across_sides": true, "fraction_zero_grouped": ["train", "train", "val", "val"], "fraction_one_grouped": ["train", "train", "val", "val"]}
+small_oof_fallback {"rows": 4, "fit_calls": 0, "returns_in_sample_residuals_as_oof": true}
+legacy_exporter {"rows": 3, "duplicate_rows_kept": true, "joined_belief_stamp_s": 1.05, "perception_receipt_stamp_s": 1.0, "miss_retained": true, "stats": {"rows_seen": 3, "kept": 3, "dropped_belief_nan": 0, "dropped_stamp_tol": 0, "dropped_min_spacing": 0}, "frame_expected_and_received_assumed": true}
+provisional_heading_features {"implicit_commanded_yaw_changes_features": true, "explicit_online_heading_works_without_truth": true, "disable_heading_still_requires_robot_yaw": true, "nonfinite_score_returns_nonfinite_features": true}
+operational_residuals {"unique_records": 2, "duplicated_records": 20, "shrinkage_before": 0.8333333333333334, "shrinkage_after_duplicates": 0.3333333333333333, "default_empty_anchor_list_claims_held_out": true, "affine_uv_expected_residual": [0, 0], "affine_uv_observed_residual": [640.0, 360.0]}
+frozen_capture {"schema": "bbox_characterization_capture.v1", "rows": 15440, "poses": 3088, "positions": 386, "hits": 6412, "misses": 9028, "unique_decoded_hashes": 7138, "source_batch_ids_present": false, "exact_camera_batches": true, "poses_with_span_above_005s": 978, "max_span_s": 0.20000000000004547, "reported_span_matches_recomputed": true, "duplicate_hit_hash_groups": 3, "cross_split_hash_groups": 5, "cross_split_hit_hash_groups": 0, "cross_commissioning_role_hit_hash_groups": 0, "test_to_train_position_distance_m": {"min": 0.6444444444444422, "median": 0.6444444444444457, "max": 1.3375000000000004}, "role_opportunities": {"covariance_fit": 2720, "mean_train": 7800, "evaluation": 2760, "selection": 2160}, "role_hits": {"covariance_fit": 1172, "mean_train": 3249, "evaluation": 1172, "selection": 819}}
+verified images 1000
+verified images 2000
+verified images 3000
+verified images 4000
+verified images 5000
+verified images 6000
+verified images 7000
+frozen_pixels {"scope": "all indexed unique paths", "checked_paths": 7138, "problems": []}
+frozen_inference {"rows": 6412, "max_feature_difference": 3.552713678800501e-15, "max_nn_xy_difference_m": 3.552713678800501e-15, "max_reference_z_R_difference": 3.552713678800501e-15, "no_fitting": true}
+artifact_input_and_roundtrips {"unknown_camera_returns_none": true, "nonfinite_raw_returns_none": true, "nonfinite_score_returns_none": true, "missing_bbox_returns_none": true, "unknown_version": {"accepted": false, "error": "ValueError: learned box correction has schema 'v999', this runtime understands 'box_feature_bias_correction.joblib.v1'; refusing to run a model whose feature contract may differ"}, "missing_feature_metadata": {"accepted": false, "error": "ValueError: learned box-correction feature order does not match this runtime.\n  artifact: []\n  runtime : ['range_m', 'inv_range', 'box_w_frac', 'box_h_frac', 'box_aspect', 'u_frac', 'v_frac', 'bearing_cos', 'bearing_sin', 'confidence', 'is_camera_A', 'is_camera_B', 'is_camera_C', 'is_camera_D', 'is_camera_E']"}, "missing_target": {"accepted": true, "value": [-7.9915362765310665, -8.637136688434255]}, "missing_B_geometry": {"accepted": true, "value": null}, "f
+artifact_preservation {"changed_frozen_files": []}
+provenance_check_summary {"checked": 41, "mismatches": [{"manifest": "capture/detector", "field": "profiles", "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/config/world_profiles.yaml", "expected": "3559f0a78b562bcad7cb7cbb476acfcc48442e14eedb017e8002fb1ae3f4f5fb", "actual": "742cb32c69ea9f48ecdf1ce899e9bf8cd45949be863312369b85cb67a79405cd", "matches": false}]}
+wrote /home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/12_probe_results.json

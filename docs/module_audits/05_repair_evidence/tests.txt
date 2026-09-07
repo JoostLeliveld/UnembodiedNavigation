@@ -1,0 +1,11 @@
+........................................................................ [ 66%]
+....................................                                     [100%]
+=============================== warnings summary ===============================
+tests/reliability/test_reference_calibration.py::test_actual_manager_matches_frozen_offline_mean_and_R
+  Warning: Pandas requires version '2.8.4' or newer of 'numexpr' (version '2.8.1' currently installed).
+
+tests/reliability/test_reference_calibration.py::test_actual_manager_matches_frozen_offline_mean_and_R
+  Warning: Pandas requires version '1.3.6' or newer of 'bottleneck' (version '1.3.2' currently installed).
+
+-- Docs: https://docs.pytest.org/en/stable/warnings.html
+108 passed, 2 warnings in 3.23s

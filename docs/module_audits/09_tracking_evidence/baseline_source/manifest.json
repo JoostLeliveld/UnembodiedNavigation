@@ -1,0 +1,46 @@
+{
+  "src/planning/planning/nodes/efe_agent_node.py": {
+    "sha256": "a575ba53e74a835ee955625b14e5718c09939fc36d206ef8b35b4a0c405818ae",
+    "recovered_from": "docs/module_audits/08_source_snapshot/src/planning/planning/nodes/efe_agent_node.py"
+  },
+  "src/planning/planning/nodes/unicycle_planner_node.py": {
+    "sha256": "56100b37b8e9351d1cee3d4e089357503e53838db428c4261e0bf1a11f76514f",
+    "recovered_from": "docs/module_audits/08_source_snapshot/src/planning/planning/nodes/unicycle_planner_node.py"
+  },
+  "src/planning/planning/planners/base_planner.py": {
+    "sha256": "abe6edffd6ac66998088c71884e256d56f7f3dbc798bf5684a86a623d4edffdb",
+    "recovered_from": "docs/module_audits/08_source_snapshot/src/planning/planning/planners/base_planner.py"
+  },
+  "src/planning/planning/core/tracker_guard.py": {
+    "sha256": "5e5f21a0c1ccd5f835c18d3d83d80765fb2f65ac7e4ed6187a0df2277503e8af",
+    "recovered_from": "git 5e844a89^:src/planning/planning/core/tracker_guard.py"
+  },
+  "src/experiments/experiments/nodes/goal_mission_node.py": {
+    "sha256": "f2b208e86c332049f9bab4dbd843875d484d3de582d723048adcc7e75b6d8817",
+    "recovered_from": "git 5e844a89^:src/experiments/experiments/nodes/goal_mission_node.py"
+  },
+  "src/experiments/experiments/nodes/experiment_logger.py": {
+    "sha256": "6c03281600ad906020fee19af04e5454846bdf2b9c653da6f63266d767e678e3",
+    "recovered_from": "experiments/runtime_integrity/logging_accounting_20260906/source_snapshot/src/experiments/experiments/nodes/experiment_logger.py"
+  },
+  "src/unav_common/unav_common/preselected_route.py": {
+    "sha256": "dc374896ac427ae0352518d80c04a582ffa378e33f9dbd5c73e983fc45e11e6a",
+    "recovered_from": "src/unav_common/unav_common/preselected_route.py"
+  },
+  "src/unav_common/unav_common/lane_graph_routes.py": {
+    "sha256": "3a917e61fb06077661486d8f871b5c1d7edd58118fb8e52f1b0b105a1974238a",
+    "recovered_from": "src/unav_common/unav_common/lane_graph_routes.py"
+  },
+  "src/sim/sim/actuation_noise_node.py": {
+    "sha256": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f",
+    "recovered_from": "experiments/runtime_integrity/logging_accounting_20260906/source_snapshot/src/sim/sim/actuation_noise_node.py"
+  },
+  "src/experiments/experiments/core/visibility_launch_common.py": {
+    "sha256": "de61a0fe93250d3207629ddb37d10d5d04b8e605452725b831b74882d2b98817",
+    "recovered_from": "docs/module_audits/08_source_snapshot/src/experiments/experiments/core/visibility_launch_common.py"
+  },
+  "scripts/visibility_comparison/run_visibility_campaign.py": {
+    "sha256": "ec4b7dc26eaf2a9dcd2671705563382c8e765e2e5ff145f087bd58d29ea17af2",
+    "recovered_from": "docs/module_audits/08_source_snapshot/scripts/visibility_comparison/run_visibility_campaign.py"
+  }
+}

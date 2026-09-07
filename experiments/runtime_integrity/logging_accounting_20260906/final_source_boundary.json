@@ -1,0 +1,66 @@
+{
+  "observed_at_utc": "2026-09-06T21:20:23.019459+00:00",
+  "audited_commit": "3c4ddeae4a7427bf374514dad6a1d65dc728a91c",
+  "files": {
+    "experiments/fusion_on_fixed_routes/aligned.py": {
+      "baseline": "dabd8b9167af3f11ee21c7a42dbd795b847300c63ac0c69af3cc0167d3965f80",
+      "current": "dabd8b9167af3f11ee21c7a42dbd795b847300c63ac0c69af3cc0167d3965f80",
+      "same": true
+    },
+    "scripts/visibility_comparison/run_visibility_campaign.py": {
+      "baseline": "ec4b7dc26eaf2a9dcd2671705563382c8e765e2e5ff145f087bd58d29ea17af2",
+      "current": "02373892837810cf135f86e515b02aae2b55743be8f97a2f6b9b385d920689d0",
+      "same": false
+    },
+    "src/experiments/experiments/core/camera_opportunity_log.py": {
+      "baseline": "ac4ce0693534f3d0293a73cf4d90d3a56c83f17db48b9deedaa8b6531553f16d",
+      "current": "ac4ce0693534f3d0293a73cf4d90d3a56c83f17db48b9deedaa8b6531553f16d",
+      "same": true
+    },
+    "src/experiments/experiments/core/manifest.py": {
+      "baseline": "d5a69d9e1994d3ef545b5c28ae6e2661af9f00d50e64bceca3cf47329223cddb",
+      "current": "d5a69d9e1994d3ef545b5c28ae6e2661af9f00d50e64bceca3cf47329223cddb",
+      "same": true
+    },
+    "src/experiments/experiments/nodes/experiment_logger.py": {
+      "baseline": "6c03281600ad906020fee19af04e5454846bdf2b9c653da6f63266d767e678e3",
+      "current": "6c03281600ad906020fee19af04e5454846bdf2b9c653da6f63266d767e678e3",
+      "same": true
+    },
+    "src/planning/planning/nodes/efe_agent_node.py": {
+      "baseline": "a575ba53e74a835ee955625b14e5718c09939fc36d206ef8b35b4a0c405818ae",
+      "current": "72e306463ea8d262bce5dc83ee93b3fc0344375d241e72a88188c3a3d4eb2044",
+      "same": false
+    },
+    "src/planning/planning/nodes/unicycle_planner_node.py": {
+      "baseline": "56100b37b8e9351d1cee3d4e089357503e53838db428c4261e0bf1a11f76514f",
+      "current": "c56d51b4bb4a0ada7629be1db6dad1d0aaed04684bf074897910cfa070653da5",
+      "same": false
+    },
+    "src/reliability/reliability/nodes/camera_manager_node.py": {
+      "baseline": "5e11bd202de065a448154cc18192e63c507b2da058051a34e9ac14929d14c9a6",
+      "current": "8788520eb3a194767b2631430df5db26ca3704124924f81ca08517ab350d04e6",
+      "same": false
+    },
+    "src/sim/sim/actuation_noise_node.py": {
+      "baseline": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f",
+      "current": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f",
+      "same": true
+    },
+    "src/unav_common/unav_common/manifest.py": {
+      "baseline": "f3f568e9edfcb97527629384f4421817286f0718086ef25ebe399dc4baa34e6e",
+      "current": "f3f568e9edfcb97527629384f4421817286f0718086ef25ebe399dc4baa34e6e",
+      "same": true
+    },
+    "src/experiments/experiments/core/visibility_launch_common.py": {
+      "baseline": "de61a0fe93250d3207629ddb37d10d5d04b8e605452725b831b74882d2b98817",
+      "current": "f8c9b281433480b80f7b165fa14482100da40456c3c5733ee1c5f26e65a91db9",
+      "same": false
+    },
+    "src/perception/perception/nodes/batched_four_camera_yolo_node.py": {
+      "baseline": "1f18372d4229e769a464ccc343ad31dc3f06ba7631bb1b5c9ecfd8652d344523",
+      "current": "f8fdbeaa603fe9be62d4892c1c78c037e8574f54288169f3af23da1ec23d0819",
+      "same": false
+    }
+  }
+}

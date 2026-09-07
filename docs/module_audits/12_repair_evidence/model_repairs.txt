@@ -1,0 +1,88 @@
+/home/joostleliveld/.config/matplotlib is not a writable directory
+Matplotlib created a temporary cache directory at /tmp/matplotlib-mzhyi_re because there was an issue with the default path (/home/joostleliveld/.config/matplotlib); it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better support multiprocessing.
+.....................F.................................................. [ 87%]
+..F.......                                                               [100%]
+=================================== FAILURES ===================================
+__________ test_unidentifiable_legacy_export_is_refused_before_writes __________
+
+tmp_path = PosixPath('/tmp/pytest-of-joostleliveld/pytest-156/test_unidentifiable_legacy_exp0')
+
+    def test_unidentifiable_legacy_export_is_refused_before_writes(tmp_path):
+        with pytest.raises(RuntimeError,match='physical image/opportunity'):
+>           export_observation_dataset(str(tmp_path),UsableObservationGateConfig(),ExporterConfig(),str(tmp_path/'out'))
+E           TypeError: UsableObservationGateConfig.__init__() missing 2 required positional arguments: 'image_width_px' and 'image_height_px'
+
+tests/reliability/test_capture_export_repairs_12.py:108: TypeError
+____________ test_actual_manager_matches_frozen_offline_mean_and_R _____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7d019e4f5db0>
+
+    @pytest.mark.skipif(not ARTIFACT.exists(), reason='local frozen calibration unavailable')
+    def test_actual_manager_matches_frozen_offline_mean_and_R(monkeypatch):
+        import joblib
+        import reliability.nodes.camera_manager_node as manager
+        from reliability.contracts import CameraObservation
+        from reliability.learned_box_correction import LearnedBoxCorrection
+        models = joblib.load(ROOT / 'logs/studies/icra_commissioning_20260905/models.joblib')
+        calibration = ReferenceCalibration(ARTIFACT, MEAN, [f'camera_{c}' for c in 'ABCDE'])
+        nn = LearnedBoxCorrection(MEAN)
+        path = ROOT / 'logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bias_update_interpretations.csv'
+        with path.open() as stream:
+            # Keep camera support in this equality check; no performance estimate is made.
+            rows = [r for r in csv.DictReader(stream) if r['nn_valid'] == '1' and r['split'] == 'test']
+        chosen = []
+        for camera in calibration.bias:
+            chosen.extend([r for r in rows if r['camera_id'] == camera][:20])
+        assert len(chosen) == 100
+        monkeypatch.setattr(manager, '_with_provider_quality', lambda observation, *args: observation)
+        for row in chosen:
+            camera = row['camera_id']
+            raw = (float(row['raw_x']), float(row['raw_y']))
+            monkeypatch.setattr(manager, 'project_observation_to_world_with_covariance',
+                                lambda *args: (raw, ((1., 0.), (0., 1.))))
+            # Valid contract, with no robot truth or reference fields in deployed inputs.
+            contract = CameraObservation(camera_id=camera, timestamp_s=1., detection_valid=True,
+                pixel_uv=(float(row['u_bbox_bottom']), float(row['v_bbox_bottom'])),
+                detector_score=float(row['confidence']), detector_score_raw=float(row['confidence']),
+                bbox_xyxy=tuple(float(row[k]) for k in ('x0', 'y0', 'x1', 'y1')))
+            fake = SimpleNamespace(_latest={camera: contract}, commissioned_pixel_cov_by_camera={},
+                commissioned_pixel_cov=((1., 0.), (0., 1.)), camera_models={camera: SimpleNamespace(cam_pos=[0., 0., 3.])},
+                covariance_profile=manager.COMMISSIONED_REFERENCE_COVARIANCE, _belief_query_history=[],
+                reliability_query_max_time_delta_s=.2, admission_gate=False, silhouette_correction=False,
+                observation_model=manager.OBSERVATION_MODEL_LEARNED_NN, learned_correction=nn,
+                reference_calibration=calibration, _gate_rejections=collections.Counter(),
+                _silhouette_status_by_camera={}, _detection_extras_by_camera={},
+                _reliability_query_source_by_camera={}, replay_config=None)
+>           observations = manager.CameraManagerNode._map_observations(fake, 1.)
+
+tests/reliability/test_reference_calibration.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = namespace(_latest={'camera_A': CameraObservation(schema_version='phase0.v1', camera_id='camera_A', source_batch_id='',...detection_extras_by_camera={}, _reliability_query_source_by_camera={}, replay_config=None, _bootstrap_camera_ids=set())
+now_s = 1.0
+
+    def _map_observations(self, now_s: float) -> list[MapObservation]:
+        observations: list[MapObservation] = []
+        self._bootstrap_camera_ids = set()
+        self._detection_extras_by_camera = {}
+        self._silhouette_status_by_camera = {}
+        self._reliability_query_source_by_camera = {}
+>       inputs = self._decision_snapshot or self._snapshot_inputs(self._ready_source_batch_id)
+E       AttributeError: 'types.SimpleNamespace' object has no attribute '_decision_snapshot'
+
+src/reliability/reliability/nodes/camera_manager_node.py:1350: AttributeError
+=============================== warnings summary ===============================
+../../.local/lib/python3.10/site-packages/pandas/core/computation/expressions.py:21
+  Warning: Pandas requires version '2.8.4' or newer of 'numexpr' (version '2.8.1' currently installed).
+
+../../.local/lib/python3.10/site-packages/pandas/core/arrays/masked.py:61
+  Warning: Pandas requires version '1.3.6' or newer of 'bottleneck' (version '1.3.2' currently installed).
+
+../../.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63
+  Warning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+
+-- Docs: https://docs.pytest.org/en/stable/warnings.html
+=========================== short test summary info ============================
+FAILED tests/reliability/test_capture_export_repairs_12.py::test_unidentifiable_legacy_export_is_refused_before_writes
+FAILED tests/reliability/test_reference_calibration.py::test_actual_manager_matches_frozen_offline_mean_and_R
+2 failed, 80 passed, 3 warnings in 14.72s

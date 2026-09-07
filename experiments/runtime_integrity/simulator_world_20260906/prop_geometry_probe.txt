@@ -1,0 +1,134 @@
+{
+  "scope": "Exact clipping/projecting of DAE collision triangles through the robot vertical slab; exact 2-D boxes for SDF box collisions. Static included props only; lamps are above robot and omitted.",
+  "planner_collision_models": [
+    "warehouse_shell",
+    "warehouse_v2_occluders"
+  ],
+  "records": [
+    {
+      "name": "forklift_parked",
+      "source_model": "dyn_forklift",
+      "include_pose": [
+        3.6,
+        -8.75,
+        0.0,
+        0.0,
+        0.0,
+        3.1416
+      ],
+      "collision_part_count_at_robot_height": 6,
+      "collision_footprint_bounds": [
+        2.499996400280587,
+        -9.26000117541187,
+        5.270000514233873,
+        -8.23999882458813
+      ],
+      "driveable_intersection_area_m2": 0.0,
+      "spawn_body_clearance_m": 9.999997612125245,
+      "spawn_any_half_degree_yaw_intersection": false,
+      "spawn_min_half_degree_yaw_clearance_m": 9.914587441256762,
+      "selected_plan_centerline_clearance_m": 9.510892427010848,
+      "selected_plan_circle_clearance_m": 9.025480231037157
+    },
+    {
+      "name": "pallet_jack",
+      "source_model": "aws_robomaker_warehouse_PalletJackB_01",
+      "include_pose": [
+        -8.69,
+        -9.0,
+        0.0,
+        0.0,
+        0.0,
+        1.5708
+      ],
+      "collision_part_count_at_robot_height": 1,
+      "collision_footprint_bounds": [
+        -8.889581489934768,
+        -9.595603675996053,
+        -8.349746726363067,
+        -8.434722472715888
+      ],
+      "driveable_intersection_area_m2": 0.12483762999650598,
+      "spawn_body_clearance_m": 0.04974810752604566,
+      "spawn_any_half_degree_yaw_intersection": true,
+      "spawn_min_half_degree_yaw_clearance_m": 0.0,
+      "selected_plan_centerline_clearance_m": 0.4569564314749806,
+      "selected_plan_circle_clearance_m": -0.0284557644987094
+    },
+    {
+      "name": "bin_office",
+      "source_model": "aws_robomaker_warehouse_TrashCanC_01",
+      "include_pose": [
+        -8.71,
+        -7.45,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "collision_part_count_at_robot_height": 1,
+      "collision_footprint_bounds": [
+        -9.352810949106235,
+        -7.812736126264343,
+        -8.067189050893766,
+        -7.087263803735658
+      ],
+      "driveable_intersection_area_m2": 0.3288956255944532,
+      "spawn_body_clearance_m": 0.6122638737356558,
+      "spawn_any_half_degree_yaw_intersection": false,
+      "spawn_min_half_degree_yaw_clearance_m": 0.4174704128678477,
+      "selected_plan_centerline_clearance_m": 0.8205751186354204,
+      "selected_plan_circle_clearance_m": 0.3351629226617304
+    },
+    {
+      "name": "pallet_loose_1",
+      "source_model": "dyn_pallet_box",
+      "include_pose": [
+        -3.98,
+        -8.65,
+        0.0,
+        0.0,
+        0.0,
+        0.12
+      ],
+      "collision_part_count_at_robot_height": 2,
+      "collision_footprint_bounds": [
+        -4.623570064427888,
+        -9.118950778714899,
+        -3.3364299355721125,
+        -8.181049221285102
+      ],
+      "driveable_intersection_area_m2": 0.0,
+      "spawn_body_clearance_m": 2.878177980588063,
+      "spawn_any_half_degree_yaw_intersection": false,
+      "spawn_min_half_degree_yaw_clearance_m": 2.8124417564356317,
+      "selected_plan_centerline_clearance_m": 2.387747481084697,
+      "selected_plan_circle_clearance_m": 1.9023352851110071
+    },
+    {
+      "name": "pallet_loose_2",
+      "source_model": "dyn_pallet_box",
+      "include_pose": [
+        4.45,
+        -8.63,
+        0.0,
+        0.0,
+        0.0,
+        -0.2
+      ],
+      "collision_part_count_at_robot_height": 2,
+      "collision_footprint_bounds": [
+        3.782492320977231,
+        -9.141228229613533,
+        5.117507679022769,
+        -8.118771770386468
+      ],
+      "driveable_intersection_area_m2": 0.0,
+      "spawn_body_clearance_m": 11.282492320977232,
+      "spawn_any_half_degree_yaw_intersection": false,
+      "spawn_min_half_degree_yaw_clearance_m": 11.19884066167949,
+      "selected_plan_centerline_clearance_m": 10.799117984743122,
+      "selected_plan_circle_clearance_m": 10.31370578876943
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+/home/joostleliveld/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+/home/joostleliveld/.local/lib/python3.10/site-packages/pandas/core/computation/expressions.py:21: UserWarning: Pandas requires version '2.8.4' or newer of 'numexpr' (version '2.8.1' currently installed).
+  from pandas.core.computation.check import NUMEXPR_INSTALLED
+/home/joostleliveld/.local/lib/python3.10/site-packages/pandas/core/arrays/masked.py:61: UserWarning: Pandas requires version '1.3.6' or newer of 'bottleneck' (version '1.3.2' currently installed).
+  from pandas.core import (
+/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/icra_commissioning/study.py:105: RuntimeWarning: invalid value encountered in sqrt
+  mean_mahalanobis2=float(nees.mean()),rms_sigma_cm=float(100*np.sqrt(np.mean(np.trace(R,axis1=1,axis2=2))/2)))
+  NOTE fusion_network_traverse/F4: one seed. Time samples within a drive are correlated, so this shows the shape of a result and cannot support a comparison between arms.
+  NOTE fusion_network_traverse/F4: one seed. Time samples within a drive are correlated, so this shows the shape of a result and cannot support a comparison between arms.
+  NOTE fusion_network_traverse/F1: one seed. Time samples within a drive are correlated, so this shows the shape of a result and cannot support a comparison between arms.
+  NOTE fusion_network_traverse/F4: one seed. Time samples within a drive are correlated, so this shows the shape of a result and cannot support a comparison between arms.
+59 synthetic cases recorded; source changes during probe: 0
+/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/results.json

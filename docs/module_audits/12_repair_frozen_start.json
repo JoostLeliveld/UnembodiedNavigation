@@ -1,0 +1,86 @@
+[
+  {
+    "path": "logs/perception_models/box_feature_bias_correction_20260831/models.joblib",
+    "sha256": "5da33c63a2bb46b3367e13acbb4eb96cab57388b5854a71db98676df176aad9d"
+  },
+  {
+    "path": "logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt",
+    "sha256": "efff1949c1b8cdeeb11438b36de80f6cf8daeef5f3a4682cfce8ae7dfe314f34"
+  },
+  {
+    "path": "logs/studies/icra_commissioning_20260905/models.joblib",
+    "sha256": "84454e296a9a5c83dd07bd5756b877bf614addd4fc1c3b18b9abff27789adb1c"
+  },
+  {
+    "path": "logs/studies/icra_commissioning_20260905/manifest.json",
+    "sha256": "46fe4a4486ca7ee50465b0362bfd0987982564765dd964474ed3946cb94fcafb"
+  },
+  {
+    "path": "logs/studies/icra_commissioning_20260905/field_study/field.joblib",
+    "sha256": "00cd08656e2e8afc4416496be838a5dee905a8e739a2231f62d0166afb515963"
+  },
+  {
+    "path": "logs/studies/icra_commissioning_20260905/field_study/manifest.json",
+    "sha256": "5a3a9066e31c3102e8b05de8495c64de4829be8023e838b9a555b8213f8dacae"
+  },
+  {
+    "path": "logs/studies/icra_commissioning_20260905/field_study/selection.json",
+    "sha256": "03a334717d68d977c1a62b8198d0e4020a49468e7caca5d641b79c4476afd67b"
+  },
+  {
+    "path": "logs/studies/icra_commissioning_20260905/network_planner/manifest.json",
+    "sha256": "db6d3a7d47e9c998285e3768622276c63956664bfc9988d6d4062cb1184949ea"
+  },
+  {
+    "path": "logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json",
+    "sha256": "0a462258197b42537bafaf989642bb85b348c077e0557d8cdf5b890709cfe22d"
+  },
+  {
+    "path": "logs/studies/measurement_commissioning/calibration.json",
+    "sha256": "de578957683905763c5890e686345dee56cd583f5a5ade05b5050adc593ecc30"
+  },
+  {
+    "path": "logs/studies/icra_commissioning_20260905/network_planner/uniform.npz",
+    "sha256": "9a312f1970c1689c1c830c12059e484fd285d97cb70c2e4d51b0a361319565ec"
+  },
+  {
+    "path": "logs/studies/icra_commissioning_20260905/network_planner/geometry.npz",
+    "sha256": "7a3f1c535c91373112b22205ac1d54435242ed0326cc2028473ef19f15755fd1"
+  },
+  {
+    "path": "logs/studies/icra_commissioning_20260905/network_planner/gp.npz",
+    "sha256": "2564739e96dc30d48cf0846cebdc0f4f1019ad7e612dc9b21441b9a914b24930"
+  },
+  {
+    "path": "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/capture_index.csv",
+    "sha256": "444eacca6ddcb210b7012d42305abe9d56d4bbf103b10687cc7daf0581ca729c"
+  },
+  {
+    "path": "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/capture_manifest.json",
+    "sha256": "d1b4d9ee3eefe6ce10a2b06d58d509c8a5f0114c57d2be08c69b76eb6474b1d8"
+  },
+  {
+    "path": "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bbox_observations.csv",
+    "sha256": "fb96041eb4795667a71a4160210f6f53dac69b6e8d94e49aa6e09c78f737cd86"
+  },
+  {
+    "path": "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bbox_detector_manifest.json",
+    "sha256": "3e4e60715259a021f4e2094214332f0a12cda41d3066f5a1051a15ddc95950a0"
+  },
+  {
+    "path": "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/observation_interpretations.csv",
+    "sha256": "407993f8fab6de16df79531267f665db6447df1072e2106e7c917cebf58c3366"
+  },
+  {
+    "path": "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/observation_interpretations_manifest.json",
+    "sha256": "13456a0934e5b309a52a5da13895d9b7a288ebdd26823a0eda4ceb537da0f88d"
+  },
+  {
+    "path": "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bias_update_interpretations.csv",
+    "sha256": "2ef381a377b0ada5943ceeb96fcc3a5f2b670a805a1b5f3dc3f4944768fe6cc2"
+  },
+  {
+    "path": "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bias_update_interpretations_manifest.json",
+    "sha256": "42615f41aba4533a85bf259bd717a49d13e46860508603de08f0e9528d6b57a8"
+  }
+]

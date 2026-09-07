@@ -1,5 +1,17 @@
 # How it works, start to finish
 
+> **Scope, 2026-09-07:** the account below preserves the earlier pixel-space generative
+> model and its investigations. Its seven-parameter description, noise rankings and
+> pixel-space update equations do not describe the active metric-reference path.
+> The registered navigation pilots use a frozen bbox/IPM neural correction, residual
+> offset and full commissioned metric covariance, then camera admission/fusion and one
+> robot filter with the configured heading-update mode. See the [active pipeline](README.md#the-pipeline),
+> [metrics contract](docs/localization_metrics.md) and [runtime repair tracker](docs/module_audits/IMPLEMENTATION_PROGRESS.md).
+> Current repairs distinguish supported motion prediction from missing motion, and
+> preserve reasoned correction refusals. The gate descriptions below are not proof of
+> complete runtime acceptance. Historical numbers and model comparisons retain their
+> original evidence scope.
+
 The whole chain: what the world is assumed to do, what was collected, what is measured once,
 and what happens every frame while the robot drives. Companion to [`PLAN.md`](PLAN.md),
 which holds what the paper has to earn.

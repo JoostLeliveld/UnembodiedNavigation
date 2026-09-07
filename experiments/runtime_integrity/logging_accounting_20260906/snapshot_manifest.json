@@ -1,0 +1,17 @@
+{
+  "commit": "3c4ddeae4a7427bf374514dad6a1d65dc728a91c",
+  "files": {
+    "experiments/fusion_on_fixed_routes/aligned.py": "dabd8b9167af3f11ee21c7a42dbd795b847300c63ac0c69af3cc0167d3965f80",
+    "scripts/visibility_comparison/run_visibility_campaign.py": "ec4b7dc26eaf2a9dcd2671705563382c8e765e2e5ff145f087bd58d29ea17af2",
+    "src/experiments/experiments/core/camera_opportunity_log.py": "ac4ce0693534f3d0293a73cf4d90d3a56c83f17db48b9deedaa8b6531553f16d",
+    "src/experiments/experiments/core/manifest.py": "d5a69d9e1994d3ef545b5c28ae6e2661af9f00d50e64bceca3cf47329223cddb",
+    "src/experiments/experiments/nodes/experiment_logger.py": "6c03281600ad906020fee19af04e5454846bdf2b9c653da6f63266d767e678e3",
+    "src/planning/planning/nodes/efe_agent_node.py": "a575ba53e74a835ee955625b14e5718c09939fc36d206ef8b35b4a0c405818ae",
+    "src/planning/planning/nodes/unicycle_planner_node.py": "56100b37b8e9351d1cee3d4e089357503e53838db428c4261e0bf1a11f76514f",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "5e11bd202de065a448154cc18192e63c507b2da058051a34e9ac14929d14c9a6",
+    "src/sim/sim/actuation_noise_node.py": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f",
+    "src/unav_common/unav_common/manifest.py": "f3f568e9edfcb97527629384f4421817286f0718086ef25ebe399dc4baa34e6e",
+    "src/experiments/experiments/core/visibility_launch_common.py": "de61a0fe93250d3207629ddb37d10d5d04b8e605452725b831b74882d2b98817",
+    "src/perception/perception/nodes/batched_four_camera_yolo_node.py": "1f18372d4229e769a464ccc343ad31dc3f06ba7631bb1b5c9ecfd8652d344523"
+  }
+}

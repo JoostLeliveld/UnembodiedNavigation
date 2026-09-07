@@ -1,0 +1,7 @@
+tasks:
+  requested_route:
+    conditions: [P0]
+    seeds: [210]
+conditions:
+  P0:
+    camera_network_artifact_path: /home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/navigation_fixture/field.npz

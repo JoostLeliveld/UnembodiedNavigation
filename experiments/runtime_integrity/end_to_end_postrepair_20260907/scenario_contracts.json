@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "invariants": {
+    "I1": "Each physical detector invocation has a unique source_batch_id or the versioned repository contract explicitly adopts and joins a distinct invocation ID.",
+    "I2": "Each fused correction has exactly one truthful terminal assimilation outcome.",
+    "I3": "State, covariance, frame and timestamp describe one instant and epoch.",
+    "I4": "Only the authorized serialized transaction modifies recursive state.",
+    "I5": "Belief publication and planning use immutable snapshots and reject stale work at commit.",
+    "I6": "Command ownership and stop precedence are unambiguous through physical application.",
+    "I7": "Planner, tracker, adapter and actuator limits share one validated resolved source.",
+    "I8": "Capture, arrival, decision, commit, belief and command times remain distinguishable.",
+    "I9": "Missing camera evidence and missing motion support have distinct states and reasons.",
+    "I10": "Contact, command receipt, command application, physical rest and terminal mission status remain distinct and joined.",
+    "I11": "Manifest binds exact imported source, resolved config, model, calibration, world, robot, route and attempt.",
+    "I12": "Logger drains terminal events, survives individual write/close failures and supports reconstruction.",
+    "I13": "Offline validation accepts or refuses the run for explicit contract reasons before reference scoring.",
+    "I14": "README, HOW_IT_WORKS, runtime audit, registry, protocol and captions describe the repaired active path and evidence boundary."
+  },
+  "scenarios": [
+    {"id": "S1", "name": "normal motion with valid observations", "required_channels": ["capture", "detector", "observation", "fusion", "state", "belief", "plan", "command", "odom", "logger", "offline"]},
+    {"id": "S2", "name": "long camera outage with complete odometry and a turn", "required_channels": ["camera_silence", "motion_support", "turn", "belief", "recovery", "logger", "offline"]},
+    {"id": "S3", "name": "camera outage with missing or gapped odometry", "required_channels": ["camera_silence", "motion_gap", "invalid_belief", "plan_refusal", "logger", "offline"]},
+    {"id": "S4", "name": "delayed duplicated reordered and simultaneous observations", "required_channels": ["capture_identity", "arrival_order", "fusion_identity", "terminal_outcome", "revision", "logger", "offline"]},
+    {"id": "S5", "name": "correction during planning or command execution", "required_channels": ["belief_revision", "goal_revision", "global_route", "local_tape", "stop_generation", "command_application"]},
+    {"id": "S6", "name": "detector silence and planner or command silence", "required_channels": ["acquisition_liveness", "planner_liveness", "command_liveness", "final_actuator_guard", "physical_rest"]},
+    {"id": "S7", "name": "camera rejection followed by valid recovery", "required_channels": ["sensor_validation", "admission_reason", "motion_support", "terminal_outcome", "valid_recovery"]},
+    {"id": "S8", "name": "goal approach safe stop and physical contact probe", "required_channels": ["complete_route", "goal_state", "stop_ack", "physical_rest", "contact_health", "contact_event", "terminal_summary"]},
+    {"id": "S9", "name": "controlled restart or simulation-clock reset", "required_channels": ["stop_ack", "old_epoch_drain", "process_restart", "fresh_clock", "fresh_odom", "fresh_camera", "fresh_state", "fresh_command"]},
+    {"id": "S10", "name": "shutdown with buffered terminal events", "required_channels": ["producer_cutoff", "queue_drain", "independent_close", "atomic_summary", "offline_reconstruction"]}
+  ],
+  "rule": "Every scenario is evaluated against I1-I14. An unexercised channel is NOT VERIFIED, never PASS."
+}

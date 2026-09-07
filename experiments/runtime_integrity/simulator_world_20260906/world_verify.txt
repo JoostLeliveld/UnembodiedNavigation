@@ -1,0 +1,6 @@
+[state A: warehouse_v2.world.sdf] 211 checks
+[state A] PASS: the world matches the layout
+[state B: warehouse_v2_shipout.world.sdf] 177 checks
+[state B] PASS: the world matches the layout
+[paired peak/shipout invariants] 8 checks
+[paired peak/shipout invariants] PASS

@@ -1,0 +1,8 @@
+{
+  "scope": "new cache-key Q invalidation independently verified; broader cache/JIT covered only by focused regressions",
+  "before": 5.87387012677612,
+  "after_without_manual_clear": 5.870261479605744,
+  "after_manual_clear": 5.870261479605744,
+  "new_function": true,
+  "probe_sha256": "ee4154595d9b719a926862335b69ab85fed671d4a77a36f04d73cdc4846c1a09"
+}

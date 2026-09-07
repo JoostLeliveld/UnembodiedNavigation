@@ -1,0 +1,134 @@
+{
+  "scope": "One recorded fusion algebra/identity trace; no run accuracy, calibration or ranking",
+  "selection": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_evidence/selection.json",
+  "selection_sha256": "66b928fbaf8f470332acff23922003822fcb58113d4bd085180ade5c54c0cfd0",
+  "run": "logs/studies/icra_commissioning_20260905/network_navigation_runtime_pilot/fusion_network_traverse/P0/seed210/experiment_20260906_213015",
+  "input_hashes": {
+    "run_manifest.json": "31d1714f817919c989862539c80ec7aaa4b9e6cddb8c7c51b55125c2cb8d314a",
+    "run_summary.json": "50a7118e4d30c63f7073327ada07d7ad3989b8cf22bfcf56e7dcf71f300fc821",
+    "experiment.csv": "64d9daf304e064930f0fbd6573a200b362d5636731d88ae2ae1f51fe1332b72d",
+    "fusion_observations.csv": "bdf79f810e9629def34196ed573eb5333bb9ef43d009853f0d0654881366bbfe",
+    "correction_assimilations.csv": "61fe08439a528efb2074efc6ebd9ffebcf9b192db70a1b83619db450d477b029"
+  },
+  "batch": "strict:camera_A@3400000000,camera_B@3400000000,camera_C@3400000000,camera_D@3400000000,camera_E@3400000000",
+  "frame": "map_bev",
+  "units": "m and m2",
+  "rows": [
+    {
+      "camera": "B",
+      "source_batch_id": "strict:camera_A@3400000000,camera_B@3400000000,camera_C@3400000000,camera_D@3400000000,camera_E@3400000000",
+      "obs_stamp": 3.4000000000000004,
+      "obs_x": -7.886615474502497,
+      "obs_y": -8.633010424232808,
+      "cov": [
+        [
+          0.033313103557099315,
+          0.012617474882541087
+        ],
+        [
+          0.012617474882541087,
+          0.27909081853677753
+        ]
+      ],
+      "common_capture_stamp": 3.4000000000000004,
+      "aligned_xy": [
+        -7.886615474502497,
+        -8.633010424232808
+      ],
+      "aligned_cov": [
+        [
+          0.033313103557099315,
+          0.012617474882541087
+        ],
+        [
+          0.012617474882541087,
+          0.27909081853677753
+        ]
+      ],
+      "used": true,
+      "fused_stamp": 3.4000000000000004,
+      "decision_stamp": 3.802
+    },
+    {
+      "camera": "C",
+      "source_batch_id": "strict:camera_A@3400000000,camera_B@3400000000,camera_C@3400000000,camera_D@3400000000,camera_E@3400000000",
+      "obs_stamp": 3.4000000000000004,
+      "obs_x": -7.919193895767121,
+      "obs_y": -8.618793378490285,
+      "cov": [
+        [
+          0.137744246431263,
+          0.04088366985291611
+        ],
+        [
+          0.04088366985291611,
+          0.05974336960786123
+        ]
+      ],
+      "common_capture_stamp": 3.4000000000000004,
+      "aligned_xy": [
+        -7.919193895767121,
+        -8.618793378490285
+      ],
+      "aligned_cov": [
+        [
+          0.137744246431263,
+          0.04088366985291611
+        ],
+        [
+          0.04088366985291611,
+          0.05974336960786123
+        ]
+      ],
+      "used": true,
+      "fused_stamp": 3.4000000000000004,
+      "decision_stamp": 3.802
+    }
+  ],
+  "reconstructed": {
+    "mean": [
+      -7.892793496055022,
+      -8.61456496702969
+    ],
+    "covariance": [
+      [
+        0.05372548115338846,
+        0.01653439617853531
+      ],
+      [
+        0.01653439617853531,
+        0.08626210761405116
+      ]
+    ],
+    "used": [
+      "camera_B",
+      "camera_C"
+    ],
+    "rejected": []
+  },
+  "recorded_mean": [
+    -7.892793496055022,
+    -8.61456496702969
+  ],
+  "recorded_covariance": [
+    [
+      0.05372548115338846,
+      0.01653439617853531
+    ],
+    [
+      0.01653439617853531,
+      0.08626210761405116
+    ]
+  ],
+  "mean_max_difference_m": 0.0,
+  "covariance_max_difference_m2": 0.0,
+  "terminal": {
+    "source_batch_id": "strict:camera_A@3400000000,camera_B@3400000000,camera_C@3400000000,camera_D@3400000000,camera_E@3400000000",
+    "correction_stamp": 3.4,
+    "apply_stamp": 3.802,
+    "belief_stamp_after": 3.4,
+    "status": "accepted_bootstrap",
+    "reason": "bootstrap",
+    "accepted": true
+  }
+}

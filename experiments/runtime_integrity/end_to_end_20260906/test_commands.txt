@@ -1,0 +1,79 @@
+# Audit 15 command catalogue
+# Run from /home/joostleliveld/Thesis/UnembodiedNavigation.
+# Native C14 commands allocate private partitions/domains inside their scripts; do not
+# run them while another process owns the same resources. No campaign command belongs here.
+
+# Shared deterministic environment
+source install/setup.bash
+export PYTHONDONTWRITEBYTECODE=1
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+
+# C1 — initial source-bound focused component transcript.
+# The exact shell argv was not retained; component_tests.txt is retained with the
+# identity_start.json hashes and audited_sources.tar.gz. Do not infer a current pass
+# from its 290 defect-reproduction/contract tests.
+
+# C2 — audit-15 actual-method and ROS-free bounded harness (39 reproductions).
+python3 experiments/runtime_integrity/end_to_end_20260906/audit.py
+
+# C3 — observation geometry, active frozen model and live selected trace.
+python3 docs/module_audits/05_geometry_probe.py
+python3 docs/module_audits/05_live_trace.py
+
+# C4 — fusion numerical, actual-node and registered-event evidence.
+python3 docs/module_audits/07_fusion_probe.py
+python3 docs/module_audits/07_fusion_node_probe.py
+python3 docs/module_audits/07_registered_event_probe.py
+# The baseline reproduction must use its archived source boundary:
+python3 docs/module_audits/07_reproduce_snapshot.py
+
+# C5 — first later owner-repaired packet, with source archive and drift check.
+python3 experiments/runtime_integrity/end_to_end_20260906/current_verification.py
+
+# C6 — package 01/03 desired-invariant revalidation on the present tree.
+python3 -m pytest -q \
+  tests/planning/test_outage_motion_replay.py \
+  tests/planning/test_planner_node_state_correction.py \
+  tests/sim/test_encoder_input_chronology.py \
+  tests/planning/test_command_installation.py \
+  tests/planning/test_runtime_transactions.py \
+  tests/sim/test_command_watchdog.py \
+  tests/planning/test_tracker_guard.py
+
+# C08 — planner, cache, route and boundary probes; see each saved output for source identity.
+python3 docs/module_audits/08_planner_probe.py
+python3 docs/module_audits/08_boundary_checks.py
+python3 docs/module_audits/08_route_artifact_checks.py
+python3 docs/module_audits/08_cache_followup.py
+python3 docs/module_audits/08_current_result_checks.py
+
+# C09 — tracking/route/termination probes and explicitly historical replays.
+python3 docs/module_audits/09_tracking_probe.py
+python3 docs/module_audits/09_ideal_replay.py
+python3 docs/module_audits/09_run_trace.py
+python3 docs/module_audits/09_recovery_trace.py
+
+# C10/C11 — logging and offline validation evidence.
+# Audit 10's exact commands are embedded in its report and artifact metadata.
+python3 docs/module_audits/11_alignment_probe.py
+python3 docs/module_audits/11_registered_evidence_inventory.py
+
+# C12/C13 — capture/export and configuration/provenance probes.
+python3 docs/module_audits/12_probe.py
+python3 docs/module_audits/12_boundary_probe.py
+python3 docs/module_audits/12_detector_parity.py
+python3 docs/module_audits/13_configuration_probe.py
+
+# C14 — bounded simulator/world probes. Read the saved raw evidence first.
+python3 experiments/runtime_integrity/simulator_world_20260906/asset_probe.py
+python3 experiments/runtime_integrity/simulator_world_20260906/prop_geometry_probe.py
+python3 experiments/runtime_integrity/simulator_world_20260906/callback_probe.py
+python3 experiments/runtime_integrity/simulator_world_20260906/physics_probe.py
+python3 experiments/runtime_integrity/simulator_world_20260906/transport_probe.py
+python3 experiments/runtime_integrity/simulator_world_20260906/watchdog_probe.py
+python3 experiments/runtime_integrity/simulator_world_20260906/analyze_native.py
+python3 experiments/runtime_integrity/simulator_world_20260906/analyze_watchdog.py
+
+# Deliberately absent: broad campaign or audit-15 live integrated drive. Component
+# prerequisites failed, so the simulator acceptance gate was not entered.

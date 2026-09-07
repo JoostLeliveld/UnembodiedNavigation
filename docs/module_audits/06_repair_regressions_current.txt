@@ -1,0 +1,127 @@
+....FFFF............                                                     [100%]
+=================================== FAILURES ===================================
+_______ test_repeated_frames_from_one_camera_cannot_form_reanchor_quorum _______
+
+    def test_repeated_frames_from_one_camera_cannot_form_reanchor_quorum():
+        n = node(belief_cov=.01)
+        n.state_reanchor_m = 2.
+        n._apply_map_observations([
+            observation('camera_A', 3., 0., seconds=9.94, var=.01),
+            observation('camera_A', 3., 0., seconds=9.95, var=.01)])
+>       assert n.belief_m[0] == pytest.approx(0.)
+E       assert 3.0 == 0.0 ± 1.0e-12
+E        +  where 0.0 ± 1.0e-12 = <function approx at 0x7f891736f1c0>(0.0)
+E        +    where <function approx at 0x7f891736f1c0> = pytest.approx
+
+tests/planning/test_admission_recovery_06.py:112: AssertionError
+____________ test_stale_agreeing_cameras_do_not_reanchor_or_inflate ____________
+
+    def test_stale_agreeing_cameras_do_not_reanchor_or_inflate():
+        n = node(belief_stamp_s=10., now_s=12.)
+        n.state_reanchor_m = 2.
+        before_m, before_P = n.belief_m.copy(), n.belief_S.copy()
+        n._apply_map_observations([
+            observation('camera_A', 3., 0., seconds=9., var=.01),
+            observation('camera_B', 3., 0., seconds=9., var=.01)])
+>       np.testing.assert_array_equal(n.belief_m, before_m)
+
+tests/planning/test_admission_recovery_06.py:122: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<built-in function eq>, array([3.  , 0.  , 0.25]), array([0., 0., 0.]))
+kwds = {'err_msg': '', 'header': 'Arrays are not equal', 'strict': False, 'verbose': True}
+
+    @wraps(func)
+    def inner(*args, **kwds):
+        with self._recreate_cm():
+>           return func(*args, **kwds)
+E           AssertionError: 
+E           Arrays are not equal
+E           
+E           Mismatched elements: 2 / 3 (66.7%)
+E           Max absolute difference: 3.
+E           Max relative difference: inf
+E            x: array([3.  , 0.  , 0.25])
+E            y: array([0., 0., 0.])
+
+/usr/lib/python3.10/contextlib.py:79: AssertionError
+___________ test_direct_bootstrap_is_not_a_rejection_inflation_event ___________
+
+    def test_direct_bootstrap_is_not_a_rejection_inflation_event():
+        n = node()
+        n.belief_m = n.belief_S = n.belief_stamp = None
+        n._apply_map_observations([observation('camera_A', 1., 0., seconds=9.95, var=.01)])
+        # Existing direct path allows one-camera initialization; no policy change here.
+        np.testing.assert_allclose(n.belief_m[:2], [1., 0.])
+>       np.testing.assert_allclose(n.belief_S[:2, :2], np.eye(2)*.01, atol=1e-12)
+
+tests/planning/test_admission_recovery_06.py:133: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<function assert_allclose.<locals>.compare at 0x7f8911a29480>, array([[0.06, 0.  ],
+       [0.  , 0.06]]), array([[0.01, 0.  ],
+       [0.  , 0.01]]))
+kwds = {'equal_nan': True, 'err_msg': '', 'header': 'Not equal to tolerance rtol=1e-07, atol=1e-12', 'verbose': True}
+
+    @wraps(func)
+    def inner(*args, **kwds):
+        with self._recreate_cm():
+>           return func(*args, **kwds)
+E           AssertionError: 
+E           Not equal to tolerance rtol=1e-07, atol=1e-12
+E           
+E           Mismatched elements: 2 / 4 (50%)
+E           Max absolute difference: 0.05
+E           Max relative difference: 5.
+E            x: array([[0.06, 0.  ],
+E                  [0.  , 0.06]])
+E            y: array([[0.01, 0.  ],
+E                  [0.  , 0.01]])
+
+/usr/lib/python3.10/contextlib.py:79: AssertionError
+_________ test_direct_gap_refusal_inflates_only_once_like_fused_event __________
+
+    def test_direct_gap_refusal_inflates_only_once_like_fused_event():
+        direct = node(belief_stamp_s=0.)
+        fused = node(belief_stamp_s=0.)
+        for n in (direct, fused):
+            n.use_odom_for_predict = True
+            n._odom_log = [(k/10, 0., 0.) for k in range(101)]
+        direct._apply_map_observations([observation('camera_A', 0., 0., seconds=9.95, var=.01)])
+        fused._apply_metric_correction(stamp(9.95), np.zeros(2), np.eye(2)*.01)
+>       np.testing.assert_allclose(direct.belief_S, fused.belief_S, atol=1e-12)
+
+tests/planning/test_admission_recovery_06.py:144: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<function assert_allclose.<locals>.compare at 0x7f8911a29990>, array([[0.15, 0.  , 0.  ],
+       [0.  , 0.15, 0.  ],
+       [0.  , 0.  , 0.05]]), array([[0.1 , 0.  , 0.  ],
+       [0.  , 0.1 , 0.  ],
+       [0.  , 0.  , 0.05]]))
+kwds = {'equal_nan': True, 'err_msg': '', 'header': 'Not equal to tolerance rtol=1e-07, atol=1e-12', 'verbose': True}
+
+    @wraps(func)
+    def inner(*args, **kwds):
+        with self._recreate_cm():
+>           return func(*args, **kwds)
+E           AssertionError: 
+E           Not equal to tolerance rtol=1e-07, atol=1e-12
+E           
+E           Mismatched elements: 2 / 9 (22.2%)
+E           Max absolute difference: 0.05
+E           Max relative difference: 0.5
+E            x: array([[0.15, 0.  , 0.  ],
+E                  [0.  , 0.15, 0.  ],
+E                  [0.  , 0.  , 0.05]])
+E            y: array([[0.1 , 0.  , 0.  ],
+E                  [0.  , 0.1 , 0.  ],
+E                  [0.  , 0.  , 0.05]])
+
+/usr/lib/python3.10/contextlib.py:79: AssertionError
+=========================== short test summary info ============================
+FAILED tests/planning/test_admission_recovery_06.py::test_repeated_frames_from_one_camera_cannot_form_reanchor_quorum
+FAILED tests/planning/test_admission_recovery_06.py::test_stale_agreeing_cameras_do_not_reanchor_or_inflate
+FAILED tests/planning/test_admission_recovery_06.py::test_direct_bootstrap_is_not_a_rejection_inflation_event
+FAILED tests/planning/test_admission_recovery_06.py::test_direct_gap_refusal_inflates_only_once_like_fused_event
+4 failed, 16 passed in 0.56s

@@ -1,0 +1,58 @@
+{
+  "protocol_sha256": "5c115b021a563614bf00e41920d53ea47ea0629c719b11e8f214b318c8f660e1",
+  "snapshot_files": [
+    {
+      "source": "experiments/icra_commissioning/network_navigation_runtime_pilot.yaml",
+      "matches_protocol": true
+    },
+    {
+      "source": "src/reliability/reliability/reference_calibration.py",
+      "matches_protocol": true
+    },
+    {
+      "source": "src/reliability/reliability/nodes/camera_manager_node.py",
+      "matches_protocol": true
+    },
+    {
+      "source": "src/reliability/reliability/fusion.py",
+      "matches_protocol": true
+    },
+    {
+      "source": "src/planning/planning/nodes/unicycle_planner_node.py",
+      "matches_protocol": true
+    },
+    {
+      "source": "src/planning/planning/nodes/efe_agent_node.py",
+      "matches_protocol": true
+    },
+    {
+      "source": "src/planning/planning/core/belief_correction.py",
+      "matches_protocol": true
+    },
+    {
+      "source": "src/planning/planning/core/dynamics.py",
+      "matches_protocol": true
+    },
+    {
+      "source": "src/planning/planning/core/motion_history.py",
+      "matches_protocol": true
+    },
+    {
+      "source": "src/sim/sim/actuation_noise_node.py",
+      "matches_protocol": true
+    },
+    {
+      "source": "scripts/visibility_comparison/run_visibility_campaign.py",
+      "matches_protocol": true
+    },
+    {
+      "source": "logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json",
+      "matches_protocol": true
+    },
+    {
+      "source": "experiments/icra_commissioning/network_navigation_analysis.py",
+      "matches_protocol": true
+    }
+  ],
+  "not_in_source_snapshot": []
+}

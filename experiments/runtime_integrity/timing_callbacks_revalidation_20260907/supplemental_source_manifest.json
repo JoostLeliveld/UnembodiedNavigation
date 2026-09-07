@@ -1,0 +1,7 @@
+{
+  "src/perception/perception/nodes/batched_four_camera_yolo_node.py": "f8fdbeaa603fe9be62d4892c1c78c037e8574f54288169f3af23da1ec23d0819",
+  "src/experiments/experiments/nodes/experiment_logger.py": "10c57ede5d42a88950a2fcc684925b5090feb30104c3df113b607ba3a00cbd7c",
+  "src/experiments/experiments/nodes/goal_marker_node.py": "a8c6130d57b2a50f59f886708e753ebeb1862c39f245ed790d21955d9d677f27",
+  "docs/module_audits/01_repair_package_a_implemented.md": "079f17b861307a7d7c7bd66b1f176b25196f5b7cc51ea86d2a2ecca6092875a3",
+  "docs/module_audits/03_command_execution_repair_implemented.md": "5da48cc0cf14281f1b742cd365e67160544499e18ca8e9b3a2993dd98ac5547d"
+}

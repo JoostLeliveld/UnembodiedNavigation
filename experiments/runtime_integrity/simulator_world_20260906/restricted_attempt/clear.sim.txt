@@ -1,0 +1,42 @@
+Failed to create directory [/home/joostleliveld/.ignition/gazebo/log/2026-09-06T22:56:08.77973303]: Read-only file system
+Failed to generate log directories. No log file will be generated.Error opening log file: /home/joostleliveld/.ignition/auto_default.log
+[1;32m[Msg] [0m[1;32mIgnition Gazebo Server v[0m[1;32m6.17.1[0m[1;32m[0m
+Socket creation failed.
+Socket creation failed.
+Did you set the environment variable IGN_IP with a correct IP address? 
+  [127.0.0.1] seems an invalid local IP address.
+  Using 127.0.0.1 as hostname.
+terminate called after throwing an instance of 'std::out_of_range'
+  what():  vector::_M_range_check: __n (which is 0) >= this->size() (which is 0)
+Stack trace (most recent call last):
+#29   Object "[0xffffffffffffffff]", at 0xffffffffffffffff, in 
+#28   Object "ign gazebo -r -s -v 4 --iterations 2500 /home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/clear.fixture.sdf", at 0x5a4d1ce091c4, in _start
+#27   Object "/lib/x86_64-linux-gnu/libc.so.6", at 0x7df996c29e3f, in __libc_start_main
+#26   Object "/lib/x86_64-linux-gnu/libc.so.6", at 0x7df996c29d8f, in 
+#25   Object "ign gazebo -r -s -v 4 --iterations 2500 /home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/simulator_world_20260906/clear.fixture.sdf", at 0x5a4d1ce0917e, in 
+#24   Object "/lib/x86_64-linux-gnu/libruby-3.0.so.3.0", at 0x7df9970a8e19, in ruby_run_node
+#23   Object "/lib/x86_64-linux-gnu/libruby-3.0.so.3.0", at 0x7df9970a5317, in 
+#22   Object "/lib/x86_64-linux-gnu/libruby-3.0.so.3.0", at 0x7df99723a30c, in rb_vm_exec
+#21   Object "/lib/x86_64-linux-gnu/libruby-3.0.so.3.0", at 0x7df997234c96, in 
+#20   Object "/lib/x86_64-linux-gnu/libruby-3.0.so.3.0", at 0x7df997231fc5, in 
+#19   Object "/lib/x86_64-linux-gnu/libruby-3.0.so.3.0", at 0x7df99722fc34, in 
+#18   Object "/usr/lib/x86_64-linux-gnu/ruby/3.0.0/fiddle.so", at 0x7df99737e44b, in 
+#17   Object "/lib/x86_64-linux-gnu/libruby-3.0.so.3.0", at 0x7df9971fd088, in rb_nogvl
+#16   Object "/usr/lib/x86_64-linux-gnu/ruby/3.0.0/fiddle.so", at 0x7df99737dd6b, in 
+#15   Object "/lib/x86_64-linux-gnu/libffi.so.8", at 0x7df996e2e492, in 
+#14   Object "/lib/x86_64-linux-gnu/libffi.so.8", at 0x7df996e31e2d, in 
+#13   Object "/usr/lib/x86_64-linux-gnu/libignition-gazebo6-ign.so.6.17.1", at 0x7df9925afdcd, in runServer
+#12   Object "/lib/x86_64-linux-gnu/libignition-gazebo6.so.6", at 0x7df99200f9b7, in ignition::gazebo::v6::Server::Server(ignition::gazebo::v6::ServerConfig const&)
+#11   Object "/lib/x86_64-linux-gnu/libignition-gazebo6.so.6", at 0x7df99201ba43, in 
+#10   Object "/lib/x86_64-linux-gnu/libignition-transport11.so.11", at 0x7df9921522bf, in ignition::transport::v11::Node::Node(ignition::transport::v11::NodeOptions const&)
+#9    Object "/lib/x86_64-linux-gnu/libignition-transport11.so.11", at 0x7df99213d2a6, in 
+#8    Object "/lib/x86_64-linux-gnu/libignition-transport11.so.11", at 0x7df9921697d5, in ignition::transport::v11::NodeShared::NodeShared()
+#7    Object "/lib/x86_64-linux-gnu/libstdc++.so.6", at 0x7df992ea54cc, in 
+#6    Object "/lib/x86_64-linux-gnu/libstdc++.so.6", at 0x7df992eae4d7, in __cxa_throw
+#5    Object "/lib/x86_64-linux-gnu/libstdc++.so.6", at 0x7df992eae276, in std::terminate()
+#4    Object "/lib/x86_64-linux-gnu/libstdc++.so.6", at 0x7df992eae20b, in 
+#3    Object "/lib/x86_64-linux-gnu/libstdc++.so.6", at 0x7df992ea2b9d, in 
+#2    Object "/lib/x86_64-linux-gnu/libc.so.6", at 0x7df996c287f2, in abort
+#1    Object "/lib/x86_64-linux-gnu/libc.so.6", at 0x7df996c42475, in raise
+#0    Object "/lib/x86_64-linux-gnu/libc.so.6", at 0x7df996c969bc, in pthread_kill
+Aborted (Signal sent by tkill() 6 1000)

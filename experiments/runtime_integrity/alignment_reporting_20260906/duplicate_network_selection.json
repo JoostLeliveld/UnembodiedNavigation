@@ -1,0 +1,49 @@
+{
+  "status": "complete_pilot_diagnostic",
+  "pending": [],
+  "invalid": [],
+  "runs": [
+    {
+      "run": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/schema3_opportunity_consumer",
+      "files": {},
+      "task": "wrong_route",
+      "seed": 999,
+      "field_sha256": "wrong_model"
+    },
+    {
+      "run": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/schema3_opportunity_consumer",
+      "files": {},
+      "task": "wrong_route",
+      "seed": 999,
+      "field_sha256": "wrong_model"
+    },
+    {
+      "run": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/schema3_opportunity_consumer",
+      "files": {},
+      "task": "wrong_route",
+      "seed": 999,
+      "field_sha256": "wrong_model"
+    },
+    {
+      "run": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/schema3_opportunity_consumer",
+      "files": {},
+      "task": "wrong_route",
+      "seed": 999,
+      "field_sha256": "wrong_model"
+    },
+    {
+      "run": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/schema3_opportunity_consumer",
+      "files": {},
+      "task": "wrong_route",
+      "seed": 999,
+      "field_sha256": "wrong_model"
+    },
+    {
+      "run": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/schema3_opportunity_consumer",
+      "files": {},
+      "task": "wrong_route",
+      "seed": 999,
+      "field_sha256": "wrong_model"
+    }
+  ]
+}

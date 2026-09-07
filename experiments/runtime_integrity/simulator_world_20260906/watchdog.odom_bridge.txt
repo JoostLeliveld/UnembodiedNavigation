@@ -1,0 +1,2 @@
+[INFO] [1788729481.936204817] [audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd_odom_bridge]: Creating GZ->ROS Bridge: [/model/turtlebot3/odometry (gz.msgs.Odometry) -> /model/turtlebot3/odometry (nav_msgs/msg/Odometry)] (Lazy 0)
+[INFO] [1788729494.210003446] [rclcpp]: signal_handler(SIGINT/SIGTERM)

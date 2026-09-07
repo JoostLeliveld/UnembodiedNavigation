@@ -19,11 +19,11 @@ paper suitable for submission and a mandatory AIES cover. **Appendices are allow
 are not assessed.** Essential theory, evidence and limitations must fit in the main paper.
 The documents do not state a universal 12-page limit; we follow the user's constraint and
 provisionally include one page of references. Cover/reference counting remains unconfirmed.
-The [verified requirements and rubric mapping](../../papers/master_thesis/planning/aies_requirements.md)
+The [verified requirements and rubric mapping](../../papers/Thesis/planning/aies_requirements.md)
 links the official documents, versions and preserved downloads. Five assessment categories
 have equal weight; conference acceptance is not stated as a graduation requirement.
 
-The [49-page report](../../papers/master_thesis/thesis.pdf) is now a source bank. Preserve
+The [49-page report](../../papers/Thesis/thesis.pdf) is now a source bank. Preserve
 its measured figures, method explanations and provenance for reuse; do not compress it
 indiscriminately into tiny text. First settle the argument and main evidence, then write the
 12-page paper. The accepted IWAI source and its results remain their own published record.
@@ -47,8 +47,9 @@ including cheaper incomplete ones, remain in `network_planner/full_route_v1`.
 offset after the existing NN and uses the same full camera R as the planner artifacts.
 Checkpoint identity, observation reference, frame, units and SPD are validated at load.
 The actual manager agrees with the frozen offline model on 100 recorded test observations;
-all nine completed original/tracking/corrected runs agree exactly on 6,190 logged camera
-means/R. The corrected baseline packet passes 150 tests; the subsequent command/recovery
+all ten completed original/tracking/corrected/recovery runs agree exactly on 6,887 logged
+camera means/R, counted within each drive window. The corrected baseline packet passes
+150 tests; the subsequent command/recovery
 packet passes 159, with three archived pixel traces absent in each.
 Robust `joint_network` fusion still differs from independent
 precision addition; this is not a claim of a calibrated shared posterior predictor.
@@ -71,15 +72,28 @@ The gap contains many detector sightings but very few fused candidates; per-came
 admission reasons are not retained. One isolated fused candidate is refused by the total-gap
 rule before NIS. These are system diagnostics, not a GP effect estimate.
 
-The separate P0 `network_navigation_recovery_pilot.yaml` is collecting with checked rotation
-recovery through the unchanged local clearance gate. Its source also guards fatal-stop/clock
-rewind command publication and clears stopped execution diagnostics. Q, NN, residual offset
-and camera R remain fixed. All attempts are retained; one seed per arm is descriptive.
+The separate P0 `network_navigation_recovery_pilot.yaml` reached the goal with one logged
+checked rotation through the unchanged clearance gate. Its 1,826 unique belief timestamps
+have 5.54 cm median / 19.35 cm p95 position error; the accepted-correction gap still reaches
+28.796 s and 36.20% of fused corrections are dropped. The
+[follow-up result](../logs/studies/icra_commissioning_20260905/network_navigation_recovery_evidence/recovery_result.md)
+keeps this controller check separate from the three-field comparison. Its source also
+guards fatal-stop/clock rewind command publication and clears stopped execution diagnostics.
+Q, NN, residual offset and camera R remain fixed. All attempts are retained; one seed per
+arm is descriptive. Further source-pinned module audits expose motion-order, bootstrap and
+terminal-event defects beyond the scoped passing checks; the runtime audit ranks the repairs.
 
-The [complete paper map](../../papers/master_thesis/planning/paper_map.md),
+The [ten-page runtime evidence packet](../../papers/Thesis/planning/runtime_evidence.pdf)
+collects the perception/command diagrams, measured failure mechanisms and separate pilots.
+Editable [perception gates](../../papers/Thesis/planning/perception_gates.svg) and
+[runtime ownership](../../papers/Thesis/planning/runtime_transactions.svg) figures
+remain available individually. This is a thesis discussion/figure package, not the thesis
+manuscript or a claim that the outstanding repairs have all been completed.
+
+The [complete paper map](../../papers/Thesis/planning/paper_map.md),
 [code implementation plan](../experiments/icra_commissioning/planner_implementation_plan.md),
-[planner block diagram](../../papers/master_thesis/planning/planner_setup.svg) and
-[paper evidence diagram](../../papers/master_thesis/planning/paper_evidence_map.svg)
+[planner block diagram](../../papers/Thesis/planning/planner_setup.svg) and
+[paper evidence diagram](../../papers/Thesis/planning/paper_evidence_map.svg)
 are the current reviewable plan. The stronger q/R forecast remains separate from the
 IWAI score cost. The existing IWAI rollout does not recursively apply hypothetical
 camera updates through its horizon. Camera-level equivalence has been checked; matching
@@ -113,7 +127,7 @@ means the claimed experiment has not been completed.
 | Alternative RGB/keypoint/shape correction | `logs/perception_models/warehouse_v2_center_keypoint_20260828_r1/manifest.json`; geometry-residual/shape model directories | Provisional checkpoints exist. Centre keypoint targets z=0.35 m, not the floor reference. Earlier full-residual variants are explicitly invalid | Recover only for a focused tail/heading hypothesis; not the main method |
 | Additional configurations | `generalization.py`; `logs/perception_datasets/warehouse_v2_generalization_20260902/`; `generalization_manifest.json` | Previously inspected dense configurations in the same installation, not transfer; P1b capture requires completion audit | Supporting application check with scope stated |
 | Process noise and heading diagnostics | `experiments/gate0_process_noise/validate_q.py`; `coupled_heading.py`, `docs/open_questions.md` | Diagnostic code/artifacts exist; original supplied-Q identification provenance remains unverified | Freeze Q across sensor arms; investigate model mismatch without attributing it to R |
-| Multi-camera planner integration | `planning/core/camera_network.py`, `base_planner.py`, `casadi_efe.py`; `export_network_planner.py`, `network_route_probe.py` | Three full-route solutions use the same corridor. Two failed three-arm pilots and a corrected pilot (one stuck, two goals) are frozen; controller follow-up collecting. All remain diagnostic | Main thesis extension is implemented; repeated robust execution and independent field-effect evidence remain |
+| Multi-camera planner integration | `planning/core/camera_network.py`, `base_planner.py`, `casadi_efe.py`; `export_network_planner.py`, `network_route_probe.py` | Three full-route solutions use the same corridor. Two failed three-arm pilots and a corrected pilot (one stuck, two goals) are frozen; separate guarded-controller P0 reached the goal. All remain diagnostic | Main thesis extension is implemented; repeated robust execution and independent field-effect evidence remain |
 | Physical validation / new installation | No selected physical study or untouched installation-transfer evaluation | Missing | State the simulation scope; not necessary to invent a hardware project |
 
 Some old file comments and result documents claim that GP or a particular noise model wins
@@ -156,14 +170,14 @@ be described as the original published study, not as newly validated fusion evid
    nominal 95% containment. With constant R in overlap, the network has a larger p95 than E
    alone in all three recordings. These are exploratory within-run observations, not a
    selected best-camera benchmark or proof of the error mechanism. See the complete
-   [pilot interpretation and per-run tables](../../papers/master_thesis/planning/network_pilot.md)
+   [pilot interpretation and per-run tables](../../papers/Thesis/planning/network_pilot.md)
    and the [exhaustive figure](../logs/studies/icra_commissioning_20260905/thesis_network_pilot/camera_subsets.svg).
 
 The exact current selection is
 `logs/studies/icra_commissioning_20260905/thesis_evidence/selection.json`.
 Each selected run was loaded again through `field_driving.load_run` and `aligned.py` for
 this map. The six replay result files, input hashes and figures are recorded in the thesis
-[verification record](../../papers/master_thesis/generated/verification.json).
+[verification record](../../papers/Thesis/generated/verification.json).
 
 **Critical limit:** covariance replay applies camera readings at capture time and does not
 reproduce live processing latency/refusal. The traverse forecasts end at collision and
@@ -356,10 +370,11 @@ the main 12 pages; appendices do not hide failed assumptions.
 3. **Runtime-equivalence evidence:** implement delayed-arrival replay using the selected
    `camera_opportunities.jsonl` and `correction_assimilations.csv`; compare baseline events
    against the live estimator before a new covariance result is attributed to R.
-4. **Finish the separate guarded-controller P0 follow-up.** The three original, three
-   tracking and three corrected baseline runs are complete and frozen. Analyze the new
-   follow-up with its own config/root and verify source/model/event identity. Preserve
-   every stop and collision. The next sensor-policy priority is supported-history
+4. **Repair the remaining causal event boundaries before new field-effect trials.** The
+   three original, three tracking, three corrected and one guarded-controller runs are
+   complete and frozen. Preserve every stop and collision. Prioritize immutable ordered
+   motion replay, identified startup, atomic terminal records and monotonic publication.
+   The next sensor-policy priority is supported-history
    admission: the P2 isolated opportunity demonstrates why dropping a first return is
    not equivalent to merely delaying one camera period. Add terminal accounting from
    detector opportunity through manager admission and fusion before assigning missing
@@ -383,10 +398,10 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 experiments/icra_commissioning/
 From the workspace root:
 
 ```bash
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 papers/master_thesis/build_evidence.py
-python3 papers/master_thesis/build.py
-python3 papers/master_thesis/planning/build_maps.py
-python3 papers/master_thesis/planning/summarize_network_pilot.py
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 papers/Thesis/build_evidence.py
+python3 papers/Thesis/build.py
+python3 papers/Thesis/planning/build_maps.py
+python3 papers/Thesis/planning/summarize_network_pilot.py
 ```
 
 The first command reanalyzes the frozen diagnostic selection; it does not launch a new

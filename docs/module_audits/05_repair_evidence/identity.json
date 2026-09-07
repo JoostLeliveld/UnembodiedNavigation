@@ -1,0 +1,13 @@
+{
+  "sources": {
+    "src/reliability/reliability/observation_geometry.py": "af4f455cb2a4145ee56f45385e3f21d4bb2b4106452696cbfcf071424b04d1c2",
+    "src/unav_common/unav_common/camera_model.py": "1d207b849887f271542eb79fee01f96ee1239e252d8c69a9bff081c0ac8afa2e",
+    "src/reliability/reliability/projection.py": "d581f04da7d0a478d479c43a7394c8f8339525a877233abb40b4715263286238",
+    "src/state/state/core/pixel_to_bev.py": "e607ae4a7c2bb24f7d9c52b49da07e0783385e821d9c29fdf524710a99dd477f",
+    "tests/reliability/test_observation_geometry_05.py": "15381e8d899452e53314b3139aee9a19c3707b5d2b94aba7a5a77a9cc4dabad8"
+  },
+  "frozen_artifacts_unchanged": {
+    "logs/perception_models/box_feature_bias_correction_20260831/models.joblib": "5da33c63a2bb46b3367e13acbb4eb96cab57388b5854a71db98676df176aad9d",
+    "logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json": "0a462258197b42537bafaf989642bb85b348c077e0557d8cdf5b890709cfe22d"
+  }
+}

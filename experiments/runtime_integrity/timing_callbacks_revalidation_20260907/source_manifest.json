@@ -1,0 +1,22 @@
+{
+  "git_head": "f9e1a312c9990c29223f91f487eeb6c5aa2e71d3",
+  "basis": "Current working files; package A/B committed, concurrent refactor uncommitted. No deployment claim.",
+  "sha256": {
+    "src/planning/planning/nodes/unicycle_planner_node.py": "e6566d3ef0956f58f4a523dc2353c61d015b57c9b5a6bb8d897109bc1f0defba",
+    "src/planning/planning/nodes/efe_agent_node.py": "f3750f4a4dcb0969de7bd114b696f1dd536d1a10d47f14b80c53a755fae4bd45",
+    "src/planning/planning/core/motion_history.py": "ac5ea439b956f3425a784447c384b828c8ce48075f7dabd0e6e96bb1b460a1c5",
+    "src/planning/planning/core/belief_correction.py": "0f5f0b32f561ad1326fec098dedd93a975c14904dc5e4602341afd53c432ee12",
+    "src/experiments/experiments/nodes/goal_mission_node.py": "deedad91515c4bd13c368e6cb13a718b963fd142377ca84b1ce4f68bcb91a755",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "8788520eb3a194767b2631430df5db26ca3704124924f81ca08517ab350d04e6",
+    "src/perception/perception/core/four_camera_batch.py": "047cc9871d7cff5f2c87a35be89bfef9475e976918016541bb85c966a171ca92",
+    "tests/planning/test_runtime_transactions.py": "809eb2d9daee550a5777b4d957cf1539a9485c6747b16dea837db8673238d238",
+    "tests/planning/test_command_installation.py": "e2a997066163dc89456f995868d1158b5ffffa1670d36b07c98f57b5b7166e35",
+    "tests/planning/test_outage_motion_replay.py": "5b237951eb9c2fb605a6bbf4e8085ad9c8ef4f8f46af300fd9b7d85d332718e6",
+    "tests/planning/test_planner_node_state_correction.py": "6e8e7d44cc666d809c209971aa460bca114ece823ca439831084c09f9bbda65a",
+    "tests/planning/test_planner_node_correction_wiring.py": "5a6b06007c0479fe36a1bcfb1cb5564e762b1bc38dcf9b3764904c78b579ef5e",
+    "tests/sim/test_encoder_input_chronology.py": "06bd7970feb9053081641c846c9d1cee8caedeb3599d37ce9de5d187d3c480b7",
+    "src/experiments/experiments/core/visibility_launch_common.py": "dab696fbf073485eeb466bfd43d1116c4a382dac99f0ec29208a0cf1b3ed65e6",
+    "experiments/icra_commissioning/network_navigation_runtime_pilot.yaml": "72d7318718c9510f5b4bb570927be0650f16e4c0186440562e6c8a2cf167d380",
+    "experiments/runtime_integrity/timing_callbacks_20260906/probe.py": "7fddaec28d795ad131e457396b2b525be186db4243c92607a4d739effa14e115"
+  }
+}

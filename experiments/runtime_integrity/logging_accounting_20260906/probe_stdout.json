@@ -1,0 +1,373 @@
+{
+  "mini_run": {
+    "fusion_batches": [
+      "malformed_fused",
+      "strict:camera_A@1000000000,camera_B@1000000000,camera_C@1000000000,camera_D@1000000000,camera_E@1000000000",
+      "strict:camera_A@1200000000,camera_B@1200000000,camera_C@1200000000,camera_D@1200000000,camera_E@1200000000",
+      "strict:camera_A@1400000000,camera_B@1400000000,camera_C@1400000000,camera_D@1400000000,camera_E@1400000000",
+      "strict:camera_A@1600000000,camera_B@1600000000,camera_C@1600000000,camera_D@1600000000,camera_E@1600000000",
+      "strict:camera_A@1800000000,camera_B@1800000000,camera_C@1800000000,camera_D@1800000000,camera_E@1800000000",
+      "strict:camera_A@2200000000,camera_B@2200000000,camera_C@2200000000,camera_D@2200000000,camera_E@2200000000"
+    ],
+    "assimilation_rows": 5,
+    "statuses": {
+      "accepted_bootstrap": 1,
+      "accepted": 2,
+      "rejected": 1,
+      "dropped": 1
+    },
+    "update_batches": [
+      "strict:camera_A@1000000000,camera_B@1000000000,camera_C@1000000000,camera_D@1000000000,camera_E@1000000000",
+      "strict:camera_A@1200000000,camera_B@1200000000,camera_C@1200000000,camera_D@1200000000,camera_E@1200000000",
+      "strict:camera_A@1600000000,camera_B@1600000000,camera_C@1600000000,camera_D@1600000000,camera_E@1600000000"
+    ],
+    "missing": [
+      "malformed_fused",
+      "strict:camera_A@2200000000,camera_B@2200000000,camera_C@2200000000,camera_D@2200000000,camera_E@2200000000"
+    ],
+    "extra": [],
+    "duplicated": [],
+    "unclassifiable": [],
+    "unreasoned": [],
+    "summary_count": 5,
+    "summary_valid": true,
+    "summary_count_matches": true,
+    "dropped_fraction": 0.2,
+    "summary_dropped_fraction": 0.2,
+    "fatal_events": [
+      {
+        "context": "fused correction envelope failed",
+        "error": "duplicate source_batch_id 'strict:camera_A@1200000000,camera_B@1200000000,camera_C@1200000000,camera_D@1200000000,camera_E@1200000000'"
+      },
+      {
+        "context": "fused correction envelope failed",
+        "error": "correction envelope frame differs from robot belief frame"
+      }
+    ],
+    "opportunity_rows": 41,
+    "detector_misses": 5,
+    "duplicate_opportunity_deliveries": 1,
+    "malformed_opportunity_deliveries": 1,
+    "generated_assimilations": 6,
+    "physical_unique_fused_publications": 7,
+    "campaign_validation": [
+      false,
+      "correction/assimilation batch mismatch: 2 missing, 0 extra"
+    ]
+  },
+  "logging_faults": {
+    "missing": {
+      "fusion_batches": [
+        "expected"
+      ],
+      "assimilation_rows": 0,
+      "statuses": {},
+      "update_batches": [],
+      "missing": [
+        "expected"
+      ],
+      "extra": [],
+      "duplicated": [],
+      "unclassifiable": [],
+      "unreasoned": [],
+      "summary_count": 0,
+      "summary_valid": true,
+      "summary_count_matches": true,
+      "dropped_fraction": 0.0,
+      "summary_dropped_fraction": 0.0,
+      "campaign_validation": [
+        false,
+        "correction/assimilation batch mismatch: 1 missing, 0 extra"
+      ]
+    },
+    "extra": {
+      "fusion_batches": [
+        "expected"
+      ],
+      "assimilation_rows": 1,
+      "statuses": {
+        "accepted": 1
+      },
+      "update_batches": [
+        "extra"
+      ],
+      "missing": [
+        "expected"
+      ],
+      "extra": [
+        "extra"
+      ],
+      "duplicated": [],
+      "unclassifiable": [],
+      "unreasoned": [],
+      "summary_count": 1,
+      "summary_valid": true,
+      "summary_count_matches": true,
+      "dropped_fraction": 0.0,
+      "summary_dropped_fraction": 0.0,
+      "campaign_validation": [
+        false,
+        "correction/assimilation batch mismatch: 1 missing, 1 extra"
+      ]
+    },
+    "unreasoned_rejected": {
+      "fusion_batches": [
+        "expected"
+      ],
+      "assimilation_rows": 1,
+      "statuses": {
+        "rejected": 1
+      },
+      "update_batches": [],
+      "missing": [],
+      "extra": [],
+      "duplicated": [],
+      "unclassifiable": [],
+      "unreasoned": [
+        "expected"
+      ],
+      "summary_count": 1,
+      "summary_valid": true,
+      "summary_count_matches": true,
+      "dropped_fraction": 0.0,
+      "summary_dropped_fraction": 0.0,
+      "campaign_validation": [
+        false,
+        "1 refusal(s) with no recorded reason"
+      ]
+    },
+    "unknown_status": {
+      "fusion_batches": [
+        "expected"
+      ],
+      "assimilation_rows": 1,
+      "statuses": {
+        "teleported": 1
+      },
+      "update_batches": [],
+      "missing": [],
+      "extra": [],
+      "duplicated": [],
+      "unclassifiable": [
+        "expected"
+      ],
+      "unreasoned": [],
+      "summary_count": 1,
+      "summary_valid": false,
+      "summary_count_matches": true,
+      "dropped_fraction": 0.0,
+      "summary_dropped_fraction": 0.0,
+      "campaign_validation": [
+        false,
+        "unclassifiable assimilation status: ['teleported']"
+      ]
+    },
+    "duplicate_delivery": {
+      "fusion_batches": [
+        "expected"
+      ],
+      "assimilation_rows": 1,
+      "statuses": {
+        "accepted": 1
+      },
+      "update_batches": [
+        "expected"
+      ],
+      "missing": [],
+      "extra": [],
+      "duplicated": [],
+      "unclassifiable": [],
+      "unreasoned": [],
+      "summary_count": 1,
+      "summary_valid": false,
+      "summary_count_matches": true,
+      "dropped_fraction": 0.0,
+      "summary_dropped_fraction": 0.0,
+      "campaign_validation": [
+        true,
+        ""
+      ]
+    },
+    "malformed_delivery": {
+      "fusion_batches": [
+        "expected"
+      ],
+      "assimilation_rows": 1,
+      "statuses": {
+        "accepted": 1
+      },
+      "update_batches": [
+        "expected"
+      ],
+      "missing": [],
+      "extra": [],
+      "duplicated": [],
+      "unclassifiable": [],
+      "unreasoned": [],
+      "summary_count": 1,
+      "summary_valid": false,
+      "summary_count_matches": true,
+      "dropped_fraction": 0.0,
+      "summary_dropped_fraction": 0.0,
+      "campaign_validation": [
+        true,
+        ""
+      ]
+    },
+    "receipt_collision": {
+      "fusion_batches": [
+        "a"
+      ],
+      "assimilation_rows": 2,
+      "statuses": {
+        "accepted": 2
+      },
+      "update_batches": [
+        "a",
+        "b"
+      ],
+      "missing": [],
+      "extra": [
+        "b"
+      ],
+      "duplicated": [],
+      "unclassifiable": [],
+      "unreasoned": [],
+      "summary_count": 2,
+      "summary_valid": true,
+      "summary_count_matches": true,
+      "dropped_fraction": 0.0,
+      "summary_dropped_fraction": 0.0
+    },
+    "post_summary_tail": {
+      "fusion_batches": [
+        "after",
+        "before"
+      ],
+      "assimilation_rows": 2,
+      "statuses": {
+        "accepted": 2
+      },
+      "update_batches": [
+        "before",
+        "after"
+      ],
+      "missing": [],
+      "extra": [],
+      "duplicated": [],
+      "unclassifiable": [],
+      "unreasoned": [],
+      "summary_count": 1,
+      "summary_valid": true,
+      "summary_count_matches": false,
+      "dropped_fraction": 0.0,
+      "summary_dropped_fraction": 0.0,
+      "last_log_stamp": "10.200000000000001"
+    },
+    "summary_write_failure": {
+      "completed_latched": true,
+      "stop_latched": true,
+      "file_bytes": 0,
+      "parsed": null
+    },
+    "opportunity_nonfinite": {
+      "exception": "Out of range float values are not JSON compliant",
+      "rows_counter": 1,
+      "written_rows": 0,
+      "seen": 1,
+      "first_written_is_duplicate": true
+    }
+  },
+  "held_and_diagnostics": {
+    "held_rows": 5,
+    "unique_belief_stamps": 2,
+    "summary_tick_weighted_mean": 0.8,
+    "unique_event_mean": 0.5,
+    "last_raw_value": "0.2",
+    "last_raw_receipt": "2.1",
+    "last_output_value": "0.09",
+    "reported_noise_error": "-0.11000000000000001",
+    "paired_diagnostic_error": -0.020000000000000018
+  },
+  "additional_boundaries": {
+    "status_control": {
+      "fusion_batches": [
+        "accepted",
+        "accepted_bootstrap",
+        "dropped",
+        "reanchored",
+        "rejected"
+      ],
+      "assimilation_rows": 5,
+      "statuses": {
+        "accepted_bootstrap": 1,
+        "accepted": 1,
+        "reanchored": 1,
+        "rejected": 1,
+        "dropped": 1
+      },
+      "update_batches": [
+        "accepted_bootstrap",
+        "accepted",
+        "reanchored"
+      ],
+      "missing": [],
+      "extra": [],
+      "duplicated": [],
+      "unclassifiable": [],
+      "unreasoned": [],
+      "summary_count": 5,
+      "summary_valid": true,
+      "summary_count_matches": true,
+      "dropped_fraction": 0.2,
+      "summary_dropped_fraction": 0.2
+    },
+    "gap_semantics": {
+      "summary_gap_s": 1.0,
+      "largest_accepted_update_interval_s": 4.0,
+      "trailing_no_accepted_update_s": 5.0,
+      "stop_stamp": 10.0
+    },
+    "identity_precision": {
+      "fusion_rows": [
+        {
+          "source_batch_id": "a",
+          "camera": "A",
+          "obs_repeat": "0",
+          "obs_stamp": "1.0"
+        },
+        {
+          "source_batch_id": "a",
+          "camera": "B",
+          "obs_repeat": "0",
+          "obs_stamp": "1.0"
+        },
+        {
+          "source_batch_id": "b",
+          "camera": "A",
+          "obs_repeat": "1",
+          "obs_stamp": "1.0000004"
+        },
+        {
+          "source_batch_id": "b",
+          "camera": "B",
+          "obs_repeat": "1",
+          "obs_stamp": "1.0000004"
+        }
+      ],
+      "same_camera_batch_changed_stamp_duplicate": false,
+      "logger_accepts_unknown_schema": true,
+      "manager_contract_error": "Unsupported schema_version 'future'"
+    },
+    "headers_at_finish": {
+      "experiment.csv": 4529,
+      "fusion_observations.csv": 0,
+      "correction_assimilations.csv": 0
+    },
+    "truth_receipt_latency": {
+      "stamp_source": "receipt_sim_clock",
+      "reported_max_sample_interval_s": 0.001000000000000334,
+      "injected_delay_s": 5.0
+    }
+  }
+}

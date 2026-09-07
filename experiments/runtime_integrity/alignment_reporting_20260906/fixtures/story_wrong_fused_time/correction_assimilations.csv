@@ -1,0 +1,2 @@
+source_batch_id,correction_stamp,apply_stamp,belief_stamp_after,status,reason,accepted,nis
+b,0.6,0.76,0.6,accepted,accepted,1,1

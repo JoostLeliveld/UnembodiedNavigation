@@ -1,0 +1,586 @@
+{
+  "complete": {
+    "coverage": true,
+    "terminal": [
+      {
+        "accepted": false,
+        "apply_stamp": 10.100000000000001,
+        "belief_stamp_after": 10.0,
+        "correction_stamp": 10.0,
+        "nis": null,
+        "reason": "replay_gap_too_large",
+        "schema_version": 1,
+        "source_batch_id": "audit15:complete:return",
+        "status": "dropped",
+        "mean": [
+          0.39999999999999997,
+          1.2000000000000002,
+          1.5707963267948963
+        ],
+        "covariance": [
+          [
+            0.07816100000000004,
+            -0.0049284689763191255,
+            -0.015359999999999995
+          ],
+          [
+            -0.0049284689763191255,
+            0.06233766666666666,
+            0.0041600000000000005
+          ],
+          [
+            -0.015359999999999995,
+            0.0041600000000000005,
+            0.01400000000000001
+          ]
+        ]
+      },
+      {
+        "accepted": true,
+        "apply_stamp": 10.299999999,
+        "belief_stamp_after": 10.2,
+        "correction_stamp": 10.2,
+        "nis": 5.617686341313876e-31,
+        "reason": "accepted",
+        "schema_version": 1,
+        "source_batch_id": "audit15:complete:recovery",
+        "status": "accepted",
+        "mean": [
+          0.4,
+          1.24,
+          1.5707963267948963
+        ],
+        "covariance": [
+          [
+            0.021500718646369342,
+            0.0019962307074746378,
+            -0.004139948935551971
+          ],
+          [
+            0.0019962307074746378,
+            0.02002395669525022,
+            0.0006193831583047008
+          ],
+          [
+            -0.004139948935551971,
+            0.0006193831583047008,
+            0.01157696441182772
+          ]
+        ]
+      },
+      {
+        "accepted": false,
+        "apply_stamp": 10.299999999,
+        "belief_stamp_after": 10.2,
+        "correction_stamp": 10.1,
+        "nis": null,
+        "reason": "not_newer_than_belief",
+        "schema_version": 1,
+        "source_batch_id": "audit15:complete:reordered",
+        "status": "dropped",
+        "mean": [
+          0.4,
+          1.24,
+          1.5707963267948963
+        ],
+        "covariance": [
+          [
+            0.021500718646369342,
+            0.0019962307074746378,
+            -0.004139948935551971
+          ],
+          [
+            0.0019962307074746378,
+            0.02002395669525022,
+            0.0006193831583047008
+          ],
+          [
+            -0.004139948935551971,
+            0.0006193831583047008,
+            0.01157696441182772
+          ]
+        ]
+      },
+      {
+        "accepted": true,
+        "apply_stamp": 10.5,
+        "belief_stamp_after": 10.4,
+        "correction_stamp": 10.4,
+        "nis": 0.0,
+        "reason": "accepted",
+        "schema_version": 1,
+        "source_batch_id": "audit15:complete:next",
+        "status": "accepted",
+        "mean": [
+          0.4,
+          1.28,
+          1.5707963267948963
+        ],
+        "covariance": [
+          [
+            0.0126233793123944,
+            0.0015299024516252677,
+            -0.002639803164524033
+          ],
+          [
+            0.0015299024516252677,
+            0.012002569096381368,
+            0.0002956282241612353
+          ],
+          [
+            -0.002639803164524033,
+            0.0002956282241612353,
+            0.011216811200394411
+          ]
+        ]
+      }
+    ],
+    "publication_read_only": true,
+    "independent_return_mean": [
+      0.4,
+      1.2,
+      1.5707963267948966
+    ],
+    "publication_stamps": [
+      10.5
+    ]
+  },
+  "missing_prefix": {
+    "coverage": false,
+    "terminal": [
+      {
+        "accepted": false,
+        "apply_stamp": 10.100000000000001,
+        "belief_stamp_after": 10.0,
+        "correction_stamp": 10.0,
+        "nis": null,
+        "reason": "replay_gap_too_large",
+        "schema_version": 1,
+        "source_batch_id": "audit15:missing_prefix:return",
+        "status": "dropped",
+        "mean": [
+          0.20000000000000004,
+          0.0,
+          0.0
+        ],
+        "covariance": [
+          [
+            3.5570500000000003,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            3.5573133333333335,
+            0.0020800000000000003
+          ],
+          [
+            0.0,
+            0.0020800000000000003,
+            0.010600000000000002
+          ]
+        ]
+      },
+      {
+        "accepted": true,
+        "apply_stamp": 10.299999999,
+        "belief_stamp_after": 10.2,
+        "correction_stamp": 10.2,
+        "nis": 0.43558310951401863,
+        "reason": "accepted",
+        "schema_version": 1,
+        "source_batch_id": "audit15:missing_prefix:recovery",
+        "status": "accepted",
+        "mean": [
+          0.3969483946370541,
+          1.2294118827381075,
+          0.0008658938129770923
+        ],
+        "covariance": [
+          [
+            0.029742246261272864,
+            0.004916730496516614,
+            3.4629293703649996e-06
+          ],
+          [
+            0.004916730496516614,
+            0.029742275277224284,
+            2.0947944710809473e-05
+          ],
+          [
+            3.4629293703649996e-06,
+            2.0947944710809473e-05,
+            0.010678250021109864
+          ]
+        ]
+      },
+      {
+        "accepted": false,
+        "apply_stamp": 10.299999999,
+        "belief_stamp_after": 10.2,
+        "correction_stamp": 10.1,
+        "nis": null,
+        "reason": "not_newer_than_belief",
+        "schema_version": 1,
+        "source_batch_id": "audit15:missing_prefix:reordered",
+        "status": "dropped",
+        "mean": [
+          0.3969483946370541,
+          1.2294118827381075,
+          0.0008658938129770923
+        ],
+        "covariance": [
+          [
+            0.029742246261272864,
+            0.004916730496516614,
+            3.4629293703649996e-06
+          ],
+          [
+            0.004916730496516614,
+            0.029742275277224284,
+            2.0947944710809473e-05
+          ],
+          [
+            3.4629293703649996e-06,
+            2.0947944710809473e-05,
+            0.010678250021109864
+          ]
+        ]
+      },
+      {
+        "accepted": true,
+        "apply_stamp": 10.5,
+        "belief_stamp_after": 10.4,
+        "correction_stamp": 10.4,
+        "nis": 0.07813260395181562,
+        "reason": "accepted",
+        "schema_version": 1,
+        "source_batch_id": "audit15:missing_prefix:next",
+        "status": "accepted",
+        "mean": [
+          0.4185263856139291,
+          1.2546391648679267,
+          0.0013020884043391501
+        ],
+        "covariance": [
+          [
+            0.014940316832534375,
+            0.002479092716448387,
+            1.7207819240301683e-06
+          ],
+          [
+            0.002479092716448387,
+            0.0149400228142475,
+            0.0002257110256134793
+          ],
+          [
+            1.7207819240301683e-06,
+            0.0002257110256134793,
+            0.010754778342836417
+          ]
+        ]
+      }
+    ],
+    "publication_read_only": true,
+    "independent_return_mean": [
+      0.4,
+      1.2,
+      1.5707963267948966
+    ],
+    "publication_stamps": [
+      10.5
+    ]
+  },
+  "missing_turn": {
+    "coverage": false,
+    "terminal": [
+      {
+        "accepted": false,
+        "apply_stamp": 10.100000000000001,
+        "belief_stamp_after": 10.0,
+        "correction_stamp": 10.0,
+        "nis": null,
+        "reason": "replay_gap_too_large",
+        "schema_version": 1,
+        "source_batch_id": "audit15:missing_turn:return",
+        "status": "dropped",
+        "mean": [
+          0.3,
+          0.0,
+          0.0
+        ],
+        "covariance": [
+          [
+            3.5570500000000003,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            3.5578180000000006,
+            0.0030900000000000007
+          ],
+          [
+            0.0,
+            0.0030900000000000007,
+            0.010600000000000002
+          ]
+        ]
+      },
+      {
+        "accepted": true,
+        "apply_stamp": 10.299999999,
+        "belief_stamp_after": 10.2,
+        "correction_stamp": 10.2,
+        "nis": 0.42947639168119883,
+        "reason": "accepted",
+        "schema_version": 1,
+        "source_batch_id": "audit15:missing_turn:recovery",
+        "status": "accepted",
+        "mean": [
+          0.3977848187857087,
+          1.2295517983722513,
+          0.0012148713987321113
+        ],
+        "covariance": [
+          [
+            0.029742247379410447,
+            0.004916737260349611,
+            4.858033212254154e-06
+          ],
+          [
+            0.004916737260349611,
+            0.02974231619298795,
+            2.938720379470211e-05
+          ],
+          [
+            4.858033212254154e-06,
+            2.938720379470211e-05,
+            0.010676555411311985
+          ]
+        ]
+      },
+      {
+        "accepted": false,
+        "apply_stamp": 10.299999999,
+        "belief_stamp_after": 10.2,
+        "correction_stamp": 10.1,
+        "nis": null,
+        "reason": "not_newer_than_belief",
+        "schema_version": 1,
+        "source_batch_id": "audit15:missing_turn:reordered",
+        "status": "dropped",
+        "mean": [
+          0.3977848187857087,
+          1.2295517983722513,
+          0.0012148713987321113
+        ],
+        "covariance": [
+          [
+            0.029742247379410447,
+            0.004916737260349611,
+            4.858033212254154e-06
+          ],
+          [
+            0.004916737260349611,
+            0.02974231619298795,
+            2.938720379470211e-05
+          ],
+          [
+            4.858033212254154e-06,
+            2.938720379470211e-05,
+            0.010676555411311985
+          ]
+        ]
+      },
+      {
+        "accepted": true,
+        "apply_stamp": 10.5,
+        "belief_stamp_after": 10.4,
+        "correction_stamp": 10.4,
+        "nis": 0.07914854203056132,
+        "reason": "accepted",
+        "schema_version": 1,
+        "source_batch_id": "audit15:missing_turn:next",
+        "status": "accepted",
+        "mean": [
+          0.4189462905128811,
+          1.254717037274173,
+          0.0016580751282621775
+        ],
+        "covariance": [
+          [
+            0.014940317078985162,
+            0.002479108690414518,
+            2.3488623235772575e-06
+          ],
+          [
+            0.002479108690414518,
+            0.01494020255657334,
+            0.00022991058656276998
+          ],
+          [
+            2.3488623235772575e-06,
+            0.00022991058656276998,
+            0.010752956268011519
+          ]
+        ]
+      }
+    ],
+    "publication_read_only": true,
+    "independent_return_mean": [
+      0.4,
+      1.2,
+      1.5707963267948966
+    ],
+    "publication_stamps": [
+      10.5
+    ]
+  },
+  "missing_tail": {
+    "coverage": false,
+    "terminal": [
+      {
+        "accepted": false,
+        "apply_stamp": 10.100000000000001,
+        "belief_stamp_after": 10.0,
+        "correction_stamp": 10.0,
+        "nis": null,
+        "reason": "replay_gap_too_large",
+        "schema_version": 1,
+        "source_batch_id": "audit15:missing_tail:return",
+        "status": "dropped",
+        "mean": [
+          0.30000000000000004,
+          0.0,
+          0.0
+        ],
+        "covariance": [
+          [
+            3.5570500000000003,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            3.5578180000000006,
+            0.0030900000000000003
+          ],
+          [
+            0.0,
+            0.0030900000000000003,
+            0.0106
+          ]
+        ]
+      },
+      {
+        "accepted": true,
+        "apply_stamp": 10.299999999,
+        "belief_stamp_after": 10.2,
+        "correction_stamp": 10.2,
+        "nis": 0.42947639168119883,
+        "reason": "accepted",
+        "schema_version": 1,
+        "source_batch_id": "audit15:missing_tail:recovery",
+        "status": "accepted",
+        "mean": [
+          0.3977848187857087,
+          1.2295517983722513,
+          0.0012148713987321126
+        ],
+        "covariance": [
+          [
+            0.029742247379410447,
+            0.004916737260349611,
+            4.858033212254161e-06
+          ],
+          [
+            0.004916737260349611,
+            0.02974231619298795,
+            2.938720379470211e-05
+          ],
+          [
+            4.858033212254161e-06,
+            2.938720379470211e-05,
+            0.010676555411311984
+          ]
+        ]
+      },
+      {
+        "accepted": false,
+        "apply_stamp": 10.299999999,
+        "belief_stamp_after": 10.2,
+        "correction_stamp": 10.1,
+        "nis": null,
+        "reason": "not_newer_than_belief",
+        "schema_version": 1,
+        "source_batch_id": "audit15:missing_tail:reordered",
+        "status": "dropped",
+        "mean": [
+          0.3977848187857087,
+          1.2295517983722513,
+          0.0012148713987321126
+        ],
+        "covariance": [
+          [
+            0.029742247379410447,
+            0.004916737260349611,
+            4.858033212254161e-06
+          ],
+          [
+            0.004916737260349611,
+            0.02974231619298795,
+            2.938720379470211e-05
+          ],
+          [
+            4.858033212254161e-06,
+            2.938720379470211e-05,
+            0.010676555411311984
+          ]
+        ]
+      },
+      {
+        "accepted": true,
+        "apply_stamp": 10.5,
+        "belief_stamp_after": 10.4,
+        "correction_stamp": 10.4,
+        "nis": 0.0791485420305609,
+        "reason": "accepted",
+        "schema_version": 1,
+        "source_batch_id": "audit15:missing_tail:next",
+        "status": "accepted",
+        "mean": [
+          0.4189462905128811,
+          1.2547170372741732,
+          0.001658075128262177
+        ],
+        "covariance": [
+          [
+            0.014940317078985162,
+            0.002479108690414518,
+            2.348862323577261e-06
+          ],
+          [
+            0.002479108690414518,
+            0.01494020255657334,
+            0.00022991058656276993
+          ],
+          [
+            2.348862323577261e-06,
+            0.00022991058656276993,
+            0.010752956268011517
+          ]
+        ]
+      }
+    ],
+    "publication_read_only": true,
+    "independent_return_mean": [
+      0.4,
+      1.2,
+      1.5707963267948966
+    ],
+    "publication_stamps": [
+      10.5
+    ]
+  }
+}

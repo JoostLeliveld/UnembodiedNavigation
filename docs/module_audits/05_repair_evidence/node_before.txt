@@ -1,0 +1,241 @@
+FFFFFFFF                                                                 [100%]
+=================================== FAILURES ===================================
+_______________ test_full_covariance_and_affine_congruence[None] _______________
+
+affine = None
+
+    @pytest.mark.parametrize('affine',[None,(0.,-1.,2.,1.,0.,-3.),(1.2,.4,2.,-.3,.8,-3.)])
+    def test_full_covariance_and_affine_congruence(affine):
+        n,out=node(affine); msg=input_message(); t=n._transformer
+        raw=np.array(t.pixel_to_world(600.,450.)); eps=1e-3
+        J=np.column_stack([(np.array(t.pixel_to_world(600.+eps*(i==0),450.+eps*(i==1)))-np.array(t.pixel_to_world(600.-eps*(i==0),450.-eps*(i==1))))/(2*eps) for i in (0,1)])
+        R=J@J.T*n.pixel_noise_sigma**2
+        A=np.eye(2) if affine is None else np.array([[affine[0],affine[1]],[affine[3],affine[4]]])
+        offset=np.array([0.,.2]) if affine is None else np.array([affine[2],affine[5]])
+        callback()(n,msg)
+        assert len(out)==1
+        published=out[0]; actual=np.array(published.pose.covariance).reshape(6,6)[:2,:2]
+>       np.testing.assert_allclose(actual,A@R@A.T,rtol=1e-8,atol=1e-12)
+
+tests/state/test_pixel_covariance_publication_05.py:60: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<function assert_allclose.<locals>.compare at 0x7922678daef0>, array([[8.53684243e-06, 0.00000000e+00],
+       [0.00000000e+00, 9.37412476e-06]]), array([[8.53684242e-06, 1.39732759e-06],
+       [1.39732759e-06, 9.37412475e-06]]))
+kwds = {'equal_nan': True, 'err_msg': '', 'header': 'Not equal to tolerance rtol=1e-08, atol=1e-12', 'verbose': True}
+
+    @wraps(func)
+    def inner(*args, **kwds):
+        with self._recreate_cm():
+>           return func(*args, **kwds)
+E           AssertionError: 
+E           Not equal to tolerance rtol=1e-08, atol=1e-12
+E           
+E           Mismatched elements: 2 / 4 (50%)
+E           Max absolute difference: 1.39732759e-06
+E           Max relative difference: 1.
+E            x: array([[8.536842e-06, 0.000000e+00],
+E                  [0.000000e+00, 9.374125e-06]])
+E            y: array([[8.536842e-06, 1.397328e-06],
+E                  [1.397328e-06, 9.374125e-06]])
+
+/usr/lib/python3.10/contextlib.py:79: AssertionError
+_____________ test_full_covariance_and_affine_congruence[affine1] ______________
+
+affine = (0.0, -1.0, 2.0, 1.0, 0.0, -3.0)
+
+    @pytest.mark.parametrize('affine',[None,(0.,-1.,2.,1.,0.,-3.),(1.2,.4,2.,-.3,.8,-3.)])
+    def test_full_covariance_and_affine_congruence(affine):
+        n,out=node(affine); msg=input_message(); t=n._transformer
+        raw=np.array(t.pixel_to_world(600.,450.)); eps=1e-3
+        J=np.column_stack([(np.array(t.pixel_to_world(600.+eps*(i==0),450.+eps*(i==1)))-np.array(t.pixel_to_world(600.-eps*(i==0),450.-eps*(i==1))))/(2*eps) for i in (0,1)])
+        R=J@J.T*n.pixel_noise_sigma**2
+        A=np.eye(2) if affine is None else np.array([[affine[0],affine[1]],[affine[3],affine[4]]])
+        offset=np.array([0.,.2]) if affine is None else np.array([affine[2],affine[5]])
+        callback()(n,msg)
+        assert len(out)==1
+        published=out[0]; actual=np.array(published.pose.covariance).reshape(6,6)[:2,:2]
+>       np.testing.assert_allclose(actual,A@R@A.T,rtol=1e-8,atol=1e-12)
+
+tests/state/test_pixel_covariance_publication_05.py:60: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<function assert_allclose.<locals>.compare at 0x792267434c10>, array([[8.53684243e-06, 0.00000000e+00],
+       [0.00000000e+00, 9.37412476e-06]]), array([[ 9.37412475e-06, -1.39732759e-06],
+       [-1.39732759e-06,  8.53684242e-06]]))
+kwds = {'equal_nan': True, 'err_msg': '', 'header': 'Not equal to tolerance rtol=1e-08, atol=1e-12', 'verbose': True}
+
+    @wraps(func)
+    def inner(*args, **kwds):
+        with self._recreate_cm():
+>           return func(*args, **kwds)
+E           AssertionError: 
+E           Not equal to tolerance rtol=1e-08, atol=1e-12
+E           
+E           Mismatched elements: 4 / 4 (100%)
+E           Max absolute difference: 1.39732759e-06
+E           Max relative difference: 1.
+E            x: array([[8.536842e-06, 0.000000e+00],
+E                  [0.000000e+00, 9.374125e-06]])
+E            y: array([[ 9.374125e-06, -1.397328e-06],
+E                  [-1.397328e-06,  8.536842e-06]])
+
+/usr/lib/python3.10/contextlib.py:79: AssertionError
+_____________ test_full_covariance_and_affine_congruence[affine2] ______________
+
+affine = (1.2, 0.4, 2.0, -0.3, 0.8, -3.0)
+
+    @pytest.mark.parametrize('affine',[None,(0.,-1.,2.,1.,0.,-3.),(1.2,.4,2.,-.3,.8,-3.)])
+    def test_full_covariance_and_affine_congruence(affine):
+        n,out=node(affine); msg=input_message(); t=n._transformer
+        raw=np.array(t.pixel_to_world(600.,450.)); eps=1e-3
+        J=np.column_stack([(np.array(t.pixel_to_world(600.+eps*(i==0),450.+eps*(i==1)))-np.array(t.pixel_to_world(600.-eps*(i==0),450.-eps*(i==1))))/(2*eps) for i in (0,1)])
+        R=J@J.T*n.pixel_noise_sigma**2
+        A=np.eye(2) if affine is None else np.array([[affine[0],affine[1]],[affine[3],affine[4]]])
+        offset=np.array([0.,.2]) if affine is None else np.array([affine[2],affine[5]])
+        callback()(n,msg)
+        assert len(out)==1
+        published=out[0]; actual=np.array(published.pose.covariance).reshape(6,6)[:2,:2]
+>       np.testing.assert_allclose(actual,A@R@A.T,rtol=1e-8,atol=1e-12)
+
+tests/state/test_pixel_covariance_publication_05.py:60: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<function assert_allclose.<locals>.compare at 0x792267435360>, array([[8.53684243e-06, 0.00000000e+00],
+       [0.00000000e+00, 9.37412476e-06]]), array([[1.51343475e-05, 1.10021182e-06],
+       [1.10021182e-06, 6.09703842e-06]]))
+kwds = {'equal_nan': True, 'err_msg': '', 'header': 'Not equal to tolerance rtol=1e-08, atol=1e-12', 'verbose': True}
+
+    @wraps(func)
+    def inner(*args, **kwds):
+        with self._recreate_cm():
+>           return func(*args, **kwds)
+E           AssertionError: 
+E           Not equal to tolerance rtol=1e-08, atol=1e-12
+E           
+E           Mismatched elements: 4 / 4 (100%)
+E           Max absolute difference: 6.59750511e-06
+E           Max relative difference: 1.
+E            x: array([[8.536842e-06, 0.000000e+00],
+E                  [0.000000e+00, 9.374125e-06]])
+E            y: array([[1.513435e-05, 1.100212e-06],
+E                  [1.100212e-06, 6.097038e-06]])
+
+/usr/lib/python3.10/contextlib.py:79: AssertionError
+______ test_invalid_covariance_has_no_publication_or_heading_commit[None] ______
+
+R = None
+
+    @pytest.mark.parametrize('R',[None,np.full((2,2),np.nan),np.array([[1.,2.],[2.,1.]]),np.array([[1.,.1],[.2,1.]])])
+    def test_invalid_covariance_has_no_publication_or_heading_commit(R):
+        n,out=node(); n._transformer.pixel_covariance_to_metric=lambda *a,**kw:R
+        callback()(n,input_message())
+>       assert out==[] and n._last_xy is None
+E       AssertionError: assert ([namespace(he...0000000001]))] == []
+E         Left contains one more item: namespace(header=namespace(stamp=namespace(sec=4, nanosec=0), frame_id='map_bev'), pose=namespace(pose=namespace(posit..., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.04000000000000001]))
+E         Full diff:
+E           [
+E         -  ,
+E         +  namespace(header=namespace(stamp=namespace(sec=4,
+E         +                                             nanosec=0),
+E         +                             frame_id='map_bev'),...
+E         
+E         ...Full output truncated (44 lines hidden), use '-vv' to show)
+
+tests/state/test_pixel_covariance_publication_05.py:72: AssertionError
+_______ test_invalid_covariance_has_no_publication_or_heading_commit[R1] _______
+
+R = array([[nan, nan],
+       [nan, nan]])
+
+    @pytest.mark.parametrize('R',[None,np.full((2,2),np.nan),np.array([[1.,2.],[2.,1.]]),np.array([[1.,.1],[.2,1.]])])
+    def test_invalid_covariance_has_no_publication_or_heading_commit(R):
+        n,out=node(); n._transformer.pixel_covariance_to_metric=lambda *a,**kw:R
+        callback()(n,input_message())
+>       assert out==[] and n._last_xy is None
+E       AssertionError: assert ([namespace(he...0000000001]))] == []
+E         Left contains one more item: namespace(header=namespace(stamp=namespace(sec=4, nanosec=0), frame_id='map_bev'), pose=namespace(pose=namespace(posit..., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.04000000000000001]))
+E         Full diff:
+E           [
+E         -  ,
+E         +  namespace(header=namespace(stamp=namespace(sec=4,
+E         +                                             nanosec=0),
+E         +                             frame_id='map_bev'),...
+E         
+E         ...Full output truncated (44 lines hidden), use '-vv' to show)
+
+tests/state/test_pixel_covariance_publication_05.py:72: AssertionError
+_______ test_invalid_covariance_has_no_publication_or_heading_commit[R2] _______
+
+R = array([[1., 2.],
+       [2., 1.]])
+
+    @pytest.mark.parametrize('R',[None,np.full((2,2),np.nan),np.array([[1.,2.],[2.,1.]]),np.array([[1.,.1],[.2,1.]])])
+    def test_invalid_covariance_has_no_publication_or_heading_commit(R):
+        n,out=node(); n._transformer.pixel_covariance_to_metric=lambda *a,**kw:R
+        callback()(n,input_message())
+>       assert out==[] and n._last_xy is None
+E       AssertionError: assert ([namespace(he...0000000001]))] == []
+E         Left contains one more item: namespace(header=namespace(stamp=namespace(sec=4, nanosec=0), frame_id='map_bev'), pose=namespace(pose=namespace(posit..., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.04000000000000001]))
+E         Full diff:
+E           [
+E         -  ,
+E         +  namespace(header=namespace(stamp=namespace(sec=4,
+E         +                                             nanosec=0),
+E         +                             frame_id='map_bev'),...
+E         
+E         ...Full output truncated (44 lines hidden), use '-vv' to show)
+
+tests/state/test_pixel_covariance_publication_05.py:72: AssertionError
+_______ test_invalid_covariance_has_no_publication_or_heading_commit[R3] _______
+
+R = array([[1. , 0.1],
+       [0.2, 1. ]])
+
+    @pytest.mark.parametrize('R',[None,np.full((2,2),np.nan),np.array([[1.,2.],[2.,1.]]),np.array([[1.,.1],[.2,1.]])])
+    def test_invalid_covariance_has_no_publication_or_heading_commit(R):
+        n,out=node(); n._transformer.pixel_covariance_to_metric=lambda *a,**kw:R
+        callback()(n,input_message())
+>       assert out==[] and n._last_xy is None
+E       AssertionError: assert ([namespace(he...0000000001]))] == []
+E         Left contains one more item: namespace(header=namespace(stamp=namespace(sec=4, nanosec=0), frame_id='map_bev'), pose=namespace(pose=namespace(posit..., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.04000000000000001]))
+E         Full diff:
+E           [
+E         -  ,
+E         +  namespace(header=namespace(stamp=namespace(sec=4,
+E         +                                             nanosec=0),
+E         +                             frame_id='map_bev'),...
+E         
+E         ...Full output truncated (44 lines hidden), use '-vv' to show)
+
+tests/state/test_pixel_covariance_publication_05.py:72: AssertionError
+_________________ test_transform_only_covariance_is_propagated _________________
+
+    def test_transform_only_covariance_is_propagated():
+        n,out=node(sigma=0.); n.transform_noise_sigma=.01
+        # Hold the sampled mean at nominal geometry; covariance remains a statement
+        # about the declared transform uncertainty, not a random draw.
+        n._transformer.rng=None
+        callback()(n,input_message())
+        R=np.array(out[0].pose.covariance).reshape(6,6)[:2,:2]
+>       assert np.linalg.eigvalsh(R).min()>0 and abs(R[0,1])>1e-10
+E       AssertionError: assert (0.0001 > 0 and 0.0 > 1e-10)
+E        +  where 0.0001 = <built-in method min of numpy.ndarray object at 0x7922674952f0>()
+E        +    where <built-in method min of numpy.ndarray object at 0x7922674952f0> = array([0.0001, 0.0001]).min
+E        +      where array([0.0001, 0.0001]) = <function eigvalsh at 0x792267f04ef0>(array([[0.0001, 0.    ],\n       [0.    , 0.0001]]))
+E        +        where <function eigvalsh at 0x792267f04ef0> = <module 'numpy.linalg' from '/home/joostleliveld/.local/lib/python3.10/site-packages/numpy/linalg/__init__.py'>.eigvalsh
+E        +          where <module 'numpy.linalg' from '/home/joostleliveld/.local/lib/python3.10/site-packages/numpy/linalg/__init__.py'> = np.linalg
+E        +  and   0.0 = abs(0.0)
+
+tests/state/test_pixel_covariance_publication_05.py:82: AssertionError
+=========================== short test summary info ============================
+FAILED tests/state/test_pixel_covariance_publication_05.py::test_full_covariance_and_affine_congruence[None]
+FAILED tests/state/test_pixel_covariance_publication_05.py::test_full_covariance_and_affine_congruence[affine1]
+FAILED tests/state/test_pixel_covariance_publication_05.py::test_full_covariance_and_affine_congruence[affine2]
+FAILED tests/state/test_pixel_covariance_publication_05.py::test_invalid_covariance_has_no_publication_or_heading_commit[None]
+FAILED tests/state/test_pixel_covariance_publication_05.py::test_invalid_covariance_has_no_publication_or_heading_commit[R1]
+FAILED tests/state/test_pixel_covariance_publication_05.py::test_invalid_covariance_has_no_publication_or_heading_commit[R2]
+FAILED tests/state/test_pixel_covariance_publication_05.py::test_invalid_covariance_has_no_publication_or_heading_commit[R3]
+FAILED tests/state/test_pixel_covariance_publication_05.py::test_transform_only_covariance_is_propagated
+8 failed in 0.43s

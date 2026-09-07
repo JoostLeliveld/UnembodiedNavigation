@@ -1,0 +1,995 @@
+{
+  "kind": "synthetic_software_audit_not_drive_results",
+  "source_sha256": {
+    "experiments/fusion_on_fixed_routes/aligned.py": "dabd8b9167af3f11ee21c7a42dbd795b847300c63ac0c69af3cc0167d3965f80",
+    "experiments/fusion_on_fixed_routes/replay.py": "94df68d35368a454890c632180ceb5cefe7290565eda03e31edd02a5258f4d73",
+    "experiments/fusion_on_fixed_routes/score.py": "3cf40042216d0d58fa20ceed23841f1cd466f9a4fa44f949920b50027ff8990c",
+    "experiments/fusion_on_fixed_routes/compare.py": "4113e47c611b0dd8a7d458e465d638018341aee2d4a3ab485698ff00cf12e6e0",
+    "experiments/fusion_on_fixed_routes/story/fusion_examples.py": "508065e2577eb09199a185a3ae71464fa14c756cc1fcf96f4d82cf8f92853597",
+    "experiments/icra_commissioning/replay.py": "2910ab2e45b3ecbe5a73f645723acbc3ca5a5bc78f50a93172c5a9c14cacf4b9",
+    "experiments/icra_commissioning/field_driving.py": "cbb3ff81030bfcc4ac8a437f7e0be21e2df1ffd21b062ee0b0e48f67b9b4f083",
+    "experiments/icra_commissioning/network_replay.py": "cc9624da338380647bfe5baac58d6833dbcca173d82c816196a8cc7ba4f4d73d",
+    "experiments/icra_commissioning/network_navigation_analysis.py": "504c08f1ca4d6e3f91cb8a3552ce31384e1183c26d4bb3d981279af3e245cfd4",
+    "experiments/icra_commissioning/network_runtime_report.py": "d1f957e98b0a0d159f213e9578d8fbb9410fd091ba408da8432e4fce6fbbb94c",
+    "experiments/icra_commissioning/thesis_evidence.py": "f05d0b7bcd6ba4561f866a98a5ed30880eba26eec9fa18bace9085e3b049ba74",
+    "experiments/icra_commissioning/study.py": "3c5c258354c8cd453d80e01d66efa613bfac05c7e330b1b90a307c355c7cb3c4",
+    "experiments/icra_commissioning/model.py": "5295e358e2d2334aef62ee1503068039b09ecbcb59c3df6faa16740302609fce",
+    "scripts/shared/metrics.py": "3eba2bf994be5479cf54760bd621a636ca9e0c283b41384e835182a60ca6126b",
+    "scripts/visibility_comparison/monitor_campaign.py": "efc02d43031511ec0b34d80b3833a95795e2840f240b673d2e6c42f2778b674f",
+    "tests/experiments/test_fusion_study_alignment.py": "e0a4c01550f9e6029d934613eef541a3eb39a524c512ccb1de873b4fa3acf15a",
+    "tests/test_network_replay.py": "67d16abc3f76e65b864f8c0d8bcf4c37c5feaa94c37765482a14255724ac5679",
+    "src/experiments/experiments/nodes/experiment_logger.py": "6c03281600ad906020fee19af04e5454846bdf2b9c653da6f63266d767e678e3",
+    "src/planning/planning/core/dynamics.py": "7a6bde9ddfbc2b100b328fd5d1ae870438a57f1f95e2f7f91e8a6b51859a4107",
+    "docs/localization_metrics.md": "0af9f42321e225406c2297ddd2915f57d913dc49988767a03aeb007f8083a28e",
+    "docs/localization_metrics_registry.json": "1b622751291cfb12b504a428fa01790f0d894f174929b4bb9f63e9b2b68b7249"
+  },
+  "source_snapshot": {
+    "experiments/fusion_on_fixed_routes/aligned.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/dabd8b9167af3f11ee21c7a42dbd795b847300c63ac0c69af3cc0167d3965f80/aligned.py",
+    "experiments/fusion_on_fixed_routes/replay.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/94df68d35368a454890c632180ceb5cefe7290565eda03e31edd02a5258f4d73/replay.py",
+    "experiments/fusion_on_fixed_routes/score.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/3cf40042216d0d58fa20ceed23841f1cd466f9a4fa44f949920b50027ff8990c/score.py",
+    "experiments/fusion_on_fixed_routes/compare.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/4113e47c611b0dd8a7d458e465d638018341aee2d4a3ab485698ff00cf12e6e0/compare.py",
+    "experiments/fusion_on_fixed_routes/story/fusion_examples.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/508065e2577eb09199a185a3ae71464fa14c756cc1fcf96f4d82cf8f92853597/fusion_examples.py",
+    "experiments/icra_commissioning/replay.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/2910ab2e45b3ecbe5a73f645723acbc3ca5a5bc78f50a93172c5a9c14cacf4b9/replay.py",
+    "experiments/icra_commissioning/field_driving.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/cbb3ff81030bfcc4ac8a437f7e0be21e2df1ffd21b062ee0b0e48f67b9b4f083/field_driving.py",
+    "experiments/icra_commissioning/network_replay.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/cc9624da338380647bfe5baac58d6833dbcca173d82c816196a8cc7ba4f4d73d/network_replay.py",
+    "experiments/icra_commissioning/network_navigation_analysis.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/504c08f1ca4d6e3f91cb8a3552ce31384e1183c26d4bb3d981279af3e245cfd4/network_navigation_analysis.py",
+    "experiments/icra_commissioning/network_runtime_report.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/d1f957e98b0a0d159f213e9578d8fbb9410fd091ba408da8432e4fce6fbbb94c/network_runtime_report.py",
+    "experiments/icra_commissioning/thesis_evidence.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/f05d0b7bcd6ba4561f866a98a5ed30880eba26eec9fa18bace9085e3b049ba74/thesis_evidence.py",
+    "experiments/icra_commissioning/study.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/3c5c258354c8cd453d80e01d66efa613bfac05c7e330b1b90a307c355c7cb3c4/study.py",
+    "experiments/icra_commissioning/model.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/5295e358e2d2334aef62ee1503068039b09ecbcb59c3df6faa16740302609fce/model.py",
+    "scripts/shared/metrics.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/3eba2bf994be5479cf54760bd621a636ca9e0c283b41384e835182a60ca6126b/metrics.py",
+    "scripts/visibility_comparison/monitor_campaign.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/efc02d43031511ec0b34d80b3833a95795e2840f240b673d2e6c42f2778b674f/monitor_campaign.py",
+    "tests/experiments/test_fusion_study_alignment.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/e0a4c01550f9e6029d934613eef541a3eb39a524c512ccb1de873b4fa3acf15a/test_fusion_study_alignment.py",
+    "tests/test_network_replay.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/67d16abc3f76e65b864f8c0d8bcf4c37c5feaa94c37765482a14255724ac5679/test_network_replay.py",
+    "src/experiments/experiments/nodes/experiment_logger.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/6c03281600ad906020fee19af04e5454846bdf2b9c653da6f63266d767e678e3/experiment_logger.py",
+    "src/planning/planning/core/dynamics.py": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/7a6bde9ddfbc2b100b328fd5d1ae870438a57f1f95e2f7f91e8a6b51859a4107/dynamics.py",
+    "docs/localization_metrics.md": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/0af9f42321e225406c2297ddd2915f57d913dc49988767a03aeb007f8083a28e/localization_metrics.md",
+    "docs/localization_metrics_registry.json": "experiments/runtime_integrity/alignment_reporting_20260906/source_snapshot/1b622751291cfb12b504a428fa01790f0d894f174929b4bb9f63e9b2b68b7249/localization_metrics_registry.json"
+  },
+  "resolved_modules": {
+    "aligned": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/fusion_on_fixed_routes/aligned.py",
+    "commissioning_replay": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/icra_commissioning/replay.py",
+    "fixed_route_replay": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/fusion_on_fixed_routes/replay.py",
+    "field_driving": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/icra_commissioning/field_driving.py",
+    "score": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/fusion_on_fixed_routes/score.py",
+    "compare": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/fusion_on_fixed_routes/compare.py"
+  },
+  "changed_sources_during_probe": {},
+  "cases": [
+    {
+      "case": "separate_own_time_errors",
+      "classification": "verified control",
+      "expected": "6 camera readings at 2 cm; 3 fused events at 1 cm; 21 beliefs at 0 cm, unrelated wheel x+10 ignored",
+      "observed": {
+        "camera_n": 6,
+        "camera_error_cm": 2,
+        "fused_n": 3,
+        "fused_error_cm": 1,
+        "belief_n": 21,
+        "belief_error_cm": 0
+      }
+    },
+    {
+      "case": "out_of_range",
+      "classification": "verified fail-closed reference",
+      "expected": "NaN references outside truth support",
+      "observed": [
+        "nan",
+        "nan",
+        "nan"
+      ]
+    },
+    {
+      "case": "missing_assimilation",
+      "classification": "confirmed defect",
+      "expected": "Reject inconsistent evidence before returning event scores",
+      "observed": {
+        "aligned_event_ids": [
+          "b0",
+          "b1"
+        ],
+        "fixed_route_selection": {
+          "returned": false,
+          "exception": "SystemExit",
+          "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/missing_assimilation: correction/assimilation identity mismatch; missing=['b2'], extra=[]"
+        }
+      }
+    },
+    {
+      "case": "extra_assimilation",
+      "classification": "confirmed defect",
+      "expected": "Reject inconsistent evidence before returning event scores",
+      "observed": {
+        "aligned_event_ids": [
+          "b0",
+          "b1",
+          "b2"
+        ],
+        "fixed_route_selection": {
+          "returned": false,
+          "exception": "SystemExit",
+          "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/extra_assimilation: correction/assimilation identity mismatch; missing=[], extra=['extra']"
+        }
+      }
+    },
+    {
+      "case": "unclassifiable_status",
+      "classification": "confirmed defect",
+      "expected": "Reject inconsistent evidence before returning event scores",
+      "observed": {
+        "aligned_event_ids": [
+          "b1",
+          "b2"
+        ],
+        "fixed_route_selection": {
+          "returned": true,
+          "result": [
+            "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/unclassifiable_status"
+          ]
+        }
+      }
+    },
+    {
+      "case": "reasonless_rejection",
+      "classification": "confirmed defect",
+      "expected": "Reject inconsistent evidence before returning event scores",
+      "observed": {
+        "aligned_event_ids": [
+          "b1",
+          "b2"
+        ],
+        "fixed_route_selection": {
+          "returned": false,
+          "exception": "SystemExit",
+          "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/reasonless_rejection: 1 refusal(s) with no recorded reason"
+        }
+      }
+    },
+    {
+      "case": "accepted_flag_conflict",
+      "classification": "confirmed defect",
+      "expected": "Reject inconsistent evidence before returning event scores",
+      "observed": {
+        "aligned_event_ids": [
+          "b1",
+          "b2"
+        ],
+        "fixed_route_selection": {
+          "returned": true,
+          "result": [
+            "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/accepted_flag_conflict"
+          ]
+        }
+      }
+    },
+    {
+      "case": "stamp_mismatch",
+      "classification": "confirmed defect",
+      "expected": "Reject inconsistent evidence before returning event scores",
+      "observed": {
+        "aligned_event_ids": [
+          "b0",
+          "b1",
+          "b2"
+        ],
+        "fixed_route_selection": {
+          "returned": true,
+          "result": [
+            "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/stamp_mismatch"
+          ]
+        }
+      }
+    },
+    {
+      "case": "duplicate_assimilation_id_refused",
+      "classification": "verified fail-closed control",
+      "expected": "Reject",
+      "observed": {
+        "returned": false,
+        "exception": "ValueError",
+        "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/duplicate_assimilation/correction_assimilations.csv: duplicate assimilation for b0"
+      }
+    },
+    {
+      "case": "blank_assimilation_id_refused",
+      "classification": "verified fail-closed control",
+      "expected": "Reject",
+      "observed": {
+        "returned": false,
+        "exception": "ValueError",
+        "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/missing_assimilation_id/correction_assimilations.csv: assimilation without source_batch_id"
+      }
+    },
+    {
+      "case": "reasoned_refusals",
+      "classification": "verified repair",
+      "expected": "Run remains valid; only accepted b0 enters event-belief population",
+      "observed": [
+        "b0"
+      ]
+    },
+    {
+      "case": "schema3_boundary",
+      "classification": "legacy compatibility limit with guarded fixed-route entry",
+      "expected": "No confirmed post-update population without explicit outcomes",
+      "observed": {
+        "aligned_inferred_events": 3,
+        "label": "legacy_timestamp_inference",
+        "fixed_route_selection": "refused"
+      }
+    },
+    {
+      "case": "schema4_empty_ledger",
+      "classification": "verified fail-closed control",
+      "expected": "Reject event-belief inference",
+      "observed": {
+        "returned": false,
+        "exception": "ValueError",
+        "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/schema4_no_assimilation: schema 4 run has no source-batch assimilation records"
+      }
+    },
+    {
+      "case": "conflicting_duplicate_first",
+      "classification": "confirmed defect",
+      "expected": "Reject conflicting payloads for same (batch,camera)",
+      "observed": {
+        "selected_error_cm": 2.0000000000000018,
+        "fused_error_cm": 1.0000000000000009
+      }
+    },
+    {
+      "case": "conflicting_duplicate_reverse",
+      "classification": "confirmed defect",
+      "expected": "Reject conflicting payloads for same (batch,camera)",
+      "observed": {
+        "selected_error_cm": 99.99999999999999,
+        "fused_error_cm": 99.99999999999999
+      }
+    },
+    {
+      "case": "distinct_batches_equal_capture",
+      "classification": "confirmed defect",
+      "expected": "Preserve two declared identities, or refuse ambiguous physical identity; never silently choose one",
+      "observed": {
+        "reading_ids": [
+          "physical1"
+        ],
+        "fused_ids": [
+          "physical1",
+          "physical2"
+        ]
+      }
+    },
+    {
+      "case": "same_batch_changed_capture",
+      "classification": "confirmed defect",
+      "expected": "Reject changed timestamp under same (batch,camera)",
+      "observed": {
+        "reading_count": 2,
+        "fused_count": 1
+      }
+    },
+    {
+      "case": "missing_observation_ids",
+      "classification": "confirmed defect",
+      "expected": "Schema 7 correction events require nonempty identities",
+      "observed": {
+        "fused_ids": [
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "case": "reordered_landed",
+      "classification": "confirmed defect",
+      "expected": {
+        "first_unique_mask": [
+          true,
+          true,
+          false,
+          false
+        ]
+      },
+      "observed": {
+        "stamps": [
+          1,
+          2,
+          1,
+          2
+        ],
+        "actual_mask": [
+          true,
+          true,
+          false,
+          true
+        ]
+      }
+    },
+    {
+      "case": "initial_nan_landed",
+      "classification": "confirmed defect",
+      "expected": {
+        "first_unique_mask": [
+          false,
+          true,
+          false,
+          true
+        ]
+      },
+      "observed": {
+        "stamps": [
+          "nan",
+          1,
+          1,
+          2
+        ],
+        "actual_mask": [
+          false,
+          false,
+          false,
+          true
+        ]
+      }
+    },
+    {
+      "case": "before_apply_is_post_correction",
+      "classification": "confirmed defect",
+      "expected": "No exact event posterior is logged. First public candidate after apply is at 1.4 (40 cm), not the 1.1 sample (10 cm) before apply=1.3",
+      "observed": {
+        "source_batch_id": "late",
+        "assimilation_status": "accepted",
+        "n_candidates": 2.0,
+        "error_cm": 10.000000000000009,
+        "stated_sigma_cm": 10.0,
+        "belief_lag_after_fusion_s": 0.10000000000000009
+      }
+    },
+    {
+      "case": "multiple_updates_between_ticks",
+      "classification": "confirmed defect",
+      "expected": "Cannot recover two distinct posteriors from one public belief; explicit unscoreable event count required",
+      "observed": [
+        {
+          "source_batch_id": "e1",
+          "assimilation_status": "accepted",
+          "n_candidates": 2.0,
+          "error_cm": 30.000000000000004,
+          "stated_sigma_cm": 10.0,
+          "belief_lag_after_fusion_s": 0.10000000000000009
+        },
+        {
+          "source_batch_id": "e2",
+          "assimilation_status": "accepted",
+          "n_candidates": 2.0,
+          "error_cm": 30.000000000000004,
+          "stated_sigma_cm": 10.0,
+          "belief_lag_after_fusion_s": 0.050000000000000044
+        }
+      ]
+    },
+    {
+      "case": "shutdown_before_final_belief",
+      "classification": "confirmed defect",
+      "expected": "ID sets match: valid accounted event, unscoreable truth/posterior tail. Report incompleteness separately",
+      "observed": {
+        "raw_obs_ids": [
+          "final"
+        ],
+        "assimilation_ids": [
+          "final"
+        ],
+        "event_scores": [],
+        "selection": {
+          "returned": false,
+          "exception": "SystemExit",
+          "message": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/shutdown_before_final_belief: correction/assimilation identity mismatch; missing=[], extra=['final']"
+        }
+      }
+    },
+    {
+      "case": "truth_tie",
+      "classification": "confirmed defect",
+      "expected": "Reject conflicting time/epoch; declare interpolation support limit for gap",
+      "observed": {
+        "input_t": [
+          0,
+          1,
+          1,
+          2
+        ],
+        "sorted_t": [
+          0.0,
+          1.0,
+          1.0,
+          2.0
+        ],
+        "query": 1.0,
+        "returned_x": [
+          9.0
+        ]
+      }
+    },
+    {
+      "case": "truth_clock_reset",
+      "classification": "confirmed defect",
+      "expected": "Reject conflicting time/epoch; declare interpolation support limit for gap",
+      "observed": {
+        "input_t": [
+          0,
+          1,
+          0,
+          1
+        ],
+        "sorted_t": [
+          0.0,
+          0.0,
+          1.0,
+          1.0
+        ],
+        "query": 0.5,
+        "returned_x": [
+          50.5
+        ]
+      }
+    },
+    {
+      "case": "truth_large_gap",
+      "classification": "confirmed defect",
+      "expected": "Reject conflicting time/epoch; declare interpolation support limit for gap",
+      "observed": {
+        "input_t": [
+          0,
+          10
+        ],
+        "sorted_t": [
+          0.0,
+          10.0
+        ],
+        "query": 5.0,
+        "returned_x": [
+          5.0
+        ]
+      }
+    },
+    {
+      "case": "missing_heading_poisons_following",
+      "classification": "confirmed defect",
+      "expected": "Known yaw at t=2,3 is .1,.2 rad; handle finite segments independently",
+      "observed": [
+        "nan",
+        "nan"
+      ]
+    },
+    {
+      "case": "buffered_truth_columns_ignored",
+      "classification": "confirmed defect",
+      "expected": "Synthetic triangular truth x(0)=0,x(.5)=1,x(1)=0: logged buffered reference at belief .5 establishes zero error, and docstring promises preference",
+      "observed": {
+        "buffered_error_cm": 0,
+        "loader_error_cm": 100.0,
+        "coarse_truth_endpoint_x": [
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "case": "heading_wrap_control",
+      "classification": "verified control",
+      "expected": "179 to -179 deg crosses 180, not zero",
+      "observed": {
+        "midpoint_deg": 180
+      }
+    },
+    {
+      "case": "blind_boundaries",
+      "classification": "confirmed defect",
+      "expected": "Gaps on [0,10] with accepted updates 4,5 are [4,1,5]; longest=5 s",
+      "observed": {
+        "n_state_publications": 2,
+        "n_state_publications_note": "log rows with a fresh /state/bev stamp, at the 10 Hz log rate -- an availability fraction, not a count of corrections",
+        "n_detector_rounds": 2,
+        "duration_s": 10.0,
+        "state_fresh_rate_hz": 0.2,
+        "longest_gap_s": 1.0,
+        "median_gap_s": 1.0
+      }
+    },
+    {
+      "case": "held_belief_weights_score",
+      "classification": "confirmed defect",
+      "expected": "Two unique beliefs [0,100] cm => median=50 cm regardless of repetitions",
+      "observed": {
+        "quiet": {
+          "median": 50.0,
+          "p95": 95.0,
+          "worst": 100.0,
+          "n_samples": 2,
+          "median_scored_at_log_time": 50.0,
+          "note": "scored against the truth at the belief's own stamp. The log-time figure beside it is the old definition, late by one publish cycle (median 0.000 s here)."
+        },
+        "held": {
+          "median": 100.0,
+          "p95": 100.0,
+          "worst": 100.0,
+          "n_samples": 6,
+          "median_scored_at_log_time": 75.0,
+          "note": "scored against the truth at the belief's own stamp. The log-time figure beside it is the old definition, late by one publish cycle (median 0.150 s here)."
+        }
+      }
+    },
+    {
+      "case": "negative_covariance_nees",
+      "classification": "confirmed defect",
+      "expected": "Reject negative-definite covariance, never negative NEES/inside ellipse",
+      "observed": {
+        "nees": -1.0,
+        "covered": true,
+        "asymmetric_nees": 1.0
+      }
+    },
+    {
+      "case": "commissioning_covariance_validation",
+      "classification": "confirmed defect",
+      "expected": "Reject invalid covariance before score",
+      "observed": {
+        "n": 1,
+        "groups": 1,
+        "median_cm": 100.0,
+        "p95_cm": 100.0,
+        "rmse_cm": 100.0,
+        "bias_cm": [
+          100.0,
+          0.0
+        ],
+        "gaussian_nll": 1.3378770664093453,
+        "group_mean_nll": 1.3378770664093453,
+        "group_bootstrap_nll_ci95": [
+          1.3378770664093453,
+          1.3378770664093453
+        ],
+        "coverage": {
+          "0.5": 1.0,
+          "0.8": 1.0,
+          "0.9": 1.0,
+          "0.95": 1.0,
+          "0.99": 1.0
+        },
+        "mean_mahalanobis2": -1.0,
+        "rms_sigma_cm": "nan"
+      }
+    },
+    {
+      "case": "legacy_replay_tick_collision",
+      "classification": "confirmed defect",
+      "expected": "Two unique camera captures .96,1.04 must remain two updates at their own times, or replay must refuse this resolution",
+      "observed": {
+        "selected_captures": [
+          0.96
+        ]
+      }
+    },
+    {
+      "case": "legacy_replay_gap_and_nees_label",
+      "classification": "confirmed defect",
+      "expected": "Longest gap 5 s; median raw NEES 2.5, mean raw NEES 2.5",
+      "observed": {
+        "longest_gap": 1.0,
+        "reported_nees": 3.6067376022224087
+      }
+    },
+    {
+      "case": "story_uses_capture_truth_for_fused",
+      "classification": "confirmed defect",
+      "expected": "Perfect fused x=.6 at fused_stamp=.6 => 0 cm; camera stamp .4 cannot be its reference",
+      "observed": {
+        "story_fused_error_cm": 19.999999999999996,
+        "aligned_fused_error_cm": 0
+      }
+    },
+    {
+      "case": "capture_time_policy",
+      "classification": "intentional policy limit",
+      "expected": "Capture-time replay applies at .5 independent of unavailable arrival/status; this is intentional, not live performance",
+      "observed": {
+        "update_times": [
+          0.5
+        ]
+      }
+    },
+    {
+      "case": "simultaneous_reordered_camera_updates",
+      "classification": "verified control",
+      "expected": "Both camera identities counted once; x=.1 m, Pxy=I/600 m\u00b2 regardless of order",
+      "observed": [
+        {
+          "x": 0.1,
+          "Pxy": [
+            [
+              0.0016666666666666666,
+              0.0
+            ],
+            [
+              0.0,
+              0.0016666666666666666
+            ]
+          ],
+          "updates": 2
+        },
+        {
+          "x": 0.1,
+          "Pxy": [
+            [
+              0.0016666666666666666,
+              0.0
+            ],
+            [
+              0.0,
+              0.0016666666666666666
+            ]
+          ],
+          "updates": 2
+        }
+      ]
+    },
+    {
+      "case": "duplicate_replay_update_refused",
+      "classification": "verified fail-closed control",
+      "expected": "Reject duplicate camera/time update before applying it again",
+      "observed": {
+        "returned": false,
+        "exception": "ValueError",
+        "message": "duplicate physical camera update"
+      }
+    },
+    {
+      "case": "prediction_grid_changes_covariance",
+      "classification": "confirmed caller-control gap; network_replay repaired",
+      "expected": "Within an arm comparison use one identical propagation grid; old callers omit it",
+      "observed": [
+        {
+          "final_P": [
+            [
+              0.0026000000000000003,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.010248768828001048,
+              0.007815435494667714
+            ],
+            [
+              0.0,
+              0.007815435494667714,
+              0.008015435494667714
+            ]
+          ],
+          "score": {
+            "n": 2,
+            "groups": 1,
+            "median_cm": 0.0,
+            "p95_cm": 0.0,
+            "rmse_cm": 0.0,
+            "bias_cm": [
+              0.0,
+              0.0
+            ],
+            "gaussian_nll": -3.791065589371667,
+            "group_mean_nll": -3.791065589371667,
+            "group_bootstrap_nll_ci95": [
+              -3.791065589371667,
+              -3.791065589371667
+            ],
+            "coverage": {
+              "0.5": 1.0,
+              "0.8": 1.0,
+              "0.9": 1.0,
+              "0.95": 1.0,
+              "0.99": 1.0
+            },
+            "mean_mahalanobis2": 0.0,
+            "rms_sigma_cm": 6.6799642267008155,
+            "updates": 0,
+            "yaw_rmse_deg": 40.51423422706978,
+            "pre_gate_mean_nis": null
+          }
+        },
+        {
+          "final_P": [
+            [
+              0.0032647338897388457,
+              -0.0020753710554618104,
+              -0.0023241722357473502
+            ],
+            [
+              -0.0020753710554618104,
+              0.009028183375485882,
+              0.007159650261393043
+            ],
+            [
+              -0.0023241722357473502,
+              0.007159650261393043,
+              0.008015435494667714
+            ]
+          ],
+          "score": {
+            "n": 2,
+            "groups": 1,
+            "median_cm": 15.274815740453857,
+            "p95_cm": 29.022149906862325,
+            "rmse_cm": 21.601851582899872,
+            "bias_cm": [
+              -4.131078596311122,
+              14.705583481654749
+            ],
+            "gaussian_nll": -1.3898108150668986,
+            "group_mean_nll": -1.3898108150668986,
+            "group_bootstrap_nll_ci95": [
+              -1.3898108150668986,
+              -1.3898108150668986
+            ],
+            "coverage": {
+              "0.5": 0.5,
+              "0.8": 0.5,
+              "0.9": 0.5,
+              "0.95": 0.5,
+              "0.99": 0.5
+            },
+            "mean_mahalanobis2": 4.831068292616079,
+            "rms_sigma_cm": 6.575126855282856,
+            "updates": 0,
+            "yaw_rmse_deg": 40.51423422706978,
+            "pre_gate_mean_nis": null
+          }
+        }
+      ]
+    },
+    {
+      "case": "unbounded_missing_motion",
+      "classification": "unbounded ZOH policy limit",
+      "expected": "Explicitly mark 10 s interval unsupported under declared motion-history limit; no bound is configured in replay",
+      "observed": {
+        "final_x": 10.0,
+        "interval_s": 10
+      }
+    },
+    {
+      "case": "missing_provenance_accepted",
+      "classification": "confirmed defect",
+      "expected": "Required source/artifact hashes must be present, not all None",
+      "observed": {
+        "fixed_route_selected": true,
+        "manifest_has_no_provenance_hashes": true
+      }
+    },
+    {
+      "case": "cross_arm_source_identity",
+      "classification": "confirmed defect",
+      "expected": "Matched arms must share controlled source/config/model identities",
+      "observed": {
+        "F1": "source_B",
+        "F4": null,
+        "both_selected": true
+      }
+    },
+    {
+      "case": "first_run_metadata_in_aggregate",
+      "classification": "confirmed defect",
+      "expected": "Aggregate two-run duration/path/gaps/outcomes or identify those as one named run; disclose per-metric valid n",
+      "observed": {
+        "n_runs": 2,
+        "completion": "stuck",
+        "completion_counts": {
+          "collision": 1,
+          "stuck": 1
+        },
+        "duration": 2.0,
+        "path": 2.0,
+        "gaps": {
+          "detector_rounds": 3,
+          "state_publications_seen": 3,
+          "state_fresh_rate_hz": 1.5,
+          "longest_gap_s": 0.4,
+          "median_gap_s": 0.4,
+          "note": "detector_rounds is the count of distinct camera readings. state_publications_seen is log rows with a fresh correction at the 10 Hz log rate, so it is an availability fraction times duration, not a count of corrections -- compare arms by the rate, not the count, because the drives differ in length."
+        },
+        "aggregation": "Each displayed point estimate is the median of the per-run statistic across 2 frozen seeds. Samples within a drive are not treated as independent runs."
+      }
+    },
+    {
+      "case": "unscoreable_metric_denominator",
+      "classification": "confirmed defect",
+      "expected": "Keep two attempts and disclose median based on only one run",
+      "observed": {
+        "n_runs": 2,
+        "median": 0.0,
+        "per_run": [
+          {
+            "median": 0.0,
+            "p95": 0.0,
+            "worst": 0.0
+          },
+          {
+            "median": null,
+            "p95": 0.0,
+            "worst": 0.0
+          }
+        ],
+        "aggregation": "Each displayed point estimate is the median of the per-run statistic across 2 frozen seeds. Samples within a drive are not treated as independent runs."
+      }
+    },
+    {
+      "case": "score_unknown_cli_option",
+      "classification": "confirmed defect",
+      "expected": "Unknown --taks must exit nonzero before selecting any route",
+      "observed": {
+        "calls": [
+          [
+            "F4",
+            "fusion_network_traverse"
+          ],
+          [
+            "F4",
+            "fusion_overlap_rich"
+          ],
+          [
+            "F4",
+            "fusion_overlap_sparse"
+          ],
+          [
+            "F4",
+            "fusion_long_traverse"
+          ]
+        ],
+        "result": {
+          "returned": true,
+          "result": 0
+        }
+      }
+    },
+    {
+      "case": "compare_cli_typo_control",
+      "classification": "verified repair",
+      "expected": "Unknown options refused before selection",
+      "observed": {
+        "returned": false,
+        "exception": "SystemExit",
+        "message": "unknown argument '--taks=fusion_overlap_rich'; use --task=<route> and --partial"
+      }
+    },
+    {
+      "case": "compare_task_spellings",
+      "classification": "verified repair",
+      "expected": "Both documented task spellings select the same route",
+      "observed": [
+        "fusion_overlap_rich",
+        "fusion_overlap_rich"
+      ]
+    },
+    {
+      "case": "monitor_task_and_attempt_identity",
+      "classification": "confirmed defect",
+      "expected": "2 tasks, 2 copies of seed110 distinguished from independent seeds, seed111 missing summary visible",
+      "observed": {
+        "task_ids": [
+          "fusion",
+          "fusion",
+          "fusion"
+        ],
+        "seeds": [
+          "110",
+          "110",
+          "110"
+        ],
+        "rows": 3,
+        "summaryless_visible": false
+      }
+    },
+    {
+      "case": "monitor_ground_truth_field",
+      "classification": "verified repair",
+      "expected": "Use .032 m GT summary, never .297 m wheel disagreement",
+      "observed": {
+        "gt_err_m": 0.032
+      }
+    },
+    {
+      "case": "navigation_freeze_extra_and_wrong_identity",
+      "classification": "confirmed defect",
+      "expected": "Fail extra ledger key and manifest task/seed != declared entry",
+      "observed": {
+        "entries": 1,
+        "declared_task": "requested_route",
+        "actual_task": "fusion_network_traverse",
+        "declared_seed": 210,
+        "actual_seed": 0,
+        "extra_key_retained": false
+      }
+    },
+    {
+      "case": "field_loader_unverified_entry",
+      "classification": "confirmed consumer guard gap; upstream thesis selector rejects schema3",
+      "expected": "Require schema >=7, all required file hashes, exact task/seed and frozen model identity",
+      "observed": {
+        "schema": 3,
+        "declared_task": "wrong_route",
+        "actual_task": "fusion_network_traverse",
+        "hashes_checked": 0,
+        "loaded_batches": 3
+      }
+    },
+    {
+      "case": "navigation_analyze_wrong_identity",
+      "classification": "confirmed defect",
+      "expected": "Reject task/seed mismatch before computing scores; camera-model calculation stubbed only",
+      "observed": {
+        "declared_task": "requested_route",
+        "manifest_task": "fusion_network_traverse",
+        "declared_seed": 210,
+        "manifest_seed": 0,
+        "status": "stuck"
+      }
+    },
+    {
+      "case": "navigation_protocol_hardcoded_task_seed",
+      "classification": "confirmed defect",
+      "expected": "--config requesting fusion_overlap_rich/seed999 must freeze that identity or reject unsupported task",
+      "observed": {
+        "config_task": "fusion_overlap_rich",
+        "config_seed": 999,
+        "protocol_task": "fusion_network_traverse",
+        "protocol_seeds": [
+          210
+        ]
+      }
+    },
+    {
+      "case": "network_duplicate_selected_runs",
+      "classification": "confirmed guard gap; registry lookup mocked to bind synthetic fixture",
+      "expected": "Reject six repeated entries as an invalid 2-route x 3-seed selection before writing protocol/loading",
+      "observed": {
+        "returned": false,
+        "exception": "ReachedLoad",
+        "message": "duplicate selection reached numerical loader"
+      }
+    },
+    {
+      "case": "cached_results_skip_validation",
+      "classification": "confirmed defect",
+      "expected": "Validate requested frozen inputs and model/source hashes before reusing results",
+      "observed": {
+        "run": "old_run",
+        "replay": "stale",
+        "field_sha256": "old"
+      }
+    },
+    {
+      "case": "tied_binary_metrics",
+      "classification": "verified control",
+      "expected": "Two tied scores with one positive => ROC AUC and AP both .5",
+      "observed": {
+        "auc": 0.5,
+        "ap": 0.5
+      }
+    },
+    {
+      "case": "auprc_nan_does_not_advance",
+      "classification": "confirmed optional utility bug; no current caller found",
+      "expected": "Reject/nonfinite-mask explicitly, terminate with finite population count",
+      "observed": {
+        "timeout": true,
+        "stdout": "ready\n"
+      }
+    },
+    {
+      "case": "ece_invalid_predictions_look_calibrated",
+      "classification": "confirmed defect",
+      "expected": "Reject invalid probabilities / report excluded n",
+      "observed": {
+        "ece": 0.0
+      }
+    }
+  ]
+}

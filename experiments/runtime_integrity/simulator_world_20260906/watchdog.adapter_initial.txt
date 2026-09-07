@@ -1,0 +1,21 @@
+[INFO] [1788729482.256270165] [audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd_adapter_initial]: Actuation noise node started: /audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd/cmd_input -> /audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd/cmd_output, enabled=True, seed=210, linear_slip_mean=0.030, linear_slip_std=0.060, linear_additive_std=0.008 m/s, angular_slip_std=0.040, angular_additive_std=0.035 rad/s, command_timeout=0.500s (simulation clock)
+[WARN] [1788729485.669312022] [audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd_adapter_initial]: Command watchdog stop: input age 0.500s
+[WARN] [1788729487.729123989] [audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd_adapter_initial]: Command watchdog stop: input age 0.511s
+[WARN] [1788729489.389358684] [audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd_adapter_initial]: Command watchdog stop: input age 1.120s
+[WARN] [1788729490.769607092] [audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd_adapter_initial]: Command watchdog stop: input age -4.561s
+Traceback (most recent call last):
+  File "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/lib/sim/actuation_noise_node", line 33, in <module>
+    sys.exit(load_entry_point('sim', 'console_scripts', 'actuation_noise_node')())
+  File "/home/joostleliveld/Thesis/UnembodiedNavigation/build/sim/sim/actuation_noise_node.py", line 209, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 808, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 797, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 780, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 681, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException

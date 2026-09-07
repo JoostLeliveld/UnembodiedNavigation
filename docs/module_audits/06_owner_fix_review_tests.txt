@@ -1,0 +1,43 @@
+............................................................F........... [ 52%]
+................................................................         [100%]
+=================================== FAILURES ===================================
+________ test_coverage_check_and_replay_cannot_see_different_histories _________
+
+    def test_coverage_check_and_replay_cannot_see_different_histories():
+        """A trim arriving between the check and the replay must not erase the turn.
+    
+        The coverage check accepted a full 60 s history containing a 0.2 rad turn.
+        When the check and the replay were two separate reads of the live buffer, an
+        odometry callback landing in between could trim that turn away, so the belief
+        stamp advanced 60 s over motion that was never integrated.
+        """
+        node = make_state_node(belief_stamp_s=0., now_s=60.)
+        node.use_odom_for_predict = True
+        node.heading_update_mode = 'coupled'
+        node.planner = MotionModel()
+        node._CMD_LOG_MAX_S = 60.
+        node._odom_log = [(k/10., 0., 1. if k < 2 else 0.) for k in range(600)]
+        assert covers_interval(node._odom_log, 0., 59.9, 1.5)
+    
+        predict = node._predict_belief_to_now
+        trimmed = []
+    
+        def input_arrives_after_coverage_check(*args, **kwargs):
+            # Runs after the coverage read and before replay. Without a shared
+            # snapshot this trims the already-verified turn out of the buffer.
+            node._clock.seconds = 60.2
+            node._odom_cb(_odom_msg(60.2))
+            trimmed.append(node._odom_log[0][0])
+            return predict(*args, **kwargs)
+    
+        node._predict_belief_to_now = input_arrives_after_coverage_check
+        node._advance_belief_over_outage(stamp(59.9), 59.9)
+    
+        # The interfering callback really did trim the verified turn from the buffer.
+>       assert trimmed and trimmed[0] > .2
+E       assert ([0.2] and 0.2 > 0.2)
+
+tests/planning/test_outage_motion_replay.py:110: AssertionError
+=========================== short test summary info ============================
+FAILED tests/planning/test_outage_motion_replay.py::test_coverage_check_and_replay_cannot_see_different_histories
+1 failed, 135 passed in 0.97s

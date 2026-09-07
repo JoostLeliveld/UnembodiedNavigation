@@ -1,0 +1,197 @@
+{
+  "source_hashes": {
+    "src/reliability/reliability/nodes/camera_manager_node.py": "5e11bd202de065a448154cc18192e63c507b2da058051a34e9ac14929d14c9a6",
+    "src/unav_common/unav_common/camera_model.py": "b20d6344b368e397986a995b1b3f16b42923e3651e3dbdd4daaf413d69541d96",
+    "src/reliability/reliability/projection.py": "fcbb865293096086d71738fc084677a22cabf9c579a2ba3c666ddb7d5325b119",
+    "src/reliability/reliability/learned_box_correction.py": "d382b5c37d74aa8087aa22b3a010feb6c4a28b03dc92afa3a9f8298e8e824659",
+    "src/reliability/reliability/reference_calibration.py": "442d2ad7876f6a95f537917acb358cce1ea0e3e5cf68ca71fef6e58bd7ac3542"
+  },
+  "hashes": {
+    "logs/perception_models/box_feature_bias_correction_20260831/models.joblib": "5da33c63a2bb46b3367e13acbb4eb96cab57388b5854a71db98676df176aad9d",
+    "logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json": "0a462258197b42537bafaf989642bb85b348c077e0557d8cdf5b890709cfe22d",
+    "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/capture_manifest.json": "d1b4d9ee3eefe6ce10a2b06d58d509c8a5f0114c57d2be08c69b76eb6474b1d8",
+    "logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bias_update_interpretations.csv": "2ef381a377b0ada5943ceeb96fcc3a5f2b670a805a1b5f3dc3f4944768fe6cc2",
+    "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf": "cb872fd438bd3275ac75da44c12013c01c91c95287ce29edaf6bd0f09073f3e3",
+    "docs/module_audits/05_geometry_probe.py": "f889eee69a3744bf27f593b9e5969b5972a367fc9106b52958d3b46373cec585"
+  },
+  "counts": {
+    "camera_B": 1235,
+    "camera_C": 877,
+    "camera_A": 1294,
+    "camera_D": 1339,
+    "camera_E": 1667
+  },
+  "max_abs_errors": {
+    "raw": 0.0,
+    "features": 3.552713678800501e-15,
+    "nn": 3.552713678800501e-15,
+    "manager_z": 3.552713678800501e-15,
+    "manager_R": 0.0,
+    "ray_oracle": 2.842170943040401e-14,
+    "jacobian": 1.5964396471446207e-11,
+    "covariance": 2.395117437714589e-11
+  },
+  "example": {
+    "camera": "camera_B",
+    "box": [
+      0.6729227900505066,
+      366.19384765625,
+      120.63645935058594,
+      454.72119140625
+    ],
+    "pixel": [
+      60.65469107031822,
+      454.72119140625
+    ],
+    "stamp": 1.0,
+    "stamp_note": "synthetic contract stamp; static table has no capture event stamp used here",
+    "raw": [
+      -7.773459460156418,
+      -8.982721594219168
+    ],
+    "features": [
+      6.316634629757904,
+      0.15831214857496462,
+      0.0937215129379183,
+      0.12295464409722222,
+      1.3551015028679818,
+      0.04738647739868611,
+      0.6315572102864583,
+      0.5254895957530965,
+      0.8508000263018609,
+      0.9600066542625427,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "ray_correction": [
+      0.256922942397184,
+      -0.31776882574670867
+    ],
+    "nn": [
+      -7.9915362765310665,
+      -8.637136688434255
+    ],
+    "bias": [
+      -0.020673684090573307,
+      -0.0399250047235681
+    ],
+    "z": [
+      -7.970862592440493,
+      -8.597211683710688
+    ],
+    "R": [
+      [
+        0.033313103557099315,
+        0.012617474882541087
+      ],
+      [
+        0.012617474882541087,
+        0.27909081853677753
+      ]
+    ]
+  },
+  "invalid": {
+    "above_horizon": {
+      "pixel": [
+        640.0,
+        -267.9830504232268
+      ],
+      "homography": [
+        -452.1108458265377,
+        -450.1124644671785
+      ],
+      "ray": null
+    },
+    "near_horizon": {
+      "pixel": [
+        640.0,
+        -257.9830494232268
+      ],
+      "homography": [
+        4372469359.203513,
+        4372485422.20982
+      ],
+      "ray": [
+        4372469980.030228,
+        4372486043.038813
+      ]
+    },
+    "nan": {
+      "pixel": [
+        NaN,
+        400.0
+      ],
+      "homography": [
+        NaN,
+        NaN
+      ],
+      "ray": [
+        NaN,
+        NaN
+      ]
+    },
+    "wrong_camera_map_output": [
+      -13.275206067615727,
+      -2.121666988410209
+    ],
+    "wrong_camera_map_shift_m": 8.37070718658037,
+    "wrong_calibration": {
+      "mapped": 1,
+      "z": [
+        -7.970862592440493,
+        -8.597211683710688
+      ]
+    },
+    "pixel_box_disagree": {
+      "mapped": 1,
+      "z": [
+        -7.799545871091668,
+        -8.523090298053129
+      ]
+    },
+    "wrong_frame": {
+      "mapped": 1,
+      "z": [
+        -7.970862592440493,
+        -8.597211683710688
+      ]
+    },
+    "zero_box": {
+      "mapped": 1,
+      "z": [
+        -7.365196282834771,
+        -8.421895527867276
+      ]
+    },
+    "reversed_box": {
+      "mapped": 1,
+      "z": [
+        -22.13042322785063,
+        -15.315091209082206
+      ]
+    }
+  },
+  "permutations": 120,
+  "permutation_max": 0.0,
+  "optional": {
+    "hull_jacobian_step_difference": 1.250335279756598e-09,
+    "hull_covariance_error": 1.3877787807814457e-17,
+    "condition_30_accepted": true,
+    "pixel_noise_helper": [
+      1.0563367525864772e-05,
+      1.4282771713811264e-05
+    ],
+    "world_axis_std_oracle": [
+      1.2561500345784221e-05,
+      1.2561513845318245e-05
+    ],
+    "floor_rank_one_eigenvalues": [
+      0.0,
+      200000000.0
+    ]
+  },
+  "horizon_v": -257.9830504232268
+}

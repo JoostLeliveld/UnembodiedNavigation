@@ -1,0 +1,14 @@
+{
+  "requested_route__P0__seed210": {
+    "finished_at": "synthetic",
+    "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/base",
+    "outcome": "stuck",
+    "completion_reason": "stuck"
+  },
+  "unexpected__P2__seed999": {
+    "finished_at": "synthetic",
+    "run_dir": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/alignment_reporting_20260906/fixtures/base",
+    "outcome": "stuck",
+    "completion_reason": "stuck"
+  }
+}

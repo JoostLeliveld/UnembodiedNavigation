@@ -1,0 +1,39 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______________ test_outcome_is_journaled_before_failing_transport ______________
+
+tmp_path = PosixPath('/tmp/pytest-of-joostleliveld/pytest-85/test_outcome_is_journaled_befo0')
+
+    def test_outcome_is_journaled_before_failing_transport(tmp_path):
+        recorded = []
+        class Journal:
+            def append(self, event):
+                recorded.append(dict(event))
+                return dict(event, event_id='producer:1')
+        def fail(message):
+            assert recorded, 'transport attempted before durable journal append'
+            raise RuntimeError('publisher unavailable')
+        node = NS(_producer_epoch='producer', _outcome_journal=Journal(),
+                  get_clock=lambda: NS(now=lambda: NS(nanoseconds=1)),
+                  get_logger=lambda: NS(info=lambda _: None),
+                  batch_outcome_publisher=NS(publish=fail))
+        with pytest.raises(RuntimeError, match='publisher unavailable'):
+>           method('_publish_batch_outcome')(node, dict(status='aborted', source_batch_id='cycle'))
+
+tests/perception/test_detector_outcome_transport_04.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/perception/perception/nodes/batched_four_camera_yolo_node.py:631: in _publish_batch_outcome
+    self.batch_outcome_publisher.publish(message)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+message = namespace(data='{"producer_epoch": "producer", "publish_stamp_s": 1e-09, "schema_version": "camera_batch_outcome.v1", "source_batch_id": "cycle", "stage": "detector", "status": "aborted"}')
+
+    def fail(message):
+>       assert recorded, 'transport attempted before durable journal append'
+E       AssertionError: transport attempted before durable journal append
+E       assert []
+
+tests/perception/test_detector_outcome_transport_04.py:33: AssertionError
+=========================== short test summary info ============================
+FAILED tests/perception/test_detector_outcome_transport_04.py::test_outcome_is_journaled_before_failing_transport
+1 failed in 0.09s

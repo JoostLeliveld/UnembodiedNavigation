@@ -1,0 +1,26 @@
+{
+  "sources": {
+    "src/planning/planning/core/camera_network.py": "3fa1dc1c86a2ed81627445371d63cba044160ab1728ffc1a3c4416e0be7f06b2",
+    "src/planning/planning/core/casadi_efe.py": "d1f091b833e34ecc4dacbbdc5c1a6b23bc7055fc64ba4f28fa55438c8d051380",
+    "src/planning/planning/core/efe_utils.py": "39ca64e8f56262828cdbd8fabf964cff457e95fb4533d44b72e79871ed6cfdaa",
+    "src/planning/planning/core/rollout.py": "57ec3ac5e542dfbea3cb5e6df7f53f92bb7ee2d4e1a5ea2842c37a9e53e694c2",
+    "src/planning/planning/core/visibility_gp_map.py": "49e3f53baaccb4312a3651e016ea018944e123dd883a04740503614538c2b6e9",
+    "src/planning/planning/core/nogo_cost.py": "6cd27d0d9a9e552b183cf40ecbea93a561f3c573b2b81fef18ea5c39f56f0232",
+    "src/planning/planning/core/dynamics.py": "7a6bde9ddfbc2b100b328fd5d1ae870438a57f1f95e2f7f91e8a6b51859a4107",
+    "src/planning/planning/planners/base_planner.py": "abe6edffd6ac66998088c71884e256d56f7f3dbc798bf5684a86a623d4edffdb",
+    "src/planning/planning/nodes/efe_agent_node.py": "a575ba53e74a835ee955625b14e5718c09939fc36d206ef8b35b4a0c405818ae",
+    "src/planning/planning/nodes/unicycle_planner_node.py": "56100b37b8e9351d1cee3d4e089357503e53838db428c4261e0bf1a11f76514f",
+    "src/unav_common/unav_common/camera_model.py": "b20d6344b368e397986a995b1b3f16b42923e3651e3dbdd4daaf413d69541d96",
+    "src/unav_common/unav_common/occlusion_geometry.py": "1d99eecf14435a0efb6e167c3e829d94eea3fe614972b83869873214b949a6e4",
+    "src/experiments/experiments/core/visibility_launch_common.py": "de61a0fe93250d3207629ddb37d10d5d04b8e605452725b831b74882d2b98817",
+    "src/experiments/launch/warehouse_primary_comparison.launch.py": "31d8d26fc9b5fdce318ead2a1335809c01937b7244e52e1f4b966bf0d90dea81",
+    "scripts/visibility_comparison/run_visibility_campaign.py": "ec4b7dc26eaf2a9dcd2671705563382c8e765e2e5ff145f087bd58d29ea17af2",
+    "experiments/icra_commissioning/export_network_planner.py": "2827ecc2951df0f7ec6d9e47fff23b52d2df55c8beb34d394b3c817af388deda",
+    "experiments/icra_commissioning/verify_network_planner.py": "2531dbaeb208cdc0fefa332209ddca116caa360b8137ee583dca4a9c5e216ac3",
+    "experiments/icra_commissioning/future.py": "20e7116f4ac480cce67d0b574292b0da33e1a8f947a737ccf6ed28d2e816cadb",
+    "experiments/icra_commissioning/network_route_probe.py": "61771b98d0f6b6ee31912646f3d3926d808300bcd9c2e22654351869a8de1ae4",
+    "experiments/icra_commissioning/network_navigation_runtime_pilot.yaml": "72d7318718c9510f5b4bb570927be0650f16e4c0186440562e6c8a2cf167d380",
+    "experiments/icra_commissioning/network_navigation_recovery_pilot.yaml": "db917172697b66c40d5fd61aeae681454ef62296ca7dc997851871e98142400b"
+  },
+  "scope": "Original investigation 08 tested source bytes; no runtime edits"
+}

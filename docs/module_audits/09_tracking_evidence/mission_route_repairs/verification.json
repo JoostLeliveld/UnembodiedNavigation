@@ -1,0 +1,86 @@
+{
+  "captured_at_utc": "2026-09-07T08:09:42.638454+00:00",
+  "snapshot_timing": "Captured after the final live-source test packet. No claim of cross-owner source immutability during test execution.",
+  "files": {
+    "src/experiments/experiments/nodes/goal_mission_node.py": {
+      "sha256": "f1bff205df2a4663b3bcec80f1dcdea4028b1df140c71706dcc32b564db0d812",
+      "owner_09": true
+    },
+    "src/unav_common/unav_common/mission_goal.py": {
+      "sha256": "235084120f2d7879bb6c4b7556284e7af834d3868f6b34eb4f514963619da12b",
+      "owner_09": true
+    },
+    "src/unav_common/unav_common/operational_belief.py": {
+      "sha256": "07c0048eb19217e7120f780177fc12d68ff121d2f64d6395c4d8fea16a971876",
+      "owner_09": true
+    },
+    "src/unav_common/unav_common/lane_graph_routes.py": {
+      "sha256": "bb426d9367bb25e67d82380e1dbbeaf911c6a773847c867fe6214503f24c631c",
+      "owner_09": true
+    },
+    "tests/test_operational_belief.py": {
+      "sha256": "d24a2dde4d0f3f6f16c2e412939466b468655318b4f75ea08aada494e616ee08",
+      "owner_09": true
+    },
+    "tests/experiments/test_goal_mission_validity.py": {
+      "sha256": "716ea9cdd244d371ebc8fba42b70f5750ec1d98b41dae3263333936aec4cf2d1",
+      "owner_09": true
+    },
+    "tests/experiments/test_goal_mission_traffic.py": {
+      "sha256": "a3ea627fa0b74514eb29def7428719b46a6604000f9a9503142afe9ad6f98346",
+      "owner_09": true
+    },
+    "tests/experiments/test_mission_goal_contract.py": {
+      "sha256": "863d8690f16d544727855ba22166ff12a3a3ccbc1b5313182ee00d9e6a1072bd",
+      "owner_09": true
+    },
+    "tests/planning/test_route_seed_origin.py": {
+      "sha256": "7fcbe2bf23203859a43029ec33ccde2a252779a18bb806321b23a9f0902c8435",
+      "owner_09": true
+    },
+    "src/planning/planning/core/belief_state.py": {
+      "sha256": "f18a6a5c9627e40d662e55fec894950c2553ed095e409a2274a930832272a660",
+      "owner_09": false
+    },
+    "src/planning/planning/nodes/unicycle_planner_node.py": {
+      "sha256": "e375e2cc35d54791b0ce54467fe9770f428f071ba0d1a14167a13ea7d94cd1f5",
+      "owner_09": false
+    },
+    "src/planning/planning/nodes/efe_agent_node.py": {
+      "sha256": "6aa2779b14b6135702b336c2c6f76fd8fd3eafa94a99f5cf70931dc7eecd74f3",
+      "owner_09": false
+    },
+    "src/experiments/experiments/nodes/experiment_logger.py": {
+      "sha256": "4b5a1225d1bd74ac7ab406821d93a609ad3435f6684d99295ec895d098fee570",
+      "owner_09": false
+    },
+    "src/reliability/reliability/manager_state.py": {
+      "sha256": "f913114b362ed9ae3641b0a298cd8905ba8a871953823ad870a7b18161486718",
+      "owner_09": false
+    },
+    "src/experiments/experiments/core/visibility_launch_common.py": {
+      "sha256": "0dafdaf1fcdaae56014af651e87b5bfad00e89ae1f72ffcaa006806f84aa9d21",
+      "owner_09": false
+    }
+  },
+  "command": [
+    "python3",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/test_operational_belief.py",
+    "tests/experiments/test_goal_mission_validity.py",
+    "tests/experiments/test_goal_mission_traffic.py",
+    "tests/experiments/test_mission_goal_contract.py",
+    "tests/planning/test_route_seed_origin.py",
+    "tests/planning/test_lane_graph_routes.py",
+    "tests/planning/test_preselected_route.py",
+    "tests/reliability/test_manager_integrity_07.py",
+    "tests/planning/test_global_route_installation.py",
+    "tests/experiments/test_logger_event_accounting_repair.py"
+  ],
+  "exit_code": 0,
+  "result": "236 passed in 4.10s",
+  "tool_exec_session": 55971,
+  "scope": "Pure/component tests; no ROS initialization, DDS traffic or simulation"
+}

@@ -1,0 +1,65 @@
+...................................................F..F                  [100%]
+=================================== FAILURES ===================================
+________ test_new_planner_loads_without_rebuilding_and_preserves_values ________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7d6f5f3312d0>
+tmp_path = PosixPath('/tmp/pytest-of-joostleliveld/pytest-43/test_new_planner_loads_without0')
+
+    def test_new_planner_loads_without_rebuilding_and_preserves_values(monkeypatch, tmp_path):
+        monkeypatch.setenv('UNAV_CASADI_CACHE_DIR', str(tmp_path))
+        monkeypatch.setenv('UNAV_CASADI_JIT', '0')
+        first = function(planner())
+        expected = evaluate(first)
+        assert first.cache_info['status'] == 'miss'
+        def forbidden(*args, **kwargs):
+            raise AssertionError('cache hit rebuilt the function')
+        monkeypatch.setattr(casadi_efe, 'make_efe_valgrad_fn', forbidden)
+>       second = function(planner())
+
+tests/planning/test_casadi_cache.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/planning/test_casadi_cache.py:23: in function
+    return p._get_casadi_valgrad([2., 1.], None,
+src/planning/planning/planners/base_planner.py:1040: in _get_casadi_valgrad
+    valgrad = casadi_efe.make_efe_valgrad_fn(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (CasadiEfeParams(R_visible=array([[6.25, 0.  ],
+       [0.  , 6.25]]), R_miss=array([[14400.,     0.],
+       [    0.,...     [-6.69229600e+01, -7.20708800e+01,  4.05712480e+03],
+       [ 6.08007925e-01,  6.54777766e-01,  8.79647158e+00]]))
+kwargs = {'R_plan_state': None, 'approx': 'ET1', 'nogo_belief_cost': None, 'nogo_cost': None, ...}
+
+    def forbidden(*args, **kwargs):
+>       raise AssertionError('cache hit rebuilt the function')
+E       AssertionError: cache hit rebuilt the function
+
+tests/planning/test_casadi_cache.py:39: AssertionError
+____ test_compiled_function_and_embedded_reload_preserve_value_and_gradient ____
+
+tmp_path = PosixPath('/tmp/pytest-of-joostleliveld/pytest-43/test_compiled_function_and_emb0')
+
+    def test_compiled_function_and_embedded_reload_preserve_value_and_gradient(tmp_path):
+        native = function(planner())
+        compiled = compile_function(native.casadi_function)
+        cache = FunctionCache(tmp_path)
+        cache.save('compiled_fixture', compiled)
+        loaded = cache.load('compiled_fixture')
+>       assert loaded is not None
+E       assert None is not None
+
+tests/planning/test_casadi_cache.py:84: AssertionError
+=============================== warnings summary ===============================
+tests/planning/test_camera_network.py: 30 warnings
+  Warning: Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)
+
+tests/planning/test_casadi_cache.py::test_new_planner_loads_without_rebuilding_and_preserves_values
+tests/planning/test_casadi_cache.py::test_compiled_function_and_embedded_reload_preserve_value_and_gradient
+  Warning: Ignoring unusable planner cache entry: .../casadi/core/serializing_stream.hpp:190: Assertion "false" failed:
+  Notify the CasADi developers.
+
+-- Docs: https://docs.pytest.org/en/stable/warnings.html
+=========================== short test summary info ============================
+FAILED tests/planning/test_casadi_cache.py::test_new_planner_loads_without_rebuilding_and_preserves_values
+FAILED tests/planning/test_casadi_cache.py::test_compiled_function_and_embedded_reload_preserve_value_and_gradient
+2 failed, 53 passed, 32 warnings in 2.06s

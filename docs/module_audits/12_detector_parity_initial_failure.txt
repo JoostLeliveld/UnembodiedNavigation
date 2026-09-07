@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/home/joostleliveld/Thesis/UnembodiedNavigation/docs/module_audits/12_detector_parity.py", line 31, in <module>
+    runtime=env['_predict_batch'](node,images)
+  File "/home/joostleliveld/Thesis/UnembodiedNavigation/src/perception/perception/nodes/batched_four_camera_yolo_node.py", line 675, in _predict_batch
+    started_wall = time.perf_counter()
+NameError: name 'time' is not defined

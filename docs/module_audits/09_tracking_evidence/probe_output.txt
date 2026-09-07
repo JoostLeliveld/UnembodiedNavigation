@@ -1,0 +1,817 @@
+{
+  "cases": 50,
+  "results": {
+    "mission_negative_variance": {
+      "ready": true,
+      "waypoint": 1,
+      "published_goal": [
+        0.08,
+        0.0
+      ],
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0,
+      "belief_stamp": 10,
+      "belief_frame": "map_bev"
+    },
+    "mission_indefinite_xy": {
+      "ready": true,
+      "waypoint": 1,
+      "published_goal": [
+        0.08,
+        0.0
+      ],
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0,
+      "belief_stamp": 10,
+      "belief_frame": "map_bev"
+    },
+    "mission_wrong_frame": {
+      "ready": true,
+      "waypoint": 1,
+      "published_goal": [
+        0.08,
+        0.0
+      ],
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0,
+      "belief_stamp": 10,
+      "belief_frame": "odom"
+    },
+    "mission_stale": {
+      "ready": true,
+      "waypoint": 1,
+      "published_goal": [
+        0.08,
+        0.0
+      ],
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0,
+      "belief_stamp": 0,
+      "belief_frame": "map_bev"
+    },
+    "mission_nan_position": {
+      "ready": true,
+      "waypoint": 0,
+      "published_goal": [
+        0.0,
+        0.0
+      ],
+      "goal_stamp": 1788728000,
+      "sim_now": 10.0,
+      "belief_stamp": 10,
+      "belief_frame": "map_bev"
+    },
+    "short_duplicate_sharp_turn_handoff": {
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.04,
+          0.0
+        ],
+        [
+          0.04,
+          0.0
+        ],
+        [
+          0.04,
+          0.04
+        ],
+        [
+          1.0,
+          0.04
+        ]
+      ],
+      "target_index": 4,
+      "target": [
+        1.0,
+        0.04
+      ],
+      "commands": [
+        [
+          0.2113781816426279,
+          0.07995737424658009
+        ]
+      ],
+      "lane_dedupe": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.04,
+          0.0
+        ],
+        [
+          0.04,
+          0.04
+        ],
+        [
+          1.0,
+          0.04
+        ]
+      ]
+    },
+    "preselected_duplicate_rejection": "route points 1 and 2 are duplicates; the executed polyline must be unambiguous",
+    "downsample_loses_corner": {
+      "source": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.11,
+          0.0,
+          0.0
+        ],
+        [
+          0.11,
+          0.11,
+          1.5707963267948966
+        ]
+      ],
+      "output": [
+        [
+          0.11,
+          0.11
+        ]
+      ]
+    },
+    "spacing_is_threshold_not_maximum": [
+      [
+        0.22,
+        0.0
+      ],
+      [
+        0.44,
+        0.0
+      ],
+      [
+        0.66,
+        0.0
+      ],
+      [
+        0.88,
+        0.0
+      ]
+    ],
+    "goal_change_0.999": {
+      "global_goal": [
+        1.0,
+        0.0
+      ],
+      "current_goal": 1.999,
+      "target": [
+        1.0,
+        0.0
+      ],
+      "waypoints": [
+        [
+          1.0,
+          0.0
+        ]
+      ],
+      "commands": [
+        [
+          0.0,
+          0.0
+        ]
+      ]
+    },
+    "goal_change_1.0": {
+      "global_goal": [
+        1.0,
+        0.0
+      ],
+      "current_goal": 2.0,
+      "target": [
+        1.0,
+        0.0
+      ],
+      "waypoints": [
+        [
+          1.0,
+          0.0
+        ]
+      ],
+      "commands": [
+        [
+          0.0,
+          0.0
+        ]
+      ]
+    },
+    "goal_change_1.001": {
+      "global_goal": [
+        2.001,
+        0.0
+      ],
+      "current_goal": 2.001,
+      "target": [
+        1.0,
+        0.0
+      ],
+      "waypoints": [
+        [
+          1.1668333333333334,
+          0.0
+        ],
+        [
+          1.3336666666666666,
+          0.0
+        ],
+        [
+          1.5005,
+          0.0
+        ],
+        [
+          1.6673333333333331,
+          0.0
+        ],
+        [
+          1.8341666666666665,
+          0.0
+        ],
+        [
+          2.001,
+          0.0
+        ]
+      ],
+      "commands": []
+    },
+    "goal_and_belief_during_global_solve": {
+      "installed_route": [
+        [
+          1.0,
+          0.0
+        ]
+      ],
+      "route_goal": [
+        1.0,
+        0.0
+      ],
+      "latest_goal": -2.0,
+      "current_belief": [
+        0.0,
+        1.0,
+        3.141592653589793
+      ]
+    },
+    "during_local_goal": {
+      "commands": [
+        [
+          0.22,
+          0.0
+        ]
+      ],
+      "belief": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "goal": -2.0,
+      "target": [
+        1.0,
+        0.0
+      ]
+    },
+    "during_local_belief": {
+      "commands": [
+        [
+          0.22,
+          0.0
+        ]
+      ],
+      "belief": [
+        0.0,
+        0.0,
+        3.141592653589793
+      ],
+      "goal": 1.0,
+      "target": [
+        1.0,
+        0.0
+      ]
+    },
+    "during_local_ordinary_stop": {
+      "commands": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.22,
+          0.0
+        ]
+      ],
+      "belief": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "goal": 1.0,
+      "target": [
+        1.0,
+        0.0
+      ]
+    },
+    "during_local_fatal_stop": {
+      "commands": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "belief": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "goal": 1.0,
+      "target": [
+        1.0,
+        0.0
+      ]
+    },
+    "belief_update_during_active_tape": {
+      "commands": [
+        [
+          0.22,
+          0.0
+        ],
+        [
+          0.22,
+          0.0
+        ]
+      ],
+      "current_belief": [
+        0.0,
+        0.0,
+        3.141592653589793
+      ]
+    },
+    "hierarchical_wrong_frame_skips_validation": {
+      "index": 1,
+      "state_frame": "odom",
+      "goal_frame": "map_bev",
+      "commands": [
+        [
+          0.22,
+          0.0
+        ]
+      ]
+    },
+    "final_within_controller_stop": {
+      "index": 0,
+      "count": 1,
+      "distance": 0.049000000000000044,
+      "commands": [
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "tape_length": 12
+    },
+    "final_outside_controller_stop": {
+      "index": 0,
+      "count": 1,
+      "distance": 0.051000000000000045,
+      "commands": [
+        [
+          0.22,
+          0.0
+        ]
+      ],
+      "tape_length": 12
+    },
+    "recovery_allowance_ratchet": {
+      "start_penetration_m": 0.001,
+      "final_penetration_m": 0.1328592450491349
+    },
+    "nonfinite_clearance_fails_open": [
+      12,
+      ""
+    ],
+    "logger_goal_inside": {
+      "reason": "goal_reached",
+      "decision_stamp": 12.0,
+      "belief_stamp": 12.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 0.349,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "logger_goal_on_boundary": {
+      "reason": "goal_reached",
+      "decision_stamp": 12.0,
+      "belief_stamp": 12.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 0.35,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "logger_goal_outside": {
+      "snapshot": null,
+      "history_samples": 2
+    },
+    "logger_goal_stale": {
+      "reason": "goal_reached",
+      "decision_stamp": 12.0,
+      "belief_stamp": 0.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 0.349,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "logger_goal_wrong_frame": {
+      "reason": "goal_reached",
+      "decision_stamp": 12.0,
+      "belief_stamp": 12.0,
+      "belief_frame": "odom",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 0.349,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "logger_goal_negative_covariance": {
+      "reason": "goal_reached",
+      "decision_stamp": 12.0,
+      "belief_stamp": 12.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 0.349,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "logger_goal_indefinite_covariance": {
+      "reason": "goal_reached",
+      "decision_stamp": 12.0,
+      "belief_stamp": 12.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 0.349,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "logger_goal_future_stamp": {
+      "reason": "goal_reached",
+      "decision_stamp": 12.0,
+      "belief_stamp": 100.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 0.349,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "logger_goal_change_inherits_hold": {
+      "reason": "goal_reached",
+      "decision_stamp": 12.0,
+      "belief_stamp": 12.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 0.3,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "stuck_rotation": {
+      "reason": "stuck",
+      "decision_stamp": 8,
+      "belief_stamp": 8.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.029203673205103534
+      ],
+      "operational_goal_distance_m": 1.0,
+      "command": [
+        0.0,
+        0.2
+      ]
+    },
+    "stuck_idle_replan": {
+      "reason": "stuck",
+      "decision_stamp": 8,
+      "belief_stamp": 8.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 1.0,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "stuck_stale_belief": {
+      "reason": "stuck",
+      "decision_stamp": 8,
+      "belief_stamp": 0.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 1.0,
+      "command": [
+        0.22,
+        0.0
+      ]
+    },
+    "stuck_oscillation": {
+      "reason": "stuck",
+      "decision_stamp": 8,
+      "belief_stamp": 8.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        -7.347880794884119e-17,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 1.0,
+      "command": [
+        0.22,
+        0.0
+      ]
+    },
+    "stuck_mixed_activity": {
+      "snapshot": null,
+      "history_samples": 9,
+      "window": {
+        "duration_s": 8.0,
+        "displacement_m": 0.0,
+        "goal_improvement_m": 0.0,
+        "cmd_fraction": 0.3333333333333333
+      },
+      "heading_change_rad": 0.0
+    },
+    "silent_contact_publisher_then_disappears": {
+      "reason": "goal_reached",
+      "decision_stamp": 12.0,
+      "belief_stamp": 10.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 0.3,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "no_contact_publisher_first_command": {
+      "reason": "infra_invalid_contact_channel",
+      "decision_stamp": 10.0,
+      "belief_stamp": 10.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 1.0,
+      "command": [
+        0.22,
+        0.0
+      ]
+    },
+    "stop_cause_planner_clearance_stop": {
+      "reason": "stuck",
+      "decision_stamp": 8,
+      "belief_stamp": 8.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 1.0,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "stop_cause_controller_zero": {
+      "reason": "stuck",
+      "decision_stamp": 8,
+      "belief_stamp": 8.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 1.0,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "stop_cause_tape_exhausted": {
+      "reason": "stuck",
+      "decision_stamp": 8,
+      "belief_stamp": 8.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 1.0,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "stop_cause_watchdog": {
+      "reason": "stuck",
+      "decision_stamp": 8,
+      "belief_stamp": 8.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 1.0,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "stop_cause_goal_change_wait": {
+      "reason": "stuck",
+      "decision_stamp": 8,
+      "belief_stamp": 8.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 1.0,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "stop_cause_contact": {
+      "reason": "collision",
+      "decision_stamp": 8.123,
+      "belief_stamp": 8.123,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 1.0,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "stop_cause_timeout": {
+      "reason": "timeout_after_first_cmd",
+      "decision_stamp": 600.0,
+      "belief_stamp": 600.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 1.0,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "stop_cause_fatal_stop": {
+      "reason": "stuck",
+      "decision_stamp": 8,
+      "belief_stamp": 8.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 1.0,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "summary_not_physical_stop": {
+      "reason": "goal_reached",
+      "decision_stamp": 12.0,
+      "belief_stamp": 12.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 0.3,
+      "command": [
+        0.22,
+        0.0
+      ]
+    },
+    "geometry_does_not_terminate_but_sets_crashed": {
+      "reason": "goal_reached",
+      "decision_stamp": 12.0,
+      "belief_stamp": 12.0,
+      "belief_frame": "map_bev",
+      "belief_pose": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "operational_goal_distance_m": 0.3,
+      "command": [
+        0.0,
+        0.0
+      ]
+    },
+    "zero_y_corridor_omitted": {
+      "at_zero": [],
+      "shifted_one_metre": [
+        {
+          "name": "above_connector",
+          "waypoints": [
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        }
+      ]
+    }
+  }
+}

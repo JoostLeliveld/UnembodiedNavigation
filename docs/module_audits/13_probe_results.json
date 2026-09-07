@@ -1,0 +1,430 @@
+{
+  "scope": "No live processes; fake process and action boundaries; real files only in temporary fixtures",
+  "probes": {
+    "typo_global": "accepted and omitted from launch",
+    "typo_task": "accepted and omitted from launch",
+    "typo_condition": "accepted and omitted from launch",
+    "typo_route": "accepted and omitted from launch",
+    "forward_tasks_yaml": {
+      "declared": "/tmp/unav-audit13-rol0odj6/custom_tasks.yaml",
+      "argument": "<omitted>"
+    },
+    "forward_world_profiles": {
+      "declared": "/tmp/unav-audit13-rol0odj6/custom_world.yaml",
+      "argument": "<omitted>"
+    },
+    "forward_state_correction_ekf": {
+      "declared": false,
+      "argument": "False"
+    },
+    "forward_pixel_correction_nis_threshold": {
+      "declared": 0,
+      "argument": "0"
+    },
+    "forward_pixel_timeout_s": {
+      "declared": null,
+      "argument": "<omitted>"
+    },
+    "forward_manager_covariance_profile": {
+      "declared": "",
+      "argument": "<omitted>"
+    },
+    "forward_enable_mission": {
+      "declared": false,
+      "argument": "<omitted>"
+    },
+    "forward_yolo_predict_conf_floor": {
+      "declared": 0.2,
+      "argument": "<omitted>"
+    },
+    "forward_simple_tracker_yaw_gate_rad": {
+      "declared": 0.1,
+      "argument": "<omitted>"
+    },
+    "precedence": {
+      "v_max": {
+        "resolver": 0,
+        "launch": "0.22"
+      },
+      "use_encoder_noise": {
+        "resolver": false,
+        "launch": "true"
+      },
+      "pixel_timeout_s": {
+        "resolver": 0,
+        "launch": "0"
+      }
+    },
+    "duplicate_seed_identity": [
+      "fusion_network_traverse__C0__seed1",
+      "fusion_network_traverse__C0__seed1",
+      "fusion_network_traverse__C0__seed1"
+    ],
+    "unknown_task_dry_validation": "accepted by campaign validation",
+    "duplicate_yaml_key": "duplicate dt silently keeps last value 0.5",
+    "zero_route_validation_fallback": {
+      "endpoint_tolerance_m": 0.25,
+      "sample_step_m": 0.04,
+      "declared_clearance_m": 0.25
+    },
+    "resume_no_summary_or_csv": [
+      true,
+      ""
+    ],
+    "resume_partial": [
+      true,
+      ""
+    ],
+    "resume_malformed": [
+      true,
+      ""
+    ],
+    "resume_invalid": [
+      true,
+      ""
+    ],
+    "resume_failed": [
+      true,
+      ""
+    ],
+    "resume_wrong_cell_identity": [
+      true,
+      ""
+    ],
+    "quoted_false_resume": {
+      "correct_false_manifest": [
+        false,
+        "use_command_noise mismatch: run used False, config expects false"
+      ],
+      "incorrect_true_manifest": [
+        true,
+        ""
+      ]
+    },
+    "model_replacement_cached": {
+      "stale_cache": [
+        true,
+        ""
+      ],
+      "fresh_process": [
+        false,
+        "yolo_model content hash mismatch"
+      ]
+    },
+    "resume_learned_mean_replaced": [
+      true,
+      ""
+    ],
+    "resume_legacy_gp_replaced": [
+      true,
+      ""
+    ],
+    "network_replacement_rejected": [
+      false,
+      "camera network artifact content hash mismatch"
+    ],
+    "fresh_incomplete_goal": {
+      "outcome": "goal_reached",
+      "completion_reason": "goal_reached",
+      "selected": "experiment_20000101_000000",
+      "returncode_ignored": 17,
+      "manifest_exists": false
+    },
+    "fresh_invalid_goal": {
+      "outcome": "goal_reached",
+      "completion_reason": "goal_reached",
+      "selected": "experiment_20000101_000000",
+      "returncode_ignored": 17,
+      "manifest_exists": false
+    },
+    "fresh_interrupted": {
+      "outcome": "interrupted",
+      "completion_reason": "interrupted",
+      "selected": "experiment_20000101_000000",
+      "returncode_ignored": 17,
+      "manifest_exists": false
+    },
+    "fresh_empty_summary": {
+      "outcome": "completed",
+      "completion_reason": "",
+      "selected": "experiment_20000101_000000",
+      "returncode_ignored": 17,
+      "manifest_exists": false
+    },
+    "spawn_failure": {
+      "error": "OSError: audit synthetic spawn failure",
+      "outcome": null,
+      "terminal_reason": null,
+      "cleanup": [],
+      "process_calls": 1
+    },
+    "recorder_failure": {
+      "error": "OSError: audit synthetic spawn failure",
+      "outcome": null,
+      "terminal_reason": null,
+      "cleanup": [],
+      "process_calls": 2
+    },
+    "ledger_interrupted_replace": "old ledger preserved",
+    "ledger_concurrent_writers": {
+      "old": {
+        "outcome": "goal_reached"
+      },
+      "completed_B": {
+        "outcome": "goal_reached"
+      }
+    },
+    "ledger_malformed_resume": "malformed existing ledger becomes empty dictionary",
+    "ledger_fsync_targets": [
+      "file"
+    ],
+    "duplicate_config_basename": {
+      "snapshot_keys": [
+        "same.yaml"
+      ],
+      "retained": "source B"
+    },
+    "same_second_run_ids": {
+      "run_id": "experiment_20260906_010203",
+      "run_dir": "/tmp/unav-audit13-rol0odj6/ids/experiment_20260906_010203"
+    },
+    "manifest_interrupted_rewrite": "{\"partial\":",
+    "dirty_source_and_cache": {
+      "fresh_tracked_change_detected": true,
+      "fresh_untracked_change_detected": true,
+      "second_manifest_keeps_first_hashes": true
+    },
+    "installed_source_attestation_gap": {
+      "imported": {
+        "value": "stale installed",
+        "path": "/tmp/unav-audit13-rol0odj6/installed/audit13_runtime.py"
+      },
+      "git_provenance_unchanged_when_installed_code_changes": true
+    },
+    "calibration_hash_load_race": {
+      "recorded_hash_matches_loaded_file": false,
+      "loaded_variance": 2.0,
+      "variance_of_recorded_bytes": 1
+    },
+    "simultaneous_tokens": {
+      "ours": [
+        8101
+      ],
+      "theirs": [
+        8103
+      ],
+      "campaign_A_domain": "211",
+      "campaign_B_domain": "211"
+    },
+    "invalid_runner_cli_exit": 2,
+    "invalid_launch_cli_task_alias": {
+      "argument": "task_name:=nonexistent_task",
+      "resolved_task": "fusion_overlap_primary"
+    },
+    "invalid_launch_mode": "typo_efe silently resolved to efe",
+    "declared_prediction_cap": {
+      "experiment_logger": 0.125,
+      "visibility_aware_efe_agent": 0.125
+    },
+    "explicit_false_ekf": "false reaches planner",
+    "multicam_zero_speed_cap": 0.22,
+    "summary_wrong_shape": "JSON list accepted as summary object",
+    "reasoned_refusal_contract": [
+      true,
+      ""
+    ],
+    "path_resolution_policy": {
+      "runner_subprocess_has_explicit_cwd": false,
+      "tasks_yaml": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/experiments/share/experiments/config/tasks.yaml",
+      "world_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/install/sim/share/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+      "manager_mean_path": "logs/perception_models/box_feature_bias_correction_20260831/models.joblib",
+      "detector_model_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt"
+    },
+    "registered_run_manifest_reuse_check": {
+      "selection_sha256": "66b928fbaf8f470332acff23922003822fcb58113d4bd085180ade5c54c0cfd0",
+      "selected": "fusion_network_traverse__P0__seed210",
+      "all_selected_hashes_match": true,
+      "same_recorded_git_resume": [
+        false,
+        "use_encoder_noise missing from run manifest"
+      ]
+    },
+    "registered_loader": "opened exact selected run through aligned.rows; no scores calculated",
+    "registered_correction_accounting": [
+      true,
+      ""
+    ],
+    "campaign_yaml_dry_checks": {
+      "baseline_cpu.yaml": {
+        "cells": 1,
+        "validation_and_command_build": "passed",
+        "cleanup_mode": "legacy_global",
+        "ros_domain_id_base": 151
+      },
+      "field_pilot_cpu.yaml": {
+        "cells": 6,
+        "validation_and_command_build": "passed",
+        "cleanup_mode": "legacy_global",
+        "ros_domain_id_base": 161
+      },
+      "field_pilot_remaining_cpu.yaml": {
+        "cells": 4,
+        "validation_and_command_build": "passed",
+        "cleanup_mode": "legacy_global",
+        "ros_domain_id_base": 161
+      },
+      "network_navigation_pilot.yaml": {
+        "cells": 3,
+        "validation_and_command_build": "passed",
+        "cleanup_mode": "isolated",
+        "ros_domain_id_base": 191
+      },
+      "network_navigation_recovery_pilot.yaml": {
+        "cells": 1,
+        "validation_and_command_build": "passed",
+        "cleanup_mode": "isolated",
+        "ros_domain_id_base": 214
+      },
+      "network_navigation_runtime_pilot.yaml": {
+        "cells": 3,
+        "validation_and_command_build": "passed",
+        "cleanup_mode": "isolated",
+        "ros_domain_id_base": 211
+      },
+      "network_navigation_tracking_pilot.yaml": {
+        "cells": 3,
+        "validation_and_command_build": "passed",
+        "cleanup_mode": "isolated",
+        "ros_domain_id_base": 201
+      },
+      "network_planner_pilot.yaml": {
+        "cells": 3,
+        "validation_and_command_build": "passed",
+        "cleanup_mode": "legacy_global",
+        "ros_domain_id_base": 191
+      }
+    },
+    "setting_inventory": {
+      "settings": 265,
+      "parsed": 257,
+      "node_parameter_sets": [
+        "wait_for_odom",
+        "actuation_noise_node",
+        "encoder_noise_node",
+        "yolo_robot_detector_node",
+        "pixel_to_bev_state_node",
+        "goal_mission_node",
+        "goal_marker_node",
+        "experiment_logger",
+        "rviz2",
+        "visibility_aware_efe_agent",
+        "batched_four_camera_yolo",
+        "camera_manager_active"
+      ]
+    },
+    "node_inventory": {
+      "parameters": 474,
+      "note": "AST literal/direct-helper declarations plus launch overrides; dynamic loops and internal clamps require linked source inspection"
+    },
+    "registered_provenance": {
+      "protocol_sources": 13,
+      "snapshots_matching": 13,
+      "current_sources_matching": 8,
+      "artifact_hashes": {
+        "yolo_model": {
+          "path": "logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt",
+          "current_sha256": "efff1949c1b8cdeeb11438b36de80f6cf8daeef5f3a4682cfce8ae7dfe314f34",
+          "recorded": "efff1949c1b8cdeeb11438b36de80f6cf8daeef5f3a4682cfce8ae7dfe314f34",
+          "matches": true
+        },
+        "camera_network_artifact_path": {
+          "path": "logs/studies/icra_commissioning_20260905/network_planner/uniform.npz",
+          "current_sha256": "9a312f1970c1689c1c830c12059e484fd285d97cb70c2e4d51b0a361319565ec",
+          "recorded": "9a312f1970c1689c1c830c12059e484fd285d97cb70c2e4d51b0a361319565ec",
+          "matches": true
+        },
+        "manager_commissioned_calibration_path": {
+          "path": "logs/studies/measurement_commissioning/calibration.json",
+          "current_sha256": "de578957683905763c5890e686345dee56cd583f5a5ade05b5050adc593ecc30",
+          "recorded": "de578957683905763c5890e686345dee56cd583f5a5ade05b5050adc593ecc30",
+          "matches": true
+        },
+        "manager_commissioned_world_covariance_path": {
+          "path": "logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json",
+          "current_sha256": "0a462258197b42537bafaf989642bb85b348c077e0557d8cdf5b890709cfe22d",
+          "recorded": "0a462258197b42537bafaf989642bb85b348c077e0557d8cdf5b890709cfe22d",
+          "matches": true
+        },
+        "manager_learned_correction_path": {
+          "path": "logs/perception_models/box_feature_bias_correction_20260831/models.joblib",
+          "current_sha256": "5da33c63a2bb46b3367e13acbb4eb96cab57388b5854a71db98676df176aad9d",
+          "recorded": null,
+          "matches": false
+        }
+      }
+    }
+  },
+  "executed_source_bytes": {
+    "audit13_campaign": {
+      "path": "scripts/visibility_comparison/run_visibility_campaign.py",
+      "sha256": "afc15e464fece7a17f9db106e7df39ee2eb2078dade1f1cecb2308a687b0ca9a",
+      "snapshot": "docs/module_audits/13_source_snapshot/afc15e464fec/scripts/visibility_comparison/run_visibility_campaign.py"
+    },
+    "experiments.core.visibility_launch_common": {
+      "path": "src/experiments/experiments/core/visibility_launch_common.py",
+      "sha256": "f8c9b281433480b80f7b165fa14482100da40456c3c5733ee1c5f26e65a91db9",
+      "snapshot": "docs/module_audits/13_source_snapshot/f8c9b2814334/src/experiments/experiments/core/visibility_launch_common.py"
+    },
+    "audit13_primary": {
+      "path": "src/experiments/launch/warehouse_primary_comparison.launch.py",
+      "sha256": "31d8d26fc9b5fdce318ead2a1335809c01937b7244e52e1f4b966bf0d90dea81",
+      "snapshot": "docs/module_audits/13_source_snapshot/31d8d26fc9b5/src/experiments/launch/warehouse_primary_comparison.launch.py"
+    },
+    "audit13_aligned": {
+      "path": "experiments/fusion_on_fixed_routes/aligned.py",
+      "sha256": "dabd8b9167af3f11ee21c7a42dbd795b847300c63ac0c69af3cc0167d3965f80",
+      "snapshot": "docs/module_audits/13_source_snapshot/dabd8b9167af/experiments/fusion_on_fixed_routes/aligned.py"
+    }
+  },
+  "source_hashes": {
+    "scripts/visibility_comparison/run_visibility_campaign.py": "afc15e464fece7a17f9db106e7df39ee2eb2078dade1f1cecb2308a687b0ca9a",
+    "scripts/visibility_comparison/common.py": "c3e3931695e89531873ca5c7728087e1b50b6843bfc5a07f8a5f54cabfee43a7",
+    "scripts/visibility_comparison/monitor_campaign.py": "efc02d43031511ec0b34d80b3833a95795e2840f240b673d2e6c42f2778b674f",
+    "src/experiments/experiments/core/visibility_launch_common.py": "f8c9b281433480b80f7b165fa14482100da40456c3c5733ee1c5f26e65a91db9",
+    "src/experiments/experiments/core/manifest.py": "d5a69d9e1994d3ef545b5c28ae6e2661af9f00d50e64bceca3cf47329223cddb",
+    "src/unav_common/unav_common/manifest.py": "f3f568e9edfcb97527629384f4421817286f0718086ef25ebe399dc4baa34e6e",
+    "src/experiments/experiments/core/tasks.py": "2c7fa63cf2b63c4605612dfaca5cbb13095b8f6d52e04847a8c15485a2f0bd57",
+    "src/experiments/experiments/core/world_profiles.py": "e4e8d61721e74c9cb003fac035dfdb17c1c93fd500be404f8a8c8219e1495424",
+    "src/experiments/experiments/nodes/experiment_logger.py": "6c03281600ad906020fee19af04e5454846bdf2b9c653da6f63266d767e678e3",
+    "src/perception/perception/nodes/batched_four_camera_yolo_node.py": "3d7d7ad0826d4310ca1e11ad8af0d2ae32ec01f6cf2d55fe83782c1e7782bc89",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "8557cb29f2e2e38e3cc8546441b93028f64b22458d776e9ba9e60e96f92f014a",
+    "src/reliability/reliability/reference_calibration.py": "442d2ad7876f6a95f537917acb358cce1ea0e3e5cf68ca71fef6e58bd7ac3542",
+    "src/planning/planning/nodes/unicycle_planner_node.py": "1191b8879b8515d7d2bd176015538cacd0bb9ed196af49da80d6cd8705bd8995",
+    "src/planning/planning/nodes/efe_agent_node.py": "a575ba53e74a835ee955625b14e5718c09939fc36d206ef8b35b4a0c405818ae",
+    "src/sim/sim/actuation_noise_node.py": "ce98aba1300bafcb79de5ff12a16842f8f391389cd0ec44e0329746699f7524f",
+    "experiments/icra_commissioning/network_navigation_analysis.py": "504c08f1ca4d6e3f91cb8a3552ce31384e1183c26d4bb3d981279af3e245cfd4",
+    "src/experiments/launch/warehouse_aws_notebook_capture.launch.py": "2ddec84bf9a039c8023a6107ea1dcd5c7dee4ad30fb9d1f120faa5e3d3c494ee",
+    "src/experiments/launch/warehouse_full4cam_commissioning.launch.py": "2f49fee752be332687702f84e984ee12fd72cc87bf53f55e146d276d34772a25",
+    "src/experiments/launch/warehouse_multicamera_extension.launch.py": "7efa38d8d28f9e7f5aaf85750390c733df43aa42998025f361b9c30ba74eaa52",
+    "src/experiments/launch/warehouse_primary_comparison.launch.py": "31d8d26fc9b5fdce318ead2a1335809c01937b7244e52e1f4b966bf0d90dea81",
+    "src/experiments/launch/warehouse_visibility_capture.launch.py": "b5dd97588a9f0d1003cadc2fe0a07d7fb15b31d20711514e0144df40c5888ee5",
+    "src/sim/launch/bringup_sim.launch.py": "4d50fe35a9ff1c63275c58ad897ee6661b135d1dd3108446ab4cf38d1306d6a9",
+    "src/sim/launch/gazebo.launch.py": "ef7af80549374f5d664c3dd249e15811ac071f9286e97b103f5616abbe47b88a",
+    "src/sim/launch/robot_description.launch.py": "6899e75f7191d42ca7925567235b9e2620f05541a87263f9f9bb541adb6778c6",
+    "src/experiments/setup.cfg": "d6ab7407ae3f4e60e9e0a3c75dd8d6886084370d2ef9154999a93136b0f95532",
+    "src/experiments/setup.py": "e9242f5451b0d4bc573ed7160b9d8f273ac1cee773dd8a337e922b1c2eac060f",
+    "src/perception/setup.cfg": "d3f76fd34626be7130c677d75d42cb981e6091b7f466125a2836938d7302667e",
+    "src/perception/setup.py": "6945bed6b640473a0df8db6aa5d2ea5543e90ad6941a166ece5674d11eda8c1b",
+    "src/planning/setup.cfg": "81fc31bba348453f5ebba70dfe1371128360cc3958f19e7485da88232ffb8d7d",
+    "src/planning/setup.py": "8bb65c0babeb7a392ed7018eed1ae5590e7ec2c41107b371ecaad4b1f42e2e0d",
+    "src/reliability/setup.cfg": "f1903c9e3df0398592c176cbb4ea121522bbed51fad4b6a7368d1ca0f0c97879",
+    "src/reliability/setup.py": "907103c1571a41bd442c3e8494a2fd9aa6fef09a2ebe27bfa2696e5ed609c0be",
+    "src/sim/setup.cfg": "231a26624b53fcbffc7f58436b931af1ad4e7ddc912bc05253b8c26b6278d9da",
+    "src/sim/setup.py": "b0d00f83bc7a1010863dea0eed8b82db374194c9907a2b2778c65bb03e4a9660",
+    "src/state/setup.cfg": "f600fe8dfedecaca92165db4e116a0f28be8991afa808b5d70d24083c8c7916e",
+    "src/state/setup.py": "bf8fa8fd2ec8b82b949dcaa85e27cb3b445063a46d115843565bc954585bdf55",
+    "src/unav_common/setup.cfg": "cb7999e21e14ad3139de26fa744728e964c1919045e730891947f594cda55b72",
+    "src/unav_common/setup.py": "ca4f5494985b819d173511539ad20905441ec52ebebb32725b5a313b5aa173cc"
+  },
+  "changed_during_probe": {}
+}

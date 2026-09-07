@@ -1,0 +1,26 @@
+{
+  "scope": "synthetic algebra/serialization; not navigation or calibration",
+  "casadi_version": "3.7.2",
+  "cases": {
+    "raw_diagonal_solve_serialization": {
+      "reload_succeeded": false,
+      "error": ".../casadi/core/serializing_stream.hpp:190: Assertion \"false\" failed:\nNotify the CasADi developers."
+    },
+    "repaired_risk": {
+      "examples": 20,
+      "max_value_error": 8.881784197001252e-16,
+      "max_finite_difference_gradient_error": 4.118838603517361e-10,
+      "max_serialized_reload_error": 0.0
+    },
+    "numpy_risk_solve_equivalence": {
+      "examples": 20,
+      "max_difference": 3.552713678800501e-15
+    }
+  },
+  "sources": {
+    "src/planning/planning/core/efe_utils.py": "03e7628422a9c46314c00082df91014a6d951a2e03f5eea889a71262f198d734",
+    "src/planning/planning/core/casadi_efe.py": "8ca250510db0cf494a38f846b93dff0f11f617f798424cf0ff05311e8a89fcd0",
+    "src/planning/planning/core/casadi_cache.py": "f0266d65949f74d8c2a4d712c3fdf87def5df602daf89043dcdd12672a9877a0"
+  },
+  "probe_sha256": "a85c211a68daaaddc52797b342efec26ab625f2da3e917ce4438da6084a7e30a"
+}

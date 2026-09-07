@@ -1,0 +1,2 @@
+stamp,source_batch_id,camera,used,obs_stamp,obs_x,obs_y,obs_cov_xx,obs_cov_xy,obs_cov_yy,fused_stamp,fused_x,fused_y,fused_cov_xx,fused_cov_xy,fused_cov_yy,n_candidates,n_used
+1.5,audit15:batch,A,1,1.0,0.2,0.0,0.03,0.0,0.03,1.0,0.2,0.0,0.03,0.0,0.03,1,1

@@ -1,0 +1,316 @@
+{
+  "scope": "Offline native reference only; nearest source-stamped samples, no interpolation, no online use.",
+  "partition": "audit14_watchdog_ccb6ec9121714feab8a67ea669c3ebcd",
+  "epoch_sample_counts": [
+    363,
+    222
+  ],
+  "phases": [
+    {
+      "label": "ready",
+      "epoch": 0,
+      "odom_stamp_s": 0.8,
+      "native_reference": {
+        "stamp_s": 0.803,
+        "entity": {
+          "name": "turtlebot3",
+          "id": 147,
+          "position": {
+            "x": -7.9000000000127155,
+            "y": -8.7,
+            "z": -4.77039247691855e-06
+          },
+          "orientation": {
+            "x": -5.667715137248649e-10,
+            "y": 1.265965012198014e-07,
+            "z": -2.9851285403208557e-13,
+            "w": 0.999999999999992
+          }
+        }
+      },
+      "reference_offset_s": 0.0030000000000000027
+    },
+    {
+      "label": "ordinary_silence_after_0_9_wall_s",
+      "epoch": 0,
+      "odom_stamp_s": 1.7200000000000002,
+      "native_reference": {
+        "stamp_s": 1.726,
+        "entity": {
+          "name": "turtlebot3",
+          "id": 147,
+          "position": {
+            "x": -7.80759157153369,
+            "y": -8.700765929067424,
+            "z": 5.856078106279337e-08
+          },
+          "orientation": {
+            "x": -2.318906701514248e-07,
+            "y": -2.0264509742210018e-05,
+            "z": -0.008649673749849771,
+            "w": 0.9999625906669295
+          }
+        }
+      },
+      "reference_offset_s": 0.005999999999999783
+    },
+    {
+      "label": "paused_after_command",
+      "epoch": 0,
+      "odom_stamp_s": 2.04,
+      "native_reference": {
+        "stamp_s": 2.044,
+        "entity": {
+          "name": "turtlebot3",
+          "id": 147,
+          "position": {
+            "x": -7.749054621518898,
+            "y": -8.701722875235177,
+            "z": 7.912655503282812e-08
+          },
+          "orientation": {
+            "x": -1.944297260788341e-09,
+            "y": 1.7738853794001211e-07,
+            "z": -0.0072184689349083725,
+            "w": 0.9999739465137101
+          }
+        }
+      },
+      "reference_offset_s": 0.0040000000000000036
+    },
+    {
+      "label": "resumed_after_pause",
+      "epoch": 0,
+      "odom_stamp_s": 2.74,
+      "native_reference": {
+        "stamp_s": 2.743,
+        "entity": {
+          "name": "turtlebot3",
+          "id": 147,
+          "position": {
+            "x": -7.714552432104817,
+            "y": -8.702168242804392,
+            "z": -1.7836661644438806e-07
+          },
+          "orientation": {
+            "x": -6.72552562073307e-07,
+            "y": -2.908856773112121e-07,
+            "z": -0.006374896618020115,
+            "w": 0.9999796801398378
+          }
+        }
+      },
+      "reference_offset_s": 0.0029999999999996696
+    },
+    {
+      "label": "before_clock_bridge_loss",
+      "epoch": 0,
+      "odom_stamp_s": 2.8600000000000003,
+      "native_reference": {
+        "stamp_s": 2.862,
+        "entity": {
+          "name": "turtlebot3",
+          "id": 147,
+          "position": {
+            "x": -7.69773410635765,
+            "y": -8.70240319726696,
+            "z": 7.803591646423599e-08
+          },
+          "orientation": {
+            "x": -4.919170003656903e-09,
+            "y": 5.573225869429859e-07,
+            "z": -0.006128290793785341,
+            "w": 0.9999812218495086
+          }
+        }
+      },
+      "reference_offset_s": 0.0019999999999997797
+    },
+    {
+      "label": "clock_bridge_lost_physics_running",
+      "epoch": 0,
+      "odom_stamp_s": 3.8600000000000003,
+      "native_reference": {
+        "stamp_s": 3.866,
+        "entity": {
+          "name": "turtlebot3",
+          "id": 147,
+          "position": {
+            "x": -7.517775407045563,
+            "y": -8.704001423617685,
+            "z": 7.977800433402451e-08
+          },
+          "orientation": {
+            "x": -2.3710701026965606e-10,
+            "y": 1.3307310257162687e-07,
+            "z": -0.0027491181204870865,
+            "w": 0.9999962211676312
+          }
+        }
+      },
+      "reference_offset_s": 0.005999999999999783
+    },
+    {
+      "label": "clock_bridge_restored",
+      "epoch": 0,
+      "odom_stamp_s": 4.66,
+      "native_reference": {
+        "stamp_s": 4.6530000000000005,
+        "entity": {
+          "name": "turtlebot3",
+          "id": 147,
+          "position": {
+            "x": -7.5140738026748775,
+            "y": -8.70401317062027,
+            "z": 8.101749301584333e-08
+          },
+          "orientation": {
+            "x": -1.6369991754267247e-10,
+            "y": 1.3947359015631378e-07,
+            "z": -0.002708728740480619,
+            "w": 0.9999963313875662
+          }
+        }
+      },
+      "reference_offset_s": -0.006999999999999673
+    },
+    {
+      "label": "before_reset",
+      "epoch": 0,
+      "odom_stamp_s": 4.78,
+      "native_reference": {
+        "stamp_s": 4.772,
+        "entity": {
+          "name": "turtlebot3",
+          "id": 147,
+          "position": {
+            "x": -7.497349386590297,
+            "y": -8.704103985553006,
+            "z": 8.070489792510456e-08
+          },
+          "orientation": {
+            "x": 7.685189118285341e-10,
+            "y": 6.336818858054257e-07,
+            "z": -0.0017809021050750778,
+            "w": 0.9999984141923879
+          }
+        }
+      },
+      "reference_offset_s": -0.008000000000000007
+    },
+    {
+      "label": "after_reset_no_new_command",
+      "epoch": 1,
+      "odom_stamp_s": 1.2,
+      "native_reference": {
+        "stamp_s": 1.193,
+        "entity": {
+          "name": "turtlebot3",
+          "id": 147,
+          "position": {
+            "x": -7.416974933553365,
+            "y": -8.703984658345513,
+            "z": 8.124783358225866e-08
+          },
+          "orientation": {
+            "x": -1.0074160145579503e-09,
+            "y": 1.4862688457104616e-07,
+            "z": 0.003479476696810379,
+            "w": 0.9999939466026253
+          }
+        }
+      },
+      "reference_offset_s": -0.006999999999999895
+    },
+    {
+      "label": "before_adapter_death",
+      "epoch": 1,
+      "odom_stamp_s": 1.3,
+      "native_reference": {
+        "stamp_s": 1.295,
+        "entity": {
+          "name": "turtlebot3",
+          "id": 147,
+          "position": {
+            "x": -7.4023820917546885,
+            "y": -8.70390142545907,
+            "z": 8.056818615597487e-08
+          },
+          "orientation": {
+            "x": -1.9500000322643433e-09,
+            "y": 8.104963970005434e-07,
+            "z": 0.0011790242317551395,
+            "w": 0.9999993049503605
+          }
+        }
+      },
+      "reference_offset_s": -0.0050000000000001155
+    },
+    {
+      "label": "fresh_adapter_without_new_input",
+      "epoch": 1,
+      "odom_stamp_s": 2.72,
+      "native_reference": {
+        "stamp_s": 2.723,
+        "entity": {
+          "name": "turtlebot3",
+          "id": 147,
+          "position": {
+            "x": -7.151394326536512,
+            "y": -8.714652186432334,
+            "z": 2.840260490287588e-06
+          },
+          "orientation": {
+            "x": 7.1647181733766315e-06,
+            "y": 4.423037467590936e-06,
+            "z": -0.044048660701151696,
+            "w": 0.9990293866646458
+          }
+        }
+      },
+      "reference_offset_s": 0.0029999999999996696
+    },
+    {
+      "label": "explicit_final_zero",
+      "epoch": 1,
+      "odom_stamp_s": 3.02,
+      "native_reference": {
+        "stamp_s": 3.028,
+        "entity": {
+          "name": "turtlebot3",
+          "id": 147,
+          "position": {
+            "x": -7.149924653267733,
+            "y": -8.71465869889455,
+            "z": -6.269885406694735e-08
+          },
+          "orientation": {
+            "x": -2.2320422578641439e-07,
+            "y": -9.044695704251219e-08,
+            "z": -0.044281239619821125,
+            "w": 0.9990191048311708
+          }
+        }
+      },
+      "reference_offset_s": 0.008000000000000007
+    }
+  ],
+  "physical_displacements": {
+    "before_clock_bridge_loss": {
+      "from": "before_clock_bridge_loss",
+      "to": "clock_bridge_lost_physics_running",
+      "sim_interval_s": 1.004,
+      "dx_m": 0.1799586993120874,
+      "dy_m": -0.0015982263507243744,
+      "distance_m": 0.17996579615462055
+    },
+    "before_adapter_death": {
+      "from": "before_adapter_death",
+      "to": "fresh_adapter_without_new_input",
+      "sim_interval_s": 1.428,
+      "dx_m": 0.25098776521817623,
+      "dy_m": -0.010750760973262885,
+      "distance_m": 0.25121790770309066
+    }
+  }
+}

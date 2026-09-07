@@ -1,0 +1,485 @@
+FFFFFFFFFFFFFFFFFF.F.FF.FFF                                              [100%]
+=================================== FAILURES ===================================
+_________________________ test_valid_boundary_and_miss _________________________
+
+    def test_valid_boundary_and_miss():
+>       validate(observed())
+
+tests/reliability/test_observation_geometry_05.py:32: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = CameraObservation(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(650..._id='camera_B', conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)), availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+__________________ test_semantic_mutations_rejected[changes0] __________________
+
+changes = {'calibration_id': 'foreign'}
+
+    @pytest.mark.parametrize('changes',[
+        {'calibration_id':'foreign'}, {'image_frame_id':'foreign'}, {'camera_id':'camera_A'},
+        {'timestamp_s':-1.}, {'bbox_xyxy':(600.,380.,600.,420.)},
+        {'bbox_xyxy':(700.,380.,600.,420.)}, {'bbox_xyxy':(-1.,380.,700.,420.)},
+        {'bbox_xyxy':(600.,380.,1281.,420.)}, {'pixel_uv':(651.,420.)},
+        {'bbox_bottom_uv':(650.,419.)}, {'selected_pixel_source':'mask_bottom'},
+    ])
+    def test_semantic_mutations_rejected(changes):
+>       with pytest.raises(ValueError): validate(observed(**changes))
+
+tests/reliability/test_observation_geometry_05.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = CameraObservation(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(650..._id='camera_B', conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)), availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+__________________ test_semantic_mutations_rejected[changes1] __________________
+
+changes = {'image_frame_id': 'foreign'}
+
+    @pytest.mark.parametrize('changes',[
+        {'calibration_id':'foreign'}, {'image_frame_id':'foreign'}, {'camera_id':'camera_A'},
+        {'timestamp_s':-1.}, {'bbox_xyxy':(600.,380.,600.,420.)},
+        {'bbox_xyxy':(700.,380.,600.,420.)}, {'bbox_xyxy':(-1.,380.,700.,420.)},
+        {'bbox_xyxy':(600.,380.,1281.,420.)}, {'pixel_uv':(651.,420.)},
+        {'bbox_bottom_uv':(650.,419.)}, {'selected_pixel_source':'mask_bottom'},
+    ])
+    def test_semantic_mutations_rejected(changes):
+>       with pytest.raises(ValueError): validate(observed(**changes))
+
+tests/reliability/test_observation_geometry_05.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = CameraObservation(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(650...e_id='foreign', conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)), availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+__________________ test_semantic_mutations_rejected[changes2] __________________
+
+changes = {'camera_id': 'camera_A'}
+
+    @pytest.mark.parametrize('changes',[
+        {'calibration_id':'foreign'}, {'image_frame_id':'foreign'}, {'camera_id':'camera_A'},
+        {'timestamp_s':-1.}, {'bbox_xyxy':(600.,380.,600.,420.)},
+        {'bbox_xyxy':(700.,380.,600.,420.)}, {'bbox_xyxy':(-1.,380.,700.,420.)},
+        {'bbox_xyxy':(600.,380.,1281.,420.)}, {'pixel_uv':(651.,420.)},
+        {'bbox_bottom_uv':(650.,419.)}, {'selected_pixel_source':'mask_bottom'},
+    ])
+    def test_semantic_mutations_rejected(changes):
+>       with pytest.raises(ValueError): validate(observed(**changes))
+
+tests/reliability/test_observation_geometry_05.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = CameraObservation(schema_version='phase0.v1', camera_id='camera_A', source_batch_id='', timestamp_s=1.0, pixel_uv=(650..._id='camera_B', conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)), availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+__________________ test_semantic_mutations_rejected[changes3] __________________
+
+changes = {'timestamp_s': -1.0}
+
+    @pytest.mark.parametrize('changes',[
+        {'calibration_id':'foreign'}, {'image_frame_id':'foreign'}, {'camera_id':'camera_A'},
+        {'timestamp_s':-1.}, {'bbox_xyxy':(600.,380.,600.,420.)},
+        {'bbox_xyxy':(700.,380.,600.,420.)}, {'bbox_xyxy':(-1.,380.,700.,420.)},
+        {'bbox_xyxy':(600.,380.,1281.,420.)}, {'pixel_uv':(651.,420.)},
+        {'bbox_bottom_uv':(650.,419.)}, {'selected_pixel_source':'mask_bottom'},
+    ])
+    def test_semantic_mutations_rejected(changes):
+>       with pytest.raises(ValueError): validate(observed(**changes))
+
+tests/reliability/test_observation_geometry_05.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = CameraObservation(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=-1.0, pixel_uv=(65..._id='camera_B', conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)), availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+__________________ test_semantic_mutations_rejected[changes4] __________________
+
+changes = {'bbox_xyxy': (600.0, 380.0, 600.0, 420.0)}
+
+    @pytest.mark.parametrize('changes',[
+        {'calibration_id':'foreign'}, {'image_frame_id':'foreign'}, {'camera_id':'camera_A'},
+        {'timestamp_s':-1.}, {'bbox_xyxy':(600.,380.,600.,420.)},
+        {'bbox_xyxy':(700.,380.,600.,420.)}, {'bbox_xyxy':(-1.,380.,700.,420.)},
+        {'bbox_xyxy':(600.,380.,1281.,420.)}, {'pixel_uv':(651.,420.)},
+        {'bbox_bottom_uv':(650.,419.)}, {'selected_pixel_source':'mask_bottom'},
+    ])
+    def test_semantic_mutations_rejected(changes):
+>       with pytest.raises(ValueError): validate(observed(**changes))
+
+tests/reliability/test_observation_geometry_05.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = CameraObservation(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(650..._id='camera_B', conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)), availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+__________________ test_semantic_mutations_rejected[changes5] __________________
+
+changes = {'bbox_xyxy': (700.0, 380.0, 600.0, 420.0)}
+
+    @pytest.mark.parametrize('changes',[
+        {'calibration_id':'foreign'}, {'image_frame_id':'foreign'}, {'camera_id':'camera_A'},
+        {'timestamp_s':-1.}, {'bbox_xyxy':(600.,380.,600.,420.)},
+        {'bbox_xyxy':(700.,380.,600.,420.)}, {'bbox_xyxy':(-1.,380.,700.,420.)},
+        {'bbox_xyxy':(600.,380.,1281.,420.)}, {'pixel_uv':(651.,420.)},
+        {'bbox_bottom_uv':(650.,419.)}, {'selected_pixel_source':'mask_bottom'},
+    ])
+    def test_semantic_mutations_rejected(changes):
+>       with pytest.raises(ValueError): validate(observed(**changes))
+
+tests/reliability/test_observation_geometry_05.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = CameraObservation(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(650..._id='camera_B', conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)), availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+__________________ test_semantic_mutations_rejected[changes6] __________________
+
+changes = {'bbox_xyxy': (-1.0, 380.0, 700.0, 420.0)}
+
+    @pytest.mark.parametrize('changes',[
+        {'calibration_id':'foreign'}, {'image_frame_id':'foreign'}, {'camera_id':'camera_A'},
+        {'timestamp_s':-1.}, {'bbox_xyxy':(600.,380.,600.,420.)},
+        {'bbox_xyxy':(700.,380.,600.,420.)}, {'bbox_xyxy':(-1.,380.,700.,420.)},
+        {'bbox_xyxy':(600.,380.,1281.,420.)}, {'pixel_uv':(651.,420.)},
+        {'bbox_bottom_uv':(650.,419.)}, {'selected_pixel_source':'mask_bottom'},
+    ])
+    def test_semantic_mutations_rejected(changes):
+>       with pytest.raises(ValueError): validate(observed(**changes))
+
+tests/reliability/test_observation_geometry_05.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = CameraObservation(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(650..._id='camera_B', conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)), availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+__________________ test_semantic_mutations_rejected[changes7] __________________
+
+changes = {'bbox_xyxy': (600.0, 380.0, 1281.0, 420.0)}
+
+    @pytest.mark.parametrize('changes',[
+        {'calibration_id':'foreign'}, {'image_frame_id':'foreign'}, {'camera_id':'camera_A'},
+        {'timestamp_s':-1.}, {'bbox_xyxy':(600.,380.,600.,420.)},
+        {'bbox_xyxy':(700.,380.,600.,420.)}, {'bbox_xyxy':(-1.,380.,700.,420.)},
+        {'bbox_xyxy':(600.,380.,1281.,420.)}, {'pixel_uv':(651.,420.)},
+        {'bbox_bottom_uv':(650.,419.)}, {'selected_pixel_source':'mask_bottom'},
+    ])
+    def test_semantic_mutations_rejected(changes):
+>       with pytest.raises(ValueError): validate(observed(**changes))
+
+tests/reliability/test_observation_geometry_05.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = CameraObservation(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(650..._id='camera_B', conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)), availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+__________________ test_semantic_mutations_rejected[changes8] __________________
+
+changes = {'pixel_uv': (651.0, 420.0)}
+
+    @pytest.mark.parametrize('changes',[
+        {'calibration_id':'foreign'}, {'image_frame_id':'foreign'}, {'camera_id':'camera_A'},
+        {'timestamp_s':-1.}, {'bbox_xyxy':(600.,380.,600.,420.)},
+        {'bbox_xyxy':(700.,380.,600.,420.)}, {'bbox_xyxy':(-1.,380.,700.,420.)},
+        {'bbox_xyxy':(600.,380.,1281.,420.)}, {'pixel_uv':(651.,420.)},
+        {'bbox_bottom_uv':(650.,419.)}, {'selected_pixel_source':'mask_bottom'},
+    ])
+    def test_semantic_mutations_rejected(changes):
+>       with pytest.raises(ValueError): validate(observed(**changes))
+
+tests/reliability/test_observation_geometry_05.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = CameraObservation(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(651..._id='camera_B', conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)), availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+__________________ test_semantic_mutations_rejected[changes9] __________________
+
+changes = {'bbox_bottom_uv': (650.0, 419.0)}
+
+    @pytest.mark.parametrize('changes',[
+        {'calibration_id':'foreign'}, {'image_frame_id':'foreign'}, {'camera_id':'camera_A'},
+        {'timestamp_s':-1.}, {'bbox_xyxy':(600.,380.,600.,420.)},
+        {'bbox_xyxy':(700.,380.,600.,420.)}, {'bbox_xyxy':(-1.,380.,700.,420.)},
+        {'bbox_xyxy':(600.,380.,1281.,420.)}, {'pixel_uv':(651.,420.)},
+        {'bbox_bottom_uv':(650.,419.)}, {'selected_pixel_source':'mask_bottom'},
+    ])
+    def test_semantic_mutations_rejected(changes):
+>       with pytest.raises(ValueError): validate(observed(**changes))
+
+tests/reliability/test_observation_geometry_05.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = CameraObservation(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(650..._id='camera_B', conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)), availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+_________________ test_semantic_mutations_rejected[changes10] __________________
+
+changes = {'selected_pixel_source': 'mask_bottom'}
+
+    @pytest.mark.parametrize('changes',[
+        {'calibration_id':'foreign'}, {'image_frame_id':'foreign'}, {'camera_id':'camera_A'},
+        {'timestamp_s':-1.}, {'bbox_xyxy':(600.,380.,600.,420.)},
+        {'bbox_xyxy':(700.,380.,600.,420.)}, {'bbox_xyxy':(-1.,380.,700.,420.)},
+        {'bbox_xyxy':(600.,380.,1281.,420.)}, {'pixel_uv':(651.,420.)},
+        {'bbox_bottom_uv':(650.,419.)}, {'selected_pixel_source':'mask_bottom'},
+    ])
+    def test_semantic_mutations_rejected(changes):
+>       with pytest.raises(ValueError): validate(observed(**changes))
+
+tests/reliability/test_observation_geometry_05.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = CameraObservation(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(650..._id='camera_B', conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)), availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+___ test_validator_checks_covariance_even_without_contract_constructor[cov0] ___
+
+cov = [[1.0, 2.0], [2.0, 1.0]]
+
+    @pytest.mark.parametrize('cov', [[[1.,2.],[2.,1.]],[[1.,.1],[.2,1.]],[[1.,0.],[0.,float('nan')]]])
+    def test_validator_checks_covariance_even_without_contract_constructor(cov):
+        values=vars(observed()).copy(); values['conditional_cov_uv']=cov
+>       with pytest.raises(ValueError): validate(SimpleNamespace(**values))
+
+tests/reliability/test_observation_geometry_05.py:51: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = namespace(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(650.0, 420...._id='camera_B', conditional_cov_uv=[[1.0, 2.0], [2.0, 1.0]], availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+___ test_validator_checks_covariance_even_without_contract_constructor[cov1] ___
+
+cov = [[1.0, 0.1], [0.2, 1.0]]
+
+    @pytest.mark.parametrize('cov', [[[1.,2.],[2.,1.]],[[1.,.1],[.2,1.]],[[1.,0.],[0.,float('nan')]]])
+    def test_validator_checks_covariance_even_without_contract_constructor(cov):
+        values=vars(observed()).copy(); values['conditional_cov_uv']=cov
+>       with pytest.raises(ValueError): validate(SimpleNamespace(**values))
+
+tests/reliability/test_observation_geometry_05.py:51: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = namespace(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(650.0, 420...._id='camera_B', conditional_cov_uv=[[1.0, 0.1], [0.2, 1.0]], availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+___ test_validator_checks_covariance_even_without_contract_constructor[cov2] ___
+
+cov = [[1.0, 0.0], [0.0, nan]]
+
+    @pytest.mark.parametrize('cov', [[[1.,2.],[2.,1.]],[[1.,.1],[.2,1.]],[[1.,0.],[0.,float('nan')]]])
+    def test_validator_checks_covariance_even_without_contract_constructor(cov):
+        values=vars(observed()).copy(); values['conditional_cov_uv']=cov
+>       with pytest.raises(ValueError): validate(SimpleNamespace(**values))
+
+tests/reliability/test_observation_geometry_05.py:51: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = namespace(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(650.0, 420...._id='camera_B', conditional_cov_uv=[[1.0, 0.0], [0.0, nan]], availability_probability=1.0, association_probability=1.0)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+_____________ test_original_image_dimensions_checked_when_supplied _____________
+
+    def test_original_image_dimensions_checked_when_supplied():
+        values=vars(observed()).copy(); values.update(image_width=640,image_height=360)
+>       with pytest.raises(ValueError): validate(SimpleNamespace(**values))
+
+tests/reliability/test_observation_geometry_05.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = namespace(schema_version='phase0.v1', camera_id='camera_B', source_batch_id='', timestamp_s=1.0, pixel_uv=(650.0, 420....((1.0, 0.0), (0.0, 1.0)), availability_probability=1.0, association_probability=1.0, image_width=640, image_height=360)
+
+    def validate(o):
+>       from reliability.observation_geometry import validate_observation_geometry
+E       ModuleNotFoundError: No module named 'reliability.observation_geometry'
+
+tests/reliability/test_observation_geometry_05.py:26: ModuleNotFoundError
+___________________ test_degenerate_camera_rejected[kwargs0] ___________________
+
+kwargs = {'cam_pos': (0.0, 0.0, 0.0), 'look_at': (0.0, 0.0, 0.0)}
+
+    @pytest.mark.parametrize('kwargs',[
+        {'cam_pos':(0.,0.,0.),'look_at':(0.,0.,0.)},
+        {'cam_pos':(0.,0.,5.),'look_at':(0.,0.,0.)},
+        {'img_width':0}, {'img_width':1280.5}, {'fov_h_rad':math.pi},
+        {'cam_pos':(math.nan,0.,5.)},
+    ])
+    def test_degenerate_camera_rejected(kwargs):
+>       with pytest.raises(ValueError): ObliqueCameraModel(**kwargs)
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/reliability/test_observation_geometry_05.py:66: Failed
+___________________ test_degenerate_camera_rejected[kwargs1] ___________________
+
+kwargs = {'cam_pos': (0.0, 0.0, 5.0), 'look_at': (0.0, 0.0, 0.0)}
+
+    @pytest.mark.parametrize('kwargs',[
+        {'cam_pos':(0.,0.,0.),'look_at':(0.,0.,0.)},
+        {'cam_pos':(0.,0.,5.),'look_at':(0.,0.,0.)},
+        {'img_width':0}, {'img_width':1280.5}, {'fov_h_rad':math.pi},
+        {'cam_pos':(math.nan,0.,5.)},
+    ])
+    def test_degenerate_camera_rejected(kwargs):
+>       with pytest.raises(ValueError): ObliqueCameraModel(**kwargs)
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/reliability/test_observation_geometry_05.py:66: Failed
+___________________ test_degenerate_camera_rejected[kwargs3] ___________________
+
+kwargs = {'img_width': 1280.5}
+
+    @pytest.mark.parametrize('kwargs',[
+        {'cam_pos':(0.,0.,0.),'look_at':(0.,0.,0.)},
+        {'cam_pos':(0.,0.,5.),'look_at':(0.,0.,0.)},
+        {'img_width':0}, {'img_width':1280.5}, {'fov_h_rad':math.pi},
+        {'cam_pos':(math.nan,0.,5.)},
+    ])
+    def test_degenerate_camera_rejected(kwargs):
+>       with pytest.raises(ValueError): ObliqueCameraModel(**kwargs)
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/reliability/test_observation_geometry_05.py:66: Failed
+___________________ test_degenerate_camera_rejected[kwargs5] ___________________
+
+kwargs = {'cam_pos': (nan, 0.0, 5.0)}
+
+    @pytest.mark.parametrize('kwargs',[
+        {'cam_pos':(0.,0.,0.),'look_at':(0.,0.,0.)},
+        {'cam_pos':(0.,0.,5.),'look_at':(0.,0.,0.)},
+        {'img_width':0}, {'img_width':1280.5}, {'fov_h_rad':math.pi},
+        {'cam_pos':(math.nan,0.,5.)},
+    ])
+    def test_degenerate_camera_rejected(kwargs):
+>       with pytest.raises(ValueError): ObliqueCameraModel(**kwargs)
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/reliability/test_observation_geometry_05.py:66: Failed
+___________________ test_forward_floor_intersection_and_nan ____________________
+
+    def test_forward_floor_intersection_and_nan():
+        c=camera(); a=c.H_inv
+        v=-(a[2,0]*640+a[2,2])/a[2,1]
+>       assert c.pixel_to_world(640,v-10) is None
+E       assert (-547.7085316489322, -547.7085316489324) is None
+E        +  where (-547.7085316489322, -547.7085316489324) = <bound method ObliqueCameraModel.pixel_to_world of <unav_common.camera_model.ObliqueCameraModel object at 0x7b53866ac340>>(640, (-394.2444627659527 - 10))
+E        +    where <bound method ObliqueCameraModel.pixel_to_world of <unav_common.camera_model.ObliqueCameraModel object at 0x7b53866ac340>> = <unav_common.camera_model.ObliqueCameraModel object at 0x7b53866ac340>.pixel_to_world
+
+tests/reliability/test_observation_geometry_05.py:72: AssertionError
+________________ test_unrepresentable_floor_is_explicit_refusal ________________
+
+    def test_unrepresentable_floor_is_explicit_refusal():
+>       with pytest.raises(ValueError): _floor_spd_2x2(((1e8,1e8),(1e8,1e8)),1e-12)
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/reliability/test_observation_geometry_05.py:86: Failed
+___ test_pixel_covariance_full_matrix_against_independent_finite_difference ____
+
+    def test_pixel_covariance_full_matrix_against_independent_finite_difference():
+        c=camera(); t=PixelToBevTransformer(c.cam_pos,c.look_at,1280,720,c.fov_h_rad)
+        u,v=600.,450.; step=1e-3
+        J=np.column_stack([(np.array(c.pixel_to_world(u+step*(i==0),v+step*(i==1)))-np.array(c.pixel_to_world(u-step*(i==0),v-step*(i==1))))/(2*step) for i in (0,1)])
+        R=np.array([[4.,1.],[1.,2.]])
+>       np.testing.assert_allclose(t.pixel_covariance_to_metric(u,v,R),J@R@J.T,rtol=1e-8,atol=1e-12)
+E       AttributeError: 'PixelToBevTransformer' object has no attribute 'pixel_covariance_to_metric'
+
+tests/reliability/test_observation_geometry_05.py:94: AttributeError
+___________ test_covariance_mapping_does_not_sample_random_geometry ____________
+
+    def test_covariance_mapping_does_not_sample_random_geometry():
+        c=camera()
+        rng=SimpleNamespace(normal=lambda *a,**kw:pytest.fail('covariance differentiation sampled random extrinsics'))
+        t=PixelToBevTransformer(c.cam_pos,c.look_at,1280,720,c.fov_h_rad,rng=rng)
+>       R=t.pixel_covariance_to_metric(640.,400.,np.eye(2),transform_noise_sigma=.01)
+E       AttributeError: 'PixelToBevTransformer' object has no attribute 'pixel_covariance_to_metric'
+
+tests/reliability/test_observation_geometry_05.py:102: AttributeError
+=============================== warnings summary ===============================
+tests/reliability/test_observation_geometry_05.py::test_degenerate_camera_rejected[kwargs0]
+tests/reliability/test_observation_geometry_05.py::test_degenerate_camera_rejected[kwargs1]
+  Warning: invalid value encountered in divide
+
+-- Docs: https://docs.pytest.org/en/stable/warnings.html
+=========================== short test summary info ============================
+FAILED tests/reliability/test_observation_geometry_05.py::test_valid_boundary_and_miss
+FAILED tests/reliability/test_observation_geometry_05.py::test_semantic_mutations_rejected[changes0]
+FAILED tests/reliability/test_observation_geometry_05.py::test_semantic_mutations_rejected[changes1]
+FAILED tests/reliability/test_observation_geometry_05.py::test_semantic_mutations_rejected[changes2]
+FAILED tests/reliability/test_observation_geometry_05.py::test_semantic_mutations_rejected[changes3]
+FAILED tests/reliability/test_observation_geometry_05.py::test_semantic_mutations_rejected[changes4]
+FAILED tests/reliability/test_observation_geometry_05.py::test_semantic_mutations_rejected[changes5]
+FAILED tests/reliability/test_observation_geometry_05.py::test_semantic_mutations_rejected[changes6]
+FAILED tests/reliability/test_observation_geometry_05.py::test_semantic_mutations_rejected[changes7]
+FAILED tests/reliability/test_observation_geometry_05.py::test_semantic_mutations_rejected[changes8]
+FAILED tests/reliability/test_observation_geometry_05.py::test_semantic_mutations_rejected[changes9]
+FAILED tests/reliability/test_observation_geometry_05.py::test_semantic_mutations_rejected[changes10]
+FAILED tests/reliability/test_observation_geometry_05.py::test_validator_checks_covariance_even_without_contract_constructor[cov0]
+FAILED tests/reliability/test_observation_geometry_05.py::test_validator_checks_covariance_even_without_contract_constructor[cov1]
+FAILED tests/reliability/test_observation_geometry_05.py::test_validator_checks_covariance_even_without_contract_constructor[cov2]
+FAILED tests/reliability/test_observation_geometry_05.py::test_original_image_dimensions_checked_when_supplied
+FAILED tests/reliability/test_observation_geometry_05.py::test_degenerate_camera_rejected[kwargs0]
+FAILED tests/reliability/test_observation_geometry_05.py::test_degenerate_camera_rejected[kwargs1]
+FAILED tests/reliability/test_observation_geometry_05.py::test_degenerate_camera_rejected[kwargs3]
+FAILED tests/reliability/test_observation_geometry_05.py::test_degenerate_camera_rejected[kwargs5]
+FAILED tests/reliability/test_observation_geometry_05.py::test_forward_floor_intersection_and_nan
+FAILED tests/reliability/test_observation_geometry_05.py::test_unrepresentable_floor_is_explicit_refusal
+FAILED tests/reliability/test_observation_geometry_05.py::test_pixel_covariance_full_matrix_against_independent_finite_difference
+FAILED tests/reliability/test_observation_geometry_05.py::test_covariance_mapping_does_not_sample_random_geometry
+24 failed, 3 passed, 2 warnings in 0.40s

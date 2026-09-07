@@ -1,0 +1,1587 @@
+{
+  "callback_write_inventory": {
+    "src/planning/planning/nodes/efe_agent_node.py": {
+      "callbacks": [
+        {
+          "line": 345,
+          "owner": "__init__",
+          "registration": "self.create_timer(\n            self._cmd_timer_period_s,\n            self._publish_active_plan_command,\n            callback_group=self._io_group,\n        )"
+        },
+        {
+          "line": 380,
+          "owner": "__init__",
+          "registration": "self.create_subscription(String, '/experiment/run_dir', self._run_dir_cb, run_dir_qos)"
+        }
+      ],
+      "writes": [
+        {
+          "field": "last_cmd",
+          "function": "_publish_command",
+          "line": 1345,
+          "statement": "self.last_cmd = np.array([cmd.linear.x, cmd.angular.z], dtype=float)"
+        }
+      ]
+    },
+    "src/planning/planning/nodes/unicycle_planner_node.py": {
+      "callbacks": [
+        {
+          "line": 620,
+          "owner": "__init__",
+          "registration": "self.create_subscription(\n            PoseWithCovarianceStamped, '/state/bev', self._state_cb, qos_profile=state_qos,\n            callback_group=self._io_group\n        )"
+        },
+        {
+          "line": 650,
+          "owner": "__init__",
+          "registration": "self.create_subscription(\n            PoseStamped, '/goal_bev', self._goal_cb, qos_profile=goal_qos,\n            callback_group=self._io_group\n        )"
+        },
+        {
+          "line": 654,
+          "owner": "__init__",
+          "registration": "self.create_subscription(\n            PoseStamped, self.pixel_topic, self._pixel_cb, qos_profile=state_qos,\n            callback_group=self._io_group\n        )"
+        },
+        {
+          "line": 658,
+          "owner": "__init__",
+          "registration": "self.create_subscription(\n            Float64MultiArray, DETECTION_DIAGNOSTICS_TOPIC, self._detection_diag_cb, qos_profile=state_qos,\n            callback_group=self._io_group\n        )"
+        },
+        {
+          "line": 662,
+          "owner": "__init__",
+          "registration": "self.create_subscription(\n            Twist, self.cmd_topic, self._cmd_cb, qos_profile=state_qos,\n            callback_group=self._io_group\n        )"
+        },
+        {
+          "line": 666,
+          "owner": "__init__",
+          "registration": "self.create_subscription(\n            Odometry, self.odom_topic, self._odom_cb, qos_profile=state_qos,\n            callback_group=self._io_group\n        )"
+        },
+        {
+          "line": 749,
+          "owner": "__init__",
+          "registration": "self.create_timer(self._plan_period_s, self._plan_once, callback_group=self._plan_group)"
+        },
+        {
+          "line": 630,
+          "owner": "__init__",
+          "registration": "self.create_subscription(\n                String,\n                self.state_correction_envelope_topic,\n                self._state_correction_envelope_cb,\n                qos_profile=state_qos,\n                callback_group=self._io_group,\n            )"
+        },
+        {
+          "line": 639,
+          "owner": "__init__",
+          "registration": "self.create_subscription(\n                String, self.map_observations_topic, self._map_observations_cb,\n                qos_profile=state_qos, callback_group=self._io_group\n            )"
+        },
+        {
+          "line": 683,
+          "owner": "__init__",
+          "registration": "self.create_subscription(\n                Odometry, self.diagnostic_odom_topic, self._diagnostic_odom_cb,\n                qos_profile=state_qos, callback_group=self._io_group,\n            )"
+        },
+        {
+          "line": 752,
+          "owner": "__init__",
+          "registration": "self.create_timer(\n                self._belief_publish_period_s,\n                self._belief_publish_tick,\n                callback_group=self._io_group,\n            )"
+        },
+        {
+          "line": 760,
+          "owner": "__init__",
+          "registration": "self.create_timer(\n                correction_period, self._pixel_correction_timer_cb, callback_group=self._io_group\n            )"
+        }
+      ],
+      "writes": [
+        {
+          "field": "_latest_odom_yaw",
+          "function": "__init__",
+          "line": 563,
+          "statement": "self._latest_odom_yaw = None"
+        },
+        {
+          "field": "_odom_origin_stamp_s",
+          "function": "__init__",
+          "line": 566,
+          "statement": "self._odom_origin_stamp_s = None"
+        },
+        {
+          "field": "_odom_accepted_stamp_ns",
+          "function": "__init__",
+          "line": 570,
+          "statement": "self._odom_accepted_stamp_ns = None"
+        },
+        {
+          "field": "state_msg",
+          "function": "__init__",
+          "line": 712,
+          "statement": "self.state_msg = None"
+        },
+        {
+          "field": "_last_correction_stamp",
+          "function": "__init__",
+          "line": 719,
+          "statement": "self._last_correction_stamp = None"
+        },
+        {
+          "field": "belief_m",
+          "function": "__init__",
+          "line": 732,
+          "statement": "self.belief_m = None"
+        },
+        {
+          "field": "belief_S",
+          "function": "__init__",
+          "line": 733,
+          "statement": "self.belief_S = None"
+        },
+        {
+          "field": "belief_stamp",
+          "function": "__init__",
+          "line": 734,
+          "statement": "self.belief_stamp = None"
+        },
+        {
+          "field": "last_cmd",
+          "function": "__init__",
+          "line": 735,
+          "statement": "self.last_cmd = np.array([0.0, 0.0], dtype=float)"
+        },
+        {
+          "field": "odom_vel",
+          "function": "__init__",
+          "line": 736,
+          "statement": "self.odom_vel = np.array([0.0, 0.0], dtype=float)"
+        },
+        {
+          "field": "state_msg",
+          "function": "_state_cb",
+          "line": 818,
+          "statement": "self.state_msg = msg"
+        },
+        {
+          "field": "last_cmd",
+          "function": "_cmd_cb",
+          "line": 1035,
+          "statement": "self.last_cmd = np.array([msg.linear.x, msg.angular.z], dtype=float)"
+        },
+        {
+          "field": "_latest_odom_yaw",
+          "function": "_odom_cb",
+          "line": 1094,
+          "statement": "self._latest_odom_yaw = yaw"
+        },
+        {
+          "field": "odom_vel",
+          "function": "_odom_cb",
+          "line": 1095,
+          "statement": "self.odom_vel = np.array([v_odom, w_odom], dtype=float)"
+        },
+        {
+          "field": "_odom_accepted_stamp_ns",
+          "function": "_odom_cb",
+          "line": 1099,
+          "statement": "self._odom_accepted_stamp_ns = stamp_ns"
+        },
+        {
+          "field": "_odom_origin_stamp_s",
+          "function": "_odom_cb",
+          "line": 1097,
+          "statement": "self._odom_origin_stamp_s = float(stamp_s)"
+        },
+        {
+          "field": "belief_m",
+          "function": "_init_belief_from_state",
+          "line": 1206,
+          "statement": "self.belief_m, self.belief_S = self._state_msg_to_belief(self.state_msg)"
+        },
+        {
+          "field": "belief_S",
+          "function": "_init_belief_from_state",
+          "line": 1206,
+          "statement": "self.belief_m, self.belief_S = self._state_msg_to_belief(self.state_msg)"
+        },
+        {
+          "field": "belief_stamp",
+          "function": "_init_belief_from_state",
+          "line": 1207,
+          "statement": "self.belief_stamp = self.state_msg.header.stamp"
+        },
+        {
+          "field": "belief_m",
+          "function": "_apply_pixel_correction",
+          "line": 1779,
+          "statement": "self.belief_m = outcome.next_m"
+        },
+        {
+          "field": "belief_S",
+          "function": "_apply_pixel_correction",
+          "line": 1780,
+          "statement": "self.belief_S = outcome.next_S"
+        },
+        {
+          "field": "belief_stamp",
+          "function": "_apply_pixel_correction",
+          "line": 1781,
+          "statement": "self.belief_stamp = stamp_msg"
+        },
+        {
+          "field": "_last_correction_stamp",
+          "function": "_apply_pixel_correction",
+          "line": 1782,
+          "statement": "self._last_correction_stamp = stamp_msg"
+        },
+        {
+          "field": "belief_m",
+          "function": "_resolve_state_belief_for_planning",
+          "line": 2146,
+          "statement": "self.belief_m = m0.copy()"
+        },
+        {
+          "field": "belief_S",
+          "function": "_resolve_state_belief_for_planning",
+          "line": 2147,
+          "statement": "self.belief_S = S0.copy()"
+        },
+        {
+          "field": "belief_stamp",
+          "function": "_resolve_state_belief_for_planning",
+          "line": 2148,
+          "statement": "self.belief_stamp = state_ref.header.stamp"
+        },
+        {
+          "field": "belief_m",
+          "function": "_reanchor_belief_to_xy",
+          "line": 2182,
+          "statement": "self.belief_m, self.belief_S = m.copy(), S.copy()"
+        },
+        {
+          "field": "belief_S",
+          "function": "_reanchor_belief_to_xy",
+          "line": 2182,
+          "statement": "self.belief_m, self.belief_S = m.copy(), S.copy()"
+        },
+        {
+          "field": "belief_stamp",
+          "function": "_reanchor_belief_to_xy",
+          "line": 2183,
+          "statement": "self.belief_stamp = stamp_msg"
+        },
+        {
+          "field": "_last_correction_stamp",
+          "function": "_reanchor_belief_to_xy",
+          "line": 2184,
+          "statement": "self._last_correction_stamp = stamp_msg"
+        },
+        {
+          "field": "belief_S",
+          "function": "_inflate_belief_after_rejection",
+          "line": 2352,
+          "statement": "self.belief_S = self._regularize_state_covariance(S)"
+        },
+        {
+          "field": "belief_m",
+          "function": "_advance_belief_over_outage",
+          "line": 2406,
+          "statement": "self.belief_m = np.asarray(m1, dtype=float).copy()"
+        },
+        {
+          "field": "belief_S",
+          "function": "_advance_belief_over_outage",
+          "line": 2407,
+          "statement": "self.belief_S = self._regularize_state_covariance(S1)"
+        },
+        {
+          "field": "belief_stamp",
+          "function": "_advance_belief_over_outage",
+          "line": 2408,
+          "statement": "self.belief_stamp = stamp_msg"
+        },
+        {
+          "field": "belief_m",
+          "function": "_commit_metric_correction_outcome",
+          "line": 2702,
+          "statement": "self.belief_m = np.asarray(outcome.m_pred, dtype=float).copy()"
+        },
+        {
+          "field": "belief_S",
+          "function": "_commit_metric_correction_outcome",
+          "line": 2703,
+          "statement": "self.belief_S = self._regularize_state_covariance(S_hold)"
+        },
+        {
+          "field": "belief_stamp",
+          "function": "_commit_metric_correction_outcome",
+          "line": 2704,
+          "statement": "self.belief_stamp = stamp_msg"
+        },
+        {
+          "field": "belief_m",
+          "function": "_commit_metric_correction_outcome",
+          "line": 2663,
+          "statement": "self.belief_m = m_upd"
+        },
+        {
+          "field": "belief_S",
+          "function": "_commit_metric_correction_outcome",
+          "line": 2664,
+          "statement": "self.belief_S = S_upd"
+        },
+        {
+          "field": "belief_stamp",
+          "function": "_commit_metric_correction_outcome",
+          "line": 2665,
+          "statement": "self.belief_stamp = stamp_msg"
+        },
+        {
+          "field": "_last_correction_stamp",
+          "function": "_commit_metric_correction_outcome",
+          "line": 2666,
+          "statement": "self._last_correction_stamp = stamp_msg"
+        }
+      ]
+    }
+  },
+  "cases": {
+    "alias_hazard": {
+      "classification": "API hazard; no current production post-commit mutator found",
+      "result_mutation_changes_anchor": true,
+      "shared_covariance": true,
+      "shared_mean": true
+    },
+    "almost_simultaneous_camera": {
+      "accepted_and_reason_codes": [
+        [
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          8.0
+        ]
+      ],
+      "camera_separation_s": 0.0005,
+      "committed_stamp": 9.95,
+      "expected": "A and B each accepted once, with 0.0005 s supported prediction"
+    },
+    "coherent_wrapper": {
+      "declared_total_cross_variance": 0.0006235009000000001,
+      "runtime_coherent_cross_variance": 1.2470018000000464e-05,
+      "steps": 50,
+      "variance_ratio": 49.999999999998145,
+      "white_Q_composition_with_F_passes": true
+    },
+    "complete_trace": {
+      "H": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "K": [
+        [
+          0.7283391260836498,
+          -0.00910055926385076
+        ],
+        [
+          -0.010685933630838694,
+          0.7059308003724202
+        ],
+        [
+          0.023314775595011838,
+          -0.017104293248262854
+        ]
+      ],
+      "R": [
+        [
+          0.015,
+          0.003
+        ],
+        [
+          0.003,
+          0.025
+        ]
+      ],
+      "applied_nis": 0.009300646714161694,
+      "diagnostics": [
+        10.0,
+        1.0,
+        0.2,
+        0.5999999999999996,
+        null,
+        1.0,
+        0.019999999999999574,
+        -0.010000000000000009,
+        0.01636299695773403,
+        0.0006373384443828511,
+        0.0,
+        null,
+        null,
+        0.0006373384443828511,
+        1.0693856589980275,
+        -1.9657902611385139,
+        0.5199999999999989,
+        1.0840434471123388,
+        -1.9730632878148548,
+        0.5206373384443818,
+        1.089385658998027,
+        -1.9757902611385139,
+        1.0693856589980275,
+        -1.9657902611385139,
+        0.015,
+        0.025,
+        null,
+        null,
+        0.0,
+        0.009300646714161694,
+        1.0,
+        0.0,
+        10.200000000000001,
+        9.4,
+        3.0,
+        0.5999999999999996,
+        0.0,
+        9.21,
+        null,
+        null,
+        null,
+        1.0,
+        0.023314775595011782,
+        -0.01710429324826275,
+        1.0,
+        0.0,
+        null
+      ],
+      "full_covariance_max_abs_error": 6.938893903907228e-18,
+      "initial_P": [
+        [
+          0.04,
+          0.005,
+          0.002
+        ],
+        [
+          0.005,
+          0.06,
+          -0.003
+        ],
+        [
+          0.002,
+          -0.003,
+          0.025
+        ]
+      ],
+      "initial_m": [
+        1.0,
+        -2.0,
+        0.4
+      ],
+      "initial_stamp": 9.4,
+      "innovation": [
+        0.020000000000000018,
+        -0.010000000000000009
+      ],
+      "innovation_covariance": [
+        [
+          0.0549410286899791,
+          0.008205224541926428
+        ],
+        [
+          0.008205224541926428,
+          0.08471584085197881
+        ]
+      ],
+      "odom_log": [
+        [
+          9.350000000000001,
+          0.2,
+          0.0
+        ],
+        [
+          9.600000000000001,
+          0.0,
+          0.8
+        ],
+        [
+          9.75,
+          0.15,
+          0.0
+        ],
+        [
+          10.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "posterior_P": [
+        [
+          0.010897785213463193,
+          0.00195750339665468,
+          0.000298408754180389
+        ],
+        [
+          0.0019575033966546806,
+          0.01761621220841799,
+          -0.0003576630044215358
+        ],
+        [
+          0.00029840875418038904,
+          -0.0003576630044215358,
+          0.02519189522851796
+        ]
+      ],
+      "posterior_m": [
+        1.0840434471123386,
+        -1.9730632878148548,
+        0.5206373384443832
+      ],
+      "reads_did_not_commit": true,
+      "steps": [
+        {
+          "F": [
+            [
+              1.0,
+              0.0,
+              -0.015576733692345968
+            ],
+            [
+              0.0,
+              1.0,
+              0.03684243976011528
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "P": [
+            [
+              0.03996073246839402,
+              0.005113226216091667,
+              0.001609958588343657
+            ],
+            [
+              0.005113226216091667,
+              0.05981594862494258,
+              -0.002077465308406713
+            ],
+            [
+              0.001609958588343657,
+              -0.002077465308406713,
+              0.02508
+            ]
+          ],
+          "Q": [
+            [
+              1.697353735033885e-05,
+              7.158257312389346e-06,
+              -6.230693476938366e-07
+            ],
+            [
+              7.158257312389348e-06,
+              3.069129316327741e-06,
+              1.4736975904046062e-06
+            ],
+            [
+              -6.230693476938366e-07,
+              1.4736975904046062e-06,
+              7.999999999999972e-05
+            ]
+          ],
+          "end": 9.6,
+          "m": [
+            1.0368424397601153,
+            -1.984423266307654,
+            0.4
+          ],
+          "start": 9.4,
+          "u": [
+            0.2,
+            0.0
+          ]
+        },
+        {
+          "F": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "P": [
+            [
+              0.039973457768714124,
+              0.005118606386773414,
+              0.001609958588343657
+            ],
+            [
+              0.005118606386773414,
+              0.05981822332462247,
+              -0.002077465308406713
+            ],
+            [
+              0.001609958588343657,
+              -0.002077465308406713,
+              0.025140000000000003
+            ]
+          ],
+          "Q": [
+            [
+              1.2725300320103771e-05,
+              5.380170681746434e-06,
+              0.0
+            ],
+            [
+              5.380170681746435e-06,
+              2.274699679896265e-06,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              6.0000000000000144e-05
+            ]
+          ],
+          "end": 9.75,
+          "m": [
+            1.0368424397601153,
+            -1.984423266307654,
+            0.5200000000000004
+          ],
+          "start": 9.6,
+          "u": [
+            0.0,
+            0.8
+          ]
+        },
+        {
+          "F": [
+            [
+              1.0,
+              0.0,
+              -0.018633005169140137
+            ],
+            [
+              0.0,
+              1.0,
+              0.03254321923791186
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "P": [
+            [
+              0.0399410286899791,
+              0.005205224541926427,
+              0.001140593188133017
+            ],
+            [
+              0.005205224541926427,
+              0.05971584085197881,
+              -0.001257701615803713
+            ],
+            [
+              0.001140593188133017,
+              -0.001257701615803713,
+              0.025240000000000002
+            ]
+          ],
+          "Q": [
+            [
+              1.883932617813083e-05,
+              1.0759840241465718e-05,
+              -9.316502584570069e-07
+            ],
+            [
+              1.0759840241465718e-05,
+              6.207548821869172e-06,
+              1.6271609618955931e-06
+            ],
+            [
+              -9.316502584570069e-07,
+              1.6271609618955931e-06,
+              0.0001
+            ]
+          ],
+          "end": 10.0,
+          "m": [
+            1.069385658998027,
+            -1.9657902611385139,
+            0.5200000000000004
+          ],
+          "start": 9.75,
+          "u": [
+            0.15,
+            0.0
+          ]
+        }
+      ],
+      "terminal_event": {
+        "accepted": true,
+        "apply_stamp": 10.200000000000001,
+        "belief_stamp_after": 10.0,
+        "correction_stamp": 10.0,
+        "nis": 0.009300646714161694,
+        "reason": "accepted",
+        "schema_version": 1,
+        "source_batch_id": "audit:camera_A+camera_B@10000000000",
+        "status": "accepted"
+      },
+      "z": [
+        1.089385658998027,
+        -1.9757902611385139
+      ]
+    },
+    "current_capture_heading": {
+      "actual_capture_yaw": 1.3,
+      "apply_stamp": 10.0,
+      "capture_covariance": [
+        [
+          0.03,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.03,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0003200000000000003
+        ]
+      ],
+      "capture_stamp": 9.8,
+      "expected_capture_yaw": 1.1,
+      "expected_now_yaw": 1.3,
+      "offset": 0.3,
+      "predicted_covariance": [
+        [
+          0.03000100444452981,
+          4.252447609886833e-06,
+          0.0
+        ],
+        [
+          4.252447609886833e-06,
+          0.030018995555470187,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0004000000000000001
+        ]
+      ],
+      "predicted_now_yaw": 1.4999999999999993,
+      "verdict": "confirmed open defect"
+    },
+    "drop_reject_and_duplicate_event_order": {
+      "duplicate_fatal_error": [
+        "duplicate source_batch_id 'reject'"
+      ],
+      "duplicate_has_new_terminal_event": false,
+      "duplicate_mutation": false,
+      "expected_reject_covariance": [
+        [
+          0.06876281179705074,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.06881125606060993,
+          0.0017508491508229607
+        ],
+        [
+          0.0,
+          0.0017508491508229607,
+          0.050069970024657996
+        ]
+      ],
+      "held_prediction": {
+        "P": [
+          [
+            0.06876281179705074,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.06881125606060993,
+            0.0017508491508229748
+          ],
+          [
+            0.0,
+            0.0017508491508229748,
+            0.050069970024657996
+          ]
+        ],
+        "m": [
+          0.060000000000000234,
+          0.0,
+          0.0
+        ],
+        "t": 10.1
+      },
+      "terminal_events": [
+        {
+          "accepted": true,
+          "apply_stamp": 10.200000000000001,
+          "belief_stamp_after": 10.0,
+          "correction_stamp": 10.0,
+          "nis": 2.406810727802094e-31,
+          "reason": "accepted",
+          "schema_version": 1,
+          "source_batch_id": "accept",
+          "status": "accepted"
+        },
+        {
+          "accepted": false,
+          "apply_stamp": 10.200000000000001,
+          "belief_stamp_after": 10.0,
+          "correction_stamp": 9.9,
+          "nis": null,
+          "reason": "not_newer_than_belief",
+          "schema_version": 1,
+          "source_batch_id": "late",
+          "status": "dropped"
+        },
+        {
+          "accepted": false,
+          "apply_stamp": 10.200000000000001,
+          "belief_stamp_after": 10.0,
+          "correction_stamp": 9.0,
+          "nis": null,
+          "reason": "stale_age",
+          "schema_version": 1,
+          "source_batch_id": "stale",
+          "status": "dropped"
+        },
+        {
+          "accepted": false,
+          "apply_stamp": 10.200000000000001,
+          "belief_stamp_after": 10.1,
+          "correction_stamp": 10.1,
+          "nis": 409699.0729162087,
+          "reason": "nis_too_large",
+          "schema_version": 1,
+          "source_batch_id": "reject",
+          "status": "rejected"
+        }
+      ],
+      "verdict": "verified"
+    },
+    "duplicate_pixel": {
+      "duplicate_xy_variance": 0.014285714285714287,
+      "first_xy_variance": 0.022222222222222223,
+      "stamp_after_old_delivery": 9.9,
+      "stamp_before_old_delivery": 9.95
+    },
+    "encoder_coherent_state_persists": {
+      "coherent_covariance": [
+        [
+          0.0004840000000000005,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "expected_coherent_x_variance": 0.0004840000000000001,
+      "intervals": 50,
+      "scale_jacobian": [
+        1.1000000000000005,
+        0.0,
+        0.0
+      ],
+      "verdict": "verified persistent encoder scale state"
+    },
+    "encoder_covariance_at_stop": {
+      "covariance_before": 0.0001,
+      "covariance_x_after": 0.00011599999999999985,
+      "covariance_yaw_after": 0.000499999999999999,
+      "generator_stop_branch_injects_no_noise": true,
+      "stationary_duration_s": 10.0
+    },
+    "fixed_bootstrap_identity": {
+      "orders": [
+        {
+          "anchor": {
+            "P": [
+              [
+                0.03,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.03,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                9.869604401089358
+              ]
+            ],
+            "m": [
+              1.0,
+              2.0,
+              0.25
+            ],
+            "t": 9.95
+          },
+          "order": [
+            "pose",
+            "envelope"
+          ],
+          "terminal": {
+            "accepted": true,
+            "apply_stamp": 10.0,
+            "belief_stamp_after": 9.95,
+            "correction_stamp": 9.95,
+            "nis": null,
+            "reason": "bootstrap",
+            "schema_version": 1,
+            "source_batch_id": "identified-bootstrap",
+            "status": "accepted_bootstrap"
+          }
+        },
+        {
+          "anchor": {
+            "P": [
+              [
+                0.03,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.03,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                9.869604401089358
+              ]
+            ],
+            "m": [
+              1.0,
+              2.0,
+              0.25
+            ],
+            "t": 9.95
+          },
+          "order": [
+            "envelope",
+            "pose"
+          ],
+          "terminal": {
+            "accepted": true,
+            "apply_stamp": 10.0,
+            "belief_stamp_after": 9.95,
+            "correction_stamp": 9.95,
+            "nis": null,
+            "reason": "bootstrap",
+            "schema_version": 1,
+            "source_batch_id": "identified-bootstrap",
+            "status": "accepted_bootstrap"
+          }
+        }
+      ],
+      "verdict": "fixed"
+    },
+    "fixed_encoder_order_and_open_gap": {
+      "expected_order_yaw": 0.3,
+      "gap_input": [
+        0.0,
+        0.1,
+        1.1,
+        1.2
+      ],
+      "gap_verdict": "open; existing baseline rebase policy retained",
+      "input_order": [
+        0.0,
+        0.2,
+        0.1,
+        0.3
+      ],
+      "known_script_yaw": 1.2,
+      "observed_order_yaw": 0.30000000000000004,
+      "order_verdict": "fixed",
+      "published_stamp": 1.2,
+      "published_yaw": 0.2,
+      "published_yaw_variance": 0.00027
+    },
+    "fixed_odom_order": {
+      "applied_yaw_Q": 0.0002400000000000041,
+      "expected_prior_x": 0.12,
+      "motion": [
+        [
+          9.4,
+          0.2,
+          0.0
+        ],
+        [
+          9.700000000000001,
+          0.2,
+          0.0
+        ]
+      ],
+      "prior_x": 0.11999999999999994,
+      "refused_duplicate": 1,
+      "refused_old": 1,
+      "verdict": "fixed"
+    },
+    "fixed_outage_snapshot": {
+      "checked_entries": 600,
+      "expected_yaw": 0.2,
+      "live_history_starts_at": 0.3,
+      "observed_yaw": 0.1999999999999929,
+      "posterior": {
+        "P": [
+          [
+            0.10575426739998955,
+            0.0011634070984452563,
+            0.0
+          ],
+          [
+            0.0011634070984452563,
+            0.10023573260001228,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.07395999999999903
+          ]
+        ],
+        "m": [
+          0.0,
+          0.0,
+          0.1999999999999929
+        ],
+        "t": 59.9
+      },
+      "terminal": {
+        "accepted": false,
+        "apply_stamp": 60.00000000000001,
+        "belief_stamp_after": 59.9,
+        "correction_stamp": 59.9,
+        "nis": null,
+        "reason": "replay_gap_too_large",
+        "schema_version": 1,
+        "source_batch_id": "outage-fixed",
+        "status": "dropped"
+      },
+      "verdict": "fixed"
+    },
+    "fixed_same_time_camera_and_duplicates": {
+      "diagnostics": [
+        [
+          1.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          8.0
+        ],
+        [
+          0.0,
+          8.0
+        ]
+      ],
+      "duplicate_changed_anchor": false,
+      "expected_x_variance": 0.011538727790169987,
+      "posterior": {
+        "P": [
+          [
+            0.011538727790169987,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.011538461538461539,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.05002
+          ]
+        ],
+        "m": [
+          0.011538727790169987,
+          0.0,
+          0.0
+        ],
+        "t": 9.95
+      },
+      "terminal_event_count": 0,
+      "two_distinct_cameras_accepted": true,
+      "verdict": "fixed"
+    },
+    "fixed_serialized_corrections": {
+      "oracle_posterior_P": [
+        [
+          0.011547096285016267,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.011595590090772757,
+          0.0016886957424820832
+        ],
+        [
+          0.0,
+          0.0016886957424820828,
+          0.04995502382835276
+        ]
+      ],
+      "oracle_posterior_m": [
+        0.0953879270894817,
+        0.0,
+        0.0
+      ],
+      "posterior": {
+        "P": [
+          [
+            0.011547096285016264,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.011595590090772755,
+            0.0016886957424820876
+          ],
+          [
+            0.0,
+            0.0016886957424820876,
+            0.04995502382835277
+          ]
+        ],
+        "m": [
+          0.0953879270894818,
+          0.0,
+          0.0
+        ],
+        "t": 10.2
+      },
+      "read_priors": [
+        {
+          "P": [
+            [
+              0.05,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.05,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.05
+            ]
+          ],
+          "m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "t": 9.8
+        },
+        {
+          "P": [
+            [
+              0.018752811797050732,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.018761244749253544,
+              0.0007498497503298006
+            ],
+            [
+              0.0,
+              0.0007498497503298006,
+              0.050029970024658
+            ]
+          ],
+          "m": [
+            0.05250187453136711,
+            0.0,
+            0.0
+          ],
+          "t": 10.0
+        }
+      ],
+      "terminal_events": [
+        {
+          "accepted": true,
+          "apply_stamp": 10.3,
+          "belief_stamp_after": 10.0,
+          "correction_stamp": 10.0,
+          "nis": 0.004998750312421962,
+          "reason": "accepted",
+          "schema_version": 1,
+          "source_batch_id": "serial-A",
+          "status": "accepted"
+        },
+        {
+          "accepted": true,
+          "apply_stamp": 10.3,
+          "belief_stamp_after": 10.2,
+          "correction_stamp": 10.2,
+          "nis": 0.0011527300451182475,
+          "reason": "accepted",
+          "schema_version": 1,
+          "source_batch_id": "serial-B",
+          "status": "accepted"
+        }
+      ],
+      "verdict": "fixed",
+      "witnessed_lock_contention": true
+    },
+    "frame_and_white_noise_checks": {
+      "jacobian_max_abs_error": 8.22666379463044e-11,
+      "straight_white_covariance_partition_max_abs_error": 2.6020852139652106e-18,
+      "straight_white_lateral_variance": 0.0008066666666666667
+    },
+    "invalid_prediction_can_be_committed_after_refusal": {
+      "before": {
+        "P": [
+          [
+            0.05,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.05,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.05
+          ]
+        ],
+        "m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "t": 9.9
+      },
+      "finite_covariance_after": false,
+      "finite_mean_after": false,
+      "stamp_after": 10.0,
+      "terminal_event": {
+        "accepted": false,
+        "apply_stamp": 10.0,
+        "belief_stamp_after": 10.0,
+        "correction_stamp": 10.0,
+        "nis": null,
+        "reason": "update_failed",
+        "schema_version": 1,
+        "source_batch_id": "invalid-motion",
+        "status": "rejected"
+      },
+      "verdict": "confirmed open defect; nonfinite command fault injection"
+    },
+    "missing_prefix_and_empty_history": {
+      "empty_history_correction_prior_x": 0.01999999999999993,
+      "empty_history_publication_x": 0.0,
+      "known_script_expected_x": 0.12,
+      "partial_history_prior_x": 0.05999999999999979,
+      "partial_replay": {
+        "cmd_replay_count": 1.0,
+        "cmd_replay_duration_s": 0.5999999999999996,
+        "cmd_replay_used_fallback": 0.0,
+        "motion_replay_source_code": 1.0
+      }
+    },
+    "optional_heading_override_diagnostic": {
+      "actual_heading_delta": 0.6,
+      "committed": {
+        "P": [
+          [
+            0.018751192847799032,
+            5.043279604186729e-07,
+            0.0
+          ],
+          [
+            5.043279604186729e-07,
+            0.018750213226441687,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.05004
+          ]
+        ],
+        "m": [
+          0.018751192847799036,
+          5.043279604186726e-07,
+          1.0
+        ],
+        "t": 10.0
+      },
+      "reported_heading_delta": 0.0037496023840669634,
+      "verdict": "optional covariance transformation verified; yaw diagnostic open"
+    },
+    "per_camera_nonrejection_inflation": {
+      "actual_bootstrap_variance": 0.08,
+      "configured_once_per_batch_inflation": 0.05,
+      "single_camera_bootstrap_R": 0.03,
+      "single_long_gap_batch_inflation_added": 0.1000000000000003,
+      "stale_drop_stamp_after": 10.0,
+      "stale_drop_variance_added": 0.05
+    },
+    "pixel_refusal_freezes_anchor": {
+      "anchor_stamp_after": 9.9,
+      "reason_code": 5.0,
+      "rejected_stamp": 9.95
+    },
+    "prediction_yaw_diagnostic_uses_wrong_endpoint": {
+      "expected_integrated_delta": 0.12,
+      "predicted_delta": 0.11999999999999887,
+      "reported_odom_delta": 0.16000000000000086,
+      "verdict": "confirmed open diagnostic defect"
+    },
+    "q_diagnostic": {
+      "applied_heading_process_variance": 3.999999999999986e-05,
+      "dt": 0.25,
+      "logged_Q_theta_theta": 0.00016,
+      "ratio": 4.000000000000014
+    },
+    "quorum_information_reuse": {
+      "R_each": 0.03,
+      "actual_xy_variance": 0.01,
+      "assimilation_count": 0,
+      "cameras": 2,
+      "diagnostics_count": 2,
+      "equivalent_information_terms": 3.0,
+      "independent_two_reading_bootstrap_variance": 0.015
+    },
+    "stale_motion": {
+      "accepted": true,
+      "coverage": false,
+      "interval": [
+        9.9,
+        10.0
+      ],
+      "last_odom_stamp": 1.0,
+      "predicted_x": 0.01999999999999993,
+      "replay": {
+        "cmd_replay_count": 0.0,
+        "cmd_replay_duration_s": 0.09999999999999964,
+        "cmd_replay_used_fallback": 0.0,
+        "motion_replay_source_code": 1.0
+      }
+    },
+    "stale_quorum": {
+      "belief_stamp_after": 9.0,
+      "belief_stamp_before": 10.0,
+      "belief_x_after": 3.01,
+      "now": 12.0,
+      "old_camera_stamp": 9.0
+    },
+    "turning_partition_limit": {
+      "exact_continuous_mean": [
+        0.16829419696157932,
+        0.09193953882637206,
+        1.0
+      ],
+      "partitions": [
+        {
+          "P": [
+            [
+              0.0001,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              5.3333333333333345e-06,
+              4e-05
+            ],
+            [
+              0.0,
+              4e-05,
+              0.0004
+            ]
+          ],
+          "m": [
+            0.2,
+            0.0,
+            1.0
+          ],
+          "steps": 1
+        },
+        {
+          "P": [
+            [
+              7.771845064212613e-05,
+              3.0739433711746914e-05,
+              -2.2488726658753662e-05
+            ],
+            [
+              3.0739433711746914e-05,
+              2.7354502411169667e-05,
+              3.174890287795088e-05
+            ],
+            [
+              -2.2488726658753662e-05,
+              3.174890287795088e-05,
+              0.0004
+            ]
+          ],
+          "m": [
+            0.1727509053590026,
+            0.0834481999235163,
+            0.9999999999999999
+          ],
+          "steps": 10
+        },
+        {
+          "P": [
+            [
+              7.482130995601097e-05,
+              3.281885106463001e-05,
+              -2.394002171021133e-05
+            ],
+            [
+              3.281885106463001e-05,
+              3.0251618532591674e-05,
+              3.06623798678858e-05
+            ],
+            [
+              -2.394002171021133e-05,
+              3.06623798678858e-05,
+              0.0003999999999999993
+            ]
+          ],
+          "m": [
+            0.16875249220173236,
+            0.09109730167746377,
+            1.0000000000000007
+          ],
+          "steps": 100
+        }
+      ],
+      "verdict": "declared Euler/frozen-heading approximation, not a Q retuning result"
+    },
+    "unsupported_heading": {
+      "heading_variance_added": 0.0005999999999999964,
+      "replay_cap_s": 1.5,
+      "total_gap_s": 10.0,
+      "unknown_motion_s": 8.5,
+      "xy_variance_added": 3.4970500000000007
+    }
+  },
+  "import_provenance": {
+    "experiments.core.visibility_launch_common": {
+      "frozen_protocol_match": null,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/experiments/experiments/core/visibility_launch_common.py",
+      "resolved_source": "src/experiments/experiments/core/visibility_launch_common.py",
+      "sha256": "be80369af8f80b70a07e824554baa1dcc12022064d1ec255a04c1bee7754c0e8"
+    },
+    "planning.core.belief_correction": {
+      "frozen_protocol_match": false,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/core/belief_correction.py",
+      "resolved_source": "src/planning/planning/core/belief_correction.py",
+      "sha256": "0f5f0b32f561ad1326fec098dedd93a975c14904dc5e4602341afd53c432ee12"
+    },
+    "planning.core.dynamics": {
+      "frozen_protocol_match": true,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/core/dynamics.py",
+      "resolved_source": "src/planning/planning/core/dynamics.py",
+      "sha256": "7a6bde9ddfbc2b100b328fd5d1ae870438a57f1f95e2f7f91e8a6b51859a4107"
+    },
+    "planning.core.motion_history": {
+      "frozen_protocol_match": false,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/core/motion_history.py",
+      "resolved_source": "src/planning/planning/core/motion_history.py",
+      "sha256": "ac5ea439b956f3425a784447c384b828c8ce48075f7dabd0e6e96bb1b460a1c5"
+    },
+    "planning.nodes.efe_agent_node": {
+      "frozen_protocol_match": false,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/nodes/efe_agent_node.py",
+      "resolved_source": "src/planning/planning/nodes/efe_agent_node.py",
+      "sha256": "c2546f81863703e133f30c6342077f599a0ee48e650888f21e41431da6239296"
+    },
+    "planning.nodes.unicycle_planner_node": {
+      "frozen_protocol_match": false,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/nodes/unicycle_planner_node.py",
+      "resolved_source": "src/planning/planning/nodes/unicycle_planner_node.py",
+      "sha256": "b3e78d48b56b84f84aecdb8e6d84d1941a715aa946941bbdc166d59e1ed4418b"
+    },
+    "planning.planners.base_planner": {
+      "frozen_protocol_match": null,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/planners/base_planner.py",
+      "resolved_source": "src/planning/planning/planners/base_planner.py",
+      "sha256": "135901442b985455048589547ae88ab1724763da4d707c3a532b536e84d321eb"
+    },
+    "sim.encoder_noise_node": {
+      "frozen_protocol_match": null,
+      "import_path": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/sim/sim/encoder_noise_node.py",
+      "resolved_source": "src/sim/sim/encoder_noise_node.py",
+      "sha256": "f48cbb9dee41b0a4b1cdcf78c51f9e0228c61c73008c4da24e3441cd631f88ef"
+    }
+  },
+  "probe_sha256": "637ea831accf6f2bd8955eb32ca9c8d982f9993f86ac96ae63408828b96c3735",
+  "source_after": {
+    "src/planning/planning/core/belief_correction.py": "0f5f0b32f561ad1326fec098dedd93a975c14904dc5e4602341afd53c432ee12",
+    "src/planning/planning/core/dynamics.py": "7a6bde9ddfbc2b100b328fd5d1ae870438a57f1f95e2f7f91e8a6b51859a4107",
+    "src/planning/planning/core/motion_history.py": "ac5ea439b956f3425a784447c384b828c8ce48075f7dabd0e6e96bb1b460a1c5",
+    "src/planning/planning/nodes/efe_agent_node.py": "c2546f81863703e133f30c6342077f599a0ee48e650888f21e41431da6239296",
+    "src/planning/planning/nodes/unicycle_planner_node.py": "b3e78d48b56b84f84aecdb8e6d84d1941a715aa946941bbdc166d59e1ed4418b",
+    "src/planning/planning/planners/base_planner.py": "135901442b985455048589547ae88ab1724763da4d707c3a532b536e84d321eb",
+    "src/sim/sim/encoder_noise_node.py": "f48cbb9dee41b0a4b1cdcf78c51f9e0228c61c73008c4da24e3441cd631f88ef"
+  },
+  "source_before": {
+    "src/planning/planning/core/belief_correction.py": "0f5f0b32f561ad1326fec098dedd93a975c14904dc5e4602341afd53c432ee12",
+    "src/planning/planning/core/dynamics.py": "7a6bde9ddfbc2b100b328fd5d1ae870438a57f1f95e2f7f91e8a6b51859a4107",
+    "src/planning/planning/core/motion_history.py": "ac5ea439b956f3425a784447c384b828c8ce48075f7dabd0e6e96bb1b460a1c5",
+    "src/planning/planning/nodes/efe_agent_node.py": "c2546f81863703e133f30c6342077f599a0ee48e650888f21e41431da6239296",
+    "src/planning/planning/nodes/unicycle_planner_node.py": "b3e78d48b56b84f84aecdb8e6d84d1941a715aa946941bbdc166d59e1ed4418b",
+    "src/planning/planning/planners/base_planner.py": "135901442b985455048589547ae88ab1724763da4d707c3a532b536e84d321eb",
+    "src/sim/sim/encoder_noise_node.py": "f48cbb9dee41b0a4b1cdcf78c51f9e0228c61c73008c4da24e3441cd631f88ef"
+  },
+  "source_stable_during_probe": true
+}

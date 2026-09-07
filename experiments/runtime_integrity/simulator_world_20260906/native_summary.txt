@@ -1,0 +1,330 @@
+{
+  "contact_stream": {
+    "count": 2500,
+    "first_stamp_s": 0.001,
+    "last_stamp_s": 2.5,
+    "median_positive_interval_s": 0.0010000000000000009,
+    "min_positive_interval_s": 0.0009999999999998899,
+    "max_positive_interval_s": 0.001000000000000334,
+    "unique_positive_intervals_s": [
+      0.001
+    ]
+  },
+  "clear_stream_count": 0,
+  "first_contact_payload": {
+    "header": {
+      "stamp": {
+        "nsec": 1000000
+      }
+    },
+    "contact": [
+      {
+        "header": {
+          "stamp": {
+            "nsec": 1000000
+          }
+        },
+        "collision1": {
+          "id": "73",
+          "name": "warehouse_v2_occluders::obs_A2b3e::collision"
+        },
+        "collision2": {
+          "id": "159",
+          "name": "turtlebot3::base_footprint::base_footprint_fixed_joint_lump__base_link_collision"
+        },
+        "position": [
+          {
+            "x": -4.930000000000001,
+            "y": 5.668,
+            "z": 0.39000000000000024
+          },
+          {
+            "x": -4.930000000000001,
+            "y": 5.668,
+            "z": 0.11999999999999977
+          },
+          {
+            "x": -4.930000000000001,
+            "y": 5.117999999999999,
+            "z": 0.11999999999999977
+          },
+          {
+            "x": -4.930000000000001,
+            "y": 5.117999999999999,
+            "z": 0.39000000000000024
+          }
+        ]
+      }
+    ]
+  },
+  "last_contact_payload": {
+    "header": {
+      "stamp": {
+        "sec": "2",
+        "nsec": 500000000
+      }
+    },
+    "contact": [
+      {
+        "header": {
+          "stamp": {
+            "sec": "2",
+            "nsec": 500000000
+          }
+        },
+        "collision1": {
+          "id": "73",
+          "name": "warehouse_v2_occluders::obs_A2b3e::collision"
+        },
+        "collision2": {
+          "id": "159",
+          "name": "turtlebot3::base_footprint::base_footprint_fixed_joint_lump__base_link_collision"
+        },
+        "position": [
+          {
+            "x": -4.91092122186494,
+            "y": 5.118000000126716,
+            "z": 0.07050104368547494
+          },
+          {
+            "x": -4.9116749871838,
+            "y": 5.117999999673589,
+            "z": 0.3404999915312841
+          },
+          {
+            "x": -4.911674987249121,
+            "y": 5.667999999673589,
+            "z": 0.34049999245414053
+          },
+          {
+            "x": -4.91092122193026,
+            "y": 5.668000000126716,
+            "z": 0.0705010446083314
+          }
+        ]
+      }
+    ]
+  },
+  "native_cadence": {
+    "ground_truth": {
+      "count": 372,
+      "first_stamp_s": 0.0,
+      "last_stamp_s": 1.223,
+      "median_positive_interval_s": 0.017000000000000015,
+      "min_positive_interval_s": 0.0009999999999998899,
+      "max_positive_interval_s": 0.018000000000000238,
+      "unique_positive_intervals_s": [
+        0.001,
+        0.01,
+        0.014,
+        0.015,
+        0.016,
+        0.017,
+        0.018
+      ]
+    },
+    "odom": {
+      "count": 223,
+      "first_stamp_s": 0.02,
+      "last_stamp_s": 1.22,
+      "median_positive_interval_s": 0.020000000000000018,
+      "min_positive_interval_s": 0.019999999999999574,
+      "max_positive_interval_s": 0.020000000000000462,
+      "unique_positive_intervals_s": [
+        0.02
+      ]
+    },
+    "native_tf": {
+      "count": 223,
+      "first_stamp_s": 0.0,
+      "last_stamp_s": 0.0,
+      "median_positive_interval_s": null,
+      "min_positive_interval_s": null,
+      "max_positive_interval_s": null,
+      "unique_positive_intervals_s": [],
+      "rate_note": "stamp is on each pose, not the Pose_V outer header"
+    }
+  },
+  "reset": {
+    "gt_before": {
+      "stamp": 3.222,
+      "robot": {
+        "name": "turtlebot3",
+        "id": 147,
+        "position": {
+          "x": -7.54885443323252,
+          "y": -8.69999999991513,
+          "z": 7.977331342318881e-08
+        },
+        "orientation": {
+          "x": -5.958221473617269e-10,
+          "y": 1.330463989932109e-07,
+          "z": -3.5959529305468123e-11,
+          "w": 0.9999999999999911
+        }
+      }
+    },
+    "gt_after": {
+      "stamp": 0.017,
+      "robot": {
+        "name": "turtlebot3",
+        "id": 147,
+        "position": {
+          "x": -7.545254433358584,
+          "y": -8.699999999915098,
+          "z": 7.97733137932671e-08
+        },
+        "orientation": {
+          "x": -5.958219292236306e-10,
+          "y": 1.3304637803781034e-07,
+          "z": -3.7580465254962305e-11,
+          "w": 0.9999999999999911
+        }
+      }
+    },
+    "gt_last": {
+      "stamp": 1.223,
+      "robot": {
+        "name": "turtlebot3",
+        "id": 147,
+        "position": {
+          "x": -7.304054441803022,
+          "y": -8.6999999999335,
+          "z": 7.977331328875923e-08
+        },
+        "orientation": {
+          "x": -5.958226337434027e-10,
+          "y": 1.3304634157677984e-07,
+          "z": -1.1345461280050413e-10,
+          "w": 0.9999999999999911
+        }
+      }
+    },
+    "odom_before": {
+      "header": {
+        "stamp": {
+          "sec": "3",
+          "nsec": 220000000
+        },
+        "data": [
+          {
+            "key": "frame_id",
+            "value": [
+              "odom"
+            ]
+          },
+          {
+            "key": "child_frame_id",
+            "value": [
+              "base_link"
+            ]
+          }
+        ]
+      },
+      "pose": {
+        "position": {
+          "x": 0.3529999999918547,
+          "y": -1.2376353616414103e-12
+        },
+        "orientation": {
+          "z": -1.771499618737e-12,
+          "w": 1
+        }
+      },
+      "twist": {
+        "linear": {
+          "x": 0.19999999999931184
+        },
+        "angular": {}
+      }
+    },
+    "odom_after": {
+      "header": {
+        "stamp": {},
+        "data": [
+          {
+            "key": "frame_id",
+            "value": [
+              "odom"
+            ]
+          },
+          {
+            "key": "child_frame_id",
+            "value": [
+              "base_link"
+            ]
+          }
+        ]
+      },
+      "pose": {
+        "position": {
+          "x": 0.35359999999185265,
+          "y": -1.2397611611838872e-12
+        },
+        "orientation": {
+          "z": -1.771499618737e-12,
+          "w": 1
+        }
+      },
+      "twist": {
+        "linear": {
+          "x": 0.1799937926747376
+        },
+        "angular": {}
+      }
+    },
+    "odom_last": {
+      "header": {
+        "stamp": {
+          "sec": "1",
+          "nsec": 220000000
+        },
+        "data": [
+          {
+            "key": "frame_id",
+            "value": [
+              "odom"
+            ]
+          },
+          {
+            "key": "child_frame_id",
+            "value": [
+              "base_link"
+            ]
+          }
+        ]
+      },
+      "pose": {
+        "position": {
+          "x": 0.5975999999910186,
+          "y": -2.1167784986723187e-12
+        },
+        "orientation": {
+          "z": -1.8124390927700646e-12,
+          "w": 1
+        }
+      },
+      "twist": {
+        "linear": {
+          "x": 0.19999999999935625
+        },
+        "angular": {}
+      }
+    }
+  },
+  "pause": {
+    "sim_stamp_s": 2.492,
+    "native_clock_messages": 447,
+    "system_clock_span_s": 0.9984052181243896
+  },
+  "raw_files_sha256": {
+    "transport.odom.jsonl": "da6f171e3d67654141e70337060ac673bc441151d6dc757489744c70ff5b3dd9",
+    "transport.ground_truth.jsonl": "2ece55897cd5fc2802a72f86eae4c256ed2b71e65b88482f5261aaafe1a57698",
+    "transport.configured_tf.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "transport.joint_states.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "transport.native_tf.jsonl": "f0e1b247a8844aad7f2f84a28ad78b0a5d19d78315487801ac51b32b3c5c55bd",
+    "transport.clock.jsonl": "9b75115a7b975cb59a981074c7485d58b0e7947bea4636cddfe4c63bdc2ba616",
+    "clear.contacts.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "contact.contacts.jsonl": "640c6deb1036766b855258876770d1684b4e31d495ea7efb05dbe527ce0e0942"
+  }
+}

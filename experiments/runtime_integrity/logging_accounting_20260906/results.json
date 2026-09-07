@@ -1,0 +1,373 @@
+{
+  "additional_boundaries": {
+    "gap_semantics": {
+      "largest_accepted_update_interval_s": 4.0,
+      "stop_stamp": 10.0,
+      "summary_gap_s": 1.0,
+      "trailing_no_accepted_update_s": 5.0
+    },
+    "headers_at_finish": {
+      "correction_assimilations.csv": 0,
+      "experiment.csv": 4529,
+      "fusion_observations.csv": 0
+    },
+    "identity_precision": {
+      "fusion_rows": [
+        {
+          "camera": "A",
+          "obs_repeat": "0",
+          "obs_stamp": "1.0",
+          "source_batch_id": "a"
+        },
+        {
+          "camera": "B",
+          "obs_repeat": "0",
+          "obs_stamp": "1.0",
+          "source_batch_id": "a"
+        },
+        {
+          "camera": "A",
+          "obs_repeat": "1",
+          "obs_stamp": "1.0000004",
+          "source_batch_id": "b"
+        },
+        {
+          "camera": "B",
+          "obs_repeat": "1",
+          "obs_stamp": "1.0000004",
+          "source_batch_id": "b"
+        }
+      ],
+      "logger_accepts_unknown_schema": true,
+      "manager_contract_error": "Unsupported schema_version 'future'",
+      "same_camera_batch_changed_stamp_duplicate": false
+    },
+    "status_control": {
+      "assimilation_rows": 5,
+      "dropped_fraction": 0.2,
+      "duplicated": [],
+      "extra": [],
+      "fusion_batches": [
+        "accepted",
+        "accepted_bootstrap",
+        "dropped",
+        "reanchored",
+        "rejected"
+      ],
+      "missing": [],
+      "statuses": {
+        "accepted": 1,
+        "accepted_bootstrap": 1,
+        "dropped": 1,
+        "reanchored": 1,
+        "rejected": 1
+      },
+      "summary_count": 5,
+      "summary_count_matches": true,
+      "summary_dropped_fraction": 0.2,
+      "summary_valid": true,
+      "unclassifiable": [],
+      "unreasoned": [],
+      "update_batches": [
+        "accepted_bootstrap",
+        "accepted",
+        "reanchored"
+      ]
+    },
+    "truth_receipt_latency": {
+      "injected_delay_s": 5.0,
+      "reported_max_sample_interval_s": 0.001000000000000334,
+      "stamp_source": "receipt_sim_clock"
+    }
+  },
+  "held_and_diagnostics": {
+    "held_rows": 5,
+    "last_output_value": "0.09",
+    "last_raw_receipt": "2.1",
+    "last_raw_value": "0.2",
+    "paired_diagnostic_error": -0.020000000000000018,
+    "reported_noise_error": "-0.11000000000000001",
+    "summary_tick_weighted_mean": 0.8,
+    "unique_belief_stamps": 2,
+    "unique_event_mean": 0.5
+  },
+  "logging_faults": {
+    "duplicate_delivery": {
+      "assimilation_rows": 1,
+      "campaign_validation": [
+        true,
+        ""
+      ],
+      "dropped_fraction": 0.0,
+      "duplicated": [],
+      "extra": [],
+      "fusion_batches": [
+        "expected"
+      ],
+      "missing": [],
+      "statuses": {
+        "accepted": 1
+      },
+      "summary_count": 1,
+      "summary_count_matches": true,
+      "summary_dropped_fraction": 0.0,
+      "summary_valid": false,
+      "unclassifiable": [],
+      "unreasoned": [],
+      "update_batches": [
+        "expected"
+      ]
+    },
+    "extra": {
+      "assimilation_rows": 1,
+      "campaign_validation": [
+        false,
+        "correction/assimilation batch mismatch: 1 missing, 1 extra"
+      ],
+      "dropped_fraction": 0.0,
+      "duplicated": [],
+      "extra": [
+        "extra"
+      ],
+      "fusion_batches": [
+        "expected"
+      ],
+      "missing": [
+        "expected"
+      ],
+      "statuses": {
+        "accepted": 1
+      },
+      "summary_count": 1,
+      "summary_count_matches": true,
+      "summary_dropped_fraction": 0.0,
+      "summary_valid": true,
+      "unclassifiable": [],
+      "unreasoned": [],
+      "update_batches": [
+        "extra"
+      ]
+    },
+    "malformed_delivery": {
+      "assimilation_rows": 1,
+      "campaign_validation": [
+        true,
+        ""
+      ],
+      "dropped_fraction": 0.0,
+      "duplicated": [],
+      "extra": [],
+      "fusion_batches": [
+        "expected"
+      ],
+      "missing": [],
+      "statuses": {
+        "accepted": 1
+      },
+      "summary_count": 1,
+      "summary_count_matches": true,
+      "summary_dropped_fraction": 0.0,
+      "summary_valid": false,
+      "unclassifiable": [],
+      "unreasoned": [],
+      "update_batches": [
+        "expected"
+      ]
+    },
+    "missing": {
+      "assimilation_rows": 0,
+      "campaign_validation": [
+        false,
+        "correction/assimilation batch mismatch: 1 missing, 0 extra"
+      ],
+      "dropped_fraction": 0.0,
+      "duplicated": [],
+      "extra": [],
+      "fusion_batches": [
+        "expected"
+      ],
+      "missing": [
+        "expected"
+      ],
+      "statuses": {},
+      "summary_count": 0,
+      "summary_count_matches": true,
+      "summary_dropped_fraction": 0.0,
+      "summary_valid": true,
+      "unclassifiable": [],
+      "unreasoned": [],
+      "update_batches": []
+    },
+    "opportunity_nonfinite": {
+      "exception": "Out of range float values are not JSON compliant",
+      "first_written_is_duplicate": true,
+      "rows_counter": 1,
+      "seen": 1,
+      "written_rows": 0
+    },
+    "post_summary_tail": {
+      "assimilation_rows": 2,
+      "dropped_fraction": 0.0,
+      "duplicated": [],
+      "extra": [],
+      "fusion_batches": [
+        "after",
+        "before"
+      ],
+      "last_log_stamp": "10.200000000000001",
+      "missing": [],
+      "statuses": {
+        "accepted": 2
+      },
+      "summary_count": 1,
+      "summary_count_matches": false,
+      "summary_dropped_fraction": 0.0,
+      "summary_valid": true,
+      "unclassifiable": [],
+      "unreasoned": [],
+      "update_batches": [
+        "before",
+        "after"
+      ]
+    },
+    "receipt_collision": {
+      "assimilation_rows": 2,
+      "dropped_fraction": 0.0,
+      "duplicated": [],
+      "extra": [
+        "b"
+      ],
+      "fusion_batches": [
+        "a"
+      ],
+      "missing": [],
+      "statuses": {
+        "accepted": 2
+      },
+      "summary_count": 2,
+      "summary_count_matches": true,
+      "summary_dropped_fraction": 0.0,
+      "summary_valid": true,
+      "unclassifiable": [],
+      "unreasoned": [],
+      "update_batches": [
+        "a",
+        "b"
+      ]
+    },
+    "summary_write_failure": {
+      "completed_latched": true,
+      "file_bytes": 0,
+      "parsed": null,
+      "stop_latched": true
+    },
+    "unknown_status": {
+      "assimilation_rows": 1,
+      "campaign_validation": [
+        false,
+        "unclassifiable assimilation status: ['teleported']"
+      ],
+      "dropped_fraction": 0.0,
+      "duplicated": [],
+      "extra": [],
+      "fusion_batches": [
+        "expected"
+      ],
+      "missing": [],
+      "statuses": {
+        "teleported": 1
+      },
+      "summary_count": 1,
+      "summary_count_matches": true,
+      "summary_dropped_fraction": 0.0,
+      "summary_valid": false,
+      "unclassifiable": [
+        "expected"
+      ],
+      "unreasoned": [],
+      "update_batches": []
+    },
+    "unreasoned_rejected": {
+      "assimilation_rows": 1,
+      "campaign_validation": [
+        false,
+        "1 refusal(s) with no recorded reason"
+      ],
+      "dropped_fraction": 0.0,
+      "duplicated": [],
+      "extra": [],
+      "fusion_batches": [
+        "expected"
+      ],
+      "missing": [],
+      "statuses": {
+        "rejected": 1
+      },
+      "summary_count": 1,
+      "summary_count_matches": true,
+      "summary_dropped_fraction": 0.0,
+      "summary_valid": true,
+      "unclassifiable": [],
+      "unreasoned": [
+        "expected"
+      ],
+      "update_batches": []
+    }
+  },
+  "mini_run": {
+    "assimilation_rows": 5,
+    "campaign_validation": [
+      false,
+      "correction/assimilation batch mismatch: 2 missing, 0 extra"
+    ],
+    "detector_misses": 5,
+    "dropped_fraction": 0.2,
+    "duplicate_opportunity_deliveries": 1,
+    "duplicated": [],
+    "extra": [],
+    "fatal_events": [
+      {
+        "context": "fused correction envelope failed",
+        "error": "duplicate source_batch_id 'strict:camera_A@1200000000,camera_B@1200000000,camera_C@1200000000,camera_D@1200000000,camera_E@1200000000'"
+      },
+      {
+        "context": "fused correction envelope failed",
+        "error": "correction envelope frame differs from robot belief frame"
+      }
+    ],
+    "fusion_batches": [
+      "malformed_fused",
+      "strict:camera_A@1000000000,camera_B@1000000000,camera_C@1000000000,camera_D@1000000000,camera_E@1000000000",
+      "strict:camera_A@1200000000,camera_B@1200000000,camera_C@1200000000,camera_D@1200000000,camera_E@1200000000",
+      "strict:camera_A@1400000000,camera_B@1400000000,camera_C@1400000000,camera_D@1400000000,camera_E@1400000000",
+      "strict:camera_A@1600000000,camera_B@1600000000,camera_C@1600000000,camera_D@1600000000,camera_E@1600000000",
+      "strict:camera_A@1800000000,camera_B@1800000000,camera_C@1800000000,camera_D@1800000000,camera_E@1800000000",
+      "strict:camera_A@2200000000,camera_B@2200000000,camera_C@2200000000,camera_D@2200000000,camera_E@2200000000"
+    ],
+    "generated_assimilations": 6,
+    "malformed_opportunity_deliveries": 1,
+    "missing": [
+      "malformed_fused",
+      "strict:camera_A@2200000000,camera_B@2200000000,camera_C@2200000000,camera_D@2200000000,camera_E@2200000000"
+    ],
+    "opportunity_rows": 41,
+    "physical_unique_fused_publications": 7,
+    "statuses": {
+      "accepted": 2,
+      "accepted_bootstrap": 1,
+      "dropped": 1,
+      "rejected": 1
+    },
+    "summary_count": 5,
+    "summary_count_matches": true,
+    "summary_dropped_fraction": 0.2,
+    "summary_valid": true,
+    "unclassifiable": [],
+    "unreasoned": [],
+    "update_batches": [
+      "strict:camera_A@1000000000,camera_B@1000000000,camera_C@1000000000,camera_D@1000000000,camera_E@1000000000",
+      "strict:camera_A@1200000000,camera_B@1200000000,camera_C@1200000000,camera_D@1200000000,camera_E@1200000000",
+      "strict:camera_A@1600000000,camera_B@1600000000,camera_C@1600000000,camera_D@1600000000,camera_E@1600000000"
+    ]
+  }
+}

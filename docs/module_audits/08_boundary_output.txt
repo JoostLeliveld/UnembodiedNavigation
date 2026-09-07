@@ -1,0 +1,32 @@
+/home/joostleliveld/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+/home/joostleliveld/.local/lib/python3.10/site-packages/pandas/core/computation/expressions.py:21: UserWarning: Pandas requires version '2.8.4' or newer of 'numexpr' (version '2.8.1' currently installed).
+  from pandas.core.computation.check import NUMEXPR_INSTALLED
+/home/joostleliveld/.local/lib/python3.10/site-packages/pandas/core/arrays/masked.py:61: UserWarning: Pandas requires version '1.3.6' or newer of 'bottleneck' (version '1.3.2' currently installed).
+  from pandas.core import (
+{
+  "all_camera_orders": {
+    "permutations": 120,
+    "maximum_metric_covariance_difference": 3.469446951953614e-18
+  },
+  "camera_roster_not_bound": {
+    "manager_ids": "camera_A,camera_B",
+    "planner_ids": [
+      "camera_A",
+      "camera_B",
+      "camera_C",
+      "camera_D",
+      "camera_E"
+    ],
+    "artifact": "9a312f1970c1689c1c830c12059e484fd285d97cb70c2e4d51b0a361319565ec"
+  },
+  "availability_not_objective_input": {
+    "q_zero_objective": 24.537343546654313,
+    "q_one_objective": 24.537343546654313
+  },
+  "optional_coherent_drift_mismatch": {
+    "numpy_normalized": 24.536903978985087,
+    "casadi": 24.537343546654313
+  },
+  "probe_sha256": "22951c5061bba2a124cede5b1b452fce05bf08e67ecea41af8c90ad56f7048f3"
+}

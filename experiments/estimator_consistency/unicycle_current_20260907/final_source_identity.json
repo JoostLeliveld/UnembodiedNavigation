@@ -1,0 +1,36 @@
+{
+  "archive_matches_executed_sources": true,
+  "captured_utc": "2026-09-06T22:21:12.282389+00:00",
+  "changed_methods_since_initial": {
+    "src/planning/planning/core/belief_correction.py": [],
+    "src/planning/planning/core/dynamics.py": [],
+    "src/planning/planning/core/motion_history.py": [],
+    "src/planning/planning/nodes/efe_agent_node.py": [
+      "EfeAgentNode._simple_plan_safe_to_execute"
+    ],
+    "src/planning/planning/nodes/unicycle_planner_node.py": [
+      "UnicyclePlannerNode.__init__"
+    ],
+    "src/planning/planning/planners/base_planner.py": [],
+    "src/sim/sim/encoder_noise_node.py": []
+  },
+  "files_sha256": {
+    "src/planning/planning/core/belief_correction.py": "0f5f0b32f561ad1326fec098dedd93a975c14904dc5e4602341afd53c432ee12",
+    "src/planning/planning/core/dynamics.py": "7a6bde9ddfbc2b100b328fd5d1ae870438a57f1f95e2f7f91e8a6b51859a4107",
+    "src/planning/planning/core/motion_history.py": "ac5ea439b956f3425a784447c384b828c8ce48075f7dabd0e6e96bb1b460a1c5",
+    "src/planning/planning/nodes/efe_agent_node.py": "c2546f81863703e133f30c6342077f599a0ee48e650888f21e41431da6239296",
+    "src/planning/planning/nodes/unicycle_planner_node.py": "b3e78d48b56b84f84aecdb8e6d84d1941a715aa946941bbdc166d59e1ed4418b",
+    "src/planning/planning/planners/base_planner.py": "135901442b985455048589547ae88ab1724763da4d707c3a532b536e84d321eb",
+    "src/sim/sim/encoder_noise_node.py": "f48cbb9dee41b0a4b1cdcf78c51f9e0228c61c73008c4da24e3441cd631f88ef"
+  },
+  "launch_parameters_match_first_verification": true,
+  "post_final_probe_changes": {
+    "src/planning/planning/planners/base_planner.py": {
+      "changed_methods": [
+        "UnicyclePlannerBase.__init__"
+      ],
+      "current_hash": "10e36dff72b66d2f2637f55cb1006b3de853f0dc998f91db5860ca3dfcbcc1e1",
+      "tested_hash": "135901442b985455048589547ae88ab1724763da4d707c3a532b536e84d321eb"
+    }
+  }
+}

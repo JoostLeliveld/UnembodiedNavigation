@@ -1,0 +1,205 @@
+{
+  "valid": {
+    "contract_errors": [],
+    "assimilation_parser": {
+      "accepted_input": true,
+      "rows": 1,
+      "returned": [
+        {
+          "source_batch_id": "audit15:batch",
+          "correction_stamp": 1.0,
+          "apply_stamp": 1.5,
+          "belief_stamp_after": 1.0,
+          "status": "accepted",
+          "reason": "accepted",
+          "accepted": true,
+          "nis": 0.0
+        }
+      ]
+    },
+    "event_belief_helper": {
+      "accepted_input": true,
+      "rows": 1,
+      "returned": [
+        {
+          "source_batch_id": "audit15:batch",
+          "assimilation_status": "accepted",
+          "n_candidates": 1.0,
+          "error_cm": 0.0,
+          "stated_sigma_cm": 10.0,
+          "belief_lag_after_fusion_s": 0.10000000000000009
+        }
+      ]
+    }
+  },
+  "reasoned_drop": {
+    "contract_errors": [],
+    "assimilation_parser": {
+      "accepted_input": true,
+      "rows": 1,
+      "returned": [
+        {
+          "source_batch_id": "audit15:batch",
+          "correction_stamp": 1.0,
+          "apply_stamp": 1.5,
+          "belief_stamp_after": 1.0,
+          "status": "dropped",
+          "reason": "replay_gap_too_large",
+          "accepted": false,
+          "nis": 0.0
+        }
+      ]
+    },
+    "event_belief_helper": {
+      "accepted_input": true,
+      "rows": 0,
+      "returned": []
+    }
+  },
+  "missing": {
+    "contract_errors": [
+      "missing_assimilation"
+    ],
+    "assimilation_parser": {
+      "accepted_input": true,
+      "rows": 0,
+      "returned": []
+    },
+    "event_belief_helper": {
+      "accepted_input": false,
+      "reason": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end_20260906/synthetic_runs/missing: schema 4 run has no source-batch assimilation records"
+    }
+  },
+  "duplicate": {
+    "contract_errors": [
+      "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end_20260906/synthetic_runs/duplicate/correction_assimilations.csv: duplicate assimilation for audit15:batch"
+    ],
+    "assimilation_parser": {
+      "accepted_input": false,
+      "reason": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end_20260906/synthetic_runs/duplicate/correction_assimilations.csv: duplicate assimilation for audit15:batch"
+    },
+    "event_belief_helper": {
+      "accepted_input": false,
+      "reason": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/runtime_integrity/end_to_end_20260906/synthetic_runs/duplicate/correction_assimilations.csv: duplicate assimilation for audit15:batch"
+    }
+  },
+  "extra": {
+    "contract_errors": [
+      "extra_assimilation"
+    ],
+    "assimilation_parser": {
+      "accepted_input": true,
+      "rows": 2,
+      "returned": [
+        {
+          "source_batch_id": "audit15:batch",
+          "correction_stamp": 1.0,
+          "apply_stamp": 1.5,
+          "belief_stamp_after": 1.0,
+          "status": "accepted",
+          "reason": "accepted",
+          "accepted": true,
+          "nis": 0.0
+        },
+        {
+          "source_batch_id": "extra",
+          "correction_stamp": 1.0,
+          "apply_stamp": 1.5,
+          "belief_stamp_after": 1.0,
+          "status": "accepted",
+          "reason": "accepted",
+          "accepted": true,
+          "nis": 0.0
+        }
+      ]
+    },
+    "event_belief_helper": {
+      "accepted_input": true,
+      "rows": 1,
+      "returned": [
+        {
+          "source_batch_id": "audit15:batch",
+          "assimilation_status": "accepted",
+          "n_candidates": 1.0,
+          "error_cm": 0.0,
+          "stated_sigma_cm": 10.0,
+          "belief_lag_after_fusion_s": 0.10000000000000009
+        }
+      ]
+    }
+  },
+  "unknown": {
+    "contract_errors": [
+      "unclassifiable_status"
+    ],
+    "assimilation_parser": {
+      "accepted_input": true,
+      "rows": 1,
+      "returned": [
+        {
+          "source_batch_id": "audit15:batch",
+          "correction_stamp": 1.0,
+          "apply_stamp": 1.5,
+          "belief_stamp_after": 1.0,
+          "status": "mystery",
+          "reason": "accepted",
+          "accepted": true,
+          "nis": 0.0
+        }
+      ]
+    },
+    "event_belief_helper": {
+      "accepted_input": true,
+      "rows": 0,
+      "returned": []
+    }
+  },
+  "unreasoned": {
+    "contract_errors": [
+      "refusal_without_reason"
+    ],
+    "assimilation_parser": {
+      "accepted_input": true,
+      "rows": 1,
+      "returned": [
+        {
+          "source_batch_id": "audit15:batch",
+          "correction_stamp": 1.0,
+          "apply_stamp": 1.5,
+          "belief_stamp_after": 1.0,
+          "status": "rejected",
+          "reason": "",
+          "accepted": false,
+          "nis": 0.0
+        }
+      ]
+    },
+    "event_belief_helper": {
+      "accepted_input": true,
+      "rows": 0,
+      "returned": []
+    }
+  },
+  "reference_gap": {
+    "query": 5.0,
+    "value": [
+      [
+        1.0
+      ],
+      [
+        0.0
+      ]
+    ]
+  },
+  "epoch_overlap": {
+    "query": 1.0,
+    "value": [
+      [
+        10.2
+      ],
+      [
+        0.0
+      ]
+    ]
+  }
+}

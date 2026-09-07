@@ -1,0 +1,18 @@
+{
+  "logging_schema_version": 7,
+  "task": "fusion_network_traverse",
+  "seed": 0,
+  "run_id": "same_batch_changed_capture",
+  "manager_fusion_rule": "joint_network",
+  "manager_observation_model": "hull",
+  "goal_termination_reference": "planner_belief",
+  "process_noise_xy": 0.01,
+  "process_noise_theta": 0.02,
+  "use_odom_for_predict": true,
+  "odom_topic": "/odom_noisy",
+  "task_start_pose": {
+    "x": 0,
+    "y": 0,
+    "yaw": 0
+  }
+}

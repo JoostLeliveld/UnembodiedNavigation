@@ -1,0 +1,7 @@
+{
+  "harness_errors": {},
+  "failed_reproductions": [],
+  "source_changes_during_harness": [],
+  "live_simulator": "NOT RUN: component acceptance prerequisites fail",
+  "semantics": "No all-green acceptance implied by a successful reproduction"
+}

@@ -1,0 +1,6204 @@
+{
+  "src/planning/planning/nodes/unicycle_planner_node.py": {
+    "UnicyclePlannerNode.__init__": {
+      "line": 66,
+      "end_line": 778,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 342,
+          "target": "self.plan_rate"
+        },
+        {
+          "line": 343,
+          "target": "self.belief_publish_rate"
+        },
+        {
+          "line": 344,
+          "target": "self.horizon"
+        },
+        {
+          "line": 345,
+          "target": "self.dt"
+        },
+        {
+          "line": 346,
+          "target": "self.v_min"
+        },
+        {
+          "line": 347,
+          "target": "self.v_max"
+        },
+        {
+          "line": 348,
+          "target": "self.w_min"
+        },
+        {
+          "line": 349,
+          "target": "self.w_max"
+        },
+        {
+          "line": 350,
+          "target": "self.control_weight"
+        },
+        {
+          "line": 351,
+          "target": "self.seed"
+        },
+        {
+          "line": 353,
+          "target": "self.coherent_drift"
+        },
+        {
+          "line": 354,
+          "target": "self.process_noise_xy"
+        },
+        {
+          "line": 355,
+          "target": "self.process_noise_theta"
+        },
+        {
+          "line": 356,
+          "target": "self.obs_noise_uv"
+        },
+        {
+          "line": 358,
+          "target": "self.goal_sigma_uv"
+        },
+        {
+          "line": 360,
+          "target": "self.risk_weight_obs"
+        },
+        {
+          "line": 361,
+          "target": "self.ambiguity_weight"
+        },
+        {
+          "line": 362,
+          "target": "self.approx_method"
+        },
+        {
+          "line": 365,
+          "target": "self.planner_path_summary"
+        },
+        {
+          "line": 368,
+          "target": "self.use_obs_risk"
+        },
+        {
+          "line": 369,
+          "target": "self.use_ambiguity"
+        },
+        {
+          "line": 370,
+          "target": "self.use_visibility_model"
+        },
+        {
+          "line": 371,
+          "target": "self.visibility_target_height_m"
+        },
+        {
+          "line": 372,
+          "target": "self.visibility_geometry_json"
+        },
+        {
+          "line": 373,
+          "target": "self.collision_geometry_json"
+        },
+        {
+          "line": 374,
+          "target": "self.r_visible_uv"
+        },
+        {
+          "line": 375,
+          "target": "self.r_miss_uv"
+        },
+        {
+          "line": 376,
+          "target": "self.visibility_sigma_kappa"
+        },
+        {
+          "line": 377,
+          "target": "self.goal_prior_u_std_start"
+        },
+        {
+          "line": 378,
+          "target": "self.goal_prior_v_std_start"
+        },
+        {
+          "line": 379,
+          "target": "self.goal_prior_u_std_final"
+        },
+        {
+          "line": 380,
+          "target": "self.goal_prior_v_std_final"
+        },
+        {
+          "line": 381,
+          "target": "self.goal_tightening_power"
+        },
+        {
+          "line": 382,
+          "target": "self.goal_progress_n_steps"
+        },
+        {
+          "line": 383,
+          "target": "self.observation_risk_scale"
+        },
+        {
+          "line": 384,
+          "target": "self.ambiguity_term_scale"
+        },
+        {
+          "line": 385,
+          "target": "self.discount_gamma"
+        },
+        {
+          "line": 386,
+          "target": "self.use_nogo_cost"
+        },
+        {
+          "line": 387,
+          "target": "self.nogo_penalty_type"
+        },
+        {
+          "line": 388,
+          "target": "self.nogo_weight"
+        },
+        {
+          "line": 389,
+          "target": "self.nogo_safe_distance"
+        },
+        {
+          "line": 390,
+          "target": "self.nogo_logbarrier_eps"
+        },
+        {
+          "line": 391,
+          "target": "self.nogo_warning_band"
+        },
+        {
+          "line": 392,
+          "target": "self.nogo_near_weight"
+        },
+        {
+          "line": 393,
+          "target": "self.use_belief_nogo_cost"
+        },
+        {
+          "line": 394,
+          "target": "self.nogo_belief_kappa"
+        },
+        {
+          "line": 395,
+          "target": "self.use_hit_miss_mixture"
+        },
+        {
+          "line": 396,
+          "target": "self.nogo_mode"
+        },
+        {
+          "line": 397,
+          "target": "self.driveable_geometry_json"
+        },
+        {
+          "line": 398,
+          "target": "self.visibility_artifact_path"
+        },
+        {
+          "line": 399,
+          "target": "self.camera_network_artifact_path"
+        },
+        {
+          "line": 400,
+          "target": "self.robot_collision_radius_m"
+        },
+        {
+          "line": 402,
+          "target": "self.optimizer_maxiter"
+        },
+        {
+          "line": 403,
+          "target": "self.optimizer_maxfun"
+        },
+        {
+          "line": 404,
+          "target": "self.optimizer_ftol"
+        },
+        {
+          "line": 405,
+          "target": "self.optimizer_gtol"
+        },
+        {
+          "line": 406,
+          "target": "self.optimizer_warm_start"
+        },
+        {
+          "line": 407,
+          "target": "self.optimizer_multistart"
+        },
+        {
+          "line": 408,
+          "target": "self.optimizer_multistart_include_direct"
+        },
+        {
+          "line": 411,
+          "target": "self.optimizer_initial_routes_json"
+        },
+        {
+          "line": 414,
+          "target": "self.optimizer_terminal_goal_tolerance_m"
+        },
+        {
+          "line": 417,
+          "target": "self.optimizer_route_seed_mode"
+        },
+        {
+          "line": 420,
+          "target": "self.use_hierarchical"
+        },
+        {
+          "line": 421,
+          "target": "self.global_horizon"
+        },
+        {
+          "line": 423,
+          "target": "self.global_dt"
+        },
+        {
+          "line": 424,
+          "target": "self.local_horizon"
+        },
+        {
+          "line": 425,
+          "target": "self.local_plan_rate"
+        },
+        {
+          "line": 426,
+          "target": "self.local_optimizer_maxiter"
+        },
+        {
+          "line": 427,
+          "target": "self.global_use_ambiguity"
+        },
+        {
+          "line": 428,
+          "target": "self.local_use_ambiguity"
+        },
+        {
+          "line": 429,
+          "target": "self.local_use_obs_risk"
+        },
+        {
+          "line": 430,
+          "target": "self.global_optimizer_multistart"
+        },
+        {
+          "line": 433,
+          "target": "self.local_optimizer_multistart"
+        },
+        {
+          "line": 436,
+          "target": "self.local_use_visibility_model"
+        },
+        {
+          "line": 439,
+          "target": "self.local_use_belief_nogo_cost"
+        },
+        {
+          "line": 442,
+          "target": "self.local_nogo_penalty_type"
+        },
+        {
+          "line": 445,
+          "target": "self.local_nogo_weight"
+        },
+        {
+          "line": 446,
+          "target": "self.local_nogo_safe_distance"
+        },
+        {
+          "line": 449,
+          "target": "self.local_goal_prior_u_std_start"
+        },
+        {
+          "line": 452,
+          "target": "self.local_goal_prior_v_std_start"
+        },
+        {
+          "line": 455,
+          "target": "self.local_goal_prior_u_std_final"
+        },
+        {
+          "line": 458,
+          "target": "self.local_goal_prior_v_std_final"
+        },
+        {
+          "line": 461,
+          "target": "self.waypoint_spacing_m"
+        },
+        {
+          "line": 462,
+          "target": "self.waypoint_arrival_radius_m"
+        },
+        {
+          "line": 463,
+          "target": "self.local_replan_min_remaining_s"
+        },
+        {
+          "line": 466,
+          "target": "self.local_replan_on_waypoint_change"
+        },
+        {
+          "line": 469,
+          "target": "self.latency_compensate_plan_handoff"
+        },
+        {
+          "line": 472,
+          "target": "self.simple_tracker_yaw_gate_rad"
+        },
+        {
+          "line": 476,
+          "target": "self.local_controller_type"
+        },
+        {
+          "line": 482,
+          "target": "self.use_pixel_correction"
+        },
+        {
+          "line": 483,
+          "target": "self.state_correction_ekf"
+        },
+        {
+          "line": 486,
+          "target": "self.state_correction_mode"
+        },
+        {
+          "line": 494,
+          "target": "self.map_observations_topic"
+        },
+        {
+          "line": 495,
+          "target": "self.state_correction_envelope_topic"
+        },
+        {
+          "line": 498,
+          "target": "self.require_state_correction_envelope"
+        },
+        {
+          "line": 505,
+          "target": "self.pixel_topic"
+        },
+        {
+          "line": 506,
+          "target": "self.cmd_topic"
+        },
+        {
+          "line": 507,
+          "target": "self.cmd_publish_rate"
+        },
+        {
+          "line": 508,
+          "target": "self.pixel_timeout_s"
+        },
+        {
+          "line": 509,
+          "target": "self.pixel_correction_min_interval_s"
+        },
+        {
+          "line": 512,
+          "target": "self.bev_y_calibration_offset_m"
+        },
+        {
+          "line": 520,
+          "target": "self._bev_affine"
+        },
+        {
+          "line": 523,
+          "target": "self.pixel_max_correction_jump_m"
+        },
+        {
+          "line": 526,
+          "target": "self.use_diagnostic_odom_localization"
+        },
+        {
+          "line": 529,
+          "target": "self.diagnostic_odom_topic"
+        },
+        {
+          "line": 532,
+          "target": "self.pixel_correction_nis_threshold"
+        },
+        {
+          "line": 535,
+          "target": "self.pixel_correction_approx"
+        },
+        {
+          "line": 540,
+          "target": "self.skip_stale_pixel_correction"
+        },
+        {
+          "line": 543,
+          "target": "self.odom_topic"
+        },
+        {
+          "line": 544,
+          "target": "self.use_odom_for_predict"
+        },
+        {
+          "line": 545,
+          "target": "self.odom_yaw_offset_rad"
+        },
+        {
+          "line": 546,
+          "target": "self.state_reanchor_m"
+        },
+        {
+          "line": 547,
+          "target": "self.state_max_predict_dt_s"
+        },
+        {
+          "line": 548,
+          "target": "self.state_reject_inflate_m2"
+        },
+        {
+          "line": 551,
+          "target": "self.stale_belief_inflate_m2_per_s"
+        },
+        {
+          "line": 554,
+          "target": "self.stale_belief_inflate_cap_m2"
+        },
+        {
+          "line": 557,
+          "target": "self.state_max_correction_jump_m"
+        },
+        {
+          "line": 560,
+          "target": "self.max_predict_speed_mps"
+        },
+        {
+          "line": 563,
+          "target": "self._latest_odom_yaw"
+        },
+        {
+          "line": 566,
+          "target": "self._odom_origin_stamp_s"
+        },
+        {
+          "line": 570,
+          "target": "self._odom_accepted_stamp_ns"
+        },
+        {
+          "line": 574,
+          "target": "self._odom_refused_old"
+        },
+        {
+          "line": 575,
+          "target": "self._odom_refused_duplicate"
+        },
+        {
+          "line": 576,
+          "target": "self._odom_refused_invalid"
+        },
+        {
+          "line": 577,
+          "target": "self.heading_update_mode"
+        },
+        {
+          "line": 583,
+          "target": "self.min_state_cov"
+        },
+        {
+          "line": 584,
+          "target": "self.cov_eig_floor"
+        },
+        {
+          "line": 585,
+          "target": "self._heading_anchor_applied"
+        },
+        {
+          "line": 586,
+          "target": "self._state_bev_yaw_ignored"
+        },
+        {
+          "line": 587,
+          "target": "self._latest_prediction_source"
+        },
+        {
+          "line": 588,
+          "target": "self._latest_prediction_dt"
+        },
+        {
+          "line": 589,
+          "target": "self._latest_u_pred_v"
+        },
+        {
+          "line": 590,
+          "target": "self._latest_u_pred_omega"
+        },
+        {
+          "line": 591,
+          "target": "self._latest_Q_theta_theta"
+        },
+        {
+          "line": 592,
+          "target": "self._latest_odom_delta_theta"
+        },
+        {
+          "line": 593,
+          "target": "self._latest_cmd_delta_theta"
+        },
+        {
+          "line": 594,
+          "target": "self.debug_runtime"
+        },
+        {
+          "line": 595,
+          "target": "self.debug_log_period_s"
+        },
+        {
+          "line": 596,
+          "target": "self.slow_plan_factor"
+        },
+        {
+          "line": 597,
+          "target": "self.slow_correction_ms"
+        },
+        {
+          "line": 608,
+          "target": "self._camera_params"
+        },
+        {
+          "line": 609,
+          "target": "self._warm_start_shift_steps"
+        },
+        {
+          "line": 610,
+          "target": "self.optimizer_warm_start_shift_steps"
+        },
+        {
+          "line": 611,
+          "target": "self.planner"
+        },
+        {
+          "line": 612,
+          "target": "self._io_group"
+        },
+        {
+          "line": 613,
+          "target": "self._plan_group"
+        },
+        {
+          "line": 614,
+          "target": "self._data_lock"
+        },
+        {
+          "line": 615,
+          "target": "self._correction_lock"
+        },
+        {
+          "line": 620,
+          "target": "self.state_sub"
+        },
+        {
+          "line": 624,
+          "target": "self.state_correction_envelope_sub"
+        },
+        {
+          "line": 630,
+          "target": "self.state_correction_envelope_sub"
+        },
+        {
+          "line": 637,
+          "target": "self.map_observations_sub"
+        },
+        {
+          "line": 639,
+          "target": "self.map_observations_sub"
+        },
+        {
+          "line": 650,
+          "target": "self.goal_sub"
+        },
+        {
+          "line": 654,
+          "target": "self.pixel_sub"
+        },
+        {
+          "line": 658,
+          "target": "self.detection_diag_sub"
+        },
+        {
+          "line": 662,
+          "target": "self.cmd_sub"
+        },
+        {
+          "line": 666,
+          "target": "self.odom_sub"
+        },
+        {
+          "line": 672,
+          "target": "self.diagnostic_odom_pose"
+        },
+        {
+          "line": 673,
+          "target": "self.diagnostic_odom_pose_stamp"
+        },
+        {
+          "line": 674,
+          "target": "self._tf_buffer"
+        },
+        {
+          "line": 675,
+          "target": "self._tf_listener"
+        },
+        {
+          "line": 676,
+          "target": "self.diagnostic_odom_sub"
+        },
+        {
+          "line": 680,
+          "target": "self._tf_buffer"
+        },
+        {
+          "line": 681,
+          "target": "self._tf_listener"
+        },
+        {
+          "line": 682,
+          "target": "self._do_transform_pose"
+        },
+        {
+          "line": 683,
+          "target": "self.diagnostic_odom_sub"
+        },
+        {
+          "line": 696,
+          "target": "self.path_pub"
+        },
+        {
+          "line": 697,
+          "target": "self.plan_preview_pub"
+        },
+        {
+          "line": 698,
+          "target": "self.planner_belief_pub"
+        },
+        {
+          "line": 701,
+          "target": "self.metrics_pub"
+        },
+        {
+          "line": 702,
+          "target": "self.planner_diag_pub"
+        },
+        {
+          "line": 703,
+          "target": "self.planner_diag_text_pub"
+        },
+        {
+          "line": 704,
+          "target": "self.pixel_correction_diag_pub"
+        },
+        {
+          "line": 707,
+          "target": "self.correction_assimilation_pub"
+        },
+        {
+          "line": 712,
+          "target": "self.state_msg"
+        },
+        {
+          "line": 713,
+          "target": "self.goal_msg"
+        },
+        {
+          "line": 714,
+          "target": "self._goal_received_logged"
+        },
+        {
+          "line": 715,
+          "target": "self.pixel_meas"
+        },
+        {
+          "line": 716,
+          "target": "self.pixel_stamp"
+        },
+        {
+          "line": 717,
+          "target": "self._latest_detection_diag"
+        },
+        {
+          "line": 718,
+          "target": "self._last_correction_log"
+        },
+        {
+          "line": 719,
+          "target": "self._last_correction_stamp"
+        },
+        {
+          "line": 720,
+          "target": "self._seen_state_source_batch_ids"
+        },
+        {
+          "line": 721,
+          "target": "self._seen_map_observation_stamps"
+        },
+        {
+          "line": 722,
+          "target": "self._last_stale_log"
+        },
+        {
+          "line": 723,
+          "target": "self._last_shape_mismatch_log"
+        },
+        {
+          "line": 724,
+          "target": "self._last_runtime_log"
+        },
+        {
+          "line": 725,
+          "target": "self._last_plan_entry_log"
+        },
+        {
+          "line": 726,
+          "target": "self._last_plan_return_log"
+        },
+        {
+          "line": 727,
+          "target": "self._last_slow_plan_log"
+        },
+        {
+          "line": 728,
+          "target": "self._last_slow_correction_log"
+        },
+        {
+          "line": 729,
+          "target": "self._fatal_stop_triggered"
+        },
+        {
+          "line": 730,
+          "target": "self._goal_signature"
+        },
+        {
+          "line": 731,
+          "target": "self._goal_progress_start_dist_m"
+        },
+        {
+          "line": 732,
+          "target": "self.belief_m"
+        },
+        {
+          "line": 733,
+          "target": "self.belief_S"
+        },
+        {
+          "line": 734,
+          "target": "self.belief_stamp"
+        },
+        {
+          "line": 735,
+          "target": "self.last_cmd"
+        },
+        {
+          "line": 736,
+          "target": "self.odom_vel"
+        },
+        {
+          "line": 741,
+          "target": "self._cmd_log"
+        },
+        {
+          "line": 742,
+          "target": "self._odom_log"
+        },
+        {
+          "line": 743,
+          "target": "self._CMD_LOG_MAX_S"
+        },
+        {
+          "line": 744,
+          "target": "self._latest_measurement_available"
+        },
+        {
+          "line": 745,
+          "target": "self._latest_belief_age_s"
+        },
+        {
+          "line": 748,
+          "target": "self._plan_period_s"
+        },
+        {
+          "line": 751,
+          "target": "self._belief_publish_period_s"
+        },
+        {
+          "line": 757,
+          "target": "self._pixel_correction_timer"
+        },
+        {
+          "line": 760,
+          "target": "self._pixel_correction_timer"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 77,
+          "call": "self.has_parameter"
+        },
+        {
+          "line": 78,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 342,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 343,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 344,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 345,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 346,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 347,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 348,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 349,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 350,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 351,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 353,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 354,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 355,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 356,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 358,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 360,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 361,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 362,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 368,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 369,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 370,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 371,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 372,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 373,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 374,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 375,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 376,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 377,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 378,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 379,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 380,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 381,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 382,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 383,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 384,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 385,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 386,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 387,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 388,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 389,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 390,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 391,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 392,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 393,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 394,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 395,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 396,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 397,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 398,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 399,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 400,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 402,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 403,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 404,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 405,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 406,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 407,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 409,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 412,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 415,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 418,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 420,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 421,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 422,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 423,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 424,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 425,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 426,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 427,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 428,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 429,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 431,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 434,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 437,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 440,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 443,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 445,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 447,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 450,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 453,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 456,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 459,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 461,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 462,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 464,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 467,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 470,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 473,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 477,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 482,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 483,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 487,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 494,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 496,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 499,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 505,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 506,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 507,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 508,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 510,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 513,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 518,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 524,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 527,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 530,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 533,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 536,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 541,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 543,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 544,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 545,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 546,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 547,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 549,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 552,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 555,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 558,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 561,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 577,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 583,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 594,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 595,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 596,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 597,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 600,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 601,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 602,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 603,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 604,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 606,
+          "call": "self._warm_start_shift_steps_for_rate"
+        },
+        {
+          "line": 611,
+          "call": "self._construct_planner"
+        },
+        {
+          "line": 620,
+          "call": "self.create_subscription"
+        },
+        {
+          "line": 630,
+          "call": "self.create_subscription"
+        },
+        {
+          "line": 639,
+          "call": "self.create_subscription"
+        },
+        {
+          "line": 643,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 643,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 650,
+          "call": "self.create_subscription"
+        },
+        {
+          "line": 654,
+          "call": "self.create_subscription"
+        },
+        {
+          "line": 658,
+          "call": "self.create_subscription"
+        },
+        {
+          "line": 662,
+          "call": "self.create_subscription"
+        },
+        {
+          "line": 666,
+          "call": "self.create_subscription"
+        },
+        {
+          "line": 683,
+          "call": "self.create_subscription"
+        },
+        {
+          "line": 687,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 687,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 696,
+          "call": "self.create_publisher"
+        },
+        {
+          "line": 697,
+          "call": "self.create_publisher"
+        },
+        {
+          "line": 698,
+          "call": "self.create_publisher"
+        },
+        {
+          "line": 701,
+          "call": "self.create_publisher"
+        },
+        {
+          "line": 702,
+          "call": "self.create_publisher"
+        },
+        {
+          "line": 703,
+          "call": "self.create_publisher"
+        },
+        {
+          "line": 704,
+          "call": "self.create_publisher"
+        },
+        {
+          "line": 707,
+          "call": "self.create_publisher"
+        },
+        {
+          "line": 749,
+          "call": "self.create_timer"
+        },
+        {
+          "line": 752,
+          "call": "self.create_timer"
+        },
+        {
+          "line": 760,
+          "call": "self.create_timer"
+        },
+        {
+          "line": 763,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 763,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 764,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 764,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._publish_safe_stop_command": {
+      "line": 780,
+      "end_line": 782,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._fatal_experiment_stop": {
+      "line": 784,
+      "end_line": 813,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 787,
+          "target": "self._fatal_stop_triggered"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 790,
+          "call": "self._publish_safe_stop_command"
+        },
+        {
+          "line": 797,
+          "call": "self.get_logger().error"
+        },
+        {
+          "line": 797,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 804,
+          "call": "self.get_logger().error"
+        },
+        {
+          "line": 804,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._state_cb": {
+      "line": 816,
+      "end_line": 835,
+      "decorators": [
+        "_serialized_correction"
+      ],
+      "assignments": [
+        {
+          "line": 818,
+          "target": "self.state_msg"
+        }
+      ],
+      "locks": [
+        {
+          "line": 817,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 833,
+          "call": "self._apply_state_correction"
+        },
+        {
+          "line": 835,
+          "call": "self._fatal_experiment_stop"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._state_correction_envelope_cb": {
+      "line": 838,
+      "end_line": 887,
+      "decorators": [
+        "_serialized_correction"
+      ],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 874,
+          "context": "self._data_lock"
+        },
+        {
+          "line": 884,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 858,
+          "call": "self._resolve_plan_frame_id"
+        },
+        {
+          "line": 878,
+          "call": "self._apply_metric_correction"
+        },
+        {
+          "line": 879,
+          "call": "self._float_to_stamp"
+        },
+        {
+          "line": 885,
+          "call": "self._seen_state_source_batch_ids.add"
+        },
+        {
+          "line": 887,
+          "call": "self._fatal_experiment_stop"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._map_observations_cb": {
+      "line": 890,
+      "end_line": 906,
+      "decorators": [
+        "_serialized_correction"
+      ],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 895,
+          "call": "self._resolve_plan_frame_id"
+        },
+        {
+          "line": 901,
+          "call": "self._fatal_experiment_stop"
+        },
+        {
+          "line": 904,
+          "call": "self._apply_map_observations"
+        },
+        {
+          "line": 906,
+          "call": "self._fatal_experiment_stop"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._update_goal_progress_origin": {
+      "line": 908,
+      "end_line": 924,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 923,
+          "target": "self._goal_signature"
+        },
+        {
+          "line": 924,
+          "target": "self._goal_progress_start_dist_m"
+        }
+      ],
+      "locks": [
+        {
+          "line": 914,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._warm_start_shift_steps_for_rate": {
+      "line": 926,
+      "end_line": 930,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._construct_planner": {
+      "line": 932,
+      "end_line": 954,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 950,
+          "call": "self._build_planner_instance"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._build_planner_instance": {
+      "line": 956,
+      "end_line": 1005,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 957,
+          "call": "self.PLANNER_CLASS"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._current_goal_progress_index": {
+      "line": 1007,
+      "end_line": 1017,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1012,
+          "target": "self._goal_progress_start_dist_m"
+        }
+      ],
+      "locks": [
+        {
+          "line": 1009,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._goal_cb": {
+      "line": 1019,
+      "end_line": 1030,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1021,
+          "target": "self.goal_msg"
+        },
+        {
+          "line": 1024,
+          "target": "self._goal_received_logged"
+        }
+      ],
+      "locks": [
+        {
+          "line": 1020,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1025,
+          "call": "self._update_goal_progress_origin"
+        },
+        {
+          "line": 1027,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 1027,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._cmd_cb": {
+      "line": 1032,
+      "end_line": 1041,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1035,
+          "target": "self.last_cmd"
+        }
+      ],
+      "locks": [
+        {
+          "line": 1034,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1033,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 1033,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 1037,
+          "call": "self._cmd_log.append"
+        },
+        {
+          "line": 1041,
+          "call": "self._cmd_log.pop"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1033,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._yaw_from_quaternion": {
+      "line": 1044,
+      "end_line": 1047,
+      "decorators": [
+        "staticmethod"
+      ],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._odom_cb": {
+      "line": 1049,
+      "end_line": 1102,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1069,
+          "target": "self._odom_refused_invalid"
+        },
+        {
+          "line": 1072,
+          "target": "self._odom_refused_invalid"
+        },
+        {
+          "line": 1079,
+          "target": "self._odom_refused_invalid"
+        },
+        {
+          "line": 1090,
+          "target": "self._odom_refused_duplicate"
+        },
+        {
+          "line": 1092,
+          "target": "self._odom_refused_old"
+        },
+        {
+          "line": 1094,
+          "target": "self._latest_odom_yaw"
+        },
+        {
+          "line": 1095,
+          "target": "self.odom_vel"
+        },
+        {
+          "line": 1097,
+          "target": "self._odom_origin_stamp_s"
+        },
+        {
+          "line": 1099,
+          "target": "self._odom_accepted_stamp_ns"
+        }
+      ],
+      "locks": [
+        {
+          "line": 1083,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1065,
+          "call": "self._yaw_from_quaternion"
+        },
+        {
+          "line": 1098,
+          "call": "self._odom_log.append"
+        },
+        {
+          "line": 1102,
+          "call": "self._odom_log.pop"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._diagnostic_odom_cb": {
+      "line": 1104,
+      "end_line": 1121,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1120,
+          "target": "self.diagnostic_odom_pose"
+        },
+        {
+          "line": 1121,
+          "target": "self.diagnostic_odom_pose_stamp"
+        }
+      ],
+      "locks": [
+        {
+          "line": 1119,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1107,
+          "call": "self._resolve_plan_frame_id"
+        },
+        {
+          "line": 1111,
+          "call": "self._tf_buffer.lookup_transform"
+        },
+        {
+          "line": 1113,
+          "call": "self._do_transform_pose"
+        },
+        {
+          "line": 1118,
+          "call": "self._yaw_from_quaternion"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._stamp_to_float": {
+      "line": 1124,
+      "end_line": 1125,
+      "decorators": [
+        "staticmethod"
+      ],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._detection_diag_cb": {
+      "line": 1127,
+      "end_line": 1133,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1133,
+          "target": "self._latest_detection_diag"
+        }
+      ],
+      "locks": [
+        {
+          "line": 1132,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._state_msg_to_belief": {
+      "line": 1135,
+      "end_line": 1149,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1138,
+          "call": "self._yaw_from_quaternion"
+        },
+        {
+          "line": 1146,
+          "call": "self._xy_covariance_from_pose"
+        },
+        {
+          "line": 1149,
+          "call": "self._regularize_state_covariance"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._xy_covariance_from_pose": {
+      "line": 1151,
+      "end_line": 1179,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1174,
+          "call": "self._warn_stale_pixel_once"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._state_msg_age_s": {
+      "line": 1181,
+      "end_line": 1185,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1183,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 1183,
+          "call": "self.get_clock"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1183,
+          "expression": "self.get_clock().now()"
+        },
+        {
+          "line": 1183,
+          "expression": "Time.from_msg(state_ref.header.stamp)"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._state_msg_is_fresh": {
+      "line": 1187,
+      "end_line": 1190,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1188,
+          "call": "self._state_msg_age_s"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._regularize_state_covariance": {
+      "line": 1192,
+      "end_line": 1194,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._init_belief_from_state": {
+      "line": 1196,
+      "end_line": 1208,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1206,
+          "target": "self.belief_m"
+        },
+        {
+          "line": 1206,
+          "target": "self.belief_S"
+        },
+        {
+          "line": 1207,
+          "target": "self.belief_stamp"
+        }
+      ],
+      "locks": [
+        {
+          "line": 1197,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1200,
+          "call": "self._state_msg_is_fresh"
+        },
+        {
+          "line": 1201,
+          "call": "self._state_msg_age_s"
+        },
+        {
+          "line": 1202,
+          "call": "self._warn_stale_pixel_once"
+        },
+        {
+          "line": 1206,
+          "call": "self._state_msg_to_belief"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._matching_detection_diag_locked": {
+      "line": 1210,
+      "end_line": 1222,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1216,
+          "call": "self._stamp_to_float"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._pixel_cb": {
+      "line": 1225,
+      "end_line": 1256,
+      "decorators": [
+        "_serialized_correction"
+      ],
+      "assignments": [
+        {
+          "line": 1249,
+          "target": "self.pixel_meas"
+        },
+        {
+          "line": 1250,
+          "target": "self.pixel_stamp"
+        }
+      ],
+      "locks": [
+        {
+          "line": 1248,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1256,
+          "call": "self._apply_pixel_correction"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._pixel_correction_timer_cb": {
+      "line": 1258,
+      "end_line": 1265,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 1261,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1265,
+          "call": "self._apply_pixel_correction"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._stamp_age_s": {
+      "line": 1267,
+      "end_line": 1271,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1269,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 1269,
+          "call": "self.get_clock"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1269,
+          "expression": "self.get_clock().now()"
+        },
+        {
+          "line": 1269,
+          "expression": "Time.from_msg(stamp_msg)"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._warn_stale_pixel_once": {
+      "line": 1273,
+      "end_line": 1277,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1277,
+          "target": "self._last_stale_log"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1276,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 1276,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1274,
+          "expression": "time.monotonic()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._pixel_correction_is_throttled": {
+      "line": 1279,
+      "end_line": 1292,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 1282,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [],
+      "clocks": [
+        {
+          "line": 1288,
+          "expression": "Time.from_msg(stamp_msg)"
+        },
+        {
+          "line": 1288,
+          "expression": "Time.from_msg(last_correction_stamp)"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._replay_cmd_log_interval": {
+      "line": 1294,
+      "end_line": 1373,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 1325,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1309,
+          "call": "self.planner.predict"
+        },
+        {
+          "line": 1348,
+          "call": "self.planner.predict"
+        },
+        {
+          "line": 1360,
+          "call": "self.planner.predict"
+        },
+        {
+          "line": 1366,
+          "call": "self.planner.predict"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1306,
+          "expression": "Time.from_msg(from_stamp)"
+        },
+        {
+          "line": 1307,
+          "expression": "Time.from_msg(to_stamp)"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._pixel_correction_dt_s": {
+      "line": 1375,
+      "end_line": 1395,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 1378,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1389,
+          "call": "self._warn_stale_pixel_once"
+        },
+        {
+          "line": 1393,
+          "call": "self._init_belief_from_state"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1377,
+          "expression": "Time.from_msg(stamp_msg)"
+        },
+        {
+          "line": 1380,
+          "expression": "Time.from_msg(stamp_ref)"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._snapshot_pixel_correction_inputs": {
+      "line": 1397,
+      "end_line": 1416,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 1398,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1399,
+          "call": "self.belief_m.copy"
+        },
+        {
+          "line": 1400,
+          "call": "self.belief_S.copy"
+        },
+        {
+          "line": 1403,
+          "call": "self.pixel_meas.copy"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._correction_gates": {
+      "line": 1418,
+      "end_line": 1453,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._log_pixel_shape_error_once": {
+      "line": 1455,
+      "end_line": 1459,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1459,
+          "target": "self._last_shape_mismatch_log"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1458,
+          "call": "self.get_logger().error"
+        },
+        {
+          "line": 1458,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1456,
+          "expression": "time.monotonic()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._publish_pixel_correction_diagnostics": {
+      "line": 1463,
+      "end_line": 1571,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1501,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 1501,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 1506,
+          "call": "self.planner.camera.world_to_pixel"
+        },
+        {
+          "line": 1517,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 1571,
+          "call": "self.pixel_correction_diag_pub.publish"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1501,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._publish_pixel_correction_rejection": {
+      "line": 1575,
+      "end_line": 1637,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1607,
+          "call": "self._publish_pixel_correction_diagnostics"
+        },
+        {
+          "line": 1626,
+          "call": "self._pixel_correction_reject_code"
+        },
+        {
+          "line": 1627,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 1627,
+          "call": "self.get_clock"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1627,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._correction_reject_warning": {
+      "line": 1639,
+      "end_line": 1651,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._publish_correction_outcome": {
+      "line": 1653,
+      "end_line": 1721,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1657,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 1671,
+          "call": "self._publish_pixel_correction_rejection"
+        },
+        {
+          "line": 1696,
+          "call": "self._publish_pixel_correction_diagnostics"
+        },
+        {
+          "line": 1716,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 1716,
+          "call": "self.get_clock"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1716,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._apply_pixel_correction": {
+      "line": 1724,
+      "end_line": 1806,
+      "decorators": [
+        "_serialized_correction"
+      ],
+      "assignments": [
+        {
+          "line": 1779,
+          "target": "self.belief_m"
+        },
+        {
+          "line": 1780,
+          "target": "self.belief_S"
+        },
+        {
+          "line": 1781,
+          "target": "self.belief_stamp"
+        },
+        {
+          "line": 1782,
+          "target": "self._last_correction_stamp"
+        },
+        {
+          "line": 1794,
+          "target": "self._last_correction_log"
+        },
+        {
+          "line": 1806,
+          "target": "self._last_slow_correction_log"
+        }
+      ],
+      "locks": [
+        {
+          "line": 1742,
+          "context": "self._data_lock"
+        },
+        {
+          "line": 1778,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1726,
+          "call": "self._stamp_age_s"
+        },
+        {
+          "line": 1727,
+          "call": "self._correction_gates"
+        },
+        {
+          "line": 1732,
+          "call": "self._warn_stale_pixel_once"
+        },
+        {
+          "line": 1735,
+          "call": "self._publish_correction_outcome"
+        },
+        {
+          "line": 1739,
+          "call": "self._pixel_correction_is_throttled"
+        },
+        {
+          "line": 1744,
+          "call": "self._init_belief_from_state"
+        },
+        {
+          "line": 1748,
+          "call": "self._pixel_correction_dt_s"
+        },
+        {
+          "line": 1750,
+          "call": "self._publish_correction_outcome"
+        },
+        {
+          "line": 1760,
+          "call": "self._snapshot_pixel_correction_inputs"
+        },
+        {
+          "line": 1774,
+          "call": "self._correction_reject_warning"
+        },
+        {
+          "line": 1776,
+          "call": "self._warn_stale_pixel_once"
+        },
+        {
+          "line": 1783,
+          "call": "self._publish_correction_outcome"
+        },
+        {
+          "line": 1790,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 1790,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 1802,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 1802,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1725,
+          "expression": "time.perf_counter()"
+        },
+        {
+          "line": 1788,
+          "expression": "time.monotonic()"
+        },
+        {
+          "line": 1796,
+          "expression": "time.perf_counter()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._belief_snapshot_for_planning": {
+      "line": 1808,
+      "end_line": 1820,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 1809,
+          "context": "self._data_lock"
+        },
+        {
+          "line": 1813,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1811,
+          "call": "self._init_belief_from_state"
+        },
+        {
+          "line": 1815,
+          "call": "self.belief_m.copy"
+        },
+        {
+          "line": 1816,
+          "call": "self.belief_S.copy"
+        },
+        {
+          "line": 1819,
+          "call": "self.last_cmd.copy"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._belief_age_for_planning": {
+      "line": 1822,
+      "end_line": 1835,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1830,
+          "call": "self._warn_stale_pixel_once"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1826,
+          "expression": "Time.from_msg(now_msg)"
+        },
+        {
+          "line": 1826,
+          "expression": "Time.from_msg(stamp_ref)"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._pixel_measurement_available_for_planning": {
+      "line": 1837,
+      "end_line": 1846,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": [
+        {
+          "line": 1842,
+          "expression": "Time.from_msg(now_msg)"
+        },
+        {
+          "line": 1842,
+          "expression": "Time.from_msg(pixel_stamp_ref)"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._reset_prediction_diagnostics": {
+      "line": 1848,
+      "end_line": 1855,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1849,
+          "target": "self._latest_prediction_source"
+        },
+        {
+          "line": 1850,
+          "target": "self._latest_prediction_dt"
+        },
+        {
+          "line": 1851,
+          "target": "self._latest_u_pred_v"
+        },
+        {
+          "line": 1852,
+          "target": "self._latest_u_pred_omega"
+        },
+        {
+          "line": 1853,
+          "target": "self._latest_Q_theta_theta"
+        },
+        {
+          "line": 1854,
+          "target": "self._latest_odom_delta_theta"
+        },
+        {
+          "line": 1855,
+          "target": "self._latest_cmd_delta_theta"
+        }
+      ],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._predict_belief_to_now": {
+      "line": 1857,
+      "end_line": 1962,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1870,
+          "target": "self._latest_prediction_dt"
+        },
+        {
+          "line": 1871,
+          "target": "self._latest_prediction_source"
+        },
+        {
+          "line": 1901,
+          "target": "self._latest_odom_delta_theta"
+        },
+        {
+          "line": 1911,
+          "target": "self._latest_cmd_delta_theta"
+        },
+        {
+          "line": 1926,
+          "target": "self._latest_prediction_source"
+        },
+        {
+          "line": 1927,
+          "target": "self._latest_prediction_dt"
+        },
+        {
+          "line": 1930,
+          "target": "self._latest_Q_theta_theta"
+        },
+        {
+          "line": 1932,
+          "target": "self._latest_Q_theta_theta"
+        },
+        {
+          "line": 1935,
+          "target": "self._latest_u_pred_v"
+        },
+        {
+          "line": 1936,
+          "target": "self._latest_u_pred_omega"
+        },
+        {
+          "line": 1959,
+          "target": "self._latest_u_pred_v"
+        },
+        {
+          "line": 1960,
+          "target": "self._latest_u_pred_omega"
+        }
+      ],
+      "locks": [
+        {
+          "line": 1885,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1882,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 1882,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 1929,
+          "call": "self.planner.process_noise"
+        },
+        {
+          "line": 1937,
+          "call": "self.planner.predict"
+        },
+        {
+          "line": 1951,
+          "call": "self.planner.predict"
+        },
+        {
+          "line": 1957,
+          "call": "self.planner.predict"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1880,
+          "expression": "Time.from_msg(now_msg)"
+        },
+        {
+          "line": 1882,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._map_frame_heading": {
+      "line": 1964,
+      "end_line": 1969,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._map_frame_heading_variance": {
+      "line": 1971,
+      "end_line": 2000,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1994,
+          "call": "self._stamp_to_float"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._anchor_belief_yaw_for_planning": {
+      "line": 2002,
+      "end_line": 2032,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 2012,
+          "target": "self._heading_anchor_applied"
+        },
+        {
+          "line": 2013,
+          "target": "self._state_bev_yaw_ignored"
+        },
+        {
+          "line": 2031,
+          "target": "self._heading_anchor_applied"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 2018,
+          "call": "self._map_frame_heading"
+        },
+        {
+          "line": 2029,
+          "call": "self._map_frame_heading_variance"
+        },
+        {
+          "line": 2030,
+          "call": "self._regularize_state_covariance"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._inflate_stale_planning_covariance": {
+      "line": 2034,
+      "end_line": 2045,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 2045,
+          "call": "self._regularize_state_covariance"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._resolve_pixel_corrected_belief_for_planning": {
+      "line": 2047,
+      "end_line": 2088,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 2048,
+          "call": "self._belief_snapshot_for_planning"
+        },
+        {
+          "line": 2052,
+          "call": "self._belief_age_for_planning"
+        },
+        {
+          "line": 2054,
+          "call": "self._init_belief_from_state"
+        },
+        {
+          "line": 2056,
+          "call": "self._belief_snapshot_for_planning"
+        },
+        {
+          "line": 2061,
+          "call": "self._pixel_measurement_available_for_planning"
+        },
+        {
+          "line": 2069,
+          "call": "self._warn_stale_pixel_once"
+        },
+        {
+          "line": 2072,
+          "call": "self._predict_belief_to_now"
+        },
+        {
+          "line": 2076,
+          "call": "self._anchor_belief_yaw_for_planning"
+        },
+        {
+          "line": 2077,
+          "call": "self._inflate_stale_planning_covariance"
+        },
+        {
+          "line": 2079,
+          "call": "self._predict_belief_to_now"
+        },
+        {
+          "line": 2083,
+          "call": "self._anchor_belief_yaw_for_planning"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 2072,
+          "expression": "self._predict_belief_to_now(snapshot['m'], snapshot['S'], snapshot['last_cmd'], belief_age_s, now_msg)"
+        },
+        {
+          "line": 2079,
+          "expression": "self._predict_belief_to_now(snapshot['m'], snapshot['S'], snapshot['last_cmd'], belief_age_s, now_msg)"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._resolve_state_belief_for_planning": {
+      "line": 2090,
+      "end_line": 2152,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 2125,
+          "target": "self._state_bev_yaw_ignored"
+        },
+        {
+          "line": 2146,
+          "target": "self.belief_m"
+        },
+        {
+          "line": 2147,
+          "target": "self.belief_S"
+        },
+        {
+          "line": 2148,
+          "target": "self.belief_stamp"
+        }
+      ],
+      "locks": [
+        {
+          "line": 2092,
+          "context": "self._data_lock"
+        },
+        {
+          "line": 2145,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 2091,
+          "call": "self.get_clock().now().to_msg"
+        },
+        {
+          "line": 2091,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 2091,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 2094,
+          "call": "self.belief_m.copy"
+        },
+        {
+          "line": 2095,
+          "call": "self.belief_S.copy"
+        },
+        {
+          "line": 2097,
+          "call": "self.last_cmd.copy"
+        },
+        {
+          "line": 2100,
+          "call": "self._state_msg_is_fresh"
+        },
+        {
+          "line": 2106,
+          "call": "self._belief_age_for_planning"
+        },
+        {
+          "line": 2110,
+          "call": "self._predict_belief_to_now"
+        },
+        {
+          "line": 2113,
+          "call": "self._anchor_belief_yaw_for_planning"
+        },
+        {
+          "line": 2114,
+          "call": "self._inflate_stale_planning_covariance"
+        },
+        {
+          "line": 2116,
+          "call": "self._predict_belief_to_now"
+        },
+        {
+          "line": 2119,
+          "call": "self._anchor_belief_yaw_for_planning"
+        },
+        {
+          "line": 2124,
+          "call": "self._state_msg_to_belief"
+        },
+        {
+          "line": 2127,
+          "call": "self.belief_m.copy"
+        },
+        {
+          "line": 2128,
+          "call": "self.belief_S.copy"
+        },
+        {
+          "line": 2130,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2130,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2133,
+          "call": "self.planner.predict"
+        },
+        {
+          "line": 2134,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 2134,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 2134,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2134,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2138,
+          "call": "self.get_logger().error"
+        },
+        {
+          "line": 2138,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 2091,
+          "expression": "self.get_clock().now().to_msg()"
+        },
+        {
+          "line": 2091,
+          "expression": "self.get_clock().now()"
+        },
+        {
+          "line": 2110,
+          "expression": "self._predict_belief_to_now(belief_m, belief_S, last_cmd, belief_age_s, now_msg)"
+        },
+        {
+          "line": 2116,
+          "expression": "self._predict_belief_to_now(belief_m, belief_S, last_cmd, belief_age_s, now_msg)"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._reanchor_belief_to_correction": {
+      "line": 2154,
+      "end_line": 2164,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 2156,
+          "call": "self._reanchor_belief_to_xy"
+        },
+        {
+          "line": 2162,
+          "call": "self._state_measurement_cov"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._reanchor_belief_to_xy": {
+      "line": 2166,
+      "end_line": 2186,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 2182,
+          "target": "self.belief_m"
+        },
+        {
+          "line": 2182,
+          "target": "self.belief_S"
+        },
+        {
+          "line": 2183,
+          "target": "self.belief_stamp"
+        },
+        {
+          "line": 2184,
+          "target": "self._last_correction_stamp"
+        }
+      ],
+      "locks": [
+        {
+          "line": 2181,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 2171,
+          "call": "self._map_frame_heading"
+        },
+        {
+          "line": 2176,
+          "call": "self._map_frame_heading_variance"
+        },
+        {
+          "line": 2180,
+          "call": "self._regularize_state_covariance"
+        },
+        {
+          "line": 2186,
+          "call": "self._warn_stale_pixel_once"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._state_measurement_cov": {
+      "line": 2188,
+      "end_line": 2195,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 2195,
+          "call": "self._xy_covariance_from_pose"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._snapshot_metric_correction_inputs": {
+      "line": 2197,
+      "end_line": 2215,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 2198,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 2199,
+          "call": "self.belief_m.copy"
+        },
+        {
+          "line": 2200,
+          "call": "self.belief_S.copy"
+        },
+        {
+          "line": 2202,
+          "call": "self.last_cmd.copy"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._apply_state_correction": {
+      "line": 2217,
+      "end_line": 2226,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 2219,
+          "call": "self._apply_metric_correction"
+        },
+        {
+          "line": 2225,
+          "call": "self._state_measurement_cov"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._apply_map_observations": {
+      "line": 2229,
+      "end_line": 2297,
+      "decorators": [
+        "_serialized_correction"
+      ],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 2251,
+          "call": "self._seen_map_observation_stamps.get"
+        },
+        {
+          "line": 2253,
+          "call": "self._publish_pixel_correction_rejection"
+        },
+        {
+          "line": 2254,
+          "call": "self._float_to_stamp"
+        },
+        {
+          "line": 2256,
+          "call": "self._stamp_age_s"
+        },
+        {
+          "line": 2256,
+          "call": "self._float_to_stamp"
+        },
+        {
+          "line": 2274,
+          "call": "self._reanchor_on_camera_quorum"
+        },
+        {
+          "line": 2278,
+          "call": "self._apply_metric_correction"
+        },
+        {
+          "line": 2279,
+          "call": "self._float_to_stamp"
+        },
+        {
+          "line": 2281,
+          "call": "self._observation_covariance"
+        },
+        {
+          "line": 2295,
+          "call": "self._inflate_belief_after_rejection"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._observation_covariance": {
+      "line": 2299,
+      "end_line": 2305,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._reanchor_on_camera_quorum": {
+      "line": 2307,
+      "end_line": 2339,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 2311,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 2312,
+          "call": "self.belief_m.copy"
+        },
+        {
+          "line": 2334,
+          "call": "self._reanchor_belief_to_xy"
+        },
+        {
+          "line": 2335,
+          "call": "self._float_to_stamp"
+        },
+        {
+          "line": 2337,
+          "call": "self._observation_covariance"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._inflate_belief_after_rejection": {
+      "line": 2341,
+      "end_line": 2355,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 2352,
+          "target": "self.belief_S"
+        }
+      ],
+      "locks": [
+        {
+          "line": 2346,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 2352,
+          "call": "self._regularize_state_covariance"
+        },
+        {
+          "line": 2353,
+          "call": "self._warn_stale_pixel_once"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._advance_belief_over_outage": {
+      "line": 2357,
+      "end_line": 2408,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 2406,
+          "target": "self.belief_m"
+        },
+        {
+          "line": 2407,
+          "target": "self.belief_S"
+        },
+        {
+          "line": 2408,
+          "target": "self.belief_stamp"
+        }
+      ],
+      "locks": [
+        {
+          "line": 2372,
+          "context": "self._data_lock"
+        },
+        {
+          "line": 2405,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 2385,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2386,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2391,
+          "call": "self._predict_belief_to_now"
+        },
+        {
+          "line": 2407,
+          "call": "self._regularize_state_covariance"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 2391,
+          "expression": "self._predict_belief_to_now(m0, S0, last_cmd, replayed_s, stamp_msg, motion_snapshot=motion)"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._publish_correction_assimilation": {
+      "line": 2410,
+      "end_line": 2440,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 2422,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 2427,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2431,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2434,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 2434,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 2440,
+          "call": "self.correction_assimilation_pub.publish"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 2434,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._apply_metric_correction": {
+      "line": 2443,
+      "end_line": 2599,
+      "decorators": [
+        "_serialized_correction"
+      ],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 2483,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 2467,
+          "call": "self._stamp_age_s"
+        },
+        {
+          "line": 2468,
+          "call": "self._metric_correction_is_fresh"
+        },
+        {
+          "line": 2469,
+          "call": "self._publish_pixel_correction_rejection"
+        },
+        {
+          "line": 2476,
+          "call": "self._publish_correction_assimilation"
+        },
+        {
+          "line": 2493,
+          "call": "self._reanchor_belief_to_xy"
+        },
+        {
+          "line": 2494,
+          "call": "self._publish_correction_assimilation"
+        },
+        {
+          "line": 2502,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2502,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2508,
+          "call": "self._publish_pixel_correction_rejection"
+        },
+        {
+          "line": 2513,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2517,
+          "call": "self._publish_correction_assimilation"
+        },
+        {
+          "line": 2536,
+          "call": "self._advance_belief_over_outage"
+        },
+        {
+          "line": 2537,
+          "call": "self._inflate_belief_after_rejection"
+        },
+        {
+          "line": 2541,
+          "call": "self._publish_pixel_correction_rejection"
+        },
+        {
+          "line": 2546,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2550,
+          "call": "self._publish_correction_assimilation"
+        },
+        {
+          "line": 2560,
+          "call": "self._snapshot_metric_correction_inputs"
+        },
+        {
+          "line": 2569,
+          "call": "self._correction_gates"
+        },
+        {
+          "line": 2577,
+          "call": "self._commit_metric_correction_outcome"
+        },
+        {
+          "line": 2580,
+          "call": "self._publish_correction_outcome"
+        },
+        {
+          "line": 2592,
+          "call": "self._publish_correction_assimilation"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._metric_correction_is_fresh": {
+      "line": 2601,
+      "end_line": 2607,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._float_to_stamp": {
+      "line": 2609,
+      "end_line": 2613,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._commit_metric_correction_outcome": {
+      "line": 2615,
+      "end_line": 2709,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 2663,
+          "target": "self.belief_m"
+        },
+        {
+          "line": 2664,
+          "target": "self.belief_S"
+        },
+        {
+          "line": 2665,
+          "target": "self.belief_stamp"
+        },
+        {
+          "line": 2666,
+          "target": "self._last_correction_stamp"
+        },
+        {
+          "line": 2702,
+          "target": "self.belief_m"
+        },
+        {
+          "line": 2703,
+          "target": "self.belief_S"
+        },
+        {
+          "line": 2704,
+          "target": "self.belief_stamp"
+        }
+      ],
+      "locks": [
+        {
+          "line": 2662,
+          "context": "self._data_lock"
+        },
+        {
+          "line": 2701,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 2650,
+          "call": "self._map_frame_heading"
+        },
+        {
+          "line": 2655,
+          "call": "self._regularize_state_covariance"
+        },
+        {
+          "line": 2657,
+          "call": "self.project_to_psd"
+        },
+        {
+          "line": 2672,
+          "call": "self._reanchor_belief_to_xy"
+        },
+        {
+          "line": 2684,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2685,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2689,
+          "call": "self._advance_belief_over_outage"
+        },
+        {
+          "line": 2703,
+          "call": "self._regularize_state_covariance"
+        },
+        {
+          "line": 2705,
+          "call": "self._warn_stale_pixel_once"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._resolve_state_belief_ekf": {
+      "line": 2711,
+      "end_line": 2763,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 2723,
+          "target": "self._state_bev_yaw_ignored"
+        }
+      ],
+      "locks": [
+        {
+          "line": 2716,
+          "context": "self._data_lock"
+        },
+        {
+          "line": 2736,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 2719,
+          "call": "self.belief_m.copy"
+        },
+        {
+          "line": 2720,
+          "call": "self.belief_S.copy"
+        },
+        {
+          "line": 2722,
+          "call": "self.last_cmd.copy"
+        },
+        {
+          "line": 2733,
+          "call": "self._state_msg_is_fresh"
+        },
+        {
+          "line": 2735,
+          "call": "self._apply_state_correction"
+        },
+        {
+          "line": 2737,
+          "call": "self.belief_m.copy"
+        },
+        {
+          "line": 2738,
+          "call": "self.belief_S.copy"
+        },
+        {
+          "line": 2744,
+          "call": "self._state_msg_is_fresh"
+        },
+        {
+          "line": 2746,
+          "call": "self._belief_age_for_planning"
+        },
+        {
+          "line": 2750,
+          "call": "self._predict_belief_to_now"
+        },
+        {
+          "line": 2753,
+          "call": "self._anchor_belief_yaw_for_planning"
+        },
+        {
+          "line": 2754,
+          "call": "self._inflate_stale_planning_covariance"
+        },
+        {
+          "line": 2756,
+          "call": "self._predict_belief_to_now"
+        },
+        {
+          "line": 2759,
+          "call": "self._anchor_belief_yaw_for_planning"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 2750,
+          "expression": "self._predict_belief_to_now(belief_m, belief_S, last_cmd, belief_age_s, now_msg)"
+        },
+        {
+          "line": 2756,
+          "expression": "self._predict_belief_to_now(belief_m, belief_S, last_cmd, belief_age_s, now_msg)"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._resolve_diagnostic_odom_belief_for_planning": {
+      "line": 2765,
+      "end_line": 2780,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 2773,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._resolve_belief_for_planning": {
+      "line": 2782,
+      "end_line": 2807,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 2783,
+          "target": "self._heading_anchor_applied"
+        },
+        {
+          "line": 2784,
+          "target": "self._state_bev_yaw_ignored"
+        },
+        {
+          "line": 2799,
+          "target": "self._latest_measurement_available"
+        },
+        {
+          "line": 2800,
+          "target": "self._latest_belief_age_s"
+        }
+      ],
+      "locks": [
+        {
+          "line": 2801,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 2785,
+          "call": "self._reset_prediction_diagnostics"
+        },
+        {
+          "line": 2786,
+          "call": "self.get_clock().now().to_msg"
+        },
+        {
+          "line": 2786,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 2786,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 2788,
+          "call": "self._resolve_diagnostic_odom_belief_for_planning"
+        },
+        {
+          "line": 2790,
+          "call": "self._resolve_pixel_corrected_belief_for_planning"
+        },
+        {
+          "line": 2792,
+          "call": "self._resolve_state_belief_ekf"
+        },
+        {
+          "line": 2794,
+          "call": "self._resolve_state_belief_for_planning"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 2786,
+          "expression": "self.get_clock().now().to_msg()"
+        },
+        {
+          "line": 2786,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._resolve_plan_frame_id": {
+      "line": 2809,
+      "end_line": 2815,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 2810,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._pose_covariance_from_state_covariance": {
+      "line": 2818,
+      "end_line": 2829,
+      "decorators": [
+        "staticmethod"
+      ],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._build_path_message": {
+      "line": 2831,
+      "end_line": 2852,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 2833,
+          "call": "self._resolve_plan_frame_id"
+        },
+        {
+          "line": 2834,
+          "call": "self.get_clock().now().to_msg"
+        },
+        {
+          "line": 2834,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 2834,
+          "call": "self.get_clock"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 2834,
+          "expression": "self.get_clock().now().to_msg()"
+        },
+        {
+          "line": 2834,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._belief_publish_tick": {
+      "line": 2854,
+      "end_line": 2905,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 2864,
+          "context": "self._data_lock"
+        },
+        {
+          "line": 2900,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 2868,
+          "call": "self.belief_m.copy"
+        },
+        {
+          "line": 2869,
+          "call": "self.belief_S.copy"
+        },
+        {
+          "line": 2872,
+          "call": "self.odom_vel.copy"
+        },
+        {
+          "line": 2876,
+          "call": "self.get_clock().now().to_msg"
+        },
+        {
+          "line": 2876,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 2876,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 2877,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2877,
+          "call": "self._stamp_to_float"
+        },
+        {
+          "line": 2891,
+          "call": "self._predict_belief_to_now"
+        },
+        {
+          "line": 2896,
+          "call": "self._build_belief_message"
+        },
+        {
+          "line": 2897,
+          "call": "self._resolve_plan_frame_id"
+        },
+        {
+          "line": 2905,
+          "call": "self.planner_belief_pub.publish"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 2876,
+          "expression": "self.get_clock().now().to_msg()"
+        },
+        {
+          "line": 2876,
+          "expression": "self.get_clock().now()"
+        },
+        {
+          "line": 2891,
+          "expression": "self._predict_belief_to_now(m, S, predict_vel, age_s, now_msg)"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._build_belief_message": {
+      "line": 2907,
+      "end_line": 2916,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 2909,
+          "call": "self._resolve_plan_frame_id"
+        },
+        {
+          "line": 2910,
+          "call": "self.get_clock().now().to_msg"
+        },
+        {
+          "line": 2910,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 2910,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 2915,
+          "call": "self._pose_covariance_from_state_covariance"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 2910,
+          "expression": "self.get_clock().now().to_msg()"
+        },
+        {
+          "line": 2910,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._publish_plan_and_metrics": {
+      "line": 2918,
+      "end_line": 2963,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 2919,
+          "call": "self._resolve_plan_frame_id"
+        },
+        {
+          "line": 2920,
+          "call": "self.get_clock().now().to_msg"
+        },
+        {
+          "line": 2920,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 2920,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 2921,
+          "call": "self._build_path_message"
+        },
+        {
+          "line": 2935,
+          "call": "self.path_pub.publish"
+        },
+        {
+          "line": 2936,
+          "call": "self.plan_preview_pub.publish"
+        },
+        {
+          "line": 2963,
+          "call": "self.metrics_pub.publish"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 2920,
+          "expression": "self.get_clock().now().to_msg()"
+        },
+        {
+          "line": 2920,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._after_plan_result": {
+      "line": 2965,
+      "end_line": 2967,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._publish_planner_diagnostics": {
+      "line": 2969,
+      "end_line": 3053,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 2983,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 2992,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 2992,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 3048,
+          "call": "self.planner_diag_pub.publish"
+        },
+        {
+          "line": 3053,
+          "call": "self._publish_planner_status_text"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 2992,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._publish_planner_status_text": {
+      "line": 3055,
+      "end_line": 3070,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 3069,
+          "target": "self._last_status_text"
+        },
+        {
+          "line": 3070,
+          "target": "self._last_status_text_stamp_s"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 3061,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 3061,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 3068,
+          "call": "self.planner_diag_text_pub.publish"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 3061,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._snapshot_plan_inputs": {
+      "line": 3072,
+      "end_line": 3078,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 3073,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._validate_plan_frames": {
+      "line": 3080,
+      "end_line": 3088,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 3084,
+          "call": "self._fatal_experiment_stop"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._goal_xy_from_msg": {
+      "line": 3090,
+      "end_line": 3094,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._call_planner": {
+      "line": 3096,
+      "end_line": 3127,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 3103,
+          "target": "self._last_plan_entry_log"
+        },
+        {
+          "line": 3123,
+          "target": "self._last_plan_return_log"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 3098,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 3098,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 3107,
+          "call": "self.planner.plan"
+        },
+        {
+          "line": 3111,
+          "call": "self._fatal_experiment_stop"
+        },
+        {
+          "line": 3117,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 3117,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 3125,
+          "call": "self._fatal_experiment_stop"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 3114,
+          "expression": "time.monotonic()"
+        },
+        {
+          "line": 3116,
+          "expression": "time.perf_counter()"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._publish_plan_result_bundle": {
+      "line": 3129,
+      "end_line": 3132,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 3130,
+          "call": "self._publish_plan_and_metrics"
+        },
+        {
+          "line": 3131,
+          "call": "self._after_plan_result"
+        },
+        {
+          "line": 3132,
+          "call": "self._publish_planner_diagnostics"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._warn_on_plan_health": {
+      "line": 3134,
+      "end_line": 3148,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 3141,
+          "target": "self._last_slow_plan_log"
+        },
+        {
+          "line": 3148,
+          "target": "self._last_slow_plan_log"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 3137,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 3137,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 3143,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 3143,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._pixel_age_for_debug": {
+      "line": 3150,
+      "end_line": 3156,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 3154,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 3154,
+          "call": "self.get_clock"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 3154,
+          "expression": "self.get_clock().now()"
+        },
+        {
+          "line": 3154,
+          "expression": "Time.from_msg(pixel_stamp_ref)"
+        }
+      ]
+    },
+    "UnicyclePlannerNode._log_plan_debug_once": {
+      "line": 3158,
+      "end_line": 3189,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 3189,
+          "target": "self._last_runtime_log"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 3173,
+          "call": "self._pixel_age_for_debug"
+        },
+        {
+          "line": 3174,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 3174,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": []
+    },
+    "UnicyclePlannerNode._plan_once": {
+      "line": 3191,
+      "end_line": 3232,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 3192,
+          "call": "self._snapshot_plan_inputs"
+        },
+        {
+          "line": 3200,
+          "call": "self._validate_plan_frames"
+        },
+        {
+          "line": 3202,
+          "call": "self._resolve_belief_for_planning"
+        },
+        {
+          "line": 3206,
+          "call": "self._goal_xy_from_msg"
+        },
+        {
+          "line": 3207,
+          "call": "self._current_goal_progress_index"
+        },
+        {
+          "line": 3210,
+          "call": "self._call_planner"
+        },
+        {
+          "line": 3218,
+          "call": "self._publish_plan_result_bundle"
+        },
+        {
+          "line": 3221,
+          "call": "self._warn_on_plan_health"
+        },
+        {
+          "line": 3222,
+          "call": "self._log_plan_debug_once"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 3199,
+          "expression": "time.monotonic()"
+        },
+        {
+          "line": 3209,
+          "expression": "time.perf_counter()"
+        },
+        {
+          "line": 3216,
+          "expression": "time.perf_counter()"
+        }
+      ]
+    }
+  },
+  "src/planning/planning/nodes/efe_agent_node.py": {
+    "EfeAgentNode.__init__": {
+      "line": 212,
+      "end_line": 475,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 217,
+          "target": "self.cmd_topic"
+        },
+        {
+          "line": 223,
+          "target": "self.global_planner_mode"
+        },
+        {
+          "line": 244,
+          "target": "self.preselected_route_json"
+        },
+        {
+          "line": 247,
+          "target": "self.preselected_route_sha256"
+        },
+        {
+          "line": 250,
+          "target": "self.preselected_route_source_path"
+        },
+        {
+          "line": 253,
+          "target": "self.preselected_route_source_sha256"
+        },
+        {
+          "line": 256,
+          "target": "self.preselected_route_validation_json"
+        },
+        {
+          "line": 259,
+          "target": "self._preselected_route_points"
+        },
+        {
+          "line": 260,
+          "target": "self._preselected_route_provenance"
+        },
+        {
+          "line": 297,
+          "target": "self.preselected_route_json"
+        },
+        {
+          "line": 298,
+          "target": "self.preselected_route_sha256"
+        },
+        {
+          "line": 299,
+          "target": "self.preselected_route_source_path"
+        },
+        {
+          "line": 300,
+          "target": "self.preselected_route_source_sha256"
+        },
+        {
+          "line": 301,
+          "target": "self._preselected_route_points"
+        },
+        {
+          "line": 302,
+          "target": "self._preselected_route_provenance"
+        },
+        {
+          "line": 314,
+          "target": "self.cmd_pub"
+        },
+        {
+          "line": 315,
+          "target": "self.active_execution_diag_pub"
+        },
+        {
+          "line": 318,
+          "target": "self._active_controls"
+        },
+        {
+          "line": 319,
+          "target": "self._active_plan_started_at"
+        },
+        {
+          "line": 320,
+          "target": "self._active_controls_original_len"
+        },
+        {
+          "line": 321,
+          "target": "self._last_local_plan_target"
+        },
+        {
+          "line": 322,
+          "target": "self._pending_plan_started_at"
+        },
+        {
+          "line": 323,
+          "target": "self._pending_plan_started_active_remaining_s"
+        },
+        {
+          "line": 329,
+          "target": "self._command_stop_generation"
+        },
+        {
+          "line": 333,
+          "target": "self._active_plan_request"
+        },
+        {
+          "line": 334,
+          "target": "self._last_latency_skip_steps"
+        },
+        {
+          "line": 335,
+          "target": "self._last_latency_skip_s"
+        },
+        {
+          "line": 336,
+          "target": "self._current_wp_idx"
+        },
+        {
+          "line": 337,
+          "target": "self._current_wp_count"
+        },
+        {
+          "line": 338,
+          "target": "self._current_wp_target"
+        },
+        {
+          "line": 339,
+          "target": "self._current_wp_dist"
+        },
+        {
+          "line": 340,
+          "target": "self._current_desired_yaw"
+        },
+        {
+          "line": 341,
+          "target": "self._current_yaw_error"
+        },
+        {
+          "line": 342,
+          "target": "self._current_tracking_yaw"
+        },
+        {
+          "line": 343,
+          "target": "self._current_tracking_yaw_source"
+        },
+        {
+          "line": 344,
+          "target": "self._cmd_timer_period_s"
+        },
+        {
+          "line": 345,
+          "target": "self._cmd_timer"
+        },
+        {
+          "line": 354,
+          "target": "self._hier_phase"
+        },
+        {
+          "line": 355,
+          "target": "self._waypoints"
+        },
+        {
+          "line": 356,
+          "target": "self._wp_idx"
+        },
+        {
+          "line": 362,
+          "target": "self._global_goal_xy"
+        },
+        {
+          "line": 366,
+          "target": "self._global_solve_done"
+        },
+        {
+          "line": 369,
+          "target": "self.goal_replan_move_m"
+        },
+        {
+          "line": 371,
+          "target": "self._ctrl_prev_w"
+        },
+        {
+          "line": 372,
+          "target": "self._ctrl_spin"
+        },
+        {
+          "line": 376,
+          "target": "self._run_dir"
+        },
+        {
+          "line": 377,
+          "target": "self._pending_global_artifact"
+        },
+        {
+          "line": 378,
+          "target": "self._global_artifact_saved"
+        },
+        {
+          "line": 381,
+          "target": "self.global_planner"
+        },
+        {
+          "line": 415,
+          "target": "self.planner"
+        },
+        {
+          "line": 439,
+          "target": "self.global_planner"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 215,
+          "call": "self.has_parameter"
+        },
+        {
+          "line": 216,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 217,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 221,
+          "call": "self.has_parameter"
+        },
+        {
+          "line": 222,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 224,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 242,
+          "call": "self.has_parameter"
+        },
+        {
+          "line": 243,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 245,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 248,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 251,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 254,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 257,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 314,
+          "call": "self.create_publisher"
+        },
+        {
+          "line": 315,
+          "call": "self.create_publisher"
+        },
+        {
+          "line": 345,
+          "call": "self.create_timer"
+        },
+        {
+          "line": 367,
+          "call": "self.has_parameter"
+        },
+        {
+          "line": 368,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 369,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 380,
+          "call": "self.create_subscription"
+        },
+        {
+          "line": 415,
+          "call": "self._construct_planner"
+        },
+        {
+          "line": 427,
+          "call": "self._warm_start_shift_steps_for_rate"
+        },
+        {
+          "line": 439,
+          "call": "self._construct_planner"
+        },
+        {
+          "line": 444,
+          "call": "self._warm_start_shift_steps_for_rate"
+        },
+        {
+          "line": 459,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 459,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._run_dir_cb": {
+      "line": 477,
+      "end_line": 481,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 478,
+          "target": "self._run_dir"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 481,
+          "call": "self._write_global_artifact"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._densify_line": {
+      "line": 483,
+      "end_line": 492,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "EfeAgentNode._save_global_plan_artifacts": {
+      "line": 494,
+      "end_line": 529,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 529,
+          "target": "self._pending_global_artifact"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 524,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 524,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 527,
+          "call": "self._write_global_artifact"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._save_preselected_route_artifacts": {
+      "line": 531,
+      "end_line": 558,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 558,
+          "target": "self._pending_global_artifact"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 556,
+          "call": "self._write_global_artifact"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._write_global_artifact": {
+      "line": 560,
+      "end_line": 606,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 598,
+          "target": "self._global_artifact_saved"
+        },
+        {
+          "line": 599,
+          "target": "self._pending_global_artifact"
+        }
+      ],
+      "locks": [
+        {
+          "line": 566,
+          "context": "open(os.path.join(run_dir, 'global_plan.csv'), 'w', encoding='utf-8')"
+        },
+        {
+          "line": 571,
+          "context": "open(os.path.join(run_dir, 'global_waypoints.csv'), 'w', encoding='utf-8')"
+        },
+        {
+          "line": 575,
+          "context": "open(os.path.join(run_dir, 'global_plan_meta.json'), 'w', encoding='utf-8')"
+        },
+        {
+          "line": 579,
+          "context": "open(os.path.join(run_dir, 'preselected_route.json'), 'w', encoding='utf-8', newline='')"
+        },
+        {
+          "line": 586,
+          "context": "open(os.path.join(run_dir, 'preselected_route_provenance.json'), 'w', encoding='utf-8')"
+        }
+      ],
+      "calls": [
+        {
+          "line": 600,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 600,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 606,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 606,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._active_plan_remaining_s": {
+      "line": 608,
+      "end_line": 615,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 609,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 614,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 614,
+          "call": "self.get_clock"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 614,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "EfeAgentNode._capture_plan_request": {
+      "line": 617,
+      "end_line": 628,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 624,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 627,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 627,
+          "call": "self.get_clock"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 627,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "EfeAgentNode._install_control_tape": {
+      "line": 630,
+      "end_line": 665,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 653,
+          "target": "self._active_controls"
+        },
+        {
+          "line": 654,
+          "target": "self._active_plan_started_at"
+        },
+        {
+          "line": 656,
+          "target": "self._active_controls_original_len"
+        },
+        {
+          "line": 657,
+          "target": "self._last_latency_skip_steps"
+        },
+        {
+          "line": 658,
+          "target": "self._last_latency_skip_s"
+        }
+      ],
+      "locks": [
+        {
+          "line": 644,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 647,
+          "call": "self._plan_request_is_current"
+        },
+        {
+          "line": 651,
+          "call": "self._plan_request_expired"
+        },
+        {
+          "line": 655,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 655,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 660,
+          "call": "self._publish_command"
+        },
+        {
+          "line": 663,
+          "call": "self._warn_once_about_expired_tape"
+        },
+        {
+          "line": 664,
+          "call": "self._publish_safe_stop_command"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 655,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "EfeAgentNode._warn_once_about_expired_tape": {
+      "line": 667,
+      "end_line": 672,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 670,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 670,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._plan_request_expired": {
+      "line": 674,
+      "end_line": 701,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 693,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 693,
+          "call": "self.get_clock"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 693,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "EfeAgentNode._plan_request_is_current": {
+      "line": 703,
+      "end_line": 711,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "EfeAgentNode._plan_once": {
+      "line": 713,
+      "end_line": 728,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 722,
+          "target": "self._active_plan_request"
+        },
+        {
+          "line": 728,
+          "target": "self._active_plan_request"
+        }
+      ],
+      "locks": [
+        {
+          "line": 721,
+          "context": "self._data_lock"
+        },
+        {
+          "line": 726,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 720,
+          "call": "self._capture_plan_request"
+        },
+        {
+          "line": 724,
+          "call": "self._plan_once_impl"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._plan_once_impl": {
+      "line": 730,
+      "end_line": 1090,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 763,
+          "target": "self._hier_phase"
+        },
+        {
+          "line": 784,
+          "target": "self._waypoints"
+        },
+        {
+          "line": 788,
+          "target": "self._wp_idx"
+        },
+        {
+          "line": 789,
+          "target": "self._hier_phase"
+        },
+        {
+          "line": 790,
+          "target": "self._global_goal_xy"
+        },
+        {
+          "line": 791,
+          "target": "self._global_solve_done"
+        },
+        {
+          "line": 797,
+          "target": "self.planner.prev_controls_flat"
+        },
+        {
+          "line": 853,
+          "target": "self._waypoints"
+        },
+        {
+          "line": 866,
+          "target": "self._waypoints"
+        },
+        {
+          "line": 874,
+          "target": "self._waypoints"
+        },
+        {
+          "line": 875,
+          "target": "self._wp_idx"
+        },
+        {
+          "line": 876,
+          "target": "self._hier_phase"
+        },
+        {
+          "line": 877,
+          "target": "self._global_goal_xy"
+        },
+        {
+          "line": 883,
+          "target": "self.planner.prev_controls_flat"
+        },
+        {
+          "line": 918,
+          "target": "self.global_planner.optimizer_initial_routes"
+        },
+        {
+          "line": 943,
+          "target": "self.global_planner.optimizer_initial_routes"
+        },
+        {
+          "line": 945,
+          "target": "self.global_planner.prev_controls_flat"
+        },
+        {
+          "line": 961,
+          "target": "self._waypoints"
+        },
+        {
+          "line": 962,
+          "target": "self._wp_idx"
+        },
+        {
+          "line": 963,
+          "target": "self._hier_phase"
+        },
+        {
+          "line": 964,
+          "target": "self._global_goal_xy"
+        },
+        {
+          "line": 968,
+          "target": "self.planner.prev_controls_flat"
+        },
+        {
+          "line": 972,
+          "target": "self._waypoints"
+        },
+        {
+          "line": 984,
+          "target": "self._waypoints"
+        },
+        {
+          "line": 985,
+          "target": "self._wp_idx"
+        },
+        {
+          "line": 986,
+          "target": "self._hier_phase"
+        },
+        {
+          "line": 987,
+          "target": "self._global_goal_xy"
+        },
+        {
+          "line": 988,
+          "target": "self._global_solve_done"
+        },
+        {
+          "line": 997,
+          "target": "self.planner.prev_controls_flat"
+        },
+        {
+          "line": 1021,
+          "target": "self._wp_idx"
+        },
+        {
+          "line": 1026,
+          "target": "self.planner.prev_controls_flat"
+        },
+        {
+          "line": 1042,
+          "target": "self._pending_plan_started_at"
+        },
+        {
+          "line": 1043,
+          "target": "self._pending_plan_started_active_remaining_s"
+        },
+        {
+          "line": 1044,
+          "target": "self._last_local_plan_target"
+        },
+        {
+          "line": 1054,
+          "target": "self._current_wp_idx"
+        },
+        {
+          "line": 1055,
+          "target": "self._current_wp_count"
+        },
+        {
+          "line": 1056,
+          "target": "self._current_wp_target"
+        },
+        {
+          "line": 1057,
+          "target": "self._current_wp_dist"
+        },
+        {
+          "line": 1058,
+          "target": "self._current_desired_yaw"
+        },
+        {
+          "line": 1059,
+          "target": "self._current_yaw_error"
+        },
+        {
+          "line": 1060,
+          "target": "self._current_tracking_yaw"
+        },
+        {
+          "line": 1061,
+          "target": "self._current_tracking_yaw_source"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 734,
+          "call": "self._snapshot_plan_inputs"
+        },
+        {
+          "line": 739,
+          "call": "self._resolve_belief_for_planning"
+        },
+        {
+          "line": 742,
+          "call": "self._goal_xy_from_msg"
+        },
+        {
+          "line": 753,
+          "call": "self._fatal_experiment_stop"
+        },
+        {
+          "line": 758,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 758,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 768,
+          "call": "self._fatal_experiment_stop"
+        },
+        {
+          "line": 776,
+          "call": "self._fatal_experiment_stop"
+        },
+        {
+          "line": 794,
+          "call": "self.planner._controls_for_waypoints"
+        },
+        {
+          "line": 807,
+          "call": "self.path_pub.publish"
+        },
+        {
+          "line": 808,
+          "call": "self._build_path_message"
+        },
+        {
+          "line": 812,
+          "call": "self._save_preselected_route_artifacts"
+        },
+        {
+          "line": 813,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 813,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 846,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 846,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 854,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 854,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 861,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 861,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 872,
+          "call": "self._waypoints.append"
+        },
+        {
+          "line": 882,
+          "call": "self.planner._controls_for_waypoints"
+        },
+        {
+          "line": 886,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 886,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 895,
+          "call": "self.path_pub.publish"
+        },
+        {
+          "line": 896,
+          "call": "self._build_path_message"
+        },
+        {
+          "line": 919,
+          "call": "self.global_planner._parse_initial_routes"
+        },
+        {
+          "line": 922,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 922,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 927,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 927,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 932,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 932,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 944,
+          "call": "self.global_planner._parse_initial_routes"
+        },
+        {
+          "line": 946,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 946,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 951,
+          "call": "self.global_planner.plan"
+        },
+        {
+          "line": 954,
+          "call": "self._fatal_experiment_stop"
+        },
+        {
+          "line": 958,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 958,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 961,
+          "call": "self._densify_line"
+        },
+        {
+          "line": 967,
+          "call": "self.planner._controls_for_waypoints"
+        },
+        {
+          "line": 982,
+          "call": "self._waypoints.append"
+        },
+        {
+          "line": 996,
+          "call": "self.planner._controls_for_waypoints"
+        },
+        {
+          "line": 1000,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 1000,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 1008,
+          "call": "self._publish_plan_and_metrics"
+        },
+        {
+          "line": 1011,
+          "call": "self._save_global_plan_artifacts"
+        },
+        {
+          "line": 1025,
+          "call": "self.planner._controls_for_waypoints"
+        },
+        {
+          "line": 1030,
+          "call": "self._active_plan_remaining_s"
+        },
+        {
+          "line": 1037,
+          "call": "self._active_plan_remaining_s"
+        },
+        {
+          "line": 1042,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 1042,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 1043,
+          "call": "self._active_plan_remaining_s"
+        },
+        {
+          "line": 1064,
+          "call": "self._dispatch_local_controller"
+        },
+        {
+          "line": 1073,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 1073,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 1076,
+          "call": "self._publish_safe_stop_command"
+        },
+        {
+          "line": 1079,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 1079,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 1085,
+          "call": "self._install_control_tape"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 738,
+          "expression": "time.monotonic()"
+        },
+        {
+          "line": 949,
+          "expression": "time.perf_counter()"
+        },
+        {
+          "line": 1001,
+          "expression": "time.perf_counter()"
+        },
+        {
+          "line": 1041,
+          "expression": "time.perf_counter()"
+        },
+        {
+          "line": 1042,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "EfeAgentNode._simple_local_plan": {
+      "line": 1092,
+      "end_line": 1125,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "EfeAgentNode._dispatch_local_controller": {
+      "line": 1127,
+      "end_line": 1137,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1130,
+          "call": "self._hyst_damp_plan"
+        },
+        {
+          "line": 1132,
+          "call": "self._pure_pursuit_plan"
+        },
+        {
+          "line": 1134,
+          "call": "self._ff_fb_plan"
+        },
+        {
+          "line": 1136,
+          "call": "self._simple_local_plan"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._waypoint_array": {
+      "line": 1139,
+      "end_line": 1142,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "EfeAgentNode._hyst_damp_plan": {
+      "line": 1144,
+      "end_line": 1168,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1167,
+          "target": "self._ctrl_spin"
+        },
+        {
+          "line": 1167,
+          "target": "self._ctrl_prev_w"
+        }
+      ],
+      "locks": [],
+      "calls": [],
+      "clocks": []
+    },
+    "EfeAgentNode._pure_pursuit_plan": {
+      "line": 1170,
+      "end_line": 1192,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1173,
+          "call": "self._waypoint_array"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._ff_fb_plan": {
+      "line": 1194,
+      "end_line": 1265,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1197,
+          "call": "self._waypoint_array"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._simple_plan_safe_to_execute": {
+      "line": 1267,
+      "end_line": 1327,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1293,
+          "call": "self.planner.collision_signed_distance_state_np"
+        },
+        {
+          "line": 1314,
+          "call": "self.planner.collision_signed_distance_state_np"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._publish_command": {
+      "line": 1329,
+      "end_line": 1343,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1338,
+          "target": "self._active_controls"
+        },
+        {
+          "line": 1339,
+          "target": "self._active_plan_started_at"
+        },
+        {
+          "line": 1340,
+          "target": "self._active_controls_original_len"
+        },
+        {
+          "line": 1343,
+          "target": "self.last_cmd"
+        }
+      ],
+      "locks": [
+        {
+          "line": 1333,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1341,
+          "call": "self._publish_idle_execution_diagnostics"
+        },
+        {
+          "line": 1342,
+          "call": "self.cmd_pub.publish"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._publish_idle_execution_diagnostics": {
+      "line": 1345,
+      "end_line": 1361,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1361,
+          "call": "self.active_execution_diag_pub.publish"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._result_safe_to_execute": {
+      "line": 1363,
+      "end_line": 1412,
+      "decorators": [],
+      "assignments": [],
+      "locks": [],
+      "calls": [
+        {
+          "line": 1403,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 1403,
+          "call": "self.get_clock"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1403,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "EfeAgentNode._publish_active_plan_command": {
+      "line": 1414,
+      "end_line": 1418,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 1417,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1418,
+          "call": "self._publish_active_plan_command_locked"
+        }
+      ],
+      "clocks": []
+    },
+    "EfeAgentNode._publish_active_plan_command_locked": {
+      "line": 1420,
+      "end_line": 1467,
+      "decorators": [],
+      "assignments": [],
+      "locks": [
+        {
+          "line": 1421,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1423,
+          "call": "self._active_controls.copy"
+        },
+        {
+          "line": 1429,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 1429,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 1434,
+          "call": "self._publish_safe_stop_command"
+        },
+        {
+          "line": 1441,
+          "call": "self._publish_safe_stop_command"
+        },
+        {
+          "line": 1466,
+          "call": "self.active_execution_diag_pub.publish"
+        },
+        {
+          "line": 1467,
+          "call": "self._publish_command"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1429,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "EfeAgentNode._after_plan_result": {
+      "line": 1469,
+      "end_line": 1518,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1498,
+          "target": "self._active_controls"
+        },
+        {
+          "line": 1499,
+          "target": "self._active_plan_started_at"
+        },
+        {
+          "line": 1500,
+          "target": "self._active_controls_original_len"
+        },
+        {
+          "line": 1501,
+          "target": "self._last_latency_skip_steps"
+        },
+        {
+          "line": 1502,
+          "target": "self._last_latency_skip_s"
+        }
+      ],
+      "locks": [
+        {
+          "line": 1472,
+          "context": "self._data_lock"
+        },
+        {
+          "line": 1497,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1476,
+          "call": "self._plan_request_is_current"
+        },
+        {
+          "line": 1478,
+          "call": "self._result_safe_to_execute"
+        },
+        {
+          "line": 1480,
+          "call": "self.get_logger().warn"
+        },
+        {
+          "line": 1480,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 1484,
+          "call": "self._publish_safe_stop_command"
+        },
+        {
+          "line": 1487,
+          "call": "self.get_clock().now"
+        },
+        {
+          "line": 1487,
+          "call": "self.get_clock"
+        },
+        {
+          "line": 1503,
+          "call": "self._publish_command"
+        },
+        {
+          "line": 1510,
+          "call": "self._install_control_tape"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 1487,
+          "expression": "self.get_clock().now()"
+        }
+      ]
+    },
+    "EfeAgentNode._publish_safe_stop_command": {
+      "line": 1520,
+      "end_line": 1538,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 1532,
+          "target": "self._command_stop_generation"
+        },
+        {
+          "line": 1534,
+          "target": "self._active_controls"
+        },
+        {
+          "line": 1535,
+          "target": "self._active_plan_started_at"
+        },
+        {
+          "line": 1536,
+          "target": "self._active_controls_original_len"
+        }
+      ],
+      "locks": [
+        {
+          "line": 1531,
+          "context": "self._data_lock"
+        }
+      ],
+      "calls": [
+        {
+          "line": 1537,
+          "call": "self._publish_command"
+        },
+        {
+          "line": 1538,
+          "call": "self._publish_idle_execution_diagnostics"
+        }
+      ],
+      "clocks": []
+    }
+  },
+  "src/experiments/experiments/nodes/goal_mission_node.py": {
+    "GoalMissionNode.__init__": {
+      "line": 21,
+      "end_line": 85,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 36,
+          "target": "self.delay"
+        },
+        {
+          "line": 37,
+          "target": "self.repeat_rate"
+        },
+        {
+          "line": 38,
+          "target": "self.repeat_count"
+        },
+        {
+          "line": 39,
+          "target": "self.repeat_unchanged_goal"
+        },
+        {
+          "line": 42,
+          "target": "self.frame_id"
+        },
+        {
+          "line": 43,
+          "target": "self.arrival_radius"
+        },
+        {
+          "line": 44,
+          "target": "self.wait_for_belief"
+        },
+        {
+          "line": 47,
+          "target": "self.initial_belief_max_sigma_m"
+        },
+        {
+          "line": 53,
+          "target": "self.waypoints"
+        },
+        {
+          "line": 61,
+          "target": "self.waypoints"
+        },
+        {
+          "line": 63,
+          "target": "self.wp_idx"
+        },
+        {
+          "line": 66,
+          "target": "self.goal_pub"
+        },
+        {
+          "line": 68,
+          "target": "self._belief_xy"
+        },
+        {
+          "line": 69,
+          "target": "self._belief_ready"
+        },
+        {
+          "line": 70,
+          "target": "self._belief_sigma_m"
+        },
+        {
+          "line": 71,
+          "target": "self._belief_wait_logged"
+        },
+        {
+          "line": 72,
+          "target": "self.sent_count"
+        },
+        {
+          "line": 73,
+          "target": "self._last_published_wp_idx"
+        },
+        {
+          "line": 74,
+          "target": "self.wall_clock"
+        },
+        {
+          "line": 75,
+          "target": "self.start_time"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 24,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 25,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 26,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 27,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 28,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 29,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 30,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 31,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 32,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 33,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 34,
+          "call": "self.declare_parameter"
+        },
+        {
+          "line": 36,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 37,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 38,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 40,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 42,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 43,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 45,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 48,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 52,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 57,
+          "call": "self.waypoints.append"
+        },
+        {
+          "line": 59,
+          "call": "self.get_logger().error"
+        },
+        {
+          "line": 59,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 61,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 62,
+          "call": "self.get_parameter"
+        },
+        {
+          "line": 66,
+          "call": "self.create_publisher"
+        },
+        {
+          "line": 67,
+          "call": "self.create_subscription"
+        },
+        {
+          "line": 75,
+          "call": "self.wall_clock.now"
+        },
+        {
+          "line": 78,
+          "call": "self.create_timer"
+        },
+        {
+          "line": 79,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 79,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 74,
+          "expression": "Clock(clock_type=ClockType.SYSTEM_TIME)"
+        },
+        {
+          "line": 75,
+          "expression": "self.wall_clock.now()"
+        }
+      ]
+    },
+    "GoalMissionNode._belief_cb": {
+      "line": 87,
+      "end_line": 102,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 88,
+          "target": "self._belief_xy"
+        },
+        {
+          "line": 92,
+          "target": "self._belief_sigma_m"
+        },
+        {
+          "line": 93,
+          "target": "self._belief_ready"
+        },
+        {
+          "line": 102,
+          "target": "self._belief_wait_logged"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 98,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 98,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": []
+    },
+    "GoalMissionNode._maybe_advance": {
+      "line": 104,
+      "end_line": 116,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 112,
+          "target": "self.wp_idx"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 113,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 113,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": []
+    },
+    "GoalMissionNode._send_goal": {
+      "line": 118,
+      "end_line": 157,
+      "decorators": [],
+      "assignments": [
+        {
+          "line": 134,
+          "target": "self._belief_wait_logged"
+        },
+        {
+          "line": 152,
+          "target": "self.sent_count"
+        },
+        {
+          "line": 153,
+          "target": "self._last_published_wp_idx"
+        }
+      ],
+      "locks": [],
+      "calls": [
+        {
+          "line": 119,
+          "call": "self.wall_clock.now"
+        },
+        {
+          "line": 129,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 129,
+          "call": "self.get_logger"
+        },
+        {
+          "line": 138,
+          "call": "self._maybe_advance"
+        },
+        {
+          "line": 146,
+          "call": "self.wall_clock.now().to_msg"
+        },
+        {
+          "line": 146,
+          "call": "self.wall_clock.now"
+        },
+        {
+          "line": 151,
+          "call": "self.goal_pub.publish"
+        },
+        {
+          "line": 154,
+          "call": "self.get_logger().info"
+        },
+        {
+          "line": 154,
+          "call": "self.get_logger"
+        }
+      ],
+      "clocks": [
+        {
+          "line": 119,
+          "expression": "self.wall_clock.now()"
+        },
+        {
+          "line": 146,
+          "expression": "self.wall_clock.now().to_msg()"
+        },
+        {
+          "line": 146,
+          "expression": "self.wall_clock.now()"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,2 @@
+source_batch_id,correction_stamp,apply_stamp,belief_stamp_after,status,reason,accepted,nis
+audit15:batch,1.0,1.5,1.0,rejected,,0,0.0

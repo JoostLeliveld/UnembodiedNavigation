@@ -1,0 +1,198 @@
+{
+  "source_before": {
+    "src/planning/planning/nodes/unicycle_planner_node.py": "b3e78d48b56b84f84aecdb8e6d84d1941a715aa946941bbdc166d59e1ed4418b",
+    "src/planning/planning/nodes/efe_agent_node.py": "c2546f81863703e133f30c6342077f599a0ee48e650888f21e41431da6239296",
+    "src/planning/planning/core/motion_history.py": "ac5ea439b956f3425a784447c384b828c8ce48075f7dabd0e6e96bb1b460a1c5",
+    "src/planning/planning/core/belief_correction.py": "0f5f0b32f561ad1326fec098dedd93a975c14904dc5e4602341afd53c432ee12",
+    "src/experiments/experiments/nodes/goal_mission_node.py": "deedad91515c4bd13c368e6cb13a718b963fd142377ca84b1ce4f68bcb91a755",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "8788520eb3a194767b2631430df5db26ca3704124924f81ca08517ab350d04e6",
+    "src/perception/perception/core/four_camera_batch.py": "047cc9871d7cff5f2c87a35be89bfef9475e976918016541bb85c966a171ca92",
+    "tests/planning/test_runtime_transactions.py": "809eb2d9daee550a5777b4d957cf1539a9485c6747b16dea837db8673238d238",
+    "tests/planning/test_command_installation.py": "e2a997066163dc89456f995868d1158b5ffffa1670d36b07c98f57b5b7166e35",
+    "tests/planning/test_outage_motion_replay.py": "5b237951eb9c2fb605a6bbf4e8085ad9c8ef4f8f46af300fd9b7d85d332718e6",
+    "tests/planning/test_planner_node_state_correction.py": "6e8e7d44cc666d809c209971aa460bca114ece823ca439831084c09f9bbda65a",
+    "tests/planning/test_planner_node_correction_wiring.py": "5a6b06007c0479fe36a1bcfb1cb5564e762b1bc38dcf9b3764904c78b579ef5e",
+    "tests/sim/test_encoder_input_chronology.py": "06bd7970feb9053081641c846c9d1cee8caedeb3599d37ce9de5d187d3c480b7",
+    "src/experiments/experiments/core/visibility_launch_common.py": "be80369af8f80b70a07e824554baa1dcc12022064d1ec255a04c1bee7754c0e8",
+    "experiments/icra_commissioning/network_navigation_runtime_pilot.yaml": "72d7318718c9510f5b4bb570927be0650f16e4c0186440562e6c8a2cf167d380",
+    "experiments/runtime_integrity/timing_callbacks_20260906/probe.py": "7fddaec28d795ad131e457396b2b525be186db4243c92607a4d739effa14e115"
+  },
+  "results": {
+    "publication_overtakes": {
+      "published_stamps": [
+        10.2,
+        10.0
+      ],
+      "each_message_coherent": true,
+      "latest_message_regresses": true
+    },
+    "same_stamp_supersession_guard": {
+      "anchor_stamp_unchanged": 9.0,
+      "correction_applied": true,
+      "superseded_prediction_published": false
+    },
+    "full_covariance_snapshot": {
+      "full_planar_covariance_preserved": true,
+      "frame": "map_bev",
+      "stamp": 10.0
+    },
+    "frame_from_different_event": {
+      "belief_coordinates_frame": "map_bev",
+      "published_frame": "camera_optical"
+    },
+    "equal_time_revision_lost_by_consumer": {
+      "stamp": 10.0,
+      "published_x": [
+        0.0,
+        0.0625
+      ],
+      "manager_kept_x": 0.0,
+      "manager_retained_revisions": 1
+    },
+    "planner_metadata_from_superseding_update": {
+      "input_anchor": 9.9,
+      "returned_anchor": 9.95,
+      "returned_x": 0.0,
+      "committed_x": 0.0625,
+      "recursive_anchor_after_correction": 9.95
+    },
+    "correction_worker_starvation": {
+      "workers": 2,
+      "one_calculating": true,
+      "one_waiting_on_correction_lock": true,
+      "data_lock_free": true,
+      "queued_odom_cannot_execute_until_release": true
+    },
+    "simultaneous_duplicate_envelopes": {
+      "assimilation_count": 1,
+      "duplicate_fails_closed": true
+    },
+    "pixel_timer_reads_new_measurement_with_old_stamp": {
+      "timer_target": 9.9,
+      "actual_pixel_capture": 9.95,
+      "applied_measurement_x": 0.2
+    },
+    "clock_domain_error_fails_open": {
+      "clock_domain_mismatch_reported_age": 0.0,
+      "accepted_as_fresh": true,
+      "active_ros_clock_path": false
+    },
+    "mission_clock_and_readiness": {
+      "goal_header": 1780000000.0,
+      "ros_now": 0.1,
+      "readiness_survives_invalid_input": true,
+      "waypoint_advanced_using_unvalidated_belief": true,
+      "planner_compares_goal_stamp": false
+    },
+    "camera_batch_reset": {
+      "previous_epoch_status": "batch_ready",
+      "reset_frame_status": "out_of_order"
+    },
+    "command_receipt_completion_order": {
+      "history": [
+        [
+          11.0,
+          0.2,
+          0.0
+        ],
+        [
+          10.0,
+          0.1,
+          0.0
+        ]
+      ],
+      "retained_last_v": 0.1,
+      "replay_x": 0.2,
+      "chronologically_ordered_oracle_x": 0.30000000000000004,
+      "source_code": 2.0,
+      "odometry_available": false
+    },
+    "reset_retains_anchor_and_new_request_can_install": {
+      "ros_now": 1.0,
+      "retained_anchor": 100.0,
+      "reported_planning_age": 0.0,
+      "retained_odom_stamps": [
+        100.0
+      ],
+      "new_epoch_odom_refused": true,
+      "public_messages": 0,
+      "retained_old_identity": true,
+      "new_epoch_correction": "not_newer_than_belief",
+      "fresh_request_installation": "installed",
+      "composed_method_boundaries": true,
+      "full_solver_exercised": false
+    },
+    "reset_during_public_prediction": {
+      "clock_after_reset": 1.0,
+      "published_pre_reset_target": 100.1,
+      "in_flight_prediction_invalidated": false
+    },
+    "committed_correction_without_identity_or_terminal_record": {
+      "posterior_x": 0.0625,
+      "committed_anchor": 9.95,
+      "identity_retained_at_failure": false,
+      "terminal_records_at_failure": 0,
+      "fatal_called": true,
+      "redelivery_with_stubbed_shutdown": "not_newer_than_belief",
+      "double_assimilation": false
+    },
+    "goal_and_progress_signature_are_different_events": {
+      "retained_goal_x": 2.0,
+      "retained_signature_x": 1.0,
+      "torn_progress_metadata": true
+    },
+    "bounded_unpredicted_publication_interval": {
+      "anchor_state_time": 10.0,
+      "header_time": 10.0005,
+      "prediction_called": false,
+      "configured_cutoff_s": 0.001,
+      "classification": "bounded numerical approximation"
+    },
+    "mission_system_jumps_current_default": {
+      "system_now": [
+        99.0,
+        103.0,
+        90.0,
+        104.0
+      ],
+      "sent_counts": [
+        0,
+        1,
+        1,
+        1
+      ],
+      "startup_uses_system_elapsed": true,
+      "repeat_unchanged_goal_default": false,
+      "classification": "intentional wall startup, civil jump sensitivity"
+    }
+  },
+  "failures": {},
+  "meaning": "Passing probes confirm observed behavior including defects.",
+  "source_after": {
+    "src/planning/planning/nodes/unicycle_planner_node.py": "b3e78d48b56b84f84aecdb8e6d84d1941a715aa946941bbdc166d59e1ed4418b",
+    "src/planning/planning/nodes/efe_agent_node.py": "c2546f81863703e133f30c6342077f599a0ee48e650888f21e41431da6239296",
+    "src/planning/planning/core/motion_history.py": "ac5ea439b956f3425a784447c384b828c8ce48075f7dabd0e6e96bb1b460a1c5",
+    "src/planning/planning/core/belief_correction.py": "0f5f0b32f561ad1326fec098dedd93a975c14904dc5e4602341afd53c432ee12",
+    "src/experiments/experiments/nodes/goal_mission_node.py": "deedad91515c4bd13c368e6cb13a718b963fd142377ca84b1ce4f68bcb91a755",
+    "src/reliability/reliability/nodes/camera_manager_node.py": "8788520eb3a194767b2631430df5db26ca3704124924f81ca08517ab350d04e6",
+    "src/perception/perception/core/four_camera_batch.py": "047cc9871d7cff5f2c87a35be89bfef9475e976918016541bb85c966a171ca92",
+    "tests/planning/test_runtime_transactions.py": "809eb2d9daee550a5777b4d957cf1539a9485c6747b16dea837db8673238d238",
+    "tests/planning/test_command_installation.py": "e2a997066163dc89456f995868d1158b5ffffa1670d36b07c98f57b5b7166e35",
+    "tests/planning/test_outage_motion_replay.py": "5b237951eb9c2fb605a6bbf4e8085ad9c8ef4f8f46af300fd9b7d85d332718e6",
+    "tests/planning/test_planner_node_state_correction.py": "6e8e7d44cc666d809c209971aa460bca114ece823ca439831084c09f9bbda65a",
+    "tests/planning/test_planner_node_correction_wiring.py": "5a6b06007c0479fe36a1bcfb1cb5564e762b1bc38dcf9b3764904c78b579ef5e",
+    "tests/sim/test_encoder_input_chronology.py": "06bd7970feb9053081641c846c9d1cee8caedeb3599d37ce9de5d187d3c480b7",
+    "src/experiments/experiments/core/visibility_launch_common.py": "be80369af8f80b70a07e824554baa1dcc12022064d1ec255a04c1bee7754c0e8",
+    "experiments/icra_commissioning/network_navigation_runtime_pilot.yaml": "72d7318718c9510f5b4bb570927be0650f16e4c0186440562e6c8a2cf167d380",
+    "experiments/runtime_integrity/timing_callbacks_20260906/probe.py": "7fddaec28d795ad131e457396b2b525be186db4243c92607a4d739effa14e115"
+  },
+  "import_paths": {
+    "UnicyclePlannerNode": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/nodes/unicycle_planner_node.py",
+    "EfeAgentNode": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/planning/planning/nodes/efe_agent_node.py",
+    "CameraManagerNode": "/home/joostleliveld/Thesis/UnembodiedNavigation/build/reliability/reliability/nodes/camera_manager_node.py",
+    "GoalMissionNode": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/experiments/nodes/goal_mission_node.py"
+  },
+  "manifest_matches_before": false,
+  "unchanged_during_execution": true,
+  "passed": 19
+}
