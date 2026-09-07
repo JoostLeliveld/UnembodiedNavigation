@@ -143,6 +143,7 @@ def test_non_identity_jacobian_is_applied():
         smoothed_mean=mean, smoothed_cov=cov, measurements=_measurements(mean, [2]),
         camera_id="camera_A", anchored_by=("camera_B",), frame="uv",
         observation_jacobian=H,
+        observation_function=lambda state: np.asarray(H) @ state,
     )
     expected = np.asarray(H) @ (0.04 * np.eye(2)) @ np.asarray(H).T
     np.testing.assert_allclose(records[0].state_projection, expected, atol=1e-12)

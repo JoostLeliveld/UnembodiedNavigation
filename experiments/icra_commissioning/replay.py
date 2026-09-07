@@ -32,7 +32,7 @@ def freeze(path,runs):
     for name in runs:
         p=Path(name).resolve(); m=json.loads((p/'run_manifest.json').read_text())
         if m['logging_schema_version']<4:raise ValueError('schema <4')
-        entries.append(dict(run=str(p.relative_to(REPO)),files={f:digest(p/f) for f in REQUIRED},
+        entries.append(dict(run=str(p.relative_to(REPO)),files={f:digest(p/f) for f in aligned.required_artifacts(p,REQUIRED)},
             role='development_replay',seed=m['seed'],task=m['task']))
     writejson(path,dict(status='diagnostic_replay_not_paper_fusion_selection',runs=entries,
         Q=dict(xy=.01,theta=.02),init='declared task_start_pose; diag(0.05 m,0.05 m,5 deg)^2',
@@ -40,32 +40,24 @@ def freeze(path,runs):
         rate='full unique capture rate and common minimum interval 1 s per camera'))
 
 
-def load(entry,mean,geometry):
-    p=REPO/entry['run']
-    for f,h in entry['files'].items():
-        if digest(p/f)!=h:raise ValueError(f'changed run artifact: {p/f}')
-    m=json.loads((p/'run_manifest.json').read_text())
+def load(entry,mean,geometry,*,max_reference_gap_s=None):
+    p,m,summary=aligned.verify_frozen_entry(entry,REQUIRED,repo=REPO)
     if not m['use_odom_for_predict'] or m['odom_topic']!='/odom_noisy':raise ValueError('wrong odometry input')
     if (m['process_noise_xy'],m['process_noise_theta'])!=(.01,.02):raise ValueError('Q changed')
-    # Accounting checked independently of numerical accuracy.
-    ass=aligned.assimilations(p);obs=aligned.observations(p)
-    bids={o['source_batch_id'] for o in obs}
-    if bids!={a['source_batch_id'] for a in ass}:raise ValueError('correction accounting mismatch')
-    if any(a['status'] not in ['accepted','accepted_bootstrap','reanchored','rejected','dropped'] or
-           (a['status'] in ['rejected','dropped'] and not a['reason']) for a in ass):raise ValueError('unexplained outcome')
-    table=aligned.rows(p); truth=aligned.truth_series(p,table)
-    odom={}
-    for r in table:
-        try:t=float(r['odom_noisy_stamp']);u=np.array([float(r['odom_noisy_v']),float(r['odom_noisy_w'])])
-        except (KeyError,ValueError):continue
-        if math.isfinite(t) and np.isfinite(u).all():odom.setdefault(t,u)
-    if not odom:raise ValueError('no measured odometry')
+    ledger=aligned.validate_run_ledger(p)
+    ass=aligned.assimilations(p)
+    table=aligned.rows(p); truth=aligned.truth_series(p,table,max_reference_gap_s=max_reference_gap_s)
+    start,stop=aligned.mission_interval(p)
+    odom=aligned.measured_odometry(table,start=start,stop=stop)
+    m=dict(m,replay_start_stamp=start)
     rawrows={}
     for r in readcsv(p/'fusion_observations.csv'):
-        rawrows.setdefault((r['camera'],round(float(r['obs_stamp']),6)),r)
+        rawrows.setdefault((r['source_batch_id'],r['camera']),r)
     readings=[]
-    for o in aligned.readings(p,admitted_only=False):
-        r=rawrows[(o['camera'],round(o['obs_stamp'],6))];cam='camera_'+o['camera']
+    for o in aligned.readings(p,admitted_only=False,max_reference_gap_s=max_reference_gap_s,
+                              require_reference=False):
+        if not start<=o['obs_stamp']<=stop:continue
+        r=rawrows[o['source_batch_id'],o['camera']];cam='camera_'+o['camera']
         raw=np.array([float(r['raw_obs_x']),float(r['raw_obs_y'])])
         if not np.isfinite(raw).all():raise ValueError('raw reading absent')
         u,v,visible=geometry[cam].world_to_pixel(*raw)
@@ -86,6 +78,11 @@ def run_filter(m,truth,odom,readings,models,kind,cameras,interval=0,*,prediction
     every original capture time holds the numerical process-noise integration grid
     fixed when comparing camera subsets. Omitting it preserves historical calls.
     """
+    readings=sorted(readings,key=lambda r:(r['t'],r['batch'],r['camera']))
+    raw_ids=[(r['batch'],r['camera']) for r in readings]
+    if len(raw_ids)!=len(set(raw_ids)):raise ValueError('duplicate physical camera update')
+    if not all(math.isfinite(r['t']) for r in readings):raise ValueError('nonfinite capture event')
+    if not math.isfinite(interval) or interval<0:raise ValueError('invalid sampling interval')
     chosen=[];last={}
     for r in readings:
         if r['camera'] not in cameras:continue
@@ -95,7 +92,14 @@ def run_filter(m,truth,odom,readings,models,kind,cameras,interval=0,*,prediction
     for r in chosen:bytime[r['t']].append(r)
     grid=set() if prediction_times is None else set(prediction_times)
     if not all(math.isfinite(t) for t in grid):raise ValueError('nonfinite prediction event')
-    times=sorted(set(odom)|set(bytime)|grid)
+    if not odom or not all(math.isfinite(t) and np.asarray(u).shape==(2,) and
+                            np.isfinite(u).all() for t,u in odom.items()):
+        raise ValueError('invalid measured odometry')
+    # Every call uses all original capture times, including removed cameras/rates.
+    # Explicit opportunity times extend this grid with no-detection events.
+    grid.update(r['t'] for r in readings)
+    times=sorted(set(odom)|grid)
+    if times[0]<min(odom):raise ValueError('missing causal odometry at replay start')
     start=m['task_start_pose']
     state=np.array([start[k] for k in ['x','y','yaw']],float); P=np.diag([.05,.05,np.deg2rad(5)])**2
     persistent=kind=='confidence_bias'
@@ -122,12 +126,14 @@ def run_filter(m,truth,odom,readings,models,kind,cameras,interval=0,*,prediction
                 P=F@P@F.T+Q;state=unicycle_step(state,control,dt)
         # Measurement before motion samples stamped at t affect the next interval.
         for r in bytime.get(t,[]):
-            key=(r['camera'],t)
+            key=(r['batch'],r['camera'])
             if key in seen:raise ValueError('duplicate physical camera update')
             seen.add(key)
             if kind=='recorded':z,R=r['original_z'],r['original_R']
             else:
                 zz,RR=models[r['camera'],'confidence' if persistent else kind].predict([r]);z,R=zz[0],RR[0]
+            if np.asarray(z).shape!=(2,) or not np.isfinite(z).all():raise ValueError('invalid replay observation')
+            aligned.validate_covariances(np.asarray(R)[None])
             pre=state.copy();Pm=P.copy()
             if persistent:
                 H=np.zeros((2,len(state)));H[:,:2]=np.eye(2)
@@ -153,25 +159,51 @@ def run_filter(m,truth,odom,readings,models,kind,cameras,interval=0,*,prediction
             records.append(dict(t=t,state=state.copy(),P=P.copy(),error=err,
                 yaw_error=(state[2]-yaw+np.pi)%(2*np.pi)-np.pi))
         previous=t
-    e=np.array([r['error'] for r in records]);C=np.array([r['P'][:2,:2] for r in records])
+    e=np.array([r['error'] for r in records]).reshape(-1,2);C=np.array([r['P'][:2,:2] for r in records]).reshape(-1,2,2)
     s=score(e,C,['one_drive']*len(e));s['updates']=len(seen)
-    s['yaw_rmse_deg']=float(np.rad2deg(np.sqrt(np.mean([r['yaw_error']**2 for r in records]))))
+    s['yaw_rmse_deg']=float(np.rad2deg(np.sqrt(np.mean([r['yaw_error']**2 for r in records])))) if records else None
+    s['scoring_stamps_total']=len(odom)
+    s['scoring_stamps_without_reference']=len(odom)-len(records)
+    s['reference_max_gap_s']=truth.max_gap_s
+    s['timing']='capture-time idealized; no arrival delay, NIS or live refusal reproduction'
+    s['motion_input']='zero-order-held logged odometry; no full-rate motion-support claim'
+    s['max_logged_odometry_gap_s']=float(max(np.diff(sorted(odom)),default=0.))
     s['pre_gate_mean_nis']=float(np.mean([r['nis'] for r in innovations])) if innovations else None
     return s,records,innovations
 
 
-def main(selection,out):
-    manifest=json.loads(selection.read_text()); models=joblib.load(out/'models.joblib')
+def main(selection,out,*,max_reference_gap_s=None,model_path=None):
+    manifest=json.loads(selection.read_text())
+    out.mkdir(parents=True,exist_ok=True)
+    model_path=Path(model_path) if model_path is not None else OUT/'models.joblib'
+    identities=[(r['task'],r['seed']) for r in manifest['runs']]
+    if len(set(identities))!=len(identities) or len({r['run'] for r in manifest['runs']})!=len(identities):
+        raise ValueError('duplicate frozen replay identity')
+    protocol=dict(selection_sha256=digest(selection),model_sha256=digest(model_path),
+                  max_reference_gap_s=max_reference_gap_s,
+                  source_sha256={str(p.relative_to(REPO)):digest(p) for p in [Path(__file__),Path(aligned.__file__),
+                  REPO/'experiments/icra_commissioning/model.py',REPO/'experiments/icra_commissioning/study.py',
+                  REPO/'src/unav_common/unav_common/correction_ledger.py']})
+    path=out/'replay_protocol.json'
+    if (out/'replay_results.json').exists() and not path.exists():raise ValueError('historical output has no current protocol; use a new output directory')
+    if path.exists() and json.loads(path.read_text())!=protocol:raise ValueError('replay protocol differs; use a new output directory')
+    writejson(path,protocol)
+    models=joblib.load(model_path)
+    frozen_inputs=json.loads((OUT/'manifest.json').read_text())['files']
+    for name in [ARTIFACT,f'{CAPTURE}/capture_manifest.json']:
+        if name not in frozen_inputs or digest(REPO/name)!=frozen_inputs[name]:
+            raise ValueError(f'changed or unfrozen mean/geometry input: {name}')
     mean=LearnedBoxCorrection(REPO/ARTIFACT)
     geometry=camera_models(json.loads((REPO/CAPTURE/'capture_manifest.json').read_text()))
     allscores=[];temporal=[];cross=[]
     for entry in manifest['runs']:
-        m,truth,odom,readings,ass=load(entry,mean,geometry)
+        m,truth,odom,readings,ass=load(entry,mean,geometry,max_reference_gap_s=max_reference_gap_s)
         cams=sorted({r['camera'] for r in readings})
         # Residual dependence is computed at capture time, within this run only.
         residual_by_batch=defaultdict(dict)
         for c in cams:
-            rows=[r for r in readings if r['camera']==c]
+            rows=[r for r in readings if r['camera']==c and np.isfinite(r['truth']).all()]
+            if not rows:continue
             z,R=models[c,'constant'].predict(rows)
             e=z-np.array([r['truth'] for r in rows])
             white=np.linalg.solve(np.linalg.cholesky(R),e[...,None])[...,0]
@@ -182,7 +214,8 @@ def main(selection,out):
                 # exclude long visibility gaps when interpreting nominal lag correlation
                 keep=dt<max(2.,lag*.5)
                 if keep.sum()<10:continue
-                rho=[float(np.corrcoef(white[:-lag,j][keep],white[lag:,j][keep])[0,1]) for j in range(2)]
+                rho=[float(np.corrcoef(white[:-lag,j][keep],white[lag:,j][keep])[0,1])
+                     if min(np.std(white[:-lag,j][keep]),np.std(white[lag:,j][keep]))>0 else None for j in range(2)]
                 temporal.append(dict(run=entry['run'],camera=c,lag=lag,pairs=int(keep.sum()),
                     median_lag_s=float(np.median(dt[keep])),correlation=rho))
         for i,a in enumerate(cams):
@@ -190,8 +223,9 @@ def main(selection,out):
                 paired=[(v[a],v[b]) for v in residual_by_batch.values() if a in v and b in v]
                 if len(paired)<10:continue
                 aa,bb=np.asarray(paired).transpose(1,0,2)
+                rho=np.corrcoef(aa.T,bb.T)[:2,2:]
                 cross.append(dict(run=entry['run'],cameras=[a,b],n=len(paired),
-                    correlation=np.corrcoef(aa.T,bb.T)[:2,2:].tolist()))
+                    correlation=[[float(v) if np.isfinite(v) else None for v in row] for row in rho]))
         fig,axes=plt.subplots(2,1,figsize=(9,6),layout='constrained')
         for kind in ['recorded',*KINDS,'confidence_bias']:
             for interval in [0,1.]:
@@ -213,7 +247,7 @@ def main(selection,out):
         axes[0].legend(ncol=4,fontsize=7)
         fig.savefig(out/f"replay_{m['run_id']}.pdf");fig.savefig(out/f"replay_{m['run_id']}.png",dpi=180);plt.close(fig)
     writejson(out/'replay_results.json',dict(status='diagnostic_fixed_Q_replay',selection_sha256=digest(selection),
-      model_sha256=digest(out/'models.joblib'),scores=allscores,temporal=temporal,cross_camera=cross,
+      model_sha256=digest(model_path),scores=allscores,temporal=temporal,cross_camera=cross,
       limitations=['Per-camera raw boxes reconstructed from raw ground point and box dimensions.',
         'Legacy fusion log excludes some refused camera opportunities; availability not identifiable here.',
         'No live latency or NIS gating; logged 10 Hz measured odometry is coarser than online history.',
@@ -229,4 +263,5 @@ def main(selection,out):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('action',choices=['freeze','run']);p.add_argument('--selection',type=Path,default=OUT/'driving_manifest.json');p.add_argument('--run',action='append');p.add_argument('--output',type=Path,default=OUT)
-    a=p.parse_args();freeze(a.selection,a.run) if a.action=='freeze' else main(a.selection,a.output)
+    p.add_argument('--max-reference-gap-s',type=float);p.add_argument('--models',type=Path,default=OUT/'models.joblib')
+    a=p.parse_args();freeze(a.selection,a.run) if a.action=='freeze' else main(a.selection,a.output,max_reference_gap_s=a.max_reference_gap_s,model_path=a.models)

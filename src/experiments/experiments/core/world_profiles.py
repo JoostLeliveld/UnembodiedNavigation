@@ -308,8 +308,11 @@ def serialize_occlusion_geometry_from_world(
 def serialize_collision_geometry_from_world(
     world_path: str,
     model_names: Tuple[str, ...] = ("warehouse_walls", "warehouse_rack_occluders"),
+    include_names: Tuple[str, ...] = (),
 ) -> str:
-    scene = parse_collision_scene_from_world(world_path, model_names=model_names)
+    scene = parse_collision_scene_from_world(
+        world_path, model_names=model_names, include_names=include_names
+    )
     return scene_to_json(scene)
 
 

@@ -33,6 +33,29 @@ WORLD = (
 POSE = (-5.0, -3.0, 0.5)
 
 
+@pytest.mark.parametrize("scale", [1e-150, 1., 1e150])
+@pytest.mark.parametrize("condition", [1., 19., 20., 21., 30., 41.])
+def test_jacobian_condition_gate_enforces_the_declared_limit(scale, condition):
+    from reliability.silhouette_observation import _inverse_2x2
+
+    # Scaling a Jacobian changes its units, not its singular-value ratio.
+    jacobian = scale*np.diag([condition, 1.])
+    inverse = _inverse_2x2(jacobian, max_condition=20.)
+    if condition > 20.:
+        assert inverse is None
+    else:
+        assert inverse is not None
+        np.testing.assert_allclose(jacobian @ inverse, np.eye(2), atol=1e-14)
+
+
+@pytest.mark.parametrize("limit", [0., .5, float("nan"), float("inf")])
+def test_jacobian_condition_limit_must_be_finite_and_at_least_one(limit):
+    from reliability.silhouette_observation import _inverse_2x2
+
+    with pytest.raises(ValueError, match="max_condition"):
+        _inverse_2x2(np.eye(2), max_condition=limit)
+
+
 @pytest.fixture(scope="module")
 def camera():
     if not WORLD.exists():

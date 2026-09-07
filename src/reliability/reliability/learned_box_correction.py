@@ -22,6 +22,8 @@ world coordinates directly would rotate the correction by the camera's bearing.
 from __future__ import annotations
 
 import math
+import hashlib
+import io
 from pathlib import Path
 from typing import Sequence
 
@@ -38,13 +40,17 @@ SUPPORTED_SCHEMA = 'box_feature_bias_correction.joblib.v1'
 class LearnedBoxCorrection:
     """Forward-only wrapper around the packaged neural box correction."""
 
-    def __init__(self, artifact_path: str | Path) -> None:
+    def __init__(self, artifact_path: str | Path, *, expected_sha256: str | None = None) -> None:
         import joblib  # imported here so the runtime only needs it when this model is used
 
         path = Path(artifact_path).expanduser()
         if not path.is_file():
             raise FileNotFoundError(f'learned box-correction artifact not found: {path}')
-        payload = joblib.load(path)
+        data = path.read_bytes()
+        self.sha256 = hashlib.sha256(data).hexdigest()
+        if expected_sha256 is not None and self.sha256 != expected_sha256:
+            raise ValueError('learned correction artifact hash differs from expected identity')
+        payload = joblib.load(io.BytesIO(data))
 
         schema = str(payload.get('schema', ''))
         if schema != SUPPORTED_SCHEMA:
@@ -60,6 +66,10 @@ class LearnedBoxCorrection:
         camera_ids = [str(value) for value in payload.get('camera_ids') or []]
         if not camera_ids:
             raise ValueError('artifact carries no camera_ids, so identity cannot be encoded')
+        if len(set(camera_ids)) != len(camera_ids) or any(not c for c in camera_ids):
+            raise ValueError('artifact camera_ids must be unique nonempty identities')
+        if payload.get('target') != 'truth minus raw projection in along/across camera-ray coordinates':
+            raise ValueError('learned correction target/reference semantics are unsupported')
 
         # The artifact's own ordering is authoritative. Check it rather than trusting that
         # this file and the fit have stayed in step.
@@ -73,6 +83,8 @@ class LearnedBoxCorrection:
         geometry = payload.get('camera_geometry') or {}
         if not geometry:
             raise ValueError('artifact carries no camera_geometry')
+        if set(geometry) != set(camera_ids):
+            raise ValueError('camera geometry must match exactly the trained camera registry')
 
         self.path = path
         self.model = model
@@ -87,6 +99,10 @@ class LearnedBoxCorrection:
             }
             for camera, entry in geometry.items()
         }
+        for camera, entry in self._geometry.items():
+            values = [*entry['xy'], entry['yaw'], entry['width'], entry['height']]
+            if not all(math.isfinite(v) for v in values) or min(entry['width'], entry['height']) <= 0:
+                raise ValueError(f'nonfinite or invalid learned camera geometry: {camera}')
 
     # -- feature construction -------------------------------------------------
     def _features(self, camera_id: str, raw_xy: Sequence[float],
@@ -137,9 +153,16 @@ class LearnedBoxCorrection:
         Returning None is deliberate: a reading the model cannot describe is left to the
         caller to handle, rather than silently passed through as if it had been corrected.
         """
-        if bbox_xyxy is None or len(bbox_xyxy) < 4:
+        if bbox_xyxy is None or len(bbox_xyxy) != 4 or raw_xy is None or len(raw_xy) != 2:
             return None
-        row = self._features(camera_id, raw_xy, bbox_xyxy, confidence)
+        try:
+            if not all(math.isfinite(float(v)) for v in (*raw_xy, *bbox_xyxy, confidence)):
+                return None
+            if not 0 <= float(confidence) <= 1 or float(bbox_xyxy[2]) <= float(bbox_xyxy[0]) or float(bbox_xyxy[3]) <= float(bbox_xyxy[1]):
+                return None
+            row = self._features(camera_id, raw_xy, bbox_xyxy, confidence)
+        except (ValueError, TypeError, IndexError, OverflowError):
+            return None
         if row is None:
             return None
         try:

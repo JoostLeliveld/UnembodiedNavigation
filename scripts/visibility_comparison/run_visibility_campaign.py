@@ -13,14 +13,19 @@ from __future__ import annotations
 
 import argparse
 import csv
+import fcntl
 import json
 import math
 import os
+import re
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
+import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -38,7 +43,11 @@ from unav_common.preselected_route import (  # noqa: E402
     sha256_file,
     validate_preselected_route,
 )
-from unav_common.manifest import git_provenance  # noqa: E402
+from unav_common.navigation_parameters import validate_navigation_parameters, PARAMETERS
+from unav_common.manifest import atomic_write_json, git_provenance  # noqa: E402
+from unav_common.config import parse_bool  # noqa: E402
+from unav_common.correction_ledger import validate_correction_ledger  # noqa: E402
+from unav_common.camera_outcomes import read_journal  # noqa: E402
 
 # Map condition ID to planner name (must match ALLOWED_PLANNERS in launch file).
 #: Every terminal outcome a correction may have; mirrors the planner and the logger.
@@ -105,21 +114,76 @@ PRESELECTED_ROUTE_KEYS = (
     'preselected_route_sample_step_m',
 )
 
+BOOL_CONFIG_KEYS = frozenset({
+    'headless', 'use_rviz', 'reset_world', 'use_command_noise',
+    'use_encoder_noise', 'use_odom_for_predict', 'optimizer_multistart',
+    'optimizer_multistart_include_direct', 'yolo_use_masks',
+    'yolo_use_torchscript', 'yolo_inference_in_callback',
+    'require_state_correction_envelope', 'use_pixel_correction',
+    'skip_stale_pixel_correction', 'debug_runtime', 'optimizer_warm_start',
+    'use_hierarchical', 'global_use_ambiguity', 'local_use_ambiguity',
+    'local_use_obs_risk', 'global_optimizer_multistart',
+    'local_optimizer_multistart', 'local_use_visibility_model',
+    'local_use_belief_nogo_cost', 'local_replan_on_waypoint_change',
+    'latency_compensate_plan_handoff', 'use_nogo_cost',
+    'use_belief_nogo_cost', 'use_hit_miss_mixture',
+    'terminate_on_geom_collision', 'bridge_camera_b', 'bridge_camera_c',
+    'bridge_camera_d', 'multicam_belief', 'manager_require_source_batch_id',
+    'manager_commissioned_per_camera_sigma',
+    'manager_correction_timestamp_compensation', 'manager_admission_gate',
+    'manager_require_consistency_when_source_available', 'manager_fusion_mode',
+    'manager_require_gp_artifacts', 'state_correction_ekf',
+    'wait_for_belief_before_first_goal', 'multicam_scheduled',
+    'cleanup_sim_stragglers', 'enable_mission',
+})
+
+CAMPAIGN_METADATA_KEYS = frozenset({
+    'conditions', 'tasks', 'study_title', 'study_comparison', 'cleanup_mode',
+    'cleanup_sim_stragglers', 'ros_domain_id_base', 'world_profiles',
+    'tasks_yaml', 'gp_artifact',
+})
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """Safe YAML loader that refuses duplicate mapping keys."""
+
+
+def _construct_unique_mapping(loader, node, deep=False):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise ValueError(
+                f'duplicate YAML key {key!r} at line {key_node.start_mark.line + 1}'
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping
+)
+
 
 def _load_config(path: Path) -> dict:
     with path.open('r', encoding='utf-8') as f:
-        cfg = yaml.safe_load(f)
+        cfg = yaml.load(f, Loader=_UniqueKeyLoader)
     _validate_config(cfg, path)
     return cfg
 
 
 def _validate_config(cfg: dict, path: Path) -> None:
-    cleanup_mode = cfg.get('cleanup_mode', 'legacy_global')
-    if cleanup_mode not in ('legacy_global', 'isolated'):
-        raise ValueError('cleanup_mode must be legacy_global or isolated')
-    if cleanup_mode == 'isolated':
-        if cfg.get('ros_domain_id_base') is None or cfg.get('cleanup_sim_stragglers', False):
-            raise ValueError('isolated cleanup requires ros_domain_id_base and no global straggler cleanup')
+    if not isinstance(cfg, dict):
+        raise ValueError(f'campaign config {path} must be a mapping')
+    unknown_top = set(cfg) - _known_campaign_keys()
+    if unknown_top:
+        raise ValueError(f'{path}: unknown campaign keys: {sorted(unknown_top)}')
+    validate_navigation_parameters(cfg)
+    cleanup_mode = cfg.get('cleanup_mode', 'isolated')
+    if cleanup_mode != 'isolated':
+        raise ValueError('campaign execution requires cleanup_mode: isolated')
+    if cfg.get('cleanup_sim_stragglers', False):
+        raise ValueError('isolated cleanup forbids global straggler cleanup')
     for key in ('world', 'launch_file', 'conditions', 'tasks',
                 'yolo_model', 'horizon', 'dt', 'goal_success_radius',
                 'run_timeout_after_first_cmd_s'):
@@ -137,6 +201,10 @@ def _validate_config(cfg: dict, path: Path) -> None:
                 f"Campaign config {path} has unfilled placeholder for '{key}': {cfg[key]!r}\n"
                 f"Verify the lambda mapping against the planner source and fill it in."
             )
+    if not isinstance(cfg['conditions'], dict) or not cfg['conditions']:
+        raise ValueError(f'{path}: conditions must be a nonempty mapping')
+    if not isinstance(cfg['tasks'], dict) or not cfg['tasks']:
+        raise ValueError(f'{path}: tasks must be a nonempty mapping')
     for condition_id in cfg['conditions']:
         if condition_id not in CONDITION_PLANNER:
             raise RuntimeError(
@@ -155,19 +223,111 @@ def _validate_config(cfg: dict, path: Path) -> None:
                 f"Condition '{condition_id}' declares planner {declared_planner!r}, "
                 f"but the active runner contract requires {expected_planner!r}"
             )
+        unknown = set(condition_cfg) - (_known_campaign_keys() | {'label', 'planner'})
+        if unknown:
+            raise ValueError(
+                f'{path}: condition {condition_id!r} has unknown keys: {sorted(unknown)}'
+            )
+        _validate_explicit_scalar_types(condition_cfg, f'{path}: condition {condition_id}')
+    normalized_cells = set()
     for task_name, task_cfg in cfg['tasks'].items():
+        if not isinstance(task_name, str) or not re.fullmatch(r'[A-Za-z0-9_.-]+', task_name):
+            raise ValueError(f'{path}: invalid task name {task_name!r}')
+        if not isinstance(task_cfg, dict):
+            raise ValueError(f'{path}: task {task_name!r} must be a mapping')
+        unknown = set(task_cfg) - (_known_campaign_keys() | {
+            'conditions', 'seeds', 'preselected_routes',
+        })
+        if unknown:
+            raise ValueError(
+                f'{path}: task {task_name!r} has unknown keys: {sorted(unknown)}'
+            )
+        conditions = task_cfg.get('conditions')
+        seeds = task_cfg.get('seeds')
+        if not isinstance(conditions, list) or not conditions:
+            raise ValueError(f'{path}: task {task_name!r} conditions must be a nonempty list')
+        if len(set(conditions)) != len(conditions):
+            raise ValueError(f'{path}: task {task_name!r} has duplicate conditions')
+        if not isinstance(seeds, list) or not seeds:
+            raise ValueError(f'{path}: task {task_name!r} seeds must be a nonempty list')
+        if any(isinstance(seed, bool) or not isinstance(seed, int) for seed in seeds):
+            raise ValueError(f'{path}: task {task_name!r} seeds must be integers')
+        if len(set(seeds)) != len(seeds):
+            raise ValueError(f'{path}: task {task_name!r} has duplicate seeds')
+        routes = task_cfg.get('preselected_routes', {}) or {}
+        if not isinstance(routes, dict):
+            raise ValueError(f'{path}: task {task_name!r} preselected_routes must be a mapping')
+        for route_condition, route_cfg in routes.items():
+            if route_condition not in conditions:
+                raise ValueError(
+                    f'{path}: task {task_name!r} has a route for inactive condition '
+                    f'{route_condition!r}'
+                )
+            if not isinstance(route_cfg, dict):
+                raise ValueError(
+                    f'{path}: task {task_name!r} route {route_condition!r} must be a mapping'
+                )
+            unknown_route = set(route_cfg) - set(PRESELECTED_ROUTE_KEYS)
+            if unknown_route:
+                raise ValueError(
+                    f'{path}: task {task_name!r} route {route_condition!r} has '
+                    f'unknown keys: {sorted(unknown_route)}'
+                )
+            _validate_explicit_scalar_types(
+                route_cfg, f'{path}: task {task_name}/{route_condition} route'
+            )
+        _validate_explicit_scalar_types(task_cfg, f'{path}: task {task_name}')
         for condition_id in task_cfg.get('conditions', []):
             if condition_id not in CONDITION_PLANNER:
                 raise RuntimeError(
                     f"Task '{task_name}' in {path} uses unsupported active condition "
                     f"'{condition_id}'. Allowed conditions are: {', '.join(CONDITION_PLANNER)}"
                 )
+            if condition_id not in cfg['conditions']:
+                raise ValueError(
+                    f'{path}: task {task_name!r} references undeclared condition '
+                    f'{condition_id!r}'
+                )
+            for seed in seeds:
+                cell = (task_name, condition_id, seed)
+                if cell in normalized_cells:
+                    raise ValueError(f'{path}: duplicate campaign cell {cell!r}')
+                normalized_cells.add(cell)
+
+    _validate_explicit_scalar_types(cfg, str(path))
 
     active_cells = [
         (task_name, condition_id)
         for task_name, task_cfg in cfg['tasks'].items()
         for condition_id in task_cfg.get('conditions', [])
     ]
+    for task_name, condition_id in active_cells:
+        layers = (cfg, cfg['tasks'][task_name], cfg['conditions'][condition_id] or {},
+                  _route_overrides(cfg, task_name, condition_id))
+        explicit_keys = set().union(*(layer.keys() for layer in layers))
+        try:
+            validate_navigation_parameters({
+                key: _effective_value(cfg, task_name, condition_id, key)
+                for key in PARAMETERS & explicit_keys
+            })
+        except ValueError as exc:
+            raise ValueError(f'{path}: {task_name}/{condition_id}: {exc}') from exc
+        operational_timeout = _effective_value(
+            cfg, task_name, condition_id, 'operational_belief_timeout_s'
+        )
+        if operational_timeout is not None:
+            try:
+                operational_timeout = float(operational_timeout)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f'{path}: {task_name}/{condition_id}: '
+                    'operational_belief_timeout_s must be numeric'
+                ) from exc
+            if not math.isfinite(operational_timeout) or operational_timeout <= 0.0:
+                raise ValueError(
+                    f'{path}: {task_name}/{condition_id}: '
+                    'operational_belief_timeout_s must be finite and positive'
+                )
     needs_gp = any(
         CONDITION_PLANNER[condition_id] == 'visibility_aware_efe'
         and not _effective_value(cfg, task_name, condition_id, 'camera_network_artifact_path')
@@ -351,12 +511,29 @@ def _load_run_log(log_path: Path) -> dict:
     if not log_path.is_file():
         return {}
     try:
-        return json.loads(log_path.read_text(encoding='utf-8'))
-    except (OSError, json.JSONDecodeError):
-        return {}
+        payload = json.loads(log_path.read_text(encoding='utf-8'))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f'malformed campaign ledger {log_path}: {exc}') from exc
+    except OSError as exc:
+        raise RuntimeError(f'cannot read campaign ledger {log_path}: {exc}') from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(f'campaign ledger {log_path} must contain a JSON object')
+    return payload
 
 
-def _save_run_log(log_path: Path, log: dict) -> None:
+@contextmanager
+def _directory_lock(directory: Path):
+    directory.mkdir(parents=True, exist_ok=True)
+    fd = os.open(directory, os.O_RDONLY)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def _save_run_log_unlocked(log_path: Path, log: dict) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     # A stopped writer must not truncate the only campaign ledger. The temporary
     # file is on the same filesystem so replacement is atomic.
@@ -371,9 +548,54 @@ def _save_run_log(log_path: Path, log: dict) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, log_path)
+        temporary = None
+        directory_fd = os.open(log_path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     finally:
         if temporary is not None and temporary.exists():
             temporary.unlink()
+
+
+def _save_run_log(log_path: Path, log: dict) -> None:
+    with _directory_lock(log_path.parent):
+        _save_run_log_unlocked(log_path, log)
+
+
+def _update_run_log(log_path: Path, key: str, entry: dict) -> dict:
+    """Update one cell under a lock, preserving other writers' completed cells."""
+    with _directory_lock(log_path.parent):
+        ledger = _load_run_log(log_path)
+        ledger[key] = dict(entry)
+        _save_run_log_unlocked(log_path, ledger)
+        return ledger
+
+
+@contextmanager
+def _exclusive_lease(path: Path, owner: dict):
+    """Hold an exclusive nonblocking resource lease for this process lifetime."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    stream = path.open('a+', encoding='utf-8')
+    try:
+        try:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            stream.seek(0)
+            current = stream.read().strip() or '<unknown owner>'
+            raise RuntimeError(f'resource lease already held: {path}: {current}') from exc
+        stream.seek(0)
+        stream.truncate()
+        stream.write(json.dumps(owner, sort_keys=True))
+        stream.flush()
+        os.fsync(stream.fileno())
+        yield
+    finally:
+        try:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+        finally:
+            stream.close()
 
 
 def _resolve_repo_path(path_str: str, *, strict: bool = False) -> Path:
@@ -389,10 +611,92 @@ def _resolve_for_compare(path_str: str) -> Path:
     return _resolve_repo_path(path_str, strict=False)
 
 
+def _verify_installed_world_matches_checkout(world_file: str) -> Path:
+    """Return the SDF Gazebo will load, refusing a stale installed copy."""
+    source = REPO_ROOT / 'src' / 'sim' / 'gazebo_worlds' / 'worlds' / world_file
+    if not source.is_file():
+        raise RuntimeError(f'checkout world does not exist: {source}')
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        installed = (
+            Path(get_package_share_directory('sim'))
+            / 'gazebo_worlds' / 'worlds' / world_file
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            'sim package is not available in the active ROS environment'
+        ) from exc
+    if not installed.is_file():
+        raise RuntimeError(f'installed simulator world does not exist: {installed}')
+    if sha256_file(source) != sha256_file(installed):
+        raise RuntimeError(
+            f'installed simulator world is stale relative to checkout: {installed}'
+        )
+    return installed.resolve()
+
+
+def _checkout_pythonpath() -> str:
+    """Prefer this checkout's Python packages over possibly stale installs."""
+    package_roots = sorted({
+        str(setup.parent.resolve()) for setup in (REPO_ROOT / 'src').glob('*/setup.py')
+    })
+    if not package_roots:
+        raise RuntimeError('no checkout Python packages found under src/*/setup.py')
+    existing = os.environ.get('PYTHONPATH', '')
+    return os.pathsep.join(package_roots + ([existing] if existing else []))
+
+
+def _freeze_campaign_source(log_root: Path, config_path: Path, provenance: dict) -> Path:
+    """Freeze the executable source/config bytes once for this campaign root."""
+    snapshot = log_root / 'source_snapshot'
+    identity_path = snapshot / 'source_identity.json'
+    if snapshot.exists():
+        try:
+            recorded = json.loads(identity_path.read_text(encoding='utf-8'))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f'malformed existing campaign source snapshot: {exc}') from exc
+        if recorded.get('git_provenance') != provenance:
+            raise RuntimeError('campaign source snapshot differs from executable checkout')
+        return snapshot
+
+    temporary = log_root / f'.source_snapshot.{uuid.uuid4().hex}.tmp'
+    temporary.mkdir(parents=False, exist_ok=False)
+    suffixes = {'.py', '.yaml', '.yml', '.json', '.xml', '.sdf', '.urdf', '.xacro'}
+    try:
+        for source_root in (REPO_ROOT / 'src', REPO_ROOT / 'scripts' / 'visibility_comparison'):
+            for source in source_root.rglob('*'):
+                if (not source.is_file() or '__pycache__' in source.parts
+                        or (source.suffix not in suffixes and source.name not in {'setup.py', 'package.xml'})):
+                    continue
+                destination = temporary / source.relative_to(REPO_ROOT)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+        config_destination = temporary / 'campaign_config' / config_path.name
+        config_destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(config_path, config_destination)
+        atomic_write_json(str(temporary / 'source_identity.json'), {
+            'git_provenance': provenance,
+            'campaign_config_sha256': sha256_file(config_path),
+            'executable_source_root': str(REPO_ROOT),
+        })
+        os.replace(temporary, snapshot)
+        temporary = None
+        directory_fd = os.open(log_root, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        if temporary is not None and temporary.exists():
+            shutil.rmtree(temporary)
+    return snapshot
+
+
 def _as_bool(value) -> bool:
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on')
+    try:
+        return parse_bool(value)
+    except ValueError as exc:
+        raise ValueError(f"invalid boolean value {value!r}") from exc
 
 
 def _route_overrides(cfg: dict, task_name: str, condition_id: str) -> dict:
@@ -423,6 +727,19 @@ def _effective_value(cfg: dict, task_name: str, condition_id: str, key: str):
     if key in task_cfg:
         return task_cfg[key]
     return cfg.get(key)
+
+
+def _resolved_cell_config(cfg: dict, task_name: str, condition_id: str) -> dict:
+    """Materialize route > condition > task > campaign precedence once."""
+    task_cfg = cfg.get('tasks', {}).get(task_name, {}) or {}
+    condition_cfg = cfg.get('conditions', {}).get(condition_id, {}) or {}
+    route_cfg = _route_overrides(cfg, task_name, condition_id)
+    resolved = dict(cfg)
+    for layer in (task_cfg, condition_cfg, route_cfg):
+        for key, value in layer.items():
+            if key not in {'conditions', 'seeds', 'preselected_routes', 'label', 'planner'}:
+                resolved[key] = value
+    return resolved
 
 
 def _task_spec_from_yaml(cfg: dict, task_name: str, config_path: Path) -> dict:
@@ -546,20 +863,18 @@ def _validate_preselected_campaign_routes(cfg: dict, config_path: Path) -> None:
                     profile_driveable = _profile_driveable_geometry(cfg, config_path)
                 driveable = profile_driveable
 
+            endpoint_value = _effective_value(
+                cfg, task_name, condition_id,
+                'preselected_route_endpoint_tolerance_m',
+            )
+            sample_step_value = _effective_value(
+                cfg, task_name, condition_id, 'preselected_route_sample_step_m'
+            )
             endpoint_tolerance = float(
-                _effective_value(
-                    cfg,
-                    task_name,
-                    condition_id,
-                    'preselected_route_endpoint_tolerance_m',
-                )
-                or 0.25
+                0.25 if endpoint_value is None else endpoint_value
             )
             sample_step = float(
-                _effective_value(
-                    cfg, task_name, condition_id, 'preselected_route_sample_step_m'
-                )
-                or 0.04
+                0.04 if sample_step_value is None else sample_step_value
             )
             if not 0.0 <= endpoint_tolerance <= 0.25:
                 raise RuntimeError(
@@ -708,7 +1023,40 @@ def _verify_preselected_run_artifacts(
     return True, ''
 
 
-def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
+def _terminal_summary_outcome(summary: dict | None) -> tuple[bool, str, str]:
+    """Classify only a fully committed, evidence-complete terminal summary."""
+    if not isinstance(summary, dict):
+        return False, 'infra_invalid', 'missing_or_malformed_summary'
+    for field in ('completed', 'valid_run', 'data_files_closed'):
+        if summary.get(field) is not True:
+            return False, 'infra_invalid', f'summary_{field}_not_true'
+    reason = str(summary.get('completion_reason', '') or '')
+    if reason in ('goal_reached', 'goal_reached_stable'):
+        return True, 'goal_reached', reason
+    if reason == 'timeout_after_first_cmd':
+        return True, 'timeout', reason
+    if reason in ('collision', 'physical_contact', 'geometric_collision'):
+        return True, 'collision', reason
+    if reason == 'stuck':
+        return True, 'stuck', reason
+    return False, 'infra_invalid', f'unrecognized_terminal_reason:{reason or "missing"}'
+
+
+def _existing_entry_matches_config(
+    entry: dict,
+    cfg: dict,
+    *,
+    expected_cell: tuple[str, str, int] | None = None,
+) -> tuple[bool, str]:
+    if not isinstance(entry, dict):
+        return False, 'campaign entry is not an object'
+    if expected_cell is not None:
+        actual_cell = (entry.get('task'), entry.get('condition'), entry.get('seed'))
+        if actual_cell != expected_cell:
+            return False, f'ledger cell identity mismatch: {actual_cell!r} != {expected_cell!r}'
+    if ('_execution_options' in cfg
+            and entry.get('execution_options') != cfg['_execution_options']):
+        return False, 'planner execution options differ'
     condition_id = str(entry.get('condition', ''))
     run_dir_str = str(entry.get('run_dir', '') or '')
     if not run_dir_str:
@@ -729,9 +1077,69 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
             return False, f'{key} differs from the executable checkout'
 
     task_name = str(entry.get('task', '') or '')
+    expected_manifest_identity = {
+        'task': task_name,
+        'planner': CONDITION_PLANNER.get(condition_id),
+        'world': cfg.get('world'),
+        'seed': entry.get('seed'),
+    }
+    for key, expected in expected_manifest_identity.items():
+        if manifest.get(key) != expected:
+            return False, f'run manifest {key} mismatch: {manifest.get(key)!r} != {expected!r}'
+    expected_world_path = str(cfg.get('_world_sdf_path', '') or '')
+    if expected_world_path:
+        if _resolve_for_compare(manifest.get('world_sdf_path', '')) != _resolve_for_compare(
+            expected_world_path
+        ):
+            return False, 'world SDF path mismatch'
+        if manifest.get('world_sdf_sha256') != cfg.get('_world_sdf_sha256'):
+            return False, 'world SDF content hash mismatch'
+
+    summary = _read_run_summary(Path(run_dir_str))
+    terminal_ok, terminal_outcome, terminal_reason = _terminal_summary_outcome(summary)
+    if not terminal_ok:
+        return False, terminal_reason
+    if entry.get('outcome') != terminal_outcome:
+        return False, 'campaign outcome disagrees with terminal summary'
+    if entry.get('completion_reason') != str(summary.get('completion_reason', '') or ''):
+        return False, 'campaign completion_reason disagrees with terminal summary'
+    if entry.get('attempt_evidence_complete') is not True:
+        return False, 'campaign attempt evidence verdict is not complete'
+    verdict_path = Path(str(entry.get('run_log_dir', '') or '')) / 'attempt_evidence_verdict.json'
+    try:
+        verdict = json.loads(verdict_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, f'missing or malformed attempt evidence verdict: {exc}'
+    if (not isinstance(verdict, dict) or verdict.get('complete') is not True
+            or verdict.get('attempt_id') != entry.get('attempt_id')
+            or verdict.get('run_dir') != run_dir_str):
+        return False, 'attempt evidence verdict identity mismatch'
+    assimilation_ok, assimilation_reason = _verify_correction_assimilations(
+        Path(run_dir_str)
+    )
+    if not assimilation_ok:
+        return False, f'correction evidence invalid: {assimilation_reason}'
 
     def expected_value(key: str):
         return _effective_value(cfg, task_name, condition_id, key)
+
+    multicam_value = expected_value('multicam_belief')
+    if multicam_value is not None and _as_bool(multicam_value):
+        attempt_dir = Path(str(entry.get('run_log_dir', '') or ''))
+        journal_ok, journal_verdict = _verify_detector_journal(
+            attempt_dir
+        )
+        if not journal_ok:
+            return False, str(journal_verdict.get('reason', 'detector journal invalid'))
+        if entry.get('detector_journal_sha256') != journal_verdict.get('journal_sha256'):
+            return False, 'detector journal content hash mismatch'
+        manager_ok, manager_verdict = _verify_outcome_journal(
+            attempt_dir, 'manager_outcomes.jsonl', 'manager'
+        )
+        if not manager_ok:
+            return False, str(manager_verdict.get('reason', 'manager journal invalid'))
+        if entry.get('manager_journal_sha256') != manager_verdict.get('journal_sha256'):
+            return False, 'manager journal content hash mismatch'
 
     expected_yolo_model = str(_resolve_repo_path(cfg['yolo_model'], strict=False))
     actual_yolo_model = str(manifest.get('yolo_model', '') or '')
@@ -747,6 +1155,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
 
     numeric_keys = (
         'horizon', 'dt', 'goal_success_radius', 'goal_success_hold_s',
+        'operational_belief_timeout_s',
         'optimizer_terminal_goal_tolerance_m',
         'run_timeout_after_first_cmd_s', 'r_visible_uv', 'r_miss_uv',
         'process_noise_xy', 'process_noise_theta', 'risk_weight_obs',
@@ -760,7 +1169,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'nogo_logbarrier_eps',
         'nogo_belief_kappa',
         'pixel_correction_nis_threshold',
-        'robot_collision_radius_m',
+        'robot_collision_radius_m', 'robot_length_m', 'robot_width_m',
         'global_horizon', 'global_dt', 'local_horizon', 'local_plan_rate',
         'local_optimizer_maxiter', 'local_nogo_weight',
         'local_nogo_safe_distance',
@@ -836,7 +1245,12 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         if expected is not None:
             if key not in manifest:
                 return False, f'{key} missing from run manifest'
-            if bool(manifest.get(key)) != bool(expected):
+            try:
+                actual_bool = _as_bool(manifest.get(key))
+                expected_bool = _as_bool(expected)
+            except ValueError as exc:
+                return False, f'{key} has invalid boolean encoding: {exc}'
+            if actual_bool != expected_bool:
                 return False, f'{key} mismatch: run used {manifest.get(key)}, config expects {expected}'
 
     string_keys = (
@@ -906,6 +1320,16 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
                 return False, 'camera network artifact path mismatch'
             if manifest.get('camera_network_artifact_sha256') != sha256_file(expected):
                 return False, 'camera network artifact content hash mismatch'
+            if manifest.get('camera_network_expected_sha256') != sha256_file(expected):
+                return False, 'camera network consumer expectation mismatch'
+            if not isinstance(manifest.get('camera_network_source_hashes'), dict) or not manifest.get(
+                'camera_network_source_hashes'
+            ):
+                return False, 'camera network source provenance is missing'
+            camera_ids = manifest.get('camera_network_camera_ids')
+            if (not isinstance(camera_ids, list) or not camera_ids
+                    or len(camera_ids) != len(set(camera_ids))):
+                return False, 'camera network roster provenance is missing or malformed'
             if manifest.get('visibility_artifact_path'):
                 return False, 'network run unexpectedly also used a legacy visibility artifact'
             return True, ''
@@ -937,6 +1361,7 @@ def _ros_domain_for_run(cfg: dict, run_idx: int) -> str | None:
 
 
 def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, log_dir: Path) -> list[str]:
+    cfg = _resolved_cell_config(cfg, task_name, condition_id)
     planner = CONDITION_PLANNER[condition_id]
     global_mode = str(
         _effective_value(cfg, task_name, condition_id, 'global_planner_mode') or 'efe'
@@ -947,7 +1372,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         gp_artifact = str(_resolve_repo_path(cfg['gp_artifact'], strict=True))
     yolo_model = str(_resolve_repo_path(cfg['yolo_model'], strict=True))
     odom_topic = str(cfg.get('odom_topic', '/odom_noisy'))
-    if not bool(cfg.get('use_encoder_noise', True)) and odom_topic == '/odom_noisy':
+    if not _as_bool(cfg.get('use_encoder_noise', True)) and odom_topic == '/odom_noisy':
         odom_topic = '/odom'
 
     cmd = [
@@ -957,12 +1382,15 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'planner:={planner}',
         f'seed:={seed}',
         f'log_dir:={log_dir}',
+        f'outcome_journal_path:={log_dir / "detector_outcomes.jsonl"}',
+        f'manager_outcome_journal_path:={log_dir / "manager_outcomes.jsonl"}',
         f'campaign_config_path:={cfg.get("_campaign_config_path", "")}',
         f'perception_backend:={cfg.get("perception_backend", "yolo")}',
         f'horizon:={cfg["horizon"]}',
         f'dt:={cfg["dt"]}',
         f'goal_success_radius:={cfg["goal_success_radius"]}',
         f'goal_success_hold_s:={cfg.get("goal_success_hold_s", 2.0)}',
+        f'operational_belief_timeout_s:={cfg.get("operational_belief_timeout_s", 0.5)}',
         f'run_timeout_after_first_cmd_s:={cfg["run_timeout_after_first_cmd_s"]}',
         f'auto_stop_on_goal:=true',
         f'headless:={str(cfg.get("headless", False)).lower()}',
@@ -1032,6 +1460,16 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'stale_belief_inflate_cap_m2:={cfg.get("stale_belief_inflate_cap_m2", 0.0)}',
         f'require_state_correction_envelope:={str(cfg.get("require_state_correction_envelope", False)).lower()}',
     ]
+    input_defaults = {
+        'world_profiles': 'src/experiments/config/world_profiles.yaml',
+        'tasks_yaml': 'src/experiments/config/tasks.yaml',
+    }
+    for argument_name, default_path in input_defaults.items():
+        configured_path = cfg.get(argument_name, default_path)
+        cmd.append(
+            f'{argument_name}:='
+            f'{_resolve_repo_path(str(configured_path), strict=True)}'
+        )
     if global_mode == 'preselected_route':
         cmd.append(f'comparison_method_id:=closed_loop_{condition_id}')
 
@@ -1081,7 +1519,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'use_belief_nogo_cost',
         'nogo_belief_kappa',
         'use_hit_miss_mixture',
-        'robot_collision_radius_m',
+        'robot_collision_radius_m', 'robot_length_m', 'robot_width_m',
         'terminate_on_geom_collision',
         'global_planner_mode',
         *PRESELECTED_ROUTE_KEYS,
@@ -1118,12 +1556,22 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'stuck_window_s', 'stuck_max_displacement_m',
         'stuck_max_goal_improvement_m', 'stuck_cmd_fraction_min',
         'stuck_idle_cmd_fraction_max',
+        'enable_mission', 'simple_tracker_yaw_gate_rad',
     ):
         val = _effective_value(cfg, task_name, condition_id, key)
         if key == 'preselected_route_json' and val is not None:
             _points, val = canonicalize_polyline_json(str(val))
         elif key == 'preselected_route_source_path' and val is not None:
             val = str(_resolve_repo_path(str(val), strict=True))
+        elif key in {
+            'manager_commissioned_calibration_path',
+            'manager_commissioned_world_covariance_path',
+            'manager_learned_correction_path',
+            'scheduled_coverage_artifact',
+        } and val:
+            val = str(_resolve_repo_path(str(val), strict=True))
+        elif key == 'manager_gp_artifact_template' and val:
+            val = str(_resolve_repo_path(str(val), strict=False))
         if val is not None and not str(val).startswith('[FILL'):
             cmd.append(f'{key}:={val}')
 
@@ -1134,86 +1582,224 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
     return cmd
 
 
+def _constant_strings(value) -> set[str]:
+    strings = set()
+    if isinstance(value, str):
+        if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', value):
+            strings.add(value)
+    elif isinstance(value, (tuple, list, set, frozenset)):
+        for item in value:
+            strings.update(_constant_strings(item))
+    elif hasattr(value, 'co_consts'):
+        for item in value.co_consts:
+            strings.update(_constant_strings(item))
+    return strings
+
+
+def _known_campaign_keys() -> set[str]:
+    """Keys consumed by command construction plus explicit campaign metadata."""
+    return (
+        set(CAMPAIGN_METADATA_KEYS)
+        | set(PRESELECTED_ROUTE_KEYS)
+        | _constant_strings(_build_launch_cmd.__code__)
+        | {
+            'world', 'launch_file', 'yolo_model', 'horizon', 'dt',
+            'goal_success_radius', 'run_timeout_after_first_cmd_s',
+        }
+    )
+
+
+def _validate_explicit_scalar_types(values: dict, location: str) -> None:
+    for key, value in values.items():
+        if key in {'conditions', 'tasks', 'seeds', 'preselected_routes', 'label', 'planner'}:
+            continue
+        if value is None:
+            raise ValueError(f'{location}: explicit {key} may not be null')
+        if key in BOOL_CONFIG_KEYS and not isinstance(value, bool):
+            raise ValueError(
+                f'{location}: {key} must be a YAML boolean, got {value!r}'
+            )
+
+
 def _read_run_summary(run_dir: Path) -> dict | None:
     summary_path = run_dir / 'run_summary.json'
     if not summary_path.is_file():
         return None
     try:
-        return json.loads(summary_path.read_text(encoding='utf-8'))
+        summary = json.loads(summary_path.read_text(encoding='utf-8'))
+        return summary if isinstance(summary, dict) else None
     except (OSError, json.JSONDecodeError):
         return None
 
 
+def _verify_outcome_journal(
+    attempt_dir: Path, filename: str, producer_label: str
+) -> tuple[bool, dict]:
+    """Validate the durable producer close marker after launch shutdown."""
+    journal_path = attempt_dir / filename
+    if not journal_path.is_file():
+        return False, {'reason': f'missing_{producer_label}_outcome_journal'}
+    try:
+        rows = list(read_journal(journal_path))
+    except (OSError, ValueError) as exc:
+        return False, {'reason': f'malformed_{producer_label}_outcome_journal:{exc}'}
+    if not rows:
+        return False, {'reason': f'empty_{producer_label}_outcome_journal'}
+    epochs = {str(row.get('producer_epoch', '') or '') for row in rows}
+    if len(epochs) != 1 or '' in epochs:
+        return False, {'reason': f'{producer_label}_journal_epoch_mismatch'}
+    if rows[-1].get('status') != 'session_stopped':
+        return False, {'reason': f'{producer_label}_session_not_closed'}
+    return True, {
+        'reason': 'validated',
+        'journal_path': str(journal_path),
+        'journal_sha256': sha256_file(journal_path),
+        'producer_epoch': next(iter(epochs)),
+        'event_count': len(rows),
+        'last_event_id': rows[-1].get('event_id'),
+        'last_event_sha256': rows[-1].get('event_sha256'),
+    }
+
+
+def _verify_detector_journal(attempt_dir: Path) -> tuple[bool, dict]:
+    return _verify_outcome_journal(
+        attempt_dir, 'detector_outcomes.jsonl', 'detector'
+    )
+
+
 def _verify_correction_assimilations(run_dir: Path) -> tuple[bool, str]:
     """Every published fused correction must have one terminal filter outcome."""
+    publications_path = run_dir / 'correction_publications.csv'
     observations_path = run_dir / 'fusion_observations.csv'
     assimilations_path = run_dir / 'correction_assimilations.csv'
-    if not observations_path.is_file():
-        return False, 'missing fusion_observations.csv'
+    source_path = publications_path if publications_path.is_file() else observations_path
+    schema_version = int(
+        _load_run_manifest(run_dir).get('logging_schema_version', 0) or 0
+    )
+    if not source_path.is_file():
+        return False, 'missing correction publication evidence'
     if not assimilations_path.is_file():
         return False, 'missing correction_assimilations.csv'
     try:
-        correction_batches = {
-            str(row.get('source_batch_id', '') or '').strip()
-            for row in csv.DictReader(open(observations_path, encoding='utf-8'))
-            if str(row.get('source_batch_id', '') or '').strip()
-        }
-        assimilation_rows = list(csv.DictReader(
-            open(assimilations_path, encoding='utf-8')))
+        with source_path.open(encoding='utf-8', newline='') as stream:
+            publication_rows = list(csv.DictReader(stream))
+        with assimilations_path.open(encoding='utf-8', newline='') as stream:
+            assimilation_rows = list(csv.DictReader(stream))
     except (OSError, csv.Error) as exc:
         return False, f'cannot read correction evidence: {exc}'
-    assimilation_ids = [
-        str(row.get('source_batch_id', '') or '').strip()
-        for row in assimilation_rows
-    ]
-    if any(not value for value in assimilation_ids):
-        return False, 'assimilation row without source_batch_id'
-    if len(assimilation_ids) != len(set(assimilation_ids)):
-        return False, 'duplicate source_batch assimilation'
-    assimilation_batches = set(assimilation_ids)
-    if not correction_batches:
-        return False, 'no fused corrections were published'
-    if assimilation_batches != correction_batches:
-        return False, (
-            'correction/assimilation batch mismatch: '
-            f'{len(correction_batches - assimilation_batches)} missing, '
-            f'{len(assimilation_batches - correction_batches)} extra'
-        )
-    unknown = sorted({
-        str(row.get('status', '') or 'empty') for row in assimilation_rows
-        if str(row.get('status', '') or '') not in KNOWN_ASSIMILATION_STATUSES
-    })
-    if unknown:
-        return False, f'unclassifiable assimilation status: {unknown}'
-    unreasoned = [
-        row for row in assimilation_rows
-        if row.get('status') in ('dropped', 'rejected')
-        and not str(row.get('reason', '') or '').strip()
-    ]
-    if unreasoned:
-        return False, f'{len(unreasoned)} refusal(s) with no recorded reason'
-    # A refusal WITH a reason is not a broken chain: the filter declined a measurement it
-    # could not causally bridge -- usually a camera outage longer than the replay cap --
-    # said why, and carried on. The refusal rate and the longest gap are reported in the
-    # run summary. Failing the run on them would discard 90% of drives and, worse, would
-    # discard them by coverage, keeping only the well-covered route.
+    def exact_ns(value):
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            return value
+        if isinstance(value, str) and re.fullmatch(r'0|[1-9][0-9]*', value):
+            return int(value)
+        return value
+
+    def json_field(value):
+        if not isinstance(value, str):
+            return value
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+
+    # correction_publications.csv is the identity-bearing envelope stream. Older
+    # schema fixtures only have fusion_observations.csv, whose per-camera/display
+    # rows are not publications; reduce that fallback to one batch identity.
+    publications = []
+    legacy_ids = set()
+    for row in publication_rows:
+        source_batch_id = row.get('source_batch_id')
+        if source_path == observations_path and schema_version < 4:
+            if source_batch_id in legacy_ids:
+                continue
+            legacy_ids.add(source_batch_id)
+            publications.append(source_batch_id)
+            continue
+        publication = {'source_batch_id': source_batch_id}
+        stamp = row.get('correction_stamp') if source_path == publications_path else row.get('fused_stamp')
+        if stamp not in (None, ''):
+            publication['correction_stamp'] = stamp
+        if source_path == publications_path:
+            publication['frame_id'] = row.get('frame_id')
+            publication['event_id'] = row.get('event_id')
+            publication['epoch'] = row.get('epoch')
+            publication['publication_seq'] = exact_ns(row.get('publication_seq'))
+            publication['correction_stamp_ns'] = exact_ns(row.get('correction_stamp_ns'))
+            publication['member_ids'] = json_field(row.get('member_ids'))
+            publication['payload_sha256'] = row.get('payload_sha256')
+        else:
+            payload_keys = (
+                'fused_x', 'fused_y', 'fused_cov_xx', 'fused_cov_xy', 'fused_cov_yy'
+            )
+            if any(key in row for key in payload_keys):
+                publication['payload'] = {
+                    key: row.get(key) for key in payload_keys
+                }
+                try:
+                    publication['payload'] = {
+                        key: float(value)
+                        for key, value in publication['payload'].items()
+                    }
+                except (TypeError, ValueError):
+                    pass
+        publications.append(publication)
+    outcomes = []
+    for row in assimilation_rows:
+        status = str(row.get('status', '') or '').strip()
+        outcome = {
+            'source_batch_id': row.get('source_batch_id'),
+            'status': status,
+            'reason': row.get('reason'),
+            'accepted': (
+                row.get('accepted') if row.get('accepted') not in (None, '')
+                else (status in {'accepted', 'accepted_bootstrap', 'reanchored'}
+                      if schema_version < 4 else None)
+            ),
+        }
+        for key in ('correction_stamp', 'apply_stamp'):
+            if row.get(key) not in (None, ''):
+                outcome[key] = row.get(key)
+        for key in ('correction_stamp_ns', 'apply_stamp_ns'):
+            if row.get(key) not in (None, ''):
+                outcome[key] = exact_ns(row.get(key))
+        if row.get('source_epoch') not in (None, ''):
+            outcome['epoch'] = row.get('source_epoch')
+        if row.get('source_event_id') not in (None, ''):
+            outcome['event_id'] = row.get('source_event_id')
+        if row.get('source_member_ids') not in (None, ''):
+            outcome['member_ids'] = json_field(row.get('source_member_ids'))
+        if row.get('source_payload_sha256') not in (None, ''):
+            outcome['payload_sha256'] = row.get('source_payload_sha256')
+        outcomes.append(outcome)
+    require_timestamps = all(
+        isinstance(record, dict)
+        and record.get('correction_stamp') not in (None, '') for record in publications
+    ) and all(
+        record.get('correction_stamp') not in (None, '')
+        and record.get('apply_stamp') not in (None, '') for record in outcomes
+    )
+    validation = validate_correction_ledger(
+        publications, outcomes, require_timestamps=require_timestamps,
+        allow_repeated_publications=True,
+    )
+    if not validation.valid:
+        issue = validation.errors[0]
+        return False, f'{issue.code}: {issue.message}'
     return True, ''
 
 
-def _find_latest_run_dir(log_dir: Path) -> Path | None:
-    if not log_dir.is_dir():
+def _attempt_run_dir(attempt_dir: Path) -> Path | None:
+    """Return the sole run created by one attempt; refuse ambiguous ownership."""
+    if not attempt_dir.is_dir():
         return None
-    candidates = sorted(log_dir.iterdir(), reverse=True)
-    for d in candidates:
-        if d.is_dir() and (d / 'run_summary.json').is_file():
-            return d
-    return None
-
-
-def _find_latest_experiment_dir(log_dir: Path) -> Path | None:
-    if not log_dir.is_dir():
-        return None
-    candidates = sorted((d for d in log_dir.iterdir() if d.is_dir() and d.name.startswith('experiment_')), reverse=True)
+    candidates = [
+        child for child in attempt_dir.iterdir()
+        if child.is_dir() and child.name.startswith('experiment_')
+    ]
+    if len(candidates) > 1:
+        raise RuntimeError(
+            f'attempt directory contains multiple experiment runs: {attempt_dir}'
+        )
     return candidates[0] if candidates else None
 
 
@@ -1262,6 +1848,13 @@ def main() -> int:
                              'guillotined mid-optimization with no command (the dominant past failure mode).')
     parser.add_argument('--cleanup-delay', type=float, default=8.0,
                         help='Sleep between runs for process cleanup (seconds).')
+    parser.add_argument('--planner-cache-dir', type=Path,
+                        default=REPO_ROOT / 'logs/cache/casadi',
+                        help='Reusable CasADi function cache; keys include model parameters and source hashes.')
+    parser.add_argument('--no-planner-cache', action='store_true',
+                        help='Build planner functions from scratch in each process.')
+    parser.add_argument('--planner-jit', action='store_true',
+                        help='Opt in to compiled objective/gradient evaluation; recorded for resume checks.')
     args = parser.parse_args()
 
     config_path = _resolve_repo_path(args.config, strict=False)
@@ -1270,6 +1863,7 @@ def main() -> int:
         return 1
 
     cfg = _load_config(config_path)
+    cfg.setdefault('operational_belief_timeout_s', 0.5)
     # Runtime provenance: the logger snapshots and hashes these exact bytes. Keep this
     # out-of-band key separate from the scientific YAML fields consumed by validation.
     cfg['_campaign_config_path'] = str(config_path)
@@ -1277,6 +1871,10 @@ def main() -> int:
     cfg['_yolo_model_sha256'] = sha256_file(
         _resolve_repo_path(cfg['yolo_model'], strict=True)
     )
+    cfg['_world_sdf_path'] = str(
+        _verify_installed_world_matches_checkout(cfg['world'])
+    )
+    cfg['_world_sdf_sha256'] = sha256_file(cfg['_world_sdf_path'])
     cfg['_git_provenance'] = git_provenance(str(REPO_ROOT))
     log_root = Path(args.log_root).expanduser().resolve()
     campaign_log_path = log_root / 'campaign_log.json'
@@ -1286,8 +1884,18 @@ def main() -> int:
         ros_log_dir.mkdir(parents=True, exist_ok=True)
     child_env = dict(os.environ)
     child_env['ROS_LOG_DIR'] = str(ros_log_dir)
+    child_env['PYTHONPATH'] = _checkout_pythonpath()
+    child_env['UNAV_EXECUTABLE_SOURCE_ROOT'] = str(REPO_ROOT)
+    cache_dir = '' if args.no_planner_cache else str(args.planner_cache_dir.expanduser().resolve())
+    child_env['UNAV_CASADI_CACHE_DIR'] = cache_dir
+    child_env['UNAV_CASADI_JIT'] = '1' if args.planner_jit else '0'
+    cfg['_execution_options'] = dict(planner_cache_dir=cache_dir, planner_jit=args.planner_jit)
 
     run_matrix = _build_run_matrix(cfg)
+    if not args.dry_run and cfg.get('ros_domain_id_base') is None:
+        raise RuntimeError(
+            'campaign execution requires ros_domain_id_base for scoped cleanup'
+        )
     if 'ros_domain_id_base' in cfg:
         domain_base = int(cfg['ros_domain_id_base'])
         domain_max = domain_base + max(len(run_matrix) - 1, 0)
@@ -1302,24 +1910,38 @@ def main() -> int:
     print(f'Config: {config_path}')
     print(f'Log root: {log_root}')
     print(f'Campaign log: {campaign_log_path}')
+    print(f'Planner function cache: {cache_dir or "disabled"}; JIT: {args.planner_jit}')
     print(f'ROS log dir: {ros_log_dir}')
     if cfg.get('cleanup_sim_stragglers', False):
         print(f'Gazebo cleanup: enabled for {cfg["world"]}')
     if args.dry_run:
         print('DRY RUN — no processes will be started.\n')
 
-    isolated = cfg.get('cleanup_mode', 'legacy_global') == 'isolated'
-    if not args.dry_run and not isolated:
-        _force_fresh()
+    isolated = True
 
     campaign_log = dict(existing_log)
+    campaign_lease = None
+    source_snapshot = None
+    if not args.dry_run:
+        campaign_lease = _exclusive_lease(
+            log_root / '.campaign.lock',
+            {'pid': os.getpid(), 'config': str(config_path),
+             'started_at': datetime.now().isoformat()},
+        )
+        campaign_lease.__enter__()
+        source_snapshot = _freeze_campaign_source(
+            log_root, config_path, cfg['_git_provenance']
+        )
 
     for run_idx, (task_name, condition_id, seed) in enumerate(run_matrix):
         key = _run_key(task_name, condition_id, seed)
         label = f'[{run_idx + 1}/{len(run_matrix)}] task={task_name} condition={condition_id} seed={seed}'
 
         if args.resume and key in campaign_log and campaign_log[key].get('outcome') not in (None, 'infra_invalid'):
-            matches, reason = _existing_entry_matches_config(campaign_log[key], cfg)
+            matches, reason = _existing_entry_matches_config(
+                campaign_log[key], cfg,
+                expected_cell=(task_name, condition_id, seed),
+            )
             if not matches:
                 raise RuntimeError(
                     f'Cannot resume campaign with stale run entry for {label}: {reason}. '
@@ -1328,8 +1950,11 @@ def main() -> int:
             print(f'  SKIP (already done): {label}')
             continue
 
-        run_log_dir = log_root / task_name / condition_id / f'seed{seed}'
-        run_log_dir.mkdir(parents=True, exist_ok=True)
+        cell_log_dir = log_root / task_name / condition_id / f'seed{seed}'
+        attempt_id = uuid.uuid4().hex
+        run_log_dir = cell_log_dir / 'attempts' / attempt_id
+        if not args.dry_run:
+            run_log_dir.mkdir(parents=True, exist_ok=False)
 
         cmd = _build_launch_cmd(cfg, task_name, condition_id, seed, run_log_dir)
         ros_domain_id = _ros_domain_for_run(cfg, run_idx)
@@ -1341,8 +1966,10 @@ def main() -> int:
         if args.dry_run:
             continue
 
-        if run_idx > 0 and not isolated:
-            _force_fresh()
+        if git_provenance(str(REPO_ROOT)) != cfg['_git_provenance']:
+            raise RuntimeError(
+                'executable checkout changed after campaign source identity was frozen'
+            )
 
         run_entry: dict = {
             'task': task_name,
@@ -1358,6 +1985,7 @@ def main() -> int:
                 cfg, task_name, condition_id, 'preselected_route_sha256'
             ),
             'run_log_dir': str(run_log_dir),
+            'attempt_id': attempt_id,
             'started_at': datetime.now().isoformat(),
             'outcome': None,
             'completion_reason': None,
@@ -1369,9 +1997,46 @@ def main() -> int:
             'minimum_goal_distance': None,
             'ros_domain_id': ros_domain_id,
             'first_cmd_timeout_s': args.first_cmd_timeout,
+            'execution_options': dict(cfg['_execution_options']),
+            'source_snapshot': str(source_snapshot),
         }
-        campaign_log[key] = run_entry
-        _save_run_log(campaign_log_path, campaign_log)
+        previous_entry = campaign_log.get(key)
+        attempt_history = []
+        if isinstance(previous_entry, dict):
+            attempt_history.extend(previous_entry.get('attempts', []))
+            previous_snapshot = {
+                k: v for k, v in previous_entry.items() if k != 'attempts'
+            }
+            attempt_history.append(previous_snapshot)
+        run_entry['attempts'] = attempt_history
+        resolved_config = _resolved_cell_config(cfg, task_name, condition_id)
+        artifact_paths = {
+            'campaign_config': str(config_path),
+            'world_sdf': cfg['_world_sdf_path'],
+            'yolo_model': str(_resolve_repo_path(cfg['yolo_model'], strict=True)),
+        }
+        for field in (
+            'camera_network_artifact_path', 'manager_commissioned_calibration_path',
+            'manager_commissioned_world_covariance_path',
+            'manager_learned_correction_path', 'preselected_route_source_path',
+        ):
+            value = resolved_config.get(field)
+            if value:
+                artifact_paths[field] = str(_resolve_repo_path(str(value), strict=True))
+        atomic_write_json(str(run_log_dir / 'attempt_manifest.json'), {
+            'attempt_id': attempt_id,
+            'cell': {'task': task_name, 'condition': condition_id, 'seed': seed},
+            'command': cmd,
+            'resolved_config': json.loads(json.dumps(resolved_config, default=str)),
+            'artifacts': {
+                name: {'path': path, 'sha256': sha256_file(path)}
+                for name, path in artifact_paths.items()
+            },
+            'git_provenance': cfg['_git_provenance'],
+            'source_snapshot': str(source_snapshot),
+            'created_at': datetime.now().isoformat(),
+        })
+        campaign_log = _update_run_log(campaign_log_path, key, run_entry)
 
         run_env = dict(child_env)
         if ros_domain_id is not None:
@@ -1382,76 +2047,121 @@ def main() -> int:
                            IGN_PARTITION=run_token, GZ_PARTITION=run_token)
             run_entry['transport_partition'] = run_token
             run_entry['cleanup_mode'] = 'isolated'
-            _save_run_log(campaign_log_path, campaign_log)
+            campaign_log = _update_run_log(campaign_log_path, key, run_entry)
 
-        process = subprocess.Popen(cmd, start_new_session=True, env=run_env)
-        pgid = os.getpgid(process.pid)
+        domain_lease = _exclusive_lease(
+            Path(tempfile.gettempdir()) / 'unav_campaign_leases'
+            / f'ros_domain_{ros_domain_id}.lock',
+            {'pid': os.getpid(), 'campaign_root': str(log_root),
+             'attempt_id': attempt_id, 'run_token': run_token},
+        )
+        domain_lease.__enter__()
+        process = None
+        pgid = None
+        process_returncode = None
 
         # Optional: stream-record the external camera for this run (opt-in).
         recorder_pgid = None
-        if os.environ.get('CAMPAIGN_RECORD_CAMERA'):
-            cam_out = run_log_dir / 'camera_frames'
-            cam_out.mkdir(parents=True, exist_ok=True)
-            rec_proc = subprocess.Popen(
-                ['python3', str(REPO_ROOT / 'scripts/paper_figures/record_camera_stream.py'),
-                 '--out-dir', str(cam_out)],
-                start_new_session=True, env=run_env)
-            try:
-                recorder_pgid = os.getpgid(rec_proc.pid)
-            except Exception:
-                recorder_pgid = None
-
         timed_out = False
         no_first_cmd_timeout = False
-        started_at = time.time()
+        spawn_error = ''
+        started_at = time.monotonic()
         first_cmd_watch_started_at = None
+        first_command_seen = False
         try:
+            process = subprocess.Popen(cmd, start_new_session=True, env=run_env)
+            pgid = os.getpgid(process.pid)
+            if os.environ.get('CAMPAIGN_RECORD_CAMERA'):
+                cam_out = run_log_dir / 'camera_frames'
+                cam_out.mkdir(parents=True, exist_ok=True)
+                rec_proc = subprocess.Popen(
+                    ['python3', str(REPO_ROOT / 'scripts/paper_figures/record_camera_stream.py'),
+                     '--out-dir', str(cam_out)],
+                    start_new_session=True, env=run_env)
+                recorder_pgid = os.getpgid(rec_proc.pid)
             while True:
                 if process.poll() is not None:
+                    process_returncode = process.returncode
                     break
-                elapsed_wall = time.time() - started_at
+                elapsed_wall = time.monotonic() - started_at
                 if elapsed_wall >= args.run_timeout:
                     timed_out = True
                     print(f'  Wall-clock timeout after {args.run_timeout:.0f}s — killing.')
                     break
-                live_run_dir = _find_latest_experiment_dir(run_log_dir)
-                rows, has_command = _command_activity(live_run_dir)
-                if has_command:
-                    first_cmd_watch_started_at = None
-                elif rows > 0 and args.first_cmd_timeout > 0:
-                    if first_cmd_watch_started_at is None:
-                        first_cmd_watch_started_at = time.time()
-                    elif (time.time() - first_cmd_watch_started_at) >= args.first_cmd_timeout:
-                        no_first_cmd_timeout = True
-                        print(
-                            f'  INFRA INVALID: no nonzero command after '
-                            f'{args.first_cmd_timeout:.0f}s of logged experiment rows — killing.'
-                        )
-                        break
+                if not first_command_seen and args.first_cmd_timeout > 0:
+                    live_run_dir = _attempt_run_dir(run_log_dir)
+                    rows, first_command_seen = _command_activity(live_run_dir)
+                    if first_command_seen:
+                        first_cmd_watch_started_at = None
+                    elif rows > 0:
+                        if first_cmd_watch_started_at is None:
+                            first_cmd_watch_started_at = time.monotonic()
+                        elif (time.monotonic() - first_cmd_watch_started_at) >= args.first_cmd_timeout:
+                            no_first_cmd_timeout = True
+                            print(
+                                f'  INFRA INVALID: no nonzero command after '
+                                f'{args.first_cmd_timeout:.0f}s of logged experiment rows — killing.'
+                            )
+                            break
                 time.sleep(2.0)
+        except OSError as exc:
+            spawn_error = f'{type(exc).__name__}: {exc}'
         finally:
             if recorder_pgid is not None:
                 _terminate_process_group(recorder_pgid)
-            _terminate_process_group(pgid)
-            if isolated:
-                _cleanup_owned_run(run_token)
-            else:
-                _force_fresh()
+            if pgid is not None:
+                _terminate_process_group(pgid)
+            _cleanup_owned_run(run_token)
+            domain_lease.__exit__(None, None, None)
 
         # Read run summary written by experiment_logger
-        run_dir = _find_latest_run_dir(run_log_dir)
+        run_dir = _attempt_run_dir(run_log_dir)
         summary = _read_run_summary(run_dir) if run_dir else None
         route_artifact_ok = True
         route_artifact_reason = ''
         assimilation_ok = True
         assimilation_reason = ''
+        multicam_value = _effective_value(
+            cfg, task_name, condition_id, 'multicam_belief'
+        )
+        detector_journal_required = (
+            _as_bool(multicam_value) if multicam_value is not None else False
+        )
+        detector_journal_ok = not detector_journal_required
+        detector_journal_verdict = {
+            'reason': 'not_required' if not detector_journal_required else 'not_checked'
+        }
+        manager_journal_ok = not detector_journal_required
+        manager_journal_verdict = {
+            'reason': 'not_required' if not detector_journal_required else 'not_checked'
+        }
         if run_dir is not None:
             route_artifact_ok, route_artifact_reason = _verify_preselected_run_artifacts(
                 run_dir, cfg, task_name, condition_id
             )
             assimilation_ok, assimilation_reason = _verify_correction_assimilations(run_dir)
+        if detector_journal_required:
+            detector_journal_ok, detector_journal_verdict = _verify_detector_journal(
+                run_log_dir
+            )
+            manager_journal_ok, manager_journal_verdict = _verify_outcome_journal(
+                run_log_dir, 'manager_outcomes.jsonl', 'manager'
+            )
 
-        if no_first_cmd_timeout:
+        terminal_ok, terminal_outcome, terminal_reason = _terminal_summary_outcome(summary)
+        if spawn_error:
+            outcome = 'infra_invalid'
+            completion_reason = 'spawn_error'
+            print(f'  INFRA INVALID: {spawn_error}')
+        elif timed_out:
+            outcome = 'infra_invalid'
+            completion_reason = 'wall_clock_timeout'
+            print('  INFRA INVALID: campaign wall-clock timeout.')
+        elif process_returncode not in (0, None):
+            outcome = 'infra_invalid'
+            completion_reason = 'launch_process_failed'
+            print(f'  INFRA INVALID: launch exited with status {process_returncode}.')
+        elif no_first_cmd_timeout:
             outcome = 'infra_invalid'
             completion_reason = 'no_first_cmd_timeout'
             print(f'  INFRA INVALID: live run never produced a nonzero command.')
@@ -1467,21 +2177,21 @@ def main() -> int:
             outcome = 'infra_invalid'
             completion_reason = 'correction_assimilation_invalid'
             print(f'  INFRA INVALID: {assimilation_reason}')
-        elif not summary.get('completed', False) and timed_out:
+        elif not detector_journal_ok:
             outcome = 'infra_invalid'
-            completion_reason = 'wall_clock_timeout'
-            print(f'  INFRA INVALID: wall-clock timeout, logger did not complete.')
+            completion_reason = 'detector_journal_invalid'
+            print(f'  INFRA INVALID: {detector_journal_verdict["reason"]}')
+        elif not manager_journal_ok:
+            outcome = 'infra_invalid'
+            completion_reason = 'manager_journal_invalid'
+            print(f'  INFRA INVALID: {manager_journal_verdict["reason"]}')
+        elif not terminal_ok:
+            outcome = 'infra_invalid'
+            completion_reason = terminal_reason
+            print(f'  INFRA INVALID: {terminal_reason}')
         else:
+            outcome = terminal_outcome
             completion_reason = str(summary.get('completion_reason', ''))
-            crashed = bool(summary.get('crashed', False))
-            if crashed:
-                outcome = 'collision'
-            elif completion_reason in ('goal_reached', 'goal_reached_stable'):
-                outcome = 'goal_reached'
-            elif completion_reason == 'timeout_after_first_cmd':
-                outcome = 'timeout'
-            else:
-                outcome = completion_reason or 'completed'
 
         run_entry.update({
             'finished_at': datetime.now().isoformat(),
@@ -1499,9 +2209,60 @@ def main() -> int:
             'route_artifact_verification_reason': route_artifact_reason,
             'correction_assimilation_verified': assimilation_ok if run_dir else False,
             'correction_assimilation_verification_reason': assimilation_reason,
+            'process_returncode': process_returncode,
+            'spawn_error': spawn_error or None,
+            'detector_journal_required': detector_journal_required,
+            'detector_journal_verified': detector_journal_ok,
+            'detector_journal_sha256': detector_journal_verdict.get('journal_sha256'),
+            'detector_journal_verification_reason': detector_journal_verdict.get('reason'),
+            'manager_journal_verified': manager_journal_ok,
+            'manager_journal_sha256': manager_journal_verdict.get('journal_sha256'),
+            'manager_journal_verification_reason': manager_journal_verdict.get('reason'),
+            'attempt_evidence_complete': outcome != 'infra_invalid',
         })
-        campaign_log[key] = run_entry
-        _save_run_log(campaign_log_path, campaign_log)
+        atomic_write_json(str(run_log_dir / 'attempt_evidence_verdict.json'), {
+            'attempt_id': attempt_id,
+            'complete': outcome != 'infra_invalid',
+            'outcome': outcome,
+            'completion_reason': completion_reason,
+            'run_dir': str(run_dir) if run_dir else None,
+            'detector_journal': detector_journal_verdict,
+            'manager_journal': manager_journal_verdict,
+            'route_artifact_verified': route_artifact_ok if run_dir else False,
+            'correction_assimilation_verified': assimilation_ok if run_dir else False,
+            'written_at': datetime.now().isoformat(),
+        })
+        if outcome != 'infra_invalid':
+            evidence_ok, evidence_reason = _existing_entry_matches_config(
+                run_entry, cfg,
+                expected_cell=(task_name, condition_id, seed),
+            )
+            if not evidence_ok:
+                run_entry['terminal_completion_reason'] = completion_reason
+                run_entry['outcome'] = outcome = 'infra_invalid'
+                run_entry['completion_reason'] = completion_reason = 'evidence_identity_mismatch'
+                run_entry['goal_reached'] = False
+                run_entry['attempt_evidence_complete'] = False
+                run_entry['evidence_validation_reason'] = evidence_reason
+                print(f'  INFRA INVALID: {evidence_reason}')
+                atomic_write_json(
+                    str(run_log_dir / 'attempt_evidence_verdict.json'), {
+                        'attempt_id': attempt_id,
+                        'complete': False,
+                        'outcome': outcome,
+                        'completion_reason': completion_reason,
+                        'terminal_completion_reason': run_entry.get(
+                            'terminal_completion_reason'),
+                        'run_dir': str(run_dir) if run_dir else None,
+                        'detector_journal': detector_journal_verdict,
+                        'manager_journal': manager_journal_verdict,
+                        'route_artifact_verified': route_artifact_ok if run_dir else False,
+                        'correction_assimilation_verified': assimilation_ok if run_dir else False,
+                        'evidence_validation_reason': evidence_reason,
+                        'written_at': datetime.now().isoformat(),
+                    },
+                )
+        campaign_log = _update_run_log(campaign_log_path, key, run_entry)
 
         goal_str = 'YES' if outcome == 'goal_reached' else 'no'
         print(f'  -> outcome={outcome}, goal={goal_str}, reason={completion_reason}')
@@ -1516,6 +2277,8 @@ def main() -> int:
         infra = sum(1 for e in campaign_log.values() if e.get('outcome') == 'infra_invalid')
         print(f'  {completed}/{total} runs completed, {goals} goal_reached, {infra} infra_invalid')
         print(f'  Full log: {campaign_log_path}')
+    if campaign_lease is not None:
+        campaign_lease.__exit__(None, None, None)
     return 0
 
 

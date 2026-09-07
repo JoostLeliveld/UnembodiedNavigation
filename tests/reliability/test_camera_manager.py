@@ -235,6 +235,19 @@ def test_manager_config_rejects_invalid_thresholds_and_camera_ids() -> None:
         CameraManagerConfig(allowed_camera_ids=("camera_A", "camera_A"))
 
 
+def test_manager_rejects_two_votes_from_one_physical_camera() -> None:
+    observation = _obs("camera_A", timestamp_s=1.0)
+    with pytest.raises(ContractValidationError, match="duplicate camera"):
+        _manager().select(timestamp_s=1.0, observations=(observation, observation))
+
+
+def test_equal_selection_scores_have_a_stable_camera_tiebreak() -> None:
+    a = _obs("camera_A", timestamp_s=1.0, p=0.9)
+    b = _obs("camera_B", timestamp_s=1.0, p=0.9)
+    assert _manager().select(timestamp_s=1.0, observations=(a, b)).selected_camera_id == "camera_A"
+    assert _manager().select(timestamp_s=1.0, observations=(b, a)).selected_camera_id == "camera_A"
+
+
 def test_manager_cannot_receive_ground_truth_through_the_camera_quality_contract() -> None:
     with pytest.raises(ContractValidationError, match="evaluation-only"):
         CameraQuality.from_dict(

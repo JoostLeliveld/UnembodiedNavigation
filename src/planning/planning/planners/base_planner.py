@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import json
 import math
+import os
 import time
 import numpy as np
 
@@ -14,6 +15,10 @@ from planning.core.nogo_cost import NogoCostConfig, NogoZoneCostModel
 from planning.core.visibility_gp_map import GPVisibilityMapConfig, GPVisibilityMapModel
 from unav_common.camera_model import ObliqueCameraModel
 from planning.core.rollout import rollout_unicycle
+from planning.core.plan_validation import (
+    validate_controls, validate_covariance,
+    validate_plan_result, validate_planning_inputs,
+)
 
 
 @dataclass
@@ -47,7 +52,7 @@ class PlanResult:
     fraction_horizon_low_pvis: float = np.nan
     fraction_horizon_high_ambiguity: float = np.nan
     min_predicted_obstacle_distance_m: float = np.nan
-    rollout_valid: bool = True
+    rollout_valid: bool = False
     invalid_reason: str = ""
 
 
@@ -114,6 +119,9 @@ class UnicyclePlannerBase:
         collision_geometry_json='',
         visibility_artifact_path='',
         camera_network_artifact_path='',
+        camera_network_expected_sha256='',
+        camera_network_expected_source_hashes=None,
+        camera_network_camera_ids=None,
         r_visible_uv=2.5,
         r_miss_uv=120.0,
         visibility_sigma_kappa=1.0,
@@ -144,6 +152,8 @@ class UnicyclePlannerBase:
         nogo_mode='keep_out',
         driveable_geometry_json='',
         robot_collision_radius_m=0.125,
+        robot_length_m=0.8,
+        robot_width_m=0.55,
         use_hit_miss_mixture=False,
         runtime_debug=False,
     ):
@@ -178,6 +188,8 @@ class UnicyclePlannerBase:
         self.ambiguity_term_scale = float(ambiguity_term_scale)
         self.discount_gamma = float(discount_gamma)
         self.robot_collision_radius_m = float(max(robot_collision_radius_m, 0.0))
+        self.robot_length_m = float(robot_length_m)
+        self.robot_width_m = float(robot_width_m)
 
         if approx_method is None:
             self.approx_method = 'ET1'
@@ -234,7 +246,23 @@ class UnicyclePlannerBase:
             if use_hit_miss_mixture:
                 raise ValueError('IWAI network score proxy is not the hit/miss measurement model')
             from planning.core.camera_network import CameraNetworkModel
-            self.camera_network = CameraNetworkModel(network_path)
+            expected_sources = camera_network_expected_source_hashes
+            if isinstance(expected_sources, str):
+                expected_sources = json.loads(expected_sources) if expected_sources.strip() else None
+            expected_ids = camera_network_camera_ids
+            if isinstance(expected_ids, str):
+                expected_ids = tuple(v.strip() for v in expected_ids.split(',') if v.strip())
+            self.camera_network = CameraNetworkModel(
+                network_path, expected_sha256=camera_network_expected_sha256 or None,
+                expected_source_hashes=expected_sources, expected_camera_ids=expected_ids)
+        from unav_common.navigation_parameters import validate_navigation_parameters
+        # Reject invalid tuning before the legacy clamps can silently change it.
+        validate_navigation_parameters({
+            'nogo_weight': nogo_weight, 'nogo_safe_distance': nogo_safe_distance,
+            'nogo_logbarrier_eps': nogo_logbarrier_eps,
+            'nogo_warning_band': nogo_warning_band, 'nogo_near_weight': nogo_near_weight,
+            'nogo_belief_kappa': nogo_belief_kappa,
+        })
         self.use_nogo_cost = bool(use_nogo_cost)
         self.nogo_penalty_type = str(nogo_penalty_type or 'warning_band').strip().lower()
         self.nogo_weight = float(max(nogo_weight, 0.0))
@@ -247,10 +275,8 @@ class UnicyclePlannerBase:
         # off, the planner runs the frozen precision-blend path bit-for-bit (see
         # tests/planning/test_efe_hit_miss_mixture.py). On, detection availability
         # is modelled as Bernoulli instead of being laundered into R_plan, and
-        # r_miss_uv is not read at all. Affects the CasADi objective only — the
-        # numpy `_evaluate_controls` diagnostics path still reports blend-based
-        # metrics, and `observation_model_with_visibility` (the correction path)
-        # is deliberately untouched.
+        # r_miss_uv is not read by the objective. NumPy selection evaluates the
+        # same mixture; observation_model_with_visibility remains separate.
         self.use_hit_miss_mixture = bool(use_hit_miss_mixture)
         self.nogo_belief_kappa = float(max(nogo_belief_kappa, 1e-6))
         self.nogo_mode = str(nogo_mode or 'keep_out').strip().lower()
@@ -308,6 +334,14 @@ class UnicyclePlannerBase:
             )
             self.collision_cost_model = NogoZoneCostModel(collision_cfg)
 
+        from unav_common.rectangular_footprint import RectangularFootprint
+        self._footprint_collision_model = RectangularFootprint(
+            self.collision_cost_model.prisms if self.collision_cost_model is not None else (),
+            self.robot_length_m, self.robot_width_m)
+        self._footprint_driveable_model = (
+            RectangularFootprint(self.nogo_cost_model.prisms,
+                                 self.robot_length_m, self.robot_width_m, keep_in=self.nogo_mode == 'keep_in')
+            if self.nogo_cost_model is not None else None)
         self.prev_controls_flat = None
         self._prev_goal_xy = None
         self._casadi_valgrad_cache = {}
@@ -330,6 +364,48 @@ class UnicyclePlannerBase:
             and distance <= self.optimizer_terminal_goal_tolerance_m
         )
 
+    @property
+    def control_bounds(self):
+        return ((self.v_min, self.v_max), (self.w_min, self.w_max))
+
+    def validate_trajectory_geometry(self, states, controls):
+        """Check the current footprint model over each declared motion segment."""
+        states = np.asarray(states, dtype=float)
+        controls = np.asarray(controls, dtype=float)
+        if (states.shape != (len(controls)+1, 3) or not np.isfinite(states).all()
+                or controls.ndim != 2 or controls.shape[1] != 2 or not np.isfinite(controls).all()):
+            return False, 'invalid_geometry_trajectory'
+        for index, pose in enumerate(states):
+            clearances = (self.collision_clearance_state_np(pose),
+                          self.driveable_clearance_state_np(pose))
+            if any(np.isnan(v) or v < 0 for v in clearances):
+                return False, f'footprint_violation_at_state_{index}'
+        from unav_common.rectangular_footprint import constant_twist_pose
+        physical_state = states[0].copy()
+        for index, (start, end, control) in enumerate(zip(states[:-1], states[1:], controls)):
+            yaw_delta = float(control[1])*self.dt
+            physical_end = constant_twist_pose(physical_state, control, self.dt)
+            clearances = (
+                self.collision_sweep_clearance_np(start,end,yaw_delta=yaw_delta,control=control,dt=self.dt),
+                self.driveable_sweep_clearance_np(start,end,yaw_delta=yaw_delta,control=control,dt=self.dt),
+                self.collision_sweep_clearance_np(physical_state,physical_end,yaw_delta=yaw_delta,control=control,dt=self.dt),
+                self.driveable_sweep_clearance_np(physical_state,physical_end,yaw_delta=yaw_delta,control=control,dt=self.dt),
+            )
+            if any(np.isnan(v) or v < 0 for v in clearances):
+                return False, f'footprint_violation_on_segment_{index}'
+            physical_state = physical_end
+        return True, ''
+
+    def validate_result(self, result, m0, S0, goal_xy, *, require_complete=False):
+        """Authoritative numerical/dynamics/geometry contract for this planner."""
+        return validate_plan_result(
+            result, initial_state=m0, initial_covariance=S0, goal_xy=goal_xy,
+            dt=self.dt, control_bounds=self.control_bounds, expected_horizon=self.horizon,
+            require_complete=require_complete,
+            terminal_tolerance_m=self.optimizer_terminal_goal_tolerance_m,
+            geometry_validator=self.validate_trajectory_geometry,
+        )
+
     def _prefer_candidate(
         self,
         *,
@@ -341,6 +417,10 @@ class UnicyclePlannerBase:
         incumbent_cost,
     ):
         """Lexicographic multistart choice: safety, task feasibility, then EFE."""
+        if not np.isfinite(candidate_cost):
+            return False
+        if not np.isfinite(incumbent_cost):
+            return True
         if bool(candidate_valid) != bool(incumbent_valid):
             return bool(candidate_valid)
         if (
@@ -563,10 +643,22 @@ class UnicyclePlannerBase:
         return float(self.collision_cost_model.signed_distance_state_np(m))
 
     def collision_clearance_state_np(self, m):
-        signed_d = self.collision_signed_distance_state_np(m)
-        if not math.isfinite(signed_d):
-            return float('inf')
-        return float(signed_d - self.robot_collision_radius_m)
+        return self._footprint_collision_model.clearance(m)
+
+    def collision_sweep_clearance_np(self, start, end, *, yaw_delta=None, control=None, dt=None):
+        return self._footprint_collision_model.sweep_clearance(start, end, yaw_delta=yaw_delta, control=control, dt=dt)
+
+    def driveable_clearance_state_np(self, m):
+        if self._footprint_driveable_model is not None:
+            return self._footprint_driveable_model.clearance(m)
+        if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
+            return self.nogo_cost_model.clearance_state_np(m)
+        return math.inf
+
+    def driveable_sweep_clearance_np(self, start, end, *, yaw_delta=None, control=None, dt=None):
+        if self._footprint_driveable_model is not None:
+            return self._footprint_driveable_model.sweep_clearance(start, end, yaw_delta=yaw_delta, control=control, dt=dt)
+        return math.inf
 
     def collision_penetration_state_np(self, m):
         clearance = self.collision_clearance_state_np(m)
@@ -580,8 +672,14 @@ class UnicyclePlannerBase:
         return float(np.linalg.norm(state_xy - goal_xy))
 
     def _trajectory_plan_diagnostics(self, m0, S0, controls, goal_xy):
+        m0, S0, goal_xy = validate_planning_inputs(m0, S0, goal_xy)
         goal_xy = np.asarray(goal_xy, dtype=float).reshape(2)
-        controls = np.asarray(controls, dtype=float).reshape(self.horizon, 2)
+        # This private geometry diagnostic also probes trajectories outside the
+        # actuator envelope. Public evaluation, selection and result admission
+        # enforce bounds independently before relying on these diagnostics.
+        controls = np.asarray(controls, dtype=float).reshape(self.horizon,2)
+        if not np.isfinite(controls).all():
+            raise ValueError('nonfinite diagnostic controls')
         m = np.asarray(m0, dtype=float).copy()
         S = np.asarray(S0, dtype=float).copy()
         p_vis_values = []
@@ -592,10 +690,29 @@ class UnicyclePlannerBase:
         # WITHOUT safe_distance / belief-tube. Used for the hard validity gate so that a
         # feasible in-lane route is not rejected merely for grazing the soft standoff band.
         min_nogo_mean_inside = float('inf')
+        min_driveable_body_clearance = float('inf')
 
+        from unav_common.rectangular_footprint import constant_twist_pose
+        physical_state = np.asarray(m0, dtype=float).copy()
         for u in controls:
             m_prev = np.asarray(m, dtype=float).copy()
             m, S = self.predict(m, S, u)
+            validate_covariance(S, name='predicted covariance')
+            sweep_collision = self.collision_sweep_clearance_np(m_prev, m, yaw_delta=float(u[1])*self.dt, control=u, dt=self.dt)
+            if np.isnan(sweep_collision):
+                raise ValueError('nonfinite collision sweep geometry')
+            min_collision_clearance = min(min_collision_clearance, sweep_collision)
+            min_driveable_body_clearance = min(
+                min_driveable_body_clearance,
+                self.driveable_sweep_clearance_np(m_prev, m, yaw_delta=float(u[1])*self.dt, control=u, dt=self.dt))
+            physical_end = constant_twist_pose(physical_state, u, self.dt)
+            min_collision_clearance = min(min_collision_clearance,
+                self.collision_sweep_clearance_np(physical_state, physical_end,
+                    yaw_delta=float(u[1])*self.dt, control=u, dt=self.dt))
+            min_driveable_body_clearance = min(min_driveable_body_clearance,
+                self.driveable_sweep_clearance_np(physical_state, physical_end,
+                    yaw_delta=float(u[1])*self.dt, control=u, dt=self.dt))
+            physical_state = physical_end
             vis_diag = self.planning_visibility_diagnostics(m, S)
             p_vis_values.append(float(vis_diag['p_vis']))
             ambiguity_std_values.append(
@@ -650,24 +767,16 @@ class UnicyclePlannerBase:
             if ambiguity_std_values else math.nan
         )
         min_clearance = min(min_collision_clearance, min_nogo_clearance)
-        # Hard validity: the MEAN trajectory must not collide and, under keep_in, must
-        # stay inside the driveable lane union (a small tolerance absorbs the discrete
-        # segment sampling). The belief-tube + safe_distance clearance (min_nogo_clearance)
-        # shapes the COST -- the soft wider-turn standoff -- but is deliberately NOT the
-        # hard gate: using it as the gate spuriously rejects feasible in-lane routes whose
-        # tube merely grazes the standoff band, collapsing the global solve to a degenerate
-        # stop. A plan whose mean leaves the lane (e.g. a corner-cut through forbidden
-        # floor) still fails the keep_in gate.
-        KEEP_IN_MEAN_TOL = 0.05
-        collision_ok = (not math.isfinite(min_collision_clearance)) or min_collision_clearance >= 0.0
-        if self.nogo_mode == 'keep_in':
-            nogo_ok = (not math.isfinite(min_nogo_mean_inside)) or min_nogo_mean_inside >= -KEEP_IN_MEAN_TOL
-        else:
-            nogo_ok = (not math.isfinite(min_nogo_clearance)) or min_nogo_clearance >= 0.0
-        rollout_valid = bool(collision_ok and nogo_ok)
+        # Hard validity uses the same swept rectangular footprint as execution.
+        # Soft centre/belief no-go costs remain diagnostics and preferences.
+        collision_ok = min_collision_clearance >= 0.0
+        nogo_ok = min_driveable_body_clearance >= 0.0
+        states = rollout_unicycle(m0, controls, self.dt)
+        geometry_valid, geometry_reason = self.validate_trajectory_geometry(states, controls)
+        rollout_valid = bool(collision_ok and nogo_ok and geometry_valid)
         invalid_reason = ''
         if not rollout_valid:
-            invalid_reason = (
+            invalid_reason = geometry_reason or (
                 'predicted_collision_geometry'
                 if not collision_ok
                 else 'predicted_driveable_region_violation'
@@ -678,7 +787,7 @@ class UnicyclePlannerBase:
             'fraction_horizon_low_pvis': low_pvis_fraction,
             'fraction_horizon_high_ambiguity': high_ambiguity_fraction,
             'min_predicted_obstacle_distance_m': (
-                float(min_clearance) if math.isfinite(min_clearance) else math.inf
+                float(min_clearance)
             ),
             'rollout_valid': rollout_valid,
             'invalid_reason': invalid_reason,
@@ -707,6 +816,9 @@ class UnicyclePlannerBase:
 
     def evaluate_rollout_controls(self, m0, S0, goal_xy, controls, *, progress_index=0.0):
         """Evaluate one fixed control rollout using the same accounting as planner selection."""
+        m0, S0, goal_xy = validate_planning_inputs(m0, S0, goal_xy)
+        if not np.isfinite(progress_index):
+            raise ValueError('goal progress index must be finite')
         (
             goal_state,
             goal_obs,
@@ -714,7 +826,8 @@ class UnicyclePlannerBase:
             _use_observation_risk,
             _use_ambiguity_term,
         ) = self._resolve_plan_problem(m0, goal_xy)
-        controls = np.asarray(controls, dtype=float).reshape(self.horizon, 2)
+        controls = validate_controls(np.asarray(controls, dtype=float).reshape(self.horizon, 2),
+                                     control_bounds=self.control_bounds, expected_horizon=self.horizon)
         total_cost, metrics = self._evaluate_controls(
             controls.reshape(-1),
             np.asarray(m0, dtype=float),
@@ -787,7 +900,12 @@ class UnicyclePlannerBase:
 
     def _initial_controls_flat(self):
         if self.optimizer_warm_start and self.prev_controls_flat is not None:
-            return self._shift_controls_flat(self.prev_controls_flat)
+            try:
+                controls = validate_controls(np.asarray(self.prev_controls_flat).reshape(self.horizon,2),
+                                             control_bounds=self.control_bounds, expected_horizon=self.horizon)
+                return self._shift_controls_flat(controls.reshape(-1))
+            except (ValueError, TypeError):
+                self.prev_controls_flat = None
         return self._nominal_controls_flat()
 
     def _controls_for_waypoints(self, start_xy_yaw, waypoints):
@@ -904,6 +1022,21 @@ class UnicyclePlannerBase:
             'scaled_total': float(scaled_total),
         }
 
+    def _checked_candidate_controls(self, controls_flat, m0, S0, goal_state,
+                                    goal_obs, goal_obs_cov, objective_scales, *, progress_index):
+        """Reject invalid numbers before they can become a selection incumbent."""
+        controls = validate_controls(np.asarray(controls_flat, dtype=float).reshape(self.horizon,2),
+                                     control_bounds=self.control_bounds, expected_horizon=self.horizon)
+        candidate = self._evaluate_candidate_controls(
+            controls.reshape(-1), m0, S0, goal_state, goal_obs, goal_obs_cov,
+            objective_scales, progress_index=progress_index)
+        values = [candidate['total_cost'], candidate['scaled_total'], *candidate['metrics'].values()]
+        if not np.isfinite(values).all():
+            raise ValueError('nonfinite candidate objective or components')
+        diagnostics = self._trajectory_plan_diagnostics(m0,S0,controls,goal_state[:2])
+        candidate['controls_flat'] = controls.reshape(-1).copy()
+        return candidate, diagnostics
+
     def _autodiff_cache_key(
         self,
         goal_state,
@@ -933,18 +1066,40 @@ class UnicyclePlannerBase:
             float(self.ambiguity_term_scale),
             float(self.discount_gamma),
             float(self.robot_collision_radius_m),
+            float(self.robot_length_m), float(self.robot_width_m),
             bool(self.use_nogo_cost),
             bool(self.use_belief_nogo_cost),
             bool(self.use_hit_miss_mixture),
             float(self.nogo_belief_kappa),
-            tuple(self.nogo_cost_model.signature) if self.nogo_cost_model is not None else (),
-            tuple(self.collision_cost_model.signature) if self.collision_cost_model is not None else (),
+            self._geometry_cache_identity(self.nogo_cost_model),
+            self._geometry_cache_identity(self.collision_cost_model),
             int(self.horizon),
             float(self.dt),
             int(np.asarray(goal_obs, dtype=float).shape[0]),
             tuple(self.visibility_model.signature) if self.visibility_model is not None else (),
             tuple(self.camera_network.signature) if self.camera_network is not None else (),
+            float(self.process_noise_xy),
+            float(self.process_noise_theta),
+            tuple(np.asarray(self.camera.H, dtype=float).reshape(-1)),
+            tuple(np.asarray(self.R_visible, dtype=float).reshape(-1)),
+            tuple(np.asarray(self.R_miss, dtype=float).reshape(-1)),
+            os.environ.get('UNAV_CASADI_JIT', '0') == '1',
         )
+
+    @staticmethod
+    def _geometry_cache_identity(model):
+        if model is None:
+            return ()
+        # Model.signature is a rounded human diagnostic; it is not an exact
+        # identity for constants frozen into a symbolic graph.
+        settings = tuple(getattr(model,name,None) for name in (
+            'mode','penalty_type','weight','safe_distance','logbarrier_eps',
+            'warning_band','near_weight'))
+        prisms = tuple(tuple(float(getattr(p,name)) for name in
+                       ('xmin','xmax','ymin','ymax','zmin','zmax')) for p in model.prisms)
+        arrays = tuple(tuple(np.asarray(getattr(model,name,()),dtype=float).reshape(-1))
+                       for name in ('_xmins','_xmaxs','_ymins','_ymaxs','union_boundary_segments'))
+        return settings,prisms,arrays
 
     def _get_casadi_valgrad(
         self,
@@ -955,6 +1110,9 @@ class UnicyclePlannerBase:
         use_ambiguity_term,
     ):
         from planning.core import casadi_efe
+
+        if getattr(self, 'coherent_drift', False):
+            raise ValueError('coherent drift has no matching symbolic planner dynamics')
 
         if not casadi_efe.casadi_available():
             raise RuntimeError("CasADi is not available")
@@ -976,6 +1134,18 @@ class UnicyclePlannerBase:
         )
         if valgrad is None:
             build_start = time.perf_counter()
+            from planning.core.casadi_cache import FunctionCache, compile_function, function_key
+            cache_dir = os.environ.get('UNAV_CASADI_CACHE_DIR', '').strip()
+            jit = os.environ.get('UNAV_CASADI_JIT', '0') == '1'
+            disk_cache = FunctionCache(cache_dir) if cache_dir else None
+            disk_key = function_key(cache_key, jit=jit) if disk_cache else None
+            cached = disk_cache.load(disk_key) if disk_cache else None
+            if cached is not None:
+                valgrad = casadi_efe._make_valgrad_wrapper(cached)
+                valgrad.cache_info = dict(status='hit', key=disk_key, jit=jit,
+                                          prepare_s=time.perf_counter() - build_start)
+                self._casadi_valgrad_cache[cache_key] = valgrad
+                return valgrad
             p_vis_ca = None
             if self.use_visibility_model and self.visibility_model is not None:
                 p_vis_ca = self.visibility_model.make_prob_state_casadi()
@@ -1029,6 +1199,14 @@ class UnicyclePlannerBase:
                     self.camera_network.make_proxy_covariance_casadi(
                         self.camera.H, self.visibility_sigma_kappa)),
             )
+            if jit:
+                # An unsupported compiler/backend must be explicit; never quietly
+                # run a different execution profile than the campaign recorded.
+                valgrad = casadi_efe._make_valgrad_wrapper(compile_function(valgrad.casadi_function))
+            if disk_cache:
+                disk_cache.save(disk_key, valgrad.casadi_function)
+            valgrad.cache_info = dict(status='miss' if disk_cache else 'disabled', key=disk_key,
+                                      jit=jit, prepare_s=time.perf_counter() - build_start)
             self._casadi_valgrad_cache[cache_key] = valgrad
             self._runtime_debug_print(
                 "[planner_debug] CasADi valgrad function prepared in "
@@ -1061,6 +1239,31 @@ class UnicyclePlannerBase:
     def _goal_obs_cov(self):
         return self.goal_obs_cov_for_progress(0.0)
 
+    def _mixture_stage_metrics(self, m, S, p_use, goal_obs, goal_cov):
+        """NumPy counterpart of the existing optional symbolic hit/miss stage."""
+        from planning.core.camera_network import projection_jacobian
+        from planning.core.casadi_efe import INNOVATION_COV_FLOOR_PX2
+        R = np.asarray(self.R_visible, dtype=float)
+        mu, Sigma_hit, _Gamma = self.approx_observation(m,S,R_override=R)
+        Sigma_miss = Sigma_hit-R
+        # risk_ca's existing numerical jitter, unchanged in the symbolic model.
+        target = (goal_obs, goal_cov+1e-9*np.eye(2))
+        hit = risk_components(mu, (Sigma_hit+Sigma_hit.T)*.5+1e-9*np.eye(2), target)
+        miss = risk_components(mu, (Sigma_miss+Sigma_miss.T)*.5+1e-9*np.eye(2), target)
+        risk_parts = {key:p_use*hit[key]+(1-p_use)*miss[key] for key in hit}
+        J = np.column_stack((projection_jacobian(self.camera.H,m),np.zeros(2)))
+        prior = (S+S.T)*.5
+        innovation = J@prior@J.T+R+INNOVATION_COV_FLOOR_PX2*np.eye(2)
+        K = np.linalg.solve(innovation,J@prior).T
+        A = np.eye(3)-K@J
+        posterior = A@prior@A.T+K@R@K.T
+        posterior = (posterior+posterior.T)*.5
+        def entropy(P):
+            return .5*(3*math.log(2*math.pi*math.e)+math.log(max(float(np.linalg.det(P)),1e-12)))
+        hit_entropy, prior_entropy = entropy(posterior), entropy(prior)
+        return (risk_parts, p_use*hit_entropy+(1-p_use)*prior_entropy,
+                p_use*posterior+(1-p_use)*prior, hit['total'], hit_entropy)
+
     def _evaluate_controls(
         self,
         controls_flat,
@@ -1079,6 +1282,10 @@ class UnicyclePlannerBase:
         assert controls_flat.size == self.horizon * 2, f"controls_flat size {controls_flat.size} != expected {self.horizon * 2}"
         controls = controls_flat.reshape(self.horizon, 2)
 
+        validate_planning_inputs(m0, S0, goal_state[:2])
+        if not np.isfinite(controls).all():
+            raise ValueError('nonfinite objective controls')
+
         m = m0.copy()
         S = S0.copy()
         total_risk = 0.0
@@ -1094,6 +1301,10 @@ class UnicyclePlannerBase:
         use_observation_risk = self.use_obs_risk
         use_ambiguity_term = self.use_ambiguity
         goal_xy = np.asarray(goal_state[:2], dtype=float).reshape(2)
+        if self.use_hit_miss_mixture and goal_obs is None:
+            # The optional branch helper computes component diagnostics even
+            # when both weighted observation terms are disabled.
+            goal_obs = self._goal_obs(goal_state)
         R_good = np.asarray(
             R_baseline_override
             if R_baseline_override is not None
@@ -1104,9 +1315,29 @@ class UnicyclePlannerBase:
         for t in range(self.horizon):
             u = controls[t]
             m, S = self.predict(m, S, u)
+            validate_covariance(S, name='predicted covariance')
             vis_diag = self.planning_visibility_diagnostics(m, S)
             p_vis = vis_diag['p_vis']
             R_plan = vis_diag['R_plan']
+            if self.use_hit_miss_mixture:
+                weight_t = self.discount_gamma**t
+                goal_cov = self.goal_obs_cov_for_progress(
+                    (float(progress_index)+t)/max(self.goal_progress_n_steps,1))
+                parts, expected_entropy, S_drive, hit_risk, hit_entropy = self._mixture_stage_metrics(
+                    m,S,self._visibility_effective_score(p_vis),goal_obs,goal_cov)
+                risk_scale = self.risk_weight_obs*self.observation_risk_scale if use_observation_risk else 0.
+                ambiguity_scale = self.ambiguity_weight*self.ambiguity_term_scale if use_ambiguity_term else 0.
+                total_risk += weight_t*risk_scale*parts['total']
+                total_risk_mean += weight_t*risk_scale*parts['mean']
+                total_risk_cov_trace += weight_t*risk_scale*parts['cov_trace']
+                total_risk_cov_logdet += weight_t*risk_scale*parts['cov_logdet']
+                total_risk_const += weight_t*risk_scale*parts['const']
+                total_amb += weight_t*ambiguity_scale*expected_entropy
+                total_delta_risk_visibility += weight_t*risk_scale*(parts['total']-hit_risk)
+                total_delta_ambiguity_visibility += weight_t*ambiguity_scale*(expected_entropy-hit_entropy)
+                total_obstacle += weight_t*self.obstacle_penalty(m,S_drive if self.use_belief_nogo_cost else S)
+                total_control += weight_t*self.control_weight*float(u@u)
+                continue
             mu_y = Sigma_y = Gamma = None
             if use_observation_risk or use_ambiguity_term or self.use_belief_nogo_cost:
                 mu_y, Sigma_y, Gamma = self.approx_observation(
@@ -1180,6 +1411,14 @@ class UnicyclePlannerBase:
 
     def plan(self, m0, S0, goal_xy, *, progress_index=0.0):
         t_plan_start = time.perf_counter()
+        m0, S0, goal_xy = validate_planning_inputs(m0, S0, goal_xy)
+        if not np.isfinite(self.dt) or self.dt <= 0 or self.horizon <= 0:
+            raise ValueError('planning horizon and dt must be positive')
+        from planning.core.camera_network import projection_jacobian
+        projection_jacobian(self.camera.H, m0)
+        projection_jacobian(self.camera.H, np.r_[goal_xy, 0.])
+        if not np.isfinite(progress_index):
+            raise ValueError('goal progress index must be finite')
         progress_index = float(max(progress_index, 0.0))
 
         # Reset warm start when goal changes by more than 0.5 m to prevent
@@ -1250,6 +1489,9 @@ class UnicyclePlannerBase:
                         f"with J={val_out:.3f}, grad_norm={np.linalg.norm(grad_out):.3f}"
                     )
                 fg_calls['count'] += 1
+                if (not np.isfinite(val_out) or np.asarray(grad_out).shape != u_arr.shape
+                        or not np.isfinite(grad_out).all()):
+                    raise ValueError('nonfinite objective or invalid gradient')
                 return val_out, grad_out
 
             minimize_start = time.perf_counter()
@@ -1260,89 +1502,52 @@ class UnicyclePlannerBase:
             )
 
             for init_name, x_init in init_candidates:
-                # Reset the fg call counter per attempt so debug timing is per-attempt.
                 attempt_start = time.perf_counter()
+                def checked(raw):
+                    try:
+                        return self._checked_candidate_controls(
+                            raw, m0, S0, goal_state, goal_obs, goal_obs_cov,
+                            objective_scales, progress_index=progress_index)
+                    except (ValueError, TypeError, RuntimeError, np.linalg.LinAlgError) as exc:
+                        self._runtime_debug_print(f"[planner_debug] rejected numerical candidate: {exc}")
+                        return None
+
+                # Check the seed independently: an optimizer exception, malformed
+                # x, or NaN result must not hide an already evaluable finite seed.
+                seed_checked = checked(x_init)
+                from types import SimpleNamespace
+                result = SimpleNamespace(success=False, status=-1, nit=0, nfev=0,
+                                         message='optimizer failed; evaluated seed', x=None)
                 try:
                     result = minimize(
-                        objective,
-                        np.asarray(x_init, dtype=float),
-                        jac=True,
-                        method='L-BFGS-B',
-                        bounds=bounds,
-                        options={
-                            'maxiter': self.optimizer_maxiter,
-                            'maxfun': self.optimizer_maxfun,
-                            'ftol': self.optimizer_ftol,
-                            'gtol': self.optimizer_gtol,
-                        },
-                    )
+                        objective, np.asarray(x_init, dtype=float), jac=True,
+                        method='L-BFGS-B', bounds=bounds,
+                        options={'maxiter': self.optimizer_maxiter, 'maxfun': self.optimizer_maxfun,
+                                 'ftol': self.optimizer_ftol, 'gtol': self.optimizer_gtol})
+                    raw_valid = result.x is not None
+                    for name in ('fun', 'jac'):
+                        value = getattr(result, name, None)
+                        if value is not None and not np.isfinite(value).all():
+                            raw_valid = False
+                    opt_checked = checked(result.x) if raw_valid else None
                 except Exception as exc:
-                    self._runtime_debug_print(
-                        f"[planner_debug] init={init_name!s} threw {type(exc).__name__}: {exc}"
-                    )
+                    self._runtime_debug_print(f"[planner_debug] init={init_name!s} threw {type(exc).__name__}: {exc}")
+                    opt_checked = None
+                if opt_checked is None and seed_checked is None:
                     continue
-                if result.x is None or not np.all(np.isfinite(np.asarray(result.x, dtype=float))):
-                    self._runtime_debug_print(
-                        f"[planner_debug] init={init_name!s} returned non-finite solution; skip"
-                    )
-                    continue
-                x_opt = np.asarray(result.x, dtype=float)
-                candidate = self._evaluate_candidate_controls(
-                    x_opt,
-                    m0,
-                    S0,
-                    goal_state,
-                    goal_obs,
-                    goal_obs_cov,
-                    objective_scales,
-                    progress_index=progress_index,
-                )
-                seed_candidate = self._evaluate_candidate_controls(
-                    np.asarray(x_init, dtype=float),
-                    m0,
-                    S0,
-                    goal_state,
-                    goal_obs,
-                    goal_obs_cov,
-                    objective_scales,
-                    progress_index=progress_index,
-                )
-                opt_diag = self._trajectory_plan_diagnostics(
-                    m0,
-                    S0,
-                    np.asarray(x_opt, dtype=float).reshape(self.horizon, 2),
-                    goal_xy,
-                )
-                seed_diag = self._trajectory_plan_diagnostics(
-                    m0,
-                    S0,
-                    np.asarray(x_init, dtype=float).reshape(self.horizon, 2),
-                    goal_xy,
-                )
-                opt_valid = bool(opt_diag['rollout_valid'])
-                seed_valid = bool(seed_diag['rollout_valid'])
-                opt_goal_feasible = self._terminal_goal_feasible(opt_diag)
-                seed_goal_feasible = self._terminal_goal_feasible(seed_diag)
-                # The optimizer is allowed to improve a neutral route seed, but
-                # it must not replace a valid seed with a cheaper corner-cutting
-                # trajectory through forbidden floor or with a cheaper partial
-                # trajectory that does not complete the task.
-                if self._prefer_candidate(
-                    candidate_valid=seed_valid,
-                    candidate_goal_feasible=seed_goal_feasible,
-                    candidate_cost=seed_candidate['total_cost'],
-                    incumbent_valid=opt_valid,
-                    incumbent_goal_feasible=opt_goal_feasible,
-                    incumbent_cost=candidate['total_cost'],
-                ):
-                    candidate = seed_candidate
-                    candidate['controls_flat'] = np.asarray(x_init, dtype=float)
-                    candidate['optimizer_seed_fallback'] = True
-                    diag_attempt = seed_diag
-                else:
-                    candidate['controls_flat'] = x_opt
-                    candidate['optimizer_seed_fallback'] = False
-                    diag_attempt = opt_diag
+                use_seed = opt_checked is None
+                if opt_checked is not None and seed_checked is not None:
+                    opt_candidate, opt_diag = opt_checked
+                    seed_candidate, seed_diag = seed_checked
+                    use_seed = self._prefer_candidate(
+                        candidate_valid=seed_diag['rollout_valid'],
+                        candidate_goal_feasible=self._terminal_goal_feasible(seed_diag),
+                        candidate_cost=seed_candidate['total_cost'],
+                        incumbent_valid=opt_diag['rollout_valid'],
+                        incumbent_goal_feasible=self._terminal_goal_feasible(opt_diag),
+                        incumbent_cost=opt_candidate['total_cost'])
+                candidate, diag_attempt = seed_checked if use_seed else opt_checked
+                candidate['optimizer_seed_fallback'] = use_seed
                 ctrls_attempt = np.asarray(candidate['controls_flat'], dtype=float).reshape(self.horizon, 2)
                 cand_valid = bool(diag_attempt['rollout_valid'])
                 cand_goal_feasible = self._terminal_goal_feasible(diag_attempt)
@@ -1350,6 +1555,8 @@ class UnicyclePlannerBase:
                     f'solver:shifted_warm_start' if (init_name == 'warm_or_cold' and self.prev_controls_flat is not None)
                     else f'solver:{init_name}'
                 )
+                if use_seed:
+                    source_label = source_label.replace('solver:', 'seed:', 1)
                 candidate.update({
                     'source': source_label,
                     'rollout_valid': cand_valid,
@@ -1403,22 +1610,9 @@ class UnicyclePlannerBase:
                 raise RuntimeError("Planner optimizer returned no finite solution from any init")
             if not bool(best_candidate.get('rollout_valid', False)):
                 stop_controls = np.zeros(self.horizon * 2, dtype=float)
-                stop_candidate = self._evaluate_candidate_controls(
-                    stop_controls,
-                    m0,
-                    S0,
-                    goal_state,
-                    goal_obs,
-                    goal_obs_cov,
-                    objective_scales,
-                    progress_index=progress_index,
-                )
-                stop_diag = self._trajectory_plan_diagnostics(
-                    m0,
-                    S0,
-                    stop_controls.reshape(self.horizon, 2),
-                    goal_xy,
-                )
+                stop_candidate, stop_diag = self._checked_candidate_controls(
+                    stop_controls, m0, S0, goal_state, goal_obs, goal_obs_cov,
+                    objective_scales, progress_index=progress_index)
                 if bool(stop_diag['rollout_valid']):
                     stop_candidate.update({
                         'source': 'safe_stop_invalid_rollout',
@@ -1457,14 +1651,16 @@ class UnicyclePlannerBase:
             raise RuntimeError("Planner produced no candidate solution")
 
         best_controls_flat = np.asarray(best_candidate['controls_flat'], dtype=float)
-        self.prev_controls_flat = np.array(best_controls_flat, dtype=float)
-        best_controls = self.prev_controls_flat.reshape(self.horizon, 2)
+        best_controls = best_controls_flat.reshape(self.horizon, 2).copy()
         total_cost = float(best_candidate['total_cost'])
         metrics = dict(best_candidate['metrics'])
         vis_diag = self.planning_visibility_diagnostics(m0, S0)
 
         states = rollout_unicycle(m0, best_controls, self.dt)
         plan_diag = self._trajectory_plan_diagnostics(m0, S0, best_controls, goal_xy)
+        # Invalid routes are returned with explicit diagnostics when no valid stop
+        # exists; they must not become the warm start for the next solve.
+        self.prev_controls_flat = best_controls.reshape(-1).copy() if plan_diag['rollout_valid'] else None
         selected_source = str(best_candidate.get('source', ''))
         solve_time_s = float(max(time.perf_counter() - t_plan_start, 0.0))
         return PlanResult(

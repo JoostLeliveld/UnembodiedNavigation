@@ -1,57 +1,74 @@
-"""Score every estimate against the truth at the instant that estimate describes.
+"""Offline evidence loading, identity validation and own-time reference scoring.
 
-One loader, used by `score.py`, `per_camera_error.py` and `repeating_error.py`, because
-the two mistakes it exists to prevent were each made independently in more than one of
-them.
-
-**Mistake 1: pairing a timestamped estimate with a later truth.** Every publisher here
-stamps what it produces, and the logger samples at 10 Hz. The belief publishes at 10 Hz
-too, so the row that records it is written one full cycle after the instant it describes:
-measured 0.1000 s median. At 0.22 m/s that is 2.2 cm of robot travel added to a real
-median error of 1.1 cm. Recomputed on the six-arm drives, aligning the truth moved the
-median belief error from 2.75 cm to 1.13 cm and mean NEES from 6.78 to 3.54 -- and it
-moved the raw-box arms by under 1 cm, because 24 cm of error swamps 2 cm of lag. So the
-misalignment flattered nothing and discredited nothing; it just made the good arms look
-2.3x worse than they are and the whole network look overconfident.
-
-**Mistake 2: counting each reading about four times.** The camera manager decides at
-20 Hz and the detector produces 5 Hz, so one physical detection is republished on about
-four consecutive decisions and written to `fusion_observations.csv` four times. Measured
-25656 rows for 6418 distinct readings across five drives. Those rows are not even
-identical -- the hull correction is re-applied against a newer belief each tick -- so
-they are a mixture of one reading's successive re-estimates, weighted by how long the
-manager kept re-fusing it.
-
-Both are fixed here rather than in each caller, and both work on runs written before the
-logger recorded the fields (`logging_schema_version` 1) by re-deriving alignment from the
-10 Hz truth series. Where the logger's own aligned columns exist they are preferred: they
-were computed against the full-rate truth buffer instead of an interpolated 10 Hz one.
-
-Ground truth is used to score and for nothing else.
+Camera readings use obs_stamp, fused corrections use fused_stamp, and public
+beliefs use planner_belief_stamp. Committed posteriors require explicit records.
+A finite interpolation bound must be supplied by the selected analysis protocol;
+without one, only exact logged ground-truth timestamps have reference support.
+Schema <4 capture-stamp fallbacks are historical diagnostics only. Ground truth
+is an offline scoring reference and never an estimator input.
 """
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
+import sys
 from pathlib import Path
 
 import numpy as np
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "src/unav_common"))
+from unav_common.correction_ledger import validate_correction_ledger
+
+class PosteriorUnavailable(ValueError):
+    """The log does not contain an identifiable committed posterior."""
 
 
 class TruthSeries:
     """The run's ground-truth path, on ground truth's own clock."""
 
-    def __init__(self, t, x, y, yaw, source: str):
-        order = np.argsort(t)
-        self.t = np.asarray(t, dtype=float)[order]
-        self.x = np.asarray(x, dtype=float)[order]
-        self.y = np.asarray(y, dtype=float)[order]
-        self.yaw = np.unwrap(np.asarray(yaw, dtype=float)[order]) if len(yaw) else np.array([])
+    def __init__(self, t, x, y, yaw, source: str, *, max_reference_gap_s=None):
+        t, x, y, yaw = (np.asarray(v, dtype=float) for v in (t, x, y, yaw))
+        if not (t.ndim == x.ndim == y.ndim == yaw.ndim == 1 and
+                len(t) == len(x) == len(y) == len(yaw) and len(t)):
+            raise ValueError("ground truth must contain equally sized nonempty vectors")
+        if not np.isfinite(np.c_[t, x, y]).all():
+            raise ValueError("nonfinite ground truth time/position")
+        if np.any(np.diff(t) < 0):
+            raise ValueError("ground truth clock reset or reordered reference samples")
+        keep = np.r_[True, np.diff(t) != 0]
+        for i in np.flatnonzero(~keep):
+            a, b = np.array([x[i-1], y[i-1], yaw[i-1]]), np.array([x[i], y[i], yaw[i]])
+            if not np.array_equal(a, b, equal_nan=True):
+                raise ValueError("conflicting ground truth samples at one timestamp")
+        self.t, self.x, self.y, self.yaw = (v[keep] for v in (t, x, y, yaw))
+        # Unwrap separately across missing heading sections; a missing yaw must not
+        # poison later valid positions/headings or license interpolation across it.
+        indices = np.flatnonzero(np.isfinite(self.yaw))
+        for block in np.split(indices, np.flatnonzero(np.diff(indices) != 1) + 1):
+            self.yaw[block] = np.unwrap(self.yaw[block])
+        if max_reference_gap_s is not None and (not math.isfinite(max_reference_gap_s) or
+                                                max_reference_gap_s <= 0):
+            raise ValueError("max_reference_gap_s must be finite and positive")
+        self.max_gap_s = max_reference_gap_s
         self.source = source
 
     def __len__(self):
         return int(self.t.size)
+
+    def support(self, stamps):
+        """Exact samples or bounded interpolation brackets; no extrapolation."""
+        s = np.asarray(stamps, dtype=float)
+        right = np.searchsorted(self.t, s, side="left")
+        r = np.clip(right, 0, len(self.t)-1)
+        left = np.maximum(r-1, 0)
+        exact = s == self.t[r]
+        inside = (right > 0) & (right < len(self.t))
+        bracket = self.t[r] - self.t[left]
+        supported = exact if self.max_gap_s is None else exact | (inside & (bracket <= self.max_gap_s + 1e-9))
+        return np.isfinite(s) & supported
 
     def at(self, stamps):
         """Truth at `stamps`. NaN outside the recorded interval -- never clamped.
@@ -62,7 +79,7 @@ class TruthSeries:
         s = np.asarray(stamps, dtype=float)
         gx = np.interp(s, self.t, self.x)
         gy = np.interp(s, self.t, self.y)
-        outside = (s < self.t[0]) | (s > self.t[-1]) | ~np.isfinite(s)
+        outside = ~self.support(s)
         gx = np.where(outside, np.nan, gx)
         gy = np.where(outside, np.nan, gy)
         return gx, gy
@@ -70,7 +87,7 @@ class TruthSeries:
     def yaw_at(self, stamps):
         s = np.asarray(stamps, dtype=float)
         gyaw = np.interp(s, self.t, self.yaw)
-        outside = (s < self.t[0]) | (s > self.t[-1]) | ~np.isfinite(s)
+        outside = ~self.support(s)
         return np.where(outside, np.nan, gyaw)
 
 
@@ -81,9 +98,13 @@ def schema_version(run: Path) -> int:
     if not manifest.is_file():
         return 1
     try:
-        return int(json.loads(manifest.read_text()).get("logging_schema_version", 1))
-    except (ValueError, TypeError, OSError):
-        return 1
+        record = json.loads(manifest.read_text())
+        version = record["logging_schema_version"]
+        if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+            raise ValueError("logging_schema_version must be a positive integer")
+        return version
+    except (ValueError, TypeError, KeyError, OSError) as exc:
+        raise ValueError(f"{manifest}: invalid logging schema") from exc
 
 
 def _float(row, key):
@@ -94,10 +115,19 @@ def _float(row, key):
 
 
 def rows(run: Path) -> list[dict]:
-    return list(csv.DictReader(open(Path(run) / "experiment.csv")))
+    with (Path(run) / "experiment.csv").open() as stream:
+        table = list(csv.DictReader(stream))
+    _validate_log_clock(table)
+    return table
 
 
-def truth_series(run: Path, table: list[dict] | None = None) -> TruthSeries:
+def _validate_log_clock(table):
+    stamps = np.array([_float(r, "stamp") for r in table])
+    if not np.isfinite(stamps).all() or np.any(np.diff(stamps) < 0):
+        raise ValueError("invalid logger clock or unmarked clock reset")
+
+
+def truth_series(run: Path, table: list[dict] | None = None, *, max_reference_gap_s=None) -> TruthSeries:
     """The truth path, timestamped as well as the run allows.
 
     Schema 2 logs `gt_stamp`, the stamp the pose itself carried, so the series sits on
@@ -105,6 +135,7 @@ def truth_series(run: Path, table: list[dict] | None = None) -> TruthSeries:
     long the held value had been sitting there -- bounded by the 10 Hz log tick.
     """
     table = rows(run) if table is None else table
+    _validate_log_clock(table)
     t, x, y, yaw = [], [], [], []
     use_gt_stamp = schema_version(run) >= 2 and table and "gt_stamp" in table[0]
     for row in table:
@@ -120,11 +151,15 @@ def truth_series(run: Path, table: list[dict] | None = None) -> TruthSeries:
         yaw.append(_float(row, "gt_yaw"))
     if not t:
         raise SystemExit(f"{run}: no usable ground truth")
+    summary_path = Path(run) / "run_summary.json"
+    summary = json.loads(summary_path.read_text()) if summary_path.is_file() else {}
+    provenance = summary.get("gt_stamp_source", "unspecified")
     return TruthSeries(t, x, y, yaw,
-                       "gt_stamp" if use_gt_stamp else "log_stamp (schema 1)")
+                       f"gt_stamp ({provenance})" if use_gt_stamp else "log_stamp (schema 1)",
+                       max_reference_gap_s=max_reference_gap_s)
 
 
-def aligned_error_cm(run: Path, kind: str, table: list[dict] | None = None) -> dict:
+def aligned_error_cm(run: Path, kind: str, table: list[dict] | None = None, *, max_reference_gap_s=None) -> dict:
     """Error of one estimate against the truth at the estimate's OWN stamp.
 
     `kind` is 'belief' (the planner's belief) or 'state' (the correction the filter is
@@ -133,8 +168,10 @@ def aligned_error_cm(run: Path, kind: str, table: list[dict] | None = None) -> d
     """
     if kind not in {"belief", "state"}:
         raise ValueError("kind must be 'belief' or 'state'")
+    if schema_version(run) >= 4:
+        validate_run_ledger(run)
     table = rows(run) if table is None else table
-    truth = truth_series(run, table)
+    truth = truth_series(run, table, max_reference_gap_s=max_reference_gap_s)
     xkey, ykey, skey = (
         ("planner_belief_x", "planner_belief_y", "planner_belief_stamp")
         if kind == "belief" else ("state_x", "state_y", "state_stamp"))
@@ -145,6 +182,20 @@ def aligned_error_cm(run: Path, kind: str, table: list[dict] | None = None) -> d
     log_s = np.array([_float(r, "stamp") for r in table])
 
     have = np.isfinite(est_x) & np.isfinite(est_y) & np.isfinite(est_s)
+    available_key = "planner_belief_available" if kind == "belief" else "state_available"
+    if table and available_key in table[0]:
+        have &= np.array([_float(r, available_key) == 1 for r in table])
+    if schema_version(run) >= 4:
+        seen = {}
+        payload_keys = ([xkey, ykey, "planner_belief_yaw", "planner_cov_x", "planner_cov_xy", "planner_cov_y"]
+                        if kind == "belief" else [xkey, ykey])
+        for row, stamp, present in zip(table, est_s, have):
+            if not present:
+                continue
+            payload = np.array([_float(row, k) for k in payload_keys])
+            if stamp in seen and not np.array_equal(seen[stamp], payload, equal_nan=True):
+                raise ValueError(f"{run}: ambiguous {kind} payloads at one timestamp without message revision")
+            seen[stamp] = payload
     gx_a, gy_a = truth.at(est_s)
     gx_l, gy_l = truth.at(log_s)
     aligned = np.where(have, np.hypot(est_x - gx_a, est_y - gy_a), np.nan) * 100.0
@@ -152,7 +203,10 @@ def aligned_error_cm(run: Path, kind: str, table: list[dict] | None = None) -> d
     lag = np.where(have, log_s - est_s, np.nan)
     return dict(aligned_cm=aligned, logtime_cm=logtime, stamp=est_s, log_stamp=log_s,
                 x=est_x, y=est_y, gt_x=gx_a, gt_y=gy_a, have=have, lag_s=lag,
-                truth_source=truth.source)
+                truth_source=truth.source, reference_supported=truth.support(est_s),
+                reference_max_gap_s=truth.max_gap_s,
+                reference_method=("exact_logged_gt" if truth.max_gap_s is None
+                                  else "bounded_interpolation_of_logged_gt"))
 
 
 def landed_mask(stamps) -> np.ndarray:
@@ -164,8 +218,13 @@ def landed_mask(stamps) -> np.ndarray:
     s = np.asarray(stamps, dtype=float)
     if s.size == 0:
         return np.zeros(0, dtype=bool)
-    first = np.concatenate([[True], np.diff(s) > 1.0e-9])
-    return first & np.isfinite(s)
+    seen = set()
+    first = np.zeros(s.size, dtype=bool)
+    for i, stamp in enumerate(s):
+        if np.isfinite(stamp) and stamp not in seen:
+            first[i] = True
+            seen.add(stamp)
+    return first
 
 
 def corrections(run: Path, table: list[dict] | None = None) -> dict:
@@ -206,7 +265,7 @@ def corrections(run: Path, table: list[dict] | None = None) -> dict:
                 tuple(sorted(stamps)) for stamps in by_decision.values() if stamps
             }) or None
 
-    return dict(
+    result = dict(
         n_state_publications=int(unique.size),
         n_state_publications_note=(
             "log rows with a fresh /state/bev stamp, at the 10 Hz log rate -- an "
@@ -219,6 +278,17 @@ def corrections(run: Path, table: list[dict] | None = None) -> dict:
         median_gap_s=float(np.median(gaps)) if gaps.size else math.nan,
     )
 
+    if schema_version(run) >= 4:
+        accounting = correction_accounting(run)
+        result.update(longest_gap_s=accounting['longest_correction_gap_s'],
+                      median_gap_s=accounting['median_correction_gap_s'],
+                      accepted_updates=accounting['accepted_updates'],
+                      correction_dropped_fraction=accounting['correction_dropped_fraction'],
+                      gap_reference=accounting['gap_reference'])
+    else:
+        result['gap_reference'] = 'legacy held-state diagnostic; accepted-update gaps unavailable'
+    return result
+
 
 def observations(run: Path) -> list[dict]:
     """Raw `fusion_observations.csv`, one dict per row, floats parsed. No filtering."""
@@ -230,7 +300,7 @@ def observations(run: Path) -> list[dict]:
     for row in csv.DictReader(open(path)):
         entry = dict(
             camera=row.get("camera", ""),
-            source_batch_id=row.get("source_batch_id", ""),
+            source_batch_id=row.get("source_batch_id", "").strip(),
             used=row.get("used") == "1",
             decision_stamp=_float(row, "stamp"),
             common_capture_stamp=_float(row, "common_capture_stamp"),
@@ -281,21 +351,249 @@ def assimilations(run: Path) -> list[dict]:
         if source_batch_id in seen:
             raise ValueError(f"{path}: duplicate assimilation for {source_batch_id}")
         seen.add(source_batch_id)
+        accepted = str(row.get("accepted", "")).strip()
+        if accepted not in {"0", "1"}:
+            raise ValueError(f"{path}: invalid accepted flag for {source_batch_id}")
         out.append({
+            **row,
             "source_batch_id": source_batch_id,
             "correction_stamp": _float(row, "correction_stamp"),
             "apply_stamp": _float(row, "apply_stamp"),
             "belief_stamp_after": _float(row, "belief_stamp_after"),
             "status": str(row.get("status", "") or "").strip(),
             "reason": str(row.get("reason", "") or "").strip(),
-            "accepted": str(row.get("accepted", "")).strip() == "1",
+            "accepted": accepted == "1",
             "nis": _float(row, "nis"),
         })
+        for name in ("correction_stamp_ns", "apply_stamp_ns", "belief_stamp_before_ns", "belief_stamp_after_ns"):
+            if row.get(name) not in (None, ""):
+                out[-1][name] = _integer(row[name], name)
+            else:
+                out[-1].pop(name, None)
     return out
 
 
+def validate_run_ledger(run: Path):
+    """Validate the complete raw publication/outcome ledger, before truth selection.
+
+    A valid event beyond the final truth row remains accounted for. This validator
+    makes no accuracy claim and never uses ``fused_answers`` as its input population.
+    """
+    run = Path(run)
+    if schema_version(run) < 4:
+        raise ValueError(f"{run}: schema 4 source-batch accounting is required")
+    for name in ("fusion_observations.csv", "correction_assimilations.csv"):
+        if not (run / name).is_file():
+            raise ValueError(f"{run}: missing {name}")
+    outcomes = []
+    for a in assimilations(run):
+        canonical = dict(a)
+        canonical.pop("epoch", None)  # Belief epoch is not the detector/source epoch.
+        if a.get("source_epoch"):
+            canonical["epoch"] = a["source_epoch"]
+        outcomes.append(canonical)
+    if schema_version(run) >= 8:
+        path = run / "correction_publications.csv"
+        if not path.is_file():
+            raise ValueError(f"{run}: schema 8 publication ledger is missing")
+        with path.open() as stream:
+            publications = list(csv.DictReader(stream))
+        for p in publications:
+            p["member_ids"] = json.loads(p.get("member_ids") or p["accepted_camera_ids"])
+            for name in ("correction_stamp_ns", "common_capture_stamp_ns", "publication_stamp_ns"):
+                if p.get(name) not in (None, ""):
+                    p[name] = _integer(p[name], name)
+                else:
+                    p.pop(name, None)
+            if not p.get("frame_id") or str(p.get("schema_version")) not in {"1", "2"}:
+                raise ValueError(f"{run}: malformed correction publication")
+            if str(p["schema_version"]) == "2":
+                matches = [a for a in outcomes if a["source_batch_id"] == p["source_batch_id"]]
+                if not p.get("epoch") or any(not a.get("source_epoch") for a in matches):
+                    raise ValueError(f"{run}: source epoch required for v2 correction lineage")
+                if "correction_stamp_ns" not in p or any("correction_stamp_ns" not in a or
+                                                        "apply_stamp_ns" not in a for a in matches):
+                    raise ValueError(f"{run}: exact correction/apply timestamps required for v2 lineage")
+        ledger = validate_correction_ledger(publications, outcomes).require_valid()
+    else:
+        ledger = None
+    publications = []
+    for o in observations(run):
+        publications.append(dict(source_batch_id=o["source_batch_id"],
+            correction_stamp=o["fused_stamp"], payload=dict(
+                mean=[o["fused_x"], o["fused_y"]], covariance=o["fused_cov"].tolist())))
+    if ledger is not None:
+        diagnostic_ids = {p["source_batch_id"] for p in publications}
+        if not diagnostic_ids <= ledger.publications_by_batch.keys():
+            raise ValueError(f"{run}: fusion diagnostic without a correction publication")
+        for p in publications:
+            stamp = ledger.publications_by_batch[p["source_batch_id"]]["correction_stamp"]
+            if not math.isclose(float(stamp), p["correction_stamp"], abs_tol=1e-9, rel_tol=0):
+                raise ValueError(f"{run}: fusion diagnostic/publication timestamp mismatch")
+        outcomes = [a for a in outcomes if a["source_batch_id"] in diagnostic_ids]
+    result = validate_correction_ledger(publications, outcomes,
+                                       allow_repeated_publications=True)
+    result.require_valid()
+    return ledger if ledger is not None else result
+
+
+def _unique_observations(run, obs):
+    """One camera per physical batch; inconsistent copies are evidence errors."""
+    if schema_version(run) < 4:
+        return obs  # Explicit diagnostic legacy capture-stamp handling below.
+    seen = {}
+    for o in obs:
+        key = o["source_batch_id"], o["camera"]
+        if not all(key):
+            raise ValueError(f"{run}: missing camera/source_batch_id")
+        if key in seen:
+            previous = seen[key]
+            for field in ("obs_stamp", "obs_x", "obs_y", "cov", "used", "conf",
+                          "bbox_h_px", "bbox_w_px", "aligned_xy", "aligned_cov"):
+                if not np.array_equal(np.asarray(o[field]), np.asarray(previous[field]), equal_nan=True):
+                    raise ValueError(f"{run}: conflicting camera reading {key}: {field}")
+        else:
+            seen[key] = o
+    return list(seen.values())
+
+
+def mission_interval(run: Path, table=None):
+    """A declared whole mission interval; do not omit either blind endpoint."""
+    path = Path(run) / "run_summary.json"
+    summary = json.loads(path.read_text()) if path.is_file() else {}
+    start, stop = _float(summary, "first_cmd_stamp"), _float(summary, "stop_stamp")
+    if not np.isfinite([start, stop]).all() or stop < start:
+        raise ValueError(f"{run}: missing or invalid mission interval")
+    return start, stop
+
+
+def verify_frozen_entry(entry, required, *, minimum_schema=4, repo=REPO):
+    """Verify every required artifact and the declared run/task/seed identity."""
+    run = (Path(repo) / entry["run"]).resolve()
+    files = entry.get("files", {})
+    missing = set(required) - files.keys()
+    if missing:
+        raise ValueError(f"{run}: frozen artifact hashes missing: {sorted(missing)}")
+    for name, expected in files.items():
+        path = (run / name).resolve()
+        if not path.is_relative_to(run) or not isinstance(expected, str) or len(expected) != 64:
+            raise ValueError(f"{run}: invalid frozen artifact entry {name}")
+        if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            raise ValueError(f"{run}: changed frozen artifact {name}")
+    manifest = json.loads((run / "run_manifest.json").read_text())
+    if schema_version(run) < minimum_schema:
+        raise ValueError(f"{run}: schema {minimum_schema} or newer required")
+    if schema_version(run) >= 8 and not {"correction_publications.csv", "runtime_event_deliveries.jsonl"} <= files.keys():
+        raise ValueError(f"{run}: schema 8 frozen event ledgers are required")
+    if "task" not in entry or "seed" not in entry:
+        raise ValueError("frozen task and seed are required")
+    if manifest.get("task") != entry["task"] or manifest.get("seed") != entry["seed"]:
+        raise ValueError(f"{run}: frozen task/seed identity mismatch")
+    return run, manifest, json.loads((run / "run_summary.json").read_text())
+
+
+def required_artifacts(run, base):
+    names = list(base)
+    if schema_version(run) >= 8:
+        names.extend(["correction_publications.csv", "runtime_event_deliveries.jsonl"])
+    return tuple(dict.fromkeys(names))
+
+
+def measured_odometry(table, *, start=None, stop=None):
+    """Finite ZOH controls, with duplicate agreement and chronological support."""
+    odom = {}
+    previous = -math.inf
+    for row in table:
+        stamp = _float(row, "odom_noisy_stamp")
+        control = np.array([_float(row, "odom_noisy_v"), _float(row, "odom_noisy_w")])
+        if not math.isfinite(stamp):
+            continue  # The logger may not yet have received odometry.
+        if not np.isfinite(control).all():
+            raise ValueError("nonfinite measured odometry")
+        if stamp < previous:
+            raise ValueError("reordered odometry or unmarked clock reset")
+        previous = stamp
+        if stamp in odom and not np.array_equal(odom[stamp], control):
+            raise ValueError("conflicting odometry controls at one timestamp")
+        odom[stamp] = control
+    if start is not None:
+        if not any(t <= start for t in odom):
+            raise ValueError("no causal measured control at mission start")
+        anchor = max(t for t in odom if t <= start)
+        odom = {t: u for t, u in odom.items() if t >= start} | {start: odom[anchor]}
+    if stop is not None:
+        odom = {t: u for t, u in odom.items() if t <= stop}
+    if not odom:
+        raise ValueError("no measured odometry")
+    return dict(sorted(odom.items()))
+
+
+def camera_opportunities(run):
+    """Canonical detector deliveries, verified before time/reference filtering."""
+    deliveries = [json.loads(line) for line in (Path(run) / "camera_opportunities.jsonl").read_text().splitlines()]
+    groups = {}
+    duplicates = 0
+    for row in deliveries:
+        if row.get("valid_contract") is not True or row.get("conflicting_duplicate"):
+            raise ValueError("invalid or conflicting camera opportunity delivery")
+        o = row["observation"]
+        key = o.get("source_batch_id"), o.get("camera_id")
+        if not all(isinstance(v, str) and v for v in key):
+            raise ValueError("camera opportunity identity missing")
+        if not math.isfinite(float(o["timestamp_s"])) or not isinstance(o["detection_valid"], bool):
+            raise ValueError("invalid camera opportunity time/detection flag")
+        groups.setdefault(key, []).append(row)
+    result = []
+    for key, group in groups.items():
+        canonical = [r for r in group if r.get("duplicate") is False]
+        if len(canonical) != 1:
+            raise ValueError(f"camera opportunity needs one canonical delivery: {key}")
+        o = canonical[0]["observation"]
+        for row in group:
+            if row["observation"] != o:
+                raise ValueError(f"conflicting camera opportunity copies: {key}")
+        duplicates += len(group)-1
+        result.append(o)
+    return sorted(result, key=lambda o: (o["timestamp_s"], o["source_batch_id"], o["camera_id"])), duplicates
+
+
+def freeze_analysis_protocol(out, name, protocol, *, owned_outputs=()):
+    """Do not replace a historical result with different or unidentified analysis."""
+    out = Path(out)
+    path = out / name
+    if path.is_file():
+        if json.loads(path.read_text()) != protocol:
+            raise ValueError(f"{path}: analysis inputs differ; choose a new output directory")
+    elif any((out / p).exists() for p in owned_outputs):
+        raise ValueError(f"{out}: existing outputs lack matching analysis provenance; preserve them")
+    else:
+        out.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(json.dumps(protocol, indent=2, allow_nan=False) + "\n")
+        temporary.replace(path)
+    return protocol
+
+
+def correction_accounting(run: Path):
+    ledger = validate_run_ledger(run)
+    start, stop = mission_interval(run)
+    outcomes = [a for a in ledger.by_batch.values() if start <= a["apply_stamp"] <= stop]
+    accepted = [a["apply_stamp"] for a in outcomes if a["source_batch_id"] in ledger.accepted_update_ids]
+    gaps = np.diff(sorted({start, stop, *accepted}))
+    return dict(total_published=len(ledger.publications_by_batch), total_outcomes=len(ledger.by_batch),
+                mission_outcomes=len(outcomes), accepted_updates=len(accepted),
+                rejected=sum(a["status"] == "rejected" for a in outcomes),
+                dropped=sum(a["status"] == "dropped" for a in outcomes),
+                correction_dropped_fraction=(sum(a["status"] == "dropped" for a in outcomes) /
+                                             len(outcomes) if outcomes else None),
+                longest_correction_gap_s=float(max(gaps, default=0.0)),
+                median_correction_gap_s=float(np.median(gaps)) if gaps.size else 0.0,
+                gap_reference="accepted apply_stamp within [first_cmd_stamp, stop_stamp], including endpoints")
+
+
 def readings(run: Path, *, admitted_only: bool = True, dedupe: bool = True,
-             require_capture_time: bool = True) -> list[dict]:
+             require_capture_time: bool = True, max_reference_gap_s=None,
+             require_reference: bool = True) -> list[dict]:
     """One entry per camera reading, scored against the truth when the camera saw it.
 
     `dedupe` keeps the FIRST row for each (camera, capture time): the reading as the
@@ -308,12 +606,17 @@ def readings(run: Path, *, admitted_only: bool = True, dedupe: bool = True,
     unconditional distribution; callers that care should report both.
     """
     obs = observations(run)
+    if schema_version(run) >= 4:
+        if not dedupe:
+            raise ValueError("modern reading scores require deduplication; observations() exposes raw rows")
+        validate_run_ledger(run)
+        obs = _unique_observations(run, obs)
     if not obs:
         return []
     have_capture = any(math.isfinite(o["obs_stamp"]) for o in obs)
     if require_capture_time and not have_capture:
         return []
-    truth = truth_series(run)
+    truth = truth_series(run, max_reference_gap_s=max_reference_gap_s)
 
     seen = set()
     out = []
@@ -326,24 +629,27 @@ def readings(run: Path, *, admitted_only: bool = True, dedupe: bool = True,
         if not math.isfinite(cap):
             continue
         if dedupe:
-            key = (o["camera"], round(cap, 6))
+            key = ((o["source_batch_id"], o["camera"]) if schema_version(run) >= 4
+                   else (o["camera"], cap))
             if key in seen:
                 continue
             seen.add(key)
         gx, gy = truth.at([cap])
-        if not (math.isfinite(gx[0]) and math.isfinite(gy[0])):
+        supported = math.isfinite(gx[0]) and math.isfinite(gy[0])
+        if require_reference and not supported:
             continue
         entry = dict(o)
+        entry["reference_supported"] = supported
         entry["truth"] = np.array([float(gx[0]), float(gy[0])])
         entry["truth_yaw"] = float(truth.yaw_at([cap])[0])
         entry["error"] = np.array([o["obs_x"], o["obs_y"]]) - entry["truth"]
         entry["error_cm"] = float(np.linalg.norm(entry["error"]) * 100.0)
         out.append(entry)
-    out.sort(key=lambda r: r["obs_stamp"])
+    out.sort(key=lambda r: (r["obs_stamp"], r["source_batch_id"], r["camera"]))
     return out
 
 
-def fused_answers(run: Path, *, dedupe: bool = True) -> list[dict]:
+def fused_answers(run: Path, *, dedupe: bool = True, max_reference_gap_s=None) -> list[dict]:
     """The fused correction per decision, scored at the instant IT describes.
 
     The manager propagates the fused answer to `now` and re-stamps it, while leaving
@@ -353,9 +659,14 @@ def fused_answers(run: Path, *, dedupe: bool = True) -> list[dict]:
     by convention.
     """
     obs = observations(run)
+    if schema_version(run) >= 4:
+        if not dedupe:
+            raise ValueError("modern fused scores require one event per identity")
+        validate_run_ledger(run)
+        obs = _unique_observations(run, obs)
     if not obs:
         return []
-    truth = truth_series(run)
+    truth = truth_series(run, max_reference_gap_s=max_reference_gap_s)
     by_decision: dict[object, list[dict]] = {}
     for o in obs:
         key = o["source_batch_id"] or round(o["decision_stamp"], 6)
@@ -375,10 +686,10 @@ def fused_answers(run: Path, *, dedupe: bool = True) -> list[dict]:
         # The fused answer describes `fused_stamp` where the run records it, and the
         # newest capture time where it does not (schema 1 predates the field).
         when = head["fused_stamp"]
-        if not math.isfinite(when):
+        if not math.isfinite(when) and schema_version(run) < 4:
             when = max(caps) if caps else head["decision_stamp"]
         gx, gy = truth.at([when])
-        if not (math.isfinite(head["fused_x"]) and math.isfinite(gx[0])):
+        if not np.isfinite([head["fused_x"], head["fused_y"], gx[0], gy[0]]).all():
             continue
         fused_truth = np.array([float(gx[0]), float(gy[0])])
         cameras = {}
@@ -400,80 +711,102 @@ def fused_answers(run: Path, *, dedupe: bool = True) -> list[dict]:
                 np.array([head["fused_x"], head["fused_y"]]) - fused_truth) * 100.0),
             n_candidates=head["n_candidates"], n_used=head["n_used"],
             cameras=cameras))
-    return out
+    return sorted(out, key=lambda r: (r["fused_stamp"], r["source_batch_id"]))
 
 
-def belief_at_fusion_events(run: Path, table: list[dict] | None = None) -> list[dict]:
-    """Belief immediately after each unique detector batch correction.
+def _integer(value, name):
+    if isinstance(value, bool) or str(value).strip() != str(int(value)) or int(value) < 0:
+        raise ValueError(f"invalid nonnegative integer {name}")
+    return int(value)
 
-    This gives correction-count and belief panels the same event weighting. A 10 Hz logger
-    must never turn a 5 Hz correction into two experimental observations.
+
+def _true(value):
+    return value is True or value in ("true", "True", "1", 1)
+
+
+def belief_at_fusion_events(run: Path, table: list[dict] | None = None, *,
+                            max_reference_gap_s=None, reference_frame=None) -> list[dict]:
+    """Score explicit committed posteriors; periodic predictions cannot identify them.
+
+    Legacy logs without a v2 posterior record are unavailable for this quantity,
+    even when a later public belief happens to have the same or a nearby timestamp.
+    Missing truth support retains the identified event with a NaN error and an
+    explicit ``reference_supported=False`` flag.
     """
-
-    assimilation_rows = assimilations(run)
-    if schema_version(run) >= 4 and not assimilation_rows:
-        raise ValueError(
-            f"{run}: schema 4 run has no source-batch assimilation records"
-        )
-    accepted_by_batch = {
-        row["source_batch_id"]: row
-        for row in assimilation_rows
-        if row["accepted"]
-        and row["status"] in {"accepted", "accepted_bootstrap", "reanchored"}
-    }
-
-    table = rows(run) if table is None else table
-    belief = aligned_error_cm(run, "belief", table)
-    cov = np.array([[[_float(r, "planner_cov_x"), _float(r, "planner_cov_xy")],
-                     [_float(r, "planner_cov_xy"), _float(r, "planner_cov_y")]]
-                    for r in table])
-    valid_indices = np.flatnonzero(belief["have"])
-    if not valid_indices.size:
+    ledger = validate_run_ledger(run)
+    accepted = [a for a in assimilations(run) if a["source_batch_id"] in ledger.accepted_update_ids]
+    if not accepted:
         return []
-    stamps = belief["stamp"][valid_indices]
+    manifest = json.loads((Path(run) / "run_manifest.json").read_text())
+    reference_frame = reference_frame or manifest.get("gt_frame_id")
+    required = ("schema_version", "posterior_mean", "posterior_covariance", "state_stamp_ns",
+                "epoch", "revision_before", "revision_after", "frame_id", "valid", "motion_supported")
+    for a in accepted:
+        if any(a.get(k) in (None, "") for k in required) or str(a["schema_version"]) != "2":
+            raise PosteriorUnavailable(f"{run}: explicit v2 committed posterior missing for {a['source_batch_id']}")
+    if not reference_frame:
+        raise PosteriorUnavailable(f"{run}: explicit ground-truth reference frame is required")
+    truth = truth_series(run, table, max_reference_gap_s=max_reference_gap_s)
+    candidates = {o["source_batch_id"]: o["n_candidates"] for o in observations(run)}
+    revisions = set()
     out = []
-    for event in fused_answers(run):
-        if assimilation_rows and event["source_batch_id"] not in accepted_by_batch:
-            continue
-        target = float(event["fused_stamp"])
-        after = np.flatnonzero(stamps > target + 1.0e-9)
-        if not after.size:
-            continue
-        idx = int(valid_indices[int(after[0])])
-        lag = float(belief["stamp"][idx] - target)
-        if not math.isfinite(lag) or lag > 0.30:
-            continue
-        covariance = cov[idx]
-        if not np.isfinite(covariance).all():
-            continue
-        out.append({
-            "source_batch_id": event["source_batch_id"],
-            "assimilation_status": (
-                accepted_by_batch[event["source_batch_id"]]["status"]
-                if assimilation_rows else "legacy_timestamp_inference"
-            ),
-            "n_candidates": event["n_candidates"],
-            "error_cm": float(belief["aligned_cm"][idx]),
-            "stated_sigma_cm": float(
-                np.sqrt(np.trace(covariance) / 2.0) * 100.0),
-            "belief_lag_after_fusion_s": lag,
-        })
-    return out
+    for a in accepted:
+        mean = np.asarray(json.loads(a["posterior_mean"]), dtype=float)
+        P = np.asarray(json.loads(a["posterior_covariance"]), dtype=float)
+        if mean.shape != (3,) or not np.isfinite(mean).all():
+            raise ValueError("invalid committed posterior mean")
+        validate_covariances(P[None], dimension=3)
+        stamp_ns = _integer(a["state_stamp_ns"], "state_stamp_ns")
+        revision = _integer(a["revision_after"], "revision_after")
+        before = _integer(a["revision_before"], "revision_before")
+        if revision <= before or (a["epoch"], revision) in revisions:
+            raise ValueError("committed posterior revision is not a unique advancing update")
+        revisions.add((a["epoch"], revision))
+        if a["frame_id"] != reference_frame:
+            raise ValueError("posterior/reference frame mismatch")
+        if not _true(a["valid"]) or not _true(a["motion_supported"]):
+            raise PosteriorUnavailable(f"{run}: committed posterior is invalid or motion-unsupported")
+        target = stamp_ns / 1e9
+        gx, gy = truth.at([target])
+        supported = bool(np.isfinite([gx[0], gy[0]]).all())
+        out.append(dict(source_batch_id=a["source_batch_id"], assimilation_status=a["status"],
+            n_candidates=candidates.get(a["source_batch_id"], math.nan),
+            state_stamp_ns=stamp_ns, planner_belief_stamp=target, frame_id=a["frame_id"],
+            epoch=a["epoch"], revision=revision, mean=mean, covariance=P,
+            error_cm=float(np.linalg.norm(mean[:2]-[gx[0], gy[0]])*100),
+            stated_sigma_cm=float(np.sqrt(np.trace(P[:2, :2])/2)*100),
+            belief_lag_after_fusion_s=target-a["correction_stamp"],
+            reference_supported=supported, reference_max_gap_s=max_reference_gap_s,
+            truth_source=truth.source, quantity="committed_posterior"))
+    return sorted(out, key=lambda r: (r["epoch"], r["revision"]))
+
+
+def validate_covariances(covariances, *, dimension=2):
+    """Require full finite, symmetric, positive-definite covariance matrices."""
+    c = np.asarray(covariances, dtype=float)
+    if c.ndim != 3 or c.shape[1:] != (dimension, dimension):
+        raise ValueError(f"expected (n,{dimension},{dimension}) covariance array")
+    if not np.isfinite(c).all():
+        raise ValueError("nonfinite covariance")
+    if not np.allclose(c, np.swapaxes(c, 1, 2), rtol=1e-10, atol=1e-12):
+        raise ValueError("asymmetric covariance")
+    try:
+        np.linalg.cholesky(c)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError("covariance must be positive definite") from exc
+    return c
 
 
 def nees(residuals, covariances) -> np.ndarray:
-    """Normalised squared error, in closed form, for 2x2 covariances."""
-
-    r = np.asarray(residuals, dtype=float).reshape(-1, 2)
-    c = np.asarray(covariances, dtype=float).reshape(-1, 2, 2)
-    a, b, d = c[:, 0, 0], c[:, 0, 1], c[:, 1, 1]
-    det = a * d - b * b
-    ok = det > 0.0
-    out = np.full(r.shape[0], np.nan)
-    out[ok] = ((d[ok] * r[ok, 0] ** 2
-                - 2.0 * b[ok] * r[ok, 0] * r[ok, 1]
-                + a[ok] * r[ok, 1] ** 2) / det[ok])
-    return out
+    """Planar normalized squared error using the complete checked covariance."""
+    r = np.asarray(residuals, dtype=float)
+    c = np.asarray(covariances, dtype=float)
+    if r.size == c.size == 0:
+        return np.empty(0)
+    if r.ndim != 2 or r.shape[1] != 2 or len(c) != len(r) or not np.isfinite(r).all():
+        raise ValueError("expected matching finite planar residuals and covariances")
+    validate_covariances(c)
+    return np.einsum("ni,ni->n", r, np.linalg.solve(c, r[..., None])[..., 0])
 
 
 #: Mean of a 2-D chi-square: the target for a MEAN NEES.

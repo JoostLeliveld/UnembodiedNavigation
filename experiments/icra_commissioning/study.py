@@ -50,7 +50,7 @@ def freeze(out):
        covariance_models=list(KINDS),no_final_test_claim=True))
     print(path)
 
-def load(out):
+def load(out, *, write_records=True):
     manifest=json.loads((out/'manifest.json').read_text())
     for p,h in manifest['files'].items():
         if digest(REPO/p)!=h: raise RuntimeError(f'input changed: {p}')
@@ -86,21 +86,32 @@ def load(out):
           confidence=float(r['confidence']),heading=float(r['robot_yaw']),frame=record['frame']))
         record.update(raw_xy=raw.tolist(),corrected_xy=z.tolist(),bbox=box,confidence=float(r['confidence']))
         records.append(record)
-    with (out/'records.jsonl').open('w') as f:
-        for r in records:f.write(json.dumps(r)+'\n')
+    if write_records:
+        with (out/'records.jsonl').open('w') as f:
+            for r in records:f.write(json.dumps(r)+'\n')
     return data,{f'{a}/{b}':n for (a,b),n in counts.items()}
 
 def score(e,R,groups):
-    v=np.linalg.solve(R,e[...,None])[...,0]; nees=np.einsum('ni,ni->n',e,v)
+    sys.path.insert(0,str(REPO/'experiments/fusion_on_fixed_routes'))
+    import aligned
+    e=np.asarray(e,float);R=np.asarray(R,float)
+    if len(groups)!=len(e):raise ValueError('score groups/residual count mismatch')
+    if not len(e):
+        return dict(n=0,groups=0,status='no_scoreable_reference',median_cm=None,p95_cm=None,
+          rmse_cm=None,bias_cm=None,gaussian_nll=None,group_mean_nll=None,
+          group_bootstrap_nll_ci95=None,coverage={str(p):None for p in [.5,.8,.9,.95,.99]},
+          mean_mahalanobis2=None,rms_sigma_cm=None)
+    nees=aligned.nees(e,R)
     nll=.5*(np.linalg.slogdet(R)[1]+nees+2*np.log(2*np.pi))
     err=100*np.linalg.norm(e,axis=1)
     group_scores=[np.mean(nll[np.asarray(groups)==g]) for g in sorted(set(groups))]
     rng=np.random.default_rng(509)
-    boot=np.mean(rng.choice(group_scores,(1000,len(group_scores))),axis=1)
+    boot=np.mean(rng.choice(group_scores,(1000,len(group_scores))),axis=1) if len(group_scores)>1 else None
     return dict(n=len(e),groups=len(set(groups)),median_cm=float(np.median(err)),p95_cm=float(np.quantile(err,.95)),
       rmse_cm=float(np.sqrt(np.mean(err**2))),bias_cm=(100*e.mean(axis=0)).tolist(),
       gaussian_nll=float(nll.mean()),group_mean_nll=float(np.mean(group_scores)),
-      group_bootstrap_nll_ci95=np.quantile(boot,[.025,.975]).tolist(),
+      group_bootstrap_nll_ci95=np.quantile(boot,[.025,.975]).tolist() if boot is not None else None,
+      interval_note="unavailable with fewer than two independent groups" if boot is None else "group bootstrap",
       coverage={str(p):float(np.mean(nees<=chi2.ppf(p,2))) for p in [.5,.8,.9,.95,.99]},
       mean_mahalanobis2=float(nees.mean()),rms_sigma_cm=float(100*np.sqrt(np.mean(np.trace(R,axis1=1,axis2=2))/2)))
 

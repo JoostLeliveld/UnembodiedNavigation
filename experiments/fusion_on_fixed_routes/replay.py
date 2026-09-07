@@ -1,27 +1,7 @@
-"""Every fusion arm on EXACTLY the same observations, by replaying one drive offline.
+"""Retired historical replay helpers, preserved only for provenance audits.
 
-**Why this is allowed here, and why it is better than one drive per arm.** The route is
-fixed. The robot's path, its odometry and every camera's reading are therefore inputs, not
-outcomes -- so a fusion rule cannot change what the cameras saw, only what the filter does
-with it. Replaying the logged observation stream through different rules removes run-to-run
-variance *by construction*: the 1.6 points of calibration and 0.09 cm of error that separate
-two identical closed-loop drives become exactly zero, and a 0.3 cm difference between rules
-becomes measurable instead of being buried.
-
-It also lets the network be taken apart. "What if only camera E existed?" is not a drive you
-can run without rebuilding the world; it is a subset of a stream you already have.
-
-**What it cannot answer:** anything where the belief steers the robot. A worse filter would
-have driven a different path and seen different cameras. That feedback is real and this
-method is blind to it, which is exactly why the closed-loop drives still exist -- this
-answers "which rule uses the data best", they answer "does it survive being in the loop".
-
-Each observation is applied at the instant the CAMERA saw it, so the pipeline delay the
-runtime has to compensate for is absent here by construction.
-
-    python3 experiments/fusion_on_fixed_routes/replay.py [DRIVE_GLOB]
-
-Writes ``logs/studies/fusion_on_fixed_routes/replay/results.json``.
+The CLI fails closed. These old helpers are not a supported accuracy evaluator;
+use the manifest-bound commissioning replay through aligned.py for new analysis.
 """
 from __future__ import annotations
 
@@ -231,76 +211,12 @@ CHOSEN_FLOOR_CM = 0.0
 
 
 def main():
-    pattern = sys.argv[1] if len(sys.argv) > 1 else "drives_commissioning_v*"
-    runs = sorted({p.parent for g in DRIVES.glob(pattern)
-                   for p in g.rglob("fusion_observations.csv")})
-    runs = [r for r in runs if "obs_stamp" in open(r / "fusion_observations.csv").readline()]
-    if not runs:
-        raise SystemExit(f"no drives with obs_stamp under {pattern}")
-    loaded = {}
-    for run in runs:
-        steps, observations = load(run)
-        loaded[run] = (steps, observations)
-    held_out = runs[-1]
-    fit = runs[:-1]
-    print(f"replaying {len(runs)} drives of the same fixed route "
-          f"({len(fit)} to choose the floor, 1 held out)\n")
-
-    # --- how far may the belief shrink? ------------------------------------------------
-    print("DIAGNOSTIC, not a result: how much the answer moves with a covariance floor "
-          "nobody\n  has measured. The measured mechanism is in repeating_error.py.")
-    print(f"  {'floor':>8} {'median error':>14} {'calibration (2 = honest)':>26}")
-    ladder = {}
-    for floor_cm in BELIEF_FLOOR_LADDER:
-        rows = []
-        for run in fit:
-            steps, observations = loaded[run]
-            rows.append(summarise(steps, replay(
-                steps, bind(steps, observations, set(CAMERAS)), "independent",
-                belief_floor_m=floor_cm / 100.0)))
-        error = float(np.median([r["median_error_cm"] for r in rows]))
-        nees = float(np.median([r["nees"] for r in rows]))
-        ladder[floor_cm] = dict(median_error_cm=error, nees=nees)
-        mark = "  <- as deployed" if floor_cm == 0.0 else ""
-        print(f"  {floor_cm:6.1f} cm {error:11.2f} cm {nees:22.2f}{mark}")
-    print("  No value is chosen here. Picking one against the calibration column would be "
-          "fitting\n  the answer to the score.")
-
-    # --- the arms, all at the chosen floor ----------------------------------------------
-    floor = CHOSEN_FLOOR_CM / 100.0
-    report = {"floor_ladder": ladder, "chosen_floor_cm": CHOSEN_FLOOR_CM, "drives": {}}
-    for run in runs:
-        steps, observations = loaded[run]
-        label = f"{run.parents[3].name}/{run.parents[2].name}"
-        tag = " (HELD OUT)" if run is held_out else ""
-        attached = bind(steps, observations, set(CAMERAS))
-        arms = {}
-        for camera in CAMERAS:
-            arms[f"camera {camera} alone"] = summarise(steps, replay(
-                steps, bind(steps, observations, {camera}), "independent",
-                belief_floor_m=floor))
-        for rule, name in (("best_single", "all five: the most confident one"),
-                           ("distance_angle", "all five: weighted by distance"),
-                           ("independent", "all five: precisions add"),
-                           ("joint_network", "all five: one robust batch estimate")):
-            arms[name] = summarise(steps, replay(steps, attached, rule, belief_floor_m=floor))
-        arms["all five: precisions add, NO floor"] = summarise(
-            steps, replay(steps, attached, "independent"))
-        arms["no cameras at all (dead reckoning)"] = summarise(
-            steps, replay(steps, {}, "independent", belief_floor_m=floor))
-        print(f"\n=== {label}{tag} — {len(steps)} steps, "
-              f"{len(observations)} logged readings ===")
-        print(f"  {'arm':38} {'corrections':>11} {'median':>9} {'p95':>9} "
-              f"{'longest blind':>21} {'claims':>8} {'calib':>7}")
-        for name, s in arms.items():
-            print(f"  {name:38} {s['corrections']:11d} {s['median_error_cm']:6.2f} cm "
-                  f"{s['p95_error_cm']:6.2f} cm {s['worst_blind_s']:9.1f} s = "
-                  f"{s['worst_blind_m']:5.2f} m {s['claims_cm']:5.2f} cm {s['nees']:7.2f}")
-        report["drives"][label + tag] = arms
-
-    OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "results.json").write_text(json.dumps(report, indent=1))
-    print(f"\nwrote {OUT / 'results.json'}")
+    raise SystemExit(
+        "This historical replay is retired: its logger-tick observation pairing and "
+        "directory-glob selection do not meet the evidence contract. Use "
+        "experiments/icra_commissioning/replay.py with an explicit frozen selection "
+        "or network_replay.py for the registered diagnostic pilot. Preserve old outputs."
+    )
 
 
 if __name__ == "__main__":

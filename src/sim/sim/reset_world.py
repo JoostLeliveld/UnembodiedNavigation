@@ -22,6 +22,7 @@ class ResetWorld(Node):
         self.client = self.create_client(ControlWorld, self.service_name)
         self.future = None
         self.done = False
+        self.failed = False
 
         self.get_logger().info(f"Waiting for {self.service_name} to reset world")
         self.create_timer(0.2, self._tick)
@@ -39,11 +40,17 @@ class ResetWorld(Node):
             return
 
         if self.future.done():
-            result = self.future.result()
-            if hasattr(result, 'success') and not result.success:
-                self.get_logger().warn('World reset reported failure')
+            try:
+                result = self.future.result()
+            except Exception as exc:  # noqa: BLE001
+                self.failed = True
+                self.get_logger().error(f'World reset service failed: {exc}')
             else:
-                self.get_logger().info('World reset complete')
+                if hasattr(result, 'success') and not result.success:
+                    self.failed = True
+                    self.get_logger().error('World reset reported failure')
+                else:
+                    self.get_logger().info('World reset complete')
             self.done = True
 
 
@@ -58,7 +65,7 @@ def main(args=None):
             if node.done:
                 node.destroy_node()
                 rclpy.shutdown()
-                return 0
+                return 1 if node.failed else 0
             if node.timeout_s > 0.0 and (time.monotonic() - start) > node.timeout_s:
                 node.get_logger().error(f"Timeout waiting for {node.service_name}")
                 node.destroy_node()

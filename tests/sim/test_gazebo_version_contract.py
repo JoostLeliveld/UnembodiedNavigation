@@ -22,11 +22,11 @@ def test_sim_package_describes_the_runtime_it_actually_uses():
     assert "Harmonic" not in description
 
 
-def test_service_bridges_use_service_syntax_not_topic_type_syntax():
+def test_set_pose_bridge_uses_service_syntax_and_unsafe_reset_is_not_bridged():
     launch = (ROOT / "src/sim/launch/bringup_sim.launch.py").read_text(encoding="utf-8")
 
     assert "/set_pose@ros_gz_interfaces/srv/SetEntityPose'" in launch
-    assert "/control@ros_gz_interfaces/srv/ControlWorld'" in launch
+    assert "/control@ros_gz_interfaces/srv/ControlWorld'" not in launch
     assert "SetEntityPose@gz.msgs" not in launch
     assert "ControlWorld@gz.msgs" not in launch
 

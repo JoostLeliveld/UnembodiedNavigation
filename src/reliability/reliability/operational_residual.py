@@ -38,7 +38,8 @@ and estimate; no number is returned without one. See PLAN.md §5.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Sequence
+from typing import Callable, Iterable, Mapping, Sequence
+import hashlib
 
 import numpy as np
 
@@ -74,6 +75,8 @@ class OperationalResidual:
     state_projection: tuple[tuple[float, float], tuple[float, float]]
     anchored_by: tuple[str, ...]
     held_out: bool
+    measurement_id: str = ''
+    reference_id: str = ''
 
     def total_covariance(
         self, r_cond: Sequence[Sequence[float]]
@@ -117,8 +120,10 @@ def build_operational_residuals(
     measurements: Iterable,
     camera_id: str,
     frame: str = "xy",
-    anchored_by: Sequence[str] = (),
-    observation_jacobian: Sequence[Sequence[float]] | None = None,
+    anchored_by: Sequence[str] | None = None,
+    observation_jacobian: Sequence[Sequence[float]] | Callable | None = None,
+    observation_function: Callable[[np.ndarray], Sequence[float]] | None = None,
+    reference_id: str | None = None,
 ) -> list[OperationalResidual]:
     """Residual records for one camera against a smoothed trajectory.
 
@@ -127,12 +132,13 @@ def build_operational_residuals(
     ``camera_id`` are used, so passing the full set is safe and a mismatched
     ``camera_id`` yields an empty list rather than mislabelled residuals.
 
-    ``held_out`` is derived from ``anchored_by`` -- the sources that actually
-    anchored the trajectory -- not asserted by the caller, so a record cannot claim
-    independence it does not have.
+    ``anchored_by`` is caller-supplied reference provenance. Omission means unknown,
+    never held out; an explicit source list is still not proof of independence.
 
     ``observation_jacobian`` defaults to ``I2`` (the ``xy`` path, ``h(x) = [I2|0]``).
-    For the ``uv`` path pass the camera projection Jacobian at ``mu_t^s``.
+    For ``uv``, supply both the observation function and its Jacobian. The Jacobian
+    propagates state covariance; it is not the function value. Measurement IDs should
+    identify physical acquisitions; absent IDs are conservatively grouped by index.
     """
     frame_key = _validated_frame(frame)
     if not str(camera_id):
@@ -146,12 +152,23 @@ def build_operational_residuals(
         raise ContractValidationError(
             f"smoothed_cov must have shape ({mu.shape[0]}, 2, 2), got {P.shape}"
         )
+    if not np.isfinite(mu).all() or not np.isfinite(P).all():
+        raise ContractValidationError('reference mean/covariance must be finite')
+    if not np.allclose(P, P.transpose(0, 2, 1), atol=1e-10, rtol=0) or np.any(np.linalg.eigvalsh(P) < -1e-10):
+        raise ContractValidationError('reference covariance must be symmetric PSD')
+    if frame_key == 'uv' and (observation_function is None or observation_jacobian is None):
+        raise ContractValidationError('pixel residuals require an observation function and Jacobian')
 
-    H = np.eye(2) if observation_jacobian is None else _as_matrix(observation_jacobian, "observation_jacobian")
-    sources = tuple(sorted({str(s) for s in anchored_by}))
-    held_out = str(camera_id) not in sources
+    H = (None if callable(observation_jacobian) else np.eye(2) if observation_jacobian is None
+         else _as_matrix(observation_jacobian, 'observation_jacobian'))
+    if H is None and observation_function is None:
+        raise ContractValidationError('a nonlinear Jacobian requires an observation function')
+    sources = tuple(sorted({str(s) for s in (anchored_by or ())}))
+    held_out = anchored_by is not None and str(camera_id) not in sources
+    reference_id = str(reference_id or hashlib.sha256(mu.tobytes() + P.tobytes()).hexdigest())
 
     out: list[OperationalResidual] = []
+    seen = set()
     for meas in measurements:
         if str(getattr(meas, "source", "")) != str(camera_id):
             continue
@@ -161,9 +178,14 @@ def build_operational_residuals(
                 f"measurement index {index} outside the {mu.shape[0]}-step smoothed trajectory"
             )
         z = np.asarray(meas.z, dtype=float)
-        predicted = H @ mu[index]
-        if not (np.all(np.isfinite(z)) and np.all(np.isfinite(predicted))):
-            continue
+        jacobian = _as_matrix(observation_jacobian(mu[index]), 'observation_jacobian') if H is None else H
+        measurement_id = str(getattr(meas, 'image_id', '') or getattr(meas, 'event_id', '') or f'{camera_id}/index/{index}')
+        if measurement_id in seen:
+            raise ContractValidationError('duplicate physical measurement in residual population')
+        seen.add(measurement_id)
+        predicted = np.asarray(observation_function(mu[index]) if observation_function is not None else H @ mu[index], dtype=float)
+        if z.shape != (2,) or predicted.shape != (2,) or not (np.isfinite(z).all() and np.isfinite(predicted).all()):
+            raise ContractValidationError('measurement and predicted observation must be finite pairs')
         out.append(
             OperationalResidual(
                 camera_id=str(camera_id),
@@ -172,9 +194,11 @@ def build_operational_residuals(
                 measured=(float(z[0]), float(z[1])),
                 predicted=(float(predicted[0]), float(predicted[1])),
                 residual=(float(z[0] - predicted[0]), float(z[1] - predicted[1])),
-                state_projection=_as_tuple(H @ P[index] @ H.T),
+                state_projection=_as_tuple(jacobian @ P[index] @ jacobian.T),
                 anchored_by=sources,
                 held_out=held_out,
+                measurement_id=measurement_id,
+                reference_id=reference_id,
             )
         )
     return out
@@ -197,6 +221,11 @@ def summarize_residuals(residuals: Sequence[OperationalResidual]) -> ResidualSum
     records = list(residuals)
     if len(records) < 2:
         raise ContractValidationError("at least 2 residuals are required")
+    identities = [(r.camera_id, r.measurement_id or str(r.index)) for r in records]
+    if len(set(identities)) != len(identities):
+        raise ContractValidationError('duplicate physical residual evidence')
+    if len({(r.reference_id, r.anchored_by) for r in records}) != 1:
+        raise ContractValidationError('residuals mix reference trajectories or source provenance')
     frames = {r.frame for r in records}
     if len(frames) != 1:
         raise ContractValidationError(f"residuals mix frames: {sorted(frames)}")

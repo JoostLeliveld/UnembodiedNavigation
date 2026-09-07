@@ -7,13 +7,16 @@ from launch.actions import (
     DeclareLaunchArgument,
     RegisterEventHandler,
     OpaqueFunction,
+    EmitEvent,
+    LogInfo,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import PathJoinSubstitution, LaunchConfiguration, PythonExpression
-from launch.conditions import IfCondition, UnlessCondition
+from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
+from launch.events import Shutdown
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -58,16 +61,23 @@ def _make_contact_bridge(context, *args, **kwargs):
                     if sensor.get("type") == "contact":
                         triples.append((mname, lname, sensor.get("name")))
 
+    # The active AMR carries a body contact sensor so collisions with included
+    # props (which are not editable frozen-world links) still produce physical
+    # evidence. Its fixed base joint is lumped into base_footprint by sdformat.
+    if LaunchConfiguration("robot_model").perform(context) == "warehouse_amr":
+        triples.append(("turtlebot3", "base_footprint", "body_contact"))
+
     if not triples:
         print(f"[bringup_sim] contact bridge: NO <sensor type=\"contact\"> found in "
               f"{world_file}; /world_contacts will be silent (no physics-collision cross-check).")
         return []
 
-    args_list, remaps = [], []
+    args_list, remaps, source_ids = [], [], []
     for (mname, lname, sname) in triples:
         gz_topic = f"/world/{world_name}/model/{mname}/link/{lname}/sensor/{sname}/contact"
         args_list.append(f"{gz_topic}@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts")
         remaps.append((gz_topic, "/world_contacts"))
+        source_ids.append(gz_topic)
     print(f"[bringup_sim] contact bridge: bridging {len(triples)} contact sensors "
           f"from {world_file} -> /world_contacts")
     return [Node(
@@ -77,7 +87,37 @@ def _make_contact_bridge(context, *args, **kwargs):
         arguments=args_list,
         remappings=remaps,
         output="screen",
+    ), Node(
+        package="sim",
+        executable="contact_evidence_node",
+        name="contact_evidence",
+        parameters=[{
+            "contact_topic": "/world_contacts",
+            "status_topic": "/sim/contact_channel_status",
+            "source_ids": source_ids,
+            "heartbeat_s": 1.0,
+        }],
+        output="screen",
     )]
+
+
+def _reject_unsafe_in_place_reset(context, *args, **kwargs):
+    if LaunchConfiguration("reset_world").perform(context).lower() == "true":
+        raise RuntimeError(
+            "reset_world:=true is unsupported: Gazebo Sim 6 reset.all rewinds time "
+            "without clearing robot pose, odometry, or the DiffDrive target. Restart "
+            "the complete launch for a new simulator epoch."
+        )
+    return []
+
+
+def _continue_only_on_success(next_action, gate_name):
+    def _handler(event, _context):
+        if event.returncode == 0:
+            return [next_action]
+        reason = f"{gate_name} exited with code {event.returncode}; aborting simulator startup"
+        return [LogInfo(msg=reason), EmitEvent(event=Shutdown(reason=reason))]
+    return _handler
 
 
 
@@ -223,10 +263,9 @@ def generate_launch_description():
     headless = LaunchConfiguration("headless")
     reset_world_arg = DeclareLaunchArgument(
         "reset_world",
-        default_value="true",
-        description="Reset the Gazebo world on launch",
+        default_value="false",
+        description="Unsupported in-place reset guard; use a complete launch restart",
     )
-    reset_world = LaunchConfiguration("reset_world")
     spawn_x_arg = DeclareLaunchArgument(
         "spawn_x",
         default_value="0.0",
@@ -289,7 +328,8 @@ def generate_launch_description():
         output="screen",
         parameters=[{
             "topic": "/clock",
-            "timeout_s": 0.0,
+            "timeout_s": 30.0,
+            "min_messages": 3,
         }],
     )
     clock_throttle = Node(
@@ -318,40 +358,11 @@ def generate_launch_description():
         output="screen"
     )
 
-    reset_world_node = Node(
-        package="sim",
-        executable="reset_world",
-        name="reset_world",
-        parameters=[{
-            "world_name": world_name,
-            "reset_all": True,
-        }],
-        output="screen",
-        condition=IfCondition(reset_world),
-    )
-
-    reset_after_clock = RegisterEventHandler(
-        OnProcessExit(
-            target_action=wait_for_clock,
-            on_exit=[reset_world_node]
-        ),
-        condition=IfCondition(reset_world),
-    )
-
-    spawn_after_reset = RegisterEventHandler(
-        OnProcessExit(
-            target_action=reset_world_node,
-            on_exit=[spawn]
-        ),
-        condition=IfCondition(reset_world),
-    )
-
     spawn_after_clock = RegisterEventHandler(
         OnProcessExit(
             target_action=wait_for_clock,
-            on_exit=[spawn]
+            on_exit=_continue_only_on_success(spawn, "wait_for_clock"),
         ),
-        condition=UnlessCondition(reset_world),
     )
 
 
@@ -365,11 +376,6 @@ def generate_launch_description():
         "'/world/' + '",
         world_name,
         "' + '/set_pose@ros_gz_interfaces/srv/SetEntityPose'"
-    ])
-    control_service_arg = PythonExpression([
-        "'/world/' + '",
-        world_name,
-        "' + '/control@ros_gz_interfaces/srv/ControlWorld'"
     ])
     clock_remap_src = PythonExpression([
         "'/world/' + '",
@@ -395,10 +401,11 @@ def generate_launch_description():
         package="ros_gz_bridge",
         executable="parameter_bridge",
         arguments=[
-            "/model/turtlebot3/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist",
+            "/model/turtlebot3/cmd_vel_guard_input@geometry_msgs/msg/Twist]gz.msgs.Twist",
             "/model/turtlebot3/odometry@nav_msgs/msg/Odometry[gz.msgs.Odometry",
-            "/model/turtlebot3/odometry_tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V",
+            "/model/turtlebot3/tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V",
             "/model/turtlebot3/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model",
+            "/model/turtlebot3/actuation_outcome@std_msgs/msg/String[gz.msgs.StringMsg",
             # Segmentation stays out of the runtime bridge. Dataset capture
             # enables it through the separate conditional bridge below so a
             # stalled semantic stream cannot take the RGB bridge down with it.
@@ -412,13 +419,13 @@ def generate_launch_description():
             # "/external_camera/segmentation/labels_map@sensor_msgs/msg/Image[gz.msgs.Image",
             clock_arg,
             set_pose_service_arg,
-            control_service_arg,
         ],
         remappings=[
-            ("/model/turtlebot3/cmd_vel", "/cmd_vel"),
+            ("/model/turtlebot3/cmd_vel_guard_input", "/cmd_vel"),
             ("/model/turtlebot3/odometry", "/odom"),
-            ("/model/turtlebot3/odometry_tf", "/tf"),
+            ("/model/turtlebot3/tf", "/tf"),
             ("/model/turtlebot3/joint_states", "/joint_states"),
+            ("/model/turtlebot3/actuation_outcome", "/sim/actuation_outcome"),
             (clock_remap_src, "/clock_full"),
         ],
         output="screen",
@@ -591,6 +598,7 @@ def generate_launch_description():
         *extra_camera_args,
         bridge_overview_camera_arg,
         reset_world_arg,
+        OpaqueFunction(function=_reject_unsafe_in_place_reset),
         spawn_x_arg,
         spawn_y_arg,
         spawn_z_arg,
@@ -599,8 +607,6 @@ def generate_launch_description():
         robot_description,
         ros_gz_bridge,
         clock_throttle,
-        reset_after_clock,
-        spawn_after_reset,
         spawn_after_clock,
         wait_for_clock,
         ros_gz_segmentation_bridge,

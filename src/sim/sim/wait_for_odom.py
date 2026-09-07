@@ -20,6 +20,8 @@ class WaitForOdom(Node):
         self.declare_parameter('expected_yaw', 0.0)
         self.declare_parameter('position_tolerance', 0.5)
         self.declare_parameter('yaw_tolerance', 0.6)
+        self.declare_parameter('expected_frame_id', 'odom')
+        self.declare_parameter('expected_child_frame_id', 'base_footprint')
 
         self.topic = self.get_parameter('topic').value
         self.timeout_s = float(self.get_parameter('timeout_s').value)
@@ -30,8 +32,11 @@ class WaitForOdom(Node):
         self.expected_yaw = float(self.get_parameter('expected_yaw').value)
         self.position_tolerance = float(self.get_parameter('position_tolerance').value)
         self.yaw_tolerance = float(self.get_parameter('yaw_tolerance').value)
+        self.expected_frame_id = str(self.get_parameter('expected_frame_id').value)
+        self.expected_child_frame_id = str(self.get_parameter('expected_child_frame_id').value)
         self.received = False
         self.match_count = 0
+        self.last_stamp_ns = None
 
         self.create_subscription(Odometry, self.topic, self._cb, 10)
         if self.timeout_s > 0.0:
@@ -59,10 +64,30 @@ class WaitForOdom(Node):
 
     def _cb(self, msg: Odometry):
         if not self.received:
+            stamp_ns = int(msg.header.stamp.sec) * 1_000_000_000 + int(msg.header.stamp.nanosec)
+            p = msg.pose.pose.position
+            q = msg.pose.pose.orientation
+            t = msg.twist.twist
+            numeric = (
+                p.x, p.y, p.z, q.x, q.y, q.z, q.w,
+                t.linear.x, t.linear.y, t.linear.z,
+                t.angular.x, t.angular.y, t.angular.z,
+            )
+            valid = (
+                msg.header.frame_id == self.expected_frame_id
+                and msg.child_frame_id == self.expected_child_frame_id
+                and 0 <= int(msg.header.stamp.nanosec) < 1_000_000_000
+                and all(math.isfinite(float(value)) for value in numeric)
+                and sum(float(value) ** 2 for value in (q.x, q.y, q.z, q.w)) > 0.25
+                and (self.last_stamp_ns is None or stamp_ns > self.last_stamp_ns)
+            )
+            self.last_stamp_ns = stamp_ns
+            if not valid:
+                self.match_count = 0
+                return
             if self.require_pose_match:
-                x = float(msg.pose.pose.position.x)
-                y = float(msg.pose.pose.position.y)
-                q = msg.pose.pose.orientation
+                x = float(p.x)
+                y = float(p.y)
                 yaw = self._yaw_from_quaternion(
                     float(q.x), float(q.y), float(q.z), float(q.w)
                 )

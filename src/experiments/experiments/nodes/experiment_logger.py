@@ -4,6 +4,8 @@ import json
 import hashlib
 import math
 import os
+import tempfile
+import threading
 import time
 from collections import deque
 from datetime import datetime
@@ -17,17 +19,21 @@ from tf2_msgs.msg import TFMessage
 from nav_msgs.msg import Odometry, Path
 from ros_gz_interfaces.msg import Contacts
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, DurabilityPolicy
+from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
 from std_msgs.msg import Float64MultiArray, String
 from tf2_geometry_msgs import do_transform_pose
 
 from experiments.core.manifest import create_run_dir, snapshot_configs, write_manifest
-from experiments.core.camera_opportunity_log import CameraOpportunityLog
+from experiments.core.camera_opportunity_log import CameraOpportunityLog, JsonlDeliveryLog
 from experiments.core.world_profiles import load_profile, compute_look_at_from_pose
 from perception.core.detection_diagnostics import (
     DETECTION_DIAGNOSTICS_TOPIC,
     diagnostics_from_message,
 )
+from reliability.fusion_event import FusedCorrectionEvent
+from unav_common.config import parse_bev_affine_calibration
+from unav_common.correction_ledger import validate_correction_ledger
+from unav_common.mission_goal import MISSION_GOAL_TOPIC, mission_goal_from_json
 from unav_common.occlusion_geometry import scene_from_json, signed_distance_to_union_xy
 
 
@@ -90,6 +96,52 @@ def _sha256_file(path: str):
     return digest.hexdigest()
 
 
+def _strict_json_value(value):
+    """Convert runtime diagnostics to interoperable JSON without NaN/Infinity."""
+    if isinstance(value, dict):
+        return {str(key): _strict_json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_strict_json_value(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return _strict_json_value(value.tolist())
+    if isinstance(value, np.generic):
+        return _strict_json_value(value.item())
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
+def _write_json_atomic(path: str, payload) -> None:
+    """Commit strict JSON by atomic replace and sync the containing directory."""
+    directory = os.path.dirname(os.path.abspath(path))
+    os.makedirs(directory, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.summary-', suffix='.tmp', dir=directory)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+            json.dump(_strict_json_value(payload), handle, indent=2,
+                      sort_keys=True, allow_nan=False)
+            handle.write('\n')
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        try:
+            directory_fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError:
+            # Atomic replacement is complete. Some filesystems do not permit
+            # directory fsync; the summary records file-level completion.
+            pass
+    except Exception:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+
+
 def _split_prisms_by_prefix(prisms, prefix: str):
     token = str(prefix or '').strip()
     if not token:
@@ -105,6 +157,8 @@ def _split_prisms_by_prefix(prisms, prefix: str):
 KNOWN_ASSIMILATION_STATUSES = frozenset({
     "accepted", "accepted_bootstrap", "reanchored", "rejected", "dropped",
 })
+EVENT_DRAIN_QUIET_S = 0.20
+EVENT_DRAIN_MAX_S = 0.75
 
 class ExperimentLogger(Node):
     def __init__(self):
@@ -116,6 +170,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('method', '')
         self.declare_parameter('perception_backend', '')
         self.declare_parameter('world', '')
+        self.declare_parameter('world_sdf_path', '')
         self.declare_parameter('task', '')
         self.declare_parameter('planner', '')
         self.declare_parameter('state_source_x', 'unknown')
@@ -128,6 +183,9 @@ class ExperimentLogger(Node):
         # result's arm identity is recorded in the run rather than in its path.
         self.declare_parameter('manager_settings_json', '')
         self.declare_parameter('campaign_config_path', '')
+        self.declare_parameter('outcome_journal_path', '')
+        self.declare_parameter('manager_outcome_journal_path', '')
+        self.declare_parameter('operational_belief_timeout_s', 0.5)
         self.declare_parameter('use_pixel_correction', False)
         self.declare_parameter('pixel_timeout_s', 0.5)
         self.declare_parameter('use_ambiguity', False)
@@ -148,6 +206,9 @@ class ExperimentLogger(Node):
         self.declare_parameter('use_visibility_model', False)
         self.declare_parameter('visibility_artifact_path', '')
         self.declare_parameter('camera_network_artifact_path', '')
+        self.declare_parameter('camera_network_expected_sha256', '')
+        self.declare_parameter('camera_network_expected_source_hashes_json', '')
+        self.declare_parameter('camera_network_camera_ids', '')
         self.declare_parameter('risk_weight_obs', 1.0)
         self.declare_parameter('ambiguity_weight', 1.0)
         self.declare_parameter('goal_sigma_uv', 2.0)
@@ -175,6 +236,8 @@ class ExperimentLogger(Node):
         self.declare_parameter('visibility_geometry_json', '')
         self.declare_parameter('collision_geometry_json', '')
         self.declare_parameter('robot_collision_radius_m', 0.125)
+        self.declare_parameter('robot_length_m', 0.8)
+        self.declare_parameter('robot_width_m', 0.55)
         # When False, a geometric wall/obstacle penetration is still logged but does
         # NOT terminate the run (only physical contact does). Lets a run continue past
         # a boundary graze so its natural outcome (goal / stuck / timeout) and full GT
@@ -292,6 +355,9 @@ class ExperimentLogger(Node):
         self.method = str(self.get_parameter('method').value)
         self.perception_backend = str(self.get_parameter('perception_backend').value)
         self.world = self.get_parameter('world').value
+        self.world_sdf_path = str(self.get_parameter('world_sdf_path').value or '').strip()
+        if self.world_sdf_path and not os.path.isfile(self.world_sdf_path):
+            raise RuntimeError('configured world_sdf_path does not name a readable file')
         self.task = self.get_parameter('task').value
         self.planner = self.get_parameter('planner').value
         self.state_source_x = str(self.get_parameter('state_source_x').value)
@@ -305,6 +371,15 @@ class ExperimentLogger(Node):
             self.get_parameter('manager_settings_json').value or '')
         self.campaign_config_path = str(
             self.get_parameter('campaign_config_path').value or '')
+        self.outcome_journal_path = str(
+            self.get_parameter('outcome_journal_path').value or '').strip()
+        self.manager_outcome_journal_path = str(
+            self.get_parameter('manager_outcome_journal_path').value or '').strip()
+        self.operational_belief_timeout_s = float(
+            self.get_parameter('operational_belief_timeout_s').value)
+        if (not math.isfinite(self.operational_belief_timeout_s)
+                or self.operational_belief_timeout_s <= 0.0):
+            raise RuntimeError('operational_belief_timeout_s must be finite and positive')
         self.heading_update_mode = str(self.get_parameter('heading_update_mode').value)
         self.state_reanchor_m = float(self.get_parameter('state_reanchor_m').value)
         self.state_max_predict_dt_s = float(
@@ -339,6 +414,34 @@ class ExperimentLogger(Node):
         self.use_visibility_model = bool(self.get_parameter('use_visibility_model').value)
         self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value)
         self.camera_network_artifact_path = str(self.get_parameter('camera_network_artifact_path').value)
+        self.camera_network_expected_sha256 = str(
+            self.get_parameter('camera_network_expected_sha256').value or '').strip()
+        if self.camera_network_expected_sha256 and (
+                len(self.camera_network_expected_sha256) != 64
+                or any(char not in '0123456789abcdef'
+                       for char in self.camera_network_expected_sha256)):
+            raise RuntimeError(
+                'camera_network_expected_sha256 must be a lowercase SHA-256')
+        source_hashes_text = str(
+            self.get_parameter('camera_network_expected_source_hashes_json').value or '').strip()
+        try:
+            self.camera_network_source_hashes = (
+                json.loads(source_hashes_text) if source_hashes_text else {})
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError('camera_network_expected_source_hashes_json is malformed') from exc
+        if not isinstance(self.camera_network_source_hashes, dict) or not all(
+                isinstance(key, str) and key
+                and isinstance(value, str) and len(value) == 64
+                and all(char in '0123456789abcdef' for char in value)
+                for key, value in self.camera_network_source_hashes.items()):
+            raise RuntimeError(
+                'camera network source hashes must map names to lowercase SHA-256 strings')
+        camera_ids_text = str(
+            self.get_parameter('camera_network_camera_ids').value or '').strip()
+        self.camera_network_camera_ids = [
+            item.strip() for item in camera_ids_text.split(',') if item.strip()]
+        if len(self.camera_network_camera_ids) != len(set(self.camera_network_camera_ids)):
+            raise RuntimeError('camera_network_camera_ids contains duplicates')
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
         self.ambiguity_weight = float(self.get_parameter('ambiguity_weight').value)
         self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
@@ -368,6 +471,8 @@ class ExperimentLogger(Node):
         self.visibility_geometry_json = str(self.get_parameter('visibility_geometry_json').value)
         self.collision_geometry_json = str(self.get_parameter('collision_geometry_json').value)
         self.robot_collision_radius_m = float(self.get_parameter('robot_collision_radius_m').value)
+        self.robot_length_m = float(self.get_parameter('robot_length_m').value)
+        self.robot_width_m = float(self.get_parameter('robot_width_m').value)
         self.terminate_on_geom_collision = bool(self.get_parameter('terminate_on_geom_collision').value)
         if self.terminate_on_geom_collision:
             raise RuntimeError(
@@ -596,6 +701,9 @@ class ExperimentLogger(Node):
                 manager_settings = {}
         except (ValueError, TypeError):
             manager_settings = {}
+        world_sdf_sha256 = _sha256_file(self.world_sdf_path)
+        if self.world_sdf_path and world_sdf_sha256 is None:
+            raise RuntimeError('configured world_sdf_path cannot be hashed')
 
         manifest_data = {
             'run_id': self.run_id,
@@ -626,13 +734,33 @@ class ExperimentLogger(Node):
             #       drive per interpretation.
             #   7 = raw per-camera opportunities (including misses and refusals
             #       upstream of manager selection) retained in camera_opportunities.jsonl.
-            'logging_schema_version': 7,
+            #   8 = raw correction/decision/stage deliveries are retained exactly;
+            #       identity-bearing fused publications have their own ledger; terminal
+            #       schema-2 posterior fields pass through; final summary follows a
+            #       bounded drain, complete ledger reconciliation and atomic file close.
+            'logging_schema_version': 8,
             'camera_opportunity_log': 'camera_opportunities.jsonl',
             'camera_opportunity_scope': 'all received detector outputs; not all scheduled sensor frames',
+            'camera_opportunity_schema': 'camera_opportunity_log.v2',
+            'runtime_event_delivery_ledger': 'runtime_event_deliveries.jsonl',
+            'runtime_event_delivery_schema': 'runtime_event_delivery.v1',
+            'detector_outcome_journal_path': self.outcome_journal_path,
+            'manager_outcome_journal_path': self.manager_outcome_journal_path,
+            'correction_publication_ledger': 'correction_publications.csv',
+            'correction_publication_schema': 'correction_publications.v2',
+            'correction_assimilation_schema': '1_or_2_passthrough',
+            'committed_posterior_capability': (
+                'terminal_schema_2_required_with_mean_full_covariance_frame_state_time_revision'),
+            'command_diagnostic_semantics': (
+                'cmd_raw_is_requested;cmd_is_ros_published;neither_is_physical_application'),
+            'actuation_outcome_semantics': (
+                'native_forwarding_boundary_only;physical_application_verified_false'),
             'timestamp': datetime.now().isoformat(),
             'method': self.method or self.planner,
             'perception_backend': self.perception_backend,
             'world': self.world,
+            'world_sdf_path': self.world_sdf_path,
+            'world_sdf_sha256': world_sdf_sha256,
             'task': self.task,
             'planner': self.planner,
             'state_source_x': self.state_source_x,
@@ -647,6 +775,7 @@ class ExperimentLogger(Node):
             'stale_belief_inflate_m2_per_s': self.stale_belief_inflate_m2_per_s,
             'stale_belief_inflate_cap_m2': self.stale_belief_inflate_cap_m2,
             'require_state_correction_envelope': self.require_state_correction_envelope,
+            'operational_belief_timeout_s': self.operational_belief_timeout_s,
             'use_pixel_correction': self.use_pixel_correction,
             'pixel_timeout_s': self.pixel_timeout_s,
             'use_ambiguity': self.use_ambiguity,
@@ -675,6 +804,9 @@ class ExperimentLogger(Node):
             'collision_geometry_json': self.collision_geometry_json,
             'collision_geometry_sha256': _sha256_text(self.collision_geometry_json),
             'robot_collision_radius_m': self.robot_collision_radius_m,
+            'robot_length_m': self.robot_length_m, 'robot_width_m': self.robot_width_m,
+            'planner_collision_model': 'oriented_rectangle_swept_v1',
+            'legacy_geometry_diagnostic_model': 'circle',
             'use_command_noise': self.use_command_noise,
             'command_noise_linear_slip_mean': self.command_noise_linear_slip_mean,
             'command_noise_linear_slip_std': self.command_noise_linear_slip_std,
@@ -807,11 +939,23 @@ class ExperimentLogger(Node):
             self.visibility_artifact_path)
         manifest_data['camera_network_artifact_sha256'] = _sha256_file(
             self.camera_network_artifact_path)
+        actual_camera_network_sha256 = manifest_data['camera_network_artifact_sha256']
+        if (self.camera_network_expected_sha256
+                and actual_camera_network_sha256 != self.camera_network_expected_sha256):
+            raise RuntimeError(
+                'camera network artifact SHA-256 differs from the configured expectation')
+        manifest_data['camera_network_expected_sha256'] = self.camera_network_expected_sha256
+        manifest_data['camera_network_source_hashes'] = dict(
+            self.camera_network_source_hashes)
+        manifest_data['camera_network_camera_ids'] = list(self.camera_network_camera_ids)
         if self.camera_network_artifact_path:
             manifest_data['planner_field_semantics'] = 'IWAI detector-score precision proxy; not a measurement covariance or calibrated posterior'
             manifest_data['planner_p_vis_semantics'] = 'mean expected detector score across artifact cameras; not probability of a usable observation'
         manifest_data['manager_commissioned_calibration_sha256'] = _sha256_file(
             str(manager_settings.get('manager_commissioned_calibration_path', '') or '')
+        )
+        manifest_data['manager_learned_correction_sha256'] = _sha256_file(
+            str(manager_settings.get('manager_learned_correction_path', '') or '')
         )
         # The commissioned world-plane covariance table, hashed for the same reason: a drive
         # must not be scoreable against a table that has since been refitted.
@@ -862,6 +1006,7 @@ class ExperimentLogger(Node):
         self.heading_diag = None
         self.pixel_correction_diag = None
         self._assimilation_source_batches = set()
+        self._assimilation_payloads = {}
         self._assimilation_count = 0
         self._assimilation_dropped_count = 0
         self.cmd_msg = None
@@ -883,6 +1028,27 @@ class ExperimentLogger(Node):
         self._motion_history = deque()
         self._stop_requested = False
         self._completed = False
+        self._finalizing = False
+        self._accepting_events = True
+        self._event_streams_closed = False
+        self._event_lock = threading.RLock()
+        self._last_event_wall_s = time.monotonic()
+        self._finish_requested_wall_s = math.nan
+        self._finish_reason = ''
+        self._finish_stamp = math.nan
+        self._late_event_count = 0
+        self._runtime_event_counts = {}
+        self._runtime_event_invalid_count = 0
+        self._fusion_decision_payloads = {}
+        self._correction_publications = {}
+        self._data_file_close_errors = []
+        self._terminal_stop_verified = False
+        self._terminal_stop_event_id = ''
+        self._terminal_zero_forwarded = False
+        self._mission_goal_state = None
+        self._active_mission_goal_id = ''
+        self._contact_channel_status = None
+        self._contact_delivery_seq = 0
         self._last_tf_warn_wall = 0.0
         self._frame_sanity_logged = False
         self._frame_sanity = {
@@ -992,12 +1158,46 @@ class ExperimentLogger(Node):
         #: the manager's latest decision: which cameras went into the correction, and when
         self.fusion_decision = None
         self.fusion_decision_stamp = None
+        self.runtime_event_path = os.path.join(
+            self.run_dir, 'runtime_event_deliveries.jsonl')
+        self.runtime_event_file = open(self.runtime_event_path, 'w', encoding='utf-8')
+        self.runtime_event_log = JsonlDeliveryLog(self.runtime_event_file)
+        event_qos = QoSProfile(
+            depth=4096,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        compatible_event_qos = QoSProfile(
+            depth=4096,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+        )
         self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
         self.create_subscription(Odometry, '/odom_noisy', self._odom_noisy_cb, 10)
         self.create_subscription(TFMessage, '/ground_truth_tf', self._ground_truth_cb, 50)
         self.create_subscription(PoseWithCovarianceStamped, '/state/bev', self._state_cb, 10)
         self.create_subscription(
             String, '/reliability/camera_manager/decision', self._fusion_decision_cb, 10)
+        self.create_subscription(
+            String, '/reliability/camera_manager/fused_correction',
+            self._fused_correction_cb, 100)
+        for topic in ('/perception/camera_batch_outcome', MISSION_GOAL_TOPIC):
+            self.create_subscription(
+                String, topic,
+                lambda msg, name=topic: self._runtime_outcome_cb(name, msg),
+                event_qos,
+            )
+        # These active publishers are volatile today. A volatile request remains
+        # compatible if a producer is upgraded to transient-local later, whereas a
+        # transient-local request silently disconnects from the current bridge/manager.
+        for topic in ('/reliability/camera_manager/batch_outcome',
+                      '/sim/actuation_outcome', '/sim/contact_outcome',
+                      '/sim/contact_channel_status'):
+            self.create_subscription(
+                String, topic,
+                lambda msg, name=topic: self._runtime_outcome_cb(name, msg),
+                compatible_event_qos,
+            )
         self.create_subscription(Float64MultiArray, '/state/heading_diagnostics', self._heading_diag_cb, 10)
         self.create_subscription(PoseWithCovarianceStamped, '/planner_belief', self._planner_belief_cb, 10)
         self.create_subscription(PoseStamped, '/perception/pixel_pose', self._obs_cb, 10)
@@ -1227,6 +1427,28 @@ class ExperimentLogger(Node):
         self.assimilation_writer.writerow([
             'source_batch_id', 'correction_stamp', 'apply_stamp',
             'status', 'reason', 'accepted', 'nis', 'belief_stamp_after',
+            'schema_version', 'epoch', 'revision_before', 'revision_after',
+            'frame_id', 'state_stamp_ns', 'posterior_mean',
+            'posterior_covariance', 'valid', 'motion_supported',
+            'logger_receive_stamp', 'correction_stamp_ns', 'apply_stamp_ns',
+            'belief_stamp_before_ns', 'belief_stamp_after_ns',
+            'source_event_id', 'source_epoch', 'source_publication_seq',
+            'source_member_ids', 'source_payload_sha256',
+        ])
+
+        # The actual identity-bearing correction envelope is a distinct boundary
+        # from the manager's later display/diagnostic decision message.
+        self.correction_publication_path = os.path.join(
+            self.run_dir, 'correction_publications.csv')
+        self.correction_publication_file = open(
+            self.correction_publication_path, 'w', newline='')
+        self.correction_publication_writer = csv.writer(self.correction_publication_file)
+        self.correction_publication_writer.writerow([
+            'source_batch_id', 'event_id', 'epoch', 'publication_seq',
+            'correction_stamp', 'correction_stamp_ns', 'common_capture_stamp',
+            'common_capture_stamp_ns', 'publication_stamp_ns', 'logger_receive_stamp',
+            'frame_id', 'schema_version', 'accepted_camera_ids', 'member_ids',
+            'payload_sha256',
         ])
 
         self.plan_file = None
@@ -1338,8 +1560,7 @@ class ExperimentLogger(Node):
         self._camera_opportunity_subscriptions = [
             self.create_subscription(
                 String, f'/perception/camera_observation/{camera}',
-                lambda msg, c=camera: self.camera_opportunity_log.append(
-                    c, msg.data, self.get_clock().now().nanoseconds * 1e-9),
+                lambda msg, c=camera: self._camera_opportunity_cb(c, msg),
                 100)
             for camera in ('camera_A', 'camera_B', 'camera_C', 'camera_D', 'camera_E')
         ]
@@ -1378,16 +1599,7 @@ class ExperimentLogger(Node):
 
     @staticmethod
     def _parse_bev_affine(raw: str):
-        text = str(raw or '').strip()
-        if not text:
-            return None
-        try:
-            vals = [float(v) for v in text.replace(';', ',').split(',') if v.strip()]
-        except ValueError:
-            return None
-        if len(vals) != 6:
-            return None
-        return vals
+        return parse_bev_affine_calibration(raw)
 
     def _apply_bev_calibration(self, x: float, y: float) -> tuple[float, float]:
         if self._bev_affine is not None:
@@ -1500,7 +1712,14 @@ class ExperimentLogger(Node):
         return bool(self._goal_region_entered)
 
     def _maybe_finish_for_goal(self, stamp: float, goal_dist: float, cmd_v: float, cmd_w: float) -> bool:
-        if not (self.auto_stop_on_goal and self.goal_msg and math.isfinite(goal_dist)):
+        mission = getattr(self, '_mission_goal_state', None)
+        if mission is not None and (not mission.is_final or mission.status != 'active'):
+            self._goal_in_radius_since = None
+            self._goal_stable_since = None
+            return False
+        if not (self.auto_stop_on_goal
+                and (self.goal_msg is not None or mission is not None)
+                and math.isfinite(goal_dist)):
             self._goal_in_radius_since = None
             self._goal_stable_since = None
             return False
@@ -1654,10 +1873,9 @@ class ExperimentLogger(Node):
         # warehouse_v2, the ros_gz bridge publishes /ground_truth_tf with header.stamp
         # exactly 0 on every transform, because gz.msgs.Pose_V carries its time on the
         # message header and not on the individual poses. So the sample is stamped at
-        # RECEIPT on the simulation clock, which leaves only the transport delay. Gazebo
-        # publishes dynamic_pose/info every world step (1 kHz here), so that delay is
-        # bounded by how far behind the bridge runs -- which is why the inter-sample
-        # interval is measured below and reported in the run summary rather than assumed.
+        # RECEIPT on the simulation clock. That stamp includes an unknown transport
+        # delay. Inter-sample intervals below describe delivered cadence only; they do
+        # not bound a constant or slowly varying bridge delay.
         receipt_s = float(self.get_clock().now().nanoseconds) * 1e-9
         for tr in msg.transforms:
             if tr.child_frame_id == 'turtlebot3':
@@ -1681,24 +1899,216 @@ class ExperimentLogger(Node):
                         self._gt_intervals.append(stamp - self._gt_buf[-1][0])
                     self._gt_buf.append((stamp, x, y, yaw))
 
+    def _record_runtime_delivery(self, topic: str, payload: str):
+        """Append one raw ROS delivery before any semantic interpretation."""
+        with self._event_lock:
+            if not self._accepting_events or self._event_streams_closed:
+                self._late_event_count += 1
+                return None
+            receipt = float(self.get_clock().now().nanoseconds) * 1e-9
+            try:
+                record = self.runtime_event_log.append(topic, payload, receipt)
+            except Exception as exc:
+                self._record_invalid(f'runtime_event_log_write_failed:{type(exc).__name__}')
+                raise
+            self._last_event_wall_s = time.monotonic()
+            self._runtime_event_counts[topic] = self._runtime_event_counts.get(topic, 0) + 1
+            if not record.get('valid_json_object', False):
+                self._runtime_event_invalid_count += 1
+            return record
+
+    def _camera_opportunity_cb(self, camera: str, message: String) -> None:
+        with self._event_lock:
+            if not self._accepting_events or self._event_streams_closed:
+                self._late_event_count += 1
+                return
+            receipt = float(self.get_clock().now().nanoseconds) * 1e-9
+            try:
+                record = self.camera_opportunity_log.append(camera, message.data, receipt)
+            except Exception as exc:
+                self._record_invalid(
+                    f'camera_opportunity_log_write_failed:{type(exc).__name__}')
+                raise
+            self._last_event_wall_s = time.monotonic()
+            if not record.get('valid_contract', False):
+                self._record_invalid('invalid_camera_opportunity_delivery')
+            elif record.get('conflicting_duplicate', False):
+                self._record_invalid('conflicting_camera_opportunity_delivery')
+
+    def _runtime_outcome_cb(self, topic: str, message: String) -> None:
+        record = self._record_runtime_delivery(topic, message.data)
+        if record is None:
+            return
+        payload = record.get('parsed_payload')
+        if not isinstance(payload, dict):
+            self._record_invalid(f'malformed_runtime_outcome:{topic}')
+            return
+        if topic == MISSION_GOAL_TOPIC:
+            try:
+                mission = mission_goal_from_json(message.data)
+            except Exception:
+                self._record_invalid('malformed_mission_goal_state')
+                return
+            previous_id = getattr(self, '_active_mission_goal_id', '')
+            if previous_id and previous_id != mission.goal_id:
+                self._goal_in_radius_since = None
+                self._goal_stable_since = None
+                self._goal_region_entered = False
+                self._goal_region_first_stamp = math.nan
+            self._active_mission_goal_id = mission.goal_id
+            self._mission_goal_state = mission
+            if mission.status == 'cancelled':
+                cancellation_reason = mission.reason or 'unspecified'
+                self._record_invalid(f'mission_cancelled:{cancellation_reason}')
+                self._finish_run(
+                    'mission_cancelled',
+                    float(self.get_clock().now().nanoseconds) * 1e-9)
+        elif topic == '/sim/actuation_outcome' and self._stop_requested:
+            try:
+                linear = float(payload.get('forwarded_linear'))
+                angular = float(payload.get('forwarded_angular'))
+                status = str(payload.get('status', '') or '')
+                if (status in ('forwarded', 'forwarded_zero')
+                        and abs(linear) <= 1e-12
+                        and abs(angular) <= 1e-12):
+                    self._terminal_zero_forwarded = True
+                    self._terminal_stop_event_id = str(
+                        payload.get('event_id', '') or '')
+            except (TypeError, ValueError):
+                self._record_invalid('malformed_actuation_outcome')
+        elif topic == '/sim/contact_channel_status':
+            try:
+                if type(payload.get('schema_version')) is not int or payload['schema_version'] != 1:
+                    raise ValueError('unsupported contact status schema')
+                if not str(payload.get('producer_epoch', '') or '').strip():
+                    raise ValueError('missing contact status epoch')
+                if not str(payload.get('event_id', '') or '').strip():
+                    raise ValueError('missing contact status event ID')
+                if (isinstance(payload.get('sequence'), bool)
+                        or not isinstance(payload.get('sequence'), int)
+                        or payload['sequence'] < 0):
+                    raise ValueError('invalid contact status sequence')
+                if payload.get('state') not in (
+                        'missing_configuration',
+                        'configured_silent_requires_positive_control',
+                        'contact_deliveries_observed'):
+                    raise ValueError('invalid contact observation state')
+                if payload.get('silence_is_no_contact') is not False:
+                    raise ValueError('invalid contact silence semantics')
+                self._contact_channel_status = dict(payload)
+            except (KeyError, TypeError, ValueError):
+                self._record_invalid('malformed_contact_channel_status')
+
+    def _fused_correction_cb(self, message: String) -> None:
+        topic = '/reliability/camera_manager/fused_correction'
+        record = self._record_runtime_delivery(topic, message.data)
+        if record is None:
+            return
+        payload = record.get('parsed_payload')
+        try:
+            if (not isinstance(payload, dict)
+                    or type(payload.get('schema_version')) is not int
+                    or payload.get('schema_version') not in (1, 2)):
+                raise ValueError('unsupported correction publication schema')
+            if payload['schema_version'] == 2:
+                payload = FusedCorrectionEvent.from_json(message.data).payload
+            source_batch_id = str(payload.get('source_batch_id', '') or '').strip()
+            if not source_batch_id:
+                raise ValueError('correction publication has no source_batch_id')
+            correction_stamp = float(payload['correction_stamp'])
+            if not math.isfinite(correction_stamp):
+                raise ValueError('correction publication stamp is not finite')
+            frame_id = str(payload.get('frame_id', '') or '').strip()
+            if not frame_id:
+                raise ValueError('correction publication has no frame_id')
+            xy = np.asarray(payload['xy'], dtype=float)
+            covariance = np.asarray(payload['covariance_m2'], dtype=float)
+            if xy.shape != (2,) or covariance.shape != (2, 2):
+                raise ValueError('correction publication payload shape is invalid')
+            if not np.isfinite(xy).all() or not np.isfinite(covariance).all():
+                raise ValueError('correction publication payload is not finite')
+            if not np.allclose(covariance, covariance.T, rtol=1e-7, atol=1e-10):
+                raise ValueError('correction publication covariance is not symmetric')
+            np.linalg.cholesky(covariance)
+            canonical = {
+                'source_batch_id': source_batch_id,
+                'correction_stamp': correction_stamp,
+                'frame_id': frame_id,
+                'payload': {'xy': xy.tolist(), 'covariance_m2': covariance.tolist()},
+                'member_ids': list(
+                    payload.get('member_ids')
+                    or payload.get('physical_member_ids')
+                    or payload.get('accepted_camera_ids')
+                    or []),
+            }
+            for field in ('event_id', 'epoch', 'publication_seq', 'payload_sha256'):
+                if field in payload:
+                    canonical[field] = payload[field]
+            if 'correction_stamp_ns' in payload:
+                correction_stamp_ns = payload['correction_stamp_ns']
+                if (isinstance(correction_stamp_ns, bool)
+                        or not isinstance(correction_stamp_ns, int)
+                        or correction_stamp_ns < 0):
+                    raise ValueError('correction_stamp_ns is invalid')
+                canonical['correction_stamp_ns'] = correction_stamp_ns
+        except (KeyError, TypeError, ValueError, np.linalg.LinAlgError) as exc:
+            self._record_invalid(f'invalid_correction_publication:{type(exc).__name__}')
+            return
+        previous = self._correction_publications.get(source_batch_id)
+        if previous is not None:
+            if previous != canonical:
+                self._record_invalid('conflicting_correction_publication')
+            return
+        self._correction_publications[source_batch_id] = canonical
+        receipt = float(record['receive_stamp_s'])
+        self.correction_publication_writer.writerow([
+            source_batch_id, payload.get('event_id', ''), payload.get('epoch', ''),
+            payload.get('publication_seq', ''), correction_stamp,
+            payload.get('correction_stamp_ns', ''),
+            payload.get('common_capture_stamp', ''),
+            payload.get('common_capture_stamp_ns', ''),
+            payload.get('publication_stamp_ns', ''), receipt, frame_id,
+            payload.get('schema_version'),
+            json.dumps(payload.get('accepted_camera_ids') or [], separators=(',', ':')),
+            json.dumps(canonical['member_ids'], separators=(',', ':')),
+            payload.get('payload_sha256', ''),
+        ])
+        self.correction_publication_file.flush()
+
     def _fusion_decision_cb(self, message) -> None:
         """The camera manager's own account of which cameras went into this correction."""
-
-        try:
-            payload = json.loads(message.data)
-        except (ValueError, TypeError):
+        topic = '/reliability/camera_manager/decision'
+        record = self._record_runtime_delivery(topic, message.data)
+        if record is None:
             return
+        payload = record.get('parsed_payload')
         if not isinstance(payload, dict):
+            self._record_invalid('malformed_fusion_decision')
             return
         self.fusion_decision = payload
-        self.fusion_decision_stamp = self.get_clock().now().nanoseconds * 1.0e-9
+        self.fusion_decision_stamp = float(record['receive_stamp_s'])
+
+        source_batch_id = str(payload.get('source_batch_id', '') or '').strip()
+        if not source_batch_id:
+            self._record_invalid('fusion_decision_without_source_batch_id')
+            return
+        try:
+            signature = json.dumps(payload, sort_keys=True, allow_nan=False,
+                                   separators=(',', ':'))
+        except (ValueError, TypeError, OverflowError):
+            self._record_invalid('nonfinite_fusion_decision')
+            return
+        previous = self._fusion_decision_payloads.get(source_batch_id)
+        if previous is not None:
+            if previous != signature:
+                self._record_invalid('conflicting_fusion_decision')
+            return
+        self._fusion_decision_payloads[source_batch_id] = signature
 
         observations = payload.get('observations')
         if not observations or self.fusion_obs_writer is None:
             return
         stamp = self.fusion_decision_stamp
-        if self._fusion_obs_last_stamp is not None and stamp <= self._fusion_obs_last_stamp:
-            return
         self._fusion_obs_last_stamp = stamp
         self._fusion_decision_seq += 1
         decision_seq = self._fusion_decision_seq
@@ -1707,7 +2117,6 @@ class ExperimentLogger(Node):
         gt = self._gt_xy if self._gt_xy is not None else (float('nan'), float('nan'))
         gt_stamp = float(self._gt_stamp)
         fused_stamp = float(payload.get('fused_stamp', float('nan')))
-        source_batch_id = str(payload.get('source_batch_id', '') or '')
         common_capture_stamp = float(
             payload.get('common_capture_stamp', float('nan')))
         fok, fgx, fgy, _fyaw = self._gt_at(fused_stamp)
@@ -1728,7 +2137,7 @@ class ExperimentLogger(Node):
             ook, ogx, ogy, _oyaw = self._gt_at(obs_stamp)
             if not ook:
                 ogx = ogy = float('nan')
-            key = (camera, round(obs_stamp, 6) if math.isfinite(obs_stamp) else None)
+            key = (source_batch_id, camera)
             repeat = self._obs_repeat_count.get(key, 0)
             self._obs_repeat_count[key] = repeat + 1
             if repeat == 0:
@@ -1783,6 +2192,16 @@ class ExperimentLogger(Node):
 
     def _goal_cb(self, msg: PoseStamped):
         self.goal_msg = msg
+
+    def _active_goal_xy(self):
+        """Return coordinates atomically paired with mission identity when available."""
+        mission = getattr(self, '_mission_goal_state', None)
+        if mission is not None:
+            return float(mission.x), float(mission.y)
+        if self.goal_msg is not None:
+            return (float(self.goal_msg.pose.position.x),
+                    float(self.goal_msg.pose.position.y))
+        return math.nan, math.nan
 
     def _plan_cb(self, msg: Path):
         self.plan_msg = msg
@@ -1851,11 +2270,11 @@ class ExperimentLogger(Node):
         self.pixel_correction_diag = msg
 
     def _correction_assimilation_cb(self, msg: String):
-        try:
-            payload = json.loads(msg.data)
-        except (TypeError, ValueError):
-            self._record_invalid('malformed_correction_assimilation')
+        topic = '/planner/correction_assimilation'
+        record = self._record_runtime_delivery(topic, msg.data)
+        if record is None:
             return
+        payload = record.get('parsed_payload')
         if not isinstance(payload, dict):
             self._record_invalid('malformed_correction_assimilation')
             return
@@ -1866,9 +2285,113 @@ class ExperimentLogger(Node):
         if source_batch_id in self._assimilation_source_batches:
             self._record_invalid('duplicate_source_batch_assimilation')
             return
-        self._assimilation_source_batches.add(source_batch_id)
+        schema_version = payload.get('schema_version')
+        if type(schema_version) is not int or schema_version not in (1, 2):
+            self._record_invalid('unsupported_correction_assimilation_schema')
+            return
         try:
-            corr_stamp_s = float(payload.get('correction_stamp'))
+            json.dumps(payload, sort_keys=True, allow_nan=False, separators=(',', ':'))
+        except (ValueError, TypeError, OverflowError):
+            self._record_invalid('nonfinite_correction_assimilation')
+            return
+        status = str(payload.get('status', '') or '').strip()
+        reason = str(payload.get('reason', '') or '').strip()
+        accepted = payload.get('accepted')
+        if status not in KNOWN_ASSIMILATION_STATUSES:
+            self._record_invalid(f'unknown_assimilation_status:{status or "empty"}')
+            return
+        if status in ('rejected', 'dropped') and not reason:
+            self._record_invalid('correction_refusal_without_reason')
+            return
+        if not isinstance(accepted, bool) or accepted != (
+                status in ('accepted', 'accepted_bootstrap', 'reanchored')):
+            self._record_invalid('assimilation_accepted_status_mismatch')
+            return
+        try:
+            correction_stamp = float(payload['correction_stamp'])
+            apply_stamp = float(payload['apply_stamp'])
+            if (not math.isfinite(correction_stamp) or correction_stamp < 0.0
+                    or not math.isfinite(apply_stamp) or apply_stamp < 0.0):
+                raise ValueError('terminal timestamps must be finite and nonnegative')
+            if schema_version == 2:
+                epoch = payload['epoch']
+                frame_id = payload['frame_id']
+                revision_before = payload['revision_before']
+                revision_after = payload['revision_after']
+                correction_stamp_ns = payload['correction_stamp_ns']
+                apply_stamp_ns = payload['apply_stamp_ns']
+                state_stamp_ns = payload['state_stamp_ns']
+                initialized = payload['initialized']
+                if not isinstance(epoch, str) or not epoch.strip():
+                    raise ValueError('schema-2 terminal has no epoch')
+                if not isinstance(frame_id, str) or not frame_id.strip():
+                    raise ValueError('schema-2 terminal has no frame_id')
+                if (isinstance(revision_before, bool)
+                        or not isinstance(revision_before, int)
+                        or revision_before < 0
+                        or isinstance(revision_after, bool)
+                        or not isinstance(revision_after, int)
+                        or revision_after < revision_before):
+                    raise ValueError('schema-2 terminal revision is invalid')
+                if any(isinstance(value, bool) or not isinstance(value, int) or value < 0
+                       for value in (correction_stamp_ns, apply_stamp_ns)):
+                    raise ValueError('schema-2 terminal exact timestamps are invalid')
+                if (correction_stamp != correction_stamp_ns * 1e-9
+                        or apply_stamp != apply_stamp_ns * 1e-9):
+                    raise ValueError('schema-2 float/exact timestamps disagree')
+                if accepted and apply_stamp_ns < correction_stamp_ns:
+                    raise ValueError('schema-2 accepted terminal applies before correction')
+                if type(initialized) is not bool:
+                    raise ValueError('schema-2 terminal initialized is not boolean')
+                if type(payload.get('valid')) is not bool:
+                    raise ValueError('schema-2 terminal valid is not boolean')
+                if type(payload.get('motion_supported')) is not bool:
+                    raise ValueError('schema-2 terminal motion_supported is not boolean')
+                if initialized:
+                    posterior_mean = np.asarray(payload['posterior_mean'], dtype=float)
+                    posterior_covariance = np.asarray(
+                        payload['posterior_covariance'], dtype=float)
+                    if (isinstance(state_stamp_ns, bool)
+                            or not isinstance(state_stamp_ns, int)
+                            or state_stamp_ns < 0):
+                        raise ValueError('schema-2 terminal state_stamp_ns is invalid')
+                    if (posterior_mean.shape != (3,)
+                            or posterior_covariance.shape != (3, 3)):
+                        raise ValueError('schema-2 terminal posterior shape is invalid')
+                    if (not np.isfinite(posterior_mean).all()
+                            or not np.isfinite(posterior_covariance).all()
+                            or not np.allclose(posterior_covariance,
+                                               posterior_covariance.T,
+                                               rtol=1e-7, atol=1e-10)
+                            or np.linalg.eigvalsh(
+                                posterior_covariance).min() < -1e-10):
+                        raise ValueError(
+                            'schema-2 terminal posterior covariance is invalid')
+                elif (accepted or payload.get('valid') or payload.get('motion_supported')
+                      or state_stamp_ns is not None
+                      or payload.get('posterior_mean') is not None
+                      or payload.get('posterior_covariance') is not None):
+                    raise ValueError('uninitialized terminal claims a posterior/update')
+        except (KeyError, TypeError, ValueError, OverflowError, np.linalg.LinAlgError):
+            self._record_invalid('invalid_correction_assimilation_contract')
+            return
+
+        self._assimilation_source_batches.add(source_batch_id)
+        canonical_terminal = dict(payload)
+        # `epoch` on terminal schema 2 is the recursive belief epoch. Publication
+        # identity has its own producer epoch, copied through by the planner as
+        # `source_epoch`; map that field only for cross-boundary ledger agreement.
+        if payload.get('source_epoch') is not None:
+            canonical_terminal['belief_epoch'] = payload.get('epoch')
+            canonical_terminal['epoch'] = payload.get('source_epoch')
+        if payload.get('source_payload_sha256') is not None:
+            canonical_terminal['payload_sha256'] = payload.get(
+                'source_payload_sha256')
+        if payload.get('source_member_ids') is not None:
+            canonical_terminal['member_ids'] = payload.get('source_member_ids')
+        self._assimilation_payloads[source_batch_id] = canonical_terminal
+        try:
+            corr_stamp_s = correction_stamp
         except (TypeError, ValueError):
             corr_stamp_s = math.nan
         if math.isfinite(corr_stamp_s):
@@ -1877,14 +2400,8 @@ class ExperimentLogger(Node):
                 if gap > self._longest_correction_gap_s:
                     self._longest_correction_gap_s = float(gap)
             self._last_correction_stamp_s = corr_stamp_s
-        status = str(payload.get('status', '') or '').strip()
-        reason = str(payload.get('reason', '') or '').strip()
         self._assimilation_count += 1
-        if status not in KNOWN_ASSIMILATION_STATUSES:
-            # An outcome the analysis cannot classify is the failure this check exists
-            # for: it means a correction went somewhere unaccounted.
-            self._record_invalid(f'unknown_assimilation_status:{status or "empty"}')
-        elif status == 'dropped':
+        if status in ('rejected', 'dropped'):
             # A REFUSAL is not a broken evidence chain. The filter declined a measurement
             # it could not causally bridge -- most often a camera outage longer than the
             # replay cap -- recorded why, and carried on. That is the same class of event
@@ -1896,21 +2413,45 @@ class ExperimentLogger(Node):
             # with a 17 s blind stretch is a finding about the camera network, not a
             # faulty drive -- and discarding those runs would throw away exactly the
             # low-coverage routes the comparison needs.
-            self._assimilation_dropped_count += 1
-            if not reason:
-                self._record_invalid('correction_dropped_without_reason')
-            self._assimilation_dropped_reasons[reason] = (
-                self._assimilation_dropped_reasons.get(reason, 0) + 1
-            )
+            if status == 'dropped':
+                self._assimilation_dropped_count += 1
+                self._assimilation_dropped_reasons[reason] = (
+                    self._assimilation_dropped_reasons.get(reason, 0) + 1
+                )
+        def encoded(field):
+            value = payload.get(field)
+            if value is None:
+                return ''
+            return json.dumps(value, allow_nan=False, separators=(',', ':'))
         self.assimilation_writer.writerow([
             source_batch_id,
             payload.get('correction_stamp', math.nan),
             payload.get('apply_stamp', math.nan),
             status,
             reason,
-            1 if bool(payload.get('accepted', False)) else 0,
+            1 if accepted is True else 0,
             payload.get('nis', math.nan),
             payload.get('belief_stamp_after', math.nan),
+            payload.get('schema_version', ''),
+            payload.get('epoch', ''),
+            payload.get('revision_before', ''),
+            payload.get('revision_after', ''),
+            payload.get('frame_id', ''),
+            payload.get('state_stamp_ns', ''),
+            encoded('posterior_mean'),
+            encoded('posterior_covariance'),
+            payload.get('valid', ''),
+            payload.get('motion_supported', ''),
+            record.get('receive_stamp_s', math.nan),
+            payload.get('correction_stamp_ns', ''),
+            payload.get('apply_stamp_ns', ''),
+            payload.get('belief_stamp_before_ns', ''),
+            payload.get('belief_stamp_after_ns', ''),
+            payload.get('source_event_id', ''),
+            payload.get('source_epoch', ''),
+            payload.get('source_publication_seq', ''),
+            encoded('source_member_ids'),
+            payload.get('source_payload_sha256', ''),
         ])
         self.assimilation_file.flush()
 
@@ -1993,14 +2534,37 @@ class ExperimentLogger(Node):
             self._collision_reason = str(reason).strip()
 
     def _contacts_cb(self, msg: Contacts):
-        self._contact_messages_seen += 1
         try:
             stamp = self._stamp_to_float(msg.header.stamp)
+            source_stamp_ns = (
+                int(msg.header.stamp.sec) * 1_000_000_000
+                + int(msg.header.stamp.nanosec))
         except AttributeError:
             stamp = float(self.get_clock().now().nanoseconds) * 1e-9
+            source_stamp_ns = None
+        contacts = []
         for contact in list(msg.contacts or []):
-            name_1 = str(getattr(getattr(contact, 'collision1', None), 'name', '') or '')
-            name_2 = str(getattr(getattr(contact, 'collision2', None), 'name', '') or '')
+            contacts.append({
+                'collision1': str(
+                    getattr(getattr(contact, 'collision1', None), 'name', '') or ''),
+                'collision2': str(
+                    getattr(getattr(contact, 'collision2', None), 'name', '') or ''),
+            })
+        delivery_seq = self._contact_delivery_seq + 1
+        delivery_payload = json.dumps({
+            'schema_version': 1,
+            'event_id': f'logger:{self.run_id}:world_contacts:{delivery_seq}',
+            'source_stamp_ns': source_stamp_ns,
+            'contact_count': len(contacts),
+            'contacts': contacts,
+        }, allow_nan=False, sort_keys=True, separators=(',', ':'))
+        if self._record_runtime_delivery('/world_contacts', delivery_payload) is None:
+            return
+        self._contact_delivery_seq = delivery_seq
+        self._contact_messages_seen += 1
+        for names in contacts:
+            name_1 = names['collision1']
+            name_2 = names['collision2']
             pair = (name_1, name_2)
             if not any('turtlebot3' in name for name in pair):
                 continue
@@ -2464,6 +3028,8 @@ class ExperimentLogger(Node):
         self.perception_file.flush()
 
     def _log_once(self):
+        if getattr(self, '_event_streams_closed', False):
+            return
         now_stamp = float(self.get_clock().now().nanoseconds) * 1e-9
 
         state_ok, state_stamp, state_x, state_y, state_yaw = self._latest_state_pose()
@@ -2766,23 +3332,20 @@ class ExperimentLogger(Node):
         # them on drifting wheel-odom would (like the collision metric) misreport
         # whether the TRUE robot reached the goal. If gt is unavailable -> NaN.
         goal_dist = math.nan
-        if self.goal_msg and self._gt_xy is not None:
-            goal_x = float(self.goal_msg.pose.position.x)
-            goal_y = float(self.goal_msg.pose.position.y)
+        goal_x, goal_y = self._active_goal_xy()
+        if math.isfinite(goal_x) and math.isfinite(goal_y) and self._gt_xy is not None:
             goal_dist = math.hypot(goal_x - self._gt_xy[0], goal_y - self._gt_xy[1])
 
         operational_goal_dist_m = math.nan
         if (
-            self.goal_msg
+            math.isfinite(goal_x)
+            and math.isfinite(goal_y)
             and planner_belief_ok
             and math.isfinite(planner_belief_x)
             and math.isfinite(planner_belief_y)
         ):
             # This is the state the controller actually uses. It alone may
             # drive automatic goal and stuck termination.
-            if not math.isfinite(goal_x):
-                goal_x = float(self.goal_msg.pose.position.x)
-                goal_y = float(self.goal_msg.pose.position.y)
             operational_goal_dist_m = math.hypot(
                 goal_x - planner_belief_x, goal_y - planner_belief_y
             )
@@ -3254,18 +3817,92 @@ class ExperimentLogger(Node):
             return
 
     def _finish_run(self, reason: str, stamp: float = None):
-        if self._stop_requested:
-            return
-        self._stop_requested = True
-        self._completed = True
-        
-        if self.plan_file is not None:
-            self.plan_file.flush()
-        if self.perception_file is not None:
-            self.perception_file.flush()
-        self.file.flush()
+        """Request terminal closure, then allow a bounded event-drain interval."""
+        with self._event_lock:
+            if self._stop_requested:
+                return
+            self._stop_requested = True
+            self._finish_reason = str(reason)
+            self._finish_stamp = (
+                float(stamp) if stamp is not None
+                else float(self.get_clock().now().nanoseconds) * 1e-9
+            )
+            self._finish_requested_wall_s = time.monotonic()
+        threading.Timer(EVENT_DRAIN_QUIET_S, self._finalize_run).start()
 
-        import json
+    def _correction_ledger_result(self):
+        return validate_correction_ledger(
+            list(self._correction_publications.values()),
+            list(self._assimilation_payloads.values()),
+        )
+
+    def _flush_close_data_files(self):
+        """Attempt every stream even when one flush/close fails."""
+        errors = []
+        names = (
+            'file', 'plan_file', 'perception_file', 'fusion_obs_file',
+            'assimilation_file', 'correction_publication_file',
+            'camera_opportunity_file', 'runtime_event_file',
+        )
+        for name in names:
+            handle = getattr(self, name, None)
+            if handle is None or getattr(handle, 'closed', False):
+                continue
+            try:
+                handle.flush()
+                try:
+                    os.fsync(handle.fileno())
+                except (AttributeError, OSError):
+                    pass
+            except Exception as exc:
+                errors.append(f'{name}:flush:{type(exc).__name__}:{exc}')
+            try:
+                handle.close()
+            except Exception as exc:
+                errors.append(f'{name}:close:{type(exc).__name__}:{exc}')
+        self._data_file_close_errors = errors
+        self._event_streams_closed = True
+        return errors
+
+    def _finalize_run(self):
+        """Freeze the event cutoff, reconcile the ledger, and atomically commit summary."""
+        with self._event_lock:
+            if self._completed or self._finalizing:
+                return
+            now_wall = time.monotonic()
+            requested = float(self._finish_requested_wall_s)
+            elapsed = max(now_wall - requested, 0.0)
+            quiet = max(now_wall - float(self._last_event_wall_s), 0.0)
+            if quiet < EVENT_DRAIN_QUIET_S and elapsed < EVENT_DRAIN_MAX_S:
+                delay = min(EVENT_DRAIN_QUIET_S - quiet, EVENT_DRAIN_MAX_S - elapsed)
+                threading.Timer(max(delay, 0.01), self._finalize_run).start()
+                return
+            self._finalizing = True
+            self._accepting_events = False
+            reason = self._finish_reason
+            stamp = self._finish_stamp
+            event_cutoff_wall_s = now_wall
+            event_drain_elapsed_s = elapsed
+
+        ledger = self._correction_ledger_result()
+        ledger_required = bool(
+            getattr(self, 'require_state_correction_envelope', False)
+            and getattr(self, 'state_correction_mode', '') == 'fused')
+        ledger_applicable = bool(
+            ledger_required or self._correction_publications
+            or self._assimilation_payloads)
+        if ledger_applicable and not ledger.valid:
+            codes = ','.join(sorted({issue.code for issue in ledger.errors}))
+            self._record_invalid(f'correction_ledger_invalid:{codes}')
+        schema2_terminal_count = sum(
+            int(payload.get('schema_version', 1)) == 2
+            for payload in self._assimilation_payloads.values())
+        committed_posterior_complete = bool(
+            not self._assimilation_payloads
+            or schema2_terminal_count == len(self._assimilation_payloads))
+        if ledger_required and not committed_posterior_complete:
+            self._record_invalid('committed_posterior_missing')
+
         mean_efe_risk = self._efe_risk_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
         mean_efe_ambiguity = self._efe_ambiguity_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
         mean_efe_control = self._efe_control_sum / max(self._efe_count, 1) if self._efe_count > 0 else math.nan
@@ -3343,9 +3980,6 @@ class ExperimentLogger(Node):
             if self._odom_map_vs_belief_yaw_error_after_first_cmd_count > 0 else math.nan
         )
 
-        if stamp is None:
-            stamp = float(self.get_clock().now().nanoseconds) * 1e-9
-
         elapsed_after_first_cmd_s = stamp - self._first_cmd_stamp if self._first_cmd_stamp is not None else 0.0
         if (
             self._first_cmd_stamp is not None
@@ -3368,9 +4002,8 @@ class ExperimentLogger(Node):
         final_goal_distance_odom = math.nan
         odom_ok, _odom_stamp, odom_pose_x, odom_pose_y, _odom_yaw = (
             self._latest_odom_map_pose())
-        if self.goal_msg:
-            goal_x = float(self.goal_msg.pose.position.x)
-            goal_y = float(self.goal_msg.pose.position.y)
+        goal_x, goal_y = self._active_goal_xy()
+        if math.isfinite(goal_x) and math.isfinite(goal_y):
             if self._gt_xy is not None:
                 final_goal_distance = math.hypot(
                     goal_x - self._gt_xy[0], goal_y - self._gt_xy[1])
@@ -3402,11 +4035,11 @@ class ExperimentLogger(Node):
             'final_goal_distance': final_goal_distance,
             'final_goal_distance_reference': 'ground_truth',
             'goal_termination_reference': 'planner_belief',
-            # How well the truth reference itself is timed. `receipt_sim_clock` means
-            # the bridge gave no usable stamp and the sample is timed at arrival, so
-            # the residual alignment error is the transport delay -- bounded by, and
-            # visible in, the sample interval below.
+            # `receipt_sim_clock` means the bridge gave no usable source stamp. The
+            # interval fields describe delivered cadence, not transport latency.
             'gt_stamp_source': self._gt_stamp_source,
+            'gt_source_time_available': self._gt_stamp_source == 'transform_header',
+            'gt_transport_latency_measured': False,
             'gt_sample_interval_median_s': (
                 float(np.median(self._gt_intervals)) if self._gt_intervals else math.nan),
             'gt_sample_interval_p95_s': (
@@ -3466,6 +4099,12 @@ class ExperimentLogger(Node):
             'collision_geom': bool(self._geom_collision_seen),
             'contact_topic_publishers': contact_topic_publishers,
             'contact_messages_seen': int(self._contact_messages_seen),
+            'contact_observation_state': (
+                'collision_recorded' if self._contact_collision_seen
+                else ('contact_messages_without_robot_collision'
+                      if self._contact_messages_seen else 'no_recorded_contact')),
+            'contact_silence_is_no_collision': False,
+            'contact_channel_status': self._contact_channel_status,
             'collision_reason': self._collision_reason,
             'first_crash_stamp': self._first_crash_stamp,
             'min_wall_distance_m': min_wall_distance_m,
@@ -3488,49 +4127,98 @@ class ExperimentLogger(Node):
                 float(self._assimilation_dropped_count) / float(self._assimilation_count)
                 if self._assimilation_count else 0.0),
             'longest_correction_gap_s': float(self._longest_correction_gap_s),
+            'correction_ledger': ledger.to_dict(),
+            'correction_ledger_applicable': ledger_applicable,
+            'correction_ledger_required': ledger_required,
+            'schema2_terminal_count': schema2_terminal_count,
+            'committed_posterior_complete': committed_posterior_complete,
+            'runtime_event_delivery_count': int(getattr(self.runtime_event_log, 'rows', 0)),
+            'runtime_event_counts_by_topic': dict(self._runtime_event_counts),
+            'runtime_event_invalid_count': int(self._runtime_event_invalid_count),
+            'event_drain_quiet_s': EVENT_DRAIN_QUIET_S,
+            'event_drain_max_s': EVENT_DRAIN_MAX_S,
+            'event_drain_elapsed_s': event_drain_elapsed_s,
+            'event_cutoff_wall_s': event_cutoff_wall_s,
+            'late_events_observed_before_summary_snapshot': int(self._late_event_count),
+            'producer_quiescence_acknowledged': False,
+            'terminal_stop_verified': bool(self._terminal_stop_verified),
+            'terminal_zero_forwarded': bool(self._terminal_zero_forwarded),
+            'terminal_stop_event_id': self._terminal_stop_event_id,
+            'mission_goal_id': (
+                self._mission_goal_state.goal_id if self._mission_goal_state is not None else ''),
+            'mission_epoch': (
+                self._mission_goal_state.mission_epoch
+                if self._mission_goal_state is not None else ''),
+            'mission_goal_is_final': (
+                self._mission_goal_state.is_final
+                if self._mission_goal_state is not None else None),
+            'mission_goal_status': (
+                self._mission_goal_state.status
+                if self._mission_goal_state is not None else ''),
+            'mission_goal_reason': (
+                self._mission_goal_state.reason
+                if self._mission_goal_state is not None else ''),
+            'mission_goal_status_stamp_ns': (
+                self._mission_goal_state.status_stamp_ns
+                if self._mission_goal_state is not None else None),
             'frame_sanity': dict(self._frame_sanity),
             'run_dir': self.run_dir
         }
-        
+
+        close_errors = self._flush_close_data_files()
+        if close_errors:
+            self._record_invalid('data_file_close_failure')
+            summary['valid_run'] = False
+            summary['invalid_reason'] = self._invalid_reason
+        summary['data_files_closed'] = not close_errors
+        summary['data_file_close_errors'] = list(close_errors)
+        summary['evidence_complete'] = bool(
+            not close_errors
+            and (not ledger_applicable or ledger.valid)
+            and (not ledger_required or committed_posterior_complete)
+            and summary['producer_quiescence_acknowledged']
+            and self._valid_run)
         summary_path = os.path.join(self.run_dir, 'run_summary.json')
-        with open(summary_path, 'w', encoding='utf-8') as f:
-            json.dump(summary, f, indent=2)
+        try:
+            _write_json_atomic(summary_path, summary)
+        except Exception as exc:
+            self._finalizing = False
+            self.get_logger().error(
+                f'Failed to commit run summary atomically: {type(exc).__name__}: {exc}')
+            threading.Timer(0.15, _safe_shutdown).start()
+            return
+        self._completed = True
+        self._finalizing = False
 
         self.get_logger().info(f"Ending run. Reason: {reason}.")
         # rclpy.shutdown() must NOT be called from inside a timer/subscription callback
         # (it deadlocks on the global executor lock). Schedule it on a background thread
         # so this callback can return cleanly first.
-        import threading
         threading.Timer(0.15, _safe_shutdown).start()
 
     def destroy_node(self):
         try:
             if not getattr(self, '_completed', False):
-                import json
+                self._accepting_events = False
+                close_errors = self._flush_close_data_files()
                 summary_path = os.path.join(self.run_dir, 'run_summary.json')
                 summary = {
                     'completed': False,
                     'completion_reason': 'interrupted',
                     'valid_run': bool(getattr(self, '_valid_run', True)),
                     'invalid_reason': str(getattr(self, '_invalid_reason', '') or ''),
+                    'data_files_closed': not close_errors,
+                    'data_file_close_errors': list(close_errors),
+                    'terminal_stop_verified': bool(
+                        getattr(self, '_terminal_stop_verified', False)),
+                    'terminal_zero_forwarded': bool(
+                        getattr(self, '_terminal_zero_forwarded', False)),
                     'frame_sanity': dict(getattr(self, '_frame_sanity', {})),
                     'run_dir': getattr(self, 'run_dir', '')
                 }
-                with open(summary_path, 'w', encoding='utf-8') as f:
-                    json.dump(summary, f, indent=2)
-
-            if hasattr(self, 'file'):
-                self.file.close()
-            if self.plan_file is not None:
-                self.plan_file.close()
-            if self.perception_file is not None:
-                self.perception_file.close()
-            if getattr(self, 'fusion_obs_file', None) is not None:
-                self.fusion_obs_file.close()
-            if getattr(self, 'assimilation_file', None) is not None:
-                self.assimilation_file.close()
-            if getattr(self, 'camera_opportunity_file', None) is not None:
-                self.camera_opportunity_file.close()
+                _write_json_atomic(summary_path, summary)
+            else:
+                self._flush_close_data_files()
         finally:
             super().destroy_node()
 

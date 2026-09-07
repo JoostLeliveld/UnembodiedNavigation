@@ -1,0 +1,245 @@
+{
+  "schema": "commissioned_projection_binding.v1",
+  "frame": "map_bev",
+  "reference": "robot_ground_reference_xy",
+  "position_units": "m",
+  "ground_plane_z_m": 0.0,
+  "pixel_convention": "original_image_half_open_bbox_bottom_centre",
+  "mean_checkpoint_sha256": "5da33c63a2bb46b3367e13acbb4eb96cab57388b5854a71db98676df176aad9d",
+  "reference_calibration_sha256": "0a462258197b42537bafaf989642bb85b348c077e0557d8cdf5b890709cfe22d",
+  "detector_sha256": "efff1949c1b8cdeeb11438b36de80f6cf8daeef5f3a4682cfce8ae7dfe314f34",
+  "capture_manifest_sha256": "d1b4d9ee3eefe6ce10a2b06d58d509c8a5f0114c57d2be08c69b76eb6474b1d8",
+  "world_sha256": "cb872fd438bd3275ac75da44c12013c01c91c95287ce29edaf6bd0f09073f3e3",
+  "world_profiles_sha256": "3559f0a78b562bcad7cb7cbb476acfcc48442e14eedb017e8002fb1ae3f4f5fb",
+  "detector_inference": {
+    "image_size": 960,
+    "confidence_threshold": 0.25,
+    "predict_confidence_floor": 0.001,
+    "iou_threshold": 0.45,
+    "class_name": "robot",
+    "selected_point": "bbox_bottom_centre"
+  },
+  "cameras": {
+    "camera_A": {
+      "cam_pos": [
+        -11.45,
+        -9.45,
+        5.0
+      ],
+      "K": [
+        [
+          639.9976491530514,
+          0.0,
+          640.0
+        ],
+        [
+          0.0,
+          639.9976491530514,
+          360.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "R": [
+        [
+          0.7071080798594737,
+          -0.7071054825112363,
+          0.0
+        ],
+        [
+          -0.491173918197195,
+          -0.4911757223830516,
+          -0.7193709695451317
+        ],
+        [
+          0.5086711565247861,
+          0.5086730249817059,
+          -0.6946260923516315
+        ]
+      ],
+      "image_width": 1280,
+      "image_height": 720
+    },
+    "camera_B": {
+      "cam_pos": [
+        -1.5,
+        -9.72,
+        5.0
+      ],
+      "K": [
+        [
+          639.9976491530514,
+          0.0,
+          640.0
+        ],
+        [
+          0.0,
+          639.9976491530514,
+          360.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "R": [
+        [
+          0.9063198903646912,
+          0.42259230509952994,
+          -0.0
+        ],
+        [
+          0.31405914928006473,
+          -0.6735523820683337,
+          -0.669099424124364
+        ],
+        [
+          -0.282756267981483,
+          0.6064181167154715,
+          -0.7431729009029087
+        ]
+      ],
+      "image_width": 1280,
+      "image_height": 720
+    },
+    "camera_C": {
+      "cam_pos": [
+        -6.95,
+        9.45,
+        5.0
+      ],
+      "K": [
+        [
+          639.9976491530514,
+          0.0,
+          640.0
+        ],
+        [
+          0.0,
+          639.9976491530514,
+          360.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "R": [
+        [
+          -0.8660266281835431,
+          -0.4999978792725457,
+          0.0
+        ],
+        [
+          -0.30781953621388614,
+          0.5331620914556376,
+          -0.7880262161627103
+        ],
+        [
+          0.39401143689252377,
+          -0.6824516869036278,
+          -0.6156416836442133
+        ]
+      ],
+      "image_width": 1280,
+      "image_height": 720
+    },
+    "camera_D": {
+      "cam_pos": [
+        11.45,
+        7.2,
+        5.0
+      ],
+      "K": [
+        [
+          639.9976491530514,
+          0.0,
+          640.0
+        ],
+        [
+          0.0,
+          639.9976491530514,
+          360.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "R": [
+        [
+          -0.6427576972998623,
+          0.7660695415964393,
+          0.0
+        ],
+        [
+          0.4716243423769826,
+          0.39570843094096486,
+          -0.7880262161627102
+        ],
+        [
+          -0.6036828821817438,
+          -0.506509916112667,
+          -0.6156416836442132
+        ]
+      ],
+      "image_width": 1280,
+      "image_height": 720
+    },
+    "camera_E": {
+      "cam_pos": [
+        11.45,
+        -9.45,
+        5.0
+      ],
+      "K": [
+        [
+          639.9976491530514,
+          0.0,
+          640.0
+        ],
+        [
+          0.0,
+          639.9976491530514,
+          360.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "R": [
+        [
+          0.7431679854040157,
+          0.6691048837592928,
+          -0.0
+        ],
+        [
+          0.4476995189393598,
+          -0.4972552997777908,
+          -0.7431704431584758
+        ],
+        [
+          -0.497258972982894,
+          0.552300481053894,
+          -0.6691021539463423
+        ]
+      ],
+      "image_width": 1280,
+      "image_height": 720
+    }
+  },
+  "historical_limits": [
+    "commanded simulator model origin; actual settled pose not verified",
+    "capture did not record expanded robot-description identity",
+    "static development artifact; this sidecar does not establish empirical calibration"
+  ],
+  "derivation_source_sha256": "2c14156ec1c58eba5bc98a53d02c51204291b8a887816777cbef79c709da3d6a"
+}

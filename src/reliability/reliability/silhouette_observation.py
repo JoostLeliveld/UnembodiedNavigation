@@ -225,17 +225,29 @@ def plausibility_reasons(
 
 
 def _inverse_2x2(matrix: Matrix2x2, *, max_condition: float) -> Matrix2x2 | None:
+    limit = float(max_condition)
+    if not math.isfinite(limit) or limit < 1.0:
+        raise ValueError("max_condition must be finite and at least one")
     a, b = float(matrix[0][0]), float(matrix[0][1])
     c, d = float(matrix[1][0]), float(matrix[1][1])
+    if not all(math.isfinite(value) for value in (a, b, c, d)):
+        return None
+    scale = max(abs(a), abs(b), abs(c), abs(d))
+    if scale == 0.0:
+        return None
+    a, b, c, d = a/scale, b/scale, c/scale, d/scale
     determinant = a * d - b * c
-    if not math.isfinite(determinant) or determinant == 0.0:
+    if determinant == 0.0:
         return None
-    # Frobenius/|det| stands in for the 2-norm condition number: cheap, never smaller than
-    # the true ratio by more than sqrt(2), and it only ever rejects more, not less.
-    norm = math.sqrt(a * a + b * b + c * c + d * d)
-    if norm * norm / abs(determinant) > 2.0 * float(max_condition):
+    # For singular values s1 >= s2, ||H||_F^2/|det(H)| = kappa + 1/kappa.
+    # This is increasing for kappa >= 1. Comparing with 2*limit used to admit
+    # almost twice the declared condition number. Scaling avoids unit-dependent
+    # overflow/underflow without changing the condition or adding another gate.
+    if (a*a + b*b + c*c + d*d) / abs(determinant) > limit + 1.0/limit:
         return None
-    return ((d / determinant, -b / determinant), (-c / determinant, a / determinant))
+    inverse = ((d / determinant / scale, -b / determinant / scale),
+               (-c / determinant / scale, a / determinant / scale))
+    return inverse if all(math.isfinite(value) for row in inverse for value in row) else None
 
 
 def _mat_mul(a, b):

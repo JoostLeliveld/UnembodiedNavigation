@@ -153,6 +153,17 @@ def summarize(errors: np.ndarray) -> dict[str, float]:
     }
 
 
+def validate_split_images(rows: list[dict]) -> None:
+    """Successful physical-image evidence cannot cross mean fitting/evaluation roles."""
+    roles = {}
+    for row in rows:
+        identity = row.get('image_sha1')
+        if not identity:
+            raise ValueError('missing successful-image identity')
+        if roles.setdefault(identity, row['split']) != row['split']:
+            raise ValueError('successful image appears in both mean train and test')
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('--capture', type=Path, required=True)
@@ -183,9 +194,10 @@ def main() -> int:
         row['split'] = split_of[row['position_id']]
 
     usable = [row for row in rows if row['raw_valid'] == '1']
-    design = {row['pose_id'] + ':' + row['camera_id']: None for row in usable}
+    validate_split_images(usable)
+    design = {(row['pose_id'], row['camera_id'], row['repetition_id']) for row in usable}
     if len(design) != len(usable):
-        raise RuntimeError('Duplicate (pose_id, camera_id) among usable rows')
+        raise RuntimeError('Duplicate (pose_id, repetition_id, camera_id) among usable rows')
 
     # --- fit -------------------------------------------------------------------------
     train = [row for row in usable if row['split'] == 'train']

@@ -7,12 +7,14 @@ import csv
 import hashlib
 import json
 import math
+import io
+import tempfile
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-for rel in ('src/perception',):
+for rel in ('src/perception', 'src/unav_common'):
     value = str((REPO / rel).resolve())
     if value not in sys.path:
         sys.path.insert(0, value)
@@ -22,11 +24,15 @@ from perception.core.yolo_selection import (  # noqa: E402
     target_class_ids,
 )
 from ultralytics import YOLO  # noqa: E402
+from unav_common.capture_integrity import (
+    atomic_csv, atomic_json, capture_lock, checked_bytes, checked_image, digest,
+)
 
 
 FIELDS = (
     'pose_id', 'position_id', 'heading_id', 'repetition_id', 'source_batch_id', 'camera_id',
-    'image', 'image_sha1', 'detected', 'detector_clipped', 'n_candidates', 'confidence',
+    'image', 'image_sha1', 'capture_status', 'capture_error', 'inference_status',
+    'capture_session_id', 'image_id', 'image_stamp_ns', 'detected', 'detector_clipped', 'n_candidates', 'confidence',
     'x0', 'y0', 'x1', 'y1', 'u_bbox_bottom', 'v_bbox_bottom',
 )
 CLIP_EPSILON_PX = 0.5
@@ -56,144 +62,114 @@ def main() -> int:
     args = parser.parse_args()
 
     capture = args.capture.expanduser().resolve()
-    index = capture / 'capture_index.csv'
-    manifest = capture / 'capture_manifest.json'
-    weights = args.weights.expanduser().resolve()
-    if not index.is_file() or not manifest.is_file() or not weights.is_file():
-        raise RuntimeError('Capture index, capture manifest, and detector weights must exist')
-    capture_meta = json.loads(manifest.read_text(encoding='utf-8'))
-    if not str(capture_meta.get('status', '')).startswith('complete'):
-        raise RuntimeError(f'Capture is not complete: {capture_meta.get("status")!r}')
+    with capture_lock(capture):
+        return run(args, capture)
 
-    rows = list(csv.DictReader(index.open(encoding='utf-8')))
-    image_size_by_camera = {
-        item['camera_id']: (int(item['image_width']), int(item['image_height']))
-        for item in capture_meta['cameras']
-    }
-    usable = [row for row in rows if row['capture_status'] == 'ok' and row['image']]
-    unique_by_hash = {}
-    for row in usable:
-        unique_by_hash.setdefault(row['image_sha1'], capture / row['image'])
-    hashes = list(unique_by_hash)
-    paths = [unique_by_hash[value] for value in hashes]
 
-    model = YOLO(str(weights))
-    target_ids = target_class_ids(getattr(model, 'names', {}), 'robot', -1)
-    if target_ids == set():
-        raise RuntimeError(f'Frozen detector has no robot class: {getattr(model, "names", {})!r}')
-    selected_by_hash = {}
-    batch_size = max(int(args.batch_size), 1)
-    for start in range(0, len(paths), batch_size):
-        batch = paths[start:start + batch_size]
-        kwargs = {
-            'source': [str(path) for path in batch],
-            'imgsz': int(args.image_size),
-            'conf': float(args.predict_confidence_floor),
-            'iou': float(args.iou_threshold),
-            'batch': len(batch),
-            'stream': False,
-            'verbose': False,
-        }
-        if str(args.device).strip():
-            kwargs['device'] = str(args.device).strip()
-        results = list(model.predict(**kwargs))
-        if len(results) != len(batch):
-            raise RuntimeError(f'YOLO returned {len(results)} results for {len(batch)} images')
-        for image_hash, result in zip(hashes[start:start + batch_size], results, strict=True):
-            selected_by_hash[image_hash] = select_best_detection(
-                result,
-                target_ids=target_ids,
-                confidence_threshold=float(args.confidence_threshold),
-                use_masks=False,
-                mask_min_area=0.0,
-                mask_bottom_band_px=3.0,
-            )
-        done = min(start + len(batch), len(paths))
-        if done % 256 == 0 or done == len(paths):
-            print(f'inferred {done}/{len(paths)} unique images', flush=True)
-
+def run(args, capture: Path) -> int:
+    index, manifest = capture / 'capture_index.csv', capture / 'capture_manifest.json'
     output = capture / 'bbox_observations.csv'
+    output_manifest = capture / 'bbox_detector_manifest.json'
+    if output.exists() or output_manifest.exists():
+        raise RuntimeError('detector outputs already exist; frozen outputs are never overwritten')
+    manifest_bytes = manifest.read_bytes()
+    capture_meta = json.loads(manifest_bytes)
+    if capture_meta.get('status') not in ('complete', 'complete_with_failed_batches'):
+        raise RuntimeError('capture must be complete before inference')
+    index_bytes = checked_bytes(index, capture_meta.get('capture_index_sha256'))
+    rows = list(csv.DictReader(io.StringIO(index_bytes.decode())))
+    keys = [(r['pose_id'], r['repetition_id'], r['camera_id']) for r in rows]
+    if len(set(keys)) != len(keys):
+        raise RuntimeError('duplicate capture opportunity keys')
+    sizes = {r['camera_id']: (int(r['image_width']), int(r['image_height']))
+             for r in capture_meta['cameras']}
+    if len(sizes) != len(capture_meta['cameras']) or not sizes:
+        raise RuntimeError('duplicate or empty capture camera registry')
+    unique = {}
+    for row in rows:
+        if row['camera_id'] not in sizes or row['capture_status'] not in ('ok', 'failed'):
+            raise RuntimeError('unknown camera or acquisition outcome')
+        if row['capture_status'] == 'ok':
+            checked_image(capture, row, size=sizes[row['camera_id']])
+            unique.setdefault(row['image_sha1'], row)
+    weights = args.weights.expanduser().resolve()
+    weight_bytes = weights.read_bytes()
+    weights_hash = digest(weight_bytes)
+    selections = {}
+    items = list(unique.items())
+    # Native YOLO takes a path; a private exact-byte copy prevents path-swap races.
+    with tempfile.TemporaryDirectory(prefix='frozen_capture_detector_') as name:
+        loaded_weights = Path(name) / weights.name
+        loaded_weights.write_bytes(weight_bytes)
+        model = YOLO(str(loaded_weights))
+        target_ids = target_class_ids(getattr(model, 'names', {}), 'robot', -1)
+        if target_ids == set():
+            raise RuntimeError('frozen detector has no robot class')
+        batch_size = max(int(args.batch_size), 1)
+        for start in range(0, len(items), batch_size):
+            chunk = items[start:start + batch_size]
+            images = [checked_image(capture, row, size=sizes[row['camera_id']]) for _,row in chunk]
+            kwargs = dict(source=images, imgsz=int(args.image_size),
+                          conf=float(args.predict_confidence_floor), iou=float(args.iou_threshold),
+                          batch=len(images), stream=False, verbose=False)
+            if str(args.device).strip():
+                kwargs['device'] = str(args.device).strip()
+            results = list(model.predict(**kwargs))
+            if len(results) != len(chunk):
+                raise RuntimeError('detector returned wrong number of image results')
+            for (image_hash, _), result in zip(chunk, results, strict=True):
+                selections[image_hash] = select_best_detection(result, target_ids=target_ids,
+                    confidence_threshold=float(args.confidence_threshold), use_masks=False,
+                    mask_min_area=0.0, mask_bottom_band_px=3.0)
+    written = []
     detected = 0
-    with output.open('w', newline='', encoding='utf-8') as handle:
-        writer = csv.DictWriter(handle, fieldnames=FIELDS)
-        writer.writeheader()
-        for source in usable:
-            selection = selected_by_hash[source['image_sha1']]
-            box = selection['bbox_xyxy']
-            is_detected = bool(selection['detected'])
-            width, height = image_size_by_camera[source['camera_id']]
-            is_clipped = bool(
-                is_detected and box is not None
-                and (float(box[0]) <= CLIP_EPSILON_PX
-                     or float(box[1]) <= CLIP_EPSILON_PX
-                     or float(box[2]) >= width - CLIP_EPSILON_PX
-                     or float(box[3]) >= height - CLIP_EPSILON_PX)
-            )
-            detected += int(is_detected)
-            row = {
-                'pose_id': source['pose_id'],
-                'position_id': source['position_id'],
-                'heading_id': source['heading_id'],
-                'repetition_id': source['repetition_id'],
-                'source_batch_id': source.get(
-                    'source_batch_id',
-                    f"pose_{int(source['pose_id']):06d}_r{int(source['repetition_id']):02d}",
-                ),
-                'camera_id': source['camera_id'],
-                'image': source['image'],
-                'image_sha1': source['image_sha1'],
-                'detected': int(is_detected),
-                'detector_clipped': int(is_clipped),
-                'n_candidates': int(selection['n_candidates']),
-                'confidence': float(selection['confidence']),
-                'x0': float(box[0]) if box is not None else math.nan,
-                'y0': float(box[1]) if box is not None else math.nan,
-                'x1': float(box[2]) if box is not None else math.nan,
-                'y1': float(box[3]) if box is not None else math.nan,
-                'u_bbox_bottom': float(selection['bbox_bottom_u']) if is_detected else math.nan,
-                'v_bbox_bottom': float(selection['bbox_bottom_v']) if is_detected else math.nan,
-            }
-            writer.writerow(row)
-
-    detector_manifest = {
-        'status': 'complete',
-        'schema': 'bbox_characterization_detector.v2',
-        'created_utc': datetime.now(timezone.utc).isoformat(),
-        'detector_script': str(Path(__file__).resolve()),
-        'detector_script_sha256': sha256(Path(__file__).resolve()),
-        'selection_helper': str(
-            (REPO / 'src/perception/perception/core/yolo_selection.py').resolve()
-        ),
-        'selection_helper_sha256': sha256(
-            (REPO / 'src/perception/perception/core/yolo_selection.py').resolve()
-        ),
-        'capture_index_sha256': sha256(index),
-        'capture_manifest_sha256': sha256(manifest),
-        'weights': str(weights),
-        'weights_sha256': sha256(weights),
-        'runtime': {
-            'image_size': int(args.image_size),
-            'confidence_threshold': float(args.confidence_threshold),
-            'predict_confidence_floor': float(args.predict_confidence_floor),
-            'iou_threshold': float(args.iou_threshold),
-            'class_name': 'robot',
-            'selected_point': 'bbox_bottom_centre',
-            'detector_clipped_definition': (
-                'selected box touches an image boundary within 0.5 px rounding tolerance'
-            ),
-        },
-        'attempt_rows': len(usable),
-        'unique_images': len(paths),
-        'detected_rows': detected,
-        'bbox_observations_sha256': sha256(output),
-    }
-    (capture / 'bbox_detector_manifest.json').write_text(
-        json.dumps(detector_manifest, indent=2), encoding='utf-8'
-    )
-    print(json.dumps({
-        'rows': len(usable), 'unique_images': len(paths), 'detected': detected,
-        'output': str(output),
-    }, indent=2))
+    for source in rows:
+        row = {field: source.get(field, '') for field in FIELDS}
+        if source['capture_status'] == 'failed':
+            row.update(inference_status='not_attempted_acquisition_failed', detected='',
+                       confidence='', n_candidates='')
+            written.append(row)
+            continue
+        selection = selections[source['image_sha1']]
+        box = selection['bbox_xyxy']
+        hit = bool(selection['detected'])
+        width, height = sizes[source['camera_id']]
+        clipped = bool(hit and box is not None and (
+            float(box[0]) <= CLIP_EPSILON_PX or float(box[1]) <= CLIP_EPSILON_PX
+            or float(box[2]) >= width - CLIP_EPSILON_PX or float(box[3]) >= height - CLIP_EPSILON_PX))
+        row.update(inference_status='detected' if hit else 'miss', detected=int(hit),
+                   confidence=float(selection['confidence']), n_candidates=int(selection['n_candidates']),
+                   detector_clipped=int(clipped),
+                   u_bbox_bottom=float(selection['bbox_bottom_u']) if hit else math.nan,
+                   v_bbox_bottom=float(selection['bbox_bottom_v']) if hit else math.nan)
+        row.update({key: float(box[i]) if box is not None else math.nan
+                    for i,key in enumerate(('x0','y0','x1','y1'))})
+        written.append(row)
+        detected += int(hit)
+    # Do not certify a source/configuration that changed while inference was running.
+    checked_bytes(index, digest(index_bytes))
+    checked_bytes(manifest, digest(manifest_bytes))
+    checked_bytes(weights, weights_hash)
+    atomic_csv(output, written, FIELDS)
+    metadata = dict(status='complete', schema='bbox_characterization_detector.v3',
+        created_utc=datetime.now(timezone.utc).isoformat(),
+        detector_script=str(Path(__file__).resolve()), detector_script_sha256=sha256(Path(__file__)),
+        selection_helper=str(REPO / 'src/perception/perception/core/yolo_selection.py'),
+        selection_helper_sha256=sha256(REPO / 'src/perception/perception/core/yolo_selection.py'),
+        capture_index_sha256=digest(index_bytes), capture_manifest_sha256=digest(manifest_bytes),
+        weights=str(weights), weights_sha256=weights_hash,
+        preprocessing='verified decoded BGR uint8 arrays in original capture dimensions; native YOLO preprocessing',
+        runtime=dict(image_size=int(args.image_size), confidence_threshold=float(args.confidence_threshold),
+                     predict_confidence_floor=float(args.predict_confidence_floor),
+                     iou_threshold=float(args.iou_threshold), class_name='robot', selected_point='bbox_bottom_centre'),
+        attempt_rows=len(rows), opportunity_rows=len(rows),
+        inference_rows=sum(r['capture_status']=='ok' for r in rows),
+        acquisition_failed_rows=sum(r['capture_status']=='failed' for r in rows),
+        unique_images=len(items), detected_rows=detected,
+        availability_target='detector return conditional on successful acquisition; acquisition failures have unknown detector outcome',
+        bbox_observations_sha256=sha256(output))
+    atomic_json(output_manifest, metadata)
+    print(json.dumps(dict(rows=len(rows), detected=detected, output=str(output)), indent=2))
     return 0
 
 

@@ -12,6 +12,7 @@ import csv
 import hashlib
 import json
 import math
+import io
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,6 +29,9 @@ for rel in ('src/experiments', 'src/unav_common', 'experiments/measurement_commi
 from experiments.core.world_profiles import compute_look_at_from_pose  # noqa: E402
 from observation import h as hull_h, jacobian as hull_jacobian  # noqa: E402
 from unav_common.camera_model import ObliqueCameraModel  # noqa: E402
+from unav_common.capture_integrity import (  # noqa: E402
+    atomic_bytes, atomic_json, capture_lock, checked_bytes, digest, historical_bytes,
+)
 
 
 KEY = ('pose_id', 'repetition_id', 'camera_id')
@@ -36,6 +40,8 @@ BASE_FIELDS = (
     'pose_id', 'position_id', 'heading_id', 'repetition_id', 'source_batch_id', 'camera_id',
     'dataset_split', 'random_draw_index',
     'image', 'image_sha1', 'robot_x', 'robot_y', 'robot_yaw', 'camera_range_m',
+    'capture_status', 'capture_error', 'inference_status', 'capture_session_id',
+    'image_id', 'image_stamp_ns',
     'nominal_in_frame', 'detected', 'detector_clipped', 'confidence', 'n_candidates',
     'x0', 'y0', 'x1', 'y1', 'u_bbox_bottom', 'v_bbox_bottom',
 )
@@ -59,14 +65,20 @@ def row_key(row: dict[str, str]) -> tuple[str, ...]:
     return tuple(row[field] for field in KEY)
 
 
-def camera_models(capture_manifest: dict) -> dict[str, ObliqueCameraModel]:
+def camera_models(capture_manifest: dict, *, capture_root: Path | None = None) -> dict[str, ObliqueCameraModel]:
     profiles_path = Path(capture_manifest['world_profiles_path'])
-    if sha256(profiles_path) != capture_manifest['world_profiles_sha256']:
-        raise RuntimeError('The world-profile file changed after capture; refusing reconstruction')
-    profiles = yaml.safe_load(profiles_path.read_text(encoding='utf-8'))
+    snapshot = capture_root / 'provenance/world_profiles.yaml' if capture_root else None
+    profile_bytes = historical_bytes(profiles_path, capture_manifest['world_profiles_sha256'],
+        repo=REPO, snapshot=snapshot if snapshot and snapshot.exists() else None)
+    world_snapshot = capture_root / 'provenance/world.sdf' if capture_root else None
+    historical_bytes(Path(capture_manifest['world_path']), capture_manifest['world_sha256'],
+        repo=REPO, snapshot=world_snapshot if world_snapshot and world_snapshot.exists() else None)
+    profiles = yaml.safe_load(profile_bytes)
     intrinsics = profiles['camera_intrinsics']
     models = {}
     for item in capture_manifest['cameras']:
+        if item['camera_id'] in models:
+            raise ValueError('duplicate camera in capture manifest')
         pose = [float(value) for value in item['pose_xyz_rpy']]
         look_at = compute_look_at_from_pose(pose[:3], *pose[3:])
         models[item['camera_id']] = ObliqueCameraModel(
@@ -120,6 +132,11 @@ def main() -> int:
     args = parser.parse_args()
 
     capture = args.capture.expanduser().resolve()
+    with capture_lock(capture):
+        return derive(args, capture)
+
+
+def derive(args, capture: Path) -> int:
     capture_index = capture / 'capture_index.csv'
     bbox_path = capture / 'bbox_observations.csv'
     capture_manifest_path = capture / 'capture_manifest.json'
@@ -127,27 +144,40 @@ def main() -> int:
     required = (capture_index, bbox_path, capture_manifest_path, detector_manifest_path)
     if any(not path.is_file() for path in required):
         raise RuntimeError('Complete capture and detector outputs are required')
-    capture_manifest = json.loads(capture_manifest_path.read_text(encoding='utf-8'))
-    detector_manifest = json.loads(detector_manifest_path.read_text(encoding='utf-8'))
+    if (capture / 'observation_interpretations.csv').exists() or (capture / 'observation_interpretations_manifest.json').exists():
+        raise RuntimeError('interpretation output already exists; refusing frozen overwrite')
+    detector_bytes = detector_manifest_path.read_bytes()
+    detector_manifest = json.loads(detector_bytes)
+    capture_bytes = checked_bytes(capture_manifest_path, detector_manifest.get('capture_manifest_sha256'))
+    capture_manifest = json.loads(capture_bytes)
+    index_bytes = checked_bytes(capture_index, detector_manifest.get('capture_index_sha256'))
+    if digest(index_bytes) != capture_manifest.get('capture_index_sha256'):
+        raise ValueError('capture index does not match its own manifest')
+    box_bytes = checked_bytes(bbox_path, detector_manifest.get('bbox_observations_sha256'))
     if (
         not str(capture_manifest.get('status', '')).startswith('complete')
         or detector_manifest.get('status') != 'complete'
     ):
         raise RuntimeError('Capture and detector manifests must both be complete')
 
-    capture_rows = list(csv.DictReader(capture_index.open(encoding='utf-8')))
-    bbox_rows = list(csv.DictReader(bbox_path.open(encoding='utf-8')))
+    capture_rows = list(csv.DictReader(io.StringIO(index_bytes.decode())))
+    bbox_rows = list(csv.DictReader(io.StringIO(box_bytes.decode())))
     bbox_by_key = {row_key(row): row for row in bbox_rows}
     if len(bbox_by_key) != len(bbox_rows):
         raise RuntimeError('Duplicate observation keys in bbox_observations.csv')
-    usable = [row for row in capture_rows if row['capture_status'] == 'ok']
+    if len({row_key(r) for r in capture_rows}) != len(capture_rows):
+        raise RuntimeError('duplicate capture keys')
+    usable = capture_rows
+    if detector_manifest.get('schema') != 'bbox_characterization_detector.v3':
+        if any(r['capture_status'] != 'ok' for r in capture_rows):
+            raise RuntimeError('legacy detector table lost acquisition failures; regenerate in a new capture copy')
     if {row_key(row) for row in usable} != set(bbox_by_key):
         raise RuntimeError('Capture and detector keys do not match exactly')
 
-    cameras = camera_models(capture_manifest)
+    cameras = camera_models(capture_manifest, capture_root=capture)
     output = capture / 'observation_interpretations.csv'
     counts = {'attempts': 0, 'detections': 0, 'raw_valid': 0, 'fixed_valid': 0, 'hull_valid': 0}
-    with output.open('w', newline='', encoding='utf-8') as handle:
+    with io.StringIO(newline='') as handle:
         writer = csv.DictWriter(handle, fieldnames=FIELDS)
         writer.writeheader()
         for source in usable:
@@ -161,7 +191,7 @@ def main() -> int:
                 if field in box:
                     row[field] = box[field]
             counts['attempts'] += 1
-            if int(box['detected']) != 1:
+            if source['capture_status'] != 'ok' or int(box['detected']) != 1:
                 for method in METHODS:
                     values = method_values(None, truth=np.zeros(2), camera_xy=np.zeros(2))
                     row.update({f'{method}_{key}': value for key, value in values.items()})
@@ -190,12 +220,21 @@ def main() -> int:
                 counts[f'{method}_valid'] += int(values['valid'])
             writer.writerow(row)
 
+        encoded = handle.getvalue().encode()
+    for path, data in ((capture_index, index_bytes), (bbox_path, box_bytes),
+                       (capture_manifest_path, capture_bytes), (detector_manifest_path, detector_bytes)):
+        checked_bytes(path, digest(data))
+    atomic_bytes(output, encoded)
+
     manifest = {
         'status': 'complete',
-        'schema': 'bbox_observation_interpretations.v1',
+        'schema': 'bbox_observation_interpretations.v2',
         'created_utc': datetime.now(timezone.utc).isoformat(),
         'capture_index_sha256': sha256(capture_index),
         'bbox_observations_sha256': sha256(bbox_path),
+        'capture_manifest_sha256': digest(capture_bytes),
+        'detector_manifest_sha256': digest(detector_bytes),
+        'acquisition_failed_rows': sum(r['capture_status'] != 'ok' for r in capture_rows),
         'interpretations': {
             'raw': 'floor back-projection of YOLO bounding-box bottom-centre',
             'fixed': 'raw point shifted away from camera by one fixed distance',
@@ -212,9 +251,7 @@ def main() -> int:
         'counts': counts,
         'observation_interpretations_sha256': sha256(output),
     }
-    (capture / 'observation_interpretations_manifest.json').write_text(
-        json.dumps(manifest, indent=2), encoding='utf-8'
-    )
+    atomic_json(capture / 'observation_interpretations_manifest.json', manifest)
     print(json.dumps({'output': str(output), **counts}, indent=2))
     return 0
 

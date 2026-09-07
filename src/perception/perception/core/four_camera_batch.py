@@ -2,8 +2,8 @@
 
 The runtime deliberately does not approximate-time synchronize by reusing the
 last image from a slow camera.  A batch is emitted only when every camera has
-contributed one strictly newer image.  Pending images are latest-only and are
-discarded when their wall age or inter-camera stamp skew exceeds the configured
+contributed one strictly newer image. Pending images are grouped in bounded
+timestamp buckets and are discarded when their wall age or inter-camera stamp skew exceeds the configured
 bound.
 """
 
@@ -41,6 +41,8 @@ class PendingFrame:
     receive_stamp_s: float
     receive_wall_s: float
     payload: Any
+    source_frame_id: str = ""
+    content_sha256: str = ""
 
 
 @dataclass(frozen=True)
@@ -133,7 +135,7 @@ def validate_batch_results(
 
 
 class FourCameraBatcher:
-    """Thread-safe, latest-only synchronizer with no frame reuse."""
+    """Thread-safe, bounded stamp-bucket synchronizer with no frame reuse."""
 
     def __init__(
         self,
@@ -141,6 +143,8 @@ class FourCameraBatcher:
         camera_order: Sequence[str] = CAMERA_ORDER,
         max_stamp_skew_s: float = 0.05,
         max_pending_wall_s: float = 0.50,
+        max_pending_batches: int = 32,
+        on_event=None,
     ) -> None:
         order = tuple(str(camera_id) for camera_id in camera_order)
         expected = len(CAMERA_ORDER)
@@ -153,6 +157,10 @@ class FourCameraBatcher:
             raise BatchContractError("max_stamp_skew_s must be finite and non-negative")
         if not math.isfinite(max_pending_wall_s) or float(max_pending_wall_s) <= 0.0:
             raise BatchContractError("max_pending_wall_s must be finite and positive")
+        if isinstance(max_pending_batches, bool) or int(max_pending_batches) != max_pending_batches or max_pending_batches < 1:
+            raise BatchContractError("max_pending_batches must be a positive integer")
+        self.max_pending_batches = int(max_pending_batches)
+        self._on_event = on_event or (lambda event: None)
         self.camera_order = order
         self.max_stamp_skew_ns = int(round(float(max_stamp_skew_s) * 1.0e9))
         self.max_pending_wall_s = float(max_pending_wall_s)
@@ -160,6 +168,7 @@ class FourCameraBatcher:
         #: stamp bucket -> the frames of that round, at most one per camera
         self._buckets: dict[int, dict[str, PendingFrame]] = {}
         self._last_seen_stamp_ns = {camera_id: -1 for camera_id in order}
+        self._last_seen_content_sha256 = {camera_id: "" for camera_id in order}
         self._last_batched_stamp_ns = {camera_id: -1 for camera_id in order}
         self._lock = threading.Lock()
 
@@ -171,7 +180,7 @@ class FourCameraBatcher:
 
     @property
     def bucket_report(self) -> tuple[tuple[int, tuple[str, ...]], ...]:
-        """Which cameras each open round is still waiting on.
+        """Camera members currently present in each open round.
 
         A round that never completes is otherwise silent: the batcher returns
         "accepted_waiting" and the node publishes nothing, with no warning to
@@ -195,20 +204,27 @@ class FourCameraBatcher:
                 return key
         return int(stamp_ns)
 
+    def _drop_locked(self, key: int, reason: str) -> tuple[str, ...]:
+        bucket = self._buckets.pop(key)
+        present = tuple(c for c in self.camera_order if c in bucket)
+        self._on_event(dict(status=reason, bucket_stamp_ns=key,
+                            received_camera_ids=list(present),
+                            missing_camera_ids=[c for c in self.camera_order if c not in bucket],
+                            frame_stamp_ns={c: f.stamp_ns for c, f in bucket.items()},
+                            members=[dict(camera_id=f.camera_id, capture_stamp_ns=f.stamp_ns,
+                                          source_frame_id=f.source_frame_id,
+                                          image_receive_stamp_s=f.receive_stamp_s,
+                                          image_receive_wall_s=f.receive_wall_s)
+                                     for f in bucket.values()]))
+        return present
+
     def _expire_locked(self, now_wall_s: float) -> tuple[str, ...]:
-        dropped: list[str] = []
-        for key in list(self._buckets):
-            bucket = self._buckets[key]
-            for camera_id in [
-                cam for cam, frame in bucket.items()
-                if now_wall_s - frame.receive_wall_s > self.max_pending_wall_s
-            ]:
-                bucket.pop(camera_id, None)
-                dropped.append(camera_id)
-            if not bucket:
-                self._buckets.pop(key, None)
-        # report in camera order, once each, however many rounds they came from
-        return tuple(c for c in self.camera_order if c in set(dropped))
+        dropped = set()
+        for key, bucket in list(self._buckets.items()):
+            # Expire the transaction when any required member becomes too old.
+            if any(now_wall_s - f.receive_wall_s > self.max_pending_wall_s for f in bucket.values()):
+                dropped.update(self._drop_locked(key, "incomplete_timeout"))
+        return tuple(c for c in self.camera_order if c in dropped)
 
     def expire(self, now_wall_s: float) -> tuple[str, ...]:
         """Discard pending frames that can no longer form a fresh batch."""
@@ -218,6 +234,12 @@ class FourCameraBatcher:
             raise BatchContractError("now_wall_s must be finite")
         with self._lock:
             return self._expire_locked(now_wall_s)
+
+    def close(self) -> None:
+        """Account for unselected rounds after the executor has quiesced."""
+        with self._lock:
+            for key in list(self._buckets):
+                self._drop_locked(key, "incomplete_shutdown")
 
     def offer(self, frame: PendingFrame) -> BatchDecision:
         """Offer a frame and possibly return a deterministic contract-ordered batch."""
@@ -237,6 +259,11 @@ class FourCameraBatcher:
             expired = self._expire_locked(float(frame.receive_wall_s))
             last_seen = self._last_seen_stamp_ns[frame.camera_id]
             if frame.stamp_ns == last_seen:
+                previous_hash = self._last_seen_content_sha256[frame.camera_id]
+                if previous_hash and frame.content_sha256 and previous_hash != frame.content_sha256:
+                    self._on_event(dict(status="conflicting_duplicate_image", camera_id=frame.camera_id,
+                                        capture_stamp_ns=frame.stamp_ns, source_frame_id=frame.source_frame_id))
+                    raise BatchContractError(f"conflicting image bytes at same capture stamp for {frame.camera_id}")
                 return BatchDecision("duplicate", dropped_camera_ids=expired)
             if frame.stamp_ns < last_seen:
                 return BatchDecision("out_of_order", dropped_camera_ids=expired)
@@ -259,8 +286,17 @@ class FourCameraBatcher:
             # arrival of the next one. `max_stamp_skew_ns` becomes the grouping
             # tolerance rather than a rejection test.
             self._last_seen_stamp_ns[frame.camera_id] = frame.stamp_ns
+            self._last_seen_content_sha256[frame.camera_id] = frame.content_sha256
             key = self._bucket_key_locked(frame.stamp_ns)
+            if key not in self._buckets and len(self._buckets) >= self.max_pending_batches:
+                evicted = self._drop_locked(next(iter(self._buckets)), "incomplete_capacity")
+                expired = tuple(dict.fromkeys((*expired, *evicted)))
             replaced = frame.camera_id in self._buckets.setdefault(key, {})
+            if replaced:
+                self._on_event(dict(status="frame_replaced", bucket_stamp_ns=key,
+                                    camera_id=frame.camera_id,
+                                    frame_stamp_ns=self._buckets[key][frame.camera_id].stamp_ns,
+                                    source_frame_id=self._buckets[key][frame.camera_id].source_frame_id))
             self._buckets[key][frame.camera_id] = frame
             if len(self._buckets[key]) != len(self.camera_order):
                 return BatchDecision(
@@ -290,7 +326,10 @@ class FourCameraBatcher:
                         if stamps[camera_id] == oldest_stamp
                     )
                 for camera_id in skew_dropped:
-                    self._pending.pop(camera_id, None)
+                    dropped_frame = self._pending.pop(camera_id)
+                    self._on_event(dict(status="stamp_skew", bucket_stamp_ns=key,
+                                        camera_id=camera_id, frame_stamp_ns=dropped_frame.stamp_ns,
+                                        source_frame_id=dropped_frame.source_frame_id))
                 return BatchDecision(
                     "stamp_skew",
                     dropped_camera_ids=tuple(dict.fromkeys((*expired, *skew_dropped))),
@@ -299,8 +338,10 @@ class FourCameraBatcher:
             batch = tuple(self._pending.pop(camera_id) for camera_id in self.camera_order)
             # a completed round makes every earlier round unreachable: discard them
             # instead of leaving them to expire and be reported as drops later
-            for stale in [k for k in self._buckets if k <= key]:
-                self._buckets.pop(stale, None)
+            self._buckets.pop(key, None)
+            for stale in [k for k in self._buckets if k < key]:
+                superseded = self._drop_locked(stale, "superseded_by_complete_batch")
+                expired = tuple(dict.fromkeys((*expired, *superseded)))
             for item in batch:
                 if item.stamp_ns <= self._last_batched_stamp_ns[item.camera_id]:
                     # This should be unreachable because last-seen stamps are

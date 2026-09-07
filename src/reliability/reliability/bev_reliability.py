@@ -28,6 +28,7 @@ from reliability.firewall import validate_feature_columns
 from reliability.prior import CameraPriorMap, MultiCameraPriorMap
 from reliability.providers import GridMapReliabilityProvider
 from reliability.single_camera_adapter import precision_blend_covariance
+from unav_common.config import parse_bool
 
 
 DEFAULT_BEV_FEATURE_NAMES = (
@@ -148,14 +149,20 @@ class BEVCameraToken:
         object.__setattr__(self, "xy_m", _pair(self.xy_m, "xy_m"))
         object.__setattr__(self, "timestamp_s", _finite(self.timestamp_s, "timestamp_s"))
         object.__setattr__(self, "geometry_prior", _probability(self.geometry_prior, "geometry_prior"))
-        object.__setattr__(self, "in_fov", bool(self.in_fov))
+        try:
+            in_fov = parse_bool(self.in_fov, field_name="in_fov")
+            detection_valid = parse_bool(self.detection_valid, field_name="detection_valid")
+            measurement_stale = parse_bool(self.measurement_stale, field_name="measurement_stale")
+        except ValueError as exc:
+            raise ContractValidationError(str(exc)) from exc
+        object.__setattr__(self, "in_fov", in_fov)
         object.__setattr__(self, "detector_score", _probability(self.detector_score, "detector_score"))
-        object.__setattr__(self, "detection_valid", bool(self.detection_valid))
+        object.__setattr__(self, "detection_valid", detection_valid)
         age = _finite(self.measurement_age_s, "measurement_age_s")
         if age < 0.0:
             raise ContractValidationError("measurement_age_s must be non-negative")
         object.__setattr__(self, "measurement_age_s", age)
-        object.__setattr__(self, "measurement_stale", bool(self.measurement_stale))
+        object.__setattr__(self, "measurement_stale", measurement_stale)
         object.__setattr__(
             self,
             "association_confidence",

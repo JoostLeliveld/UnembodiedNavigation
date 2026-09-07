@@ -11,7 +11,7 @@ os.environ.setdefault('OMP_NUM_THREADS','1')
 import json,sys,argparse
 from pathlib import Path
 import joblib,numpy as np
-from field_driving import load_run,analyze,REQUIRED,CAMERAS
+from field_driving import load_run,analyze,REQUIRED,CAMERAS,aligned
 from field_study import FIELD_OUT,OUT,REPO,REQ,digest,load_data,grouped_probability_score
 from study import load,score,KINDS
 
@@ -26,6 +26,16 @@ def save(path,obj):
     temporary.write_text(json.dumps(obj,indent=2,allow_nan=False)+'\n');temporary.replace(path)
 
 def selection():
+    destination=DEST/'selection.json'
+    if destination.exists():
+        frozen=json.loads(destination.read_text())
+        if frozen.get('status')=='complete_pilot_diagnostic':
+            from network_replay import validate_selection
+            validate_selection(frozen,dict(runs=6,routes=2,seeds_per_route=3))
+            if {(e['task'],e['seed']) for e in frozen['runs']}!=set(EXPECTED):
+                raise ValueError('frozen thesis selection identity differs')
+            for entry in frozen['runs']:load_run(entry)
+            return frozen
     candidates={(t,s):(OUT/'field_pilot'/t/'N1'/f'seed{s}'/r,'recovered_explicit_execution') for t,s,r in INITIAL}
     ledger=OUT/'field_pilot_remaining/campaign_log.json'
     if ledger.exists():
@@ -46,7 +56,7 @@ def selection():
             if not summary['completed']:raise ValueError('incomplete execution')
             if not summary.get('valid_run'):raise ValueError('runtime invalid run')
             entry=dict(key=f'{t}__N1__seed{s}',run=str(run.relative_to(REPO)),task=t,seed=s,
-                files={name:digest(run/name) for name in REQUIRED},status='completed',
+                files={name:digest(run/name) for name in aligned.required_artifacts(run,REQUIRED)},status='completed',
                 field_sha256=digest(FIELD_OUT/'field.joblib'),requirements_sha256=digest(REQ))
             destination=DEST/'driving'/entry['key']/'manifest.json'
             if destination.exists() and json.loads(destination.read_text())!=entry:raise ValueError('frozen execution changed')
@@ -79,14 +89,17 @@ def static():
     save(DEST/'static.json',result)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--static',action='store_true');parser.add_argument('--select-only',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--static',action='store_true');parser.add_argument('--select-only',action='store_true');parser.add_argument('--output',type=Path,default=DEST/'driving');parser.add_argument('--max-reference-gap-s',type=float);args=parser.parse_args()
     DEST.mkdir(parents=True,exist_ok=True)
     if args.static:static()
     selected=selection();print(json.dumps({k:v for k,v in selected.items() if k!='runs'}),flush=True)
+    produced={}
     if not args.select_only:
         for entry in selected['runs']:
             print('Analyzing',entry['key'],flush=True)
-            analyze(entry,DEST/'driving')
-    save(DEST/'analysis_sources.json',{str(p.relative_to(REPO)):digest(p) for p in [Path(__file__),
-        REPO/'experiments/icra_commissioning/field_driving.py',REPO/'experiments/icra_commissioning/replay.py',
-        REPO/'experiments/icra_commissioning/model.py',REPO/'experiments/fusion_on_fixed_routes/aligned.py']})
+            result=analyze(entry,args.output,max_reference_gap_s=args.max_reference_gap_s)
+            produced[entry['key']]=result['analysis_inputs']
+    if not args.select_only:
+        args.output.mkdir(parents=True,exist_ok=True)
+        save(args.output/'analysis_sources.json',dict(selection_sha256=digest(DEST/'selection.json'),
+            producer_inputs_by_run=produced,runner_sha256=digest(Path(__file__))))

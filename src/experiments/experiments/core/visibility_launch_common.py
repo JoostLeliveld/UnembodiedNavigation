@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import io
 import os
 from pathlib import Path
 from typing import Dict, List
+
+import numpy as np
 
 from launch.actions import IncludeLaunchDescription, RegisterEventHandler, Shutdown
 from launch.event_handlers import OnProcessExit
@@ -13,6 +17,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+from unav_common.config import local_controller_type, parse_bev_affine_calibration, parse_bool
 
 
 PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
@@ -85,7 +91,9 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'observation_risk_scale': '1.25',
     'ambiguity_term_scale': '1.00',
     'discount_gamma': '0.98',
-    'robot_collision_radius_m': '0.125',
+    'robot_collision_radius_m': '0.48541219597369',
+    'robot_length_m': '0.8',
+    'robot_width_m': '0.55',
     'bridge_contacts': 'true',
     'bridge_camera_a': 'true',
     'bridge_camera_b': 'false',
@@ -136,8 +144,8 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'local_goal_prior_v_std_start': '-1.0',
     'local_goal_prior_u_std_final': '-1.0',
     'local_goal_prior_v_std_final': '-1.0',
-    'waypoint_spacing_m': '1.0',
-    'waypoint_arrival_radius_m': '0.35',
+    'waypoint_spacing_m': '0.2',
+    'waypoint_arrival_radius_m': '0.1',
     'local_replan_min_remaining_s': '0.0',
     'local_replan_on_waypoint_change': 'false',
     'latency_compensate_plan_handoff': 'false',
@@ -168,7 +176,10 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'enable_mission': 'true',
     'wait_for_belief_before_first_goal': 'false',
     'initial_belief_max_sigma_m': '0.0',
+    'operational_belief_timeout_s': '0.5',
     'yolo_model': '',
+    'outcome_journal_path': '',
+    'manager_outcome_journal_path': '',
     'campaign_config_path': '',
     'yolo_device': '',
     'yolo_imgsz': '640',
@@ -184,6 +195,30 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     # one period so adjacent physical capture rounds can never merge.
     'yolo_max_batch_stamp_skew_s': '0.05',
     'log_dir': 'logs/experiments',
+}
+
+# Must match reliability.measurement_fusion without importing one ROS package
+# into another package's launch-description import path. Historical campaigns
+# name their rule explicitly; this default keeps ad-hoc launch and manifest
+# generation aligned with the camera-manager node.
+DEFAULT_MANAGER_FUSION_RULE = 'independent'
+
+# Runtime collision closure for verified named include instances. This is kept
+# outside the frozen camera/world profile contract so adding physical obstacles
+# cannot silently refreeze calibration identity.
+_COLLISION_INCLUDE_NAMES_BY_WORLD = {
+    world: ('forklift_parked', 'pallet_jack', 'bin_office',
+            'pallet_loose_1', 'pallet_loose_2')
+    for world in (
+        'warehouse_v2.world.sdf',
+        'warehouse_v2_shipout.world.sdf',
+        'warehouse_v2_low_cpu.world.sdf',
+    )
+}
+
+_DETECTOR_CALIBRATION_WORLD_BY_WORLD = {
+    # Performance-only SDF variant uses the same camera geometry/calibration.
+    'warehouse_v2_low_cpu.world.sdf': 'warehouse_v2',
 }
 
 # Command noise shape — paper-locked, not user-overridable.
@@ -217,7 +252,7 @@ VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
     'use_nogo_cost': 'true',
     'nogo_penalty_type': 'warning_band',
     'nogo_weight': 40.0,
-    'nogo_safe_distance': 0.35,
+    'nogo_safe_distance': 0.55,
     'nogo_logbarrier_eps': 1e-3,
     'nogo_warning_band': 0.05,
     'nogo_near_weight': 50.0,
@@ -231,8 +266,11 @@ VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
 }
 
 
-def _as_bool(value: str) -> bool:
-    return str(value).strip().lower() in ('1', 'true', 't', 'yes', 'y', 'on')
+def _as_bool(value: object) -> bool:
+    try:
+        return parse_bool(value)
+    except ValueError as exc:
+        raise ValueError(f"invalid boolean value {value!r}") from exc
 
 
 def _launch_value(context, name: str, default_value: str) -> str:
@@ -252,6 +290,33 @@ def _require_task_field(task, key):
     if key not in task:
         raise RuntimeError(f"Task is missing '{key}' field")
     return task[key]
+
+
+def _camera_network_identity(path: str, expected_camera_ids) -> Dict[str, object]:
+    """Read the exact network bytes and materialize the consumer expectations."""
+    artifact_bytes = Path(path).read_bytes()
+    digest = hashlib.sha256(artifact_bytes).hexdigest()
+    try:
+        with np.load(io.BytesIO(artifact_bytes), allow_pickle=False) as archive:
+            metadata = json.loads(str(archive['metadata_json'].item()))
+            artifact_camera_ids = tuple(str(value) for value in archive['camera_ids'])
+    except (KeyError, TypeError, ValueError, OSError) as exc:
+        raise RuntimeError(f'malformed camera-network artifact identity: {exc}') from exc
+    source_hashes = metadata.get('source_hashes') if isinstance(metadata, dict) else None
+    if not isinstance(source_hashes, dict) or not source_hashes:
+        raise RuntimeError('camera-network artifact has no nonempty source_hashes mapping')
+    roster = tuple(str(value) for value in expected_camera_ids)
+    if not roster or len(set(roster)) != len(roster) or set(roster) != set(artifact_camera_ids):
+        raise RuntimeError(
+            f'camera-network roster {artifact_camera_ids} differs from world profile {roster}'
+        )
+    return {
+        'camera_network_expected_sha256': digest,
+        'camera_network_expected_source_hashes_json': json.dumps(
+            source_hashes, sort_keys=True, separators=(',', ':')
+        ),
+        'camera_network_camera_ids': ','.join(roster),
+    }
 
 
 def _state_estimator_metadata(cfg: Dict[str, object] | None = None) -> Dict[str, str]:
@@ -337,7 +402,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'manager_fusion_common_mode_std_m': float(
             _launch_value(context, 'manager_fusion_common_mode_std_m', '0.0')),
         'manager_fusion_rule': _launch_value(
-            context, 'manager_fusion_rule', 'legacy'
+            context, 'manager_fusion_rule', DEFAULT_MANAGER_FUSION_RULE
         ).strip().lower(),
         'manager_correction_timestamp_compensation': _as_bool(_launch_value(
             context, 'manager_correction_timestamp_compensation', 'false')),
@@ -430,6 +495,10 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             context,
             'initial_belief_max_sigma_m',
             PAPER_LAUNCH_DEFAULTS['initial_belief_max_sigma_m'],
+        )),
+        'operational_belief_timeout_s': float(_launch_value(
+            context, 'operational_belief_timeout_s',
+            PAPER_LAUNCH_DEFAULTS['operational_belief_timeout_s'],
         )),
         'goal_success_radius': float(_launch_value(context, 'goal_success_radius', PAPER_LAUNCH_DEFAULTS['goal_success_radius'])),
         'goal_success_hold_s': float(_launch_value(context, 'goal_success_hold_s', PAPER_LAUNCH_DEFAULTS['goal_success_hold_s'])),
@@ -644,6 +713,8 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'nogo_mode': _launch_value(context, 'nogo_mode', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_mode'])).strip().lower(),
         'use_hit_miss_mixture': _as_bool(_launch_value(context, 'use_hit_miss_mixture', str(VISIBILITY_FALLBACK_DEFAULTS['use_hit_miss_mixture']))),
         'goal_sigma_uv': float(_launch_value(context, 'goal_sigma_uv', PAPER_LAUNCH_DEFAULTS['goal_sigma_uv'])),
+        'robot_length_m': float(_launch_value(context, 'robot_length_m', PAPER_LAUNCH_DEFAULTS['robot_length_m'])),
+        'robot_width_m': float(_launch_value(context, 'robot_width_m', PAPER_LAUNCH_DEFAULTS['robot_width_m'])),
         'robot_collision_radius_m': float(
             _launch_value(
                 context,
@@ -733,6 +804,13 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'use_rviz': _as_bool(_launch_value(context, 'use_rviz', 'false')),
         'rviz_config': _launch_value(context, 'rviz_config', ''),
         'yolo_model': _launch_value(context, 'yolo_model', PAPER_LAUNCH_DEFAULTS['yolo_model']),
+        'outcome_journal_path': _launch_value(
+            context, 'outcome_journal_path', PAPER_LAUNCH_DEFAULTS['outcome_journal_path']
+        ).strip(),
+        'manager_outcome_journal_path': _launch_value(
+            context, 'manager_outcome_journal_path',
+            PAPER_LAUNCH_DEFAULTS['manager_outcome_journal_path']
+        ).strip(),
         'yolo_device': _launch_value(context, 'yolo_device', PAPER_LAUNCH_DEFAULTS['yolo_device']),
         'yolo_imgsz': int(_launch_value(context, 'yolo_imgsz', PAPER_LAUNCH_DEFAULTS['yolo_imgsz'])),
         'yolo_conf_threshold': float(_launch_value(context, 'yolo_conf_threshold', PAPER_LAUNCH_DEFAULTS['yolo_conf_threshold'])),
@@ -758,6 +836,11 @@ def parse_common_launch_config(context) -> Dict[str, object]:
     if cfg['heading_update_mode'] not in ('camera_xy_only', 'coupled'):
         raise RuntimeError(
             "heading_update_mode must be 'camera_xy_only' or 'coupled'")
+    try:
+        cfg['local_controller_type'] = local_controller_type(cfg['local_controller_type'])
+        parse_bev_affine_calibration(cfg['bev_affine_calibration'])
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
     if not (0.0 <= cfg['yolo_max_batch_stamp_skew_s'] < 0.20):
         raise RuntimeError(
             "yolo_max_batch_stamp_skew_s must be non-negative and strictly below "
@@ -915,6 +998,15 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         raise RuntimeError(
             f"World profile camera_image_topics must align with camera_ids for {cfg['world']}"
         )
+    network_identity = {
+        'camera_network_expected_sha256': '',
+        'camera_network_expected_source_hashes_json': '',
+        'camera_network_camera_ids': '',
+    }
+    if camera_network_artifact_path:
+        network_identity = _camera_network_identity(
+            camera_network_artifact_path, profile_camera_ids
+        )
     camera_params = {
         'cam_pos': cam_pos,
         'look_at': look_at,
@@ -949,7 +1041,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     nogo_geometry_needed = (
         raw_use_nogo_cost in ('1', 'true', 't', 'yes', 'y', 'on')
     )
-    geometry_needed = bool(cfg.get('perception_use_geometry_occlusion', False)) or nogo_geometry_needed
+    geometry_needed = _as_bool(cfg.get('perception_use_geometry_occlusion', False)) or nogo_geometry_needed
     occlusion_model_names = _profile_name_tuple(
         profile,
         'occlusion_model_names',
@@ -960,6 +1052,15 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         'collision_model_names',
         'collision_model_name',
     )
+    collision_include_names = _profile_name_tuple(
+        profile,
+        'collision_include_names',
+        'collision_include_name',
+    )
+    if not collision_include_names:
+        collision_include_names = _COLLISION_INCLUDE_NAMES_BY_WORLD.get(
+            str(cfg['world']), ()
+        )
     if (not visibility_geometry_json) and geometry_needed:
         visibility_geometry_json = serialize_occlusion_geometry_from_world(
             world_path,
@@ -970,9 +1071,12 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
             collision_geometry_json = serialize_collision_geometry_from_world(
                 world_path,
                 model_names=collision_model_names,
+                include_names=collision_include_names,
             )
         else:
-            collision_geometry_json = serialize_collision_geometry_from_world(world_path)
+            collision_geometry_json = serialize_collision_geometry_from_world(
+                world_path, include_names=collision_include_names
+            )
 
     global_planner_mode = str(cfg.get('global_planner_mode', 'efe') or 'efe').strip().lower()
     allowed_global_modes = ('efe', 'geometric_shortest_path', 'preselected_route')
@@ -990,7 +1094,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     route_args_present = any(str(cfg.get(name, '') or '').strip() for name in route_argument_names)
     preselected_route_validation_json = ''
     if global_planner_mode == 'preselected_route':
-        if not bool(cfg.get('use_hierarchical', False)):
+        if not _as_bool(cfg.get('use_hierarchical', False)):
             raise RuntimeError(
                 "global_planner_mode='preselected_route' requires use_hierarchical:=true "
                 "so the existing belief-based local waypoint tracker executes the route"
@@ -1077,6 +1181,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         'driveable_geometry_json': driveable_geometry_json,
         'visibility_artifact_path': visibility_artifact_path,
         'camera_network_artifact_path': camera_network_artifact_path,
+        **network_identity,
         'preselected_route_validation_json': preselected_route_validation_json,
     })
     return cfg
@@ -1086,7 +1191,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     """Create shared nodes/components for the thesis pipeline."""
     state_sources = _state_estimator_metadata(cfg)
     odom_topic = str(cfg.get('odom_topic') or '/odom_noisy')
-    use_encoder_noise = bool(cfg.get('use_encoder_noise', True))
+    use_encoder_noise = _as_bool(cfg.get('use_encoder_noise', True))
     if not use_encoder_noise and odom_topic == '/odom_noisy':
         odom_topic = '/odom'
     sim_pkg = FindPackageShare('sim')
@@ -1109,7 +1214,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'bridge_camera_c': 'true' if cfg.get('bridge_camera_c', False) else 'false',
         'bridge_camera_d': 'true' if cfg.get('bridge_camera_d', False) else 'false',
     }
-    if bool(cfg.get('multicam_scheduled', False)) or bool(cfg.get('multicam_belief', False)):
+    if _as_bool(cfg.get('multicam_scheduled', False)) or _as_bool(cfg.get('multicam_belief', False)):
         # Both multi-camera front-ends need fresh RGB from EVERY camera the world profile
         # declares: the scheduled detector infers one view per cycle, and the batched
         # detector emits a batch only once every camera in its contract has contributed.
@@ -1300,6 +1405,9 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'initial_belief_max_sigma_m': cfg.get(
             'initial_belief_max_sigma_m', 0.0
         ),
+        'operational_belief_timeout_s': cfg.get(
+            'operational_belief_timeout_s', 0.5
+        ),
     }
     mission_node = Node(
         package='experiments',
@@ -1351,6 +1459,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'method': cfg['comparison_method_id'] or cfg['planner'],
                 'perception_backend': cfg['perception_backend'],
                 'world': cfg['world'],
+                'world_sdf_path': str(cfg['world_path']),
                 'task': cfg['task'].get('name', cfg['task_name'] or ''),
                 'planner': cfg['planner'],
                 'state_source_x': state_sources['state_source_x'],
@@ -1363,9 +1472,12 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 # result's arm identity does not live only in its directory name.
                 'manager_settings_json': json.dumps(
                     dict(manager_arm_settings(cfg),
-                         manager_active=bool(cfg.get('multicam_belief', False))),
+                         manager_active=_as_bool(cfg.get('multicam_belief', False))),
                     sort_keys=True),
                 'campaign_config_path': cfg.get('campaign_config_path', ''),
+                'outcome_journal_path': cfg.get('outcome_journal_path', ''),
+                'manager_outcome_journal_path': cfg.get(
+                    'manager_outcome_journal_path', ''),
                 'use_pixel_correction': cfg['use_pixel_correction'],
                 'pixel_timeout_s': cfg['pixel_timeout_s'],
                 'use_ambiguity': cfg['use_ambiguity'],
@@ -1373,6 +1485,11 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'use_visibility_model': cfg['use_visibility_model'],
                 'visibility_artifact_path': cfg['visibility_artifact_path'],
                 'camera_network_artifact_path': cfg.get('camera_network_artifact_path', ''),
+                'camera_network_expected_sha256': cfg.get(
+                    'camera_network_expected_sha256', ''),
+                'camera_network_expected_source_hashes_json': cfg.get(
+                    'camera_network_expected_source_hashes_json', ''),
+                'camera_network_camera_ids': cfg.get('camera_network_camera_ids', ''),
                 'risk_weight_obs': cfg['risk_weight_obs'],
                 'ambiguity_weight': cfg['ambiguity_weight'],
                 'goal_sigma_uv': cfg['goal_sigma_uv'],
@@ -1432,6 +1549,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'auto_stop_on_goal': cfg['auto_stop_on_goal'],
                 'goal_success_radius': cfg['goal_success_radius'],
                 'goal_success_hold_s': cfg['goal_success_hold_s'],
+                'operational_belief_timeout_s': cfg['operational_belief_timeout_s'],
                 'goal_stable_radius': cfg['goal_stable_radius'],
                 'goal_stable_hold_s': cfg['goal_stable_hold_s'],
                 'goal_stable_max_displacement_m': cfg['goal_stable_max_displacement_m'],
@@ -1498,8 +1616,8 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'local_goal_prior_v_std_start': cfg.get('local_goal_prior_v_std_start', -1.0),
                 'local_goal_prior_u_std_final': cfg.get('local_goal_prior_u_std_final', -1.0),
                 'local_goal_prior_v_std_final': cfg.get('local_goal_prior_v_std_final', -1.0),
-                'waypoint_spacing_m': cfg.get('waypoint_spacing_m', 1.0),
-                'waypoint_arrival_radius_m': cfg.get('waypoint_arrival_radius_m', 0.35),
+                'waypoint_spacing_m': cfg.get('waypoint_spacing_m', 0.2),
+                'waypoint_arrival_radius_m': cfg.get('waypoint_arrival_radius_m', 0.1),
                 'local_replan_min_remaining_s': cfg.get('local_replan_min_remaining_s', 0.0),
                 'local_replan_on_waypoint_change': cfg.get('local_replan_on_waypoint_change', False),
                 'latency_compensate_plan_handoff': cfg.get('latency_compensate_plan_handoff', False),
@@ -1515,6 +1633,8 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'stuck_cmd_fraction_min': cfg['stuck_cmd_fraction_min'],
                 'stuck_idle_cmd_fraction_max': cfg['stuck_idle_cmd_fraction_max'],
                 'robot_collision_radius_m': cfg['robot_collision_radius_m'],
+                'robot_length_m': cfg.get('robot_length_m', 0.8),
+                'robot_width_m': cfg.get('robot_width_m', 0.55),
                 'terminate_on_geom_collision': cfg['terminate_on_geom_collision'],
                 'use_command_noise': cfg['use_command_noise'],
                 'use_odom_for_predict': cfg['use_odom_for_predict'],
@@ -1600,15 +1720,15 @@ def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
 
     return {
         'manager_decision_rate_hz': float(cfg.get('manager_decision_rate_hz', 5.0)),
-        'manager_require_gp_artifacts': bool(cfg.get('manager_require_gp_artifacts', True)),
-        'manager_fusion_mode': bool(cfg.get('manager_fusion_mode', True)),
-        'manager_publish_map_observations': bool(
+        'manager_require_gp_artifacts': _as_bool(cfg.get('manager_require_gp_artifacts', True)),
+        'manager_fusion_mode': _as_bool(cfg.get('manager_fusion_mode', True)),
+        'manager_publish_map_observations': _as_bool(
             cfg.get('manager_publish_map_observations',
                     str(cfg.get('state_correction_mode', 'fused')) == 'per_camera')
         ),
         'manager_fusion_disagreement_gate_m': float(
             cfg.get('manager_fusion_disagreement_gate_m', 0.6)),
-        'manager_require_source_batch_id': bool(
+        'manager_require_source_batch_id': _as_bool(
             cfg.get('manager_require_source_batch_id', True)),
         'manager_bootstrap_min_cameras': int(
             cfg.get('manager_bootstrap_min_cameras', 2)),
@@ -1623,14 +1743,14 @@ def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
         'manager_commissioned_world_covariance_path': str(
             cfg.get('manager_commissioned_world_covariance_path', '') or ''),
         'manager_commissioned_sigma_px': float(cfg.get('manager_commissioned_sigma_px', 0.0)),
-        'manager_commissioned_per_camera_sigma': bool(
+        'manager_commissioned_per_camera_sigma': _as_bool(
             cfg.get('manager_commissioned_per_camera_sigma', False)),
         'manager_fusion_common_mode_std_m': float(
             cfg.get('manager_fusion_common_mode_std_m', 0.0)),
-        'manager_fusion_rule': str(cfg.get('manager_fusion_rule', 'legacy')),
-        'manager_correction_timestamp_compensation': bool(
+        'manager_fusion_rule': str(cfg.get('manager_fusion_rule', DEFAULT_MANAGER_FUSION_RULE)),
+        'manager_correction_timestamp_compensation': _as_bool(
             cfg.get('manager_correction_timestamp_compensation', False)),
-        'manager_admission_gate': bool(cfg.get('manager_admission_gate', True)),
+        'manager_admission_gate': _as_bool(cfg.get('manager_admission_gate', True)),
         'manager_correction_residual_interval_s': float(
             cfg.get('manager_correction_residual_interval_s', 0.05)),
         'manager_correction_propagation_drift_std': float(
@@ -1655,7 +1775,7 @@ def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
             cfg.get('manager_required_consecutive_better_frames', 1)),
         'manager_max_cross_camera_disagreement_m': float(
             cfg.get('manager_max_cross_camera_disagreement_m', 1.0)),
-        'manager_require_consistency_when_source_available': bool(
+        'manager_require_consistency_when_source_available': _as_bool(
             cfg.get('manager_require_consistency_when_source_available', False)),
         'manager_bias_floor_along_slope_m_per_m': float(
             cfg.get('manager_bias_floor_along_slope_m_per_m', 0.0)),
@@ -1683,6 +1803,22 @@ def _manager_node_parameters(cfg: Dict[str, object]) -> Dict[str, object]:
             assert key.startswith('manager_'), key
             name = key[len('manager_'):]
         out[name] = value
+    learned_path = str(cfg.get('manager_learned_correction_path', '') or '').strip()
+    world_covariance_path = str(
+        cfg.get('manager_commissioned_world_covariance_path', '') or ''
+    ).strip()
+    if learned_path:
+        learned = Path(learned_path).expanduser().resolve()
+        out['learned_correction_path'] = str(learned)
+        out['learned_correction_expected_sha256'] = hashlib.sha256(
+            learned.read_bytes()
+        ).hexdigest()
+    if world_covariance_path:
+        covariance = Path(world_covariance_path).expanduser().resolve()
+        out['commissioned_world_covariance_path'] = str(covariance)
+        out['commissioned_world_covariance_expected_sha256'] = hashlib.sha256(
+            covariance.read_bytes()
+        ).hexdigest()
     return out
 
 
@@ -1714,6 +1850,9 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
         BATCHED_CAMERA_ORDER,
     )
     contract_camera_ids = tuple(BATCHED_CAMERA_ORDER)
+    detector_calibration_world = _DETECTOR_CALIBRATION_WORLD_BY_WORLD.get(
+        str(cfg['world']), str(cfg['world']).replace('.world.sdf', '')
+    )
     profile_camera_ids = tuple(cfg.get('profile_camera_ids', ()))
     if profile_camera_ids != contract_camera_ids:
         raise RuntimeError(
@@ -1730,13 +1869,14 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
         executable='batched_four_camera_yolo_node',
         name='batched_four_camera_yolo',
         output='screen',
+        on_exit=[Shutdown(reason='batched multicamera detector exited')],
         parameters=[{
             'use_sim_time': True,
             # Every published observation carries a calibration identity of the form
             # "<world>_<camera>", and the node refuses to run without the world half. This
             # launch path never set it, so the batched detector died on start-up; the
             # commissioning launch derived it the same way.
-            'calibration_world': str(cfg['world']).replace('.world.sdf', ''),
+            'calibration_world': detector_calibration_world,
             'model_path': cfg['yolo_model'],
             'runtime_backend': cfg.get('yolo_runtime_backend', 'native'),
             'compiled_model_path': cfg.get('yolo_compiled_model', ''),
@@ -1769,6 +1909,7 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
             'runtime_trace_period_s': float(cfg.get('yolo_runtime_trace_period_s', 0.0)),
             'camera_observation_r_visible_uv': float(cfg.get('r_visible_uv', 2.5)),
             'camera_observation_r_miss_uv': float(cfg.get('r_miss_uv', 40.0)),
+            'outcome_journal_path': str(cfg.get('outcome_journal_path', '') or ''),
         }],
     )
     # Which cameras the fusion manager uses. Empty -> all registered cameras; restrict
@@ -1792,20 +1933,34 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
             "guess a model include name."
         )
     _mc_model_includes = [_model_include_by_id[c] for c in _mc_camera_ids]
+    _manager_odom_topic = str(cfg.get('odom_topic') or '/odom_noisy')
+    if not _as_bool(cfg.get('use_encoder_noise', True)) and _manager_odom_topic == '/odom_noisy':
+        _manager_odom_topic = '/odom'
     manager = Node(
         package='reliability',
         executable='camera_manager_node',
         name='camera_manager_active',
         output='screen',
+        on_exit=[Shutdown(reason='camera manager exited')],
         parameters=[{
             'use_sim_time': True,
             'world_sdf': world_sdf,
             'authority': 'active',
             'active_output_topic': '/state/bev',
             'frame_id': 'map_bev',
+            'odometry_topic': _manager_odom_topic,
+            'odometry_frame_id': 'odom',
+            'odometry_to_map_yaw_rad': float(cfg['spawn']['yaw']),
             'gp_artifact_template': str(cfg.get('manager_gp_artifact_template', '') or ''),
             'camera_ids': _mc_camera_ids,
             'camera_model_includes': _mc_model_includes,
+            'camera_calibration_ids': [
+                f'{detector_calibration_world}_{camera_id}'
+                for camera_id in _mc_camera_ids
+            ],
+            'camera_image_frame_ids': list(_mc_camera_ids),
+            'outcome_journal_path': str(
+                cfg.get('manager_outcome_journal_path', '') or ''),
             **_manager_node_parameters(cfg),
         }],
     )
@@ -1849,7 +2004,7 @@ def _scheduled_detector_node(cfg: Dict[str, object]):
 def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     """Create runtime actions for the visibility-aware agent launch."""
     odom_topic = str(cfg.get('odom_topic') or '/odom_noisy')
-    if not bool(cfg.get('use_encoder_noise', True)) and odom_topic == '/odom_noisy':
+    if not _as_bool(cfg.get('use_encoder_noise', True)) and odom_topic == '/odom_noisy':
         odom_topic = '/odom'
     raw_use_nogo_cost = cfg.get('use_nogo_cost', 'auto')
     if isinstance(raw_use_nogo_cost, str) and raw_use_nogo_cost in ('', 'auto', 'default'):
@@ -1907,7 +2062,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
         },
     }
     planner_uses_visibility = (
-        bool(cfg['use_visibility_model'])
+        _as_bool(cfg['use_visibility_model'])
         and planner not in ('constant_R_efe', 'geometric_shortest_path')
     )
     agent_node = Node(
@@ -1981,6 +2136,11 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'nogo_mode': cfg.get('nogo_mode', 'keep_out'),
             'visibility_artifact_path': cfg['visibility_artifact_path'],
             'camera_network_artifact_path': cfg.get('camera_network_artifact_path', ''),
+            'camera_network_expected_sha256': cfg.get(
+                'camera_network_expected_sha256', ''),
+            'camera_network_expected_source_hashes_json': cfg.get(
+                'camera_network_expected_source_hashes_json', ''),
+            'camera_network_camera_ids': cfg.get('camera_network_camera_ids', ''),
             'use_nogo_cost': cfg['resolved_use_nogo_cost'],
             'nogo_penalty_type': cfg['nogo_penalty_type'],
             'nogo_weight': cfg['nogo_weight'],
@@ -1992,6 +2152,8 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'nogo_belief_kappa': cfg['nogo_belief_kappa'],
             'use_hit_miss_mixture': cfg.get('use_hit_miss_mixture', False),
             'robot_collision_radius_m': cfg['robot_collision_radius_m'],
+            'robot_length_m': cfg.get('robot_length_m', 0.8),
+            'robot_width_m': cfg.get('robot_width_m', 0.55),
             'optimizer_maxiter': cfg['optimizer_maxiter'],
             'optimizer_maxfun': cfg['optimizer_maxfun'],
             'optimizer_ftol': cfg['optimizer_ftol'],
@@ -2032,8 +2194,8 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'local_goal_prior_v_std_start': cfg.get('local_goal_prior_v_std_start', -1.0),
             'local_goal_prior_u_std_final': cfg.get('local_goal_prior_u_std_final', -1.0),
             'local_goal_prior_v_std_final': cfg.get('local_goal_prior_v_std_final', -1.0),
-            'waypoint_spacing_m': cfg.get('waypoint_spacing_m', 1.0),
-            'waypoint_arrival_radius_m': cfg.get('waypoint_arrival_radius_m', 0.35),
+            'waypoint_spacing_m': cfg.get('waypoint_spacing_m', 0.2),
+            'waypoint_arrival_radius_m': cfg.get('waypoint_arrival_radius_m', 0.1),
             'local_replan_min_remaining_s': cfg.get('local_replan_min_remaining_s', 0.0),
             'local_replan_on_waypoint_change': cfg.get('local_replan_on_waypoint_change', False),
             'latency_compensate_plan_handoff': cfg.get('latency_compensate_plan_handoff', False),

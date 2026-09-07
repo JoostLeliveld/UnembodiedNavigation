@@ -296,6 +296,8 @@ class CorrectionSnapshot:
     yaw_meas: float | None = None
     yaw_sigma: float = math.nan
     yaw_source: float = 0.0
+    motion_snapshot: Any = None
+    belief_record: Any = None
 
 
 @dataclass
@@ -414,21 +416,43 @@ def compute_update(m_pred, lin: Linearization, *, cov_eig_floor: float,
     m_pred = np.asarray(m_pred, dtype=float)
     mu_y = np.asarray(lin.mu_y, dtype=float).reshape(-1)
     meas = np.asarray(lin.z, dtype=float).reshape(-1)
-    if meas.size != mu_y.size:
+    if m_pred.shape != (3,) or meas.size == 0 or meas.size != mu_y.size:
         _report(on_shape_error,
-                "Pixel correction shape mismatch: "
-                f"meas_dim={meas.size}, pred_dim={mu_y.size}. "
+                "Correction shape mismatch: "
+                f"state={m_pred.shape}, meas_dim={meas.size}, pred_dim={mu_y.size}. "
                 "Skipping correction for this message.")
         return None
 
     Sigma_y = np.asarray(lin.Sigma_y, dtype=float)
     Gamma = np.asarray(lin.Gamma, dtype=float)
-    if Sigma_y.shape != (meas.size, meas.size) or Gamma.shape[1] != meas.size:
+    S_eff = np.asarray(lin.S_eff, dtype=float)
+    R_eff = np.asarray(lin.R_eff, dtype=float)
+    if (Sigma_y.shape != (meas.size, meas.size) or Gamma.shape != (3, meas.size)
+            or S_eff.shape != (3, 3) or R_eff.shape != Sigma_y.shape):
         _report(on_shape_error,
-                "Pixel correction covariance shape mismatch: "
-                f"Sigma_y={Sigma_y.shape}, Gamma={Gamma.shape}, meas_dim={meas.size}. "
+                "Correction covariance shape mismatch: "
+                f"Sigma_y={Sigma_y.shape}, Gamma={Gamma.shape}, "
+                f"S_eff={S_eff.shape}, R_eff={R_eff.shape}, meas_dim={meas.size}. "
                 "Skipping correction for this message.")
         return None
+
+    gain_scale = float(lin.gain_scale)
+    if (not all(np.isfinite(value).all() for value in
+                (m_pred, mu_y, meas, Sigma_y, Gamma, S_eff, R_eff))
+            or not math.isfinite(gain_scale)):
+        _report(on_shape_error, "Non-finite correction inputs; skipping correction.")
+        return None
+    # Symmetrization removes roundoff, not invalid covariance semantics. Inverting
+    # an indefinite innovation can yield a negative NIS and bypass a statistical gate.
+    for name, covariance in (("innovation", Sigma_y), ("measurement", R_eff)):
+        if not np.allclose(covariance, covariance.T, atol=0.0, rtol=1e-9):
+            _report(on_shape_error, f"Asymmetric {name} covariance; skipping correction.")
+            return None
+        try:
+            np.linalg.cholesky(0.5 * (covariance + covariance.T))
+        except np.linalg.LinAlgError:
+            _report(on_shape_error, f"Non-positive {name} covariance; skipping correction.")
+            return None
 
     innov = meas - mu_y
     if innov.size >= 3:
@@ -439,17 +463,22 @@ def compute_update(m_pred, lin: Linearization, *, cov_eig_floor: float,
     except np.linalg.LinAlgError:
         _report(on_shape_error, "Singular innovation covariance; skipping correction.")
         return None
-    gain_scale = float(lin.gain_scale)
     next_m = m_pred + gain_scale * (K @ innov)
+    if not np.isfinite(next_m).all():
+        _report(on_shape_error, "Non-finite correction mean; skipping correction.")
+        return None
     next_m[2] = wrap_angle(next_m[2])
     # Joseph covariance expressed through the joint state/measurement moments. This
     # also applies to moment-matched nonlinear observations without inventing an H.
     # The gain used by the mean must also be used by every covariance term.
     effective_K = gain_scale * K
-    next_S = (np.asarray(lin.S_eff, dtype=float)
+    next_S = (S_eff
               - effective_K @ Gamma.T - Gamma @ effective_K.T
               + effective_K @ Sigma_y @ effective_K.T)
     next_S = 0.5 * (next_S + next_S.T)
+    if not np.isfinite(next_S).all():
+        _report(on_shape_error, "Non-finite correction covariance; skipping correction.")
+        return None
     eig_min = np.min(np.linalg.eigvalsh(next_S))
     if eig_min < cov_eig_floor:
         next_S = project_to_psd(next_S, floor=cov_eig_floor)
@@ -469,10 +498,10 @@ def normalized_innovation_squared(innov, S_y) -> float:
         return float('nan')
     innov_2d = np.asarray(innov, dtype=float).reshape(-1)[:2]
     try:
-        S_inv = np.linalg.inv(np.asarray(S_y, dtype=float)[:2, :2])
+        solved = np.linalg.solve(np.asarray(S_y, dtype=float)[:2, :2], innov_2d)
     except np.linalg.LinAlgError:
         return float('nan')
-    return float(innov_2d @ S_inv @ innov_2d)
+    return float(innov_2d @ solved)
 
 
 def yaw_report(next_m, next_S, m_pred) -> dict:
@@ -536,9 +565,8 @@ class PixelMeasurementSource:
 class FusedMapMeasurementSource:
     """Multicam source: z = (x, y) metres, h(x) = [I2 | 0], R from the manager.
 
-    Not yet wired into the node -- that is step 2 of the consolidation. Kept
-    here so the seam is real rather than hypothetical, and unit-tested against
-    the closed-form ``K = S[:, :2] S_y⁻¹`` update the multicam path used.
+    Used by the node's fused and per-camera metric corrections. The map-XY
+    covariance reaches the same gate/update chain as the pixel source.
     """
 
     label = 'fused_map'
@@ -588,6 +616,14 @@ def apply_correction(
     implausible dt, throttling, bootstrap).
     """
     space = float(getattr(source, 'measurement_space', SPACE_PIXEL_UV))
+
+    # evaluate_gates also serves partial historical diagnostics, where NaN means
+    # "not logged yet". Executing an update requires actual, chronological times.
+    if not math.isfinite(age):
+        return CorrectionOutcome(reason=RejectReason.STALE_AGE, age=age, measurement_space=space)
+    if not math.isfinite(dt_s) or dt_s < 0.0:
+        return CorrectionOutcome(reason=RejectReason.DT_IMPLAUSIBLE, age=age, dt_s=dt_s,
+                                 measurement_space=space)
 
     reason = evaluate_gates(gates, age=age)
     if reason is not RejectReason.ACCEPTED:
@@ -664,6 +700,7 @@ def apply_correction(
             xy_update_norm_m=xy_update_norm_m,
             nis=nis,
             innov_norm_m=innov_norm_m,
+            update_failed=not math.isfinite(nis) or nis < 0.0,
         ),
         age=age,
         dt_s=dt_s,

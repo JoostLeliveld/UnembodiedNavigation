@@ -199,7 +199,6 @@ def risk_components(mu, Sigma, goal):
     S_star = np.asarray(S_star, dtype=float)
 
     d = mu.size
-    S_inv = np.linalg.inv(S_star)
     diff = (m_star - mu).reshape(-1, 1)
 
     sign_s, logdet_s = np.linalg.slogdet(Sigma)
@@ -209,8 +208,8 @@ def risk_components(mu, Sigma, goal):
     if sign_t <= 0:
         logdet_t = np.log(np.maximum(np.linalg.det(S_star), 1e-12))
 
-    term_trace = np.trace(S_inv @ Sigma)
-    term_quad = float(diff.T @ S_inv @ diff)
+    term_trace = np.trace(np.linalg.solve(S_star, Sigma))
+    term_quad = (diff.T @ np.linalg.solve(S_star, diff)).item()
     mean = 0.5 * term_quad
     cov_trace = 0.5 * float(term_trace)
     cov_logdet = 0.5 * float(logdet_t - logdet_s)

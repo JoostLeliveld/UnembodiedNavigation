@@ -15,6 +15,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import tempfile
 from types import SimpleNamespace
 import numpy as np
 
@@ -51,7 +52,8 @@ def resolve(config, task, arm, seed):
     for action in launch.generate_launch_description().entities:
         if isinstance(action, DeclareLaunchArgument):
             context.launch_configurations[action.name] = perform_substitutions(context, action.default_value)
-    command = runner._build_launch_cmd(cfg, task, arm, seed, Path('/tmp/network_route_graph_only'))
+    with tempfile.TemporaryDirectory(prefix='network_route_graph_only_') as output_dir:
+        command = runner._build_launch_cmd(cfg, task, arm, seed, Path(output_dir))
     for arg in command:
         if ':=' in arg:
             key, value = arg.split(':=', 1)

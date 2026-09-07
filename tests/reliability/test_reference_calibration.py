@@ -11,6 +11,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'experiments/icra_commissioning'))
+sys.path.insert(0, str(ROOT / 'experiments/camera_observation_characterization'))
 from reliability.reference_calibration import ReferenceCalibration
 
 ARTIFACT = ROOT / 'logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json'
@@ -58,9 +59,12 @@ def test_actual_manager_matches_frozen_offline_mean_and_R(monkeypatch):
     import reliability.nodes.camera_manager_node as manager
     from reliability.contracts import CameraObservation
     from reliability.learned_box_correction import LearnedBoxCorrection
+    from reliability.manager_state import ManagerInputs
+    from derive_interpretations import camera_models
     models = joblib.load(ROOT / 'logs/studies/icra_commissioning_20260905/models.joblib')
     calibration = ReferenceCalibration(ARTIFACT, MEAN, [f'camera_{c}' for c in 'ABCDE'])
     nn = LearnedBoxCorrection(MEAN)
+    geometry = camera_models(json.loads((ROOT / 'logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/capture_manifest.json').read_text()))
     path = ROOT / 'logs/perception_datasets/warehouse_v2_bbox_characterization_20260831/bias_update_interpretations.csv'
     with path.open() as stream:
         # Keep camera support in this equality check; no performance estimate is made.
@@ -77,11 +81,16 @@ def test_actual_manager_matches_frozen_offline_mean_and_R(monkeypatch):
                             lambda *args: (raw, ((1., 0.), (0., 1.))))
         # Valid contract, with no robot truth or reference fields in deployed inputs.
         contract = CameraObservation(camera_id=camera, timestamp_s=1., detection_valid=True,
+            source_batch_id='frozen_fixture', calibration_id=camera, image_frame_id=camera,
             pixel_uv=(float(row['u_bbox_bottom']), float(row['v_bbox_bottom'])),
+            bbox_bottom_uv=(float(row['u_bbox_bottom']), float(row['v_bbox_bottom'])),
+            selected_pixel_source='bbox_bottom',
             detector_score=float(row['confidence']), detector_score_raw=float(row['confidence']),
             bbox_xyxy=tuple(float(row[k]) for k in ('x0', 'y0', 'x1', 'y1')))
         fake = SimpleNamespace(_latest={camera: contract}, commissioned_pixel_cov_by_camera={},
-            commissioned_pixel_cov=((1., 0.), (0., 1.)), camera_models={camera: SimpleNamespace(cam_pos=[0., 0., 3.])},
+            commissioned_pixel_cov=((1., 0.), (0., 1.)), camera_models={camera: geometry[camera]},
+            camera_calibration_ids_by_camera={camera: camera}, camera_image_frame_ids_by_camera={camera: camera},
+            _decision_snapshot=ManagerInputs('frozen_fixture', (contract,), (), False, None, None),
             covariance_profile=manager.COMMISSIONED_REFERENCE_COVARIANCE, _belief_query_history=[],
             reliability_query_max_time_delta_s=.2, admission_gate=False, silhouette_correction=False,
             observation_model=manager.OBSERVATION_MODEL_LEARNED_NN, learned_correction=nn,

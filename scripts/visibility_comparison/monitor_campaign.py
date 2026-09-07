@@ -1,143 +1,116 @@
 #!/usr/bin/env python3
-"""Live / post-hoc campaign monitor + triage. Given a campaign log-root, report
-per-run status and FLAG anomalies so a bad run can be caught and re-run before
-the whole campaign is wasted. Safe to call repeatedly while the campaign runs.
+"""Triage from an explicit campaign ledger; this output is not scoring evidence.
 
-Per run it reports: did the global solve produce a plan, the chosen route, the
-first-command sim stamp, the execution outcome (goal / collision / stuck /
-interrupted), validity, the post-first-command belief error against GROUND TRUTH, the
-fraction of corrections the filter refused and the longest stretch with no usable
-correction. It then prints per-condition counts and an ANOMALY list:
-  * compute-fail   : ran but never produced a plan/command (the dominant past
-                     failure; if many, the machine is contended -> restart fresh)
-  * route-mismatch : online chosen route != the offline expected route (needs
-                     an offline route-sanity artifact present; skipped when absent)
-  * invalid        : run_summary.valid_run is False for a non-outcome reason
-
-This is a triage view, never evidence. Scoring goes through
-experiments/fusion_on_fixed_routes/aligned.py against a frozen run manifest.
-
-Usage:
-    python monitor_campaign.py logs/visibility_comparison/robustness_campaign_v2
-    python monitor_campaign.py <log-root> --expect 5   # expected seeds/condition
+--config adds the exact planned task/condition/seed denominator. Without it, only
+ledger entries are inventoried, so an absent planned trial cannot be inferred.
+Logger summary means are tick-weighted diagnostics, not independent observations.
 """
-import sys, json, glob, os, math, argparse
-from collections import Counter, defaultdict
+import argparse
+from collections import Counter
+import json
+import math
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-OFFLINE = ROOT / "logs/paper_figures/offline_plan_sanity.json"
+OFFLINE = ROOT / 'logs/paper_figures/offline_plan_sanity.json'
 
 
 def _num(x, nd=2):
     try:
-        if x is None:
-            return None
-        f = float(x)
-        return None if math.isnan(f) else round(f, nd)
-    except (TypeError, ValueError):
+        value=float(x)
+        return round(value,nd) if math.isfinite(value) else None
+    except (TypeError,ValueError):
         return None
 
 
 def _offline_routes():
-    if not OFFLINE.exists():
-        return {}
-    d = json.loads(OFFLINE.read_text())
-    return {(name, c): d[name][c]["route"] for name in d for c in ("C1", "C2")}
+    if not OFFLINE.is_file():return {}
+    data=json.loads(OFFLINE.read_text())
+    return {(task,condition):record['route'] for task,groups in data.items()
+            for condition,record in groups.items() if isinstance(record,dict) and 'route' in record}
 
 
-def collect(log_root: Path):
-    off = _offline_routes()
-    rows = []
-    for rs_p in sorted(glob.glob(str(log_root / "*/*/seed*/*/run_summary.json"))):
-        run = os.path.dirname(rs_p)
-        parts = Path(rs_p).relative_to(log_root).parts
-        task, cond, seed = parts[0], parts[1], parts[2].replace("seed", "")
-        rs = json.loads(Path(rs_p).read_text())
-        meta_p = os.path.join(run, "global_plan_meta.json")
-        meta = json.loads(Path(meta_p).read_text()) if os.path.exists(meta_p) else {}
-        route = str(meta.get("selected_source", "")).replace("solver:route:", "").replace("solver:", "")
-        rows.append(dict(
-            task=task.split("_")[0], cond=cond, seed=seed,
-            has_plan=bool(meta), route=route, off=off.get((task, cond), "?"),
-            fcmd=_num(rs.get("first_cmd_stamp"), 1),
-            completion=(rs.get("completion_reason") or "")[:18],
-            crashed=bool(rs.get("crashed")), collision=bool(rs.get("collision_any")),
-            fgoal=_num(rs.get("final_goal_distance")),
-            valid=rs.get("valid_run"), invalid=(rs.get("invalid_reason") or "")[:18],
-            # Against GROUND TRUTH. The odometry column next to it in run_summary is
-            # belief-vs-wheel-odometry, which is not an error at all -- it read 0.297 m
-            # where thetrue error was 0.032 m, a ninefold overstatement, under a heading
-            # that said "truth".
-            gt_err=_num(rs.get("mean_belief_error_gt_after_first_cmd_m"), 3),
-            drop_frac=_num(rs.get("correction_dropped_fraction"), 3),
-            blind_s=_num(rs.get("longest_correction_gap_s"), 1),
-        ))
-    return rows, off
+def expected_trials(config):
+    import yaml
+    cfg=yaml.safe_load(Path(config).read_text())
+    expected={}
+    for task,group in cfg['tasks'].items():
+        for condition in group['conditions']:
+            for seed in group['seeds']:
+                key=f'{task}__{condition}__seed{seed}'
+                if key in expected:raise ValueError('duplicate configured trial identity')
+                expected[key]=(task,condition,str(seed))
+    return expected
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("log_root", type=str)
-    ap.add_argument("--expect", type=int, default=5, help="expected seeds per task/condition")
-    args = ap.parse_args()
-    log_root = Path(args.log_root)
-    if not log_root.is_absolute():
-        log_root = ROOT / log_root
-    rows, off = collect(log_root)
-    if not rows:
-        print(f"No runs found yet under {log_root}"); return
+def collect(log_root: Path, config=None):
+    path=Path(log_root)/'campaign_log.json'
+    if not path.is_file():raise ValueError(f'{path}: explicit campaign ledger required')
+    ledger=json.loads(path.read_text())
+    expected=expected_trials(config) if config else {}
+    off=_offline_routes();rows=[]
+    for key in sorted(set(ledger)|set(expected)):
+        parts=key.rsplit('__',2)
+        if len(parts)!=3 or not parts[2].startswith('seed'):
+            raise ValueError(f'malformed campaign key: {key}')
+        task,cond,seed=parts[0],parts[1],parts[2][4:]
+        event=ledger.get(key,{})
+        history=event.get('attempts',[])
+        attempts=[(a,False) for a in history]+[(event,True)]
+        for index,(attempt,current) in enumerate(attempts):
+            explicit=(attempt.get('task',task),attempt.get('condition',cond),str(attempt.get('seed',seed)))
+            if explicit!=(task,cond,seed):raise ValueError(f'{key}: attempt identity disagrees with campaign key')
+            run=Path(attempt['run_dir']) if attempt.get('run_dir') else None
+            if run is not None and not run.is_absolute():run=ROOT/run
+            summary_path=run/'run_summary.json' if run else None
+            rs=json.loads(summary_path.read_text()) if summary_path and summary_path.is_file() else {}
+            meta_path=run/'global_plan_meta.json' if run else None
+            meta=json.loads(meta_path.read_text()) if meta_path and meta_path.is_file() else {}
+            identity_error=None
+            manifest_path=run/'run_manifest.json' if run else None
+            if manifest_path and manifest_path.is_file():
+                manifest=json.loads(manifest_path.read_text())
+                if (manifest.get('task'),str(manifest.get('seed')))!=(task,seed):
+                    identity_error='manifest task/seed mismatch'
+            completion=rs.get('completion_reason') or attempt.get('completion_reason')
+            if not rs:completion='missing_summary' if run else ('pending' if not attempt else 'no_run_dir')
+            rows.append(dict(task=task,cond=cond,seed=seed,key=key,current=current,
+                attempt=attempt.get('attempt_id',str(index)),run=str(run) if run else None,
+                planned=(key in expected) if config else None,identity_error=identity_error,
+                has_plan=bool(meta),route=str(meta.get('selected_source','')).removeprefix('solver:route:').removeprefix('solver:'),
+                off=off.get((task,cond),'?'),fcmd=_num(rs.get('first_cmd_stamp'),1),
+                completion=completion,collision=rs.get('collision_any'),valid=rs.get('valid_run'),
+                invalid=rs.get('invalid_reason'),gt_err=_num(rs.get('mean_belief_error_gt_after_first_cmd_m'),3),
+                drop_frac=_num(rs.get('correction_dropped_fraction'),3),
+                rejected=rs.get('correction_rejected_count'),blind_s=_num(rs.get('longest_correction_gap_s'),1)))
+    return rows,off
 
-    hdr = (f"{'tsk':4} {'c':3} {'s':1} {'plan':4} {'route':16} {'fcmd':5} "
-           f"{'completion':18} {'col':3} {'fgl':5} {'val':3} {'gt_err_m':8} "
-           f"{'refused':7} {'blind_s':7}")
-    print(hdr); print("-" * len(hdr))
+
+def main(argv=None):
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('log_root',type=Path)
+    parser.add_argument('--config',type=Path,help='exact campaign YAML to show missing/extra trials')
+    parser.add_argument('--expect',type=int,help='diagnostic count hint only; --config supplies exact seeds')
+    args=parser.parse_args(argv)
+    root=args.log_root if args.log_root.is_absolute() else ROOT/args.log_root
+    rows,_=collect(root,args.config)
+    print('TRIAGE ONLY: logger-tick mean belief error versus GT at belief time; metres. '
+          'dropped is not all refusals; blind gap follows logger summary support.')
+    if args.config is None:print('Planned denominator unavailable: supply --config; only ledger entries are shown.')
     for r in rows:
-        rm = "" if (r["off"] == "?" or not r["has_plan"]) else ("" if r["route"] == r["off"] else " <-MISMATCH")
-        print(f"{r['task'][:4]:4} {r['cond']:3} {r['seed']:1} {str(r['has_plan'])[0]:4} "
-              f"{r['route'][:16]:16} {str(r['fcmd']):5} {r['completion']:18} "
-              f"{str(r['collision'])[0]:3} {str(r['fgoal']):5} "
-              f"{str(r['valid'])[0] if r['valid'] is not None else '?':3} "
-              f"{str(r['gt_err']):8} {str(r['drop_frac']):7} {str(r['blind_s']):7}{rm}")
-
-    # ---- per-condition counts, whatever conditions this campaign actually has ----
-    print()
-    for c in sorted({r["cond"] for r in rows}):
-        rs = [r for r in rows if r["cond"] == c]
-        goal = sum(1 for r in rs if r["completion"].startswith("goal_reached"))
-        coll = sum(1 for r in rs if r["collision"])
-        print(f"  {c}: {len(rs)} runs | goal_reached {goal} | collisions {coll}")
-
-    # ---- anomalies ----
-    def _id(r, suffix=""):
-        return "{}/{}/s{}{}".format(r["task"], r["cond"], r["seed"], suffix)
-    compute_fail = [r for r in rows if not r["has_plan"]]
-    mismatch = [r for r in rows if r["has_plan"] and r["off"] != "?" and r["route"] != r["off"]]
-    invalid = [r for r in rows if r["valid"] is False]
-    cf_ids = ", ".join(_id(r) for r in compute_fail)
-    mm_ids = ", ".join(_id(r, "=" + r["route"]) for r in mismatch)
-    iv_ids = ", ".join(_id(r, ":" + r["invalid"]) for r in invalid)
-    print("\nANOMALIES:")
-    print(f"  compute-fail (no plan/command): {len(compute_fail)}" + (f"  -> {cf_ids}" if cf_ids else ""))
-    print(f"  route-mismatch vs offline:      {len(mismatch)}" + (f"  -> {mm_ids}" if mm_ids else ""))
-    print(f"  invalid (non-outcome):          {len(invalid)}" + (f"  -> {iv_ids}" if iv_ids else ""))
-    if not OFFLINE.exists():
-        print("  (no offline route artifact -> route-mismatch check skipped)")
-
-    # ---- progress vs expected ----
-    per = defaultdict(int)
-    for r in rows:
-        per[(r["task"], r["cond"])] += 1
-    print(f"\nPROGRESS: {len(rows)} runs logged; per task/condition seed counts:")
-    for k in sorted(per):
-        flag = "" if per[k] >= args.expect else f"  (expect {args.expect})"
-        print(f"  {k[0]:6} {k[1]}: {per[k]}{flag}")
-
-    if compute_fail:
-        print("\nTRIAGE: compute-fails present. If just 1-2 and the rest are clean, simply re-run those "
-              "seeds (re-launch with --resume). If many, the machine is contended -> stop, reboot fresh "
-              "(only VS Code), relaunch. Plans themselves are fine when produced (see route column).")
+        suffix=' current' if r['current'] else ' prior attempt'
+        extra=' EXTRA' if r['planned'] is False else ''
+        print(f"{r['task']}/{r['cond']}/seed{r['seed']} attempt={r['attempt']}{suffix}{extra} "
+              f"outcome={r['completion']} valid={r['valid']} plan={r['has_plan']} "
+              f"mean_belief_gt_m={r['gt_err']} dropped_fraction={r['drop_frac']} "
+              f"longest_gap_s={r['blind_s']} identity_error={r['identity_error']}")
+    current=[r for r in rows if r['current']]
+    for task,cond in sorted({(r['task'],r['cond']) for r in rows}):
+        cells=[r for r in current if (r['task'],r['cond'])==(task,cond)]
+        attempts=sum((r['task'],r['cond'])==(task,cond) and r['run'] is not None for r in rows)
+        print(f'{task}/{cond}: {len({r["seed"] for r in cells})} unique seed cells; {attempts} recorded attempts; '
+              f'current outcomes {dict(Counter(r["completion"] for r in cells))}')
+    return 0
 
 
-if __name__ == "__main__":
-    main()
+if __name__=='__main__':raise SystemExit(main())

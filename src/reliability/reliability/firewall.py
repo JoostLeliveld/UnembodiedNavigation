@@ -9,6 +9,7 @@ from typing import Any, Iterable, Mapping
 import yaml
 
 from reliability.contracts import EVALUATION_ONLY_FIELD_NAMES, LeakageError
+from unav_common.config import parse_bool
 
 
 DEFAULT_FIREWALL_CONFIG = (
@@ -50,18 +51,7 @@ def _token_hits(tokens: Iterable[str], text: str) -> list[str]:
 
 def _as_config_bool(value: Any) -> bool:
     """Interpret common launch/YAML boolean spellings without executing config."""
-
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"1", "true", "yes", "on"}:
-            return True
-        if lowered in {"0", "false", "no", "off", ""}:
-            return False
-    return bool(value)
+    return parse_bool(value, field_name="firewall flag")
 
 
 def validate_feature_columns(columns: Iterable[str], cfg: Mapping[str, Any] | None = None) -> None:

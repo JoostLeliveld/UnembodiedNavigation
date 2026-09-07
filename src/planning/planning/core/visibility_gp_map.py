@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import io
 from pathlib import Path
 
 import numpy as np
 import scipy.interpolate
+from planning.core.plan_validation import immutable_array
 
 
 def _clip_prob(p, eps: float):
@@ -25,12 +27,20 @@ class GPVisibilityMapConfig:
 class GPVisibilityMapModel:
     """Load a fixed GP visibility field used by the thesis experiments."""
 
+    def __setattr__(self, name, value):
+        if getattr(self, '_loaded', False) and not name.startswith('_'):
+            raise AttributeError('loaded visibility field is immutable; construct a new model')
+        object.__setattr__(self, name, value)
+
     def __init__(self, cfg: GPVisibilityMapConfig):
         self.cfg = cfg
         self.min_prob = float(max(cfg.min_prob, 1e-6))
+        if not np.isfinite(cfg.min_prob) or not 0 < cfg.min_prob < .5:
+            raise ValueError('visibility min_prob must be finite and in (0,.5)')
         self.artifact_path = self._resolve_artifact_path(cfg.artifact_path)
         self._load_artifact()
         self._prob_state_casadi = None
+        self._loaded = True
 
     @staticmethod
     def _resolve_artifact_path(raw_path: str) -> Path:
@@ -44,8 +54,10 @@ class GPVisibilityMapModel:
         return path.resolve()
 
     def _load_artifact(self) -> None:
+        artifact_bytes = self.artifact_path.read_bytes()
+        self.sha256 = hashlib.sha256(artifact_bytes).hexdigest()
         try:
-            with np.load(self.artifact_path, allow_pickle=False) as data:
+            with np.load(io.BytesIO(artifact_bytes), allow_pickle=False) as data:
                 xs = np.asarray(data["xs"], dtype=float)
                 ys = np.asarray(data["ys"], dtype=float)
                 if "P_conservative_plan_map" not in data.files:
@@ -70,11 +82,13 @@ class GPVisibilityMapModel:
                 f"Empirical GP visibility artifact {self.artifact_path} is missing required field {exc!s}."
             ) from exc
 
-        expected_shape = (ys.shape[0], xs.shape[0])
         if xs.ndim != 1 or ys.ndim != 1 or xs.size < 2 or ys.size < 2:
             raise RuntimeError(
                 f"Empirical GP visibility artifact {self.artifact_path} has an invalid grid."
             )
+        expected_shape = (ys.size, xs.size)
+        if any(not np.isfinite(axis).all() or not (np.diff(axis)>0).all() for axis in (xs,ys)):
+            raise ValueError('visibility axes must be finite and strictly increasing')
         for field_name, grid in (
             ("P_mean_map", p_mean),
             ("P_conservative_plan_map", p_cons),
@@ -84,12 +98,16 @@ class GPVisibilityMapModel:
                     f"Empirical GP visibility artifact {self.artifact_path} has {field_name} shape {grid.shape}, "
                     f"expected {expected_shape}."
                 )
+            if not np.isfinite(grid).all() or np.any((grid < 0) | (grid > 1)):
+                raise ValueError(f'{field_name} must be finite probabilities in [0,1]')
+        if camera_pos.shape != (3,) or not np.isfinite(camera_pos).all() or not np.isfinite(target_height):
+            raise ValueError('visibility camera and target geometry must be finite')
 
-        self.xs = xs
-        self.ys = ys
-        self.P_mean_map = _clip_prob(p_mean, self.min_prob).astype(float)
-        self.P_conservative_plan_map = _clip_prob(p_cons, self.min_prob).astype(float)
-        self.camera_pos = np.asarray(camera_pos, dtype=float).reshape(3)
+        self.xs = immutable_array(xs)
+        self.ys = immutable_array(ys)
+        self.P_mean_map = immutable_array(_clip_prob(p_mean, self.min_prob))
+        self.P_conservative_plan_map = immutable_array(_clip_prob(p_cons, self.min_prob))
+        self.camera_pos = immutable_array(camera_pos)
         self.target_height = float(target_height)
         self.x_min = float(self.xs[0])
         self.x_max = float(self.xs[-1])
@@ -106,10 +124,9 @@ class GPVisibilityMapModel:
     def contains_xy_np(self, x: float, y: float) -> bool:
         if not (np.isfinite(x) and np.isfinite(y)):
             return False
-        eps = 1e-9
         return bool(
-            self.x_min - eps <= float(x) <= self.x_max + eps
-            and self.y_min - eps <= float(y) <= self.y_max + eps
+            self.x_min <= float(x) <= self.x_max
+            and self.y_min <= float(y) <= self.y_max
         )
 
     def _require_xy_in_support_np(self, x: float, y: float) -> tuple[float, float]:
@@ -126,20 +143,9 @@ class GPVisibilityMapModel:
 
     @property
     def signature(self) -> tuple:
-        stat = self.artifact_path.stat()
-        digest = hashlib.sha256(str(self.artifact_path).encode("utf-8")).hexdigest()[:12]
         return (
             "empirical_gp_visibility",
-            digest,
-            str(self.artifact_path),
-            int(stat.st_size),
-            int(self.xs.size),
-            int(self.ys.size),
-            round(float(np.mean(self.P_conservative_plan_map)), 6),
-            round(float(self.xs[0]), 6),
-            round(float(self.xs[-1]), 6),
-            round(float(self.ys[0]), 6),
-            round(float(self.ys[-1]), 6),
+            self.sha256, self.min_prob, tuple(self.camera_pos), self.target_height,
         )
 
     def prob_state_np(self, m) -> float:
@@ -172,10 +178,12 @@ class GPVisibilityMapModel:
         y_max = float(self.y_max)
 
         def p_vis_ca(m):
+            inside = ca.logic_and(ca.logic_and(m[0] >= x_min, m[0] <= x_max),
+                                  ca.logic_and(m[1] >= y_min, m[1] <= y_max))
             x = ca.fmin(ca.fmax(m[0], x_min), x_max)
             y = ca.fmin(ca.fmax(m[1], y_min), y_max)
             z = interp(ca.vertcat(x, y))
-            return ca.fmin(ca.fmax(z, eps), 1.0 - eps)
+            return ca.if_else(inside, ca.fmin(ca.fmax(z, eps), 1.0 - eps), eps)
 
         self._prob_state_casadi = p_vis_ca
         return p_vis_ca

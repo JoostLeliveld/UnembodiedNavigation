@@ -24,13 +24,14 @@ def publish_node():
     node.odom_vel = np.zeros(2)
     node.planner_belief_pub = Publisher()
     node._resolve_plan_frame_id = lambda: 'map_bev'
+    node._cmd_log = [(9., 0., 0.)]
     return node
 
 
 def test_belief_header_is_the_prediction_target_even_if_computation_takes_time():
     node = publish_node()
 
-    def prediction(m, P, u, age, target):
+    def prediction(m, P, u, age, target, *, motion_snapshot=None):
         assert node._stamp_to_float(target) == pytest.approx(10.)
         node._clock.seconds = 10.2
         return m, P
@@ -44,10 +45,8 @@ def test_belief_header_is_the_prediction_target_even_if_computation_takes_time()
 def test_prediction_from_superseded_anchor_is_not_published():
     node = publish_node()
 
-    def prediction(m, P, u, age, target):
-        node.belief_m = np.array([1., 2., 0.])
-        node.belief_S = np.eye(3)
-        node.belief_stamp = stamp(9.8)
+    def prediction(m, P, u, age, target, *, motion_snapshot=None):
+        node._commit_belief(np.array([1., 2., 0.]), np.eye(3), stamp(9.8))
         return m, P
 
     node._predict_belief_to_now = prediction
@@ -84,7 +83,7 @@ def test_metric_corrections_cannot_compute_from_the_same_prior_concurrently():
     second_entered = threading.Event()
     errors = []
 
-    def replay(m, P, from_stamp, to_stamp, u, dt):
+    def replay(m, P, from_stamp, to_stamp, u, dt, *, motion_snapshot=None):
         if node._stamp_to_float(to_stamp) < 10.1:
             first_entered.set()
             if not release_first.wait(2.):

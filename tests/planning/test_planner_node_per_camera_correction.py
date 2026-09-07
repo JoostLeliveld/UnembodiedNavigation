@@ -279,3 +279,34 @@ def test_a_corrupt_batch_stops_the_run_instead_of_quietly_never_correcting():
     np.testing.assert_array_equal(node.belief_m, before)
     assert node._fatal_stop_triggered
     assert any('map-observation batch' in m for _, m in node._logger.messages)
+
+
+def test_foreign_frame_is_rejected_before_any_state_or_dedup_mutation():
+    from std_msgs.msg import String
+
+    node = make_per_camera_node(belief_xy=(0., 0.))
+    node._resolve_plan_frame_id = lambda: 'map_bev'
+    before = node.belief_m.copy(), node.belief_S.copy()
+    errors = []
+    node._fatal_experiment_stop = lambda context, exc: errors.append(str(exc))
+    msg = String()
+    msg.data = map_observations_to_json(
+        [observation('camera_A', .1, 0., seconds=9.95)], frame_id='camera_optical')
+    node._map_observations_cb(msg)
+    assert len(errors) == 1 and 'frame' in errors[0]
+    assert node._seen_map_observation_stamps == {}
+    np.testing.assert_array_equal(node.belief_m, before[0])
+    np.testing.assert_array_equal(node.belief_S, before[1])
+
+
+def test_parser_failure_returns_even_if_the_stop_handler_returns():
+    from std_msgs.msg import String
+
+    node = make_per_camera_node()
+    errors = []
+    node._fatal_experiment_stop = lambda context, exc: errors.append(str(exc))
+    node._apply_map_observations = lambda observations: pytest.fail('applied a malformed batch')
+    msg = String()
+    msg.data = '{}'
+    node._map_observations_cb(msg)
+    assert len(errors) == 1

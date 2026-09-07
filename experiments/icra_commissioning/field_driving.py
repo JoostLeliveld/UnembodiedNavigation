@@ -31,6 +31,8 @@ REQUIRED=['run_manifest.json','run_summary.json','experiment.csv','fusion_observ
 def frozen_runs(out):
     cfg=yaml.safe_load((REPO/'experiments/icra_commissioning/field_pilot_cpu.yaml').read_text())
     ledger=json.loads((PILOT/'campaign_log.json').read_text())
+    expected={f'{t}__N1__seed{s}' for t,g in cfg['tasks'].items() for s in g['seeds']}
+    if set(ledger)-expected:raise ValueError('extra task/condition/seed entries in field campaign ledger')
     entries=[];pending=[]
     for task,config in cfg['tasks'].items():
         for seed in config['seeds']:
@@ -43,7 +45,7 @@ def frozen_runs(out):
             if (m['task'],int(m['seed']))!=(task,seed):raise ValueError('ledger identity mismatch')
             if int(m['logging_schema_version'])<7:raise ValueError('complete opportunity log required')
             entry=dict(key=key,run=str(run.relative_to(REPO)),task=task,seed=seed,
-                files={name:digest(run/name) for name in REQUIRED},status='completed',
+                files={name:digest(run/name) for name in aligned.required_artifacts(run,REQUIRED)},status='completed',
                 field_sha256=digest(FIELD_OUT/'field.joblib'),requirements_sha256=digest(REQ))
             directory=out/key;directory.mkdir(parents=True,exist_ok=True)
             selection=directory/'manifest.json'
@@ -51,42 +53,44 @@ def frozen_runs(out):
                 if json.loads(selection.read_text())!=entry:raise ValueError('frozen run changed')
             else:writejson(selection,entry)
             entries.append(entry)
-    writejson(out/'campaign_selection.json',dict(status='complete' if not pending else 'partial_no_aggregate_claim',
+    selection=dict(status='complete' if not pending else 'partial_no_aggregate_claim',
         runs=entries,pending=pending,selection_source=str((PILOT/'campaign_log.json').relative_to(REPO)),
-        config_sha256=digest(REPO/'experiments/icra_commissioning/field_pilot_cpu.yaml')))
+        config_sha256=digest(REPO/'experiments/icra_commissioning/field_pilot_cpu.yaml'))
+    selected_path=out/'campaign_selection.json'
+    if selected_path.exists():
+        prior=json.loads(selected_path.read_text())
+        if prior.get('status')=='complete' and prior!=selection:raise ValueError('completed frozen campaign selection changed')
+    writejson(selected_path,selection)
     return entries,pending
 
 
-def load_run(entry):
-    run=REPO/entry['run']
-    for name,h in entry['files'].items():
-        if digest(run/name)!=h:raise ValueError('changed driving artifact')
-    m=json.loads((run/'run_manifest.json').read_text());summary=json.loads((run/'run_summary.json').read_text())
+def load_run(entry,*,max_reference_gap_s=None):
+    run,m,summary=aligned.verify_frozen_entry(entry,REQUIRED,minimum_schema=7,repo=REPO)
+    if entry.get('field_sha256')!=digest(FIELD_OUT/'field.joblib'):
+        raise ValueError('frozen field artifact differs')
+    if entry.get('requirements_sha256')!=digest(REQ):
+        raise ValueError('frozen field requirements differ')
     if (m['process_noise_xy'],m['process_noise_theta'])!=(.01,.02):raise ValueError('Q differs')
     if not m['use_odom_for_predict'] or m['odom_topic']!='/odom_noisy':raise ValueError('odometry contract differs')
-    table=aligned.rows(run);truth=aligned.truth_series(run,table)
-    ass=aligned.assimilations(run);obs=aligned.observations(run)
-    assert {o['source_batch_id'] for o in obs}=={a['source_batch_id'] for a in ass}
-    assert len(ass)==len({a['source_batch_id'] for a in ass})
-    assert all(a['status'] in ['accepted','accepted_bootstrap','reanchored','rejected','dropped'] and
-        (a['status'] not in ['rejected','dropped'] or a['reason']) for a in ass)
-    start,stop=float(summary['first_cmd_stamp']),float(summary['stop_stamp'])
-    odom={}
-    for r in table:
-        try:t=float(r['odom_noisy_stamp']);u=np.array([float(r['odom_noisy_v']),float(r['odom_noisy_w'])])
-        except (ValueError,KeyError):continue
-        if np.isfinite([t,*u]).all() and start<=t<=stop:odom.setdefault(t,u)
+    ledger=aligned.validate_run_ledger(run)
+    table=aligned.rows(run);truth=aligned.truth_series(run,table,max_reference_gap_s=max_reference_gap_s)
+    ass=aligned.assimilations(run)
+    start,stop=aligned.mission_interval(run)
+    odom=aligned.measured_odometry(table,start=start,stop=stop)
+    m=dict(m,replay_start_stamp=start)
+    field_inputs=json.loads((FIELD_OUT/'manifest.json').read_text())['files']
+    required_inputs=[ARTIFACT,f'{CAPTURE}/capture_manifest.json',str((OUT/'models.joblib').relative_to(REPO))]
+    for name in required_inputs:
+        if name not in field_inputs or digest(REPO/name)!=field_inputs[name]:
+            raise ValueError(f'changed or unfrozen replay model/geometry input: {name}')
     mean=LearnedBoxCorrection(REPO/ARTIFACT)
     geometry=camera_models(json.loads((REPO/CAPTURE/'capture_manifest.json').read_text()))
-    deliveries=[json.loads(line) for line in (run/'camera_opportunities.jsonl').read_text().splitlines()]
-    if any(not r['valid_contract'] for r in deliveries):raise ValueError('malformed opportunity contract')
-    bybatch=defaultdict(dict);duplicates=0
-    for row in deliveries:
-        if row['duplicate']:duplicates+=1;continue
-        o=row['observation'];t=o['timestamp_s']
+    delivered,duplicates=aligned.camera_opportunities(run)
+    bybatch=defaultdict(dict)
+    for o in delivered:
+        t=o['timestamp_s']
         if not start<=t<=stop:continue
         c=o['camera_id'];b=o['source_batch_id']
-        if c in bybatch[b]:raise ValueError('camera delivered twice with distinct identity in one batch')
         bybatch[b][c]=o
     batches=[];readings=[];unscored=0
     for batch,obs in bybatch.items():
@@ -96,7 +100,8 @@ def load_run(entry):
         # Current campaign is truly simultaneous; do not silently collapse skew.
         if max(times)-min(times)>1e-7:raise ValueError('forecast study requires simultaneous frames')
         t=times[0];gx,gy=truth.at([t]);yaw=truth.yaw_at([t])[0]
-        if not np.isfinite([gx[0],gy[0],yaw]).all():unscored+=1;continue
+        supported=bool(np.isfinite([gx[0],gy[0],yaw]).all())
+        if not supported:unscored+=1
         hits=np.zeros(5,bool)
         for j,c in enumerate(CAMERAS):
             o=obs[c]
@@ -110,24 +115,29 @@ def load_run(entry):
                 truth=np.array([gx[0],gy[0]]),confidence=o['detector_score'],
                 basis=ray_basis(np.asarray(raw),np.asarray(mean._geometry[c]['xy'])),
                 distance=float(np.linalg.norm(np.asarray(raw)-mean._geometry[c]['xy']))))
-        batches.append(dict(t=t,batch=batch,hits=hits,reference=np.array([gx[0],gy[0],yaw])))
+        batches.append(dict(t=t,batch=batch,hits=hits,reference=np.array([gx[0],gy[0],yaw]),reference_supported=supported))
     batches.sort(key=lambda r:r['t']);readings.sort(key=lambda r:(r['t'],r['camera']))
     valid_batches={r['batch'] for r in batches}
     in_drive_fused={a['source_batch_id'] for a in ass if start<=a['correction_stamp']<=stop}
     # Fused envelopes may describe batches whose captures predate first command;
     # accounting is checked above, opportunity completeness is checked independently.
-    live=aligned.aligned_error_cm(run,'belief',table)
+    live=aligned.aligned_error_cm(run,'belief',table,max_reference_gap_s=max_reference_gap_s)
     keep=aligned.landed_mask(live['stamp'])&np.isfinite(live['aligned_cm'])&(live['stamp']>=start)&(live['stamp']<=stop)
     error=live['aligned_cm'][keep]
-    accepted=[a['belief_stamp_after'] for a in ass if a['accepted'] and start<=a['belief_stamp_after']<=stop]
-    gaps=np.diff(sorted([start,stop,*accepted]))
+    mission_accounting=aligned.correction_accounting(run)
+    population=aligned.landed_mask(live['stamp'])&live['have']&(live['stamp']>=start)&(live['stamp']<=stop)
     accounting=dict(batches=len(batches),unscored_reference_batches=unscored,duplicate_deliveries=duplicates,
-        per_camera_opportunities=len(batches),fresh_readings=len(readings),fused_batches=len(ass),
-        dropped_fraction=sum(a['status']=='dropped' for a in ass)/len(ass),longest_gap_s=float(gaps.max()),
+        per_camera_opportunities=len(batches),fresh_readings=len(readings),fused_batches=len(ledger.by_batch),
+        dropped_fraction=mission_accounting['correction_dropped_fraction'],
+        longest_gap_s=mission_accounting['longest_correction_gap_s'],
+        correction_accounting=mission_accounting,
+        reference_max_gap_s=max_reference_gap_s,reference_method=live['reference_method'],
         gt_stamp_source=summary.get('gt_stamp_source'),outcome=summary['completion_reason'],
-        live_belief_n=len(error),live_belief_median_cm=float(np.median(error)),live_belief_p95_cm=float(np.quantile(error,.95)),
+        live_belief_n=len(error),live_belief_reference_unscoreable=int(population.sum())-len(error),
+        live_belief_median_cm=float(np.median(error)) if len(error) else None,
+        live_belief_p95_cm=float(np.quantile(error,.95)) if len(error) else None,
         live_path_length_m=summary.get('path_length_m'),elapsed_s=stop-start,
-        processed_batch_median_interval_s=float(np.median(np.diff([b['t'] for b in batches]))))
+        processed_batch_median_interval_s=float(np.median(np.diff([b['t'] for b in batches]))) if len(batches)>1 else None)
     return m,summary,truth,odom,readings,batches,accounting
 
 
@@ -156,23 +166,36 @@ def coarse_batches(batches,interval=1.):
     return selected
 
 
-def analyze(entry,out):
+def analyze(entry,out,*,max_reference_gap_s=None):
     directory=out/entry['key'];result_path=directory/'results.json'
-    if result_path.exists():return json.loads(result_path.read_text())
-    m,summary,truth,odom,readings,batches,accounting=load_run(entry)
+    # Validate the selected run before any cache access. Cache ownership includes
+    # the full selection, models, implementation and explicit reference policy.
+    m,summary,truth,odom,readings,batches,accounting=load_run(entry,max_reference_gap_s=max_reference_gap_s)
+    inputs=dict(selection=entry,max_reference_gap_s=max_reference_gap_s,
+        files={str(p.relative_to(REPO)):digest(p) for p in [Path(__file__),Path(aligned.__file__),
+            REPO/'experiments/icra_commissioning/replay.py',REPO/'experiments/icra_commissioning/study.py',
+            REPO/'experiments/icra_commissioning/model.py',REPO/'src/unav_common/unav_common/correction_ledger.py',
+            REPO/'scripts/shared/metrics.py',FIELD_OUT/'manifest.json',FIELD_OUT/'field.joblib',OUT/'models.joblib',REPO/ARTIFACT]})
+    if result_path.exists():
+        cached=json.loads(result_path.read_text())
+        if cached.get('analysis_inputs')!=inputs:
+            raise ValueError('existing analysis was produced from different/unknown inputs; use a new output directory')
+        return cached
+    directory.mkdir(parents=True,exist_ok=True)
     field=joblib.load(FIELD_OUT/'field.joblib');models=joblib.load(OUT/'models.joblib')
     coarse=coarse_batches(batches);chosen={b['batch'] for b in coarse}
     sub=[r for r in readings if r['batch'] in chosen]
     comparisons={};reference=None
     for rate,items in [('full',readings),('1Hz_policy',sub)]:
         for kind in ['constant','geometry','confidence','confidence_bias']:
-            s,trace,innov=run_filter(m,truth,odom,items,models,kind,list(CAMERAS),0)
+            s,trace,innov=run_filter(m,truth,odom,items,models,kind,list(CAMERAS),0,prediction_times=[b['t'] for b in batches])
             comparisons[rate+'/'+kind]=s
             if rate=='1Hz_policy' and kind=='confidence':reference=trace
     for c in CAMERAS:
         if not any(r['camera']==c for r in readings):continue
-        s,_,_=run_filter(m,truth,odom,readings,models,'constant',[c],0)
+        s,_,_=run_filter(m,truth,odom,readings,models,'constant',[c],0,prediction_times=[b['t'] for b in batches])
         comparisons['single/'+c]=s
+    if not reference:raise ValueError('no reference-supported replay samples; choose an explicit reference policy')
     tt=np.array(sorted(odom));uu=np.asarray([odom[t] for t in tt])
     times=np.array([r['t'] for r in reference]);states=np.array([r['state'] for r in reference])
     covs=np.array([r['P'] for r in reference]);errs=np.array([r['error'] for r in reference])
@@ -187,9 +210,11 @@ def analyze(entry,out):
     query=np.asarray(query);gtquery=np.asarray(gtquery);observed=np.asarray(observed)
     availability={};qsave={}
     for kind,model in field.availability.items():
-        predicted=model.predict(query);diagnostic=model.predict(gtquery)
+        supported=np.isfinite(gtquery).all(axis=1)
+        predicted=model.predict(query);diagnostic=model.predict(gtquery[supported]) if supported.any() else None
         availability[kind]=dict(brier=M.brier(observed,predicted),logloss=M.logloss(observed,predicted),
-            reference_pose_query_brier=M.brier(observed,diagnostic),supported_fraction=float(model.support(query).mean()),
+            reference_pose_query_brier=M.brier(observed[supported],diagnostic) if diagnostic is not None else None,
+            reference_pose_query_n=int(supported.sum()),supported_fraction=float(model.support(query).mean()),
             per_camera={c:dict(brier=M.brier(observed[:,j],predicted[:,j]),
                 observed_fraction=float(observed[:,j].mean()),predicted_fraction=float(predicted[:,j].mean())) for j,c in enumerate(CAMERAS)})
         qsave[kind]=predicted
@@ -197,7 +222,7 @@ def analyze(entry,out):
     # Normalized reference residual dependence, within each run and camera.
     temporal=[]
     for c in CAMERAS:
-        rows=[r for r in readings if r['camera']==c]
+        rows=[r for r in readings if r['camera']==c and np.isfinite(r['truth']).all()]
         if len(rows)<10:continue
         z,R=models[c,'confidence'].predict(rows);e=z-np.array([r['truth'] for r in rows])
         normalized=np.linalg.solve(np.linalg.cholesky(R),e[...,None])[...,0]
@@ -208,7 +233,8 @@ def analyze(entry,out):
             if valid.sum()<10:continue
             temporal.append(dict(camera=c,lag=lag,pairs=int(valid.sum()),lag_s=float(np.median(dt[valid])),
                 distance_m=float(np.median(np.linalg.norm(pos[lag:]-pos[:-lag],axis=1)[valid])),
-                correlation=[float(np.corrcoef(normalized[:-lag,j][valid],normalized[lag:,j][valid])[0,1]) for j in range(2)]))
+                correlation=[float(np.corrcoef(normalized[:-lag,j][valid],normalized[lag:,j][valid])[0,1])
+                    if min(np.std(normalized[:-lag,j][valid]),np.std(normalized[lag:,j][valid]))>0 else None for j in range(2)]))
     # Frozen forecast settings. Future recorded controls are prescribed route inputs;
     # future camera images, detections and GT never enter a forecast query.
     forecasts=[]
@@ -248,11 +274,12 @@ def analyze(entry,out):
             if not np.isfinite(e).all():continue
             errors.append(e);predicted.append(P[:2,:2])
         if errors:qcheck.append(dict(horizon_s=horizon,score=score(np.array(errors),np.array(predicted),['one_run']*len(errors))))
-    result=dict(run=entry['run'],task=entry['task'],seed=entry['seed'],accounting=accounting,
+    result=dict(run=entry['run'],task=entry['task'],seed=entry['seed'],accounting=accounting,analysis_inputs=inputs,
         replay=comparisons,availability=availability,temporal=temporal,forecasts=forecasts,Q_diagnostic=qcheck,
-        coarse_batch_median_interval_s=float(np.median(np.diff([b['t'] for b in coarse]))),
+        coarse_batch_median_interval_s=float(np.median(np.diff([b['t'] for b in coarse]))) if len(coarse)>1 else None,
         selected_coarse_batches=len(coarse),field_sha256=digest(FIELD_OUT/'field.joblib'),
-        limitations=['Recorded controls prescribe the future route; no closed-loop field-based planning claim.',
+        limitations=['Capture-time idealized replay; arrival latency and live refusal policy are not reproduced.',
+            'Recorded controls prescribe the future route; no closed-loop field-based planning claim.',
             'Forecast uses 1Hz opportunities; actual first-fresh >=1s policy may be slower and is reported.',
             'One trajectory is one experimental unit; forecast windows and residual lag pairs are dependent.',
             'Reference transform may use receipt sim clock; timestamp provenance is reported.',
@@ -262,12 +289,12 @@ def analyze(entry,out):
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,default=FIELD_OUT/'driving');args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,default=FIELD_OUT/'driving');p.add_argument('--max-reference-gap-s',type=float);args=p.parse_args()
     args.output.mkdir(parents=True,exist_ok=True)
     entries,pending=frozen_runs(args.output)
     for entry in entries:
         if entry['status']!='completed':continue
-        print('analyze',entry['key'],flush=True);analyze(entry,args.output)
+        print('analyze',entry['key'],flush=True);analyze(entry,args.output,max_reference_gap_s=args.max_reference_gap_s)
     print('pending',pending,flush=True)
 
 

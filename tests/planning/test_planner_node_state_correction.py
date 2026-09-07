@@ -74,6 +74,9 @@ def make_state_node(*, belief_xy=(0.0, 0.0), belief_cov=0.05, now_s=10.0,
     node.state_max_correction_jump_m = 0.0   # NIS is the gate on the metric path
     node.odom_yaw_offset_rad = 0.0
     node._latest_odom_yaw = odom_yaw
+    # Stamped preceding yaw support, rather than an unclocked latest-yaw field.
+    node._odom_log = [(belief_stamp_s, 0., 0.)]
+    node._odom_heading_log = [(round(belief_stamp_s*1e9), odom_yaw)] if odom_yaw is not None else []
     node.state_msg = None
     return node
 
@@ -429,7 +432,7 @@ def test_prediction_clamp_bounds_an_implausible_replayed_step():
     node.max_predict_speed_mps = 0.6
 
     # Replay invents 5 m of travel over the 0.05 s interval.
-    def _runaway_replay(m, S, from_stamp, to_stamp, cmd, dt):
+    def _runaway_replay(m, S, from_stamp, to_stamp, cmd, dt, *, motion_snapshot=None):
         m = np.asarray(m, dtype=float).copy()
         m[0] += 5.0
         return m, np.asarray(S, dtype=float), {}

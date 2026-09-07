@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from itertools import permutations
 import sys
 from pathlib import Path
 
@@ -28,6 +29,7 @@ from reliability import (  # noqa: E402
     conservative_camera_score,
     run_replay,
     select_conservative_best_camera,
+    select_best_static_reliability,
     select_fixed_zone,
     select_freshest_valid,
     select_highest_detector_score,
@@ -123,6 +125,23 @@ def test_selection_policies_choose_expected_observations() -> None:
         qualities={"camera_A": _quality("camera_A", 0.3), "camera_B": _quality("camera_B", 0.8)},
     ) == b
     assert conservative_camera_score(b, _quality("camera_B", 0.8)) > conservative_camera_score(a, _quality("camera_A", 0.3))
+
+
+def test_selection_policy_ties_do_not_depend_on_callback_order() -> None:
+    a = _obs("camera_A", 0.8, age=0.1, p=0.7)
+    b = _obs("camera_B", 0.8, age=0.1, p=0.7)
+    qualities = {
+        "camera_A": _quality("camera_A", 0.7),
+        "camera_B": _quality("camera_B", 0.7),
+    }
+
+    for observations in permutations((a, b)):
+        assert select_primary_camera(observations, primary_camera_id="absent").camera_id == "camera_A"
+        assert select_fixed_zone(observations, state_xy=(0.0, 0.0), zones=()).camera_id == "camera_A"
+        assert select_highest_detector_score(observations).camera_id == "camera_A"
+        assert select_freshest_valid(observations).camera_id == "camera_A"
+        assert select_best_static_reliability(observations, qualities).camera_id == "camera_A"
+        assert select_conservative_best_camera(observations, qualities).camera_id == "camera_A"
 
 
 def test_sequential_fusion_accepts_near_observation_and_rejects_outlier() -> None:

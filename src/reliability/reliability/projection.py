@@ -46,19 +46,28 @@ def camera_model_from_world(world_sdf: str | Path, *, include_name: str):
 
     root = ET.parse(Path(world_sdf)).getroot()
     pose_text = None
-    for include in root.findall(".//include"):
+    matches = []
+    for include in root.findall("./world/include"):
         name = (include.findtext("name") or "").strip()
         uri = (include.findtext("uri") or "").strip()
         model_name = uri.removeprefix("model://").split("/", 1)[0]
         if include_name in {name, model_name}:
-            pose_text = include.findtext("pose")
-            break
+            matches.append(include)
+    if len(matches) > 1:
+        raise RuntimeError(f"Ambiguous camera include {include_name!r}")
+    if matches:
+        pose = matches[0].find("pose")
+        if pose is not None and (pose.get("relative_to") or pose.get("degrees", "false").lower() == "true" or pose.get("rotation_format", "euler_rpy") != "euler_rpy"):
+            raise RuntimeError("Camera include requires an absolute world pose in Euler radians")
+        pose_text = matches[0].findtext("pose")
     if not pose_text:
         raise RuntimeError(f"Could not find a posed camera include {include_name!r} in {world_sdf}")
     values = [float(value) for value in pose_text.split()]
-    if len(values) != 6:
+    if len(values) != 6 or not all(math.isfinite(v) for v in values):
         raise RuntimeError(f"Camera pose for {include_name!r} must contain six values")
-    x, y, z, _roll, pitch, yaw = values
+    x, y, z, roll, pitch, yaw = values
+    if roll != 0.0 or z <= 0.0:
+        raise RuntimeError("Floor camera loader requires zero roll and positive camera height")
     forward = (math.cos(pitch) * math.cos(yaw), math.cos(pitch) * math.sin(yaw), -math.sin(pitch))
     if forward[2] >= -1.0e-6:
         raise RuntimeError(f"Camera {include_name!r} does not point down towards the ground")
@@ -115,9 +124,11 @@ def project_observation_to_world_with_covariance(
     if not math.isfinite(floor) or floor <= 0.0:
         raise ValueError("min_eigenvalue_m2 must be finite and positive")
 
+    from reliability.observation_geometry import validate_pixel_covariance
+    validate_pixel_covariance(observation.conditional_cov_uv)
     u, v = observation.pixel_uv
     centre = camera.pixel_to_world(u, v)
-    if centre is None:
+    if centre is None or not all(math.isfinite(float(v)) for v in centre):
         return None
     du = _projection_derivative(camera, u, v, axis=0, step=step, centre=centre)
     dv = _projection_derivative(camera, u, v, axis=1, step=step, centre=centre)
@@ -134,7 +145,11 @@ def project_observation_to_world_with_covariance(
     xx = j00 * j00 * a + 2.0 * j00 * j01 * b + j01 * j01 * d
     xy = j00 * j10 * a + (j00 * j11 + j01 * j10) * b + j01 * j11 * d
     yy = j10 * j10 * a + 2.0 * j10 * j11 * b + j11 * j11 * d
-    covariance = _floor_spd_2x2(((xx, xy), (xy, yy)), floor)
+    try:
+        covariance = _floor_spd_2x2(((xx, xy), (xy, yy)), floor)
+    except ValueError:
+        # Unsupported numerical geometry creates no measurement.
+        return None
     return centre, covariance
 
 
@@ -178,9 +193,24 @@ def _projection_derivative(
 def _floor_spd_2x2(matrix: Matrix2x2, floor: float) -> Matrix2x2:
     """Add only enough isotropic jitter to give the matrix a numerical SPD floor."""
 
+    import numpy as np
+    values = np.asarray(matrix, dtype=float)
+    if values.shape != (2, 2) or not np.isfinite(values).all():
+        raise ValueError("projection covariance must be finite 2x2")
+    if not math.isfinite(float(floor)) or floor <= 0:
+        raise ValueError("projection covariance floor must be finite and positive")
+    if not np.allclose(values, values.T, atol=1e-12, rtol=0):
+        raise ValueError("projection covariance must be symmetric")
     a = float(matrix[0][0])
     b = 0.5 * (float(matrix[0][1]) + float(matrix[1][0]))
     d = float(matrix[1][1])
     minimum = 0.5 * (a + d) - math.hypot(0.5 * (a - d), b)
     jitter = max(0.0, float(floor) - minimum)
-    return ((a + jitter, b), (b, d + jitter))
+    result = ((a + jitter, b), (b, d + jitter))
+    if not np.isfinite(result).all():
+        raise ValueError("projection covariance overflow")
+    try:
+        np.linalg.cholesky(result)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError("projection covariance floor is not representable at this scale") from exc
+    return result

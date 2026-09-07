@@ -306,8 +306,18 @@ def risk_ca(mu, Sigma, goal_mu, goal_S):
     Sigma_pd = _ensure_symmetric_pd(Sigma)
     goal_S_pd = _ensure_symmetric_pd(goal_S)
     diff = goal_mu - mu
-    trace_term = ca.trace(ca.solve(goal_S_pd, Sigma_pd))
-    quad_term = ca.mtimes([diff.T, ca.solve(goal_S_pd, diff)])
+    if goal_S_pd.sparsity().is_diag():
+        # The goal prior is diagonal. Explicit componentwise division is the
+        # same diagonal solve, and avoids CasADi 3.7.2's DiagSolve serialization
+        # defect (a saved function otherwise cannot be loaded in another run).
+        diagonal = ca.diag(goal_S_pd)
+        solved_cov = Sigma_pd / ca.repmat(diagonal, 1, Sigma_pd.size2())
+        solved_diff = diff / diagonal
+    else:
+        solved_cov = ca.solve(goal_S_pd, Sigma_pd)
+        solved_diff = ca.solve(goal_S_pd, diff)
+    trace_term = ca.trace(solved_cov)
+    quad_term = ca.mtimes([diff.T, solved_diff])
     dim = int(goal_mu.size1())
     logdet_goal = _logdet_small_pd(goal_S_pd)
     logdet_sigma = _logdet_small_pd(Sigma_pd)
@@ -661,6 +671,8 @@ def _make_valgrad_wrapper(valgrad):
         )
         return float(np.asarray(val, dtype=float).reshape(-1)[0]), np.asarray(grad, dtype=float).reshape(-1)
 
+    # Expose the immutable graph for serialization / optional compiled evaluation.
+    _wrapper.casadi_function = valgrad
     return _wrapper
 
 

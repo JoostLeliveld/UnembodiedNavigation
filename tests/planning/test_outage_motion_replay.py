@@ -107,7 +107,7 @@ def test_coverage_check_and_replay_cannot_see_different_histories():
     node._advance_belief_over_outage(stamp(59.9), 59.9)
 
     # The interfering callback really did trim the verified turn from the buffer.
-    assert trimmed and trimmed[0] > .2
+    assert trimmed and trimmed[0] == pytest.approx(.2)
 
     # The 0.2 rad turn recorded in the checked history is still integrated.
     assert node.belief_m[2] == pytest.approx(.2, abs=1e-10)
@@ -193,6 +193,7 @@ def test_a_late_callback_cannot_pair_its_yaw_with_another_events_velocity():
     event's heading beside a newer event's velocity.
     """
     node = _node_with_odom_buffer()
+    node._clock.seconds = 11.
     node._odom_cb(_odom_msg(11., .2, 0., yaw=.5))
     node._odom_cb(_odom_msg(10., 9., 9., yaw=-1.3))
 

@@ -3,6 +3,8 @@
 import json
 import math
 import time
+import threading
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 import numpy as np
@@ -14,14 +16,17 @@ from rclpy.duration import Duration
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.qos import QoSProfile, DurabilityPolicy
 
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, PoseStamped
 from std_msgs.msg import Float64MultiArray, String
 
 from planning.nodes.unicycle_planner_node import UnicyclePlannerNode
 from planning.planners.base_planner import UnicyclePlannerBase, extract_waypoints
 from planning.core.dynamics import unicycle_step
 from planning.core.efe_utils import wrap_angle
+from planning.core.plan_validation import validate_plan_result
 from planning.core.tracker_guard import ControlSafetyResult, SafetyFailure, checked_tracker_controls
+from unav_common.config import local_controller_type
+from unav_common.mission_goal import MISSION_GOAL_TOPIC, mission_goal_from_json
 
 
 def _preview_corner_speed_limit(
@@ -330,6 +335,12 @@ class EfeAgentNode(UnicyclePlannerNode):
         # ``_plan_once`` wrapper and cleared in its ``finally``. The existing
         # mutually exclusive planning group makes this scoped context single-writer.
         self._active_plan_request = None
+        self._mission_goal = None
+        self._retired_mission_epochs = set()
+        mission_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self._mission_goal_sub = self.create_subscription(
+            String, MISSION_GOAL_TOPIC, self._mission_goal_cb, mission_qos,
+            callback_group=self._io_group)
         self._last_latency_skip_steps = 0
         self._last_latency_skip_s = 0.0
         self._current_wp_idx = math.nan
@@ -354,14 +365,11 @@ class EfeAgentNode(UnicyclePlannerNode):
         self._waypoints = None
         self._wp_idx = 0
         # Multi-goal support: the (x,y) the frozen global route currently targets.
-        # When the mission goal advances to a new waypoint (goal moves by more than
-        # goal_replan_move_m) we re-enter the GLOBAL phase and replan the route to
-        # the new goal; without this the robot tracks the stale route to the old
-        # waypoint and then stalls at the corner.
+        # Any changed goal identity revokes the old route, including a new mission
+        # goal ID at identical coordinates. Replan before tracking the new goal.
         self._global_goal_xy = None
-        # True once the FIRST global solve has completed. The first solve is the
-        # route-choice evidence and any failure there is fatal; subsequent solves
-        # are per-leg multi-goal replans and must degrade gracefully instead.
+        # True once a global route has passed admission. Failed replans stop;
+        # they must not substitute an unchecked straight route.
         self._global_solve_done = False
         if not self.has_parameter('goal_replan_move_m'):
             self.declare_parameter('goal_replan_move_m', 1.0)
@@ -624,7 +632,228 @@ class EfeAgentNode(UnicyclePlannerNode):
             return {
                 'stop_generation': int(self._command_stop_generation),
                 'started_at': self.get_clock().now(),
+                'goal': self._execution_goal_identity(),
+                'config': self._execution_config_identity(),
+                'owner_thread': threading.get_ident(),
             }
+
+    def _execution_goal_identity(self):
+        goal = getattr(self, 'goal_msg', None)
+        if goal is None:
+            return None
+        mission = getattr(self, '_mission_goal', None)
+        return (goal.header.frame_id, float(goal.pose.position.x), float(goal.pose.position.y),
+                None if mission is None else (mission.mission_epoch, mission.goal_id))
+
+    def _goal_cb(self, msg):
+        with self._data_lock:
+            if getattr(self, '_mission_goal', None) is not None:
+                return  # Once present, the atomic envelope owns goal identity.
+            previous = self._execution_goal_identity()
+            super()._goal_cb(msg)
+            if previous is not None and previous != self._execution_goal_identity():
+                self._publish_safe_stop_command()
+
+    def _mission_goal_cb(self, msg):
+        try:
+            goal = mission_goal_from_json(msg.data)
+        except ValueError as error:
+            self._fatal_experiment_stop('Invalid mission goal envelope', error)
+            return
+        with self._data_lock:
+            old = getattr(self, '_mission_goal', None)
+            retired = getattr(self, '_retired_mission_epochs', set())
+            if goal.mission_epoch in retired:
+                return
+            if old is not None and old.goal_id == goal.goal_id:
+                if old.identity_payload != goal.identity_payload:
+                    self._fatal_experiment_stop('Conflicting mission goal identity')
+                    return
+                if old.status != 'active' and goal.status == 'active':
+                    return
+            if old is not None and old.mission_epoch == goal.mission_epoch and goal.tour_index < old.tour_index:
+                return
+            if old is not None and old.mission_epoch != goal.mission_epoch:
+                retired.add(old.mission_epoch)
+            self._retired_mission_epochs = retired
+            changed = old is None or old.goal_id != goal.goal_id or old.status != goal.status
+            self._mission_goal = goal
+            if goal.status != 'active':
+                self.goal_msg = None
+                if changed:
+                    self._publish_safe_stop_command()
+                return
+            pose = PoseStamped()
+            pose.header.frame_id = goal.frame_id
+            pose.header.stamp.sec, pose.header.stamp.nanosec = goal.stamp_sec, goal.stamp_nanosec
+            pose.pose.position.x, pose.pose.position.y = goal.x, goal.y
+            super()._goal_cb(pose)
+            if changed:
+                self._publish_safe_stop_command()
+
+    def _execution_config_identity(self):
+        # Values that change route/control feasibility, not diagnostic timestamps.
+        names = ('v_min', 'v_max', 'w_min', 'w_max', 'dt', 'global_dt',
+                 'global_planner_mode', 'local_controller_type', 'driveable_geometry_json',
+                 'robot_collision_radius_m', 'nogo_safe_distance', 'local_nogo_safe_distance',
+                 'camera_network_artifact_path')
+        identity = [(name, repr(getattr(self, name, None))) for name in names]
+        planner_names = ('dt', 'horizon', 'v_min', 'v_max', 'w_min', 'w_max',
+                         'robot_length_m', 'robot_width_m', 'robot_collision_radius_m',
+                         'use_nogo_cost', 'use_belief_nogo_cost', 'nogo_belief_kappa',
+                         'control_weight', 'risk_weight_obs', 'ambiguity_weight',
+                         'use_visibility_model', 'use_hit_miss_mixture')
+        for label in ('planner', 'global_planner'):
+            planner = getattr(self, label, None)
+            identity.append((label, id(planner)))
+            identity.extend((label+'.'+name, repr(getattr(planner, name, None))) for name in planner_names)
+            for name in ('collision_cost_model', 'nogo_cost_model', 'camera_network', 'visibility_model'):
+                model = getattr(planner, name, None)
+                identity.append((label+'.'+name, repr(getattr(model, 'signature', None))))
+        return tuple(identity)
+
+    def _remember_request_belief(self, meta):
+        request = getattr(self, '_active_plan_request', None)
+        if (request is not None and request.get('owner_thread') == threading.get_ident()
+                and 'belief_origin' not in request):
+            request['belief_origin'] = dict(meta or {})
+
+    def _global_solver_result_safe(self, result, goal):
+        request = self._active_plan_request
+        origin = request.get('state_origin') if request is not None else None
+        if origin is None:
+            return False, 'missing_solver_origin'
+        validator = getattr(self.global_planner, 'validate_result', None)
+        if validator is not None:
+            return validator(result, origin[0], origin[1], goal, require_complete=True)
+        return validate_plan_result(
+            result, initial_state=origin[0], initial_covariance=origin[1], goal_xy=goal,
+            dt=float(getattr(self.global_planner, 'dt', getattr(self, 'global_dt', 1.))),
+            control_bounds=((self.v_min, self.v_max), (self.w_min, self.w_max)),
+            require_complete=True,
+            terminal_tolerance_m=float(self.global_planner.optimizer_terminal_goal_tolerance_m))
+
+    def _global_route_candidate_safe(self, points, goal, current_m, result=None):
+        """Check every segment LOCAL will track, including its fresh entry leg."""
+        try:
+            points = np.asarray(points, dtype=float)
+            if points.ndim != 2 or points.shape[1] != 2 or not len(points) or not np.isfinite(points).all():
+                return False, 'malformed_route_points'
+            tolerance = float(getattr(self.global_planner, 'optimizer_terminal_goal_tolerance_m', 0.))
+            if np.linalg.norm(points[-1] - np.asarray(goal)) > tolerance:
+                return False, 'incomplete_route'
+            planner = self.global_planner
+            pose = np.asarray(current_m[:3], dtype=float).copy()
+            for point in points:
+                delta = point - pose[:2]
+                yaw = pose[2] if np.linalg.norm(delta) < 1e-12 else math.atan2(delta[1], delta[0])
+                rotated = np.array([pose[0], pose[1], yaw])
+                end = np.array([point[0], point[1], yaw])
+                for start, finish in ((pose, rotated), (rotated, end)):
+                    for method in ('collision_sweep_clearance_np', 'driveable_sweep_clearance_np'):
+                        checker = getattr(planner, method, None)
+                        if checker is None:
+                            return False, 'missing_route_geometry_validator'
+                        clearance = float(checker(start, finish))
+                        if math.isnan(clearance) or clearance < 0.:
+                            return False, method
+                pose = end
+            return True, ''
+        except (ValueError, TypeError, AttributeError, OverflowError):
+            return False, 'invalid_route_geometry'
+
+    def _resolve_belief_for_planning(self):
+        result = super()._resolve_belief_for_planning()
+        if result[0] is not None:
+            self._remember_request_belief(result[2])
+            request = getattr(self, '_active_plan_request', None)
+            if (request is not None and request.get('owner_thread') == threading.get_ident()
+                    and 'state_origin' not in request):
+                request['state_origin'] = (result[0].copy(), result[1].copy())
+        return result
+
+    def _reject_current_request(self, request, reason):
+        # Stop ownership is decided and consumed before logging can run callbacks.
+        with self._data_lock:
+            if not self._plan_request_is_current(request):
+                return False
+            self._publish_safe_stop_command()
+        self._warn_once_about_expired_tape(reason)
+        return False
+
+    def _fresh_request_belief(self, request):
+        m, S, meta = self._resolve_belief_for_planning()
+        origin = request.get('belief_origin', {})
+        if (m is None or S is None or not meta.get('belief_valid', False)
+                or not meta.get('motion_supported', False)):
+            return None
+        if meta.get('belief_epoch') != origin.get('belief_epoch'):
+            return None
+        frame = meta.get('belief_frame_id')
+        if meta.get('belief_epoch') is None or not frame or frame != origin.get('belief_frame_id'):
+            return None
+        goal = request.get('goal')
+        if goal is not None and goal[0] and frame != goal[0]:
+            return None
+        if not np.isfinite(m).all() or not np.isfinite(S).all():
+            return None
+        return m, S, meta
+
+    def _controls_within_execution_bounds(self, controls):
+        return (controls.ndim == 2 and controls.shape[0] > 0 and controls.shape[1] == 2
+                and np.isfinite(controls).all()
+                and np.all(controls[:, 0] >= getattr(self, 'v_min', 0.))
+                and np.all(controls[:, 0] <= getattr(self, 'v_max', .22))
+                and np.all(controls[:, 1] >= getattr(self, 'w_min', -1.))
+                and np.all(controls[:, 1] <= getattr(self, 'w_max', 1.)))
+
+    def _execution_belief_is_current(self, meta):
+        checker = getattr(self, '_belief_context_is_current', None)
+        if checker is not None and getattr(self, '_belief_record', None) is not None:
+            return checker(meta, require_revision=True)
+        return (meta.get('belief_epoch') == getattr(self, '_belief_epoch', None)
+                and meta.get('belief_revision') == getattr(self, '_belief_revision', None))
+
+    def _install_global_route(self, points, final_goal, *, result=None):
+        """Admit the actual tracked route against a supported current belief.
+
+        GLOBAL controls are never a command tape: no LOCAL duration bound applies.
+        A slow result must pass the same fresh geometry check as a fast result.
+        Correction ownership prevents a camera commit between revalidation and
+        installation; odometry/clock/goal ownership shares the final data lock.
+        """
+        request = getattr(self, '_active_plan_request', None)
+        reason = 'missing_global_request'
+        with getattr(self, '_correction_lock', nullcontext()):
+            with self._data_lock:
+                if request is None or not self._plan_request_is_current(request):
+                    return False
+                age = (self.get_clock().now() - request['started_at']).nanoseconds * 1e-9
+                if not math.isfinite(age) or age < 0. or getattr(self, '_fatal_stop_triggered', False):
+                    return self._reject_current_request(request, 'invalid_global_request_epoch')
+                fresh = self._fresh_request_belief(request)
+                if fresh is None:
+                    return self._reject_current_request(request, 'unsupported_global_belief')
+                current_m, _, fresh_meta = fresh
+                safe, reason = self._global_route_candidate_safe(points, final_goal, current_m, result)
+                if (not self._plan_request_is_current(request)
+                        or not self._execution_belief_is_current(fresh_meta)):
+                    return False
+                if not safe:
+                    return self._reject_current_request(request, 'Rejected global route: ' + reason)
+                self._waypoints = [(float(p[0]), float(p[1])) for p in points]
+                self._wp_idx = 0
+                self._hier_phase = 'LOCAL'
+                self._global_goal_xy = np.asarray(final_goal, dtype=float).copy()
+                self._global_solve_done = True
+                self._installed_route_request = dict(request)
+                # The warm start belongs to the route only after admission.
+                try:
+                    seed = self.planner._controls_for_waypoints(current_m[:3], [np.asarray(self._waypoints[0])])
+                    self.planner.prev_controls_flat = np.asarray(seed, dtype=float).reshape(-1)
+                except Exception:
+                    self.planner.prev_controls_flat = None
+                return True
 
     def _install_control_tape(self, controls, *, original_len, started_at=None,
                               latency_skip_steps=0, latency_skip_s=0.0,
@@ -640,11 +869,27 @@ class EfeAgentNode(UnicyclePlannerNode):
         """
         controls = np.asarray(controls, dtype=float)
         request = getattr(self, '_active_plan_request', None)
-        with self._data_lock:
+        with getattr(self, '_correction_lock', nullcontext()), self._data_lock:
             # Generation FIRST: a cancelled result must not reach the stop below,
             # which would erase a replacement tape another owner already installed.
             if not self._plan_request_is_current(request):
                 return 'cancelled'
+            if not self._controls_within_execution_bounds(controls):
+                self._publish_safe_stop_command()
+                return 'invalid'
+            if request is not None and 'belief_origin' in request:
+                fresh = self._fresh_request_belief(request)
+                if fresh is None:
+                    self._publish_safe_stop_command()
+                    return 'invalid_belief'
+                safety = self._simple_plan_safe_to_execute(controls, fresh[0])
+                if (not self._plan_request_is_current(request)
+                        or not self._execution_belief_is_current(fresh[2])):
+                    return 'cancelled'
+                if safety.safe_steps <= 0:
+                    self._publish_safe_stop_command()
+                    return 'unsafe'
+                controls = controls[:safety.safe_steps]
             # The age is read here, under the install lock, so safety validation
             # and scheduling time count against the tape that actually installs.
             expired, why = self._plan_request_expired(request, controls.shape[0])
@@ -655,12 +900,13 @@ class EfeAgentNode(UnicyclePlannerNode):
                 self._active_controls_original_len = int(original_len)
                 self._last_latency_skip_steps = int(latency_skip_steps)
                 self._last_latency_skip_s = float(latency_skip_s)
+                self._active_tape_request = None if request is None else dict(request)
                 if controls.size > 0:
                     self._publish_command(float(controls[0, 0]), float(controls[0, 1]))
                 return 'installed'
-        # Fail closed for a current-generation over-age result.
+            # Consume the stop in the same transaction as the expiry decision.
+            self._publish_safe_stop_command()
         self._warn_once_about_expired_tape(f'{log_prefix}: {why}')
-        self._publish_safe_stop_command()
         return 'expired'
 
     def _warn_once_about_expired_tape(self, message: str) -> None:
@@ -707,7 +953,13 @@ class EfeAgentNode(UnicyclePlannerNode):
         """
         if request is None:
             return True
-        return int(request['stop_generation']) == int(self._command_stop_generation)
+        origin = request.get('belief_origin')
+        if origin is not None and hasattr(self, '_belief_epoch'):
+            if origin.get('belief_epoch') != self._belief_epoch:
+                return False
+        return (int(request['stop_generation']) == int(self._command_stop_generation)
+                and request.get('goal') == self._execution_goal_identity()
+                and request.get('config', self._execution_config_identity()) == self._execution_config_identity())
 
     def _plan_once(self):
         """Wrap both execution routes in one cancellation context.
@@ -721,6 +973,9 @@ class EfeAgentNode(UnicyclePlannerNode):
             self._active_plan_request = request
         try:
             return self._plan_once_impl()
+        except Exception:
+            self._reject_current_request(request, 'Planning callback failed')
+            raise
         finally:
             with self._data_lock:
                 if self._active_plan_request is request:
@@ -738,7 +993,19 @@ class EfeAgentNode(UnicyclePlannerNode):
         m0, S0, belief_meta = self._resolve_belief_for_planning()
         if m0 is None or S0 is None:
             return
+        self._remember_request_belief(belief_meta)
+        if self._active_plan_request is not None:
+            self._active_plan_request['state_origin'] = (m0.copy(), S0.copy())
         final_goal = self._goal_xy_from_msg(goal_ref)
+
+        route_request = getattr(self, '_installed_route_request', None)
+        if self._hier_phase == 'LOCAL' and route_request is not None:
+            if (route_request.get('goal') != self._execution_goal_identity()
+                    or route_request.get('config') != self._execution_config_identity()
+                    or route_request['belief_origin'].get('belief_epoch') != belief_meta.get('belief_epoch')):
+                self._hier_phase = 'GLOBAL'
+                self._publish_safe_stop_command()
+                return  # The next callback captures the new cancellation context.
 
         # Multi-goal: if the mission goal has advanced (a new waypoint published to
         # /goal_bev), re-enter the GLOBAL phase so a fresh route is planned to the
@@ -747,7 +1014,7 @@ class EfeAgentNode(UnicyclePlannerNode):
         if (self._hier_phase == 'LOCAL'
                 and self._global_goal_xy is not None
                 and float(np.linalg.norm(final_goal - self._global_goal_xy))
-                > self.goal_replan_move_m):
+                > 1.0e-9):
             if self.global_planner_mode == 'preselected_route':
                 self._fatal_experiment_stop(
                     "Mission goal changed during preselected-route execution; "
@@ -780,24 +1047,10 @@ class EfeAgentNode(UnicyclePlannerNode):
 
                 # Preserve every selected coordinate exactly. In particular, do
                 # not densify, smooth, truncate, or append the live belief/goal.
-                self._waypoints = [
-                    (float(point[0]), float(point[1]))
-                    for point in self._preselected_route_points
-                ]
-                self._wp_idx = 0
-                self._hier_phase = 'LOCAL'
-                self._global_goal_xy = np.asarray(final_goal, dtype=float)
-                self._global_solve_done = True
-                try:
-                    first_waypoint = np.asarray(self._waypoints[0], dtype=float)
-                    seed = self.planner._controls_for_waypoints(
-                        m0[:3], [first_waypoint]
-                    )
-                    self.planner.prev_controls_flat = np.asarray(
-                        seed, dtype=float
-                    ).reshape(-1)
-                except Exception:
-                    pass
+                candidate = [(float(point[0]), float(point[1]))
+                             for point in self._preselected_route_points]
+                if not self._install_global_route(candidate, final_goal):
+                    return
 
                 route_states = _polyline_states(
                     self._waypoints, initial_yaw=float(m0[2])
@@ -847,45 +1100,13 @@ class EfeAgentNode(UnicyclePlannerNode):
                             f"({exc}); falling back to straight start->goal route"
                         )
                         seeds = []
-                if seeds:
-                    best = min(seeds, key=lambda s: _route_time(s['waypoints']))
-                    self._waypoints = [(float(w[0]), float(w[1])) for w in best['waypoints']]
-                    self.get_logger().info(
-                        f"[geometric_shortest_path] shortest-time of "
-                        f"{[s['name'] for s in seeds]} -> {best['name']} "
-                        f"({_polyline_len(best['waypoints']):.2f} m, "
-                        f"{_route_time(best['waypoints']):.2f} s estimated)"
-                    )
-                else:
-                    self.get_logger().warn(
-                        "[geometric_shortest_path] 0 lane-graph seeds "
-                        "(check driveable_geometry_json covers start/goal); "
-                        "using straight start->goal route"
-                    )
-                    self._waypoints = [(float(m0[0]), float(m0[1]))]
-                # Mirror the EFE branch: the tracked route must end at the actual
-                # mission goal rather than the route terminus.
-                if self._waypoints:
-                    last_wp = np.asarray(self._waypoints[-1], dtype=float)
-                    if float(np.linalg.norm(last_wp - final_goal)) > 1e-3:
-                        self._waypoints.append((float(final_goal[0]), float(final_goal[1])))
-                else:
-                    self._waypoints = [(float(final_goal[0]), float(final_goal[1]))]
-                self._wp_idx = 0
-                self._hier_phase = 'LOCAL'
-                self._global_goal_xy = np.asarray(final_goal, dtype=float)
-                # Same local warm-start bootstrap as the EFE branch.
-                if self._waypoints:
-                    try:
-                        wp0 = np.asarray(self._waypoints[0], dtype=float)
-                        seed = self.planner._controls_for_waypoints(m0[:3], [wp0])
-                        self.planner.prev_controls_flat = np.asarray(seed, dtype=float).reshape(-1)
-                    except Exception:
-                        pass
-                self.get_logger().info(
-                    f"[geometric_shortest_path] global route chosen without EFE solve -> "
-                    f"{len(self._waypoints)} waypoints; switching to local tracking"
-                )
+                if not seeds:
+                    self._reject_current_request(self._active_plan_request, 'No validated geometric route')
+                    return
+                best = min(seeds, key=lambda seed: _route_time(seed['waypoints']))
+                candidate = [(float(w[0]), float(w[1])) for w in best['waypoints']]
+                if not self._install_global_route(candidate, final_goal):
+                    return
                 # C0 has no optimizer result, but consumers (including the live
                 # dashboard) still need the route the planner actually chose.
                 route_result = SimpleNamespace(
@@ -949,53 +1170,20 @@ class EfeAgentNode(UnicyclePlannerNode):
             try:
                 rg = self.global_planner.plan(m0, S0, final_goal)
             except Exception as exc:  # noqa: BLE001
-                if not is_replan:
-                    self._fatal_experiment_stop("Global planner raised an exception", exc)
-                    return
-                # A per-leg replan failure must not kill the mission: fall back to a
-                # straight geometric route to the new goal and keep tracking locally.
-                self.get_logger().warn(
-                    f"[hierarchical] replan global solve failed ({exc}); "
-                    "falling back to straight route to new goal")
-                self._waypoints = self._densify_line(m0[:2], final_goal)
-                self._wp_idx = 0
-                self._hier_phase = 'LOCAL'
-                self._global_goal_xy = np.asarray(final_goal, dtype=float)
-                try:
-                    wp0 = np.asarray(self._waypoints[0], dtype=float)
-                    seed = self.planner._controls_for_waypoints(m0[:3], [wp0])
-                    self.planner.prev_controls_flat = np.asarray(seed, dtype=float).reshape(-1)
-                except Exception:
-                    pass
+                # An exception is not authority to install an unchecked straight route.
+                self._reject_current_request(self._active_plan_request,
+                                             f'Global planner raised: {type(exc).__name__}: {exc}')
                 return
-            self._waypoints = extract_waypoints(
-                rg.states, spacing_m=self.waypoint_spacing_m, include_goal=True
-            )
-            # The long-horizon global EFE plan gives the route shape, but its
-            # finite horizon may stop short of the task goal. The local tracker
-            # must still end at the actual mission goal rather than treating the
-            # global plan terminus as success.
-            if self._waypoints:
-                last_wp = np.asarray(self._waypoints[-1], dtype=float)
-                if float(np.linalg.norm(last_wp - final_goal)) > 1e-3:
-                    self._waypoints.append((float(final_goal[0]), float(final_goal[1])))
-            else:
-                self._waypoints = [(float(final_goal[0]), float(final_goal[1]))]
-            self._wp_idx = 0
-            self._hier_phase = 'LOCAL'
-            self._global_goal_xy = np.asarray(final_goal, dtype=float)
-            self._global_solve_done = True
-            # Bootstrap the local planner's warm start from a direct-goal seed to the
-            # first waypoint.  Without this, the first local call uses a cold zero-control
-            # initialisation which takes 20-30 L-BFGS-B iterations to escape; with it,
-            # the first call is already near-optimal and needs only 3-8 iterations.
-            if self._waypoints:
-                try:
-                    wp0 = np.asarray(self._waypoints[0], dtype=float)
-                    seed = self.planner._controls_for_waypoints(m0[:3], [wp0])
-                    self.planner.prev_controls_flat = np.asarray(seed, dtype=float).reshape(-1)
-                except Exception:
-                    pass
+            # Validate solver evidence before waypoint extraction can hide malformed
+            # or incomplete results. No unchecked terminal connector is appended.
+            safe, reason = self._global_solver_result_safe(rg, final_goal)
+            if not safe:
+                self._reject_current_request(self._active_plan_request, 'Rejected global result: ' + reason)
+                return
+            candidate = extract_waypoints(
+                rg.states, spacing_m=self.waypoint_spacing_m, include_goal=True)
+            if not self._install_global_route(candidate, final_goal, result=rg):
+                return
             self.get_logger().info(
                 f"[hierarchical] global plan solved in {(time.perf_counter()-plan_start):.1f}s "
                 f"(backend={getattr(rg, 'backend', '?')}, "
@@ -1124,14 +1312,16 @@ class EfeAgentNode(UnicyclePlannerNode):
         return controls
 
     def _dispatch_local_controller(self, m0: np.ndarray, target: np.ndarray) -> np.ndarray:
-        ct = getattr(self, 'local_controller_type', 'turn_then_go')
+        ct = local_controller_type(getattr(self, 'local_controller_type', 'turn_then_go'))
         if ct == 'hyst_damp':
             return self._hyst_damp_plan(m0, target)
         if ct == 'pure_pursuit':
             return self._pure_pursuit_plan(m0)
         if ct == 'ff_fb':
             return self._ff_fb_plan(m0)
-        return self._simple_local_plan(m0, target)
+        if ct in ('turn_then_go', 'turn_then_go_recovery'):
+            return self._simple_local_plan(m0, target)
+        raise AssertionError(f"unhandled local controller {ct!r}")
 
     def _waypoint_array(self, state_xy=None) -> np.ndarray | None:
         if state_xy is None:
@@ -1262,19 +1452,10 @@ class EfeAgentNode(UnicyclePlannerNode):
         return controls
 
     def _simple_plan_safe_to_execute(self, controls: np.ndarray, m0: np.ndarray) -> ControlSafetyResult:
-        """Recovery-aware feasibility gate for the non-optimizing waypoint tracker.
+        """Accept only prefixes whose oriented body stays clear throughout motion.
 
-        Returns the number of LEADING control steps safe to execute (>=1 -> publish
-        that prefix; 0 -> safe-stop). Two reasons it is not a naive `clearance<0`
-        veto: (1) in a narrow keep-in aisle a TRANSIENT belief-prediction excursion
-        (e.g. odom overshoot during a hard turn) can put the predicted mean
-        mm-outside the band even though truth is centred; a hard veto then freezes
-        the tracker at (0,0) forever. So reject a step only if it drives an already
-        negative clearance strictly WORSE than the plan start (the robot is actively
-        leaving the region); holding/recovering a marginal violation is allowed.
-        (2) the rollout is open-loop and we only execute the first step before
-        replanning, so a violation a few steps ahead must not veto the safe
-        immediate step -- we execute the safe prefix and let the next replan re-aim.
+        Physical overlap or an uncertified swept interval refuses the step.
+        Stationary rotation recovery must pass the same footprint check.
         """
         controls = np.asarray(controls, dtype=float)
         if controls.ndim != 2 or controls.shape[0] == 0 or controls.shape[1] != 2:
@@ -1282,45 +1463,47 @@ class EfeAgentNode(UnicyclePlannerNode):
         if not np.all(np.isfinite(controls)):
             return ControlSafetyResult(0, 'nonfinite_controls', SafetyFailure.INVALID_INPUT)
 
-        RECOVERY_EPS = 5e-3
         start = np.asarray(m0[:3], dtype=float)
         if start.shape != (3,) or not np.isfinite(start).all() or not math.isfinite(self.dt) or self.dt <= 0.0:
             return ControlSafetyResult(0, 'invalid_state_or_timestep', SafetyFailure.INVALID_INPUT)
         if self.planner.collision_cost_model is not None:
-            start_coll = self.planner.collision_signed_distance_state_np(start)
+            start_coll = self.planner.collision_clearance_state_np(start)
         else:
             start_coll = float('inf')
         nogo = self.planner.nogo_cost_model
-        if nogo is not None and nogo.enabled:
-            start_nogo = nogo.clearance_state_np(start)
+        if nogo is not None:
+            start_nogo = self.planner.driveable_clearance_state_np(start)
         else:
             start_nogo = float('inf')
         # +inf represents an unconstrained/empty scene. NaN and -inf cannot
         # establish a safe prefix and must not silently disable the gate.
         if any(math.isnan(clearance) or clearance == -math.inf for clearance in (start_coll, start_nogo)):
             return ControlSafetyResult(0, 'invalid_initial_clearance', SafetyFailure.INVALID_GEOMETRY)
-        coll_floor = (min(start_coll, 0.0) - RECOVERY_EPS) if math.isfinite(start_coll) else -math.inf
-        nogo_floor = (min(start_nogo, 0.0) - RECOVERY_EPS) if math.isfinite(start_nogo) else -math.inf
-
+        from unav_common.rectangular_footprint import constant_twist_pose
         state = start.copy()
         for i, u in enumerate(controls):
+            previous_state = state.copy()
             state = unicycle_step(state, u, float(self.dt))
             if not np.isfinite(state).all():
                 return ControlSafetyResult(i, 'nonfinite_predicted_state', SafetyFailure.INVALID_INPUT)
             if self.planner.collision_cost_model is not None:
-                clearance = self.planner.collision_signed_distance_state_np(state)
+                clearance = self.planner.collision_sweep_clearance_np(
+                    previous_state, state, yaw_delta=float(u[1])*self.dt, control=u, dt=self.dt)
                 if math.isnan(clearance) or clearance == -math.inf:
                     return ControlSafetyResult(i, 'invalid_collision_clearance', SafetyFailure.INVALID_GEOMETRY)
-                if math.isfinite(clearance) and clearance < 0.0 and clearance < coll_floor:
+                if clearance < 0.0:
                     return ControlSafetyResult(i, f'collision_geometry_violation_step_{i}:{clearance:.3f}',
                                                SafetyFailure.COLLISION)
-            if nogo is not None and nogo.enabled:
-                clearance = nogo.clearance_state_np(state)
+            if nogo is not None:
+                clearance = self.planner.driveable_sweep_clearance_np(
+                    previous_state, state, yaw_delta=float(u[1])*self.dt, control=u, dt=self.dt)
                 if math.isnan(clearance) or clearance == -math.inf:
                     return ControlSafetyResult(i, 'invalid_driveable_clearance', SafetyFailure.INVALID_GEOMETRY)
-                if math.isfinite(clearance) and clearance < 0.0 and clearance < nogo_floor:
+                if clearance < 0.0:
                     return ControlSafetyResult(i, f'driveable_clearance_violation_step_{i}:{clearance:.3f}',
                                                SafetyFailure.DRIVEABLE_CLEARANCE)
+            # Carry the exact held-command endpoint into the next interval.
+            state = constant_twist_pose(previous_state, u, float(self.dt))
         return ControlSafetyResult(controls.shape[0])
 
     def _publish_command(self, v_cmd: float, w_cmd: float):
@@ -1330,9 +1513,13 @@ class EfeAgentNode(UnicyclePlannerNode):
         with self._data_lock:
             # An in-flight solve may finish after a different callback declares
             # a fatal integrity stop. Publication is the final ownership boundary.
-            if getattr(self, '_fatal_stop_triggered', False):
+            invalid_command = not (math.isfinite(cmd.linear.x) and math.isfinite(cmd.angular.z))
+            if getattr(self, '_fatal_stop_triggered', False) or invalid_command:
                 cmd = Twist()
+                if invalid_command:
+                    self._command_stop_generation = int(getattr(self, '_command_stop_generation', 0)) + 1
                 self._active_controls = None
+                self._active_tape_request = None
                 self._active_plan_started_at = None
                 self._active_controls_original_len = 0
                 self._publish_idle_execution_diagnostics()
@@ -1355,7 +1542,11 @@ class EfeAgentNode(UnicyclePlannerNode):
             float(getattr(self, '_current_tracking_yaw', math.nan)),
             float(getattr(self, '_current_tracking_yaw_source', math.nan)),
         ]
-        self.active_execution_diag_pub.publish(diag)
+        try:
+            self.active_execution_diag_pub.publish(diag)
+        except Exception:
+            # Diagnostics cannot prevent a fatal/ordinary zero command.
+            pass
 
     def _result_safe_to_execute(self, result) -> tuple[bool, str]:
         """Return whether a solver result may replace the active control tape.
@@ -1365,6 +1556,16 @@ class EfeAgentNode(UnicyclePlannerNode):
         controls that leave the known driveable domain, contain non-finite values,
         or fail to move the local tracker toward its waypoint.
         """
+        request = getattr(self, '_active_plan_request', None)
+        if request is not None and 'state_origin' in request:
+            origin = request['state_origin']
+            goal = request['goal']
+            decision = validate_plan_result(
+                result, initial_state=origin[0], initial_covariance=origin[1],
+                goal_xy=goal[1:3], dt=self.dt,
+                control_bounds=((self.v_min, self.v_max), (self.w_min, self.w_max)))
+            if not decision.valid:
+                return False, decision.reason
         controls = np.asarray(getattr(result, 'controls', []), dtype=float)
         if controls.ndim != 2 or controls.shape[0] == 0 or controls.shape[1] != 2:
             return False, 'empty_or_malformed_controls'
@@ -1411,7 +1612,7 @@ class EfeAgentNode(UnicyclePlannerNode):
     def _publish_active_plan_command(self):
         # Snapshot, expiry, publication and tape replacement share one ownership
         # boundary. A timer must not resurrect a tape after a concurrent stop.
-        with self._data_lock:
+        with getattr(self, '_correction_lock', nullcontext()), self._data_lock:
             self._publish_active_plan_command_locked()
 
     def _publish_active_plan_command_locked(self):
@@ -1438,6 +1639,27 @@ class EfeAgentNode(UnicyclePlannerNode):
             self._publish_safe_stop_command()
             return
         step_idx = min(int(elapsed_s / step_dt), controls.shape[0] - 1)
+        request = getattr(self, '_active_tape_request', None)
+        if request is not None and 'belief_origin' in request:
+            if not self._plan_request_is_current(request):
+                self._publish_safe_stop_command()
+                return
+            fresh = self._fresh_request_belief(request)
+            if fresh is None:
+                self._publish_safe_stop_command()
+                return
+            # Revalidate rather than cancel on every new camera correction.
+            safety = self._simple_plan_safe_to_execute(controls[step_idx:], fresh[0])
+            if (not self._plan_request_is_current(request)
+                    or self._active_controls is not controls_ref
+                    or not self._execution_belief_is_current(fresh[2])):
+                return
+            if safety.safe_steps <= 0:
+                self._publish_safe_stop_command()
+                return
+            if safety.safe_steps < controls.shape[0] - step_idx:
+                self._active_controls = controls[:step_idx+safety.safe_steps].copy()
+                controls = self._active_controls
         u = controls[step_idx]
         diag = Float64MultiArray()
         diag.data = [
@@ -1460,8 +1682,13 @@ class EfeAgentNode(UnicyclePlannerNode):
             float(self._current_tracking_yaw),
             float(self._current_tracking_yaw_source),
         ]
-        self.active_execution_diag_pub.publish(diag)
         self._publish_command(u[0], u[1])
+        if getattr(self, '_fatal_stop_triggered', False):
+            return
+        try:
+            self.active_execution_diag_pub.publish(diag)
+        except Exception:
+            pass
 
     def _after_plan_result(self, result):
         # Keep following the current planned control sequence until replanning replaces it.
@@ -1474,11 +1701,7 @@ class EfeAgentNode(UnicyclePlannerNode):
                 return
         safe, reason = self._result_safe_to_execute(result)
         if not safe:
-            self.get_logger().warn(
-                f"Rejected local control tape before execution: {reason}. "
-                "Publishing safe stop instead."
-            )
-            self._publish_safe_stop_command()
+            self._reject_current_request(request, f'Rejected local control tape: {reason}')
             return
         controls = np.asarray(result.controls, dtype=float)
         started_at = self.get_clock().now()
@@ -1491,13 +1714,7 @@ class EfeAgentNode(UnicyclePlannerNode):
             skip_steps = min(int(latency_s / step_dt), int(controls.shape[0]))
             fractional_s = max(latency_s - skip_steps * step_dt, 0.0)
             if skip_steps >= controls.shape[0]:
-                with self._data_lock:
-                    self._active_controls = None
-                    self._active_plan_started_at = None
-                    self._active_controls_original_len = int(controls.shape[0])
-                    self._last_latency_skip_steps = int(skip_steps)
-                    self._last_latency_skip_s = float(latency_s)
-                    self._publish_command(0.0, 0.0)
+                self._reject_current_request(request, 'Latency compensation exhausted control tape')
                 return
             if fractional_s > 0.0:
                 started_at = started_at - Duration(seconds=fractional_s)
@@ -1529,6 +1746,7 @@ class EfeAgentNode(UnicyclePlannerNode):
             self._command_stop_generation = int(
                 getattr(self, '_command_stop_generation', 0)) + 1
             self._active_controls = None
+            self._active_tape_request = None
             self._active_plan_started_at = None
             self._active_controls_original_len = 0
             self._publish_command(0.0, 0.0)

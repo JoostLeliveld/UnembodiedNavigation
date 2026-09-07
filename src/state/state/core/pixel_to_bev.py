@@ -32,18 +32,63 @@ class PixelToBevTransformer:
         camera = self._make_camera(cam_pos, look_at)
         return camera.pixel_to_world(u, v)
 
+    def pixel_covariance_to_metric(self, u, v, covariance_px2, transform_noise_sigma=0.0):
+        """Map full pixel covariance using derivatives of one nominal camera.
+
+        Transform noise means independent uncertainty in the configured camera
+        position and look-at coordinates (metres). Its six derivatives are added
+        once as J_geometry sigma² I J_geometry.T, without random camera draws.
+        This is a first-order covariance, not an empirical residual calibration.
+        """
+        R = np.asarray(covariance_px2, dtype=float)
+        if R.shape != (2, 2) or not np.isfinite(R).all() or not np.allclose(R, R.T, atol=1e-12, rtol=0):
+            raise ValueError("pixel covariance must be finite symmetric 2x2")
+        if np.linalg.eigvalsh(R).min() < 0:
+            raise ValueError("pixel covariance must be positive semidefinite")
+        sigma = float(transform_noise_sigma)
+        if not math.isfinite(sigma) or sigma < 0:
+            raise ValueError("transform noise sigma must be finite and nonnegative")
+        camera = self._make_camera(self.cam_pos, self.look_at)
+        if camera.pixel_to_world(u, v) is None:
+            return None
+        A = camera.H_inv
+        w = A @ np.array([float(u), float(v), 1.0])
+        J = (A[:2, :2]*w[2] - w[:2, None]*A[2, :2]) / w[2]**2
+        metric = J @ R @ J.T
+        if sigma > 0:
+            # Central differences: each column perturbs exactly one geometry
+            # coordinate about the same nominal configuration.
+            geometry = np.concatenate((self.cam_pos, self.look_at))
+            columns = []
+            for axis in range(6):
+                step = np.cbrt(np.finfo(float).eps) * max(1.0, abs(geometry[axis]))
+                plus, minus = geometry.copy(), geometry.copy()
+                plus[axis] += step
+                minus[axis] -= step
+                try:
+                    high = self._make_camera(plus[:3], plus[3:]).pixel_to_world(u, v)
+                    low = self._make_camera(minus[:3], minus[3:]).pixel_to_world(u, v)
+                except ValueError:
+                    return None
+                if high is None or low is None:
+                    return None
+                columns.append((np.asarray(high)-low)/(2*step))
+            geometry_J = np.column_stack(columns)
+            metric += sigma**2 * geometry_J @ geometry_J.T
+        if not np.isfinite(metric).all():
+            return None
+        return (metric + metric.T) / 2
+
     def pixel_noise_to_metric(self, u, v, pixel_noise_sigma, transform_noise_sigma=0.0):
-        world = self.pixel_to_world(u, v, transform_noise_sigma=transform_noise_sigma)
-        if world is None:
+        """World-axis marginal standard deviations; full covariance API is above."""
+        sigma = float(pixel_noise_sigma)
+        if not math.isfinite(sigma) or sigma < 0:
+            raise ValueError("pixel noise sigma must be finite and nonnegative")
+        covariance = self.pixel_covariance_to_metric(
+            u, v, np.eye(2)*sigma**2, transform_noise_sigma)
+        if covariance is None:
             return None
-        x, y = world
-        dx = self.pixel_to_world(u + pixel_noise_sigma, v, transform_noise_sigma=transform_noise_sigma)
-        dy = self.pixel_to_world(u, v + pixel_noise_sigma, transform_noise_sigma=transform_noise_sigma)
-        if dx is None or dy is None:
-            return None
-        sigma_x = math.hypot(dx[0] - x, dx[1] - y)
-        sigma_y = math.hypot(dy[0] - x, dy[1] - y)
-        return sigma_x, sigma_y
+        return tuple(np.sqrt(np.maximum(np.diag(covariance), 0.0)))
 
     def pixel_to_world_at_z(self, u, v, z_plane, transform_noise_sigma=0.0):
         """Back-project a pixel to the world plane z=z_plane.
@@ -62,14 +107,4 @@ class PixelToBevTransformer:
             cam_pos = cam_pos + self.rng.normal(0.0, transform_noise_sigma, size=3)
             look_at = look_at + self.rng.normal(0.0, transform_noise_sigma, size=3)
         camera = self._make_camera(cam_pos, look_at)
-        K_inv = np.linalg.inv(camera.K)
-        ray_cam = K_inv @ np.array([float(u), float(v), 1.0], dtype=float)
-        ray_world = camera.R.T @ ray_cam
-        if abs(ray_world[2]) < 1e-9:
-            return None
-        t = (float(z_plane) - cam_pos[2]) / ray_world[2]
-        if t <= 0.0:
-            return None
-        x = cam_pos[0] + t * ray_world[0]
-        y = cam_pos[1] + t * ray_world[1]
-        return float(x), float(y)
+        return camera.pixel_to_world_at_z(u, v, z_plane)

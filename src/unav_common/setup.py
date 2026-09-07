@@ -11,7 +11,7 @@ setup(
          ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools', 'numpy'],
+    install_requires=['setuptools', 'numpy', 'shapely>=1.8'],
     zip_safe=True,
     maintainer='joostleliveld',
     maintainer_email='j.j.p.leliveld@student.tue.nl',

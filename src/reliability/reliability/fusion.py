@@ -1,12 +1,21 @@
-"""Simple camera selection and fusion policies for Phase 1/2 experiments."""
+"""Camera selection, measurement fusion and planar filter updates.
+
+Batch fusion requires one observation per physical camera. Sequential updates
+are a separate API and deliberately preserve the caller's temporal order.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
+from numbers import Integral
+from statistics import median
 from typing import Iterable, Mapping, Sequence
 
-from reliability.contracts import CameraObservation, CameraQuality, ContractValidationError
+from reliability.contracts import (
+    CameraObservation, CameraQuality, ContractValidationError,
+    _as_pair, _as_matrix_2x2, _finite_float, _validate_spd_2x2,
+)
 
 
 @dataclass(frozen=True)
@@ -19,13 +28,23 @@ class MapObservation:
     source: str = ""
 
     def __post_init__(self) -> None:
+        if not isinstance(self.camera_id, str) or not self.camera_id.strip():
+            raise ContractValidationError("camera_id must be a non-empty string")
+        timestamp = _finite_float(self.timestamp_s, field_name="timestamp_s")
+        if timestamp < 0.0:
+            raise ContractValidationError("timestamp_s must be non-negative")
         xy = _pair(self.xy_m, "xy_m")
         cov = _matrix_2x2(self.covariance_m2, "covariance_m2")
         _validate_spd(cov, "covariance_m2")
         object.__setattr__(self, "xy_m", xy)
         object.__setattr__(self, "covariance_m2", cov)
+        object.__setattr__(self, "timestamp_s", timestamp)
+        if not isinstance(self.quality, CameraQuality):
+            raise ContractValidationError("quality must be a CameraQuality object")
         if self.quality.camera_id and self.quality.camera_id != self.camera_id:
             raise ContractValidationError("quality.camera_id must match MapObservation.camera_id")
+        if not isinstance(self.source, str):
+            raise ContractValidationError("source must be a string")
 
     def to_dict(self) -> dict:
         return {
@@ -49,19 +68,54 @@ class MapObservation:
             raise ContractValidationError(
                 "MapObservation is missing fields: " + ", ".join(sorted(missing))
             )
+        unknown = set(payload) - {
+            "camera_id", "timestamp_s", "xy_m", "covariance_m2", "quality", "source",
+        }
+        if unknown:
+            raise ContractValidationError(
+                "MapObservation contains unknown fields: " + ", ".join(sorted(unknown))
+            )
         return cls(
-            camera_id=str(payload["camera_id"]),
-            timestamp_s=float(payload["timestamp_s"]),
-            xy_m=tuple(payload["xy_m"]),
-            covariance_m2=tuple(tuple(row) for row in payload["covariance_m2"]),
+            camera_id=payload["camera_id"],
+            timestamp_s=payload["timestamp_s"],
+            xy_m=payload["xy_m"],
+            covariance_m2=payload["covariance_m2"],
             quality=CameraQuality.from_dict(payload["quality"]),
-            source=str(payload.get("source", "")),
+            source=payload.get("source", ""),
         )
 
 
 #: Wire format version for the per-camera map-observation batch. The planner
 #: refuses a batch it does not recognise rather than silently misreading it.
 MAP_OBSERVATION_BATCH_SCHEMA = "map_observation_batch/1"
+
+
+def camera_measurement_batch(
+    observations: Iterable[MapObservation], *, allow_empty: bool = False,
+) -> tuple[MapObservation, ...]:
+    """Validate camera identity before any batch selection, weighting or gate.
+
+    Repeated cameras are an upstream event-accounting error, including identical
+    duplicates. Choosing a first/last value or counting both would silently change
+    the evidence. Capture-time alignment is the caller's responsibility.
+    """
+    items = tuple(observations)
+    if not items and not allow_empty:
+        raise ContractValidationError("at least one map observation is required")
+    seen = set()
+    for observation in items:
+        if not isinstance(observation, MapObservation):
+            raise ContractValidationError("batch entries must be MapObservation objects")
+        if observation.camera_id in seen:
+            raise ContractValidationError(f"duplicate camera in measurement batch: {observation.camera_id!r}")
+        seen.add(observation.camera_id)
+    return items
+
+
+def _frame_id(value) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ContractValidationError("frame_id must be a non-empty string")
+    return value
 
 
 def map_observations_to_json(observations: Sequence[MapObservation], *, frame_id: str = "map") -> str:
@@ -78,8 +132,8 @@ def map_observations_to_json(observations: Sequence[MapObservation], *, frame_id
     return json.dumps(
         {
             "schema": MAP_OBSERVATION_BATCH_SCHEMA,
-            "frame_id": frame_id,
-            "observations": [obs.to_dict() for obs in observations],
+            "frame_id": _frame_id(frame_id),
+            "observations": [obs.to_dict() for obs in camera_measurement_batch(observations, allow_empty=True)],
         },
         sort_keys=True,
         allow_nan=False,
@@ -93,16 +147,25 @@ def map_observations_from_json(text: str) -> tuple[list[MapObservation], str]:
     payload = json.loads(text)
     if not isinstance(payload, Mapping):
         raise ContractValidationError("map-observation batch must be a JSON object")
+    unknown = set(payload) - {"schema", "frame_id", "observations"}
+    if unknown:
+        raise ContractValidationError(
+            "map-observation batch contains unknown fields: " + ", ".join(sorted(unknown))
+        )
     schema = str(payload.get("schema", ""))
     if schema != MAP_OBSERVATION_BATCH_SCHEMA:
         raise ContractValidationError(
             f"unsupported map-observation batch schema {schema!r}; "
             f"expected {MAP_OBSERVATION_BATCH_SCHEMA!r}"
         )
-    raw = payload.get("observations", [])
-    if not isinstance(raw, Sequence):
+    raw = payload.get("observations")
+    if not isinstance(raw, list):
         raise ContractValidationError("map-observation batch 'observations' must be a list")
-    return [MapObservation.from_dict(item) for item in raw], str(payload.get("frame_id", "map"))
+    frame_id = _frame_id(payload.get("frame_id"))
+    observations = camera_measurement_batch(
+        (MapObservation.from_dict(item) for item in raw), allow_empty=True,
+    )
+    return list(observations), frame_id
 
 
 @dataclass(frozen=True)
@@ -140,7 +203,7 @@ def select_primary_camera(
     for obs in valid:
         if obs.camera_id == primary_camera_id:
             return obs
-    return valid[0] if valid else None
+    return min(valid, key=lambda obs: obs.camera_id) if valid else None
 
 
 def select_fixed_zone(
@@ -156,21 +219,27 @@ def select_fixed_zone(
         for obs in valid:
             if obs.camera_id == zone.camera_id:
                 return obs
-    return valid[0] if valid else None
+    return min(valid, key=lambda obs: obs.camera_id) if valid else None
 
 
 def select_highest_detector_score(observations: Iterable[CameraObservation]) -> CameraObservation | None:
     valid = usable_observations(observations)
     if not valid:
         return None
-    return max(valid, key=lambda obs: (obs.detector_score, -obs.measurement_age_s))
+    return min(
+        valid,
+        key=lambda obs: (-obs.detector_score, obs.measurement_age_s, obs.camera_id),
+    )
 
 
 def select_freshest_valid(observations: Iterable[CameraObservation]) -> CameraObservation | None:
     valid = usable_observations(observations)
     if not valid:
         return None
-    return min(valid, key=lambda obs: (obs.measurement_age_s, -obs.detector_score))
+    return min(
+        valid,
+        key=lambda obs: (obs.measurement_age_s, -obs.detector_score, obs.camera_id),
+    )
 
 
 def select_best_static_reliability(
@@ -180,11 +249,12 @@ def select_best_static_reliability(
     valid = usable_observations(observations)
     if not valid:
         return None
-    return max(
+    return min(
         valid,
         key=lambda obs: (
-            qualities.get(obs.camera_id, obs.quality()).p_available,
-            obs.detector_score,
+            -qualities.get(obs.camera_id, obs.quality()).p_available,
+            -obs.detector_score,
+            obs.camera_id,
         ),
     )
 
@@ -217,13 +287,16 @@ def select_conservative_best_camera(
     valid = usable_observations(observations)
     if not valid:
         return None
-    return max(
+    return min(
         valid,
-        key=lambda obs: conservative_camera_score(
-            obs,
-            qualities.get(obs.camera_id),
-            lambda_age=lambda_age,
-            gamma_epistemic=gamma_epistemic,
+        key=lambda obs: (
+            -conservative_camera_score(
+                obs,
+                qualities.get(obs.camera_id),
+                lambda_age=lambda_age,
+                gamma_epistemic=gamma_epistemic,
+            ),
+            obs.camera_id,
         ),
     )
 
@@ -276,17 +349,15 @@ def sequential_kalman_update_2d(
         k = _mat_mul(cov, _mat_inv_2x2(s_mat))
         delta = _mat_vec(k, innovation)
         mean = (mean[0] + delta[0], mean[1] + delta[1])
-        cov = _mat_mul(_mat_sub(((1.0, 0.0), (0.0, 1.0)), k), cov)
-        cov = _symmetrize(cov)
+        cov = _joseph_covariance(cov, obs.covariance_m2, k)
         accepted.append(obs.camera_id)
 
     if belief_floors and accepted:
-        from reliability.bias_floor import apply_belief_floor, combine_floors
+        from reliability.bias_floor import apply_belief_floor, combine_camera_floors
 
-        chosen = [belief_floors[cam] for cam in accepted if cam in belief_floors]
-        if chosen:
-            cov = _symmetrize(apply_belief_floor(
-                cov, combine_floors([_matrix_2x2(f, "belief_floor") for f in chosen])))
+        floor = combine_camera_floors(belief_floors, accepted)
+        if floor is not None:
+            cov = _symmetrize(apply_belief_floor(cov, floor))
 
     return SequentialFusionResult(
         mean_xy=mean,
@@ -310,9 +381,7 @@ def independent_measurement_fusion_2d(
     Cross-camera correlation is deliberately outside this historical baseline.
     """
 
-    items = tuple(observations)
-    if not items:
-        raise ContractValidationError("at least one map observation is required")
+    items = camera_measurement_batch(observations)
     information = ((0.0, 0.0), (0.0, 0.0))
     information_vector = (0.0, 0.0)
     for observation in items:
@@ -340,18 +409,14 @@ def select_smallest_covariance(
     Distinct from :func:`select_information_best`, which scores an observation against the
     filter's current prior and therefore answers "which helps most now?" rather than "which
     is most precise?". This one needs no prior, so it can be stated as a rule a reader can
-    reimplement.
+    reimplement. Equal traces are resolved by camera ID, independently of callback order.
     """
 
-    best: MapObservation | None = None
-    best_trace = math.inf
-    for obs in observations:
-        if obs is None:
-            continue
-        trace = float(obs.covariance_m2[0][0] + obs.covariance_m2[1][1])
-        if trace < best_trace:
-            best, best_trace = obs, trace
-    return best
+    return min(
+        camera_measurement_batch(observations, allow_empty=True),
+        key=lambda obs: (obs.covariance_m2[0][0] + obs.covariance_m2[1][1], obs.camera_id),
+        default=None,
+    )
 
 
 def distance_angle_weights(
@@ -373,9 +438,10 @@ def distance_angle_weights(
     not the same as knowing how good their readings are.
     """
 
-    items = tuple(observations)
-    if not items:
-        raise ContractValidationError("at least one map observation is required")
+    items = camera_measurement_batch(observations)
+    epsilon = _finite_float(epsilon, field_name="epsilon")
+    if epsilon <= 0.0:
+        raise ContractValidationError("epsilon must be positive")
     scores = {}
     for obs in items:
         position = camera_positions_m.get(obs.camera_id)
@@ -383,7 +449,10 @@ def distance_angle_weights(
             raise ContractValidationError(
                 f"no camera position for {obs.camera_id!r}; refusing to guess one"
             )
-        cx, cy, cz = (float(position[0]), float(position[1]), float(position[2]))
+        if len(position) != 3:
+            raise ContractValidationError(f"camera position for {obs.camera_id!r} must have three coordinates")
+        cx, cy, cz = (_finite_float(value, field_name=f"camera_positions_m[{obs.camera_id!r}]")
+                      for value in position)
         dx, dy = obs.xy_m[0] - cx, obs.xy_m[1] - cy
         horizontal_sq = dx * dx + dy * dy
         slant = math.sqrt(horizontal_sq + cz * cz)
@@ -449,15 +518,13 @@ def joint_network_estimate_2d(
     on commissioning data and tested on held-out routes.
     """
 
-    items = tuple(observations)
-    if not items:
-        raise ContractValidationError("at least one map observation is required")
+    items = camera_measurement_batch(observations)
     delta = float(huber_delta)
     if not math.isfinite(delta) or delta <= 0.0:
         raise ContractValidationError("huber_delta must be finite and positive")
+    if isinstance(max_iterations, bool) or not isinstance(max_iterations, Integral) or max_iterations <= 0:
+        raise ContractValidationError("max_iterations must be a positive integer")
     iterations = int(max_iterations)
-    if iterations <= 0:
-        raise ContractValidationError("max_iterations must be positive")
     tolerance = float(convergence_m)
     if not math.isfinite(tolerance) or tolerance < 0.0:
         raise ContractValidationError("convergence_m must be finite and non-negative")
@@ -468,12 +535,6 @@ def joint_network_estimate_2d(
     # camera cannot choose. Sorting also makes the result independent of message order.
     xs = sorted(obs.xy_m[0] for obs in items)
     ys = sorted(obs.xy_m[1] for obs in items)
-
-    def median(values):
-        middle = len(values) // 2
-        if len(values) % 2:
-            return float(values[middle])
-        return 0.5 * float(values[middle - 1] + values[middle])
 
     mean = (median(xs), median(ys))
     precisions = [_mat_inv_2x2(obs.covariance_m2) for obs in items]
@@ -590,12 +651,7 @@ def joseph_update_2d(
     k = _mat_mul(cov, _mat_inv_2x2(s_mat))
     delta = _mat_vec(k, innovation)
     mean_post = (mean[0] + delta[0], mean[1] + delta[1])
-    i_minus_k = _mat_sub(((1.0, 0.0), (0.0, 1.0)), k)
-    cov_post = _mat_add(
-        _mat_mul(_mat_mul(i_minus_k, cov), _transpose(i_minus_k)),
-        _mat_mul(_mat_mul(k, r_mat), _transpose(k)),
-    )
-    cov_post = _symmetrize(cov_post)
+    cov_post = _joseph_covariance(cov, r_mat, k)
     if belief_floor is not None:
         from reliability.bias_floor import apply_belief_floor
 
@@ -660,14 +716,9 @@ def expected_information_gain(
     r_mat = _matrix_2x2(observation_covariance, "observation_covariance")
     _validate_spd(r_mat, "observation_covariance")
 
-    s_mat = _mat_add(p_mat, r_mat)
-    k = _mat_mul(p_mat, _mat_inv_2x2(s_mat))
-    p_post = _symmetrize(_mat_mul(_mat_sub(((1.0, 0.0), (0.0, 1.0)), k), p_mat))
-    det_prior = _det_2x2(p_mat)
-    det_post = _det_2x2(p_post)
-    if det_post <= 0.0:
-        raise ContractValidationError("posterior covariance is not positive definite")
-    return float(math.log(det_prior) - math.log(det_post))
+    # det(P)/det(P+) = det(P+R)/det(R). Avoid subtracting two almost
+    # equal matrices to obtain a tiny posterior, and avoid determinant underflow.
+    return _logdet_spd_2x2(_mat_add(p_mat, r_mat)) - _logdet_spd_2x2(r_mat)
 
 
 def select_information_best(
@@ -683,16 +734,11 @@ def select_information_best(
 
     p_mat = _matrix_2x2(cov_prior, "cov_prior")
     _validate_spd(p_mat, "cov_prior")
-    best: MapObservation | None = None
-    best_gain = -math.inf
-    for obs in observations:
-        if obs is None:
-            continue
-        gain = expected_information_gain(p_mat, obs.covariance_m2)
-        if gain > best_gain:
-            best = obs
-            best_gain = gain
-    return best
+    return min(
+        camera_measurement_batch(observations, allow_empty=True),
+        key=lambda obs: (-expected_information_gain(p_mat, obs.covariance_m2), obs.camera_id),
+        default=None,
+    )
 
 
 def fuse_or_select(
@@ -820,38 +866,15 @@ def _require_probability(value: object, field_name: str) -> float:
 
 
 def _pair(value: Sequence[float], field_name: str) -> tuple[float, float]:
-    if hasattr(value, "tolist") and not isinstance(value, (str, bytes)):
-        value = value.tolist()
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or len(value) != 2:
-        raise ContractValidationError(f"{field_name} must be a 2-element sequence")
-    out = (float(value[0]), float(value[1]))
-    if not math.isfinite(out[0]) or not math.isfinite(out[1]):
-        raise ContractValidationError(f"{field_name} must be finite")
-    return out
+    return _as_pair(value, field_name=field_name)
 
 
 def _matrix_2x2(value: Sequence[Sequence[float]], field_name: str) -> tuple[tuple[float, float], tuple[float, float]]:
-    if hasattr(value, "tolist") and not isinstance(value, (str, bytes)):
-        value = value.tolist()
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or len(value) != 2:
-        raise ContractValidationError(f"{field_name} must be a 2x2 matrix")
-    rows = []
-    for row in value:
-        if not isinstance(row, Sequence) or isinstance(row, (str, bytes)) or len(row) != 2:
-            raise ContractValidationError(f"{field_name} must be a 2x2 matrix")
-        rows.append((float(row[0]), float(row[1])))
-    return (rows[0], rows[1])
+    return _as_matrix_2x2(value, field_name=field_name)
 
 
 def _validate_spd(matrix: tuple[tuple[float, float], tuple[float, float]], field_name: str) -> None:
-    a, b = matrix[0]
-    c, d = matrix[1]
-    if not all(math.isfinite(v) for v in (a, b, c, d)):
-        raise ContractValidationError(f"{field_name} must be finite")
-    if abs(b - c) > 1.0e-9:
-        raise ContractValidationError(f"{field_name} must be symmetric")
-    if a <= 0.0 or d <= 0.0 or a * d - b * c <= 0.0:
-        raise ContractValidationError(f"{field_name} must be symmetric positive definite")
+    _validate_spd_2x2(matrix, field_name=field_name)
 
 
 def _mat_scale(a, k):
@@ -878,11 +901,35 @@ def _mat_vec(a, v):
 
 
 def _mat_inv_2x2(a):
-    det = a[0][0] * a[1][1] - a[0][1] * a[1][0]
-    if abs(det) <= 1.0e-12:
+    scale = max(abs(value) for row in a for value in row)
+    if not math.isfinite(scale) or scale == 0.0:
+        raise ContractValidationError("matrix must be finite and invertible")
+    aa, ab = a[0][0] / scale, a[0][1] / scale
+    ac, ad = a[1][0] / scale, a[1][1] / scale
+    det = aa * ad - ab * ac
+    if not math.isfinite(det) or det == 0.0:
         raise ContractValidationError("matrix is singular")
-    inv_det = 1.0 / det
-    return ((a[1][1] * inv_det, -a[0][1] * inv_det), (-a[1][0] * inv_det, a[0][0] * inv_det))
+    inverse = ((ad / det / scale, -ab / det / scale),
+               (-ac / det / scale, aa / det / scale))
+    if not all(math.isfinite(value) for row in inverse for value in row):
+        raise ContractValidationError("matrix inverse is not finite")
+    return inverse
+
+
+def _logdet_spd_2x2(matrix):
+    scale = max(abs(value) for row in matrix for value in row)
+    determinant = ((matrix[0][0] / scale) * (matrix[1][1] / scale)
+                   - (matrix[0][1] / scale) * (matrix[1][0] / scale))
+    return 2.0 * math.log(scale) + math.log(determinant)
+
+
+def _joseph_covariance(prior, measurement, gain):
+    """One stable posterior formula for both planar update APIs."""
+    i_minus_k = _mat_sub(((1.0, 0.0), (0.0, 1.0)), gain)
+    return _symmetrize(_mat_add(
+        _mat_mul(_mat_mul(i_minus_k, prior), _transpose(i_minus_k)),
+        _mat_mul(_mat_mul(gain, measurement), _transpose(gain)),
+    ))
 
 
 def _quad_form_inverse_2x2(v, a):

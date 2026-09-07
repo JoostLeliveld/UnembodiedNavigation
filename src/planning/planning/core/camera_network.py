@@ -9,11 +9,35 @@ goal preference and objective weights therefore do not change with camera count.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import re
+from collections.abc import Mapping
 from itertools import product
 from pathlib import Path
+from types import MappingProxyType
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
+from planning.core.plan_validation import immutable_array, validate_covariance
+
+
+def _source_hashes(value):
+    if not isinstance(value, Mapping) or not value:
+        raise ValueError('network source_hashes must be a nonempty mapping')
+    for path, digest in value.items():
+        if (not isinstance(path, str) or not path.strip() or Path(path).is_absolute()
+                or '..' in Path(path).parts or not isinstance(digest, str)
+                or re.fullmatch(r'[0-9a-f]{64}', digest) is None):
+            raise ValueError('network source_hashes requires relative names and SHA-256 digests')
+    return dict(value)
+
+
+def _freeze(value):
+    if isinstance(value, dict):
+        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze(item) for item in value)
+    return value
 
 
 def _spd(value, name):
@@ -29,8 +53,13 @@ def _spd(value, name):
 
 def projection_jacobian(H, state):
     """Original-image pixels per metre for the fixed cost chart, not a detector."""
-    H = np.asarray(H, dtype=float).reshape(3, 3)
-    point = np.r_[np.asarray(state, dtype=float)[:2], 1.]
+    H = np.asarray(H, dtype=float)
+    state = np.asarray(state, dtype=float)
+    if H.shape != (3,3) or not np.isfinite(H).all() or state.shape != (3,) or not np.isfinite(state).all():
+        raise ValueError('cost chart requires finite 3x3 homography and [x,y,yaw]')
+    if np.linalg.matrix_rank(H) != 3:
+        raise ValueError('cost chart homography must be nonsingular')
+    point = np.r_[state[:2], 1.]
     projected = H @ point
     if abs(projected[2]) < 1e-8:
         raise ValueError('network cost chart is singular at this query')
@@ -44,11 +73,27 @@ class CameraNetworkModel:
     interpolation matches the CasADi path. Outside the commissioned grid the
     score and usable-detection probability are zero. No image or GT is queried.
     """
-    def __init__(self, artifact_path, cameras=None):
+    def __setattr__(self, name, value):
+        if getattr(self, '_loaded', False) and not name.startswith('_'):
+            raise AttributeError('loaded camera network is immutable; construct a new model')
+        object.__setattr__(self, name, value)
+
+    def __init__(self, artifact_path, cameras=None, *, expected_sha256=None,
+                 expected_source_hashes=None, expected_camera_ids=None):
         self.path = Path(artifact_path).expanduser().resolve()
-        self.sha256 = hashlib.sha256(self.path.read_bytes()).hexdigest()
-        with np.load(self.path, allow_pickle=False) as data:
+        artifact_bytes = self.path.read_bytes()
+        self.sha256 = hashlib.sha256(artifact_bytes).hexdigest()
+        if expected_sha256 is not None and self.sha256 != expected_sha256:
+            raise ValueError('camera-network artifact SHA-256 mismatch')
+        # Hash and parse one immutable byte snapshot; a replaced file cannot race
+        # a separate np.load(path) into having the old identity and new arrays.
+        with np.load(io.BytesIO(artifact_bytes), allow_pickle=False) as data:
             self.metadata = json.loads(str(data['metadata_json'].item()))
+            if not isinstance(self.metadata, dict):
+                raise ValueError('network metadata must be an object')
+            sources = _source_hashes(self.metadata.get('source_hashes'))
+            if expected_source_hashes is not None and sources != _source_hashes(expected_source_hashes):
+                raise ValueError('camera-network source provenance differs from expected manifest')
             if self.metadata.get('schema') != 'camera_network.iwai.v1':
                 raise ValueError('unsupported camera-network artifact schema')
             if self.metadata.get('reference') != 'robot_ground_reference_xy':
@@ -59,9 +104,16 @@ class CameraNetworkModel:
                 raise ValueError('the IWAI proxy requires an explicitly labelled detector-score field')
             if self.metadata.get('availability_target') != 'valid_detection_finite_ground_projection':
                 raise ValueError('availability must describe the declared pre-gate detection event')
-            ids = tuple(str(c) for c in data['camera_ids'])
-            if not ids or len(set(ids)) != len(ids):
+            raw_ids = np.asarray(data['camera_ids'])
+            if raw_ids.ndim != 1 or raw_ids.dtype.kind not in ('U','S'):
+                raise ValueError('camera IDs must be a one-dimensional string axis')
+            ids = tuple(raw_ids.astype(str))
+            if not ids or len(set(ids)) != len(ids) or any(not c or c != c.strip() for c in ids):
                 raise ValueError('unique camera IDs required')
+            if expected_camera_ids is not None:
+                expected = tuple(expected_camera_ids)
+                if not expected or len(set(expected)) != len(expected) or set(expected) != set(ids):
+                    raise ValueError('camera-network roster differs from declared future cameras')
             self.camera_ids = ids if cameras is None else tuple(cameras)
             if not self.camera_ids or len(set(self.camera_ids)) != len(self.camera_ids):
                 raise ValueError('camera mask must be nonempty and unique')
@@ -79,17 +131,24 @@ class CameraNetworkModel:
                     raise ValueError(f'{key} camera/y/x dimensions differ')
                 if not np.isfinite(grid).all() or np.any((grid<0)|(grid>1)):
                     raise ValueError(f'{key} must be in [0,1]')
-                self.fields[key] = grid[indices]
-            self.R = _spd(data['R_cond_m2'], 'conditional R')[indices]
-            self.R_miss = _spd(data['R_miss_proxy_m2'], 'miss proxy R')[indices]
-            if self.R.shape != (len(indices), 2, 2) or self.R_miss.shape != self.R.shape:
-                raise ValueError('one covariance per selected camera is required')
+                self.fields[key] = immutable_array(grid[indices])
+            full_R = _spd(data['R_cond_m2'], 'conditional R')
+            full_miss = _spd(data['R_miss_proxy_m2'], 'miss proxy R')
+            if full_R.shape != (len(ids), 2, 2) or full_miss.shape != full_R.shape:
+                raise ValueError('one covariance per artifact camera is required before masking')
+            self.R = immutable_array(full_R[indices])
+            self.R_miss = immutable_array(full_miss[indices])
             if np.linalg.eigvalsh(self.R_miss-self.R).min() < -1e-12:
                 raise ValueError('miss proxy cannot be more precise than conditional R')
-        self.precision = np.linalg.solve(self.R, np.broadcast_to(np.eye(2), self.R.shape))
-        self.miss_precision = np.linalg.solve(self.R_miss, np.broadcast_to(np.eye(2), self.R.shape))
+        self.xs, self.ys = immutable_array(self.xs), immutable_array(self.ys)
+        self.fields = MappingProxyType(self.fields)
+        self.metadata = _freeze(self.metadata)
+        self.precision = immutable_array(np.linalg.solve(self.R, np.broadcast_to(np.eye(2), self.R.shape)))
+        self.miss_precision = immutable_array(np.linalg.solve(self.R_miss, np.broadcast_to(np.eye(2), self.R.shape)))
         self.interpolators = {key: [RegularGridInterpolator((self.ys,self.xs), grid,
             bounds_error=False, fill_value=0.) for grid in maps] for key,maps in self.fields.items()}
+        self.interpolators = MappingProxyType({key: tuple(value) for key,value in self.interpolators.items()})
+        self._loaded = True
 
     @property
     def signature(self):
@@ -105,8 +164,9 @@ class CameraNetworkModel:
     def query_belief(self, state, P, kappa=1.):
         state, P = np.asarray(state,float), np.asarray(P,float)
         self.query(state)  # validate the public input before deriving sigma points
-        if P.shape != (3,3) or not np.isfinite(P).all():
-            raise ValueError('network query covariance must be finite 3x3')
+        P = validate_covariance(P)
+        if not np.isfinite(kappa) or kappa <= 0:
+            raise ValueError('sigma-point kappa must be finite and positive')
         kappa = max(float(kappa), 1e-6)
         spread = np.sqrt(2+kappa)*np.linalg.cholesky((P[:2,:2]+P[:2,:2].T)/2+1e-9*np.eye(2))
         offsets = [np.zeros(2),spread[:,0],-spread[:,0],spread[:,1],-spread[:,1]]
@@ -145,9 +205,7 @@ class CameraNetworkModel:
         and the approximation to the actual robust runtime fusion are unvalidated.
         """
         q = self.query(state)['availability']
-        P = np.asarray(P,float)
-        if P.shape != (3,3) or not np.isfinite(P).all() or not np.allclose(P,P.T) or np.linalg.eigvalsh(P).min()<=0:
-            raise ValueError('forecast prior must be SPD 3x3')
+        P = validate_covariance(P, positive_definite=(mode == 'information'), name='forecast prior')
         if mode == 'information':
             info = np.linalg.solve(P,np.eye(3))
             info[:2,:2] += (q[:,None,None]*self.precision).sum(axis=0)
@@ -174,7 +232,10 @@ class CameraNetworkModel:
         for i,grid in enumerate(self.fields['score']):
             interpolators.append(ca.interpolant(f'network_{self.sha256[:10]}_{i}', 'linear',
                 [self.xs.tolist(),self.ys.tolist()],grid.T.ravel(order='F').tolist()))
-        H = ca.DM(np.asarray(H,float))
+        H_numpy = np.asarray(H,float)
+        if H_numpy.shape != (3,3) or not np.isfinite(H_numpy).all() or np.linalg.matrix_rank(H_numpy) != 3:
+            raise ValueError('cost chart homography must be finite and nonsingular')
+        H = ca.DM(H_numpy)
         def evaluate(m,P):
             points,weights = _xy_visibility_sigma_points_ca(m[:2],P[:2,:2],kappa)
             scores=[]
@@ -193,5 +254,8 @@ class CameraNetworkModel:
             ground=ca.solve(info,ca.DM.eye(2))
             projected=H @ ca.vertcat(m[0],m[1],1.)
             J=(H[:2,:2]*projected[2]-projected[:2] @ H[2,:2])/projected[2]**2
-            return J @ ground @ J.T
+            # Same numerical domain as the NumPy chart. Invalid queries must
+            # reach the finite-objective guard, not a fictitious finite chart.
+            return ca.if_else(ca.fabs(projected[2]) >= 1e-8,
+                              J @ ground @ J.T, ca.DM(np.full((2,2), np.nan)))
         return evaluate

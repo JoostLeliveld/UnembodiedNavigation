@@ -39,7 +39,9 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('state_reanchor_m', default_value='0.0'),
         DeclareLaunchArgument('state_max_predict_dt_s', default_value='1.5'),
         DeclareLaunchArgument('state_reject_inflate_m2', default_value='0.05'),
-        DeclareLaunchArgument('robot_collision_radius_m', default_value='0.125'),
+        DeclareLaunchArgument('robot_length_m', default_value='0.8'),
+        DeclareLaunchArgument('robot_width_m', default_value='0.55'),
+        DeclareLaunchArgument('robot_collision_radius_m', default_value='0.48541219597369'),
         DeclareLaunchArgument('terminate_on_geom_collision', default_value='false',
                               description='Must remain false for experiments: geometry uses ground truth. Physical contacts still terminate.'),
         DeclareLaunchArgument('odom_heading_timeout_s', default_value='0.75',
@@ -50,7 +52,7 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('use_nogo_cost', default_value='auto'),
         DeclareLaunchArgument('nogo_penalty_type', default_value='warning_band'),
         DeclareLaunchArgument('nogo_weight', default_value='40.0'),
-        DeclareLaunchArgument('nogo_safe_distance', default_value='0.35'),
+        DeclareLaunchArgument('nogo_safe_distance', default_value='0.55'),
         DeclareLaunchArgument('nogo_logbarrier_eps', default_value='0.001'),
         DeclareLaunchArgument('nogo_warning_band', default_value='0.05'),
         DeclareLaunchArgument('nogo_near_weight', default_value='50.0'),
@@ -104,8 +106,8 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('local_goal_prior_v_std_start', default_value='-1.0'),
         DeclareLaunchArgument('local_goal_prior_u_std_final', default_value='-1.0'),
         DeclareLaunchArgument('local_goal_prior_v_std_final', default_value='-1.0'),
-        DeclareLaunchArgument('waypoint_spacing_m', default_value='1.0'),
-        DeclareLaunchArgument('waypoint_arrival_radius_m', default_value='0.35'),
+        DeclareLaunchArgument('waypoint_spacing_m', default_value='0.2'),
+        DeclareLaunchArgument('waypoint_arrival_radius_m', default_value='0.1'),
         DeclareLaunchArgument('local_replan_min_remaining_s', default_value='0.0',
                               description='Skip local replanning while the active control tape has more than this many seconds remaining.'),
         DeclareLaunchArgument('local_replan_on_waypoint_change', default_value='false',
@@ -132,7 +134,6 @@ def _launch_setup(context, *args, **kwargs):
 
     requested_global_mode = str(cfg.get('global_planner_mode', 'efe') or 'efe').strip().lower()
     cfg['planner'] = planner
-    cfg['use_rviz'] = bool(cfg.get('use_rviz', False))
 
     if planner == 'constant_R_efe':
         cfg['use_visibility_model'] = False
@@ -196,6 +197,9 @@ def generate_launch_description():
             default_value='0.0',
             description='Maximum xy sigma for the initial-belief readiness gate; <=0 accepts the first finite belief.',
         ),
+        DeclareLaunchArgument(
+            'operational_belief_timeout_s', default_value='0.5',
+            description='Maximum age of the operational predicted belief used to release a mission goal.'),
         DeclareLaunchArgument('goal_success_radius', default_value='0.20'),
         DeclareLaunchArgument('goal_success_hold_s', default_value='2.0'),
         DeclareLaunchArgument('goal_stable_radius', default_value='0.20'),
@@ -226,6 +230,12 @@ def generate_launch_description():
         DeclareLaunchArgument('encoder_noise_correlation_alpha', default_value='0.80',
                               description='AR(1) correlation of encoder slip states.'),
         DeclareLaunchArgument('yolo_model', default_value='', description='Local path to a trained YOLO .pt model'),
+        DeclareLaunchArgument(
+            'outcome_journal_path', default_value='',
+            description='Durable JSONL detector-outcome journal; campaigns set an attempt-owned path.'),
+        DeclareLaunchArgument(
+            'manager_outcome_journal_path', default_value='',
+            description='Durable JSONL camera-manager outcome journal; campaigns set a distinct attempt-owned path.'),
         DeclareLaunchArgument('yolo_device', default_value='', description='Ultralytics device string; empty lets Ultralytics choose'),
                 # 960, matching every trained model. Until 2026-08-21 this defaulted to 640
         # while all five checkpoints were trained at imgsz 960, so inference ran at a
@@ -342,10 +352,10 @@ def generate_launch_description():
                                           'not touching the frame edge. Off reproduces the '
                                           'ungated pipeline, which fused readings up to 122 cm '
                                           'wrong.'),
-        DeclareLaunchArgument('manager_fusion_rule', default_value='legacy',
-                              description='How several cameras become one measurement: legacy keeps '
-                                          'the historical behaviour; best_single | distance_angle | '
-                                          'independent | network are the fusion arms.'),
+        DeclareLaunchArgument('manager_fusion_rule', default_value='independent',
+                              description='How several cameras become one measurement: '
+                                          'best_single | distance_angle | independent | '
+                                          'joint_network. Campaigns name this explicitly.'),
         DeclareLaunchArgument('manager_observation_model', default_value='hull',
                               description='What a detector box means: hull predicts the box from the '
                                           'robot shape; raw_box takes the box bottom-centre as the '

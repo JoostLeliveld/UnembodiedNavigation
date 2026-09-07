@@ -202,6 +202,11 @@ worlds:
       - {name: DOCK_OFFICE, type: non_driveable_obstacle, xmin: -11.67, xmax: -8.53, ymin: -9.67, ymax: -7.23, note: structure zone plus its 0.32 m keep-out envelope}
       - {name: STAGE_MID, type: non_driveable_obstacle, xmin: -4.92, xmax: -1.88, ymin: -9.67, ymax: -7.83, note: staging zone plus its 0.32 m keep-out envelope}
       - {name: STAGE_E, type: non_driveable_obstacle, xmin: 2.28, xmax: 5.32, ymin: -9.67, ymax: -7.83, note: staging zone plus its 0.32 m keep-out envelope}
+  # Same geometry, cameras and calibration contract as warehouse_v2. Only the
+  # simulator integration/contact rates are reduced for CPU-bound development runs.
+  warehouse_v2_low_cpu.world.sdf:
+    <<: *warehouse_v2_peak_profile
+    evidence_role: performance_development_only
   warehouse_v2_shipout.world.sdf:
     <<: *warehouse_v2_peak_profile
     world_name: warehouse_v2_shipout

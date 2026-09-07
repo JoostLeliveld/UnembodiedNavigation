@@ -2,6 +2,7 @@
 """Throttle Gazebo's high-rate simulation clock before ROS nodes consume it."""
 
 import math
+import time
 
 import rclpy
 from rclpy.clock import Clock as RclpyClock
@@ -24,17 +25,23 @@ class ClockThrottleNode(Node):
         self.declare_parameter('input_topic', '/clock_full')
         self.declare_parameter('output_topic', '/clock')
         self.declare_parameter('publish_rate_hz', 50.0)
+        self.declare_parameter('duplicate_heartbeat_s', 1.0)
 
         self.input_topic = str(self.get_parameter('input_topic').value)
         self.output_topic = str(self.get_parameter('output_topic').value)
         self.publish_rate_hz = float(self.get_parameter('publish_rate_hz').value)
         if not math.isfinite(self.publish_rate_hz) or self.publish_rate_hz <= 0.0:
             raise RuntimeError('publish_rate_hz must be a positive finite value')
+        self.duplicate_heartbeat_s = float(self.get_parameter('duplicate_heartbeat_s').value)
+        if not math.isfinite(self.duplicate_heartbeat_s) or self.duplicate_heartbeat_s <= 0.0:
+            raise RuntimeError('duplicate_heartbeat_s must be a positive finite value')
 
         qos = _clock_qos()
         self._latest_msg = None
         self._received_count = 0
         self._published_count = 0
+        self._last_published_stamp = None
+        self._last_publish_wall_s = -math.inf
 
         self.create_subscription(Clock, self.input_topic, self._clock_cb, qos)
         self._pub = self.create_publisher(Clock, self.output_topic, qos)
@@ -59,9 +66,19 @@ class ClockThrottleNode(Node):
             self.get_logger().info(f"Received first input clock at t={stamp:.6f}s")
 
     def _publish_latest(self):
-        if self._latest_msg is None:
+        message = self._latest_msg
+        if message is None:
             return
-        self._pub.publish(self._latest_msg)
+        stamp_key = (message.clock.sec, message.clock.nanosec)
+        now = time.monotonic()
+        # Changed timestamps (including a reset) retain the original cadence.
+        # A paused clock only needs a heartbeat for newly joined ROS nodes.
+        if (stamp_key == self._last_published_stamp
+                and now - self._last_publish_wall_s < self.duplicate_heartbeat_s):
+            return
+        self._pub.publish(message)
+        self._last_published_stamp = stamp_key
+        self._last_publish_wall_s = now
         self._published_count += 1
         if self._published_count == 1:
             stamp = self._latest_msg.clock.sec + self._latest_msg.clock.nanosec * 1e-9

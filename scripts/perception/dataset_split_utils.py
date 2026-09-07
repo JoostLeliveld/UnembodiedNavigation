@@ -79,10 +79,14 @@ def assign_splits(
     seed: int = 0,
     spatial_block_size: int = 2,
 ) -> list[str]:
-    val_fraction = float(max(0.0, min(1.0, val_fraction)))
+    val_fraction = float(val_fraction)
+    if not math.isfinite(val_fraction) or not 0 <= val_fraction <= 1:
+        raise ValueError('val_fraction must be finite and in [0, 1]')
     split_mode = str(split_mode).strip().lower()
     if not records:
         return []
+    if val_fraction in (0.0, 1.0):
+        return ['val' if val_fraction == 1.0 else 'train'] * len(records)
     if split_mode == 'cyclic':
         val_every = max(int(round(1.0 / max(val_fraction, 1e-6))), 2)
         return ['val' if (idx % val_every == 0) else 'train' for idx in range(len(records))]

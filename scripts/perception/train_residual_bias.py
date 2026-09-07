@@ -8,6 +8,7 @@ import copy
 import csv
 import hashlib
 import json
+import io
 import random
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,11 +45,19 @@ def train(
         raise FileExistsError(f"output exists: {output}")
     if not (dataset / ".complete").is_file():
         raise FileNotFoundError(f"dataset is incomplete: {dataset}")
+    manifest_bytes = (dataset / 'dataset_manifest.json').read_bytes()
+    completion = json.loads((dataset / '.complete').read_text())
+    if completion.get('manifest_sha256') != hashlib.sha256(manifest_bytes).hexdigest():
+        raise ValueError('residual dataset completion digest mismatch')
+    manifest = json.loads(manifest_bytes)
+    records_bytes = (dataset / 'records.csv').read_bytes()
+    if manifest.get('records_sha256') != hashlib.sha256(records_bytes).hexdigest():
+        raise ValueError('residual dataset records digest mismatch')
     output.mkdir(parents=True)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    with (dataset / "records.csv").open(newline="", encoding="utf-8") as handle:
+    with io.StringIO(records_bytes.decode(), newline='') as handle:
         rows = [row for row in csv.DictReader(handle) if row["detected"] == "1"]
     fit_rows = [row for row in rows if row["residual_split"] == "fit"]
     calibration_rows = [row for row in rows if row["residual_split"] == "calibration"]
@@ -112,6 +121,11 @@ def train(
     if best_state is None:
         raise RuntimeError("training produced no checkpoint")
     artifact = {
+        'schema': 'provisional_pixel_residual.v1',
+        'frame': 'original_image_pixels',
+        'target': 'projected_commanded_ground_reference_minus_semantic_mask_bottom_centre',
+        'dataset_manifest_sha256': hashlib.sha256(manifest_bytes).hexdigest(),
+        'records_sha256': hashlib.sha256(records_bytes).hexdigest(),
         "state_dict": best_state,
         "feature_names": list(FEATURE_NAMES),
         "x_mean": x_mean.tolist(), "x_std": x_std.tolist(),

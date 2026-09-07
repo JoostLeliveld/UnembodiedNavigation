@@ -1,5 +1,6 @@
 """Network algebra, planner wiring and gradients; synthetic fixtures only."""
 import json
+import hashlib
 import numpy as np
 import pytest
 from planning.core.camera_network import CameraNetworkModel, projection_jacobian
@@ -12,7 +13,8 @@ def write_network(path, score=.5, availability=.4, spatial=False):
     R=np.array([[[.01,.006],[.006,.16]],[[.12,-.008],[-.008,.015]]])
     meta=dict(schema='camera_network.iwai.v1',reference='robot_ground_reference_xy',
         frame='map_bev',covariance_units='m2',score_target='detector_score_with_miss_zero',
-        availability_target='valid_detection_finite_ground_projection',evidence='synthetic_test_fixture')
+        availability_target='valid_detection_finite_ground_projection',evidence='synthetic_test_fixture',
+        source_hashes={'synthetic_fixture': hashlib.sha256(b'camera-network-test-v1').hexdigest()})
     np.savez(path,xs=xs,ys=ys,camera_ids=['camera_A','camera_B'],score=rho,
         availability=np.full((2,3,3),availability),R_cond_m2=R,R_miss_proxy_m2=R+25*np.eye(2),
         metadata_json=json.dumps(meta))

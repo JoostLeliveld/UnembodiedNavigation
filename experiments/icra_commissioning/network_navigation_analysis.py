@@ -134,11 +134,23 @@ def preflight(out):
             *[PROBE / f'{a}_result.json' for a in ARMS]]}))
 
 
+def configured_trials():
+    cfg=yaml.safe_load(CONFIG.read_text())
+    if len(cfg['tasks'])!=1:raise ValueError('This analyzer requires exactly one task per pilot')
+    task,group=next(iter(cfg['tasks'].items()))
+    if len(group['seeds'])!=1:raise ValueError('This analyzer plots exactly one declared seed per arm')
+    if len(group['conditions'])!=len(set(group['conditions'])):raise ValueError('duplicate configured condition')
+    if not set(group['conditions'])<=set(NAMES):raise ValueError('unknown configured condition')
+    return cfg,task,group
+
+
 def freeze(out):
-    cfg = yaml.safe_load(CONFIG.read_text())
+    cfg,_,_=configured_trials()
     ledger_path = CAMPAIGN / 'campaign_log.json'
     ledger = json.loads(ledger_path.read_text())
-    entries = []
+    expected={f'{t}__{a}__seed{s}' for t,g in cfg['tasks'].items() for a in g['conditions'] for s in g['seeds']}
+    if set(ledger)!=expected:raise ValueError('campaign ledger differs from exact configured trial set')
+    entries = [];seen_runs=set()
     for task, group in cfg['tasks'].items():
         for arm in group['conditions']:
             for seed in group['seeds']:
@@ -149,9 +161,13 @@ def freeze(out):
                 entry = dict(key=key, arm=arm, task=task, seed=seed, event=event)
                 if event.get('run_dir'):
                     run = Path(event['run_dir'])
+                    if run.resolve() in seen_runs:raise ValueError('same logged path reused for distinct trials')
+                    seen_runs.add(run.resolve())
+                    m=json.loads((run/'run_manifest.json').read_text())
+                    if (m.get('task'),m.get('seed'))!=(task,seed):raise ValueError('ledger task/seed mismatch')
                     entry['run'] = str(run.relative_to(REPO))
-                    entry['files'] = {name: digest(run/name) for name in REQUIRED if (run/name).exists()}
-                    entry['missing'] = [name for name in REQUIRED if not (run/name).exists()]
+                    entry['files'] = {name: digest(run/name) for name in aligned.required_artifacts(run,REQUIRED) if (run/name).exists()}
+                    entry['missing'] = [name for name in aligned.required_artifacts(run,REQUIRED) if not (run/name).exists()]
                 entries.append(entry)
     selection = dict(status=('three_arm_one_seed_integration_pilot_not_confirmatory' if len(entries)==3
                              else 'scoped_integration_pilot_not_confirmatory'),
@@ -201,15 +217,17 @@ def audit_live_camera_model(run, delivered):
                 maximum_R_difference_m2=worst_R)
 
 
-def sensor_diagnostics(run, start, stop):
+def sensor_diagnostics(run, start, stop, *, max_reference_gap_s=None):
     """Exploratory conditional-error audit; never fit noise from these drive rows."""
-    readings = [r for r in aligned.readings(run, admitted_only=False)
+    selected = [r for r in aligned.readings(run, admitted_only=False, max_reference_gap_s=max_reference_gap_s,require_reference=False)
                 if start <= r['obs_stamp'] <= stop]
+    readings=[r for r in selected if r['reference_supported']]
     output = []
     for camera in sorted({r['camera'] for r in readings}):
         rows = [r for r in readings if r['camera'] == camera]
         t = np.array([r['obs_stamp'] for r in rows])
         errors = np.array([r['error'] for r in rows])
+        aligned.validate_covariances(np.array([r['cov'] for r in rows]))
         normalized = np.array([np.linalg.solve(np.linalg.cholesky(r['cov']), r['error']) for r in rows])
         distance2 = np.sum(normalized**2, axis=1)
         correlations = []
@@ -232,20 +250,19 @@ def sensor_diagnostics(run, start, stop):
             position_median_cm=float(np.median(np.linalg.norm(errors, axis=1))*100),
             nominal_95_ellipse_coverage=float(np.mean(distance2 <= 5.991464547)),
             temporal=correlations))
-    return dict(population='camera-manager outputs before fusion selection, after its admission gate; capture-time reference',
+    return dict(selected_readings=len(selected),reference_supported_readings=len(readings),
+                unscoreable_reference_readings=len(selected)-len(readings),
+                population='camera-manager outputs before fusion selection, after its admission gate; capture-time reference',
                 interpretation='Within-run exploratory diagnostic. View-dependent mean and scale can cause correlation; no independence or Gaussian claim.',
                 cameras=output)
 
 
-def analyze_run(entry):
+def analyze_run(entry, *, max_reference_gap_s=None):
     if entry['event']['outcome'] == 'infra_invalid' or entry.get('missing'):
         return dict(arm=entry['arm'], status='infrastructure_invalid',
                     reason=entry['event']['completion_reason']), None
-    run = REPO / entry['run']
-    for name, sha in entry['files'].items():
-        if digest(run/name) != sha: raise ValueError(f'Changed selected run {run/name}')
-    manifest = json.loads((run / 'run_manifest.json').read_text())
-    summary = json.loads((run / 'run_summary.json').read_text())
+    run,manifest,summary=aligned.verify_frozen_entry(entry,REQUIRED,minimum_schema=7,repo=REPO)
+    ledger=aligned.validate_run_ledger(run)
     if manifest['campaign_config_sha256'] != digest(CONFIG): raise ValueError('Wrong runtime config')
     if (manifest['process_noise_xy'], manifest['process_noise_theta']) != (.01, .02): raise ValueError('Q mismatch')
     if manifest['manager_covariance_profile'] != 'commissioned_reference_r': raise ValueError('Live R mismatch')
@@ -254,26 +271,28 @@ def analyze_run(entry):
     if manifest['camera_network_artifact_sha256'] != digest(REPO/yaml.safe_load(CONFIG.read_text())['conditions'][entry['arm']]['camera_network_artifact_path']):
         raise ValueError('Wrong field artifact')
     table = aligned.rows(run)
-    truth = aligned.truth_series(run, table)
-    a = aligned.aligned_error_cm(run, 'belief', table)
-    start, stop = float(summary['first_cmd_stamp']), float(summary['stop_stamp'])
+    truth = aligned.truth_series(run, table, max_reference_gap_s=max_reference_gap_s)
+    a = aligned.aligned_error_cm(run, 'belief', table, max_reference_gap_s=max_reference_gap_s)
+    try:
+        start, stop = aligned.mission_interval(run)
+    except ValueError as exc:
+        return dict(arm=entry['arm'],task=entry['task'],seed=entry['seed'],status=entry['event']['outcome'],
+                    accuracy_status='unscoreable_mission_interval',reason=str(exc)),None
+    population=aligned.landed_mask(a['stamp'])&a['have']&(a['stamp']>=start)&(a['stamp']<=stop)
     use = aligned.landed_mask(a['stamp']) & np.isfinite(a['aligned_cm']) & (a['stamp'] >= start) & (a['stamp'] <= stop)
     P = np.array([[[f(r, 'planner_cov_x'), f(r, 'planner_cov_xy')],
                    [f(r, 'planner_cov_xy'), f(r, 'planner_cov_y')]] for r in table])[use]
     errors = a['aligned_cm'][use]
     e = np.column_stack([a['x'][use]-a['gt_x'][use], a['y'][use]-a['gt_y'][use]])
-    valid = np.isfinite(P).all(axis=(1, 2))
-    nees = np.array([z @ np.linalg.solve(C, z) for C, z in zip(P[valid], e[valid])])
+    nees = aligned.nees(e,P)
     ass = aligned.assimilations(run)
-    observations = aligned.observations(run)
-    if {o['source_batch_id'] for o in observations} != {r['source_batch_id'] for r in ass}:
-        raise ValueError('Unaccounted camera batch')
-    if not all(r['status'] in ('accepted', 'accepted_bootstrap', 'reanchored', 'rejected', 'dropped')
-               and (r['status'] not in ('rejected', 'dropped') or r['reason']) for r in ass):
-        raise ValueError('Unclassifiable assimilation')
     events = [r for r in ass if start <= r['apply_stamp'] <= stop]
-    accepted = [r['apply_stamp'] for r in events if r['accepted']]
-    gaps = np.diff([start, *sorted(accepted), stop])
+    accounting=aligned.correction_accounting(run)
+    if not len(errors):
+        return dict(arm=entry['arm'],task=entry['task'],seed=entry['seed'],status=entry['event']['outcome'],
+            accuracy_status='no_reference_supported_beliefs',belief_samples=0,
+            belief_reference_unscoreable=int(population.sum()),reference_max_gap_s=max_reference_gap_s,
+            correction_accounting=accounting),None
     ty = truth.yaw_at(a['stamp'][use])
     ey = np.array([f(r, 'planner_belief_yaw') for r in table])[use]-ty
     yaw_error_deg = np.rad2deg(np.abs(np.arctan2(np.sin(ey), np.cos(ey))))
@@ -284,12 +303,10 @@ def analyze_run(entry):
     P_pose[:, 2, 2] = np.array([f(r, 'planner_belief_cov_theta_theta') for r in table])[use]
     error_pose = np.column_stack([e, np.arctan2(np.sin(ey), np.cos(ey))])
     pose_valid = np.isfinite(P_pose).all(axis=(1, 2)) & np.isfinite(error_pose).all(axis=1)
-    if np.any(np.linalg.eigvalsh(P_pose[pose_valid]) <= 0):
-        raise ValueError('Non-positive pose covariance in scored belief')
+    aligned.validate_covariances(P_pose[np.isfinite(error_pose).all(axis=1)],dimension=3)
     pose_nees = np.array([z @ np.linalg.solve(C, z) for C, z in zip(P_pose[pose_valid], error_pose[pose_valid])])
-    delivery = [json.loads(line) for line in (run/'camera_opportunities.jsonl').read_text().splitlines()]
-    opportunities = [r['observation'] for r in delivery if r['valid_contract'] and not r['duplicate']
-                     and start <= r['observation']['timestamp_s'] <= stop]
+    delivery,duplicate_deliveries=aligned.camera_opportunities(run)
+    opportunities=[o for o in delivery if start<=o['timestamp_s']<=stop]
     by_batch = {}
     for r in opportunities:
         k = (r['source_batch_id'], r['camera_id'])
@@ -303,23 +320,28 @@ def analyze_run(entry):
     global_meta = json.loads((run/'global_plan_meta.json').read_text())
     record = dict(arm=entry['arm'], status=entry['event']['outcome'],
         selected_source=global_meta['selected_source'], camera_model_audit=camera_audit,
-        sensor_diagnostics=sensor_diagnostics(run, start, stop),
+        task=entry['task'],seed=entry['seed'],
+        sensor_diagnostics=sensor_diagnostics(run, start, stop,max_reference_gap_s=max_reference_gap_s),
+        reference_max_gap_s=max_reference_gap_s,belief_reference_unscoreable=int(population.sum())-len(errors),
         stop_reason=summary['completion_reason'], belief_samples=int(len(errors)),
         duration_sim_s=stop-start, path_length_m=summary.get('path_length_m'),
         offline_final_goal_distance_m=summary.get('final_goal_distance'),
+        offline_final_goal_distance_reference=summary.get('final_goal_distance_reference','unspecified'),
         belief_position_median_cm=float(np.median(errors)), belief_position_p95_cm=float(np.quantile(errors, .95)),
         belief_position_rmse_cm=float(np.sqrt(np.mean(errors**2))),
         planar_95_ellipse_coverage=float(np.mean(nees <= 5.991464547)), planar_nees_median=float(np.median(nees)),
-        belief_heading_median_deg=float(np.nanmedian(yaw_error_deg)),
-        belief_heading_p95_deg=float(np.nanquantile(yaw_error_deg, .95)),
-        belief_heading_final_deg=float(yaw_error_deg[-1]),
+        belief_heading_samples=int(np.isfinite(yaw_error_deg).sum()),
+        belief_heading_median_deg=float(np.nanmedian(yaw_error_deg)) if np.isfinite(yaw_error_deg).any() else None,
+        belief_heading_p95_deg=float(np.nanquantile(yaw_error_deg,.95)) if np.isfinite(yaw_error_deg).any() else None,
+        belief_heading_final_deg=float(yaw_error_deg[-1]) if np.isfinite(yaw_error_deg[-1]) else None,
         pose_nees_samples=int(len(pose_nees)),
-        pose_95_ellipsoid_coverage=float(np.mean(pose_nees <= 7.814727903)),
-        pose_nees_median=float(np.median(pose_nees)),
+        pose_95_ellipsoid_coverage=float(np.mean(pose_nees <= 7.814727903)) if len(pose_nees) else None,
+        pose_nees_median=float(np.median(pose_nees)) if len(pose_nees) else None,
         assimilations=len(events), assimilation_status_counts=dict(Counter(r['status'] for r in events)),
         refusal_reasons=dict(Counter(r['reason'] for r in events if not r['accepted'])),
-        correction_dropped_fraction=sum(r['status']=='dropped' for r in events)/max(len(events), 1),
-        longest_correction_gap_s=float(max(gaps)), opportunities=len(opportunities),
+        correction_dropped_fraction=accounting['correction_dropped_fraction'],
+        longest_correction_gap_s=accounting['longest_correction_gap_s'], opportunities=len(opportunities),
+        duplicate_deliveries=duplicate_deliveries,
         detections=sum(bool(r['detection_valid']) for r in opportunities),
         frame_age_publish_median_sim_s=float(np.median(latencies)) if latencies else None,
         inference_median_wall_ms=float(np.median(inference)) if inference else None,
@@ -331,16 +353,24 @@ def analyze_run(entry):
     return record, plot
 
 
-def navigation(out):
+def navigation(out, *, max_reference_gap_s=None):
+    protocol_data=json.loads((out/'protocol.json').read_text())
+    if protocol_data.get('reference_policy')!={'max_reference_gap_s':max_reference_gap_s}:
+        raise ValueError('protocol reference policy differs or is absent; preserve old output and use a new protocol directory')
     entries = freeze(out)
+    analysis=dict(selection_sha256=digest(out/'selection.json'),max_reference_gap_s=max_reference_gap_s,
+        sources={str(p):digest(p) for p in [Path(__file__),Path(aligned.__file__),
+            REPO/'src/unav_common/unav_common/correction_ledger.py']})
+    aligned.freeze_analysis_protocol(out,'analysis_protocol.json',analysis,
+        owned_outputs=['results.json','results.csv','navigation_pilot.png'])
     results, curves = [], {}
     for entry in entries:
-        result, curve = analyze_run(entry)
+        result, curve = analyze_run(entry,max_reference_gap_s=max_reference_gap_s)
         results.append(result); curves[entry['arm']] = curve
     fig, axes = plt.subplots(2, len(ARMS), figsize=(max(5.4,3.83*len(ARMS)), 7.),
                              squeeze=False, layout='constrained')
     background = json.loads((PROBE / 'P0_result.json').read_text())['settings']
-    all_scales = np.concatenate([np.r_[c['e'], c['std_trace']] for c in curves.values() if c is not None])
+    all_scales = np.concatenate([np.empty(0),*[np.r_[c['e'], c['std_trace']] for c in curves.values() if c is not None]])
     positive = all_scales[np.isfinite(all_scales) & (all_scales > 0)]
     scale_limits = (max(.01, positive.min()*.8), positive.max()*1.25) if positive.size else (.1, 10.)
     for arm, ax, err_ax in zip(ARMS, axes[0], axes[1]):
@@ -348,14 +378,16 @@ def navigation(out):
         record = next(r for r in results if r['arm'] == arm)
         entry = next(r for r in entries if r['arm'] == arm)
         curve = curves[arm]
-        ax.set_title(f"{NAMES[arm]}: {record['status']}")
+        ax.set_title(f"{NAMES[arm]}: {record['status'].replace('_', ' ')}")
         if curve is None:
-            ax.text(.5, .5, 'Infrastructure invalid\nNo accuracy comparison', transform=ax.transAxes, ha='center')
+            ax.text(.5, .5, record.get('accuracy_status','infrastructure_invalid').replace('_',' ')+'\nNo accuracy comparison', transform=ax.transAxes, ha='center')
             err_ax.set_axis_off(); continue
         with (REPO/entry['run']/'global_plan.csv').open() as stream:
             planned = np.array([[f(r, 'x'), f(r, 'y')] for r in csv.DictReader(stream)])
         ax.plot(planned[:, 0], planned[:, 1], ':', color='#88949e', lw=1., label='Planned route')
-        ax.plot(10.6, 6.5, 'k*', ms=7)
+        # Goal comes from the selected run's route metadata when explicitly logged.
+        goal=json.loads((REPO/entry['run']/'global_plan_meta.json').read_text()).get('goal')
+        if isinstance(goal,list) and len(goal)>=2:ax.plot(*goal[:2],'k*',ms=7)
         ax.plot(curve['gx'], curve['gy'], color='black', lw=1.4, label='Simulator reference')
         ax.plot(curve['x'], curve['y'], color=COLORS[arm], lw=1., label='Online belief')
         err_ax.plot(curve['t'], curve['e'], color=COLORS[arm], lw=1., label='Position error')
@@ -367,8 +399,12 @@ def navigation(out):
         err_ax.grid(alpha=.2)
     axes[0, 0].legend(fontsize=7, frameon=False)
     axes[1, 0].legend(fontsize=7, frameon=False)
-    fig.suptitle(yaml.safe_load(CONFIG.read_text()).get('study_title',
-        'Matched navigation pilot: one run per field, identical camera model and estimator'), fontsize=12)
+    title = yaml.safe_load(CONFIG.read_text()).get('study_title',
+        'Matched navigation pilot: one run per field, identical camera model and estimator')
+    if len(ARMS) == 1:
+        import textwrap
+        title = '\n'.join(textwrap.fill(line, width=57) for line in title.splitlines())
+    fig.suptitle(title, fontsize=10 if len(ARMS) == 1 else 12)
     savefig(fig, out/'navigation_pilot')
     writejson(out / 'results.json', dict(selection_sha256=digest(out/'selection.json'), results=results,
         analysis_source_sha256=digest(Path(__file__)),
@@ -378,11 +414,11 @@ def navigation(out):
         writer = csv.DictWriter(stream, fieldnames=columns); writer.writeheader(); writer.writerows(results)
 
 
-def protocol(out):
+def protocol(out, *, max_reference_gap_s=None):
     out.mkdir(parents=True, exist_ok=True)
     path = out/'protocol.json'
     if path.exists(): raise ValueError('Protocol already frozen')
-    cfg=yaml.safe_load(CONFIG.read_text())
+    cfg,task,group=configured_trials()
     files = [CONFIG, REPO/'src/reliability/reliability/reference_calibration.py',
              REPO/'src/reliability/reliability/nodes/camera_manager_node.py',
              REPO/'src/reliability/reliability/fusion.py',
@@ -395,7 +431,8 @@ def protocol(out):
              REPO/'src/sim/sim/actuation_noise_node.py',
              REPO/'scripts/visibility_comparison/run_visibility_campaign.py',
              OUT/'network_planner/reference_calibration.json', Path(__file__)]
-    writejson(path, dict(kind='matched_integration_pilot', task='fusion_network_traverse', seeds=[210], arms=ARMS,
+    writejson(path, dict(kind='matched_integration_pilot', task=task, seeds=group['seeds'], arms=group['conditions'],
+        reference_policy=dict(max_reference_gap_s=max_reference_gap_s),
         comparison=cfg.get('study_comparison',
             'Change only the future detector-score field; keep mean, camera R, fusion, Q and controller fixed.'),
         primary_outputs=['termination including failures', 'route choice', 'time and travel cost',
@@ -410,10 +447,12 @@ if __name__ == '__main__':
     parser.add_argument('--out', type=Path, default=OUT/'network_navigation_evidence')
     parser.add_argument('--config', type=Path, default=CONFIG)
     parser.add_argument('--campaign', type=Path, default=CAMPAIGN)
+    parser.add_argument('--max-reference-gap-s',type=float)
     args = parser.parse_args(); style()
     CONFIG, CAMPAIGN = args.config.resolve(), args.campaign.resolve()
     if args.mode != 'preflight':
         cfg=yaml.safe_load(CONFIG.read_text())
         if len(cfg['tasks']) != 1:raise ValueError('This analyzer requires exactly one task per pilot')
         ARMS=tuple(next(iter(cfg['tasks'].values()))['conditions'])
-    globals()[args.mode](args.out.resolve())
+    if args.mode=='preflight':preflight(args.out.resolve())
+    else:globals()[args.mode](args.out.resolve(),max_reference_gap_s=args.max_reference_gap_s)

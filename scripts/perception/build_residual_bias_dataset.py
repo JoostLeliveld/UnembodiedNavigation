@@ -17,6 +17,9 @@ import hashlib
 import json
 import math
 import os
+import sys
+import tempfile
+import io
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +27,8 @@ from pathlib import Path
 import numpy as np
 
 from build_center_keypoint_dataset import project_point
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src/unav_common'))
+from unav_common.capture_integrity import checked_image
 
 
 def _sha256(path: Path) -> str:
@@ -54,13 +59,23 @@ def _calibration_split(x: str, y: str) -> str:
     return "calibration" if int(hashlib.sha256(key).hexdigest()[:8], 16) % 5 == 0 else "fit"
 
 
-def _source_diagnostics(source_root: Path) -> dict[tuple[str, str], dict[str, str]]:
+def _source_diagnostics(source_root: Path, sources: dict) -> dict[tuple[str, str], dict[str, str]]:
+    if not sources:
+        raise ValueError('centre dataset must declare exact source manifests/diagnostics')
     result = {}
-    for camera_root in sorted(source_root.glob("camera_*")):
-        with (camera_root / "label_diagnostics.csv").open(newline="", encoding="utf-8") as handle:
-            for row in csv.DictReader(handle):
-                if row["accepted"] == "1" and row["sample_kind"] == "positive":
-                    result[(camera_root.name, row["sample_index"])] = row
+    for camera_name, entry in sources.items():
+        for key in ('manifest', 'diagnostics'):
+            data = Path(entry[key]).read_bytes()
+            if hashlib.sha256(data).hexdigest() != entry.get(key + '_sha256'):
+                raise ValueError(f'changed source {key} for {camera_name}')
+            if key == 'diagnostics':
+                diagnostics = list(csv.DictReader(io.StringIO(data.decode())))
+        for row in diagnostics:
+            if row['accepted'] == '1' and row['sample_kind'] == 'positive':
+                key = (camera_name, row['sample_index'])
+                if key in result:
+                    raise ValueError('duplicate source diagnostic identity')
+                result[key] = row
     return result
 
 
@@ -78,24 +93,49 @@ def build(
         raise FileExistsError(f"staging output exists: {staged}")
     staged.mkdir(parents=True)
     try:
-        manifest = json.loads((centre_dataset / "dataset_manifest.json").read_text())
+        manifest_bytes = (centre_dataset / 'dataset_manifest.json').read_bytes()
+        manifest = json.loads(manifest_bytes)
+        completion = json.loads((centre_dataset / '.complete').read_text())
+        if completion.get('manifest_sha256') != hashlib.sha256(manifest_bytes).hexdigest():
+            raise ValueError('centre dataset completion digest mismatch')
+        records_bytes = (centre_dataset / 'records.csv').read_bytes()
+        if manifest.get('records_sha256') != hashlib.sha256(records_bytes).hexdigest():
+            raise ValueError('centre dataset records digest mismatch')
+        if int(batch) < 1:
+            raise ValueError('inference batch must be positive')
         source_root = Path(manifest["source_root"])
-        diagnostics = _source_diagnostics(source_root)
-        with (centre_dataset / "records.csv").open(newline="", encoding="utf-8") as handle:
+        diagnostics = _source_diagnostics(source_root, manifest.get('sources', {}))
+        with io.StringIO(records_bytes.decode(), newline='') as handle:
             # Exclude clipped-centre and background records from the correction task.
             records = [row for row in csv.DictReader(handle) if row["positive"] == "1"]
 
         from ultralytics import YOLO
 
-        model = YOLO(str(detector))
+        detector_hash = _sha256(detector)
+        detector_copy = staged / 'frozen_detector_input.pt'
+        detector_copy.write_bytes(detector.read_bytes())
+        if _sha256(detector_copy) != detector_hash:
+            raise ValueError('detector changed during loading')
+        model = YOLO(str(detector_copy))
         output_rows: list[dict[str, object]] = []
         for start in range(0, len(records), int(batch)):
             chunk = records[start:start + int(batch)]
+            images = []
+            for row in chunk:
+                diagnostic = diagnostics[(row['camera'], row['sample_index'])]
+                relative = str(Path(row['image']).resolve().relative_to(source_root.resolve()))
+                image = checked_image(source_root, dict(image=relative, image_sha1=diagnostic.get('image_sha1')),
+                                      size=(int(row['image_width']), int(row['image_height'])))
+                row['image_sha1'] = diagnostic['image_sha1']
+                images.append(image)
             predictions = model.predict(
-                [row["image"] for row in chunk], imgsz=int(imgsz), conf=float(confidence),
+                images, imgsz=int(imgsz), conf=float(confidence),
                 batch=int(batch), device=str(device), verbose=False,
             )
-            for record, prediction in zip(chunk, predictions):
+            predictions = list(predictions)
+            if len(predictions) != len(chunk):
+                raise RuntimeError('detector result cardinality differs from source image count')
+            for record, prediction in zip(chunk, predictions, strict=True):
                 row: dict[str, object] = dict(record)
                 row["residual_split"] = (
                     "test" if record["split"] == "val"
@@ -104,6 +144,7 @@ def build(
                 boxes = prediction.boxes
                 if boxes is None or len(boxes) == 0:
                     row["detected"] = 0
+                    row['inference_status'] = 'miss'
                     output_rows.append(row)
                     continue
                 confidence_values = boxes.conf.detach().cpu().numpy()
@@ -121,6 +162,7 @@ def build(
                 )
                 if baseline_world is None or not target_inside:
                     row["detected"] = 0
+                    row['inference_status'] = 'detected_projection_or_target_invalid'
                     output_rows.append(row)
                     continue
                 baseline_xy = np.asarray(baseline_world)
@@ -134,6 +176,7 @@ def build(
                 mask_bottom_v = float(source["mask_bbox_y1"]) + 1.0
                 row.update({
                     "detected": 1,
+                    'inference_status': 'detected_target_valid',
                     "box_x1": f"{x1:.10f}", "box_y1": f"{y1:.10f}",
                     "box_x2": f"{x2:.10f}", "box_y2": f"{y2:.10f}",
                     "box_bottom_u": f"{bottom_u:.10f}", "box_bottom_v": f"{bottom_v:.10f}",
@@ -154,6 +197,18 @@ def build(
                 })
                 output_rows.append(row)
 
+        detector_copy.unlink()
+        if _sha256(detector) != detector_hash:
+            raise ValueError('detector source changed during dataset construction')
+        if (centre_dataset / 'dataset_manifest.json').read_bytes() != manifest_bytes or (centre_dataset / 'records.csv').read_bytes() != records_bytes:
+            raise ValueError('centre dataset changed during residual construction')
+        image_splits = {}
+        for row in output_rows:
+            old = image_splits.setdefault(row['image_sha1'], row['residual_split'])
+            if old != row['residual_split']:
+                raise ValueError('same detector image appears in different residual fitting roles')
+        if len(output_rows) != len(records):
+            raise RuntimeError('residual dataset lost input rows')
         fields = sorted({key for row in output_rows for key in row})
         records_out = staged / "records.csv"
         with records_out.open("w", newline="", encoding="utf-8") as handle:
@@ -175,7 +230,7 @@ def build(
             "evaluation_only_inputs": ["commanded GT x/y", "semantic mask box"],
             "centre_dataset": str(centre_dataset),
             "centre_dataset_manifest_sha256": _sha256(centre_dataset / "dataset_manifest.json"),
-            "detector": str(detector), "detector_sha256": _sha256(detector),
+            "detector": str(detector), "detector_sha256": detector_hash,
             "detector_inference": {"imgsz": imgsz, "confidence": confidence, "batch": batch},
             "split_contract": "source val is untouched test; source train xy groups hash to fit/calibration",
             "counts": {f"{split}_{'detected' if detected else 'missed'}": count

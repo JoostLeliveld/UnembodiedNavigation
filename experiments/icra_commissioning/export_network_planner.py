@@ -13,6 +13,7 @@ import argparse
 from collections import defaultdict, Counter
 import hashlib
 import json
+import io
 from pathlib import Path
 import sys
 import time
@@ -31,6 +32,7 @@ from study import OUT, readcsv, tile, digest, writejson
 from commissioned_field import CAMERAS
 from planning.core.camera_network import CameraNetworkModel
 from reliability.observation_gp import _fbag
+from unav_common.capture_integrity import atomic_bytes, atomic_json, checked_bytes
 
 DEST = OUT/'network_planner'
 KINDS = ('uniform', 'geometry', 'gp')
@@ -46,6 +48,8 @@ def grouped_scores(rows, roles):
     hash_roles = defaultdict(set)
     counts = Counter()
     for r in rows:
+        if r.get('capture_status', 'ok') != 'ok':
+            raise ValueError('detector-score fields require complete acquisition; outages cannot be imputed as detector misses')
         role = 'mean_train' if r['split']=='train' else roles[tile(r)]
         if r['raw_valid']=='1': hash_roles[r['image_sha1']].add(role)
         counts[role] += 1
@@ -72,9 +76,9 @@ def grouped_scores(rows, roles):
 
 
 def export(out, step=.5, length=1., noise=.05, miss_extra_std=5.):
-    if (out/'manifest.json').exists():
+    if out.exists() or out.with_name(out.name + '.incomplete').exists():
         raise RuntimeError('output already frozen; use a new --out directory')
-    if min(step,length,noise,miss_extra_std)<=0: raise ValueError('positive export parameters required')
+    if not np.isfinite([step,length,noise,miss_extra_std]).all() or min(step,length,noise,miss_extra_std)<=0: raise ValueError('positive export parameters required')
     start=time.perf_counter()
     source_manifest=OUT/'manifest.json'; frozen=json.loads(source_manifest.read_text())
     for p,h in frozen['files'].items():
@@ -86,8 +90,9 @@ def export(out, step=.5, length=1., noise=.05, miss_extra_std=5.):
     field_manifest=json.loads((OUT/'field_study/manifest.json').read_text())
     for p,h in field_manifest['files'].items():
         if digest(REPO/p)!=h: raise RuntimeError(f'changed availability input: {p}')
-    field=joblib.load(field_path)
-    models=joblib.load(OUT/'models.joblib')
+    field=joblib.load(io.BytesIO(checked_bytes(field_path,json.loads(selection.read_bytes())['artifact_sha256'])))
+    model_path=OUT/'models.joblib'
+    models=joblib.load(io.BytesIO(checked_bytes(model_path,field_manifest['files'][str(model_path.relative_to(REPO))])))
     rows=readcsv(REPO/frozen['capture']/'bias_update_interpretations.csv')
     groups,counts=grouped_scores(rows,frozen['roles'])
     xy=np.vstack([g['X'] for g in groups.values()])
@@ -130,7 +135,9 @@ def export(out, step=.5, length=1., noise=.05, miss_extra_std=5.):
         conditioning='predicted XY; heading marginalized over commissioned headings',
         mean_definition='existing bbox-feature NN then subtract frozen per-camera residual bias',
         required_runtime_mean_offset_m=dict(zip(CAMERAS,bias)),
-        runtime_equivalence='not established: live mean offset/R and robust fusion differ',
+        runtime_equivalence='offline mapping checks do not establish whole-runtime forecast/fusion equivalence',
+        covariance_fit_roles=['covariance_fit', 'selection'],
+        covariance_transformations=['center residuals by fitted camera mean','selection-fitted global scale and isotropic shrinkage'],
         score_fit='mean_train + covariance_fit only; equal weight per commissioned position',
         score_hyperparameters=dict(gp_length_m=length,gp_logit_noise_variance=noise,ridge_alpha=1.,
             status='fixed implementation-pilot settings, not selected on final outcomes'),
@@ -140,24 +147,31 @@ def export(out, step=.5, length=1., noise=.05, miss_extra_std=5.):
         miss_proxy_definition='R_miss_proxy = R_cond + std^2 I; designed IWAI endpoint, not measured miss noise',
         independence='matrix information addition is provisional for the current robust runtime fusion',
         Q=frozen['Q'],source_hashes=sources)
-    out.mkdir(parents=True,exist_ok=True)
+    out.parent.mkdir(parents=True,exist_ok=True)
+    staged=out.with_name(out.name + '.incomplete');staged.mkdir()
     artifacts={}
     for kind,qkind in zip(KINDS,('constant','geometry_xy','gp_xy')):
         availability=field.availability[qkind].predict(query).T.reshape((5,*X.shape))
         availability[:,~support.reshape(X.shape)]=0.
         meta={**common,'score_model':kind,'availability_model':qkind}
-        path=out/f'{kind}.npz'
-        np.savez_compressed(path,xs=xs,ys=ys,camera_ids=np.asarray(CAMERAS),
+        path=staged/f'{kind}.npz'
+        buffer=io.BytesIO()
+        np.savez_compressed(buffer,xs=xs,ys=ys,camera_ids=np.asarray(CAMERAS),
             score=np.asarray(score_maps[kind]),availability=availability,R_cond_m2=R,
             R_miss_proxy_m2=R+miss_extra_std**2*np.eye(2),metadata_json=json.dumps(meta,sort_keys=True))
+        atomic_bytes(path,buffer.getvalue())
         CameraNetworkModel(path)  # validate exactly the runtime-readable representation
-        artifacts[kind]=dict(path=str(path.relative_to(REPO)),sha256=digest(path))
+        final=out/path.name
+        artifacts[kind]=dict(path=str(final.relative_to(REPO)) if final.is_relative_to(REPO) else str(final),sha256=digest(path))
     elapsed=time.perf_counter()-start
     manifest=dict(schema='network_planner_export.v1',sources=sources,artifacts=artifacts,
         source_role_counts=counts,score_fit=fit_details,grid_shape=list(X.shape),
         elapsed_export_seconds=elapsed,common_metadata=common,
         cost_scope='export time includes score fitting and grid prediction; excludes prior NN, R, and availability fitting')
-    writejson(out/'manifest.json',manifest)
+    for p,h in sources.items():
+        checked_bytes(REPO/p,h)
+    atomic_json(staged/'manifest.json',manifest)
+    os.replace(staged,out)
     print(json.dumps(dict(out=str(out),seconds=elapsed,positions_per_camera={c:len(g['X']) for c,g in groups.items()})))
 
 

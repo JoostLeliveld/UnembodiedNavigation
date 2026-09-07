@@ -28,6 +28,14 @@ from reliability.fusion import map_observations_from_json
 from planning.core.efe_utils import wrap_angle
 from planning.core import belief_correction as bc
 from planning.core.motion_history import MotionHistorySnapshot, covers_interval
+from planning.core.motion_history import plan_replay
+from planning.core.belief_state import BeliefRecord, MotionSupport, PredictionSnapshot, checked_state
+from planning.core.dynamics import unicycle_jacobian
+from copy import deepcopy
+from types import MappingProxyType
+import uuid
+from unav_common.config import local_controller_type, parse_bev_affine_calibration
+from unav_common.odometry_input import odometry_pose_yaw, odometry_pose_is_available
 
 PIXEL_DIAG_K_THETA_U_IDX = 42
 PIXEL_DIAG_K_THETA_V_IDX = 43
@@ -36,6 +44,7 @@ PIXEL_DIAG_K_THETA_V_IDX = 43
 # non-informative so no consumer mistakes it for a heading fix. Matches
 # camera_manager_node.NONINFORMATIVE_YAW_VAR.
 NONINFORMATIVE_YAW_VAR = float(math.pi ** 2)
+_UNSPECIFIED_RECORD = object()
 
 
 def _as_bool(value):
@@ -148,11 +157,16 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('driveable_geometry_json', '')
         _declare_if_not('visibility_artifact_path', '')
         _declare_if_not('camera_network_artifact_path', '')
+        _declare_if_not('camera_network_expected_sha256', '')
+        _declare_if_not('camera_network_expected_source_hashes_json', '')
+        _declare_if_not('camera_network_camera_ids', '')
         # The planner models the robot as a disc, so this is the CIRCUMSCRIBED
         # radius. warehouse_amr is 0.800 x 0.550 m -> hypot(0.400, 0.275) = 0.485.
         # (turtlebot3_burger was 0.125; pass it explicitly to reproduce a
         # pre-2026-08-20 campaign.)
         _declare_if_not('robot_collision_radius_m', 0.485)
+        _declare_if_not('robot_length_m', 0.8)
+        _declare_if_not('robot_width_m', 0.55)
 
         # Optimizer params
         _declare_if_not('optimizer_maxiter', 50)
@@ -200,8 +214,8 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('local_goal_prior_v_std_start', -1.0)
         _declare_if_not('local_goal_prior_u_std_final', -1.0)
         _declare_if_not('local_goal_prior_v_std_final', -1.0)
-        _declare_if_not('waypoint_spacing_m', 1.0)
-        _declare_if_not('waypoint_arrival_radius_m', 0.35)
+        _declare_if_not('waypoint_spacing_m', 0.2)
+        _declare_if_not('waypoint_arrival_radius_m', 0.1)
         _declare_if_not('local_replan_min_remaining_s', 0.0)
         _declare_if_not('local_replan_on_waypoint_change', False)
         _declare_if_not('latency_compensate_plan_handoff', False)
@@ -264,6 +278,8 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('pixel_correction_approx', 'AUTO')
         _declare_if_not('skip_stale_pixel_correction', True)
         _declare_if_not('odom_topic', '/odom_noisy')
+        _declare_if_not('odom_frame_id', 'odom')
+        _declare_if_not('odom_child_frame_id', 'base_footprint')
         _declare_if_not('use_odom_for_predict', True)
         # The long-standing behaviour stays the default. `coupled` is the better
         # estimator -- it keeps the posterior the update produced instead of deleting
@@ -396,7 +412,18 @@ class UnicyclePlannerNode(Node):
         self.driveable_geometry_json = str(self.get_parameter('driveable_geometry_json').value or '')
         self.visibility_artifact_path = str(self.get_parameter('visibility_artifact_path').value).strip()
         self.camera_network_artifact_path = str(self.get_parameter('camera_network_artifact_path').value).strip()
+        self.camera_network_expected_sha256 = str(
+            self.get_parameter('camera_network_expected_sha256').value
+        ).strip()
+        self.camera_network_expected_source_hashes_json = str(
+            self.get_parameter('camera_network_expected_source_hashes_json').value
+        ).strip()
+        self.camera_network_camera_ids = str(
+            self.get_parameter('camera_network_camera_ids').value
+        ).strip()
         self.robot_collision_radius_m = float(self.get_parameter('robot_collision_radius_m').value)
+        self.robot_length_m = float(self.get_parameter('robot_length_m').value)
+        self.robot_width_m = float(self.get_parameter('robot_width_m').value)
 
         self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
         self.optimizer_maxfun = int(self.get_parameter('optimizer_maxfun').value)
@@ -471,9 +498,12 @@ class UnicyclePlannerNode(Node):
         self.simple_tracker_yaw_gate_rad = max(
             0.0, float(self.get_parameter('simple_tracker_yaw_gate_rad').value)
         )
-        self.local_controller_type = str(
-            self.get_parameter('local_controller_type').value
-        ).strip().lower()
+        try:
+            self.local_controller_type = local_controller_type(
+                self.get_parameter('local_controller_type').value
+            )
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc
 
         self.use_pixel_correction = _as_bool(self.get_parameter('use_pixel_correction').value)
         self.state_correction_ekf = _as_bool(self.get_parameter('state_correction_ekf').value)
@@ -511,15 +541,11 @@ class UnicyclePlannerNode(Node):
         # Position-dependent affine BEV calibration (6 coeffs). When set it is the
         # single calibration used by the pixel correction, matching the state node
         # and experiment logger; the constant y-offset is only a legacy fallback.
-        self._bev_affine = None
         _affine_raw = str(self.get_parameter('bev_affine_calibration').value or '').strip()
-        if _affine_raw:
-            try:
-                _vals = [float(x) for x in _affine_raw.replace(';', ',').split(',') if x.strip() != '']
-                if len(_vals) == 6:
-                    self._bev_affine = _vals
-            except Exception:
-                self._bev_affine = None
+        try:
+            self._bev_affine = parse_bev_affine_calibration(_affine_raw)
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc
         self.pixel_max_correction_jump_m = float(
             self.get_parameter('pixel_max_correction_jump_m').value
         )
@@ -541,6 +567,8 @@ class UnicyclePlannerNode(Node):
             self.get_parameter('skip_stale_pixel_correction').value
         )
         self.odom_topic = str(self.get_parameter('odom_topic').value)
+        self.odom_frame_id = str(self.get_parameter('odom_frame_id').value)
+        self.odom_child_frame_id = str(self.get_parameter('odom_child_frame_id').value)
         self.use_odom_for_predict = _as_bool(self.get_parameter('use_odom_for_predict').value)
         self.odom_yaw_offset_rad = float(self.get_parameter('odom_yaw_offset_rad').value)
         self.state_reanchor_m = float(self.get_parameter('state_reanchor_m').value)
@@ -610,16 +638,21 @@ class UnicyclePlannerNode(Node):
         self.optimizer_warm_start_shift_steps = warm_start_shift_steps
         self.planner = self._construct_planner()
         self._io_group = ReentrantCallbackGroup()
+        self._correction_group = MutuallyExclusiveCallbackGroup()
         self._plan_group = MutuallyExclusiveCallbackGroup()
         self._data_lock = threading.RLock()
         self._correction_lock = threading.RLock()
+        _declare_if_not('belief_frame_id', 'map_bev')
+        self._belief_frame_id = str(self.get_parameter('belief_frame_id').value).strip()
+        if not self._belief_frame_id:
+            raise RuntimeError('belief_frame_id must name the authoritative map frame')
 
         # Subscriptions
         state_qos = QoSProfile(depth=1)
         state_qos.durability = DurabilityPolicy.VOLATILE
         self.state_sub = self.create_subscription(
             PoseWithCovarianceStamped, '/state/bev', self._state_cb, qos_profile=state_qos,
-            callback_group=self._io_group
+            callback_group=self._correction_group
         )
         self.state_correction_envelope_sub = None
         if (
@@ -632,13 +665,13 @@ class UnicyclePlannerNode(Node):
                 self.state_correction_envelope_topic,
                 self._state_correction_envelope_cb,
                 qos_profile=state_qos,
-                callback_group=self._io_group,
+                callback_group=self._correction_group,
             )
         self.map_observations_sub = None
         if self.state_correction_ekf and self.state_correction_mode == 'per_camera':
             self.map_observations_sub = self.create_subscription(
                 String, self.map_observations_topic, self._map_observations_cb,
-                qos_profile=state_qos, callback_group=self._io_group
+                qos_profile=state_qos, callback_group=self._correction_group
             )
             self.get_logger().info(
                 "state_correction_mode=per_camera: folding per-camera map "
@@ -653,7 +686,7 @@ class UnicyclePlannerNode(Node):
         )
         self.pixel_sub = self.create_subscription(
             PoseStamped, self.pixel_topic, self._pixel_cb, qos_profile=state_qos,
-            callback_group=self._io_group
+            callback_group=self._correction_group
         )
         self.detection_diag_sub = self.create_subscription(
             Float64MultiArray, DETECTION_DIAGNOSTICS_TOPIC, self._detection_diag_cb, qos_profile=state_qos,
@@ -698,6 +731,7 @@ class UnicyclePlannerNode(Node):
         self.planner_belief_pub = self.create_publisher(
             PoseWithCovarianceStamped, '/planner_belief', qos_profile=path_qos
         )
+        self.belief_state_pub = self.create_publisher(String, '/planner/belief_state', qos_profile=path_qos)
         self.metrics_pub = self.create_publisher(Float64MultiArray, '/efe/metrics', 10)
         self.planner_diag_pub = self.create_publisher(Float64MultiArray, '/planner/diagnostics', 10)
         self.planner_diag_text_pub = self.create_publisher(String, '/planner/diagnostics_text', 10)
@@ -740,9 +774,12 @@ class UnicyclePlannerNode(Node):
         # The command log remains as a fallback and for diagnostics.
         self._cmd_log: list[tuple[float, float, float]] = []
         self._odom_log: list[tuple[float, float, float]] = []
+        self._odom_heading_log = []
         self._CMD_LOG_MAX_S: float = 60.0
         self._latest_measurement_available = False
         self._latest_belief_age_s = math.nan
+        with self._data_lock:
+            self._ensure_belief_runtime_locked()
 
         planner_rate = self.local_plan_rate if self.use_hierarchical else self.plan_rate
         self._plan_period_s = 1.0 / max(planner_rate, 0.1)
@@ -758,7 +795,7 @@ class UnicyclePlannerNode(Node):
         if self.use_pixel_correction and self.pixel_correction_min_interval_s > 0.0:
             correction_period = max(self.pixel_correction_min_interval_s, 0.02)
             self._pixel_correction_timer = self.create_timer(
-                correction_period, self._pixel_correction_timer_cb, callback_group=self._io_group
+                correction_period, self._pixel_correction_timer_cb, callback_group=self._correction_group
             )
         self.get_logger().info(f'Active planner path: {self.planner_path_summary}')
         self.get_logger().info(
@@ -776,6 +813,230 @@ class UnicyclePlannerNode(Node):
             f"heading_update_mode={self.heading_update_mode}, "
             f"debug_runtime={self.debug_runtime})"
         )
+
+    def _ensure_belief_runtime_locked(self):
+        """Initialize owned metadata; also supports minimal object.__new__ fixtures.
+
+        Production calls this once before timers start. Legacy m/P/time fields
+        are adopted only on this first initialization; later writes use the
+        central commit and the immutable record is authoritative.
+        """
+        if hasattr(self, '_belief_record'):
+            return
+        self._belief_epoch = uuid.uuid4().hex
+        self._belief_revision = 0
+        self._goal_revision = 0
+        self._belief_invalid_reason = ''
+        self._belief_clock_ns = None
+        self._last_belief_publication = None
+        self._belief_frame_id = getattr(self, '_belief_frame_id', 'map_bev')
+        self._correction_outcomes = {}
+        self._seen_state_source_batch_ids = getattr(self, '_seen_state_source_batch_ids', set())
+        self._seen_state_source_members = set()
+        self._odom_heading_log = getattr(self, '_odom_heading_log', [])
+        self._belief_record = None
+        if all(getattr(self, name, None) is not None for name in ('belief_m', 'belief_S', 'belief_stamp')):
+            self._belief_record = BeliefRecord.create(
+                self.belief_m, self.belief_S, self._stamp_ns(self.belief_stamp),
+                self._belief_frame_id, self._belief_epoch, 0)
+
+    @staticmethod
+    def _stamp_ns(stamp_msg):
+        ns = int(stamp_msg.sec) * 1_000_000_000 + int(stamp_msg.nanosec)
+        if ns < 0 or not 0 <= int(stamp_msg.nanosec) < 1_000_000_000:
+            raise ValueError('invalid ROS timestamp')
+        return ns
+
+    @staticmethod
+    def _ns_stamp(ns):
+        value = TimeMsg()
+        value.sec, value.nanosec = divmod(int(ns), 1_000_000_000)
+        return value
+
+    def _observe_belief_clock_locked(self):
+        self._ensure_belief_runtime_locked()
+        try:
+            ns = int(self.get_clock().now().nanoseconds)
+            if ns < 0:
+                raise ValueError('negative ROS clock')
+        except (AttributeError, TypeError, ValueError, OverflowError):
+            self._belief_invalid_reason = 'invalid_clock'
+            return None
+        previous = self._belief_clock_ns
+        if previous is not None and ns < previous and not self._belief_invalid_reason:
+            # A partial hot reset cannot reconcile the detector, odometry,
+            # correction and command histories. Invalidate this epoch until
+            # the owning runtime is restarted; do not relabel its old state.
+            self._belief_epoch = uuid.uuid4().hex
+            self._belief_invalid_reason = 'clock_rewind'
+            self._last_belief_publication = None
+        self._belief_clock_ns = ns
+        return None if self._belief_invalid_reason else ns
+
+    def _commit_belief(self, m, P, stamp_msg, *, motion_support=None):
+        """The only recursive m/P/time writer after startup; validates before mutation."""
+        with self._data_lock:
+            self._ensure_belief_runtime_locked()
+            now_ns = self._observe_belief_clock_locked()
+            if now_ns is None:
+                raise ValueError(f'cannot commit belief in invalid epoch: {self._belief_invalid_reason}')
+            record = BeliefRecord.create(
+                m, P, self._stamp_ns(stamp_msg), self._belief_frame_id,
+                self._belief_epoch, self._belief_revision + 1, motion_support)
+            if self._belief_record is not None and record.stamp_ns < self._belief_record.stamp_ns:
+                raise ValueError('recursive belief time cannot move backwards')
+            self._belief_record = record
+            self._belief_revision = record.revision
+            self._last_belief_commit_ns = now_ns
+            # Compatibility mirrors never alias a returned correction outcome.
+            self.belief_m, self.belief_S = record.arrays()
+            self.belief_m.setflags(write=False)
+            self.belief_S.setflags(write=False)
+            self.belief_stamp = self._ns_stamp(record.stamp_ns)
+            return record
+
+    def _motion_snapshot_locked(self):
+        return MotionHistorySnapshot.capture(
+            self._odom_log, self._cmd_log, self.use_odom_for_predict,
+            getattr(self, '_odom_heading_log', ()), getattr(self, '_odom_motion_gaps', ()))
+
+    def _run_motion_replay(self, m, P, plan):
+        m, P = checked_state(m, P)
+        Q_total = np.zeros((3, 3))
+        yaw_delta = 0.0
+        for a, b, v, w in plan.segments:
+            dt = (b - a) * 1e-9
+            F = unicycle_jacobian(m, [v, w], dt)
+            old_P = P
+            m, P = self.planner.predict(m, P, np.array([v, w]), dt=dt)
+            m, P = checked_state(m, P)
+            Q_total = F @ Q_total @ F.T + (P - F @ old_P @ F.T)
+            yaw_delta += w * dt
+        return m, P, Q_total, yaw_delta
+
+    def _publish_invalid_belief(self, reason, *, expected_record=_UNSPECIFIED_RECORD,
+                              expected_epoch=None):
+        with self._data_lock:
+            self._ensure_belief_runtime_locked()
+            record = self._belief_record
+            if expected_record is not _UNSPECIFIED_RECORD and record is not expected_record:
+                return
+            if expected_epoch is not None and expected_epoch != self._belief_epoch:
+                return
+            if reason == 'uninitialized' and record is not None:
+                return
+            if reason == 'future_anchor' and record is not None:
+                current_ns = self._observe_belief_clock_locked()
+                if current_ns is not None and current_ns >= record.stamp_ns:
+                    return
+            payload = dict(schema_version=1, initialized=record is not None, epoch=self._belief_epoch,
+                revision=self._belief_revision, frame_id=self._belief_frame_id,
+                anchor_stamp_ns=record.stamp_ns if record else 0,
+                state_stamp_ns=record.stamp_ns if record else 0,
+                mean=list(record.mean) if record else None,
+                covariance=[list(r) for r in record.covariance] if record else None,
+                valid=False, invalid_reason=str(reason), motion_supported=False,
+                motion_support=record.motion_support.to_dict() if record else None)
+            publisher = getattr(self, 'belief_state_pub', None)
+            if publisher is not None:
+                msg = String(); msg.data = json.dumps(payload, allow_nan=False)
+                publisher.publish(msg)
+
+    def _current_belief_context(self):
+        with self._data_lock:
+            now_ns = self._observe_belief_clock_locked()
+            record = self._belief_record
+            valid = (now_ns is not None and record is not None
+                     and record.epoch == self._belief_epoch and now_ns >= record.stamp_ns)
+            support = record.motion_support if record else None
+            if valid:
+                plan = plan_replay(self._motion_snapshot_locked(), record.stamp_ns, now_ns,
+                                   self.state_max_predict_dt_s)
+                support = plan.support.following(support)
+                valid = support.supported
+            return dict(belief_epoch=self._belief_epoch, belief_revision=self._belief_revision,
+                        belief_frame_id=self._belief_frame_id, goal_revision=self._goal_revision,
+                        belief_valid=bool(valid), motion_supported=bool(support and support.supported),
+                        belief_stamp_ns=record.stamp_ns if record else None,
+                        prediction_stamp_ns=now_ns,
+                        invalid_reason=self._belief_invalid_reason or ('' if valid else 'unavailable_belief'))
+
+    def _belief_context_is_current(self, meta, *, require_revision=True):
+        current = self._current_belief_context()
+        keys = ['belief_epoch', 'belief_frame_id', 'goal_revision']
+        if require_revision:
+            keys.append('belief_revision')
+        return bool(current['belief_valid'] and meta.get('belief_valid', False)
+                    and all(meta.get(k) == current[k] for k in keys))
+
+    @staticmethod
+    def _freeze_outcome(value):
+        if isinstance(value, dict):
+            return MappingProxyType({k: UnicyclePlannerNode._freeze_outcome(v) for k, v in value.items()})
+        if isinstance(value, (list, tuple)):
+            return tuple(UnicyclePlannerNode._freeze_outcome(v) for v in value)
+        return value
+
+    @staticmethod
+    def _outcome_json_value(value):
+        if isinstance(value, (dict, MappingProxyType)):
+            return {k: UnicyclePlannerNode._outcome_json_value(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [UnicyclePlannerNode._outcome_json_value(v) for v in value]
+        return value
+
+    def _retain_correction_outcome_locked(self, source_batch_id, stamp_msg, status, reason,
+                                          before, outcome=None):
+        """Called in the same data-lock transaction as the final state commit."""
+        self._ensure_belief_runtime_locked()
+        if not source_batch_id:
+            return None
+        if source_batch_id in self._correction_outcomes:
+            return self._correction_outcomes[source_batch_id]
+        after = self._belief_record
+        is_prediction = outcome is not None and outcome.m_pred is not None and outcome.S_pred is not None
+        prior_m = outcome.m_pred if is_prediction else (before.mean if before else None)
+        prior_P = outcome.S_pred if is_prediction else (before.covariance if before else None)
+        if prior_m is not None and not (np.isfinite(prior_m).all() and np.isfinite(prior_P).all()):
+            prior_m = prior_P = None
+            is_prediction = False
+        stamp_ns = self._stamp_ns(stamp_msg)
+        apply_ns = (self._last_belief_commit_ns if after is not before
+                    else (self._belief_clock_ns if self._belief_clock_ns is not None else 0))
+        nis = float(getattr(outcome, 'nis', math.nan))
+        payload = dict(schema_version=2, source_batch_id=str(source_batch_id),
+            correction_stamp=stamp_ns*1e-9, apply_stamp=apply_ns*1e-9,
+            belief_stamp_after=after.stamp_ns*1e-9 if after else None,
+            status=status, reason=reason, accepted=status in ('accepted','accepted_bootstrap','reanchored'),
+            nis=nis if math.isfinite(nis) else None, epoch=self._belief_epoch,
+            revision_before=before.revision if before else 0,
+            revision_after=after.revision if after else 0, frame_id=self._belief_frame_id,
+            correction_stamp_ns=stamp_ns, apply_stamp_ns=apply_ns,
+            belief_stamp_before_ns=before.stamp_ns if before else None,
+            belief_stamp_after_ns=after.stamp_ns if after else None,
+            prior_kind='prediction' if is_prediction else 'anchor',
+            prior_stamp_ns=stamp_ns if is_prediction else (before.stamp_ns if before else None),
+            prior_mean=np.asarray(prior_m).tolist() if prior_m is not None else None,
+            prior_covariance=np.asarray(prior_P).tolist() if prior_P is not None else None,
+            posterior_mean=list(after.mean) if after else None,
+            posterior_covariance=[list(row) for row in after.covariance] if after else None,
+            state_stamp_ns=after.stamp_ns if after else None, initialized=after is not None,
+            valid=bool(after and after.motion_support.supported and not self._belief_invalid_reason),
+            motion_supported=bool(after and after.motion_support.supported),
+            motion_support=after.motion_support.to_dict() if after else None)
+        source = getattr(self, '_active_correction_envelope', None)
+        if source is not None:
+            payload['source_envelope'] = deepcopy(source)
+            for key in ('event_id', 'epoch', 'publication_seq', 'member_ids', 'payload_sha256'):
+                if key in source:
+                    payload['source_' + key] = deepcopy(source[key])
+            for member in source.get('members', ()):
+                self._seen_state_source_members.add((member['camera_id'], member['producer_epoch'],
+                                                      member['source_frame_id']))
+        retained = self._freeze_outcome(payload)
+        self._correction_outcomes[source_batch_id] = retained
+        self._seen_state_source_batch_ids.add(source_batch_id)
+        return retained
 
     def _publish_safe_stop_command(self):
         """Hook for agent mode; planner-only nodes can ignore."""
@@ -815,12 +1076,11 @@ class UnicyclePlannerNode(Node):
     @_serialized_correction
     def _state_cb(self, msg: PoseWithCovarianceStamped):
         with self._data_lock:
-            self.state_msg = msg
+            self._ensure_belief_runtime_locked()
+            self.state_msg = deepcopy(msg)
         # EKF mode: fold each fused correction into the belief on arrival (the
         # same architecture the single-camera pixel path uses -- corrections are
-        # applied here, the planning loop only predicts the committed belief
-        # forward). The legacy hard-reset path leaves the belief update to
-        # _resolve_state_belief_for_planning instead.
+        # applied here, the planning loop only predicts the committed belief).
         # In per_camera mode the belief is corrected from the per-camera
         # observations instead; applying the fused pose too would fold the same
         # measurements in twice.
@@ -833,6 +1093,8 @@ class UnicyclePlannerNode(Node):
                 self._apply_state_correction(msg)
             except Exception as exc:
                 self._fatal_experiment_stop("state correction update failed", exc)
+        elif not self.state_correction_ekf and not self.use_pixel_correction:
+            self._init_belief_from_state(allow_replace=True)
 
     @_serialized_correction
     def _state_correction_envelope_cb(self, msg: String):
@@ -853,8 +1115,11 @@ class UnicyclePlannerNode(Node):
             payload = json.loads(msg.data)
             if not isinstance(payload, dict):
                 raise ValueError("correction envelope must be a JSON object")
-            if payload.get('schema_version') != 1:
+            if type(payload.get('schema_version')) is not int or payload['schema_version'] not in (1, 2):
                 raise ValueError("unsupported correction envelope schema")
+            if payload['schema_version'] == 2:
+                from reliability.fusion_event import FusedCorrectionEvent
+                payload = FusedCorrectionEvent.from_json(msg.data).payload
             if payload.get('frame_id') != self._resolve_plan_frame_id():
                 raise ValueError("correction envelope frame differs from robot belief frame")
             source_batch_id = str(payload.get('source_batch_id', '') or '').strip()
@@ -872,17 +1137,22 @@ class UnicyclePlannerNode(Node):
                 raise ValueError("correction envelope covariance is not symmetric")
             np.linalg.cholesky(covariance)  # No silent repair of malformed sensor R.
             with self._data_lock:
+                self._ensure_belief_runtime_locked()
                 duplicate = source_batch_id in self._seen_state_source_batch_ids
+                repeated_members = any((member['camera_id'], member['producer_epoch'], member['source_frame_id'])
+                    in self._seen_state_source_members for member in payload.get('members', ()))
             if duplicate:
                 raise ValueError(f"duplicate source_batch_id {source_batch_id!r}")
-            self._apply_metric_correction(
-                self._float_to_stamp(correction_stamp),
-                xy,
-                covariance,
-                source_batch_id=source_batch_id,
-            )
-            with self._data_lock:
-                self._seen_state_source_batch_ids.add(source_batch_id)
+            if repeated_members:
+                raise ValueError('physical camera frame was already processed in another correction event')
+            self._active_correction_envelope = deepcopy(payload)
+            try:
+                self._apply_metric_correction(
+                    (self._ns_stamp(payload['correction_stamp_ns']) if payload['schema_version'] == 2
+                     else self._float_to_stamp(correction_stamp)), xy, covariance,
+                    source_batch_id=source_batch_id, allow_same_stamp=payload['schema_version'] == 2)
+            finally:
+                self._active_correction_envelope = None
         except Exception as exc:
             self._fatal_experiment_stop("fused correction envelope failed", exc)
 
@@ -892,9 +1162,10 @@ class UnicyclePlannerNode(Node):
             return
         try:
             observations, frame_id = map_observations_from_json(msg.data)
-            if frame_id != self.belief_frame_id:
+            belief_frame_id = self._resolve_plan_frame_id()
+            if frame_id != belief_frame_id:
                 raise ValueError(
-                    f"map-observation frame {frame_id!r} does not match belief frame {self.belief_frame_id!r}"
+                    f"map-observation frame {frame_id!r} does not match belief frame {belief_frame_id!r}"
                 )
         except Exception as exc:
             self._fatal_experiment_stop("malformed map-observation batch", exc)
@@ -911,6 +1182,7 @@ class UnicyclePlannerNode(Node):
             float(msg.pose.position.y),
         )
         with self._data_lock:
+            self._ensure_belief_runtime_locked()
             previous = self._goal_signature
             changed = (
                 previous is None
@@ -919,6 +1191,7 @@ class UnicyclePlannerNode(Node):
                 or abs(signature[2] - previous[2]) > 1e-9
             )
             if changed:
+                self._goal_revision += 1
                 self._goal_signature = signature
                 self._goal_progress_start_dist_m = None
 
@@ -981,6 +1254,18 @@ class UnicyclePlannerNode(Node):
                 g_default('camera_network_artifact_path', getattr(self, 'camera_network_artifact_path', ''))
                 if _as_bool(g('use_visibility_model')) else ''
             ),
+            camera_network_expected_sha256=g_default(
+                'camera_network_expected_sha256',
+                getattr(self, 'camera_network_expected_sha256', ''),
+            ),
+            camera_network_expected_source_hashes=g_default(
+                'camera_network_expected_source_hashes_json',
+                getattr(self, 'camera_network_expected_source_hashes_json', ''),
+            ),
+            camera_network_camera_ids=g_default(
+                'camera_network_camera_ids',
+                getattr(self, 'camera_network_camera_ids', ''),
+            ),
             r_visible_uv=self.r_visible_uv, r_miss_uv=self.r_miss_uv,
             visibility_sigma_kappa=self.visibility_sigma_kappa,
             goal_prior_u_std_start=g('goal_prior_u_std_start'),
@@ -1001,6 +1286,7 @@ class UnicyclePlannerNode(Node):
             use_hit_miss_mixture=_as_bool(g('use_hit_miss_mixture')),
             nogo_mode=str(g('nogo_mode')), driveable_geometry_json=g('driveable_geometry_json'),
             robot_collision_radius_m=self.robot_collision_radius_m, runtime_debug=self.debug_runtime,
+            robot_length_m=self.robot_length_m, robot_width_m=self.robot_width_m,
         )
 
     def _current_goal_progress_index(self, m0, goal_xy) -> float:
@@ -1016,12 +1302,15 @@ class UnicyclePlannerNode(Node):
         return progress_fraction * float(max(self.goal_progress_n_steps, 1))
 
     def _goal_cb(self, msg: PoseStamped):
+        if not all(math.isfinite(float(x)) for x in (msg.pose.position.x, msg.pose.position.y)):
+            return
         with self._data_lock:
-            self.goal_msg = msg
+            self._ensure_belief_runtime_locked()
+            self.goal_msg = deepcopy(msg)
             first_goal = not self._goal_received_logged
             if first_goal:
                 self._goal_received_logged = True
-        self._update_goal_progress_origin(msg)
+            self._update_goal_progress_origin(self.goal_msg)
         if first_goal:
             self.get_logger().info(
                 f"Received goal ({msg.pose.position.x:.2f}, {msg.pose.position.y:.2f}) "
@@ -1029,11 +1318,17 @@ class UnicyclePlannerNode(Node):
             )
 
     def _cmd_cb(self, msg: Twist):
-        now_s = self.get_clock().now().nanoseconds * 1e-9
+        values = (float(msg.linear.x), float(msg.angular.z))
+        if not all(math.isfinite(x) for x in values):
+            return
         with self._data_lock:
-            self.last_cmd = np.array([msg.linear.x, msg.angular.z], dtype=float)
+            now_ns = self._observe_belief_clock_locked()
+            if now_ns is None:
+                return
+            now_s = now_ns * 1e-9
+            self.last_cmd = np.array(values, dtype=float)
             # Log the intended pre-noise command with its sim timestamp.
-            self._cmd_log.append((now_s, msg.linear.x, msg.angular.z))
+            self._cmd_log.append((now_s, *values))
             # Trim entries older than the ring-buffer horizon.
             cutoff = now_s - self._CMD_LOG_MAX_S
             while self._cmd_log and self._cmd_log[0][0] < cutoff:
@@ -1061,7 +1356,10 @@ class UnicyclePlannerNode(Node):
         temporal support; that validity question is separate and still open.
         """
         try:
-            yaw = float(self._yaw_from_quaternion(msg.pose.pose.orientation))
+            yaw = odometry_pose_yaw(msg,
+                expected_frame=getattr(self, 'odom_frame_id', 'odom'),
+                expected_child_frame=getattr(self, 'odom_child_frame_id', 'base_footprint'))
+            pose_available = odometry_pose_is_available(msg)
             v_odom = float(msg.twist.twist.linear.x)
             w_odom = float(msg.twist.twist.angular.z)
         except (AttributeError, TypeError, ValueError):
@@ -1071,7 +1369,7 @@ class UnicyclePlannerNode(Node):
             self._odom_refused_invalid = getattr(self, '_odom_refused_invalid', 0) + 1
             return
         try:
-            stamp_ns = int(msg.header.stamp.sec) * 1_000_000_000 + int(msg.header.stamp.nanosec)
+            stamp_ns = self._stamp_ns(msg.header.stamp)
         except (AttributeError, TypeError, ValueError):
             # Do not invent a receipt-time measurement stamp: a wall-clock stamp
             # would place unstamped motion at the wrong point in the history.
@@ -1080,6 +1378,12 @@ class UnicyclePlannerNode(Node):
         stamp_s = stamp_ns * 1e-9
 
         with self._data_lock:
+            now_ns = self._observe_belief_clock_locked()
+            if now_ns is None:
+                return
+            if stamp_ns > now_ns:
+                self._odom_refused_future = getattr(self, '_odom_refused_future', 0) + 1
+                return
             accepted = getattr(self, '_odom_accepted_stamp_ns', None)
             if accepted is not None and stamp_ns <= accepted:
                 # An exact duplicate and a conflicting equal-stamp message both add
@@ -1090,15 +1394,25 @@ class UnicyclePlannerNode(Node):
                 else:
                     self._odom_refused_old = getattr(self, '_odom_refused_old', 0) + 1
                 return
-            self._latest_odom_yaw = yaw
+            self._latest_odom_yaw = yaw if pose_available else None
             self.odom_vel = np.array([v_odom, w_odom], dtype=float)
             if getattr(self, '_odom_origin_stamp_s', None) is None:
                 self._odom_origin_stamp_s = float(stamp_s)
             self._odom_log.append((stamp_s, v_odom, w_odom))
+            if pose_available:
+                self._odom_heading_log.append((stamp_ns, yaw))
+            elif not getattr(self, '_odom_pose_unavailable', False):
+                if not hasattr(self, '_odom_motion_gaps'):
+                    self._odom_motion_gaps = []
+                if accepted is not None:
+                    self._odom_motion_gaps.append((accepted, stamp_ns, 'encoder_pose_unavailable'))
+            self._odom_pose_unavailable = not pose_available
             self._odom_accepted_stamp_ns = stamp_ns
             cutoff = stamp_s - self._CMD_LOG_MAX_S
-            while self._odom_log and self._odom_log[0][0] < cutoff:
+            while len(self._odom_log) > 1 and self._odom_log[1][0] <= cutoff:
                 self._odom_log.pop(0)
+            while len(self._odom_heading_log) > 1 and self._odom_heading_log[1][0] * 1e-9 <= cutoff:
+                self._odom_heading_log.pop(0)
 
     def _diagnostic_odom_cb(self, msg: Odometry):
         """DIAGNOSTIC: transform raw odom (truth) into the plan frame via TF."""
@@ -1192,19 +1506,37 @@ class UnicyclePlannerNode(Node):
         """Keep planner belief covariance positive enough for stable updates."""
         return bc.regularize_covariance(S, self.min_state_cov)
 
-    def _init_belief_from_state(self):
+    @_serialized_correction
+    def _init_belief_from_state(self, *, allow_replace=False):
         with self._data_lock:
-            if self.state_msg is None:
+            now_ns = self._observe_belief_clock_locked()
+            before = self._belief_record
+            state = deepcopy(self.state_msg)
+            motion = self._motion_snapshot_locked()
+            if before is not None and not allow_replace:
+                return True
+            if state is None or now_ns is None:
                 return False
-            if self.skip_stale_pixel_correction and not self._state_msg_is_fresh(self.state_msg):
-                age = self._state_msg_age_s(self.state_msg)
-                self._warn_stale_pixel_once(
-                    f"Refusing to initialize planner belief from stale /state/bev (age {age:.2f}s)"
-                )
+            target_ns = self._stamp_ns(state.header.stamp)
+            if target_ns > now_ns or (before is not None and target_ns <= before.stamp_ns):
                 return False
-            self.belief_m, self.belief_S = self._state_msg_to_belief(self.state_msg)
-            self.belief_stamp = self.state_msg.header.stamp
-            return True
+            if self.skip_stale_pixel_correction and not self._state_msg_is_fresh(state):
+                return False
+            if (state.header.frame_id or self._belief_frame_id) != self._belief_frame_id:
+                raise ValueError('state initialization frame differs from belief frame')
+        m, P = self._state_msg_to_belief(state)
+        support = MotionSupport(target_ns, target_ns)
+        if before is not None:
+            plan = plan_replay(motion, before.stamp_ns, target_ns,
+                               float(getattr(self, 'state_max_predict_dt_s', 1.5)))
+            predicted, covariance, _, _ = self._run_motion_replay(*before.arrays(), plan)
+            # Legacy position replacement contributes independent XY; retaining
+            # unrelated old XY/yaw cross terms can produce an indefinite matrix.
+            m[2], P[2,2] = predicted[2], covariance[2,2]
+            P[:2,2] = 0.; P[2,:2] = 0.
+            support = plan.support.following(before.motion_support)
+        self._commit_belief(m, P, state.header.stamp, motion_support=support)
+        return True
 
     def _matching_detection_diag_locked(self, stamp_msg):
         """Return the diagnostics message that belongs to a pixel observation."""
@@ -1254,11 +1586,12 @@ class UnicyclePlannerNode(Node):
             return
         self._apply_pixel_correction(msg.header.stamp, source='callback')
 
+    @_serialized_correction
     def _pixel_correction_timer_cb(self):
         if not self.use_pixel_correction or self.pixel_correction_min_interval_s <= 0.0:
             return
         with self._data_lock:
-            stamp_ref = self.pixel_stamp
+            stamp_ref = deepcopy(self.pixel_stamp)
         if stamp_ref is None:
             return
         self._apply_pixel_correction(stamp_ref, source='timer')
@@ -1267,7 +1600,7 @@ class UnicyclePlannerNode(Node):
         try:
             return (self.get_clock().now() - Time.from_msg(stamp_msg)).nanoseconds * 1e-9
         except (AttributeError, TypeError, ValueError):
-            return 0.0
+            return math.nan
 
     def _warn_stale_pixel_once(self, message: str):
         now_wall = time.monotonic()
@@ -1291,128 +1624,53 @@ class UnicyclePlannerNode(Node):
         return bool(0.0 <= dt_since_correction < self.pixel_correction_min_interval_s)
 
     def _replay_cmd_log_interval(self, m0, S0, from_stamp, to_stamp,
-                                   fallback_cmd, fallback_dt):
-        """Predict (m0, S0) from from_stamp to to_stamp using motion replay.
-
-        When ``use_odom_for_predict`` is enabled, replay the configured odometry
-        topic first (normally ``/odom_noisy``).  This is the paper-facing
-        dead-reckoning path: camera updates correct a belief propagated by
-        onboard odometry, not by the ideal command request.  If odometry samples
-        are unavailable, fall back to command replay and finally to a single
-        fallback prediction.
-        """
-        try:
-            from_s = Time.from_msg(from_stamp).nanoseconds * 1e-9
-            to_s   = Time.from_msg(to_stamp).nanoseconds * 1e-9
-        except (AttributeError, TypeError, ValueError):
-            m0, S0 = self.planner.predict(m0, S0, fallback_cmd, dt=fallback_dt)
-            return m0, S0, {
-                'cmd_replay_count': 0.0,
-                'cmd_replay_duration_s': float(fallback_dt),
-                'cmd_replay_used_fallback': 1.0,
-                'motion_replay_source_code': 3.0,
-            }
-
-        if to_s <= from_s:
-            return m0, S0, {
-                'cmd_replay_count': 0.0,
-                'cmd_replay_duration_s': 0.0,
-                'cmd_replay_used_fallback': 0.0,
-                'motion_replay_source_code': 0.0,
-            }
-
-        with self._data_lock:
-            odom_entries = list(self._odom_log)
-            cmd_entries = list(self._cmd_log)
-        entries = odom_entries if self.use_odom_for_predict else cmd_entries
-        source_code = 1.0 if self.use_odom_for_predict else 2.0
-        previous = [(t, v, w) for t, v, w in entries if t <= from_s]
-        relevant = [(t, v, w) for t, v, w in entries if from_s < t <= to_s]
-        if self.use_odom_for_predict and not previous and not relevant:
-            entries = cmd_entries
-            source_code = 2.0
-            previous = [(t, v, w) for t, v, w in entries if t <= from_s]
-            relevant = [(t, v, w) for t, v, w in entries if from_s < t <= to_s]
-
-        if previous:
-            current_cmd = np.array([previous[-1][1], previous[-1][2]], dtype=float)
-            used_fallback = 0.0
-        elif relevant:
-            # No command at the measurement stamp.  Treat the robot as
-            # stationary until the first later command; this avoids applying a
-            # future command to the past during delayed-measurement replay.
-            current_cmd = np.array([0.0, 0.0], dtype=float)
-            used_fallback = 0.0
-        else:
-            m0, S0 = self.planner.predict(m0, S0, fallback_cmd, dt=fallback_dt)
-            return m0, S0, {
-                'cmd_replay_count': 0.0,
-                'cmd_replay_duration_s': float(fallback_dt),
-                'cmd_replay_used_fallback': 1.0,
-                'motion_replay_source_code': 3.0,
-            }
-
-        prev_t = from_s
-        for t, v, w in relevant:
-            dt_gap = t - prev_t
-            if dt_gap > 1e-4:
-                m0, S0 = self.planner.predict(
-                    m0, S0, current_cmd, dt=dt_gap)
-            current_cmd = np.array([v, w], dtype=float)
-            prev_t = t
-        dt_tail = to_s - prev_t
-        if dt_tail > 1e-4:
-            m0, S0 = self.planner.predict(
-                m0, S0, current_cmd, dt=dt_tail)
-        return m0, S0, {
-            'cmd_replay_count': float(len(relevant)),
-            'cmd_replay_duration_s': float(max(to_s - from_s, 0.0)),
-            'cmd_replay_used_fallback': float(used_fallback),
-            'motion_replay_source_code': float(source_code),
+                                   fallback_cmd, fallback_dt, *, motion_snapshot=None):
+        start_ns, end_ns = self._stamp_ns(from_stamp), self._stamp_ns(to_stamp)
+        if motion_snapshot is None:
+            with self._data_lock:
+                motion_snapshot = self._motion_snapshot_locked()
+        plan = plan_replay(motion_snapshot, start_ns, end_ns,
+                           float(self.state_max_predict_dt_s) if hasattr(self, 'state_max_predict_dt_s') else 1.5)
+        m, P, Q, yaw = self._run_motion_replay(m0, S0, plan)
+        return m, P, {
+            'cmd_replay_count': float(plan.event_count),
+            'cmd_replay_duration_s': (end_ns - start_ns) * 1e-9,
+            'cmd_replay_used_fallback': float(not plan.support.supported),
+            'motion_replay_source_code': {'odom': 1., 'command': 2., 'none': 3.}[plan.support.source],
+            'motion_support': plan.support.to_dict(),
+            'applied_process_covariance': Q.tolist(),
+            'integrated_yaw_delta': yaw,
         }
 
     def _pixel_correction_dt_s(self, stamp_msg) -> float | None:
-        try:
-            now = Time.from_msg(stamp_msg)
-            with self._data_lock:
-                stamp_ref = self.belief_stamp
-            last = Time.from_msg(stamp_ref) if stamp_ref is not None else None
-            dt_s = (now - last).nanoseconds * 1e-9 if last is not None else self.dt
-            if dt_s <= 0.0:
-                dt_s = self.dt
-        except (AttributeError, TypeError, ValueError):
-            dt_s = self.dt
-
-        max_dt_s = max(2.0 * float(self.pixel_timeout_s), 4.0 * float(self.dt), 0.5)
-        if dt_s > max_dt_s:
-            self._warn_stale_pixel_once(
-                f"Skipping pixel correction with implausible dt={dt_s:.2f}s "
-                f"(max {max_dt_s:.2f}s); resetting belief from state."
-            )
-            self._init_belief_from_state()
+        with self._data_lock:
+            self._ensure_belief_runtime_locked()
+            record = self._belief_record
+        if record is None:
             return None
-        return float(dt_s)
+        dt_ns = self._stamp_ns(stamp_msg) - record.stamp_ns
+        if dt_ns <= 0:
+            return None
+        dt_s = dt_ns * 1e-9
+        max_dt_s = max(2.0 * float(self.pixel_timeout_s), 4.0 * float(self.dt), 0.5)
+        return dt_s if dt_s <= max_dt_s else None
 
     def _snapshot_pixel_correction_inputs(self, stamp_msg):
         with self._data_lock:
-            belief_m = None if self.belief_m is None else self.belief_m.copy()
-            belief_S = None if self.belief_S is None else self.belief_S.copy()
-            belief_stamp = self.belief_stamp
-            v_cmd, w_cmd = float(self.last_cmd[0]), float(self.last_cmd[1])
+            self._ensure_belief_runtime_locked()
+            record = self._belief_record
             meas = None if self.pixel_meas is None else self.pixel_meas.copy()
-        if belief_m is None or belief_S is None or meas is None:
-            return None
-        return bc.CorrectionSnapshot(
-            belief_m=belief_m,
-            belief_S=belief_S,
-            belief_stamp=belief_stamp,
-            cmd=np.array([v_cmd, w_cmd], dtype=float),
-            meas=meas,
-            meas_stamp=stamp_msg,
-            yaw_meas=None,
-            yaw_sigma=math.nan,
-            yaw_source=0.0,
-        )
+            measured_stamp = getattr(self, 'pixel_stamp', None)
+            if measured_stamp is not None and self._stamp_ns(measured_stamp) != self._stamp_ns(stamp_msg):
+                return None
+            if record is None or meas is None:
+                return None
+            m, P = record.arrays()
+            return bc.CorrectionSnapshot(
+                belief_m=m, belief_S=P, belief_stamp=self._ns_stamp(record.stamp_ns),
+                cmd=self.last_cmd.copy(), meas=meas, meas_stamp=deepcopy(stamp_msg),
+                yaw_meas=None, yaw_sigma=math.nan, yaw_source=0.0,
+                motion_snapshot=self._motion_snapshot_locked(), belief_record=record)
 
     def _correction_gates(
         self,
@@ -1721,117 +1979,93 @@ class UnicyclePlannerNode(Node):
 
     @_serialized_correction
     def _apply_pixel_correction(self, stamp_msg, *, source='callback'):
-        cb_start = time.perf_counter()
-        age = self._stamp_age_s(stamp_msg)
-        gates = self._correction_gates()
-
-        # The two gates below carry node-side effects (a warn-once, a belief
-        # re-init) so they stay here; the decision itself is the shared chain's.
-        if gates.age_is_invalid(age):
-            self._warn_stale_pixel_once(
-                f"Skipping time-inconsistent pixel measurement (age {age:.2f}s)"
-            )
-            self._publish_correction_outcome(
-                stamp_msg, bc.CorrectionOutcome(reason=bc.RejectReason.STALE_AGE, age=age)
-            )
-            return
-        if self._pixel_correction_is_throttled(stamp_msg):
-            return
-
+        stamp_ns = self._stamp_ns(stamp_msg)
+        event_id = f'pixel:{stamp_ns}'
         with self._data_lock:
-            has_belief = self.belief_m is not None and self.belief_S is not None
-        if not has_belief and not self._init_belief_from_state():
+            now_ns = self._observe_belief_clock_locked()
+            if event_id in self._correction_outcomes:
+                return
+            before = self._belief_record
+        age = self._stamp_age_s(stamp_msg)
+        if now_ns is None or self._correction_gates().age_is_invalid(age):
+            outcome = bc.CorrectionOutcome(reason=bc.RejectReason.STALE_AGE, age=age)
+            with self._data_lock:
+                self._retain_correction_outcome_locked(event_id, stamp_msg, 'dropped',
+                    outcome.reason.value, before, outcome)
+            self._warn_stale_pixel_once(f'Skipping time-inconsistent pixel measurement (age {age:.2f}s)')
+            self._publish_correction_outcome(stamp_msg, outcome)
+            self._publish_correction_assimilation(source_batch_id=event_id, stamp_msg=stamp_msg,
+                status='dropped', reason=outcome.reason.value, outcome=outcome)
             return
-
-        # Warns and re-initialises the belief from /state/bev on an implausible dt.
-        dt_s = self._pixel_correction_dt_s(stamp_msg)
-        if dt_s is None:
-            self._publish_correction_outcome(
-                stamp_msg, bc.CorrectionOutcome(reason=bc.RejectReason.DT_IMPLAUSIBLE, age=age)
-            )
+        if before is None and not self._init_belief_from_state():
             return
-
+        with self._data_lock:
+            before = self._belief_record
+        if stamp_ns <= before.stamp_ns or self._pixel_correction_is_throttled(stamp_msg):
+            return
+        snapshot = self._snapshot_pixel_correction_inputs(stamp_msg)
+        if snapshot is None:
+            return
+        dt_s = (stamp_ns - before.stamp_ns)*1e-9
         corr_method = self.approx_method if self.pixel_correction_approx == 'AUTO' else self.pixel_correction_approx
-        outcome = bc.apply_correction(
-            source=bc.PixelMeasurementSource(
-                planner=self.planner,
-                planner_for_obs=getattr(self, 'global_planner', None) or self.planner,
-                snapshot_fn=lambda: self._snapshot_pixel_correction_inputs(stamp_msg),
-                corr_method=corr_method,
-            ),
-            gates=gates,
-            # Forward-predict belief from T_belief_stamp to T_pixel using the
-            # configured motion replay source. Paper-facing runs prefer
-            # /odom_noisy and fall back to command replay only when odometry
-            # samples are unavailable.
-            replay=self._replay_cmd_log_interval,
-            age=age,
-            dt_s=dt_s,
-            on_shape_error=self._log_pixel_shape_error_once,
-        )
-
+        try:
+            replay = lambda *args: self._replay_cmd_log_interval(
+                *args, motion_snapshot=snapshot.motion_snapshot)
+            if self._pixel_correction_dt_s(stamp_msg) is None:
+                outcome = bc.CorrectionOutcome(reason=bc.RejectReason.DT_IMPLAUSIBLE,
+                    age=age, dt_s=dt_s, snapshot=snapshot)
+            else:
+                outcome = bc.apply_correction(
+                    source=bc.PixelMeasurementSource(planner=self.planner,
+                        planner_for_obs=getattr(self, 'global_planner', None) or self.planner,
+                        snapshot_fn=lambda: snapshot, corr_method=corr_method),
+                    gates=self._correction_gates(), replay=replay, age=age, dt_s=dt_s,
+                    on_shape_error=self._log_pixel_shape_error_once)
+            if outcome.m_pred is None or outcome.S_pred is None:
+                outcome.m_pred, outcome.S_pred, outcome.replay_meta = replay(
+                    *before.arrays(), self._ns_stamp(before.stamp_ns), stamp_msg, snapshot.cmd, dt_s)
+            m, P = checked_state(outcome.next_m, outcome.next_S) if outcome.accepted else checked_state(
+                outcome.m_pred, outcome.S_pred)
+            support = MotionSupport.from_dict(outcome.replay_meta['motion_support']).following(before.motion_support)
+            with self._data_lock:
+                record = self._commit_belief(m, P, stamp_msg, motion_support=support)
+                if outcome.accepted:
+                    outcome.next_m, outcome.next_S = record.arrays()
+                    outcome.yaw_info = bc.yaw_report(outcome.next_m, outcome.next_S, outcome.m_pred)
+                    self._last_correction_stamp = deepcopy(stamp_msg)
+                self._retain_correction_outcome_locked(event_id, stamp_msg,
+                    'accepted' if outcome.accepted else 'rejected', outcome.reason.value, before, outcome)
+        except (ValueError, ArithmeticError, np.linalg.LinAlgError) as exc:
+            with self._data_lock:
+                self._retain_correction_outcome_locked(event_id, stamp_msg, 'rejected',
+                    self._belief_invalid_reason or 'invalid_prediction', before)
+            self._fatal_experiment_stop('invalid pixel prediction or commit', exc)
+            return
         warning = self._correction_reject_warning(outcome)
         if warning is not None:
             self._warn_stale_pixel_once(warning)
-        if outcome.accepted:
-            with self._data_lock:
-                self.belief_m = outcome.next_m
-                self.belief_S = outcome.next_S
-                self.belief_stamp = stamp_msg
-                self._last_correction_stamp = stamp_msg
         self._publish_correction_outcome(stamp_msg, outcome)
-        if not outcome.accepted:
-            return
-
-        p_vis = outcome.p_vis
-        now_wall = time.monotonic()
-        if self.debug_runtime and (now_wall - self._last_correction_log > 2.0):
-            self.get_logger().info(
-                f"Applied pixel correction in {source} "
-                f"(method={corr_method}, age={age:.3f}s, dt={dt_s:.3f}s, p_vis={p_vis:.3f})"
-            )
-            self._last_correction_log = now_wall
-
-        cb_ms = max((time.perf_counter() - cb_start) * 1000.0, 0.0)
-        if (
-            self.debug_runtime
-            and cb_ms > self.slow_correction_ms
-            and (now_wall - self._last_slow_correction_log) > 2.0
-        ):
-            self.get_logger().warn(
-                f"Slow pixel correction {source} ({cb_ms:.1f} ms) "
-                f"using {corr_method}; this can cause stale-belief behavior."
-            )
-            self._last_slow_correction_log = now_wall
+        self._publish_correction_assimilation(source_batch_id=event_id, stamp_msg=stamp_msg,
+            status='accepted' if outcome.accepted else 'rejected', reason=outcome.reason.value,
+            outcome=outcome)
 
     def _belief_snapshot_for_planning(self):
         with self._data_lock:
-            has_belief = self.belief_m is not None and self.belief_S is not None
-        if not has_belief and not self._init_belief_from_state():
-            return None
-        with self._data_lock:
-            return {
-                'm': self.belief_m.copy(),
-                'S': self.belief_S.copy(),
-                'stamp': self.belief_stamp,
-                'pixel_stamp': self.pixel_stamp,
-                'last_cmd': self.last_cmd.copy(),
-            }
+            self._ensure_belief_runtime_locked()
+            record = self._belief_record
+            if record is None:
+                return None
+            m, P = record.arrays()
+            return dict(m=m, S=P, stamp=self._ns_stamp(record.stamp_ns),
+                        pixel_stamp=deepcopy(self.pixel_stamp), last_cmd=self.last_cmd.copy(),
+                        belief_record=record, motion_snapshot=self._motion_snapshot_locked())
 
     def _belief_age_for_planning(self, now_msg, stamp_ref) -> float | None:
-        if stamp_ref is None:
-            return 0.0
         try:
-            raw_age_s = (Time.from_msg(now_msg) - Time.from_msg(stamp_ref)).nanoseconds * 1e-9
-        except (AttributeError, TypeError, ValueError):
-            return 0.0
-        if raw_age_s < -max(float(self.pixel_timeout_s), 0.25):
-            self._warn_stale_pixel_once(
-                f"Pixel belief stamp is in the future (age {raw_age_s:.2f}s); "
-                "resetting belief from state."
-            )
+            dt_ns = self._stamp_ns(now_msg) - self._stamp_ns(stamp_ref)
+        except (AttributeError, TypeError, ValueError, OverflowError):
             return None
-        return float(max(raw_age_s, 0.0))
+        return dt_ns * 1e-9 if dt_ns >= 0 else None
 
     def _pixel_measurement_available_for_planning(self, now_msg, pixel_stamp_ref) -> bool:
         if pixel_stamp_ref is None:
@@ -1854,118 +2088,54 @@ class UnicyclePlannerNode(Node):
         self._latest_cmd_delta_theta = 0.0
 
     def _predict_belief_to_now(self, m0, S0, last_cmd, belief_age_s: float, now_msg,
-                               *, motion_snapshot=None):
-        """Project a belief for planning/monitoring without committing it.
-
-        Only a correction callback may advance ``belief_stamp``. This causal
-        boundary is what keeps detector-latency corrections applicable.
-
-        ``motion_snapshot`` lets a caller that already checked temporal support
-        replay exactly the entries it checked. Without it the check and the
-        replay are two separate reads of a live buffer, so a concurrent trim
-        between them makes the check describe a history this never sees.
-        """
-        if belief_age_s <= 0.0:
-            self._latest_prediction_dt = 0.0
-            self._latest_prediction_source = 0.0
-            return m0, S0
-
-        # Replay timestamped motion over the interval.  For paper-facing runs
-        # use the configured odometry topic (normally /odom_noisy) so dead
-        # reckoning follows the encoder/noisy-odometry estimate rather than the
-        # ideal requested command.  Fall back to command replay if odometry has
-        # no samples for this interval.
-        try:
-            now_s = Time.from_msg(now_msg).nanoseconds * 1e-9
-        except (AttributeError, TypeError, ValueError):
-            now_s = self.get_clock().now().nanoseconds * 1e-9
-        t_start = now_s - belief_age_s
+                               *, motion_snapshot=None, diagnostics=None):
+        if not math.isfinite(belief_age_s) or belief_age_s < 0:
+            raise ValueError('invalid prediction interval')
+        end_ns = self._stamp_ns(now_msg)
+        start_ns = end_ns - round(belief_age_s * 1e9)
         if motion_snapshot is None:
             with self._data_lock:
-                motion_snapshot = MotionHistorySnapshot.capture(
-                    self._odom_log, self._cmd_log, self.use_odom_for_predict)
-        odom_entries = motion_snapshot.odom
-        cmd_entries = motion_snapshot.cmd
-        use_odom = motion_snapshot.use_odom
+                motion_snapshot = self._motion_snapshot_locked()
+        plan = plan_replay(motion_snapshot, start_ns, end_ns,
+                           float(getattr(self, 'state_max_predict_dt_s', 1.5)))
+        m, P, Q, yaw = self._run_motion_replay(m0, S0, plan)
+        self._latest_prediction_source = {'odom': 1., 'command': 2., 'none': 0.}[plan.support.source]
+        self._latest_prediction_dt = belief_age_s
+        self._latest_u_pred_v = plan.segments[-1][2] if plan.segments else 0.
+        self._latest_u_pred_omega = plan.segments[-1][3] if plan.segments else 0.
+        self._latest_Q_theta_theta = float(Q[2, 2])
+        self._latest_odom_delta_theta = yaw if plan.support.source == 'odom' else 0.
+        self._latest_cmd_delta_theta = yaw if plan.support.source == 'command' else 0.
+        if diagnostics is not None:
+            diagnostics.update(prediction_source={'odom': 1., 'command': 2., 'none': 0.}[plan.support.source],
+                prediction_dt_s=belief_age_s, u_pred_v=plan.segments[-1][2] if plan.segments else 0.,
+                u_pred_omega=plan.segments[-1][3] if plan.segments else 0.,
+                Q_theta_theta=float(Q[2,2]), odom_delta_theta=yaw if plan.support.source == 'odom' else 0.,
+                cmd_delta_theta=yaw if plan.support.source == 'command' else 0.)
+        return m, P
 
-        # Collect odom and cmd delta yaw
-        relevant_odom = [(t, v, w) for t, v, w in odom_entries if t_start < t <= now_s]
-        odom_delta = 0.0
-        if relevant_odom:
-            pt = t_start
-            for t, v, w in relevant_odom:
-                odom_delta += w * (t - pt)
-                pt = t
-            odom_delta += relevant_odom[-1][2] * (now_s - pt)
-        self._latest_odom_delta_theta = float(odom_delta)
-
-        relevant_cmd = [(t, v, w) for t, v, w in cmd_entries if t_start < t <= now_s]
-        cmd_delta = 0.0
-        if relevant_cmd:
-            pt = t_start
-            for t, v, w in relevant_cmd:
-                cmd_delta += w * (t - pt)
-                pt = t
-            cmd_delta += relevant_cmd[-1][2] * (now_s - pt)
-        self._latest_cmd_delta_theta = float(cmd_delta)
-
-        entries = odom_entries if use_odom else cmd_entries
-        previous = [(t, v, w) for t, v, w in entries if t <= t_start]
-        relevant = [(t, v, w) for t, v, w in entries if t_start < t <= now_s]
-        source_code = 1.0 if (use_odom and (previous or relevant)) else 2.0
-        if use_odom and not previous and not relevant:
-            entries = cmd_entries
-            previous = [(t, v, w) for t, v, w in entries if t <= t_start]
-            relevant = [(t, v, w) for t, v, w in entries if t_start < t <= now_s]
-            source_code = 2.0
-
-        if not previous and not relevant:
-            source_code = 0.0
-
-        self._latest_prediction_source = float(source_code)
-        self._latest_prediction_dt = float(belief_age_s)
-        try:
-            Q = self.planner.process_noise(belief_age_s)
-            self._latest_Q_theta_theta = float(Q[2, 2])
-        except Exception:
-            self._latest_Q_theta_theta = 0.0
-
-        if not previous and not relevant:
-            self._latest_u_pred_v = 0.0
-            self._latest_u_pred_omega = 0.0
-            m0, S0 = self.planner.predict(
-                m0, S0, np.array([0.0, 0.0], dtype=float), dt=belief_age_s
-            )
-            return m0, S0
-
-        if previous:
-            current_cmd = np.array([previous[-1][1], previous[-1][2]], dtype=float)
-        elif relevant:
-            current_cmd = np.array([0.0, 0.0], dtype=float)
-
-        prev_t = t_start
-        for t, v, w in relevant:
-            dt_gap = t - prev_t
-            if dt_gap > 1e-4:
-                m0, S0 = self.planner.predict(m0, S0, current_cmd, dt=dt_gap)
-            current_cmd = np.array([v, w], dtype=float)
-            prev_t = t
-
-        dt_tail = now_s - prev_t
-        if dt_tail > 1e-4:
-            m0, S0 = self.planner.predict(m0, S0, current_cmd, dt=dt_tail)
-
-        self._latest_u_pred_v = float(current_cmd[0])
-        self._latest_u_pred_omega = float(current_cmd[1])
-
-        return m0, S0
-
-    def _map_frame_heading(self):
-        """map_bev heading = raw odom yaw + spawn-yaw offset (as pixel_to_bev does).
-        None until the first odometry message arrives."""
-        if self._latest_odom_yaw is None:
+    def _map_frame_heading(self, stamp_msg=None, *, motion_snapshot=None):
+        """Use odometry heading at the requested state instant, never receipt time."""
+        if stamp_msg is None:
+            return None if self._latest_odom_yaw is None else float(wrap_angle(
+                self._latest_odom_yaw + self.odom_yaw_offset_rad))
+        target_ns = self._stamp_ns(stamp_msg)
+        if motion_snapshot is None:
+            with self._data_lock:
+                motion_snapshot = self._motion_snapshot_locked()
+        previous = next(((t, yaw) for t, yaw in reversed(motion_snapshot.headings)
+                         if t <= target_ns), None)
+        if previous is None:
             return None
-        return float(wrap_angle(self._latest_odom_yaw + self.odom_yaw_offset_rad))
+        t, yaw = previous
+        odom_only = MotionHistorySnapshot(motion_snapshot.odom, (), True,
+                                          motion_snapshot.headings, motion_snapshot.gaps)
+        plan = plan_replay(odom_only, t, target_ns,
+                           float(getattr(self, 'state_max_predict_dt_s', 1.5)))
+        if not plan.support.supported:
+            return None
+        delta = sum((b-a)*1e-9*w for a, b, _, w in plan.segments)
+        return float(wrap_angle(yaw + delta + self.odom_yaw_offset_rad))
 
     def _map_frame_heading_variance(self, stamp_msg) -> float:
         """How wrong the map-frame odometry heading can be, at this instant.
@@ -1998,7 +2168,7 @@ class UnicyclePlannerNode(Node):
         drift_var = float(self.process_noise_theta) ** 2 * elapsed_s
         return float(min(NONINFORMATIVE_YAW_VAR, max(floor_var, drift_var)))
 
-    def _anchor_belief_yaw_for_planning(self, m0, S0, now_msg):
+    def _anchor_belief_yaw_for_planning(self, m0, S0, now_msg, *, motion_snapshot=None):
         """Heading anchor.
 
         Single-camera path (use_pixel_correction): pixel_to_bev already bakes the
@@ -2014,7 +2184,7 @@ class UnicyclePlannerNode(Node):
             not self.use_pixel_correction
             and self.heading_update_mode == 'camera_xy_only'
         ):
-            h = self._map_frame_heading()
+            h = self._map_frame_heading(now_msg, motion_snapshot=motion_snapshot)
             if h is not None:
                 m0 = np.asarray(m0, dtype=float).copy()
                 S0 = np.asarray(S0, dtype=float).copy()
@@ -2044,111 +2214,16 @@ class UnicyclePlannerNode(Node):
         return self._regularize_state_covariance(result)
 
     def _resolve_pixel_corrected_belief_for_planning(self, now_msg):
-        snapshot = self._belief_snapshot_for_planning()
-        if snapshot is None:
-            return None, None, {}
-
-        belief_age_s = self._belief_age_for_planning(now_msg, snapshot['stamp'])
-        if belief_age_s is None:
-            if not self._init_belief_from_state():
-                return None, None, {}
-            snapshot = self._belief_snapshot_for_planning()
-            if snapshot is None:
-                return None, None, {}
-            belief_age_s = 0.0
-
-        measurement_available = self._pixel_measurement_available_for_planning(
-            now_msg, snapshot['pixel_stamp']
-        )
-
-        # Planning is a read-only projection of the committed filter state.
-        # Advancing the committed stamp here used to make a delayed camera
-        # correction look older than the belief and silently discard it.
-        if belief_age_s > self.pixel_timeout_s:
-            self._warn_stale_pixel_once(
-                f"Pixel belief stale (age {belief_age_s:.2f}s); planning on prediction-only belief"
-            )
-            m0, S0 = self._predict_belief_to_now(
-                snapshot['m'], snapshot['S'], snapshot['last_cmd'],
-                belief_age_s, now_msg,
-            )
-            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg)
-            S0 = self._inflate_stale_planning_covariance(S0, belief_age_s)
-        else:
-            m0, S0 = self._predict_belief_to_now(
-                snapshot['m'], snapshot['S'], snapshot['last_cmd'],
-                belief_age_s, now_msg,
-            )
-            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg)
-
-        return m0, S0, {
-            'measurement_available': bool(measurement_available),
-            'belief_age_s': float(belief_age_s),
-        }
+        # All operational modes project the same owned record. Initialization
+        # and measurement assimilation are callback transactions, never reads.
+        m, P, meta = self._resolve_state_belief_ekf(now_msg)
+        with self._data_lock:
+            pixel_stamp = deepcopy(getattr(self, 'pixel_stamp', None))
+        meta['measurement_available'] = self._pixel_measurement_available_for_planning(now_msg, pixel_stamp)
+        return m, P, meta
 
     def _resolve_state_belief_for_planning(self):
-        now_msg = self.get_clock().now().to_msg()
-        with self._data_lock:
-            state_ref = self.state_msg
-            belief_m = None if self.belief_m is None else self.belief_m.copy()
-            belief_S = None if self.belief_S is None else self.belief_S.copy()
-            belief_stamp = self.belief_stamp
-            last_cmd = self.last_cmd.copy()
-        if state_ref is None:
-            return None, None, {}
-        if self.skip_stale_pixel_correction and not self._state_msg_is_fresh(state_ref):
-            if belief_m is None or belief_S is None or belief_stamp is None:
-                return None, None, {
-                    'measurement_available': False,
-                    'belief_age_s': math.inf,
-                }
-            belief_age_s = self._belief_age_for_planning(now_msg, belief_stamp)
-            if belief_age_s is None:
-                return None, None, {}
-            if belief_age_s > self.pixel_timeout_s:
-                m0, S0 = self._predict_belief_to_now(
-                    belief_m, belief_S, last_cmd, belief_age_s, now_msg
-                )
-                m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg)
-                S0 = self._inflate_stale_planning_covariance(S0, belief_age_s)
-            else:
-                m0, S0 = self._predict_belief_to_now(
-                    belief_m, belief_S, last_cmd, belief_age_s, now_msg
-                )
-                m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg)
-            return m0, S0, {
-                'measurement_available': False,
-                'belief_age_s': float(belief_age_s),
-            }
-        m0, S0 = self._state_msg_to_belief(state_ref)
-        self._state_bev_yaw_ignored = True
-        if self.belief_m is not None:
-            m_pred = self.belief_m.copy()
-            S_pred = self.belief_S.copy()
-            if self.belief_stamp is not None:
-                dt = self._stamp_to_float(state_ref.header.stamp) - self._stamp_to_float(self.belief_stamp)
-                if dt > 1e-3:
-                    try:
-                        m_pred_new, S_pred_new = self.planner.predict(m_pred, S_pred, last_cmd, dt=dt)
-                        self.get_logger().info(f"[CAMERA_XY_ONLY] state_stamp={self._stamp_to_float(state_ref.header.stamp):.4f} prev_stamp={self._stamp_to_float(self.belief_stamp):.4f} dt={dt:.4f} S_old={S_pred[2,2]:.6f} S_new={S_pred_new[2,2]:.6f}")
-                        m_pred = m_pred_new
-                        S_pred = S_pred_new
-                    except Exception as e:
-                        self.get_logger().error(f"[CAMERA_XY_ONLY] predict failed: {e}")
-            m0[2] = float(m_pred[2])
-            S0[2, 2] = float(S_pred[2, 2])
-            S0[2, 0] = float(S_pred[2, 0])
-            S0[0, 2] = float(S_pred[0, 2])
-            S0[2, 1] = float(S_pred[2, 1])
-            S0[1, 2] = float(S_pred[1, 2])
-        with self._data_lock:
-            self.belief_m = m0.copy()
-            self.belief_S = S0.copy()
-            self.belief_stamp = state_ref.header.stamp
-        return m0, S0, {
-            'measurement_available': True,
-            'belief_age_s': 0.0,
-        }
+        return self._resolve_state_belief_ekf(self.get_clock().now().to_msg())
 
     def _reanchor_belief_to_correction(self, state_msg, reason=""):
         """Re-anchor to a fused /state/bev correction (message form)."""
@@ -2163,26 +2238,14 @@ class UnicyclePlannerNode(Node):
         )
 
     def _reanchor_belief_to_xy(self, stamp_msg, z_xy, R, reason=""):
-        """Hard re-anchor the belief to a fresh metric correction (reliable) and
-        reset its covariance. Recovery from a diverged belief / bad-stamp jump:
-        the correction is trustworthy, so snap to it rather than dead-reckon."""
-        m = np.array([float(z_xy[0]), float(z_xy[1]), 0.0], dtype=float)
-        h = self._map_frame_heading()
-        yaw_var = NONINFORMATIVE_YAW_VAR
-        if h is not None:
-            m[2] = h
-            # The heading mean came from odometry, so the variance describes odometry.
-            yaw_var = self._map_frame_heading_variance(stamp_msg)
-        R = np.asarray(R, dtype=float)
-        S = np.diag([0.0, 0.0, yaw_var]).astype(float)
-        S[:2, :2] = R[:2, :2]
-        S = self._regularize_state_covariance(S)
         with self._data_lock:
-            self.belief_m, self.belief_S = m.copy(), S.copy()
-            self.belief_stamp = stamp_msg
-            self._last_correction_stamp = stamp_msg
-        if reason:
-            self._warn_stale_pixel_once(f"belief re-anchored to metric correction ({reason})")
+            motion = self._motion_snapshot_locked()
+            h = self._map_frame_heading(stamp_msg, motion_snapshot=motion)
+            m = np.array([float(z_xy[0]), float(z_xy[1]), h if h is not None else 0.])
+            yaw_var = self._map_frame_heading_variance(stamp_msg) if h is not None else NONINFORMATIVE_YAW_VAR
+            P = np.diag([0., 0., yaw_var]); P[:2, :2] = np.asarray(R)
+            self._commit_belief(m, self._regularize_state_covariance(P), stamp_msg)
+            self._last_correction_stamp = deepcopy(stamp_msg)
 
     def _state_measurement_cov(self, state_msg):
         """Measurement covariance of one fused /state/bev correction.
@@ -2195,23 +2258,15 @@ class UnicyclePlannerNode(Node):
 
     def _snapshot_metric_correction_inputs(self, stamp_msg, z_xy):
         with self._data_lock:
-            belief_m = None if self.belief_m is None else self.belief_m.copy()
-            belief_S = None if self.belief_S is None else self.belief_S.copy()
-            belief_stamp = self.belief_stamp
-            cmd = self.last_cmd.copy()
-        if belief_m is None or belief_S is None or belief_stamp is None:
-            return None
-        return bc.CorrectionSnapshot(
-            belief_m=belief_m,
-            belief_S=belief_S,
-            belief_stamp=belief_stamp,
-            cmd=cmd,
-            meas=np.asarray(z_xy, dtype=float).reshape(-1)[:2].copy(),
-            meas_stamp=stamp_msg,
-            yaw_meas=None,
-            yaw_sigma=math.nan,
-            yaw_source=0.0,
-        )
+            self._ensure_belief_runtime_locked()
+            record = self._belief_record
+            if record is None:
+                return None
+            m, P = record.arrays()
+            return bc.CorrectionSnapshot(m, P, self._ns_stamp(record.stamp_ns),
+                self.last_cmd.copy(), np.asarray(z_xy, dtype=float).reshape(-1)[:2].copy(),
+                meas_stamp=deepcopy(stamp_msg), motion_snapshot=self._motion_snapshot_locked(),
+                belief_record=record)
 
     def _apply_state_correction(self, state_msg):
         """Fold one FUSED /state/bev correction into the belief (message form)."""
@@ -2245,6 +2300,11 @@ class UnicyclePlannerNode(Node):
         ordered = sorted(observations, key=lambda o: (float(o.timestamp_s), str(o.camera_id)))
         if not ordered:
             return
+        indexes = {id(obs): i for i, obs in enumerate(ordered)}
+        with self._data_lock:
+            if self._observe_belief_clock_locked() is None:
+                return
+            before = self._belief_record
         fresh = []
         for index, obs in enumerate(ordered):
             previous = self._seen_map_observation_stamps.get(str(obs.camera_id), -math.inf)
@@ -2257,6 +2317,15 @@ class UnicyclePlannerNode(Node):
                 )
                 continue
             self._seen_map_observation_stamps[str(obs.camera_id)] = float(obs.timestamp_s)
+            stamp_msg = self._float_to_stamp(float(obs.timestamp_s))
+            if (not self._metric_correction_is_fresh(self._stamp_age_s(stamp_msg))
+                    or (before is not None and self._stamp_ns(stamp_msg) < before.stamp_ns)):
+                self._publish_pixel_correction_rejection(stamp_msg,
+                    reason=(bc.RejectReason.STALE_AGE if not self._metric_correction_is_fresh(
+                        self._stamp_age_s(stamp_msg)) else bc.RejectReason.NOT_NEWER),
+                    age=self._stamp_age_s(stamp_msg), measurement_space=bc.SPACE_MAP_XY,
+                    camera_index=float(index))
+                continue
             fresh.append(obs)
         ordered = fresh
         if not ordered:
@@ -2270,16 +2339,21 @@ class UnicyclePlannerNode(Node):
         # agreeing cameras can re-anchor the belief before the updates run.
         # (The fused path keeps the single-observation guard: that measurement
         # has already been through the manager's NIS + disagreement gates.)
-        self._reanchor_on_camera_quorum(ordered)
+        consumed = self._reanchor_on_camera_quorum(ordered)
 
-        accepted_any = False
+        accepted_any = bool(consumed)
+        rejected_any = False
         for index, obs in enumerate(ordered):
+            if (str(obs.camera_id), float(obs.timestamp_s)) in consumed:
+                continue
             outcome = self._apply_metric_correction(
                 self._float_to_stamp(float(obs.timestamp_s)),
                 np.array([float(obs.xy_m[0]), float(obs.xy_m[1])], dtype=float),
                 self._observation_covariance(obs),
-                camera_index=float(index),
+                camera_index=float(indexes[id(obs)]),
                 label=str(obs.camera_id),
+                source_batch_id='camera:' + json.dumps([str(obs.camera_id), round(obs.timestamp_s*1e9)],
+                                                      separators=(',', ':')),
                 allow_same_stamp=True,
                 allow_reanchor=False,
                 # Inflate at most once per batch, below, and only if NOTHING
@@ -2289,11 +2363,24 @@ class UnicyclePlannerNode(Node):
                 inflate_on_reject=False,
             )
             accepted_any = accepted_any or bool(outcome is not None and outcome.accepted)
+            rejected_any = rejected_any or bool(outcome is not None and not outcome.accepted
+                and outcome.reason not in (bc.RejectReason.NOT_NEWER, bc.RejectReason.STALE_AGE))
 
-        if not accepted_any:
+        if rejected_any and not accepted_any:
             self._inflate_belief_after_rejection(
                 f"no camera accepted ({len(ordered)} observation(s))"
             )
+        # One terminal batch record includes any final configured inflation.
+        # The optional wire has camera/time identities, but no detector event ID.
+        event_id = 'per_camera:' + json.dumps([(str(o.camera_id), round(o.timestamp_s*1e9))
+                                              for o in ordered], separators=(',', ':'))
+        stamp_msg = self._float_to_stamp(max(o.timestamp_s for o in ordered))
+        with self._data_lock:
+            self._retain_correction_outcome_locked(event_id, stamp_msg,
+                'accepted' if accepted_any else 'rejected',
+                'camera_quorum' if consumed else 'per_camera_batch', before)
+        self._publish_correction_assimilation(source_batch_id=event_id, stamp_msg=stamp_msg,
+            status='accepted' if accepted_any else 'rejected', reason='per_camera_batch')
 
     def _observation_covariance(self, obs):
         """One camera's stated covariance, as it stated it (see _state_measurement_cov)."""
@@ -2305,19 +2392,23 @@ class UnicyclePlannerNode(Node):
 
     def _reanchor_on_camera_quorum(self, ordered):
         """Re-anchor only when several mutually agreeing cameras say the belief is lost."""
+        # Multiple frames from one physical camera cannot supply multiple votes.
+        ordered = list({str(obs.camera_id): obs for obs in ordered}.values())
         if self.state_reanchor_m <= 0.0 or len(ordered) < 2:
-            return
+            return set()
         with self._data_lock:
+            self._ensure_belief_runtime_locked()
+            before = self._belief_record
             belief_m = None if self.belief_m is None else self.belief_m.copy()
         if belief_m is None:
-            return
+            return set()
         far = [
             obs for obs in ordered
             if math.hypot(float(obs.xy_m[0]) - float(belief_m[0]),
                           float(obs.xy_m[1]) - float(belief_m[1])) > self.state_reanchor_m
         ]
         if len(far) < max(2, (len(ordered) + 1) // 2):
-            return
+            return set()
         # They must agree with EACH OTHER far better than they disagree with the
         # belief, else this is scattered noise rather than a lost belief.
         spread = max(
@@ -2325,7 +2416,7 @@ class UnicyclePlannerNode(Node):
             for a in far for b in far
         )
         if spread >= self.state_reanchor_m:
-            return
+            return set()
         xs = sorted(float(obs.xy_m[0]) for obs in far)
         ys = sorted(float(obs.xy_m[1]) for obs in far)
         median = np.array([xs[len(xs) // 2], ys[len(ys) // 2]], dtype=float)
@@ -2336,266 +2427,139 @@ class UnicyclePlannerNode(Node):
             self._observation_covariance(newest),
             reason=f"{len(far)}/{len(ordered)} cameras agree, spread {spread:.2f} m",
         )
+        event_id = 'quorum:' + json.dumps([(str(o.camera_id), round(o.timestamp_s*1e9))
+                                           for o in far], separators=(',', ':'))
+        with self._data_lock:
+            self._retain_correction_outcome_locked(event_id,
+                self._float_to_stamp(newest.timestamp_s), 'reanchored', 'camera_quorum', before)
+        return {(str(obs.camera_id), float(obs.timestamp_s)) for obs in far}
 
     def _inflate_belief_after_rejection(self, reason: str):
-        """Grow the belief covariance so a rejection can never freeze it."""
         inflate = float(self.state_reject_inflate_m2)
-        if inflate <= 0.0:
+        if inflate <= 0:
             return
         with self._data_lock:
-            if self.belief_S is None:
+            self._ensure_belief_runtime_locked()
+            record = self._belief_record
+            if record is None:
                 return
-            S = np.asarray(self.belief_S, dtype=float).copy()
-            S[0, 0] += inflate
-            S[1, 1] += inflate
-            self.belief_S = self._regularize_state_covariance(S)
-        self._warn_stale_pixel_once(
-            f"correction rejected ({reason}); inflating {inflate:.3f} m^2"
-        )
+            m, P = record.arrays()
+            P[0, 0] += inflate; P[1, 1] += inflate
+            self._commit_belief(m, self._regularize_state_covariance(P), self._ns_stamp(record.stamp_ns),
+                                motion_support=record.motion_support)
 
     def _advance_belief_over_outage(self, stamp_msg, dt_s: float) -> None:
-        """Move the committed belief forward to a correction that will be refused.
-
-        Only the clock and the ordinary motion model are applied here: the measurement
-        is not used, no gate is bypassed, and ground truth is not consulted. This is the
-        same bounded prediction planning already reads, committed rather than discarded,
-        so that refusing one correction cannot make every later correction unrefusable.
-
-        A camera gap is not necessarily a motion-input gap. If timestamped inputs
-        cover the entire interval, commit the same full replay used for planning.
-        Truncating it to the final 1.5 seconds erased earlier turns while still
-        advancing the stamp, even with complete measured odometry in the buffer.
-        The existing conservative fallback remains for unsupported motion history;
-        its reach inflation is a recovery heuristic, not calibrated sensor noise.
-        """
         with self._data_lock:
-            m0 = None if self.belief_m is None else np.asarray(self.belief_m, dtype=float).copy()
-            S0 = None if self.belief_S is None else np.asarray(self.belief_S, dtype=float).copy()
-            last_cmd = np.asarray(self.last_cmd, dtype=float).copy()
-            belief_stamp = self.belief_stamp
-            # Freeze the anchor and the motion in ONE locked read. Checking coverage
-            # on one read and replaying from a second lets a concurrent trim drop the
-            # very entries the check accepted, committing an advanced stamp over
-            # motion that was never replayed.
-            motion = MotionHistorySnapshot.capture(
-                self._odom_log, self._cmd_log, self.use_odom_for_predict)
-        if m0 is None or S0 is None:
-            return
-        from_s = self._stamp_to_float(belief_stamp)
-        to_s = self._stamp_to_float(stamp_msg)
-        supported = covers_interval(
-            motion.selected, from_s, to_s, float(self.state_max_predict_dt_s))
-        replayed_s = float(dt_s) if supported else min(float(dt_s), float(self.state_max_predict_dt_s))
-        try:
-            m1, S1 = self._predict_belief_to_now(
-                m0, S0, last_cmd, replayed_s, stamp_msg, motion_snapshot=motion)
-        except Exception:
-            m1, S1 = m0, S0
-            replayed_s = 0.0
-        if float(dt_s) > replayed_s:
-            # Beyond the replay cap the motion is genuinely unknown. Grow the position
-            # covariance by what the vehicle could have travelled in the uncovered time,
-            # which is a kinematic bound from the speed limit, not a fitted constant.
-            uncovered_s = float(dt_s) - replayed_s
-            reach_m = float(self.v_max) * uncovered_s
-            S1 = np.asarray(S1, dtype=float).copy()
-            S1[0, 0] += reach_m ** 2
-            S1[1, 1] += reach_m ** 2
-        with self._data_lock:
-            self.belief_m = np.asarray(m1, dtype=float).copy()
-            self.belief_S = self._regularize_state_covariance(S1)
-            self.belief_stamp = stamp_msg
+            self._ensure_belief_runtime_locked()
+            record = self._belief_record
+            if record is None:
+                return
+            motion = self._motion_snapshot_locked()
+        target_ns = self._stamp_ns(stamp_msg)
+        full = plan_replay(motion, record.stamp_ns, target_ns, self.state_max_predict_dt_s)
+        supported = full.support.supported
+        replayed_s = dt_s if supported else min(dt_s, self.state_max_predict_dt_s)
+        start_ns = target_ns - round(replayed_s * 1e9)
+        plan = plan_replay(motion, start_ns, target_ns, self.state_max_predict_dt_s)
+        m, P = self._predict_belief_to_now(*record.arrays(), self.last_cmd.copy(), replayed_s,
+                                          stamp_msg, motion_snapshot=motion)
+        gaps = list(plan.support.gaps)
+        if start_ns > record.stamp_ns:
+            gaps.insert(0, (record.stamp_ns, start_ns, 'replay_cap_unknown_motion'))
+            reach = self.v_max * (start_ns-record.stamp_ns)*1e-9
+            P = np.asarray(P).copy(); P[0,0] += reach**2; P[1,1] += reach**2
+        support = MotionSupport(record.stamp_ns, target_ns, plan.support.source, tuple(gaps))
+        self._commit_belief(m, self._regularize_state_covariance(P), stamp_msg,
+                            motion_support=support.following(record.motion_support))
 
-    def _publish_correction_assimilation(
-        self,
-        *,
-        source_batch_id: str,
-        stamp_msg,
-        status: str,
-        reason: str,
-        outcome=None,
-    ) -> None:
-        """Publish one terminal filter outcome for one detector source batch."""
+    def _publish_correction_assimilation(self, *, source_batch_id, stamp_msg,
+                                          status, reason, outcome=None):
         if not source_batch_id:
             return
         with self._data_lock:
-            belief_stamp = self.belief_stamp
-        payload = {
-            'schema_version': 1,
-            'source_batch_id': str(source_batch_id),
-            'correction_stamp': float(self._stamp_to_float(stamp_msg)),
-            'status': str(status),
-            'reason': str(reason),
-            'belief_stamp_after': (
-                float(self._stamp_to_float(belief_stamp))
-                if belief_stamp is not None else math.nan
-            ),
-            'apply_stamp': float(self.get_clock().now().nanoseconds) * 1e-9,
-            'nis': float(getattr(outcome, 'nis', math.nan)),
-            'accepted': bool(status in ('accepted', 'accepted_bootstrap', 'reanchored')),
-        }
+            retained = self._correction_outcomes[source_batch_id]
         message = String()
-        message.data = json.dumps(payload, sort_keys=True)
+        message.data = json.dumps(self._outcome_json_value(retained), sort_keys=True, allow_nan=False)
         self.correction_assimilation_pub.publish(message)
 
     @_serialized_correction
     def _apply_metric_correction(self, stamp_msg, z_xy, R, *,
-                                 camera_index=math.nan, label="fused",
-                                 source_batch_id="",
-                                 allow_reanchor=True, inflate_on_reject=True,
-                                 allow_same_stamp=False):
-        """Fold one metric xy correction into the belief as a proper EKF update,
-        running the SAME gate chain as the single-camera pixel path
-        (``planning.core.belief_correction``).
-
-        A recursive Bayesian update, not a hard reset: predict the belief to the
-        correction's own (capture) stamp by replaying the motion between them, then
-        apply a covariance-weighted Kalman update in map-xy with H = [I2 | 0].
-
-        The measurement is position only. Whether heading moves is decided by
-        ``heading_update_mode``: under ``coupled`` the update's own posterior is kept,
-        so heading may change through the position-heading cross-covariance; under
-        ``camera_xy_only`` heading and its cross terms are replaced by the odometry
-        model. Neither is a camera heading measurement.
-
-        This path and the single-camera pixel path share one implementation, so a
-        gate configured for one cannot be silently absent from the other. A rejection
-        advances the belief stamp and inflates the covariance mildly, so a refused
-        correction can never freeze the belief.
-        """
-        age = self._stamp_age_s(stamp_msg)
-        if not self._metric_correction_is_fresh(age):
-            self._publish_pixel_correction_rejection(
-                stamp_msg,
-                reason=bc.RejectReason.STALE_AGE,
-                age=age,
-                measurement_space=bc.SPACE_MAP_XY,
-                camera_index=camera_index,
-            )
-            self._publish_correction_assimilation(
-                source_batch_id=source_batch_id,
-                stamp_msg=stamp_msg,
-                status='dropped',
-                reason=bc.RejectReason.STALE_AGE.value,
-            )
-            return None
+                                 camera_index=math.nan, label="fused", source_batch_id="",
+                                 allow_reanchor=True, inflate_on_reject=True, allow_same_stamp=False):
         with self._data_lock:
-            has_belief = (
-                self.belief_m is not None
-                and self.belief_S is not None
-                and self.belief_stamp is not None
-            )
-            belief_stamp = self.belief_stamp
+            now_ns = self._observe_belief_clock_locked()
+            before = self._belief_record
+            if source_batch_id in self._correction_outcomes:
+                return None  # no repeat information, inflation, or terminal reclassification
+        stamp_ns = self._stamp_ns(stamp_msg)
+        age = self._stamp_age_s(stamp_msg)
+        dt_corr = (stamp_ns-before.stamp_ns)*1e-9 if before else 0.
 
-        # Bootstrap the belief from the first fresh correction.
-        if not has_belief:
-            self._reanchor_belief_to_xy(stamp_msg, z_xy, R)
-            self._publish_correction_assimilation(
-                source_batch_id=source_batch_id,
-                stamp_msg=stamp_msg,
-                status='accepted_bootstrap',
-                reason='bootstrap',
-            )
-            return None
+        def finish(status, reason, outcome=None, commit=None):
+            with self._data_lock:
+                if commit is not None:
+                    commit()
+                self._retain_correction_outcome_locked(source_batch_id, stamp_msg, status,
+                                                       str(reason), before, outcome)
+            if status != 'accepted_bootstrap':
+                if outcome is not None and outcome.snapshot is not None:
+                    self._publish_correction_outcome(stamp_msg, outcome, camera_index=camera_index)
+                else:
+                    self._publish_pixel_correction_rejection(stamp_msg, reason=reason, age=age,
+                        dt_s=dt_corr, measurement_space=bc.SPACE_MAP_XY, camera_index=camera_index,
+                        belief_input_stamp_s=before.stamp_ns*1e-9 if before else math.nan)
+            self._publish_correction_assimilation(source_batch_id=source_batch_id, stamp_msg=stamp_msg,
+                                                 status=status, reason=reason, outcome=outcome)
+            return outcome
 
-        dt_corr = self._stamp_to_float(stamp_msg) - self._stamp_to_float(belief_stamp)
-        # Distinct cameras in a deduplicated batch may update the same instant.
-        # They add independent evidence without another motion prediction. The
-        # fused interface keeps its stricter one-batch/one-update rule.
-        simultaneous = allow_same_stamp and abs(dt_corr) <= 1e-9
-        if dt_corr <= 1e-3 and not simultaneous:
-            self._publish_pixel_correction_rejection(
-                stamp_msg,
-                reason=bc.RejectReason.NOT_NEWER,
-                age=age,
-                dt_s=dt_corr,
-                belief_input_stamp_s=self._stamp_to_float(belief_stamp),
-                measurement_space=bc.SPACE_MAP_XY,
-                camera_index=camera_index,
-            )
-            self._publish_correction_assimilation(
-                source_batch_id=source_batch_id,
-                stamp_msg=stamp_msg,
-                status='dropped',
-                reason=bc.RejectReason.NOT_NEWER.value,
-            )
-            return None
-        if dt_corr > self.state_max_predict_dt_s:
-            # A bad stamp or long outage is not evidence that the measurement is true.
-            # Re-anchoring here used to bypass both NIS and the now-disabled re-anchor
-            # threshold. Without a replayable prior there is no statistically valid NIS,
-            # so this correction is rejected rather than granted a separate bypass.
-            #
-            # The MEASUREMENT is refused; the CLOCK still moves. Leaving the belief
-            # stamped at an older instant than the corrections still arriving makes this
-            # an absorbing state: the gap grows by one period every cycle, so every later
-            # correction is refused for the same reason and the drive finishes on
-            # odometry alone. Measured, before this: one 1.4 s startup gap turned into
-            # 158 consecutive refusals and a collision.
-            self._advance_belief_over_outage(stamp_msg, dt_corr)
-            self._inflate_belief_after_rejection(
-                f"correction replay gap {dt_corr:.1f}s exceeds "
-                f"{self.state_max_predict_dt_s:.1f}s"
-            )
-            self._publish_pixel_correction_rejection(
-                stamp_msg,
-                reason=bc.RejectReason.REPLAY_GAP,
-                age=age,
-                dt_s=dt_corr,
-                belief_input_stamp_s=self._stamp_to_float(belief_stamp),
-                measurement_space=bc.SPACE_MAP_XY,
-                camera_index=camera_index,
-            )
-            self._publish_correction_assimilation(
-                source_batch_id=source_batch_id,
-                stamp_msg=stamp_msg,
-                status='dropped',
-                reason=bc.RejectReason.REPLAY_GAP.value,
-            )
-            return None
+        def dropped(reason):
+            out = bc.CorrectionOutcome(reason=reason, age=age, dt_s=dt_corr,
+                                        measurement_space=bc.SPACE_MAP_XY)
+            return finish('dropped', reason.value, out)
 
-        outcome = bc.apply_correction(
-            source=bc.FusedMapMeasurementSource(
-                snapshot_fn=lambda: self._snapshot_metric_correction_inputs(stamp_msg, z_xy),
-                measurement_cov_fn=lambda: R,
-            ),
-            # This is always a metric measurement.  ``allow_reanchor`` controls
-            # only the divergence recovery policy; it must not accidentally
-            # select the paper-1 pixel jump limit.  The old coupling caused
-            # every per-camera update (where re-anchor is intentionally off) to
-            # inherit pixel_max_correction_jump_m=0.5 despite the metric arm's
-            # state_max_correction_jump_m=0.0.
-            gates=self._correction_gates(
-                metric_measurement=True,
-                allow_reanchor=allow_reanchor,
-            ),
-            replay=self._replay_cmd_log_interval,
-            age=age,
-            dt_s=dt_corr,
-        )
-        self._commit_metric_correction_outcome(
-            stamp_msg, R, outcome, label=label, inflate_on_reject=inflate_on_reject
-        )
-        self._publish_correction_outcome(stamp_msg, outcome, camera_index=camera_index)
-        if outcome.accepted:
-            assimilation_status = 'accepted'
-        elif outcome.recover == bc.RECOVER_REANCHOR:
-            assimilation_status = 'reanchored'
-        else:
-            assimilation_status = 'rejected'
-        reason = (
-            outcome.reason.value
-            if isinstance(outcome.reason, bc.RejectReason)
-            else str(outcome.reason)
-        )
-        self._publish_correction_assimilation(
-            source_batch_id=source_batch_id,
-            stamp_msg=stamp_msg,
-            status=assimilation_status,
-            reason=reason,
-            outcome=outcome,
-        )
-        return outcome
+        if now_ns is None:
+            return dropped(bc.RejectReason.DT_IMPLAUSIBLE)
+        if not self._metric_correction_is_fresh(age):
+            return dropped(bc.RejectReason.STALE_AGE)
+        if before is None:
+            out = bc.CorrectionOutcome(reason=bc.RejectReason.ACCEPTED, age=age,
+                                        measurement_space=bc.SPACE_MAP_XY)
+            return finish('accepted_bootstrap', 'bootstrap', out,
+                          lambda: self._reanchor_belief_to_xy(stamp_msg, z_xy, R))
+        simultaneous = allow_same_stamp and stamp_ns == before.stamp_ns
+        if stamp_ns <= before.stamp_ns and not simultaneous:
+            return dropped(bc.RejectReason.NOT_NEWER)
+        try:
+            if dt_corr > self.state_max_predict_dt_s:
+                out = bc.CorrectionOutcome(reason=bc.RejectReason.REPLAY_GAP, age=age,
+                                            dt_s=dt_corr, measurement_space=bc.SPACE_MAP_XY)
+                def advance():
+                    self._advance_belief_over_outage(stamp_msg, dt_corr)
+                    if inflate_on_reject:
+                        self._inflate_belief_after_rejection('replay gap')
+                return finish('dropped', out.reason.value, out, advance)
+            snapshot = self._snapshot_metric_correction_inputs(stamp_msg, z_xy)
+            outcome = bc.apply_correction(
+                source=bc.FusedMapMeasurementSource(snapshot_fn=lambda: snapshot,
+                                                      measurement_cov_fn=lambda: R),
+                gates=self._correction_gates(metric_measurement=True, allow_reanchor=allow_reanchor),
+                replay=lambda *args: self._replay_cmd_log_interval(
+                    *args, motion_snapshot=snapshot.motion_snapshot), age=age, dt_s=dt_corr)
+            status = ('accepted' if outcome.accepted else
+                      'reanchored' if outcome.recover == bc.RECOVER_REANCHOR else 'rejected')
+            return finish(status, outcome.reason.value, outcome,
+                lambda: self._commit_metric_correction_outcome(stamp_msg, R, outcome,
+                    label=label, inflate_on_reject=inflate_on_reject))
+        except (ValueError, ArithmeticError, np.linalg.LinAlgError) as exc:
+            # A failed numerical prediction is not a prediction to hold. The last
+            # valid immutable anchor survives and the event is retained before stop.
+            with self._data_lock:
+                self._retain_correction_outcome_locked(source_batch_id, stamp_msg, 'rejected',
+                    self._belief_invalid_reason or 'invalid_prediction', before)
+            self._publish_correction_assimilation(source_batch_id=source_batch_id, stamp_msg=stamp_msg,
+                status='rejected', reason='invalid_prediction')
+            self._fatal_experiment_stop('invalid metric prediction or commit', exc)
+            return None
 
     def _metric_correction_is_fresh(self, age: float) -> bool:
         future_tolerance_s = max(float(self.pixel_timeout_s), 0.25)
@@ -2606,160 +2570,88 @@ class UnicyclePlannerNode(Node):
         )
 
     def _float_to_stamp(self, seconds: float):
-        stamp = TimeMsg()
-        stamp.sec = int(seconds)
-        stamp.nanosec = int(round((float(seconds) - int(seconds)) * 1e9))
-        return stamp
+        seconds = float(seconds)
+        if not math.isfinite(seconds) or seconds < 0:
+            raise ValueError('invalid measurement timestamp')
+        return self._ns_stamp(round(seconds * 1e9))
 
     def _commit_metric_correction_outcome(self, stamp_msg, R, outcome, *, label="fused",
                                           inflate_on_reject=True):
-        """Apply one metric correction outcome to the belief."""
-        if outcome.accepted:
-            R = np.asarray(R, dtype=float)
-            m_upd = np.asarray(outcome.next_m, dtype=float).copy()
-            S_upd = np.asarray(outcome.next_S, dtype=float).copy()
-            S_pred = np.asarray(outcome.S_pred, dtype=float)
-            # camera_xy_only: heading comes from map-frame odometry
-            # (odom_yaw+offset), not the xy measurement. Falls back to the
-            # predicted heading pre-odom. Since heading is externally anchored,
-            # do not carry x/y-theta correlations through this correction. A
-            # previous implementation replaced the posterior cross terms with
-            # the much larger PRIOR cross terms while retaining the posterior
-            # xy block. That hybrid is not a covariance matrix: it became
-            # indefinite during straight multicamera drives, produced negative
-            # NIS values, and let the belief diverge while valid observations
-            # were rejected. Keep the predicted heading variance, but make the
-            # externally anchored heading independent of camera xy.
-            if getattr(self, 'heading_update_mode', 'camera_xy_only') == 'coupled':
-                # Keep the posterior the update actually produced, heading included. The
-                # prediction step builds a position-heading correlation (driving with a
-                # heading error puts you sideways), so a position fix carries information
-                # about heading and the gain's third row applies it. Deleting those terms
-                # throws that information away and leaves the heading variance growing for
-                # the whole drive. The indefiniteness that motivated the deletion came from
-                # the HYBRID -- posterior x/y block beside PRIOR cross terms -- not from the
-                # coupling; a consistent posterior is projected to PSD below like any other.
-                #
-                # Measured offline on five recorded drives before this was wired in
-                # (experiments/fusion_on_fixed_routes/coupled_heading.py): heading error
-                # 0.81-6.60 deg -> 0.45-1.07 deg, heading sigma 14.3 deg -> 1.3-5.4 deg,
-                # position unchanged, smallest eigenvalue positive throughout.
-                pass
-            else:
-                h = self._map_frame_heading()
-                m_upd[2] = float(h) if h is not None else float(outcome.m_pred[2])
-                S_upd[:2, 2] = 0.0
-                S_upd[2, :2] = 0.0
-                S_upd[2, 2] = float(S_pred[2, 2])
-            S_upd = self._regularize_state_covariance(S_upd)
-            if np.min(np.linalg.eigvalsh(S_upd)) < self.cov_eig_floor:
-                S_upd = self.project_to_psd(S_upd, floor=self.cov_eig_floor)
-            # Write back so the published diagnostics report what was actually
-            # committed, heading override and variance floor included.
-            outcome.next_m = m_upd
-            outcome.next_S = S_upd
-            with self._data_lock:
-                self.belief_m = m_upd
-                self.belief_S = S_upd
-                self.belief_stamp = stamp_msg
-                self._last_correction_stamp = stamp_msg
-            return
-
-        if outcome.recover == bc.RECOVER_REANCHOR:
-            # The BELIEF diverged, not the measurement. Snap to the correction --
-            # rejecting would lock the belief out of recovery.
-            self._reanchor_belief_to_xy(
-                stamp_msg, outcome.meas, R,
-                reason=f"{label} |innov|={outcome.innov_norm_m:.1f}m",
-            )
-            return
-
-        if outcome.m_pred is None or outcome.S_pred is None:
-            # Refused before a prediction was formed, so there is no posterior to hold.
-            # The clock must still move when the belief is BEHIND the correction, for the
-            # absorbing-state reason above. When it is not behind (a stale or
-            # not-newer correction) the belief is already current and must not be touched.
-            dt_behind = (
-                self._stamp_to_float(stamp_msg)
-                - self._stamp_to_float(self.belief_stamp)
-                if self.belief_stamp is not None else 0.0
-            )
-            if dt_behind > 1e-3:
-                self._advance_belief_over_outage(stamp_msg, dt_behind)
-            return
-
-        # Hold the PREDICTION (not the rejected posterior), but ADVANCE THE STAMP
-        # and inflate, so a rejection can never freeze the belief. The inflation
-        # is deliberately small: the old +1.0 m^2 left S_y ~ 1.0, which scored a
-        # 1.87 m innovation at NIS ~3.4 and let it through un-gated on the very
-        # next correction.
-        inflate = float(self.state_reject_inflate_m2) if inflate_on_reject else 0.0
-        S_hold = np.asarray(outcome.S_pred, dtype=float).copy()
-        S_hold[0, 0] += inflate
-        S_hold[1, 1] += inflate
         with self._data_lock:
-            self.belief_m = np.asarray(outcome.m_pred, dtype=float).copy()
-            self.belief_S = self._regularize_state_covariance(S_hold)
-            self.belief_stamp = stamp_msg
-        self._warn_stale_pixel_once(
-            f"{label} correction rejected ({outcome.reason.value}: "
-            f"NIS {outcome.nis:.2f}, update {outcome.xy_update_norm_m:.3f} m); "
-            f"holding prediction, inflating {inflate:.3f} m^2"
-        )
+            self._ensure_belief_runtime_locked()
+        if outcome.accepted:
+            m, P = checked_state(outcome.next_m, outcome.next_S)
+            if getattr(self, 'heading_update_mode', 'camera_xy_only') != 'coupled':
+                h = self._map_frame_heading(stamp_msg,
+                    motion_snapshot=outcome.snapshot.motion_snapshot if outcome.snapshot else None)
+                m[2] = float(h) if h is not None else float(outcome.m_pred[2])
+                P[:2, 2] = 0.; P[2, :2] = 0.
+                P[2, 2] = float(outcome.S_pred[2, 2])
+            P = self._regularize_state_covariance(P)
+            support_data = outcome.replay_meta.get('motion_support')
+            before = outcome.snapshot.belief_record if outcome.snapshot else self._belief_record
+            support = (MotionSupport.from_dict(support_data) if support_data else
+                       MotionSupport(before.stamp_ns, self._stamp_ns(stamp_msg)))
+            record = self._commit_belief(m, P, stamp_msg,
+                          motion_support=support.following(before.motion_support if before else None))
+            outcome.next_m, outcome.next_S = record.arrays()
+            outcome.yaw_info = bc.yaw_report(outcome.next_m, outcome.next_S, outcome.m_pred)
+            self._last_correction_stamp = deepcopy(stamp_msg)
+            return
+        if outcome.recover == bc.RECOVER_REANCHOR:
+            self._reanchor_belief_to_xy(stamp_msg, outcome.meas, R)
+            return
+        if outcome.m_pred is None or outcome.S_pred is None:
+            behind = (self._stamp_ns(stamp_msg)-self._belief_record.stamp_ns)*1e-9
+            if behind > 0:
+                self._advance_belief_over_outage(stamp_msg, behind)
+            return
+        m, P = checked_state(outcome.m_pred, outcome.S_pred)
+        if inflate_on_reject:
+            P[0,0] += self.state_reject_inflate_m2; P[1,1] += self.state_reject_inflate_m2
+        support_data = outcome.replay_meta.get('motion_support')
+        before = outcome.snapshot.belief_record if outcome.snapshot else self._belief_record
+        support = (MotionSupport.from_dict(support_data) if support_data else
+                   MotionSupport(before.stamp_ns, self._stamp_ns(stamp_msg)))
+        self._commit_belief(m, self._regularize_state_covariance(P), stamp_msg,
+                            motion_support=support.following(before.motion_support if before else None))
 
     def _resolve_state_belief_ekf(self, now_msg):
-        """Planning-time belief for the EKF /state/bev path: read-only predict of
-        the committed belief to *now* (corrections are applied in
-        ``_apply_state_correction`` on arrival, exactly like the pixel path's
-        split between ``_apply_pixel_correction`` and its planning resolver)."""
         with self._data_lock:
-            state_ref = self.state_msg
-            has_belief = self.belief_m is not None and self.belief_S is not None
-            belief_m = None if self.belief_m is None else self.belief_m.copy()
-            belief_S = None if self.belief_S is None else self.belief_S.copy()
-            belief_stamp = self.belief_stamp
+            self._ensure_belief_runtime_locked()
+            state_ref = deepcopy(getattr(self, 'state_msg', None))
+            record = self._belief_record
+            motion = self._motion_snapshot_locked()
             last_cmd = self.last_cmd.copy()
+            goal_revision = self._goal_revision
+            invalid = self._belief_invalid_reason
         self._state_bev_yaw_ignored = True
-        if not has_belief:
-            # No correction has bootstrapped the belief yet.
-            #
-            # Under the mandatory envelope contract the compatibility pose is not an
-            # admissible bootstrap: it carries no source batch identity and no capture
-            # time, so assimilating it would initialize the estimator from an anonymous
-            # measurement and record no identified event. Wait for the envelope
-            # callback instead. The explicitly configured legacy non-envelope path
-            # keeps its existing fused fallback.
-            if (state_ref is not None and self._state_msg_is_fresh(state_ref)
-                    and not self.require_state_correction_envelope):
-                self._apply_state_correction(state_ref)
-                with self._data_lock:
-                    belief_m = None if self.belief_m is None else self.belief_m.copy()
-                    belief_S = None if self.belief_S is None else self.belief_S.copy()
-                    belief_stamp = self.belief_stamp
-            if belief_m is None or belief_S is None:
-                return None, None, {'measurement_available': False, 'belief_age_s': math.inf}
-
-        measurement_available = bool(
-            state_ref is not None and self._state_msg_is_fresh(state_ref)
-        )
-        belief_age_s = self._belief_age_for_planning(now_msg, belief_stamp)
-        if belief_age_s is None:
-            belief_age_s = 0.0
-        if belief_age_s > self.pixel_timeout_s:
-            m0, S0 = self._predict_belief_to_now(
-                belief_m, belief_S, last_cmd, belief_age_s, now_msg
-            )
-            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg)
-            S0 = self._inflate_stale_planning_covariance(S0, belief_age_s)
-        else:
-            m0, S0 = self._predict_belief_to_now(
-                belief_m, belief_S, last_cmd, belief_age_s, now_msg
-            )
-            m0, S0 = self._anchor_belief_yaw_for_planning(m0, S0, now_msg)
-        return m0, S0, {
-            'measurement_available': measurement_available,
-            'belief_age_s': float(belief_age_s),
-        }
+        if record is None:
+            return None, None, {'measurement_available': False, 'belief_age_s': math.inf,
+                                'belief_valid': False, 'invalid_reason': 'uninitialized'}
+        target_ns = self._stamp_ns(now_msg)
+        if invalid or target_ns < record.stamp_ns or record.epoch != self._belief_epoch:
+            return None, None, {'belief_valid': False,
+                                'invalid_reason': invalid or 'future_anchor'}
+        age = (target_ns - record.stamp_ns) * 1e-9
+        plan = plan_replay(motion, record.stamp_ns, target_ns, self.state_max_predict_dt_s)
+        support = plan.support.following(record.motion_support)
+        prediction_meta = {}
+        m, P = self._predict_belief_to_now(*record.arrays(), last_cmd, age,
+                                          now_msg, motion_snapshot=motion, diagnostics=prediction_meta)
+        m, P = self._anchor_belief_yaw_for_planning(m, P, now_msg, motion_snapshot=motion)
+        P = self._inflate_stale_planning_covariance(P, age)
+        snapshot = PredictionSnapshot.create(record, m, P, target_ns, support,
+                    valid=support.supported, invalid_reason='' if support.supported else 'unsupported_motion',
+                    goal_revision=goal_revision)
+        meta = snapshot.planner_meta()
+        meta.update(prediction_meta)
+        meta['heading_anchor_applied'] = bool(not self.use_pixel_correction
+            and self.heading_update_mode == 'camera_xy_only'
+            and self._map_frame_heading(now_msg, motion_snapshot=motion) is not None)
+        meta.update(measurement_available=bool(state_ref is not None and self._state_msg_is_fresh(state_ref)),
+                    belief_age_s=age, belief_stamp=self._ns_stamp(record.stamp_ns))
+        return (m, P, meta) if snapshot.valid else (None, None, meta)
 
     def _resolve_diagnostic_odom_belief_for_planning(self):
         """DIAGNOSTIC: use raw ODOMETRY as the belief, with a near-zero covariance.
@@ -2782,36 +2674,31 @@ class UnicyclePlannerNode(Node):
         self._heading_anchor_applied = False
         self._state_bev_yaw_ignored = False
         self._reset_prediction_diagnostics()
-        now_msg = self.get_clock().now().to_msg()
-        if self.use_diagnostic_odom_localization:
-            m0, S0, meta = self._resolve_diagnostic_odom_belief_for_planning()
-        elif self.use_pixel_correction:
-            m0, S0, meta = self._resolve_pixel_corrected_belief_for_planning(now_msg)
-        elif self.state_correction_ekf:
-            m0, S0, meta = self._resolve_state_belief_ekf(now_msg)
-        else:
-            m0, S0, meta = self._resolve_state_belief_for_planning()
-        if m0 is None or S0 is None:
-            return None, None, {}
-        measurement_available = bool(meta.get('measurement_available', False))
-        belief_age_s = float(meta.get('belief_age_s', 0.0))
-        self._latest_measurement_available = bool(measurement_available)
-        self._latest_belief_age_s = float(belief_age_s)
         with self._data_lock:
-            b_stamp = self.belief_stamp
-        return m0, S0, {
-            'measurement_available': bool(measurement_available),
-            'belief_age_s': float(belief_age_s),
-            'belief_stamp': b_stamp,
-        }
+            now_ns = self._observe_belief_clock_locked()
+        if now_ns is None:
+            return None, None, {'belief_valid': False, 'invalid_reason': self._belief_invalid_reason}
+        now_msg = self._ns_stamp(now_ns)
+        if self.use_diagnostic_odom_localization:
+            m, P, meta = self._resolve_diagnostic_odom_belief_for_planning()
+        elif self.use_pixel_correction:
+            m, P, meta = self._resolve_pixel_corrected_belief_for_planning(now_msg)
+        elif self.state_correction_ekf:
+            m, P, meta = self._resolve_state_belief_ekf(now_msg)
+        else:
+            m, P, meta = self._resolve_state_belief_for_planning()
+        if m is None or P is None:
+            return None, None, meta
+        if not meta.get('belief_valid', True):
+            return None, None, meta
+        self._latest_measurement_available = bool(meta.get('measurement_available', False))
+        self._latest_belief_age_s = float(meta.get('belief_age_s', math.nan))
+        return m, P, meta
 
     def _resolve_plan_frame_id(self):
         with self._data_lock:
-            state_ref = self.state_msg
-        return (
-            (state_ref.header.frame_id if state_ref else '')
-            or 'map_bev'
-        )
+            self._ensure_belief_runtime_locked()
+            return self._belief_frame_id
 
     @staticmethod
     def _pose_covariance_from_state_covariance(S):
@@ -2851,57 +2738,51 @@ class UnicyclePlannerNode(Node):
         return path
 
     def _belief_publish_tick(self):
-        """High-rate belief publisher.
-
-        Propagates the latest internal belief by the motion model with the
-        most recent commanded velocity, then publishes the result. This
-        keeps the belief mean alive (with growing covariance) between plan
-        iterations and during stretches where no perception update arrives,
-        which is what the post-hoc analysis needs in order to visualize
-        prior-only propagation.
-        """
         with self._data_lock:
-            if self.belief_m is None or self.belief_S is None:
-                return
-            anchor_m, anchor_S = self.belief_m, self.belief_S
-            m = self.belief_m.copy()
-            S = self.belief_S.copy()
-            stamp_msg = self.belief_stamp
-            last_cmd = np.asarray(self.last_cmd, dtype=float).copy()
-            predict_vel = self.odom_vel.copy() if self.use_odom_for_predict else last_cmd
-        if stamp_msg is None:
+            now_ns = self._observe_belief_clock_locked()
+            record = self._belief_record
+            anchor_objects = (getattr(self, 'belief_m', None), getattr(self, 'belief_S', None))
+            motion = self._motion_snapshot_locked()
+            goal_revision = self._goal_revision
+            reason = self._belief_invalid_reason
+            epoch = self._belief_epoch
+        if record is None or now_ns is None or (record is not None and now_ns < record.stamp_ns):
+            self._publish_invalid_belief(reason or ('uninitialized' if record is None else 'future_anchor'),
+                                         expected_record=record, expected_epoch=epoch)
             return
-        # Capture one target clock. Computation/publishing time is not state time.
-        now_msg = self.get_clock().now().to_msg()
-        age_s = self._stamp_to_float(now_msg)-self._stamp_to_float(stamp_msg)
-        if not math.isfinite(age_s) or age_s < 0.0:
+        try:
+            plan = plan_replay(motion, record.stamp_ns, now_ns, self.state_max_predict_dt_s)
+            support = plan.support.following(record.motion_support)
+            m, P = self._predict_belief_to_now(*record.arrays(), self.last_cmd.copy(),
+                        (now_ns-record.stamp_ns)*1e-9, self._ns_stamp(now_ns), motion_snapshot=motion)
+            snapshot = PredictionSnapshot.create(record, m, P, now_ns, support,
+                        valid=support.supported,
+                        invalid_reason='' if support.supported else 'unsupported_motion',
+                        goal_revision=goal_revision)
+        except (ValueError, TypeError, ArithmeticError, np.linalg.LinAlgError) as exc:
+            self._publish_invalid_belief('invalid_prediction', expected_record=record,
+                                         expected_epoch=epoch)
+            self._fatal_experiment_stop('invalid belief publication prediction', exc)
             return
-        if age_s > 1e-3:
-            try:
-                # Replay the timestamped odom log over [belief_stamp, now] -- the
-                # SAME path the planner uses to resolve its control belief -- rather
-                # than a crude single-velocity predict (odom_vel * age). The crude
-                # version froze the PUBLISHED belief at speed changes: at a stop the
-                # latest odom_vel is ~0, so it could not propagate the 0.5-1s-old
-                # belief anchor forward, leaving the logged belief stuck at a stale
-                # pose -> spurious 0.3-0.5m backward jumps in the logged trajectory
-                # (the controller was unaffected; it already used this replay). This
-                # only changes the monitoring/logging belief. read-only: mutate=False.
-                m, S = self._predict_belief_to_now(
-                    m, S, predict_vel, age_s, now_msg,
-                )
-            except Exception:
-                return
-        belief_msg = self._build_belief_message(
-            m, S, frame_id=self._resolve_plan_frame_id(),
-            stamp=now_msg,
-        )
         with self._data_lock:
-            # A correction may have committed while the read-only replay ran.
-            # Do not publish its superseded predecessor as the current belief.
-            if self.belief_m is not anchor_m or self.belief_S is not anchor_S:
+            if self._observe_belief_clock_locked() is None:
+                self._publish_invalid_belief(self._belief_invalid_reason)
                 return
-            self.planner_belief_pub.publish(belief_msg)
+            if (self._belief_record is not record or self._belief_epoch != record.epoch
+                    or self.belief_m is not anchor_objects[0] or self.belief_S is not anchor_objects[1]):
+                return
+            key = (record.epoch, now_ns, record.revision)
+            last = self._last_belief_publication
+            if last is not None and last[0] == key[0] and key[1:] <= last[1:]:
+                return
+            self._last_belief_publication = key
+            publisher = getattr(self, 'belief_state_pub', None)
+            if publisher is not None:
+                msg = String(); msg.data = json.dumps(snapshot.to_dict(), allow_nan=False)
+                publisher.publish(msg)
+            if snapshot.valid:
+                self.planner_belief_pub.publish(self._build_belief_message(
+                    m, P, frame_id=record.frame_id, stamp=self._ns_stamp(now_ns)))
 
     def _build_belief_message(self, m0, S0, *, frame_id=None, stamp=None):
         belief = PoseWithCovarianceStamped()
@@ -3034,14 +2915,14 @@ class UnicyclePlannerNode(Node):
             command_timer_period_s,
             planner_timer_period_s,
             pending_active_remaining_s,
-            float(self._latest_prediction_source),
-            float(self._latest_prediction_dt),
-            float(self._latest_u_pred_v),
-            float(self._latest_u_pred_omega),
-            float(self._latest_Q_theta_theta),
-            float(self._latest_odom_delta_theta),
-            float(self._latest_cmd_delta_theta),
-            1.0 if self._heading_anchor_applied else 0.0,
+            float((belief_meta or {}).get('prediction_source', math.nan)),
+            float((belief_meta or {}).get('prediction_dt_s', math.nan)),
+            float((belief_meta or {}).get('u_pred_v', math.nan)),
+            float((belief_meta or {}).get('u_pred_omega', math.nan)),
+            float((belief_meta or {}).get('Q_theta_theta', math.nan)),
+            float((belief_meta or {}).get('odom_delta_theta', math.nan)),
+            float((belief_meta or {}).get('cmd_delta_theta', math.nan)),
+            float(bool((belief_meta or {}).get('heading_anchor_applied', False))),
             1.0 if self._state_bev_yaw_ignored else 0.0,
         ]
         self.planner_diag_pub.publish(diag)
@@ -3070,10 +2951,13 @@ class UnicyclePlannerNode(Node):
 
     def _snapshot_plan_inputs(self):
         with self._data_lock:
+            self._ensure_belief_runtime_locked()
             return {
-                'goal': self.goal_msg,
-                'pixel_stamp': self.pixel_stamp,
-                'state': self.state_msg,
+                'goal': deepcopy(self.goal_msg),
+                'pixel_stamp': deepcopy(self.pixel_stamp),
+                'state': deepcopy(self.state_msg),
+                'goal_revision': self._goal_revision,
+                'belief_epoch': self._belief_epoch,
             }
 
     def _validate_plan_frames(self, goal_ref, state_ref) -> tuple[str, str]:

@@ -10,7 +10,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field, fields
 import json
 import math
+from numbers import Integral
 from typing import Any, ClassVar, Mapping, Sequence
+
+from unav_common.config import parse_bool
 
 
 SCHEMA_VERSION = "phase0.v1"
@@ -22,6 +25,13 @@ class ContractValidationError(ValueError):
 
 class LeakageError(ContractValidationError):
     """Raised when evaluation-only evidence enters an operational contract."""
+
+
+def _strict_bool(value: Any, *, field_name: str) -> bool:
+    try:
+        return parse_bool(value, field_name=field_name)
+    except ValueError as exc:
+        raise ContractValidationError(str(exc)) from exc
 
 
 EVALUATION_ONLY_FIELD_NAMES = frozenset(
@@ -115,6 +125,13 @@ def _finite_probability(value: Any, *, field_name: str) -> float:
     return out
 
 
+def _nonnegative_float(value: Any, *, field_name: str) -> float:
+    out = _finite_float(value, field_name=field_name)
+    if out < 0.0:
+        raise ContractValidationError(f"{field_name} must be non-negative, got {out}")
+    return out
+
+
 def _array_like_payload(value: Any) -> Any:
     if hasattr(value, "tolist") and not isinstance(value, (str, bytes)):
         return value.tolist()
@@ -171,10 +188,13 @@ def _as_matrix_2x2(value: Any, *, field_name: str) -> tuple[tuple[float, float],
 def _validate_spd_2x2(matrix: tuple[tuple[float, float], tuple[float, float]], *, field_name: str) -> None:
     a, b = matrix[0]
     c, d = matrix[1]
-    if abs(b - c) > 1e-9:
+    if not all(math.isfinite(value) for value in (a, b, c, d)):
+        raise ContractValidationError(f"{field_name} must be finite")
+    scale = max(abs(a), abs(b), abs(c), abs(d))
+    if abs(b - c) > 1e-9 * scale:
         raise ContractValidationError(f"{field_name} must be symmetric")
-    det = a * d - b * c
-    if a <= 0.0 or d <= 0.0 or det <= 0.0:
+    # Check a dimensionless determinant, so units cannot determine validity.
+    if a <= 0.0 or d <= 0.0 or (a/scale)*(d/scale) - (b/scale)*(c/scale) <= 0.0:
         raise ContractValidationError(f"{field_name} must be symmetric positive definite")
 
 
@@ -283,12 +303,12 @@ class OperationalReliabilitySample:
         object.__setattr__(
             self,
             "timestamp_s",
-            _finite_float(self.timestamp_s, field_name="timestamp_s"),
+            _nonnegative_float(self.timestamp_s, field_name="timestamp_s"),
         )
         object.__setattr__(
             self,
             "measurement_age_s",
-            _finite_float(self.measurement_age_s, field_name="measurement_age_s"),
+            _nonnegative_float(self.measurement_age_s, field_name="measurement_age_s"),
         )
         object.__setattr__(
             self,
@@ -312,8 +332,21 @@ class OperationalReliabilitySample:
         object.__setattr__(self, "image_location", _plain_mapping(self.image_location, field_name="image_location"))
         object.__setattr__(
             self,
+            "projection_valid",
+            _strict_bool(self.projection_valid, field_name="projection_valid"),
+        )
+        object.__setattr__(
+            self,
+            "measurement_stale",
+            _strict_bool(self.measurement_stale, field_name="measurement_stale"),
+        )
+        object.__setattr__(
+            self,
             "recent_detector_history",
-            tuple(bool(value) for value in self.recent_detector_history),
+            tuple(
+                _strict_bool(value, field_name=f"recent_detector_history[{index}]")
+                for index, value in enumerate(self.recent_detector_history)
+            ),
         )
         object.__setattr__(
             self,
@@ -376,7 +409,7 @@ class EvaluationOnlySample:
         object.__setattr__(
             self,
             "timestamp_s",
-            _finite_float(self.timestamp_s, field_name="timestamp_s"),
+            _nonnegative_float(self.timestamp_s, field_name="timestamp_s"),
         )
         if self.ground_truth_projected_pixel is not None:
             object.__setattr__(
@@ -401,6 +434,12 @@ class EvaluationOnlySample:
             self,
             "clearance_m",
             _finite_float(self.clearance_m, field_name="clearance_m", allow_nan=True),
+        )
+        object.__setattr__(self, "collision", _strict_bool(self.collision, field_name="collision"))
+        object.__setattr__(
+            self,
+            "geometry_breach",
+            _strict_bool(self.geometry_breach, field_name="geometry_breach"),
         )
         object.__setattr__(
             self,
@@ -441,11 +480,9 @@ class CameraObservation:
 
     schema_version: str = SCHEMA_VERSION
     camera_id: str = ""
-    # Identity of the detector invocation that produced this observation. All
-    # cameras processed by one strict batch carry the same value. Older and
-    # single-camera producers may leave it empty, but evidence-grade batched
-    # fusion uses it to wait for a complete batch and to assimilate that batch
-    # exactly once.
+    # Logical all-camera detector cycle. A native cycle can contain multiple
+    # model calls; detector_invocation_id below identifies the physical call.
+    # Historical records retain this field without invented member identities.
     source_batch_id: str = ""
     timestamp_s: float = 0.0
     pixel_uv: tuple[float, float] | None = None
@@ -475,17 +512,50 @@ class CameraObservation:
     )
     availability_probability: float = 1.0
     association_probability: float = 1.0
+    producer_epoch: str = ""
+    source_frame_id: str = ""
+    capture_stamp_ns: int | None = None
+    detector_invocation_id: str = ""
 
     def __post_init__(self) -> None:
         if self.schema_version != SCHEMA_VERSION:
             raise ContractValidationError(f"Unsupported schema_version {self.schema_version!r}")
+        camera_id = str(self.camera_id).strip()
+        if not camera_id:
+            raise ContractValidationError("camera_id must be a non-empty string")
+        object.__setattr__(self, "camera_id", camera_id)
         object.__setattr__(self, "source_batch_id", str(self.source_batch_id or "").strip())
         object.__setattr__(
             self,
             "timestamp_s",
-            _finite_float(self.timestamp_s, field_name="timestamp_s"),
+            _nonnegative_float(self.timestamp_s, field_name="timestamp_s"),
         )
-        object.__setattr__(self, "detection_valid", bool(self.detection_valid))
+        identity_present = self.capture_stamp_ns is not None or any(
+            value != "" for value in (self.producer_epoch, self.source_frame_id,
+                                       self.detector_invocation_id)
+        )
+        if identity_present:
+            for name in ("producer_epoch", "source_frame_id", "detector_invocation_id"):
+                value = getattr(self, name)
+                if not isinstance(value, str) or not value.strip() or value != value.strip():
+                    raise ContractValidationError(f"{name} must be a non-empty canonical string")
+            if not self.source_batch_id:
+                raise ContractValidationError("physical source identity requires source_batch_id")
+            ns = self.capture_stamp_ns
+            if isinstance(ns, bool) or not isinstance(ns, Integral) or ns < 0:
+                raise ContractValidationError("capture_stamp_ns must be a non-negative integer")
+            object.__setattr__(self, "capture_stamp_ns", int(ns))
+            capture_s = int(ns) / 1_000_000_000
+            # Exact ns remain authoritative. Float seconds can lose an ULP at
+            # epoch-sized clocks, but may not describe another capture instant.
+            tolerance = max(1e-9, math.ulp(capture_s))
+            if abs(self.timestamp_s - capture_s) > tolerance:
+                raise ContractValidationError("timestamp_s differs from capture_stamp_ns")
+        object.__setattr__(
+            self,
+            "detection_valid",
+            _strict_bool(self.detection_valid, field_name="detection_valid"),
+        )
         pixel = _as_pair(self.pixel_uv, field_name="pixel_uv", allow_none=True)
         if self.detection_valid and pixel is None:
             raise ContractValidationError("pixel_uv is required when detection_valid is true")
@@ -526,7 +596,11 @@ class CameraObservation:
                 "selected_pixel_source must be none, bbox_bottom, or mask_bottom"
             )
         object.__setattr__(self, "selected_pixel_source", selected_source)
-        object.__setattr__(self, "mask_available", bool(self.mask_available))
+        object.__setattr__(
+            self,
+            "mask_available",
+            _strict_bool(self.mask_available, field_name="mask_available"),
+        )
         for field_name in (
             "mask_area_px",
             "mask_polygon_points",
@@ -650,7 +724,7 @@ class CameraQuality:
         if epistemic_score < 0.0:
             raise ContractValidationError("epistemic_score must be non-negative")
         object.__setattr__(self, "epistemic_score", epistemic_score)
-        object.__setattr__(self, "stale", bool(self.stale))
+        object.__setattr__(self, "stale", _strict_bool(self.stale, field_name="stale"))
         reject_evaluation_only_keys(self.to_dict(), context="CameraQuality")
 
     @classmethod
@@ -708,7 +782,7 @@ class ReliabilityPrediction:
         object.__setattr__(
             self,
             "timestamp_s",
-            _finite_float(self.timestamp_s, field_name="timestamp_s"),
+            _nonnegative_float(self.timestamp_s, field_name="timestamp_s"),
         )
         epistemic_uncertainty = _finite_float(
             self.epistemic_uncertainty,
@@ -770,6 +844,7 @@ class UpdateCovariance:
         matrix = _as_matrix_2x2(self.matrix_px2, field_name="matrix_px2")
         _validate_spd_2x2(matrix, field_name="matrix_px2")
         object.__setattr__(self, "matrix_px2", matrix)
+        object.__setattr__(self, "available", _strict_bool(self.available, field_name="available"))
         epistemic_inflation = _finite_float(
             self.epistemic_inflation,
             field_name="epistemic_inflation",
@@ -849,7 +924,7 @@ class PlanningCovariance:
         object.__setattr__(
             self,
             "timestamp_s",
-            _finite_float(self.timestamp_s, field_name="timestamp_s"),
+            _nonnegative_float(self.timestamp_s, field_name="timestamp_s"),
         )
 
     def to_dict(self) -> dict[str, Any]:

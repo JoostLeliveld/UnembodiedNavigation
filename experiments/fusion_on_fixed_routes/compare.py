@@ -15,6 +15,8 @@ missing arm as a bad one. --partial overrides that for a working look.
 from __future__ import annotations
 
 import csv
+import hashlib
+import json
 import math
 import sys
 from pathlib import Path
@@ -27,7 +29,7 @@ sys.path.insert(0, str(HERE.parents[1] / "deck_figures"))
 sys.path.insert(0, str(HERE.parent))
 import style as D                                        # noqa: E402
 import aligned as A  # noqa: E402
-from score import FOLDER, TASKS, showcase_run, _selected_runs, score, story_dir   # noqa: E402
+from score import FOLDER, TASKS, FROZEN_RUNS, comparison_identity, showcase_run, _selected_runs, score, story_dir   # noqa: E402
 sys.path.insert(0, str(HERE.parent / "story"))
 from fusion_examples import draw_moment, load as load_moments   # noqa: E402
 
@@ -41,20 +43,24 @@ BOX_NAME = {"F4": "hull — predict the box", "O1": "the box bottom-centre\nIS t
             "O2": "the box plus one\nfixed offset"}
 
 
-def per_arm(task):
-    out = {}
+def per_arm(task, *, max_reference_gap_s=None, partial=False):
+    out = {};provenance=set()
+    declared=json.loads(FROZEN_RUNS.read_text())['runs'][task]
     for arm in FOLDER:
-        try:
-            runs = _selected_runs(arm, task)
-        except SystemExit:
-            continue
+        if arm not in declared:
+            if partial:continue
+            raise SystemExit(f'{task}/{arm}: missing frozen arm')
+        runs = _selected_runs(arm, task)
         belief_run_median, stated_run_median = [], []
         corr_err, corr_stated, corr_cams, corr_run = [], [], [], []
         belief_err, belief_stated, belief_cams, belief_run = [], [], [], []
         for run_idx, run in enumerate(runs):
-            rows = list(csv.DictReader(open(run / "experiment.csv")))
-            if not rows:
-                continue
+            rows = A.rows(run)
+            manifest=json.loads((run/'run_manifest.json').read_text())
+            run_idx=int(manifest['seed'])
+            provenance.add(comparison_identity(manifest))
+            start,stop=A.mission_interval(run)
+            if not rows:raise SystemExit(f'{run}: no experiment rows')
 
             def col(key):
                 vals = []
@@ -65,14 +71,22 @@ def per_arm(task):
                         vals.append(math.nan)
                 return np.array(vals)
 
-            aligned = A.aligned_error_cm(run, "belief", rows)["aligned_cm"]
+            belief = A.aligned_error_cm(run, "belief", rows,max_reference_gap_s=max_reference_gap_s)
+            aligned = belief["aligned_cm"]
             sigma = np.sqrt((col("planner_cov_x") + col("planner_cov_y")) / 2.0) * 100.0
-            keep = np.isfinite(aligned) & np.isfinite(sigma)
+            population=A.landed_mask(belief['stamp'])&belief['have']&(belief['stamp']>=start)&(belief['stamp']<=stop)
+            cx,cxy,cy=col('planner_cov_x'),col('planner_cov_xy'),col('planner_cov_y')
+            cov=np.stack([np.stack([cx,cxy],axis=1),np.stack([cxy,cy],axis=1)],axis=1)
+            A.validate_covariances(cov[population])
+            keep = population & np.isfinite(aligned)
+            if not keep.any():raise SystemExit(f'{run}: unscoreable reference; run cannot disappear from comparison')
             if keep.any():
                 belief_run_median.append(float(np.median(aligned[keep])))
                 stated_run_median.append(float(np.median(sigma[keep])))
 
-            for event in A.fused_answers(run):
+            for event in A.fused_answers(run,max_reference_gap_s=max_reference_gap_s):
+                if not start<=event["fused_stamp"]<=stop:continue
+                A.validate_covariances(event["fused_cov"][None])
                 covariance = event["fused_cov"]
                 if not (math.isfinite(event["error_cm"]) and np.isfinite(covariance).all()):
                     continue
@@ -80,7 +94,13 @@ def per_arm(task):
                 corr_stated.append(float(np.sqrt(np.trace(covariance) / 2.0) * 100.0))
                 corr_cams.append(event["n_candidates"])
                 corr_run.append(run_idx)
-            for event in A.belief_at_fusion_events(run, rows):
+            try:
+                posterior=A.belief_at_fusion_events(run,rows,max_reference_gap_s=max_reference_gap_s)
+            except A.PosteriorUnavailable as exc:
+                posterior=[]
+                print(f'{run}: committed posterior unavailable: {exc}',file=sys.stderr)
+            for event in posterior:
+                if not event['reference_supported'] or not start<=event['planner_belief_stamp']<=stop:continue
                 belief_err.append(event["error_cm"])
                 belief_stated.append(event["stated_sigma_cm"])
                 belief_cams.append(event["n_candidates"])
@@ -89,7 +109,7 @@ def per_arm(task):
         if not belief_run_median:
             continue
         out[arm] = {
-            "numbers": score(arm, task),
+            "numbers": score(arm, task,max_reference_gap_s=max_reference_gap_s),
             "err": np.asarray(belief_run_median),
             "stated": np.asarray(stated_run_median),
             "corr_err": np.asarray(corr_err), "corr_stated": np.asarray(corr_stated),
@@ -99,6 +119,7 @@ def per_arm(task):
             "belief_cams": np.asarray(belief_cams),
             "belief_run": np.asarray(belief_run),
         }
+    if len(provenance)>1:raise SystemExit('arms differ in common source/configuration identity')
     return out
 
 
@@ -108,6 +129,8 @@ def main() -> int:
     # Silently ignoring an argument here meant asking for one route and being handed
     # another route's figures, with the same filenames and no warning.
     task = TASKS[0]
+    max_reference_gap_s=None
+    output_root=STORY_ROOT
     rest = []
     i = 0
     while i < len(args):
@@ -118,6 +141,12 @@ def main() -> int:
             if i + 1 >= len(args):
                 raise SystemExit("--task needs a route name")
             task = args[i + 1]; i += 1
+        elif a == "--max-reference-gap-s":
+            if i+1>=len(args):raise SystemExit('--max-reference-gap-s needs a finite bound')
+            max_reference_gap_s=float(args[i+1]);i+=1
+        elif a == "--out":
+            if i+1>=len(args):raise SystemExit('--out needs an output root')
+            output_root=Path(args[i+1]);i+=1
         elif a == "--partial":
             rest.append(a)
         else:
@@ -125,18 +154,23 @@ def main() -> int:
         i += 1
     if task not in TASKS:
         raise SystemExit(f"unknown route {task!r}; choose one of {', '.join(TASKS)}")
-    OUT = STORY_ROOT / task / "compare"
-    OUT.mkdir(parents=True, exist_ok=True)
+    OUT = output_root / task / "compare"
     route = task.replace("fusion_", "").replace("_", " ")
-    arms = per_arm(task)
+    arms = per_arm(task,max_reference_gap_s=max_reference_gap_s,partial="--partial" in rest)
     missing = [a for a in FOLDER if a not in arms]
     if missing and "--partial" not in sys.argv:
         raise SystemExit(f"no drive yet for {missing}; a partial comparison reads a missing "
                          "arm as a bad one. Pass --partial for a working look.")
     ids = [a for a in FOLDER if a in arms]
+    if not ids:raise SystemExit('no declared scoreable arms')
+    protocol=dict(task=task,arms=ids,max_reference_gap_s=max_reference_gap_s,
+        selection_sha256=hashlib.sha256(FROZEN_RUNS.read_bytes()).hexdigest(),
+        sources={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in [Path(__file__),Path(A.__file__)]})
+    A.freeze_analysis_protocol(OUT,'analysis_protocol.json',protocol,
+        owned_outputs=['01_error_and_claim_vs_cameras.png','02_the_six_arms.png'])
 
     # ---------------- 01 error and claim against camera count ----------------
-    bins = [1, 2, 3, 4]
+    bins = [1, 2, 3, 4, 5]
     fig, axes = plt.subplots(2, 2, figsize=(15.0, 10.4), constrained_layout=True)
     panels = [
         (axes[0][0], "corr_err", "how far the CORRECTION was from the truth"),
@@ -144,18 +178,31 @@ def main() -> int:
         (axes[1][0], "belief_err", "how far the robot's BELIEF was from the truth"),
         (axes[1][1], "belief_stated", "how precise the belief CLAIMED to be"),
     ]
+    bin_counts={}
     for ax, key, title in panels:
+        bin_counts[key]={}
         for a in ids:
+            bin_counts[key][a]={}
             prefix = "corr" if key.startswith("corr_") else "belief"
             cams, values = arms[a][f"{prefix}_cams"], arms[a][key]
             run_ids = arms[a][f"{prefix}_run"]
             xs, ys, lows, highs = [], [], [], []
             for b in bins:
+                eligible_by_arm=[]
+                for other in ids:
+                    other_ids=arms[other][f'{prefix}_run']
+                    other_values=arms[other][key]
+                    other_cams=arms[other][f'{prefix}_cams']
+                    eligible_by_arm.append({seed for seed in np.unique(other_ids)
+                        if np.sum((other_cams==b)&(other_ids==seed)&np.isfinite(other_values))>=5})
+                paired=set.intersection(*eligible_by_arm)
                 run_medians = []
-                for run_id in np.unique(run_ids):
+                for run_id in sorted(paired):
                     sel = (cams == b) & (run_ids == run_id) & np.isfinite(values)
                     if sel.sum() >= 5:
                         run_medians.append(float(np.median(values[sel])))
+                bin_counts[key][a][str(b)]=dict(selected_runs=len(arms[a]['numbers']['runs']),
+                                                eligible_runs=len(run_medians),paired_seed_ids=sorted(int(x) for x in paired),minimum_samples_per_run=5)
                 if len(run_medians) < 3:
                     continue
                 xs.append(b)
@@ -165,6 +212,8 @@ def main() -> int:
             if xs:
                 ax.plot(xs, ys, "-o", color=COLOUR[a], lw=2.2, ms=8, label=a)
                 ax.fill_between(xs, lows, highs, color=COLOUR[a], alpha=0.10)
+        if key.startswith('belief') and not any(arms[a]['belief_err'].size for a in ids):
+            ax.text(.5,.5,'Committed posterior unavailable',transform=ax.transAxes,ha='center')
         ax.set_xlabel("cameras available at that correction", fontsize=12)
         ax.set_ylabel("centimetres", fontsize=12)
         ax.set_xticks(bins)
@@ -182,9 +231,10 @@ def main() -> int:
              "odometry between corrections and so hides much of that difference.\n"
              "The axis is how many cameras were AVAILABLE, not how many each rule chose to use, "
              "so the arms are read against the same thing. Bins with fewer than 5 samples are "
-             "dropped. Points are medians of per-run medians across five paired seeds; "
-             "shading is the run range.",
+             "unavailable. Each bin uses the same eligible seeds in every arm and needs at least 3 paired runs. "
+             "Shading is the run range. Empty posterior panels lack explicit committed records.",
              fontsize=11.5, color=D.INK2, va="top", linespacing=1.5)
+    (OUT/'bin_counts.json').write_text(json.dumps(bin_counts,indent=2)+'\n')
     fig.savefig(OUT / "01_error_and_claim_vs_cameras.png", dpi=170, bbox_inches="tight")
     plt.close(fig)
 
@@ -215,11 +265,11 @@ def main() -> int:
     ax.set_title(f"Six ways of using the same cameras — {route}",
                  loc="left", fontsize=19, color=D.INK)
     fig.text(0.005, -0.03,
-             "Five paired seeds per arm on the frozen route. Bars summarize per-run medians; "
+             "The declared paired seed set on the frozen route. Bars summarize per-run medians; "
              "error against ground truth; the hatched bar is what that arm claimed to know.\n"
              "Honest means the truth falls inside the stated 95% ellipse about 95% of the "
              "time: much less is overconfident, much more is a padded ellipse.\n"
-             "The transparent extension shows the 95th percentile across the five run-level "
+             "The transparent extension shows the 95th percentile across the run-level "
              "median errors, not across thousands of correlated log rows.",
              fontsize=11.5, color=D.INK2, va="top", linespacing=1.5)
     fig.savefig(OUT / "02_the_six_arms.png", dpi=170, bbox_inches="tight")
@@ -249,7 +299,7 @@ def main() -> int:
                  "Same joint network estimator, same route: only the meaning "
                  "of the box differs.\nCommissioning measured that gap at 24-36 cm on single "
                  "sightings; this is what it costs a filter that fuses many of them.\n"
-                 "Each violin contains five per-run median errors (paired seeds).",
+                 "Each violin contains the declared per-run median errors (paired seeds).",
                  fontsize=11.5, color=D.INK2, va="top", linespacing=1.5)
         fig.savefig(OUT / "03_what_the_box_meant.png", dpi=170, bbox_inches="tight")
         plt.close(fig)
@@ -274,7 +324,7 @@ def main() -> int:
     moments_by_arm = {}
     for a in ids:
         try:
-            _run, moments = load_moments(a, task)
+            _run, moments = load_moments(a, task,max_reference_gap_s=max_reference_gap_s)
         except SystemExit:
             continue
         moments_by_arm[a] = moments
@@ -303,7 +353,7 @@ def main() -> int:
                  "(green star).\n"
                  "Rows are arms, columns are places. Each arm drove the same route at its own "
                  "pace, so these are the corrections nearest each place, not the same instant.\n"
-                 "One drive per arm, seed 0.",
+                 "One explicitly selected showcase drive per arm. Camera and fused residuals use their own times.",
                  fontsize=11.5, color=D.INK2, va="top", linespacing=1.5)
         fig.savefig(OUT / "04_the_same_places_six_ways.png", dpi=150, bbox_inches="tight")
         plt.close(fig)

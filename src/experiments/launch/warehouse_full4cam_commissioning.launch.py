@@ -146,6 +146,7 @@ def _batched_detector_node() -> Node:
             "camera_observation_r_miss_uv": LaunchConfiguration(
                 "camera_observation_r_miss_uv"
             ),
+            "outcome_journal_path": LaunchConfiguration("outcome_journal_path"),
         }],
     )
 
@@ -297,6 +298,10 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("use_encoder_noise", default_value="true"),
         DeclareLaunchArgument("encoder_noise_seed", default_value="0"),
         DeclareLaunchArgument("yolo_model", default_value="", description="Local path to the trained YOLO model"),
+        DeclareLaunchArgument(
+            "outcome_journal_path", default_value="",
+            description="Durable JSONL detector-outcome journal; set explicitly or provide ROS_LOG_DIR.",
+        ),
         DeclareLaunchArgument(
             "yolo_runtime_backend", default_value="native",
             description="native is the strict runtime; torchscript is diagnostic-only",

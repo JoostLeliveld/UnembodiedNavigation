@@ -39,7 +39,7 @@ certain is the filter allowed to become", and they compose.
 from __future__ import annotations
 
 import math
-from typing import Sequence
+from typing import Iterable, Mapping, Sequence
 
 Matrix2x2 = tuple[tuple[float, float], tuple[float, float]]
 
@@ -209,3 +209,16 @@ def combine_floors(floors: Sequence[Matrix2x2]) -> Matrix2x2:
             raise BiasFloorError("every floor must be positive definite")
         combined = apply_belief_floor(combined, f)
     return combined
+
+
+def combine_camera_floors(
+    floors: Mapping[str, Matrix2x2], camera_ids: Iterable[str],
+) -> Matrix2x2 | None:
+    """Combine contributing camera bounds once in stable camera-ID order.
+
+    Pairwise covariance flooring is not associative for three noncommuting
+    matrices. The ordering is part of this conservative bound, not callback
+    arrival order; it does not turn the bound into independent information.
+    """
+    chosen = [floors[camera_id] for camera_id in sorted(set(camera_ids)) if camera_id in floors]
+    return combine_floors(chosen) if chosen else None

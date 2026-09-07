@@ -258,6 +258,8 @@ def out_of_fold_residuals(data: dict, method: str, seed: int, splits: int) -> np
     rows = [data["rows"][i] for i in train_index]
     tiles = np.asarray([row["position_id"] for row in rows])
     unique = np.unique(tiles)
+    if splits < 2 or len(unique) < splits:
+        raise ValueError('held-out mean residuals require at least two nonempty grouped folds')
     rng = np.random.default_rng(seed)
     assignment = {tile: int(fold) for tile, fold in
                   zip(unique, rng.permutation(len(unique)) % splits)}
@@ -267,9 +269,10 @@ def out_of_fold_residuals(data: dict, method: str, seed: int, splits: int) -> np
     for fold in range(splits):
         held = fold_of == fold
         kept = ~held
-        if not held.any() or kept.sum() < 50:
-            out[held] = data["e"][train_index[held]]
+        if not held.any():
             continue
+        if kept.sum() < 50:
+            raise ValueError('insufficient mean-training support for held-out covariance residuals; in-sample fallback is forbidden')
         model = fit_mean_model([rows[i] for i in np.flatnonzero(kept)],
                                data["geometry"], seed)
         out[held] = mean_residuals([rows[i] for i in np.flatnonzero(held)],

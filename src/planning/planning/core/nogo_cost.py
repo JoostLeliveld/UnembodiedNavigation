@@ -8,6 +8,7 @@ import math
 import numpy as np
 
 from unav_common.occlusion_geometry import scene_from_json, signed_distance_to_union_xy, _get_union_boundary_segments
+from unav_common.navigation_parameters import validate_navigation_parameters
 
 
 VALID_NOGO_PENALTIES = ('warning_band',)
@@ -41,6 +42,11 @@ class NogoZoneCostModel:
     """Geometry-based no-go-zone penalty around obstacle footprints."""
 
     def __init__(self, cfg: NogoCostConfig):
+        validate_navigation_parameters({
+            'nogo_weight': cfg.weight, 'nogo_safe_distance': cfg.safe_distance,
+            'nogo_logbarrier_eps': cfg.logbarrier_eps,
+            'nogo_warning_band': cfg.warning_band, 'nogo_near_weight': cfg.near_weight,
+        })
         penalty_type = str(cfg.penalty_type or '').strip().lower()
         if penalty_type not in VALID_NOGO_PENALTIES:
             raise ValueError(

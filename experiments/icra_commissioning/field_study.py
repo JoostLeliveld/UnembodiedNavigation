@@ -57,6 +57,8 @@ def load_data(out):
     for p,h in manifest['files'].items():
         if digest(REPO/p)!=h:raise ValueError(f'changed field input {p}')
     rows=readcsv(REPO/CAPTURE/'bias_update_interpretations.csv')
+    if any(r.get('capture_status', 'ok') != 'ok' for r in rows):
+        raise ValueError('conditional detector availability requires complete acquisition; failed opportunities remain in the capture ledger')
     mean=LearnedBoxCorrection(REPO/ARTIFACT);models=joblib.load(OUT/'models.joblib')
     frames={};byhash=defaultdict(set)
     for r in rows:
@@ -67,6 +69,8 @@ def load_data(out):
                 role=role,group=tile(r),hits=np.zeros(5,bool),R=np.full((5,2,2),np.nan),
                 error=np.full((5,2),np.nan),raw_error=np.full((5,2),np.nan),cameras=set())
         f=frames[frame];j=CAMERAS.index(r['camera_id'])
+        if not np.allclose(f['pose'], [float(r[k]) for k in ['robot_x','robot_y','robot_yaw']], rtol=0, atol=1e-12):
+            raise ValueError('camera views in one capture frame have different commanded poses')
         assert f['role']==role and j not in f['cameras'];f['cameras'].add(j)
         if r['raw_valid']!='1':continue
         byhash[r['image_sha1']].add(role)

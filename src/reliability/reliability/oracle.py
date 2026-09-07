@@ -14,6 +14,7 @@ from typing import Sequence
 
 from reliability.contracts import ContractValidationError
 from reliability.replay import EvaluationFrame
+from unav_common.config import parse_bool
 
 
 EVALUATION_ONLY_LABEL = "evaluation_only_oracle"
@@ -64,7 +65,11 @@ class OracleCameraFeasibilitySample:
     def __post_init__(self) -> None:
         object.__setattr__(self, "timestamp_s", _finite(self.timestamp_s, "timestamp_s"))
         object.__setattr__(self, "truth_xy_m", _pair(self.truth_xy_m, "truth_xy_m"))
-        object.__setattr__(self, "available", bool(self.available))
+        try:
+            available = parse_bool(self.available, field_name="available")
+        except ValueError as exc:
+            raise ContractValidationError(str(exc)) from exc
+        object.__setattr__(self, "available", available)
         object.__setattr__(self, "p_available", _probability(self.p_available, "p_available"))
         if self.label != EVALUATION_ONLY_LABEL:
             raise ContractValidationError(f"Oracle samples must be labeled {EVALUATION_ONLY_LABEL!r}")

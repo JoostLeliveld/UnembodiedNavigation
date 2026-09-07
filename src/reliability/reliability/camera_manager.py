@@ -15,6 +15,7 @@ from typing import Mapping, Sequence
 
 from reliability.contracts import ContractValidationError
 from reliability.fusion import MapObservation
+from unav_common.config import parse_bool
 
 
 @dataclass(frozen=True)
@@ -67,8 +68,15 @@ class CameraManagerConfig:
         if any(not camera_id for camera_id in ids) or len(set(ids)) != len(ids):
             raise ContractValidationError("allowed_camera_ids must contain unique non-empty IDs")
         object.__setattr__(self, "allowed_camera_ids", ids)
-        object.__setattr__(self, "require_consistency_when_source_available", bool(self.require_consistency_when_source_available))
-        object.__setattr__(self, "fallback_on_active_camera_loss", bool(self.fallback_on_active_camera_loss))
+        for name in (
+            "require_consistency_when_source_available",
+            "fallback_on_active_camera_loss",
+        ):
+            try:
+                value = parse_bool(getattr(self, name), field_name=name)
+            except ValueError as exc:
+                raise ContractValidationError(str(exc)) from exc
+            object.__setattr__(self, name, value)
 
 
 @dataclass(frozen=True)
@@ -278,7 +286,7 @@ class CameraManager:
         method deliberately does not change the active-camera state.
         """
         timestamp = _finite(timestamp_s, "timestamp_s")
-        return self._eligible_by_camera(timestamp, observations)
+        return self._eligible_by_camera(timestamp, _camera_batch(observations))
 
     def _eligible_by_camera(
         self,
@@ -295,10 +303,8 @@ class CameraManager:
                 rejected = _with_rejection(rejected, camera_id, *reasons)
                 continue
             score = operational_camera_score(observation, timestamp_s=timestamp_s, age_decay_s=self.config.age_decay_s)
-            current = candidates.get(camera_id)
-            if current is None or _preferred(observation, score, current, scores[camera_id]):
-                candidates[camera_id] = observation
-                scores[camera_id] = score
+            candidates[camera_id] = observation
+            scores[camera_id] = score
         return candidates, scores, rejected
 
     def _eligibility_reasons(self, timestamp_s: float, observation: MapObservation) -> tuple[str, ...]:
@@ -413,19 +419,29 @@ def operational_camera_score(
 def _best(candidates: Mapping[str, MapObservation], scores: Mapping[str, float]) -> MapObservation | None:
     if not candidates:
         return None
-    return max(
+    return min(
         candidates.values(),
-        key=lambda observation: (scores[observation.camera_id], observation.timestamp_s, observation.camera_id),
+        key=lambda observation: (
+            -scores[observation.camera_id],
+            -observation.timestamp_s,
+            observation.camera_id,
+        ),
     )
 
 
-def _preferred(
-    candidate: MapObservation,
-    candidate_score: float,
-    current: MapObservation,
-    current_score: float,
-) -> bool:
-    return (candidate_score, candidate.timestamp_s) > (current_score, current.timestamp_s)
+def _camera_batch(observations: Sequence[MapObservation]) -> tuple[MapObservation, ...]:
+    """Require one current observation per physical camera."""
+    items = tuple(observations)
+    seen: set[str] = set()
+    for observation in items:
+        if not isinstance(observation, MapObservation):
+            raise ContractValidationError("camera manager entries must be MapObservation objects")
+        if observation.camera_id in seen:
+            raise ContractValidationError(
+                f"duplicate camera in manager batch: {observation.camera_id!r}"
+            )
+        seen.add(observation.camera_id)
+    return items
 
 
 def _with_rejection(

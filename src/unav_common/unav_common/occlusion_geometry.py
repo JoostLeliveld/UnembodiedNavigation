@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import json
 import math
 import os
+from pathlib import Path
 from typing import Iterable, Sequence
 import xml.etree.ElementTree as ET
 
@@ -206,11 +207,18 @@ def _geometry_prisms_from_node(
     geometry_node: ET.Element | None,
     pose: _Pose6D,
     element_name: str,
+    model_search_paths: Sequence[str] = (),
+    robot_z_range: tuple[float, float] | None = None,
 ) -> list[AxisAlignedPrism]:
     if geometry_node is None:
         return []
 
     prisms: list[AxisAlignedPrism] = []
+    def _at_robot_height(items: list[AxisAlignedPrism]) -> list[AxisAlignedPrism]:
+        if robot_z_range is None:
+            return items
+        zlo, zhi = sorted((float(robot_z_range[0]), float(robot_z_range[1])))
+        return [item for item in items if item.zmin <= zhi and item.zmax >= zlo]
     box = _find_child(geometry_node, 'box')
     if box is not None:
         size_node = _find_child(box, 'size')
@@ -222,7 +230,7 @@ def _geometry_prisms_from_node(
                     size_node.text.strip(),
                 )
             )
-        return prisms
+        return _at_robot_height(prisms)
 
     cylinder = _find_child(geometry_node, 'cylinder')
     if cylinder is not None:
@@ -237,7 +245,90 @@ def _geometry_prisms_from_node(
                     length_node.text.strip(),
                 )
             )
-    return prisms
+        return _at_robot_height(prisms)
+
+    mesh = _find_child(geometry_node, 'mesh')
+    if mesh is not None:
+        uri_node = _find_child(mesh, 'uri')
+        if uri_node is None or not uri_node.text:
+            raise RuntimeError(f'Mesh collision {model_name}/{link_name}:{element_name} has no URI')
+        scale_node = _find_child(mesh, 'scale')
+        scale = (1.0, 1.0, 1.0)
+        if scale_node is not None and scale_node.text:
+            scale = tuple(float(v) for v in scale_node.text.split())
+            if len(scale) != 3:
+                raise RuntimeError(f'Mesh scale must have 3 values: {scale_node.text}')
+        mesh_path = _resolve_model_uri(uri_node.text.strip(), model_search_paths)
+        points = _collada_position_points(mesh_path, scale)
+        points = _transform_points(points, pose)
+        if robot_z_range is not None:
+            points = _points_touching_z_slab(points, robot_z_range)
+        if points.size:
+            mins = points.min(axis=0)
+            maxs = points.max(axis=0)
+            prisms.append(AxisAlignedPrism(
+                name=f'{model_name}/{link_name}:{element_name}',
+                xmin=float(mins[0]), xmax=float(maxs[0]),
+                ymin=float(mins[1]), ymax=float(maxs[1]),
+                zmin=float(mins[2]), zmax=float(maxs[2]),
+            ))
+    return _at_robot_height(prisms)
+
+
+def _resolve_model_uri(uri: str, search_paths: Sequence[str]) -> str:
+    if not uri.startswith('model://'):
+        path = Path(uri).expanduser()
+        if path.is_file():
+            return str(path.resolve())
+        raise RuntimeError(f'Unsupported or missing mesh URI: {uri}')
+    relative = uri[len('model://'):]
+    for root in search_paths:
+        candidate = Path(root) / relative
+        if candidate.is_file():
+            return str(candidate.resolve())
+    raise RuntimeError(f'Could not resolve {uri} in model search paths: {list(search_paths)}')
+
+
+def _collada_position_points(path: str, scale: Sequence[float]) -> np.ndarray:
+    root = ET.parse(path).getroot()
+    unit = 1.0
+    for node in root.iter():
+        if _tag_matches(node, 'unit') and node.get('meter'):
+            unit = float(node.get('meter', '1'))
+            break
+    arrays = [node for node in root.iter() if _tag_matches(node, 'float_array')]
+    position_arrays = [node for node in arrays if 'position' in node.get('id', '').lower()]
+    if not position_arrays or not position_arrays[0].text:
+        raise RuntimeError(f'COLLADA mesh has no POSITION array: {path}')
+    values = np.asarray([float(v) for v in position_arrays[0].text.split()], dtype=float)
+    if values.size % 3:
+        raise RuntimeError(f'COLLADA POSITION array is not XYZ triples: {path}')
+    return values.reshape(-1, 3) * (unit * np.asarray(scale, dtype=float))
+
+
+def _transform_points(points: np.ndarray, pose: _Pose6D) -> np.ndarray:
+    cr, sr = math.cos(pose.roll), math.sin(pose.roll)
+    cp, sp = math.cos(pose.pitch), math.sin(pose.pitch)
+    cy, sy = math.cos(pose.yaw), math.sin(pose.yaw)
+    rx = np.array([[1, 0, 0], [0, cr, -sr], [0, sr, cr]], dtype=float)
+    ry = np.array([[cp, 0, sp], [0, 1, 0], [-sp, 0, cp]], dtype=float)
+    rz = np.array([[cy, -sy, 0], [sy, cy, 0], [0, 0, 1]], dtype=float)
+    return points @ (rz @ ry @ rx).T + np.array([pose.x, pose.y, pose.z])
+
+
+def _points_touching_z_slab(points: np.ndarray, z_range: tuple[float, float]) -> np.ndarray:
+    """Return vertices in a slab plus edge intersections for a conservative slice AABB."""
+    zmin, zmax = sorted((float(z_range[0]), float(z_range[1])))
+    inside = points[(points[:, 2] >= zmin) & (points[:, 2] <= zmax)]
+    extras = []
+    # Without triangle indices, all-pairs would invent geometry. The in-slab
+    # vertices are sufficient for the current collision meshes; include global
+    # extrema only when the mesh spans the slab but has no sampled vertex in it.
+    if inside.size == 0 and points[:, 2].min() <= zmax and points[:, 2].max() >= zmin:
+        extras = [points]
+    if extras:
+        return np.concatenate([inside, *extras], axis=0)
+    return inside
 
 
 def _normalize_names(names: str | Sequence[str] | None) -> tuple[str, ...]:
@@ -270,6 +361,9 @@ def parse_occlusion_scene_from_world(
     *,
     model_name: str | Sequence[str] = 'warehouse_rack_occluders',
     geometry_tags: Iterable[str] | None = None,
+    include_names: Sequence[str] = (),
+    model_search_paths: Sequence[str] = (),
+    robot_z_range: tuple[float, float] | None = None,
 ) -> OcclusionScene:
     if not os.path.isfile(world_path):
         raise RuntimeError(f'World file not found: {world_path}')
@@ -279,6 +373,8 @@ def parse_occlusion_scene_from_world(
         raise RuntimeError(f"Failed to parse world file '{world_path}': {exc}") from exc
 
     root = tree.getroot()
+    default_models = str(Path(world_path).resolve().parents[2] / 'models')
+    search_paths = tuple(model_search_paths) or (default_models,)
     model_names = _normalize_names(model_name)
     geometry_kinds = _normalize_geometry_tags(geometry_tags)
     matched_models: list[ET.Element] = []
@@ -288,6 +384,40 @@ def parse_occlusion_scene_from_world(
         node_name = str(node.attrib.get('name', '')).strip()
         if node_name in model_names:
             matched_models.append(node)
+
+    include_name_set = set(_normalize_names(include_names))
+    world_node = next((node for node in root.iter() if _tag_matches(node, 'world')), None)
+    if world_node is not None:
+        for include in list(world_node):
+            if not _tag_matches(include, 'include'):
+                continue
+            name_node = _find_child(include, 'name')
+            instance_name = name_node.text.strip() if name_node is not None and name_node.text else ''
+            if instance_name not in include_name_set:
+                continue
+            uri_node = _find_child(include, 'uri')
+            if uri_node is None or not uri_node.text:
+                raise RuntimeError(f'Included collision model {instance_name} has no URI')
+            model_dir = _resolve_model_uri(uri_node.text.strip() + '/model.sdf', search_paths)
+            included_root = ET.parse(model_dir).getroot()
+            included_model = next(
+                (node for node in included_root.iter() if _tag_matches(node, 'model')), None)
+            if included_model is None:
+                raise RuntimeError(f'Included model has no <model>: {model_dir}')
+            included_model = ET.fromstring(ET.tostring(included_model, encoding='unicode'))
+            included_model.set('name', instance_name)
+            include_pose = _parse_pose_node(_find_child(include, 'pose'))
+            model_pose = _parse_pose_node(_find_child(included_model, 'pose'))
+            composed = _compose_pose(include_pose, model_pose)
+            pose_node = _find_child(included_model, 'pose')
+            if pose_node is None:
+                pose_node = ET.Element('pose')
+                included_model.insert(0, pose_node)
+            pose_node.text = (
+                f'{composed.x} {composed.y} {composed.z} '
+                f'{composed.roll} {composed.pitch} {composed.yaw}'
+            )
+            matched_models.append(included_model)
 
     if not matched_models:
         return OcclusionScene(
@@ -318,6 +448,8 @@ def parse_occlusion_scene_from_world(
                         geometry_node=_find_child(element, 'geometry'),
                         pose=element_pose,
                         element_name=element_name,
+                        model_search_paths=search_paths,
+                        robot_z_range=robot_z_range,
                     )
                 )
     return OcclusionScene(
@@ -331,11 +463,17 @@ def parse_collision_scene_from_world(
     world_path: str,
     *,
     model_names: Sequence[str] = ('warehouse_walls', 'warehouse_rack_occluders'),
+    include_names: Sequence[str] = (),
+    model_search_paths: Sequence[str] = (),
+    robot_z_range: tuple[float, float] | None = (0.07, 0.35),
 ) -> OcclusionScene:
     return parse_occlusion_scene_from_world(
         world_path,
         model_name=model_names,
         geometry_tags=('collision',),
+        include_names=include_names,
+        model_search_paths=model_search_paths,
+        robot_z_range=robot_z_range,
     )
 
 

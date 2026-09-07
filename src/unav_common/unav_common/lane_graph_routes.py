@@ -160,6 +160,7 @@ def generate_route_seeds(
         return []
 
     below = [y for y in centres if y < 0.0]
+    centred = [y for y in centres if y == 0.0]
     above = [y for y in centres if y > 0.0]
     valid_below = [
         (y, route)
@@ -175,6 +176,13 @@ def generate_route_seeds(
             prisms, vertical_centres, start, goal, y
         )) is not None
     ]
+    valid_centred = [
+        (y, route)
+        for y in centred
+        if (route := _route_for_corridor(
+            prisms, vertical_centres, start, goal, y
+        )) is not None
+    ]
 
     routes: List[dict] = []
     for index, (y, waypoints) in enumerate(valid_below):
@@ -186,6 +194,12 @@ def generate_route_seeds(
             name = f"below_cross_aisle_{index + 1}"
         routes.append({
             "name": name,
+            "waypoints": [list(w) for w in waypoints],
+        })
+
+    for _y, waypoints in valid_centred:
+        routes.append({
+            "name": "centre_cross_aisle",
             "waypoints": [list(w) for w in waypoints],
         })
 

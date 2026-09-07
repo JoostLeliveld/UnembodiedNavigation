@@ -197,7 +197,8 @@ def test_accepted_correction_commits_belief_and_publishes_accepted_diagnostics()
     assert node.belief_m[0] > 0.0
     assert node.belief_m[0] < 0.05
     assert node.belief_stamp.sec == 9 and node.belief_stamp.nanosec == 950000000
-    assert node._last_correction_stamp is node.belief_stamp
+    assert node._last_correction_stamp == node.belief_stamp
+    assert node._last_correction_stamp is not node.belief_stamp
 
     diag = only_diag(node)
     assert diag[IDX_ACCEPTED] == 1.0
@@ -206,7 +207,7 @@ def test_accepted_correction_commits_belief_and_publishes_accepted_diagnostics()
     assert math.isfinite(diag[IDX_NIS])
 
 
-def test_jump_limiter_rejects_and_leaves_the_belief_untouched():
+def test_jump_limiter_rejects_and_commits_only_the_prediction():
     """The gate the multicam path silently dropped -- it must still bite here."""
     # Loose prior + tight R -> gain ~1 -> a 3 m innovation moves the belief ~3 m.
     node = make_node(meas=(3.0, 0.0), belief_cov=10.0, r_eff=1e-4)
@@ -216,7 +217,8 @@ def test_jump_limiter_rejects_and_leaves_the_belief_untouched():
     node._apply_pixel_correction(stamp(9.95), source='callback')
 
     np.testing.assert_array_equal(node.belief_m, before_m)
-    assert node.belief_stamp is before_stamp
+    assert node.belief_stamp == stamp(9.95)
+    assert before_stamp == stamp(9.9)
     assert node._last_correction_stamp is None
 
     diag = only_diag(node)
@@ -283,8 +285,10 @@ def test_snapshot_is_the_shared_dataclass_carrying_the_measurement_stamp():
     stamp_msg = stamp(9.95)
     snapshot = node._snapshot_pixel_correction_inputs(stamp_msg)
     assert isinstance(snapshot, bc.CorrectionSnapshot)
-    assert snapshot.meas_stamp is stamp_msg
-    assert snapshot.belief_stamp is node.belief_stamp
+    assert snapshot.meas_stamp == stamp_msg
+    assert snapshot.meas_stamp is not stamp_msg
+    assert snapshot.belief_stamp == node.belief_stamp
+    assert snapshot.belief_stamp is not node.belief_stamp
     np.testing.assert_array_equal(snapshot.meas, node.pixel_meas)
 
     node.pixel_meas = None

@@ -258,12 +258,42 @@
     </gazebo>
   </xacro:if>
 
+  <!-- Robot-side physical evidence covers contacts with collision-bearing
+       included props as well as world links. The body collision is the outer
+       obstacle-striking hull; wheel/caster sensors would continuously report
+       normal ground support and obscure obstacle events. -->
+  <gazebo reference="${ns}base_link">
+    <sensor name="body_contact" type="contact">
+      <!-- sdformat lumps the fixed base_joint into base_footprint and assigns
+           this deterministic collision name (verified with `ign sdf -p`). -->
+      <contact><collision>${ns}base_footprint_fixed_joint_lump__base_link_collision</collision></contact>
+      <update_rate>60</update_rate>
+      <always_on>true</always_on>
+    </sensor>
+  </gazebo>
+
   <!-- ================= Gazebo Harmonic DiffDrive ================= -->
   <gazebo>
     <plugin
         filename="gz-sim-label-system"
         name="ignition::gazebo::systems::Label">
       <label>23</label>
+    </plugin>
+
+    <plugin
+        filename="libsim_command_guard.so"
+        name="sim_command_guard::CommandGuardSystem">
+      <input_topic>/model/turtlebot3/cmd_vel_guard_input</input_topic>
+      <output_topic>/model/turtlebot3/cmd_vel_applied</output_topic>
+      <outcome_topic>/model/turtlebot3/actuation_outcome</outcome_topic>
+      <command_timeout>0.5</command_timeout>
+    </plugin>
+
+    <plugin
+        filename="gz-sim-joint-state-publisher-system"
+        name="gz::sim::systems::JointStatePublisher">
+      <topic>/model/turtlebot3/joint_states</topic>
+      <update_rate>50</update_rate>
     </plugin>
 
     <plugin
@@ -276,11 +306,12 @@
       <wheel_separation>${wheel_sep}</wheel_separation>
       <wheel_radius>${wheel_r}</wheel_radius>
 
-      <topic>/model/turtlebot3/cmd_vel</topic>
+      <topic>/model/turtlebot3/cmd_vel_applied</topic>
       <odom_topic>/model/turtlebot3/odometry</odom_topic>
+      <tf_topic>/model/turtlebot3/tf</tf_topic>
 
       <frame_id>odom</frame_id>
-      <child_frame_id>base_link</child_frame_id>
+      <child_frame_id>base_footprint</child_frame_id>
 
       <odom_publish_frequency>50</odom_publish_frequency>
       <publish_tf>true</publish_tf>

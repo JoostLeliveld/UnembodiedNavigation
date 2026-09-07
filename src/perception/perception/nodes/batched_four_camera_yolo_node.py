@@ -1,7 +1,7 @@
 """Single-model, deterministic multicamera YOLO inference runtime.
 
 This node is intentionally specific to the commissioned camera registry.
-It holds at most one not-yet-used frame per camera and invokes one native
+It holds a bounded set of timestamp rounds and invokes one native
 Ultralytics model with one image per registered camera in contract order. It never fills a
 batch by repeating a previous image.
 """
@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import math
+import json
+import uuid
 from pathlib import Path
 import threading
 import time
@@ -32,6 +34,12 @@ from ultralytics import YOLO
 import perception.core.four_camera_batch as four_camera_batch_module
 import perception.core.four_camera_runtime_contract as runtime_contract_module
 import perception.core.yolo_selection as yolo_selection_module
+import unav_common.camera_outcomes as camera_outcomes_module
+import perception.core.detector_outcomes as detector_outcomes_module
+from perception.core.detector_outcomes import (
+    OutcomeJournal, OUTCOME_HISTORY_DEPTH, DEFAULT_JOURNAL_MAX_BYTES,
+    image_content_sha256, source_frame_id, frame_member, journal_path,
+)
 from perception.core.detection_diagnostics import (
     diagnostics_from_message,
     diagnostics_message,
@@ -92,6 +100,12 @@ def _runtime_contract_qos() -> QoSProfile:
         reliability=ReliabilityPolicy.RELIABLE,
         durability=DurabilityPolicy.TRANSIENT_LOCAL,
     )
+
+
+def _outcome_qos() -> QoSProfile:
+    return QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=OUTCOME_HISTORY_DEPTH,
+                      reliability=ReliabilityPolicy.RELIABLE,
+                      durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
 
 @dataclass(frozen=True)
@@ -155,6 +169,8 @@ class BatchedFourCameraYoloNode(Node):
         self.declare_parameter("async_coalesce_wall_s", 0.02)
         self.declare_parameter("input_transport", "ros")
         self.declare_parameter("runtime_trace_period_s", 0.0)
+        self.declare_parameter("outcome_journal_path", "")
+        self.declare_parameter("outcome_journal_max_bytes", DEFAULT_JOURNAL_MAX_BYTES)
         # Per-axis pixel noise of a KEPT reading, pushed through the projection Jacobian
         # as R_xy = sigma_px^2 J J^T. 2.5 px was never measured -- it was a conservative
         # placeholder, and it is 4.3x too large for this reading. On 486 held-out fused
@@ -310,13 +326,34 @@ class BatchedFourCameraYoloNode(Node):
             raise RuntimeError("runtime_trace_period_s must be finite and non-negative")
         if not math.isfinite(self.async_coalesce_wall_s) or self.async_coalesce_wall_s <= 0.0:
             raise RuntimeError("async_coalesce_wall_s must be finite and positive")
+        self._producer_epoch = uuid.uuid4().hex
+        self._cycle_sequence = 0
+        self._clock_high_water_s = None
+        self._clock_lock = threading.Lock()
+        self._outcome_journal = OutcomeJournal(
+            journal_path(str(self.get_parameter("outcome_journal_path").value), self._producer_epoch),
+            self._producer_epoch,
+            max_bytes=int(self.get_parameter("outcome_journal_max_bytes").value),
+        )
+        self.batch_outcome_publisher = self.create_publisher(
+            String, "/perception/camera_batch_outcome", _outcome_qos()
+        )
+        self._publish_batch_outcome(dict(
+            status="session_started", camera_ids=list(CAMERA_ORDER),
+            outcome_source_sha256=sha256_file(Path(detector_outcomes_module.__file__)),
+            journal_source_sha256=sha256_file(Path(camera_outcomes_module.__file__)),
+            frame_identity_semantics="producer_epoch_camera_exact_stamp_image_content",
+            source_batch_semantics="logical_cycle", invocation_semantics="one_model_call",
+        ))
         self.batcher = FourCameraBatcher(
             camera_order=CAMERA_ORDER,
             max_stamp_skew_s=self.max_batch_stamp_skew_s,
             max_pending_wall_s=self.max_pending_wall_s,
+            on_event=self._publish_batch_outcome,
         )
         self._async_pending: dict[str, PendingFrame] = {}
         self._async_last_seen_stamp_ns = {camera_id: -1 for camera_id in CAMERA_ORDER}
+        self._async_last_seen_content_sha256 = {camera_id: "" for camera_id in CAMERA_ORDER}
         self._async_pending_lock = threading.Lock()
         self._direct_gz_received = 0
         self._async_batches_processed = 0
@@ -334,6 +371,7 @@ class BatchedFourCameraYoloNode(Node):
         #: strict-path liveness: frames offered per camera and what the batcher
         #: decided. Without these a batcher that never completes a round is silent.
         self._strict_frames: dict[str, int] = {}
+        self._strict_last_receive_wall: dict[str, float] = {}
         self._strict_decisions: dict[str, int] = {}
         self._strict_batches = 0
 
@@ -540,6 +578,8 @@ class BatchedFourCameraYoloNode(Node):
             f"opencv_threads={self.actual_opencv_num_threads}, "
             f"input_policy={self.synchronization_mode}-{self.input_transport}-new-latest-only)"
         )
+        self._liveness_clock = RclpyClock(clock_type=ClockType.STEADY_TIME)
+        self.create_timer(0.25, self._batch_liveness_tick, clock=self._liveness_clock)
         if self.runtime_trace_period_s > 0.0:
             trace_clock = RclpyClock(clock_type=ClockType.SYSTEM_TIME)
             self.create_timer(
@@ -600,7 +640,40 @@ class BatchedFourCameraYoloNode(Node):
         )
 
     def _clock_s(self) -> float:
-        return float(self.get_clock().now().nanoseconds) * 1.0e-9
+        with self._clock_lock:
+            stamp = float(self.get_clock().now().nanoseconds) * 1.0e-9
+            previous = self._clock_high_water_s
+            if previous is not None and stamp < previous - MAX_FUTURE_IMAGE_STAMP_S:
+                self._fatal("simulation clock moved backwards; coordinated runtime restart required")
+            self._clock_high_water_s = stamp if previous is None else max(stamp, previous)
+            return stamp
+
+    def _publish_batch_outcome(self, event) -> None:
+        # This local durable record precedes publication. Reliable DDS history
+        # supports bounded late delivery; the journal covers process/transport loss.
+        payload = self._outcome_journal.append(dict(
+            event, stage="detector",
+            publish_stamp_s=float(self.get_clock().now().nanoseconds) * 1e-9,
+        ))
+        message = String()
+        message.data = json.dumps(payload, sort_keys=True, allow_nan=False)
+        self.get_logger().info("camera_batch_outcome " + message.data)
+        if getattr(self, "_outcome_transport_enabled", True):
+            self.batch_outcome_publisher.publish(message)
+
+
+    def _batch_liveness_tick(self) -> None:
+        self._clock_s()  # detect reset even if input publication stops
+        if self.synchronization_mode != "strict":
+            return
+        self.batcher.expire(time.perf_counter())
+        now_wall = time.perf_counter()
+        missing = [c for c in CAMERA_ORDER
+                   if c not in self._strict_last_receive_wall
+                   or now_wall - self._strict_last_receive_wall[c] > self.max_pending_wall_s]
+        if missing:
+            self._warn_bounded("missing_or_slow_cameras",
+                               f"no recent image received from cameras: {missing}")
 
     def _predict_batch(self, images_bgr: list[np.ndarray]):
         """One inference cycle over the whole timestamp batch, in camera order.
@@ -637,10 +710,38 @@ class BatchedFourCameraYoloNode(Node):
             }
             if self.device:
                 kwargs["device"] = self.device
-            part = self.model.predict(**kwargs)
-            if part is None:
-                raise BatchContractError("batch inference returned no result sequence")
-            results.extend(list(part))
+            cycle = getattr(self, "_active_cycle", None)
+            scheduled_stamp = self._clock_s() if cycle is not None else None
+            invocation_id = f"{cycle[0]}/chunk/{start // chunk}" if cycle is not None else None
+            invocation_members = ([self._active_members[c] for c in cycle[1][start:start + len(group)]]
+                                  if cycle is not None else [])
+            if cycle is not None:
+                self._publish_batch_outcome(dict(source_batch_id=cycle[0], invocation_id=invocation_id,
+                                                 members=invocation_members, status="inference_started",
+                                                 inference_scheduled_stamp_s=scheduled_stamp))
+            started_stamp = self._clock_s() if cycle is not None else None
+            started_wall = time.perf_counter()
+            try:
+                part = self.model.predict(**kwargs)
+                finished_wall = time.perf_counter()
+                finished_stamp = self._clock_s() if cycle is not None else None
+                if part is None:
+                    raise BatchContractError("batch inference returned no result sequence")
+                results.extend(validate_batch_results(part, len(group)))
+            except BaseException as exc:
+                if cycle is not None:
+                    self._publish_batch_outcome(dict(
+                        source_batch_id=cycle[0], invocation_id=invocation_id, members=invocation_members,
+                        camera_ids=cycle[1][start:start + len(group)], status="inference_error",
+                        inference_start_stamp_s=started_stamp, reason=str(exc) or type(exc).__name__))
+                raise
+            if cycle is not None:
+                self._publish_batch_outcome(dict(
+                    source_batch_id=cycle[0], invocation_id=invocation_id, members=invocation_members,
+                    camera_ids=cycle[1][start:start + len(group)], status="inference_completed",
+                    inference_start_stamp_s=started_stamp, inference_finish_stamp_s=finished_stamp,
+                    inference_wall_ms=(finished_wall - started_wall) * 1000.0,
+                    timing_semantics="host_model_call_start_return"))
         if len(results) != len(images_bgr):
             raise BatchContractError(
                 f"chunked inference returned {len(results)} results for "
@@ -671,9 +772,32 @@ class BatchedFourCameraYoloNode(Node):
         tensor = torch.from_numpy(np.stack(prepared)).to(
             device=self._torchscript_detection_device, dtype=torch.float32
         ).div_(255.0)
-        with torch.inference_mode():
-            raw = self._torchscript_detection_model(tensor)
-            predictions = raw[0] if isinstance(raw, (tuple, list)) else raw
+        cycle = getattr(self, "_active_cycle", None)
+        scheduled_stamp = self._clock_s() if cycle is not None else None
+        if cycle is not None:
+            self._publish_batch_outcome(dict(source_batch_id=cycle[0], invocation_id=f"{cycle[0]}/chunk/0",
+                                             members=list(self._active_members.values()), status="inference_started",
+                                             inference_scheduled_stamp_s=scheduled_stamp))
+        started_stamp = self._clock_s() if cycle is not None else None
+        started_wall = time.perf_counter()
+        try:
+            with torch.inference_mode():
+                raw = self._torchscript_detection_model(tensor)
+                finished_wall = time.perf_counter()
+                finished_stamp = self._clock_s() if cycle is not None else None
+                predictions = raw[0] if isinstance(raw, (tuple, list)) else raw
+        except BaseException as exc:
+            if cycle is not None:
+                self._publish_batch_outcome(dict(source_batch_id=cycle[0], invocation_id=f"{cycle[0]}/chunk/0",
+                                                 members=list(self._active_members.values()), status="inference_error",
+                                                 inference_start_stamp_s=started_stamp, reason=str(exc) or type(exc).__name__))
+            raise
+        if cycle is not None:
+            self._publish_batch_outcome(dict(source_batch_id=cycle[0], invocation_id=f"{cycle[0]}/chunk/0",
+                                             members=list(self._active_members.values()), status="inference_completed",
+                                             inference_start_stamp_s=started_stamp, inference_finish_stamp_s=finished_stamp,
+                                             inference_wall_ms=(finished_wall - started_wall) * 1000.0,
+                                             timing_semantics="host_model_call_start_return"))
         if predictions.ndim != 3 or predictions.shape[0] != len(images_bgr) or predictions.shape[1] < 5:
             raise BatchContractError(
                 f"unexpected one-class raw prediction shape {tuple(predictions.shape)}"
@@ -732,6 +856,15 @@ class BatchedFourCameraYoloNode(Node):
         """Log once and terminate rather than forge an availability miss."""
 
         self.get_logger().fatal(message)
+        if getattr(self, "_outcome_journal", None) is not None:
+            cycle = getattr(self, "_active_cycle", None)
+            try:
+                self._publish_batch_outcome(dict(status="producer_error", reason=message,
+                                                 source_batch_id=cycle[0] if cycle is not None else ""))
+            except Exception as journal_error:
+                # The primary fault must remain visible even if durability/transport
+                # is itself the failed subsystem. Do not continue processing.
+                self.get_logger().error(f"could not transport producer_error: {journal_error}")
         if cause is None:
             raise RuntimeError(message)
         raise RuntimeError(message) from cause
@@ -741,13 +874,18 @@ class BatchedFourCameraYoloNode(Node):
         receive_stamp_s = self._clock_s()
         try:
             stamp_ns = stamp_parts_to_ns(msg.header.stamp.sec, msg.header.stamp.nanosec)
+            content_hash = image_content_sha256(encoding=msg.encoding, height=msg.height,
+                                                width=msg.width, step=msg.step, data=msg.data)
             frame = PendingFrame(
                 camera_id=camera_id,
                 stamp_ns=stamp_ns,
                 receive_stamp_s=receive_stamp_s,
                 receive_wall_s=receive_wall_s,
                 payload=msg,
+                content_sha256=content_hash,
+                source_frame_id=source_frame_id(self._producer_epoch, camera_id, stamp_ns, content_hash),
             )
+            self._publish_batch_outcome(dict(status="image_received", members=[frame_member(frame)]))
             if self.synchronization_mode == "asynchronous":
                 self._offer_async_frame(frame)
                 return
@@ -755,12 +893,15 @@ class BatchedFourCameraYoloNode(Node):
         except Exception as exc:
             self._fatal(f"malformed input contract for {camera_id}: {exc}", exc)
 
+        self._strict_last_receive_wall[camera_id] = receive_wall_s
         self._strict_frames[camera_id] = self._strict_frames.get(camera_id, 0) + 1
         self._strict_decisions[decision.status] = (
             self._strict_decisions.get(decision.status, 0) + 1
         )
 
         if decision.status in {"duplicate", "out_of_order", "stamp_skew"}:
+            self._publish_batch_outcome(dict(status="image_" + decision.status,
+                                             members=[frame_member(frame)]))
             self._warn_bounded(
                 camera_id + ":" + decision.status,
                 f"{decision.status} frame rejected for {camera_id}; "
@@ -809,15 +950,17 @@ class BatchedFourCameraYoloNode(Node):
             header.stamp.sec = sec
             header.stamp.nanosec = nanosec
             header.frame_id = "image"
-            self._offer_async_frame(
-                PendingFrame(
-                    camera_id=camera_id,
-                    stamp_ns=stamp_ns,
-                    receive_stamp_s=receive_stamp_s,
-                    receive_wall_s=receive_wall_s,
-                    payload=_DirectGzImagePayload(header=header, image_bgr=bgr),
-                )
+            content_hash = image_content_sha256(encoding="rgb8", height=height, width=width,
+                                                step=step, data=msg.data)
+            frame = PendingFrame(
+                camera_id=camera_id, stamp_ns=stamp_ns,
+                receive_stamp_s=receive_stamp_s, receive_wall_s=receive_wall_s,
+                payload=_DirectGzImagePayload(header=header, image_bgr=bgr),
+                content_sha256=content_hash,
+                source_frame_id=source_frame_id(self._producer_epoch, camera_id, stamp_ns, content_hash),
             )
+            self._publish_batch_outcome(dict(status="image_received", members=[frame_member(frame)]))
+            self._offer_async_frame(frame)
             self._direct_gz_received += 1
         except Exception as exc:
             self._fatal(f"malformed direct Gazebo image for {camera_id}: {exc}", exc)
@@ -840,67 +983,59 @@ class BatchedFourCameraYoloNode(Node):
         from different cameras are close enough to combine.
         """
 
+        events = []
+        conflict = False
         with self._async_pending_lock:
-            expired = tuple(
-                camera_id
-                for camera_id, pending in self._async_pending.items()
-                if frame.receive_wall_s - pending.receive_wall_s > self.max_pending_wall_s
-            )
-            for camera_id in expired:
-                self._async_pending.pop(camera_id, None)
+            expired = [pending for pending in self._async_pending.values()
+                       if frame.receive_wall_s - pending.receive_wall_s > self.max_pending_wall_s]
+            for pending in expired:
+                self._async_pending.pop(pending.camera_id)
+            if expired:
+                events.append(dict(status="incomplete_timeout", members=[frame_member(f) for f in expired]))
             last_seen = self._async_last_seen_stamp_ns[frame.camera_id]
             if frame.stamp_ns > last_seen:
+                previous = self._async_pending.get(frame.camera_id)
+                if previous is not None:
+                    events.append(dict(status="frame_replaced", members=[frame_member(previous)]))
                 self._async_last_seen_stamp_ns[frame.camera_id] = frame.stamp_ns
+                self._async_last_seen_content_sha256[frame.camera_id] = frame.content_sha256
                 self._async_pending[frame.camera_id] = frame
-                accepted = True
             else:
-                status = "duplicate" if frame.stamp_ns == last_seen else "out_of_order"
-                accepted = False
-        if expired:
-            self._warn_bounded("async_pending_expired", f"expired pending frames: {expired}")
-        if not accepted:
-            self._warn_bounded(
-                frame.camera_id + ":async_" + status,
-                f"{status} frame rejected for {frame.camera_id}",
-            )
-            return
+                conflict = (frame.stamp_ns == last_seen and bool(frame.content_sha256)
+                            and bool(self._async_last_seen_content_sha256[frame.camera_id])
+                            and frame.content_sha256 != self._async_last_seen_content_sha256[frame.camera_id])
+                status = ("conflicting_duplicate_image" if conflict else
+                          "image_duplicate" if frame.stamp_ns == last_seen else "image_out_of_order")
+                events.append(dict(status=status, members=[frame_member(frame)]))
+        for event in events:
+            self._publish_batch_outcome(event)
+        if conflict:
+            self._fatal(f"conflicting image bytes at same capture stamp for {frame.camera_id}")
 
     def _drain_async_pending(self) -> None:
         now_wall_s = time.perf_counter()
         with self._async_pending_lock:
             if not self._async_pending:
                 return
-            expired = tuple(
-                camera_id
-                for camera_id, pending in self._async_pending.items()
-                if now_wall_s - pending.receive_wall_s > self.max_pending_wall_s
+            expired = [pending for pending in self._async_pending.values()
+                       if now_wall_s - pending.receive_wall_s > self.max_pending_wall_s]
+            for pending in expired:
+                self._async_pending.pop(pending.camera_id)
+            batch = tuple(self._async_pending[camera_id] for camera_id in CAMERA_ORDER
+                          if camera_id in self._async_pending)
+            wait_for_clock = bool(batch) and (
+                self._clock_s() + MAX_FUTURE_IMAGE_STAMP_S < max(f.stamp_ns for f in batch) * 1e-9
             )
-            for camera_id in expired:
-                self._async_pending.pop(camera_id, None)
-            batch = tuple(
-                self._async_pending[camera_id]
-                for camera_id in CAMERA_ORDER
-                if camera_id in self._async_pending
-            )
-            if not batch:
-                return
-            # Do not consume a valid image before the simulated clock has
-            # caught up. Startup delivery can otherwise make a fresh Gazebo
-            # image look materially future-dated at publish time.
-            latest_source_stamp_s = max(item.stamp_ns for item in batch) * 1.0e-9
-            if self._clock_s() + MAX_FUTURE_IMAGE_STAMP_S < latest_source_stamp_s:
-                wait_for_clock = True
-            else:
-                wait_for_clock = False
+            if not wait_for_clock:
                 for item in batch:
-                    self._async_pending.pop(item.camera_id, None)
+                    self._async_pending.pop(item.camera_id)
         if expired:
-            self._warn_bounded("async_pending_expired", f"expired pending frames: {expired}")
+            self._publish_batch_outcome(dict(status="incomplete_timeout",
+                                             members=[frame_member(f) for f in expired]))
+        if not batch:
+            return
         if wait_for_clock:
-            self._warn_bounded(
-                "async_clock_wait",
-                "waiting for simulation clock before publishing asynchronous frames",
-            )
+            self._warn_bounded("async_clock_wait", "waiting for simulation clock before publishing asynchronous frames")
             return
         self._async_batches_processed += 1
         self._async_frames_processed += len(batch)
@@ -912,7 +1047,7 @@ class BatchedFourCameraYoloNode(Node):
 
         if self.synchronization_mode == "strict":
             waiting = "; ".join(
-                f"{stamp_ns * 1.0e-9:.3f}s<-{','.join(cameras)}"
+                f"{stamp_ns}ns present={list(cameras)} missing={[c for c in CAMERA_ORDER if c not in cameras]}"
                 for stamp_ns, cameras in self.batcher.bucket_report
             )
             self.get_logger().info(
@@ -940,14 +1075,36 @@ class BatchedFourCameraYoloNode(Node):
     def _process_frames(self, batch: tuple[PendingFrame, ...]) -> None:
         if not batch or len({item.camera_id for item in batch}) != len(batch):
             self._fatal("internal camera micro-batch identity violation")
-
-        # Stable identity for one physical detector invocation. The manager
-        # uses this to wait until every subscribed camera result has arrived
-        # and to prevent a high-rate decision timer from reusing the pixels.
-        source_batch_id = "strict:" + ",".join(
+        self._cycle_sequence += 1
+        source_batch_id = f"strict:{self._producer_epoch}:{self._cycle_sequence}:" + ",".join(
             f"{item.camera_id}@{item.stamp_ns}" for item in batch
         )
+        members = [item.camera_id for item in batch]
+        chunk = len(batch) if self.torchscript_detection_only or self.inference_chunk == 0 else self.inference_chunk
+        self._active_members = {
+            item.camera_id: dict(frame_member(item), producer_epoch=self._producer_epoch,
+                                 detector_invocation_id=f"{source_batch_id}/chunk/{index // chunk}")
+            for index, item in enumerate(batch)
+        }
+        self._active_cycle = (source_batch_id, members)
+        try:
+            self._publish_batch_outcome(dict(source_batch_id=source_batch_id,
+                                             members=list(self._active_members.values()),
+                                             status="selected", camera_ids=members,
+                                             inference_chunk=self.inference_chunk))
+            status = self._process_frames_once(batch, source_batch_id=source_batch_id)
+        except BaseException as exc:
+            self._publish_batch_outcome(dict(source_batch_id=source_batch_id,
+                                             status="aborted", reason=str(exc) or type(exc).__name__, camera_ids=members,
+                                             members=list(self._active_members.values())))
+            raise
+        finally:
+            self._active_cycle = None
+        self._publish_batch_outcome(dict(source_batch_id=source_batch_id,
+                                         status=status, camera_ids=members,
+                                         members=list(self._active_members.values())))
 
+    def _process_frames_once(self, batch, *, source_batch_id):
         # Startup clock race: before the first /clock tick under use_sim_time,
         # ``now()`` reads 0 while camera images already carry sim stamps (e.g.
         # 4.8 s), so publishing would trip the future-stamp integrity fault. The
@@ -961,7 +1118,7 @@ class BatchedFourCameraYoloNode(Node):
                 "strict_clock_wait",
                 "waiting for simulation clock before publishing multicamera batch",
             )
-            return
+            return "dropped_clock_wait"
 
         images: list[np.ndarray] = []
         try:
@@ -1024,9 +1181,21 @@ class BatchedFourCameraYoloNode(Node):
         # this batch.  A malformed B/C/D result therefore cannot leave a
         # plausible partial A-only evidence row behind.
         for item, image, selection in zip(batch, images, prepared, strict=True):
-            self._publish_result(
-                item, image, selection, timing, source_batch_id=source_batch_id
-            )
+            member = self._active_members[item.camera_id]
+            self._publish_batch_outcome(dict(source_batch_id=source_batch_id, members=[member],
+                                             status="member_publication_started",
+                                             detection_valid=bool(selection.get("detected_after_threshold", False))))
+            try:
+                self._publish_result(item, image, selection, timing, source_batch_id=source_batch_id)
+            except Exception as exc:
+                self._publish_batch_outcome(dict(source_batch_id=source_batch_id, members=[member],
+                                                 status="member_publication_error", reason=str(exc) or type(exc).__name__,
+                                                 detection_valid=bool(selection.get("detected_after_threshold", False))))
+                raise
+            self._publish_batch_outcome(dict(source_batch_id=source_batch_id, members=[member],
+                                             status="member_published",
+                                             detection_valid=bool(selection.get("detected_after_threshold", False))))
+        return "published"
 
     def _prepare_result(self, result: Any) -> dict[str, Any]:
         selection = select_best_detection(
@@ -1239,7 +1408,12 @@ class BatchedFourCameraYoloNode(Node):
                 diagnostics_from_message(diagnostics),
                 config=self._observation_configs[camera_id],
             )
-            observation = replace(observation, source_batch_id=source_batch_id)
+            identity = self._active_members[camera_id]
+            observation = replace(observation, source_batch_id=source_batch_id,
+                                  producer_epoch=identity["producer_epoch"],
+                                  source_frame_id=identity["source_frame_id"],
+                                  capture_stamp_ns=identity["capture_stamp_ns"],
+                                  detector_invocation_id=identity["detector_invocation_id"])
             message = String()
             message.data = observation.to_json()
             return message
@@ -1269,6 +1443,24 @@ class BatchedFourCameraYoloNode(Node):
             cv2.imwrite(str(Path(self.debug_frame_dir).expanduser() / filename), image)
         except Exception as exc:
             self._warn_bounded(item.camera_id + ":debug", f"debug frame write failed: {exc}")
+
+    def destroy_node(self):
+        # main stops the executor first. DDS may already be unavailable, so final
+        # pending drops and the final event sequence belong in the journal only.
+        self._outcome_transport_enabled = False
+        try:
+            self.batcher.close()
+            with self._async_pending_lock:
+                pending = list(self._async_pending.values())
+                self._async_pending.clear()
+            if pending:
+                self._publish_batch_outcome(dict(status="incomplete_shutdown",
+                                                 members=[frame_member(f) for f in pending]))
+            self._publish_batch_outcome(dict(status="session_stopped", transport="journal_only"))
+        finally:
+            self._outcome_journal.close()
+            result = super().destroy_node()
+        return result
 
 
 def main(args=None) -> None:

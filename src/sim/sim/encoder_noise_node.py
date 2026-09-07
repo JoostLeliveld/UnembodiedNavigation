@@ -68,6 +68,8 @@ class EncoderNoiseNode(Node):
         self.declare_parameter('enabled', True)
         self.declare_parameter('input_topic', '/odom')
         self.declare_parameter('output_topic', '/odom_noisy')
+        self.declare_parameter('input_frame_id', 'odom')
+        self.declare_parameter('input_child_frame_id', 'base_footprint')
         self.declare_parameter('seed', 0)
 
         # Multiplicative slip on the true velocity (independent of actuation slip).
@@ -112,6 +114,8 @@ class EncoderNoiseNode(Node):
         self.enabled = bool(self.get_parameter('enabled').value)
         input_topic = str(self.get_parameter('input_topic').value)
         output_topic = str(self.get_parameter('output_topic').value)
+        self.input_frame_id = str(self.get_parameter('input_frame_id').value)
+        self.input_child_frame_id = str(self.get_parameter('input_child_frame_id').value)
 
         self.linear_slip_mean = float(self.get_parameter('linear_slip_mean').value)
         self.linear_slip_std = max(0.0, float(self.get_parameter('linear_slip_std').value))
@@ -179,7 +183,8 @@ class EncoderNoiseNode(Node):
         yaw_var = max(self.initial_yaw_std_rad ** 2, self.covariance_floor_yaw_rad2)
         return [[pos_var, 0.0, 0.0], [0.0, pos_var, 0.0], [0.0, 0.0, yaw_var]]
 
-    def _propagate_pose_covariance(self, *, theta: float, v_true: float, w_true: float, dt: float) -> tuple[float, float]:
+    def _propagate_pose_covariance(self, *, theta: float, v_true: float, w_true: float, dt: float,
+                                   v_integrated=None, noise_active=True) -> tuple[float, float]:
         """Propagate planar encoder uncertainty for one noisy integration step.
 
         The AR(1) state has stationary standard deviation ``*_slip_std``.  Its
@@ -191,9 +196,10 @@ class EncoderNoiseNode(Node):
 
         c = math.cos(theta)
         s = math.sin(theta)
+        velocity = v_true if v_integrated is None else float(v_integrated)
         f = (
-            (1.0, 0.0, -v_true * dt * s),
-            (0.0, 1.0, v_true * dt * c),
+            (1.0, 0.0, -velocity * dt * s),
+            (0.0, 1.0, velocity * dt * c),
             (0.0, 0.0, 1.0),
         )
         p = self._pose_cov
@@ -203,6 +209,8 @@ class EncoderNoiseNode(Node):
         correlation_inflation = (1.0 + self.correlation_alpha) / max(1.0 - self.correlation_alpha, 1.0e-6)
         var_v = (v_true * self.linear_slip_std) ** 2 * correlation_inflation + self.linear_additive_std ** 2
         var_w = (w_true * self.angular_slip_std) ** 2 * correlation_inflation + self.angular_additive_std ** 2
+        if not noise_active:
+            var_v = var_w = 0.
         g_v = (dt * c, dt * s, 0.0)
         g_w = (0.0, 0.0, dt)
         for i in range(3):
@@ -215,7 +223,7 @@ class EncoderNoiseNode(Node):
             )
         self._pose_cov = propagated
         previous_jacobian = list(getattr(self, '_linear_scale_jacobian', [0.0, 0.0, 0.0]))
-        scale_increment = (dt * c * v_true, dt * s * v_true, 0.0)
+        scale_increment = (dt * c * v_true, dt * s * v_true, 0.0) if noise_active else (0., 0., 0.)
         self._linear_scale_jacobian = [
             sum(f[i][k] * previous_jacobian[k] for k in range(3)) + scale_increment[i]
             for i in range(3)
@@ -266,13 +274,25 @@ class EncoderNoiseNode(Node):
         group, so no cross-callback lock is required here.
         """
         try:
+            if (msg.header.frame_id != getattr(self, 'input_frame_id', 'odom')
+                    or msg.child_frame_id != getattr(self, 'input_child_frame_id', 'base_footprint')):
+                return
+            q = msg.pose.pose.orientation
+            quaternion = tuple(float(v) for v in (q.x,q.y,q.z,q.w))
+            if (not all(math.isfinite(v) for v in quaternion)
+                    or abs(sum(v*v for v in quaternion)-1.) > 1.e-6):
+                return
+            if msg.header.stamp.sec < 0 or not 0 <= msg.header.stamp.nanosec < 1_000_000_000:
+                return
             stamp_ns = int(msg.header.stamp.sec) * 1_000_000_000 + int(msg.header.stamp.nanosec)
             pose_x = float(msg.pose.pose.position.x)
             pose_y = float(msg.pose.pose.position.y)
             pose_theta = float(_yaw_from_quaternion(msg.pose.pose.orientation))
+            v_true = float(msg.twist.twist.linear.x)
+            w_true = float(msg.twist.twist.angular.z)
         except (AttributeError, TypeError, ValueError):
             return
-        if not all(math.isfinite(x) for x in (pose_x, pose_y, pose_theta)):
+        if not all(math.isfinite(x) for x in (pose_x, pose_y, pose_theta, v_true, w_true)):
             return
         stamp = Time(nanoseconds=stamp_ns).to_msg()
 
@@ -300,15 +320,6 @@ class EncoderNoiseNode(Node):
             # gap -- the omitted motion remains an unresolved validity defect.
             self._last_stamp_ns = stamp_ns
             self._last_stamp = stamp
-            return
-
-        # True velocity from Gazebo (reflects actuation noise already applied).
-        try:
-            v_true = float(msg.twist.twist.linear.x)
-            w_true = float(msg.twist.twist.angular.z)
-        except (AttributeError, TypeError, ValueError):
-            return
-        if not (math.isfinite(v_true) and math.isfinite(w_true)):
             return
 
         # From here the interval is valid and will be integrated exactly once.
@@ -346,6 +357,8 @@ class EncoderNoiseNode(Node):
             v_true=v_true,
             w_true=w_true,
             dt=dt,
+            v_integrated=v_enc,
+            noise_active=self.enabled and not stop,
         )
 
         # Integrate noisy velocity.

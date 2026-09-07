@@ -178,7 +178,7 @@ def test_runtime_source_has_one_native_model_and_the_complete_operational_contra
     assert source.count("self.model.predict(**kwargs)") == 1
     assert '"source": group' in source
     assert '"batch": len(group)' in source
-    assert "results.extend(list(part))" in source
+    assert "results.extend(validate_batch_results(part, len(group)))" in source
     assert "if len(results) != len(images_bgr):" in source
     assert source.count("else self._predict_batch(images)") == 1
     assert "use_torchscript" not in source

@@ -179,7 +179,7 @@ def test_fused_and_per_camera_are_scored_at_their_own_instants(tmp_path):
     cameras carry their real 2 cm.
     """
     run = _write_run(tmp_path)
-    rounds = A.fused_answers(run)
+    rounds = A.fused_answers(run, max_reference_gap_s=.11)
     assert len(rounds) == 20
     assert np.median([r["error_cm"] for r in rounds]) == pytest.approx(0.0, abs=1e-6)
     per_camera = [c["error_cm"] for r in rounds for c in r["cameras"].values()]
@@ -207,12 +207,10 @@ def test_corrections_counts_detector_rounds_not_log_rows(tmp_path):
     assert counts["state_fresh_rate_hz"] == pytest.approx(60.0 / counts["duration_s"])
 
 
-def test_belief_events_require_an_accepted_source_batch_assimilation(tmp_path):
-    run = _write_run(tmp_path, schema=4, rejected_batch=7)
-    events = A.belief_at_fusion_events(run)
-    assert len(events) == 19
-    assert "batch-7" not in {event["source_batch_id"] for event in events}
-    assert {event["assimilation_status"] for event in events} == {"accepted"}
+def test_belief_events_require_an_explicit_committed_posterior(tmp_path):
+    run = _write_run(tmp_path, schema=4, repeats=1, rejected_batch=7)
+    with pytest.raises(A.PosteriorUnavailable, match="explicit v2 committed posterior"):
+        A.belief_at_fusion_events(run)
 
 
 def test_nees_targets_are_not_interchangeable():
@@ -277,13 +275,17 @@ def test_a_reasoned_refusal_does_not_invalidate_a_drive():
     import tempfile
 
     def write(run, statuses):
+        (run/'run_manifest.json').write_text(json.dumps({'logging_schema_version':4}))
         with open(run / "fusion_observations.csv", "w", newline="") as fh:
-            w = _csv.writer(fh); w.writerow(["source_batch_id"])
-            for i in range(len(statuses)): w.writerow([f"b{i}"])
+            w = _csv.writer(fh)
+            w.writerow(["source_batch_id","fused_stamp","fused_x","fused_y","fused_cov_xx","fused_cov_xy","fused_cov_yy"])
+            for i in range(len(statuses)):w.writerow([f"b{i}",float(i),0.,0.,1.,0.,1.])
         with open(run / "correction_assimilations.csv", "w", newline="") as fh:
-            w = _csv.writer(fh); w.writerow(["source_batch_id", "status", "reason"])
-            for i, s in enumerate(statuses):
-                w.writerow([f"b{i}", s, "replay_gap_too_large" if s == "dropped" else "accepted"])
+            w = _csv.writer(fh)
+            w.writerow(["source_batch_id","status","reason","accepted","correction_stamp","apply_stamp"])
+            for i,s in enumerate(statuses):
+                w.writerow([f"b{i}",s,"replay_gap_too_large" if s=="dropped" else "accepted",
+                            int(s in {'accepted','accepted_bootstrap','reanchored'}),float(i),float(i)+.01])
 
     with tempfile.TemporaryDirectory() as tmp:
         run = _Path(tmp)
@@ -293,10 +295,6 @@ def test_a_reasoned_refusal_does_not_invalidate_a_drive():
 
     with tempfile.TemporaryDirectory() as tmp:
         run = _Path(tmp)
-        with open(run / "fusion_observations.csv", "w", newline="") as fh:
-            w = _csv.writer(fh); w.writerow(["source_batch_id"]); w.writerow(["b0"])
-        with open(run / "correction_assimilations.csv", "w", newline="") as fh:
-            w = _csv.writer(fh); w.writerow(["source_batch_id", "status", "reason"])
-            w.writerow(["b0", "teleported", ""])
+        write(run,["teleported"])
         ok, why = rvc._verify_correction_assimilations(run)
         assert not ok and "unclassifiable" in why, why

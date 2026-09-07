@@ -17,6 +17,7 @@ import math
 import os
 import sys
 import time
+import uuid
 from collections import Counter, deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -27,12 +28,14 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from ros_gz_interfaces.msg import Entity
 from ros_gz_interfaces.srv import SetEntityPose
 from sensor_msgs.msg import Image
 
 REPO = Path(__file__).resolve().parents[2]
-for rel in ('scripts/perception', 'src/experiments', 'src/perception', 'src/unav_common'):
+for rel in ('scripts/perception', 'src/experiments', 'src/perception', 'src/unav_common',
+            'experiments/camera_observation_characterization'):
     value = str((REPO / rel).resolve())
     if value not in sys.path:
         sys.path.insert(0, value)
@@ -51,6 +54,10 @@ from dataset_split_utils import build_pose_records, evenly_spaced_yaws  # noqa: 
 from experiments.core.world_profiles import load_profile  # noqa: E402
 from perception.core.ros_image import image_msg_to_bgr8  # noqa: E402
 from unav_common.occlusion_geometry import parse_collision_scene_from_world  # noqa: E402
+from unav_common.capture_integrity import (  # noqa: E402
+    CaptureIndexWriter, atomic_bytes, atomic_json, capture_lock,
+)
+from audit_capture_resume import require_resume  # noqa: E402
 
 
 CAMERAS = (
@@ -63,6 +70,8 @@ CAMERAS = (
 FIELDS = (
     'pose_id', 'position_id', 'x_idx', 'y_idx', 'heading_id', 'repetition_id',
     'source_batch_id',
+    'capture_session_id', 'image_id', 'image_stamp_ns', 'raw_image_sha1',
+    'command_issue_ns', 'command_ack_ns', 'settle_barrier_ns',
     'dataset_split', 'random_draw_index',
     'camera_id', 'camera_model', 'image', 'capture_status', 'capture_error',
     'robot_x', 'robot_y', 'robot_yaw', 'camera_range_m',
@@ -92,6 +101,10 @@ class Pair:
     image_stamp_ns: int
     label_stamp_ns: int | None
     stamp_delta_s: float
+
+
+class CaptureEpochError(RuntimeError):
+    """A clock reset invalidates every outstanding capture in this process."""
 
 
 def _closest_timestamp_batch(
@@ -145,7 +158,8 @@ class FiveCameraCapture(Node):
         buffer_size: int,
         with_semantic: bool,
     ) -> None:
-        super().__init__('capture_bbox_characterization')
+        super().__init__('capture_bbox_characterization', parameter_overrides=[
+            Parameter('use_sim_time', value=True)])
         self.robot_z = float(robot_z)
         self.settle_s = float(settle_s)
         self.timeout_s = float(timeout_s)
@@ -154,6 +168,12 @@ class FiveCameraCapture(Node):
         self.min_new_rgb = max(int(min_new_rgb), 1)
         self.min_new_labels = max(int(min_new_labels), 1)
         self.with_semantic = bool(with_semantic)
+        self._last_clock_ns = 0
+        self._barrier_ns = 0
+        self._last_consumed = {spec.camera_id: 0 for spec in cameras}
+        self._last_rgb_stamp = {spec.camera_id: 0 for spec in cameras}
+        self._last_label_stamp = {spec.camera_id: 0 for spec in cameras}
+        self.capture_context = {}
         self.rgb_count = {spec.camera_id: 0 for spec in cameras}
         self.label_count = {spec.camera_id: 0 for spec in cameras}
         self.rgb = {spec.camera_id: deque(maxlen=max(int(buffer_size), 8)) for spec in cameras}
@@ -177,25 +197,42 @@ class FiveCameraCapture(Node):
                 )
 
     def _rgb_cb(self, camera_id: str, msg: Image) -> None:
+        stamp = _stamp_ns(msg)
+        if stamp <= self._last_rgb_stamp[camera_id]:
+            return  # repeated or reordered delivery is not new physical evidence
+        image = image_msg_to_bgr8(msg)
+        self._last_rgb_stamp[camera_id] = stamp
         self.rgb_count[camera_id] += 1
         self.rgb[camera_id].append(
-            (self.rgb_count[camera_id], _stamp_ns(msg), image_msg_to_bgr8(msg))
+            (self.rgb_count[camera_id], stamp, image)
         )
 
     def _labels_cb(self, camera_id: str, msg: Image) -> None:
+        stamp = _stamp_ns(msg)
+        if stamp <= self._last_label_stamp[camera_id]:
+            return
         try:
             labels = _read_uint_label_map(msg)
         except Exception as exc:  # pragma: no cover - ROS transport path
             self.last_label_error[camera_id] = str(exc)
             return
         self.label_count[camera_id] += 1
+        self._last_label_stamp[camera_id] = stamp
         self.labels[camera_id].append(
-            (self.label_count[camera_id], _stamp_ns(msg), labels)
+            (self.label_count[camera_id], stamp, labels)
         )
 
     def _spin(self, timeout: float = 0.04) -> None:
         self.zero_cmd.publish(Twist())
         rclpy.spin_once(self, timeout_sec=float(timeout))
+        self._sim_time_ns()
+
+    def _sim_time_ns(self) -> int:
+        stamp = self.get_clock().now().nanoseconds
+        if stamp < self._last_clock_ns:
+            raise CaptureEpochError('simulation clock rewound; restart the capture process')
+        self._last_clock_ns = stamp
+        return stamp
 
     def wait_ready(self, camera_ids: tuple[str, ...], timeout_s: float = 45.0) -> None:
         deadline = time.monotonic() + float(timeout_s)
@@ -205,7 +242,7 @@ class FiveCameraCapture(Node):
             ready = all(self.rgb[cid] for cid in camera_ids)
             if self.with_semantic:
                 ready = ready and all(self.labels[cid] for cid in camera_ids)
-            if service and ready:
+            if service and ready and self._sim_time_ns() > 0:
                 return
         missing = [
             cid for cid in camera_ids
@@ -232,25 +269,25 @@ class FiveCameraCapture(Node):
     def _pair_candidates(
         self, camera_id: str, before_rgb: int, before_labels: int
     ) -> list[Pair]:
-        if self.rgb_count[camera_id] < before_rgb + self.min_new_rgb:
+        barrier = max(self._barrier_ns, self._last_consumed[camera_id])
+        rgb_candidates = [item for item in self.rgb[camera_id]
+                          if item[0] > before_rgb and barrier < item[1] <= self._sim_time_ns()]
+        if len({item[1] for item in rgb_candidates}) < self.min_new_rgb:
             return []
         if not self.with_semantic:
-            candidates = [item for item in self.rgb[camera_id] if item[0] > before_rgb]
             return [
                 Pair(image.copy(), None, rgb_stamp, None, math.nan)
-                for _count, rgb_stamp, image in candidates
+                for _count, rgb_stamp, image in rgb_candidates
             ]
-        if self.label_count[camera_id] < before_labels + self.min_new_labels:
+        label_candidates = [item for item in self.labels[camera_id]
+                            if item[0] > before_labels and barrier < item[1] <= self._sim_time_ns()]
+        if len({item[1] for item in label_candidates}) < self.min_new_labels:
             return []
         paired: list[Pair] = []
-        for rgb_count, rgb_stamp, image in self.rgb[camera_id]:
-            if rgb_count <= before_rgb:
-                continue
+        for rgb_count, rgb_stamp, image in rgb_candidates:
             best = None
             best_key = None
-            for label_count, label_stamp, labels in self.labels[camera_id]:
-                if label_count <= before_labels:
-                    continue
+            for label_count, label_stamp, labels in label_candidates:
                 delta = abs(rgb_stamp - label_stamp) * 1e-9
                 if delta > self.sync_slop_s:
                     continue
@@ -277,9 +314,22 @@ class FiveCameraCapture(Node):
         return _closest_timestamp_batch(candidates, max_span_s=self.batch_sync_slop_s)
 
     def capture(self, x: float, y: float, yaw: float, camera_ids: tuple[str, ...]) -> dict[str, Pair]:
+        if not all(math.isfinite(v) for v in (x, y, yaw)):
+            raise ValueError('commanded capture pose must be finite')
+        if len(set(camera_ids)) != len(camera_ids) or set(camera_ids) != set(self.rgb):
+            raise ValueError('capture must request the exact unique camera registry')
+        issued = self._sim_time_ns()
+        if issued <= 0:
+            raise RuntimeError('positive simulation clock required before commanding a pose')
         self._set_pose(x, y, yaw)
-        settle_deadline = time.monotonic() + self.settle_s
-        while rclpy.ok() and time.monotonic() < settle_deadline:
+        ack = self._sim_time_ns()
+        self._barrier_ns = ack + math.ceil(self.settle_s * 1e9)
+        self.capture_context = dict(command_issue_ns=issued, command_ack_ns=ack,
+                                    settle_barrier_ns=self._barrier_ns)
+        settle_deadline = time.monotonic() + self.timeout_s
+        while rclpy.ok() and self._sim_time_ns() < self._barrier_ns:
+            if time.monotonic() >= settle_deadline:
+                raise RuntimeError('simulation did not reach the settle barrier')
             self._spin()
         before_rgb = dict(self.rgb_count)
         before_labels = dict(self.label_count)
@@ -288,6 +338,8 @@ class FiveCameraCapture(Node):
             self._spin()
             pairs = self._batch(camera_ids, before_rgb, before_labels)
             if pairs is not None:
+                for camera, pair in pairs.items():
+                    self._last_consumed[camera] = pair.image_stamp_ns
                 return pairs
         missing = [
             cid for cid in camera_ids
@@ -612,15 +664,43 @@ def main() -> int:
         return 0
 
     out = args.out.expanduser().resolve()
+    out.mkdir(parents=True, exist_ok=bool(args.resume))
+    with capture_lock(out):
+        return _run_capture(args, out, specs, profile, world_path, poses, plan, transport)
+
+
+def _append_attempt(out: Path, record: dict) -> None:
+    with (out / 'capture_attempts.jsonl').open('a', encoding='utf-8') as stream:
+        stream.write(json.dumps(record, allow_nan=False) + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def _run_capture(args, out, specs, profile, world_path, poses, plan, transport) -> int:
     manifest_path = out / 'capture_manifest.json'
     script = Path(__file__).resolve()
     helper = REPO / 'scripts/perception/capture_yolo_dataset.py'
     expected_manifest = {
         'status': 'running',
-        'schema': 'bbox_characterization_capture.v2',
+        'schema': 'bbox_characterization_capture.v3',
         'created_utc': datetime.now(timezone.utc).isoformat(),
         'plan': plan,
         'transport': transport,
+        'pose_plan': [{k: float(r[k]) if k in ('x', 'y', 'yaw') else int(r[k])
+                       for k in ('x', 'y', 'yaw', 'position_id', 'yaw_idx')} for r in poses],
+        'capture_policy': {k: getattr(args, k) for k in (
+            'robot_z', 'robot_label', 'settle_s', 'image_timeout_s', 'sync_slop_ms',
+            'batch_sync_slop_ms', 'min_new_rgb_frames', 'min_new_label_frames',
+            'buffer_size', 'max_attempts', 'with_semantic')},
+        'source_files': {rel: _sha256(REPO / rel) for rel in (
+            'experiments/camera_observation_characterization/capture_bbox_grid.py',
+            'experiments/camera_observation_characterization/audit_capture_resume.py',
+            'scripts/perception/capture_yolo_dataset.py',
+            'scripts/perception/dataset_split_utils.py',
+            'src/perception/perception/core/ros_image.py',
+            'src/experiments/experiments/core/world_profiles.py',
+            'src/unav_common/unav_common/capture_integrity.py',
+            'src/unav_common/unav_common/camera_model.py')},
         'world_path': str(Path(world_path).resolve()),
         'world_sha256': _sha256(Path(world_path)),
         'world_profiles_path': str(args.world_profiles.resolve()),
@@ -667,31 +747,15 @@ def main() -> int:
     if bool(args.resume):
         if not out.is_dir() or not manifest_path.is_file() or not index_path.is_file():
             raise RuntimeError('--resume requires an existing capture manifest and index')
+        report = require_resume(out, expected_manifest)
         manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-        if manifest.get('status') != 'running':
-            raise RuntimeError(f"resume requires status=running, got {manifest.get('status')!r}")
-        if manifest.get('plan') != plan:
-            raise RuntimeError('resume plan differs from the frozen capture plan')
         with index_path.open(newline='', encoding='utf-8') as handle:
             existing_rows = list(csv.DictReader(handle))
-        counts = Counter(int(row['pose_id']) for row in existing_rows)
-        if any(value != len(specs) for value in counts.values()):
-            raise RuntimeError('resume index contains an incomplete five-camera pose batch')
-        successful = {
-            int(row['pose_id']) for row in existing_rows if row['capture_status'] == 'ok'
-        }
-        start_pose_id = max(successful, default=-1) + 1
-        # A renderer crash can leave complete, all-failed retry batches at the tail. They were
-        # never images, so retry those poses after restart while retaining earlier real failures.
-        existing_rows = [row for row in existing_rows if int(row['pose_id']) < start_pose_id]
-        with index_path.open('w', newline='', encoding='utf-8') as handle:
-            writer = csv.DictWriter(handle, fieldnames=FIELDS)
-            writer.writeheader(); writer.writerows(existing_rows)
+        start_pose_id = report['next_pose_id']
+        start_batch_index = report['next_batch_index']
         rows_written = len(existing_rows)
-        failures = len({
-            (row['pose_id'], row['repetition_id'])
-            for row in existing_rows if row['capture_status'] == 'failed'
-        })
+        failures = len({(r['pose_id'], r['repetition_id']) for r in existing_rows
+                        if r['capture_status'] == 'failed'})
         manifest['resume_count'] = int(manifest.get('resume_count', 0)) + 1
         manifest.setdefault('resume_events', []).append({
             'utc': datetime.now(timezone.utc).isoformat(),
@@ -699,14 +763,35 @@ def main() -> int:
             'rows_retained': rows_written,
             'retained_failed_batches': failures,
         })
-        manifest_path.write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+        atomic_json(manifest_path, manifest)
     else:
-        if out.exists():
+        if manifest_path.exists() or index_path.exists():
             raise RuntimeError(f'Output already exists: {out}')
+        start_batch_index = 0
         for spec in specs:
             (out / spec.camera_id / 'images').mkdir(parents=True, exist_ok=False)
         manifest = expected_manifest
-        manifest_path.write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+        atomic_json(manifest_path, manifest)
+
+    session_id = uuid.uuid4().hex
+    manifest.setdefault('capture_sessions', []).append({
+        'capture_session_id': session_id, 'created_utc': datetime.now(timezone.utc).isoformat(),
+        'transport': transport, 'start_batch_index': start_batch_index})
+    atomic_json(manifest_path, manifest)
+    # Exact configuration bytes are retained separately; their hashes remain in the manifest.
+    provenance = out / 'provenance'
+    provenance.mkdir(exist_ok=True)
+    for name, source, expected in (
+        ('world.sdf', Path(world_path), manifest['world_sha256']),
+        ('world_profiles.yaml', args.world_profiles, manifest['world_profiles_sha256'])):
+        data = source.read_bytes()
+        if hashlib.sha256(data).hexdigest() != expected:
+            raise RuntimeError(f'configuration changed while opening capture: {source}')
+        dest = provenance / name
+        if dest.exists() and dest.read_bytes() != data:
+            raise RuntimeError(f'changed capture configuration snapshot: {dest}')
+        if not dest.exists():
+            atomic_bytes(dest, data)
 
     camera_ids = tuple(spec.camera_id for spec in specs)
     spec_by_id = {spec.camera_id: spec for spec in specs}
@@ -726,100 +811,119 @@ def main() -> int:
             (row['camera_id'], row['image_sha1']): out / row['image']
             for row in existing_rows if row['capture_status'] == 'ok' and row['image_sha1']
         }
-        with index_path.open('a' if bool(args.resume) else 'w', newline='', encoding='utf-8') as handle:
-            writer = csv.DictWriter(handle, fieldnames=FIELDS)
-            if not bool(args.resume):
-                writer.writeheader()
-            for pose_id, record in enumerate(poses):
-                if pose_id < start_pose_id:
+        writer = CaptureIndexWriter(index_path, FIELDS, len(specs), existing_rows)
+        for pose_id, record in enumerate(poses):
+            if pose_id < start_pose_id:
+                continue
+            x, y, yaw = float(record['x']), float(record['y']), float(record['yaw'])
+            for repetition in range(max(int(args.repeats), 1)):
+                if pose_id * plan['repeats'] + repetition < start_batch_index:
                     continue
-                x, y, yaw = float(record['x']), float(record['y']), float(record['yaw'])
-                for repetition in range(max(int(args.repeats), 1)):
-                    pairs = None
-                    error = ''
-                    for attempt in range(max(int(args.max_attempts), 1)):
-                        try:
-                            pairs = node.capture(x, y, yaw, camera_ids)
-                            break
-                        except Exception as exc:  # pragma: no cover - ROS transport path
-                            error = f'attempt_{attempt}:{exc}'
-                    if pairs is None:
-                        failures += 1
-                        for camera_id in camera_ids:
-                            spec = spec_by_id[camera_id]
-                            row = {field: '' for field in FIELDS}
-                            row.update({
-                                'pose_id': pose_id, 'position_id': int(record['position_id']),
-                                'x_idx': int(record['x_idx']), 'y_idx': int(record['y_idx']),
-                                'heading_id': int(record['yaw_idx']), 'repetition_id': repetition,
-                                'source_batch_id': f'pose_{pose_id:06d}_r{repetition:02d}',
-                                'dataset_split': record.get('dataset_split', ''),
-                                'random_draw_index': record.get('random_draw_index', ''),
-                                'camera_id': camera_id, 'camera_model': spec.model,
-                                'capture_status': 'failed', 'capture_error': error,
-                                'robot_x': x, 'robot_y': y, 'robot_yaw': yaw,
-                            })
-                            writer.writerow(row)
-                            rows_written += 1
-                        handle.flush()
-                        continue
-                    stamps = [pair.image_stamp_ns for pair in pairs.values()]
-                    batch_span_s = (max(stamps) - min(stamps)) * 1e-9
-                    for camera_id, pair in pairs.items():
+                pairs = None
+                error = ''
+                for attempt in range(max(int(args.max_attempts), 1)):
+                    attempt_id = f'{session_id}/{pose_id}:{repetition}/{attempt}'
+                    attempt_record = dict(attempt_id=attempt_id, pose_id=pose_id,
+                                          repetition_id=repetition, x=x, y=y, yaw=yaw,
+                                          status='started', utc=datetime.now(timezone.utc).isoformat())
+                    _append_attempt(out, attempt_record)
+                    try:
+                        pairs = node.capture(x, y, yaw, camera_ids)
+                        _append_attempt(out, dict(attempt_record, status='captured',
+                            capture_context=node.capture_context,
+                            camera_stamps_ns={c: p.image_stamp_ns for c, p in pairs.items()}))
+                        break
+                    except CaptureEpochError as exc:
+                        _append_attempt(out, dict(attempt_record, status='epoch_aborted', reason=str(exc)))
+                        raise
+                    except Exception as exc:  # pragma: no cover - ROS transport path
+                        error = f'attempt_{attempt}:{exc}'
+                        _append_attempt(out, dict(attempt_record, status='failed', reason=str(exc)))
+                if pairs is None:
+                    failures += 1
+                    for camera_id in camera_ids:
                         spec = spec_by_id[camera_id]
-                        detector_image = _add_rgb_read_noise(
-                            pair.image,
-                            stddev_dn=float(args.rgb_noise_stddev_dn),
-                            seed=int(args.rgb_noise_seed),
-                            pose_id=pose_id,
-                            repetition_id=repetition,
-                            camera_index=camera_index_by_id[camera_id],
-                        )
-                        image_sha1 = _sha1_array(detector_image)
-                        image_path = image_path_by_hash.get((camera_id, image_sha1))
-                        if image_path is None:
-                            image_path = (
-                                out / camera_id / 'images'
-                                / f'pose_{pose_id:06d}_r{repetition:02d}.png'
-                            )
-                            if not cv2.imwrite(str(image_path), detector_image):
-                                raise RuntimeError(f'Failed to write {image_path}')
-                            image_path_by_hash[(camera_id, image_sha1)] = image_path
-                        expected = _expected_geometry(spec, x, y, yaw)
                         row = {field: '' for field in FIELDS}
                         row.update({
                             'pose_id': pose_id, 'position_id': int(record['position_id']),
                             'x_idx': int(record['x_idx']), 'y_idx': int(record['y_idx']),
                             'heading_id': int(record['yaw_idx']), 'repetition_id': repetition,
                             'source_batch_id': f'pose_{pose_id:06d}_r{repetition:02d}',
+                            'capture_session_id': session_id,
                             'dataset_split': record.get('dataset_split', ''),
                             'random_draw_index': record.get('random_draw_index', ''),
                             'camera_id': camera_id, 'camera_model': spec.model,
-                            'image': str(image_path.relative_to(out)),
-                            'capture_status': 'ok', 'capture_error': '',
+                            'capture_status': 'failed', 'capture_error': error,
                             'robot_x': x, 'robot_y': y, 'robot_yaw': yaw,
-                            'camera_range_m': math.hypot(x - spec.pose[0], y - spec.pose[1]),
-                            'image_stamp_s': pair.image_stamp_ns * 1e-9,
-                            'label_stamp_s': (
-                                pair.label_stamp_ns * 1e-9
-                                if pair.label_stamp_ns is not None else ''
-                            ),
-                            'stamp_delta_s': pair.stamp_delta_s,
-                            'batch_image_span_s': batch_span_s,
-                            'image_sha1': image_sha1,
-                            **expected,
                         })
-                        if pair.labels is not None:
-                            row.update(_mask_geometry(pair.labels, int(args.robot_label)))
                         writer.writerow(row)
                         rows_written += 1
-                    handle.flush()
-                if (pose_id + 1) % 25 == 0:
-                    print(
-                        f'captured {pose_id + 1}/{len(poses)} poses; '
-                        f'rows={rows_written} failed_batches={failures}',
-                        flush=True,
+                    writer.flush()
+                    continue
+                stamps = [pair.image_stamp_ns for pair in pairs.values()]
+                batch_span_s = (max(stamps) - min(stamps)) * 1e-9
+                for camera_id, pair in pairs.items():
+                    spec = spec_by_id[camera_id]
+                    detector_image = _add_rgb_read_noise(
+                        pair.image,
+                        stddev_dn=float(args.rgb_noise_stddev_dn),
+                        seed=int(args.rgb_noise_seed),
+                        pose_id=pose_id,
+                        repetition_id=repetition,
+                        camera_index=camera_index_by_id[camera_id],
                     )
+                    image_sha1 = _sha1_array(detector_image)
+                    image_path = image_path_by_hash.get((camera_id, image_sha1))
+                    if image_path is None:
+                        image_path = (
+                            out / camera_id / 'images'
+                            / f'pose_{pose_id:06d}_r{repetition:02d}.png'
+                        )
+                        ok, encoded = cv2.imencode('.png', detector_image)
+                        if not ok:
+                            raise RuntimeError(f'Failed to encode {image_path}')
+                        atomic_bytes(image_path, encoded.tobytes())
+                        image_path_by_hash[(camera_id, image_sha1)] = image_path
+                    expected = _expected_geometry(spec, x, y, yaw)
+                    row = {field: '' for field in FIELDS}
+                    row.update({
+                        'pose_id': pose_id, 'position_id': int(record['position_id']),
+                        'x_idx': int(record['x_idx']), 'y_idx': int(record['y_idx']),
+                        'heading_id': int(record['yaw_idx']), 'repetition_id': repetition,
+                        'source_batch_id': f'pose_{pose_id:06d}_r{repetition:02d}',
+                        'capture_session_id': session_id,
+                        'dataset_split': record.get('dataset_split', ''),
+                        'random_draw_index': record.get('random_draw_index', ''),
+                        'camera_id': camera_id, 'camera_model': spec.model,
+                        'image': str(image_path.relative_to(out)),
+                        'capture_status': 'ok', 'capture_error': '',
+                        'robot_x': x, 'robot_y': y, 'robot_yaw': yaw,
+                        'camera_range_m': math.hypot(x - spec.pose[0], y - spec.pose[1]),
+                        'image_stamp_s': pair.image_stamp_ns * 1e-9,
+                        'label_stamp_s': (
+                            pair.label_stamp_ns * 1e-9
+                            if pair.label_stamp_ns is not None else ''
+                        ),
+                        'stamp_delta_s': pair.stamp_delta_s,
+                        'batch_image_span_s': batch_span_s,
+                        'image_sha1': image_sha1,
+                        'raw_image_sha1': _sha1_array(pair.image),
+                        'image_stamp_ns': pair.image_stamp_ns,
+                        'image_id': f'{session_id}/{camera_id}@{pair.image_stamp_ns}',
+                        **node.capture_context,
+                        **expected,
+                    })
+                    if pair.labels is not None:
+                        row.update(_mask_geometry(pair.labels, int(args.robot_label)))
+                    writer.writerow(row)
+                    rows_written += 1
+                writer.flush()
+            if (pose_id + 1) % 25 == 0:
+                print(
+                    f'captured {pose_id + 1}/{len(poses)} poses; '
+                    f'rows={rows_written} failed_batches={failures}',
+                    flush=True,
+                )
     finally:
         node.destroy_node()
         if rclpy.ok():
@@ -832,7 +936,7 @@ def main() -> int:
         'failed_batches': failures,
         'capture_index_sha256': _sha256(index_path),
     })
-    manifest_path.write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+    atomic_json(manifest_path, manifest)
     print(json.dumps({key: manifest[key] for key in ('status', 'rows_written', 'failed_batches')}, indent=2))
     return 0 if failures == 0 else 2
 

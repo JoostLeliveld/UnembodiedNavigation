@@ -3,13 +3,15 @@ import hashlib
 import os
 import shutil
 import subprocess
+import tempfile
+import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional
 
 
 def generate_run_id(prefix: str = "run") -> str:
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"{prefix}_{stamp}"
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    return f"{prefix}_{stamp}_{uuid.uuid4().hex[:12]}"
 
 
 def ensure_dir(path: str) -> None:
@@ -98,9 +100,37 @@ def snapshot_file(src_path: str, dest_dir: str, dest_name: Optional[str] = None)
     return dest_path
 
 
+def atomic_write_json(path: str, data: Dict[str, Any]) -> str:
+    """Durably replace a JSON file without exposing a truncated final path."""
+    parent = os.path.dirname(path) or "."
+    ensure_dir(parent)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=parent,
+            prefix=os.path.basename(path) + ".", suffix=".tmp", delete=False,
+        ) as handle:
+            temporary = handle.name
+            json.dump(data, handle, indent=2, sort_keys=True)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        temporary = None
+        directory_fd = os.open(parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        if temporary is not None:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
+    return path
+
+
 def write_manifest(dest_dir: str, data: Dict[str, Any], filename: str = "run_manifest.json") -> str:
     ensure_dir(dest_dir)
     path = os.path.join(dest_dir, filename)
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(data, handle, indent=2, sort_keys=True)
-    return path
+    return atomic_write_json(path, data)

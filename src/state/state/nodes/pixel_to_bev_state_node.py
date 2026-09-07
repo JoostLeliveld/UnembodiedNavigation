@@ -14,6 +14,7 @@ from perception.core.detection_diagnostics import (
 )
 from state.core.pixel_to_bev import PixelToBevTransformer
 from state.core.noise import build_covariance
+from unav_common.config import parse_bev_affine_calibration
 
 
 HEADING_SOURCE_CODES = {
@@ -97,22 +98,15 @@ class PixelToBevStateNode(Node):
         self.bev_y_calibration_offset_m = float(
             self.get_parameter('bev_y_calibration_offset_m').value
         )
-        self._bev_affine = None
         _affine_raw = str(self.get_parameter('bev_affine_calibration').value or '').strip()
-        if _affine_raw:
-            try:
-                _vals = [float(v) for v in _affine_raw.replace(';', ',').split(',') if v.strip() != '']
-                if len(_vals) == 6:
-                    self._bev_affine = _vals
-                    self.get_logger().info(
-                        f'BEV affine calibration active: {_vals} (replaces constant y-offset)'
-                    )
-                else:
-                    self.get_logger().warn(
-                        f'bev_affine_calibration needs 6 values, got {len(_vals)}; using constant offset'
-                    )
-            except Exception as exc:  # pragma: no cover
-                self.get_logger().warn(f'bad bev_affine_calibration ({exc}); using constant offset')
+        try:
+            self._bev_affine = parse_bev_affine_calibration(_affine_raw)
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc
+        if self._bev_affine is not None:
+            self.get_logger().info(
+                f'BEV affine calibration active: {self._bev_affine} (replaces constant y-offset)'
+            )
 
         # Baseline measurement noise (pixels)
         self.R_visible_std = 2.5
@@ -279,8 +273,6 @@ class PixelToBevStateNode(Node):
             x, y = (c[0] * x + c[1] * y + c[2], c[3] * x + c[4] * y + c[5])
         else:
             y += self.bev_y_calibration_offset_m
-        sigma_x = self.transform_noise_sigma
-        sigma_y = self.transform_noise_sigma
 
         diag = self._matching_diag(msg.header.stamp)
 
@@ -304,15 +296,30 @@ class PixelToBevStateNode(Node):
             blended_prec = trust_update * prec_visible + (1.0 - trust_update) * prec_miss
             pixel_noise_sigma = math.sqrt(1.0 / blended_prec)
 
-        if pixel_noise_sigma > 0.0:
-            sigmas = self._transformer.pixel_noise_to_metric(
-                u,
-                v,
-                pixel_noise_sigma,
+        # Covariance describes the same XY map as the corrected mean. Keep
+        # the full cross term; marginal sigmas alone lose camera anisotropy.
+        try:
+            metric_covariance = self._transformer.pixel_covariance_to_metric(
+                u, v, np.eye(2) * pixel_noise_sigma**2,
                 transform_noise_sigma=self.transform_noise_sigma,
             )
-            if sigmas is not None:
-                sigma_x, sigma_y = sigmas
+            if metric_covariance is None:
+                return
+            metric_covariance = np.asarray(metric_covariance, dtype=float)
+            if (metric_covariance.shape != (2, 2)
+                    or not np.isfinite(metric_covariance).all()
+                    or not np.allclose(metric_covariance, metric_covariance.T, atol=1e-12, rtol=0)
+                    or np.linalg.eigvalsh(metric_covariance).min() < 0):
+                return
+            if self._bev_affine is not None:
+                c = self._bev_affine
+                affine = np.array([[c[0], c[1]], [c[3], c[4]]], dtype=float)
+                metric_covariance = affine @ metric_covariance @ affine.T
+                metric_covariance = (metric_covariance + metric_covariance.T) / 2
+            if not np.isfinite(metric_covariance).all() or not all(math.isfinite(value) for value in (x, y)):
+                return
+        except (ValueError, np.linalg.LinAlgError):
+            return
 
         yaw_out = self._last_yaw
         sigma_yaw = float(
@@ -365,7 +372,11 @@ class PixelToBevStateNode(Node):
         out.pose.pose.orientation.y = qy
         out.pose.pose.orientation.z = qz
         out.pose.pose.orientation.w = qw
-        out.pose.covariance = build_covariance(sigma_x, sigma_y, sigma_yaw)
+        out.pose.covariance = build_covariance(0.0, 0.0, sigma_yaw)
+        out.pose.covariance[0] = float(metric_covariance[0, 0])
+        out.pose.covariance[1] = float(metric_covariance[0, 1])
+        out.pose.covariance[6] = float(metric_covariance[1, 0])
+        out.pose.covariance[7] = float(metric_covariance[1, 1])
         self._publisher.publish(out)
 
         diag_msg = Float64MultiArray()

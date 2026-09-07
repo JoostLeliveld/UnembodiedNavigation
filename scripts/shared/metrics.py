@@ -51,20 +51,32 @@ def probit_prob(mu_f, sigma_f):
     return sigmoid(kappa * np.asarray(mu_f, dtype=float))
 
 
+def _probability_inputs(y, p, *, vector=False):
+    y, p = np.asarray(y, float), np.asarray(p, float)
+    if y.shape != p.shape or (vector and y.ndim != 1):
+        raise ValueError("matching probability/target shapes are required")
+    if not np.isfinite(y).all() or not np.isfinite(p).all():
+        raise ValueError("probabilities and targets must be finite")
+    if np.any((p < 0) | (p > 1)) or np.any((y < 0) | (y > 1)):
+        raise ValueError("probabilities and targets must lie in [0,1]")
+    return y, p
+
+
 def brier(y, p):
-    return float(np.mean((np.asarray(p, float) - np.asarray(y, float)) ** 2))
+    y, p = _probability_inputs(y, p)
+    return float(np.mean((p - y) ** 2)) if y.size else math.nan
 
 
 def logloss(y, p, eps=1e-4):
+    y, p = _probability_inputs(y, p)
     p = clip_prob(p, eps)
-    y = np.asarray(y, float)
     return float(-np.mean(y * np.log(p) + (1.0 - y) * np.log(1.0 - p)))
 
 
 def auroc(y, p):
     """Mann-Whitney rank AUC with proper tie handling (NaN if one class)."""
     from scipy.stats import rankdata
-    y = np.asarray(y, float); p = np.asarray(p, float)
+    y, p = _probability_inputs(y, p, vector=True)
     pos = y >= 0.5
     n1, n0 = int(pos.sum()), int((~pos).sum())
     if n1 == 0 or n0 == 0:
@@ -82,8 +94,7 @@ def auprc(y, p):
     over AUROC when positives are rare, as in per-camera usable-observation
     labels.
     """
-    y = np.asarray(y, float)
-    p = np.asarray(p, float)
+    y, p = _probability_inputs(y, p, vector=True)
     pos_total = float((y >= 0.5).sum())
     if pos_total == 0:
         return math.nan
@@ -114,7 +125,11 @@ def auprc(y, p):
 
 def ece(y, p, bins=10):
     """Expected calibration error, equal-width bins."""
-    y = np.asarray(y, float); p = np.asarray(p, float)
+    y, p = _probability_inputs(y, p)
+    if not isinstance(bins, int) or isinstance(bins, bool) or bins < 1:
+        raise ValueError("bins must be a positive integer")
+    if not y.size:
+        return math.nan
     edges = np.linspace(0.0, 1.0, bins + 1)
     tot = 0.0
     for lo, hi in zip(edges[:-1], edges[1:]):
@@ -127,7 +142,7 @@ def ece(y, p, bins=10):
 
 def fhtr(y, p, tau_high=0.7, y_bad=0.5):
     """False-high-trust rate: P(predicted trust > tau_high | outcome bad)."""
-    y = np.asarray(y, float); p = np.asarray(p, float)
+    y, p = _probability_inputs(y, p)
     bad = y < y_bad
     if bad.sum() == 0:
         return math.nan

@@ -27,14 +27,30 @@ def feature_vector(
     row: Mapping[str, object], *, heading_rad: float | None = None,
     disable_heading: bool = False,
 ) -> np.ndarray:
-    """Build the online feature vector from one frozen detector observation."""
+    """Commissioning adapter; commanded yaw is allowed only in this offline API.
+
+    Runtime callers must use ``online_feature_vector`` with their operational heading.
+    """
+    if not disable_heading and heading_rad is None:
+        heading_rad = float(row['robot_yaw'])
+    return online_feature_vector(row, heading_rad=heading_rad, disable_heading=disable_heading)
+
+
+def online_feature_vector(
+    row: Mapping[str, object], *, heading_rad: float | None = None,
+    disable_heading: bool = False,
+) -> np.ndarray:
+    """Never reads commanded pose; enabled heading must be supplied operationally."""
     width = float(row["image_width"])
     height = float(row["image_height"])
-    yaw = float(row["robot_yaw"] if heading_rad is None else heading_rad)
-    relative = yaw - float(row["baseline_bearing_rad"])
+    if not math.isfinite(width) or not math.isfinite(height) or min(width, height) <= 0:
+        raise ValueError('image dimensions must be finite and positive')
     if disable_heading:
         sin_relative, cos_relative = 0.0, 0.0
     else:
+        if heading_rad is None or not math.isfinite(heading_rad):
+            raise ValueError('a finite operational heading is required')
+        relative = float(heading_rad) - float(row['baseline_bearing_rad'])
         sin_relative, cos_relative = math.sin(relative), math.cos(relative)
     camera = str(row["camera"])
     if camera not in CAMERAS:
@@ -50,7 +66,10 @@ def feature_vector(
         cos_relative,
         *(1.0 if camera == name else 0.0 for name in CAMERAS),
     ]
-    return np.asarray(values, dtype=np.float32)
+    values = np.asarray(values, dtype=np.float32)
+    if not np.isfinite(values).all() or values[2] <= 0 or values[3] <= 0 or not 0 <= values[4] <= 1:
+        raise ValueError('nonfinite or invalid detector features')
+    return values
 
 
 def make_model(input_dim: int):
@@ -72,8 +91,16 @@ def load_artifact(path, *, device: str = "cpu"):
     import torch
 
     artifact = torch.load(path, map_location=device, weights_only=False)
+    if artifact.get('schema') != 'provisional_pixel_residual.v1':
+        raise RuntimeError('unsupported residual-model artifact version')
+    if artifact.get('frame') != 'original_image_pixels' or artifact.get('target') != 'projected_commanded_ground_reference_minus_semantic_mask_bottom_centre':
+        raise RuntimeError('incompatible residual-model physical target')
     if artifact["feature_names"] != list(FEATURE_NAMES):
         raise RuntimeError("residual-model feature contract does not match this code")
+    for key, length in [('x_mean',len(FEATURE_NAMES)),('x_std',len(FEATURE_NAMES)),('y_mean',2),('y_std',2)]:
+        value = np.asarray(artifact.get(key), dtype=float)
+        if value.shape != (length,) or not np.isfinite(value).all() or (key.endswith('_std') and np.any(value <= 0)):
+            raise RuntimeError(f'invalid residual-model normalization: {key}')
     model = make_model(len(FEATURE_NAMES)).to(device)
     model.load_state_dict(artifact["state_dict"])
     model.eval()

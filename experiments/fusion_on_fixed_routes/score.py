@@ -19,6 +19,8 @@ artefact stays visible in the output rather than in a memo.
 """
 from __future__ import annotations
 
+import argparse
+import hashlib
 import json
 import math
 import os
@@ -52,7 +54,7 @@ FOLDER = {
 }
 
 
-def _fusion_quality(run: Path) -> dict:
+def _fusion_quality(run: Path, *, max_reference_gap_s=None) -> dict:
     """Did combining the cameras beat the best one that was on the table?
 
     Scoring only -- the rule cannot see which camera is closest to the truth. But if the
@@ -66,7 +68,9 @@ def _fusion_quality(run: Path) -> dict:
     handed fusion a ~200 ms head start on every camera it was being compared with.
     """
 
-    rounds = A.fused_answers(run)
+    start, stop = A.mission_interval(run)
+    rounds = [r for r in A.fused_answers(run, max_reference_gap_s=max_reference_gap_s)
+              if start <= r["fused_stamp"] <= stop]
     if not rounds:
         return {"logged": False,
                 "note": "this drive predates per-camera observation logging, or logs no "
@@ -135,8 +139,10 @@ def _selected_runs(arm: str, task: str = TASKS[0]) -> list[Path]:
         "O2": ("joint_network", "fixed_offset"),
     }[arm]
     selected, seeds, provenance = [], set(), set()
+    required=("run_manifest.json","run_summary.json","experiment.csv","fusion_observations.csv","correction_assimilations.csv")
     for value in values:
-        run = Path(str(value)).expanduser()
+        record=value if isinstance(value,dict) else {"run":value,"files":frozen.get("artifacts",{}).get(str(value),{})}
+        run = Path(str(record['run'])).expanduser()
         if not run.is_absolute():
             run = REPO / run
         manifest_path, summary_path = run / "run_manifest.json", run / "run_summary.json"
@@ -149,6 +155,10 @@ def _selected_runs(arm: str, task: str = TASKS[0]) -> list[Path]:
             raise SystemExit(
                 f"{run}: schema 4 or newer is required for source-batch assimilation"
             )
+        try:
+            A.verify_frozen_entry(dict(record,run=str(run),task=task,seed=manifest.get('seed')),required,repo=REPO)
+        except (ValueError,OSError) as exc:
+            raise SystemExit(f'{run}: invalid frozen artifact selection: {exc}') from exc
         if manifest.get("task") != task:
             raise SystemExit(f"{run}: task identity mismatch")
         actual = (manifest.get("manager_fusion_rule"),
@@ -159,43 +169,15 @@ def _selected_runs(arm: str, task: str = TASKS[0]) -> list[Path]:
             raise SystemExit(f"{run}: ground-truth-independent termination is required")
         if not summary.get("completed") or not summary.get("valid_run", False):
             raise SystemExit(f"{run}: frozen evidence must be completed and valid")
-        assimilation = A.assimilations(run)
-        correction_batches = {
-            row["source_batch_id"] for row in A.fused_answers(run)
-            if row["source_batch_id"]
-        }
-        assimilation_batches = {row["source_batch_id"] for row in assimilation}
-        if assimilation_batches != correction_batches:
-            missing = sorted(correction_batches - assimilation_batches)
-            extra = sorted(assimilation_batches - correction_batches)
-            raise SystemExit(
-                f"{run}: correction/assimilation identity mismatch; "
-                f"missing={missing[:3]}, extra={extra[:3]}"
-            )
-        # A refusal that recorded its reason is a gate decision, not a broken evidence
-        # chain -- the same class of event as a NIS rejection, which has never
-        # invalidated a run. The commonest cause is a camera outage longer than the
-        # replay cap, which is a property of the warehouse. What must still fail is a
-        # correction that is unaccounted for: the batch-identity check above catches a
-        # missing, duplicate or extra outcome, and an unexplained refusal is caught here.
-        # See docs/localization_metrics.md.
-        unexplained = [
-            row for row in assimilation
-            if row["status"] in ("dropped", "rejected") and not row["reason"]
-        ]
-        if unexplained:
-            raise SystemExit(
-                f"{run}: {len(unexplained)} refusal(s) with no recorded reason"
-            )
+        try:
+            A.validate_run_ledger(run)
+        except ValueError as exc:
+            raise SystemExit(f"{run}: {exc}") from exc
         seed = int(manifest.get("seed", -1))
         if seed in seeds:
             raise SystemExit(f"{run}: duplicate seed {seed} in {task}/{arm}")
         seeds.add(seed)
-        provenance.add(tuple(manifest.get(key) for key in (
-            "campaign_config_sha256", "git_sha", "git_diff_sha256",
-            "git_untracked_content_sha256", "yolo_model_sha256",
-            "manager_commissioned_calibration_sha256",
-        )))
+        provenance.add(comparison_identity(manifest))
         selected.append(run.resolve())
     # The manifest declares which seeds it froze, so a deliberately small set is
     # allowed and an accidentally incomplete one is still caught. Hardcoding 0..4 made
@@ -207,6 +189,8 @@ def _selected_runs(arm: str, task: str = TASKS[0]) -> list[Path]:
             "An implicit seed count is how a partial campaign gets reported as a whole one."
         )
     expected_seeds = {int(s) for s in declared}
+    if not isinstance(declared, list) or not expected_seeds or len(expected_seeds) != len(declared):
+        raise SystemExit("frozen seed list must be nonempty and unique")
     if seeds != expected_seeds:
         raise SystemExit(
             f"{task}/{arm}: frozen seeds are {sorted(seeds)}; "
@@ -219,6 +203,16 @@ def _selected_runs(arm: str, task: str = TASKS[0]) -> list[Path]:
     if len(provenance) != 1:
         raise SystemExit(f"{task}/{arm}: selected runs do not share one source/artifact identity")
     return selected
+
+
+def comparison_identity(manifest):
+    """Common collection identity; treatment-specific fusion/model labels are separate."""
+    required=("campaign_config_sha256", "git_sha", "git_diff_sha256", "git_untracked_content_sha256",
+              "yolo_model_sha256", "visibility_geometry_sha256", "collision_geometry_sha256",
+              "process_noise_xy", "process_noise_theta", "use_odom_for_predict", "odom_topic")
+    absent=[k for k in required if k not in manifest or manifest[k] in (None, "")]
+    if absent:raise SystemExit(f"missing common source/configuration identity: {absent}")
+    return tuple(manifest[k] for k in required)
 
 
 def showcase_run(arm: str, task: str = TASKS[0]) -> Path:
@@ -271,22 +265,27 @@ def _distance_to_polyline(points, poly):
     return out
 
 
-def _score_one(run: Path, arm: str, task: str = TASKS[0]) -> dict:
+def _score_one(run: Path, arm: str, task: str = TASKS[0], *, max_reference_gap_s=None) -> dict:
     table = A.rows(run)
     summary = json.loads((run / "run_summary.json").read_text())
-    truth = A.truth_series(run, table)
+    A.validate_run_ledger(run)
+    start, stop = A.mission_interval(run)
+    truth = A.truth_series(run, table, max_reference_gap_s=max_reference_gap_s)
 
     # --- what it did: how far the belief actually was from the truth -----------
-    belief = A.aligned_error_cm(run, "belief", table)
-    error_cm = belief["aligned_cm"][np.isfinite(belief["aligned_cm"])]
-    error_logtime_cm = belief["logtime_cm"][np.isfinite(belief["logtime_cm"])]
+    belief = A.aligned_error_cm(run, "belief", table, max_reference_gap_s=max_reference_gap_s)
+    population = (A.landed_mask(belief["stamp"]) & belief["have"] &
+                  (belief["stamp"] >= start) & (belief["stamp"] <= stop))
+    supported = population & np.isfinite(belief["aligned_cm"])
+    error_cm = belief["aligned_cm"][supported]
+    error_logtime_cm = belief["logtime_cm"][population & np.isfinite(belief["logtime_cm"])]
 
     # --- is it honest: does the truth fall inside the stated 95% ellipse? ------
     cov = np.array([[[_f(r, "planner_cov_x"), _f(r, "planner_cov_xy")],
                      [_f(r, "planner_cov_xy"), _f(r, "planner_cov_y")]] for r in table])
     resid = np.stack([belief["gt_x"] - belief["x"], belief["gt_y"] - belief["y"]], axis=1)
-    usable = (belief["have"] & np.isfinite(resid).all(axis=1)
-              & (cov[:, 0, 0] * cov[:, 1, 1] - cov[:, 0, 1] ** 2 > 0.0))
+    usable = supported
+    A.validate_covariances(cov[population])
     nees = A.nees(resid[usable], cov[usable])
     nees = nees[np.isfinite(nees)]
     # The stated 1-sigma is reported as a MEDIAN. Its mean is meaningless here: during a
@@ -301,16 +300,16 @@ def _score_one(run: Path, arm: str, task: str = TASKS[0]) -> dict:
     # state_error scores whatever correction the filter is holding, so during an outage
     # it re-scores an ageing message against a moving robot and reports the robot's own
     # travel as measurement error.
-    state = A.aligned_error_cm(run, "state", table)
-    landed = A.landed_mask(state["stamp"])
-    correction_cm = state["aligned_cm"][landed & np.isfinite(state["aligned_cm"])]
-    correction_logtime_cm = state["logtime_cm"][
-        landed & np.isfinite(state["logtime_cm"])]
-
+    fused = [r for r in A.fused_answers(run, max_reference_gap_s=max_reference_gap_s)
+             if start <= r["fused_stamp"] <= stop]
+    correction_cm = np.array([r["error_cm"] for r in fused])
+    correction_logtime_cm = np.array([])  # No later logger row substitutes for a fused event.
     corrections = A.corrections(run, table)
+    accounting = A.correction_accounting(run)
 
     # --- did it stay on the commanded route? ----------------------------------
-    path = np.stack([truth.x, truth.y], axis=1)
+    mission_truth = (truth.t >= start) & (truth.t <= stop)
+    path = np.stack([truth.x[mission_truth], truth.y[mission_truth]], axis=1)
     steps = np.linalg.norm(np.diff(path, axis=0), axis=1) if len(path) > 1 else np.array([0.0])
     off_route = _distance_to_polyline(path, _route_polyline(task)) if len(path) else np.array([np.nan])
 
@@ -323,13 +322,18 @@ def _score_one(run: Path, arm: str, task: str = TASKS[0]) -> dict:
         "run": str(run.relative_to(REPO)),
         "logging_schema_version": A.schema_version(run),
         "truth_clock": belief["truth_source"],
-        "fusion": _fusion_quality(run),
+        "reference_max_gap_s": max_reference_gap_s,
+        "reference_method": belief["reference_method"],
+        "accounting": accounting,
+        "fusion": _fusion_quality(run, max_reference_gap_s=max_reference_gap_s),
         "completion": summary.get("completion_reason"),
         "duration_s": round(float(summary.get("elapsed_after_first_cmd_s", float("nan"))), 1),
         "belief_error_cm": {
             "median": pct(error_cm, 50), "p95": pct(error_cm, 95),
             "worst": round(float(error_cm.max()), 2) if error_cm.size else None,
             "n_samples": int(error_cm.size),
+            "n_unique_mission_beliefs": int(population.sum()),
+            "n_reference_unscoreable": int((population & ~supported).sum()),
             "median_scored_at_log_time": pct(error_logtime_cm, 50),
             "note": "scored against the truth at the belief's own stamp. The log-time "
                     "figure beside it is the old definition, late by one publish cycle "
@@ -362,10 +366,8 @@ def _score_one(run: Path, arm: str, task: str = TASKS[0]) -> dict:
             "n": int(correction_cm.size),
             "median_scored_at_log_time": pct(correction_logtime_cm, 50),
             "p95_scored_at_log_time": pct(correction_logtime_cm, 95),
-            "note": "each correction scored once, when it was published, against the "
-                    "truth at its own stamp. Scoring a held correction against a moving "
-                    "robot measures the robot's travel, not the sensor: on these drives "
-                    "that turned a 4.9 cm p95 into an apparent 124 cm one.",
+            "note": "Unique published fused corrections, including refused corrections, scored at fused_stamp. "
+                    "This population is separate from accepted updates and public beliefs.",
         },
         "corrections": {
             "detector_rounds": corrections["n_detector_rounds"],
@@ -373,10 +375,9 @@ def _score_one(run: Path, arm: str, task: str = TASKS[0]) -> dict:
             "state_fresh_rate_hz": (round(corrections["state_fresh_rate_hz"], 2)
                                     if math.isfinite(corrections["state_fresh_rate_hz"])
                                     else None),
-            "longest_gap_s": (round(corrections["longest_gap_s"], 2)
-                              if math.isfinite(corrections["longest_gap_s"]) else None),
-            "median_gap_s": (round(corrections["median_gap_s"], 2)
-                             if math.isfinite(corrections["median_gap_s"]) else None),
+            "longest_gap_s": accounting["longest_correction_gap_s"],
+            "median_gap_s": accounting["median_correction_gap_s"],
+            "correction_dropped_fraction": accounting["correction_dropped_fraction"],
             "note": "detector_rounds is the count of distinct camera readings. "
                     "state_publications_seen is log rows with a fresh correction at the "
                     "10 Hz log rate, so it is an availability fraction times duration, "
@@ -406,94 +407,88 @@ def _score_one(run: Path, arm: str, task: str = TASKS[0]) -> dict:
     }
 
 
-def score(arm: str, task: str = TASKS[0]) -> dict:
-    """Aggregate the predeclared runs at the run level, never as pseudo-replicate rows."""
+def _finite_json(value):
+    if isinstance(value,dict):return {k:_finite_json(v) for k,v in value.items()}
+    if isinstance(value,list):return [_finite_json(v) for v in value]
+    if isinstance(value,float) and not math.isfinite(value):return None
+    return value
 
-    reports = [_score_one(run, arm, task) for run in _selected_runs(arm, task)]
-    result = json.loads(json.dumps(reports[0]))
-    result["runs"] = [report["run"] for report in reports]
-    result["n_runs"] = len(reports)
-    result.pop("run", None)
-    result["completion_counts"] = {
-        key: sum(report["completion"] == key for report in reports)
-        for key in sorted({report["completion"] for report in reports})
-    }
 
-    def aggregate_section(name: str, keys: tuple[str, ...]) -> None:
-        section = result[name]
-        section["per_run"] = []
-        for report in reports:
-            section["per_run"].append({key: report[name].get(key) for key in keys})
-        for key in keys:
-            values = [report[name].get(key) for report in reports]
-            finite = [float(value) for value in values
-                      if value is not None and math.isfinite(float(value))]
-            if not finite:
-                section[key] = None
-                continue
-            section[key] = round(float(np.median(finite)), 3)
-            section[f"{key}_run_range"] = [
-                round(float(min(finite)), 3), round(float(max(finite)), 3)
-            ]
+def aggregate_reports(reports):
+    """Median of each per-run statistic, with complete denominators and failures."""
+    reports=_finite_json(reports)
+    if not reports:
+        raise ValueError("no selected reports")
+    result = {key: reports[0][key] for key in ("arm", "task", "logging_schema_version",
+              "truth_clock", "reference_max_gap_s", "reference_method")}
+    result.update(runs=[r["run"] for r in reports], n_runs=len(reports), per_run=reports)
+    result["completion_counts"] = {str(k): sum(r["completion"] == k for r in reports)
+                                   for k in {r["completion"] for r in reports}}
+    result["completion"] = next(iter(result["completion_counts"])) if len(result["completion_counts"]) == 1 else "mixed"
 
-    aggregate_section("belief_error_cm", ("median", "p95", "worst"))
-    result["belief_error_cm"]["n_samples"] = sum(
-        report["belief_error_cm"]["n_samples"] for report in reports)
-    aggregate_section("honesty", (
-        "truth_inside_stated_95pct_ellipse", "median_stated_1sigma_cm",
-        "p95_stated_1sigma_cm", "nees_mean", "nees_median",
-    ))
-    result["honesty"]["n_samples"] = sum(
-        report["honesty"]["n_samples"] for report in reports)
-    aggregate_section("correction_error_cm", ("median", "p95", "worst"))
-    result["correction_error_cm"]["n"] = sum(
-        report["correction_error_cm"]["n"] for report in reports)
-    if all(report["fusion"].get("logged") for report in reports):
-        aggregate_section("fusion", (
-            "worse_than_best_available_camera", "used_the_closest_camera",
-            "median_fused_error_cm", "median_best_available_camera_error_cm",
-        ))
-        result["fusion"]["rounds"] = sum(
-            int(report["fusion"]["rounds"]) for report in reports)
-    result["aggregation"] = (
-        "Each displayed point estimate is the median of the per-run statistic across "
-        f"{len(reports)} frozen seeds. Samples within a drive are not treated as independent runs."
-    )
-    result["caveat"] = (
-        f"{len(reports)} paired seeds. Report run-level spread and paired arm contrasts; "
-        "do not use camera frames as the experimental sample size."
-    )
+    def aggregate_values(values):
+        finite = [float(v) for v in values if isinstance(v, (int, float)) and math.isfinite(v)]
+        # An unavailable run statistic must not disappear from a displayed denominator.
+        return (float(np.median(finite)) if len(finite) == len(reports) else None,
+                len(finite), [min(finite), max(finite)] if finite else None)
+
+    result["duration_s"], result["duration_n_runs"], _ = aggregate_values([r["duration_s"] for r in reports])
+    for name in ("belief_error_cm", "honesty", "correction_error_cm", "corrections", "accounting", "driving", "odometry", "fusion"):
+        sections = [r[name] for r in reports]
+        combined = {}
+        for key in set().union(*(s.keys() for s in sections)):
+            values = [s.get(key) for s in sections]
+            if key == "logged":
+                combined[key] = all(values)
+            elif key in ("n", "n_samples", "rounds", "n_unique_mission_beliefs", "n_reference_unscoreable"):
+                combined[key] = sum(v or 0 for v in values)
+            elif any(isinstance(v, (int, float)) and not isinstance(v, bool) for v in values):
+                value, count, spread = aggregate_values(values)
+                combined[key], combined[key+"_n_runs"], combined[key+"_run_range"] = value, count, spread
+            elif all(v == values[0] for v in values):
+                combined[key] = values[0]
+        combined["per_run"] = sections
+        result[name] = combined
+    result["aggregation"] = ("Median of per-run statistics only when every selected run contributes; "
+        "otherwise unavailable with contributing-run counts. Sample counts sum correlated observations. "
+        "Failures and unscoreable runs remain in per_run and completion_counts.")
+    result["caveat"] = "One drive is one experimental unit; no navigation gain follows from offline replay."
     return result
 
 
-def main() -> int:
-    args = [a for a in sys.argv[1:]]
-    tasks = [a.split("=", 1)[1] for a in args if a.startswith("--task=")] or list(TASKS)
-    arms = [a for a in args if not a.startswith("--")] or list(FOLDER)
-    for task in tasks:
-        for arm in arms:
-            if arm not in FOLDER:
-                raise SystemExit(f"unknown arm {arm!r}; expected one of {list(FOLDER)}")
+def score(arm: str, task: str = TASKS[0], *, max_reference_gap_s=None) -> dict:
+    runs = _selected_runs(arm, task)
+    result = aggregate_reports([_score_one(run, arm, task, max_reference_gap_s=max_reference_gap_s) for run in runs])
+    result["selection_sha256"] = hashlib.sha256(FROZEN_RUNS.read_bytes()).hexdigest()
+    result["analysis_sources"] = {str(p.relative_to(REPO)): hashlib.sha256(p.read_bytes()).hexdigest()
+                                   for p in (Path(__file__), Path(A.__file__))}
+    return result
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("arms", nargs="*")
+    parser.add_argument("--task", action="append", choices=TASKS)
+    parser.add_argument("--max-reference-gap-s", type=float)
+    parser.add_argument("--out", type=Path, default=STORY_ROOT)
+    args = parser.parse_args(argv)
+    if any(a not in FOLDER for a in args.arms):parser.error("unknown arm")
+    failed = False
+    for task in args.task or list(TASKS):
+        for arm in args.arms or list(FOLDER):
             try:
-                numbers = score(arm, task)
-            except SystemExit as exc:
-                print(f"{task}/{arm}: {exc}")
-                continue
-            out = story_dir(task, arm)
-            out.mkdir(parents=True, exist_ok=True)
-            (out / "numbers.json").write_text(json.dumps(numbers, indent=2) + "\n")
-            e, h, fq = numbers["belief_error_cm"], numbers["honesty"], numbers["fusion"]
-            print(f"{task:24s} {arm} {numbers['completion']:>12s}  median {e['median']} cm  "
-                  f"p95 {e['p95']} cm | inside 95% "
-                  f"{h['truth_inside_stated_95pct_ellipse']} at a median stated "
-                  f"{h['median_stated_1sigma_cm']} cm, NEES mean {h['nees_mean']} "
-                  f"(target 2), median {h['nees_median']} (target 1.386)"
-                  + (f" | worse than its best camera "
-                     f"{fq['worse_than_best_available_camera']*100:.0f}%"
-                     if fq.get("logged") else ""))
-            print(f"{'':24s}    at log time this drive would read median "
-                  f"{e['median_scored_at_log_time']} cm")
-    return 0
+                numbers = score(arm, task, max_reference_gap_s=args.max_reference_gap_s)
+                out = args.out / task / FOLDER[arm]
+                destination = out / "numbers.json"
+                if destination.exists() and json.loads(destination.read_text()) != numbers:
+                    raise ValueError(f"{destination}: existing report differs; preserve it and choose a new output tree")
+                out.mkdir(parents=True, exist_ok=True)
+                destination.write_text(json.dumps(numbers, indent=2, allow_nan=False) + "\n")
+                print(f"{task}/{arm}: {numbers['completion_counts']}; {numbers['n_runs']} selected runs; {destination}")
+            except (SystemExit, ValueError) as exc:
+                print(f"{task}/{arm}: {exc}", file=sys.stderr)
+                failed = True
+    return int(failed)
 
 
 if __name__ == "__main__":

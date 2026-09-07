@@ -31,17 +31,33 @@ def subset_name(cameras):
     return '+'.join(c.removeprefix('camera_') for c in cameras)
 
 
-def main(selection, out):
+def validate_selection(selected, registered):
+    if selected['status']!='complete_pilot_diagnostic' or selected['pending'] or selected['invalid']:
+        raise ValueError('complete diagnostic pilot required')
+    entries=selected['runs'];expected=selected.get('expected',[])
+    keys=[(e['task'],e['seed']) for e in entries]
+    expected_keys=[(e['task'],e['seed']) for e in expected]
+    if (len(keys)!=registered['runs'] or len(set(keys))!=len(keys) or
+        len(set(expected_keys))!=len(expected_keys) or set(keys)!=set(expected_keys)):
+        raise ValueError('missing/extra/duplicate frozen trial identity')
+    tasks={t for t,s in keys};seeds={s for t,s in keys}
+    if (len(tasks)!=registered['routes'] or len(seeds)!=registered['seeds_per_route'] or
+        set(keys)!={(t,s) for t in tasks for s in seeds}):
+        raise ValueError('incomplete paired route/seed product')
+    if len({(REPO/e['run']).resolve() for e in entries})!=len(entries):
+        raise ValueError('same logged path is reused as independent evidence')
+    if any(e['key']!=f"{e['task']}__N1__seed{e['seed']}" for e in entries):
+        raise ValueError('frozen key disagrees with task/condition/seed')
+
+
+def main(selection, out, *, max_reference_gap_s=None):
     from field_driving import load_run, run_filter
     selected = json.loads(selection.read_text())
     registry = json.loads((REPO / 'docs/localization_metrics_registry.json').read_text())
     registered = registry['thesis_commissioning_pilot']
     if selection.resolve() != (REPO / registered['selection']).resolve():
         raise ValueError('selection is not the registered thesis pilot')
-    if selected['status'] != 'complete_pilot_diagnostic' or selected['pending'] or selected['invalid']:
-        raise ValueError('complete diagnostic pilot required')
-    if len(selected['runs']) != registered['runs']:
-        raise ValueError('pilot run count differs')
+    validate_selection(selected,registered)
     subsets = camera_subsets()
     protocol = dict(
         status='exploratory_pilot_not_confirmatory', selection=str(selection.relative_to(REPO)),
@@ -50,7 +66,8 @@ def main(selection, out):
         mean='frozen bbox-feature NN and the same fitted per-camera mean offset',
         motion='measured /odom_noisy, supplied Q xy=0.01 theta=0.02; unchanged recursion',
         prediction_grid='union of measured odometry and ALL simultaneous camera-opportunity timestamps',
-        scoring_grid='same odometry timestamps against time-interpolated simulator GT in each run',
+        scoring_grid='same odometry timestamps against reference-supported simulator GT in each run',
+        max_reference_gap_s=max_reference_gap_s,
         observations='same valid detector outputs with finite ground projection; no replay innovation gate',
         timing='capture-time idealization; live processing/refusals are not replayed',
         inference='per-run comparisons only; exhaustive subsets are exploratory, not a selected best-camera test',
@@ -58,6 +75,8 @@ def main(selection, out):
             REPO/'experiments/icra_commissioning/replay.py',
             REPO/'experiments/icra_commissioning/field_driving.py',
             REPO/'experiments/icra_commissioning/model.py',
+            REPO/'experiments/icra_commissioning/study.py',
+            REPO/'src/unav_common/unav_common/correction_ledger.py',
             REPO/'experiments/fusion_on_fixed_routes/aligned.py']})
     out.mkdir(parents=True, exist_ok=True)
     path = out / 'protocol.json'
@@ -67,7 +86,7 @@ def main(selection, out):
     models = joblib.load(OUT / 'models.joblib')
     results = []
     for entry in selected['runs']:
-        m, summary, truth, odom, readings, batches, accounting = load_run(entry)
+        m, summary, truth, odom, readings, batches, accounting = load_run(entry,max_reference_gap_s=max_reference_gap_s)
         grid = [b['t'] for b in batches]
         expected_stamps = None
         for cameras in subsets:
@@ -116,8 +135,9 @@ def plot(results, subsets, out):
             for kind, dx in [('constant', -.14), ('confidence', .14)]:
                 rows = [r for r in results if r['task']==task and r['subset']==name and r['kind']==kind]
                 for row in (0, 1):
-                    values = [r['score']['median_cm'] if row==0 else
-                        100*r['score']['coverage']['0.95'] for r in rows]
+                    raw = [r['score']['median_cm'] if row==0 else r['score']['coverage']['0.95'] for r in rows]
+                    values = [v*(100 if row else 1) for v in raw if v is not None]
+                    if len(values)!=len(rows):axes[row,col].text(.02,.95,'Some runs unscoreable; see table',transform=axes[row,col].transAxes,fontsize=6)
                     axes[row,col].scatter(np.full(len(values), j+dx), values, s=18,
                         color=colors[kind], alpha=.8, label=kind if j==0 else None)
         axes[0,col].set_yscale('log')
@@ -145,5 +165,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--selection', type=Path, default=DEFAULT_SELECTION)
     parser.add_argument('--out', type=Path, default=DEFAULT_OUT)
+    parser.add_argument('--max-reference-gap-s',type=float)
     args = parser.parse_args()
-    main(args.selection.resolve(), args.out.resolve())
+    main(args.selection.resolve(), args.out.resolve(),max_reference_gap_s=args.max_reference_gap_s)

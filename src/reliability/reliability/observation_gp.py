@@ -54,6 +54,8 @@ class ObservabilityGP:
         fbag = _fbag()
         xy = np.asarray(xy, dtype=float)
         y = np.asarray(y, dtype=float)
+        if xy.ndim != 2 or xy.shape[1] != 2 or y.shape != (len(xy),) or not np.isfinite(xy).all() or not np.isfinite(y).all() or not np.isin(y, [0, 1]).all():
+            raise ValueError('observability fitting requires finite XY and aligned binary labels')
         if len(np.unique(y)) < 2:
             self._degenerate = True
             self._const = float(np.mean(y)) if len(y) else 0.5
@@ -83,6 +85,8 @@ class ObservabilityGP:
         link can compare that approximation without changing existing behavior.
         """
         xy = np.asarray(xy, dtype=float)
+        if xy.ndim != 2 or xy.shape[1] != 2 or not np.isfinite(xy).all():
+            raise ValueError('observability queries require finite XY pairs')
         if self._degenerate:
             p = float(np.clip(self._const, 1e-4, 1.0 - 1e-4))
             return np.full(len(xy), np.log(p/(1-p))), np.zeros(len(xy))
