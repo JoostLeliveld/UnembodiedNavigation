@@ -131,6 +131,14 @@
         "A": "cb872fd438bd3275ac75da44c12013c01c91c95287ce29edaf6bd0f09073f3e3",
         "B": "bf84cf05b351f23c38c1fc177a4424e108cb614c2f65dbfa45fbd04b2b0f5f89"
       }
+    },
+    {
+      "date": "2026-09-08",
+      "reason": "paint-only decor change, no geometry: removed the lane_artery pair (both lines duplicated the bay outlines of the zones the artery runs between, 0.22 m away, reading as a stray line in the plan view); pushed each dock door's keep-clear hatching east of any structure standing in its mouth, so the west door's stripes stop being painted under the dock office; added the dock office's keep-out outline so the plan view shows why that hatching stops short. warehouse_shell, occluders, rack_frames, floor_markings, goods and mesh_visuals are all byte-identical; collision elements 47, sensors 46 and obs links 35 unchanged, so no capture or calibration is affected.",
+      "replaced_world_sha256": {
+        "A": "cb872fd438bd3275ac75da44c12013c01c91c95287ce29edaf6bd0f09073f3e3",
+        "B": "bf84cf05b351f23c38c1fc177a4424e108cb614c2f65dbfa45fbd04b2b0f5f89"
+      }
     }
   ],
   "schema_version": 1,
@@ -139,7 +147,7 @@
     "experiments/warehouse_v2_sketches/camera_layout_decision.json": "5501d526c6ffe21e08202d9b869dc355a7dfad7f3a27d7765b8ee47ac166e72e",
     "experiments/warehouse_v2_sketches/camera_layout_gate.py": "b3e28398574c92d86c8f7b01255c1ee9283e781517920af0736febe2e26e6ca7",
     "experiments/warehouse_v2_sketches/coverage.py": "838285e1431bb02cd0513b2644b1b592edd4f86c86ce40ebce2d6bb981922604",
-    "experiments/warehouse_v2_sketches/make_world.py": "c919e4e0a69b01c1ce8899a11b41bb3da8fbc218da0ae7772e0e44d6382707d0",
+    "experiments/warehouse_v2_sketches/make_world.py": "5c9b99044ea2b2f4c0065bf3ba15a09f9b917a7db6cfae91a65f189935b34e09",
     "experiments/warehouse_v2_sketches/route_tasks.py": "3b1a1f879bc5c2dfa2a087535bebf62b0c7d562c3ecc3e2649e7502657f5b929",
     "experiments/warehouse_v2_sketches/sim_up.sh": "248d5ec69e954ed7ecd5b44bc3701a4e1b215242c93db697f64acde4f0cc20ab",
     "experiments/warehouse_v2_sketches/verify_world.py": "774048ee6bd2c9101494c493a68a288b26ccab580813b192980b7c71c29583fa",
@@ -235,8 +243,8 @@
       "generator_matches_file": true,
       "internal_world_name": "warehouse_v2",
       "occluder_links": 36,
-      "sha256": "cb872fd438bd3275ac75da44c12013c01c91c95287ce29edaf6bd0f09073f3e3",
-      "size_bytes": 191198,
+      "sha256": "4b773b98d70c12ba3291603f83f783dee84e07a56578594d3bc62ebf6a84486b",
+      "size_bytes": 191976,
       "stock_state": "peak"
     },
     "B": {
@@ -303,8 +311,8 @@
       "generator_matches_file": true,
       "internal_world_name": "warehouse_v2_shipout",
       "occluder_links": 31,
-      "sha256": "bf84cf05b351f23c38c1fc177a4424e108cb614c2f65dbfa45fbd04b2b0f5f89",
-      "size_bytes": 159235,
+      "sha256": "f0f8400d52b39dde729acedbdea4e596d99a1f5172647d80cd1f8e7d5230bc09",
+      "size_bytes": 160013,
       "stock_state": "shipout"
     }
   }

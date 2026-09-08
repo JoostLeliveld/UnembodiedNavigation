@@ -621,24 +621,46 @@ def build_world(state: str = "A") -> str:
     # gangways; OSHA 1910.22(b) puts the line width at 2-6 in, 4 in typical,
     # which is the 0.10 m used here) and a white dashed line dividing the two
     # directions of travel.
-    # A marking that runs past the thing it marks is worse than no marking. These
-    # two lines start where the artery starts (the apron edge) and stop where the
-    # racking it separates stops, instead of running wall to wall. There is no
-    # centre divider: a 2.35 m aisle is one vehicle wide, so a line down the
-    # middle of it would be claiming two lanes that do not exist.
-    for nm, x in (("w", ARTERY[0] + 0.10), ("e", ARTERY[1] - 0.10)):
-        paint(f"lane_artery_{nm}", x - 0.05, x + 0.05, APRON_TOP, A_Y1, LANE_YELLOW)
+    # The artery gets NO edge lines of its own. Its west edge IS rack A3's east
+    # zone edge and its east edge IS the C run's west edge, and both of those
+    # zones already draw a bay outline there, so an artery pair only painted a
+    # second stripe 0.22 m from each -- a doubled line down a 2.35 m aisle,
+    # which in the plan view read as a stray mark belonging to nothing. The bay
+    # outlines are the marking.
+
+    # A structure zone gets its keep-out outline here rather than as a bay: it is
+    # a building, not a storage bay, but the floor around it IS declared
+    # non-driveable and a reader of the plan view otherwise cannot tell why the
+    # dock hatching stops short of the west door. Clipped to the site boundary so
+    # the line stays on painted floor.
+    for z in L.zones:
+        if z.kind != "structure":
+            continue
+        x0, x1 = max(z.xmin - NOGO, SITE[0] + 0.05), min(z.xmax + NOGO, SITE[1])
+        y0, y1 = max(z.ymin - NOGO, SITE[2] + 0.05), min(z.ymax + NOGO, SITE[3])
+        paint("nogo_office_s", x0, x1, y0 - 0.05, y0 + 0.05, LANE_YELLOW)
+        paint("nogo_office_n", x0, x1, y1 - 0.05, y1 + 0.05, LANE_YELLOW)
+        paint("nogo_office_w", x0 - 0.05, x0 + 0.05, y0, y1, LANE_YELLOW)
+        paint("nogo_office_e", x1 - 0.05, x1 + 0.05, y0, y1, LANE_YELLOW)
 
     # pedestrian walkways: green, against the wall, out of the traffic lanes
     paint("walk_west", -11.28, -10.48, SITE[2], SITE[3], WALK_GREEN)
     paint("walk_north", -11.28, ARTERY[0], 8.48, 9.28, WALK_GREEN)
 
-    # keep-clear hatching in front of every dock door
+    # Keep-clear hatching in front of every dock door. The band is pushed east
+    # of any structure standing in that door's mouth: the dock office is built
+    # across the west half of the west door, and hatching painted under a
+    # building marks floor that does not exist. Six stripes at a 0.52 m pitch
+    # either way, so every door reads the same.
+    structures = [z for z in L.zones if z.kind == "structure"]
     for i, d in enumerate(sorted(DOCK_DOORS)):
+        start = d - 1.50
+        for z in structures:
+            if z.xmin - 0.30 <= start + 0.26 <= z.xmax + 0.30:
+                start = z.xmax + 0.19          # clear the zone and its outline
         for j in range(6):
-            sx0 = d - 1.50 + j * 0.52
-            decor.append(box_link(f"hatch_{i}_{j}", sx0 + 0.26, -8.84, 0.023,
-                                  0.14, 1.55, PT, HATCH_YELLOW,
+            decor.append(box_link(f"hatch_{i}_{j}", start + 0.26 + j * 0.52,
+                                  -8.84, 0.023, 0.14, 1.55, PT, HATCH_YELLOW,
                                   collide=False, yaw=0.70))
 
     # painted lower wall band, the industrial two-tone every hall has
