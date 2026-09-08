@@ -1,10 +1,11 @@
-"""A camera network for the IWAI objective and a separate hit/miss reference.
+"""Camera-network models for legacy and metric planning objectives.
 
 The planner proxy blends precisions using an expected detector SCORE. That proxy
 is not measurement noise, detection probability, or an exact expected posterior.
-Actual camera measurements remain metric reference-XY observations. A fixed camera
-chart maps the network's metric proxy to the existing IWAI cost coordinates; the
-goal preference and objective weights therefore do not change with camera count.
+Actual camera measurements remain metric reference-XY observations. The legacy
+objective maps a metric score proxy through one fixed camera chart. The metric
+objective instead enumerates usable-detection events and updates the predicted
+ground-plane belief directly.
 """
 from __future__ import annotations
 
@@ -224,6 +225,98 @@ class CameraNetworkModel:
                 post = A @ post @ A.T+K @ R @ K.T
             out += weight*post
         return (out+out.T)/2
+
+    def expected_belief(self, state, P, kappa=1.):
+        """Expected posterior covariance and positional entropy for one opportunity.
+
+        Availability is averaged over the predicted XY belief. Camera hit events
+        and conditional residuals are independent in this planning approximation.
+        A miss performs no update. The robust runtime fusion remains a separate
+        estimator and must not be inferred from this forecast.
+        """
+        P = validate_covariance(P, positive_definite=True, name='network forecast prior')
+        q = np.clip(self.query_belief(state, P, kappa)['availability'], 0., 1.)
+        if len(q) > 5:
+            raise ValueError('exact expected-belief forecast is bounded to at most five cameras')
+        expected = np.zeros_like(P)
+        expected_entropy = 0.
+        H = np.eye(3)[:2]
+        for mask in product((0, 1), repeat=len(q)):
+            weight = float(np.prod([q[i] if hit else 1-q[i] for i, hit in enumerate(mask)]))
+            if weight == 0.:
+                continue
+            post = P.copy()
+            for hit, R in zip(mask, self.R):
+                if not hit:
+                    continue
+                innovation = H @ post @ H.T + R
+                K = np.linalg.solve(innovation, H @ post).T
+                A = np.eye(3) - K @ H
+                post = A @ post @ A.T + K @ R @ K.T
+                post = (post + post.T) / 2.
+            sign, logdet = np.linalg.slogdet(post[:2, :2])
+            if sign <= 0:
+                raise ValueError('network posterior position covariance must be positive definite')
+            expected += weight * post
+            expected_entropy += weight * .5 * (2.*np.log(2.*np.pi*np.e) + logdet)
+        return (expected + expected.T) / 2., float(expected_entropy)
+
+    def make_expected_belief_casadi(self, kappa=1.):
+        """Return the differentiable counterpart of :meth:`expected_belief`."""
+        import casadi as ca
+        from planning.core.casadi_efe import (
+            _differential_entropy_ca, _xy_visibility_sigma_points_ca,
+        )
+        if len(self.camera_ids) > 5:
+            raise ValueError('exact expected-belief forecast is bounded to at most five cameras')
+        interpolators = [
+            ca.interpolant(
+                f'network_availability_{self.sha256[:10]}_{i}', 'linear',
+                [self.xs.tolist(), self.ys.tolist()], grid.T.ravel(order='F').tolist(),
+            )
+            for i, grid in enumerate(self.fields['availability'])
+        ]
+        H = ca.DM(np.eye(3)[:2])
+
+        def evaluate(m, P):
+            points, weights = _xy_visibility_sigma_points_ca(m[:2], P[:2, :2], kappa)
+            availability = []
+            for interp in interpolators:
+                total = 0.
+                for xy, weight in zip(points, weights):
+                    inside = ca.logic_and(
+                        ca.logic_and(xy[0] >= self.xs[0], xy[0] <= self.xs[-1]),
+                        ca.logic_and(xy[1] >= self.ys[0], xy[1] <= self.ys[-1]),
+                    )
+                    bounded = ca.vertcat(
+                        ca.fmin(ca.fmax(xy[0], self.xs[0]), self.xs[-1]),
+                        ca.fmin(ca.fmax(xy[1], self.ys[0]), self.ys[-1]),
+                    )
+                    total += float(weight) * ca.if_else(inside, interp(bounded), 0.)
+                availability.append(ca.fmin(ca.fmax(total, 0.), 1.))
+
+            prior = .5 * (P + P.T)
+            expected = ca.MX.zeros(3, 3)
+            expected_entropy = 0.
+            for mask in product((0, 1), repeat=len(availability)):
+                branch_weight = 1.
+                post = prior
+                for i, (hit, R) in enumerate(zip(mask, self.R)):
+                    q = availability[i]
+                    branch_weight *= q if hit else 1. - q
+                    if not hit:
+                        continue
+                    R_ca = ca.DM(R)
+                    innovation = H @ post @ H.T + R_ca + 1e-9 * ca.DM.eye(2)
+                    K = ca.solve(innovation, H @ post).T
+                    A = ca.DM.eye(3) - K @ H
+                    post = A @ post @ A.T + K @ R_ca @ K.T
+                    post = .5 * (post + post.T)
+                expected += branch_weight * post
+                expected_entropy += branch_weight * _differential_entropy_ca(post[:2, :2])
+            return .5 * (expected + expected.T), expected_entropy
+
+        return evaluate
 
     def make_proxy_covariance_casadi(self, H, kappa=1.):
         import casadi as ca

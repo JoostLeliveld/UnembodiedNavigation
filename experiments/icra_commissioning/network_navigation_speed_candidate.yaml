@@ -1,15 +1,15 @@
-# Unexecuted development protocol; rationale in docs/parameter_rationale.md.
+# Unexecuted metric expected-belief development protocol. This is not a final campaign.
 world: warehouse_v2.world.sdf
 launch_file: warehouse_primary_comparison.launch.py
 conditions:
   P0:
-    label: network_uniform_score
+    label: network_uniform_field
     camera_network_artifact_path: logs/studies/icra_commissioning_20260905/network_planner/uniform.npz
   P1:
-    label: network_geometry_score
+    label: network_geometry_field
     camera_network_artifact_path: logs/studies/icra_commissioning_20260905/network_planner/geometry.npz
   P2:
-    label: network_gp_score
+    label: network_gp_field
     camera_network_artifact_path: logs/studies/icra_commissioning_20260905/network_planner/gp.npz
 tasks:
   fusion_network_traverse:
@@ -105,12 +105,14 @@ local_use_ambiguity: false
 local_use_obs_risk: false
 use_pixel_correction: false
 use_hit_miss_mixture: false
+camera_network_objective: metric_expected_belief
+network_goal_std_m: 0.15
 nogo_mode: keep_in
 cleanup_mode: isolated
 manager_commissioned_world_covariance_path: logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json
 waypoint_spacing_m: 0.2
 waypoint_arrival_radius_m: 0.1
-study_title: 'Parameter audit: 0.44 m/s development candidate'
-study_comparison: Separate unexecuted speed protocol. Compare only with a fresh matched
-  0.22 m/s campaign on the same source. Same P0/P1/P2 settings; no validated operating-speed
-  claim.
+study_title: 'Metric expected-belief network planner: development candidate v1'
+study_comparison: Unexecuted method-development protocol. It is not a final campaign and
+  supports no performance claim. Revalidate the objective, estimator approximation, weights,
+  speed, and matched baselines before promoting any configuration to a final protocol.

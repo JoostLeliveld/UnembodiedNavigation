@@ -84,14 +84,31 @@ def test_numpy_and_casadi_match_inside_and_outside_support(tmp_path):
     with pytest.raises(ValueError):net.query([0.,0.,0.,.9])
 
 
-def make_planner(path):
+def test_metric_expected_belief_numpy_and_casadi_match(tmp_path):
+    ca=pytest.importorskip('casadi')
+    net=write_network(tmp_path/'field.npz',availability=.4,spatial=True)
+    state=np.array([.35,.42,.1])
+    P=np.array([[.2,.01,.03],[.01,.3,-.01],[.03,-.01,.05]])
+    m=ca.MX.sym('m',3);S=ca.MX.sym('S',3,3)
+    P_expr,H_expr=net.make_expected_belief_casadi()(m,S)
+    func=ca.Function('expected_belief',[m,S],[P_expr,H_expr])
+    actual_P,actual_H=func(state,P)
+    expected_P,expected_H=net.expected_belief(state,P)
+    np.testing.assert_allclose(np.asarray(actual_P),expected_P,rtol=1e-8,atol=1e-9)
+    np.testing.assert_allclose(float(actual_H),expected_H,rtol=1e-8,atol=1e-9)
+    assert np.trace(expected_P[:2,:2]) < np.trace(P[:2,:2])
+
+
+def make_planner(path, **overrides):
     from planning.planners.base_planner import UnicyclePlannerBase
-    return UnicyclePlannerBase(horizon=5,dt=.25,v_min=0.,v_max=.5,w_min=-1.,w_max=1.,
+    settings=dict(horizon=5,dt=.25,v_min=0.,v_max=.5,w_min=-1.,w_max=1.,
         control_weight=.02,process_noise_xy=.01,process_noise_theta=.02,obs_noise_uv=2.5,
         goal_sigma_uv=30.,risk_weight_obs=1.,ambiguity_weight=1.,optimizer_maxiter=15,
         optimizer_gtol=1e-5,optimizer_warm_start=False,seed=513,use_visibility_model=True,
         camera_network_artifact_path=str(path),camera_params=dict(cam_pos=(-5.,-5.,5.),
             look_at=(0.,0.,0.),img_width=1280,img_height=720,fov_h_rad=1.2))
+    settings.update(overrides)
+    return UnicyclePlannerBase(**settings)
 
 
 def test_real_planner_uses_network_cost_and_correct_gradient(tmp_path):
@@ -119,6 +136,35 @@ def test_real_planner_uses_network_cost_and_correct_gradient(tmp_path):
     solved=planner.plan(state,P,goal[:2])
     assert np.isfinite(solved.total_cost)
     assert np.isfinite(solved.controls).all()
+
+
+def test_metric_network_objective_is_independent_of_fixed_camera_chart(tmp_path):
+    pytest.importorskip('casadi')
+    net=write_network(tmp_path/'field.npz',availability=.4,spatial=True)
+    metric=dict(camera_network_objective='metric_expected_belief',network_goal_std_m=.2)
+    first=make_planner(net.path,**metric)
+    second=make_planner(net.path,**dict(metric,camera_params=dict(
+        cam_pos=(7.,-2.,9.),look_at=(1.,1.,0.),img_width=800,img_height=600,fov_h_rad=.8)))
+    state=np.array([.35,.42,.1]);P=np.diag([.05,.04,.03]);goal=np.array([1.2,1.,0.])
+    u=np.tile([.22,.06],5)
+    values=[]
+    for planner in (first,second):
+        goal_obs=planner._goal_obs(goal)
+        evaluate=planner._get_casadi_valgrad(
+            goal,goal_obs,use_observation_risk=True,use_ambiguity_term=True)
+        value,gradient=evaluate(u,state,P,goal_obs,goal[:2],0.)
+        assert np.isfinite(value) and np.isfinite(gradient).all()
+        numerical=[]
+        for i in range(len(u)):
+            delta=np.zeros_like(u);delta[i]=1e-5
+            numerical.append((evaluate(u+delta,state,P,goal_obs,goal[:2],0.)[0]-
+                evaluate(u-delta,state,P,goal_obs,goal[:2],0.)[0])/2e-5)
+        np.testing.assert_allclose(gradient,numerical,rtol=3e-4,atol=3e-5)
+        numpy_value=planner._evaluate_controls(u,state,P,goal,goal_obs,None)
+        H_eff=sum(planner.discount_gamma**t for t in range(planner.horizon))
+        np.testing.assert_allclose(value,numpy_value/H_eff,rtol=1e-7,atol=1e-6)
+        values.append(value)
+    np.testing.assert_allclose(values[0],values[1],rtol=1e-12,atol=1e-12)
 
 
 def test_invalid_covariance_and_unknown_masks_fail(tmp_path):

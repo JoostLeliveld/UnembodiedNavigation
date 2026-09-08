@@ -1,5 +1,12 @@
 # 08 — Planner objective, future camera model and solver results
 
+**2026-09-08 method-development update.** The findings below describe the
+audited legacy mode, now named `legacy_pixel_chart`. A separate explicit
+`metric_expected_belief` mode evaluates world-XY goal risk and enumerates
+per-camera Bernoulli reporting subsets using conditional metric covariances.
+It recursively carries the expected posterior covariance. The mode is
+unexecuted as a matched campaign and is not a final method or result.
+
 Baseline audited 2026-09-06; current-source recheck 2026-09-07 after repair commits `5e844a89` and `f9e1a312`. **The active network planner evaluates a detector-score precision proxy along a motion-only Gaussian rollout. It does not recursively apply hypothetical camera corrections. Its global-result handoff can turn an incomplete or invalid result into an executable waypoint route, and does not revalidate a solve against changed belief or goal inputs.** Correcting result acceptance does not require replacing the planning method.
 
 This is the first investigation deliverable. No runtime, fusion, controller, configuration, fitted artifact or experiment log was changed by investigation 08. Only `08_*` report/probe files were written. No ROS graph, Gazebo process, campaign, cleanup or failure injection against a running experiment was started. Host-wide process state is not established by the sandbox's process listing. The shared checkout advanced to commit `3c4ddeae4a7427bf374514dad6a1d65dc728a91c` during the audit; exact file hashes, not that commit alone, identify the inspected implementation.

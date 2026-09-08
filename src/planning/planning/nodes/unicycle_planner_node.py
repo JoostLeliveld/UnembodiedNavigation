@@ -160,6 +160,8 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('camera_network_expected_sha256', '')
         _declare_if_not('camera_network_expected_source_hashes_json', '')
         _declare_if_not('camera_network_camera_ids', '')
+        _declare_if_not('camera_network_objective', 'legacy_pixel_chart')
+        _declare_if_not('network_goal_std_m', 0.15)
         # The planner models the robot as a disc, so this is the CIRCUMSCRIBED
         # radius. warehouse_amr is 0.800 x 0.550 m -> hypot(0.400, 0.275) = 0.485.
         # (turtlebot3_burger was 0.125; pass it explicitly to reproduce a
@@ -421,6 +423,10 @@ class UnicyclePlannerNode(Node):
         self.camera_network_camera_ids = str(
             self.get_parameter('camera_network_camera_ids').value
         ).strip()
+        self.camera_network_objective = str(
+            self.get_parameter('camera_network_objective').value
+        ).strip().lower()
+        self.network_goal_std_m = float(self.get_parameter('network_goal_std_m').value)
         self.robot_collision_radius_m = float(self.get_parameter('robot_collision_radius_m').value)
         self.robot_length_m = float(self.get_parameter('robot_length_m').value)
         self.robot_width_m = float(self.get_parameter('robot_width_m').value)
@@ -1266,6 +1272,17 @@ class UnicyclePlannerNode(Node):
                 'camera_network_camera_ids',
                 getattr(self, 'camera_network_camera_ids', ''),
             ),
+            camera_network_objective=(
+                g_default(
+                    'camera_network_objective',
+                    getattr(self, 'camera_network_objective', 'legacy_pixel_chart'),
+                )
+                if _as_bool(g('use_visibility_model')) else 'legacy_pixel_chart'
+            ),
+            network_goal_std_m=float(g_default(
+                'network_goal_std_m',
+                getattr(self, 'network_goal_std_m', 0.15),
+            )),
             r_visible_uv=self.r_visible_uv, r_miss_uv=self.r_miss_uv,
             visibility_sigma_kappa=self.visibility_sigma_kappa,
             goal_prior_u_std_start=g('goal_prior_u_std_start'),

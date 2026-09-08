@@ -82,6 +82,8 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'r_visible_uv': '2.5',
     'r_miss_uv': '120.0',
     'visibility_sigma_kappa': '1.0',
+    'camera_network_objective': 'legacy_pixel_chart',
+    'network_goal_std_m': '0.15',
     'goal_prior_u_std_start': '80.0',
     'goal_prior_v_std_start': '80.0',
     'goal_prior_u_std_final': '4.0',
@@ -701,6 +703,13 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'driveable_geometry_json': _launch_value(context, 'driveable_geometry_json', ''),
         'visibility_artifact_path': _launch_value(context, 'visibility_artifact_path', ''),
         'camera_network_artifact_path': _launch_value(context, 'camera_network_artifact_path', ''),
+        'camera_network_objective': _launch_value(
+            context, 'camera_network_objective',
+            PAPER_LAUNCH_DEFAULTS['camera_network_objective'],
+        ).strip().lower(),
+        'network_goal_std_m': float(_launch_value(
+            context, 'network_goal_std_m', PAPER_LAUNCH_DEFAULTS['network_goal_std_m'],
+        )),
         'use_nogo_cost': _launch_value(context, 'use_nogo_cost', str(VISIBILITY_FALLBACK_DEFAULTS['use_nogo_cost'])).strip().lower(),
         'nogo_penalty_type': _launch_value(context, 'nogo_penalty_type', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_penalty_type'])).strip().lower(),
         'nogo_weight': float(_launch_value(context, 'nogo_weight', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_weight']))),
@@ -926,6 +935,17 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         cfg['use_obs_risk'] = True
     visibility_artifact_path = str(cfg.get('visibility_artifact_path', '') or '').strip()
     camera_network_artifact_path = str(cfg.get('camera_network_artifact_path', '') or '').strip()
+    camera_network_objective = str(
+        cfg.get('camera_network_objective', 'legacy_pixel_chart') or '').strip().lower()
+    if camera_network_objective not in ('legacy_pixel_chart', 'metric_expected_belief'):
+        raise RuntimeError('unknown camera_network_objective')
+    if camera_network_objective == 'metric_expected_belief' and not camera_network_artifact_path:
+        raise RuntimeError('metric_expected_belief requires camera_network_artifact_path')
+    network_goal_std_m = float(cfg.get('network_goal_std_m', 0.15))
+    if not np.isfinite(network_goal_std_m) or network_goal_std_m <= 0.:
+        raise RuntimeError('network_goal_std_m must be finite and positive')
+    cfg['camera_network_objective'] = camera_network_objective
+    cfg['network_goal_std_m'] = network_goal_std_m
     if camera_network_artifact_path:
         if visibility_artifact_path:
             raise RuntimeError('choose one planner field: visibility_artifact_path or camera_network_artifact_path')
@@ -934,7 +954,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         if _as_bool(cfg.get('use_pixel_correction', False)):
             raise RuntimeError('camera network planning requires metric camera corrections')
         if _as_bool(cfg.get('use_hit_miss_mixture', False)):
-            raise RuntimeError('the IWAI network score proxy is not a hit/miss probability')
+            raise RuntimeError('camera-network objective owns its reporting-event model')
         camera_network_artifact_path = resolve_profile_asset_path(cfg['world_profiles_path'], camera_network_artifact_path)
         if not Path(camera_network_artifact_path).is_file():
             raise RuntimeError(f'camera_network_artifact_path does not exist: {camera_network_artifact_path}')
@@ -1490,6 +1510,9 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'camera_network_expected_source_hashes_json': cfg.get(
                     'camera_network_expected_source_hashes_json', ''),
                 'camera_network_camera_ids': cfg.get('camera_network_camera_ids', ''),
+                'camera_network_objective': cfg.get(
+                    'camera_network_objective', 'legacy_pixel_chart'),
+                'network_goal_std_m': cfg.get('network_goal_std_m', 0.15),
                 'risk_weight_obs': cfg['risk_weight_obs'],
                 'ambiguity_weight': cfg['ambiguity_weight'],
                 'goal_sigma_uv': cfg['goal_sigma_uv'],
@@ -2141,6 +2164,9 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'camera_network_expected_source_hashes_json': cfg.get(
                 'camera_network_expected_source_hashes_json', ''),
             'camera_network_camera_ids': cfg.get('camera_network_camera_ids', ''),
+            'camera_network_objective': cfg.get(
+                'camera_network_objective', 'legacy_pixel_chart'),
+            'network_goal_std_m': cfg.get('network_goal_std_m', 0.15),
             'use_nogo_cost': cfg['resolved_use_nogo_cost'],
             'nogo_penalty_type': cfg['nogo_penalty_type'],
             'nogo_weight': cfg['nogo_weight'],

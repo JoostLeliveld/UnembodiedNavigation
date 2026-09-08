@@ -51,6 +51,8 @@ def test_node_passes_field_to_global_planner_only():
     from planning.nodes.unicycle_planner_node import UnicyclePlannerNode
     class NodeFixture:
         camera_network_artifact_path='/frozen/network.npz'
+        camera_network_objective='metric_expected_belief'
+        network_goal_std_m=.15
         PLANNER_CLASS=staticmethod(lambda **kwargs:kwargs)
         def __getattr__(self,name):return 1.
     node=NodeFixture()
@@ -58,3 +60,15 @@ def test_node_passes_field_to_global_planner_only():
         def g(key):return enabled if key=='use_visibility_model' else 1.
         result=UnicyclePlannerNode._build_planner_instance(node,g,lambda key,default:default,bool)
         assert result['camera_network_artifact_path']==('/frozen/network.npz' if enabled else '')
+        assert result['camera_network_objective']==(
+            'metric_expected_belief' if enabled else 'legacy_pixel_chart')
+
+
+def test_metric_network_mode_is_explicit_in_launch_command(tmp_path):
+    cfg=config(tmp_path)
+    cfg['camera_network_objective']='metric_expected_belief'
+    cfg['network_goal_std_m']=.15
+    campaign._validate_config(cfg,tmp_path/'config.yaml')
+    cmd=campaign._build_launch_cmd(cfg,'fusion_network_traverse','P2',513,tmp_path/'logs')
+    assert 'camera_network_objective:=metric_expected_belief' in cmd
+    assert 'network_goal_std_m:=0.15' in cmd

@@ -122,6 +122,8 @@ class UnicyclePlannerBase:
         camera_network_expected_sha256='',
         camera_network_expected_source_hashes=None,
         camera_network_camera_ids=None,
+        camera_network_objective='legacy_pixel_chart',
+        network_goal_std_m=0.15,
         r_visible_uv=2.5,
         r_miss_uv=120.0,
         visibility_sigma_kappa=1.0,
@@ -237,6 +239,14 @@ class UnicyclePlannerBase:
         self._visibility_min_prob = 1e-4
         self.visibility_model = None
         self.camera_network = None
+        self.camera_network_objective = str(camera_network_objective or '').strip().lower()
+        if self.camera_network_objective not in ('legacy_pixel_chart', 'metric_expected_belief'):
+            raise ValueError(
+                'camera_network_objective must be legacy_pixel_chart or metric_expected_belief'
+            )
+        self.network_goal_std_m = float(network_goal_std_m)
+        if not np.isfinite(self.network_goal_std_m) or self.network_goal_std_m <= 0.:
+            raise ValueError('network_goal_std_m must be finite and positive')
         network_path = str(camera_network_artifact_path or '').strip()
         if network_path:
             if not self.use_visibility_model:
@@ -255,6 +265,8 @@ class UnicyclePlannerBase:
             self.camera_network = CameraNetworkModel(
                 network_path, expected_sha256=camera_network_expected_sha256 or None,
                 expected_source_hashes=expected_sources, expected_camera_ids=expected_ids)
+        elif self.camera_network_objective != 'legacy_pixel_chart':
+            raise ValueError('metric_expected_belief requires a camera-network artifact')
         from unav_common.navigation_parameters import validate_navigation_parameters
         # Reject invalid tuning before the legacy clamps can silently change it.
         validate_navigation_parameters({
@@ -596,6 +608,9 @@ class UnicyclePlannerBase:
         return np.diag(plan_var).astype(float)
 
     def goal_obs_cov_for_progress(self, progress):
+        if (self.camera_network is not None
+                and self.camera_network_objective == 'metric_expected_belief'):
+            return np.eye(2, dtype=float) * self.network_goal_std_m**2
         progress_fast = float(np.clip(progress, 0.0, 1.0)) ** self.goal_tightening_power
         a = self._smoothstep(progress_fast)
         sigma_u = (1.0 - a) * self.goal_prior_u_std_start + a * self.goal_prior_u_std_final
@@ -608,6 +623,22 @@ class UnicyclePlannerBase:
         # It defines predictive observability/trust for route evaluation.
         # It must not be used as the sole source of measurement-update trust.
         if self.camera_network is not None:
+            if self.camera_network_objective == 'metric_expected_belief':
+                query = self.camera_network.query_belief(
+                    m, S, self.visibility_sigma_kappa,
+                )
+                posterior, _entropy = self.camera_network.expected_belief(
+                    m, S, self.visibility_sigma_kappa,
+                )
+                return {
+                    'p_vis': float(np.mean(query['availability'])),
+                    'p_vis_eff': float(np.mean(query['availability'])),
+                    'R_plan': np.asarray(posterior[:2, :2], dtype=float),
+                    'r_plan_u_std': float(np.sqrt(posterior[0, 0])),
+                    'r_plan_v_std': float(np.sqrt(posterior[1, 1])),
+                    'p_vis_semantics': 'mean_usable_detection_probability',
+                    'R_plan_semantics': 'expected_posterior_xy_covariance_m2',
+                }
             return self.camera_network.planning_diagnostics(
                 m, S, self.camera.H, self.visibility_sigma_kappa)
         p_vis = self.visibility_probability_belief(m, S)
@@ -1070,6 +1101,8 @@ class UnicyclePlannerBase:
             bool(self.use_nogo_cost),
             bool(self.use_belief_nogo_cost),
             bool(self.use_hit_miss_mixture),
+            self.camera_network_objective,
+            float(self.network_goal_std_m),
             float(self.nogo_belief_kappa),
             self._geometry_cache_identity(self.nogo_cost_model),
             self._geometry_cache_identity(self.collision_cost_model),
@@ -1188,17 +1221,29 @@ class UnicyclePlannerBase:
                 R_cond=None,
                 obs_bias=None,
             )
-            valgrad = casadi_efe.make_efe_valgrad_fn(
-                params_ca,
-                self.camera.H,
-                approx=self.approx_method,
-                p_vis_state=p_vis_ca,
-                nogo_cost=nogo_cost_ca,
-                nogo_belief_cost=nogo_belief_cost_ca,
-                R_plan_state=(None if self.camera_network is None else
-                    self.camera_network.make_proxy_covariance_casadi(
-                        self.camera.H, self.visibility_sigma_kappa)),
-            )
+            if (self.camera_network is not None
+                    and self.camera_network_objective == 'metric_expected_belief'):
+                valgrad = casadi_efe.make_metric_network_efe_valgrad_fn(
+                    params_ca,
+                    self.camera_network.make_expected_belief_casadi(
+                        self.visibility_sigma_kappa,
+                    ),
+                    goal_std_m=self.network_goal_std_m,
+                    nogo_cost=nogo_cost_ca,
+                    nogo_belief_cost=nogo_belief_cost_ca,
+                )
+            else:
+                valgrad = casadi_efe.make_efe_valgrad_fn(
+                    params_ca,
+                    self.camera.H,
+                    approx=self.approx_method,
+                    p_vis_state=p_vis_ca,
+                    nogo_cost=nogo_cost_ca,
+                    nogo_belief_cost=nogo_belief_cost_ca,
+                    R_plan_state=(None if self.camera_network is None else
+                        self.camera_network.make_proxy_covariance_casadi(
+                            self.camera.H, self.visibility_sigma_kappa)),
+                )
             if jit:
                 # An unsupported compiler/backend must be explicit; never quietly
                 # run a different execution profile than the campaign recorded.
@@ -1234,6 +1279,9 @@ class UnicyclePlannerBase:
         return np.array([goal_xy[0], goal_xy[1], theta], dtype=float)
 
     def _goal_obs(self, goal_state):
+        if (self.camera_network is not None
+                and self.camera_network_objective == 'metric_expected_belief'):
+            return np.asarray(goal_state[:2], dtype=float)
         return np.asarray(self.g_obs(goal_state), dtype=float)
 
     def _goal_obs_cov(self):
@@ -1285,6 +1333,13 @@ class UnicyclePlannerBase:
         validate_planning_inputs(m0, S0, goal_state[:2])
         if not np.isfinite(controls).all():
             raise ValueError('nonfinite objective controls')
+
+        if (self.camera_network is not None
+                and self.camera_network_objective == 'metric_expected_belief'):
+            return self._evaluate_metric_network_controls(
+                controls, m0, S0, goal_state,
+                return_metrics=return_metrics,
+            )
 
         m = m0.copy()
         S = S0.copy()
@@ -1409,14 +1464,55 @@ class UnicyclePlannerBase:
             }
         return total
 
+    def _evaluate_metric_network_controls(
+        self, controls, m0, S0, goal_state, *, return_metrics=False,
+    ):
+        """NumPy accounting for the world-XY camera-network objective."""
+        m = np.asarray(m0, dtype=float).copy()
+        S = np.asarray(S0, dtype=float).copy()
+        goal_xy = np.asarray(goal_state[:2], dtype=float)
+        goal_cov = np.eye(2, dtype=float) * self.network_goal_std_m**2
+        totals = dict(risk_cost=0., ambiguity_cost=0., control_cost=0.,
+                      obstacle_cost=0., risk_mean=0., risk_cov_trace=0.,
+                      risk_cov_logdet=0., risk_const=0.,
+                      delta_risk_visibility=0., delta_ambiguity_visibility=0.)
+        risk_scale = (self.risk_weight_obs * self.observation_risk_scale
+                      if self.use_obs_risk else 0.)
+        ambiguity_scale = (self.ambiguity_weight * self.ambiguity_term_scale
+                           if self.use_ambiguity else 0.)
+        for t, u in enumerate(controls):
+            m, S = self.predict(m, S, u)
+            validate_covariance(S, positive_definite=True, name='predicted covariance')
+            weight_t = self.discount_gamma**t
+            parts = risk_components(m[:2], S[:2, :2], (goal_xy, goal_cov))
+            totals['risk_cost'] += weight_t * risk_scale * parts['total']
+            for key in ('mean', 'cov_trace', 'cov_logdet', 'const'):
+                totals[f'risk_{key}'] += weight_t * risk_scale * parts[key]
+            S_post, expected_entropy = self.camera_network.expected_belief(
+                m, S, self.visibility_sigma_kappa,
+            )
+            totals['ambiguity_cost'] += weight_t * ambiguity_scale * expected_entropy
+            totals['obstacle_cost'] += weight_t * self.obstacle_penalty(
+                m, S_post if self.use_belief_nogo_cost else S,
+            )
+            totals['control_cost'] += weight_t * self.control_weight * float(u @ u)
+            S = S_post
+        total = sum(totals[key] for key in (
+            'risk_cost', 'ambiguity_cost', 'control_cost', 'obstacle_cost'))
+        if return_metrics:
+            return float(total), {key: float(value) for key, value in totals.items()}
+        return float(total)
+
     def plan(self, m0, S0, goal_xy, *, progress_index=0.0):
         t_plan_start = time.perf_counter()
         m0, S0, goal_xy = validate_planning_inputs(m0, S0, goal_xy)
         if not np.isfinite(self.dt) or self.dt <= 0 or self.horizon <= 0:
             raise ValueError('planning horizon and dt must be positive')
-        from planning.core.camera_network import projection_jacobian
-        projection_jacobian(self.camera.H, m0)
-        projection_jacobian(self.camera.H, np.r_[goal_xy, 0.])
+        if not (self.camera_network is not None
+                and self.camera_network_objective == 'metric_expected_belief'):
+            from planning.core.camera_network import projection_jacobian
+            projection_jacobian(self.camera.H, m0)
+            projection_jacobian(self.camera.H, np.r_[goal_xy, 0.])
         if not np.isfinite(progress_index):
             raise ValueError('goal progress index must be finite')
         progress_index = float(max(progress_index, 0.0))

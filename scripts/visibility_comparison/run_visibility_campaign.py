@@ -1330,6 +1330,13 @@ def _existing_entry_matches_config(
             if (not isinstance(camera_ids, list) or not camera_ids
                     or len(camera_ids) != len(set(camera_ids))):
                 return False, 'camera network roster provenance is missing or malformed'
+            expected_objective = str(
+                expected_value('camera_network_objective') or 'legacy_pixel_chart')
+            if manifest.get('camera_network_objective') != expected_objective:
+                return False, 'camera network objective mismatch'
+            expected_goal_std = float(expected_value('network_goal_std_m') or 0.15)
+            if float(manifest.get('network_goal_std_m', float('nan'))) != expected_goal_std:
+                return False, 'camera network metric goal width mismatch'
             if manifest.get('visibility_artifact_path'):
                 return False, 'network run unexpectedly also used a legacy visibility artifact'
             return True, ''
@@ -1484,6 +1491,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
     for key in (
         'observation_risk_scale', 'ambiguity_term_scale',
         'risk_weight_obs', 'ambiguity_weight',
+        'camera_network_objective', 'network_goal_std_m',
         'belief_publish_rate',
         'heading_update_mode',
         'use_pixel_correction', 'pixel_topic', 'command_noise_output_topic',

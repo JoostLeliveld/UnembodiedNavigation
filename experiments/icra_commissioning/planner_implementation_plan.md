@@ -9,17 +9,20 @@ is the single current decision/status account. This file specifies interfaces, c
 
 The network is an opt-in adapter inside `UnicyclePlannerBase`; the legacy path stays the
 default. `camera_network_artifact_path` replaces the single-camera visibility artifact
-for that plan. Both artifacts together are rejected. The adapter changes the covariance
-proxy supplied to the existing IWAI objective; it does not replace the objective/controller.
+for that plan. Both artifacts together are rejected. `camera_network_objective` selects
+the historical `legacy_pixel_chart` or the development-only
+`metric_expected_belief` objective. The latter uses world-XY goal risk, proper no-update
+miss branches and recursive expected posterior covariance. It has not passed a final
+campaign.
 
 | Component | Code | Contract |
 |---|---|---|
 | Frozen runtime artifact | `src/planning/planning/core/camera_network.py` | NPZ without pickle; explicit camera IDs; XY grid; separate score and availability fields; full SPD metric R and designed miss endpoint; schema, reference, units and source hashes |
 | Numpy / differentiable network query | Same module | Same bilinear fields and five XY sigma points in NumPy/CasADi; outside grid returns zero field values; preserves full ellipse shape |
-| Existing EFE integration | `src/planning/planning/core/casadi_efe.py`, `planners/base_planner.py` | Add full precision matrices, transform once into the fixed camera-A cost chart; single goal preference, same EFE terms and weights, same frozen Q |
+| EFE integration | `src/planning/planning/core/casadi_efe.py`, `planners/base_planner.py` | Preserve the fixed camera-A cost chart in legacy mode; in metric mode enumerate reporting subsets, apply conditional metric R, score a metric goal belief and propagate the expected posterior |
 | Forecast reference | `CameraNetworkModel.forecast_posterior` | Separate q/R model; at most five cameras/32 hit-miss outcomes; Joseph updates; no update on a miss. Compare expected-information approximation without calling either empirical calibration |
 | Node / launch | `nodes/unicycle_planner_node.py`; `src/experiments/launch/warehouse_primary_comparison.launch.py`; `core/visibility_launch_common.py` | Explicit artifact argument; disable field in the ordinary local tracker; reject pixel correction/proxy reuse, preselected-route mislabelling and incompatible hit/miss switch |
-| Logging / campaign | `experiment_logger.py`; `scripts/visibility_comparison/run_visibility_campaign.py` | Record artifact path and SHA, identify proxy semantics, refuse resumed runs with another artifact. P0/P1/P2 all actually select `visibility_aware_efe` |
+| Logging / campaign | `experiment_logger.py`; `scripts/visibility_comparison/run_visibility_campaign.py` | Record artifact path, SHA, objective mode and metric goal width; identify mode-specific semantics; refuse resumed runs with another artifact |
 | Export | `export_network_planner.py` | Verify frozen source hashes; fit scores on mean-training and covariance-fitting roles only; average headings at each position; preserve misses; reuse separately fitted q and full constant R |
 | Integration probe | `planner_probe.py` | Optimize the same short warehouse-lane problem for three frozen artifacts; save inputs, source hashes, controls, model forecasts, figures and solver results |
 

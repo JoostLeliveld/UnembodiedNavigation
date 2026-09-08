@@ -650,6 +650,77 @@ def visibility_aware_unicycle_efe_ca(
             + total_control * inv_H + total_nogo * inv_H)
 
 
+def make_metric_network_efe_valgrad_fn(
+    params: CasadiEfeParams,
+    expected_belief_state,
+    *,
+    goal_std_m,
+    nogo_cost=None,
+    nogo_belief_cost=None,
+):
+    """Build a world-XY expected-belief objective for a camera network.
+
+    The network callback returns the exact one-step expectation over conditionally
+    independent per-camera Bernoulli hit events. Each hit uses its conditional
+    metric covariance; a miss performs no update. The expected posterior is used
+    as the covariance for the next planning step.
+    """
+    _require_casadi()
+    goal_std_m = float(goal_std_m)
+    if not np.isfinite(goal_std_m) or goal_std_m <= 0.:
+        raise ValueError('metric network goal_std_m must be finite and positive')
+
+    u_flat = ca.MX.sym('u_flat', params.time_horizon * params.Du)
+    m0 = ca.MX.sym('m0', 3)
+    S0 = ca.MX.sym('S0', 3, 3)
+    goal_obs = ca.MX.sym('goal_obs', 2)
+    goal_xy = ca.MX.sym('goal_xy', 2)
+    progress_index0 = ca.MX.sym('progress_index0')
+    m = m0
+    S = S0
+
+    goal_cov = (goal_std_m ** 2) * ca.DM.eye(2)
+    total_risk = 0.
+    total_amb = 0.
+    total_control = 0.
+    total_nogo = 0.
+    for t in range(params.time_horizon):
+        u_t = ca.vertcat(u_flat[2*t], u_flat[2*t+1])
+        m_prev = m
+        m = unicycle_step_ca(m_prev, u_t, params.dt)
+        F = unicycle_jacobian_ca(m_prev, u_t, params.dt)
+        Q_t = unicycle_process_noise_ca(
+            params.process_noise_xy, params.process_noise_theta,
+            params.dt, m_prev[2], u_t[0],
+        )
+        S = .5 * (F @ S @ F.T + Q_t + (F @ S @ F.T + Q_t).T)
+        weight_t = params.discount_gamma ** t
+        total_risk += weight_t * params.risk_scale * risk_ca(
+            m[:2], S[:2, :2], goal_xy, goal_cov,
+        )
+        S_post, expected_entropy = expected_belief_state(m, S)
+        total_amb += weight_t * params.ambiguity_scale * expected_entropy
+        total_control += weight_t * params.control_weight * ca.sumsqr(u_t)
+        if nogo_belief_cost is not None and params.use_belief_nogo_cost:
+            total_nogo += weight_t * nogo_belief_cost(m, S_post)
+        elif nogo_cost is not None:
+            total_nogo += weight_t * nogo_cost(m)
+        S = S_post
+
+    H_eff = sum(params.discount_gamma ** t for t in range(params.time_horizon))
+    objective = (total_risk + total_amb + total_control + total_nogo) / max(H_eff, 1e-8)
+    gradient = ca.gradient(objective, u_flat)
+    # Keep the common six-input interface so cache loading and the optimizer do
+    # not need a second calling convention. goal_obs and progress are deliberate
+    # compatibility inputs; only goal_xy is used by this metric objective.
+    valgrad = ca.Function(
+        'metric_network_efe_valgrad',
+        [u_flat, m0, S0, goal_obs, goal_xy, progress_index0],
+        [objective, gradient],
+    )
+    return _make_valgrad_wrapper(valgrad)
+
+
 def _make_valgrad_wrapper(valgrad):
     """Wrap a built valgrad ca.Function as a numpy-in/out callable."""
 

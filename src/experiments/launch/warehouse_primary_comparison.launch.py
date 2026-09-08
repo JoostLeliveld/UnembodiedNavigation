@@ -20,6 +20,8 @@ PLANNER_DESCRIPTION = (
 def _planner_precision_arguments():
     return [
         DeclareLaunchArgument('camera_network_artifact_path', default_value=''),
+        DeclareLaunchArgument('camera_network_objective', default_value='legacy_pixel_chart'),
+        DeclareLaunchArgument('network_goal_std_m', default_value='0.15'),
         DeclareLaunchArgument('horizon', default_value='40'),
         DeclareLaunchArgument('dt', default_value='0.25'),
         DeclareLaunchArgument('v_max', default_value='0.22'),
@@ -38,7 +40,7 @@ def _planner_precision_arguments():
                               description='Reject pixel corrections with 2D NIS above this threshold; 0 disables NIS gating.'),
         DeclareLaunchArgument('state_reanchor_m', default_value='0.0'),
         DeclareLaunchArgument('state_max_predict_dt_s', default_value='1.5'),
-        DeclareLaunchArgument('state_reject_inflate_m2', default_value='0.05'),
+        DeclareLaunchArgument('state_reject_inflate_m2', default_value='0.0'),
         DeclareLaunchArgument('robot_length_m', default_value='0.8'),
         DeclareLaunchArgument('robot_width_m', default_value='0.55'),
         DeclareLaunchArgument('robot_collision_radius_m', default_value='0.48541219597369'),
@@ -260,6 +262,7 @@ def generate_launch_description():
             'yolo_max_batch_stamp_skew_s', default_value='0.05',
             description='Capture-stamp grouping tolerance; must remain below the 0.20 s camera period.'),
         DeclareLaunchArgument('yolo_debug_frame_dir', default_value=''),
+        DeclareLaunchArgument('yolo_debug_crop_dir', default_value=''),
         DeclareLaunchArgument('yolo_use_torchscript', default_value='false',
                               description='Load the TorchScript export of the model (single C++ forward dispatch; bit-identical detections)'),
         DeclareLaunchArgument('yolo_runtime_backend', default_value='native',

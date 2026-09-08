@@ -209,6 +209,8 @@ class ExperimentLogger(Node):
         self.declare_parameter('camera_network_expected_sha256', '')
         self.declare_parameter('camera_network_expected_source_hashes_json', '')
         self.declare_parameter('camera_network_camera_ids', '')
+        self.declare_parameter('camera_network_objective', 'legacy_pixel_chart')
+        self.declare_parameter('network_goal_std_m', 0.15)
         self.declare_parameter('risk_weight_obs', 1.0)
         self.declare_parameter('ambiguity_weight', 1.0)
         self.declare_parameter('goal_sigma_uv', 2.0)
@@ -442,6 +444,13 @@ class ExperimentLogger(Node):
             item.strip() for item in camera_ids_text.split(',') if item.strip()]
         if len(self.camera_network_camera_ids) != len(set(self.camera_network_camera_ids)):
             raise RuntimeError('camera_network_camera_ids contains duplicates')
+        self.camera_network_objective = str(
+            self.get_parameter('camera_network_objective').value or '').strip().lower()
+        self.network_goal_std_m = float(self.get_parameter('network_goal_std_m').value)
+        if self.camera_network_objective not in ('legacy_pixel_chart', 'metric_expected_belief'):
+            raise RuntimeError('unknown camera_network_objective')
+        if not np.isfinite(self.network_goal_std_m) or self.network_goal_std_m <= 0.:
+            raise RuntimeError('network_goal_std_m must be finite and positive')
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
         self.ambiguity_weight = float(self.get_parameter('ambiguity_weight').value)
         self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
@@ -783,6 +792,8 @@ class ExperimentLogger(Node):
             'use_visibility_model': self.use_visibility_model,
             'visibility_artifact_path': self.visibility_artifact_path,
             'camera_network_artifact_path': self.camera_network_artifact_path,
+            'camera_network_objective': self.camera_network_objective,
+            'network_goal_std_m': self.network_goal_std_m,
             'risk_weight_obs': self.risk_weight_obs,
             'ambiguity_weight': self.ambiguity_weight,
             'goal_sigma_uv': self.goal_sigma_uv,
@@ -949,8 +960,15 @@ class ExperimentLogger(Node):
             self.camera_network_source_hashes)
         manifest_data['camera_network_camera_ids'] = list(self.camera_network_camera_ids)
         if self.camera_network_artifact_path:
-            manifest_data['planner_field_semantics'] = 'IWAI detector-score precision proxy; not a measurement covariance or calibrated posterior'
-            manifest_data['planner_p_vis_semantics'] = 'mean expected detector score across artifact cameras; not probability of a usable observation'
+            if self.camera_network_objective == 'metric_expected_belief':
+                manifest_data['planner_field_semantics'] = (
+                    'metric expected belief over independent per-camera Bernoulli reports; '
+                    'not the robust runtime fusion posterior')
+                manifest_data['planner_p_vis_semantics'] = (
+                    'mean usable-detection probability across artifact cameras')
+            else:
+                manifest_data['planner_field_semantics'] = 'IWAI detector-score precision proxy; not a measurement covariance or calibrated posterior'
+                manifest_data['planner_p_vis_semantics'] = 'mean expected detector score across artifact cameras; not probability of a usable observation'
         manifest_data['manager_commissioned_calibration_sha256'] = _sha256_file(
             str(manager_settings.get('manager_commissioned_calibration_path', '') or '')
         )

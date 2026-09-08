@@ -12,16 +12,14 @@ a gap of 45.1 s. Panel (c) is that resuming correction. It is worth drawing beca
 is the one update on the drive large enough to see: the median accepted correction here
 moves the belief 0.97 mm, since corrections normally arrive several times a second and
 each only nudges. After 45 s of prediction the prior has drifted, so this correction
-moves the belief 65.9 cm and takes the error from 67 cm to 8 cm.
+moves the belief 65.9 cm and takes the time-aligned error from 71 cm to 16 cm.
 
-Everything is logged: belief mean and covariance from the planner, ground truth sampled at
-the belief timestamp as the metrics contract requires, and accepted corrections from the
-runtime's own flag. Panel (c) reads the prior and posterior straight out of the runtime's
-own correction record (pixel_corr_pred_* and pixel_corr_next_*). The update is applied in
-pixel space, so the world-frame reading is not logged directly; it is reconstructed from
-the logged prior, posterior and prior covariance by inverting the Kalman update, under a
-stated reading noise. Rack footprints come from the world file. Ground truth scores the
-result; the estimator never saw it.
+The belief means, prior covariance, fused map-frame reading and its covariance are logged.
+Ground truth is sampled at the belief timestamp as the metrics contract requires. Panel
+(c) reads the prior and posterior means from the runtime correction record and the fused
+reading from fusion_observations.csv. Its posterior ellipse is the Joseph-form covariance
+update evaluated from the logged prior and measurement covariance. Rack footprints come
+from the world file. Ground truth scores the result; the estimator never saw it.
 
 Note on the growth rate: across the starved stretch the stated standard deviation grows
 126 cm while the actual error grows 39 cm, so the belief ends about 2.6x wider than its own
@@ -56,8 +54,6 @@ ROUTE_START = 120.0          # where the drawn route begins
 SNAPSHOTS = (186.0, 231.0)   # corrections still arriving; 45 s later with none
 GAP_OPENS = 186.5            # last accepted correction before the starved stretch
 GAP_CLOSES = 231.605         # the correction that ends it, drawn in panel (c)
-READING_SIGMA_M = 0.25       # assumed reading noise, to reconstruct the world reading
-
 TRUTH, BELIEF, MEAS = '#2b3038', '#1f6fb8', '#c23d36'
 RACK, GONE, CAM = '#b9c0c8', '#f2d9a8', '#1f6fb8'
 GAP_INK = '#8a6d1f'
@@ -161,7 +157,7 @@ def snapshot(ax, rows, accepted, boxes, now: float, title: str) -> None:
             bbox=dict(boxstyle='round,pad=0.35', fc='white', ec='#c8ced6', alpha=.93))
 
 
-def correction_record(frame: pd.DataFrame, start: float) -> dict:
+def correction_record(frame: pd.DataFrame, fusion: pd.DataFrame, start: float) -> dict:
     """The runtime's own record of the correction that ends the starved stretch."""
     t = frame['stamp'].astype(float) - start
     row = frame[np.isclose(t, GAP_CLOSES, atol=1e-3)]
@@ -170,6 +166,8 @@ def correction_record(frame: pd.DataFrame, start: float) -> dict:
     row = row.iloc[0]
     if float(row['pixel_corr_accepted']) != 1:
         raise SystemExit(f'the correction at t={GAP_CLOSES} was not accepted')
+    if float(row['pixel_corr_measurement_space']) != 1.:
+        raise SystemExit('selected correction is not the runtime map-XY measurement path')
     prior = np.array([row['pixel_corr_pred_x'], row['pixel_corr_pred_y']], dtype=float)
     post = np.array([row['pixel_corr_next_x'], row['pixel_corr_next_y']], dtype=float)
     prior_cov = np.array([[row['planner_cov_x'], row['planner_cov_xy']],
@@ -177,17 +175,24 @@ def correction_record(frame: pd.DataFrame, start: float) -> dict:
     truth = np.array([row['gt_x_at_belief_stamp'], row['gt_y_at_belief_stamp']],
                      dtype=float)
 
-    # The update is applied in pixel space, so no world-frame reading is logged. Invert
-    # the Kalman update for the reading that carries this prior to this posterior:
-    # m+ = m- + P(P+R)^-1 (z - m-)  =>  z = m- + (P+R) P^-1 (m+ - m-).
-    meas_cov = np.eye(2) * READING_SIGMA_M ** 2
-    reading = prior + (prior_cov + meas_cov) @ np.linalg.inv(prior_cov) @ (post - prior)
-    gain = prior_cov @ np.linalg.inv(prior_cov + meas_cov)
-    post_cov = prior_cov - gain @ prior_cov
-    # the reconstruction must return the posterior the runtime actually logged
+    correction_stamp = float(row['planner_pixel_correction_stamp'])
+    fused = fusion[np.isclose(fusion['fused_stamp'].astype(float), correction_stamp, atol=1e-6)]
+    if len(fused) != 1:
+        raise SystemExit(
+            f'expected one fused observation at stamp {correction_stamp}, found {len(fused)}')
+    fused = fused.iloc[0]
+    reading = np.array([fused['fused_x'], fused['fused_y']], dtype=float)
+    meas_cov = np.array([[fused['fused_cov_xx'], fused['fused_cov_xy']],
+                         [fused['fused_cov_xy'], fused['fused_cov_yy']]], dtype=float)
+    innovation = np.array([row['pixel_corr_innov_u'], row['pixel_corr_innov_v']], dtype=float)
+    if not np.allclose(reading - prior, innovation, atol=1e-9):
+        raise SystemExit('logged map-XY innovation does not match the fused reading')
+    gain = np.linalg.solve(prior_cov + meas_cov, prior_cov).T
+    A = np.eye(2) - gain
+    post_cov = A @ prior_cov @ A.T + gain @ meas_cov @ gain.T
     check = prior + gain @ (reading - prior)
-    if not np.allclose(check, post, atol=1e-9):
-        raise SystemExit(f'reading reconstruction is inconsistent: {check} vs {post}')
+    if not np.allclose(check, post, atol=1e-3):
+        raise SystemExit(f'logged reading and correction record disagree: {check} vs {post}')
     return dict(prior=prior, prior_cov=prior_cov, post=post, post_cov=post_cov,
                 reading=reading, meas_cov=meas_cov, truth=truth,
                 yaw=float(row['pixel_corr_pred_yaw']))
@@ -241,7 +246,7 @@ def update_panel(ax, record: dict, boxes) -> None:
     halo = dict(boxstyle='square,pad=0.16', fc='white', ec='none', alpha=.84)
     for anchor, colour, label, offset, ha, va in (
             (prior, BELIEF, 'predicted\n$m_k^-,S_k^-$', (-1.30, 0.42), 'right', 'center'),
-            (reading, MEAS, 'reading\n$z_k,R_c$', (1.15, -0.60), 'left', 'center'),
+            (reading, MEAS, 'fused reading\n$z_k,R_k$', (1.15, -0.60), 'left', 'center'),
             (post, BELIEF, 'updated\n$m_k^+,S_k^+$', (-1.30, -0.62), 'right', 'center'),
             (truth, TRUTH, 'true pose $s_k$', (1.15, 0.62), 'left', 'center')):
         ax.annotate(label, xy=anchor, xytext=anchor + np.array(offset), color=colour,
@@ -269,7 +274,8 @@ def main() -> None:
     boxes = racks()
     matches = sorted(glob.glob(str(REPO / RUN)))
     frame = pd.read_csv(matches[0], low_memory=False)
-    record = correction_record(frame, frame['stamp'].astype(float).min())
+    fusion = pd.read_csv(pathlib.Path(matches[0]).parent / 'fusion_observations.csv')
+    record = correction_record(frame, fusion, frame['stamp'].astype(float).min())
 
     fig, axes = plt.subplots(1, 3, figsize=(15.4, 5.0),
                              gridspec_kw=dict(width_ratios=(1, 1, 0.92)))
