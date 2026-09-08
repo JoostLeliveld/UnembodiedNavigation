@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""Appendix figure: what each of the five cameras sees.
+"""Appendix figure: the view from each of the five cameras, with the robot boxed.
 
-One frame per camera, chosen at that camera's own median detection range so the panel
-shows a typical view rather than its best one. The robot is boxed in each. Put side by
-side, the panels show why the cameras are not interchangeable: camera B works close in
-and returns a large robot, while camera D looks across the hall and its robot falls near
-the size at which the detector starts to fail.
+One frame per camera, taken at that camera's own median detection range so each panel is
+a typical view rather than its best one.
 """
 from __future__ import annotations
 
@@ -34,7 +31,8 @@ def main() -> None:
     hits['area'] = (hits.x1 - hits.x0) * (hits.y1 - hits.y0)
 
     cameras = sorted(hits.camera_id.unique())
-    fig, axes = plt.subplots(2, 3, figsize=(12.6, 5.0))
+    # 3x2 with the last cell blank: five panels stay large across a two-column page.
+    fig, axes = plt.subplots(2, 3, figsize=(11.0, 4.3))
 
     for ax, camera in zip(axes.ravel(), cameras):
         subset = hits[hits.camera_id == camera]
@@ -53,21 +51,10 @@ def main() -> None:
         ax.add_patch(patches.Rectangle((x0 - pad, y0 - pad), (x1 - x0) + 2 * pad,
                                        (y1 - y0) + 2 * pad, fill=False,
                                        edgecolor=ROBOT, linewidth=1.9))
-        ax.set_title(f'Camera {camera[-1]}: robot {row.camera_range_m:.0f} m away, '
-                     f'{row.area:.0f} px', fontsize=9.5, fontweight='bold', pad=4)
+        ax.set_title(f'Camera {camera[-1]}', fontsize=12, fontweight='bold', pad=3)
 
-    # The sixth cell explains the boxes rather than sitting empty.
-    spare = axes.ravel()[len(cameras)]
-    spare.axis('off')
-    spare.text(0.5, 0.55,
-               'Each panel is one camera\'s view\nof the robot at that camera\'s\n'
-               'typical working distance.\n\nThe red box marks the robot.',
-               ha='center', va='center', fontsize=10, color=INK, linespacing=1.6)
-    spare.text(0.5, 0.16, 'Detection quality falls off\nbelow about 800 px.',
-               ha='center', va='center', fontsize=9.5, color=ROBOT,
-               fontweight='bold', linespacing=1.5)
-
-    fig.tight_layout(pad=0.5)
+    axes.ravel()[len(cameras)].axis('off')
+    fig.tight_layout(pad=0.35)
     OUT.mkdir(parents=True, exist_ok=True)
     for path in (OUT / 'camera_views.pdf', OUT / 'camera_views.png'):
         fig.savefig(path, dpi=200, bbox_inches='tight')
