@@ -1,5 +1,98 @@
 # Localization metrics contract
 
+## Visibility speed commissioning (2026-09-08)
+
+`visibility_speed_1mps_commissioning_20260908` records a separate user-requested
+1 m/s operating configuration. V1 Uniform timed out at the clearance guard.
+V2 Uniform passed navigation; IWAI stopped near the first bend and timed out
+following starting-belief-footprint rejections. Commissioned was not launched.
+All completed v2 attempts passed source/crop, ledger, runtime/handoff replay and
+own-time support checks. Uniform's nominal 95% containment was 41.5%.
+The final-campaign gate failed. These commissioning attempts establish neither
+calibrated uncertainty, speedup nor replicated superiority. Exact selections and
+results are in the registry and [commissioning record](visibility_speed_commissioning.md).
+Keep both failed attempts; do not pool this operating point with the frozen pilot.
+
+## One-task visibility pilot (2026-09-08)
+
+`one_task_visibility_pilot_20260908` selects three completed west-to-east drives,
+one per Uniform, IWAI score-GP and Commissioned availability-GP planning interface,
+seed 1200. Joint runtime fusion is identical. Future readings are independent in
+all three planning arms. All three reach belief goals and finish within 10 cm
+of the physical goal with positive mapped clearance. All select the shorter
+global corridor and retain feasible seeds under the fixed optimizer budget.
+The mean goal cost dominates the evaluated candidate ranking. The fitted spatial
+fields change the forecast but do not establish an EFE route-choice benefit.
+All source/crop, terminal-ledger, runtime and handoff replay checks pass. All
+28,161 scored belief timestamps have own-time native reference support.
+Nominal 95% containment is 61.9%, 60.6%, 70.6%. These single drives do not
+establish superiority or calibrated uncertainty. The earlier long-route and
+60-drive selections remain separate. Original and amended preparation candidates
+are retained. IWAI is a network adaptation, not a literal published reproduction.
+
+## Four warehouse crossings (2026-09-08)
+
+`long_warehouse_routes_v1_20260908` selects four completed attempts, one per
+long task under JointJoint. Three traverse 23.49–31.25 m and reach belief goals.
+Two meet the physical 10 cm and mapped-clearance criterion. The southwest
+attempt remains stationary through a 600 s timeout because the uncertainty
+clearance guard blocks departure. All four source/crop identities, terminal
+ledgers, source hashes, runtime replays, global-to-local queries and own-time
+reference support pass. The moving drives contain the reference in their
+nominal 95% ellipses on 49.3%, 62.7% and 72.6% of scored timestamps. Keep the
+stationary attempt's containment separate from navigation uncertainty.
+This selection establishes long-route integration diagnostics only. There is
+one attempt per different task, and no replicated EFE benefit or calibrated
+uncertainty claim. The global solutions retained map-derived seeds. Their
+objective is undiscounted over the mission; local discount remains 0.98.
+The GP underrepresents the geometric corridor visibility contrasts. The
+previous 60-drive comparison remains a separate short-task selection.
+
+## Provisional thesis navigation comparison (2026-09-08)
+
+`provisional_thesis_navigation_20260908` selects 60 completed attempts, three
+arms and five paired seeds on four development-selected tasks. This is a
+method-development comparison, not the final campaign. All native
+source/crop identities, received terminal ledgers, source/data hashes and
+exact delivery-order replays passed. All belief timestamps have own-time
+native reference support. The 45 core and 15 stress attempts remain separate.
+All core attempts met the navigation criterion. Long-aisle success is I/I 5/5,
+J/I 0/5 and J/J 2/5. Three J/I stress timeouts and four stress mapped-clearance
+failures remain included. Navigation success does not certify calibration.
+All three methods undercovered on the long aisle. No warehouse-wide
+calibration, unseen-region confirmation or global obstacle-fork claim follows.
+Native publication tails remain separate from received and assimilated frames.
+The three preparation pilots are not final replicates. No method or parameter
+set is frozen by this selection. It does not change the invalidated legacy
+fixed-route fusion boundary below.
+
+## Development route iteration (2026-09-08)
+
+`route_iteration_v1_20260908` selects five completed development drives with
+new route shapes, an original-case retest and a four-metre aisle extension.
+The method changes world-XY goal preference, XY entropy, CasADi representation
+and path feedback together. It retains the frozen camera model. All five own-time
+evaluations, source ledgers and exact delivery-order replays passed. These are
+different trajectories without independent replication; do not attribute gains
+to one change or call the observation uncertainty calibrated. The long-aisle
+run completes while its belief remains biased and undercovers. Keep navigation
+completion and uncertainty consistency separate.
+
+## Overnight GP/joint forecast selection (2026-09-08)
+
+`gp_joint_forecast_navigation_20260908` now selects three diagnostic drives on
+segment 0, seed 850, one per arm. The user canceled the remaining campaign.
+One extra segment-6 drive completed while the stop took effect and is preserved
+separately in `scope_change.json`. The three selected drives all timed out;
+source ledgers and delivery-order replay passed. There is no replicated result.
+Its model is a hypothesis under test: the development pilot on segment 0 timed
+out and undercovered. Report all attempts, including timeouts and integrity
+failures. The campaign does not certify calibration or global route choice.
+Use the dedicated exact source-frame ledger and own-time native reference
+evaluator, then verify delivery-order runtime replay. Its expected-belief EFE
+objective extension and sequential covariance approximation must be named.
+The legacy fixed-route selection remains invalidated.
+
 This file defines which quantities may be compared and which runtime evidence makes a
 drive scoreable. The original contract is dated 2026-08-29; the versioned identity
 clarification below describes the 2026-09-07 repair and does not upgrade historical runs.
@@ -81,3 +174,42 @@ Wheel odometry is diagnostic input and must never be named ground truth.
 The executable implementation of alignment and event selection is
 `experiments/fusion_on_fixed_routes/aligned.py`. If this prose and that loader disagree,
 stop and repair the contract before reporting a number.
+
+## Dedicated joint-state navigation comparison (2026-09-07)
+
+The registry entry `joint_bayesian_navigation_v2` names a separate, frozen,
+20-drive short-range comparison. Its estimator maintains one joint robot/error
+state; it does not publish a separate fused correction. The dedicated evaluator
+therefore verifies exact received camera-frame membership, unique accepted
+members and one reasoned terminal batch classification, then uses
+`aligned.TruthSeries` to score each recorded belief at its own timestamp.
+Source/model hashes, deployed robot identity and exact runtime replay are checked
+separately. Five paired seeds are compared within each segment.
+
+Only this registered selection is covered by the dedicated schema. It does not
+change the legacy fixed-route fusion evidence boundary above. Its scope is current
+belief estimation and one-metre closed-loop navigation. The planner still uses its
+legacy future-observation forecast, so these runs cannot establish a benefit from
+forecasting correlated observations, gradual occlusion or global route choice.
+
+## Conservative stochastic-model confirmation (2026-09-07)
+
+The registry entry `conservative_stochastic_model_20260907` selects eight new
+out-and-back captures on four segments, with seeds 721/722. The evaluated
+13-state artifact was frozen before scoring that comparison. Its manifest
+records a structural amendment during model-free acquisition. These are
+capture-time localization replays on the same trajectories, not closed-loop
+trials controlled by that artifact.
+The dedicated capture loader uses bounded `aligned.TruthSeries` support and
+unique source frames. Average each drive's statistic before combining seeds.
+Report nominal ellipse containment beside ellipse size. Conservative containment
+does not establish precise conditional 95% calibration.
+
+The separate exact-delivery replay of the 20 registered v2 navigation paths
+compares counterfactual beliefs. It does not replace their original closed-loop
+outcomes. Earlier seed-720 confirmation was used to revise that covariance
+and is development evidence. The binary availability model was selected after
+inspecting the newer recordings. Its path-conditioned horizon scores remain
+development evidence, separate from the camera-error model freeze. Neither
+comparison establishes a new EFE planning benefit or promotes the legacy fusion
+selection.

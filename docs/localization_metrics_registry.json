@@ -172,5 +172,295 @@
     },
     "logged_rotation_recovery_activations": 1,
     "verification": "logs/studies/icra_commissioning_20260905/network_navigation_recovery_evidence/recovery_verification.json"
+  },
+  "joint_bayesian_navigation_v2": {
+    "status": "complete_scoped_short_range_comparison",
+    "schema": "dedicated_joint_state_events_v1",
+    "selection": "../2026-09-07/i-w/outputs/bayesian_navigation/navigation_campaign_v2.json",
+    "results": "../2026-09-07/i-w/outputs/bayesian_navigation/navigation_campaign_v2_results.json",
+    "report": "../2026-09-07/i-w/outputs/bayesian_navigation/RESULTS.md",
+    "required_loader": "../2026-09-07/i-w/outputs/bayesian_navigation/evaluate_navigation.py",
+    "reference_alignment": "experiments/fusion_on_fixed_routes/aligned.py:TruthSeries",
+    "integrity": "../2026-09-07/i-w/outputs/bayesian_navigation/campaign_integrity.json",
+    "replay_equivalence": "../2026-09-07/i-w/outputs/bayesian_navigation/navigation_replay_equivalence.json",
+    "arms": [
+      "Independent",
+      "Joint"
+    ],
+    "seeds_per_arm_per_segment": 5,
+    "segments": [
+      0,
+      6
+    ],
+    "goal_distance_m": 1.0,
+    "required_runtime_evidence": [
+      "capture.json",
+      "source_freeze.json",
+      "source_snapshot/",
+      "robot_deployment.json",
+      "events.jsonl",
+      "runtime.jsonl",
+      "native_pose.jsonl",
+      "summary.json",
+      "supervisor.json"
+    ],
+    "fusion_semantics": "One joint state posterior, without a separate fused-correction publication; exact camera source-frame membership and one terminal batch classification are verified before aligned scoring.",
+    "permitted_use": "Within-segment paired-seed comparison of own-time robot beliefs and short closed-loop navigation outcomes; report run-level aggregation and uncertainty alongside accuracy.",
+    "excluded_claims": [
+      "No calibrated warehouse-wide uncertainty claim",
+      "No improvement from forecasting correlated future observations or gradual occlusion",
+      "No global route-selection or ICRA planning-contribution claim",
+      "No cross-estimator comparison with legacy bbox-NN/fixed-route studies"
+    ],
+    "legacy_boundary": "This dedicated experiment does not promote or repair the invalidated legacy fixed-route fusion selection."
+  },
+  "conservative_stochastic_model_20260907": {
+    "status": "complete_scoped_conservative_confirmation_and_counterfactual_replay",
+    "selection": "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/final_confirmation_manifest.json",
+    "model": "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/final_process.pkl",
+    "bundle": "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/final_bundle.json",
+    "results": "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/final_confirmation_results.json",
+    "report": "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/RESULTS.md",
+    "method": "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/FINAL_METHOD.md",
+    "integrity": "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/final_integrity.json",
+    "required_loaders": [
+      "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/confirmation.py",
+      "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/compare_processes.py",
+      "../2026-09-07/i-w/outputs/bayesian_navigation/data.py"
+    ],
+    "reference_alignment": "experiments/fusion_on_fixed_routes/aligned.py:TruthSeries",
+    "seeds_per_segment": 2,
+    "seeds": [
+      721,
+      722
+    ],
+    "segments": [
+      0,
+      2,
+      5,
+      6
+    ],
+    "supported_belief_timestamps": 10670,
+    "unsupported_odometry_timestamps": 3,
+    "aggregation": "Per-drive statistic first, then mean of two seeds within each segment. Timestamps are not independent replicates.",
+    "arms": [
+      "evaluated correlated artifact",
+      "independent with same mean and marginal",
+      "NN without site correction with its own broad marginal"
+    ],
+    "freeze_boundary": "The evaluated 13-state artifact was frozen before scoring this comparison; manifest records removal of overlapping correction uncertainty during model-free acquisition. Seed-720 confirmation became development evidence. This is not a final method freeze.",
+    "permitted_use": "Within-segment comparison of camera-reading and own-time belief statistics, explicitly separated. Conservative nominal containment must be accompanied by ellipse size.",
+    "counterfactual_navigation_replay": {
+      "selection": "../2026-09-07/i-w/outputs/bayesian_navigation/navigation_campaign_v2.json",
+      "results": "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/final_navigation_replay.json",
+      "required_loader": "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/replay_navigation_models.py",
+      "semantics": "Exact recorded delivery order and unique frame membership. Recomputed beliefs on existing paths do not create new closed-loop outcomes."
+    },
+    "availability": {
+      "results": "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/availability_process_results.json",
+      "summary": "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/availability_summary.json",
+      "report": "../2026-09-07/i-w/outputs/bayesian_navigation/final_model/AVAILABILITY.md",
+      "status": "Model-selected development comparison conditional on recorded paths; no untouched availability confirmation",
+      "fit_seeds": [
+        510,
+        511
+      ],
+      "evaluation_seeds": [
+        512,
+        513,
+        721,
+        722
+      ]
+    },
+    "excluded_claims": [
+      "No exact conditional 95% calibration",
+      "No warehouse-wide generalization",
+      "No new closed-loop navigation or EFE route-choice benefit",
+      "No promotion of legacy fixed-route fusion selection"
+    ]
+  },
+  "gp_joint_forecast_navigation_20260908": {
+    "status": "complete_three_drive_diagnostic_user_stopped_campaign",
+    "selection": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/overnight_20260908/diagnostic_three.json",
+    "source_freeze": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/overnight_20260908/campaign_sources.json",
+    "expected_runs": 3,
+    "segments": [
+      0
+    ],
+    "paired_seeds": [
+      850
+    ],
+    "arms": [
+      "IndependentIndependent",
+      "JointIndependent",
+      "JointJoint"
+    ],
+    "required_loader": "experiments/fusion_on_fixed_routes/aligned.py",
+    "required_integrity": "Passed complete source-frame/terminal-batch ledger, own-time native reference, source hashes and exact delivery-order runtime replay",
+    "permitted_use": "Three per-drive diagnostics and shared failure analysis; no replicate-based comparison, global route-choice or calibrated uncertainty claim",
+    "pilot_selection": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/overnight_20260908/pilot.json",
+    "pilot_status": "development only; one timeout and one belief goal; initial uncertainty model failed containment on segment 0",
+    "forecast": "GP availability, periodic source-clock surrogate, full joint camera-error covariance with sequential expected conditional covariance approximation",
+    "objective": "Expected-belief EFE extension: projected physical-prior KL plus posterior pose entropy; not algebraically unchanged published observation-entropy EFE",
+    "legacy_boundary_unchanged": true,
+    "original_selection": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/overnight_20260908/campaign.json",
+    "replication": "One drive per arm; diagnostic only",
+    "scope_change": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/overnight_20260908/scope_change.json",
+    "results": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/overnight_reporting/diagnostic_three/results.json"
+  },
+  "route_iteration_v1_20260908": {
+    "status": "complete_five_development_route_tests",
+    "selection": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/route_iteration_v1/route_iteration_results.json",
+    "results": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/overnight_reporting/route_iteration_results/results.json",
+    "method": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/route_iteration_v1/METHOD.md",
+    "verification": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/route_iteration_v1/verification.json",
+    "required_loader": "experiments/fusion_on_fixed_routes/aligned.py",
+    "runs": 5,
+    "scope": "Different route shapes and lengths, original failure retest, no independent replicated method comparison",
+    "outcome": "Five belief goals; four physical endpoints within 10 cm, one at 10.8 cm; all mapped footprint collision checks passed",
+    "uncertainty_limit": "Long west aisle undercovers; no general calibration claim",
+    "runtime": "GPU YOLO/RGB, CasADi IWAI optimizer, joint camera error state, GP availability and belief path feedback",
+    "legacy_boundary_unchanged": true
+  },
+  "provisional_thesis_navigation_20260908": {
+    "status": "complete_provisional_method_development_comparison",
+    "selection": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/thesis_campaign_20260908/campaign.json",
+    "protocol": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/thesis_campaign_20260908/PROTOCOL.md",
+    "preparation_gate": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/thesis_campaign_20260908/preparation_complete.json",
+    "results": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/thesis_campaign_reporting/campaign/results.json",
+    "expected_runs": 60,
+    "core_runs": 45,
+    "stress_runs": 15,
+    "paired_seeds": [
+      1000,
+      1001,
+      1002,
+      1003,
+      1004
+    ],
+    "arms": [
+      "IndependentIndependent",
+      "JointIndependent",
+      "JointJoint"
+    ],
+    "preparation_selection": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/thesis_campaign_20260908/preparation_pilots.json",
+    "preparation_results": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/thesis_campaign_reporting/preparation_pilots/results.json",
+    "required_loader": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/evaluate_navigation.py",
+    "reference_alignment": "experiments/fusion_on_fixed_routes/aligned.py:TruthSeries",
+    "required_integrity": [
+      "complete received source-frame/terminal-batch ledger",
+      "native detector journal, invocation and crop identity audit",
+      "source hashes",
+      "exact delivery-order runtime replay"
+    ],
+    "permitted_use": "Development-only within-task five-paired-seed comparison of own-time beliefs and navigation; all 60 attempts retained, core and stress separate; not a final campaign",
+    "excluded_claims": [
+      "No warehouse-wide calibration",
+      "No unseen-region confirmation",
+      "No global obstacle-fork route-selection claim",
+      "No promotion of invalidated legacy fusion selection",
+      "No final method, parameter or campaign claim"
+    ],
+    "runs": 60,
+    "belief_samples": 62289,
+    "integrity": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/thesis_campaign_reporting/campaign/runtime_integrity.json",
+    "completion_review": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/thesis_campaign_reporting/campaign/completion_review.json",
+    "report": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/thesis_campaign_reporting/campaign/RESULTS.md",
+    "review": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/thesis_campaign_reporting/campaign/REVIEW.md",
+    "outcome": "Core 45/45 navigation successes; stress I/I 5/5, J/I 0/5, J/J 2/5. Three J/I stress timeouts; four stress mapped-clearance failures retained.",
+    "uncertainty_limit": "All methods undercovered on the long aisle; current persistent-error model did not improve calibration generally"
+  },
+  "long_warehouse_routes_v1_20260908": {
+    "status": "complete_four_development_diagnostics",
+    "selection": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/long_routes_v1/routes.json",
+    "results": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/long_routes_reporting/routes/results.json",
+    "report": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/long_routes_reporting/routes/RESULTS.md",
+    "review": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/long_routes_reporting/routes/REVIEW.md",
+    "completion_review": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/long_routes_reporting/routes/completion_review.json",
+    "runtime_integrity": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/long_routes_reporting/routes/runtime_integrity.json",
+    "handoff_integrity": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/long_routes_reporting/routes/handoff_integrity.json",
+    "required_loader": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/evaluate_navigation.py",
+    "reference_alignment": "experiments/fusion_on_fixed_routes/aligned.py:TruthSeries",
+    "runs": 4,
+    "arms": [
+      "JointJoint"
+    ],
+    "seeds": [
+      1100
+    ],
+    "replication": "One attempt on each of four different tasks",
+    "belief_samples": 57841,
+    "outcome": "Three warehouse traversals and belief goals; two meet physical 10 cm plus mapped-clearance criterion. Southwest start blocked by uncertainty guard for 600 s.",
+    "permitted_use": "Per-task long-route integration diagnostics. All four attempts retained.",
+    "excluded_claims": [
+      "No replicated method superiority",
+      "No warehouse-wide calibrated uncertainty",
+      "No EFE visibility-driven route-choice benefit",
+      "No promotion of invalidated legacy fusion selection"
+    ],
+    "method": "Full-route undiscounted CasADi multistart with feasible seed fallbacks; belief projection to local goal; frozen NN/site correction/R/B/GP and local 20 x 0.25 s planning.",
+    "uncertainty_limit": "Moving-drive nominal 95% containment: 49.3%, 62.7%, 72.6%. Stationary containment is not motion validation."
+  },
+  "one_task_visibility_pilot_20260908": {
+    "status": "complete_three_drive_development_pilot",
+    "selection": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_pilot_v1/pilot.json",
+    "results": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_pilot_reporting/pilot/results.json",
+    "report": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_pilot_reporting/pilot/RESULTS.md",
+    "review": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_pilot_reporting/pilot/REVIEW.md",
+    "completion_review": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_pilot_reporting/pilot/completion_review.json",
+    "runtime_integrity": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_pilot_reporting/pilot/runtime_integrity.json",
+    "handoff_integrity": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_pilot_reporting/pilot/handoff_integrity.json",
+    "method": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_pilot_v1/METHOD.md",
+    "required_loader": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/evaluate_navigation.py",
+    "reference_alignment": "experiments/fusion_on_fixed_routes/aligned.py:TruthSeries",
+    "runs": 3,
+    "arms": [
+      "Uniform",
+      "IWAI",
+      "Commissioned"
+    ],
+    "seeds": [
+      1200
+    ],
+    "replication": "One drive per planning interface on one west-to-east task",
+    "belief_samples": 28161,
+    "outcome": "Three belief goals, three physical endpoints within 10 cm with nonnegative mapped clearance. All global selections retain the shorter corridor seed.",
+    "permitted_use": "Pilot integration and objective diagnosis. Exact three-attempt selection only.",
+    "limitations": [
+      "Same joint runtime fusion; independent future readings in all arms",
+      "IWAI score-GP network adaptation, not literal published reproduction",
+      "Static GP fitting and route selection are development data",
+      "Goal cost dominates candidate ranking; finite-budget global seed fallbacks retained",
+      "No replicated superiority, calibrated uncertainty or EFE route-choice benefit",
+      "Legacy fixed-route fusion evidence boundary unchanged"
+    ],
+    "uncertainty_limit": "Nominal 95% containment 61.9%, 60.6%, 70.6%; shared runtime undercoverage remains."
+  },
+  "visibility_speed_1mps_commissioning_20260908": {
+    "status": "implemented_navigation_gate_failed",
+    "documentation": "docs/visibility_speed_commissioning.md",
+    "source_config": "experiments/visibility_speed_1mps_v2/speed_profile.json",
+    "planned_protocol": "experiments/visibility_speed_1mps_v2/pilot.json",
+    "earlier_candidate_selection": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_speed_1mps_reporting/selection.json",
+    "earlier_candidate_results": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_speed_1mps_reporting/validation.json",
+    "selection": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_speed_1mps_v2_reporting/selection.json",
+    "required_loader": "experiments/validate_visibility_speed.py",
+    "reference_alignment": "experiments/fusion_on_fixed_routes/aligned.py:TruthSeries",
+    "permitted_use": "Separate 1 m/s commissioning diagnostics only; no speed equivalence, calibrated uncertainty, replicated superiority, or pooling with the frozen slow pilot",
+    "final_campaign_ready": false,
+    "results": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_speed_1mps_v2_reporting/validation.json",
+    "timing": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_speed_1mps_v2_reporting/timing.json",
+    "tests": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_speed_1mps_v2_reporting/tests.json",
+    "preflight": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_speed_1mps_v2_reporting/preflight.json",
+    "live_actuator_limit": "/home/joostleliveld/Thesis/2026-09-07/i-w/outputs/bayesian_navigation/visibility_speed_1mps_v2_reporting/live_actuator_limit.json",
+    "live_passed_arms": [
+      "Uniform"
+    ],
+    "live_failed_arms": [
+      "IWAI"
+    ],
+    "unexecuted_arms": [
+      "Commissioned"
+    ]
   }
 }
