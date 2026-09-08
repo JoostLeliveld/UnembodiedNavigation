@@ -31,8 +31,9 @@ def main() -> None:
     hits['area'] = (hits.x1 - hits.x0) * (hits.y1 - hits.y0)
 
     cameras = sorted(hits.camera_id.unique())
-    # 3x2 with the last cell blank: five panels stay large across a two-column page.
-    fig, axes = plt.subplots(2, 3, figsize=(11.0, 4.3))
+    # 2x3 with the last cell blank; the appendix is single column, so it has the
+    # full page width to fill.
+    fig, axes = plt.subplots(3, 2, figsize=(9.6, 7.6))
 
     for ax, camera in zip(axes.ravel(), cameras):
         subset = hits[hits.camera_id == camera]
