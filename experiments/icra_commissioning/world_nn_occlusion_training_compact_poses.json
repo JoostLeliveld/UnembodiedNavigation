@@ -1,0 +1,4060 @@
+{
+ "schema": "camera_observation_characterization_icra_p1_geometry.v1",
+ "purpose": "Fresh dense spatial-scale and correction/refusal transfer pilot.",
+ "selection_contract": {
+  "uses_detector_outputs": false,
+  "uses_localization_residuals": false,
+  "uses_learned_model_outputs": false,
+  "inputs": [
+   "declared traversable rectangles",
+   "frozen warehouse occluder geometry",
+   "frozen external-camera poses and intrinsics",
+   "predeclared holdout pose coordinates used only for spatial exclusion"
+  ],
+  "method": "deterministic greedy set cover over camera range and sightline strata",
+  "stock_state": "peak"
+ },
+ "source_sha256": "99670f18b59a8b9c9f83ead16bbac9ca34dff8a0528209f0f4b22a9e7eee649f",
+ "world_path": "install/sim/share/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+ "world_sha256": "cb872fd438bd3275ac75da44c12013c01c91c95287ce29edaf6bd0f09073f3e3",
+ "world_profiles_sha256": "742cb32c69ea9f48ecdf1ce899e9bf8cd45949be863312369b85cb67a79405cd",
+ "step_m": 0.2,
+ "span_m": 1.2,
+ "headings": 8,
+ "exclusion": {
+  "pose_files": [
+   "experiments/camera_observation_characterization/icra_p1_geometry_poses.json"
+  ],
+  "pose_file_sha256": {
+   "experiments/camera_observation_characterization/icra_p1_geometry_poses.json": "7c62384747ecd084c0053044d9e19470d2c6b6e12bb3533df49918da0179f753"
+  },
+  "minimum_distance_m": 0.5,
+  "unique_points": 63
+ },
+ "split_contract": {
+  "unit": "whole geometry-selected transect",
+  "fit_line_indices": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   8
+  ],
+  "validation_line_indices": [
+   0,
+   6,
+   7
+  ],
+  "selection_used_detector_or_residual": false
+ },
+ "candidate_line_count": 889,
+ "selected_line_count": 9,
+ "requested_strata_multiplicity": {
+  "camera_A:partial_view": 2,
+  "camera_A:range:far": 1,
+  "camera_A:range:mid": 1,
+  "camera_A:range:near": 1,
+  "camera_A:sightline_transition": 1,
+  "camera_B:partial_view": 2,
+  "camera_B:range:far": 1,
+  "camera_B:range:mid": 1,
+  "camera_B:range:near": 1,
+  "camera_B:sightline_transition": 1,
+  "camera_C:partial_view": 2,
+  "camera_C:range:far": 1,
+  "camera_C:range:mid": 1,
+  "camera_C:range:near": 1,
+  "camera_C:sightline_transition": 1,
+  "camera_D:partial_view": 2,
+  "camera_D:range:far": 1,
+  "camera_D:range:mid": 1,
+  "camera_D:range:near": 1,
+  "camera_D:sightline_transition": 1,
+  "camera_E:partial_view": 2,
+  "camera_E:range:far": 1,
+  "camera_E:range:mid": 1,
+  "camera_E:range:near": 1,
+  "camera_E:sightline_transition": 1,
+  "multi_camera_overlap": 1
+ },
+ "range_tertile_edges_m": {
+  "camera_A": [
+   9.976472322419346,
+   15.670673246545542
+  ],
+  "camera_B": [
+   5.17720001545236,
+   7.948295414741452
+  ],
+  "camera_C": [
+   7.011419257183204,
+   14.212670403551911
+  ],
+  "camera_D": [
+   8.422934940986506,
+   12.361600311775918
+  ],
+  "camera_E": [
+   8.301806988509698,
+   13.960181346160713
+  ]
+ },
+ "lines": [
+  {
+   "line_id": "p1g00_lane_11_x",
+   "declared_lane": "lane_11",
+   "axis": "x",
+   "dataset_split": "validation",
+   "centre": [
+    10.099999999999998,
+    -8.55
+   ],
+   "points": [
+    [
+     9.499999999999998,
+     -8.55
+    ],
+    [
+     9.699999999999998,
+     -8.55
+    ],
+    [
+     9.899999999999999,
+     -8.55
+    ],
+    [
+     10.099999999999998,
+     -8.55
+    ],
+    [
+     10.299999999999997,
+     -8.55
+    ],
+    [
+     10.499999999999998,
+     -8.55
+    ],
+    [
+     10.699999999999998,
+     -8.55
+    ]
+   ],
+   "covers": [
+    "camera_A:partial_view",
+    "camera_A:range:far",
+    "camera_A:sightline_transition",
+    "camera_D:range:far",
+    "camera_D:sightline_transition",
+    "camera_E:partial_view",
+    "camera_E:range:near",
+    "camera_E:sightline_transition",
+    "multi_camera_overlap"
+   ],
+   "geometry_visibility_by_camera": {
+    "camera_A": [
+     1,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0
+    ],
+    "camera_B": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_C": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_D": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     0,
+     0
+    ],
+    "camera_E": [
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "geometry_range_bin_by_camera": {
+    "camera_A": "far",
+    "camera_B": "not_visible",
+    "camera_C": "not_visible",
+    "camera_D": "far",
+    "camera_E": "near"
+   },
+   "overlap_positions": 4
+  },
+  {
+   "line_id": "p1g01_lane_01_x",
+   "declared_lane": "lane_01",
+   "axis": "x",
+   "dataset_split": "fit",
+   "centre": [
+    -5.800000000000002,
+    -7.025
+   ],
+   "points": [
+    [
+     -6.400000000000001,
+     -7.025
+    ],
+    [
+     -6.200000000000002,
+     -7.025
+    ],
+    [
+     -6.000000000000002,
+     -7.025
+    ],
+    [
+     -5.800000000000002,
+     -7.025
+    ],
+    [
+     -5.600000000000001,
+     -7.025
+    ],
+    [
+     -5.400000000000002,
+     -7.025
+    ],
+    [
+     -5.200000000000002,
+     -7.025
+    ]
+   ],
+   "covers": [
+    "camera_A:range:near",
+    "camera_A:sightline_transition",
+    "camera_B:partial_view",
+    "camera_B:range:near",
+    "camera_C:range:far",
+    "camera_C:sightline_transition",
+    "camera_E:range:far",
+    "multi_camera_overlap"
+   ],
+   "geometry_visibility_by_camera": {
+    "camera_A": [
+     0,
+     0,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "camera_B": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "camera_C": [
+     1,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0
+    ],
+    "camera_D": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_E": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   },
+   "geometry_range_bin_by_camera": {
+    "camera_A": "near",
+    "camera_B": "near",
+    "camera_C": "far",
+    "camera_D": "not_visible",
+    "camera_E": "far"
+   },
+   "overlap_positions": 7
+  },
+  {
+   "line_id": "p1g02_lane_01_x",
+   "declared_lane": "lane_01",
+   "axis": "x",
+   "dataset_split": "fit",
+   "centre": [
+    1.3999999999999932,
+    -7.025
+   ],
+   "points": [
+    [
+     0.7999999999999933,
+     -7.025
+    ],
+    [
+     0.9999999999999932,
+     -7.025
+    ],
+    [
+     1.1999999999999933,
+     -7.025
+    ],
+    [
+     1.3999999999999932,
+     -7.025
+    ],
+    [
+     1.5999999999999932,
+     -7.025
+    ],
+    [
+     1.7999999999999932,
+     -7.025
+    ],
+    [
+     1.9999999999999933,
+     -7.025
+    ]
+   ],
+   "covers": [
+    "camera_A:range:mid",
+    "camera_B:partial_view",
+    "camera_B:range:near",
+    "camera_B:sightline_transition",
+    "camera_D:range:far",
+    "camera_D:sightline_transition",
+    "camera_E:range:mid",
+    "multi_camera_overlap"
+   ],
+   "geometry_visibility_by_camera": {
+    "camera_A": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "camera_B": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     0,
+     0
+    ],
+    "camera_C": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_D": [
+     1,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0
+    ],
+    "camera_E": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   },
+   "geometry_range_bin_by_camera": {
+    "camera_A": "mid",
+    "camera_B": "near",
+    "camera_C": "not_visible",
+    "camera_D": "far",
+    "camera_E": "mid"
+   },
+   "overlap_positions": 7
+  },
+  {
+   "line_id": "p1g03_lane_09_x",
+   "declared_lane": "lane_09",
+   "axis": "x",
+   "dataset_split": "fit",
+   "centre": [
+    2.4,
+    6.8
+   ],
+   "points": [
+    [
+     1.7999999999999998,
+     6.8
+    ],
+    [
+     2.0,
+     6.8
+    ],
+    [
+     2.1999999999999997,
+     6.8
+    ],
+    [
+     2.4,
+     6.8
+    ],
+    [
+     2.5999999999999996,
+     6.8
+    ],
+    [
+     2.8,
+     6.8
+    ],
+    [
+     3.0,
+     6.8
+    ]
+   ],
+   "covers": [
+    "camera_C:partial_view",
+    "camera_C:range:mid",
+    "camera_D:range:mid",
+    "multi_camera_overlap"
+   ],
+   "geometry_visibility_by_camera": {
+    "camera_A": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_B": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_C": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "camera_D": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "camera_E": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "geometry_range_bin_by_camera": {
+    "camera_A": "not_visible",
+    "camera_B": "not_visible",
+    "camera_C": "mid",
+    "camera_D": "mid",
+    "camera_E": "not_visible"
+   },
+   "overlap_positions": 7
+  },
+  {
+   "line_id": "p1g04_lane_03_y",
+   "declared_lane": "lane_03",
+   "axis": "y",
+   "dataset_split": "fit",
+   "centre": [
+    10.5,
+    4.599999999999995
+   ],
+   "points": [
+    [
+     10.5,
+     3.999999999999995
+    ],
+    [
+     10.5,
+     4.199999999999995
+    ],
+    [
+     10.5,
+     4.399999999999995
+    ],
+    [
+     10.5,
+     4.599999999999995
+    ],
+    [
+     10.5,
+     4.799999999999995
+    ],
+    [
+     10.5,
+     4.999999999999995
+    ],
+    [
+     10.5,
+     5.199999999999995
+    ]
+   ],
+   "covers": [
+    "camera_D:partial_view",
+    "camera_D:range:near",
+    "camera_E:range:far",
+    "multi_camera_overlap"
+   ],
+   "geometry_visibility_by_camera": {
+    "camera_A": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_B": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_C": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_D": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "camera_E": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   },
+   "geometry_range_bin_by_camera": {
+    "camera_A": "not_visible",
+    "camera_B": "not_visible",
+    "camera_C": "not_visible",
+    "camera_D": "near",
+    "camera_E": "far"
+   },
+   "overlap_positions": 7
+  },
+  {
+   "line_id": "p1g05_lane_11_x",
+   "declared_lane": "lane_11",
+   "axis": "x",
+   "dataset_split": "fit",
+   "centre": [
+    9.499999999999996,
+    -8.55
+   ],
+   "points": [
+    [
+     8.899999999999997,
+     -8.55
+    ],
+    [
+     9.099999999999996,
+     -8.55
+    ],
+    [
+     9.299999999999997,
+     -8.55
+    ],
+    [
+     9.499999999999996,
+     -8.55
+    ],
+    [
+     9.699999999999996,
+     -8.55
+    ],
+    [
+     9.899999999999997,
+     -8.55
+    ],
+    [
+     10.099999999999996,
+     -8.55
+    ]
+   ],
+   "covers": [
+    "camera_A:partial_view",
+    "camera_A:range:far",
+    "camera_D:range:far",
+    "camera_E:partial_view",
+    "camera_E:range:near",
+    "camera_E:sightline_transition",
+    "multi_camera_overlap"
+   ],
+   "geometry_visibility_by_camera": {
+    "camera_A": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "camera_B": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_C": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_D": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "camera_E": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     0
+    ]
+   },
+   "geometry_range_bin_by_camera": {
+    "camera_A": "far",
+    "camera_B": "not_visible",
+    "camera_C": "not_visible",
+    "camera_D": "far",
+    "camera_E": "near"
+   },
+   "overlap_positions": 7
+  },
+  {
+   "line_id": "p1g06_lane_10_x",
+   "declared_lane": "lane_10",
+   "axis": "x",
+   "dataset_split": "validation",
+   "centre": [
+    2.4,
+    2.55
+   ],
+   "points": [
+    [
+     1.7999999999999998,
+     2.55
+    ],
+    [
+     2.0,
+     2.55
+    ],
+    [
+     2.1999999999999997,
+     2.55
+    ],
+    [
+     2.4,
+     2.55
+    ],
+    [
+     2.5999999999999996,
+     2.55
+    ],
+    [
+     2.8,
+     2.55
+    ],
+    [
+     3.0,
+     2.55
+    ]
+   ],
+   "covers": [
+    "camera_B:partial_view",
+    "camera_B:range:far",
+    "camera_D:partial_view",
+    "camera_D:range:mid",
+    "camera_D:sightline_transition",
+    "multi_camera_overlap"
+   ],
+   "geometry_visibility_by_camera": {
+    "camera_A": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_B": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "camera_C": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_D": [
+     0,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "camera_E": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "geometry_range_bin_by_camera": {
+    "camera_A": "not_visible",
+    "camera_B": "far",
+    "camera_C": "not_visible",
+    "camera_D": "mid",
+    "camera_E": "not_visible"
+   },
+   "overlap_positions": 6
+  },
+  {
+   "line_id": "p1g07_lane_02_x",
+   "declared_lane": "lane_02",
+   "axis": "x",
+   "dataset_split": "validation",
+   "centre": [
+    -5.299999999999988,
+    8.125
+   ],
+   "points": [
+    [
+     -5.899999999999988,
+     8.125
+    ],
+    [
+     -5.699999999999989,
+     8.125
+    ],
+    [
+     -5.4999999999999885,
+     8.125
+    ],
+    [
+     -5.299999999999988,
+     8.125
+    ],
+    [
+     -5.099999999999988,
+     8.125
+    ],
+    [
+     -4.899999999999988,
+     8.125
+    ],
+    [
+     -4.699999999999989,
+     8.125
+    ]
+   ],
+   "covers": [
+    "camera_C:partial_view",
+    "camera_C:range:near",
+    "camera_C:sightline_transition"
+   ],
+   "geometry_visibility_by_camera": {
+    "camera_A": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_B": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_C": [
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     1
+    ],
+    "camera_D": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_E": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "geometry_range_bin_by_camera": {
+    "camera_A": "not_visible",
+    "camera_B": "not_visible",
+    "camera_C": "near",
+    "camera_D": "not_visible",
+    "camera_E": "not_visible"
+   },
+   "overlap_positions": 0
+  },
+  {
+   "line_id": "p1g08_lane_01_x",
+   "declared_lane": "lane_01",
+   "axis": "x",
+   "dataset_split": "fit",
+   "centre": [
+    -7.6000000000000005,
+    -7.025
+   ],
+   "points": [
+    [
+     -8.200000000000001,
+     -7.025
+    ],
+    [
+     -8.0,
+     -7.025
+    ],
+    [
+     -7.800000000000001,
+     -7.025
+    ],
+    [
+     -7.6000000000000005,
+     -7.025
+    ],
+    [
+     -7.4,
+     -7.025
+    ],
+    [
+     -7.200000000000001,
+     -7.025
+    ],
+    [
+     -7.000000000000001,
+     -7.025
+    ]
+   ],
+   "covers": [
+    "camera_B:range:mid",
+    "camera_C:range:far",
+    "camera_C:sightline_transition",
+    "camera_E:range:far",
+    "multi_camera_overlap"
+   ],
+   "geometry_visibility_by_camera": {
+    "camera_A": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_B": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "camera_C": [
+     0,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "camera_D": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "camera_E": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   },
+   "geometry_range_bin_by_camera": {
+    "camera_A": "not_visible",
+    "camera_B": "mid",
+    "camera_C": "far",
+    "camera_D": "not_visible",
+    "camera_E": "far"
+   },
+   "overlap_positions": 7
+  }
+ ],
+ "pose_count": 504,
+ "planned_camera_rows": 2520,
+ "poses": [
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g00_lane_11_x_p00"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g00_lane_11_x_p00"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g00_lane_11_x_p00"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g00_lane_11_x_p00"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g00_lane_11_x_p00"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g00_lane_11_x_p00"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g00_lane_11_x_p00"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g00_lane_11_x_p00"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g00_lane_11_x_p01"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g00_lane_11_x_p01"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g00_lane_11_x_p01"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g00_lane_11_x_p01"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g00_lane_11_x_p01"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g00_lane_11_x_p01"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g00_lane_11_x_p01"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g00_lane_11_x_p01"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g00_lane_11_x_p02"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g00_lane_11_x_p02"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g00_lane_11_x_p02"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g00_lane_11_x_p02"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g00_lane_11_x_p02"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g00_lane_11_x_p02"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g00_lane_11_x_p02"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g00_lane_11_x_p02"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g00_lane_11_x_p03"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g00_lane_11_x_p03"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g00_lane_11_x_p03"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g00_lane_11_x_p03"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g00_lane_11_x_p03"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g00_lane_11_x_p03"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g00_lane_11_x_p03"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g00_lane_11_x_p03"
+  },
+  {
+   "x": 10.3,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g00_lane_11_x_p04"
+  },
+  {
+   "x": 10.3,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g00_lane_11_x_p04"
+  },
+  {
+   "x": 10.3,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g00_lane_11_x_p04"
+  },
+  {
+   "x": 10.3,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g00_lane_11_x_p04"
+  },
+  {
+   "x": 10.3,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g00_lane_11_x_p04"
+  },
+  {
+   "x": 10.3,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g00_lane_11_x_p04"
+  },
+  {
+   "x": 10.3,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g00_lane_11_x_p04"
+  },
+  {
+   "x": 10.3,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g00_lane_11_x_p04"
+  },
+  {
+   "x": 10.5,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g00_lane_11_x_p05"
+  },
+  {
+   "x": 10.5,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g00_lane_11_x_p05"
+  },
+  {
+   "x": 10.5,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g00_lane_11_x_p05"
+  },
+  {
+   "x": 10.5,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g00_lane_11_x_p05"
+  },
+  {
+   "x": 10.5,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g00_lane_11_x_p05"
+  },
+  {
+   "x": 10.5,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g00_lane_11_x_p05"
+  },
+  {
+   "x": 10.5,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g00_lane_11_x_p05"
+  },
+  {
+   "x": 10.5,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g00_lane_11_x_p05"
+  },
+  {
+   "x": 10.7,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g00_lane_11_x_p06"
+  },
+  {
+   "x": 10.7,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g00_lane_11_x_p06"
+  },
+  {
+   "x": 10.7,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g00_lane_11_x_p06"
+  },
+  {
+   "x": 10.7,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g00_lane_11_x_p06"
+  },
+  {
+   "x": 10.7,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g00_lane_11_x_p06"
+  },
+  {
+   "x": 10.7,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g00_lane_11_x_p06"
+  },
+  {
+   "x": 10.7,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g00_lane_11_x_p06"
+  },
+  {
+   "x": 10.7,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g00_lane_11_x_p06"
+  },
+  {
+   "x": -6.4,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g01_lane_01_x_p00"
+  },
+  {
+   "x": -6.4,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g01_lane_01_x_p00"
+  },
+  {
+   "x": -6.4,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g01_lane_01_x_p00"
+  },
+  {
+   "x": -6.4,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g01_lane_01_x_p00"
+  },
+  {
+   "x": -6.4,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g01_lane_01_x_p00"
+  },
+  {
+   "x": -6.4,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g01_lane_01_x_p00"
+  },
+  {
+   "x": -6.4,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g01_lane_01_x_p00"
+  },
+  {
+   "x": -6.4,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g01_lane_01_x_p00"
+  },
+  {
+   "x": -6.2,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g01_lane_01_x_p01"
+  },
+  {
+   "x": -6.2,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g01_lane_01_x_p01"
+  },
+  {
+   "x": -6.2,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g01_lane_01_x_p01"
+  },
+  {
+   "x": -6.2,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g01_lane_01_x_p01"
+  },
+  {
+   "x": -6.2,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g01_lane_01_x_p01"
+  },
+  {
+   "x": -6.2,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g01_lane_01_x_p01"
+  },
+  {
+   "x": -6.2,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g01_lane_01_x_p01"
+  },
+  {
+   "x": -6.2,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g01_lane_01_x_p01"
+  },
+  {
+   "x": -6.0,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g01_lane_01_x_p02"
+  },
+  {
+   "x": -6.0,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g01_lane_01_x_p02"
+  },
+  {
+   "x": -6.0,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g01_lane_01_x_p02"
+  },
+  {
+   "x": -6.0,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g01_lane_01_x_p02"
+  },
+  {
+   "x": -6.0,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g01_lane_01_x_p02"
+  },
+  {
+   "x": -6.0,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g01_lane_01_x_p02"
+  },
+  {
+   "x": -6.0,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g01_lane_01_x_p02"
+  },
+  {
+   "x": -6.0,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g01_lane_01_x_p02"
+  },
+  {
+   "x": -5.8,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g01_lane_01_x_p03"
+  },
+  {
+   "x": -5.8,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g01_lane_01_x_p03"
+  },
+  {
+   "x": -5.8,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g01_lane_01_x_p03"
+  },
+  {
+   "x": -5.8,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g01_lane_01_x_p03"
+  },
+  {
+   "x": -5.8,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g01_lane_01_x_p03"
+  },
+  {
+   "x": -5.8,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g01_lane_01_x_p03"
+  },
+  {
+   "x": -5.8,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g01_lane_01_x_p03"
+  },
+  {
+   "x": -5.8,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g01_lane_01_x_p03"
+  },
+  {
+   "x": -5.6,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g01_lane_01_x_p04"
+  },
+  {
+   "x": -5.6,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g01_lane_01_x_p04"
+  },
+  {
+   "x": -5.6,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g01_lane_01_x_p04"
+  },
+  {
+   "x": -5.6,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g01_lane_01_x_p04"
+  },
+  {
+   "x": -5.6,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g01_lane_01_x_p04"
+  },
+  {
+   "x": -5.6,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g01_lane_01_x_p04"
+  },
+  {
+   "x": -5.6,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g01_lane_01_x_p04"
+  },
+  {
+   "x": -5.6,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g01_lane_01_x_p04"
+  },
+  {
+   "x": -5.4,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g01_lane_01_x_p05"
+  },
+  {
+   "x": -5.4,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g01_lane_01_x_p05"
+  },
+  {
+   "x": -5.4,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g01_lane_01_x_p05"
+  },
+  {
+   "x": -5.4,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g01_lane_01_x_p05"
+  },
+  {
+   "x": -5.4,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g01_lane_01_x_p05"
+  },
+  {
+   "x": -5.4,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g01_lane_01_x_p05"
+  },
+  {
+   "x": -5.4,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g01_lane_01_x_p05"
+  },
+  {
+   "x": -5.4,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g01_lane_01_x_p05"
+  },
+  {
+   "x": -5.2,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g01_lane_01_x_p06"
+  },
+  {
+   "x": -5.2,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g01_lane_01_x_p06"
+  },
+  {
+   "x": -5.2,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g01_lane_01_x_p06"
+  },
+  {
+   "x": -5.2,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g01_lane_01_x_p06"
+  },
+  {
+   "x": -5.2,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g01_lane_01_x_p06"
+  },
+  {
+   "x": -5.2,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g01_lane_01_x_p06"
+  },
+  {
+   "x": -5.2,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g01_lane_01_x_p06"
+  },
+  {
+   "x": -5.2,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g01_lane_01_x_p06"
+  },
+  {
+   "x": 0.8,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g02_lane_01_x_p00"
+  },
+  {
+   "x": 0.8,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g02_lane_01_x_p00"
+  },
+  {
+   "x": 0.8,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g02_lane_01_x_p00"
+  },
+  {
+   "x": 0.8,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g02_lane_01_x_p00"
+  },
+  {
+   "x": 0.8,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g02_lane_01_x_p00"
+  },
+  {
+   "x": 0.8,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g02_lane_01_x_p00"
+  },
+  {
+   "x": 0.8,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g02_lane_01_x_p00"
+  },
+  {
+   "x": 0.8,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g02_lane_01_x_p00"
+  },
+  {
+   "x": 1.0,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g02_lane_01_x_p01"
+  },
+  {
+   "x": 1.0,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g02_lane_01_x_p01"
+  },
+  {
+   "x": 1.0,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g02_lane_01_x_p01"
+  },
+  {
+   "x": 1.0,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g02_lane_01_x_p01"
+  },
+  {
+   "x": 1.0,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g02_lane_01_x_p01"
+  },
+  {
+   "x": 1.0,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g02_lane_01_x_p01"
+  },
+  {
+   "x": 1.0,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g02_lane_01_x_p01"
+  },
+  {
+   "x": 1.0,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g02_lane_01_x_p01"
+  },
+  {
+   "x": 1.2,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g02_lane_01_x_p02"
+  },
+  {
+   "x": 1.2,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g02_lane_01_x_p02"
+  },
+  {
+   "x": 1.2,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g02_lane_01_x_p02"
+  },
+  {
+   "x": 1.2,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g02_lane_01_x_p02"
+  },
+  {
+   "x": 1.2,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g02_lane_01_x_p02"
+  },
+  {
+   "x": 1.2,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g02_lane_01_x_p02"
+  },
+  {
+   "x": 1.2,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g02_lane_01_x_p02"
+  },
+  {
+   "x": 1.2,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g02_lane_01_x_p02"
+  },
+  {
+   "x": 1.4,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g02_lane_01_x_p03"
+  },
+  {
+   "x": 1.4,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g02_lane_01_x_p03"
+  },
+  {
+   "x": 1.4,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g02_lane_01_x_p03"
+  },
+  {
+   "x": 1.4,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g02_lane_01_x_p03"
+  },
+  {
+   "x": 1.4,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g02_lane_01_x_p03"
+  },
+  {
+   "x": 1.4,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g02_lane_01_x_p03"
+  },
+  {
+   "x": 1.4,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g02_lane_01_x_p03"
+  },
+  {
+   "x": 1.4,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g02_lane_01_x_p03"
+  },
+  {
+   "x": 1.6,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g02_lane_01_x_p04"
+  },
+  {
+   "x": 1.6,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g02_lane_01_x_p04"
+  },
+  {
+   "x": 1.6,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g02_lane_01_x_p04"
+  },
+  {
+   "x": 1.6,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g02_lane_01_x_p04"
+  },
+  {
+   "x": 1.6,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g02_lane_01_x_p04"
+  },
+  {
+   "x": 1.6,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g02_lane_01_x_p04"
+  },
+  {
+   "x": 1.6,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g02_lane_01_x_p04"
+  },
+  {
+   "x": 1.6,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g02_lane_01_x_p04"
+  },
+  {
+   "x": 1.8,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g02_lane_01_x_p05"
+  },
+  {
+   "x": 1.8,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g02_lane_01_x_p05"
+  },
+  {
+   "x": 1.8,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g02_lane_01_x_p05"
+  },
+  {
+   "x": 1.8,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g02_lane_01_x_p05"
+  },
+  {
+   "x": 1.8,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g02_lane_01_x_p05"
+  },
+  {
+   "x": 1.8,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g02_lane_01_x_p05"
+  },
+  {
+   "x": 1.8,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g02_lane_01_x_p05"
+  },
+  {
+   "x": 1.8,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g02_lane_01_x_p05"
+  },
+  {
+   "x": 2.0,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g02_lane_01_x_p06"
+  },
+  {
+   "x": 2.0,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g02_lane_01_x_p06"
+  },
+  {
+   "x": 2.0,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g02_lane_01_x_p06"
+  },
+  {
+   "x": 2.0,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g02_lane_01_x_p06"
+  },
+  {
+   "x": 2.0,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g02_lane_01_x_p06"
+  },
+  {
+   "x": 2.0,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g02_lane_01_x_p06"
+  },
+  {
+   "x": 2.0,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g02_lane_01_x_p06"
+  },
+  {
+   "x": 2.0,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g02_lane_01_x_p06"
+  },
+  {
+   "x": 1.8,
+   "y": 6.8,
+   "yaw": 0.0,
+   "stratum": "fit:p1g03_lane_09_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 6.8,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g03_lane_09_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 6.8,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g03_lane_09_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 6.8,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g03_lane_09_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 6.8,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g03_lane_09_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 6.8,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g03_lane_09_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 6.8,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g03_lane_09_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 6.8,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g03_lane_09_x_p00"
+  },
+  {
+   "x": 2.0,
+   "y": 6.8,
+   "yaw": 0.0,
+   "stratum": "fit:p1g03_lane_09_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 6.8,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g03_lane_09_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 6.8,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g03_lane_09_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 6.8,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g03_lane_09_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 6.8,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g03_lane_09_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 6.8,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g03_lane_09_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 6.8,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g03_lane_09_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 6.8,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g03_lane_09_x_p01"
+  },
+  {
+   "x": 2.2,
+   "y": 6.8,
+   "yaw": 0.0,
+   "stratum": "fit:p1g03_lane_09_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 6.8,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g03_lane_09_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 6.8,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g03_lane_09_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 6.8,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g03_lane_09_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 6.8,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g03_lane_09_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 6.8,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g03_lane_09_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 6.8,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g03_lane_09_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 6.8,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g03_lane_09_x_p02"
+  },
+  {
+   "x": 2.4,
+   "y": 6.8,
+   "yaw": 0.0,
+   "stratum": "fit:p1g03_lane_09_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 6.8,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g03_lane_09_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 6.8,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g03_lane_09_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 6.8,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g03_lane_09_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 6.8,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g03_lane_09_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 6.8,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g03_lane_09_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 6.8,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g03_lane_09_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 6.8,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g03_lane_09_x_p03"
+  },
+  {
+   "x": 2.6,
+   "y": 6.8,
+   "yaw": 0.0,
+   "stratum": "fit:p1g03_lane_09_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 6.8,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g03_lane_09_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 6.8,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g03_lane_09_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 6.8,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g03_lane_09_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 6.8,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g03_lane_09_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 6.8,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g03_lane_09_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 6.8,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g03_lane_09_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 6.8,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g03_lane_09_x_p04"
+  },
+  {
+   "x": 2.8,
+   "y": 6.8,
+   "yaw": 0.0,
+   "stratum": "fit:p1g03_lane_09_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 6.8,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g03_lane_09_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 6.8,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g03_lane_09_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 6.8,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g03_lane_09_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 6.8,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g03_lane_09_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 6.8,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g03_lane_09_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 6.8,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g03_lane_09_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 6.8,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g03_lane_09_x_p05"
+  },
+  {
+   "x": 3.0,
+   "y": 6.8,
+   "yaw": 0.0,
+   "stratum": "fit:p1g03_lane_09_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 6.8,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g03_lane_09_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 6.8,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g03_lane_09_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 6.8,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g03_lane_09_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 6.8,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g03_lane_09_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 6.8,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g03_lane_09_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 6.8,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g03_lane_09_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 6.8,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g03_lane_09_x_p06"
+  },
+  {
+   "x": 10.5,
+   "y": 4.0,
+   "yaw": 0.0,
+   "stratum": "fit:p1g04_lane_03_y_p00"
+  },
+  {
+   "x": 10.5,
+   "y": 4.0,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g04_lane_03_y_p00"
+  },
+  {
+   "x": 10.5,
+   "y": 4.0,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g04_lane_03_y_p00"
+  },
+  {
+   "x": 10.5,
+   "y": 4.0,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g04_lane_03_y_p00"
+  },
+  {
+   "x": 10.5,
+   "y": 4.0,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g04_lane_03_y_p00"
+  },
+  {
+   "x": 10.5,
+   "y": 4.0,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g04_lane_03_y_p00"
+  },
+  {
+   "x": 10.5,
+   "y": 4.0,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g04_lane_03_y_p00"
+  },
+  {
+   "x": 10.5,
+   "y": 4.0,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g04_lane_03_y_p00"
+  },
+  {
+   "x": 10.5,
+   "y": 4.2,
+   "yaw": 0.0,
+   "stratum": "fit:p1g04_lane_03_y_p01"
+  },
+  {
+   "x": 10.5,
+   "y": 4.2,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g04_lane_03_y_p01"
+  },
+  {
+   "x": 10.5,
+   "y": 4.2,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g04_lane_03_y_p01"
+  },
+  {
+   "x": 10.5,
+   "y": 4.2,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g04_lane_03_y_p01"
+  },
+  {
+   "x": 10.5,
+   "y": 4.2,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g04_lane_03_y_p01"
+  },
+  {
+   "x": 10.5,
+   "y": 4.2,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g04_lane_03_y_p01"
+  },
+  {
+   "x": 10.5,
+   "y": 4.2,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g04_lane_03_y_p01"
+  },
+  {
+   "x": 10.5,
+   "y": 4.2,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g04_lane_03_y_p01"
+  },
+  {
+   "x": 10.5,
+   "y": 4.4,
+   "yaw": 0.0,
+   "stratum": "fit:p1g04_lane_03_y_p02"
+  },
+  {
+   "x": 10.5,
+   "y": 4.4,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g04_lane_03_y_p02"
+  },
+  {
+   "x": 10.5,
+   "y": 4.4,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g04_lane_03_y_p02"
+  },
+  {
+   "x": 10.5,
+   "y": 4.4,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g04_lane_03_y_p02"
+  },
+  {
+   "x": 10.5,
+   "y": 4.4,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g04_lane_03_y_p02"
+  },
+  {
+   "x": 10.5,
+   "y": 4.4,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g04_lane_03_y_p02"
+  },
+  {
+   "x": 10.5,
+   "y": 4.4,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g04_lane_03_y_p02"
+  },
+  {
+   "x": 10.5,
+   "y": 4.4,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g04_lane_03_y_p02"
+  },
+  {
+   "x": 10.5,
+   "y": 4.6,
+   "yaw": 0.0,
+   "stratum": "fit:p1g04_lane_03_y_p03"
+  },
+  {
+   "x": 10.5,
+   "y": 4.6,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g04_lane_03_y_p03"
+  },
+  {
+   "x": 10.5,
+   "y": 4.6,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g04_lane_03_y_p03"
+  },
+  {
+   "x": 10.5,
+   "y": 4.6,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g04_lane_03_y_p03"
+  },
+  {
+   "x": 10.5,
+   "y": 4.6,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g04_lane_03_y_p03"
+  },
+  {
+   "x": 10.5,
+   "y": 4.6,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g04_lane_03_y_p03"
+  },
+  {
+   "x": 10.5,
+   "y": 4.6,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g04_lane_03_y_p03"
+  },
+  {
+   "x": 10.5,
+   "y": 4.6,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g04_lane_03_y_p03"
+  },
+  {
+   "x": 10.5,
+   "y": 4.8,
+   "yaw": 0.0,
+   "stratum": "fit:p1g04_lane_03_y_p04"
+  },
+  {
+   "x": 10.5,
+   "y": 4.8,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g04_lane_03_y_p04"
+  },
+  {
+   "x": 10.5,
+   "y": 4.8,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g04_lane_03_y_p04"
+  },
+  {
+   "x": 10.5,
+   "y": 4.8,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g04_lane_03_y_p04"
+  },
+  {
+   "x": 10.5,
+   "y": 4.8,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g04_lane_03_y_p04"
+  },
+  {
+   "x": 10.5,
+   "y": 4.8,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g04_lane_03_y_p04"
+  },
+  {
+   "x": 10.5,
+   "y": 4.8,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g04_lane_03_y_p04"
+  },
+  {
+   "x": 10.5,
+   "y": 4.8,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g04_lane_03_y_p04"
+  },
+  {
+   "x": 10.5,
+   "y": 5.0,
+   "yaw": 0.0,
+   "stratum": "fit:p1g04_lane_03_y_p05"
+  },
+  {
+   "x": 10.5,
+   "y": 5.0,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g04_lane_03_y_p05"
+  },
+  {
+   "x": 10.5,
+   "y": 5.0,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g04_lane_03_y_p05"
+  },
+  {
+   "x": 10.5,
+   "y": 5.0,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g04_lane_03_y_p05"
+  },
+  {
+   "x": 10.5,
+   "y": 5.0,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g04_lane_03_y_p05"
+  },
+  {
+   "x": 10.5,
+   "y": 5.0,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g04_lane_03_y_p05"
+  },
+  {
+   "x": 10.5,
+   "y": 5.0,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g04_lane_03_y_p05"
+  },
+  {
+   "x": 10.5,
+   "y": 5.0,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g04_lane_03_y_p05"
+  },
+  {
+   "x": 10.5,
+   "y": 5.2,
+   "yaw": 0.0,
+   "stratum": "fit:p1g04_lane_03_y_p06"
+  },
+  {
+   "x": 10.5,
+   "y": 5.2,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g04_lane_03_y_p06"
+  },
+  {
+   "x": 10.5,
+   "y": 5.2,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g04_lane_03_y_p06"
+  },
+  {
+   "x": 10.5,
+   "y": 5.2,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g04_lane_03_y_p06"
+  },
+  {
+   "x": 10.5,
+   "y": 5.2,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g04_lane_03_y_p06"
+  },
+  {
+   "x": 10.5,
+   "y": 5.2,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g04_lane_03_y_p06"
+  },
+  {
+   "x": 10.5,
+   "y": 5.2,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g04_lane_03_y_p06"
+  },
+  {
+   "x": 10.5,
+   "y": 5.2,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g04_lane_03_y_p06"
+  },
+  {
+   "x": 8.9,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "fit:p1g05_lane_11_x_p00"
+  },
+  {
+   "x": 8.9,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g05_lane_11_x_p00"
+  },
+  {
+   "x": 8.9,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g05_lane_11_x_p00"
+  },
+  {
+   "x": 8.9,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g05_lane_11_x_p00"
+  },
+  {
+   "x": 8.9,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g05_lane_11_x_p00"
+  },
+  {
+   "x": 8.9,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g05_lane_11_x_p00"
+  },
+  {
+   "x": 8.9,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g05_lane_11_x_p00"
+  },
+  {
+   "x": 8.9,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g05_lane_11_x_p00"
+  },
+  {
+   "x": 9.1,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "fit:p1g05_lane_11_x_p01"
+  },
+  {
+   "x": 9.1,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g05_lane_11_x_p01"
+  },
+  {
+   "x": 9.1,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g05_lane_11_x_p01"
+  },
+  {
+   "x": 9.1,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g05_lane_11_x_p01"
+  },
+  {
+   "x": 9.1,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g05_lane_11_x_p01"
+  },
+  {
+   "x": 9.1,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g05_lane_11_x_p01"
+  },
+  {
+   "x": 9.1,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g05_lane_11_x_p01"
+  },
+  {
+   "x": 9.1,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g05_lane_11_x_p01"
+  },
+  {
+   "x": 9.3,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "fit:p1g05_lane_11_x_p02"
+  },
+  {
+   "x": 9.3,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g05_lane_11_x_p02"
+  },
+  {
+   "x": 9.3,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g05_lane_11_x_p02"
+  },
+  {
+   "x": 9.3,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g05_lane_11_x_p02"
+  },
+  {
+   "x": 9.3,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g05_lane_11_x_p02"
+  },
+  {
+   "x": 9.3,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g05_lane_11_x_p02"
+  },
+  {
+   "x": 9.3,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g05_lane_11_x_p02"
+  },
+  {
+   "x": 9.3,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g05_lane_11_x_p02"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "fit:p1g05_lane_11_x_p03"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g05_lane_11_x_p03"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g05_lane_11_x_p03"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g05_lane_11_x_p03"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g05_lane_11_x_p03"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g05_lane_11_x_p03"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g05_lane_11_x_p03"
+  },
+  {
+   "x": 9.5,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g05_lane_11_x_p03"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "fit:p1g05_lane_11_x_p04"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g05_lane_11_x_p04"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g05_lane_11_x_p04"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g05_lane_11_x_p04"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g05_lane_11_x_p04"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g05_lane_11_x_p04"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g05_lane_11_x_p04"
+  },
+  {
+   "x": 9.7,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g05_lane_11_x_p04"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "fit:p1g05_lane_11_x_p05"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g05_lane_11_x_p05"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g05_lane_11_x_p05"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g05_lane_11_x_p05"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g05_lane_11_x_p05"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g05_lane_11_x_p05"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g05_lane_11_x_p05"
+  },
+  {
+   "x": 9.9,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g05_lane_11_x_p05"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 0.0,
+   "stratum": "fit:p1g05_lane_11_x_p06"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g05_lane_11_x_p06"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g05_lane_11_x_p06"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g05_lane_11_x_p06"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g05_lane_11_x_p06"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g05_lane_11_x_p06"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g05_lane_11_x_p06"
+  },
+  {
+   "x": 10.1,
+   "y": -8.55,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g05_lane_11_x_p06"
+  },
+  {
+   "x": 1.8,
+   "y": 2.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g06_lane_10_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 2.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g06_lane_10_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 2.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g06_lane_10_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 2.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g06_lane_10_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 2.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g06_lane_10_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 2.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g06_lane_10_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 2.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g06_lane_10_x_p00"
+  },
+  {
+   "x": 1.8,
+   "y": 2.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g06_lane_10_x_p00"
+  },
+  {
+   "x": 2.0,
+   "y": 2.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g06_lane_10_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 2.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g06_lane_10_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 2.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g06_lane_10_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 2.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g06_lane_10_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 2.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g06_lane_10_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 2.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g06_lane_10_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 2.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g06_lane_10_x_p01"
+  },
+  {
+   "x": 2.0,
+   "y": 2.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g06_lane_10_x_p01"
+  },
+  {
+   "x": 2.2,
+   "y": 2.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g06_lane_10_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 2.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g06_lane_10_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 2.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g06_lane_10_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 2.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g06_lane_10_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 2.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g06_lane_10_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 2.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g06_lane_10_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 2.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g06_lane_10_x_p02"
+  },
+  {
+   "x": 2.2,
+   "y": 2.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g06_lane_10_x_p02"
+  },
+  {
+   "x": 2.4,
+   "y": 2.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g06_lane_10_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 2.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g06_lane_10_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 2.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g06_lane_10_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 2.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g06_lane_10_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 2.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g06_lane_10_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 2.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g06_lane_10_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 2.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g06_lane_10_x_p03"
+  },
+  {
+   "x": 2.4,
+   "y": 2.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g06_lane_10_x_p03"
+  },
+  {
+   "x": 2.6,
+   "y": 2.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g06_lane_10_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 2.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g06_lane_10_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 2.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g06_lane_10_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 2.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g06_lane_10_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 2.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g06_lane_10_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 2.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g06_lane_10_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 2.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g06_lane_10_x_p04"
+  },
+  {
+   "x": 2.6,
+   "y": 2.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g06_lane_10_x_p04"
+  },
+  {
+   "x": 2.8,
+   "y": 2.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g06_lane_10_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 2.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g06_lane_10_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 2.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g06_lane_10_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 2.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g06_lane_10_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 2.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g06_lane_10_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 2.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g06_lane_10_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 2.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g06_lane_10_x_p05"
+  },
+  {
+   "x": 2.8,
+   "y": 2.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g06_lane_10_x_p05"
+  },
+  {
+   "x": 3.0,
+   "y": 2.55,
+   "yaw": 0.0,
+   "stratum": "validation:p1g06_lane_10_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 2.55,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g06_lane_10_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 2.55,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g06_lane_10_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 2.55,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g06_lane_10_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 2.55,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g06_lane_10_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 2.55,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g06_lane_10_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 2.55,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g06_lane_10_x_p06"
+  },
+  {
+   "x": 3.0,
+   "y": 2.55,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g06_lane_10_x_p06"
+  },
+  {
+   "x": -5.9,
+   "y": 8.125,
+   "yaw": 0.0,
+   "stratum": "validation:p1g07_lane_02_x_p00"
+  },
+  {
+   "x": -5.9,
+   "y": 8.125,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g07_lane_02_x_p00"
+  },
+  {
+   "x": -5.9,
+   "y": 8.125,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g07_lane_02_x_p00"
+  },
+  {
+   "x": -5.9,
+   "y": 8.125,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g07_lane_02_x_p00"
+  },
+  {
+   "x": -5.9,
+   "y": 8.125,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g07_lane_02_x_p00"
+  },
+  {
+   "x": -5.9,
+   "y": 8.125,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g07_lane_02_x_p00"
+  },
+  {
+   "x": -5.9,
+   "y": 8.125,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g07_lane_02_x_p00"
+  },
+  {
+   "x": -5.9,
+   "y": 8.125,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g07_lane_02_x_p00"
+  },
+  {
+   "x": -5.7,
+   "y": 8.125,
+   "yaw": 0.0,
+   "stratum": "validation:p1g07_lane_02_x_p01"
+  },
+  {
+   "x": -5.7,
+   "y": 8.125,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g07_lane_02_x_p01"
+  },
+  {
+   "x": -5.7,
+   "y": 8.125,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g07_lane_02_x_p01"
+  },
+  {
+   "x": -5.7,
+   "y": 8.125,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g07_lane_02_x_p01"
+  },
+  {
+   "x": -5.7,
+   "y": 8.125,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g07_lane_02_x_p01"
+  },
+  {
+   "x": -5.7,
+   "y": 8.125,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g07_lane_02_x_p01"
+  },
+  {
+   "x": -5.7,
+   "y": 8.125,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g07_lane_02_x_p01"
+  },
+  {
+   "x": -5.7,
+   "y": 8.125,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g07_lane_02_x_p01"
+  },
+  {
+   "x": -5.5,
+   "y": 8.125,
+   "yaw": 0.0,
+   "stratum": "validation:p1g07_lane_02_x_p02"
+  },
+  {
+   "x": -5.5,
+   "y": 8.125,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g07_lane_02_x_p02"
+  },
+  {
+   "x": -5.5,
+   "y": 8.125,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g07_lane_02_x_p02"
+  },
+  {
+   "x": -5.5,
+   "y": 8.125,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g07_lane_02_x_p02"
+  },
+  {
+   "x": -5.5,
+   "y": 8.125,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g07_lane_02_x_p02"
+  },
+  {
+   "x": -5.5,
+   "y": 8.125,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g07_lane_02_x_p02"
+  },
+  {
+   "x": -5.5,
+   "y": 8.125,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g07_lane_02_x_p02"
+  },
+  {
+   "x": -5.5,
+   "y": 8.125,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g07_lane_02_x_p02"
+  },
+  {
+   "x": -5.3,
+   "y": 8.125,
+   "yaw": 0.0,
+   "stratum": "validation:p1g07_lane_02_x_p03"
+  },
+  {
+   "x": -5.3,
+   "y": 8.125,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g07_lane_02_x_p03"
+  },
+  {
+   "x": -5.3,
+   "y": 8.125,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g07_lane_02_x_p03"
+  },
+  {
+   "x": -5.3,
+   "y": 8.125,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g07_lane_02_x_p03"
+  },
+  {
+   "x": -5.3,
+   "y": 8.125,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g07_lane_02_x_p03"
+  },
+  {
+   "x": -5.3,
+   "y": 8.125,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g07_lane_02_x_p03"
+  },
+  {
+   "x": -5.3,
+   "y": 8.125,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g07_lane_02_x_p03"
+  },
+  {
+   "x": -5.3,
+   "y": 8.125,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g07_lane_02_x_p03"
+  },
+  {
+   "x": -5.1,
+   "y": 8.125,
+   "yaw": 0.0,
+   "stratum": "validation:p1g07_lane_02_x_p04"
+  },
+  {
+   "x": -5.1,
+   "y": 8.125,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g07_lane_02_x_p04"
+  },
+  {
+   "x": -5.1,
+   "y": 8.125,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g07_lane_02_x_p04"
+  },
+  {
+   "x": -5.1,
+   "y": 8.125,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g07_lane_02_x_p04"
+  },
+  {
+   "x": -5.1,
+   "y": 8.125,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g07_lane_02_x_p04"
+  },
+  {
+   "x": -5.1,
+   "y": 8.125,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g07_lane_02_x_p04"
+  },
+  {
+   "x": -5.1,
+   "y": 8.125,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g07_lane_02_x_p04"
+  },
+  {
+   "x": -5.1,
+   "y": 8.125,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g07_lane_02_x_p04"
+  },
+  {
+   "x": -4.9,
+   "y": 8.125,
+   "yaw": 0.0,
+   "stratum": "validation:p1g07_lane_02_x_p05"
+  },
+  {
+   "x": -4.9,
+   "y": 8.125,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g07_lane_02_x_p05"
+  },
+  {
+   "x": -4.9,
+   "y": 8.125,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g07_lane_02_x_p05"
+  },
+  {
+   "x": -4.9,
+   "y": 8.125,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g07_lane_02_x_p05"
+  },
+  {
+   "x": -4.9,
+   "y": 8.125,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g07_lane_02_x_p05"
+  },
+  {
+   "x": -4.9,
+   "y": 8.125,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g07_lane_02_x_p05"
+  },
+  {
+   "x": -4.9,
+   "y": 8.125,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g07_lane_02_x_p05"
+  },
+  {
+   "x": -4.9,
+   "y": 8.125,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g07_lane_02_x_p05"
+  },
+  {
+   "x": -4.7,
+   "y": 8.125,
+   "yaw": 0.0,
+   "stratum": "validation:p1g07_lane_02_x_p06"
+  },
+  {
+   "x": -4.7,
+   "y": 8.125,
+   "yaw": 0.785398,
+   "stratum": "validation:p1g07_lane_02_x_p06"
+  },
+  {
+   "x": -4.7,
+   "y": 8.125,
+   "yaw": 1.570796,
+   "stratum": "validation:p1g07_lane_02_x_p06"
+  },
+  {
+   "x": -4.7,
+   "y": 8.125,
+   "yaw": 2.356194,
+   "stratum": "validation:p1g07_lane_02_x_p06"
+  },
+  {
+   "x": -4.7,
+   "y": 8.125,
+   "yaw": 3.141593,
+   "stratum": "validation:p1g07_lane_02_x_p06"
+  },
+  {
+   "x": -4.7,
+   "y": 8.125,
+   "yaw": 3.926991,
+   "stratum": "validation:p1g07_lane_02_x_p06"
+  },
+  {
+   "x": -4.7,
+   "y": 8.125,
+   "yaw": 4.712389,
+   "stratum": "validation:p1g07_lane_02_x_p06"
+  },
+  {
+   "x": -4.7,
+   "y": 8.125,
+   "yaw": 5.497787,
+   "stratum": "validation:p1g07_lane_02_x_p06"
+  },
+  {
+   "x": -8.2,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g08_lane_01_x_p00"
+  },
+  {
+   "x": -8.2,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g08_lane_01_x_p00"
+  },
+  {
+   "x": -8.2,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g08_lane_01_x_p00"
+  },
+  {
+   "x": -8.2,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g08_lane_01_x_p00"
+  },
+  {
+   "x": -8.2,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g08_lane_01_x_p00"
+  },
+  {
+   "x": -8.2,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g08_lane_01_x_p00"
+  },
+  {
+   "x": -8.2,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g08_lane_01_x_p00"
+  },
+  {
+   "x": -8.2,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g08_lane_01_x_p00"
+  },
+  {
+   "x": -8.0,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g08_lane_01_x_p01"
+  },
+  {
+   "x": -8.0,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g08_lane_01_x_p01"
+  },
+  {
+   "x": -8.0,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g08_lane_01_x_p01"
+  },
+  {
+   "x": -8.0,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g08_lane_01_x_p01"
+  },
+  {
+   "x": -8.0,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g08_lane_01_x_p01"
+  },
+  {
+   "x": -8.0,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g08_lane_01_x_p01"
+  },
+  {
+   "x": -8.0,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g08_lane_01_x_p01"
+  },
+  {
+   "x": -8.0,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g08_lane_01_x_p01"
+  },
+  {
+   "x": -7.8,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g08_lane_01_x_p02"
+  },
+  {
+   "x": -7.8,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g08_lane_01_x_p02"
+  },
+  {
+   "x": -7.8,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g08_lane_01_x_p02"
+  },
+  {
+   "x": -7.8,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g08_lane_01_x_p02"
+  },
+  {
+   "x": -7.8,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g08_lane_01_x_p02"
+  },
+  {
+   "x": -7.8,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g08_lane_01_x_p02"
+  },
+  {
+   "x": -7.8,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g08_lane_01_x_p02"
+  },
+  {
+   "x": -7.8,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g08_lane_01_x_p02"
+  },
+  {
+   "x": -7.6,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g08_lane_01_x_p03"
+  },
+  {
+   "x": -7.6,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g08_lane_01_x_p03"
+  },
+  {
+   "x": -7.6,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g08_lane_01_x_p03"
+  },
+  {
+   "x": -7.6,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g08_lane_01_x_p03"
+  },
+  {
+   "x": -7.6,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g08_lane_01_x_p03"
+  },
+  {
+   "x": -7.6,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g08_lane_01_x_p03"
+  },
+  {
+   "x": -7.6,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g08_lane_01_x_p03"
+  },
+  {
+   "x": -7.6,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g08_lane_01_x_p03"
+  },
+  {
+   "x": -7.4,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g08_lane_01_x_p04"
+  },
+  {
+   "x": -7.4,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g08_lane_01_x_p04"
+  },
+  {
+   "x": -7.4,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g08_lane_01_x_p04"
+  },
+  {
+   "x": -7.4,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g08_lane_01_x_p04"
+  },
+  {
+   "x": -7.4,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g08_lane_01_x_p04"
+  },
+  {
+   "x": -7.4,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g08_lane_01_x_p04"
+  },
+  {
+   "x": -7.4,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g08_lane_01_x_p04"
+  },
+  {
+   "x": -7.4,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g08_lane_01_x_p04"
+  },
+  {
+   "x": -7.2,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g08_lane_01_x_p05"
+  },
+  {
+   "x": -7.2,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g08_lane_01_x_p05"
+  },
+  {
+   "x": -7.2,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g08_lane_01_x_p05"
+  },
+  {
+   "x": -7.2,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g08_lane_01_x_p05"
+  },
+  {
+   "x": -7.2,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g08_lane_01_x_p05"
+  },
+  {
+   "x": -7.2,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g08_lane_01_x_p05"
+  },
+  {
+   "x": -7.2,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g08_lane_01_x_p05"
+  },
+  {
+   "x": -7.2,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g08_lane_01_x_p05"
+  },
+  {
+   "x": -7.0,
+   "y": -7.025,
+   "yaw": 0.0,
+   "stratum": "fit:p1g08_lane_01_x_p06"
+  },
+  {
+   "x": -7.0,
+   "y": -7.025,
+   "yaw": 0.785398,
+   "stratum": "fit:p1g08_lane_01_x_p06"
+  },
+  {
+   "x": -7.0,
+   "y": -7.025,
+   "yaw": 1.570796,
+   "stratum": "fit:p1g08_lane_01_x_p06"
+  },
+  {
+   "x": -7.0,
+   "y": -7.025,
+   "yaw": 2.356194,
+   "stratum": "fit:p1g08_lane_01_x_p06"
+  },
+  {
+   "x": -7.0,
+   "y": -7.025,
+   "yaw": 3.141593,
+   "stratum": "fit:p1g08_lane_01_x_p06"
+  },
+  {
+   "x": -7.0,
+   "y": -7.025,
+   "yaw": 3.926991,
+   "stratum": "fit:p1g08_lane_01_x_p06"
+  },
+  {
+   "x": -7.0,
+   "y": -7.025,
+   "yaw": 4.712389,
+   "stratum": "fit:p1g08_lane_01_x_p06"
+  },
+  {
+   "x": -7.0,
+   "y": -7.025,
+   "yaw": 5.497787,
+   "stratum": "fit:p1g08_lane_01_x_p06"
+  }
+ ]
+}
