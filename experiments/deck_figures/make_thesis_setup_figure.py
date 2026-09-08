@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""The introduction's setup figure: the warehouse from above, plus one camera's view.
+"""The introduction's setup figure: the simulated warehouse from above.
 
-Left: a plan of the simulated warehouse drawn from the world file itself. Rack footprints
-come from the occluder collision boxes, camera positions and headings from their model
-poses, and the drivable floor from the frozen capture grid. Nothing is hand-placed.
+Drawn from the world file itself. Rack footprints come from the occluder collision boxes,
+camera positions and headings from their model poses, and the drivable floor from the
+frozen capture grid. Nothing is hand-placed.
 
-Right: one real captured frame from that installation with the robot marked, so the plan
-is tied to what a camera actually delivers.
+What each camera sees is a separate appendix figure, make_camera_views_figure.py.
 """
 from __future__ import annotations
 
@@ -65,8 +64,7 @@ def main() -> None:
     poses = rows.drop_duplicates('position_id')[['robot_x', 'robot_y']].to_numpy()
     row = rows[(rows.image == FRAME) & (rows.detected == 1)].iloc[0]
 
-    fig, (plan, view) = plt.subplots(
-        1, 2, figsize=(11.4, 4.5), gridspec_kw={'width_ratios': [1.0, 1.32]})
+    fig, plan = plt.subplots(figsize=(5.6, 4.9))
 
     # ---- left: the warehouse from above
     plan.scatter(poses[:, 0], poses[:, 1], s=7, color=FLOOR, marker='s',
@@ -95,7 +93,8 @@ def main() -> None:
     plan.set_aspect('equal')
     plan.set(xlim=(-12.6, 12.6), ylim=(-11.4, 11.4))
     plan.set(xlabel='x (m)', ylabel='y (m)')
-    plan.set_title('Five cameras, one warehouse\nBlue markers point where each camera looks',
+    plan.set_title('Five fixed cameras watch the warehouse floor\n'
+                   'Each marker points where that camera looks',
                    fontsize=10.5, fontweight='bold')
     plan.grid(alpha=.18)
     handles = [patches.Patch(facecolor=RACK, label='storage rack'),
@@ -103,26 +102,7 @@ def main() -> None:
     plan.legend(handles=handles, fontsize=8, loc='upper center',
                 bbox_to_anchor=(0.5, -0.16), ncol=2, frameon=False)
 
-    # ---- right: what one of those cameras sees
-    image = mpimg.imread(CAPTURE / FRAME)
-    height, width = image.shape[:2]
-    view.imshow(image)
-    view.set(xlim=(0, width), ylim=(height, 0))
-    view.axis('off')
-
-    x0, y0, x1, y1 = (float(row[k]) for k in ('x0', 'y0', 'x1', 'y1'))
-    pad = 14
-    view.add_patch(patches.Rectangle((x0 - pad, y0 - pad), (x1 - x0) + 2 * pad,
-                                     (y1 - y0) + 2 * pad, fill=False,
-                                     edgecolor=ROBOT, linewidth=2.4))
-    view.annotate('robot', xy=(x0 - pad, y0 - pad), xytext=(x0 - 330, y0 - 120),
-                  fontsize=12, fontweight='bold', color=ROBOT,
-                  arrowprops=dict(arrowstyle='->', lw=2.0, color=ROBOT))
-    view.set_title(f'What camera B sees from {row.camera_range_m:.1f} m\n'
-                   'The detector finds the robot in this image',
-                   fontsize=10.5, fontweight='bold')
-
-    fig.tight_layout(pad=0.6)
+    fig.tight_layout(pad=0.4)
     OUT.mkdir(parents=True, exist_ok=True)
     for path in (OUT / 'thesis_setup.pdf', OUT / 'thesis_setup.png'):
         fig.savefig(path, dpi=200, bbox_inches='tight')
