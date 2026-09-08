@@ -10,6 +10,11 @@ Everything is logged: belief mean and covariance from the planner, ground truth 
 the belief timestamp as the metrics contract requires, and accepted corrections from the
 runtime's own flag. Rack footprints come from the world file. Ground truth scores the
 result; the estimator never saw it.
+
+Note on the growth rate: across the starved stretch the stated standard deviation grows
+126 cm while the actual error grows 39 cm, so the belief ends about 2.6x wider than its own
+error warrants. The filter is conservative here, not overconfident. The figure shows what
+happens when corrections stop; it is not evidence that the process noise is well tuned.
 """
 from __future__ import annotations
 
@@ -39,7 +44,12 @@ SNAPSHOTS = (186.0, 231.0)   # corrections still arriving; 45 s later with none
 GAP_OPENS = 186.5            # last accepted correction before the starved stretch
 
 TRUTH, BELIEF, MEAS = '#2b3038', '#1f6fb8', '#c23d36'
-RACK, GONE = '#b9c0c8', '#f2d9a8'
+RACK, GONE, CAM = '#b9c0c8', '#f2d9a8', '#1f6fb8'
+
+# Camera world positions and yaws, read from the world file's include poses.
+CAMERAS = {'A': (-11.45, -9.45, 0.785), 'B': (-1.50, -9.72, 2.007),
+           'C': (-6.95, 9.45, -1.047), 'D': (11.45, 7.20, -2.443),
+           'E': (11.45, -9.45, 2.304)}
 
 
 def racks() -> list[tuple[float, float, float, float]]:
@@ -84,15 +94,21 @@ def snapshot(ax, rows, accepted, boxes, now: float, title: str) -> None:
             (starved['gt_x_at_belief_stamp'].min() - pad, starved['gt_y_at_belief_stamp'].min() - pad),
             np.ptp(starved['gt_x_at_belief_stamp']) + 2 * pad,
             np.ptp(starved['gt_y_at_belief_stamp']) + 2 * pad,
-            fc=GONE, ec='none', alpha=.75, zorder=1))
-        ax.text(starved['gt_x_at_belief_stamp'].mean(),
-                starved['gt_y_at_belief_stamp'].max() + 1.5, 'no corrections here',
-                color='#8a6d1f', fontsize=9, fontweight='bold', ha='center', zorder=6)
+            fc=GONE, ec='none', alpha=.75, zorder=1,
+            label='stretch crossed with no accepted correction'))
 
     for px, py, sx, sy in boxes:
         ax.add_patch(Rectangle((px - sx / 2, py - sy / 2), sx, sy,
                                facecolor=RACK, edgecolor='none', zorder=2))
     ax.add_patch(Rectangle((-12, -10), 24, 20, fill=False, ec='#6d747c', lw=1.3, zorder=2))
+
+    for name, (cx, cy, yaw) in CAMERAS.items():
+        ax.plot(cx, cy, 's', color=CAM, ms=7, mec='white', mew=1.2, zorder=7,
+                label='fixed camera' if name == 'C' else None)
+        ax.annotate('', xy=(cx + 1.9 * np.cos(yaw), cy + 1.9 * np.sin(yaw)), xytext=(cx, cy),
+                    arrowprops=dict(arrowstyle='-|>', lw=1.5, color=CAM), zorder=7)
+        ax.text(cx, cy + (0.95 if cy < 0 else -1.15), name, color=CAM, fontsize=8.5,
+                fontweight='bold', ha='center', va='center', zorder=8)
 
     for _, row in seen.iloc[::max(1, len(seen) // 11)].iterrows():
         cov = np.array([[row['planner_cov_x'], row['planner_cov_xy']],
@@ -118,10 +134,9 @@ def snapshot(ax, rows, accepted, boxes, now: float, title: str) -> None:
     ax.plot(head['gt_x_at_belief_stamp'], head['gt_y_at_belief_stamp'], 'o', color=TRUTH,
             ms=11, mec='white', mew=1.6, zorder=8, label='robot now')
 
-    # crop to the half of the hall the route uses; the south half is never entered
-    ax.set(xlim=(-12.6, 12.6), ylim=(2.0, 10.8), aspect='equal', xlabel='x (m)')
+    ax.set(xlim=(-12.9, 12.9), ylim=(-10.9, 10.9), aspect='equal', xlabel='x (m)')
     ax.set_xticks([-10, -5, 0, 5, 10])
-    ax.set_yticks([4, 6, 8, 10])
+    ax.set_yticks([-10, -5, 0, 5, 10])
     ax.tick_params(labelsize=8.5)
     ax.set_title(f'{title}\n$t={now - ROUTE_START:.0f}$ s into the route',
                  fontsize=10.5, fontweight='bold')
@@ -134,18 +149,17 @@ def main() -> None:
     rows, accepted = load()
     boxes = racks()
 
-    fig, axes = plt.subplots(2, 1, figsize=(7.4, 5.6))
+    fig, axes = plt.subplots(1, 2, figsize=(11.6, 5.2))
     snapshot(axes[0], rows, accepted, boxes, SNAPSHOTS[0],
              '(a) cameras still correcting the belief')
     snapshot(axes[1], rows, accepted, boxes, SNAPSHOTS[1],
              '(b) 45 s later, after driving on with none')
-    for ax in axes:
-        ax.set_ylabel('y (m)')
+    axes[0].set_ylabel('y (m)')
 
     handles, labels = axes[1].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='lower center', ncol=4, fontsize=9,
-               frameon=False, bbox_to_anchor=(0.5, -0.02))
-    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    fig.legend(handles, labels, loc='lower center', ncol=3, fontsize=8.8,
+               frameon=False, bbox_to_anchor=(0.5, -0.08))
+    fig.tight_layout(rect=(0, 0.10, 1, 1))
 
     OUT.mkdir(parents=True, exist_ok=True)
     for path in (OUT / 'localization_example.pdf', OUT / 'localization_example.png'):
