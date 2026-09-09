@@ -49,7 +49,7 @@ REPO = repo_root()
 CAPTURE = REPO / 'logs/perception_datasets/warehouse_v2_bbox_characterization_20260831'
 OUT = REPO / 'logs/studies/thesis_setup_figure_20260908'
 FRAME = 'camera_B/images/pose_001211_r00.png'
-CAMERA = 'camera_B'
+CAMERA = 'camera_B'   # the capture's id; the paper calls it camera i
 FOV_H_RAD = 1.5708  # external_camera_b/model.sdf
 
 DETECT = '#c23d36'      # the detection and everything derived from it
@@ -117,7 +117,7 @@ def draw_camera_icon(ax, centre: np.ndarray, scale: float = 1.0) -> np.ndarray:
                         edgecolor=INK, lw=1.2, zorder=7))
     ax.add_patch(Circle(tuple(lens), 0.17 * scale, facecolor='#9dc3e6',
                         edgecolor='none', zorder=8))
-    ax.text(centre[0] - 0.15 * scale, centre[1] + 0.78 * scale, 'fixed camera $c$',
+    ax.text(centre[0] - 0.15 * scale, centre[1] + 0.78 * scale, 'fixed camera $i$',
             ha='center', va='bottom', fontsize=10.5, color=INK, fontweight='bold')
     return lens
 
@@ -126,7 +126,7 @@ def panel_image(ax, row) -> None:
     """(a) the camera, the image it forms, and the pixel the runtime selects."""
     image = mpimg.imread(CAPTURE / row.image)
     height, width = image.shape[:2]
-    ax.set(xlim=(0.0, 9.6), ylim=(2.35, 10.4))
+    ax.set(xlim=(0.15, 9.45), ylim=(2.55, 10.15))
     ax.axis('off')
 
     lens = draw_camera_icon(ax, np.array([1.60, 9.15]))
@@ -142,8 +142,9 @@ def panel_image(ax, row) -> None:
                                 transform=ax.transData))
     ax.add_patch(Polygon([IP_BL, IP_BR, IP_TR, IP_TL], closed=True, fill=False,
                          edgecolor=CAM, lw=1.8, zorder=4))
-    ax.text(*(IP_BL + IP_BR) / 2 - np.array([0, 0.30]), 'camera image plane',
-            ha='center', va='top', fontsize=9.5, style='italic', color='#555b62')
+    ax.text(*(IP_BL + IP_BR) / 2 - np.array([0.55, 0.30]),
+            r'camera image $I_{i,k}$', ha='center', va='top', fontsize=10,
+            style='italic', color='#555b62')
 
     # the detection, in the frame's own normalised coordinates
     x0, y0, x1, y1 = (float(row[k]) for k in ('x0', 'y0', 'x1', 'y1'))
@@ -154,23 +155,23 @@ def panel_image(ax, row) -> None:
     # The detection sits at 91% across and 71% down the frame, hard into the corner,
     # so there is no room outside the plane on that side. The label goes inside the
     # plane instead, on the empty floor to the box's left, where it covers nothing.
-    ax.annotate(f'YOLO box $B_k$\n(conf. {row.confidence:.2f})',
+    ax.annotate(r'detection $B_{i,k}$',
                 xy=(box[:, 0].min(), box[:, 1].mean()),
-                xytext=(box[:, 0].min() - 0.35, box[:, 1].mean() + 0.55),
-                color=DETECT, fontsize=9.4, fontweight='bold', ha='right',
+                xytext=(box[:, 0].min() - 0.35, box[:, 1].mean() + 0.62),
+                color=DETECT, fontsize=10.5, fontweight='bold', ha='right',
                 va='center', path_effects=HALO, zorder=9,
                 arrowprops=dict(arrowstyle='->', color=DETECT, lw=1.5))
 
     u, v = (x0 + x1) / 2, y1
     pixel = to_plane(np.array([[u / width, 1 - v / height]]))[0]
     ax.plot(*pixel, '*', color=DETECT, ms=19, mec='white', mew=1.0, zorder=8)
-    ax.annotate('selected bottom-centre pixel',
-                xy=pixel, xytext=(pixel[0] - 0.65, pixel[1] - 1.30), color=DETECT,
-                fontsize=9.6, fontweight='bold', ha='center', va='top',
+    ax.annotate('bottom centre of the box',
+                xy=pixel, xytext=(pixel[0] - 0.65, pixel[1] - 1.25), color=DETECT,
+                fontsize=10, fontweight='bold', ha='center', va='top',
                 path_effects=HALO, zorder=9,
                 arrowprops=dict(arrowstyle='->', color=DETECT, lw=1.5))
-    ax.text(pixel[0] - 0.65, pixel[1] - 1.68, r'$u_k=(u_{\rm pix},v_{\rm pix})$',
-            color=DETECT, fontsize=10.5, fontweight='bold', ha='center', va='top',
+    ax.text(pixel[0] - 0.65, pixel[1] - 1.62, r'$p^{\mathrm{img}}_{i,k}=(u,v)$',
+            color=DETECT, fontsize=11.5, fontweight='bold', ha='center', va='top',
             path_effects=HALO, zorder=9)
 
 
@@ -179,17 +180,17 @@ def panel_model(ax) -> None:
     ax.set(xlim=(0, 1), ylim=(0, 1))
     ax.axis('off')
 
-    ax.text(0.5, 0.78, 'ground-plane\nhomography $H_c$', ha='center', va='bottom',
-            fontsize=11.5, color=INK, fontweight='bold')
-    ax.add_patch(FancyArrowPatch((0.06, 0.71), (0.94, 0.71), arrowstyle='-|>',
-                                 mutation_scale=24, lw=3.4, color=ARROW))
-    ax.text(0.5, 0.52, r'$[\tilde x,\tilde y,\tilde w]^\top='
-                       r'H_c^{-1}[u_{\rm pix},v_{\rm pix},1]^\top$',
-            ha='center', va='center', fontsize=10.2, color=INK)
-    ax.text(0.5, 0.38, r'$z_k=(\tilde x/\tilde w,\;\tilde y/\tilde w)$',
-            ha='center', va='center', fontsize=10.2, color=INK)
-    ax.text(0.5, 0.20, 'calibrated once,\nheld fixed', ha='center', va='center',
-            fontsize=9.2, color='#555b62', style='italic')
+    # The symbols are the paper's: the homography H_i of camera i, and the image
+    # reference point and ground location the measurement chain names.
+    ax.text(0.5, 0.70, 'inverse ground-plane\nhomography $H_i^{-1}$', ha='center',
+            va='bottom', fontsize=12.5, color=INK, fontweight='bold')
+    ax.add_patch(FancyArrowPatch((0.04, 0.62), (0.96, 0.62), arrowstyle='-|>',
+                                 mutation_scale=26, lw=3.6, color=ARROW))
+    ax.text(0.5, 0.45, r'$[\tilde x,\tilde y,\tilde w]^\top='
+                       r'H_i^{-1}\,[u,v,1]^\top$',
+            ha='center', va='center', fontsize=12.5, color=INK)
+    ax.text(0.5, 0.30, r'$z_{i,k}=(\tilde x/\tilde w,\;\tilde y/\tilde w)$',
+            ha='center', va='center', fontsize=12.5, color=INK)
 
 
 def panel_map(ax, model, centre, row) -> np.ndarray:
@@ -232,11 +233,11 @@ def panel_map(ax, model, centre, row) -> np.ndarray:
     ax.annotate('', xy=centre[:2] + 2.1 * look, xytext=centre[:2], zorder=7,
                 arrowprops=dict(arrowstyle='-|>,head_width=0.26,head_length=0.58',
                                 lw=1.8, color=CAM, shrinkA=6, shrinkB=0))
-    ax.text(centre[0] - 0.75, centre[1] + 0.15, 'camera $c$', fontsize=9.5, color=CAM,
+    ax.text(centre[0] - 0.75, centre[1] + 0.15, 'camera $i$', fontsize=9.5, color=CAM,
             fontweight='bold', ha='right', va='center', path_effects=HALO, zorder=8)
 
     ax.plot(*ground, '*', color=DETECT, ms=22, mec='white', mew=1.1, zorder=9)
-    ax.annotate(r'position measurement $z_k$', xy=ground,
+    ax.annotate(r'ground location $z_{i,k}$', xy=ground,
                 xytext=(ground[0] - 1.2, ground[1] + 3.4), color=DETECT, fontsize=10,
                 fontweight='bold', ha='center', va='bottom', path_effects=HALO,
                 zorder=10, arrowprops=dict(arrowstyle='->', color=DETECT, lw=1.6))
@@ -263,8 +264,8 @@ def main() -> None:
 
     plt.rcParams.update({'font.family': 'DejaVu Sans', 'font.size': 10,
                          'pdf.fonttype': 42, 'ps.fonttype': 42})
-    fig = plt.figure(figsize=(13.4, 4.5), constrained_layout=True)
-    grid = fig.add_gridspec(1, 3, width_ratios=(2.45, 1.05, 2.05))
+    fig = plt.figure(figsize=(13.0, 3.95), constrained_layout=True)
+    grid = fig.add_gridspec(1, 3, width_ratios=(2.40, 1.18, 2.00))
     ax_image = fig.add_subplot(grid[0, 0])
     ax_model = fig.add_subplot(grid[0, 1])
     ax_map = fig.add_subplot(grid[0, 2])
