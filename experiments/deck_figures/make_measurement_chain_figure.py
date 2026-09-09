@@ -92,11 +92,11 @@ def panel_image(ax, row) -> None:
                            ec=DETECT, lw=2.0, zorder=3))
     ax.plot((x0 + x1) / 2, y1, 'o', color=DETECT, ms=6, mec='white', mew=1.2, zorder=4)
     ax.annotate('bottom-centre pixel $u_k$', xy=((x0 + x1) / 2, y1),
-                xytext=((x0 + x1) / 2 - 250, y1 + 105), color=DETECT, fontsize=9.5,
+                xytext=((x0 + x1) / 2 - 250, y1 + 105), color=DETECT, fontsize=11.5,
                 fontweight='bold', ha='center', va='center',
                 arrowprops=dict(arrowstyle='->', lw=1.6, color=DETECT,
                                 shrinkA=4, shrinkB=3))
-    ax.text(x1 + 10, y0, f'$B_k$   {row.confidence:.2f}', color='white', fontsize=8.5,
+    ax.text(x1 + 10, y0, f'$B_k$   {row.confidence:.2f}', color='white', fontsize=10.5,
             fontweight='bold', va='top', ha='left', zorder=4,
             bbox=dict(boxstyle='square,pad=0.24', fc=DETECT, ec='none'))
     ax.set_axis_off()
@@ -191,14 +191,14 @@ def panel_projection(ax, row, model, centre) -> None:
                           (cam[0] + 1.3 * body_w, cam[1] + body_h),
                           (cam[0] + 0.5 * body_w, cam[1] + body_h / 2)],
                          closed=True, fc=INK, ec=INK, zorder=7))
-    ax.text(cam[0] - 1.4 * body_w, cam[1], 'camera $c$', color=INK, fontsize=9.5,
+    ax.text(cam[0] - 1.4 * body_w, cam[1], 'camera $c$', color=INK, fontsize=11.5,
             fontweight='bold', ha='right', va='center', zorder=7)
 
     ax.text(plane['x0'] - 0.012, (plane['y0'] + plane['y1']) / 2, 'image plane',
-            color=BELIEF, fontsize=9, ha='right', va='center', rotation=90, zorder=6)
+            color=BELIEF, fontsize=11, ha='right', va='center', rotation=90, zorder=6)
     ax.annotate('box $B_k$, pixel $u_k$', xy=page_u,
                 xytext=(page_u[0] - 0.10, plane['y0'] - 0.030), color=DETECT,
-                fontsize=9.2, fontweight='bold', ha='center', va='top', zorder=8,
+                fontsize=11.5, fontweight='bold', ha='center', va='top', zorder=8,
                 arrowprops=dict(arrowstyle='-', lw=0.9, color=DETECT, shrinkA=2,
                                 shrinkB=4))
 
@@ -209,7 +209,7 @@ def panel_projection(ax, row, model, centre) -> None:
                 arrowprops=dict(arrowstyle='-|>,head_width=0.34,head_length=0.8',
                                 lw=3.0, color=DETECT), zorder=8)
     ax.text(arrow_x + 0.035, (band_hi + band_lo) / 2,
-            r'$\tilde z_k\propto H_c^{-1}\tilde u_k$', color=DETECT, fontsize=11,
+            r'$\tilde z_k\propto H_c^{-1}\tilde u_k$', color=DETECT, fontsize=13,
             fontweight='bold', ha='left', va='center', zorder=8)
 
     # ---- level 3: the driveable map the point lands on ----------------------------
@@ -249,7 +249,7 @@ def panel_projection(ax, row, model, centre) -> None:
                 arrowprops=dict(arrowstyle='-|>,head_width=0.22,head_length=0.5',
                                 lw=1.4, color=BELIEF, alpha=.85, shrinkA=3, shrinkB=0),
                 zorder=8)
-    ax.text(cam_xy[0] - 0.018, cam_xy[1] - 0.004, 'c', color=BELIEF, fontsize=8,
+    ax.text(cam_xy[0] - 0.018, cam_xy[1] - 0.004, 'c', color=BELIEF, fontsize=9.5,
             fontweight='bold', ha='right', va='center', zorder=8)
 
     # the measurement itself
@@ -257,13 +257,13 @@ def panel_projection(ax, row, model, centre) -> None:
     z_xy = on_map(*ground)
     ax.plot(*z_xy, '*', color=MEAS, ms=16, mec='white', mew=1.0, zorder=9)
     ax.annotate('camera position\nmeasurement $z_k$', xy=z_xy,
-                xytext=(z_xy[0] + 0.115, z_xy[1] - 0.055), color=MEAS, fontsize=9.2,
+                xytext=(z_xy[0] + 0.115, z_xy[1] - 0.055), color=MEAS, fontsize=11.5,
                 fontweight='bold', ha='left', va='center', zorder=10,
                 bbox=dict(boxstyle='square,pad=0.16', fc='white', ec='none', alpha=.85),
                 arrowprops=dict(arrowstyle='-', lw=0.9, color=MEAS, shrinkA=3,
                                 shrinkB=5))
     ax.text(world['x0'] - 0.012, (world['y0'] + world['y1']) / 2, 'warehouse map',
-            color=INK, fontsize=9, ha='right', va='center', rotation=90, zorder=6)
+            color=INK, fontsize=11, ha='right', va='center', rotation=90, zorder=6)
 
 
 def main() -> None:
@@ -292,7 +292,7 @@ def main() -> None:
     title_y = max(ax.get_position().y1 for ax in axes) + 0.045
     for ax, title in zip(axes, titles):
         box = ax.get_position()
-        fig.text((box.x0 + box.x1) / 2, title_y, title, fontsize=10.5,
+        fig.text((box.x0 + box.x1) / 2, title_y, title, fontsize=12.5,
                  fontweight='bold', ha='center', va='bottom')
     OUT.mkdir(parents=True, exist_ok=True)
     for path in (OUT / 'measurement_chain.pdf', OUT / 'measurement_chain.png'):
