@@ -1,33 +1,25 @@
 #!/usr/bin/env python3
 """Problem-statement figure: how a camera image becomes a position measurement.
 
-Two panels following one real detection from the frozen capture:
+Three panels reading left to right, following one real detection from the frozen
+capture:
 
-  (a) the whole camera frame, uncropped, with the detected box and its bottom pixel,
-  (b) how that pixel becomes a position on the warehouse map.
+  (a) the camera and the image it forms, with the detected box and the pixel
+      the runtime selects from it,
+  (b) the projection model, written out,
+  (c) where that pixel lands on the driveable map the planner is given.
 
-The figure answers one question only, what the measurement z_k is and where it comes
-from. What the filter then does with it belongs to the localization-example figure,
-where the update has a place in the temporal story.
+The layout follows the IWAI localization-pathway figure, which read better than the
+stacked diagram it replaces: a camera icon with its viewing pyramid, the frame drawn
+on a tilted image plane inside that pyramid, an explicit homography step, and a map
+panel carrying the camera and its sightline to the back-projected point.
 
-Panel (a) is documentary: the frame at its native aspect, so the reader sees how small
-the robot is in the camera's view and how much of the hall the camera covers. Panel (b)
-is explanatory rather than a strict perspective construction. It stacks the three things
-that happen, camera to image, image pixel to world, world point on the map, and the
-homography is drawn as its own step rather than as a ray pretending to be it. The image
-plane carries the real frame and the ground level is the planner's real driveable map,
-so both levels are the actual data even though the stack is a diagram.
-
-Every geometric element is computed, not drawn by hand. Panel (b) places the real
-camera_B optical centre, its real viewing pyramid and the real image plane in world
-coordinates, then draws the ray through the detected pixel to its floor intersection;
-that intersection reproduces the dataset's recorded back-projection to seven decimals.
-The image plane carries a crop of the same real frame shown in (a), warped onto the
-plane, so the reader sees that it is literally the image from (a). Panel (c) is the
-world's own plan-view render with the real robot pose, the real measurement and the
-real innovation on it. Only the covariances are chosen for legibility: the capture is
-a static pose grid, so it has no filter belief to read a prior from, and the point of
-the panel is the mechanism of the update.
+Everything is real. The frame, the box and the selected pixel are the capture's own.
+The projection uses the same ObliqueCameraModel the runtime uses, built from the
+camera's captured pose, and main() asserts that its floor intersection reproduces the
+back-projection the dataset recorded. The map is the planner's driveable map, read
+through the same route_tasks.driveable() as the appendix map figure and drawn in that
+figure's colours, so the two agree by construction.
 """
 from __future__ import annotations
 
@@ -40,13 +32,16 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa: E402
 import matplotlib.image as mpimg  # noqa: E402
-from matplotlib.collections import PolyCollection  # noqa: E402
+import matplotlib.patheffects as pe  # noqa: E402
+from matplotlib.patches import Circle, Ellipse, FancyArrowPatch, FancyBboxPatch  # noqa: E402
 from matplotlib.patches import Polygon, Rectangle  # noqa: E402
+from matplotlib.transforms import Affine2D  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / 'src' / 'unav_common'))
+HERE = pathlib.Path(__file__).resolve()
+sys.path.insert(0, str(HERE.parents[2] / 'scripts' / 'shared'))
+sys.path.insert(0, str(HERE.parents[2] / 'src' / 'unav_common'))
 from paths import repo_root  # noqa: E402
 from unav_common.camera_model import ObliqueCameraModel  # noqa: E402
 
@@ -57,213 +52,202 @@ FRAME = 'camera_B/images/pose_001211_r00.png'
 CAMERA = 'camera_B'
 FOV_H_RAD = 1.5708  # external_camera_b/model.sdf
 
-DETECT, MEAS, BELIEF, INK = '#c23d36', '#c23d36', '#1f6fb8', '#1d2530'
-DRIVE, ZONE, ZONE_EDGE = '#cfe3f5', '#f0e2c8', '#b08a4a'
-MAP_SPAN = (25.2, 21.2)   # the map's drawn extent, metres
+DETECT = '#c23d36'      # the detection and everything derived from it
+INK = '#1d2530'
+GREY = '#8a8a8a'
+ARROW = '#2171b5'
+# the appendix map figure's own palette, so the two maps read as the same map
+DRIVE, DRIVE_EDGE = '#cfe3f5', '#3f7fb5'
+ZONE, ZONE_EDGE, ZONE_TEXT = '#f0e2c8', '#b08a4a', '#6b5220'
+CAM = '#1f6fb8'
+HALO = [pe.withStroke(linewidth=3.2, foreground='white')]
+
+# The image plane, drawn as a parallelogram in panel (a)'s own coordinates. The
+# affine maps the frame's unit square onto it, exactly as the IWAI figure does.
+IP_BL, IP_BR = np.array([2.30, 4.35]), np.array([6.95, 4.35])
+IP_TL, IP_TR = np.array([3.55, 7.30]), np.array([8.20, 7.30])
+AFF = Affine2D.from_values(*(IP_BR - IP_BL), *(IP_TL - IP_BL), *IP_BL)
+
+
+def to_plane(points: np.ndarray) -> np.ndarray:
+    """Unit-square frame coordinates onto the drawn image plane."""
+    return AFF.transform(np.atleast_2d(points))
 
 
 def camera_geometry() -> tuple[ObliqueCameraModel, np.ndarray]:
-    """The real camera_B, built from its captured pose. Returns the model and its centre."""
+    """The real camera, built from its captured pose. Returns the model and its centre."""
     entry = next(c for c in json.loads((CAPTURE / 'capture_manifest.json').read_text())['cameras']
                  if c['camera_id'] == CAMERA)
     x, y, z, _, pitch, yaw = entry['pose_xyz_rpy']
     centre = np.array([x, y, z])
-    # the optical axis, marched from the centre to where it meets the floor
     axis = np.array([math.cos(pitch) * math.cos(yaw),
                      math.cos(pitch) * math.sin(yaw), -math.sin(pitch)])
     look_at = centre + axis * (z / -axis[2])
     model = ObliqueCameraModel(cam_pos=centre, look_at=look_at,
-                               img_width=entry['image_width'], img_height=entry['image_height'],
-                               fov_h_rad=FOV_H_RAD)
+                               img_width=entry['image_width'],
+                               img_height=entry['image_height'], fov_h_rad=FOV_H_RAD)
     return model, centre
 
 
-def panel_image(ax, row) -> None:
-    """(a) the whole frame the camera delivered, with the detector's box on it.
-
-    Uncropped and at its native aspect: the point is how small the robot is in the
-    camera's view and how much of the hall one camera covers.
-    """
-    image = mpimg.imread(CAPTURE / row.image)
-    x0, y0, x1, y1 = (float(row[k]) for k in ('x0', 'y0', 'x1', 'y1'))
-
-    ax.imshow(image)
-    ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False,
-                           ec=DETECT, lw=2.0, zorder=3))
-    ax.plot((x0 + x1) / 2, y1, 'o', color=DETECT, ms=6, mec='white', mew=1.2, zorder=4)
-    ax.annotate('bottom-centre pixel $u_k$', xy=((x0 + x1) / 2, y1),
-                xytext=((x0 + x1) / 2 - 250, y1 + 105), color=DETECT, fontsize=11.5,
-                fontweight='bold', ha='center', va='center',
-                arrowprops=dict(arrowstyle='->', lw=1.6, color=DETECT,
-                                shrinkA=4, shrinkB=3))
-    ax.text(x1 + 10, y0, f'$B_k$   {row.confidence:.2f}', color='white', fontsize=10.5,
-            fontweight='bold', va='top', ha='left', zorder=4,
-            bbox=dict(boxstyle='square,pad=0.24', fc=DETECT, ec='none'))
-    ax.set_axis_off()
-    # the 16:9 frame is shorter than the panel, which is sized for (b)'s stack; sit it
-    # at the top so the two panels start on the same line instead of floating centred
-    ax.set_anchor('N')
-
-
 def driveable_map():
-    """The planner's own driveable map, so panel (b)'s floor is the real one."""
-    here = pathlib.Path(__file__).resolve()
-    sys.path.insert(0, str(here.parents[2] / 'experiments' / 'warehouse_v2_sketches'))
+    """The planner's own driveable map, the same call the appendix map figure makes."""
+    sys.path.insert(0, str(HERE.parents[2] / 'experiments' / 'warehouse_v2_sketches'))
     import route_tasks as rt  # noqa: E402
     from experiments.core.world_profiles import load_world_profiles  # noqa: E402
     xs, ys, mask, _ = rt.driveable()
     regions = load_world_profiles(str(rt.PROFILES))['worlds'][rt.WORLD_KEY].get(
         'known_2d_regions', []) or []
-    zones = [r for r in regions
-             if str(r.get('type', '')).strip().lower() == 'non_driveable_obstacle']
-    return xs, ys, mask, zones, rt.RES
+    kind = lambda r: str(r.get('type', '')).strip().lower()  # noqa: E731
+    zones = [r for r in regions if kind(r) == 'non_driveable_obstacle']
+    boundary = next(r for r in regions if kind(r) == 'site_boundary')
+    return xs, ys, mask, zones, boundary, rt.RES
 
 
-def panel_projection(ax, row, model, centre) -> None:
-    """(b) how the detected pixel becomes a position on the warehouse map.
+def draw_camera_icon(ax, centre: np.ndarray, scale: float = 1.0) -> np.ndarray:
+    """A camera body at `centre`. Returns the lens position, where the rays start."""
+    body = FancyBboxPatch((centre[0] - 0.62 * scale, centre[1] - 0.36 * scale),
+                          1.10 * scale, 0.72 * scale, boxstyle='round,pad=0.06',
+                          facecolor='#4a5058', edgecolor=INK, lw=1.1, zorder=6)
+    ax.add_patch(body)
+    ax.add_patch(FancyBboxPatch((centre[0] - 0.28 * scale, centre[1] + 0.30 * scale),
+                                0.46 * scale, 0.22 * scale, boxstyle='round,pad=0.04',
+                                facecolor='#4a5058', edgecolor=INK, lw=0.9, zorder=6))
+    lens = centre + np.array([0.72 * scale, -0.06 * scale])
+    ax.add_patch(Circle(tuple(lens), 0.30 * scale, facecolor='#4a5058',
+                        edgecolor=INK, lw=1.2, zorder=7))
+    ax.add_patch(Circle(tuple(lens), 0.17 * scale, facecolor='#9dc3e6',
+                        edgecolor='none', zorder=8))
+    ax.text(centre[0] - 0.15 * scale, centre[1] + 0.78 * scale, 'fixed camera $c$',
+            ha='center', va='bottom', fontsize=10.5, color=INK, fontweight='bold')
+    return lens
 
-    Three stacked levels rather than one perspective construction: the camera and the
-    image it forms, then the homography as its own labelled step, then the world map
-    the resulting point lands on. The image is the real frame and the map is the
-    planner's real driveable map; the stack between them is a diagram.
-    """
-    ax.set_axis_off()
-    ax.set(xlim=(0, 1), ylim=(0, 1), aspect='auto')
 
+def panel_image(ax, row) -> None:
+    """(a) the camera, the image it forms, and the pixel the runtime selects."""
     image = mpimg.imread(CAPTURE / row.image)
     height, width = image.shape[:2]
-    u_k = np.array([(row.x0 + row.x1) / 2, row.y1])
+    ax.set(xlim=(0.0, 9.6), ylim=(2.35, 10.4))
+    ax.axis('off')
 
-    # ---- level 1: the camera, and the image it forms ------------------------------
-    # The three levels are laid out from one height budget rather than by hand, so the
-    # frame and the map each keep their own proportions and never overlap. Both are
-    # drawn in axes coordinates with aspect='auto', so a given width fraction implies
-    # the height fraction through the axes' own inch dimensions.
-    fig_w, fig_h = ax.figure.get_size_inches()
-    box = ax.get_position()
-    ax_w, ax_h = fig_w * box.width, fig_h * box.height
+    lens = draw_camera_icon(ax, np.array([1.60, 9.15]))
+    for corner in (IP_BL, IP_BR, IP_TR, IP_TL):
+        ax.plot([lens[0], corner[0]], [lens[1], corner[1]], '--', color=GREY,
+                lw=1.0, zorder=1)
 
-    def height_for(width_frac, aspect):
-        # height fraction that renders this aspect (height/width) at this width
-        return width_frac * ax_w * aspect / ax_h
+    # the real frame, mapped onto the tilted plane and clipped to it
+    drawn = ax.imshow(np.flipud(image), extent=(0, 1, 0, 1), origin='lower',
+                      aspect='auto', interpolation='bilinear',
+                      transform=AFF + ax.transData, zorder=2)
+    drawn.set_clip_path(Polygon([IP_BL, IP_BR, IP_TR, IP_TL], closed=True,
+                                transform=ax.transData))
+    ax.add_patch(Polygon([IP_BL, IP_BR, IP_TR, IP_TL], closed=True, fill=False,
+                         edgecolor=CAM, lw=1.8, zorder=4))
+    ax.text(*(IP_BL + IP_BR) / 2 - np.array([0, 0.30]), 'camera image plane',
+            ha='center', va='top', fontsize=9.5, style='italic', color='#555b62')
 
-    plane_w, map_w = 0.80, 0.55
-    plane_h = height_for(plane_w, height / width)
-    map_h = height_for(map_w, MAP_SPAN[1] / MAP_SPAN[0])
-    cam_band, gap = 0.085, 0.075          # the camera above, the homography between
-    needed = cam_band + plane_h + gap + map_h
-    if needed > 1.0:
-        raise SystemExit(f'panel (b) does not fit: needs {needed:.3f} of its height')
-    plane_y1 = 1.0 - cam_band
-    plane = dict(x0=0.5 - plane_w / 2, x1=0.5 + plane_w / 2,
-                 y0=plane_y1 - plane_h, y1=plane_y1)
-    cam = np.array([0.50, 1.0 - cam_band / 2])
+    # the detection, in the frame's own normalised coordinates
+    x0, y0, x1, y1 = (float(row[k]) for k in ('x0', 'y0', 'x1', 'y1'))
+    box = to_plane(np.array([[x0 / width, 1 - y0 / height], [x1 / width, 1 - y0 / height],
+                             [x1 / width, 1 - y1 / height], [x0 / width, 1 - y1 / height]]))
+    ax.add_patch(Polygon(box, closed=True, fill=False, edgecolor=DETECT, lw=2.0,
+                         zorder=6))
+    # The detection sits at 91% across and 71% down the frame, hard into the corner,
+    # so there is no room outside the plane on that side. The label goes inside the
+    # plane instead, on the empty floor to the box's left, where it covers nothing.
+    ax.annotate(f'YOLO box $B_k$\n(conf. {row.confidence:.2f})',
+                xy=(box[:, 0].min(), box[:, 1].mean()),
+                xytext=(box[:, 0].min() - 0.35, box[:, 1].mean() + 0.55),
+                color=DETECT, fontsize=9.4, fontweight='bold', ha='right',
+                va='center', path_effects=HALO, zorder=9,
+                arrowprops=dict(arrowstyle='->', color=DETECT, lw=1.5))
 
-    ax.imshow(image, extent=(plane['x0'], plane['x1'], plane['y0'], plane['y1']),
-              aspect='auto', zorder=2, alpha=.92)
-    ax.add_patch(Rectangle((plane['x0'], plane['y0']), plane['x1'] - plane['x0'],
-                           plane['y1'] - plane['y0'], fill=False, ec=BELIEF, lw=1.6,
-                           zorder=4))
+    u, v = (x0 + x1) / 2, y1
+    pixel = to_plane(np.array([[u / width, 1 - v / height]]))[0]
+    ax.plot(*pixel, '*', color=DETECT, ms=19, mec='white', mew=1.0, zorder=8)
+    ax.annotate('selected bottom-centre pixel',
+                xy=pixel, xytext=(pixel[0] - 0.65, pixel[1] - 1.30), color=DETECT,
+                fontsize=9.6, fontweight='bold', ha='center', va='top',
+                path_effects=HALO, zorder=9,
+                arrowprops=dict(arrowstyle='->', color=DETECT, lw=1.5))
+    ax.text(pixel[0] - 0.65, pixel[1] - 1.68, r'$u_k=(u_{\rm pix},v_{\rm pix})$',
+            color=DETECT, fontsize=10.5, fontweight='bold', ha='center', va='top',
+            path_effects=HALO, zorder=9)
 
-    def on_plane(u: float, v: float) -> np.ndarray:
-        """A pixel of the frame, placed on the drawn image plane."""
-        return np.array([plane['x0'] + (plane['x1'] - plane['x0']) * u / width,
-                         plane['y1'] - (plane['y1'] - plane['y0']) * v / height])
 
-    # the same detection as panel (a), on that image
-    box_lo, box_hi = on_plane(row.x0, row.y1), on_plane(row.x1, row.y0)
-    ax.add_patch(Rectangle(box_lo, box_hi[0] - box_lo[0], box_hi[1] - box_lo[1],
-                           fill=False, ec=DETECT, lw=1.8, zorder=5))
-    page_u = on_plane(*u_k)
-    ax.plot(*page_u, 'o', color=DETECT, ms=6.5, mec='white', mew=1.2, zorder=6)
+def panel_model(ax) -> None:
+    """(b) the projection model, written out."""
+    ax.set(xlim=(0, 1), ylim=(0, 1))
+    ax.axis('off')
 
-    # two thin lines only: enough to say this is the image this camera sees
-    for corner in (plane['x0'], plane['x1']):
-        ax.plot([cam[0], corner], [cam[1], plane['y1']], color=INK, lw=0.8,
-                alpha=.35, zorder=1)
+    ax.text(0.5, 0.78, 'ground-plane\nhomography $H_c$', ha='center', va='bottom',
+            fontsize=11.5, color=INK, fontweight='bold')
+    ax.add_patch(FancyArrowPatch((0.06, 0.71), (0.94, 0.71), arrowstyle='-|>',
+                                 mutation_scale=24, lw=3.4, color=ARROW))
+    ax.text(0.5, 0.52, r'$[\tilde x,\tilde y,\tilde w]^\top='
+                       r'H_c^{-1}[u_{\rm pix},v_{\rm pix},1]^\top$',
+            ha='center', va='center', fontsize=10.2, color=INK)
+    ax.text(0.5, 0.38, r'$z_k=(\tilde x/\tilde w,\;\tilde y/\tilde w)$',
+            ha='center', va='center', fontsize=10.2, color=INK)
+    ax.text(0.5, 0.20, 'calibrated once,\nheld fixed', ha='center', va='center',
+            fontsize=9.2, color='#555b62', style='italic')
 
-    # the camera body, pointing down at the image it forms
-    body_w, body_h = 0.055, 0.032
-    ax.add_patch(Rectangle((cam[0] - body_w, cam[1] - body_h / 2), 1.5 * body_w, body_h,
-                           fc=INK, ec=INK, zorder=7))
-    ax.add_patch(Polygon([(cam[0] + 0.5 * body_w, cam[1] - body_h / 2),
-                          (cam[0] + 1.3 * body_w, cam[1] - body_h),
-                          (cam[0] + 1.3 * body_w, cam[1] + body_h),
-                          (cam[0] + 0.5 * body_w, cam[1] + body_h / 2)],
-                         closed=True, fc=INK, ec=INK, zorder=7))
-    ax.text(cam[0] - 1.4 * body_w, cam[1], 'camera $c$', color=INK, fontsize=11.5,
-            fontweight='bold', ha='right', va='center', zorder=7)
 
-    ax.text(plane['x0'] - 0.012, (plane['y0'] + plane['y1']) / 2, 'image plane',
-            color=BELIEF, fontsize=11, ha='right', va='center', rotation=90, zorder=6)
-    ax.annotate('box $B_k$, pixel $u_k$', xy=page_u,
-                xytext=(page_u[0] - 0.10, plane['y0'] - 0.030), color=DETECT,
-                fontsize=11.5, fontweight='bold', ha='center', va='top', zorder=8,
-                arrowprops=dict(arrowstyle='-', lw=0.9, color=DETECT, shrinkA=2,
-                                shrinkB=4))
+def panel_map(ax, model, centre, row) -> np.ndarray:
+    """(c) the driveable map, in the appendix figure's own style, with $z_k$ on it."""
+    xs, ys, mask, zones, boundary, res = driveable_map()
 
-    # ---- level 2: the homography, as its own step ---------------------------------
-    arrow_x = 0.26
-    band_hi, band_lo = plane['y0'] - 0.012, plane['y0'] - gap + 0.012
-    ax.annotate('', xy=(arrow_x, band_lo), xytext=(arrow_x, band_hi),
-                arrowprops=dict(arrowstyle='-|>,head_width=0.34,head_length=0.8',
-                                lw=3.0, color=DETECT), zorder=8)
-    ax.text(arrow_x + 0.035, (band_hi + band_lo) / 2,
-            r'$\tilde z_k\propto H_c^{-1}\tilde u_k$', color=DETECT, fontsize=13,
-            fontweight='bold', ha='left', va='center', zorder=8)
-
-    # ---- level 3: the driveable map the point lands on ----------------------------
-    xs, ys, mask, zones, res = driveable_map()
-    span_x, span_y = MAP_SPAN
-    map_y1 = plane['y0'] - gap
-    world = dict(x0=0.5 - map_w / 2, x1=0.5 + map_w / 2,
-                 y0=map_y1 - map_h, y1=map_y1)
-
-    def on_map(x: float, y: float) -> np.ndarray:
-        return np.array([world['x0'] + (world['x1'] - world['x0']) * (x + span_x / 2) / span_x,
-                         world['y0'] + (world['y1'] - world['y0']) * (y + span_y / 2) / span_y])
-
-    lo, hi = on_map(-span_x / 2, -span_y / 2), on_map(span_x / 2, span_y / 2)
-    ax.add_patch(Rectangle(lo, hi[0] - lo[0], hi[1] - lo[1], fc='white', ec='none',
-                           zorder=2))
     edge_x = np.concatenate([xs - res / 2, [xs[-1] + res / 2]])
     edge_y = np.concatenate([ys - res / 2, [ys[-1] + res / 2]])
-    grid_x = np.interp(edge_x, [-span_x / 2, span_x / 2], [lo[0], hi[0]])
-    grid_y = np.interp(edge_y, [-span_y / 2, span_y / 2], [lo[1], hi[1]])
-    ax.pcolormesh(grid_x, grid_y, np.ma.masked_where(~mask, mask.astype(float)),
+    ax.pcolormesh(edge_x, edge_y, np.ma.masked_where(~mask, mask.astype(float)),
                   cmap=matplotlib.colors.ListedColormap([DRIVE]), vmin=0, vmax=1,
-                  shading='flat', zorder=3, rasterized=True)
+                  shading='flat', zorder=1, rasterized=True)
+    ax.contour(xs, ys, mask.astype(float), levels=[0.5], colors=[DRIVE_EDGE],
+               linewidths=1.0, zorder=2, alpha=0.85)
     for zone in zones:
-        z_lo, z_hi = on_map(zone['xmin'], zone['ymin']), on_map(zone['xmax'], zone['ymax'])
-        ax.add_patch(Rectangle(z_lo, z_hi[0] - z_lo[0], z_hi[1] - z_lo[1],
-                               fc=ZONE, ec=ZONE_EDGE, lw=0.6, zorder=4))
-    ax.add_patch(Rectangle(lo, hi[0] - lo[0], hi[1] - lo[1], fill=False, ec='#8d949c',
-                           lw=1.0, zorder=6))
+        ax.add_patch(Rectangle((zone['xmin'], zone['ymin']),
+                               zone['xmax'] - zone['xmin'], zone['ymax'] - zone['ymin'],
+                               facecolor=ZONE, edgecolor=ZONE_EDGE, lw=0.9, zorder=3))
+        # Only the rack runs are named. The dock-apron boxes are too small to hold a
+        # label, and the appendix map figure carries the full set. Select on whether
+        # the name fits the box, not on shape: the A runs are tall and narrow while
+        # the B and C runs are wide and short, so any single dimension test drops some.
+        span = min(zone['xmax'] - zone['xmin'], zone['ymax'] - zone['ymin'])
+        if span > 1.2 and len(zone['name']) <= 3:
+            ax.text(0.5 * (zone['xmin'] + zone['xmax']),
+                    0.5 * (zone['ymin'] + zone['ymax']), zone['name'],
+                    fontsize=7.6, color=ZONE_TEXT, ha='center', va='center', zorder=4)
+    ax.add_patch(Rectangle((boundary['xmin'], boundary['ymin']),
+                           boundary['xmax'] - boundary['xmin'],
+                           boundary['ymax'] - boundary['ymin'], facecolor='none',
+                           edgecolor=INK, lw=1.2, ls=(0, (6, 3)), zorder=4))
 
-    # the camera that took the frame, on the map it looks at
-    cam_xy = on_map(centre[0], centre[1])
-    look = model.look_at - centre
-    look_dir = look[:2] / np.linalg.norm(look[:2])
-    ax.plot(*cam_xy, marker='s', ms=5, color=BELIEF, mec='white', mew=1.0, zorder=8)
-    ax.annotate('', xy=on_map(*(centre[:2] + 2.6 * look_dir)), xytext=cam_xy,
-                arrowprops=dict(arrowstyle='-|>,head_width=0.22,head_length=0.5',
-                                lw=1.4, color=BELIEF, alpha=.85, shrinkA=3, shrinkB=0),
-                zorder=8)
-    ax.text(cam_xy[0] - 0.018, cam_xy[1] - 0.004, 'c', color=BELIEF, fontsize=9.5,
-            fontweight='bold', ha='right', va='center', zorder=8)
+    ground = np.array(model.pixel_to_world((row.x0 + row.x1) / 2, row.y1))
 
-    # the measurement itself
-    ground = np.array(model.pixel_to_world(*u_k))
-    z_xy = on_map(*ground)
-    ax.plot(*z_xy, '*', color=MEAS, ms=16, mec='white', mew=1.0, zorder=9)
-    ax.annotate('camera position\nmeasurement $z_k$', xy=z_xy,
-                xytext=(z_xy[0] + 0.115, z_xy[1] - 0.055), color=MEAS, fontsize=11.5,
-                fontweight='bold', ha='left', va='center', zorder=10,
-                bbox=dict(boxstyle='square,pad=0.16', fc='white', ec='none', alpha=.85),
-                arrowprops=dict(arrowstyle='-', lw=0.9, color=MEAS, shrinkA=3,
-                                shrinkB=5))
-    ax.text(world['x0'] - 0.012, (world['y0'] + world['y1']) / 2, 'warehouse map',
-            color=INK, fontsize=11, ha='right', va='center', rotation=90, zorder=6)
+    # the camera that took the frame, and its sightline to the point
+    ax.plot([centre[0], ground[0]], [centre[1], ground[1]], ':', color='#6f767e',
+            lw=1.5, zorder=5)
+    ax.plot(centre[0], centre[1], 's', ms=8, color=CAM, mec='white', mew=1.3, zorder=7)
+    look = model.look_at[:2] - centre[:2]
+    look = look / np.linalg.norm(look)
+    ax.annotate('', xy=centre[:2] + 2.1 * look, xytext=centre[:2], zorder=7,
+                arrowprops=dict(arrowstyle='-|>,head_width=0.26,head_length=0.58',
+                                lw=1.8, color=CAM, shrinkA=6, shrinkB=0))
+    ax.text(centre[0] - 0.75, centre[1] + 0.15, 'camera $c$', fontsize=9.5, color=CAM,
+            fontweight='bold', ha='right', va='center', path_effects=HALO, zorder=8)
+
+    ax.plot(*ground, '*', color=DETECT, ms=22, mec='white', mew=1.1, zorder=9)
+    ax.annotate(r'position measurement $z_k$', xy=ground,
+                xytext=(ground[0] - 1.2, ground[1] + 3.4), color=DETECT, fontsize=10,
+                fontweight='bold', ha='center', va='bottom', path_effects=HALO,
+                zorder=10, arrowprops=dict(arrowstyle='->', color=DETECT, lw=1.6))
+
+    ax.set(xlim=(-12.9, 12.9), ylim=(-10.9, 10.9), aspect='equal')
+    ax.set_xlabel('east (m)', fontsize=9.5)
+    ax.set_ylabel('north (m)', fontsize=9.5)
+    ax.tick_params(labelsize=8.5)
+    for side in ('top', 'right'):
+        ax.spines[side].set_visible(False)
+    return ground
 
 
 def main() -> None:
@@ -277,28 +261,31 @@ def main() -> None:
     if not np.allclose(recomputed, recorded, atol=1e-4):
         raise SystemExit(f'camera model disagrees with the capture: {recomputed} vs {recorded}')
 
-    # (a) documentary and (b) explanatory, at roughly 45/55: the stack in (b) needs
-    # the height, the frame in (a) needs the width of its own 16:9 aspect
-    fig, axes = plt.subplots(1, 2, figsize=(10.0, 6.0),
-                             gridspec_kw=dict(width_ratios=(0.45, 0.55)))
-    panel_image(axes[0], row)
-    panel_projection(axes[1], row, model, centre)
+    plt.rcParams.update({'font.family': 'DejaVu Sans', 'font.size': 10,
+                         'pdf.fonttype': 42, 'ps.fonttype': 42})
+    fig = plt.figure(figsize=(13.4, 4.5), constrained_layout=True)
+    grid = fig.add_gridspec(1, 3, width_ratios=(2.45, 1.05, 2.05))
+    ax_image = fig.add_subplot(grid[0, 0])
+    ax_model = fig.add_subplot(grid[0, 1])
+    ax_map = fig.add_subplot(grid[0, 2])
 
-    fig.tight_layout(pad=0.4, w_pad=1.6)
+    panel_image(ax_image, row)
+    panel_model(ax_model)
+    ground = panel_map(ax_map, model, centre, row)
 
-    # One title row for both panels: they have different data aspects, so an
-    # axes-relative title would sit at a different page height in each.
-    titles = ('(a) camera detection', '(b) ground-plane projection')
-    title_y = max(ax.get_position().y1 for ax in axes) + 0.045
-    for ax, title in zip(axes, titles):
-        box = ax.get_position()
-        fig.text((box.x0 + box.x1) / 2, title_y, title, fontsize=12.5,
-                 fontweight='bold', ha='center', va='bottom')
+    for ax, title in ((ax_image, '(a) YOLO image observation'),
+                      (ax_model, '(b) projection model'),
+                      (ax_map, '(c) position on the driveable map')):
+        ax.set_title(title, fontsize=12, fontweight='bold', pad=6)
+
     OUT.mkdir(parents=True, exist_ok=True)
     for path in (OUT / 'measurement_chain.pdf', OUT / 'measurement_chain.png'):
         fig.savefig(path, dpi=200, bbox_inches='tight')
+    plt.close(fig)
     print('wrote', OUT / 'measurement_chain.pdf')
     print(f'frame {FRAME}, range {row.camera_range_m:.2f} m, confidence {row.confidence:.3f}')
+    print(f'selected pixel ({(row.x0 + row.x1) / 2:.1f}, {row.y1:.1f}) -> '
+          f'z_k ({ground[0]:.3f}, {ground[1]:.3f}) m')
     print(f'back-projection matches capture: {recomputed} == {recorded}')
 
 
