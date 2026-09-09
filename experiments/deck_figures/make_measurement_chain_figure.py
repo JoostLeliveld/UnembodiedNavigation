@@ -155,7 +155,7 @@ def panel_image(ax, row) -> None:
     # The detection sits at 91% across and 71% down the frame, hard into the corner,
     # so there is no room outside the plane on that side. The label goes inside the
     # plane instead, on the empty floor to the box's left, where it covers nothing.
-    ax.annotate(r'detection $B_{i,k}$',
+    ax.annotate(r'$B_{i,k}$',
                 xy=(box[:, 0].min(), box[:, 1].mean()),
                 xytext=(box[:, 0].min() - 0.35, box[:, 1].mean() + 0.62),
                 color=DETECT, fontsize=10.5, fontweight='bold', ha='right',

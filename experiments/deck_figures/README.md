@@ -1,5 +1,37 @@
 # Presentation figures
 
+## Rebuilding the thesis figures after a world change
+
+`rebuild_thesis_figures.py` regenerates every figure the thesis cites and installs
+it into `../papers/Thesis/figures/`:
+
+```bash
+python3 experiments/deck_figures/rebuild_thesis_figures.py --check   # what each needs
+python3 experiments/deck_figures/rebuild_thesis_figures.py           # build and install
+```
+
+Six of the seven rebuild from one command. What a world change actually costs each
+one differs, and `--check` prints it:
+
+| figure | kind | after a world change |
+|---|---|---|
+| `driveable_map` | live | nothing: reads the world file and `world_profiles.yaml` |
+| `measurement_chain` | capture | map and projection are live; the camera frame is old |
+| `camera_views` | capture | needs a fresh characterization capture |
+| `localization_example` | drive | racks and cameras are live; the drive must be repeated |
+| `reading_independence` | drive | rerun `measure_independence.py` first |
+| `thesis_setup` | render | needs a plan-view frame from a running simulation |
+| `single_camera_route_choice` | missing | **no generator exists**; see below |
+
+"live" means the figure is correct again as soon as the script is rerun. "capture"
+and "drive" mean it redraws cleanly but still shows the world it was recorded in,
+so the underlying data has to be recollected before the figure tells the truth.
+The script says so on every run rather than leaving it to be noticed.
+
+`single_camera_route_choice.pdf` has no generator in either repository. It entered
+`papers/Thesis` with that repository's initial commit and nothing here produces it,
+so it cannot currently be rebuilt or checked against a changed world.
+
 Built from the frozen commissioning artifacts. No simulator, a few minutes each.
 Every figure writes to `logs/studies/deck_figures/<subject>/` under its own name.
 

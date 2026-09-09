@@ -58,10 +58,28 @@ TRUTH, BELIEF, MEAS = '#2b3038', '#1f6fb8', '#c23d36'
 RACK, GONE, CAM = '#b9c0c8', '#f2d9a8', '#1f6fb8'
 GAP_INK = '#8a6d1f'
 
-# Camera world positions and yaws, read from the world file's include poses.
-CAMERAS = {'A': (-11.45, -9.45, 0.785), 'B': (-1.50, -9.72, 2.007),
-           'C': (-6.95, 9.45, -1.047), 'D': (11.45, 7.20, -2.443),
-           'E': (11.45, -9.45, 2.304)}
+CAM_MODELS = {'external_camera': 'A', 'external_camera_b': 'B',
+              'external_camera_c': 'C', 'external_camera_d': 'D',
+              'external_camera_e': 'E'}
+
+
+def cameras() -> dict[str, tuple[float, float, float]]:
+    """Each camera's world x, y and yaw, read from the world file's include poses.
+
+    Read rather than tabulated: a hardcoded copy goes stale silently when a camera
+    moves, and the figure would then draw the network that used to be there.
+    """
+    poses = {}
+    for _, model, pose in re.findall(
+            r'<include><name>([^<]+)</name><uri>model://([^<]+)</uri><pose>([^<]+)</pose>',
+            WORLD.read_text()):
+        if model in CAM_MODELS:
+            values = [float(v) for v in pose.split()]
+            poses[CAM_MODELS[model]] = (values[0], values[1], values[5])
+    if len(poses) != len(CAM_MODELS):
+        raise SystemExit(f'{WORLD.name} declares {sorted(poses)}, expected '
+                         f'{sorted(CAM_MODELS.values())}')
+    return poses
 
 
 def racks() -> list[tuple[float, float, float, float]]:
@@ -114,7 +132,7 @@ def snapshot(ax, rows, accepted, boxes, now: float, title: str) -> None:
                                facecolor=RACK, edgecolor='none', zorder=2))
     ax.add_patch(Rectangle((-12, -10), 24, 20, fill=False, ec='#6d747c', lw=1.3, zorder=2))
 
-    for name, (cx, cy, yaw) in CAMERAS.items():
+    for name, (cx, cy, yaw) in cameras().items():
         ax.plot(cx, cy, 's', color=CAM, ms=7, mec='white', mew=1.2, zorder=7,
                 label='fixed camera' if name == 'C' else None)
         ax.annotate('', xy=(cx + 1.9 * np.cos(yaw), cy + 1.9 * np.sin(yaw)), xytext=(cx, cy),
