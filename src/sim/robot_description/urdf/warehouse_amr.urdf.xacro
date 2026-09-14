@@ -7,7 +7,7 @@
 
          body      0.800 x 0.550 m, deck top at 0.350 m
          wheels    r 0.100, separation 0.440, differential, casters fore/aft
-         livery    charcoal chassis, hazard-yellow bumper band, grey load deck
+         livery    saturated blue chassis/deck, hazard-yellow bumper band
 
        No saturated marker disks: heading is carried by the chassis itself.
        Seen from an oblique ceiling camera the front has a recessed sensor
@@ -48,11 +48,15 @@
   <!-- ===================== -->
   <!-- Materials -->
   <!-- ===================== -->
-  <material name="chassis_charcoal"><color rgba="0.16 0.17 0.19 1.0"/></material>
-  <material name="deck_grey"><color rgba="0.55 0.56 0.58 1.0"/></material>
+  <!-- The detector target is deliberately blue, but it keeps three blue tones,
+       the yellow bumper and black sensor features so heading/shape remain
+       visible. Blue drums and totes in the warehouse are retained as hard
+       negatives; colour alone must never be sufficient for detection. -->
+  <material name="chassis_blue"><color rgba="0.04 0.20 0.62 1.0"/></material>
+  <material name="deck_blue"><color rgba="0.08 0.42 0.90 1.0"/></material>
   <material name="hazard_yellow"><color rgba="0.85 0.65 0.05 1.0"/></material>
   <material name="sensor_black"><color rgba="0.06 0.06 0.07 1.0"/></material>
-  <material name="cabinet_grey"><color rgba="0.33 0.34 0.36 1.0"/></material>
+  <material name="cabinet_blue"><color rgba="0.03 0.30 0.76 1.0"/></material>
   <material name="dark"><color rgba="0.3 0.3 0.3 1"/></material>
 
   <!-- ===================== -->
@@ -75,7 +79,7 @@
     <visual>
       <origin xyz="0 0 0.195"/>
       <geometry><box size="${body_l} ${body_w} 0.230"/></geometry>
-      <material name="chassis_charcoal"/>
+      <material name="chassis_blue"/>
     </visual>
 
     <collision>
@@ -121,7 +125,7 @@
   <!-- load deck: the surface an overhead camera actually sees -->
   <xacro:trim name="deck" xyz="0 0 0.325"
               size="${body_l - 0.020} ${body_w - 0.020} 0.030"
-              material="deck_grey"/>
+              material="deck_blue"/>
 
   <!-- FRONT cue: recessed sensor bar across the leading face -->
   <xacro:trim name="sensor_bar" xyz="0.392 0 0.250"
@@ -135,7 +139,7 @@
 
   <!-- REAR cue: raised control cabinet, the tallest thing on the deck -->
   <xacro:trim name="cabinet" xyz="-0.280 0 0.365"
-              size="0.170 0.300 0.050" material="cabinet_grey"/>
+              size="0.170 0.300 0.050" material="cabinet_blue"/>
 
   <!-- ===================== -->
   <!-- Drive wheels -->
@@ -186,13 +190,18 @@
       </visual>
       <collision>
         <geometry><sphere radius="0.040"/></geometry>
-        <surface><friction><ode><mu>0.05</mu><mu2>0.05</mu2></ode></friction></surface>
       </collision>
       <inertial>
         <mass value="0.30"/>
         <inertia ixx="1.92e-04" ixy="0" ixz="0" iyy="1.92e-04" iyz="0" izz="1.92e-04"/>
       </inertial>
     </link>
+    <!-- URDF collision <surface> is discarded by sdformat. Gazebo reference
+         extensions preserve the intended low caster friction after lumping. -->
+    <gazebo reference="${ns}${name}_link">
+      <mu1>0.05</mu1>
+      <mu2>0.05</mu2>
+    </gazebo>
   </xacro:macro>
 
   <xacro:caster name="caster_front" x="0.300"/>

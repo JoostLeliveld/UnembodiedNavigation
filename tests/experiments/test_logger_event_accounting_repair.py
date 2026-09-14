@@ -4,7 +4,9 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import threading
+from collections import deque
 from types import SimpleNamespace as NS
 
 import pytest
@@ -27,6 +29,7 @@ class Clock:
 
 def node(tmp_path):
     value = object.__new__(ExperimentLogger)
+    value.run_id = 'test-run'
     value._clock = Clock()
     value.get_clock = lambda: value._clock
     value._event_lock = threading.RLock()
@@ -52,6 +55,15 @@ def node(tmp_path):
     value._terminal_stop_verified = False
     value._terminal_stop_event_id = ''
     value._terminal_zero_forwarded = False
+    value._terminal_zero_stamp_s = float('nan')
+    value._terminal_stop_request_id = ''
+    value._terminal_stop_request_payload = None
+    value._terminal_stop_acks = {}
+    value._motion_history = deque()
+    value._published_terminal_stop_requests = []
+    value._terminal_stop_request_pub = NS(
+        publish=value._published_terminal_stop_requests.append
+    )
     value._stop_requested = False
     value._mission_goal_state = None
     value._contact_channel_status = None
@@ -241,6 +253,137 @@ def test_actuation_outcome_records_forwarded_zero_without_claiming_application(t
     assert value._terminal_stop_event_id == 'guard:8'
 
 
+def test_republished_terminal_zero_preserves_first_rest_window_anchor(tmp_path):
+    value = node(tmp_path)
+    value._stop_requested = True
+    for event_id, stamp_ns in (('guard:8', 10_000_000_000),
+                               ('guard:9', 10_200_000_000)):
+        payload = dict(
+            schema_version=1,
+            event_id=event_id,
+            status='forwarded_zero',
+            forwarded_linear=0.0,
+            forwarded_angular=0.0,
+            forwarded_sim_stamp_ns=stamp_ns,
+            physical_application_verified=False,
+        )
+        value._runtime_outcome_cb(
+            '/sim/actuation_outcome', String(data=json.dumps(payload)))
+
+    assert value._terminal_zero_stamp_s == 10.0
+    assert value._terminal_stop_event_id == 'guard:8'
+
+
+def test_terminal_motion_history_does_not_require_a_mission_goal(tmp_path):
+    value = node(tmp_path)
+    value.stuck_window_s = 8.0
+    value.goal_success_hold_s = 0.5
+    value.goal_stable_hold_s = 1.0
+    value.first_cmd_linear_eps = 0.01
+    value.first_cmd_angular_eps = 0.01
+
+    value._remember_motion_sample(10.0, 1.0, 2.0, float('nan'), 0.0, 0.0)
+
+    assert len(value._motion_history) == 1
+    stamp, x, y, goal_dist, command_active, yaw, angular_active = value._motion_history[0]
+    assert (stamp, x, y, command_active) == (10.0, 1.0, 2.0, 0.0)
+    assert math.isnan(goal_dist)
+    assert math.isnan(yaw)
+    assert angular_active == 0.0
+
+
+def test_stuck_detector_does_not_stop_an_intentional_pivot(tmp_path):
+    value = node(tmp_path)
+    value.first_cmd_linear_eps = 0.01
+    value.first_cmd_angular_eps = 0.01
+    value.stuck_window_s = 1.0
+    value.goal_success_hold_s = 0.5
+    value.goal_stable_hold_s = 0.5
+    value.stuck_max_displacement_m = 0.1
+    value.stuck_max_goal_improvement_m = 0.1
+    value.stuck_cmd_fraction_min = 0.8
+    value.stuck_idle_cmd_fraction_max = 0.1
+    value.goal_stable_radius = 0.2
+    value._first_cmd_stamp = 10.0
+    value._finish_run = lambda *_args: pytest.fail('pivot was classified as stuck')
+    for index in range(11):
+        value._remember_motion_sample(
+            10.0 + 0.1 * index, 1.0, 2.0, 4.0, 0.0, 0.5,
+            operational_yaw=0.05 * index,
+        )
+    assert not value._maybe_finish_for_stuck(11.0, 4.0)
+
+
+def test_stuck_detector_still_stops_commanded_turn_without_yaw_progress(tmp_path):
+    value = node(tmp_path)
+    value.first_cmd_linear_eps = 0.01
+    value.first_cmd_angular_eps = 0.01
+    value.stuck_window_s = 1.0
+    value.goal_success_hold_s = 0.5
+    value.goal_stable_hold_s = 0.5
+    value.stuck_max_displacement_m = 0.1
+    value.stuck_max_goal_improvement_m = 0.1
+    value.stuck_cmd_fraction_min = 0.8
+    value.stuck_idle_cmd_fraction_max = 0.1
+    value.goal_stable_radius = 0.2
+    value._first_cmd_stamp = 10.0
+    finished = []
+    value._finish_run = lambda reason, stamp: finished.append((reason, stamp))
+    value.get_logger = lambda: NS(info=lambda *_args: None)
+    for index in range(11):
+        value._remember_motion_sample(
+            10.0 + 0.1 * index, 1.0, 2.0, 4.0, 0.0, 0.5,
+            operational_yaw=0.0,
+        )
+    assert value._maybe_finish_for_stuck(11.0, 4.0)
+    assert finished == [('stuck', 11.0)]
+
+
+def test_terminal_stop_verification_uses_operational_rest_not_ground_truth(tmp_path):
+    value = node(tmp_path)
+    value._stop_requested = True
+    value._terminal_zero_forwarded = True
+    value._terminal_zero_stamp_s = 10.0
+    value._motion_history.extend([
+        (10.00, 1.000, 2.000, 0.2, 0.0),
+        (10.10, 1.002, 2.001, 0.2, 0.0),
+        (10.26, 1.003, 2.002, 0.2, 0.0),
+    ])
+    value._update_terminal_stop_verification(10.26)
+    assert value._terminal_stop_verified
+
+
+def test_terminal_stop_verification_refuses_motion_or_nonzero_command(tmp_path):
+    for samples in (
+        [(10.0, 1.0, 2.0, 0.2, 0.0), (10.3, 1.02, 2.0, 0.2, 0.0)],
+        [(10.0, 1.0, 2.0, 0.2, 0.0), (10.3, 1.0, 2.0, 0.2, 1.0)],
+    ):
+        value = node(tmp_path)
+        value._stop_requested = True
+        value._terminal_zero_forwarded = True
+        value._terminal_zero_stamp_s = 10.0
+        value._motion_history.extend(samples)
+        value._update_terminal_stop_verification(10.3)
+        assert not value._terminal_stop_verified
+
+
+def test_terminal_stop_verification_starts_rest_after_last_nonzero_sample(tmp_path):
+    value = node(tmp_path)
+    value._stop_requested = True
+    value._terminal_zero_forwarded = True
+    value._terminal_zero_stamp_s = 10.0
+    value._motion_history.extend([
+        # A cached pre-stop command can be observed after the authoritative
+        # forwarded-zero outcome because the subscriptions are asynchronous.
+        (10.05, 1.0000, 2.0000, 0.2, 1.0),
+        (10.10, 1.0002, 2.0001, 0.2, 0.0),
+        (10.22, 1.0003, 2.0001, 0.2, 0.0),
+        (10.37, 1.0004, 2.0002, 0.2, 0.0),
+    ])
+    value._update_terminal_stop_verification(10.37)
+    assert value._terminal_stop_verified
+
+
 def test_contact_silence_remains_an_explicit_unknown_state(tmp_path):
     value = node(tmp_path)
     payload = dict(schema_version=1, producer_epoch='contact:1', event_id='contact:1:1',
@@ -264,6 +407,8 @@ def test_stop_request_defers_completion_and_finalization(monkeypatch, tmp_path):
     value._finish_run('collision', 12.)
     assert value._stop_requested and not value._completed
     assert value._accepting_events
+    assert value._published_terminal_stop_requests
+    assert value._terminal_stop_request_id.startswith('logger:test-run:terminal:')
     assert timers and timers[0][1] == value._finalize_run
 
 

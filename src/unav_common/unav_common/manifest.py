@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 import uuid
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 
 def generate_run_id(prefix: str = "run") -> str:
@@ -45,18 +45,28 @@ def _git_bytes(repo_root: str, *args: str) -> Optional[bytes]:
         return None
 
 
-def git_provenance(repo_root: str) -> Dict[str, Any]:
+def git_provenance(
+    repo_root: str, paths: Optional[Sequence[str]] = None
+) -> Dict[str, Any]:
     """Return compact, content-sensitive provenance for a possibly dirty checkout.
 
     A commit SHA alone is not reproducibility evidence when the executable source was
     modified. The hashes deliberately cover both the tracked diff and the contents of
     untracked, non-ignored files without embedding a potentially enormous patch in every run.
+
+    ``paths`` optionally restricts the status/diff/untracked scan to those pathspecs,
+    so a caller that knows which directories it actually executes from can ignore edits
+    elsewhere in the checkout. ``git_sha`` always describes the whole repository.
+    Omitting it scans everything, which is the historical behaviour.
     """
 
-    status = _git_bytes(repo_root, "status", "--porcelain=v1", "-z", "--untracked-files=all")
-    diff = _git_bytes(repo_root, "diff", "--binary", "HEAD", "--")
+    pathspec = ["--", *paths] if paths else ["--"]
+    status = _git_bytes(
+        repo_root, "status", "--porcelain=v1", "-z", "--untracked-files=all", *pathspec
+    )
+    diff = _git_bytes(repo_root, "diff", "--binary", "HEAD", *pathspec)
     untracked = _git_bytes(
-        repo_root, "ls-files", "--others", "--exclude-standard", "-z"
+        repo_root, "ls-files", "--others", "--exclude-standard", "-z", *pathspec
     )
     provenance: Dict[str, Any] = {
         "git_sha": git_hash(repo_root),

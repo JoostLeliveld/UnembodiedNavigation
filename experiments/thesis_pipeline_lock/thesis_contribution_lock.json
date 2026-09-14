@@ -1,0 +1,198 @@
+{
+  "schema": "thesis_contribution_lock.v4",
+  "lock_id": "THESIS-STORY-COMMISSIONED-SENSOR-MODEL-V4",
+  "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
+  "locked_at": "2026-09-13",
+  "supersedes": {
+    "lock_id": "THESIS-STORY-COMMISSIONED-SENSOR-MODEL-V3",
+    "reason": "The author retained an RGB-aware candidate using a 16x16 runtime-observable robot-visibility matrix and a gated residual to the tabular box MLP."
+  },
+  "status": "locked_except_correction_and_matched_R_selection",
+  "paper_fallback": "../papers/Thesis/THESIS_STORY_LOCK.md",
+  "contribution": [
+    "When the fixed cameras are installed and geometrically calibrated, the same setup period is used to survey the robot at known positions and commission the camera-localization system across the warehouse.",
+    "The drives identify deterministic sensor support, spatial availability, candidate measurement corrections and a covariance model matched to each correction, which are then used by the estimator and the existing belief-aware planner to test whether commissioning improves belief prediction, route choice and navigation reliability."
+  ],
+  "causal_claim": [
+    "commissioning",
+    "selected correction plus its matched R plus spatial q_i(p)",
+    "belief prediction",
+    "route choice",
+    "navigation"
+  ],
+  "fixed": {
+    "environment": "locked warehouse, blue robot, five fixed cameras and locked capture map",
+    "detector": {
+      "model": "COCO-pretrained YOLO11n fine-tuned for one blue-robot class",
+      "checkpoint_lock": "THESIS-YOLO11N-960-V1",
+      "inference_imgsz": 960,
+      "paper_role": "two methodology sentences; training and validation in appendix",
+      "comparison_in_main_results": false
+    },
+    "measurement": {
+      "source": "raw frozen-detector bounding box",
+      "statistic": "raw bounding-box bottom centre",
+      "projection": "ground-plane projection already defined in the Problem Statement",
+      "prohibited_bases": [
+        "visual hull",
+        "hull-equivalent position",
+        "belief-projected bounding box",
+        "CAD silhouette"
+      ],
+      "admission_location": "runtime camera-update method",
+      "admission_inputs": [
+        "detector confidence",
+        "raw-box dimensions",
+        "border contact",
+        "bottom/ground-contact support"
+      ],
+      "admission_forbidden_inputs": [
+        "ground truth",
+        "belief",
+        "predicted bounding box",
+        "association residual",
+        "innovation",
+        "NIS",
+        "localizer acceptance"
+      ]
+    },
+    "correction": {
+      "selection_status": "open_until_development_drive_comparison",
+      "candidate_families": [
+        "raw baseline",
+        "raw-box MLP using runtime box and camera features",
+        "raw-box MLP plus a zero-initialized gated residual from the 16x16 visibility matrix"
+      ],
+      "target": "reference position minus raw projected bounding-box measurement",
+      "validation": "whole-drive out-of-fold predictions",
+      "selection_unit": "complete drive",
+      "visibility_patch_candidate": {
+        "protocol": "experiments/reference_controlled_commissioning_v1/visibility_patch_candidate_protocol_v1.json",
+        "protocol_sha256": "61ea93e48a4bf6072565d2bacaa2669fac7115f4cf5d383179c654310716fb14",
+        "base": "raw-box MLP",
+        "input": "16x16 soft blue-robot visibility matrix pooled inside the detected box",
+        "form": "zero-initialized gated residual added to the raw-box MLP",
+        "shuffled_control": "shuffle visibility matrices within camera on development",
+        "fallback": "retain the raw-box MLP if any predeclared selection gate fails",
+        "full_resolution_rgb_retained": false,
+        "selected_context_crop_retained": true
+      }
+    },
+    "availability": {
+      "quantity": "q_i(p)",
+      "type": "camera-specific spatial field",
+      "target": "fixed detector hit and deterministic sensor-gate pass",
+      "population": "all expected camera opportunities including admitted detections, refusals and misses",
+      "query_inputs": ["camera_id", "ground_plane_position"],
+      "heading_treatment": "pool commissioning outcomes over headings sampled at each position",
+      "includes_nis": false,
+      "runtime_role": "future-observation forecast only; never an acceptance or route-feasibility gate"
+    },
+    "covariance": {
+      "quantity": "R_i(p, psi)",
+      "selection_status": "open_and_selected_after_correction_and_dependence_analysis",
+      "pairing_rule": "every correction candidate receives a fresh R learned from that candidate's residuals",
+      "residual_source": "whole-drive out-of-fold residuals from the paired correction",
+      "candidates": [
+        "per-camera constant",
+        "spatial Cholesky field",
+        "image-conditioned runtime covariance with planner spatial marginal",
+        "fast residual covariance plus augmented persistent-bias state"
+      ],
+      "available_to": ["runtime estimator", "future-state planner"]
+    },
+    "runtime": "fixed detector -> deterministic sensor gate -> ground projection -> selected correction -> matched R query -> correlation-aware multi-camera fusion -> estimator NIS -> belief update",
+    "estimator": {
+      "primary": "one robot filter consuming each physical camera frame once",
+      "persistent_error": "use an augmented joint state when commissioned residual dependence justifies it",
+      "prohibited": "a first filter posterior reused as a fresh independent measurement by a second filter"
+    },
+    "planner": {
+      "base": "existing IWAI EFE planner",
+      "fixed_components": ["objective structure", "dynamics", "safety terms", "optimizer and tuning"],
+      "condition_change": "future observation model only",
+      "shared_route_policy": "identical candidates and geometric/rollout feasibility in every condition",
+      "availability_effect": "expected information and cost only; never route eligibility"
+    },
+    "speed_max_mps": 1.0,
+    "main_conditions": {
+      "C00": "selected runtime sensor model with constant future q and constant future R forecasts",
+      "C01": "same selected runtime sensor model with constant future q and commissioned planner-queryable R forecast",
+      "C10": "same selected runtime sensor model with commissioned q_i(p) and constant future R forecast",
+      "C11": "same selected runtime sensor model with commissioned q_i(p) and commissioned planner-queryable R forecast"
+    },
+    "navigation_analysis": {
+      "primary_comparison": "matched-seed C11 minus C00",
+      "component_ablations": [
+        "matched-seed C10 minus C00",
+        "matched-seed C01 minus C00"
+      ],
+      "tasks": [
+        "thesis09_west_to_east_north",
+        "thesis09_east_to_west_south",
+        "thesis09_aisle_to_crossaisle",
+        "thesis09_south_to_north_central"
+      ],
+      "matched_seeds_per_arm": 5,
+      "planned_runs": 80,
+      "retention": "Retain every run and outcome even if C01 and C10 are later moved to the appendix or omitted from the main text for space."
+    },
+    "main_results": [
+      "single-task route choice",
+      "runtime agreement of commissioned q and R along executed routes",
+      "multi-task matched-seed navigation comparison"
+    ],
+    "method_figures": [
+      "commissioning overview",
+      "point-level raw and corrected commissioning residuals",
+      "spatial matched-R and q_i(p) fields over the underlying opportunity points",
+      "runtime camera-update chain",
+      "belief-aware route prediction"
+    ],
+    "appendix_only": [
+      "detector training and validation",
+      "admission selection",
+      "isolated correction-candidate metrics",
+      "covariance candidate diagnostics",
+      "availability calibration details",
+      "hyperparameters and implementation details"
+    ]
+  },
+  "open_decision": {
+    "id": "correction_and_matched_R_selection",
+    "only_open_method_decision": true,
+    "fixed_invariants": [
+      "the fixed detector and deterministic belief-independent sensor gate",
+      "q_i(p) predicts detector hit and sensor-gate pass and excludes NIS",
+      "q_i(p) uses position only; R may use position and heading",
+      "each R is learned from whole-drive out-of-fold residuals of its paired correction",
+      "an image-conditioned runtime R exposes a planner-queryable spatial marginal",
+      "navigation evaluation data fit or select neither correction nor R",
+      "all navigation conditions share candidates and feasibility",
+      "one robot filter consumes each frame once"
+    ],
+    "pending": [
+      "correction family",
+      "matched covariance family",
+      "spatial parameterization and smoothness",
+      "whether residual dependence justifies an augmented bias state",
+      "development-drive selection result"
+    ]
+  },
+  "evidence_status": {
+    "eligible_dependencies": [
+      "01_warehouse",
+      "02_robot_target",
+      "03_camera_capture_map",
+      "04_labels_and_dataset",
+      "05_detector_training"
+    ],
+    "pending_rebuild": [
+      "06_detector_gate",
+      "07_correction_and_covariance",
+      "08_position_only_availability_model",
+      "09_navigation_campaign"
+    ]
+  },
+  "change_control": "Do not change a fixed decision from configuration convenience, an existing artifact or a new diagnostic. Obtain an explicit user decision and create a versioned amendment first."
+}

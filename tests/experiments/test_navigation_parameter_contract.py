@@ -1,9 +1,7 @@
 """Reject impossible parameters before launching a campaign."""
-import importlib.util
 from pathlib import Path
 
 import pytest
-import yaml
 
 from unav_common.navigation_parameters import validate_navigation_parameters
 from experiments.core.visibility_launch_common import PAPER_LAUNCH_DEFAULTS
@@ -51,26 +49,3 @@ def test_default_disc_encloses_spawned_amr_body():
     assert radius + 1e-12 >= sum((d / 2) ** 2 for d in dimensions) ** .5
     assert float(PAPER_LAUNCH_DEFAULTS['robot_length_m']) == dimensions[0]
     assert float(PAPER_LAUNCH_DEFAULTS['robot_width_m']) == dimensions[1]
-
-
-def test_campaign_checks_effective_condition_overrides():
-    spec = importlib.util.spec_from_file_location(
-        'parameter_contract_campaign', ROOT / 'scripts/visibility_comparison/run_visibility_campaign.py')
-    campaign = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(campaign)
-    path = ROOT / 'experiments/icra_commissioning/network_navigation_speed_candidate.yaml'
-    cfg = yaml.safe_load(path.read_text())
-    campaign._validate_config(cfg, path)
-    cfg['conditions']['P0']['v_max'] = -1
-    with pytest.raises(ValueError, match='fusion_network_traverse/P0: v_max'):
-        campaign._validate_config(cfg, path)
-
-
-def test_speed_candidate_changes_no_other_navigation_tuning():
-    folder = ROOT / 'experiments/icra_commissioning'
-    baseline = yaml.safe_load((folder / 'network_navigation_runtime_pilot.yaml').read_text())
-    candidate = yaml.safe_load((folder / 'network_navigation_speed_candidate.yaml').read_text())
-    for key in ('v_max', 'ros_domain_id_base', 'study_title', 'study_comparison'):
-        baseline.pop(key, None)
-        candidate.pop(key, None)
-    assert candidate == baseline

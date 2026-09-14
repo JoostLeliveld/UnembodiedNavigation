@@ -831,24 +831,11 @@ def _project_robot_bbox(
     box_width: float,
     box_height: float,
 ) -> tuple[float, float, float, float] | None:
-    """Where the robot should appear, judged against its VISUAL HULL.
+    """Projected support used only to audit synthetic detector labels.
 
-    This used to project the bounding prism given by `box_length/width/height`, and
-    every occlusion number the capture recorded was measured against that prism. The
-    prism is wrong at exactly the edge that matters: the real chassis skirt starts at
-    z = 0.090 m, and only the wheels (r 0.100 at y = +-0.220) and the casters (r 0.040
-    at x = +-0.300) reach the floor, all inset from the footprint corners. So the
-    prism's predicted bottom row sits about **5.4 px too low**, which subtracted the
-    same 5.4 px from every `bottom_occlusion_px` and let clearly occluded sightings
-    through as `occlusion_state=clear`: on warehouse_v2_yolo_20260821, 272 of 2692
-    nominally clean rows had their bottom row more than 3 px above the true contact
-    row.
-
-    The hull is `unav_common.robot_hull.VISUAL_HULL`, the same solid the observation
-    model is scored against, so the capture and the study cannot disagree about the
-    robot. The `box_*` arguments are still accepted and are used only when a caller
-    explicitly asks for the legacy prism via `shape="prism"`, which nothing does by
-    default.
+    This geometry decides whether the rendered robot can support a valid training label.
+    It is never used as a localization observation or correction input. The `box_*`
+    arguments remain for the coarse-prism audit option.
     """
     return _project_robot_shape(camera, x=x, y=y, yaw=yaw, z=z, shape="visual_hull",
                                 box_length=box_length, box_width=box_width,

@@ -9,6 +9,11 @@ import pytest
 from planning.nodes.efe_agent_node import EfeAgentNode
 from test_planner_node_correction_wiring import _Clock, stamp
 from test_planner_node_state_correction import make_state_node
+from unav_common.terminal_stop import (
+    TerminalStopRequest,
+    terminal_stop_ack_from_json,
+    terminal_stop_request_to_json,
+)
 
 
 class Publisher:
@@ -21,6 +26,9 @@ class Publisher:
 
 def publish_node():
     node = make_state_node(belief_stamp_s=9., now_s=10.)
+    # These transaction tests exercise timestamp/revision ownership, not the
+    # camera_xy_only odometry-heading adapter.
+    node.heading_update_mode = 'coupled'
     node.odom_vel = np.zeros(2)
     node.planner_belief_pub = Publisher()
     node._resolve_plan_frame_id = lambda: 'map_bev'
@@ -199,6 +207,27 @@ def test_safe_stop_clears_the_held_execution_diagnostic():
     assert data[1] == 0.  # remaining tape time
     assert data[3] == 0.  # current tape length
     assert data[5] == data[6] == 0.  # command actually being published
+
+
+def test_terminal_request_latches_planner_stop_before_acknowledgement():
+    node = command_node()
+    node._terminal_stop_requested = False
+    node._terminal_stop_request_id = ''
+    node._terminal_stop_ack_pub = Publisher()
+    request = TerminalStopRequest('request-1', 'run-1', 'goal_reached', 10)
+
+    node._terminal_stop_request_cb(
+        SimpleNamespace(data=terminal_stop_request_to_json(request))
+    )
+
+    assert node._terminal_stop_requested
+    assert node._active_controls is None
+    assert node.cmd_pub.messages[-1].linear.x == 0.0
+    assert node.cmd_pub.messages[-1].angular.z == 0.0
+    ack = terminal_stop_ack_from_json(node._terminal_stop_ack_pub.messages[-1].data)
+    assert ack.request_id == request.request_id
+    assert ack.component == 'planner'
+    assert ack.status == 'stop_command_published'
 
 
 @pytest.mark.parametrize('target', [(0., 1.), (0., -1.)])

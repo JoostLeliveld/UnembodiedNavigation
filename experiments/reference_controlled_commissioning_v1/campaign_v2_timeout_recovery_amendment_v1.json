@@ -1,0 +1,27 @@
+{
+  "schema": "reference_controlled_commissioning_timeout_amendment.v1",
+  "status": "frozen_before_recovery_capture",
+  "date": "2026-09-13",
+  "reason": "development_settle_lap4_r3 completed all 20 route legs and its stationary anchor at 169.5 s simulated time, but the 900 s wall-clock backstop expired during terminal shutdown on a host running at approximately 0.25 real-time. The attempt failed closed and is retained.",
+  "failed_attempt": "logs/commissioning/reference_controlled_v5_scientific_20260912_0241/development_settle_lap4_r3",
+  "superseded_protocol_sha256": "f0879e543b95c66da4712bd3c63b3ff41e980ebbeb0d8f7eb8954e34619fe571",
+  "amended_protocol": "experiments/reference_controlled_commissioning_v1/campaign_v2.yaml",
+  "amended_protocol_sha256": "6d6b37feffa441b73991e4ec69f82495ff494e69628abab7367ed84eb2200d73",
+  "only_parameter_change": {
+    "path": "capture.runner_wall_timeout_s",
+    "before": 900.0,
+    "after": 1800.0
+  },
+  "unchanged": [
+    "world",
+    "detector",
+    "sensor gate",
+    "controller",
+    "simulated route and timing",
+    "noise",
+    "capture rate",
+    "partitions",
+    "analysis"
+  ],
+  "merge_rule": "Only recovery drives whose drive_result.json passes may replace their missing v5 cells. The failed attempt is never selected. Audit outcomes remain sealed."
+}

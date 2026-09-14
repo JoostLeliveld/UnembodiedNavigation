@@ -93,7 +93,7 @@ class ToroCovarianceModel:
         self._points_by_camera: Mapping[str, tuple[CalibrationPoint, ...]] = {
             camera_id: tuple(points) for camera_id, points in points_by_camera.items()
         }
-        self._hull_by_camera: dict[str, tuple[tuple[float, float], ...]] = {
+        self._support_polygon_by_camera: dict[str, tuple[tuple[float, float], ...]] = {
             camera_id: _convex_hull([p.position_xy for p in points])
             for camera_id, points in self._points_by_camera.items()
         }
@@ -126,8 +126,8 @@ class ToroCovarianceModel:
     def in_validated_fov(self, camera_id: str, position_xy: Sequence[float]) -> bool:
         query = _pair(position_xy, "position_xy")
         self._camera_points(camera_id)
-        hull = self._hull_by_camera[camera_id]
-        return _point_in_convex_hull(query, hull)
+        support_polygon = self._support_polygon_by_camera[camera_id]
+        return _point_in_convex_hull(query, support_polygon)
 
     def _camera_points(self, camera_id: str) -> tuple[CalibrationPoint, ...]:
         points = self._points_by_camera.get(camera_id)

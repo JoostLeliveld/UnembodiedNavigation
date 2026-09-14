@@ -18,6 +18,7 @@ class ManagerInputs:
     has_anchor: bool
     belief_identity: tuple | None
     motion: object
+    belief_predictions: tuple = ()
 
 
 class AdmissionBeliefHistory:
@@ -101,3 +102,16 @@ class AdmissionBeliefHistory:
 
     def poses(self):
         return tuple((item.state_stamp_ns / 1e9, item.mean) for item in self.records)
+
+    def predictions(self):
+        """Timestamped means and covariances for measurement admission.
+
+        The covariance is not motion evidence. It is retained only so an online
+        observation model can marginalise a nuisance orientation instead of
+        treating the point-estimate yaw as known exactly.
+        """
+
+        return tuple(
+            (item.state_stamp_ns / 1e9, item.mean, item.covariance)
+            for item in self.records
+        )

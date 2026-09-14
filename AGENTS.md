@@ -1,58 +1,85 @@
-# Repository instructions: how to talk about a number
+# Current thesis contract
 
-Before answering any question involving camera accuracy, localization error, belief error,
-calibration, coverage, RMSE, bias, or a comparison of runs, read [`PLAN.md`](PLAN.md),
-[`docs/localization_metrics.md`](docs/localization_metrics.md), and
-[`docs/localization_metrics_registry.json`](docs/localization_metrics_registry.json), then load the run through
-[`experiments/fusion_on_fixed_routes/aligned.py`](experiments/fusion_on_fixed_routes/aligned.py).
+## IMPORTANT: TeX files require explicit permission
 
-[`docs/open_questions.md`](docs/open_questions.md) says what is unresolved and which
-implementation limits are known. Check it before presenting anything as settled.
+Never create, edit, delete, rename, move, or restore a `.tex` file unless the user has
+explicitly authorized that exact TeX change in the current conversation. Repository cleanup,
+method alignment, prose review, and evidence cleanup do not imply permission to modify TeX.
+Read and audit TeX when needed, but present proposed edits and wait for approval.
 
-## Which paper a number belongs to
+This repository exists to support the commissioned-camera-network thesis. Do not infer the
+current method from old experiments, archived reports, superseded protocols, directory names,
+or the newest-looking run.
 
-The active paper now follows one staged chain: **camera/YOLO characterization -> bias gate ->
-conditional measurement covariance -> truth-free covariance estimation -> per-camera
-availability -> selection/fusion -> an otherwise unchanged belief-aware planner**. Sensor
-characterization is the current stage. Fusion, planning and learned correction artifacts are
-not current results merely because they exist; `PLAN.md` defines when each may enter the
-paper.
+Read these sources in order:
 
-## The clean sheet
+1. `docs/COMMISSIONED_SENSOR_MODEL_CONTRACT.md` — human-readable method contract.
+2. `experiments/thesis_pipeline_lock/thesis_contribution_lock.json` — machine-readable thesis lock.
+3. `experiments/thesis_pipeline_lock/pipeline_lock.json` — current evidence status.
+4. `docs/localization_metrics.md` and `docs/localization_metrics_registry.json` — admissible results.
 
-Every study dated before **2026-08-25** is superseded. Do not reuse any of its numbers, and
-do not quote a figure from a `RESULTS.md` without re-deriving it from the drives on disk.
-A stale artifact that still parses is the most expensive kind of wrong here.
+If another document conflicts with these sources, it is wrong for the current thesis.
 
-## Hard rules
+## Locked method
 
-1. **Name what the number is.** Never say "camera error" or "localization error" without
-   saying which quantity it is (a camera's reading, the fused correction, or the filter's
-   belief), which statistic (median, mean, p95, signed bias), against which reference, over
-   which runs, and how many samples.
-2. **Do not compare across those three layers.** A camera's reading error, the fused
-   correction's error, and the belief's error are different quantities. So are median error,
-   p95, signed bias, and calibration. None of them are interchangeable.
-3. **Score each quantity at the instant it describes.** A per-camera reading is scored at its
-   capture stamp, the fused answer at its own stamp, the belief at the belief's stamp. Pairing
-   an estimate with a later truth charges the robot's own travel to the sensor: at 0.22 m/s a
-   0.1 s offset is 2.2 cm, which is larger than the effect being measured.
-4. **Count each detection once.** A held message is re-logged every tick. `aligned.py`
-   deduplicates; anything not going through it does not.
-5. **Never pool run directories by glob or "latest".** Use a frozen manifest with exact run
-   IDs, conditions and seeds, and fail on a missing or extra run.
-6. **One drive is not a result.** Time samples within a drive are correlated and cannot
-   substitute for replication. Aggregate within a run first, then across seeds.
-7. **`gt_*` is the reference.** Legacy `truth_x/y` is wheel odometry and is diagnostic only.
-   Ground truth scores results; it is never an online input, and it never terminates a run.
-8. **A camera never knows ground truth**, its own error, or its own calibration. State which
-   inputs the method actually had online and which fields the offline evaluator used.
+The runtime chain is:
 
-## Say the thing, not the label
+```text
+fixed YOLO11n detector
+  -> deterministic belief-independent sensor gate
+  -> raw bounding-box bottom-centre projected to the ground plane
+  -> selected correction
+  -> covariance fitted to that correction's residuals
+  -> correlation-aware camera fusion
+  -> estimator NIS gate
+  -> one robot-belief update
+```
 
-Report in centimetres, percentages and seconds — not pixels, ratios or log-likelihoods.
-Lead with the verdict, then the mechanism, then the caveat. If a result is a null, an
-artifact, or a correction to something said earlier, say so in the first sentence.
+- `q_i(p)` is the probability that camera `i` returns a detector box that passes the fixed
+  sensor gate at ground-plane position `p`. It depends on camera identity and two-dimensional
+  position only. Commissioning outcomes are pooled over the headings sampled at each position.
+  Heading is not an input to `q`.
+- `q_i(p)` uses every expected camera opportunity, including detector misses and gate
+  refusals. It excludes NIS and is never a runtime gate or route-feasibility gate.
+- The raw camera observation is always the projected bottom centre of the frozen YOLO box.
+  No current correction candidate starts from, contains, or depends on a visual hull,
+  hull-equivalent position, belief-projected box, CAD silhouette, or ground-truth geometry.
+- Learned correction candidates predict the offset from the raw projection to the known
+  reference position. Runtime inputs may include camera identity, camera-relative geometry,
+  raw-box geometry, detector confidence, and the declared 16x16 image-visibility matrix.
+- The image candidate is a zero-initialized gated residual added to the raw-box MLP. If its
+  predeclared development-drive gates fail, retain the raw-box MLP.
+- Every correction candidate receives a fresh covariance model fitted from that candidate's
+  whole-drive out-of-fold residuals. Never reuse one candidate's `R` for another.
+- `R_i(p, psi)` may depend on position and heading because it describes the corrected
+  measurement residual. This does not make heading an input to `q_i(p)`.
+- Process-noise covariance `Q_k` is a fixed estimator/planner input frozen in the experiment
+  configuration. Estimating, tuning, or rediscovering `Q` is not part of the thesis method.
+- The planner is the existing IWAI EFE planner. Conditions change only the future `q` and `R`
+  forecasts. They share dynamics, process noise, objective, optimizer, route candidates,
+  feasibility rules, controller, estimator, tasks, and seeds.
+- One robot filter consumes each physical camera frame once. Cascading a camera-filter
+  posterior into another filter as a fresh independent measurement is prohibited.
 
-Write the sentence the number would appear in, in the paper. If you cannot write that
-sentence, do not report the number.
+## Evidence boundary
+
+An artifact is current evidence only when an active thesis manifest names its exact path and
+hash. All other results, plots, protocols, and run summaries are non-authoritative. Never use
+an arbitrary `RESULTS.md`, a glob of run directories, or a value remembered from another chat.
+
+For camera accuracy, localization error, belief error, RMSE, bias, NEES, coverage, or run
+comparisons, also follow `docs/localization_metrics.md` and its registry. State the layer,
+statistic, reference, run set, and sample unit. Score readings, fused corrections, and beliefs
+at their own timestamps. Aggregate by complete drive before comparing drives.
+
+## Working rules
+
+- Ground truth is offline fitting/evaluation data only. It never enters the sensor gate,
+  runtime correction, covariance query, fusion, estimator, planner, or stopping rule.
+- Fit, development, and sealed-audit partitions contain complete drives.
+- Preserve all expected opportunities and distinguish misses, refusals, admitted raw
+  measurements, and corrected residuals.
+- Search current source and active contracts before tests. Old names may survive in Git
+  history but must not be revived.
+- Before launching Gazebo or a campaign, run
+  `pgrep -af "ros2 launch|ign gazebo|run_visibility_campaign"`. Do not start a second run.

@@ -221,3 +221,164 @@ def generate_route_seeds(
 def generate_route_seeds_json(driveable_geometry_json: str, start_xy, goal_xy) -> str:
     import json
     return json.dumps(generate_route_seeds(driveable_geometry_json, start_xy, goal_xy))
+
+
+def _remove_collinear(points: Sequence[XY], *, tol: float = 1e-9) -> List[XY]:
+    """Return the same polyline without redundant collinear interior vertices."""
+    points = _dedupe(points)
+    if len(points) <= 2:
+        return points
+    out = [points[0]]
+    for index in range(1, len(points) - 1):
+        previous = np.asarray(out[-1], dtype=float)
+        current = np.asarray(points[index], dtype=float)
+        following = np.asarray(points[index + 1], dtype=float)
+        first = current - previous
+        second = following - current
+        cross = float(first[0] * second[1] - first[1] * second[0])
+        if abs(cross) <= tol and float(first @ second) >= -tol:
+            continue
+        out.append(points[index])
+    out.append(points[-1])
+    return _dedupe(out)
+
+
+def _has_immediate_backtrack(points: Sequence[XY], *, tol: float = 1e-9) -> bool:
+    """Reject a polyline that reverses along the segment it just traversed."""
+    points = _dedupe(points)
+    for index in range(1, len(points) - 1):
+        first = np.asarray(points[index], dtype=float) - np.asarray(
+            points[index - 1], dtype=float
+        )
+        second = np.asarray(points[index + 1], dtype=float) - np.asarray(
+            points[index], dtype=float
+        )
+        cross = float(first[0] * second[1] - first[1] * second[0])
+        if abs(cross) <= tol and float(first @ second) < -tol:
+            return True
+    return False
+
+
+def generate_diverse_route_candidates(
+    driveable_geometry_json: str,
+    start_xy: Sequence[float],
+    goal_xy: Sequence[float],
+    *,
+    max_routes: int = 8,
+) -> List[dict]:
+    """Generate a bounded, diverse lane-graph set for finite route selection.
+
+    Unlike :func:`generate_route_seeds`, which supplies one initializer per
+    horizontal corridor, this enumerates valid start-lane/goal-lane variants.
+    It first retains one distinct shortest route per cross-aisle, then fills the
+    remaining budget by length.  Candidate generation uses geometry only and is
+    therefore identical across experimental arms.
+    """
+    if isinstance(max_routes, bool) or int(max_routes) != max_routes or max_routes < 1:
+        raise ValueError('max_routes must be a positive integer')
+    scene = scene_from_json(driveable_geometry_json)
+    prisms = tuple(scene.prisms)
+    start = (float(start_xy[0]), float(start_xy[1]))
+    goal = (float(goal_xy[0]), float(goal_xy[1]))
+    horizontal = _horizontal_corridor_centres(prisms)
+    vertical = _vertical_corridor_centres(prisms)
+
+    by_corridor: List[tuple[float, List[dict]]] = []
+    for corridor_y in horizontal:
+        variants = []
+        for start_x in sorted({start[0], *(float(x) for x in vertical)}):
+            if not (
+                _segment_inside_union(prisms, start, (start_x, start[1]))
+                and _segment_inside_union(
+                    prisms, (start_x, start[1]), (start_x, corridor_y)
+                )
+            ):
+                continue
+            for goal_x in sorted({goal[0], *(float(x) for x in vertical)}):
+                raw_full = _dedupe([
+                    start,
+                    (start_x, start[1]),
+                    (start_x, corridor_y),
+                    (goal_x, corridor_y),
+                    (goal_x, goal[1]),
+                    goal,
+                ])
+                if _has_immediate_backtrack(raw_full):
+                    continue
+                full = _remove_collinear(raw_full)
+                if not all(
+                    _segment_inside_union(prisms, a, b)
+                    for a, b in zip(full, full[1:])
+                ):
+                    continue
+                length = float(sum(
+                    np.linalg.norm(np.asarray(b) - np.asarray(a))
+                    for a, b in zip(full, full[1:])
+                ))
+                variants.append({
+                    'corridor_y': float(corridor_y),
+                    'start_lane_x': float(start_x),
+                    'goal_lane_x': float(goal_x),
+                    'length_m': length,
+                    'waypoints': [list(point) for point in full[1:]],
+                })
+        unique = {}
+        for variant in sorted(
+            variants,
+            key=lambda item: (
+                item['length_m'], item['start_lane_x'], item['goal_lane_x'],
+                tuple(map(tuple, item['waypoints'])),
+            ),
+        ):
+            key = tuple(map(tuple, variant['waypoints']))
+            unique.setdefault(key, variant)
+        by_corridor.append((float(corridor_y), list(unique.values())))
+
+    selected = []
+    selected_keys = set()
+    # Preserve cross-aisle diversity before spending the remaining budget on
+    # near-shortest lane variants.
+    for _corridor_y, variants in by_corridor:
+        for variant in variants:
+            key = tuple(map(tuple, variant['waypoints']))
+            if key not in selected_keys:
+                selected.append(variant)
+                selected_keys.add(key)
+                break
+        if len(selected) >= max_routes:
+            break
+    remaining = sorted(
+        (variant for _y, variants in by_corridor for variant in variants
+         if tuple(map(tuple, variant['waypoints'])) not in selected_keys),
+        key=lambda item: (
+            item['length_m'], item['corridor_y'], item['start_lane_x'],
+            item['goal_lane_x'], tuple(map(tuple, item['waypoints'])),
+        ),
+    )
+    for variant in remaining:
+        if len(selected) >= max_routes:
+            break
+        key = tuple(map(tuple, variant['waypoints']))
+        if key in selected_keys:
+            continue
+        selected.append(variant)
+        selected_keys.add(key)
+
+    selected.sort(key=lambda item: (
+        item['length_m'], item['corridor_y'], item['start_lane_x'],
+        item['goal_lane_x'], tuple(map(tuple, item['waypoints'])),
+    ))
+    routes = []
+    for index, variant in enumerate(selected):
+        routes.append({
+            'name': (
+                f"route_{index + 1:02d}_y{variant['corridor_y']:+.2f}"
+                f"_sx{variant['start_lane_x']:+.2f}_gx{variant['goal_lane_x']:+.2f}"
+            ),
+            'waypoints': variant['waypoints'],
+            'length_m': variant['length_m'],
+            'corridor_y': variant['corridor_y'],
+            'start_lane_x': variant['start_lane_x'],
+            'goal_lane_x': variant['goal_lane_x'],
+        })
+    return routes

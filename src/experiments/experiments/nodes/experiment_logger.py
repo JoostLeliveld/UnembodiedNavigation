@@ -35,6 +35,14 @@ from unav_common.config import parse_bev_affine_calibration
 from unav_common.correction_ledger import validate_correction_ledger
 from unav_common.mission_goal import MISSION_GOAL_TOPIC, mission_goal_from_json
 from unav_common.occlusion_geometry import scene_from_json, signed_distance_to_union_xy
+from unav_common.terminal_stop import (
+    TERMINAL_COMPONENTS,
+    TERMINAL_STOP_ACK_TOPIC,
+    TERMINAL_STOP_REQUEST_TOPIC,
+    TerminalStopRequest,
+    terminal_stop_ack_from_json,
+    terminal_stop_request_to_json,
+)
 
 
 def _find_repo_root(start_dir: str) -> str:
@@ -149,6 +157,28 @@ def _split_prisms_by_prefix(prisms, prefix: str):
     return tuple(prism for prism in tuple(prisms or ()) if str(prism.name).startswith(token))
 
 
+def _partition_collision_prisms(prisms):
+    """Partition every physical prism into enclosure or obstacle geometry.
+
+    The logger historically matched the old ``warehouse_walls`` and
+    ``warehouse_rack_occluders`` model names.  The commissioned world uses
+    ``warehouse_shell`` and ``warehouse_v2_occluders`` instead.  Prefix-only
+    selection therefore produced two empty sets and silently disabled the
+    ground-truth geometry audit.  Treat the known enclosure models as walls and
+    put *every remaining physical prism* in the obstacle set, so a renamed or
+    newly added obstacle cannot disappear from collision evidence.
+    """
+    all_prisms = tuple(prisms or ())
+    wall_prefixes = ("warehouse_walls/", "warehouse_shell/")
+    walls = tuple(
+        prism for prism in all_prisms
+        if str(prism.name).startswith(wall_prefixes)
+    )
+    wall_ids = {id(prism) for prism in walls}
+    obstacles = tuple(prism for prism in all_prisms if id(prism) not in wall_ids)
+    return walls, obstacles
+
+
 #: Every terminal outcome a correction may have. The planner publishes exactly one of
 #: these per detector batch; anything else means a correction went unaccounted, which is
 #: what invalidates a run. `accepted_bootstrap` seeds the belief, `reanchored` recovers a
@@ -158,7 +188,11 @@ KNOWN_ASSIMILATION_STATUSES = frozenset({
     "accepted", "accepted_bootstrap", "reanchored", "rejected", "dropped",
 })
 EVENT_DRAIN_QUIET_S = 0.20
-EVENT_DRAIN_MAX_S = 0.75
+EVENT_DRAIN_MAX_S = 8.0
+TERMINAL_REST_WINDOW_S = 0.25
+TERMINAL_REST_MAX_DISPLACEMENT_M = 0.01
+STUCK_TURN_PROGRESS_MIN_RAD = 0.15
+STUCK_ANGULAR_CMD_FRACTION_MIN = 0.25
 
 class ExperimentLogger(Node):
     def __init__(self):
@@ -210,6 +244,8 @@ class ExperimentLogger(Node):
         self.declare_parameter('camera_network_expected_source_hashes_json', '')
         self.declare_parameter('camera_network_camera_ids', '')
         self.declare_parameter('camera_network_objective', 'legacy_pixel_chart')
+        self.declare_parameter('camera_network_updates_per_step', 1)
+        self.declare_parameter('optimizer_control_block_steps', 1)
         self.declare_parameter('network_goal_std_m', 0.15)
         self.declare_parameter('risk_weight_obs', 1.0)
         self.declare_parameter('ambiguity_weight', 1.0)
@@ -221,8 +257,8 @@ class ExperimentLogger(Node):
         self.declare_parameter('horizon', 36)
         self.declare_parameter('dt', 0.2)
         self.declare_parameter('control_weight', 0.0)
-        self.declare_parameter('process_noise_xy', 0.01)
-        self.declare_parameter('process_noise_theta', 0.02)
+        self.declare_parameter('process_noise_xy', 0.012)
+        self.declare_parameter('process_noise_theta', 0.05)
         self.declare_parameter('obs_noise_uv', 2.0)
         self.declare_parameter('goal_prior_u_std_start', 80.0)
         self.declare_parameter('goal_prior_v_std_start', 80.0)
@@ -246,6 +282,7 @@ class ExperimentLogger(Node):
         # trajectory are observed. Default True preserves the original behaviour.
         self.declare_parameter('terminate_on_geom_collision', False)
         self.declare_parameter('use_command_noise', True)
+        self.declare_parameter('use_encoder_noise', True)
         self.declare_parameter('command_noise_linear_slip_mean', 0.03)
         self.declare_parameter('command_noise_linear_slip_std', 0.06)
         self.declare_parameter('command_noise_angular_slip_mean', 0.0)
@@ -253,8 +290,13 @@ class ExperimentLogger(Node):
         self.declare_parameter('command_noise_linear_additive_std', 0.008)
         self.declare_parameter('command_noise_angular_additive_std', 0.035)
         self.declare_parameter('command_noise_correlation_alpha', 0.85)
+        self.declare_parameter('encoder_noise_linear_slip_mean', 0.02)
+        self.declare_parameter('encoder_noise_linear_slip_std', 0.05)
+        self.declare_parameter('encoder_noise_angular_slip_mean', 0.0)
         self.declare_parameter('encoder_noise_angular_slip_std', 0.03)
+        self.declare_parameter('encoder_noise_linear_additive_std', 0.004)
         self.declare_parameter('encoder_noise_angular_additive_std', 0.020)
+        self.declare_parameter('encoder_noise_correlation_alpha', 0.8)
         self.declare_parameter('optimizer_maxiter', 80)
         self.declare_parameter('optimizer_maxfun', 500)
         self.declare_parameter('optimizer_ftol', 1e-6)
@@ -282,6 +324,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('local_optimizer_maxiter', 60)
         self.declare_parameter('global_use_ambiguity', True)
         self.declare_parameter('local_use_ambiguity', False)
+        self.declare_parameter('local_use_obs_risk', True)
         self.declare_parameter('global_optimizer_multistart', True)
         self.declare_parameter('local_optimizer_multistart', True)
         self.declare_parameter('local_use_visibility_model', False)
@@ -304,7 +347,7 @@ class ExperimentLogger(Node):
         # correction is refused, which is not visible in any error column.
         self.declare_parameter('state_reanchor_m', 0.0)
         self.declare_parameter('state_max_predict_dt_s', 1.5)
-        self.declare_parameter('state_reject_inflate_m2', 0.05)
+        self.declare_parameter('state_reject_inflate_m2', 0.0)
         self.declare_parameter('stale_belief_inflate_m2_per_s', 0.0)
         self.declare_parameter('stale_belief_inflate_cap_m2', 0.0)
         self.declare_parameter('require_state_correction_envelope', False)
@@ -326,6 +369,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('yolo_device', '')
         self.declare_parameter('yolo_imgsz', 640)
         self.declare_parameter('yolo_conf_threshold', 0.25)
+        self.declare_parameter('yolo_predict_conf_floor', 0.05)
         self.declare_parameter('yolo_iou_threshold', 0.45)
         self.declare_parameter('yolo_target_class', 'robot')
         self.declare_parameter('yolo_class_id', -1)
@@ -345,6 +389,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('first_cmd_angular_eps', 0.10)
         self.declare_parameter('v_max', 0.22)
         self.declare_parameter('use_odom_for_predict', True)
+        self.declare_parameter('use_diagnostic_odom_localization', False)
         self.declare_parameter('local_controller_type', 'turn_then_go')
         self.declare_parameter('stuck_window_s', 8.0)
         self.declare_parameter('stuck_max_displacement_m', 0.08)
@@ -446,9 +491,15 @@ class ExperimentLogger(Node):
             raise RuntimeError('camera_network_camera_ids contains duplicates')
         self.camera_network_objective = str(
             self.get_parameter('camera_network_objective').value or '').strip().lower()
+        self.camera_network_updates_per_step = int(
+            self.get_parameter('camera_network_updates_per_step').value)
+        self.optimizer_control_block_steps = int(
+            self.get_parameter('optimizer_control_block_steps').value)
         self.network_goal_std_m = float(self.get_parameter('network_goal_std_m').value)
         if self.camera_network_objective not in ('legacy_pixel_chart', 'metric_expected_belief'):
             raise RuntimeError('unknown camera_network_objective')
+        if self.camera_network_updates_per_step < 1:
+            raise RuntimeError('camera_network_updates_per_step must be positive')
         if not np.isfinite(self.network_goal_std_m) or self.network_goal_std_m <= 0.:
             raise RuntimeError('network_goal_std_m must be finite and positive')
         self.risk_weight_obs = float(self.get_parameter('risk_weight_obs').value)
@@ -489,6 +540,7 @@ class ExperimentLogger(Node):
                 'termination; use the physical /world_contacts channel instead'
             )
         self.use_command_noise = bool(self.get_parameter('use_command_noise').value)
+        self.use_encoder_noise = bool(self.get_parameter('use_encoder_noise').value)
         self.command_noise_linear_slip_mean = float(self.get_parameter('command_noise_linear_slip_mean').value)
         self.command_noise_linear_slip_std = float(self.get_parameter('command_noise_linear_slip_std').value)
         self.command_noise_angular_slip_mean = float(self.get_parameter('command_noise_angular_slip_mean').value)
@@ -496,8 +548,13 @@ class ExperimentLogger(Node):
         self.command_noise_linear_additive_std = float(self.get_parameter('command_noise_linear_additive_std').value)
         self.command_noise_angular_additive_std = float(self.get_parameter('command_noise_angular_additive_std').value)
         self.command_noise_correlation_alpha = float(self.get_parameter('command_noise_correlation_alpha').value)
+        self.encoder_noise_linear_slip_mean = float(self.get_parameter('encoder_noise_linear_slip_mean').value)
+        self.encoder_noise_linear_slip_std = float(self.get_parameter('encoder_noise_linear_slip_std').value)
+        self.encoder_noise_angular_slip_mean = float(self.get_parameter('encoder_noise_angular_slip_mean').value)
         self.encoder_noise_angular_slip_std = float(self.get_parameter('encoder_noise_angular_slip_std').value)
+        self.encoder_noise_linear_additive_std = float(self.get_parameter('encoder_noise_linear_additive_std').value)
         self.encoder_noise_angular_additive_std = float(self.get_parameter('encoder_noise_angular_additive_std').value)
+        self.encoder_noise_correlation_alpha = float(self.get_parameter('encoder_noise_correlation_alpha').value)
         self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
         self.optimizer_maxfun = int(self.get_parameter('optimizer_maxfun').value)
         self.optimizer_ftol = float(self.get_parameter('optimizer_ftol').value)
@@ -551,6 +608,7 @@ class ExperimentLogger(Node):
         self.local_optimizer_maxiter = int(self.get_parameter('local_optimizer_maxiter').value)
         self.global_use_ambiguity = bool(self.get_parameter('global_use_ambiguity').value)
         self.local_use_ambiguity = bool(self.get_parameter('local_use_ambiguity').value)
+        self.local_use_obs_risk = bool(self.get_parameter('local_use_obs_risk').value)
         self.global_optimizer_multistart = bool(
             self.get_parameter('global_optimizer_multistart').value
         )
@@ -615,6 +673,8 @@ class ExperimentLogger(Node):
         self.yolo_device = str(self.get_parameter('yolo_device').value)
         self.yolo_imgsz = int(self.get_parameter('yolo_imgsz').value)
         self.yolo_conf_threshold = float(self.get_parameter('yolo_conf_threshold').value)
+        self.yolo_predict_conf_floor = float(
+            self.get_parameter('yolo_predict_conf_floor').value)
         self.yolo_iou_threshold = float(self.get_parameter('yolo_iou_threshold').value)
         self.yolo_target_class = str(self.get_parameter('yolo_target_class').value)
         self.yolo_class_id = int(self.get_parameter('yolo_class_id').value)
@@ -644,6 +704,9 @@ class ExperimentLogger(Node):
         self.first_cmd_angular_eps = float(self.get_parameter('first_cmd_angular_eps').value)
         self.v_max = float(self.get_parameter('v_max').value)
         self.use_odom_for_predict = bool(self.get_parameter('use_odom_for_predict').value)
+        self.use_diagnostic_odom_localization = bool(
+            self.get_parameter('use_diagnostic_odom_localization').value
+        )
         self.local_controller_type = str(
             self.get_parameter('local_controller_type').value)
         self.stuck_window_s = float(self.get_parameter('stuck_window_s').value)
@@ -702,8 +765,13 @@ class ExperimentLogger(Node):
 
         collision_scene = scene_from_json(self.collision_geometry_json)
         self._collision_prisms = tuple(collision_scene.prisms)
-        self._wall_prisms = _split_prisms_by_prefix(self._collision_prisms, 'warehouse_walls/')
-        self._obstacle_prisms = _split_prisms_by_prefix(self._collision_prisms, 'warehouse_rack_occluders/')
+        self._wall_prisms, self._obstacle_prisms = _partition_collision_prisms(
+            self._collision_prisms
+        )
+        if self._collision_prisms and not (
+            self._wall_prisms or self._obstacle_prisms
+        ):
+            raise RuntimeError("collision geometry was present but could not be classified")
         try:
             manager_settings = json.loads(self.manager_settings_json or '{}')
             if not isinstance(manager_settings, dict):
@@ -747,12 +815,18 @@ class ExperimentLogger(Node):
             #       identity-bearing fused publications have their own ledger; terminal
             #       schema-2 posterior fields pass through; final summary follows a
             #       bounded drain, complete ledger reconciliation and atomic file close.
-            'logging_schema_version': 8,
+            #   9 = every planner-published belief prediction is retained with its
+            #       state timestamp, anchor epoch/revision and full covariance. This
+            #       makes simultaneous predictions from different correction revisions
+            #       distinguishable instead of silently choosing one Pose message.
+            'logging_schema_version': 9,
             'camera_opportunity_log': 'camera_opportunities.jsonl',
             'camera_opportunity_scope': 'all received detector outputs; not all scheduled sensor frames',
             'camera_opportunity_schema': 'camera_opportunity_log.v2',
             'runtime_event_delivery_ledger': 'runtime_event_deliveries.jsonl',
             'runtime_event_delivery_schema': 'runtime_event_delivery.v1',
+            'belief_prediction_ledger': 'belief_predictions.jsonl',
+            'belief_prediction_schema': 'planner_belief_prediction.v1',
             'detector_outcome_journal_path': self.outcome_journal_path,
             'manager_outcome_journal_path': self.manager_outcome_journal_path,
             'correction_publication_ledger': 'correction_publications.csv',
@@ -764,6 +838,11 @@ class ExperimentLogger(Node):
                 'cmd_raw_is_requested;cmd_is_ros_published;neither_is_physical_application'),
             'actuation_outcome_semantics': (
                 'native_forwarding_boundary_only;physical_application_verified_false'),
+            'terminal_stop_protocol': 'terminal_stop_request.v1+terminal_stop_ack.v1',
+            'terminal_stop_verification': (
+                'planner_latched_zero+native_guard_forwarded_zero+'
+                f'operational_rest_{TERMINAL_REST_WINDOW_S:.2f}s_'
+                f'{TERMINAL_REST_MAX_DISPLACEMENT_M:.3f}m'),
             'timestamp': datetime.now().isoformat(),
             'method': self.method or self.planner,
             'perception_backend': self.perception_backend,
@@ -793,6 +872,7 @@ class ExperimentLogger(Node):
             'visibility_artifact_path': self.visibility_artifact_path,
             'camera_network_artifact_path': self.camera_network_artifact_path,
             'camera_network_objective': self.camera_network_objective,
+            'camera_network_updates_per_step': self.camera_network_updates_per_step,
             'network_goal_std_m': self.network_goal_std_m,
             'risk_weight_obs': self.risk_weight_obs,
             'ambiguity_weight': self.ambiguity_weight,
@@ -819,6 +899,7 @@ class ExperimentLogger(Node):
             'planner_collision_model': 'oriented_rectangle_swept_v1',
             'legacy_geometry_diagnostic_model': 'circle',
             'use_command_noise': self.use_command_noise,
+            'use_encoder_noise': self.use_encoder_noise,
             'command_noise_linear_slip_mean': self.command_noise_linear_slip_mean,
             'command_noise_linear_slip_std': self.command_noise_linear_slip_std,
             'command_noise_angular_slip_mean': self.command_noise_angular_slip_mean,
@@ -826,8 +907,13 @@ class ExperimentLogger(Node):
             'command_noise_linear_additive_std': self.command_noise_linear_additive_std,
             'command_noise_angular_additive_std': self.command_noise_angular_additive_std,
             'command_noise_correlation_alpha': self.command_noise_correlation_alpha,
+            'encoder_noise_linear_slip_mean': self.encoder_noise_linear_slip_mean,
+            'encoder_noise_linear_slip_std': self.encoder_noise_linear_slip_std,
+            'encoder_noise_angular_slip_mean': self.encoder_noise_angular_slip_mean,
             'encoder_noise_angular_slip_std': self.encoder_noise_angular_slip_std,
+            'encoder_noise_linear_additive_std': self.encoder_noise_linear_additive_std,
             'encoder_noise_angular_additive_std': self.encoder_noise_angular_additive_std,
+            'encoder_noise_correlation_alpha': self.encoder_noise_correlation_alpha,
             'perception_use_geometry_occlusion': self.perception_use_geometry_occlusion,
             'use_nogo_cost': self.use_nogo_cost,
             'nogo_penalty_type': self.nogo_penalty_type,
@@ -847,6 +933,7 @@ class ExperimentLogger(Node):
             'yolo_device': self.yolo_device,
             'yolo_imgsz': self.yolo_imgsz,
             'yolo_conf_threshold': self.yolo_conf_threshold,
+            'yolo_predict_conf_floor': self.yolo_predict_conf_floor,
             'yolo_iou_threshold': self.yolo_iou_threshold,
             'yolo_target_class': self.yolo_target_class,
             'yolo_class_id': self.yolo_class_id,
@@ -888,6 +975,7 @@ class ExperimentLogger(Node):
             'optimizer_initial_routes_json': self.optimizer_initial_routes_json,
             'optimizer_terminal_goal_tolerance_m': self.optimizer_terminal_goal_tolerance_m,
             'optimizer_route_seed_mode': self.optimizer_route_seed_mode,
+            'optimizer_control_block_steps': self.optimizer_control_block_steps,
             'use_hierarchical': self.use_hierarchical,
             'global_planner_mode': self.global_planner_mode,
             'preselected_route_json': self.preselected_route_json,
@@ -907,6 +995,7 @@ class ExperimentLogger(Node):
             'local_optimizer_maxiter': self.local_optimizer_maxiter,
             'global_use_ambiguity': self.global_use_ambiguity,
             'local_use_ambiguity': self.local_use_ambiguity,
+            'local_use_obs_risk': self.local_use_obs_risk,
             'global_optimizer_multistart': self.global_optimizer_multistart,
             'local_optimizer_multistart': self.local_optimizer_multistart,
             'local_use_visibility_model': self.local_use_visibility_model,
@@ -935,6 +1024,7 @@ class ExperimentLogger(Node):
             'goal_stable_max_displacement_m': self.goal_stable_max_displacement_m,
             'v_max': self.v_max,
             'use_odom_for_predict': self.use_odom_for_predict,
+            'use_diagnostic_odom_localization': self.use_diagnostic_odom_localization,
             'local_controller_type': self.local_controller_type,
             'run_timeout_after_first_cmd_s': self.run_timeout_after_first_cmd_s,
             'first_cmd_linear_eps': self.first_cmd_linear_eps,
@@ -944,6 +1034,8 @@ class ExperimentLogger(Node):
             'stuck_max_goal_improvement_m': self.stuck_max_goal_improvement_m,
             'stuck_cmd_fraction_min': self.stuck_cmd_fraction_min,
             'stuck_idle_cmd_fraction_max': self.stuck_idle_cmd_fraction_max,
+            'stuck_turn_progress_min_rad': STUCK_TURN_PROGRESS_MIN_RAD,
+            'stuck_angular_cmd_fraction_min': STUCK_ANGULAR_CMD_FRACTION_MIN,
             **manager_settings,
         }
         manifest_data['visibility_artifact_sha256'] = _sha256_file(
@@ -974,6 +1066,12 @@ class ExperimentLogger(Node):
         )
         manifest_data['manager_learned_correction_sha256'] = _sha256_file(
             str(manager_settings.get('manager_learned_correction_path', '') or '')
+        )
+        manifest_data['manager_visibility_sensor_model_sha256'] = _sha256_file(
+            str(manager_settings.get('manager_visibility_sensor_model_path', '') or '')
+        )
+        manifest_data['manager_sensor_gate_config_sha256'] = _sha256_file(
+            str(manager_settings.get('manager_sensor_gate_config_path', '') or '')
         )
         # The commissioned world-plane covariance table, hashed for the same reason: a drive
         # must not be scoreable against a table that has since been refitted.
@@ -1050,6 +1148,10 @@ class ExperimentLogger(Node):
         self._accepting_events = True
         self._event_streams_closed = False
         self._event_lock = threading.RLock()
+        # Finalization runs on a background timer.  Serialize it with the periodic
+        # CSV callback so a row cannot be assembled while the underlying stream is
+        # being closed.
+        self._log_write_lock = threading.RLock()
         self._last_event_wall_s = time.monotonic()
         self._finish_requested_wall_s = math.nan
         self._finish_reason = ''
@@ -1063,6 +1165,10 @@ class ExperimentLogger(Node):
         self._terminal_stop_verified = False
         self._terminal_stop_event_id = ''
         self._terminal_zero_forwarded = False
+        self._terminal_zero_stamp_s = math.nan
+        self._terminal_stop_request_id = ''
+        self._terminal_stop_request_payload = None
+        self._terminal_stop_acks = {}
         self._mission_goal_state = None
         self._active_mission_goal_id = ''
         self._contact_channel_status = None
@@ -1180,6 +1286,12 @@ class ExperimentLogger(Node):
             self.run_dir, 'runtime_event_deliveries.jsonl')
         self.runtime_event_file = open(self.runtime_event_path, 'w', encoding='utf-8')
         self.runtime_event_log = JsonlDeliveryLog(self.runtime_event_file)
+        self.belief_prediction_path = os.path.join(
+            self.run_dir, 'belief_predictions.jsonl')
+        self.belief_prediction_file = open(
+            self.belief_prediction_path, 'w', encoding='utf-8')
+        self._belief_prediction_count = 0
+        self._belief_prediction_invalid_count = 0
         event_qos = QoSProfile(
             depth=4096,
             reliability=ReliabilityPolicy.RELIABLE,
@@ -1189,6 +1301,20 @@ class ExperimentLogger(Node):
             depth=4096,
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.VOLATILE,
+        )
+        terminal_qos = QoSProfile(
+            depth=16,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self._terminal_stop_request_pub = self.create_publisher(
+            String, TERMINAL_STOP_REQUEST_TOPIC, terminal_qos
+        )
+        self.create_subscription(
+            String,
+            TERMINAL_STOP_ACK_TOPIC,
+            self._terminal_stop_ack_cb,
+            terminal_qos,
         )
         self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
         self.create_subscription(Odometry, '/odom_noisy', self._odom_noisy_cb, 10)
@@ -1217,6 +1343,7 @@ class ExperimentLogger(Node):
                 compatible_event_qos,
             )
         self.create_subscription(Float64MultiArray, '/state/heading_diagnostics', self._heading_diag_cb, 10)
+        self.create_subscription(String, '/planner/belief_state', self._belief_state_cb, 10)
         self.create_subscription(PoseWithCovarianceStamped, '/planner_belief', self._planner_belief_cb, 10)
         self.create_subscription(PoseStamped, '/perception/pixel_pose', self._obs_cb, 10)
         self.create_subscription(
@@ -1673,14 +1800,16 @@ class ExperimentLogger(Node):
         goal_dist: float,
         cmd_v: float,
         cmd_w: float,
+        operational_yaw: float = math.nan,
     ) -> None:
         # Use the same operational state available to the controller. Ground
         # truth is evaluation-only and cannot decide when a run stops.
+        # A goal is not required for terminal-rest verification: externally
+        # controlled commissioning runs intentionally have enable_mission=false.
         if not (
             math.isfinite(stamp)
             and math.isfinite(operational_x)
             and math.isfinite(operational_y)
-            and math.isfinite(goal_dist)
         ):
             return
         self._motion_history.append((
@@ -1689,6 +1818,8 @@ class ExperimentLogger(Node):
             float(operational_y),
             float(goal_dist),
             1.0 if self._command_active(cmd_v, cmd_w) else 0.0,
+            float(operational_yaw),
+            1.0 if abs(float(cmd_w)) >= self.first_cmd_angular_eps else 0.0,
         ))
         keep_window_s = max(
             float(self.stuck_window_s),
@@ -1712,12 +1843,59 @@ class ExperimentLogger(Node):
         displacement_m = float(math.hypot(samples[-1][1] - samples[0][1], samples[-1][2] - samples[0][2]))
         goal_improvement_m = float(samples[0][3] - samples[-1][3])
         cmd_fraction = float(sum(sample[4] for sample in samples) / len(samples))
+        yaw_samples = [
+            sample for sample in samples
+            if len(sample) >= 7 and math.isfinite(sample[5])
+        ]
+        yaw_progress_rad = 0.0
+        if len(yaw_samples) >= 2:
+            yaw_progress_rad = abs(sum(
+                self._wrap_angle(current[5] - previous[5])
+                for previous, current in zip(yaw_samples[:-1], yaw_samples[1:])
+            ))
+        angular_cmd_fraction = float(
+            sum(sample[6] for sample in samples if len(sample) >= 7) / len(samples)
+        )
         return {
             'duration_s': duration_s,
             'displacement_m': displacement_m,
             'goal_improvement_m': goal_improvement_m,
             'cmd_fraction': cmd_fraction,
+            'yaw_progress_rad': float(yaw_progress_rad),
+            'angular_cmd_fraction': angular_cmd_fraction,
         }
+
+    def _update_terminal_stop_verification(self, stamp: float) -> None:
+        """Verify rest without consulting ground truth or redefining stop time."""
+        if (not self._stop_requested or not self._terminal_zero_forwarded
+                or not math.isfinite(self._terminal_zero_stamp_s)):
+            return
+        samples = [
+            sample for sample in self._motion_history
+            if sample[0] >= self._terminal_zero_stamp_s
+        ]
+        # The authoritative actuation-outcome zero and the cached /cmd_vel
+        # subscription can arrive in either callback order.  A stale nonzero
+        # sample after the forwarded-zero timestamp must delay the rest window,
+        # not poison every later window permanently.  Start after the last
+        # observed active command and still require a full idle interval.
+        last_active = max(
+            (index for index, sample in enumerate(samples) if sample[4] != 0.0),
+            default=-1,
+        )
+        samples = samples[last_active + 1:]
+        if len(samples) < 2:
+            return
+        duration_s = float(samples[-1][0] - samples[0][0])
+        if duration_s < TERMINAL_REST_WINDOW_S:
+            return
+        x0, y0 = samples[0][1], samples[0][2]
+        max_displacement_m = max(
+            math.hypot(sample[1] - x0, sample[2] - y0) for sample in samples
+        )
+        commands_idle = all(sample[4] == 0.0 for sample in samples)
+        if commands_idle and max_displacement_m <= TERMINAL_REST_MAX_DISPLACEMENT_M:
+            self._terminal_stop_verified = True
 
     def _update_goal_region_state(self, stamp: float, goal_dist: float) -> None:
         if not (math.isfinite(stamp) and math.isfinite(goal_dist)):
@@ -1800,7 +1978,11 @@ class ExperimentLogger(Node):
         )
         active_stuck = stats['cmd_fraction'] >= self.stuck_cmd_fraction_min
         idle_stuck = stats['cmd_fraction'] <= self.stuck_idle_cmd_fraction_max
-        stuck = no_motion and (active_stuck or idle_stuck)
+        turning_progress = (
+            stats['angular_cmd_fraction'] >= STUCK_ANGULAR_CMD_FRACTION_MIN
+            and stats['yaw_progress_rad'] >= STUCK_TURN_PROGRESS_MIN_RAD
+        )
+        stuck = no_motion and ((active_stuck and not turning_progress) or idle_stuck)
         if not stuck:
             return False
         mode = 'active' if active_stuck else 'idle'
@@ -1810,6 +1992,8 @@ class ExperimentLogger(Node):
             f"goal_improvement={stats['goal_improvement_m']:.3f} m <= "
             f"{self.stuck_max_goal_improvement_m:.3f} m, "
             f"cmd_fraction={stats['cmd_fraction']:.2f}, "
+            f"angular_cmd_fraction={stats['angular_cmd_fraction']:.2f}, "
+            f"yaw_progress={stats['yaw_progress_rad']:.3f} rad, "
             f"active_threshold={self.stuck_cmd_fraction_min:.2f}, "
             f"idle_threshold={self.stuck_idle_cmd_fraction_max:.2f}."
         )
@@ -1989,9 +2173,28 @@ class ExperimentLogger(Node):
                 if (status in ('forwarded', 'forwarded_zero')
                         and abs(linear) <= 1e-12
                         and abs(angular) <= 1e-12):
-                    self._terminal_zero_forwarded = True
-                    self._terminal_stop_event_id = str(
-                        payload.get('event_id', '') or '')
+                    stamp_ns = payload.get('forwarded_sim_stamp_ns')
+                    stamp_is_valid = bool(
+                        not isinstance(stamp_ns, bool)
+                        and isinstance(stamp_ns, int)
+                        and stamp_ns >= 0
+                    )
+                    # Latch the first timestamped zero after the stop request.
+                    # A zero command is intentionally republished while stopped;
+                    # replacing the anchor on every delivery would move the rest
+                    # window forever and make verification impossible.
+                    if (not self._terminal_zero_forwarded
+                            or not math.isfinite(self._terminal_zero_stamp_s)):
+                        self._terminal_zero_forwarded = True
+                        self._terminal_stop_event_id = str(
+                            payload.get('event_id', '') or '')
+                        if stamp_is_valid:
+                            self._terminal_zero_stamp_s = stamp_ns * 1e-9
+                elif (self._terminal_zero_forwarded
+                      and status == 'forwarded'
+                      and (abs(linear) > 1e-12 or abs(angular) > 1e-12)):
+                    self._terminal_stop_verified = False
+                    self._record_invalid('nonzero_command_after_terminal_zero')
             except (TypeError, ValueError):
                 self._record_invalid('malformed_actuation_outcome')
         elif topic == '/sim/contact_channel_status':
@@ -2016,6 +2219,25 @@ class ExperimentLogger(Node):
                 self._contact_channel_status = dict(payload)
             except (KeyError, TypeError, ValueError):
                 self._record_invalid('malformed_contact_channel_status')
+
+    def _terminal_stop_ack_cb(self, message: String) -> None:
+        topic = TERMINAL_STOP_ACK_TOPIC
+        record = self._record_runtime_delivery(topic, message.data)
+        if record is None:
+            return
+        try:
+            ack = terminal_stop_ack_from_json(message.data)
+        except ValueError:
+            self._record_invalid('malformed_terminal_stop_ack')
+            return
+        if not self._stop_requested or ack.request_id != self._terminal_stop_request_id:
+            self._record_invalid('terminal_stop_ack_identity_mismatch')
+            return
+        previous = self._terminal_stop_acks.get(ack.component)
+        if previous is not None and previous != ack:
+            self._record_invalid('conflicting_terminal_stop_ack')
+            return
+        self._terminal_stop_acks[ack.component] = ack
 
     def _fused_correction_cb(self, message: String) -> None:
         topic = '/reliability/camera_manager/fused_correction'
@@ -2192,6 +2414,53 @@ class ExperimentLogger(Node):
 
     def _planner_belief_cb(self, msg: PoseWithCovarianceStamped):
         self.planner_belief_msg = msg
+
+    def _belief_state_cb(self, msg: String):
+        """Retain identity-bearing planner predictions for unambiguous scoring."""
+        receive_stamp = float(self.get_clock().now().nanoseconds) * 1e-9
+        record = {'logger_receive_stamp': receive_stamp, 'valid_envelope': False}
+        invalid_reason = ''
+        try:
+            payload = json.loads(msg.data)
+            if not isinstance(payload, dict) or payload.get('schema_version') != 1:
+                raise ValueError('unsupported planner belief schema')
+            for key in ('initialized', 'valid', 'motion_supported'):
+                if type(payload.get(key)) is not bool:
+                    raise ValueError(f'planner belief {key} is not boolean')
+            if payload['initialized']:
+                if not isinstance(payload.get('epoch'), str) or not payload['epoch']:
+                    raise ValueError('planner belief epoch is missing')
+                if type(payload.get('revision')) is not int or payload['revision'] < 0:
+                    raise ValueError('planner belief revision is invalid')
+                for key in ('anchor_stamp_ns', 'state_stamp_ns'):
+                    if type(payload.get(key)) is not int or payload[key] < 0:
+                        raise ValueError(f'planner belief {key} is invalid')
+                if payload['state_stamp_ns'] < payload['anchor_stamp_ns']:
+                    raise ValueError('planner belief state precedes its anchor')
+                mean = np.asarray(payload.get('mean'), dtype=float)
+                covariance = np.asarray(payload.get('covariance'), dtype=float)
+                if mean.shape != (3,) or covariance.shape != (3, 3):
+                    raise ValueError('planner belief state shape is invalid')
+                if not np.isfinite(mean).all() or not np.isfinite(covariance).all():
+                    raise ValueError('planner belief state is nonfinite')
+                if not np.allclose(covariance, covariance.T, atol=1e-12, rtol=1e-10):
+                    raise ValueError('planner belief covariance is asymmetric')
+                if float(np.linalg.eigvalsh(covariance).min()) < -1e-10:
+                    raise ValueError('planner belief covariance is indefinite')
+            record.update(valid_envelope=True, payload=payload)
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            invalid_reason = f'{type(exc).__name__}:{exc}'
+            record.update(error=invalid_reason, raw=str(msg.data))
+        with self._log_write_lock:
+            handle = getattr(self, 'belief_prediction_file', None)
+            if handle is None or handle.closed:
+                return
+            handle.write(json.dumps(record, sort_keys=True, allow_nan=False) + '\n')
+            handle.flush()
+            self._belief_prediction_count += 1
+            if invalid_reason:
+                self._belief_prediction_invalid_count += 1
+                self._record_invalid(f'invalid_planner_belief_prediction:{invalid_reason}')
 
     def _obs_cb(self, msg: PoseStamped):
         self.obs_msg = msg
@@ -3046,6 +3315,10 @@ class ExperimentLogger(Node):
         self.perception_file.flush()
 
     def _log_once(self):
+        with self._log_write_lock:
+            self._log_once_locked()
+
+    def _log_once_locked(self):
         if getattr(self, '_event_streams_closed', False):
             return
         now_stamp = float(self.get_clock().now().nanoseconds) * 1e-9
@@ -3386,7 +3659,9 @@ class ExperimentLogger(Node):
             operational_goal_dist_m,
             cmd_v,
             cmd_w,
+            operational_yaw=planner_belief_yaw,
         )
+        self._update_terminal_stop_verification(now_stamp)
 
         plan_points = 0
         plan_length = 0.0
@@ -3835,7 +4110,7 @@ class ExperimentLogger(Node):
             return
 
     def _finish_run(self, reason: str, stamp: float = None):
-        """Request terminal closure, then allow a bounded event-drain interval."""
+        """Request a latched stop, then wait for acknowledgements and ledger drain."""
         with self._event_lock:
             if self._stop_requested:
                 return
@@ -3846,7 +4121,21 @@ class ExperimentLogger(Node):
                 else float(self.get_clock().now().nanoseconds) * 1e-9
             )
             self._finish_requested_wall_s = time.monotonic()
-        threading.Timer(EVENT_DRAIN_QUIET_S, self._finalize_run).start()
+            decision_stamp_ns = max(int(round(self._finish_stamp * 1e9)), 0)
+            request = TerminalStopRequest(
+                request_id=(
+                    f"logger:{self.run_id}:terminal:{decision_stamp_ns}"
+                ),
+                run_id=self.run_id,
+                reason=self._finish_reason,
+                decision_stamp_ns=decision_stamp_ns,
+            )
+            self._terminal_stop_request_id = request.request_id
+            self._terminal_stop_request_payload = request
+        message = String()
+        message.data = terminal_stop_request_to_json(request)
+        self._terminal_stop_request_pub.publish(message)
+        threading.Timer(0.05, self._finalize_run).start()
 
     def _correction_ledger_result(self):
         return validate_correction_ledger(
@@ -3856,11 +4145,19 @@ class ExperimentLogger(Node):
 
     def _flush_close_data_files(self):
         """Attempt every stream even when one flush/close fails."""
+        lock = getattr(self, '_log_write_lock', None)
+        if lock is None:  # Minimal unit-test fixtures and legacy callers.
+            return ExperimentLogger._flush_close_data_files_locked(self)
+        with lock:
+            return ExperimentLogger._flush_close_data_files_locked(self)
+
+    def _flush_close_data_files_locked(self):
         errors = []
         names = (
             'file', 'plan_file', 'perception_file', 'fusion_obs_file',
             'assimilation_file', 'correction_publication_file',
             'camera_opportunity_file', 'runtime_event_file',
+            'belief_prediction_file',
         )
         for name in names:
             handle = getattr(self, name, None)
@@ -3891,10 +4188,28 @@ class ExperimentLogger(Node):
             requested = float(self._finish_requested_wall_s)
             elapsed = max(now_wall - requested, 0.0)
             quiet = max(now_wall - float(self._last_event_wall_s), 0.0)
-            if quiet < EVENT_DRAIN_QUIET_S and elapsed < EVENT_DRAIN_MAX_S:
-                delay = min(EVENT_DRAIN_QUIET_S - quiet, EVENT_DRAIN_MAX_S - elapsed)
-                threading.Timer(max(delay, 0.01), self._finalize_run).start()
+            ledger_ready = self._correction_ledger_result().valid
+            acknowledged = set(self._terminal_stop_acks)
+            acknowledgements_ready = TERMINAL_COMPONENTS.issubset(acknowledged)
+            terminal_ready = bool(
+                ledger_ready
+                and acknowledgements_ready
+                and self._terminal_stop_verified
+            )
+            if ((not terminal_ready or quiet < EVENT_DRAIN_QUIET_S)
+                    and elapsed < EVENT_DRAIN_MAX_S):
+                delay = min(0.05, max(EVENT_DRAIN_MAX_S - elapsed, 0.01))
+                threading.Timer(delay, self._finalize_run).start()
                 return
+            if not ledger_ready:
+                self._record_invalid('terminal_stop_correction_ledger_not_drained')
+            if not acknowledgements_ready:
+                missing = sorted(TERMINAL_COMPONENTS - acknowledged)
+                self._record_invalid(
+                    'terminal_stop_ack_timeout:' + ','.join(missing)
+                )
+            if not self._terminal_stop_verified:
+                self._record_invalid('terminal_stop_not_verified')
             self._finalizing = True
             self._accepting_events = False
             reason = self._finish_reason
@@ -3902,6 +4217,18 @@ class ExperimentLogger(Node):
             event_cutoff_wall_s = now_wall
             event_drain_elapsed_s = elapsed
 
+        with self._log_write_lock:
+            return self._finalize_run_locked(
+                reason=reason,
+                stamp=stamp,
+                event_cutoff_wall_s=event_cutoff_wall_s,
+                event_drain_elapsed_s=event_drain_elapsed_s,
+            )
+
+    def _finalize_run_locked(
+        self, *, reason, stamp, event_cutoff_wall_s, event_drain_elapsed_s
+    ):
+        """Commit a terminal summary while the periodic row writer is excluded."""
         ledger = self._correction_ledger_result()
         ledger_required = bool(
             getattr(self, 'require_state_correction_envelope', False)
@@ -4149,6 +4476,8 @@ class ExperimentLogger(Node):
             'correction_ledger_applicable': ledger_applicable,
             'correction_ledger_required': ledger_required,
             'schema2_terminal_count': schema2_terminal_count,
+            'belief_prediction_count': self._belief_prediction_count,
+            'belief_prediction_invalid_count': self._belief_prediction_invalid_count,
             'committed_posterior_complete': committed_posterior_complete,
             'runtime_event_delivery_count': int(getattr(self.runtime_event_log, 'rows', 0)),
             'runtime_event_counts_by_topic': dict(self._runtime_event_counts),
@@ -4158,10 +4487,35 @@ class ExperimentLogger(Node):
             'event_drain_elapsed_s': event_drain_elapsed_s,
             'event_cutoff_wall_s': event_cutoff_wall_s,
             'late_events_observed_before_summary_snapshot': int(self._late_event_count),
-            'producer_quiescence_acknowledged': False,
+            'producer_quiescence_acknowledged': bool(
+                TERMINAL_COMPONENTS.issubset(set(self._terminal_stop_acks))
+            ),
+            'terminal_stop_request_id': self._terminal_stop_request_id,
+            'terminal_stop_request': (
+                None if self._terminal_stop_request_payload is None
+                else {
+                    'request_id': self._terminal_stop_request_payload.request_id,
+                    'run_id': self._terminal_stop_request_payload.run_id,
+                    'reason': self._terminal_stop_request_payload.reason,
+                    'decision_stamp_ns': (
+                        self._terminal_stop_request_payload.decision_stamp_ns
+                    ),
+                }
+            ),
+            'terminal_stop_acknowledgements': {
+                component: {
+                    'status': ack.status,
+                    'acknowledgement_stamp_ns': ack.acknowledgement_stamp_ns,
+                    'detail': ack.detail,
+                }
+                for component, ack in sorted(self._terminal_stop_acks.items())
+            },
             'terminal_stop_verified': bool(self._terminal_stop_verified),
             'terminal_zero_forwarded': bool(self._terminal_zero_forwarded),
             'terminal_stop_event_id': self._terminal_stop_event_id,
+            'terminal_zero_stamp_s': self._terminal_zero_stamp_s,
+            'terminal_rest_window_s': TERMINAL_REST_WINDOW_S,
+            'terminal_rest_max_displacement_m': TERMINAL_REST_MAX_DISPLACEMENT_M,
             'mission_goal_id': (
                 self._mission_goal_state.goal_id if self._mission_goal_state is not None else ''),
             'mission_epoch': (

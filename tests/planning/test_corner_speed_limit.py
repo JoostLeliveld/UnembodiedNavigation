@@ -2,15 +2,22 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from types import SimpleNamespace
 
 from planning.nodes.efe_agent_node import (
+    EfeAgentNode,
+    _compress_collinear_waypoints,
+    _ff_fb_arrival_speed_cap,
     _ff_fb_forward_speed,
+    _ff_fb_path_guidance,
     _geometric_route_time_cost,
     _preview_corner_speed_limit,
     _route_length_from,
     _route_states,
     _tracking_waypoints,
+    _waypoint_reached_or_passed,
 )
+from planning.core.dynamics import unicycle_step
 
 
 def test_straight_path_keeps_one_metre_per_second_ceiling():
@@ -56,6 +63,28 @@ def test_tracker_uses_current_state_before_first_route_waypoint():
     ]
 
 
+def test_dense_waypoint_is_advanced_after_belief_crosses_its_plane():
+    route = [(0.0, 0.0), (0.2, 0.0), (0.4, 0.0)]
+    assert _waypoint_reached_or_passed(
+        route, 1, np.asarray((0.31, 0.03)), arrival_radius_m=0.1,
+    )
+
+
+def test_dense_waypoint_is_not_advanced_before_its_plane():
+    route = [(0.0, 0.0), (0.2, 0.0), (0.4, 0.0)]
+    assert not _waypoint_reached_or_passed(
+        route, 1, np.asarray((0.09, 0.03)), arrival_radius_m=0.1,
+    )
+
+
+def test_ff_fb_collapses_dense_straight_samples_but_retains_corner():
+    dense = np.asarray(((0.0, 0.0), (0.2, 0.0), (0.4, 0.0),
+                        (0.4, 0.2), (0.4, 0.4)))
+    assert _compress_collinear_waypoints(dense).tolist() == [
+        [0.0, 0.0], [0.4, 0.0], [0.4, 0.4],
+    ]
+
+
 def test_geometric_route_length_includes_start_to_first_waypoint():
     assert _route_length_from(
         np.asarray((-10.0, -6.0)),
@@ -88,6 +117,73 @@ def test_ff_fb_respects_arrival_or_corner_speed_cap():
     assert _ff_fb_forward_speed(
         1.0, 0.30, 0.0, 0.0, v_max=1.0, yaw_gate_rad=0.60
     ) == pytest.approx(0.30)
+
+
+def test_ff_fb_does_not_brake_for_dense_intermediate_waypoint():
+    assert _ff_fb_arrival_speed_cap(
+        0.2, final_segment=False, v_max=1.0,
+    ) == pytest.approx(1.0)
+
+
+def test_ff_fb_brakes_only_on_final_segment():
+    assert _ff_fb_arrival_speed_cap(
+        0.2, final_segment=True, v_max=1.0,
+    ) == pytest.approx(0.3)
+
+
+def test_ff_fb_path_guidance_preserves_centreline_speed():
+    heading_error, angular_velocity, speed_cap = _ff_fb_path_guidance(
+        np.pi / 2.0, np.pi / 2.0, 0.0, v_max=1.0, w_limit=0.75,
+    )
+    assert heading_error == pytest.approx(0.0)
+    assert angular_velocity == pytest.approx(0.0)
+    assert speed_cap == pytest.approx(1.0)
+
+
+def test_ff_fb_path_guidance_turns_back_and_slows_when_right_of_northbound_path():
+    heading_error, angular_velocity, speed_cap = _ff_fb_path_guidance(
+        np.pi / 2.0, np.pi / 2.0, -0.10, v_max=1.0, w_limit=0.75,
+    )
+    assert heading_error > 0.0
+    assert angular_velocity > 0.0
+    assert speed_cap < 0.56
+
+
+def test_ff_fb_path_guidance_is_mirror_symmetric():
+    right_error, right_w, right_speed = _ff_fb_path_guidance(
+        0.0, 0.0, -0.08, v_max=1.0, w_limit=0.75,
+    )
+    left_error, left_w, left_speed = _ff_fb_path_guidance(
+        0.0, 0.0, 0.08, v_max=1.0, w_limit=0.75,
+    )
+    assert right_error == pytest.approx(-left_error)
+    assert right_w == pytest.approx(-left_w)
+    assert right_speed == pytest.approx(left_speed)
+
+
+def test_ff_fb_closed_loop_converges_from_lateral_departure_without_crossing_farther_out():
+    node = SimpleNamespace(
+        local_horizon=12,
+        dt=0.25,
+        v_max=1.0,
+        waypoint_spacing_m=0.2,
+        simple_tracker_yaw_gate_rad=0.60,
+        _waypoints=[(0.0, 0.0), (0.0, 10.0)],
+        _wp_idx=1,
+    )
+    node._waypoint_array = lambda state_xy: _tracking_waypoints(
+        node._waypoints, node._wp_idx, state_xy,
+    )
+    state = np.asarray((0.20, 0.0, np.pi / 2.0))
+    lateral_positions = []
+    for _ in range(60):
+        controls = EfeAgentNode._ff_fb_plan(node, state)
+        state = unicycle_step(state, controls[0], node.dt)
+        lateral_positions.append(float(state[0]))
+        if state[1] >= 9.8:
+            break
+    assert max(lateral_positions) <= 0.20 + 1.0e-9
+    assert abs(state[0]) < 0.02
 
 
 def test_geometric_time_cost_prefers_heading_aligned_route_over_180_pivot():

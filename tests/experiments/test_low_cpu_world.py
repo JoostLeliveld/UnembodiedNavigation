@@ -16,7 +16,12 @@ def test_low_cpu_world_only_changes_documented_rates():
 
     assert '<max_step_size>0.005</max_step_size>' in low_cpu
     assert '<real_time_update_rate>200</real_time_update_rate>' in low_cpu
-    assert low_cpu.count('<update_rate>20</update_rate>') == 46
+    # Stock-layout edits may change the number of contact-enabled collision
+    # links.  The derivative must transform every canonical rate, not preserve
+    # a historical sensor count.
+    assert low_cpu.count('<update_rate>20</update_rate>') == reference.count(
+        '<update_rate>60</update_rate>'
+    )
 
     normalized = re.sub(
         r'  <!-- LOW-CPU DERIVATIVE:.*?\n       ',

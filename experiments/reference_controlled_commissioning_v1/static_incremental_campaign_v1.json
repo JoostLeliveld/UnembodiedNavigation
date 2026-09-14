@@ -1,0 +1,257 @@
+{
+  "audit_firewall": {
+    "capture_separately": true,
+    "do_not_run_detector_fit_model_selection_or_filter_selection_on_audit": true,
+    "open_only_after_static_correction_R_and_filtering_choices_are_frozen": true
+  },
+  "created_utc": "2026-09-14T11:37:50.607655+00:00",
+  "fresh_pose_files": {
+    "audit": {
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/reference_controlled_commissioning_v1/static_incremental_audit_poses_v1.json",
+      "sha256": "be379241d94316da672674c76834322b66d164bc3d0e7eb955b6c293037e6867"
+    },
+    "validation": {
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/reference_controlled_commissioning_v1/static_incremental_validation_poses_v1.json",
+      "sha256": "06e223b5cfdfd0060f2554b307572fc8559763f475c88d1e5a2c1cc7504bc5ef"
+    }
+  },
+  "geometry_contract": {
+    "candidate_grid_step_m": 0.1,
+    "collision_include_names": [
+      "forklift_parked",
+      "pallet_jack",
+      "bin_office",
+      "pallet_loose_1",
+      "pallet_loose_2"
+    ],
+    "collision_model_names": [
+      "warehouse_shell",
+      "warehouse_v2_occluders"
+    ],
+    "collision_prism_count": 56,
+    "edge_body_clearance_interval_m": [
+      0.05,
+      0.35
+    ],
+    "legacy_validity": "exact_oriented_rectangle_at_each_of_the_8_captured_headings",
+    "new_candidate_validity": "conservative_circumscribed_radius_at_all_headings",
+    "required_body_clearance_m": 0.05,
+    "robot_footprint_m": {
+      "length": 0.8,
+      "width": 0.55
+    }
+  },
+  "legacy_exclusions": [
+    {
+      "block_id": "B01_00",
+      "exclusion_reasons": [
+        "eight_heading_body_clearance_below_requirement"
+      ],
+      "heading_count": 8,
+      "legacy_role": "commissioning_fit",
+      "minimum_body_clearance_m": -0.08365129015738154,
+      "position_id": 0,
+      "position_key": "P0000",
+      "x": -8.0,
+      "y": -8.8
+    },
+    {
+      "block_id": "B04_00",
+      "exclusion_reasons": [
+        "eight_heading_body_clearance_below_requirement"
+      ],
+      "heading_count": 8,
+      "legacy_role": "commissioning_fit",
+      "minimum_body_clearance_m": -0.3117804953348866,
+      "position_id": 8,
+      "position_key": "P0008",
+      "x": 2.0,
+      "y": -8.8
+    },
+    {
+      "block_id": "B01_00",
+      "exclusion_reasons": [
+        "eight_heading_body_clearance_below_requirement"
+      ],
+      "heading_count": 8,
+      "legacy_role": "commissioning_fit",
+      "minimum_body_clearance_m": -0.07511091669793092,
+      "position_id": 19,
+      "position_key": "P0019",
+      "x": -8.0,
+      "y": -8.4
+    },
+    {
+      "block_id": "B04_00",
+      "exclusion_reasons": [
+        "eight_heading_body_clearance_below_requirement"
+      ],
+      "heading_count": 8,
+      "legacy_role": "commissioning_fit",
+      "minimum_body_clearance_m": -0.12278708286594195,
+      "position_id": 27,
+      "position_key": "P0027",
+      "x": 1.6,
+      "y": -8.4
+    },
+    {
+      "block_id": "B01_00",
+      "exclusion_reasons": [
+        "eight_heading_body_clearance_below_requirement"
+      ],
+      "heading_count": 8,
+      "legacy_role": "commissioning_fit",
+      "minimum_body_clearance_m": -0.2154593882628696,
+      "position_id": 38,
+      "position_key": "P0038",
+      "x": -8.0,
+      "y": -8.0
+    },
+    {
+      "block_id": "B01_00",
+      "exclusion_reasons": [
+        "eight_heading_body_clearance_below_requirement"
+      ],
+      "heading_count": 8,
+      "legacy_role": "commissioning_fit",
+      "minimum_body_clearance_m": 0.02701599458225523,
+      "position_id": 39,
+      "position_key": "P0039",
+      "x": -7.6,
+      "y": -8.0
+    },
+    {
+      "block_id": "B01_00",
+      "exclusion_reasons": [
+        "eight_heading_body_clearance_below_requirement"
+      ],
+      "heading_count": 8,
+      "legacy_role": "commissioning_fit",
+      "minimum_body_clearance_m": -0.4096405702677799,
+      "position_id": 57,
+      "position_key": "P0057",
+      "x": -8.0,
+      "y": -7.6
+    },
+    {
+      "block_id": "B01_00",
+      "exclusion_reasons": [
+        "eight_heading_body_clearance_below_requirement"
+      ],
+      "heading_count": 8,
+      "legacy_role": "commissioning_fit",
+      "minimum_body_clearance_m": -0.013225715868197627,
+      "position_id": 75,
+      "position_key": "P0075",
+      "x": -7.6,
+      "y": -7.2
+    },
+    {
+      "block_id": "B00_00",
+      "exclusion_reasons": [
+        "eight_heading_body_clearance_below_requirement"
+      ],
+      "heading_count": 8,
+      "legacy_role": "commissioning_fit",
+      "minimum_body_clearance_m": -0.21397208266633044,
+      "position_id": 100,
+      "position_key": "P0100",
+      "x": -9.2,
+      "y": -6.8
+    },
+    {
+      "block_id": "B01_00",
+      "exclusion_reasons": [
+        "eight_heading_body_clearance_below_requirement"
+      ],
+      "heading_count": 8,
+      "legacy_role": "commissioning_fit",
+      "minimum_body_clearance_m": -0.23618884791992686,
+      "position_id": 101,
+      "position_key": "P0101",
+      "x": -8.4,
+      "y": -6.8
+    }
+  ],
+  "partition_contract": {
+    "final_total": {
+      "cameras_per_pose": 5,
+      "edge": 80,
+      "general": 400,
+      "headings_per_position": 8,
+      "opportunities": 19200,
+      "positions": 480
+    },
+    "fresh_sealed_audit": {
+      "edge": 21,
+      "edge_group_rule": "1.6 m tiles with odd (ix + iy)",
+      "general": 84,
+      "general_blocks": [
+        "B00_03",
+        "B01_04",
+        "B02_01",
+        "B04_03",
+        "B07_04"
+      ],
+      "positions": 105
+    },
+    "fresh_validation": {
+      "edge": 21,
+      "edge_group_rule": "1.6 m tiles with even (ix + iy)",
+      "general": 84,
+      "general_blocks": [
+        "B00_04",
+        "B01_02",
+        "B02_02",
+        "B03_01",
+        "B04_01",
+        "B04_02",
+        "B05_02",
+        "B05_05",
+        "B07_00",
+        "B07_03"
+      ],
+      "positions": 105
+    },
+    "legacy_development": {
+      "edge": 38,
+      "general": 232,
+      "legacy_roles_reclassified_as_development": [
+        "commissioning_fit",
+        "final_audit"
+      ],
+      "positions": 270
+    }
+  },
+  "purpose": "Fit the static commissioned observation model across the warehouse, validate model and filtering choices on fresh spatial support, and reserve a fresh audit.",
+  "schema": "static_incremental_commissioning_protocol.v1",
+  "selection_contract": {
+    "edge_holdout_unit": "whole_1.6_m_edge_tile",
+    "general_holdout_unit": "whole_3.2_m_coarse_block",
+    "minimum_distance_between_new_positions_m": 0.3,
+    "minimum_distance_from_any_legacy_position_m": 0.28,
+    "observed_minimum_distance_between_new_positions_m": 0.2999999999999998,
+    "selection_within_pool": "deterministic_farthest_point_then_lexicographic_tie_break",
+    "uses_observed_detector_or_residual_outputs": false
+  },
+  "source_contract": {
+    "legacy_audit_access_report": {
+      "final_audit_previously_accessed": true,
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/thesis_final_pipeline_v1/stage09_navigation/runtime_yaw_recovery_audit_v1/report.json",
+      "sha256": "932d34b07fe057450f8fd2f589a9de5599a5d3f3c83f3a9bbd291e153321300d"
+    },
+    "legacy_master_capture": {
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/thesis_final_pipeline_v1/master_capture/capture_manifest.json",
+      "sha256": "7b9e43eaae686891fb8b063b2ee7a07ae98a5d7049affa1361e2df00f34472c8"
+    },
+    "world": {
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+      "sha256": "1c7e913d6478039b4c02bb7e3b680dcc52626c4963b9fcc6bf8f1daff1f7c331"
+    },
+    "world_profiles": {
+      "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/src/experiments/config/world_profiles.yaml",
+      "sha256": "742cb32c69ea9f48ecdf1ce899e9bf8cd45949be863312369b85cb67a79405cd"
+    }
+  },
+  "status": "frozen_before_new_capture"
+}

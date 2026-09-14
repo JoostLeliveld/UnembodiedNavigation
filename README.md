@@ -1,144 +1,41 @@
-# Unembodied Navigation
+# UnembodiedNavigation
 
-A small robot drives a simulated warehouse. Its wheel odometry drifts without bound, so it
-leans on wall-mounted cameras that watch the floor. Cameras are not equally useful
-everywhere: shelves block views, accuracy falls off with range and viewing angle, and a
-camera can be quietly miscalibrated.
+ROS 2 and Gazebo implementation for the commissioned external-camera-network thesis.
 
-The question is not "can the robot see itself". It is **"how good is this particular
-sighting, and does knowing that change how the robot should drive?"**
+Start with:
 
-## What is being worked on right now
+- `AGENTS.md` for the non-negotiable method and evidence boundary;
+- `PLAN.md` for the current execution order;
+- `docs/COMMISSIONED_SENSOR_MODEL_CONTRACT.md` for the sensor-model contract;
+- `experiments/reference_controlled_commissioning_v1/PROTOCOL.md` for commissioning;
+- `experiments/thesis_pipeline_lock/pipeline_lock.json` for current evidence status.
 
-The paper now follows one ordered chain from sensor characterization to planning:
+The current observation starts at the raw YOLO bounding-box bottom centre. Visual-hull
+observations are not part of the thesis. Availability is the position-only field `q_i(p)`.
+Every correction candidate is evaluated with a covariance fitted to its own residuals.
 
-```text
-camera/YOLO bias and noise
-  -> conditional covariance and probability of a usable observation
-  -> camera selection or fusion
-  -> expected belief evolution in the existing planner
-```
+Historical studies and conclusions have been removed from the working repository. They are
+recoverable from Git history and the dated cold archive, but they are not thesis evidence.
 
-**Current scope: the IWAI camera-network extension and a commissioning audit for a
-12-page AIES thesis.** The network planner, full-route preflight and live calibration
-interface are implemented. Integration trials exposed tracking and estimator defects;
-the corrected pilot finished with one stuck run and two goals, and a separate guarded-
-controller follow-up reached the goal. These are diagnostic runtime checks, separate from
-sensor-model improvements; remaining event-handling defects are still being repaired.
-[`docs/ICRA_STATUS.md`](docs/ICRA_STATUS.md) is the current evidence/status account and
-[`docs/runtime_integrity_audit.md`](docs/runtime_integrity_audit.md) records repairs,
-retained failures and remaining filtering/command policies. The metrics registry controls
-which exact runs may be compared; these pilots do not establish a GP navigation benefit.
+## Repository layout
 
-## Start here
+- `src/`: runtime ROS packages.
+- `experiments/reference_controlled_commissioning_v1/`: current commissioning and model selection.
+- `experiments/thesis_pipeline_lock/`: current locks and detector/dataset provenance.
+- `experiments/warehouse_v2_sketches/`: locked warehouse geometry.
+- `experiments/deck_figures/`: thesis-facing figures.
+- `scripts/visibility_comparison/run_visibility_campaign.py`: campaign runner.
+- `tests/`: tests for retained thesis code.
 
-[`PLAN.md`](PLAN.md) is the plan of record — the sentences the paper has to earn, what is
-done, what is still owed, and which dataset may serve which purpose. Read it before
-proposing work.
-
-[`docs/NEXT_MEETING.md`](docs/NEXT_MEETING.md) is the slide-by-slide plan for the first
-conceptual measurement-model meeting.
-
-[`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) preserves the earlier pixel-model investigation and
-glossary. Its scope note distinguishes that model from the active metric pipeline below.
-
-[`docs/`](docs/) holds three contracts, not prose:
-[`localization_metrics.md`](docs/localization_metrics.md) — which quantities may be compared
-and what makes a drive scoreable; [`open_questions.md`](docs/open_questions.md) — what is
-unresolved and which implementation limits are known;
-[`reproducibility_inputs.md`](docs/reproducibility_inputs.md) — the hashed detector and
-calibration bytes a machine needs to produce evidence at all.
-
-**No fusion result is currently frozen.** The registry's paper selection is null; existing
-campaigns remain diagnostic until an exact, provenance-homogeneous selection satisfies the
-logging and assimilation contract. See
-[`docs/localization_metrics_registry.json`](docs/localization_metrics_registry.json).
-
-## The pipeline
-
-```text
-camera image -> YOLO box -> IPM and box features -> frozen metric NN
-             -> residual offset correction and full commissioned metric R
-             -> per-camera admission -> robust camera fusion -> robot correction
-wheel odometry -> motion prediction --------------------------> recursive belief
-recursive belief (mean, full covariance, frame, time) ---------> planner
-```
-
-This is the metric-reference camera path used by the registered navigation pilots.
-Plain IPM and pixel-covariance projection remain separately configured alternatives.
-The 2026-09-07 repairs add explicit state revision, motion support and event accounting;
-their [implementation tracker](docs/module_audits/IMPLEMENTATION_PROGRESS.md) records
-remaining integration gates. They have not yet passed complete runtime acceptance.
-
-The central object is the **belief**: a position *and* a stated uncertainty. Much of this
-work is about whether that stated uncertainty is honest, not about whether the position is
-accurate. They are separate claims, and a filter can pass one while badly failing the other.
-
-## Layout
-
-| Path | Role |
-|---|---|
-| [`src/`](src/) | The ROS 2 runtime: perception, reliability (the camera manager), planning, sim, experiments. Campaigns load from `install/`, so `colcon build` after editing. |
-| [`experiments/`](experiments/) | One folder per investigation, each with a README saying what question it answers. |
-| [`scripts/`](scripts/) | Campaign runner, perception dataset/model tooling, and the shared analysis library in [`scripts/shared/`](scripts/shared/). |
-| [`tests/`](tests/) | `python3 -m pytest -q` from this directory. Fast; just run it. |
-| [`config/`](config/), [`schemas/`](schemas/) | Shared configuration and data contracts. |
-| `logs/` | Ignored. Run output, captured datasets, trained detectors. |
-
-## Build and test
+Run tests from the repository root:
 
 ```bash
-source /opt/ros/humble/setup.bash
-colcon build --symlink-install
-source install/setup.bash
 python3 -m pytest -q
 ```
 
-## Running a campaign
-
-**Check nothing is already running first.** A second Gazebo collides with the live one on
-the same ROS topics and corrupts both.
+Before starting Gazebo or a campaign, verify that no other run is active:
 
 ```bash
-pgrep -a "ros2 launch|ign gazebo|run_visibility_campaign"      # must be empty
-source /opt/ros/humble/setup.bash && source install/setup.bash # or every run dies instantly
-
-python3 scripts/visibility_comparison/run_visibility_campaign.py \
-  --config scripts/visibility_comparison/fusion_on_fixed_routes_campaign.yaml \
-  --dry-run
+pgrep -af "ros2 launch|ign gazebo|run_visibility_campaign"
 ```
 
-The following are historical fixed-route campaign recipes, not the current navigation
-acceptance plan. Each config names its arms in its own header:
-
-| config | runs | what varies |
-|---|---|---|
-| `fusion_on_fixed_routes_campaign.yaml` | 120 | the fusion rule (F1–F4) and what a detector's box means (O1, O2), over four routes |
-| `measurement_covariance_ablation_campaign.yaml` | 15 | how much the per-camera covariance knows (K0–K2) |
-| `heading_update_ablation_campaign.yaml` | 10 | whether a position correction may move the heading (H0, H1) |
-
-Those recipes prescribe common routes. Current navigation pilots also use GLOBAL EFE
-planning; their exact configurations and separate controller-recovery treatment are named
-in the [registry](docs/localization_metrics_registry.json). Common controller/source identity
-must be verified from each selected protocol, rather than assumed across campaigns.
-
-Drop `--dry-run` to execute. Output lands in
-`logs/visibility_comparison/<campaign>/<task>/<condition>/<seed>/experiment_*/`.
-`run_summary.json` appears only when a run ends.
-
-Reuse requires matching configuration, source/assets and complete valid event evidence.
-The [campaign audit](docs/module_audits/13_configuration_provenance_campaigns.md)
-and [repair tracker](docs/module_audits/IMPLEMENTATION_PROGRESS.md) distinguish the
-implemented checks from pending integration verification. Historical manifests do not
-gain complete source or physical-asset coverage merely because current validation improves.
-
-## Reporting results
-
-Every estimate is scored against the truth at the instant that estimate describes, through
-the one loader in [`experiments/fusion_on_fixed_routes/aligned.py`](experiments/fusion_on_fixed_routes/aligned.py).
-Two mistakes it exists to prevent — pairing a timestamped estimate with a later truth, and
-counting one detection several times — were each made independently in more than one script
-and were invisible in the output. Do not read the run CSVs without it.
-
-Ground truth is used to score, and for nothing else. It is never an input the online
-planner or filter can see.

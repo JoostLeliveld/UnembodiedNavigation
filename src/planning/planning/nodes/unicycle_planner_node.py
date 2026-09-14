@@ -47,6 +47,18 @@ NONINFORMATIVE_YAW_VAR = float(math.pi ** 2)
 _UNSPECIFIED_RECORD = object()
 
 
+def _correction_envelope_allows_reanchor(payload) -> bool:
+    """Whether one retained fused event can justify resetting a lost belief."""
+    if payload.get('schema_version') == 1:
+        return True
+    accepted = payload.get('accepted_camera_ids', ())
+    return bool(
+        isinstance(accepted, list)
+        and len(accepted) == len(set(accepted))
+        and len(accepted) >= 2
+    )
+
+
 def _as_bool(value):
     if isinstance(value, bool):
         return value
@@ -107,10 +119,11 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('seed', 0)
 
         # Process/observation noise
-        _declare_if_not('process_noise_xy', 0.01)
-        _declare_if_not('process_noise_theta', 0.02)
-        # Coherent encoder drift (Gate 0, logs/studies/gate0_process_noise/). OFF by default:
-        # it changes the belief on every drive, so campaigns opt in explicitly.
+        # Locked to the camera-ready IWAI actuation-noise PSDs; see
+        # docs/PROCESS_NOISE_LOCK.md before changing either value.
+        _declare_if_not('process_noise_xy', 0.02)
+        _declare_if_not('process_noise_theta', 0.08)
+        # Frozen process-model option. Campaign manifests must state its value.
         _declare_if_not('coherent_drift', False)
         _declare_if_not('obs_noise_uv', 2.0)
 
@@ -161,7 +174,10 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('camera_network_expected_source_hashes_json', '')
         _declare_if_not('camera_network_camera_ids', '')
         _declare_if_not('camera_network_objective', 'legacy_pixel_chart')
-        _declare_if_not('network_goal_std_m', 0.15)
+        _declare_if_not('network_goal_std_m', 0.35)
+        _declare_if_not('kouw_et1_ambiguity', True)
+        _declare_if_not('network_goal_std_start_m', -1.0)
+        _declare_if_not('camera_network_updates_per_step', 1)
         # The planner models the robot as a disc, so this is the CIRCUMSCRIBED
         # radius. warehouse_amr is 0.800 x 0.550 m -> hypot(0.400, 0.275) = 0.485.
         # (turtlebot3_burger was 0.125; pass it explicitly to reproduce a
@@ -175,6 +191,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('optimizer_maxfun', 500)
         _declare_if_not('optimizer_ftol', 1e-6)
         _declare_if_not('optimizer_gtol', 1e-4)
+        _declare_if_not('optimizer_control_block_steps', 1)
         _declare_if_not('optimizer_warm_start', True)
         _declare_if_not('optimizer_multistart', False)
         _declare_if_not('optimizer_multistart_include_direct', True)
@@ -299,18 +316,18 @@ class UnicyclePlannerNode(Node):
         # belief lands implausibly far from a fresh correction the belief (or a
         # bad-stamp replay) has diverged -> hard re-anchor to the correction rather
         # than NIS-reject it (which locks the belief out of recovery). And cap the
-        # motion-replay interval so a single far-future correction stamp cannot
-        # jump the prediction tens of metres.
+        # unsupported motion-sample gap so a single far-future correction stamp
+        # cannot jump the prediction tens of metres. A longer interval between
+        # camera fixes is still replayable when timestamped odometry covers the
+        # whole interval with no gap above this bound.
         _declare_if_not('state_reanchor_m', 0.0)
         _declare_if_not('state_max_predict_dt_s', 1.5)
-        # Covariance added on a REJECTED /state/bev correction. A rejection must
-        # never freeze the belief, so the stamp still advances and S grows -- but
-        # the old +1.0 m^2 was large enough to neuter the NIS gate for the next
-        # correction (S_y ~ 1.0 makes a 1.87 m innovation score NIS ~3.4 and sail
-        # through at gain 0.97, which is how the unguarded jump got in). This is
-        # sized so repeated rejections still recover, via the state_reanchor_m
-        # guard, without blinding the gate after a single one.
-        _declare_if_not('state_reject_inflate_m2', 0.05)
+        # Optional legacy covariance added on a rejected /state/bev correction.
+        # The default is zero: the rejected observation contributes no information,
+        # while time and motion propagation still add the configured process noise.
+        # A fixed event-triggered jump makes transport failures look like physical
+        # drift and progressively weakens the NIS gate.
+        _declare_if_not('state_reject_inflate_m2', 0.0)
         # Optional extra covariance growth after the ordinary process model.
         # Zero is the evidence-grade default: an empirical staleness penalty must
         # never hide in control flow or be absent from the run manifest.
@@ -427,6 +444,12 @@ class UnicyclePlannerNode(Node):
             self.get_parameter('camera_network_objective').value
         ).strip().lower()
         self.network_goal_std_m = float(self.get_parameter('network_goal_std_m').value)
+        self.kouw_et1_ambiguity = bool(self.get_parameter('kouw_et1_ambiguity').value)
+        _goal_start = float(self.get_parameter('network_goal_std_start_m').value)
+        self.network_goal_std_start_m = _goal_start if _goal_start > 0. else None
+        self.camera_network_updates_per_step = int(
+            self.get_parameter('camera_network_updates_per_step').value
+        )
         self.robot_collision_radius_m = float(self.get_parameter('robot_collision_radius_m').value)
         self.robot_length_m = float(self.get_parameter('robot_length_m').value)
         self.robot_width_m = float(self.get_parameter('robot_width_m').value)
@@ -435,6 +458,9 @@ class UnicyclePlannerNode(Node):
         self.optimizer_maxfun = int(self.get_parameter('optimizer_maxfun').value)
         self.optimizer_ftol = float(self.get_parameter('optimizer_ftol').value)
         self.optimizer_gtol = float(self.get_parameter('optimizer_gtol').value)
+        self.optimizer_control_block_steps = int(
+            self.get_parameter('optimizer_control_block_steps').value
+        )
         self.optimizer_warm_start = _as_bool(self.get_parameter('optimizer_warm_start').value)
         self.optimizer_multistart = _as_bool(self.get_parameter('optimizer_multistart').value)
         self.optimizer_multistart_include_direct = _as_bool(
@@ -656,6 +682,14 @@ class UnicyclePlannerNode(Node):
         # Subscriptions
         state_qos = QoSProfile(depth=1)
         state_qos.durability = DurabilityPolicy.VOLATILE
+        # Pose display topics may legitimately keep only the newest sample, but an
+        # evidence-bearing correction envelope is an event stream: every published
+        # source_batch_id must reach one terminal assimilation outcome.  A depth-one
+        # queue silently discarded envelopes while the serialized EKF callback was
+        # busy (especially with 960-pixel detector inference).  Keep a bounded but
+        # comfortably deep reliable history for correction events.
+        correction_event_qos = QoSProfile(depth=1000)
+        correction_event_qos.durability = DurabilityPolicy.VOLATILE
         self.state_sub = self.create_subscription(
             PoseWithCovarianceStamped, '/state/bev', self._state_cb, qos_profile=state_qos,
             callback_group=self._correction_group
@@ -670,14 +704,14 @@ class UnicyclePlannerNode(Node):
                 String,
                 self.state_correction_envelope_topic,
                 self._state_correction_envelope_cb,
-                qos_profile=state_qos,
+                qos_profile=correction_event_qos,
                 callback_group=self._correction_group,
             )
         self.map_observations_sub = None
         if self.state_correction_ekf and self.state_correction_mode == 'per_camera':
             self.map_observations_sub = self.create_subscription(
                 String, self.map_observations_topic, self._map_observations_cb,
-                qos_profile=state_qos, callback_group=self._correction_group
+                qos_profile=correction_event_qos, callback_group=self._correction_group
             )
             self.get_logger().info(
                 "state_correction_mode=per_camera: folding per-camera map "
@@ -781,6 +815,14 @@ class UnicyclePlannerNode(Node):
         self._cmd_log: list[tuple[float, float, float]] = []
         self._odom_log: list[tuple[float, float, float]] = []
         self._odom_heading_log = []
+        # DDS may deliver an odometry sample just before the corresponding /clock
+        # callback is executed. Such a sample is not evidence at the current
+        # instant, but discarding it creates an artificial hole in the later replay
+        # history. Keep it outside the active history until the local simulation
+        # clock reaches its source stamp. A bounded dictionary also permits two
+        # future samples that arrive out of order to be committed in source order.
+        self._pending_odom_events = {}
+        self._PENDING_ODOM_MAX = 4096
         self._CMD_LOG_MAX_S: float = 60.0
         self._latest_measurement_available = False
         self._latest_belief_age_s = math.nan
@@ -902,6 +944,9 @@ class UnicyclePlannerNode(Node):
             return record
 
     def _motion_snapshot_locked(self):
+        now_ns = getattr(self, '_belief_clock_ns', None)
+        if now_ns is not None:
+            self._flush_pending_odom_locked(int(now_ns))
         return MotionHistorySnapshot.capture(
             self._odom_log, self._cmd_log, self.use_odom_for_predict,
             getattr(self, '_odom_heading_log', ()), getattr(self, '_odom_motion_gaps', ()))
@@ -1153,10 +1198,20 @@ class UnicyclePlannerNode(Node):
                 raise ValueError('physical camera frame was already processed in another correction event')
             self._active_correction_envelope = deepcopy(payload)
             try:
+                # A large innovation can mean that the recursive belief has
+                # escaped the robot.  Re-anchoring is only justified by a
+                # corroborated fused measurement: one accepted camera is still
+                # allowed through the ordinary Kalman/NIS path, but may not snap
+                # the robot belief across the map.  Schema-1 envelopes predate
+                # the retained membership list and keep their legacy behaviour.
+                allow_reanchor = _correction_envelope_allows_reanchor(payload)
                 self._apply_metric_correction(
                     (self._ns_stamp(payload['correction_stamp_ns']) if payload['schema_version'] == 2
                      else self._float_to_stamp(correction_stamp)), xy, covariance,
-                    source_batch_id=source_batch_id, allow_same_stamp=payload['schema_version'] == 2)
+                    source_batch_id=source_batch_id,
+                    allow_same_stamp=payload['schema_version'] == 2,
+                    allow_reanchor=allow_reanchor,
+                )
             finally:
                 self._active_correction_envelope = None
         except Exception as exc:
@@ -1279,9 +1334,20 @@ class UnicyclePlannerNode(Node):
                 )
                 if _as_bool(g('use_visibility_model')) else 'legacy_pixel_chart'
             ),
+            network_goal_std_start_m=getattr(self, 'network_goal_std_start_m', None),
+            kouw_et1_ambiguity=bool(g_default(
+                'kouw_et1_ambiguity', getattr(self, 'kouw_et1_ambiguity', True))),
             network_goal_std_m=float(g_default(
                 'network_goal_std_m',
                 getattr(self, 'network_goal_std_m', 0.15),
+            )),
+            camera_network_updates_per_step=int(g_default(
+                'camera_network_updates_per_step',
+                getattr(self, 'camera_network_updates_per_step', 1),
+            )),
+            optimizer_control_block_steps=int(g_default(
+                'optimizer_control_block_steps',
+                getattr(self, 'optimizer_control_block_steps', 1),
             )),
             r_visible_uv=self.r_visible_uv, r_miss_uv=self.r_miss_uv,
             visibility_sigma_kappa=self.visibility_sigma_kappa,
@@ -1398,9 +1464,6 @@ class UnicyclePlannerNode(Node):
             now_ns = self._observe_belief_clock_locked()
             if now_ns is None:
                 return
-            if stamp_ns > now_ns:
-                self._odom_refused_future = getattr(self, '_odom_refused_future', 0) + 1
-                return
             accepted = getattr(self, '_odom_accepted_stamp_ns', None)
             if accepted is not None and stamp_ns <= accepted:
                 # An exact duplicate and a conflicting equal-stamp message both add
@@ -1411,6 +1474,51 @@ class UnicyclePlannerNode(Node):
                 else:
                     self._odom_refused_old = getattr(self, '_odom_refused_old', 0) + 1
                 return
+            event = (float(yaw), bool(pose_available), float(v_odom), float(w_odom))
+            pending = getattr(self, '_pending_odom_events', None)
+            if pending is None:
+                self._pending_odom_events = pending = {}
+            previous = pending.get(stamp_ns)
+            if previous is not None:
+                if previous != event:
+                    self._odom_refused_conflict = getattr(
+                        self, '_odom_refused_conflict', 0) + 1
+                else:
+                    self._odom_refused_duplicate = getattr(
+                        self, '_odom_refused_duplicate', 0) + 1
+                return
+            capacity = int(getattr(self, '_PENDING_ODOM_MAX', 4096))
+            if len(pending) >= capacity:
+                # This is a bounded transport-reordering buffer, not an alternate
+                # motion store. Refusing overflow is preferable to evicting an
+                # earlier sample and silently manufacturing a replay gap.
+                self._odom_refused_pending_overflow = getattr(
+                    self, '_odom_refused_pending_overflow', 0) + 1
+                return
+            pending[stamp_ns] = event
+            if stamp_ns > now_ns:
+                self._odom_buffered_future = getattr(
+                    self, '_odom_buffered_future', 0) + 1
+            self._flush_pending_odom_locked(now_ns)
+
+    def _flush_pending_odom_locked(self, now_ns: int) -> None:
+        """Move only causally available odometry into the replay history.
+
+        The caller holds ``_data_lock``. Future-stamped samples remain pending,
+        so they cannot alter a current prediction, heading, or velocity. Once
+        ``/clock`` catches up, they are committed in source-time order and become
+        ordinary measured-motion evidence.
+        """
+        pending = getattr(self, '_pending_odom_events', None)
+        if not pending:
+            return
+        for stamp_ns in sorted(t for t in pending if t <= int(now_ns)):
+            yaw, pose_available, v_odom, w_odom = pending.pop(stamp_ns)
+            accepted = getattr(self, '_odom_accepted_stamp_ns', None)
+            if accepted is not None and stamp_ns <= accepted:
+                self._odom_refused_old = getattr(self, '_odom_refused_old', 0) + 1
+                continue
+            stamp_s = stamp_ns * 1e-9
             self._latest_odom_yaw = yaw if pose_available else None
             self.odom_vel = np.array([v_odom, w_odom], dtype=float)
             if getattr(self, '_odom_origin_stamp_s', None) is None:
@@ -1422,13 +1530,15 @@ class UnicyclePlannerNode(Node):
                 if not hasattr(self, '_odom_motion_gaps'):
                     self._odom_motion_gaps = []
                 if accepted is not None:
-                    self._odom_motion_gaps.append((accepted, stamp_ns, 'encoder_pose_unavailable'))
+                    self._odom_motion_gaps.append(
+                        (accepted, stamp_ns, 'encoder_pose_unavailable'))
             self._odom_pose_unavailable = not pose_available
             self._odom_accepted_stamp_ns = stamp_ns
             cutoff = stamp_s - self._CMD_LOG_MAX_S
             while len(self._odom_log) > 1 and self._odom_log[1][0] <= cutoff:
                 self._odom_log.pop(0)
-            while len(self._odom_heading_log) > 1 and self._odom_heading_log[1][0] * 1e-9 <= cutoff:
+            while (len(self._odom_heading_log) > 1
+                   and self._odom_heading_log[1][0] * 1e-9 <= cutoff):
                 self._odom_heading_log.pop(0)
 
     def _diagnostic_odom_cb(self, msg: Odometry):
@@ -1694,6 +1804,7 @@ class UnicyclePlannerNode(Node):
         *,
         metric_measurement: bool = False,
         allow_reanchor: bool = True,
+        validated_replay_dt_s: float | None = None,
     ) -> bc.CorrectionGates:
         """Thresholds for the shared gate chain, from the node's parameters.
 
@@ -1701,6 +1812,17 @@ class UnicyclePlannerNode(Node):
         in metres and so only means anything when the measurement is a map
         position (the fused /state/bev path), not pixels.
         """
+        metric_replay_ceiling = float(
+            getattr(self, 'state_max_predict_dt_s', 1.5)
+        )
+        if metric_measurement and validated_replay_dt_s is not None:
+            # The caller has already proved that timestamped motion inputs cover
+            # this entire camera-outage interval. Widen only the total-dt gate;
+            # plan_replay still uses state_max_predict_dt_s as its maximum input
+            # sample gap, so stale/absent odometry cannot pass through here.
+            metric_replay_ceiling = max(
+                metric_replay_ceiling, float(validated_replay_dt_s)
+            )
         return bc.CorrectionGates(
             pixel_timeout_s=float(self.pixel_timeout_s),
             dt_nominal_s=float(self.dt),
@@ -1719,10 +1841,10 @@ class UnicyclePlannerNode(Node):
             ),
             max_predict_speed_mps=float(self.max_predict_speed_mps),
             # The fused metric path uses the configured ceiling, so the node's own
-            # pre-check and this gate chain cannot disagree. The pixel path passes 0
-            # and keeps its derived value, leaving that baseline unchanged.
+            # support pre-check and this gate chain cannot disagree. The pixel path
+            # passes 0 and keeps its derived value, leaving that baseline unchanged.
             max_predict_dt_s=(
-                float(self.state_max_predict_dt_s) if metric_measurement else 0.0
+                metric_replay_ceiling if metric_measurement else 0.0
             ),
         )
 
@@ -2547,19 +2669,36 @@ class UnicyclePlannerNode(Node):
         if stamp_ns <= before.stamp_ns and not simultaneous:
             return dropped(bc.RejectReason.NOT_NEWER)
         try:
-            if dt_corr > self.state_max_predict_dt_s:
-                out = bc.CorrectionOutcome(reason=bc.RejectReason.REPLAY_GAP, age=age,
-                                            dt_s=dt_corr, measurement_space=bc.SPACE_MAP_XY)
-                def advance():
-                    self._advance_belief_over_outage(stamp_msg, dt_corr)
-                    if inflate_on_reject:
-                        self._inflate_belief_after_rejection('replay gap')
-                return finish('dropped', out.reason.value, out, advance)
             snapshot = self._snapshot_metric_correction_inputs(stamp_msg, z_xy)
+            if snapshot is None:
+                return dropped(bc.RejectReason.MISSING_SNAPSHOT)
+            validated_replay_dt_s = None
+            if dt_corr > self.state_max_predict_dt_s:
+                full_plan = plan_replay(
+                    snapshot.motion_snapshot,
+                    before.stamp_ns,
+                    stamp_ns,
+                    self.state_max_predict_dt_s,
+                )
+                full_support = full_plan.support.following(before.motion_support)
+                if full_support.supported:
+                    validated_replay_dt_s = dt_corr
+                else:
+                    out = bc.CorrectionOutcome(reason=bc.RejectReason.REPLAY_GAP, age=age,
+                                                dt_s=dt_corr, measurement_space=bc.SPACE_MAP_XY)
+                    def advance():
+                        self._advance_belief_over_outage(stamp_msg, dt_corr)
+                        if inflate_on_reject:
+                            self._inflate_belief_after_rejection('replay gap')
+                    return finish('dropped', out.reason.value, out, advance)
             outcome = bc.apply_correction(
                 source=bc.FusedMapMeasurementSource(snapshot_fn=lambda: snapshot,
                                                       measurement_cov_fn=lambda: R),
-                gates=self._correction_gates(metric_measurement=True, allow_reanchor=allow_reanchor),
+                gates=self._correction_gates(
+                    metric_measurement=True,
+                    allow_reanchor=allow_reanchor,
+                    validated_replay_dt_s=validated_replay_dt_s,
+                ),
                 replay=lambda *args: self._replay_cmd_log_interval(
                     *args, motion_snapshot=snapshot.motion_snapshot), age=age, dt_s=dt_corr)
             status = ('accepted' if outcome.accepted else
@@ -2685,7 +2824,19 @@ class UnicyclePlannerNode(Node):
         m0 = np.array(
             [diagnostic_pose[0], diagnostic_pose[1], diagnostic_pose[2]], dtype=float)
         S0 = np.diag([1e-4, 1e-4, 1e-4]).astype(float)
-        return m0, S0, {'measurement_available': True, 'belief_age_s': 0.0}
+        return m0, S0, {
+            'measurement_available': True,
+            'belief_age_s': 0.0,
+            'belief_valid': True,
+            'motion_supported': True,
+            'belief_epoch': 'diagnostic_odom',
+            # Diagnostic odometry is a continuously sampled source rather than
+            # a correction transaction. Keep one stable identity so route
+            # admission can re-read the latest pose without confusing motion
+            # with a concurrent estimator commit.
+            'belief_revision': 0,
+            'belief_frame_id': self._resolve_plan_frame_id(),
+        }
 
     def _resolve_belief_for_planning(self):
         self._heading_anchor_applied = False
@@ -2772,6 +2923,18 @@ class UnicyclePlannerNode(Node):
             support = plan.support.following(record.motion_support)
             m, P = self._predict_belief_to_now(*record.arrays(), self.last_cmd.copy(),
                         (now_ns-record.stamp_ns)*1e-9, self._ns_stamp(now_ns), motion_snapshot=motion)
+            # ``camera_xy_only`` defines heading as map-frame odometry heading.
+            # Planning already applies that definition in
+            # ``_resolve_state_belief_ekf``.  The canonical prediction consumed by
+            # the camera manager must expose the same state: otherwise a rapid
+            # turn can leave the manager testing the observed hull against a
+            # recursively propagated heading that the controller itself does not
+            # use.  That inconsistency is fail-closed but self-locking--valid
+            # detections are refused precisely when a position correction is
+            # needed.  Anchor both the explicit envelope and compatibility pose;
+            # x/y and the motion-support evidence are unchanged.
+            m, P = self._anchor_belief_yaw_for_planning(
+                m, P, self._ns_stamp(now_ns), motion_snapshot=motion)
             snapshot = PredictionSnapshot.create(record, m, P, now_ns, support,
                         valid=support.supported,
                         invalid_reason='' if support.supported else 'unsupported_motion',

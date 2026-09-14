@@ -27,6 +27,13 @@ from planning.core.plan_validation import validate_plan_result
 from planning.core.tracker_guard import ControlSafetyResult, SafetyFailure, checked_tracker_controls
 from unav_common.config import local_controller_type
 from unav_common.mission_goal import MISSION_GOAL_TOPIC, mission_goal_from_json
+from unav_common.terminal_stop import (
+    TERMINAL_STOP_ACK_TOPIC,
+    TERMINAL_STOP_REQUEST_TOPIC,
+    TerminalStopAck,
+    terminal_stop_ack_to_json,
+    terminal_stop_request_from_json,
+)
 
 
 def _preview_corner_speed_limit(
@@ -110,6 +117,50 @@ def _ff_fb_forward_speed(
     ))
 
 
+def _ff_fb_arrival_speed_cap(
+    target_distance_m: float, *, final_segment: bool, v_max: float,
+) -> float:
+    """Brake for the mission endpoint, not for densified polyline samples."""
+    if not final_segment:
+        return float(v_max)
+    return float(min(v_max, max(0.08, 1.5 * float(target_distance_m))))
+
+
+def _ff_fb_path_guidance(
+    path_yaw: float,
+    state_yaw: float,
+    cross_track_m: float,
+    *,
+    v_max: float,
+    w_limit: float,
+) -> tuple[float, float, float]:
+    """Return damped path-heading feedback and a cross-track speed cap.
+
+    Feeding cross-track error directly into angular velocity made the 1 m/s
+    follower alternate between the two sides of a narrow aisle.  Convert it to
+    a bounded heading offset first (a Stanley-style guidance law), then close a
+    heading loop.  Slow continuously as lateral error grows so actuator lag and
+    the next 4 Hz replan cannot carry the body through the driveable boundary.
+    """
+
+    speed_scale = max(float(v_max), 0.05)
+    guidance_yaw = float(path_yaw) - math.atan2(
+        1.5 * float(cross_track_m), speed_scale,
+    )
+    heading_error = wrap_angle(guidance_yaw - float(state_yaw))
+    angular_velocity = float(np.clip(
+        1.8 * heading_error,
+        -abs(float(w_limit)),
+        abs(float(w_limit)),
+    ))
+    # Keep the declared 1 m/s ceiling on the centreline, but shed speed early
+    # enough that a 5--10 cm lateral departure is corrected rather than
+    # amplified.  The 0.12 m/s floor still permits deterministic recovery.
+    cross_track_cap = float(v_max) * math.exp(-6.0 * abs(float(cross_track_m)))
+    cross_track_cap = float(np.clip(cross_track_cap, 0.12, float(v_max)))
+    return heading_error, angular_velocity, min(cross_track_cap, float(v_max))
+
+
 def _tracking_waypoints(
     waypoints,
     waypoint_index: int,
@@ -135,6 +186,63 @@ def _tracking_waypoints(
     if target_index == 0 and float(np.linalg.norm(remaining[0] - state)) > 1.0e-6:
         remaining = np.vstack((state, remaining))
     return remaining
+
+
+def _waypoint_reached_or_passed(
+    waypoints,
+    waypoint_index: int,
+    state_xy: np.ndarray,
+    *,
+    arrival_radius_m: float,
+) -> bool:
+    """Advance dense intermediate samples once the belief crosses their plane.
+
+    Requiring a noisy belief to enter a small circle around every densified
+    sample can leave a sample behind the robot. A neutral polyline follower
+    should then continue along the route, not turn back to capture that sample.
+    The final waypoint is deliberately handled elsewhere by the mission goal
+    criterion.
+    """
+
+    if not waypoints:
+        return False
+    index = int(np.clip(waypoint_index, 0, len(waypoints) - 1))
+    state = np.asarray(state_xy, dtype=float)[:2]
+    target = np.asarray(waypoints[index], dtype=float)[:2]
+    if float(np.linalg.norm(state - target)) < float(arrival_radius_m):
+        return True
+    if index <= 0:
+        return False
+    previous = np.asarray(waypoints[index - 1], dtype=float)[:2]
+    segment = target - previous
+    segment_sq = float(segment @ segment)
+    if segment_sq <= 1.0e-12:
+        return True
+    return float((state - previous) @ segment) >= segment_sq
+
+
+def _compress_collinear_waypoints(points: np.ndarray) -> np.ndarray:
+    """Keep route corners/endpoints while removing exact densification points."""
+
+    path = np.asarray(points, dtype=float)
+    if path.ndim != 2 or path.shape[0] <= 2:
+        return path
+    kept = [path[0]]
+    for index in range(1, len(path) - 1):
+        incoming = path[index] - kept[-1]
+        outgoing = path[index + 1] - path[index]
+        incoming_norm = float(np.linalg.norm(incoming))
+        outgoing_norm = float(np.linalg.norm(outgoing))
+        if incoming_norm <= 1.0e-9 or outgoing_norm <= 1.0e-9:
+            continue
+        cosine = float((incoming @ outgoing) / (incoming_norm * outgoing_norm))
+        cross = abs(float(incoming[0] * outgoing[1] - incoming[1] * outgoing[0]))
+        sine = cross / (incoming_norm * outgoing_norm)
+        if cosine > 0.999999 and sine < 1.0e-6:
+            continue
+        kept.append(path[index])
+    kept.append(path[-1])
+    return np.asarray(kept, dtype=float)
 
 
 def _route_length_from(start_xy: np.ndarray, waypoints) -> float:
@@ -316,6 +424,19 @@ class EfeAgentNode(UnicyclePlannerNode):
                 "global_planner_mode; refusing to ignore them"
             )
         self.cmd_pub = self.create_publisher(Twist, self.cmd_topic, 10)
+        terminal_qos = QoSProfile(depth=16, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self._terminal_stop_ack_pub = self.create_publisher(
+            String, TERMINAL_STOP_ACK_TOPIC, terminal_qos
+        )
+        self._terminal_stop_requested = False
+        self._terminal_stop_request_id = ""
+        self.create_subscription(
+            String,
+            TERMINAL_STOP_REQUEST_TOPIC,
+            self._terminal_stop_request_cb,
+            terminal_qos,
+            callback_group=self._io_group,
+        )
         self.active_execution_diag_pub = self.create_publisher(
             Float64MultiArray, '/planner/active_execution_diagnostics', 10
         )
@@ -691,6 +812,33 @@ class EfeAgentNode(UnicyclePlannerNode):
             if changed:
                 self._publish_safe_stop_command()
 
+    def _terminal_stop_request_cb(self, msg):
+        """Latch the experiment-owned terminal stop before acknowledging it."""
+        try:
+            request = terminal_stop_request_from_json(msg.data)
+        except ValueError as error:
+            self._fatal_experiment_stop("Invalid terminal stop request", error)
+            return
+        with self._data_lock:
+            if self._terminal_stop_requested:
+                if request.request_id != self._terminal_stop_request_id:
+                    self._fatal_experiment_stop("Conflicting terminal stop request identity")
+                return
+            self._terminal_stop_requested = True
+            self._terminal_stop_request_id = request.request_id
+            self._publish_safe_stop_command()
+            generation = int(self._command_stop_generation)
+        ack = TerminalStopAck(
+            request_id=request.request_id,
+            component="planner",
+            status="stop_command_published",
+            acknowledgement_stamp_ns=int(self.get_clock().now().nanoseconds),
+            detail=f"command_stop_generation={generation}",
+        )
+        message = String()
+        message.data = terminal_stop_ack_to_json(ack)
+        self._terminal_stop_ack_pub.publish(message)
+
     def _execution_config_identity(self):
         # Values that change route/control feasibility, not diagnostic timestamps.
         names = ('v_min', 'v_max', 'w_min', 'w_max', 'dt', 'global_dt',
@@ -739,10 +887,23 @@ class EfeAgentNode(UnicyclePlannerNode):
             points = np.asarray(points, dtype=float)
             if points.ndim != 2 or points.shape[1] != 2 or not len(points) or not np.isfinite(points).all():
                 return False, 'malformed_route_points'
-            tolerance = float(getattr(self.global_planner, 'optimizer_terminal_goal_tolerance_m', 0.))
-            if np.linalg.norm(points[-1] - np.asarray(goal)) > tolerance:
+            # Preselected-route mode intentionally constructs no global planner.
+            # Use the tolerance that already passed route identity/geometry
+            # validation, and use the local planner for the fresh entry-leg
+            # geometry checks below.
+            planner = self.global_planner if self.global_planner is not None else self.planner
+            if self.global_planner_mode == 'preselected_route':
+                tolerance = float((self._preselected_route_provenance or {}).get(
+                    'endpoint_tolerance_m',
+                    getattr(planner, 'optimizer_terminal_goal_tolerance_m', 0.),
+                ))
+            else:
+                tolerance = float(getattr(planner, 'optimizer_terminal_goal_tolerance_m', 0.))
+            # Canonical JSON round-tripping can move a decimal endpoint by a
+            # few ulps (e.g. 10.6 -> 10.600000000000001). A declared zero
+            # geometric tolerance still needs a numerical comparison floor.
+            if np.linalg.norm(points[-1] - np.asarray(goal)) > tolerance + 1.0e-9:
                 return False, 'incomplete_route'
-            planner = self.global_planner
             pose = np.asarray(current_m[:3], dtype=float).copy()
             for point in points:
                 delta = point - pose[:2]
@@ -808,6 +969,13 @@ class EfeAgentNode(UnicyclePlannerNode):
                 and np.all(controls[:, 1] <= getattr(self, 'w_max', 1.)))
 
     def _execution_belief_is_current(self, meta):
+        if getattr(self, 'use_diagnostic_odom_localization', False):
+            return (
+                getattr(self, 'diagnostic_odom_pose', None) is not None
+                and meta.get('belief_epoch') == 'diagnostic_odom'
+                and meta.get('belief_revision') == 0
+                and meta.get('belief_frame_id') == self._resolve_plan_frame_id()
+            )
         checker = getattr(self, '_belief_context_is_current', None)
         if checker is not None and getattr(self, '_belief_record', None) is not None:
             return checker(meta, require_revision=True)
@@ -847,6 +1015,10 @@ class EfeAgentNode(UnicyclePlannerNode):
                 self._global_goal_xy = np.asarray(final_goal, dtype=float).copy()
                 self._global_solve_done = True
                 self._installed_route_request = dict(request)
+                # Keep the first LOCAL handoff observable in campaign logs.  This
+                # is intentionally one-shot and has no control-flow effect; it
+                # distinguishes executor starvation from controller/safety work.
+                self._first_local_handoff_pending = True
                 # The warm start belongs to the route only after admission.
                 try:
                     seed = self.planner._controls_for_waypoints(current_m[:3], [np.asarray(self._waypoints[0])])
@@ -882,14 +1054,24 @@ class EfeAgentNode(UnicyclePlannerNode):
                 if fresh is None:
                     self._publish_safe_stop_command()
                     return 'invalid_belief'
-                safety = self._simple_plan_safe_to_execute(controls, fresh[0])
+                incremental_local_guard = (
+                    self.use_hierarchical and self._hier_phase == 'LOCAL'
+                )
+                # LOCAL publishes command 0 immediately and the command timer
+                # revalidates every later command from the freshest belief just
+                # before publication.  Checking the entire 12-step tape here
+                # duplicated that barrier and allowed a remote future segment
+                # to block an immediately safe command for minutes.
+                safety_candidate = controls[:1] if incremental_local_guard else controls
+                safety = self._simple_plan_safe_to_execute(safety_candidate, fresh[0])
                 if (not self._plan_request_is_current(request)
                         or not self._execution_belief_is_current(fresh[2])):
                     return 'cancelled'
                 if safety.safe_steps <= 0:
                     self._publish_safe_stop_command()
                     return 'unsafe'
-                controls = controls[:safety.safe_steps]
+                if not incremental_local_guard:
+                    controls = controls[:safety.safe_steps]
             # The age is read here, under the install lock, so safety validation
             # and scheduling time count against the tape that actually installs.
             expired, why = self._plan_request_expired(request, controls.shape[0])
@@ -920,10 +1102,10 @@ class EfeAgentNode(UnicyclePlannerNode):
         """Whether the computation took longer than the tape it produced covers.
 
         The existing rule -- ``age > steps * max(dt, 1e-3)`` -- with the strict
-        ``>`` preserved. It is evaluated on the tape that will actually install
-        (the LOCAL safe prefix, not the full solver output), and independently of
-        whether latency compensation is enabled: elapsed time is not evidence of
-        executed motion, so this must not silently activate that separate path.
+        ``>`` preserved. It is evaluated on the tape that will actually install,
+        and independently of whether latency compensation is enabled: elapsed
+        time is not evidence of executed motion, so this must not silently
+        activate that separate path.
 
         A backward clock jump during computation rejects the request even when no
         old tape existed for the timer to invalidate. That is deliberate, and it
@@ -951,6 +1133,8 @@ class EfeAgentNode(UnicyclePlannerNode):
         A request captured after an ordinary stop is genuinely new and may resume;
         only work that began before the stop is cancelled.
         """
+        if getattr(self, "_terminal_stop_requested", False):
+            return False
         if request is None:
             return True
         origin = request.get('belief_origin')
@@ -968,6 +1152,8 @@ class EfeAgentNode(UnicyclePlannerNode):
         generation counter, so a solve that began before the stop could still
         install afterwards and drive the robot away from a commanded stop.
         """
+        if getattr(self, "_terminal_stop_requested", False):
+            return
         request = self._capture_plan_request()
         with self._data_lock:
             self._active_plan_request = request
@@ -1199,12 +1385,24 @@ class EfeAgentNode(UnicyclePlannerNode):
             return
 
         # LOCAL phase: track the current planner-derived waypoint.
+        trace_first_handoff = bool(
+            getattr(self, '_first_local_handoff_pending', False)
+        )
+        if trace_first_handoff:
+            self.get_logger().info('[hierarchical] first local callback entered')
         if not self._waypoints:
             return
         target = np.asarray(self._waypoints[self._wp_idx], dtype=float)
         prev_wp_idx = self._wp_idx
-        while (self._wp_idx < len(self._waypoints) - 1
-               and float(np.linalg.norm(m0[:2] - target)) < self.waypoint_arrival_radius_m):
+        while (
+            self._wp_idx < len(self._waypoints) - 1
+            and _waypoint_reached_or_passed(
+                self._waypoints,
+                self._wp_idx,
+                m0[:2],
+                arrival_radius_m=self.waypoint_arrival_radius_m,
+            )
+        ):
             self._wp_idx += 1
             target = np.asarray(self._waypoints[self._wp_idx], dtype=float)
         if self._wp_idx != prev_wp_idx:
@@ -1247,13 +1445,27 @@ class EfeAgentNode(UnicyclePlannerNode):
         self._current_tracking_yaw = float(m_track[2])
         self._current_tracking_yaw_source = float(tracking_yaw_source)
 
+        proposed_controls = self._dispatch_local_controller(m_track, target)
+        if trace_first_handoff:
+            self.get_logger().info(
+                '[hierarchical] first local controls generated; checking immediate command'
+            )
+        # Only the command that can execute now needs admission here.  The
+        # complete generated tape remains available for scheduling, while each
+        # later command is revalidated by the publication timer before use.
+        immediate_controls = proposed_controls[:1]
         decision = checked_tracker_controls(
-            self._dispatch_local_controller(m_track, target), m_track, target,
+            immediate_controls, m_track, target,
             dt=float(self.dt), w_min=float(self.w_min), w_max=float(self.w_max),
             safety_check=self._simple_plan_safe_to_execute,
             allow_rotation_recovery=self.local_controller_type == 'turn_then_go_recovery',
         )
-        controls, n_safe, reason = decision.controls, decision.safe_steps, decision.reason
+        n_safe, reason = decision.safe_steps, decision.reason
+        if trace_first_handoff:
+            self.get_logger().info(
+                f'[hierarchical] first immediate command check finished: '
+                f'safe_steps={n_safe}, reason={reason or "safe"}'
+            )
         if n_safe <= 0:
             # The immediate step itself leaves the region (not a recovery move)
             # -> genuinely unsafe, safe-stop.
@@ -1264,16 +1476,26 @@ class EfeAgentNode(UnicyclePlannerNode):
             return
         if decision.rotation_recovery:
             self.get_logger().info(f'[hierarchical] checked rotation recovery: {reason}')
-        # Execute only the safe leading prefix; the tracker replans next cycle.
-        controls = controls[:n_safe]
-        # The safe PREFIX is what installs, so it is also what the age gate must
-        # measure: a four-step solve truncated to one step covers a quarter of the
-        # time the untruncated tape would have.
-        self._install_control_tape(
+        # A recovery tape is itself the proposed replacement.  Otherwise retain
+        # the generated tape: command 0 has passed the gate and every later
+        # command must pass the same gate immediately before publication.
+        controls = (
+            decision.controls[:n_safe]
+            if decision.rotation_recovery
+            else proposed_controls
+        )
+        if trace_first_handoff:
+            self.get_logger().info('[hierarchical] first local tape install entered')
+        install_status = self._install_control_tape(
             controls,
             original_len=int(controls.shape[0]),
             log_prefix='[hierarchical] local control tape expired before install',
         )
+        if trace_first_handoff:
+            self.get_logger().info(
+                f'[hierarchical] first local tape install finished: {install_status}'
+            )
+            self._first_local_handoff_pending = False
         return
 
     def _simple_local_plan(self, m0: np.ndarray, target: np.ndarray) -> np.ndarray:
@@ -1305,7 +1527,13 @@ class EfeAgentNode(UnicyclePlannerNode):
             if abs(yaw_err) > yaw_gate:
                 v = 0.0  # rotate in place until aligned
             else:
-                v = float(v_max * math.exp(-abs(yaw_err)))
+                # Never travel farther than the active waypoint in one command.
+                # At 1 m/s the former 0.25 m step was longer than the frozen
+                # route's 0.20 m spacing and cut corners between waypoints.
+                v = float(min(
+                    v_max * math.exp(-abs(yaw_err)),
+                    dist / max(dt, 1.0e-9),
+                ))
             controls[i] = [v, w]
             state = unicycle_step(state, [v, w], dt)
 
@@ -1372,7 +1600,11 @@ class EfeAgentNode(UnicyclePlannerNode):
                 break
             alpha = wrap_angle(math.atan2(dy, dx) - state[2])
             L = max(float(np.hypot(dx, dy)), 1e-3)
-            w = float(np.clip(2.0 * v_max * math.sin(alpha) / L, -1.5, 1.5))
+            w = float(np.clip(
+                2.0 * v_max * math.sin(alpha) / L,
+                float(self.w_min),
+                float(self.w_max),
+            ))
             v = float(v_max * max(0.2, 1.0 - abs(alpha) / 1.2))
             controls[i] = [v, w]
             state = unicycle_step(state, [v, w], dt)
@@ -1385,22 +1617,42 @@ class EfeAgentNode(UnicyclePlannerNode):
         controls = np.zeros((H, 2), dtype=float)
         if wps is None or len(wps) < 2:
             return controls
+        # The frozen route is sampled every 0.2 m for collision validation.
+        # Those samples are not control objectives. Track the equivalent
+        # corner polyline so the controller cannot dominate the comparison by
+        # repeatedly point-capturing dense samples.
+        wps = _compress_collinear_waypoints(wps)
         state = m0[:3].copy().astype(float)
+        j = 0
         for i in range(H):
-            # wps[0] -> wps[1] is the segment for the currently active mission
-            # waypoint. Picking the nearest vertex switches to wps[1] -> wps[2]
-            # halfway along a long segment and cuts the corner by metres.
-            j = 0
+            # Advance the simulated tracker after reaching or crossing a
+            # corner. This prevents later controls in the short rollout from
+            # turning back toward a waypoint which the rollout already passed.
+            while j < len(wps) - 2:
+                candidate = wps[j + 1] - wps[j]
+                candidate_len = float(np.hypot(*candidate))
+                if candidate_len < 1.0e-4:
+                    j += 1
+                    continue
+                candidate_dist = float(np.linalg.norm(wps[j + 1] - state[:2]))
+                candidate_along = float(
+                    (state[:2] - wps[j]) @ (candidate / candidate_len)
+                )
+                if candidate_dist < 0.05 or candidate_along >= candidate_len:
+                    j += 1
+                    continue
+                break
             j2 = min(j + 1, len(wps) - 1)
             seg = wps[j2] - wps[j]; seglen = float(np.hypot(*seg))
             if seglen < 1e-4:
                 break
             to_target = wps[j2] - state[:2]
             target_dist = float(np.hypot(*to_target))
-            if target_dist < 0.05:
+            final_segment = j2 == len(wps) - 1
+            if final_segment and target_dist < 0.05:
                 break
             along = float((state[:2] - wps[j]) @ (seg / seglen))
-            capture_target = target_dist < 0.60 or along >= seglen
+            capture_target = final_segment or target_dist < 0.60 or along >= seglen
             if capture_target:
                 # Point capture makes both ordinary waypoints and the final
                 # goal convergent. A fixed segment tangent otherwise continues
@@ -1411,12 +1663,17 @@ class EfeAgentNode(UnicyclePlannerNode):
                 tang = math.atan2(seg[1], seg[0])
                 nh = np.array([-math.sin(tang), math.cos(tang)])
                 ct = float((state[:2] - wps[j]) @ nh)    # + = left of path
-            he = wrap_angle(tang - state[2])
+            he, w, cross_track_cap = _ff_fb_path_guidance(
+                tang,
+                state[2],
+                ct,
+                v_max=v_max,
+                w_limit=0.75,
+            )
             # Fast wheel-counterrotation makes Gazebo's wheel odometry finish a
             # pivot before the physical body, which is especially damaging when
             # heading is intentionally odometry-only. Stay below the observed
             # traction-safe turn rate while preserving 1 m/s on straights.
-            w = float(np.clip(1.5 * he - 3.0 * ct, -0.75, 0.75))
             nominal_v = float(
                 np.clip(
                     v_max * max(0.25, 1.0 - 1.2 * abs(he) - 1.5 * abs(ct)),
@@ -1432,14 +1689,18 @@ class EfeAgentNode(UnicyclePlannerNode):
                 preview_m=max(0.90, 6.0 * float(self.waypoint_spacing_m)),
                 corner_speed_mps=min(0.30, 0.40 * v_max),
             )
-            arrival_cap = min(v_max, max(0.08, 1.5 * target_dist))
+            arrival_cap = _ff_fb_arrival_speed_cap(
+                target_dist,
+                final_segment=final_segment,
+                v_max=v_max,
+            )
             # For unicycle motion lateral acceleration is v*|w|. This keeps a
             # high straight-line ceiling without entering tight turns at that
             # same speed. Large departure turns pivot in place, otherwise the
             # minimum forward speed can create a waypoint-orbit limit cycle.
             v = _ff_fb_forward_speed(
                 nominal_v,
-                min(corner_cap, arrival_cap),
+                min(corner_cap, arrival_cap, cross_track_cap),
                 w,
                 he,
                 v_max=v_max,
@@ -1471,6 +1732,17 @@ class EfeAgentNode(UnicyclePlannerNode):
         else:
             start_coll = float('inf')
         nogo = self.planner.nogo_cost_model
+        collision_required_margin = max(
+            float(getattr(self.planner, 'nogo_safe_distance', 0.0))
+            - float(getattr(self.planner, 'robot_collision_radius_m', 0.0)),
+            0.0,
+        )
+        # The driveable union is a routing/support mask, not collision
+        # geometry.  Runtime tracking must remain inside it, while the declared
+        # body buffer applies to physical obstacles.  Applying the physical
+        # margin to both double-counts clearance at narrow mapped corners and
+        # can stop a physically safe robot that has not left the lane.
+        driveable_required_margin = 0.0
         if nogo is not None:
             start_nogo = self.planner.driveable_clearance_state_np(start)
         else:
@@ -1479,6 +1751,14 @@ class EfeAgentNode(UnicyclePlannerNode):
         # establish a safe prefix and must not silently disable the gate.
         if any(math.isnan(clearance) or clearance == -math.inf for clearance in (start_coll, start_nogo)):
             return ControlSafetyResult(0, 'invalid_initial_clearance', SafetyFailure.INVALID_GEOMETRY)
+        if start_coll < collision_required_margin:
+            return ControlSafetyResult(
+                0, f'initial_collision_clearance_below_margin:{start_coll:.3f}',
+                SafetyFailure.COLLISION)
+        if start_nogo < driveable_required_margin:
+            return ControlSafetyResult(
+                0, f'initial_driveable_clearance_below_margin:{start_nogo:.3f}',
+                SafetyFailure.DRIVEABLE_CLEARANCE)
         from unav_common.rectangular_footprint import constant_twist_pose
         state = start.copy()
         for i, u in enumerate(controls):
@@ -1488,18 +1768,20 @@ class EfeAgentNode(UnicyclePlannerNode):
                 return ControlSafetyResult(i, 'nonfinite_predicted_state', SafetyFailure.INVALID_INPUT)
             if self.planner.collision_cost_model is not None:
                 clearance = self.planner.collision_sweep_clearance_np(
-                    previous_state, state, yaw_delta=float(u[1])*self.dt, control=u, dt=self.dt)
+                    previous_state, state, yaw_delta=float(u[1])*self.dt, control=u,
+                    dt=self.dt, required_clearance=collision_required_margin)
                 if math.isnan(clearance) or clearance == -math.inf:
                     return ControlSafetyResult(i, 'invalid_collision_clearance', SafetyFailure.INVALID_GEOMETRY)
-                if clearance < 0.0:
+                if clearance < collision_required_margin:
                     return ControlSafetyResult(i, f'collision_geometry_violation_step_{i}:{clearance:.3f}',
                                                SafetyFailure.COLLISION)
             if nogo is not None:
                 clearance = self.planner.driveable_sweep_clearance_np(
-                    previous_state, state, yaw_delta=float(u[1])*self.dt, control=u, dt=self.dt)
+                    previous_state, state, yaw_delta=float(u[1])*self.dt, control=u,
+                    dt=self.dt, required_clearance=driveable_required_margin)
                 if math.isnan(clearance) or clearance == -math.inf:
                     return ControlSafetyResult(i, 'invalid_driveable_clearance', SafetyFailure.INVALID_GEOMETRY)
-                if clearance < 0.0:
+                if clearance < driveable_required_margin:
                     return ControlSafetyResult(i, f'driveable_clearance_violation_step_{i}:{clearance:.3f}',
                                                SafetyFailure.DRIVEABLE_CLEARANCE)
             # Carry the exact held-command endpoint into the next interval.
@@ -1514,7 +1796,9 @@ class EfeAgentNode(UnicyclePlannerNode):
             # An in-flight solve may finish after a different callback declares
             # a fatal integrity stop. Publication is the final ownership boundary.
             invalid_command = not (math.isfinite(cmd.linear.x) and math.isfinite(cmd.angular.z))
-            if getattr(self, '_fatal_stop_triggered', False) or invalid_command:
+            if (getattr(self, '_fatal_stop_triggered', False)
+                    or getattr(self, '_terminal_stop_requested', False)
+                    or invalid_command):
                 cmd = Twist()
                 if invalid_command:
                     self._command_stop_generation = int(getattr(self, '_command_stop_generation', 0)) + 1
@@ -1612,6 +1896,8 @@ class EfeAgentNode(UnicyclePlannerNode):
     def _publish_active_plan_command(self):
         # Snapshot, expiry, publication and tape replacement share one ownership
         # boundary. A timer must not resurrect a tape after a concurrent stop.
+        if getattr(self, "_terminal_stop_requested", False):
+            return
         with getattr(self, '_correction_lock', nullcontext()), self._data_lock:
             self._publish_active_plan_command_locked()
 
@@ -1648,8 +1934,15 @@ class EfeAgentNode(UnicyclePlannerNode):
             if fresh is None:
                 self._publish_safe_stop_command()
                 return
-            # Revalidate rather than cancel on every new camera correction.
-            safety = self._simple_plan_safe_to_execute(controls[step_idx:], fresh[0])
+            # Revalidate the control interval that can execute before this timer
+            # runs again.  The first interval was checked when the tape was
+            # installed, and every later interval is checked immediately before
+            # publication.
+            # Re-sweeping the entire remaining tape at the command rate held the
+            # correction lock long enough for the 5 Hz camera stream to backlog;
+            # that made otherwise accurate measurements stale before assimilation.
+            immediate_control = controls[step_idx:step_idx + 1]
+            safety = self._simple_plan_safe_to_execute(immediate_control, fresh[0])
             if (not self._plan_request_is_current(request)
                     or self._active_controls is not controls_ref
                     or not self._execution_belief_is_current(fresh[2])):
@@ -1657,9 +1950,6 @@ class EfeAgentNode(UnicyclePlannerNode):
             if safety.safe_steps <= 0:
                 self._publish_safe_stop_command()
                 return
-            if safety.safe_steps < controls.shape[0] - step_idx:
-                self._active_controls = controls[:step_idx+safety.safe_steps].copy()
-                controls = self._active_controls
         u = controls[step_idx]
         diag = Float64MultiArray()
         diag.data = [

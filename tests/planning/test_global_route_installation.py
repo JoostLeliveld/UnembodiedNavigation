@@ -177,6 +177,50 @@ def test_valid_preselected_route_is_unchanged():
     assert n._hier_phase=='LOCAL'
 
 
+def test_preselected_route_without_global_planner_uses_validated_tolerance_and_local_geometry():
+    n=route_node(); n.global_planner_mode='preselected_route'; n.global_planner=None
+    n._preselected_route_points=[(0.,0.),(.73,0.),(2.-1.e-13,0.)]
+    n._preselected_route_provenance={
+        'registered_goal_xy':[2.,0.], 'endpoint_tolerance_m':.25,
+    }
+    n.preselected_route_sha256='test'
+    checked=[]
+    n.planner.collision_sweep_clearance_np=lambda start,end: checked.append(('collision',start.copy(),end.copy())) or 1.
+    n.planner.driveable_sweep_clearance_np=lambda start,end: checked.append(('driveable',start.copy(),end.copy())) or 1.
+    n._plan_once()
+    assert n._hier_phase=='LOCAL'
+    assert n._waypoints==n._preselected_route_points
+    assert checked
+
+
+def test_zero_endpoint_tolerance_accepts_json_roundoff_only():
+    n=route_node(); n.global_planner_mode='preselected_route'; n.global_planner=None
+    n._preselected_route_points=[(0.,0.),(2.+4.e-15,0.)]
+    n._preselected_route_provenance={
+        'registered_goal_xy':[2.,0.], 'endpoint_tolerance_m':0.,
+    }
+    n.preselected_route_sha256='test'
+    n.planner.collision_sweep_clearance_np=lambda *args: 1.
+    n.planner.driveable_sweep_clearance_np=lambda *args: 1.
+    n._plan_once()
+    assert n._hier_phase=='LOCAL'
+    assert n._waypoints==n._preselected_route_points
+
+
+def test_diagnostic_odom_has_stable_route_admission_identity():
+    n=route_node()
+    n.use_diagnostic_odom_localization=True
+    n.diagnostic_odom_pose=(1.,2.,.3)
+    m,P,meta=n._resolve_diagnostic_odom_belief_for_planning()
+    np.testing.assert_allclose(m,[1.,2.,.3])
+    np.testing.assert_allclose(np.diag(P),[1.e-4]*3)
+    assert meta['belief_valid'] and meta['motion_supported']
+    assert meta['belief_epoch']=='diagnostic_odom'
+    assert meta['belief_revision']==0
+    assert meta['belief_frame_id']=='map_bev'
+    assert n._execution_belief_is_current(meta)
+
+
 def test_stop_during_validation_cannot_erase_newer_replacement():
     n=route_node();replacement=np.array([[.1,0.]])
     check=n._global_route_candidate_safe
@@ -248,6 +292,39 @@ def test_correction_revalidates_tape_without_extending_its_lifetime():
     n._publish_active_plan_command()
     assert n.cmd_pub.messages[-1].linear.x==.2
     assert n._active_plan_started_at==installed
+
+
+def test_local_install_checks_only_immediate_control_and_retains_full_tape():
+    from planning.core.tracker_guard import ControlSafetyResult,SafetyFailure
+    n=prepare_live_tape_node()
+    controls=np.array([[.2,0.],[.2,.1],[.1,-.1]])
+    checked=[]
+    def safe(candidate,*_):
+        checked.append(candidate.copy())
+        return ControlSafetyResult(len(candidate),'safe',SafetyFailure.NONE)
+    n._simple_plan_safe_to_execute=safe
+    assert n._install_control_tape(controls,original_len=3)=='installed'
+    assert len(checked)==1
+    np.testing.assert_array_equal(checked[0],controls[:1])
+    np.testing.assert_array_equal(n._active_controls,controls)
+
+
+def test_command_timer_revalidates_only_immediately_executable_control():
+    from planning.core.tracker_guard import ControlSafetyResult,SafetyFailure
+    n=prepare_live_tape_node()
+    controls=np.array([[.2,0.],[.2,.1],[.1,-.1]])
+    assert n._install_control_tape(controls,original_len=3)=='installed'
+    checked=[]
+    def safe(candidate,*_):
+        checked.append(candidate.copy())
+        return ControlSafetyResult(1,'safe',SafetyFailure.NONE)
+    n._simple_plan_safe_to_execute=safe
+    n._belief_revision+=1
+    n._publish_active_plan_command()
+    assert len(checked)==1
+    assert checked[0].shape==(1,2)
+    np.testing.assert_array_equal(checked[0],controls[:1])
+    np.testing.assert_array_equal(n._active_controls,controls)
 
 
 def test_unsafe_correction_stops_active_tape():

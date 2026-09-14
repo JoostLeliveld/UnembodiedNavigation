@@ -763,3 +763,28 @@ def test_legacy_non_envelope_mode_keeps_its_compatibility_bootstrap():
     node._state_cb(state_msg(1., 2., seconds=9.95))
     node._resolve_state_belief_ekf(stamp(10.))
     np.testing.assert_allclose(node.belief_m[:2], [1., 2.], atol=1e-9)
+
+
+@pytest.mark.parametrize(
+    ("accepted_camera_ids", "expected"),
+    [(["camera_A"], False), (["camera_A", "camera_B"], True)],
+)
+def test_schema2_envelope_only_allows_quorum_reanchor(
+    accepted_camera_ids, expected
+):
+    """A lone camera may update normally but may not snap a lost belief."""
+    from planning.nodes.unicycle_planner_node import (
+        _correction_envelope_allows_reanchor,
+    )
+
+    assert _correction_envelope_allows_reanchor(
+        {"schema_version": 2, "accepted_camera_ids": accepted_camera_ids}
+    ) is expected
+
+
+def test_schema1_envelope_retains_legacy_reanchor_semantics():
+    from planning.nodes.unicycle_planner_node import (
+        _correction_envelope_allows_reanchor,
+    )
+
+    assert _correction_envelope_allows_reanchor({"schema_version": 1}) is True

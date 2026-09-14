@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -46,6 +47,79 @@ def test_typo_and_duplicate_yaml_keys_are_rejected(tmp_path):
         campaign._load_config(duplicate)
 
 
+@pytest.mark.parametrize(
+    ('key', 'bad_value', 'message'),
+    [
+        ('v_max', 0.22, 'requires v_max: 1.0'),
+        ('manager_decision_rate_hz', 5.0,
+         'requires manager_decision_rate_hz: 1.0'),
+        ('camera_network_updates_per_step', 5,
+         'requires camera_network_updates_per_step: 1'),
+    ],
+)
+def test_final_thesis_execution_contract_refuses_rate_drift(
+    tmp_path, key, bad_value, message
+):
+    cfg = _config(tmp_path)
+    cfg.update({
+        'thesis_execution_contract': 'final_1mps_1hz_m4_v1',
+        'v_max': 1.0,
+        'manager_decision_rate_hz': 1.0,
+        'camera_network_updates_per_step': 1,
+        # Reach the rate guard before the final visibility-residual requirement.
+        'manager_observation_model': 'visibility_patch',
+    })
+    cfg[key] = bad_value
+    with pytest.raises(ValueError, match=message):
+        campaign._validate_config(cfg, tmp_path / 'campaign.yaml')
+
+
+@pytest.mark.parametrize(
+    ('key', 'bad_value', 'message'),
+    [
+        ('v_max', 0.22, 'requires v_max: 1.0'),
+        ('manager_decision_rate_hz', 1.0,
+         'requires manager_decision_rate_hz: 5.0'),
+        ('camera_network_updates_per_step', 1,
+         'requires camera_network_updates_per_step: 5'),
+    ],
+)
+def test_final_five_hz_thesis_execution_contract_refuses_rate_drift(
+    tmp_path, key, bad_value, message
+):
+    cfg = _config(tmp_path)
+    cfg.update({
+        'thesis_execution_contract': 'final_1mps_5hz_m4_v1',
+        'v_max': 1.0,
+        'global_dt': 1.0,
+        'manager_decision_rate_hz': 5.0,
+        'camera_network_updates_per_step': 5,
+        'manager_observation_model': 'visibility_patch',
+    })
+    cfg[key] = bad_value
+    with pytest.raises(ValueError, match=message):
+        campaign._validate_config(cfg, tmp_path / 'campaign.yaml')
+
+
+def test_temporally_thinned_five_hz_contract_uses_one_effective_planning_update(tmp_path):
+    cfg = _config(tmp_path)
+    cfg.update({
+        'thesis_execution_contract': 'final_1mps_5hz_m4_temporal_v1',
+        'v_max': 1.0,
+        'global_dt': 1.0,
+        'manager_decision_rate_hz': 5.0,
+        'camera_network_updates_per_step': 1,
+        'manager_observation_model': 'visibility_patch',
+        'manager_covariance_profile': 'commissioned_visibility_r',
+    })
+    # The remaining runtime-bundle checks are outside this rate-contract unit.
+    with pytest.raises(ValueError, match='commissioned visibility-residual bundle is missing'):
+        campaign._validate_config(cfg, tmp_path / 'campaign.yaml')
+    cfg['camera_network_updates_per_step'] = 5
+    with pytest.raises(ValueError, match='camera_network_updates_per_step: 1'):
+        campaign._validate_config(cfg, tmp_path / 'campaign.yaml')
+
+
 def test_false_and_zero_survive_precedence(tmp_path):
     cfg = _config(tmp_path)
     cfg['use_rviz'] = True
@@ -88,7 +162,7 @@ def test_partial_summary_is_not_completed(field):
     assert campaign._terminal_summary_outcome(summary)[0] is False
 
 
-def test_logger_evidence_waits_for_campaign_producer_close_verdict():
+def test_logger_evidence_requires_terminal_stop_and_producer_close_verdict():
     summary = {
         'completed': True,
         'valid_run': True,
@@ -97,7 +171,7 @@ def test_logger_evidence_waits_for_campaign_producer_close_verdict():
         'completion_reason': 'goal_reached',
     }
     assert campaign._terminal_summary_outcome(summary) == (
-        True, 'goal_reached', 'goal_reached'
+        False, 'infra_invalid', 'summary_evidence_complete_not_true'
     )
 
 
@@ -154,7 +228,9 @@ def test_manifest_provenance_is_cached_per_run(tmp_path, monkeypatch):
     monkeypatch.setattr(
         manifest.common_manifest,
         'git_provenance',
-        lambda _root: calls.append(len(calls)) or {'git_sha': f'sha-{len(calls)}'},
+        lambda _root, _paths=None: calls.append((_root, _paths)) or {
+            'git_sha': f'sha-{len(calls)}'
+        },
     )
     manifest._RUN_PROVENANCE_CACHE.clear()
     run_a = tmp_path / 'a'
@@ -165,3 +241,23 @@ def test_manifest_provenance_is_cached_per_run(tmp_path, monkeypatch):
     assert len(calls) == 2
     assert json.loads((run_a / 'run_manifest.json').read_text())['git_sha'] == 'sha-1'
     assert json.loads((run_b / 'run_manifest.json').read_text())['git_sha'] == 'sha-2'
+
+
+def test_manifest_uses_campaign_executable_scope(tmp_path, monkeypatch):
+    from experiments.core import manifest
+
+    calls = []
+    monkeypatch.setenv(
+        'UNAV_EXECUTABLE_SOURCE_PATHS',
+        os.pathsep.join(('src', 'scripts/visibility_comparison')),
+    )
+    monkeypatch.setattr(
+        manifest.common_manifest,
+        'git_provenance',
+        lambda root, paths=None: calls.append((root, paths)) or {'git_sha': 'scoped'},
+    )
+    manifest._RUN_PROVENANCE_CACHE.clear()
+    manifest.write_manifest(str(tmp_path / 'run'), {}, str(tmp_path))
+    assert calls == [
+        (str(tmp_path.resolve()), ('src', 'scripts/visibility_comparison'))
+    ]

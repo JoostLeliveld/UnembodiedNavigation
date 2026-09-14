@@ -26,9 +26,8 @@ def unicycle_jacobian(state, control, dt):
     return F
 
 
-#: Coherent (non-white) encoder drift, OFF by default -- see `coherent_drift_block`.
-#: Measured in `logs/studies/gate0_process_noise/`; derived from the encoder generator,
-#: not fitted to the drift it is scored against.
+#: Frozen simulator process-model constants. They are configuration inputs, not fitted
+#: thesis quantities.
 COHERENT_SPEED_SCALE = 0.02          # sim/encoder_noise_node.py `linear_slip_mean`
 COHERENT_HEADING_RAD = 0.0227        # 1.3 deg, the flat offset implied by cross-track drift
 
@@ -42,29 +41,20 @@ def coherent_drift_block(distance_m, theta, *, speed_scale=COHERENT_SPEED_SCALE,
     scale error (`linear_slip_mean`) and AR(1)-correlated slip (`correlation_alpha = 0.80`).
     Those are coherent: held roughly constant over a window rather than resampled each step.
 
-    Measured consequence (19 drives, `logs/studies/gate0_process_noise/`): drift grows as
-    T^0.9 -- near LINEAR in time, not the T^0.5 of white noise -- so the white model
-    understates cross-track spread by 8-40x. The lateral term of the white model is
-    `(1/3) v^2 sigma_w^2 dt^3`, which vanishes on a straight run (w -> 0), leaving the
-    position block ~1550x stiffer across the path than along it.
-
     Both coherent terms scale with DISTANCE TRAVELLED, in the body frame:
 
         along-track   speed_scale * distance      (systematic speed error)
         cross-track   heading_rad * distance      (a held heading offset)
 
-    `speed_scale` is the generator's own declared `linear_slip_mean`. `heading_rad` is the
-    offset implied by observed cross-track drift, which is flat (1.48/1.43/1.27/1.18 deg)
-    across a tenfold change in window length -- the signature of a held bias rather than a
-    random walk, whose sqrt(T) growth is ruled out by that flatness.
+    These values remain frozen with the simulator configuration. The thesis does not
+    estimate or select them.
 
     **This block is the covariance of the TOTAL drift after `distance_m`, not a per-step
     increment.** A held offset accumulates coherently: displacement grows linearly with
     distance, so variance grows as distance^2. Summing this block once per step instead
     would add variances (distance^2 -> n * (distance/n)^2), reintroducing exactly the
-    sqrt(n) averaging the term exists to prevent -- at 5 s and 0.22 m/s that understates
-    the measured cross-track drift 7x (0.35 cm against 2.43 cm). Callers that integrate
-    step by step must therefore pass the DIFFERENCE between the block at the new
+    sqrt(n) averaging the term exists to prevent. Callers that integrate step by step
+    must therefore pass the DIFFERENCE between the block at the new
     cumulative distance and the block at the old one; `coherent_drift_increment` does that.
 
     Returns a 3x3 block (heading row/column zero: these terms are positional).
@@ -86,7 +76,7 @@ def coherent_drift_increment(distance_before_m, distance_after_m, theta, **kwarg
 
     Because coherent drift grows as distance^2, the increment from `d0` to `d1` is
     `block(d1) - block(d0)`, not `block(d1 - d0)`. Over a whole window these telescope to
-    exactly `block(total)`, which is the quantity Gate 0 validated.
+    exactly `block(total)`.
     """
     after = coherent_drift_block(distance_after_m, theta, **kwargs)
     before = coherent_drift_block(distance_before_m, theta, **kwargs)

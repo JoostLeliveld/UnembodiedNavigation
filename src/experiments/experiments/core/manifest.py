@@ -45,6 +45,8 @@ def write_manifest(run_dir: str, data: Dict[str, Any], repo_root: str) -> str:
     root = os.path.realpath(repo_root)
     run_key = os.path.realpath(run_dir)
     if run_key not in _RUN_PROVENANCE_CACHE:
-        _RUN_PROVENANCE_CACHE[run_key] = common_manifest.git_provenance(root)
+        raw_paths = os.environ.get('UNAV_EXECUTABLE_SOURCE_PATHS', '')
+        paths = tuple(value for value in raw_paths.split(os.pathsep) if value) or None
+        _RUN_PROVENANCE_CACHE[run_key] = common_manifest.git_provenance(root, paths)
     manifest.update(_RUN_PROVENANCE_CACHE[run_key])
     return common_manifest.write_manifest(run_dir, manifest)

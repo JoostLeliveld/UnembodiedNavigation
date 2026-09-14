@@ -65,6 +65,15 @@ def test_wraparound_uses_short_turn_unless_explicitly_overridden():
     assert model.sweep_clearance([0, 0, math.pi-.01], [0, 0, -math.pi+.01], yaw_delta=2*math.pi) < 0
 
 
+def test_required_margin_refines_the_certificate_instead_of_false_refusal():
+    model = RectangularFootprint([prism(1.0, -2.0, 2.0, 2.0)], .8, .55)
+    value = model.sweep_clearance(
+        [0.0, 0.0, 0.0], [0.0, 0.0, math.pi / 4.0],
+        yaw_delta=math.pi / 4.0, required_clearance=0.50,
+    )
+    assert value >= 0.50
+
+
 @pytest.mark.parametrize('length,width', [(0,.55), (.8,-1), (np.nan,.55), (.8,np.inf)])
 def test_invalid_dimensions_rejected(length, width):
     with pytest.raises(ValueError):

@@ -19,6 +19,7 @@ from rclpy.clock import ClockType
 from rclpy.time import Time
 
 from reliability.nodes.camera_manager_node import CameraManagerNode
+from reliability.common_time import MotionPose
 from test_planner_node_correction_wiring import _Clock, _Logger, _Publisher, stamp
 from test_planner_node_state_correction import make_state_node, state_msg
 from test_runtime_transactions import Publisher
@@ -116,6 +117,51 @@ def _allow_integrity_stop(n, callback):
     except RuntimeError:
         assert n._timing_fatal, 'unexpected runtime failure was not an integrity stop'
         return None
+
+
+def test_manager_snapshot_never_exposes_future_odometry_but_releases_it_later():
+    manager = object.__new__(CameraManagerNode)
+    manager._input_lock = threading.RLock()
+    manager._manager_epoch = 'manager-test'
+    manager.frame_id = 'map_bev'
+    manager.odometry_frame_id = 'odom'
+    manager.odometry_to_map_yaw_rad = 0.
+    manager._odom_history = deque([
+        MotionPose(9_900_000_000, (0., 0.), 0., 'odom', 'manager-test')
+    ], maxlen=600)
+    future = MotionPose(10_200_000_000, (.06, 0.), 0., 'odom', 'manager-test')
+    manager._pending_odom_history = {future.stamp_ns: future}
+    manager._pending_odom_capacity = 4096
+    manager._clock = _Clock(10.)
+    manager.get_clock = lambda: manager._clock
+
+    with manager._input_lock:
+        before = CameraManagerNode._motion_snapshot(manager)
+    assert tuple(p.stamp_ns for p in before.samples) == (9_900_000_000,)
+    assert tuple(manager._pending_odom_history) == (10_200_000_000,)
+
+    manager._clock.seconds = 10.2
+    with manager._input_lock:
+        after = CameraManagerNode._motion_snapshot(manager)
+    assert tuple(p.stamp_ns for p in after.samples) == (
+        9_900_000_000, 10_200_000_000)
+    assert not manager._pending_odom_history
+
+
+def test_manager_shutdown_record_does_not_consult_invalid_ros_clock(tmp_path):
+    from unav_common.camera_outcomes import OutcomeJournal, read_journal
+
+    manager = object.__new__(CameraManagerNode)
+    manager._outcome_journal = OutcomeJournal(tmp_path / 'manager.jsonl', 'manager-test')
+    manager._batch_clock_high_water_s = 14.25
+    manager.get_clock = lambda: pytest.fail('shutdown must not consult the ROS clock')
+    CameraManagerNode._append_session_stopped(manager)
+    manager._outcome_journal.close()
+
+    stopped = list(read_journal(tmp_path / 'manager.jsonl'))[-1]
+    assert stopped['status'] == 'session_stopped'
+    assert stopped['stage'] == 'manager'
+    assert stopped['publish_stamp_s'] == 14.25
 
 
 class _ObservedRLock:
@@ -381,6 +427,31 @@ def test_full_published_state_and_covariance_share_the_declared_target():
     np.testing.assert_array_equal(n.belief_m, initial)
     np.testing.assert_array_equal(n.belief_S, covariance)
     assert n._stamp_to_float(n.belief_stamp) == pytest.approx(9.9)
+
+
+def test_camera_xy_only_publishes_the_same_odom_heading_used_for_planning():
+    """The manager's hull prior and the controller must see one heading state."""
+    n = _node()
+    n.heading_update_mode = 'camera_xy_only'
+    n.use_pixel_correction = False
+    n.odom_yaw_offset_rad = 0.0
+    n.process_noise_theta = .02
+    n._odom_origin_stamp_s = 0.0
+    n._odom_log = [(9.8, .2, .3), (9.9, .2, .3)]
+    n._odom_heading_log = [(9_800_000_000, 1.17), (9_900_000_000, 1.20)]
+
+    planned_m, planned_P, meta = n._resolve_belief_for_planning()
+    assert meta['heading_anchor_applied']
+    n._belief_publish_tick()
+
+    event = _last_belief_event(n)
+    pose = n.planner_belief_pub.messages[-1]
+    _assert_event_and_pose_agree(event, pose)
+    assert event['mean'][2] == pytest.approx(1.23)
+    assert event['mean'][2] == pytest.approx(planned_m[2])
+    np.testing.assert_allclose(event['covariance'], planned_P)
+    np.testing.assert_allclose(np.asarray(event['covariance'])[:2, 2], 0.0)
+    np.testing.assert_allclose(np.asarray(event['covariance'])[2, :2], 0.0)
 
 
 def test_compatibility_message_cannot_relabel_committed_belief():

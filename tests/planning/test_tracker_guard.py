@@ -104,3 +104,45 @@ def test_unknown_controller_does_not_silently_select_turn_then_go():
     node.local_controller_type = 'turn_then_g0'
     with pytest.raises(ValueError, match='unsupported local_controller_type'):
         EfeAgentNode._dispatch_local_controller(node, np.zeros(3), np.ones(2))
+
+
+def test_pure_pursuit_respects_configured_angular_bounds():
+    node = SimpleNamespace(
+        local_horizon=12,
+        dt=.25,
+        v_max=1.,
+        w_min=-1.,
+        w_max=1.,
+        waypoint_spacing_m=.2,
+        _waypoints=[(0., 0.), (0., 1.), (0., 2.)],
+        _wp_idx=1,
+    )
+    node._waypoint_array = lambda state: EfeAgentNode._waypoint_array(node, state)
+    controls = EfeAgentNode._pure_pursuit_plan(
+        node, np.array([0., 0., -np.pi / 2.]))
+    assert np.all(controls[:, 1] >= node.w_min)
+    assert np.all(controls[:, 1] <= node.w_max)
+
+
+def test_runtime_guard_keeps_physical_margin_but_only_requires_driveable_nonpenetration():
+    physical = SimpleNamespace(enabled=True)
+    driveable = SimpleNamespace(enabled=True)
+    planner = SimpleNamespace(
+        collision_cost_model=physical,
+        nogo_cost_model=driveable,
+        nogo_safe_distance=.58541219597369,
+        robot_collision_radius_m=.48541219597369,
+        collision_clearance_state_np=lambda state: .11,
+        driveable_clearance_state_np=lambda state: .05,
+        collision_sweep_clearance_np=lambda a, b, **kw: .11,
+        driveable_sweep_clearance_np=lambda a, b, **kw: .05,
+    )
+    node = SimpleNamespace(planner=planner, dt=.25)
+    controls = np.array([[.2, 0.]])
+    safe = EfeAgentNode._simple_plan_safe_to_execute(node, controls, np.zeros(3))
+    assert safe.safe_steps == 1
+
+    planner.collision_clearance_state_np = lambda state: .09
+    unsafe = EfeAgentNode._simple_plan_safe_to_execute(node, controls, np.zeros(3))
+    assert unsafe.safe_steps == 0
+    assert unsafe.failure is SafetyFailure.COLLISION

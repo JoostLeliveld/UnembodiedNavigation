@@ -654,9 +654,15 @@ def make_metric_network_efe_valgrad_fn(
     params: CasadiEfeParams,
     expected_belief_state,
     *,
+    effective_covariance=None,
     goal_std_m,
+    goal_std_start_m=None,
+    arrival_radius_m=0.0,
+    arrival_softness_m=0.25,
     nogo_cost=None,
     nogo_belief_cost=None,
+    obstacle_substeps=1,
+    control_block_steps=1,
 ):
     """Build a world-XY expected-belief objective for a camera network.
 
@@ -669,8 +675,26 @@ def make_metric_network_efe_valgrad_fn(
     goal_std_m = float(goal_std_m)
     if not np.isfinite(goal_std_m) or goal_std_m <= 0.:
         raise ValueError('metric network goal_std_m must be finite and positive')
+    # A constant goal prior makes the risk term a squared distance to the goal,
+    # so the objective reduces to shortest path and the belief terms cannot
+    # affect the route. Annealing the prior from loose to tight reproduces the
+    # pixel-objective schedule already used by goal_obs_cov_ca_for_progress:
+    # early steps are free to be shaped by the belief terms, late steps must
+    # arrive. goal_std_start_m=None keeps the previous constant behaviour.
+    if goal_std_start_m is None:
+        goal_std_start_m = goal_std_m
+    goal_std_start_m = float(goal_std_start_m)
+    if not np.isfinite(goal_std_start_m) or goal_std_start_m <= 0.:
+        raise ValueError('metric network goal_std_start_m must be finite and positive')
+    obstacle_substeps = int(obstacle_substeps)
+    if obstacle_substeps < 1:
+        raise ValueError('obstacle_substeps must be positive')
+    control_block_steps = int(control_block_steps)
+    if control_block_steps < 1:
+        raise ValueError('control_block_steps must be positive')
 
-    u_flat = ca.MX.sym('u_flat', params.time_horizon * params.Du)
+    control_blocks = int(math.ceil(params.time_horizon / control_block_steps))
+    u_flat = ca.MX.sym('u_flat', control_blocks * params.Du)
     m0 = ca.MX.sym('m0', 3)
     S0 = ca.MX.sym('S0', 3, 3)
     goal_obs = ca.MX.sym('goal_obs', 2)
@@ -679,13 +703,24 @@ def make_metric_network_efe_valgrad_fn(
     m = m0
     S = S0
 
-    goal_cov = (goal_std_m ** 2) * ca.DM.eye(2)
+    goal_cov_const = (goal_std_m ** 2) * ca.DM.eye(2)
+    anneal_denom = float(max(params.goal_progress_n_steps, 1))
+    # Steps after the predicted mean reaches the goal are not part of the plan
+    # being evaluated: the horizon is fixed, so a short route would otherwise
+    # bank its remaining steps parked at the goal and accumulate that cell's
+    # ambiguity. A route must be costed by what it takes to DRIVE it. The gate
+    # is a smooth sigmoid in the distance to the goal so the objective stays
+    # differentiable; ``arrival_softness_m`` sets its width.
+    arrival_radius = float(arrival_radius_m)
+    arrival_softness = max(float(arrival_softness_m), 1e-6)
+    active = 1.0
     total_risk = 0.
     total_amb = 0.
     total_control = 0.
     total_nogo = 0.
     for t in range(params.time_horizon):
-        u_t = ca.vertcat(u_flat[2*t], u_flat[2*t+1])
+        block = t // control_block_steps
+        u_t = ca.vertcat(u_flat[2*block], u_flat[2*block+1])
         m_prev = m
         m = unicycle_step_ca(m_prev, u_t, params.dt)
         F = unicycle_jacobian_ca(m_prev, u_t, params.dt)
@@ -695,16 +730,49 @@ def make_metric_network_efe_valgrad_fn(
         )
         S = .5 * (F @ S @ F.T + Q_t + (F @ S @ F.T + Q_t).T)
         weight_t = params.discount_gamma ** t
-        total_risk += weight_t * params.risk_scale * risk_ca(
-            m[:2], S[:2, :2], goal_xy, goal_cov,
+        if goal_std_start_m == goal_std_m:
+            goal_cov_t = goal_cov_const
+        else:
+            progress_t = (progress_index0 + float(t)) / anneal_denom
+            a_t = _smoothstep_ca(ca.power(
+                _clip_expr(progress_t, 0.0, 1.0), params.goal_tightening_power))
+            sigma_t = (1.0 - a_t) * goal_std_start_m + a_t * goal_std_m
+            goal_cov_t = ca.diag(ca.vertcat(
+                ca.power(sigma_t, 2), ca.power(sigma_t, 2)))
+        if arrival_radius > 0.:
+            # 1 while still driving, decaying to 0 once inside the goal region.
+            reached = ca.norm_2(m[:2] - goal_xy)
+            active = active * (1.0 / (1.0 + ca.exp(
+                -(reached - arrival_radius) / arrival_softness)))
+        total_risk += active * weight_t * params.risk_scale * risk_ca(
+            m[:2], S[:2, :2], goal_xy, goal_cov_t,
         )
         S_post, expected_entropy = expected_belief_state(m, S)
-        total_amb += weight_t * params.ambiguity_scale * expected_entropy
-        total_control += weight_t * params.control_weight * ca.sumsqr(u_t)
+        if effective_covariance is None:
+            total_amb += active * weight_t * params.ambiguity_scale * expected_entropy
+        else:
+            # Kouw (IWAI 2024) Lemma 1 with the first-order extended transform
+            # of Theorem 1: Sigma - Gamma^T S^-1 Gamma reduces exactly to the
+            # observation covariance, so ambiguity is 0.5(Dy log 2*pi*e +
+            # log|R|). With one fixed sensor that is constant over states; here
+            # R is the availability-weighted commissioned field, so the term
+            # varies over the workspace and prefers well-observed states.
+            R_eff = effective_covariance(m, S)
+            total_amb += (active * weight_t * params.ambiguity_scale
+                          * _differential_entropy_ca(.5 * (R_eff + R_eff.T)))
+        total_control += active * weight_t * params.control_weight * ca.sumsqr(u_t)
         if nogo_belief_cost is not None and params.use_belief_nogo_cost:
-            total_nogo += weight_t * nogo_belief_cost(m, S_post)
+            total_nogo += active * weight_t * nogo_belief_cost(m, S_post)
         elif nogo_cost is not None:
-            total_nogo += weight_t * nogo_cost(m)
+            # With a 1 s global step, endpoint-only costs can miss a curved
+            # transition through a prism or outside the driveable union. Sample
+            # the same constant-twist motion used by the rollout validator.
+            transition_cost = 0.
+            for substep in range(1, obstacle_substeps + 1):
+                substate = unicycle_step_ca(
+                    m_prev, u_t, params.dt * float(substep) / obstacle_substeps)
+                transition_cost += nogo_cost(substate)
+            total_nogo += active * weight_t * transition_cost / obstacle_substeps
         S = S_post
 
     H_eff = sum(params.discount_gamma ** t for t in range(params.time_horizon))

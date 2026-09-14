@@ -177,13 +177,28 @@ def test_one_nanosecond_motion_interval_is_integrated_exactly_once():
     assert plan.support.supported
 
 
-def test_future_odometry_cannot_displace_current_inputs():
+def test_future_odometry_is_causally_buffered_then_committed_in_source_order():
     n = _node()
     n._odom_accepted_stamp_ns = 9_900_000_000
     history = list(n._odom_log)
     n._odom_cb(_odom_msg(11.,9.,8.,2.))
     assert n._odom_log == history
-    assert n._odom_refused_future == 1
+    assert n._odom_buffered_future == 1
+    assert tuple(n._pending_odom_events) == (11_000_000_000,)
+    # A second future sample may arrive earlier in source time. Neither sample
+    # becomes current merely because it has been delivered.
+    n._odom_cb(_odom_msg(10.8,.4,.3,.7))
+    assert n._odom_log == history
+    assert tuple(sorted(n._pending_odom_events)) == (
+        10_800_000_000, 11_000_000_000)
+
+    n._clock.seconds = 11.
+    with n._data_lock:
+        n._observe_belief_clock_locked()
+        snapshot = n._motion_snapshot_locked()
+    assert snapshot.odom[-2:] == ((10.8, .4, .3), (11., 9., 8.))
+    assert snapshot.headings[-2:] == ((10_800_000_000, .7), (11_000_000_000, 2.))
+    assert not n._pending_odom_events
 
 
 @pytest.mark.parametrize('mutation', ['zero_quaternion','nonunit_quaternion','pose_frame','twist_frame'])

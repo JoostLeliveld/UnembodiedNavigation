@@ -28,7 +28,6 @@ def test_manager_false_flags_stay_false(value):
         manager_require_source_batch_id=value,
         manager_commissioned_per_camera_sigma=value,
         manager_correction_timestamp_compensation=value,
-        manager_admission_gate=value,
         manager_require_consistency_when_source_available=value,
     ))
     for key, result in settings.items():
@@ -36,7 +35,7 @@ def test_manager_false_flags_stay_false(value):
             "manager_require_gp_artifacts", "manager_fusion_mode",
             "manager_publish_map_observations", "manager_require_source_batch_id",
             "manager_commissioned_per_camera_sigma",
-            "manager_correction_timestamp_compensation", "manager_admission_gate",
+            "manager_correction_timestamp_compensation",
             "manager_require_consistency_when_source_available",
         }:
             assert result is False, key
@@ -57,6 +56,12 @@ def test_default_fusion_rule_is_supported_and_matches_runtime():
     configured = manager_arm_settings(base_config())["manager_fusion_rule"]
     assert configured == DEFAULT_MANAGER_FUSION_RULE == FUSION_RULE_INDEPENDENT
     assert configured in SUPPORTED_FUSION_RULES
+
+
+def test_manager_camera_roster_is_manifested_as_an_arm_setting():
+    roster = "camera_A,camera_B,camera_C,camera_D,camera_E"
+    settings = manager_arm_settings(base_config(manager_camera_ids=roster))
+    assert settings["manager_camera_ids"] == roster
 
 
 @pytest.mark.parametrize("value", ["fasle", "truthy", 2, None])

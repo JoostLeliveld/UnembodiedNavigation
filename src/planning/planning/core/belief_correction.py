@@ -85,9 +85,10 @@ REJECT_CODES: dict[str, float] = {
 }
 
 #: How the caller should treat the belief after a non-accepted outcome.
-#: ``REJECT`` = hold the prediction (the caller still advances the stamp and
-#: inflates, so a rejection can never freeze the belief); ``REANCHOR`` = snap to
-#: the measurement, the belief is the thing that is wrong.
+#: ``REJECT`` = keep the propagated prediction and advance its stamp; any
+#: uncertainty growth comes from the motion model (callers may retain explicit
+#: legacy inflation for reproducing older runs). ``REANCHOR`` = snap to the
+#: measurement when the belief is the thing that is wrong.
 RECOVER_REJECT = 'reject'
 RECOVER_REANCHOR = 'reanchor'
 
@@ -137,11 +138,11 @@ class CorrectionGates:
     max_predict_speed_mps: float = 0.0
     predict_margin_m: float = 0.05
 
-    #: The one ceiling on how far the belief may be replayed forward to meet a
-    #: correction. When positive it IS the ceiling, so the caller's configured and
-    #: manifest-recorded limit is the only one in force. 0 falls back to the value
-    #: derived from the pixel timeout and the planner timestep, which is the paper-1
-    #: pixel-path behaviour and is kept so that baseline is unchanged.
+    #: Ceiling on total replay duration at this gate. The metric-path caller may
+    #: widen it for one event only after independently proving that timestamped
+    #: motion inputs cover the complete interval. The configured bound still
+    #: limits gaps between those inputs. 0 falls back to the value derived from
+    #: the pixel timeout and planner timestep, preserving the paper-1 pixel path.
     #:
     #: Two ceilings on one quantity is how a drive dies quietly: the derived one was
     #: 1.0 s while the campaign declared 1.5 s, so a 1.4 s startup gap was refused by a

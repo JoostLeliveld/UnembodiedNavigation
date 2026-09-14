@@ -1,19 +1,14 @@
-# Frozen runtime inputs
+# Reproducibility inputs
 
-The large detector weights and local study logs are intentionally not committed to ordinary
-Git. A machine is eligible to produce evidence only when these exact bytes are present; the
-run manifest hashes them again for every drive.
+Current input identities are recorded only in the active pipeline manifests:
 
-| input | repository-relative runtime path | SHA-256 |
-|---|---|---|
-| detector weights | `logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt` | `efff1949c1b8cdeeb11438b36de80f6cf8daeef5f3a4682cfce8ae7dfe314f34` |
-| commissioned calibration | `logs/studies/measurement_commissioning/calibration.json` | `de578957683905763c5890e686345dee56cd583f5a5ade05b5050adc593ecc30` |
+- `experiments/warehouse_v2_sketches/world_freeze_manifest.json`;
+- `experiments/thesis_pipeline_lock/robot_target_manifest.json`;
+- `experiments/thesis_pipeline_lock/camera_capture_map_manifest.json`;
+- `experiments/thesis_pipeline_lock/stage04_dataset_manifest.json`;
+- `experiments/thesis_pipeline_lock/stage05_detector_manifest.json`;
+- the future Stage 06–11 manifests after they are frozen.
 
-The campaign configuration itself is tracked at
-`scripts/visibility_comparison/fusion_on_fixed_routes_campaign.yaml`; its hash changes with
-an intentional repair and is therefore recorded dynamically in each run manifest rather
-than copied here.
+Do not duplicate hashes in prose or copy them from superseded protocols. The active manifest
+is the authority. A changed byte requires a new manifest identity and an explicit lock update.
 
-No paper result may depend on a local artifact merely existing. The explicit frozen-run
-selection, per-run provenance hashes, schema-4 assimilation evidence, and model/calibration
-hashes must all agree before scoring.

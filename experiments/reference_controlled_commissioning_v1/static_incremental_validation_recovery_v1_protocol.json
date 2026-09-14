@@ -1,0 +1,101 @@
+{
+  "created_utc": "2026-09-14T13:38:41.932914+00:00",
+  "failed_transactions": [
+    {
+      "errors": [
+        "attempt_2:simulation did not reach the settle barrier"
+      ],
+      "heading_id": 2,
+      "original_pose_id": 394,
+      "original_repetition_id": 0,
+      "position_id": 449
+    },
+    {
+      "errors": [
+        "attempt_2:simulation did not reach the settle barrier"
+      ],
+      "heading_id": 3,
+      "original_pose_id": 819,
+      "original_repetition_id": 0,
+      "position_id": 502
+    },
+    {
+      "errors": [
+        "attempt_2:simulation did not reach the settle barrier"
+      ],
+      "heading_id": 4,
+      "original_pose_id": 820,
+      "original_repetition_id": 0,
+      "position_id": 502
+    },
+    {
+      "errors": [
+        "attempt_2:simulation did not reach the settle barrier"
+      ],
+      "heading_id": 1,
+      "original_pose_id": 833,
+      "original_repetition_id": 0,
+      "position_id": 504
+    },
+    {
+      "errors": [
+        "attempt_2:simulation did not reach the settle barrier"
+      ],
+      "heading_id": 2,
+      "original_pose_id": 834,
+      "original_repetition_id": 0,
+      "position_id": 504
+    },
+    {
+      "errors": [
+        "attempt_2:simulation did not reach the settle barrier"
+      ],
+      "heading_id": 4,
+      "original_pose_id": 836,
+      "original_repetition_id": 0,
+      "position_id": 504
+    },
+    {
+      "errors": [
+        "attempt_2:fresh synchronized frame timeout; missing=['camera_D', 'camera_E'], required_batch_span_s<=0.05"
+      ],
+      "heading_id": 6,
+      "original_pose_id": 838,
+      "original_repetition_id": 0,
+      "position_id": 504
+    },
+    {
+      "errors": [
+        "attempt_2:simulation did not reach the settle barrier"
+      ],
+      "heading_id": 7,
+      "original_pose_id": 839,
+      "original_repetition_id": 0,
+      "position_id": 504
+    }
+  ],
+  "original_protocol_manifest": {
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/reference_controlled_commissioning_v1/static_incremental_campaign_v1.json",
+    "sha256": "796a9ea90aec83b2d4df9f9dbe4733c4c283c117d7cb5bc562a6b95b3ec314ad"
+  },
+  "recovery_policy": {
+    "accepted_recovery_must_have_exactly_five_successful_camera_rows_per_transaction": true,
+    "additive_only": true,
+    "original_capture_is_never_rewritten": true,
+    "scientific_pose_set_is_unchanged": true,
+    "wall_clock_timeout_may_be_increased_but_settle_and_freshness_criteria_are_unchanged": true
+  },
+  "recovery_pose_file": {
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/experiments/reference_controlled_commissioning_v1/static_incremental_validation_recovery_v1_poses.json",
+    "sha256": "eaf0bcb877c75ba87f4629822176d85eaeb0381494c9a57496842aacbb41c51c"
+  },
+  "schema": "static_capture_additive_recovery_protocol.v1",
+  "source_capture": {
+    "capture_index_sha256": "1e4ead8bff527753a1e8bf4acb13d313907594d97674f916078373395f5756a1",
+    "capture_manifest_sha256": "d29365d75ec31ab0863bbffbaa767bab17a642813c19e3f474b8d713ec4b1c0d",
+    "failed_batches": 8,
+    "path": "/home/joostleliveld/Thesis/UnembodiedNavigation/logs/studies/reference_controlled_commissioning_v1/static_incremental_validation_capture_20260914_v1",
+    "status": "complete_with_failed_batches"
+  },
+  "status": "frozen_before_recovery_capture"
+}

@@ -34,7 +34,7 @@ def test_outcome_is_journaled_before_failing_transport(tmp_path):
         raise RuntimeError('publisher unavailable')
     node = NS(_producer_epoch='producer', _outcome_journal=Journal(),
               get_clock=lambda: NS(now=lambda: NS(nanoseconds=1)),
-              get_logger=lambda: NS(info=lambda _: None),
+              get_logger=lambda: NS(info=lambda _: None, debug=lambda _: None),
               batch_outcome_publisher=NS(publish=fail))
     with pytest.raises(RuntimeError, match='publisher unavailable'):
         method('_publish_batch_outcome')(node, dict(status='aborted', source_batch_id='cycle'))
@@ -51,7 +51,7 @@ def test_durable_journal_replays_after_publisher_failure(tmp_path):
     path = tmp_path / 'events.jsonl'
     writer = OutcomeJournal(path, 'producer')
     node = NS(_outcome_journal=writer, get_clock=lambda: NS(now=lambda: NS(nanoseconds=100)),
-              get_logger=lambda: NS(info=lambda _: None),
+              get_logger=lambda: NS(info=lambda _: None, debug=lambda _: None),
               batch_outcome_publisher=NS(publish=lambda _: (_ for _ in ()).throw(RuntimeError('no publisher'))))
     with pytest.raises(RuntimeError):
         method('_publish_batch_outcome')(node, dict(status='inference_error', source_batch_id='cycle'))
@@ -96,6 +96,33 @@ def test_partial_write_poison_and_torn_tail_are_explicit(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match='unavailable'): writer.append(dict(status='aborted'))
     writer.close()
     with pytest.raises(ValueError, match='incomplete'): list(read_journal(writer.path))
+
+
+def test_interrupt_delivered_after_fsync_does_not_poison_journal(tmp_path, monkeypatch):
+    """A shutdown signal may interrupt return, never the durable transaction."""
+    import unav_common.camera_outcomes as outcomes
+
+    writer = OutcomeJournal(tmp_path / 'events.jsonl', 'producer')
+    restore_calls = []
+
+    monkeypatch.setattr(outcomes, '_block_termination_signals', lambda: {'old-mask'})
+    def interrupt_once(previous_mask):
+        restore_calls.append(previous_mask)
+        if len(restore_calls) == 1:
+            raise KeyboardInterrupt('pending SIGINT delivered on unmask')
+    monkeypatch.setattr(outcomes, '_restore_signal_mask', interrupt_once)
+
+    with pytest.raises(KeyboardInterrupt, match='pending SIGINT'):
+        writer.append(dict(status='selected'))
+    # The first record was already fsynced and the writer's hash-chain state was
+    # committed before SIGINT became deliverable. Shutdown can therefore record
+    # its own terminal event instead of inheriting a falsely poisoned journal.
+    stopped = writer.append(dict(status='session_stopped'))
+    assert stopped['event_id'] == 'producer:2'
+    assert [row['status'] for row in read_journal(writer.path)] == [
+        'selected', 'session_stopped'
+    ]
+    writer.close()
 
 
 def test_journal_capacity_stops_without_silent_rotation(tmp_path):
@@ -168,7 +195,7 @@ def test_real_callback_batch_inference_and_observation_identity(tmp_path):
               target_ids={0}, confidence_threshold=.25, use_masks=False, mask_min_area=0,
               mask_bottom_band_px=3, min_bbox_area_px=0, pixel_noise_sigma=0,
               get_clock=lambda: NS(now=lambda: NS(nanoseconds=2_000_000_000)),
-              get_logger=lambda: NS(info=lambda _: None), batch_outcome_publisher=NS(publish=lambda _: None),
+                  get_logger=lambda: NS(info=lambda _: None, debug=lambda _: None), batch_outcome_publisher=NS(publish=lambda _: None),
               _warn_bounded=lambda *a: None,
               _observation_configs={c: c for c in CAMERA_ORDER})
     def fatal(message, cause=None): raise RuntimeError(message) from cause
@@ -246,7 +273,7 @@ def test_model_exception_has_durable_started_error_and_cycle_abort(tmp_path, exc
               torchscript_detection_only=False, inference_chunk=2, image_size=960,
               predict_conf_floor=.05, iou_threshold=.45, device='cpu', _clock_s=lambda: 1,
               get_clock=lambda: NS(now=lambda: NS(nanoseconds=1_000_000_000)),
-              get_logger=lambda: NS(info=lambda _: None), batch_outcome_publisher=NS(publish=lambda _: None))
+                  get_logger=lambda: NS(info=lambda _: None, debug=lambda _: None), batch_outcome_publisher=NS(publish=lambda _: None))
     def fail(**kwargs): raise exception_type(error_message)
     node.model = NS(predict=fail)
     env = dict(np=np, time=time, math=math, frame_member=frame_member, CAMERA_ORDER=CAMERA_ORDER,
@@ -294,15 +321,76 @@ def test_shutdown_accounts_for_unselected_pending_images_once():
     assert events[0]['missing_camera_ids'] == ['camera_B', 'camera_C', 'camera_D', 'camera_E']
 
 
-def test_shutdown_journal_does_not_depend_on_live_dds(tmp_path):
+def test_shutdown_journal_does_not_depend_on_live_dds_or_ros_clock(tmp_path):
     writer = OutcomeJournal(tmp_path / 'events.jsonl', 'epoch')
     node = NS(_outcome_journal=writer, _outcome_transport_enabled=False,
-              get_clock=lambda: NS(now=lambda: NS(nanoseconds=100)),
-              get_logger=lambda: NS(info=lambda _: None),
+              _clock_high_water_s=12.5,
+              get_clock=lambda: pytest.fail('shutdown must not consult the ROS clock'),
+                  get_logger=lambda: NS(info=lambda _: None, debug=lambda _: None),
               batch_outcome_publisher=NS(publish=lambda _: pytest.fail('DDS must not be used after quiescence')))
-    method('_publish_batch_outcome')(node, dict(status='session_stopped', transport='journal_only'))
+    method('_append_session_stopped')(node)
     writer.close()
-    assert list(read_journal(writer.path))[-1]['status'] == 'session_stopped'
+    stopped = list(read_journal(writer.path))[-1]
+    assert stopped['status'] == 'session_stopped'
+    assert stopped['publish_stamp_s'] == 12.5
+
+
+def test_terminal_request_quiesces_detector_and_binds_durable_marker(tmp_path):
+    import threading
+    from perception.core.four_camera_batch import FourCameraBatcher
+    from unav_common.terminal_stop import (
+        TerminalStopAck,
+        TerminalStopRequest,
+        terminal_stop_ack_from_json,
+        terminal_stop_ack_to_json,
+        terminal_stop_request_from_json,
+        terminal_stop_request_to_json,
+    )
+
+    writer = OutcomeJournal(tmp_path / 'events.jsonl', 'epoch')
+    published = []
+    node = NS(
+        _outcome_journal=writer,
+        _outcome_transport_enabled=True,
+        _clock_high_water_s=12.5,
+        _terminal_stopped=False,
+        _terminal_stop_request_id='',
+        _session_stopped_appended=False,
+        _terminal_lifecycle_lock=threading.RLock(),
+        _async_pending_lock=threading.RLock(),
+        _async_pending={},
+        get_clock=lambda: NS(now=lambda: NS(nanoseconds=12_500_000_000)),
+        get_logger=lambda: NS(info=lambda _: None, debug=lambda _: None),
+        batch_outcome_publisher=NS(publish=lambda message: published.append(message)),
+        _terminal_stop_ack_pub=NS(publish=lambda message: published.append(message)),
+    )
+    env = dict(
+        terminal_stop_request_from_json=terminal_stop_request_from_json,
+        TerminalStopAck=TerminalStopAck,
+        terminal_stop_ack_to_json=terminal_stop_ack_to_json,
+        frame_member=frame_member,
+    )
+    for name in ('_publish_batch_outcome', '_append_session_stopped',
+                 '_terminal_stop_request_cb'):
+        setattr(node, name, method(name, **env).__get__(node))
+    node._fatal = lambda message, cause=None: pytest.fail(message)
+    node.batcher = FourCameraBatcher(on_event=node._publish_batch_outcome)
+    request = TerminalStopRequest('request-1', 'run-1', 'goal_reached', 10)
+
+    node._terminal_stop_request_cb(
+        NS(data=terminal_stop_request_to_json(request))
+    )
+    try:
+        assert node._terminal_stopped
+        assert not node._outcome_transport_enabled
+        ack = terminal_stop_ack_from_json(published[-1].data)
+        assert ack.component == 'detector'
+        assert ack.request_id == request.request_id
+        stopped = list(read_journal(writer.path))[-1]
+        assert stopped['status'] == 'session_stopped'
+        assert stopped['terminal_stop_request_id'] == request.request_id
+    finally:
+        writer.close()
 
 
 def test_async_drop_and_all_expired_drain_remain_observable():

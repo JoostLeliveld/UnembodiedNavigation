@@ -72,6 +72,13 @@ from perception.nodes.yolo_robot_detector_node import (
     _confidence_logit,
     _selected_pixel_source_code,
 )
+from unav_common.terminal_stop import (
+    TERMINAL_STOP_ACK_TOPIC,
+    TERMINAL_STOP_REQUEST_TOPIC,
+    TerminalStopAck,
+    terminal_stop_ack_to_json,
+    terminal_stop_request_from_json,
+)
 
 
 CAMERA_TOPICS = {
@@ -160,6 +167,7 @@ class BatchedFourCameraYoloNode(Node):
         self.declare_parameter("mask_bottom_band_px", 3.0)
         self.declare_parameter("min_bbox_area_px", 0.0)
         self.declare_parameter("debug_frame_dir", "")
+        self.declare_parameter("debug_crop_dir", "")
         self.declare_parameter("pixel_noise_sigma", 0.0)
         self.declare_parameter("seed", 0)
         self.declare_parameter("warmup_iters", 3)
@@ -171,20 +179,9 @@ class BatchedFourCameraYoloNode(Node):
         self.declare_parameter("runtime_trace_period_s", 0.0)
         self.declare_parameter("outcome_journal_path", "")
         self.declare_parameter("outcome_journal_max_bytes", DEFAULT_JOURNAL_MAX_BYTES)
-        # Per-axis pixel noise of a KEPT reading, pushed through the projection Jacobian
-        # as R_xy = sigma_px^2 J J^T. 2.5 px was never measured -- it was a conservative
-        # placeholder, and it is 4.3x too large for this reading. On 486 held-out fused
-        # poses of the warehouse_v2 shared-pose campaign, with the silhouette observation
-        # function and its plausibility gate, the calibrated value is 0.575 px; the filter
-        # then measures NEES 1.050 against a chi-square-2 median of 1.386, i.e. honest.
-        # Two cautions, both deliberate rather than hidden. (1) This is the noise of what
-        # SURVIVES the gate, so it belongs with the gate, not without it; ungated readings
-        # keep a 21 cm tail no scalar sigma can describe. (2) An honest R alone makes the
-        # filter WORSE -- NEES 5.611 against 2.078 for constant R -- because it sharpens a
-        # belief whose bias is still there. It is only correct together with the
-        # observation-function correction in reliability.silhouette_observation, which is
-        # why that one defaults to on.
-        self.declare_parameter("camera_observation_r_visible_uv", 0.575)
+        # Diagnostic covariance attached to detector output. The camera manager replaces
+        # this with the matched commissioned R of the selected correction model.
+        self.declare_parameter("camera_observation_r_visible_uv", 2.5)
         self.declare_parameter("camera_observation_r_miss_uv", 40.0)
         # Which world's camera calibration these observations claim. This used to be
         # the literal "warehouse_full_4cam", so an observation captured in any other
@@ -277,6 +274,9 @@ class BatchedFourCameraYoloNode(Node):
         self.debug_frame_dir = str(self.get_parameter("debug_frame_dir").value).strip()
         if self.debug_frame_dir:
             Path(self.debug_frame_dir).expanduser().mkdir(parents=True, exist_ok=True)
+        self.debug_crop_dir = str(self.get_parameter("debug_crop_dir").value).strip()
+        if self.debug_crop_dir:
+            Path(self.debug_crop_dir).expanduser().mkdir(parents=True, exist_ok=True)
 
         if self.image_size <= 0:
             raise RuntimeError("image_size must be positive")
@@ -330,6 +330,10 @@ class BatchedFourCameraYoloNode(Node):
         self._cycle_sequence = 0
         self._clock_high_water_s = None
         self._clock_lock = threading.Lock()
+        self._terminal_lifecycle_lock = threading.RLock()
+        self._terminal_stopped = False
+        self._terminal_stop_request_id = ""
+        self._session_stopped_appended = False
         self._outcome_journal = OutcomeJournal(
             journal_path(str(self.get_parameter("outcome_journal_path").value), self._producer_epoch),
             self._producer_epoch,
@@ -337,6 +341,21 @@ class BatchedFourCameraYoloNode(Node):
         )
         self.batch_outcome_publisher = self.create_publisher(
             String, "/perception/camera_batch_outcome", _outcome_qos()
+        )
+        terminal_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=16,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self._terminal_stop_ack_pub = self.create_publisher(
+            String, TERMINAL_STOP_ACK_TOPIC, terminal_qos
+        )
+        self.create_subscription(
+            String,
+            TERMINAL_STOP_REQUEST_TOPIC,
+            self._terminal_stop_request_cb,
+            terminal_qos,
         )
         self._publish_batch_outcome(dict(
             status="session_started", camera_ids=list(CAMERA_ORDER),
@@ -649,6 +668,8 @@ class BatchedFourCameraYoloNode(Node):
             return stamp
 
     def _publish_batch_outcome(self, event) -> None:
+        if getattr(self, "_terminal_stopped", False):
+            return
         # This local durable record precedes publication. Reliable DDS history
         # supports bounded late delivery; the journal covers process/transport loss.
         payload = self._outcome_journal.append(dict(
@@ -657,12 +678,17 @@ class BatchedFourCameraYoloNode(Node):
         ))
         message = String()
         message.data = json.dumps(payload, sort_keys=True, allow_nan=False)
-        self.get_logger().info("camera_batch_outcome " + message.data)
+        # The append-only outcome journal and ROS topic are the evidence surfaces.
+        # Duplicating every full JSON event at INFO creates multi-gigabyte campaign
+        # consoles and materially slows five-camera 960 px inference.
+        self.get_logger().debug("camera_batch_outcome " + message.data)
         if getattr(self, "_outcome_transport_enabled", True):
             self.batch_outcome_publisher.publish(message)
 
 
     def _batch_liveness_tick(self) -> None:
+        if getattr(self, "_terminal_stopped", False):
+            return
         self._clock_s()  # detect reset even if input publication stops
         if self.synchronization_mode != "strict":
             return
@@ -870,6 +896,8 @@ class BatchedFourCameraYoloNode(Node):
         raise RuntimeError(message) from cause
 
     def _image_callback(self, camera_id: str, msg: Image) -> None:
+        if getattr(self, "_terminal_stopped", False):
+            return
         receive_wall_s = time.perf_counter()
         receive_stamp_s = self._clock_s()
         try:
@@ -918,6 +946,9 @@ class BatchedFourCameraYoloNode(Node):
 
     def _gz_image_callback(self, camera_id: str, msg: Any) -> None:
         """Accept one Gazebo RGB image without a ros_gz_bridge conversion."""
+
+        if getattr(self, "_terminal_stopped", False):
+            return
 
         receive_wall_s = time.perf_counter()
         receive_stamp_s = self._clock_s()
@@ -1013,6 +1044,8 @@ class BatchedFourCameraYoloNode(Node):
             self._fatal(f"conflicting image bytes at same capture stamp for {frame.camera_id}")
 
     def _drain_async_pending(self) -> None:
+        if getattr(self, "_terminal_stopped", False):
+            return
         now_wall_s = time.perf_counter()
         with self._async_pending_lock:
             if not self._async_pending:
@@ -1073,6 +1106,8 @@ class BatchedFourCameraYoloNode(Node):
         self._process_frames(batch)
 
     def _process_frames(self, batch: tuple[PendingFrame, ...]) -> None:
+        if getattr(self, "_terminal_stopped", False):
+            return
         if not batch or len({item.camera_id for item in batch}) != len(batch):
             self._fatal("internal camera micro-batch identity violation")
         self._cycle_sequence += 1
@@ -1247,7 +1282,7 @@ class BatchedFourCameraYoloNode(Node):
         self._write_debug_frame(item, image_bgr, selection)
         self._publish_camera(
             item,
-            image_bgr.shape[:2],
+            image_bgr,
             selection,
             timing,
             source_batch_id=source_batch_id,
@@ -1272,7 +1307,7 @@ class BatchedFourCameraYoloNode(Node):
     def _publish_camera(
         self,
         item: PendingFrame,
-        image_shape: tuple[int, int],
+        image_bgr: np.ndarray,
         selection: dict[str, Any] | None,
         timing: _BatchTiming,
         *,
@@ -1301,7 +1336,15 @@ class BatchedFourCameraYoloNode(Node):
         )
         polygon = (selection.get("detection") or {}).get("polygon")
         mask_points = float(polygon.shape[0]) if mask_available and polygon is not None else math.nan
-        height, width = image_shape
+        height, width = image_bgr.shape[:2]
+        visibility_grid = None
+        if bbox is not None and bool(selection.get("detected_after_threshold", False)):
+            from unav_common.visibility_patch import visibility_grid_from_bgr_frame
+            visibility_grid = tuple(
+                float(value) for value in visibility_grid_from_bgr_frame(
+                    image_bgr, bbox
+                ).reshape(-1)
+            )
         if math.isfinite(selected_u) and math.isfinite(selected_v) and height > 0 and width > 0:
             border_margin = float(
                 min(
@@ -1388,7 +1431,8 @@ class BatchedFourCameraYoloNode(Node):
         )
         output = self.outputs[item.camera_id]
         observation_message = self._observation_message(
-            item.camera_id, message, source_batch_id=source_batch_id
+            item.camera_id, message, source_batch_id=source_batch_id,
+            visibility_grid=visibility_grid,
         )
         try:
             output.diagnostics_publisher.publish(message)
@@ -1402,6 +1446,7 @@ class BatchedFourCameraYoloNode(Node):
         diagnostics: Float64MultiArray,
         *,
         source_batch_id: str,
+        visibility_grid: tuple[float, ...] | None = None,
     ) -> String:
         try:
             observation = self._camera_observation_from_diagnostics(
@@ -1413,7 +1458,8 @@ class BatchedFourCameraYoloNode(Node):
                                   producer_epoch=identity["producer_epoch"],
                                   source_frame_id=identity["source_frame_id"],
                                   capture_stamp_ns=identity["capture_stamp_ns"],
-                                  detector_invocation_id=identity["detector_invocation_id"])
+                                  detector_invocation_id=identity["detector_invocation_id"],
+                                  visibility_grid_16x16=visibility_grid)
             message = String()
             message.data = observation.to_json()
             return message
@@ -1425,38 +1471,127 @@ class BatchedFourCameraYoloNode(Node):
     def _write_debug_frame(
         self, item: PendingFrame, image_bgr: np.ndarray, selection: dict[str, Any]
     ) -> None:
-        if not self.debug_frame_dir:
+        if not self.debug_frame_dir and not self.debug_crop_dir:
             return
         try:
-            image = image_bgr.copy()
             bbox = selection.get("bbox_xyxy")
-            if bbox is not None:
+            if self.debug_crop_dir and bbox is not None:
+                from PIL import Image as PilImage
+
                 x0, y0, x1, y1 = np.asarray(bbox, dtype=float).reshape(4)
-                cv2.rectangle(
-                    image, (int(x0), int(y0)), (int(x1), int(y1)), (0, 0, 255), 1
+                height, width = image_bgr.shape[:2]
+                box_width, box_height = x1 - x0, y1 - y0
+                rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+                crop = PilImage.fromarray(rgb).crop((
+                    int(max(0.0, x0 - 0.5 * box_width)),
+                    int(max(0.0, y0 - 0.5 * box_height)),
+                    int(min(float(width), x1 + 0.5 * box_width)),
+                    int(min(float(height), y1 + 0.5 * box_height)),
+                )).resize((96, 96), PilImage.Resampling.BILINEAR)
+                filename = f"{item.camera_id}_{item.stamp_ns:019d}.npz"
+                np.savez_compressed(
+                    Path(self.debug_crop_dir).expanduser() / filename,
+                    source_frame_id=np.asarray(item.source_frame_id),
+                    producer_epoch=np.asarray(self._producer_epoch),
+                    capture_stamp_ns=np.asarray(item.stamp_ns, dtype=np.int64),
+                    crop=np.asarray(crop, dtype=np.uint8).transpose(2, 0, 1),
+                    bbox_xyxy=np.asarray(bbox, dtype=np.float64),
+                    selected_uv=np.asarray((
+                        float(selection.get("selected_u", math.nan)),
+                        float(selection.get("selected_v", math.nan)),
+                    ), dtype=np.float64),
+                    image_shape=np.asarray((height, width), dtype=np.int64),
+                    confidence=np.asarray(
+                        float(selection.get("selected_score", math.nan)), dtype=np.float64),
                 )
-            u = float(selection.get("selected_u", math.nan))
-            v = float(selection.get("selected_v", math.nan))
-            if math.isfinite(u) and math.isfinite(v):
-                cv2.circle(image, (int(u), int(v)), 2, (0, 255, 255), -1)
-            filename = f"{item.camera_id}_{item.stamp_ns:019d}.png"
-            cv2.imwrite(str(Path(self.debug_frame_dir).expanduser() / filename), image)
+            if self.debug_frame_dir:
+                image = image_bgr.copy()
+                if bbox is not None:
+                    x0, y0, x1, y1 = np.asarray(bbox, dtype=float).reshape(4)
+                    cv2.rectangle(
+                        image, (int(x0), int(y0)), (int(x1), int(y1)), (0, 0, 255), 1
+                    )
+                u = float(selection.get("selected_u", math.nan))
+                v = float(selection.get("selected_v", math.nan))
+                if math.isfinite(u) and math.isfinite(v):
+                    cv2.circle(image, (int(u), int(v)), 2, (0, 255, 255), -1)
+                filename = f"{item.camera_id}_{item.stamp_ns:019d}.png"
+                cv2.imwrite(str(Path(self.debug_frame_dir).expanduser() / filename), image)
         except Exception as exc:
             self._warn_bounded(item.camera_id + ":debug", f"debug frame write failed: {exc}")
+
+    def _terminal_stop_request_cb(self, message) -> None:
+        """Drain detector-owned work and durably close its outcome stream."""
+        try:
+            request = terminal_stop_request_from_json(message.data)
+        except ValueError as exc:
+            self._fatal("invalid terminal stop request", exc)
+            return
+        with self._terminal_lifecycle_lock:
+            if self._terminal_stopped:
+                if request.request_id != self._terminal_stop_request_id:
+                    self._fatal("conflicting terminal stop request identity")
+                return
+            self._terminal_stop_request_id = request.request_id
+            self._outcome_transport_enabled = False
+            self.batcher.close()
+            with self._async_pending_lock:
+                pending = list(self._async_pending.values())
+                self._async_pending.clear()
+            if pending:
+                self._publish_batch_outcome(dict(
+                    status="incomplete_terminal_stop",
+                    terminal_stop_request_id=request.request_id,
+                    members=[frame_member(frame) for frame in pending],
+                ))
+            self._append_session_stopped(request_id=request.request_id)
+            self._terminal_stopped = True
+        ack = TerminalStopAck(
+            request_id=request.request_id,
+            component="detector",
+            status="outcome_stream_quiescent",
+            acknowledgement_stamp_ns=int(self.get_clock().now().nanoseconds),
+            detail="durable_session_stopped",
+        )
+        response = String()
+        response.data = terminal_stop_ack_to_json(ack)
+        self._terminal_stop_ack_pub.publish(response)
+
+    def _append_session_stopped(self, *, request_id=""):
+        """Append the terminal record without consulting any ROS entity."""
+        if getattr(self, "_session_stopped_appended", False):
+            return None
+        result = self._outcome_journal.append(dict(
+            status="session_stopped",
+            transport="journal_only",
+            stage="detector",
+            terminal_stop_request_id=str(request_id or ""),
+            publish_stamp_s=float(
+                getattr(self, "_clock_high_water_s", 0.0) or 0.0),
+        ))
+        self._session_stopped_appended = True
+        return result
 
     def destroy_node(self):
         # main stops the executor first. DDS may already be unavailable, so final
         # pending drops and the final event sequence belong in the journal only.
         self._outcome_transport_enabled = False
         try:
-            self.batcher.close()
-            with self._async_pending_lock:
-                pending = list(self._async_pending.values())
-                self._async_pending.clear()
-            if pending:
-                self._publish_batch_outcome(dict(status="incomplete_shutdown",
-                                                 members=[frame_member(f) for f in pending]))
-            self._publish_batch_outcome(dict(status="session_stopped", transport="journal_only"))
+            with self._terminal_lifecycle_lock:
+                if not self._terminal_stopped:
+                    self.batcher.close()
+                    with self._async_pending_lock:
+                        pending = list(self._async_pending.values())
+                        self._async_pending.clear()
+                    if pending:
+                        self._publish_batch_outcome(dict(
+                            status="incomplete_shutdown",
+                            members=[frame_member(f) for f in pending],
+                        ))
+                    # The ROS context may already be invalid here. Closing evidence
+                    # must depend only on the journal, not on a ROS publisher.
+                    self._append_session_stopped()
+                    self._terminal_stopped = True
         finally:
             self._outcome_journal.close()
             result = super().destroy_node()

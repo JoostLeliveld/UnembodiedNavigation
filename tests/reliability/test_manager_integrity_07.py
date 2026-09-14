@@ -15,6 +15,7 @@ from reliability.common_time import MotionPose, MotionPoseSnapshot
 from reliability.manager_state import AdmissionBeliefHistory
 from reliability.fusion import MapObservation
 from reliability.fusion_event import FusedCorrectionEvent, canonical_json, publish_fused_event
+from reliability.nodes.camera_manager_node import _bootstrap_agreeing_group
 
 
 def identified_observation(**overrides):
@@ -66,6 +67,29 @@ def motion(stamp, x, y=0., frame="odom", epoch="manager-1"):
 def history(entries, yaw=0.):
     return MotionPoseSnapshot.capture(entries, target_frame="map_bev", source_frame="odom",
                                       epoch="manager-1", source_to_target_yaw=yaw)
+
+
+def test_bootstrap_prior_can_support_one_agreeing_camera_but_never_prior_alone():
+    prior = (-7.9, -8.7)
+    quality_c = identified_observation(camera_id="camera_C").quality()
+    quality_b = identified_observation(camera_id="camera_B").quality()
+    close = MapObservation(
+        "camera_C", 1.0, (-7.854, -8.685), ((0.01, 0.0), (0.0, 0.01)), quality_c
+    )
+    far = MapObservation(
+        "camera_B", 1.0, (-7.2, -8.7), ((0.01, 0.0), (0.0, 0.01)), quality_b
+    )
+    assert _bootstrap_agreeing_group([close], 0.30, prior_xy=prior) == [close]
+    assert _bootstrap_agreeing_group([far], 0.30, prior_xy=prior) == []
+    assert _bootstrap_agreeing_group([], 0.30, prior_xy=prior) == []
+
+
+def test_prior_free_bootstrap_still_rejects_a_single_camera():
+    single = MapObservation(
+        "camera_C", 1.0, (0.0, 0.0), ((0.01, 0.0), (0.0, 0.01)),
+        identified_observation(camera_id="camera_C").quality(),
+    )
+    assert _bootstrap_agreeing_group([single], 0.30) == []
 
 
 def test_supported_interpolation_is_order_invariant_and_preserves_frame_rotation():
@@ -129,6 +153,10 @@ def test_same_time_newer_revision_replaces_prior_and_old_revision_cannot_restore
     assert cache.offer(belief())
     assert cache.offer(belief(revision=2, mean=[1.4, 2., 0.]))
     assert cache.poses() == ((10., (1.4, 2., 0.)),)
+    assert cache.predictions() == ((
+        10., (1.4, 2., 0.),
+        ((.01, 0., 0.), (0., .01, 0.), (0., 0., .01)),
+    ),)
     assert not cache.offer(belief(state_stamp_ns=10_100_000_000))
     assert cache.poses() == ((10., (1.4, 2., 0.)),)
 
@@ -266,13 +294,19 @@ def manager_node(tmp_path):
     from unav_common.camera_outcomes import OutcomeJournal
     n = object.__new__(CameraManagerNode)
     n._manager_epoch = "manager-1"
+    n._terminal_stopped = False
+    n._terminal_stop_request_id = ""
+    n._session_stopped_appended = False
+    n._outcome_transport_enabled = True
+    n._terminal_stop_ack_pub = Publisher()
     n._input_lock, n._decision_lock = threading.RLock(), threading.RLock()
     n._decision_snapshot = None
     n._fusion_publication_seq = 0
     n.frame_id, n.odometry_frame_id, n.odometry_to_map_yaw_rad = "map_bev", "odom", 0.
     n._outcome_journal = OutcomeJournal(tmp_path / "manager.jsonl", n._manager_epoch)
     n.get_clock = lambda: NS(now=lambda: NS(nanoseconds=10_000_000_000))
-    n.get_logger = lambda: NS(info=lambda _: None, warn=lambda _: None, error=lambda _: None)
+    n.get_logger = lambda: NS(
+        debug=lambda _: None, info=lambda _: None, warn=lambda _: None, error=lambda _: None)
     n.batch_outcome_pub = Publisher()
     n._batch_clock_high_water_s = None
     n.camera_ids = ["camera_A", "camera_B"]
@@ -281,6 +315,7 @@ def manager_node(tmp_path):
     n._latest, n._ready_source_batch_id = {}, None
     n._ready_source_batch_stamp_s, n._last_decided_source_batch_id = -math.inf, None
     n._belief_query_history = deque([(9.95, (0., 0., 0.)), (9.99, (.4, 0., 0.))], maxlen=400)
+    n._belief_prediction_history = deque(maxlen=400)
     n._admission_beliefs = AdmissionBeliefHistory(n.frame_id)
     n._canonical_belief_seen, n._has_operational_anchor = False, True
     n._odom_history = deque([motion(9.95, 0.), motion(9.99, 0.)], maxlen=600)
@@ -297,7 +332,7 @@ def manager_node(tmp_path):
     n.observation_model, n.covariance_profile = "synthetic", "fixed_R"
     n._gate_rejections, n._reliability_query_source_by_camera = {}, {}
     n._camera_mapping_reasons = {}
-    n._silhouette_status_by_camera, n._detection_extras_by_camera = {}, {}
+    n._measurement_model_status_by_camera, n._detection_extras_by_camera = {}, {}
     n.decision_pub, n.selected_pub, n.active_pub, n.fused_correction_pub = (Publisher() for _ in range(4))
     n.map_observations_pub = None
     contracts = [identified_observation(camera_id=c, capture_stamp_ns=round(t*1e9), timestamp_s=t,
@@ -309,6 +344,32 @@ def manager_node(tmp_path):
         n._observation_callback(c.camera_id)(NS(data=c.to_json()))
     n._map_observations = lambda _: readings
     return n, contracts, readings
+
+
+def test_terminal_request_quiesces_manager_and_binds_durable_marker(tmp_path):
+    from unav_common.camera_outcomes import read_journal
+    from unav_common.terminal_stop import (
+        TerminalStopRequest,
+        terminal_stop_ack_from_json,
+        terminal_stop_request_to_json,
+    )
+
+    n, _, _ = manager_node(tmp_path)
+    request = TerminalStopRequest('request-1', 'run-1', 'goal_reached', 10)
+    n._terminal_stop_request_cb(
+        NS(data=terminal_stop_request_to_json(request))
+    )
+    try:
+        assert n._terminal_stopped
+        assert not n._outcome_transport_enabled
+        ack = terminal_stop_ack_from_json(n._terminal_stop_ack_pub.messages[-1].data)
+        assert ack.component == 'camera_manager'
+        assert ack.request_id == request.request_id
+        stopped = list(read_journal(n._outcome_journal.path))[-1]
+        assert stopped['status'] == 'session_stopped'
+        assert stopped['terminal_stop_request_id'] == request.request_id
+    finally:
+        n._outcome_journal.close()
 
 
 def test_real_manager_uses_two_stationary_odom_endpoints_never_belief_jump(tmp_path):
@@ -323,6 +384,51 @@ def test_real_manager_uses_two_stationary_odom_endpoints_never_belief_jump(tmp_p
         assert old["common_observation"]["covariance_m2"][0][0] == pytest.approx(.010004)
         n._decide()
         assert len(n.fused_correction_pub.messages) == 1
+    finally:
+        n._outcome_journal.close()
+
+
+def test_manager_bootstraps_from_declared_start_plus_one_agreeing_camera(tmp_path):
+    n, _, readings = manager_node(tmp_path)
+    n._has_operational_anchor = False
+    n.bootstrap_prior_pose = (1.0, 2.0, 0.0)
+    n.bootstrap_prior_counts_as_support = True
+    n.bootstrap_min_cameras = 2
+    n.bootstrap_max_disagreement_m = 0.30
+    n._map_observations = lambda _: readings[:1]
+    try:
+        n._decide()
+        assert len(n.fused_correction_pub.messages) == 1
+        decision = json.loads(n.decision_pub.messages[0].data)
+        assert decision["accepted_camera_ids"] == ["camera_A"]
+        assert decision["bootstrap_evidence"] == {
+            "camera_count": 1,
+            "camera_ids": ["camera_A"],
+            "max_disagreement_m": 0.30,
+            "prior_used": True,
+            "prior_xy": [1.0, 2.0],
+            "required_support_count": 2,
+            "support_count": 2,
+        }
+    finally:
+        n._outcome_journal.close()
+
+
+def test_timestamp_compensation_stops_at_latest_supported_odometry(tmp_path):
+    """Image callbacks may precede odometry at the manager's current ROS time."""
+    n, _, _ = manager_node(tmp_path)
+    n.timestamp_compensation = True
+    try:
+        n._decide()
+        assert len(n.fused_correction_pub.messages) == 1
+        event = FusedCorrectionEvent.from_json(n.fused_correction_pub.messages[0].data).payload
+        assert event["common_capture_stamp_ns"] == 9_990_000_000
+        assert event["correction_stamp_ns"] == 9_990_000_000
+        assert event["correction_motion_support"]["supported"] is True
+        assert event["correction_motion_support"]["reason"] == "same_instant"
+        decision = json.loads(n.decision_pub.messages[0].data)
+        assert decision["propagation"].startswith(
+            "applied_to_latest_supported_odometry")
     finally:
         n._outcome_journal.close()
 

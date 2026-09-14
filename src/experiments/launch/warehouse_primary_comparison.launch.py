@@ -22,6 +22,10 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('camera_network_artifact_path', default_value=''),
         DeclareLaunchArgument('camera_network_objective', default_value='legacy_pixel_chart'),
         DeclareLaunchArgument('network_goal_std_m', default_value='0.15'),
+        DeclareLaunchArgument('network_goal_std_start_m', default_value='-1.0',
+                              description='Loose goal-prior sigma at rollout start; <=0 keeps the constant prior'),
+        DeclareLaunchArgument('camera_network_updates_per_step', default_value='1'),
+        DeclareLaunchArgument('optimizer_control_block_steps', default_value='1'),
         DeclareLaunchArgument('horizon', default_value='40'),
         DeclareLaunchArgument('dt', default_value='0.25'),
         DeclareLaunchArgument('v_max', default_value='0.22'),
@@ -251,6 +255,8 @@ def generate_launch_description():
         # edge, so inference resolution is a measurement parameter, not a speed knob.
         DeclareLaunchArgument('yolo_imgsz', default_value='960'),
         DeclareLaunchArgument('yolo_conf_threshold', default_value='0.25'),
+        DeclareLaunchArgument('yolo_predict_conf_floor', default_value='0.05',
+                              description='Internal pre-NMS floor; must not exceed the reported confidence threshold.'),
         DeclareLaunchArgument('yolo_iou_threshold', default_value='0.45'),
         DeclareLaunchArgument('yolo_target_class', default_value='robot'),
         DeclareLaunchArgument('yolo_class_id', default_value='-1'),
@@ -301,6 +307,10 @@ def generate_launch_description():
                               description='Minimum agreeing cameras required for prior-free belief initialisation.'),
         DeclareLaunchArgument('manager_bootstrap_max_disagreement_m', default_value='0.30',
                               description='Maximum pairwise camera disagreement allowed during prior-free initialisation.'),
+        DeclareLaunchArgument('manager_use_task_start_as_bootstrap_prior', default_value='false',
+                              description='Use the declared physical task start only until the recursive camera belief is anchored.'),
+        DeclareLaunchArgument('manager_bootstrap_prior_counts_as_support', default_value='false',
+                              description='Count the declared task-start prior as one bootstrap support source, while still requiring at least one admitted camera within the bootstrap disagreement bound.'),
         DeclareLaunchArgument('manager_require_gp_artifacts', default_value='true',
                               description='true = per-camera reliability GP sets each observation covariance (GP). false = no GP; every observation uses a fixed covariance (non-GP baseline). Set with an empty manager_gp_artifact_template for the non-GP arm.'),
         DeclareLaunchArgument('manager_fusion_max_timestamp_spread_s', default_value='0.05',
@@ -349,37 +359,27 @@ def generate_launch_description():
                               description='Interval between carrying a correction forward and '
                                           'consuming it. Declared as uncertainty along the '
                                           'direction of travel, because it is a bias there.'),
-        DeclareLaunchArgument('manager_admission_gate', default_value='true',
-                              description='Run the admission check on every detection: tall '
-                                          'enough, right width, contact point where predicted, '
-                                          'not touching the frame edge. Off reproduces the '
-                                          'ungated pipeline, which fused readings up to 122 cm '
-                                          'wrong.'),
+        DeclareLaunchArgument('manager_sensor_gate_config_path', default_value='',
+                              description='Versioned deterministic belief-independent sensor '
+                                          'gate YAML for commissioned navigation.'),
         DeclareLaunchArgument('manager_fusion_rule', default_value='independent',
                               description='How several cameras become one measurement: '
                                           'best_single | distance_angle | independent | '
                                           'joint_network. Campaigns name this explicitly.'),
-        DeclareLaunchArgument('manager_observation_model', default_value='hull',
-                              description='What a detector box means: hull predicts the box from the '
-                                          'robot shape; raw_box takes the box bottom-centre as the '
-                                          'robot; fixed_offset pushes that point a fixed distance '
-                                          'away from the camera.'),
-        DeclareLaunchArgument('manager_fixed_offset_m', default_value='0.0',
-                              description='The one commissioned number the fixed_offset observation '
-                                          'model uses, in metres.'),
+        DeclareLaunchArgument('manager_observation_model', default_value='raw_box',
+                              description='Commissioned observation family: raw_box, learned_nn, '
+                                          'or visibility_patch.'),
+        DeclareLaunchArgument('manager_availability_model_path', default_value='',
+                              description='Frozen Stage-08 Q1 geometry availability JSON artifact.'),
+        DeclareLaunchArgument('manager_availability_model_expected_sha256', default_value='',
+                              description='Exact SHA-256 required for the Stage-08 artifact.'),
         DeclareLaunchArgument('manager_learned_correction_path', default_value='',
                               description='Packaged neural box-correction artifact. Required by the '
-                                          'learned_nn and learned_nn_gated observation models and '
-                                          'ignored by every other one.'),
-        DeclareLaunchArgument('manager_learned_gate_reject', default_value='0.5',
-                              description='learned_nn_gated: refuse a reading whose estimated '
-                                          'usability falls below this.'),
-        DeclareLaunchArgument('manager_learned_gate_good', default_value='0.8',
-                              description='learned_nn_gated: above this the reading keeps the '
-                                          'commissioned covariance; between the two it is widened.'),
-        DeclareLaunchArgument('manager_learned_gate_soft_sigma_m', default_value='0.10',
-                              description='learned_nn_gated: extra sigma, in metres, added at the '
-                                          'reject end of the intermediate usability band.'),
+                                          'learned_nn observation model.'),
+        DeclareLaunchArgument('manager_visibility_sensor_model_path', default_value='',
+                              description='Hash-bound M4 visibility correction and matched R package.'),
+        DeclareLaunchArgument('manager_visibility_sensor_model_expected_sha256', default_value='',
+                              description='Exact SHA-256 required for the M4 sensor-model package.'),
         DeclareLaunchArgument('manager_max_measurement_age_s', default_value='1.25',
                               description='Maximum correction age admitted by selection or fusion; should not exceed planner freshness.'),
         DeclareLaunchArgument('manager_age_decay_s', default_value='1.25'),

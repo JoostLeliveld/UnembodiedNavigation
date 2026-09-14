@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -79,6 +80,39 @@ def test_experiment_csv_still_carries_the_correction_diagnostic_columns():
         assert f"'{column}'" in header_src, column
 
 
+def test_run_manifest_carries_the_complete_encoder_noise_identity():
+    """A campaign cannot validate a noise treatment the manifest omits."""
+    source = LOGGER_PATH.read_text()
+    for field in (
+        "use_encoder_noise",
+        "encoder_noise_linear_slip_mean",
+        "encoder_noise_linear_slip_std",
+        "encoder_noise_angular_slip_mean",
+        "encoder_noise_angular_slip_std",
+        "encoder_noise_linear_additive_std",
+        "encoder_noise_angular_additive_std",
+        "encoder_noise_correlation_alpha",
+    ):
+        assert f"'{field}': self.{field}" in source, field
+
+
+def test_run_manifest_carries_local_observation_risk_identity():
+    """The runtime verifier must be able to distinguish enabled and disabled risk."""
+    source = LOGGER_PATH.read_text()
+    assert "self.declare_parameter('local_use_obs_risk', True)" in source
+    assert "'local_use_obs_risk': self.local_use_obs_risk" in source
+
+
+def test_run_manifest_carries_diagnostic_odometry_identity():
+    """The runtime verifier must prove raw odometry was not used as localization."""
+    source = LOGGER_PATH.read_text()
+    assert "self.declare_parameter('use_diagnostic_odom_localization', False)" in source
+    assert (
+        "'use_diagnostic_odom_localization': self.use_diagnostic_odom_localization"
+        in source
+    )
+
+
 def test_reject_reason_decoder_covers_every_shared_chain_code():
     """The logger must not decode a live reason code as 'unknown'."""
     import sys
@@ -102,3 +136,26 @@ def test_reject_reason_decoder_covers_every_shared_chain_code():
         f"reject codes {sorted(missing)} are emitted by the correction chain but "
         f"decode as 'unknown' in the CSV"
     )
+
+
+def test_current_world_collision_names_cannot_disappear_from_geometry_audit():
+    """Every current-world prism is classified; new objects default to obstacles."""
+    import sys
+
+    sys.path.insert(0, str(LOGGER_PATH.parents[3]))
+    from experiments.nodes.experiment_logger import _partition_collision_prisms
+
+    prisms = (
+        SimpleNamespace(name="warehouse_shell/wall_east:collision"),
+        SimpleNamespace(name="warehouse_v2_occluders/obs_A1:collision"),
+        SimpleNamespace(name="pallet_loose_2/body:base_collision"),
+    )
+    walls, obstacles = _partition_collision_prisms(prisms)
+    assert [item.name for item in walls] == [
+        "warehouse_shell/wall_east:collision"
+    ]
+    assert [item.name for item in obstacles] == [
+        "warehouse_v2_occluders/obs_A1:collision",
+        "pallet_loose_2/body:base_collision",
+    ]
+    assert set(map(id, walls + obstacles)) == set(map(id, prisms))

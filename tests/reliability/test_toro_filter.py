@@ -97,7 +97,7 @@ def test_covariance_lookup_is_region_dependent():
     assert model.covariance_for("camA", (8.0, 0.0))[0][0] == pytest.approx(var_hi)
 
 
-def test_fov_gate_rejects_out_of_hull_measurements():
+def test_fov_gate_rejects_out_of_calibrated_region_measurements():
     model = _box_model(yspan=(-1.0, 1.0))
     frames = [
         ReplayFrame(timestamp_s=0.0, odometry_xy_m=(1.0, 0.0), observations=(_obs("camA", 0.0, (1.0, 0.0)),)),

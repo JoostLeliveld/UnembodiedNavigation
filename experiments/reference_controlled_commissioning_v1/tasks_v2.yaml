@@ -1,0 +1,56 @@
+tasks:
+  warehouse_v2.world.sdf:
+  - name: commission_settle_lap1_fwd
+    start:
+      x: -10.75
+      y: -6.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -10.75
+      y: -6.25
+  - name: commission_settle_lap2_fwd
+    start:
+      x: -10.75
+      y: -6.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -10.75
+      y: -6.25
+  - name: commission_settle_lap3_fwd
+    start:
+      x: -6.95
+      y: -6.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -6.95
+      y: -6.25
+  - name: commission_settle_lap4_fwd
+    start:
+      x: -3.05
+      y: -6.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -3.05
+      y: -6.25
+  - name: commission_settle_lap5_fwd
+    start:
+      x: -10.75
+      y: -6.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -10.75
+      y: -6.25
+  - name: commission_settle_lap6_fwd
+    start:
+      x: -6.95
+      y: -6.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -6.95
+      y: -6.25

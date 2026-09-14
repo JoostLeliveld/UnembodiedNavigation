@@ -84,19 +84,32 @@ def test_numpy_and_casadi_match_inside_and_outside_support(tmp_path):
     with pytest.raises(ValueError):net.query([0.,0.,0.,.9])
 
 
-def test_metric_expected_belief_numpy_and_casadi_match(tmp_path):
+@pytest.mark.parametrize('opportunities',[1,5])
+def test_metric_expected_belief_numpy_and_casadi_match(tmp_path,opportunities):
     ca=pytest.importorskip('casadi')
     net=write_network(tmp_path/'field.npz',availability=.4,spatial=True)
     state=np.array([.35,.42,.1])
     P=np.array([[.2,.01,.03],[.01,.3,-.01],[.03,-.01,.05]])
     m=ca.MX.sym('m',3);S=ca.MX.sym('S',3,3)
-    P_expr,H_expr=net.make_expected_belief_casadi()(m,S)
+    P_expr,H_expr=net.make_expected_belief_casadi(opportunities=opportunities)(m,S)
     func=ca.Function('expected_belief',[m,S],[P_expr,H_expr])
     actual_P,actual_H=func(state,P)
-    expected_P,expected_H=net.expected_belief(state,P)
+    expected_P,expected_H=net.expected_belief(state,P,opportunities=opportunities)
     np.testing.assert_allclose(np.asarray(actual_P),expected_P,rtol=1e-8,atol=1e-9)
     np.testing.assert_allclose(float(actual_H),expected_H,rtol=1e-8,atol=1e-9)
     assert np.trace(expected_P[:2,:2]) < np.trace(P[:2,:2])
+
+
+def test_repeated_camera_opportunities_contract_covariance_and_validate_count(tmp_path):
+    net=write_network(tmp_path/'field.npz',availability=.4,spatial=True)
+    state=np.array([.35,.42,.1])
+    P=np.array([[.2,.01,.03],[.01,.3,-.01],[.03,-.01,.05]])
+    one,_=net.expected_belief(state,P,opportunities=1)
+    five,_=net.expected_belief(state,P,opportunities=5)
+    assert np.trace(five[:2,:2]) < np.trace(one[:2,:2])
+    for invalid in (0,-1,True,1.5):
+        with pytest.raises(ValueError,match='positive integer'):
+            net.expected_belief(state,P,opportunities=invalid)
 
 
 def make_planner(path, **overrides):
@@ -165,6 +178,35 @@ def test_metric_network_objective_is_independent_of_fixed_camera_chart(tmp_path)
         np.testing.assert_allclose(value,numpy_value/H_eff,rtol=1e-7,atol=1e-6)
         values.append(value)
     np.testing.assert_allclose(values[0],values[1],rtol=1e-12,atol=1e-12)
+
+
+def test_sparse_control_blocks_keep_full_rollout_and_exact_gradient(tmp_path):
+    pytest.importorskip('casadi')
+    net=write_network(tmp_path/'field.npz',availability=.4,spatial=True)
+    planner=make_planner(
+        net.path, camera_network_objective='metric_expected_belief',
+        network_goal_std_m=.2, optimizer_control_block_steps=2,
+    )
+    state=np.array([.35,.42,.1]);P=np.diag([.05,.04,.03]);goal=np.array([1.2,1.,0.])
+    goal_obs=planner._goal_obs(goal)
+    evaluate=planner._get_casadi_valgrad(
+        goal,goal_obs,use_observation_risk=True,use_ambiguity_term=True)
+    # ceil(5 / 2) blocks, two control variables each.
+    sparse=np.array([.20,.05,.24,-.04,.10,.0])
+    value,gradient=evaluate(sparse,state,P,goal_obs,goal[:2],0.)
+    numerical=[]
+    for i in range(len(sparse)):
+        delta=np.zeros_like(sparse);delta[i]=1e-5
+        numerical.append((evaluate(sparse+delta,state,P,goal_obs,goal[:2],0.)[0]-
+            evaluate(sparse-delta,state,P,goal_obs,goal[:2],0.)[0])/2e-5)
+    np.testing.assert_allclose(gradient,numerical,rtol=3e-4,atol=3e-5)
+    expanded=np.repeat(sparse.reshape(3,2),2,axis=0)[:5].reshape(-1)
+    numpy_value=planner._evaluate_controls(expanded,state,P,goal,goal_obs,None)
+    H_eff=sum(planner.discount_gamma**t for t in range(planner.horizon))
+    np.testing.assert_allclose(value,numpy_value/H_eff,rtol=1e-7,atol=1e-6)
+    solved=planner.plan(state,P,goal[:2])
+    np.testing.assert_allclose(solved.controls[0],solved.controls[1])
+    np.testing.assert_allclose(solved.controls[2],solved.controls[3])
 
 
 def test_invalid_covariance_and_unknown_masks_fail(tmp_path):

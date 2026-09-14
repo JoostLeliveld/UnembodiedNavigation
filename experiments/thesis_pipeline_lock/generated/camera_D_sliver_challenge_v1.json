@@ -1,0 +1,20 @@
+{
+  "schema": "thesis_stage06_named_challenge.v1",
+  "purpose": "Post-selection diagnostic for the historical Camera-D sliver; this observation may not change the selected gate.",
+  "poses": [
+    {
+      "x": -3.34375,
+      "y": 7.41111,
+      "yaw": 3.141592653589793,
+      "stratum": "stage06_named_diagnostic",
+      "position_id": 0,
+      "position_key": "D_SLIVER_001",
+      "block_id": "D_SLIVER_001",
+      "heading_id": 0,
+      "heading_degrees": 180.0,
+      "x_idx": 0,
+      "y_idx": 0,
+      "yaw_idx": 0
+    }
+  ]
+}

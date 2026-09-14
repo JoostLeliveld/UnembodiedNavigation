@@ -1,7 +1,8 @@
 """Independent audit-06 invariants; no changes to declared recovery thresholds.
 
 Uses analytic motion and fixed synthetic R to test wiring rather than camera quality.
-The first-return refusal is deliberately retained pending a separate policy decision.
+Long camera outages are distinct from missing-motion gaps: complete odometry support
+allows replay, while absent or stale support is still refused.
 """
 import json
 import math
@@ -63,20 +64,17 @@ def test_normal_update_during_supported_turn_accepts_correct_measurement():
     assert row['belief_stamp_after'] == 10.
 
 
-def test_complete_blind_turn_retains_declared_refusal_then_accepts_successor():
+def test_complete_blind_turn_with_dense_odometry_accepts_first_return():
     n = node(belief_stamp_s=0.)
     n.use_odom_for_predict = True
     n.planner = ExactMotion()
     n._odom_log = [(k/10, .2 if k < 20 or k >= 40 else 0.,
                     math.pi/4 if 20 <= k < 40 else 0.) for k in range(103)]
     first = apply(n, 10., [.4, 1.2], 'return')
-    assert first['status'] == 'dropped'
-    assert first['reason'] == 'replay_gap_too_large'
+    assert first['status'] == 'accepted'
+    assert first['reason'] == 'accepted'
     np.testing.assert_allclose(n.belief_m, [.4, 1.2, math.pi/2], atol=1e-10)
-    second = apply(n, 10.2, [.4, 1.24], 'successor')
-    assert second['status'] == 'accepted'
-    np.testing.assert_allclose(n.belief_m, [.4, 1.24, math.pi/2], atol=1e-10)
-    assert len(n.correction_assimilation_pub.published) == 2
+    assert len(n.correction_assimilation_pub.published) == 1
 
 
 def test_repeated_rejection_then_valid_evidence_recovers_without_snap():

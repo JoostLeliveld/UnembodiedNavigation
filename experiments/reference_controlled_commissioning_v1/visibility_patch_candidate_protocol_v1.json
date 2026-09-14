@@ -1,0 +1,76 @@
+{
+  "schema": "visibility_patch_candidate_protocol.v1",
+  "status": "frozen_before_valid_campaign_fit",
+  "authorized_by_user": "2026-09-13",
+  "provenance_amendment": {
+    "date": "2026-09-13",
+    "scope": "data-loading provenance only",
+    "change": "Permit an explicit immutable protocol snapshot only after verifying that every completed drive embeds the identical snapshot; model, split, selection gates, and hyperparameters are unchanged."
+  },
+  "purpose": "Test whether a runtime-observable 16x16 matrix of visible robot-colour evidence improves occlusion correction without replacing the strong tabular correction by default.",
+  "population": "sensor-gate-admitted measurements from complete reference-controlled drives; terminal controller states excluded",
+  "partitioning": {
+    "fit": "train models and produce leave-one-complete-drive-out predictions",
+    "development": "apply models trained on every fit drive and make the one candidate-selection decision",
+    "audit": "remain sealed until the complete selected correction and matched covariance are frozen"
+  },
+  "base_model": {
+    "id": "box_mlp",
+    "role": "safe correction supplied unchanged when the visibility residual is zero",
+    "inputs": "camera identity, projected camera-relative geometry, normalized detector-box geometry, and detector confidence"
+  },
+  "candidate": {
+    "id": "box_mlp_visibility_residual",
+    "equation": "correction_M4 = correction_M3 + sigmoid(gate) * visibility_residual",
+    "target": "reference position minus raw projected box-bottom measurement, expressed in camera-ray coordinates",
+    "visibility_matrix": {
+      "shape": [1, 16, 16],
+      "source": "soft blue-target evidence pooled spatially inside the detected box",
+      "source_crop": "recorded 96x96 detector context crop containing a half-box margin on every side",
+      "runtime_observable": true,
+      "ground_truth_or_segmentation_used": false,
+      "blue_distractors_retained": true
+    },
+    "network": "three convolutional visibility layers, a tabular feature branch, two shared fully connected layers, a two-value residual head, and a scalar sigmoid gate",
+    "initialization": "zero residual head, so the untrained candidate equals the box MLP exactly",
+    "loss": "tail-stratum-balanced smooth L1 with beta 0.02 m plus a small applied-residual penalty",
+    "optimizer": "AdamW, learning rate 0.0008, weight decay 0.0001, cosine schedule, 80 fixed epochs",
+    "forbidden_inputs": [
+      "reference pose at runtime",
+      "route or drive identity",
+      "robot belief",
+      "innovation",
+      "NIS",
+      "simulator segmentation"
+    ]
+  },
+  "controls": {
+    "primary": "box_mlp on identical development observations",
+    "image_information": "shuffle 16x16 visibility matrices within camera on development while retaining each row's box features and box-MLP correction"
+  },
+  "visibility_stressed_subset": "lowest visibility-score quartile within the scored partition; the score is the mean of total and lower-quarter matrix evidence and uses no correction target or error",
+  "selection_gates": [
+    "complete-drive development MSE improves over the box MLP by more than one paired standard error",
+    "visibility-stressed development p90 improves over the box MLP",
+    "the count above 1 m does not increase",
+    "the real visibility matrix beats the within-camera shuffled control"
+  ],
+  "failure_rule": "If any selection gate fails, retain box_mlp and describe the visibility residual as a negative development ablation.",
+  "post_selection_requirements": [
+    "fit a fresh matched covariance from the visibility-residual whole-drive out-of-fold residuals if it is selected",
+    "implement the exact feature and checkpoint contract in the runtime camera manager",
+    "verify offline and runtime predictions agree on recorded crops",
+    "measure the complete five-camera detector-plus-visibility-residual p95 wall time and require it to stay within the 200 ms simulated-camera cycle budget"
+  ],
+  "capture_policy": {
+    "save_full_resolution_rgb": false,
+    "save_selected_96x96_context_crop": true,
+    "reason": "The stored context crop plus bbox and image geometry reconstruct the 16x16 runtime feature; full frames are unnecessary for this candidate."
+  },
+  "sources": {
+    "experiments/reference_controlled_commissioning_v1/visibility_patch_rgb.py": "abc67b93b9d4392332f1f61f176a42e19a5bb91bcedd9b831f205dc5b238c964",
+    "experiments/reference_controlled_commissioning_v1/analyze_visibility_patch_rgb.py": "bd5b362781e73ea8c68d97d72b3f58c642df1695e01c3200e7bcfa0be8483544",
+    "experiments/reference_controlled_commissioning_v1/analyze_commissioned_model.py": "c42a7fd01f091b8cb1ef89dd6ed15a024e0658792a39a50f5049ee34c38cb029",
+    "tests/reliability/test_visibility_patch_rgb.py": "8b3567bdaaaedc5cb6a37fc62cf34a161a58e8c7db8e141df080b195e1811361"
+  }
+}

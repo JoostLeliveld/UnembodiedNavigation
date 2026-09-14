@@ -20,11 +20,6 @@ from reliability.export import (
     read_csv_rows,
     write_split_export,
 )
-from reliability.silhouette_observation import (
-    equivalent_position_measurement,
-    predicted_ground,
-    predicted_pixel,
-)
 from reliability.fusion import (
     FuseOrSelectDecision,
     FixedZone,

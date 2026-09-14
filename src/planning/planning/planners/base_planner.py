@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import json
 import math
+import warnings
 import os
 import time
 import numpy as np
@@ -68,15 +69,30 @@ def extract_waypoints(states, spacing_m=1.0, include_goal=True):
     if pts.shape[0] == 0:
         return []
     spacing = max(float(spacing_m), 1e-3)
+    # Interpolate along every segment, carrying residual arc length forward.
+    # Selecting only existing global states left gaps up to v_max*global_dt
+    # (1 m here), despite a requested 0.20 m execution spacing.
     waypoints = []
     last = pts[0]
-    acc = 0.0
-    for i in range(1, len(pts)):
-        acc += float(np.linalg.norm(pts[i] - pts[i - 1]))
-        if acc >= spacing:
-            waypoints.append((float(pts[i, 0]), float(pts[i, 1])))
-            acc = 0.0
-        last = pts[i]
+    remaining = spacing
+    for segment_start, segment_end in zip(pts, pts[1:]):
+        cursor = np.asarray(segment_start, dtype=float).copy()
+        delta = np.asarray(segment_end, dtype=float) - cursor
+        length = float(np.linalg.norm(delta))
+        if length <= 1.0e-12:
+            last = np.asarray(segment_end, dtype=float)
+            continue
+        direction = delta / length
+        travelled = 0.0
+        while length - travelled + 1.0e-12 >= remaining:
+            travelled += remaining
+            point = cursor + direction * travelled
+            waypoints.append((float(point[0]), float(point[1])))
+            remaining = spacing
+        remaining -= max(length - travelled, 0.0)
+        if remaining <= 1.0e-12:
+            remaining = spacing
+        last = np.asarray(segment_end, dtype=float)
     if include_goal:
         if not waypoints or float(np.linalg.norm(np.asarray(waypoints[-1]) - last)) > 1e-3:
             waypoints.append((float(last[0]), float(last[1])))
@@ -123,7 +139,13 @@ class UnicyclePlannerBase:
         camera_network_expected_source_hashes=None,
         camera_network_camera_ids=None,
         camera_network_objective='legacy_pixel_chart',
+        network_goal_std_start_m=None,
+        # Kouw (IWAI 2024) Lemma 1 ambiguity under the first-order extended
+        # transform, evaluated on the availability-weighted commissioned R.
+        # This is the thesis method; see docs/PLANNER_LOCK.md.
+        kouw_et1_ambiguity=True,
         network_goal_std_m=0.15,
+        camera_network_updates_per_step=1,
         r_visible_uv=2.5,
         r_miss_uv=120.0,
         visibility_sigma_kappa=1.0,
@@ -138,6 +160,7 @@ class UnicyclePlannerBase:
         discount_gamma=0.98,
         optimizer_maxfun=500,
         optimizer_ftol=1e-6,
+        optimizer_control_block_steps=1,
         optimizer_multistart=False,
         optimizer_multistart_include_direct=True,
         optimizer_initial_routes_json='',
@@ -167,6 +190,23 @@ class UnicyclePlannerBase:
         self.w_max = float(w_max)
         self.control_weight = float(control_weight)
 
+        # LOCKED: actuation-noise PSDs from the camera-ready IWAI paper. The
+        # unicycle Q_d closed form scales these with speed, heading and dt, so
+        # they are the only two free process-noise numbers in the planner. A
+        # different value is a method change and must be declared, not inherited
+        # silently from a stale config. See docs/PROCESS_NOISE_LOCK.md.
+        _LOCKED_PROCESS_NOISE_XY = 0.02
+        _LOCKED_PROCESS_NOISE_THETA = 0.08
+        if abs(float(process_noise_xy) - _LOCKED_PROCESS_NOISE_XY) > 1e-9:
+            warnings.warn(
+                f'process_noise_xy={float(process_noise_xy)} overrides the locked '
+                f'value {_LOCKED_PROCESS_NOISE_XY}; see docs/PROCESS_NOISE_LOCK.md',
+                RuntimeWarning, stacklevel=2)
+        if abs(float(process_noise_theta) - _LOCKED_PROCESS_NOISE_THETA) > 1e-9:
+            warnings.warn(
+                f'process_noise_theta={float(process_noise_theta)} overrides the locked '
+                f'value {_LOCKED_PROCESS_NOISE_THETA}; see docs/PROCESS_NOISE_LOCK.md',
+                RuntimeWarning, stacklevel=2)
         self.process_noise_xy = float(process_noise_xy)
         self.process_noise_theta = float(process_noise_theta)
         self.obs_noise_uv = float(obs_noise_uv)
@@ -216,6 +256,11 @@ class UnicyclePlannerBase:
         self.optimizer_warm_start_shift_steps = int(max(optimizer_warm_start_shift_steps, 1))
         self.optimizer_maxfun = int(max(optimizer_maxfun, 1))
         self.optimizer_ftol = float(max(optimizer_ftol, 1e-12))
+        if (isinstance(optimizer_control_block_steps, bool)
+                or int(optimizer_control_block_steps) != optimizer_control_block_steps
+                or int(optimizer_control_block_steps) < 1):
+            raise ValueError('optimizer_control_block_steps must be a positive integer')
+        self.optimizer_control_block_steps = int(optimizer_control_block_steps)
         self.optimizer_multistart = self._as_bool_like(optimizer_multistart)
         self.optimizer_multistart_include_direct = self._as_bool_like(
             optimizer_multistart_include_direct
@@ -240,6 +285,10 @@ class UnicyclePlannerBase:
         self.visibility_model = None
         self.camera_network = None
         self.camera_network_objective = str(camera_network_objective or '').strip().lower()
+        self.network_goal_std_start_m = (
+            None if network_goal_std_start_m is None
+            else float(network_goal_std_start_m))
+        self.kouw_et1_ambiguity = bool(kouw_et1_ambiguity)
         if self.camera_network_objective not in ('legacy_pixel_chart', 'metric_expected_belief'):
             raise ValueError(
                 'camera_network_objective must be legacy_pixel_chart or metric_expected_belief'
@@ -247,6 +296,11 @@ class UnicyclePlannerBase:
         self.network_goal_std_m = float(network_goal_std_m)
         if not np.isfinite(self.network_goal_std_m) or self.network_goal_std_m <= 0.:
             raise ValueError('network_goal_std_m must be finite and positive')
+        if (isinstance(camera_network_updates_per_step, bool)
+                or int(camera_network_updates_per_step) != camera_network_updates_per_step
+                or int(camera_network_updates_per_step) < 1):
+            raise ValueError('camera_network_updates_per_step must be a positive integer')
+        self.camera_network_updates_per_step = int(camera_network_updates_per_step)
         network_path = str(camera_network_artifact_path or '').strip()
         if network_path:
             if not self.use_visibility_model:
@@ -267,6 +321,7 @@ class UnicyclePlannerBase:
                 expected_source_hashes=expected_sources, expected_camera_ids=expected_ids)
         elif self.camera_network_objective != 'legacy_pixel_chart':
             raise ValueError('metric_expected_belief requires a camera-network artifact')
+
         from unav_common.navigation_parameters import validate_navigation_parameters
         # Reject invalid tuning before the legacy clamps can silently change it.
         validate_navigation_parameters({
@@ -293,6 +348,10 @@ class UnicyclePlannerBase:
         self.nogo_belief_kappa = float(max(nogo_belief_kappa, 1e-6))
         self.nogo_mode = str(nogo_mode or 'keep_out').strip().lower()
         self.driveable_geometry_json = str(driveable_geometry_json or '')
+        # Numerical integration density for state-only obstacle costs. At the
+        # maximum speed, adjacent samples are no more than 0.20 m apart.
+        self.obstacle_substeps = max(
+            1, int(math.ceil(self.v_max * self.dt / 0.20)))
         self.nogo_cost_model = None
         self.collision_cost_model = None
 
@@ -337,12 +396,19 @@ class UnicyclePlannerBase:
             self.nogo_cost_model = NogoZoneCostModel(nogo_cfg)
 
         if str(collision_geometry_json or '').strip():
+            # The exact swept rectangular-footprint check is the hard validity
+            # gate.  Give L-BFGS-B a differentiable centre-distance surrogate as
+            # well, otherwise it repeatedly converges to routes that merely pass
+            # the zero-clearance gate and fail the release's 0.10 m body margin.
             collision_cfg = NogoCostConfig(
                 penalty_type='warning_band',
-                weight=1.0,
-                safe_distance=0.0,
-                logbarrier_eps=1e-3,
+                weight=self.nogo_weight,
+                safe_distance=self.robot_collision_radius_m + 0.10,
+                logbarrier_eps=self.nogo_logbarrier_eps,
+                warning_band=self.nogo_warning_band,
+                near_weight=self.nogo_near_weight,
                 geometry_json=str(collision_geometry_json or ''),
+                mode='keep_out',
             )
             self.collision_cost_model = NogoZoneCostModel(collision_cfg)
 
@@ -610,7 +676,13 @@ class UnicyclePlannerBase:
     def goal_obs_cov_for_progress(self, progress):
         if (self.camera_network is not None
                 and self.camera_network_objective == 'metric_expected_belief'):
-            return np.eye(2, dtype=float) * self.network_goal_std_m**2
+            start = self.network_goal_std_start_m
+            if start is None or start == self.network_goal_std_m:
+                return np.eye(2, dtype=float) * self.network_goal_std_m**2
+            fast = float(np.clip(progress, 0.0, 1.0)) ** self.goal_tightening_power
+            a = self._smoothstep(fast)
+            sigma = (1.0 - a) * start + a * self.network_goal_std_m
+            return np.eye(2, dtype=float) * sigma**2
         progress_fast = float(np.clip(progress, 0.0, 1.0)) ** self.goal_tightening_power
         a = self._smoothstep(progress_fast)
         sigma_u = (1.0 - a) * self.goal_prior_u_std_start + a * self.goal_prior_u_std_final
@@ -666,6 +738,8 @@ class UnicyclePlannerBase:
                 ))
             else:
                 penalty += float(self.nogo_cost_model.penalty_state_np(m))
+        if self.collision_cost_model is not None and self.collision_cost_model.enabled:
+            penalty += float(self.collision_cost_model.penalty_state_np(m))
         return float(penalty)
 
     def collision_signed_distance_state_np(self, m):
@@ -676,8 +750,11 @@ class UnicyclePlannerBase:
     def collision_clearance_state_np(self, m):
         return self._footprint_collision_model.clearance(m)
 
-    def collision_sweep_clearance_np(self, start, end, *, yaw_delta=None, control=None, dt=None):
-        return self._footprint_collision_model.sweep_clearance(start, end, yaw_delta=yaw_delta, control=control, dt=dt)
+    def collision_sweep_clearance_np(self, start, end, *, yaw_delta=None, control=None,
+                                     dt=None, required_clearance=0.0):
+        return self._footprint_collision_model.sweep_clearance(
+            start, end, yaw_delta=yaw_delta, control=control, dt=dt,
+            required_clearance=required_clearance)
 
     def driveable_clearance_state_np(self, m):
         if self._footprint_driveable_model is not None:
@@ -686,9 +763,12 @@ class UnicyclePlannerBase:
             return self.nogo_cost_model.clearance_state_np(m)
         return math.inf
 
-    def driveable_sweep_clearance_np(self, start, end, *, yaw_delta=None, control=None, dt=None):
+    def driveable_sweep_clearance_np(self, start, end, *, yaw_delta=None, control=None,
+                                     dt=None, required_clearance=0.0):
         if self._footprint_driveable_model is not None:
-            return self._footprint_driveable_model.sweep_clearance(start, end, yaw_delta=yaw_delta, control=control, dt=dt)
+            return self._footprint_driveable_model.sweep_clearance(
+                start, end, yaw_delta=yaw_delta, control=control, dt=dt,
+                required_clearance=required_clearance)
         return math.inf
 
     def collision_penetration_state_np(self, m):
@@ -945,6 +1025,15 @@ class UnicyclePlannerBase:
         wps = [np.asarray(wp, dtype=float).reshape(2) for wp in waypoints]
         if not wps:
             return controls.reshape(-1)
+        # A map polyline states corners only. With an arrival radius of one
+        # integration step the seed switches target while still a step short of
+        # a corner, so it turns early and the swept body leaves the lane. Insert
+        # intermediate points at half the arrival radius: the seed then reaches
+        # each point before turning, and the route it traces is unchanged.
+        wps = self._densify_waypoints(
+            np.asarray(start_xy_yaw, dtype=float).reshape(-1)[:2], wps,
+            spacing=max(0.18, self.v_max * self.dt) / 2.0,
+        )
 
         m = np.asarray(start_xy_yaw, dtype=float).reshape(-1)[:3].copy()
         S_dummy = np.eye(3, dtype=float) * 1e-6
@@ -978,6 +1067,20 @@ class UnicyclePlannerBase:
             controls[k] = [float(np.clip(v, self.v_min, self.v_max)), w]
             m, _ = self.predict(m, S_dummy, controls[k])
         return controls.reshape(-1)
+
+    @staticmethod
+    def _densify_waypoints(start_xy, waypoints, *, spacing):
+        """Return the same polyline with no leg longer than ``spacing``."""
+        spacing = float(max(spacing, 1e-3))
+        points = [np.asarray(start_xy, dtype=float).reshape(2)]
+        points += [np.asarray(wp, dtype=float).reshape(2) for wp in waypoints]
+        dense = []
+        for first, second in zip(points[:-1], points[1:]):
+            leg = float(np.linalg.norm(second - first))
+            steps = max(1, int(math.ceil(leg / spacing)))
+            for index in range(1, steps + 1):
+                dense.append(first + (second - first) * (index / steps))
+        return dense or [np.asarray(wp, dtype=float).reshape(2) for wp in waypoints]
 
     def _build_multistart_candidates(self, m0, goal_xy):
         """Build optional optimizer seeds; these are not mission waypoints."""
@@ -1103,6 +1206,13 @@ class UnicyclePlannerBase:
             bool(self.use_hit_miss_mixture),
             self.camera_network_objective,
             float(self.network_goal_std_m),
+            float(self.network_goal_std_start_m)
+            if self.network_goal_std_start_m is not None else -1.0,
+            bool(self.kouw_et1_ambiguity),
+            float(self.optimizer_terminal_goal_tolerance_m),
+            int(self.camera_network_updates_per_step),
+            int(self.optimizer_control_block_steps),
+            int(self.obstacle_substeps),
             float(self.nogo_belief_kappa),
             self._geometry_cache_identity(self.nogo_cost_model),
             self._geometry_cache_identity(self.collision_cost_model),
@@ -1184,13 +1294,21 @@ class UnicyclePlannerBase:
                 p_vis_ca = self.visibility_model.make_prob_state_casadi()
             nogo_cost_ca = None
             nogo_belief_cost_ca = None
+            state_cost_terms = []
             if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
                 if self.use_belief_nogo_cost:
                     nogo_belief_cost_ca = self.nogo_cost_model.make_penalty_belief_casadi(
                         kappa=self.nogo_belief_kappa,
                     )
                 else:
-                    nogo_cost_ca = self.nogo_cost_model.make_penalty_state_casadi()
+                    state_cost_terms.append(
+                        self.nogo_cost_model.make_penalty_state_casadi())
+            if self.collision_cost_model is not None and self.collision_cost_model.enabled:
+                state_cost_terms.append(
+                    self.collision_cost_model.make_penalty_state_casadi())
+            if state_cost_terms:
+                def nogo_cost_ca(m):
+                    return sum(term(m) for term in state_cost_terms)
             params_ca = casadi_efe.CasadiEfeParams(
                 # No static Q: the EFE loop rebuilds the exact Q_d(theta, v, dt) per step
                 # from process_noise_xy/theta (see unicycle_process_noise_ca).
@@ -1227,10 +1345,20 @@ class UnicyclePlannerBase:
                     params_ca,
                     self.camera_network.make_expected_belief_casadi(
                         self.visibility_sigma_kappa,
+                        opportunities=self.camera_network_updates_per_step,
                     ),
+                    arrival_radius_m=float(self.optimizer_terminal_goal_tolerance_m),
+                    effective_covariance=(
+                        self.camera_network.make_effective_covariance_casadi(
+                            self.visibility_sigma_kappa,
+                            no_report_var=self.process_noise_xy * self.dt)
+                        if self.kouw_et1_ambiguity else None),
                     goal_std_m=self.network_goal_std_m,
+                    goal_std_start_m=self.network_goal_std_start_m,
                     nogo_cost=nogo_cost_ca,
                     nogo_belief_cost=nogo_belief_cost_ca,
+                    obstacle_substeps=self.obstacle_substeps,
+                    control_block_steps=self.optimizer_control_block_steps,
                 )
             else:
                 valgrad = casadi_efe.make_efe_valgrad_fn(
@@ -1472,6 +1600,9 @@ class UnicyclePlannerBase:
         S = np.asarray(S0, dtype=float).copy()
         goal_xy = np.asarray(goal_state[:2], dtype=float)
         goal_cov = np.eye(2, dtype=float) * self.network_goal_std_m**2
+        anneal_goal_prior = (
+            self.network_goal_std_start_m is not None
+            and self.network_goal_std_start_m != self.network_goal_std_m)
         totals = dict(risk_cost=0., ambiguity_cost=0., control_cost=0.,
                       obstacle_cost=0., risk_mean=0., risk_cov_trace=0.,
                       risk_cov_logdet=0., risk_const=0.,
@@ -1480,21 +1611,49 @@ class UnicyclePlannerBase:
                       if self.use_obs_risk else 0.)
         ambiguity_scale = (self.ambiguity_weight * self.ambiguity_term_scale
                            if self.use_ambiguity else 0.)
+        arrival_radius = float(self.optimizer_terminal_goal_tolerance_m)
+        arrival_softness = 0.25
+        active = 1.0
         for t, u in enumerate(controls):
+            m_prev = np.asarray(m, dtype=float).copy()
             m, S = self.predict(m, S, u)
             validate_covariance(S, positive_definite=True, name='predicted covariance')
             weight_t = self.discount_gamma**t
+            if arrival_radius > 0.:
+                # Parked steps are not part of the plan; see the CasADi objective.
+                reached = float(np.linalg.norm(m[:2] - goal_xy))
+                active *= 1.0 / (1.0 + math.exp(
+                    -(reached - arrival_radius) / arrival_softness))
+            weight_t *= active
+            if anneal_goal_prior:
+                goal_cov = self.goal_obs_cov_for_progress(
+                    float(t) / float(max(self.goal_progress_n_steps, 1)))
             parts = risk_components(m[:2], S[:2, :2], (goal_xy, goal_cov))
             totals['risk_cost'] += weight_t * risk_scale * parts['total']
             for key in ('mean', 'cov_trace', 'cov_logdet', 'const'):
                 totals[f'risk_{key}'] += weight_t * risk_scale * parts[key]
             S_post, expected_entropy = self.camera_network.expected_belief(
                 m, S, self.visibility_sigma_kappa,
+                opportunities=self.camera_network_updates_per_step,
             )
+            if self.kouw_et1_ambiguity:
+                R_eff = self.camera_network.effective_observation_covariance(
+                    m, S, self.visibility_sigma_kappa,
+                    no_report_var=self.process_noise_xy * self.dt)
+                sign, logdet = np.linalg.slogdet(0.5 * (R_eff + R_eff.T))
+                if sign <= 0:
+                    raise ValueError('effective observation covariance must be positive definite')
+                expected_entropy = 0.5 * (2.0 * math.log(2.0 * math.pi * math.e) + logdet)
             totals['ambiguity_cost'] += weight_t * ambiguity_scale * expected_entropy
-            totals['obstacle_cost'] += weight_t * self.obstacle_penalty(
-                m, S_post if self.use_belief_nogo_cost else S,
-            )
+            if self.use_belief_nogo_cost:
+                obstacle = self.obstacle_penalty(m, S_post)
+            else:
+                obstacle = float(np.mean([
+                    self.obstacle_penalty(unicycle_step(
+                        m_prev, u, self.dt * substep / self.obstacle_substeps))
+                    for substep in range(1, self.obstacle_substeps + 1)
+                ]))
+            totals['obstacle_cost'] += weight_t * obstacle
             totals['control_cost'] += weight_t * self.control_weight * float(u @ u)
             S = S_post
         total = sum(totals[key] for key in (
@@ -1533,20 +1692,35 @@ class UnicyclePlannerBase:
             use_ambiguity_term,
         ) = self._resolve_plan_problem(m0, goal_xy)
 
+        block_steps = self.optimizer_control_block_steps
+        decision_blocks = int(math.ceil(self.horizon / block_steps))
+
+        def compress_controls(full):
+            full = np.asarray(full, dtype=float).reshape(self.horizon, 2)
+            return np.asarray([
+                np.mean(full[start:min(start + block_steps, self.horizon)], axis=0)
+                for start in range(0, self.horizon, block_steps)
+            ], dtype=float).reshape(-1)
+
+        def expand_controls(sparse):
+            sparse = np.asarray(sparse, dtype=float).reshape(decision_blocks, 2)
+            return np.repeat(sparse, block_steps, axis=0)[:self.horizon].reshape(-1)
+
         bounds = []
-        for _ in range(self.horizon):
+        for _ in range(decision_blocks):
             bounds.append((self.v_min, self.v_max))
             bounds.append((self.w_min, self.w_max))
 
         x0_default = self._initial_controls_flat()
         init_candidates: list[tuple[str, np.ndarray]] = [
-            ('warm_or_cold', np.asarray(x0_default, dtype=float)),
+            ('warm_or_cold', compress_controls(x0_default)),
         ]
         for ms_name, ms_controls in self._build_multistart_candidates(m0, goal_xy):
-            init_candidates.append((ms_name, np.asarray(ms_controls, dtype=float)))
+            init_candidates.append((ms_name, compress_controls(ms_controls)))
 
         objective_scales = self._objective_scales(
-            init_candidates[0][1], m0, S0, goal_state, goal_obs, goal_obs_cov,
+            expand_controls(init_candidates[0][1]), m0, S0,
+            goal_state, goal_obs, goal_obs_cov,
         )
         best_candidate = None
         best_init_name = ''
@@ -1594,7 +1768,8 @@ class UnicyclePlannerBase:
             self._runtime_debug_print(
                 "[planner_debug] Starting CasADi-backed scipy.optimize.minimize "
                 f"(maxiter={self.optimizer_maxiter}, maxfun={self.optimizer_maxfun}, ftol={self.optimizer_ftol}, "
-                f"init_candidates={len(init_candidates)})"
+                f"init_candidates={len(init_candidates)}, control_blocks={decision_blocks}, "
+                f"block_steps={block_steps})"
             )
 
             for init_name, x_init in init_candidates:
@@ -1602,7 +1777,7 @@ class UnicyclePlannerBase:
                 def checked(raw):
                     try:
                         return self._checked_candidate_controls(
-                            raw, m0, S0, goal_state, goal_obs, goal_obs_cov,
+                            expand_controls(raw), m0, S0, goal_state, goal_obs, goal_obs_cov,
                             objective_scales, progress_index=progress_index)
                     except (ValueError, TypeError, RuntimeError, np.linalg.LinAlgError) as exc:
                         self._runtime_debug_print(f"[planner_debug] rejected numerical candidate: {exc}")

@@ -44,7 +44,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     # inheriting whatever the runtime default happened to be that week.
     'state_reanchor_m': '0.0',
     'state_max_predict_dt_s': '1.5',
-    'state_reject_inflate_m2': '0.05',
+    'state_reject_inflate_m2': '0.0',
     'stale_belief_inflate_m2_per_s': '0.0',
     'stale_belief_inflate_cap_m2': '0.0',
     'require_state_correction_envelope': 'false',
@@ -83,7 +83,13 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'r_miss_uv': '120.0',
     'visibility_sigma_kappa': '1.0',
     'camera_network_objective': 'legacy_pixel_chart',
-    'network_goal_std_m': '0.15',
+    # EFE preference precision. Set to the declared arrival tolerance
+    # (goal_success_radius). At 0.15 the risk term is ~5x stronger and the
+    # objective collapses toward shortest path. See docs/PLANNER_LOCK.md.
+    'network_goal_std_m': '0.35',
+    'network_goal_std_start_m': '-1.0',
+    'camera_network_updates_per_step': '1',
+    'optimizer_control_block_steps': '1',
     'goal_prior_u_std_start': '80.0',
     'goal_prior_v_std_start': '80.0',
     'goal_prior_u_std_final': '4.0',
@@ -105,8 +111,14 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'use_encoder_noise': 'true',
     'use_odom_for_predict': 'true',
     'odom_topic': '/odom_noisy',
-    'process_noise_xy': '0.01',
-    'process_noise_theta': '0.02',
+    # Actuation-noise power spectral densities (sigma_v, sigma_omega) used by the
+    # unicycle Q_d closed form. These are DECLARED MODEL PARAMETERS, not the
+    # encoder-noise specification and not fitted to data. Locked to the values of
+    # the camera-ready IWAI paper so the thesis and the prior work grow covariance
+    # identically. Do not change without recording the reason in
+    # docs/PROCESS_NOISE_LOCK.md.
+    'process_noise_xy': '0.02',
+    'process_noise_theta': '0.08',
     'obs_noise_uv': '2.0',
     'optimizer_maxiter': '80',
     'optimizer_maxfun': '500',
@@ -186,6 +198,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'yolo_device': '',
     'yolo_imgsz': '640',
     'yolo_conf_threshold': '0.25',
+    'yolo_predict_conf_floor': '0.05',
     'yolo_iou_threshold': '0.45',
     'yolo_target_class': 'robot',
     'yolo_class_id': '-1',
@@ -196,6 +209,8 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     # Five-Hz camera rounds are 0.20 s apart. This must stay strictly below
     # one period so adjacent physical capture rounds can never merge.
     'yolo_max_batch_stamp_skew_s': '0.05',
+    'yolo_debug_frame_dir': '',
+    'yolo_debug_crop_dir': '',
     'log_dir': 'logs/experiments',
 }
 
@@ -237,12 +252,18 @@ _COMMAND_NOISE_CORRELATION_ALPHA: float = 0.85
 # Models cheap wheel encoder imprecision on top of actuation slip.
 # Independent AR(1) process (different RNG seed offset) so that belief and
 # truth diverge at a realistic rate when camera observations are unavailable.
-_ENCODER_NOISE_LINEAR_SLIP_MEAN: float = 0.02
-_ENCODER_NOISE_LINEAR_SLIP_STD: float = 0.05
+# Wheel-encoder odometry noise, set to a LOW-TRACTION warehouse condition.
+# The previous values produced 1.3-2.2% position drift per metre travelled,
+# which sits inside the 0.50-2.30% band published for CALIBRATED wheel odometry
+# on good surfaces. A warehouse AMR on smooth concrete with payload shifts and
+# dust belongs above that band, so these are scaled to target ~4% of distance.
+# See docs/PROCESS_NOISE_LOCK.md for the paired process-noise decision.
+_ENCODER_NOISE_LINEAR_SLIP_MEAN: float = 0.05
+_ENCODER_NOISE_LINEAR_SLIP_STD: float = 0.125
 _ENCODER_NOISE_ANGULAR_SLIP_MEAN: float = 0.00
-_ENCODER_NOISE_ANGULAR_SLIP_STD: float = 0.03
+_ENCODER_NOISE_ANGULAR_SLIP_STD: float = 0.075
 _ENCODER_NOISE_LINEAR_ADDITIVE_STD: float = 0.004
-_ENCODER_NOISE_ANGULAR_ADDITIVE_STD: float = 0.020
+_ENCODER_NOISE_ANGULAR_ADDITIVE_STD: float = 0.050
 _ENCODER_NOISE_CORRELATION_ALPHA: float = 0.80
 
 # Sensor pixel noise — paper-locked, not user-overridable.
@@ -253,12 +274,20 @@ VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
     'visibility_target_height_m': 0.0,
     'use_nogo_cost': 'true',
     'nogo_penalty_type': 'warning_band',
-    'nogo_weight': 40.0,
-    'nogo_safe_distance': 0.55,
-    'nogo_logbarrier_eps': 1e-3,
+    # Camera-ready IWAI value. At 40 the clearance term cannot compete.
+    'nogo_weight': 2000.0,
+    # Robot half-width 0.275 + 0.05 lane-keeping margin. The former 0.55-0.585
+    # (circumscribed radius) left the 1.10 m lanes a NEGATIVE lateral budget,
+    # i.e. structurally infeasible before any uncertainty existed.
+    'nogo_safe_distance': 0.325,
+    # Equals nogo_warning_band: the already-declared 'close to the edge' scale.
+    # At 1e-3 a 1 mm notional violation cost more than the entire risk term.
+    'nogo_logbarrier_eps': 0.05,
     'nogo_warning_band': 0.05,
     'nogo_near_weight': 50.0,
-    'use_belief_nogo_cost': 'false',
+    # The covariance -> clearance channel. With this off the obstacle term sees
+    # only the mean path, so predicted belief growth costs nothing.
+    'use_belief_nogo_cost': 'true',
     'nogo_belief_kappa': 1.0,
     'nogo_mode': 'keep_out',
     # Hit/miss expected-belief mixture in the EFE objective. 'false' reproduces
@@ -383,6 +412,10 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             context, 'manager_bootstrap_min_cameras', '2')),
         'manager_bootstrap_max_disagreement_m': float(_launch_value(
             context, 'manager_bootstrap_max_disagreement_m', '0.30')),
+        'manager_use_task_start_as_bootstrap_prior': _as_bool(_launch_value(
+            context, 'manager_use_task_start_as_bootstrap_prior', 'false')),
+        'manager_bootstrap_prior_counts_as_support': _as_bool(_launch_value(
+            context, 'manager_bootstrap_prior_counts_as_support', 'false')),
         'manager_require_gp_artifacts': _as_bool(_launch_value(context, 'manager_require_gp_artifacts', 'true')),
         'manager_fusion_max_timestamp_spread_s': float(
             _launch_value(context, 'manager_fusion_max_timestamp_spread_s', '0.05')
@@ -408,30 +441,30 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         ).strip().lower(),
         'manager_correction_timestamp_compensation': _as_bool(_launch_value(
             context, 'manager_correction_timestamp_compensation', 'false')),
-        'manager_admission_gate': _as_bool(_launch_value(
-            context, 'manager_admission_gate', 'true')),
+        'manager_sensor_gate_config_path': _launch_value(
+            context, 'manager_sensor_gate_config_path', '').strip(),
         'manager_correction_residual_interval_s': float(_launch_value(
             context, 'manager_correction_residual_interval_s', '0.05')),
         'manager_correction_propagation_drift_std': float(_launch_value(
             context, 'manager_correction_propagation_drift_std', '0.05')),
         'manager_observation_model': _launch_value(
-            context, 'manager_observation_model', 'hull'
+            context, 'manager_observation_model', 'raw_box'
         ).strip().lower(),
-        'manager_fixed_offset_m': float(
-            _launch_value(context, 'manager_fixed_offset_m', '0.0')
-        ),
+        'manager_availability_model_path': _launch_value(
+            context, 'manager_availability_model_path', ''
+        ).strip(),
+        'manager_availability_model_expected_sha256': _launch_value(
+            context, 'manager_availability_model_expected_sha256', ''
+        ).strip(),
         'manager_learned_correction_path': _launch_value(
             context, 'manager_learned_correction_path', ''
         ).strip(),
-        'manager_learned_gate_reject': float(
-            _launch_value(context, 'manager_learned_gate_reject', '0.5')
-        ),
-        'manager_learned_gate_good': float(
-            _launch_value(context, 'manager_learned_gate_good', '0.8')
-        ),
-        'manager_learned_gate_soft_sigma_m': float(
-            _launch_value(context, 'manager_learned_gate_soft_sigma_m', '0.10')
-        ),
+        'manager_visibility_sensor_model_path': _launch_value(
+            context, 'manager_visibility_sensor_model_path', ''
+        ).strip(),
+        'manager_visibility_sensor_model_expected_sha256': _launch_value(
+            context, 'manager_visibility_sensor_model_expected_sha256', ''
+        ).strip(),
         'manager_max_measurement_age_s': float(
             _launch_value(context, 'manager_max_measurement_age_s', '1.25')
         ),
@@ -707,8 +740,20 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             context, 'camera_network_objective',
             PAPER_LAUNCH_DEFAULTS['camera_network_objective'],
         ).strip().lower(),
+        'network_goal_std_start_m': float(_launch_value(
+            context, 'network_goal_std_start_m',
+            PAPER_LAUNCH_DEFAULTS['network_goal_std_start_m'],
+        )),
         'network_goal_std_m': float(_launch_value(
             context, 'network_goal_std_m', PAPER_LAUNCH_DEFAULTS['network_goal_std_m'],
+        )),
+        'camera_network_updates_per_step': int(_launch_value(
+            context, 'camera_network_updates_per_step',
+            PAPER_LAUNCH_DEFAULTS['camera_network_updates_per_step'],
+        )),
+        'optimizer_control_block_steps': int(_launch_value(
+            context, 'optimizer_control_block_steps',
+            PAPER_LAUNCH_DEFAULTS['optimizer_control_block_steps'],
         )),
         'use_nogo_cost': _launch_value(context, 'use_nogo_cost', str(VISIBILITY_FALLBACK_DEFAULTS['use_nogo_cost'])).strip().lower(),
         'nogo_penalty_type': _launch_value(context, 'nogo_penalty_type', str(VISIBILITY_FALLBACK_DEFAULTS['nogo_penalty_type'])).strip().lower(),
@@ -823,6 +868,8 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'yolo_device': _launch_value(context, 'yolo_device', PAPER_LAUNCH_DEFAULTS['yolo_device']),
         'yolo_imgsz': int(_launch_value(context, 'yolo_imgsz', PAPER_LAUNCH_DEFAULTS['yolo_imgsz'])),
         'yolo_conf_threshold': float(_launch_value(context, 'yolo_conf_threshold', PAPER_LAUNCH_DEFAULTS['yolo_conf_threshold'])),
+        'yolo_predict_conf_floor': float(_launch_value(
+            context, 'yolo_predict_conf_floor', PAPER_LAUNCH_DEFAULTS['yolo_predict_conf_floor'])),
         'yolo_iou_threshold': float(_launch_value(context, 'yolo_iou_threshold', PAPER_LAUNCH_DEFAULTS['yolo_iou_threshold'])),
         'yolo_target_class': _launch_value(context, 'yolo_target_class', PAPER_LAUNCH_DEFAULTS['yolo_target_class']),
         'yolo_class_id': int(_launch_value(context, 'yolo_class_id', PAPER_LAUNCH_DEFAULTS['yolo_class_id'])),
@@ -834,6 +881,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             context, 'yolo_max_batch_stamp_skew_s',
             PAPER_LAUNCH_DEFAULTS['yolo_max_batch_stamp_skew_s'])),
         'yolo_debug_frame_dir': _launch_value(context, 'yolo_debug_frame_dir', ''),
+        'yolo_debug_crop_dir': _launch_value(context, 'yolo_debug_crop_dir', ''),
         'yolo_use_torchscript': _as_bool(_launch_value(context, 'yolo_use_torchscript', 'false')),
         'yolo_runtime_backend': _launch_value(context, 'yolo_runtime_backend', 'native').strip().lower(),
         'yolo_compiled_model': _launch_value(context, 'yolo_compiled_model', '').strip(),
@@ -854,6 +902,11 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         raise RuntimeError(
             "yolo_max_batch_stamp_skew_s must be non-negative and strictly below "
             "the 0.20 s camera period; otherwise adjacent capture rounds can merge"
+        )
+    if not (0.0 < cfg['yolo_predict_conf_floor'] <= cfg['yolo_conf_threshold'] <= 1.0):
+        raise RuntimeError(
+            "yolo_predict_conf_floor must be positive and no larger than the reported "
+            "yolo_conf_threshold, which must not exceed one"
         )
     if (
         cfg['enable_logging']
@@ -944,8 +997,19 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     network_goal_std_m = float(cfg.get('network_goal_std_m', 0.15))
     if not np.isfinite(network_goal_std_m) or network_goal_std_m <= 0.:
         raise RuntimeError('network_goal_std_m must be finite and positive')
+    network_updates = int(cfg.get('camera_network_updates_per_step', 1))
+    if network_updates < 1:
+        raise RuntimeError('camera_network_updates_per_step must be positive')
     cfg['camera_network_objective'] = camera_network_objective
     cfg['network_goal_std_m'] = network_goal_std_m
+    # <= 0 means 'no anneal'; the planner takes None and keeps a constant prior.
+    _goal_start = float(cfg.get('network_goal_std_start_m', -1.0) or -1.0)
+    cfg['network_goal_std_start_m'] = _goal_start if _goal_start > 0. else -1.0
+    cfg['camera_network_updates_per_step'] = network_updates
+    control_block_steps = int(cfg.get('optimizer_control_block_steps', 1))
+    if control_block_steps < 1:
+        raise RuntimeError('optimizer_control_block_steps must be positive')
+    cfg['optimizer_control_block_steps'] = control_block_steps
     if camera_network_artifact_path:
         if visibility_artifact_path:
             raise RuntimeError('choose one planner field: visibility_artifact_path or camera_network_artifact_path')
@@ -1358,6 +1422,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
         'min_bbox_area_px': cfg['yolo_min_bbox_area_px'],
         'debug_frame_dir': cfg.get('yolo_debug_frame_dir', ''),
+        'debug_crop_dir': cfg.get('yolo_debug_crop_dir', ''),
         # TIMING fix knobs (see yolo_robot_detector_node).
         'use_torchscript': cfg.get('yolo_use_torchscript', False),
         'runtime_backend': cfg.get('yolo_runtime_backend', 'native'),
@@ -1513,6 +1578,12 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'camera_network_objective': cfg.get(
                     'camera_network_objective', 'legacy_pixel_chart'),
                 'network_goal_std_m': cfg.get('network_goal_std_m', 0.15),
+            'network_goal_std_start_m': cfg.get('network_goal_std_start_m', -1.0),
+                'network_goal_std_start_m': cfg.get('network_goal_std_start_m', -1.0),
+                'camera_network_updates_per_step': cfg.get(
+                    'camera_network_updates_per_step', 1),
+                'optimizer_control_block_steps': cfg.get(
+                    'optimizer_control_block_steps', 1),
                 'risk_weight_obs': cfg['risk_weight_obs'],
                 'ambiguity_weight': cfg['ambiguity_weight'],
                 'goal_sigma_uv': cfg['goal_sigma_uv'],
@@ -1549,6 +1620,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'yolo_device': cfg['yolo_device'],
                 'yolo_imgsz': cfg['yolo_imgsz'],
                 'yolo_conf_threshold': cfg['yolo_conf_threshold'],
+                'yolo_predict_conf_floor': cfg['yolo_predict_conf_floor'],
                 'yolo_iou_threshold': cfg['yolo_iou_threshold'],
                 'yolo_target_class': cfg['yolo_target_class'],
                 'yolo_class_id': cfg['yolo_class_id'],
@@ -1660,6 +1732,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'robot_width_m': cfg.get('robot_width_m', 0.55),
                 'terminate_on_geom_collision': cfg['terminate_on_geom_collision'],
                 'use_command_noise': cfg['use_command_noise'],
+                'use_encoder_noise': cfg['use_encoder_noise'],
                 'use_odom_for_predict': cfg['use_odom_for_predict'],
                 'odom_topic': odom_topic,
                 'command_noise_linear_slip_mean': cfg['command_noise_linear_slip_mean'],
@@ -1741,7 +1814,8 @@ def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
     JSON-serialisable on purpose: no launch Substitutions, no camera-model paths.
     """
 
-    return {
+    settings = {
+        'manager_camera_ids': str(cfg.get('manager_camera_ids', '') or ''),
         'manager_decision_rate_hz': float(cfg.get('manager_decision_rate_hz', 5.0)),
         'manager_require_gp_artifacts': _as_bool(cfg.get('manager_require_gp_artifacts', True)),
         'manager_fusion_mode': _as_bool(cfg.get('manager_fusion_mode', True)),
@@ -1757,6 +1831,10 @@ def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
             cfg.get('manager_bootstrap_min_cameras', 2)),
         'manager_bootstrap_max_disagreement_m': float(
             cfg.get('manager_bootstrap_max_disagreement_m', 0.30)),
+        'manager_use_task_start_as_bootstrap_prior': _as_bool(
+            cfg.get('manager_use_task_start_as_bootstrap_prior', False)),
+        'manager_bootstrap_prior_counts_as_support': _as_bool(
+            cfg.get('manager_bootstrap_prior_counts_as_support', False)),
         'manager_fusion_max_timestamp_spread_s': float(
             cfg.get('manager_fusion_max_timestamp_spread_s', 0.05)),
         'manager_covariance_profile': str(
@@ -1773,21 +1851,24 @@ def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
         'manager_fusion_rule': str(cfg.get('manager_fusion_rule', DEFAULT_MANAGER_FUSION_RULE)),
         'manager_correction_timestamp_compensation': _as_bool(
             cfg.get('manager_correction_timestamp_compensation', False)),
-        'manager_admission_gate': _as_bool(cfg.get('manager_admission_gate', True)),
+        'manager_sensor_gate_config_path': str(
+            cfg.get('manager_sensor_gate_config_path', '') or ''),
         'manager_correction_residual_interval_s': float(
             cfg.get('manager_correction_residual_interval_s', 0.05)),
         'manager_correction_propagation_drift_std': float(
             cfg.get('manager_correction_propagation_drift_std', 0.05)),
-        'manager_observation_model': str(cfg.get('manager_observation_model', 'hull')),
-        'manager_fixed_offset_m': float(cfg.get('manager_fixed_offset_m', 0.0)),
-        # The learned box correction and its usability gate. Empty path means no learned
-        # model, which every non-learned observation model requires.
+        'manager_observation_model': str(cfg.get('manager_observation_model', 'raw_box')),
+        'manager_availability_model_path': str(
+            cfg.get('manager_availability_model_path', '') or ''),
+        'manager_availability_model_expected_sha256': str(
+            cfg.get('manager_availability_model_expected_sha256', '') or ''),
+        # Empty learned paths are valid for the raw-box commissioning condition.
         'manager_learned_correction_path': str(
             cfg.get('manager_learned_correction_path', '')),
-        'manager_learned_gate_reject': float(cfg.get('manager_learned_gate_reject', 0.5)),
-        'manager_learned_gate_good': float(cfg.get('manager_learned_gate_good', 0.8)),
-        'manager_learned_gate_soft_sigma_m': float(
-            cfg.get('manager_learned_gate_soft_sigma_m', 0.10)),
+        'manager_visibility_sensor_model_path': str(
+            cfg.get('manager_visibility_sensor_model_path', '')),
+        'manager_visibility_sensor_model_expected_sha256': str(
+            cfg.get('manager_visibility_sensor_model_expected_sha256', '')),
         'manager_min_spatial_trust': float(cfg.get('manager_min_spatial_trust', 0.15)),
         'manager_max_measurement_age_s': float(
             cfg.get('manager_max_measurement_age_s', cfg['pixel_timeout_s'])),
@@ -1808,6 +1889,12 @@ def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
         'manager_bias_floor_across_slope_m_per_m': float(
             cfg.get('manager_bias_floor_across_slope_m_per_m', 0.0)),
     }
+    spawn = cfg.get('spawn') or {}
+    settings['manager_bootstrap_prior_xyyaw'] = [
+        float(spawn.get('x', 0.0)), float(spawn.get('y', 0.0)),
+        float(spawn.get('yaw', 0.0)),
+    ]
+    return settings
 
 
 #: manager_arm_settings key -> the camera_manager_node parameter it sets.
@@ -1821,12 +1908,23 @@ def _manager_node_parameters(cfg: Dict[str, object]) -> Dict[str, object]:
 
     out = {}
     for key, value in manager_arm_settings(cfg).items():
+        # The node consumes a resolved string-array roster assembled from the
+        # world profile above. The manifest retains the user's comma-separated
+        # arm setting, but forwarding that scalar here would overwrite the
+        # resolved ``camera_ids`` list in the Node parameter dictionary.
+        if key == 'manager_camera_ids':
+            continue
         name = _MANAGER_PARAM_NAMES.get(key)
         if name is None:
             assert key.startswith('manager_'), key
             name = key[len('manager_'):]
         out[name] = value
     learned_path = str(cfg.get('manager_learned_correction_path', '') or '').strip()
+    visibility_path = str(
+        cfg.get('manager_visibility_sensor_model_path', '') or ''
+    ).strip()
+    availability_path = str(cfg.get('manager_availability_model_path', '') or '').strip()
+    sensor_gate_path = str(cfg.get('manager_sensor_gate_config_path', '') or '').strip()
     world_covariance_path = str(
         cfg.get('manager_commissioned_world_covariance_path', '') or ''
     ).strip()
@@ -1835,6 +1933,30 @@ def _manager_node_parameters(cfg: Dict[str, object]) -> Dict[str, object]:
         out['learned_correction_path'] = str(learned)
         out['learned_correction_expected_sha256'] = hashlib.sha256(
             learned.read_bytes()
+        ).hexdigest()
+    if visibility_path:
+        visibility = Path(visibility_path).expanduser().resolve()
+        out['visibility_sensor_model_path'] = str(visibility)
+        actual = hashlib.sha256(visibility.read_bytes()).hexdigest()
+        declared = str(
+            cfg.get('manager_visibility_sensor_model_expected_sha256', '') or ''
+        )
+        if declared and declared != actual:
+            raise RuntimeError('visibility-residual sensor model differs from configured SHA-256')
+        out['visibility_sensor_model_expected_sha256'] = declared or actual
+    if availability_path:
+        availability = Path(availability_path).expanduser().resolve()
+        out['availability_model_path'] = str(availability)
+        actual = hashlib.sha256(availability.read_bytes()).hexdigest()
+        declared = str(cfg.get('manager_availability_model_expected_sha256', '') or '')
+        if declared and declared != actual:
+            raise RuntimeError('Stage-08 availability artifact differs from configured SHA-256')
+        out['availability_model_expected_sha256'] = declared or actual
+    if sensor_gate_path:
+        sensor_gate = Path(sensor_gate_path).expanduser().resolve()
+        out['sensor_gate_config_path'] = str(sensor_gate)
+        out['sensor_gate_config_expected_sha256'] = hashlib.sha256(
+            sensor_gate.read_bytes()
         ).hexdigest()
     if world_covariance_path:
         covariance = Path(world_covariance_path).expanduser().resolve()
@@ -1913,12 +2035,13 @@ def _multicam_perception_nodes(cfg: Dict[str, object]) -> List[object]:
             'mask_min_area': cfg['yolo_min_mask_area_px'],
             'mask_bottom_band_px': cfg['yolo_mask_bottom_band_px'],
             'min_bbox_area_px': cfg['yolo_min_bbox_area_px'],
+            'debug_crop_dir': cfg.get('yolo_debug_crop_dir', ''),
             # Prune sub-threshold anchors before NMS+mask post-processing. At the
             # 0.25 reporting threshold this changes no reported detection but cuts
             # batch inference ~140 ms -> ~39 ms, which frees the P2000 to render
             # the four oblique cameras faster: measured 3.3 Hz -> 4.9 Hz per
             # camera (batched, all registered cameras in lockstep). See scheduled note.
-            'predict_conf_floor': float(cfg.get('yolo_predict_conf_floor', 0.05)),
+            'predict_conf_floor': cfg['yolo_predict_conf_floor'],
             'warmup_iters': int(cfg.get('yolo_warmup_iters', 3)),
             # Capture stamp, not callback arrival time, defines a round. Keep
             # this below the 0.20 s camera period so round N and N+1 cannot merge.
@@ -2167,6 +2290,11 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'camera_network_objective': cfg.get(
                 'camera_network_objective', 'legacy_pixel_chart'),
             'network_goal_std_m': cfg.get('network_goal_std_m', 0.15),
+            'network_goal_std_start_m': cfg.get('network_goal_std_start_m', -1.0),
+            'camera_network_updates_per_step': cfg.get(
+                'camera_network_updates_per_step', 1),
+            'optimizer_control_block_steps': cfg.get(
+                'optimizer_control_block_steps', 1),
             'use_nogo_cost': cfg['resolved_use_nogo_cost'],
             'nogo_penalty_type': cfg['nogo_penalty_type'],
             'nogo_weight': cfg['nogo_weight'],

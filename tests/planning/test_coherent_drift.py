@@ -1,9 +1,4 @@
-"""Gate 0's coherent encoder-drift terms (logs/studies/gate0_process_noise/).
-
-The white unicycle Q understates cross-track drift 8-40x because its only lateral term,
-(1/3) v^2 sigma_w^2 dt^3, vanishes on a straight run. These tests pin the correction and,
-most importantly, pin that it is OFF unless asked for.
-"""
+"""Regression tests for the frozen optional coherent-drift configuration."""
 import math
 
 import numpy as np
@@ -18,7 +13,7 @@ from planning.core.dynamics import (
 )
 
 
-def test_off_by_default_leaves_q_bit_identical():
+def test_off_by_default_leaves_process_covariance_bit_identical():
     """Existing campaigns must be unaffected until one opts in."""
     for theta, v, dt in ((0.0, 0.22, 0.1), (1.1, 0.15, 0.4), (-2.0, 0.05, 0.05)):
         base = unicycle_process_noise(0.01, 0.02, dt, theta=theta, v=v)

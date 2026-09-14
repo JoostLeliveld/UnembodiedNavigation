@@ -490,6 +490,7 @@ class CameraObservation:
     detector_score: float = 0.0
     detector_score_raw: float = math.nan
     bbox_xyxy: tuple[float, float, float, float] | None = None
+    visibility_grid_16x16: tuple[float, ...] | None = None
     bbox_bottom_uv: tuple[float, float] | None = None
     mask_bottom_uv: tuple[float, float] | None = None
     selected_pixel_source: str = "none"
@@ -580,6 +581,23 @@ class CameraObservation:
             "bbox_xyxy",
             _as_quad(self.bbox_xyxy, field_name="bbox_xyxy", allow_none=True),
         )
+        visibility = self.visibility_grid_16x16
+        if visibility is not None:
+            if not isinstance(visibility, (tuple, list)) or len(visibility) != 256:
+                raise ContractValidationError(
+                    "visibility_grid_16x16 must be absent or contain exactly 256 values"
+                )
+            visibility = tuple(
+                _finite_float(value, field_name="visibility_grid_16x16")
+                for value in visibility
+            )
+            if any(value < 0.0 or value > 1.0 for value in visibility):
+                raise ContractValidationError("visibility_grid_16x16 values must be in [0,1]")
+            if not self.detection_valid or self.bbox_xyxy is None:
+                raise ContractValidationError(
+                    "visibility_grid_16x16 requires a valid detection and bounding box"
+                )
+        object.__setattr__(self, "visibility_grid_16x16", visibility)
         object.__setattr__(
             self,
             "bbox_bottom_uv",

@@ -61,7 +61,8 @@ class RectangularFootprint:
             return -max(math.sqrt(body.intersection(self.scene).area), 1e-12)
         return float(body.distance(self.scene))
 
-    def sweep_clearance(self, start, end, *, yaw_delta=None, max_depth=16, control=None, dt=None):
+    def sweep_clearance(self, start, end, *, yaw_delta=None, max_depth=16, control=None,
+                        dt=None, required_clearance=0.0):
         """Return a certified lower clearance bound, or negative on refusal.
 
         Every body point moves by at most centre travel + radius * yaw travel.
@@ -70,6 +71,9 @@ class RectangularFootprint:
         closed. This catches thin obstacles and rotation with clear endpoints.
         """
         start, end = np.asarray(start, dtype=float)[:3], np.asarray(end, dtype=float)[:3]
+        required_clearance = float(required_clearance)
+        if not math.isfinite(required_clearance) or required_clearance < 0.0:
+            raise ValueError('required_clearance must be finite and non-negative')
         if start.shape != (3,) or end.shape != (3,) or not np.isfinite([start, end]).all():
             return -math.inf
         delta = end-start
@@ -86,14 +90,16 @@ class RectangularFootprint:
             v, w = command
             # Certify both the planner's Euler pose segment and the exact
             # constant-twist arc; do not silently change estimator dynamics.
-            nominal_bound = self.sweep_clearance(start, end, yaw_delta=w*dt, max_depth=max_depth)
-            if nominal_bound < 0:
+            nominal_bound = self.sweep_clearance(
+                start, end, yaw_delta=w*dt, max_depth=max_depth,
+                required_clearance=required_clearance)
+            if nominal_bound < required_clearance:
                 return nominal_bound
             def path(fraction):
                 return constant_twist_pose(start, command, fraction*dt)
             travel = abs(v)*dt + self.radius*abs(w)*dt
         endpoint_clearance = min(self.clearance(start), self.clearance(path(1.)))
-        if endpoint_clearance < 0 or travel == 0:
+        if endpoint_clearance < required_clearance or travel == 0:
             return endpoint_clearance
         stack = [(0., 1., 0)]
         certified = endpoint_clearance
@@ -101,10 +107,10 @@ class RectangularFootprint:
             lo, hi, depth = stack.pop()
             mid = (lo+hi)/2
             clearance = self.clearance(path(mid))
-            if clearance < 0:
+            if clearance < required_clearance:
                 return clearance
             bound = travel*(hi-lo)/2
-            if clearance > bound:
+            if clearance - bound >= required_clearance:
                 certified = min(certified, clearance-bound)
             elif depth >= max_depth:
                 return -math.inf

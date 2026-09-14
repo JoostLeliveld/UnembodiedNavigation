@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import signal
 import threading
 
 OUTCOME_SCHEMA = 'camera_batch_outcome.v2'
@@ -80,22 +81,30 @@ class OutcomeJournal:
                            journal_path=str(self.path), previous_event_sha256=self._previous_hash)
             payload['event_sha256'] = hashlib.sha256(canonical_json(payload).encode('utf-8')).hexdigest()
             encoded = (canonical_json(payload) + '\n').encode('utf-8')
+            previous_signal_mask = _block_termination_signals()
             try:
-                if self._size + len(encoded) > self.max_bytes:
-                    raise RuntimeError('camera outcome journal byte limit exceeded; stop processing')
-                written = 0
-                while written < len(encoded):
-                    count = os.write(self._fd, encoded[written:])
-                    if count <= 0:
-                        raise OSError('zero-length camera journal write')
-                    written += count
-                os.fsync(self._fd)
-            except BaseException:
-                self._failed = True
-                raise
-            self._size += len(encoded)
-            self._sequence = sequence
-            self._previous_hash = payload['event_sha256']
+                try:
+                    if self._size + len(encoded) > self.max_bytes:
+                        raise RuntimeError('camera outcome journal byte limit exceeded; stop processing')
+                    written = 0
+                    while written < len(encoded):
+                        count = os.write(self._fd, encoded[written:])
+                        if count <= 0:
+                            raise OSError('zero-length camera journal write')
+                        written += count
+                    os.fsync(self._fd)
+                except BaseException:
+                    self._failed = True
+                    raise
+                # Commit the in-memory hash-chain state while termination remains
+                # blocked. A pending SIGINT may be delivered as soon as the old mask is
+                # restored, but by then this durable record is a complete transaction
+                # and a shutdown handler can safely append ``session_stopped`` next.
+                self._size += len(encoded)
+                self._sequence = sequence
+                self._previous_hash = payload['event_sha256']
+            finally:
+                _restore_signal_mask(previous_signal_mask)
             return payload
 
     def close(self):
@@ -129,3 +138,36 @@ def read_journal(path):
             event['event_sha256'] = claimed
             previous = claimed
             yield event
+
+
+def _block_termination_signals():
+    """Delay process termination across one journal write transaction.
+
+    Python delivers signals only on the main thread. On platforms with
+    ``pthread_sigmask`` we therefore block SIGINT/SIGTERM only there; worker
+    threads need no mask change. Returning ``None`` keeps the journal portable
+    to platforms without this POSIX API.
+    """
+
+    if threading.current_thread() is not threading.main_thread():
+        return None
+    pthread_sigmask = getattr(signal, 'pthread_sigmask', None)
+    if pthread_sigmask is None:
+        return None
+    signals = {signal.SIGINT, signal.SIGTERM}
+    try:
+        return pthread_sigmask(signal.SIG_BLOCK, signals)
+    except (AttributeError, OSError, ValueError):
+        return None
+
+
+def _restore_signal_mask(previous_mask):
+    """Restore a mask after the durable state is committed.
+
+    A pending SIGINT is allowed to raise here. Deliberately do not catch it:
+    shutdown must proceed, but the journal must not be poisoned merely because
+    termination arrived during ``fsync``.
+    """
+
+    if previous_mask is not None:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)

@@ -1,4 +1,4 @@
-"""Frozen usable-observation gate (P1).
+"""Versioned deterministic observation gates.
 
 ``evaluate_observation_opportunity(raw_record, gate_config)`` turns one normalized raw
 opportunity (produced by the offline exporter from operational logs — never GT) into an
@@ -14,6 +14,11 @@ recorded in every dataset manifest.
 
 If an *enabled* check lacks its required input on a record, the record is labelled
 ``UNKNOWN`` — it is never silently coerced into a negative.
+
+The commissioning sensor gate is a stricter use of this module.  It may inspect only
+frame/detector fields, raw-box geometry, and whether the calibrated projection exists.
+It must not inspect association, tracking, a localizer decision, an innovation, or the
+current belief.  :func:`evaluate_sensor_gate` enforces that separation explicitly.
 """
 
 from __future__ import annotations
@@ -52,10 +57,14 @@ class UsableObservationGateConfig:
     confidence_threshold: float = 0.25
     check_class: bool = False
     expected_class: str | None = None
+    check_box_size: bool = False
+    min_bbox_width_px: float = 0.0
+    min_bbox_height_px: float = 0.0
     check_projection: bool = True
     check_association: bool = True
     require_track: bool = False
     check_edge_clip: bool = True
+    edge_check_mode: str = "selected_pixel"
     min_edge_distance_px: float = 4.0
     check_localizer_accept: bool = True
 
@@ -64,7 +73,13 @@ class UsableObservationGateConfig:
     def __post_init__(self) -> None:
         if self.image_width_px <= 0 or self.image_height_px <= 0:
             raise ContractValidationError("image dimensions must be positive")
-        for name in ("max_frame_age_ms", "confidence_threshold", "min_edge_distance_px"):
+        for name in (
+            "max_frame_age_ms",
+            "confidence_threshold",
+            "min_bbox_width_px",
+            "min_bbox_height_px",
+            "min_edge_distance_px",
+        ):
             value = float(getattr(self, name))
             if not math.isfinite(value) or value < 0.0:
                 raise ContractValidationError(f"{name} must be finite and non-negative")
@@ -72,6 +87,26 @@ class UsableObservationGateConfig:
             raise ContractValidationError("confidence_threshold must be in [0, 1]")
         if self.check_class and not self.expected_class:
             raise ContractValidationError("check_class requires expected_class")
+        if self.edge_check_mode not in {"selected_pixel", "full_bbox"}:
+            raise ContractValidationError(
+                "edge_check_mode must be 'selected_pixel' or 'full_bbox'"
+            )
+
+    def assert_belief_independent(self) -> None:
+        """Reject checks that belong to data association or estimator gating."""
+
+        forbidden = []
+        if self.check_association:
+            forbidden.append("check_association")
+        if self.require_track:
+            forbidden.append("require_track")
+        if self.check_localizer_accept:
+            forbidden.append("check_localizer_accept")
+        if forbidden:
+            raise ContractValidationError(
+                "commissioning sensor gate must be belief-independent; disable "
+                + ", ".join(forbidden)
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -132,6 +167,21 @@ def _edge_distance_px(u: float | None, v: float | None, width: int, height: int)
     return float(min(u, v, width - u, height - v))
 
 
+def _bbox_edge_distance_px(
+    xmin: float | None,
+    ymin: float | None,
+    xmax: float | None,
+    ymax: float | None,
+    width: int,
+    height: int,
+) -> float | None:
+    """Smallest padding between the complete box and any image boundary."""
+
+    if None in (xmin, ymin, xmax, ymax):
+        return None
+    return float(min(xmin, ymin, width - xmax, height - ymax))
+
+
 def _classify(
     raw: Mapping[str, Any],
     cfg: UsableObservationGateConfig,
@@ -139,6 +189,8 @@ def _classify(
     selected_u: float | None,
     selected_v: float | None,
     edge_distance_px: float | None,
+    bbox_width: float | None,
+    bbox_height: float | None,
 ) -> tuple[int, int, FailureReason]:
     """Return (detection_label, quality_label, failure_reason) via ordered gates."""
 
@@ -175,6 +227,15 @@ def _classify(
             if str(detector_class) != str(cfg.expected_class):
                 return 1, 0, FailureReason.WRONG_CLASS_OR_ID
 
+        if cfg.check_box_size:
+            if bbox_width is None or bbox_height is None:
+                return 1, 0, FailureReason.UNKNOWN
+            if (
+                bbox_width < cfg.min_bbox_width_px
+                or bbox_height < cfg.min_bbox_height_px
+            ):
+                return 1, 0, FailureReason.BOX_TOO_SMALL
+
         if cfg.check_projection:
             if not _get_bool(raw, "projection_valid"):
                 return 1, 0, FailureReason.INVALID_PROJECTION
@@ -200,6 +261,84 @@ def _classify(
         return 1, 0, FailureReason.UNKNOWN
 
     return 1, 1, FailureReason.USABLE
+
+
+@dataclass(frozen=True)
+class SensorGateResult:
+    """Outcome of the belief-independent gate used to define ``q_sensor``."""
+
+    admitted: bool
+    reason: str
+    gate_id: str
+    gate_config_hash: str
+
+
+def evaluate_sensor_gate(
+    raw_record: Mapping[str, Any],
+    gate_config: UsableObservationGateConfig,
+) -> SensorGateResult:
+    """Evaluate the deterministic pre-estimator gate used during commissioning.
+
+    Ground truth and belief-derived checks are rejected.  NIS is intentionally absent:
+    innovation gating occurs later, after correction and the matched covariance query.
+    """
+
+    if not isinstance(raw_record, Mapping):
+        raise ContractValidationError("raw_record must be a mapping")
+    reject_evaluation_only_keys(raw_record, context="evaluate_sensor_gate")
+    gate_config.assert_belief_independent()
+
+    bbox_xmin = _get_float(raw_record, "bbox_xmin")
+    bbox_ymin = _get_float(raw_record, "bbox_ymin")
+    bbox_xmax = _get_float(raw_record, "bbox_xmax")
+    bbox_ymax = _get_float(raw_record, "bbox_ymax")
+    bbox_width = bbox_height = bbox_center_u = bbox_ymax_for_pixel = None
+    if None not in (bbox_xmin, bbox_ymin, bbox_xmax, bbox_ymax):
+        bbox_width = bbox_xmax - bbox_xmin
+        bbox_height = bbox_ymax - bbox_ymin
+        bbox_center_u = 0.5 * (bbox_xmin + bbox_xmax)
+        bbox_ymax_for_pixel = bbox_ymax
+
+    selected_u = _get_float(raw_record, "selected_pixel_u")
+    selected_v = _get_float(raw_record, "selected_pixel_v")
+    if selected_u is None and bbox_center_u is not None:
+        selected_u = bbox_center_u
+        selected_v = bbox_ymax_for_pixel
+    edge_distance_px = None
+    if gate_config.edge_check_mode == "full_bbox":
+        edge_distance_px = _bbox_edge_distance_px(
+            bbox_xmin,
+            bbox_ymin,
+            bbox_xmax,
+            bbox_ymax,
+            gate_config.image_width_px,
+            gate_config.image_height_px,
+        )
+    else:
+        edge_distance_px = _get_float(raw_record, "edge_distance_px")
+    if edge_distance_px is None and gate_config.edge_check_mode == "selected_pixel":
+        edge_distance_px = _edge_distance_px(
+            selected_u,
+            selected_v,
+            gate_config.image_width_px,
+            gate_config.image_height_px,
+        )
+
+    _, quality_label, reason = _classify(
+        raw_record,
+        gate_config,
+        selected_u=selected_u,
+        selected_v=selected_v,
+        edge_distance_px=edge_distance_px,
+        bbox_width=bbox_width,
+        bbox_height=bbox_height,
+    )
+    return SensorGateResult(
+        admitted=bool(quality_label),
+        reason=reason.value,
+        gate_id=gate_config.gate_id,
+        gate_config_hash=gate_config.config_hash(),
+    )
 
 
 def evaluate_observation_opportunity(
@@ -241,8 +380,14 @@ def evaluate_observation_opportunity(
         # default selected pixel = bottom-centre of the box (localizer convention)
         selected_u = bbox_center_u
         selected_v = bbox_ymax
-    edge_distance_px = _get_float(raw_record, "edge_distance_px")
-    if edge_distance_px is None:
+    edge_distance_px = None
+    if gate_config.edge_check_mode == "full_bbox":
+        edge_distance_px = _bbox_edge_distance_px(
+            bbox_xmin, bbox_ymin, bbox_xmax, bbox_ymax, width, height
+        )
+    else:
+        edge_distance_px = _get_float(raw_record, "edge_distance_px")
+    if edge_distance_px is None and gate_config.edge_check_mode == "selected_pixel":
         edge_distance_px = _edge_distance_px(selected_u, selected_v, width, height)
 
     detection_label, quality_label, reason = _classify(
@@ -251,6 +396,8 @@ def evaluate_observation_opportunity(
         selected_u=selected_u,
         selected_v=selected_v,
         edge_distance_px=edge_distance_px,
+        bbox_width=bbox_width,
+        bbox_height=bbox_height,
     )
     usable_label = detection_label & quality_label
 

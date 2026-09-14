@@ -32,6 +32,10 @@ from pathlib import Path
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# The directories whose bytes actually execute during a run. Provenance is scoped to
+# these so that editing analysis or figure code elsewhere in the checkout does not
+# abort a multi-hour campaign; it mirrors what the source snapshot below copies.
+EXECUTABLE_SOURCE_PATHS = ('src', 'scripts/visibility_comparison')
 LOGS_ROOT = REPO_ROOT / 'logs' / 'visibility_comparison'
 UNAV_COMMON_SRC = REPO_ROOT / 'src' / 'unav_common'
 if str(UNAV_COMMON_SRC) not in sys.path:
@@ -48,6 +52,9 @@ from unav_common.manifest import atomic_write_json, git_provenance  # noqa: E402
 from unav_common.config import parse_bool  # noqa: E402
 from unav_common.correction_ledger import validate_correction_ledger  # noqa: E402
 from unav_common.camera_outcomes import read_journal  # noqa: E402
+from unav_common.terminal_stop import (  # noqa: E402
+    TERMINAL_ACK_STATUS_BY_COMPONENT,
+)
 
 # Map condition ID to planner name (must match ALLOWED_PLANNERS in launch file).
 #: Every terminal outcome a correction may have; mirrors the planner and the logger.
@@ -68,6 +75,10 @@ CONDITION_PLANNER = {
     'P0': 'visibility_aware_efe',
     'P1': 'visibility_aware_efe',
     'P2': 'visibility_aware_efe',
+    'C00': 'visibility_aware_efe',
+    'C01': 'visibility_aware_efe',
+    'C10': 'visibility_aware_efe',
+    'C11': 'visibility_aware_efe',
     # Prospective closed-loop successor: these are route arms, not new planner
     # objectives. Both execute through the same geometry/local-tracker path.
     'gp': 'geometric_shortest_path',
@@ -129,8 +140,10 @@ BOOL_CONFIG_KEYS = frozenset({
     'use_belief_nogo_cost', 'use_hit_miss_mixture',
     'terminate_on_geom_collision', 'bridge_camera_b', 'bridge_camera_c',
     'bridge_camera_d', 'multicam_belief', 'manager_require_source_batch_id',
+    'manager_use_task_start_as_bootstrap_prior',
+    'manager_bootstrap_prior_counts_as_support',
     'manager_commissioned_per_camera_sigma',
-    'manager_correction_timestamp_compensation', 'manager_admission_gate',
+    'manager_correction_timestamp_compensation',
     'manager_require_consistency_when_source_available', 'manager_fusion_mode',
     'manager_require_gp_artifacts', 'state_correction_ekf',
     'wait_for_belief_before_first_goal', 'multicam_scheduled',
@@ -140,7 +153,8 @@ BOOL_CONFIG_KEYS = frozenset({
 CAMPAIGN_METADATA_KEYS = frozenset({
     'conditions', 'tasks', 'study_title', 'study_comparison', 'cleanup_mode',
     'cleanup_sim_stragglers', 'ros_domain_id_base', 'world_profiles',
-    'tasks_yaml', 'gp_artifact',
+    'tasks_yaml', 'gp_artifact', 'route_selection_manifest_path',
+    'route_selection_manifest_sha256', 'thesis_execution_contract',
 })
 
 
@@ -179,6 +193,39 @@ def _validate_config(cfg: dict, path: Path) -> None:
     if unknown_top:
         raise ValueError(f'{path}: unknown campaign keys: {sorted(unknown_top)}')
     validate_navigation_parameters(cfg)
+    execution_contract = cfg.get('thesis_execution_contract')
+    if execution_contract in (
+        'final_1mps_1hz_m4_v1', 'final_1mps_5hz_m4_v1',
+        'final_1mps_5hz_m4_temporal_v1',
+    ):
+        expected_rate = 1.0 if execution_contract == 'final_1mps_1hz_m4_v1' else 5.0
+        global_dt = float(cfg.get('global_dt', 1.0) or 1.0)
+        effective_planning_rate = (
+            1.0 if execution_contract == 'final_1mps_5hz_m4_temporal_v1'
+            else expected_rate
+        )
+        expected_updates_float = effective_planning_rate * global_dt
+        if (not math.isfinite(expected_updates_float)
+                or abs(expected_updates_float - round(expected_updates_float)) > 1e-9):
+            raise ValueError(
+                f'{path}: {execution_contract} requires an integer number of '
+                'camera opportunities per global planning step'
+            )
+        expected_updates = int(round(expected_updates_float))
+        if float(cfg.get('v_max', float('nan'))) != 1.0:
+            raise ValueError(
+                f'{path}: {execution_contract} requires v_max: 1.0'
+            )
+        if float(cfg.get('manager_decision_rate_hz', float('nan'))) != expected_rate:
+            raise ValueError(
+                f'{path}: {execution_contract} requires '
+                f'manager_decision_rate_hz: {expected_rate:.1f}'
+            )
+        if int(cfg.get('camera_network_updates_per_step', -1)) != expected_updates:
+            raise ValueError(
+                f'{path}: {execution_contract} requires '
+                f'camera_network_updates_per_step: {expected_updates}'
+            )
     cleanup_mode = cfg.get('cleanup_mode', 'isolated')
     if cleanup_mode != 'isolated':
         raise ValueError('campaign execution requires cleanup_mode: isolated')
@@ -205,6 +252,22 @@ def _validate_config(cfg: dict, path: Path) -> None:
         raise ValueError(f'{path}: conditions must be a nonempty mapping')
     if not isinstance(cfg['tasks'], dict) or not cfg['tasks']:
         raise ValueError(f'{path}: tasks must be a nonempty mapping')
+    route_manifest = str(cfg.get('route_selection_manifest_path', '') or '').strip()
+    route_manifest_sha = str(
+        cfg.get('route_selection_manifest_sha256', '') or ''
+    ).strip().lower()
+    if bool(route_manifest) != bool(route_manifest_sha):
+        raise ValueError(
+            f'{path}: route-selection manifest path and SHA-256 must be supplied together'
+        )
+    if route_manifest:
+        route_manifest_path = _resolve_repo_path(route_manifest, strict=True)
+        actual = sha256_file(route_manifest_path)
+        if actual != route_manifest_sha:
+            raise ValueError(
+                f'{path}: route-selection manifest SHA-256 mismatch: '
+                f'expected {route_manifest_sha}, got {actual}'
+            )
     for condition_id in cfg['conditions']:
         if condition_id not in CONDITION_PLANNER:
             raise RuntimeError(
@@ -302,6 +365,21 @@ def _validate_config(cfg: dict, path: Path) -> None:
         for condition_id in task_cfg.get('conditions', [])
     ]
     for task_name, condition_id in active_cells:
+        _validate_visibility_runtime_bundle(cfg, path, task_name, condition_id)
+    if cfg.get('thesis_execution_contract') in (
+        'final_1mps_1hz_m4_v1', 'final_1mps_5hz_m4_v1',
+        'final_1mps_5hz_m4_temporal_v1',
+    ):
+        execution_contract = cfg['thesis_execution_contract']
+        for task_name, condition_id in active_cells:
+            if str(_effective_value(
+                    cfg, task_name, condition_id, 'manager_observation_model') or '') \
+                    != 'visibility_patch':
+                raise ValueError(
+                    f'{path}: {execution_contract} requires the commissioned '
+                    f'MLP+visibility correction in {task_name}/{condition_id}'
+                )
+    for task_name, condition_id in active_cells:
         layers = (cfg, cfg['tasks'][task_name], cfg['conditions'][condition_id] or {},
                   _route_overrides(cfg, task_name, condition_id))
         explicit_keys = set().union(*(layer.keys() for layer in layers))
@@ -359,6 +437,76 @@ def _validate_config(cfg: dict, path: Path) -> None:
         for task_name, condition_id in active_cells
     ):
         _validate_preselected_campaign_routes(cfg, path)
+
+
+def _validate_visibility_runtime_bundle(
+    cfg: dict, config_path: Path, task_name: str, condition_id: str
+) -> None:
+    """Prove that the visibility-residual correction and its matched R deploy together."""
+    expected = lambda key: _effective_value(cfg, task_name, condition_id, key)
+    observation = str(expected('manager_observation_model') or 'raw_box')
+    covariance = str(expected('manager_covariance_profile') or '')
+    uses_bundle = observation == 'visibility_patch' or covariance == 'commissioned_visibility_r'
+    if not uses_bundle:
+        return
+    if observation != 'visibility_patch' or covariance != 'commissioned_visibility_r':
+        raise ValueError(
+            f'{config_path}: {task_name}/{condition_id}: visibility_patch and '
+            'commissioned_visibility_r must be selected together'
+        )
+    declared_path = str(expected('manager_visibility_sensor_model_path') or '').strip()
+    if not declared_path:
+        raise ValueError(
+            f'{config_path}: {task_name}/{condition_id}: commissioned visibility-residual bundle is missing'
+        )
+    model_path = _resolve_repo_path(declared_path, strict=True)
+    model_sha = sha256_file(model_path)
+    declared_sha = str(
+        expected('manager_visibility_sensor_model_expected_sha256') or '').strip().lower()
+    if declared_sha != model_sha:
+        raise ValueError(
+            f'{config_path}: {task_name}/{condition_id}: commissioned visibility-residual bundle hash mismatch'
+        )
+    try:
+        manifest = json.loads(model_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f'{config_path}: malformed commissioned visibility-residual bundle') from exc
+    required_identity = {
+        'schema': 'commissioned_visibility_sensor_model.v1',
+        'mean_model': 'box_mlp_visibility_residual',
+        'runtime_covariance_model': 'R4_image_conditioned_scale',
+    }
+    for key, value in required_identity.items():
+        if manifest.get(key) != value:
+            raise ValueError(
+                f'{config_path}: {task_name}/{condition_id}: visibility-residual bundle {key} mismatch'
+            )
+    artifacts = {
+        'correction_base': 'box_mlp_fit_only.joblib',
+        'correction_patch': 'box_mlp_visibility_residual_fit_only.pt',
+        'parameters': 'commissioned_visibility_parameters.npz',
+    }
+    for key, basename in artifacts.items():
+        entry = manifest.get(key)
+        if not isinstance(entry, dict) or Path(str(entry.get('path', ''))).name != basename:
+            raise ValueError(
+                f'{config_path}: {task_name}/{condition_id}: visibility-residual bundle {key} is missing'
+            )
+        artifact = Path(str(entry['path'])).expanduser()
+        if not artifact.is_file() or sha256_file(artifact) != str(entry.get('sha256', '')):
+            raise ValueError(
+                f'{config_path}: {task_name}/{condition_id}: visibility-residual bundle {key} hash mismatch'
+            )
+    runtime = manifest.get('runtime_query', {})
+    detector_rate = float(runtime.get('detector_rate_hz', float('nan')))
+    fusion_rate = float(runtime.get('fusion_rate_hz', float('nan')))
+    configured_rate = float(expected('manager_decision_rate_hz') or float('nan'))
+    if detector_rate != 5.0 or fusion_rate != configured_rate:
+        raise ValueError(
+            f'{config_path}: {task_name}/{condition_id}: visibility-residual bundle was calibrated for '
+            f'{fusion_rate:g} Hz fusion from {detector_rate:g} Hz detections, but campaign '
+            f'requests {configured_rate:g} Hz fusion'
+        )
 
 
 def _terminate_process_group(pgid: int, *, grace_s: float = 3.0) -> None:
@@ -1030,6 +1178,27 @@ def _terminal_summary_outcome(summary: dict | None) -> tuple[bool, str, str]:
     for field in ('completed', 'valid_run', 'data_files_closed'):
         if summary.get(field) is not True:
             return False, 'infra_invalid', f'summary_{field}_not_true'
+    # Newer logger schemas emit these fields.  If present, they are mandatory:
+    # a physical route outcome is not evidence-complete until the operational
+    # stop and producer-quiescence handshake has been verified.
+    for field in (
+        'evidence_complete',
+        'terminal_stop_verified',
+        'producer_quiescence_acknowledged',
+    ):
+        if field in summary and summary.get(field) is not True:
+            return False, 'infra_invalid', f'summary_{field}_not_true'
+    if 'terminal_stop_request_id' in summary:
+        request_id = summary.get('terminal_stop_request_id')
+        if not isinstance(request_id, str) or not request_id:
+            return False, 'infra_invalid', 'summary_terminal_stop_request_id_missing'
+        acknowledgements = summary.get('terminal_stop_acknowledgements')
+        if not isinstance(acknowledgements, dict):
+            return False, 'infra_invalid', 'summary_terminal_stop_acknowledgements_missing'
+        for component, expected_status in TERMINAL_ACK_STATUS_BY_COMPONENT.items():
+            ack = acknowledgements.get(component)
+            if not isinstance(ack, dict) or ack.get('status') != expected_status:
+                return False, 'infra_invalid', f'summary_{component}_terminal_ack_invalid'
     reason = str(summary.get('completion_reason', '') or '')
     if reason in ('goal_reached', 'goal_reached_stable'):
         return True, 'goal_reached', reason
@@ -1047,6 +1216,7 @@ def _existing_entry_matches_config(
     cfg: dict,
     *,
     expected_cell: tuple[str, str, int] | None = None,
+    allow_imported_provenance: bool = False,
 ) -> tuple[bool, str]:
     if not isinstance(entry, dict):
         return False, 'campaign entry is not an object'
@@ -1069,12 +1239,27 @@ def _existing_entry_matches_config(
     if manifest.get('goal_termination_reference') != 'planner_belief':
         return False, 'run did not use planner_belief for goal termination'
     expected_provenance = cfg.get('_git_provenance', {}) or {}
-    for key in (
+    provenance_keys = (
         'git_sha', 'git_status_sha256', 'git_diff_sha256',
         'git_untracked_content_sha256',
-    ):
-        if manifest.get(key) != expected_provenance.get(key):
-            return False, f'{key} differs from the executable checkout'
+    )
+    actual_provenance = {key: manifest.get(key) for key in provenance_keys}
+    expected_provenance_subset = {
+        key: expected_provenance.get(key) for key in provenance_keys
+    }
+    if actual_provenance != expected_provenance_subset:
+        imported_provenance = entry.get('imported_executable_provenance')
+        imported_source = str(entry.get('imported_from_campaign_root', '') or '')
+        if not (
+            allow_imported_provenance
+            and imported_source
+            and imported_provenance == actual_provenance
+        ):
+            differing = next(
+                key for key in provenance_keys
+                if actual_provenance[key] != expected_provenance_subset[key]
+            )
+            return False, f'{differing} differs from the executable checkout'
 
     task_name = str(entry.get('task', '') or '')
     expected_manifest_identity = {
@@ -1161,6 +1346,7 @@ def _existing_entry_matches_config(
         'process_noise_xy', 'process_noise_theta', 'risk_weight_obs',
         'ambiguity_weight', 'observation_risk_scale', 'ambiguity_term_scale',
         'control_weight', 'v_max', 'discount_gamma', 'yolo_conf_threshold',
+        'yolo_predict_conf_floor',
         'yolo_iou_threshold', 'odom_heading_timeout_s', 'optimizer_maxiter',
         'optimizer_maxfun', 'optimizer_ftol', 'optimizer_gtol',
         'goal_prior_u_std_start', 'goal_prior_v_std_start',
@@ -1170,6 +1356,8 @@ def _existing_entry_matches_config(
         'nogo_belief_kappa',
         'pixel_correction_nis_threshold',
         'robot_collision_radius_m', 'robot_length_m', 'robot_width_m',
+        'camera_network_updates_per_step',
+        'optimizer_control_block_steps',
         'global_horizon', 'global_dt', 'local_horizon', 'local_plan_rate',
         'local_optimizer_maxiter', 'local_nogo_weight',
         'local_nogo_safe_distance',
@@ -1195,7 +1383,6 @@ def _existing_entry_matches_config(
         'manager_bootstrap_min_cameras', 'manager_bootstrap_max_disagreement_m',
         'manager_fusion_max_timestamp_spread_s',
         'manager_commissioned_sigma_px', 'manager_fusion_common_mode_std_m',
-        'manager_fixed_offset_m',
         'manager_correction_residual_interval_s',
         'manager_correction_propagation_drift_std',
         'manager_max_measurement_age_s', 'manager_age_decay_s',
@@ -1236,9 +1423,10 @@ def _existing_entry_matches_config(
         'require_state_correction_envelope',
         'manager_commissioned_per_camera_sigma',
         'manager_correction_timestamp_compensation',
-        'manager_admission_gate',
         'manager_require_consistency_when_source_available',
         'manager_fusion_mode', 'manager_require_gp_artifacts',
+        'manager_use_task_start_as_bootstrap_prior',
+        'manager_bootstrap_prior_counts_as_support',
     )
     for key in bool_keys:
         expected = expected_value(key)
@@ -1268,8 +1456,12 @@ def _existing_entry_matches_config(
         'manager_covariance_profile', 'manager_commissioned_calibration_path',
         'manager_commissioned_world_covariance_path',
         'manager_fusion_rule', 'manager_observation_model',
-        'manager_learned_correction_path', 'manager_learned_gate_reject',
-        'manager_learned_gate_good', 'manager_learned_gate_soft_sigma_m',
+        'manager_sensor_gate_config_path',
+        'manager_availability_model_path',
+        'manager_availability_model_expected_sha256',
+        'manager_learned_correction_path',
+        'manager_visibility_sensor_model_path',
+        'manager_visibility_sensor_model_expected_sha256',
     )
     for key in string_keys:
         expected = expected_value(key)
@@ -1278,7 +1470,10 @@ def _existing_entry_matches_config(
                 return False, f'{key} missing from run manifest'
             actual = str(manifest.get(key, ''))
             if key in ('manager_commissioned_calibration_path',
-                       'manager_commissioned_world_covariance_path'):
+                       'manager_commissioned_world_covariance_path',
+                       'manager_sensor_gate_config_path',
+                       'manager_availability_model_path',
+                       'manager_visibility_sensor_model_path'):
                 matches = _resolve_for_compare(actual) == _resolve_for_compare(str(expected))
             else:
                 matches = actual == str(expected)
@@ -1300,6 +1495,22 @@ def _existing_entry_matches_config(
         )
         if manifest.get('manager_commissioned_world_covariance_sha256') != expected_world_hash:
             return False, 'manager commissioned world covariance content hash mismatch'
+
+    visibility_model_path = expected_value('manager_visibility_sensor_model_path')
+    if visibility_model_path:
+        expected_visibility_hash = sha256_file(
+            _resolve_repo_path(str(visibility_model_path), strict=True)
+        )
+        if manifest.get('manager_visibility_sensor_model_sha256') != expected_visibility_hash:
+            return False, 'manager visibility sensor-model content hash mismatch'
+
+    sensor_gate_path = expected_value('manager_sensor_gate_config_path')
+    if sensor_gate_path:
+        expected_sensor_gate_hash = sha256_file(
+            _resolve_repo_path(str(sensor_gate_path), strict=True)
+        )
+        if manifest.get('manager_sensor_gate_config_sha256') != expected_sensor_gate_hash:
+            return False, 'manager sensor-gate content hash mismatch'
 
     route_matches, route_reason = _verify_preselected_run_artifacts(
         Path(run_dir_str), cfg, task_name, condition_id, manifest=manifest
@@ -1337,6 +1548,9 @@ def _existing_entry_matches_config(
             expected_goal_std = float(expected_value('network_goal_std_m') or 0.15)
             if float(manifest.get('network_goal_std_m', float('nan'))) != expected_goal_std:
                 return False, 'camera network metric goal width mismatch'
+            expected_updates = int(expected_value('camera_network_updates_per_step') or 1)
+            if int(manifest.get('camera_network_updates_per_step', -1)) != expected_updates:
+                return False, 'camera network update cadence mismatch'
             if manifest.get('visibility_artifact_path'):
                 return False, 'network run unexpectedly also used a legacy visibility artifact'
             return True, ''
@@ -1410,8 +1624,8 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'max_predict_speed_mps:={cfg.get("max_predict_speed_mps", 0.0)}',
         f'state_correction_mode:={cfg.get("state_correction_mode", "fused")}',
         f'state_max_correction_jump_m:={cfg.get("state_max_correction_jump_m", 0.0)}',
-        f'process_noise_xy:={cfg.get("process_noise_xy", 0.01)}',
-        f'process_noise_theta:={cfg.get("process_noise_theta", 0.02)}',
+        f'process_noise_xy:={cfg.get("process_noise_xy", 0.012)}',
+        f'process_noise_theta:={cfg.get("process_noise_theta", 0.05)}',
         f'control_weight:={cfg.get("control_weight", 0.0)}',
         f'optimizer_maxiter:={cfg.get("optimizer_maxiter", 80)}',
         f'optimizer_maxfun:={cfg.get("optimizer_maxfun", 500)}',
@@ -1440,6 +1654,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'yolo_device:={cfg.get("yolo_device", "")}',
         f'yolo_imgsz:={cfg.get("yolo_imgsz", 640)}',
         f'yolo_conf_threshold:={cfg.get("yolo_conf_threshold", 0.25)}',
+        f'yolo_predict_conf_floor:={cfg.get("yolo_predict_conf_floor", 0.05)}',
         f'yolo_iou_threshold:={cfg.get("yolo_iou_threshold", 0.45)}',
         f'yolo_target_class:={cfg.get("yolo_target_class", "robot")}',
         f'yolo_class_id:={cfg.get("yolo_class_id", -1)}',
@@ -1449,6 +1664,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'yolo_min_bbox_area_px:={cfg.get("yolo_min_bbox_area_px", 0.0)}',
         f'yolo_max_batch_stamp_skew_s:={cfg.get("yolo_max_batch_stamp_skew_s", 0.05)}',
         f'yolo_debug_frame_dir:={cfg.get("yolo_debug_frame_dir", "")}',
+        f'yolo_debug_crop_dir:={cfg.get("yolo_debug_crop_dir", "")}',
         f'yolo_use_torchscript:={str(cfg.get("yolo_use_torchscript", False)).lower()}',
         f'yolo_compiled_model:={cfg.get("yolo_compiled_model", "")}',
         f'yolo_warmup_iters:={cfg.get("yolo_warmup_iters", 3)}',
@@ -1462,7 +1678,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         # cannot be replayed. Passed explicitly so it lands in the run manifest.
         f'state_reanchor_m:={cfg.get("state_reanchor_m", 0.0)}',
         f'state_max_predict_dt_s:={cfg.get("state_max_predict_dt_s", 1.5)}',
-        f'state_reject_inflate_m2:={cfg.get("state_reject_inflate_m2", 0.05)}',
+        f'state_reject_inflate_m2:={cfg.get("state_reject_inflate_m2", 0.0)}',
         f'stale_belief_inflate_m2_per_s:={cfg.get("stale_belief_inflate_m2_per_s", 0.0)}',
         f'stale_belief_inflate_cap_m2:={cfg.get("stale_belief_inflate_cap_m2", 0.0)}',
         f'require_state_correction_envelope:={str(cfg.get("require_state_correction_envelope", False)).lower()}',
@@ -1491,7 +1707,9 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
     for key in (
         'observation_risk_scale', 'ambiguity_term_scale',
         'risk_weight_obs', 'ambiguity_weight',
-        'camera_network_objective', 'network_goal_std_m',
+        'camera_network_objective', 'network_goal_std_m', 'network_goal_std_start_m',
+        'camera_network_updates_per_step',
+        'optimizer_control_block_steps',
         'belief_publish_rate',
         'heading_update_mode',
         'use_pixel_correction', 'pixel_topic', 'command_noise_output_topic',
@@ -1539,16 +1757,22 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'manager_require_source_batch_id',
         'manager_bootstrap_min_cameras',
         'manager_bootstrap_max_disagreement_m',
+        'manager_use_task_start_as_bootstrap_prior',
+        'manager_bootstrap_prior_counts_as_support',
         'manager_fusion_max_timestamp_spread_s',
         'manager_covariance_profile',
         'manager_commissioned_calibration_path', 'manager_commissioned_sigma_px',
         'manager_commissioned_world_covariance_path',
         'manager_commissioned_per_camera_sigma',
         'manager_fusion_common_mode_std_m',
-        'manager_fusion_rule', 'manager_observation_model', 'manager_fixed_offset_m',
-        'manager_learned_correction_path', 'manager_learned_gate_reject',
-        'manager_learned_gate_good', 'manager_learned_gate_soft_sigma_m',
-        'manager_correction_timestamp_compensation', 'manager_admission_gate',
+        'manager_fusion_rule', 'manager_observation_model',
+        'manager_sensor_gate_config_path',
+        'manager_availability_model_path',
+        'manager_availability_model_expected_sha256',
+        'manager_learned_correction_path',
+        'manager_visibility_sensor_model_path',
+        'manager_visibility_sensor_model_expected_sha256',
+        'manager_correction_timestamp_compensation',
         'manager_correction_residual_interval_s',
         'manager_correction_propagation_drift_std',
         'manager_max_measurement_age_s', 'manager_age_decay_s',
@@ -1574,7 +1798,10 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         elif key in {
             'manager_commissioned_calibration_path',
             'manager_commissioned_world_covariance_path',
+            'manager_sensor_gate_config_path',
+            'manager_availability_model_path',
             'manager_learned_correction_path',
+            'manager_visibility_sensor_model_path',
             'scheduled_coverage_artifact',
         } and val:
             val = str(_resolve_repo_path(str(val), strict=True))
@@ -1666,6 +1893,7 @@ def _verify_outcome_journal(
         'event_count': len(rows),
         'last_event_id': rows[-1].get('event_id'),
         'last_event_sha256': rows[-1].get('event_sha256'),
+        'terminal_stop_request_id': rows[-1].get('terminal_stop_request_id'),
     }
 
 
@@ -1846,6 +2074,12 @@ def main() -> int:
                         help='Print what would be run without executing.')
     parser.add_argument('--resume', action='store_true',
                         help='Skip runs already marked completed in campaign_log.json.')
+    parser.add_argument(
+        '--allow-imported-provenance', action='store_true',
+        help='Permit completed ledger entries explicitly imported from an older campaign '
+             'only when their recorded original executable provenance matches their run manifest. '
+             'New attempts still require the current executable provenance.',
+    )
     parser.add_argument('--run-timeout', type=float, default=420.0,
                         help='Wall-clock timeout per run including simulator startup (seconds). '
                              'Sized so the one-shot global solve (median ~146s, contended tail to ~220s wall) '
@@ -1883,7 +2117,7 @@ def main() -> int:
         _verify_installed_world_matches_checkout(cfg['world'])
     )
     cfg['_world_sdf_sha256'] = sha256_file(cfg['_world_sdf_path'])
-    cfg['_git_provenance'] = git_provenance(str(REPO_ROOT))
+    cfg['_git_provenance'] = git_provenance(str(REPO_ROOT), EXECUTABLE_SOURCE_PATHS)
     log_root = Path(args.log_root).expanduser().resolve()
     campaign_log_path = log_root / 'campaign_log.json'
     ros_log_dir = Path(os.environ.get('ROS_LOG_DIR') or (log_root / '_ros_logs')).expanduser().resolve()
@@ -1894,6 +2128,9 @@ def main() -> int:
     child_env['ROS_LOG_DIR'] = str(ros_log_dir)
     child_env['PYTHONPATH'] = _checkout_pythonpath()
     child_env['UNAV_EXECUTABLE_SOURCE_ROOT'] = str(REPO_ROOT)
+    child_env['UNAV_EXECUTABLE_SOURCE_PATHS'] = os.pathsep.join(
+        EXECUTABLE_SOURCE_PATHS
+    )
     cache_dir = '' if args.no_planner_cache else str(args.planner_cache_dir.expanduser().resolve())
     child_env['UNAV_CASADI_CACHE_DIR'] = cache_dir
     child_env['UNAV_CASADI_JIT'] = '1' if args.planner_jit else '0'
@@ -1949,6 +2186,7 @@ def main() -> int:
             matches, reason = _existing_entry_matches_config(
                 campaign_log[key], cfg,
                 expected_cell=(task_name, condition_id, seed),
+                allow_imported_provenance=args.allow_imported_provenance,
             )
             if not matches:
                 raise RuntimeError(
@@ -1974,9 +2212,11 @@ def main() -> int:
         if args.dry_run:
             continue
 
-        if git_provenance(str(REPO_ROOT)) != cfg['_git_provenance']:
+        if (git_provenance(str(REPO_ROOT), EXECUTABLE_SOURCE_PATHS)
+                != cfg['_git_provenance']):
             raise RuntimeError(
-                'executable checkout changed after campaign source identity was frozen'
+                'executable checkout changed after campaign source identity was frozen '
+                f'(scope: {", ".join(EXECUTABLE_SOURCE_PATHS)})'
             )
 
         run_entry: dict = {
@@ -2023,10 +2263,16 @@ def main() -> int:
             'world_sdf': cfg['_world_sdf_path'],
             'yolo_model': str(_resolve_repo_path(cfg['yolo_model'], strict=True)),
         }
+        if cfg.get('route_selection_manifest_path'):
+            artifact_paths['route_selection_manifest'] = str(_resolve_repo_path(
+                cfg['route_selection_manifest_path'], strict=True
+            ))
         for field in (
             'camera_network_artifact_path', 'manager_commissioned_calibration_path',
             'manager_commissioned_world_covariance_path',
+            'manager_sensor_gate_config_path',
             'manager_learned_correction_path', 'preselected_route_source_path',
+            'manager_visibility_sensor_model_path',
         ):
             value = resolved_config.get(field)
             if value:
@@ -2155,6 +2401,26 @@ def main() -> int:
             manager_journal_ok, manager_journal_verdict = _verify_outcome_journal(
                 run_log_dir, 'manager_outcomes.jsonl', 'manager'
             )
+            terminal_stop_request_id = (
+                summary.get('terminal_stop_request_id')
+                if isinstance(summary, dict) else None
+            )
+            if detector_journal_ok and (
+                detector_journal_verdict.get('terminal_stop_request_id')
+                != terminal_stop_request_id
+            ):
+                detector_journal_ok = False
+                detector_journal_verdict['reason'] = (
+                    'detector_terminal_stop_request_identity_mismatch'
+                )
+            if manager_journal_ok and (
+                manager_journal_verdict.get('terminal_stop_request_id')
+                != terminal_stop_request_id
+            ):
+                manager_journal_ok = False
+                manager_journal_verdict['reason'] = (
+                    'manager_terminal_stop_request_identity_mismatch'
+                )
 
         terminal_ok, terminal_outcome, terminal_reason = _terminal_summary_outcome(summary)
         if spawn_error:
