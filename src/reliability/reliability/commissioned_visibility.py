@@ -55,6 +55,9 @@ class _VisibilityPatchResidualNet(nn.Module):
         return base + torch.sigmoid(self.gate(hidden)) * self.residual(hidden)
 
 
+MEAN_MODEL_NAMES = ("box_mlp_visibility_residual", "M4_visibility_patch_residual")
+
+
 class CommissionedVisibilitySensorModel:
     """Hash-bound visibility-residual correction and its matched covariance."""
 
@@ -69,7 +72,11 @@ class CommissionedVisibilitySensorModel:
             raise ValueError("unsupported commissioned visibility schema")
         if manifest.get("status") != "frozen_before_audit" or manifest.get("audit_accessed") is not False:
             raise ValueError("commissioned visibility model was not frozen before audit")
-        if manifest.get("mean_model") != "box_mlp_visibility_residual":
+        # Two registry spellings name the same model: the covariance fit writes
+        # "box_mlp_visibility_residual", the 5 Hz bundle rewrites it as
+        # "M4_visibility_patch_residual". Both are the box-MLP base plus the
+        # gated patch residual, and the file hashes below pin the identity.
+        if manifest.get("mean_model") not in MEAN_MODEL_NAMES:
             raise ValueError("runtime requires the selected visibility-residual mean model")
         if manifest.get("runtime_covariance_model") != "R4_image_conditioned_scale":
             raise ValueError("runtime requires the visibility residual's matched covariance")

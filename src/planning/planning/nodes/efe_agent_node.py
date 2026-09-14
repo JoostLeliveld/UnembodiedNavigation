@@ -562,6 +562,11 @@ class EfeAgentNode(UnicyclePlannerNode):
                 nogo_penalty_type=local_nogo_penalty_type,
                 nogo_weight=local_nogo_weight,
                 nogo_safe_distance=local_nogo_safe_distance,
+                # Never solved, so the locked objective's constants do not apply
+                # to it. Without this the lock warns on every run about a local
+                # setting that is off by design, which teaches the reader to
+                # ignore the warning that matters. See docs/PLANNER_LOCK.md.
+                enforce_planner_lock=False,
             )
             if self.global_planner_mode != 'preselected_route':
                 self.global_planner = self._construct_planner(
@@ -572,6 +577,8 @@ class EfeAgentNode(UnicyclePlannerNode):
                     optimizer_warm_start_shift_steps=self._warm_start_shift_steps_for_rate(
                         self.plan_rate
                     ),
+                    # This is the planner that solves the locked objective.
+                    enforce_planner_lock=True,
                 )
             global_description = (
                 f"preselected route {self.preselected_route_sha256[:12]} "

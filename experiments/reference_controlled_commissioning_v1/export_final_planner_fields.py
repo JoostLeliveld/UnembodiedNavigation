@@ -25,6 +25,9 @@ from reliability.commissioned_visibility import CommissionedVisibilitySensorMode
 
 
 CAMERAS = tuple(f"camera_{letter}" for letter in "ABCDE")
+# The world the commissioning drives were captured in. It is hashed into every
+# planner field so an artifact can never be paired with a different layout.
+WORLD = REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
 
 
 def sha256(path: Path) -> str:
@@ -120,11 +123,19 @@ def main() -> int:
     )
     if args.planning_opportunities_per_second < 1:
         raise ValueError("planning opportunities per second must be positive")
-    world = REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
-    availability = CommissionedAvailabilityModel(availability_path, world)
+    # CommissionedAvailabilityModel takes the artifact path alone; the world
+    # argument belonged to an earlier API and is no longer accepted.
+    availability = CommissionedAvailabilityModel(availability_path)
     sensor = CommissionedVisibilitySensorModel(visibility_path)
     if tuple(availability.camera_ids) != CAMERAS or tuple(sensor.camera_order) != CAMERAS:
         raise RuntimeError("commissioned camera registries differ")
+    length_scales = {
+        float(availability._parameters[camera]["length_scale_m"])
+        for camera in CAMERAS
+    }
+    if len(length_scales) != 1:
+        raise RuntimeError("availability GP mixes length scales across cameras")
+    gp_length_scale = length_scales.pop()
     xs = np.arange(args.xmin, args.xmax + 0.5 * args.grid_step_m, args.grid_step_m)
     ys = np.arange(args.ymin, args.ymax + 0.5 * args.grid_step_m, args.grid_step_m)
     headings = np.linspace(0.0, 2.0 * math.pi, args.heading_count + 1)
@@ -132,7 +143,7 @@ def main() -> int:
     q1 = np.empty((len(CAMERAS), len(ys), len(xs)), dtype=float)
     for index, camera_id in enumerate(CAMERAS):
         probability, _ = predict_laplace(
-            availability._gp_parameters[camera_id], points,
+            availability._parameters[camera_id], points,
             uncertainty_penalty=availability._uncertainty_penalty,
         )
         q1[index] = np.clip(probability, *availability._clip).reshape(len(ys), len(xs))
@@ -152,7 +163,7 @@ def main() -> int:
         relative(runtime_path): sha256(runtime_path),
         relative(Path(sensor.manifest["parameters"]["path"])): sensor.manifest["parameters"]["sha256"],
         relative(capture_root / "campaign_execution.json"): sha256(capture_root / "campaign_execution.json"),
-        relative(world): sha256(world),
+        relative(WORLD): sha256(WORLD),
         relative(Path(__file__)): sha256(Path(__file__)),
     }
     artifacts = {}
@@ -182,6 +193,9 @@ def main() -> int:
             "planning_opportunities_per_second": args.planning_opportunities_per_second,
             "runtime_sensor_model_path": relative(runtime_path),
             "runtime_sensor_model_sha256": sha256(runtime_path),
+            "availability_model_path": relative(availability_path),
+            "availability_model_sha256": sha256(availability_path),
+            "availability_gp_length_scale_m": gp_length_scale,
             "final_audit_used_for_export_or_selection": False,
             "source_hashes": sources,
         }

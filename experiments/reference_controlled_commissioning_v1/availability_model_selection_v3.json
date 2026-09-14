@@ -1,0 +1,83 @@
+{
+  "artifacts": {
+    "runtime_model": {
+      "path": "logs/studies/reference_controlled_commissioning_v1/availability_gp_20260914_ls1p0_v1/availability_runtime_model.json",
+      "sha256": "aa12810065cc984ff0cefb2089929ade598ed551c9304d76f0afda2222c50610"
+    },
+    "runtime_parameters": {
+      "path": "logs/studies/reference_controlled_commissioning_v1/availability_gp_20260914_ls1p0_v1/availability_gp_parameters.npz",
+      "sha256": "4fc4d08700148d6c92b5899666d3199f6987f782e8d2371304600ef9eed61524"
+    },
+    "selection_report": {
+      "path": "logs/studies/reference_controlled_commissioning_v1/availability_gp_20260914_ls1p0_v1/availability_model.json",
+      "sha256": "91ec29c51f686ec9f1fa90dd4300982a72e3accb56b9fffee32372b22335129a"
+    }
+  },
+  "consumed_by": {
+    "campaign": "experiments/reference_controlled_commissioning_v1/final_navigation_campaign_v6_locked.yaml",
+    "planner_fields": "logs/studies/reference_controlled_commissioning_v1/final_planner_fields_20260914_ls1p0_v3"
+  },
+  "counts": {
+    "development_opportunities": 27515,
+    "fit_opportunities": 25410,
+    "overall_admitted_rate": 0.35310344827586204
+  },
+  "fit": {
+    "final_audit_accessed": false,
+    "inference": "Laplace approximation",
+    "kernel": "isotropic squared exponential",
+    "length_scale_m": 1.0,
+    "likelihood": "Bernoulli",
+    "uncertainty_penalty": 0.0
+  },
+  "held_out_comparison": {
+    "A0_camera_constant": {
+      "held_out_equal_route_auc": 0.616673443682385,
+      "held_out_equal_route_brier": 0.2243342342712003
+    },
+    "A1_gp_position_ls0.8": {
+      "held_out_equal_route_auc": 0.9943235452711494,
+      "held_out_equal_route_brier": 0.02088590942652127
+    },
+    "A2_gp_position_ls1.0": {
+      "held_out_equal_route_auc": 0.9944238187770191,
+      "held_out_equal_route_brier": 0.019611821955960826
+    },
+    "A3_gp_position_ls1.6": {
+      "held_out_equal_route_auc": 0.9942974503070174,
+      "held_out_equal_route_brier": 0.019640478821883776
+    },
+    "A4_gp_position_ls3.2": {
+      "held_out_equal_route_auc": 0.9906488546498149,
+      "held_out_equal_route_brier": 0.027258573980514803
+    },
+    "A5_gp_position_ls0.8_lcb0.5": {
+      "held_out_equal_route_auc": 0.9943123106028082,
+      "held_out_equal_route_brier": 0.021728422011000365
+    },
+    "A6_gp_position_ls1.0_lcb0.5": {
+      "held_out_equal_route_auc": 0.9943366059470529,
+      "held_out_equal_route_brier": 0.020707973645822466
+    },
+    "A7_gp_position_ls1.6_lcb0.5": {
+      "held_out_equal_route_auc": 0.9941240603230365,
+      "held_out_equal_route_brier": 0.020521382585819942
+    },
+    "A8_gp_position_ls3.2_lcb0.5": {
+      "held_out_equal_route_auc": 0.9904339757265348,
+      "held_out_equal_route_brier": 0.02737188394048872
+    }
+  },
+  "method_family": "per_camera_bernoulli_gaussian_process",
+  "planner_inputs": [
+    "camera identity",
+    "predicted world x",
+    "predicted world y"
+  ],
+  "schema": "reference_controlled_availability_selection.v3",
+  "selected_model": "A2_gp_position_ls1.0",
+  "selection_rule": "lowest equal-route Brier on the development routes, which are held out of the fit; ties broken toward the shorter length scale",
+  "status": "selected_before_final_navigation_campaign",
+  "supersedes": "availability_model_selection_v2.json (selected ls 0.8)",
+  "why_it_changed": "The v2 record selected ls 0.8 from a candidate set that did not contain ls 1.0. Scoring ls 1.0 on the same held-out routes places it first, so the final campaign uses it. No audit data was touched."
+}

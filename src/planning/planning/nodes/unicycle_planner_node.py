@@ -1366,6 +1366,7 @@ class UnicyclePlannerNode(Node):
             nogo_warning_band=float(g('nogo_warning_band')),
             nogo_near_weight=float(g('nogo_near_weight')),
             use_belief_nogo_cost=_as_bool(g('use_belief_nogo_cost')),
+            enforce_planner_lock=bool(g_default('enforce_planner_lock', True)),
             nogo_belief_kappa=float(g('nogo_belief_kappa')),
             use_hit_miss_mixture=_as_bool(g('use_hit_miss_mixture')),
             nogo_mode=str(g('nogo_mode')), driveable_geometry_json=g('driveable_geometry_json'),

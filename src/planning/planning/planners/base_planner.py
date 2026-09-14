@@ -152,7 +152,7 @@ class UnicyclePlannerBase:
         # transform, evaluated on the availability-weighted commissioned R.
         # This is the thesis method; see docs/PLANNER_LOCK.md.
         kouw_et1_ambiguity=True,
-        network_goal_std_m=0.15,
+        network_goal_std_m=0.35,
         camera_network_updates_per_step=1,
         r_visible_uv=2.5,
         r_miss_uv=120.0,
@@ -176,11 +176,11 @@ class UnicyclePlannerBase:
         use_nogo_cost=False,
         nogo_penalty_type='warning_band',
         nogo_weight=0.0,
-        nogo_safe_distance=0.35,
-        nogo_logbarrier_eps=1e-3,
+        nogo_safe_distance=0.325,
+        nogo_logbarrier_eps=0.05,
         nogo_warning_band=0.05,
         nogo_near_weight=50.0,
-        use_belief_nogo_cost=False,
+        use_belief_nogo_cost=True,
         nogo_belief_kappa=1.0,
         nogo_mode='keep_out',
         driveable_geometry_json='',
@@ -189,7 +189,14 @@ class UnicyclePlannerBase:
         robot_width_m=0.55,
         use_hit_miss_mixture=False,
         runtime_debug=False,
+        # True for the planner that solves the locked EFE objective. The
+        # hierarchical local tracker passes False: it builds a planner object
+        # for no-go geometry and warm-start seeds but never solves it, so the
+        # locked constants do not apply to it. Defaults True so a caller that
+        # forgets is still checked. See docs/PLANNER_LOCK.md.
+        enforce_planner_lock=True,
     ):
+        self.enforce_planner_lock = bool(enforce_planner_lock)
         self.horizon = int(horizon)
         self.dt = float(dt)
         self.v_min = float(v_min)
@@ -209,33 +216,45 @@ class UnicyclePlannerBase:
         # recorded with its derivation in docs/PLANNER_LOCK.md. A run that uses
         # any superseded value silently produces a DIFFERENT planner, which has
         # already cost one 80-run campaign. Warn loudly rather than let it pass.
-        for _name, _value, _locked in (
+        # Only the planner that actually SOLVES the locked objective is checked.
+        # The hierarchical local tracker builds a planner object for its no-go
+        # geometry and warm-start seeds but never solves it, and deliberately
+        # runs without the belief-aware clearance term; warning about it trains
+        # the reader to ignore the warning that matters.
+        _enforce_lock = bool(enforce_planner_lock)
+        for _name, _value, _locked in () if not _enforce_lock else (
             ('nogo_safe_distance', nogo_safe_distance, 0.325),
             ('nogo_logbarrier_eps', nogo_logbarrier_eps, 0.05),
             ('network_goal_std_m', network_goal_std_m, 0.35),
+            # Above 1, each block of controls is averaged and repeated, which
+            # destroys the seeder's alternating turn/drive steps: the best seed
+            # then misses the goal by more than the terminal tolerance, no
+            # candidate passes the hard gate, and a parked plan wins on raw
+            # cost. This produced a Gazebo run that never moved.
+            ('optimizer_control_block_steps', optimizer_control_block_steps, 1),
         ):
             if abs(float(_value) - _locked) > 1e-9:
                 warnings.warn(
                     f'{_name}={float(_value)} overrides the locked value {_locked}; '
                     'see docs/PLANNER_LOCK.md',
                     RuntimeWarning, stacklevel=2)
-        if not bool(use_belief_nogo_cost):
+        if _enforce_lock and not bool(use_belief_nogo_cost):
             warnings.warn(
                 'use_belief_nogo_cost is off: the clearance term will not see '
                 'predicted belief growth. See docs/PLANNER_LOCK.md',
                 RuntimeWarning, stacklevel=2)
-        if not bool(kouw_et1_ambiguity):
+        if _enforce_lock and not bool(kouw_et1_ambiguity):
             warnings.warn(
                 'kouw_et1_ambiguity is off: the ambiguity term falls back to a '
                 'posterior-entropy sum that charges for route length. '
                 'See docs/PLANNER_LOCK.md',
                 RuntimeWarning, stacklevel=2)
-        if abs(float(process_noise_xy) - _LOCKED_PROCESS_NOISE_XY) > 1e-9:
+        if _enforce_lock and abs(float(process_noise_xy) - _LOCKED_PROCESS_NOISE_XY) > 1e-9:
             warnings.warn(
                 f'process_noise_xy={float(process_noise_xy)} overrides the locked '
                 f'value {_LOCKED_PROCESS_NOISE_XY}; see docs/PROCESS_NOISE_LOCK.md',
                 RuntimeWarning, stacklevel=2)
-        if abs(float(process_noise_theta) - _LOCKED_PROCESS_NOISE_THETA) > 1e-9:
+        if _enforce_lock and abs(float(process_noise_theta) - _LOCKED_PROCESS_NOISE_THETA) > 1e-9:
             warnings.warn(
                 f'process_noise_theta={float(process_noise_theta)} overrides the locked '
                 f'value {_LOCKED_PROCESS_NOISE_THETA}; see docs/PROCESS_NOISE_LOCK.md',
