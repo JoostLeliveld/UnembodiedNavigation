@@ -48,11 +48,18 @@ exited, so nothing was interrupted. Its 5 failed attempts should be discarded.
 
 All four tasks solve to the goal offline: 0.000, 0.000, 0.000, 1.9e-15 m.
 
-**$T_1$ splits by availability field.** $C_{00}$/$C_{01}$ take
-`above_connector`; $C_{10}$/$C_{11}$ take `above_cross_aisle_2`; the groups
-separate by 4.96 m. Cells sharing an availability field pick identical paths
-whatever their covariance field, and both corridors are 32.65 m, so length
-cannot account for the choice.
+**Two of the four tasks split, both on the availability axis.**
+
+| task | $C_{00}$, $C_{01}$ | $C_{10}$, $C_{11}$ | separation |
+|---|---|---|---|
+| $T_1$ blind_corridor_west_to_east | above_connector, 32.65 m | above_cross_aisle_2, 32.65 m | 4.96 m |
+| $T_2$ lane08E_to_lane12W | below_south_cross_aisle, 18.05 m | below_cross_aisle_2, 20.45 m | 10.72 m |
+
+Cells sharing an availability field pick identical paths (0.00 m apart) whatever
+their covariance field, so the covariance field changes no route on either task.
+On $T_1$ both corridors are the same length, so length cannot account for the
+choice. On $T_2$ the commissioned cells take the LONGER corridor, paying 2.40 m
+for support — the planner trading distance for observability.
 
 ## Timeouts were breached and are now sized from measurement
 
