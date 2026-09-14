@@ -12,6 +12,7 @@ Completion reasons are exactly: goal_reached, timeout_after_first_cmd, collision
 from __future__ import annotations
 
 import argparse
+import collections
 import csv
 import fcntl
 import json
@@ -113,6 +114,10 @@ CONDITION_PLANNER = {
     'H1': 'geometric_shortest_path',
     # Existing learned-mean campaigns use the same preselected-route controller.
     'N1': 'geometric_shortest_path',
+    # Provisional perception-uncertainty comparison on one shared navigation stack.
+    'U1': 'visibility_aware_efe',
+    'U2': 'visibility_aware_efe',
+    'U3': 'visibility_aware_efe',
 }
 
 PRESELECTED_ROUTE_KEYS = (
@@ -366,6 +371,7 @@ def _validate_config(cfg: dict, path: Path) -> None:
     ]
     for task_name, condition_id in active_cells:
         _validate_visibility_runtime_bundle(cfg, path, task_name, condition_id)
+        _validate_perception_runtime_bundle(cfg, path, task_name, condition_id)
     if cfg.get('thesis_execution_contract') in (
         'final_1mps_1hz_m4_v1', 'final_1mps_5hz_m4_v1',
         'final_1mps_5hz_m4_temporal_v1',
@@ -518,6 +524,47 @@ def _validate_visibility_runtime_bundle(
             f'{config_path}: {task_name}/{condition_id}: visibility-residual bundle was calibrated for '
             f'{fusion_rate:g} Hz fusion from {detector_rate:g} Hz detections, but campaign '
             f'requests {configured_rate:g} Hz fusion'
+        )
+
+
+def _validate_perception_runtime_bundle(
+    cfg: dict, config_path: Path, task_name: str, condition_id: str
+) -> None:
+    expected = lambda key: _effective_value(cfg, task_name, condition_id, key)
+    observation = str(expected('manager_observation_model') or 'raw_box')
+    covariance = str(expected('manager_covariance_profile') or '')
+    methods = {'hierarchical_residual', 'spatial_residual', 'joint_rgb_gaussian'}
+    uses_bundle = observation in methods or covariance == 'commissioned_perception_r'
+    if not uses_bundle:
+        return
+    if observation not in methods or covariance != 'commissioned_perception_r':
+        raise ValueError(
+            f'{config_path}: {task_name}/{condition_id}: a commissioned perception '
+            'method and commissioned_perception_r must be selected together'
+        )
+    declared_path = str(expected('manager_perception_sensor_model_path') or '').strip()
+    if not declared_path:
+        raise ValueError(
+            f'{config_path}: {task_name}/{condition_id}: perception sensor-model package is missing'
+        )
+    model_path = _resolve_repo_path(declared_path, strict=True)
+    actual_sha = sha256_file(model_path)
+    declared_sha = str(
+        expected('manager_perception_sensor_model_expected_sha256') or ''
+    ).strip().lower()
+    if actual_sha != declared_sha:
+        raise ValueError(
+            f'{config_path}: {task_name}/{condition_id}: perception sensor-model hash mismatch'
+        )
+    try:
+        package = json.loads(model_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f'{config_path}: malformed perception sensor-model package') from exc
+    if package.get('schema') != 'commissioned_perception_runtime_model.v1':
+        raise ValueError(f'{config_path}: unsupported perception sensor-model schema')
+    if package.get('method_id') != observation:
+        raise ValueError(
+            f'{config_path}: {task_name}/{condition_id}: configured method and package differ'
         )
 
 
@@ -1474,6 +1521,8 @@ def _existing_entry_matches_config(
         'manager_learned_correction_path',
         'manager_visibility_sensor_model_path',
         'manager_visibility_sensor_model_expected_sha256',
+        'manager_perception_sensor_model_path',
+        'manager_perception_sensor_model_expected_sha256',
     )
     for key in string_keys:
         expected = expected_value(key)
@@ -1485,7 +1534,8 @@ def _existing_entry_matches_config(
                        'manager_commissioned_world_covariance_path',
                        'manager_sensor_gate_config_path',
                        'manager_availability_model_path',
-                       'manager_visibility_sensor_model_path'):
+                       'manager_visibility_sensor_model_path',
+                       'manager_perception_sensor_model_path'):
                 matches = _resolve_for_compare(actual) == _resolve_for_compare(str(expected))
             else:
                 matches = actual == str(expected)
@@ -1515,6 +1565,14 @@ def _existing_entry_matches_config(
         )
         if manifest.get('manager_visibility_sensor_model_sha256') != expected_visibility_hash:
             return False, 'manager visibility sensor-model content hash mismatch'
+
+    perception_model_path = expected_value('manager_perception_sensor_model_path')
+    if perception_model_path:
+        expected_perception_hash = sha256_file(
+            _resolve_repo_path(str(perception_model_path), strict=True)
+        )
+        if manifest.get('manager_perception_sensor_model_sha256') != expected_perception_hash:
+            return False, 'manager perception sensor-model content hash mismatch'
 
     sensor_gate_path = expected_value('manager_sensor_gate_config_path')
     if sensor_gate_path:
@@ -1720,6 +1778,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'observation_risk_scale', 'ambiguity_term_scale',
         'risk_weight_obs', 'ambiguity_weight',
         'camera_network_objective', 'network_goal_std_m', 'network_goal_std_start_m',
+        'kouw_et1_ambiguity',
         'camera_network_updates_per_step',
         'optimizer_control_block_steps',
         'belief_publish_rate',
@@ -1784,6 +1843,8 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'manager_learned_correction_path',
         'manager_visibility_sensor_model_path',
         'manager_visibility_sensor_model_expected_sha256',
+        'manager_perception_sensor_model_path',
+        'manager_perception_sensor_model_expected_sha256',
         'manager_correction_timestamp_compensation',
         'manager_correction_residual_interval_s',
         'manager_correction_propagation_drift_std',
@@ -1814,6 +1875,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
             'manager_availability_model_path',
             'manager_learned_correction_path',
             'manager_visibility_sensor_model_path',
+            'manager_perception_sensor_model_path',
             'scheduled_coverage_artifact',
         } and val:
             val = str(_resolve_repo_path(str(val), strict=True))
@@ -2092,13 +2154,19 @@ def main() -> int:
              'only when their recorded original executable provenance matches their run manifest. '
              'New attempts still require the current executable provenance.',
     )
-    parser.add_argument('--run-timeout', type=float, default=420.0,
+    # Both caps are sized from solve times measured on 2026-09-15 with
+    # optimizer_control_block_steps=1: 8 uncontended solves, median 96 s and
+    # worst 238 s, and one solve sharing the machine with a live campaign at
+    # 304 s. The previous 270/420 s pair was sized against a "contended tail to
+    # ~220 s" that the 304 s measurement falsifies, so slow solves were being
+    # guillotined with no command and scored infra_invalid.
+    parser.add_argument('--run-timeout', type=float, default=900.0,
                         help='Wall-clock timeout per run including simulator startup (seconds). '
-                             'Sized so the one-shot global solve (median ~146s, contended tail to ~220s wall) '
-                             'completes AND leaves ~150-200s for path execution.')
-    parser.add_argument('--first-cmd-timeout', type=float, default=270.0,
+                             'Covers ~60s startup, the first-cmd solve cap, and ~40s of driving for the '
+                             'longest route, with slack. Re-measure before lowering it.')
+    parser.add_argument('--first-cmd-timeout', type=float, default=480.0,
                         help='Kill a live run when experiment.csv has rows but no nonzero command for this many seconds; <=0 disables. '
-                             'Must exceed the worst-case global-solve wall time (~220s under contention) or slow solves are '
+                             'Must exceed the worst-case global-solve wall time (304s measured under contention) or slow solves are '
                              'guillotined mid-optimization with no command (the dominant past failure mode).')
     parser.add_argument('--cleanup-delay', type=float, default=8.0,
                         help='Sleep between runs for process cleanup (seconds).')
@@ -2109,6 +2177,12 @@ def main() -> int:
                         help='Build planner functions from scratch in each process.')
     parser.add_argument('--planner-jit', action='store_true',
                         help='Opt in to compiled objective/gradient evaluation; recorded for resume checks.')
+    parser.add_argument('--max-new-runs-per-condition', type=int, default=0,
+                        help='Smoke-test cap per condition; 0 runs the complete matrix. '
+                             'A later --resume without this cap continues the campaign.')
+    parser.add_argument('--only-condition', action='append', default=[],
+                        help='Run only the named condition; repeat to select multiple conditions. '
+                             'The complete campaign configuration is still validated and frozen.')
     args = parser.parse_args()
 
     config_path = _resolve_repo_path(args.config, strict=False)
@@ -2149,6 +2223,17 @@ def main() -> int:
     cfg['_execution_options'] = dict(planner_cache_dir=cache_dir, planner_jit=args.planner_jit)
 
     run_matrix = _build_run_matrix(cfg)
+    if args.only_condition:
+        requested_conditions = set(args.only_condition)
+        unknown_conditions = requested_conditions.difference(cfg['conditions'])
+        if unknown_conditions:
+            raise ValueError(
+                'unknown --only-condition value(s): '
+                + ', '.join(sorted(unknown_conditions))
+            )
+        run_matrix = [
+            cell for cell in run_matrix if cell[1] in requested_conditions
+        ]
     if not args.dry_run and cfg.get('ros_domain_id_base') is None:
         raise RuntimeError(
             'campaign execution requires ros_domain_id_base for scoped cleanup'
@@ -2190,6 +2275,7 @@ def main() -> int:
             log_root, config_path, cfg['_git_provenance']
         )
 
+    new_runs_by_condition = collections.Counter()
     for run_idx, (task_name, condition_id, seed) in enumerate(run_matrix):
         key = _run_key(task_name, condition_id, seed)
         label = f'[{run_idx + 1}/{len(run_matrix)}] task={task_name} condition={condition_id} seed={seed}'
@@ -2207,6 +2293,11 @@ def main() -> int:
                 )
             print(f'  SKIP (already done): {label}')
             continue
+
+        if (args.max_new_runs_per_condition > 0
+                and new_runs_by_condition[condition_id] >= args.max_new_runs_per_condition):
+            continue
+        new_runs_by_condition[condition_id] += 1
 
         cell_log_dir = log_root / task_name / condition_id / f'seed{seed}'
         attempt_id = uuid.uuid4().hex
@@ -2285,6 +2376,7 @@ def main() -> int:
             'manager_sensor_gate_config_path',
             'manager_learned_correction_path', 'preselected_route_source_path',
             'manager_visibility_sensor_model_path',
+            'manager_perception_sensor_model_path',
         ):
             value = resolved_config.get(field)
             if value:

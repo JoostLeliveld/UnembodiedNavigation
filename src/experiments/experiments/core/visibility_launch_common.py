@@ -89,6 +89,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'network_goal_std_m': '0.35',
     # Goal-prior anneal start; see base_planner. -1 disables.
     'network_goal_std_start_m': '5.0',
+    'kouw_et1_ambiguity': 'true',
     'network_goal_std_start_m': '-1.0',
     'camera_network_updates_per_step': '1',
     'optimizer_control_block_steps': '1',
@@ -467,6 +468,12 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'manager_visibility_sensor_model_expected_sha256': _launch_value(
             context, 'manager_visibility_sensor_model_expected_sha256', ''
         ).strip(),
+        'manager_perception_sensor_model_path': _launch_value(
+            context, 'manager_perception_sensor_model_path', ''
+        ).strip(),
+        'manager_perception_sensor_model_expected_sha256': _launch_value(
+            context, 'manager_perception_sensor_model_expected_sha256', ''
+        ).strip(),
         'manager_max_measurement_age_s': float(
             _launch_value(context, 'manager_max_measurement_age_s', '1.25')
         ),
@@ -742,6 +749,8 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             context, 'camera_network_objective',
             PAPER_LAUNCH_DEFAULTS['camera_network_objective'],
         ).strip().lower(),
+        'kouw_et1_ambiguity': _as_bool(_launch_value(
+            context, 'kouw_et1_ambiguity', PAPER_LAUNCH_DEFAULTS['kouw_et1_ambiguity'])),
         'network_goal_std_start_m': float(_launch_value(
             context, 'network_goal_std_start_m',
             PAPER_LAUNCH_DEFAULTS['network_goal_std_start_m'],
@@ -1581,7 +1590,10 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                     'camera_network_objective', 'legacy_pixel_chart'),
                 'network_goal_std_m': cfg.get('network_goal_std_m', 0.15),
             'network_goal_std_start_m': cfg.get('network_goal_std_start_m', -1.0),
+            'kouw_et1_ambiguity': cfg.get('kouw_et1_ambiguity', True),
                 'network_goal_std_start_m': cfg.get('network_goal_std_start_m', -1.0),
+            'kouw_et1_ambiguity': cfg.get('kouw_et1_ambiguity', True),
+                'kouw_et1_ambiguity': cfg.get('kouw_et1_ambiguity', True),
                 'camera_network_updates_per_step': cfg.get(
                     'camera_network_updates_per_step', 1),
                 'optimizer_control_block_steps': cfg.get(
@@ -1871,6 +1883,10 @@ def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
             cfg.get('manager_visibility_sensor_model_path', '')),
         'manager_visibility_sensor_model_expected_sha256': str(
             cfg.get('manager_visibility_sensor_model_expected_sha256', '')),
+        'manager_perception_sensor_model_path': str(
+            cfg.get('manager_perception_sensor_model_path', '')),
+        'manager_perception_sensor_model_expected_sha256': str(
+            cfg.get('manager_perception_sensor_model_expected_sha256', '')),
         'manager_min_spatial_trust': float(cfg.get('manager_min_spatial_trust', 0.15)),
         'manager_max_measurement_age_s': float(
             cfg.get('manager_max_measurement_age_s', cfg['pixel_timeout_s'])),
@@ -1925,6 +1941,9 @@ def _manager_node_parameters(cfg: Dict[str, object]) -> Dict[str, object]:
     visibility_path = str(
         cfg.get('manager_visibility_sensor_model_path', '') or ''
     ).strip()
+    perception_path = str(
+        cfg.get('manager_perception_sensor_model_path', '') or ''
+    ).strip()
     availability_path = str(cfg.get('manager_availability_model_path', '') or '').strip()
     sensor_gate_path = str(cfg.get('manager_sensor_gate_config_path', '') or '').strip()
     world_covariance_path = str(
@@ -1946,6 +1965,16 @@ def _manager_node_parameters(cfg: Dict[str, object]) -> Dict[str, object]:
         if declared and declared != actual:
             raise RuntimeError('visibility-residual sensor model differs from configured SHA-256')
         out['visibility_sensor_model_expected_sha256'] = declared or actual
+    if perception_path:
+        perception = Path(perception_path).expanduser().resolve()
+        out['perception_sensor_model_path'] = str(perception)
+        actual = hashlib.sha256(perception.read_bytes()).hexdigest()
+        declared = str(
+            cfg.get('manager_perception_sensor_model_expected_sha256', '') or ''
+        )
+        if declared and declared != actual:
+            raise RuntimeError('perception sensor model differs from configured SHA-256')
+        out['perception_sensor_model_expected_sha256'] = declared or actual
     if availability_path:
         availability = Path(availability_path).expanduser().resolve()
         out['availability_model_path'] = str(availability)
@@ -2293,6 +2322,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
                 'camera_network_objective', 'legacy_pixel_chart'),
             'network_goal_std_m': cfg.get('network_goal_std_m', 0.15),
             'network_goal_std_start_m': cfg.get('network_goal_std_start_m', -1.0),
+            'kouw_et1_ambiguity': cfg.get('kouw_et1_ambiguity', True),
             'camera_network_updates_per_step': cfg.get(
                 'camera_network_updates_per_step', 1),
             'optimizer_control_block_steps': cfg.get(

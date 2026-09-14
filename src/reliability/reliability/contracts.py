@@ -8,6 +8,8 @@ messages, or planner code into the reliability-learning surface.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields
+import base64
+import binascii
 import json
 import math
 from numbers import Integral
@@ -491,6 +493,7 @@ class CameraObservation:
     detector_score_raw: float = math.nan
     bbox_xyxy: tuple[float, float, float, float] | None = None
     visibility_grid_16x16: tuple[float, ...] | None = None
+    rgb_context_crop_96x96_zlib_b64: str | None = None
     bbox_bottom_uv: tuple[float, float] | None = None
     mask_bottom_uv: tuple[float, float] | None = None
     selected_pixel_source: str = "none"
@@ -598,6 +601,23 @@ class CameraObservation:
                     "visibility_grid_16x16 requires a valid detection and bounding box"
                 )
         object.__setattr__(self, "visibility_grid_16x16", visibility)
+        crop = self.rgb_context_crop_96x96_zlib_b64
+        if crop is not None:
+            if not isinstance(crop, str) or not crop:
+                raise ContractValidationError(
+                    "rgb_context_crop_96x96_zlib_b64 must be absent or non-empty"
+                )
+            try:
+                base64.b64decode(crop, validate=True)
+            except (ValueError, binascii.Error) as exc:
+                raise ContractValidationError(
+                    "rgb_context_crop_96x96_zlib_b64 is not valid base64"
+                ) from exc
+            if not self.detection_valid or self.bbox_xyxy is None:
+                raise ContractValidationError(
+                    "rgb_context_crop_96x96_zlib_b64 requires a valid detection and box"
+                )
+        object.__setattr__(self, "rgb_context_crop_96x96_zlib_b64", crop)
         object.__setattr__(
             self,
             "bbox_bottom_uv",

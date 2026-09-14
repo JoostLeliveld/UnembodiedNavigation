@@ -119,16 +119,38 @@ def test_ff_fb_respects_arrival_or_corner_speed_cap():
     ) == pytest.approx(0.30)
 
 
-def test_ff_fb_does_not_brake_for_dense_intermediate_waypoint():
+def test_ff_fb_does_not_brake_when_target_does_not_require_capture():
     assert _ff_fb_arrival_speed_cap(
-        0.2, final_segment=False, v_max=1.0,
+        0.2, must_capture=False, v_max=1.0,
     ) == pytest.approx(1.0)
 
 
-def test_ff_fb_brakes_only_on_final_segment():
+def test_ff_fb_brakes_for_retained_corner_or_final_target():
     assert _ff_fb_arrival_speed_cap(
-        0.2, final_segment=True, v_max=1.0,
+        0.2, must_capture=True, v_max=1.0,
     ) == pytest.approx(0.3)
+
+
+def test_ff_fb_corner_capture_brakes_before_tight_ninety_degree_turn():
+    node = SimpleNamespace(
+        local_horizon=12,
+        dt=0.25,
+        v_max=1.0,
+        waypoint_spacing_m=0.2,
+        simple_tracker_yaw_gate_rad=0.60,
+        _waypoints=[(0.0, 0.0), (1.0, 0.0), (1.0, 2.0)],
+        _wp_idx=1,
+    )
+    node._waypoint_array = lambda state_xy: _tracking_waypoints(
+        node._waypoints, node._wp_idx, state_xy,
+    )
+    controls = EfeAgentNode._ff_fb_plan(
+        node, np.asarray((0.81, 0.0, 0.0)),
+    )
+    # At 19 cm from a retained corner the old preview-only rule allowed about
+    # 0.66 m/s.  Point-capture braking limits the immediately held command so
+    # estimator lag cannot carry the body through the outside of the turn.
+    assert controls[0, 0] <= 0.285 + 1.0e-9
 
 
 def test_ff_fb_path_guidance_preserves_centreline_speed():

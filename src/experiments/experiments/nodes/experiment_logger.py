@@ -1070,6 +1070,9 @@ class ExperimentLogger(Node):
         manifest_data['manager_visibility_sensor_model_sha256'] = _sha256_file(
             str(manager_settings.get('manager_visibility_sensor_model_path', '') or '')
         )
+        manifest_data['manager_perception_sensor_model_sha256'] = _sha256_file(
+            str(manager_settings.get('manager_perception_sensor_model_path', '') or '')
+        )
         manifest_data['manager_sensor_gate_config_sha256'] = _sha256_file(
             str(manager_settings.get('manager_sensor_gate_config_path', '') or '')
         )

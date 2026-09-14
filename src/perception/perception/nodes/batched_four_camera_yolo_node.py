@@ -9,8 +9,10 @@ batch by repeating a previous image.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import base64
 import math
 import json
+import zlib
 import uuid
 from pathlib import Path
 import threading
@@ -1338,6 +1340,7 @@ class BatchedFourCameraYoloNode(Node):
         mask_points = float(polygon.shape[0]) if mask_available and polygon is not None else math.nan
         height, width = image_bgr.shape[:2]
         visibility_grid = None
+        rgb_context_crop = None
         if bbox is not None and bool(selection.get("detected_after_threshold", False)):
             from unav_common.visibility_patch import visibility_grid_from_bgr_frame
             visibility_grid = tuple(
@@ -1345,6 +1348,21 @@ class BatchedFourCameraYoloNode(Node):
                     image_bgr, bbox
                 ).reshape(-1)
             )
+            bx0, by0, bx1, by1 = map(float, bbox)
+            bw, bh = max(bx1 - bx0, 1.0), max(by1 - by0, 1.0)
+            cx0 = max(0, int(math.floor(bx0 - 0.5 * bw)))
+            cy0 = max(0, int(math.floor(by0 - 0.5 * bh)))
+            cx1 = min(width, int(math.ceil(bx1 + 0.5 * bw)))
+            cy1 = min(height, int(math.ceil(by1 + 0.5 * bh)))
+            if cx1 > cx0 and cy1 > cy0:
+                crop_rgb = cv2.cvtColor(
+                    image_bgr[cy0:cy1, cx0:cx1], cv2.COLOR_BGR2RGB
+                )
+                crop_rgb = cv2.resize(crop_rgb, (96, 96), interpolation=cv2.INTER_LINEAR)
+                crop_chw = np.ascontiguousarray(crop_rgb.transpose(2, 0, 1), dtype=np.uint8)
+                rgb_context_crop = base64.b64encode(
+                    zlib.compress(crop_chw.tobytes(), level=3)
+                ).decode("ascii")
         if math.isfinite(selected_u) and math.isfinite(selected_v) and height > 0 and width > 0:
             border_margin = float(
                 min(
@@ -1433,6 +1451,7 @@ class BatchedFourCameraYoloNode(Node):
         observation_message = self._observation_message(
             item.camera_id, message, source_batch_id=source_batch_id,
             visibility_grid=visibility_grid,
+            rgb_context_crop=rgb_context_crop,
         )
         try:
             output.diagnostics_publisher.publish(message)
@@ -1447,6 +1466,7 @@ class BatchedFourCameraYoloNode(Node):
         *,
         source_batch_id: str,
         visibility_grid: tuple[float, ...] | None = None,
+        rgb_context_crop: str | None = None,
     ) -> String:
         try:
             observation = self._camera_observation_from_diagnostics(
@@ -1459,7 +1479,8 @@ class BatchedFourCameraYoloNode(Node):
                                   source_frame_id=identity["source_frame_id"],
                                   capture_stamp_ns=identity["capture_stamp_ns"],
                                   detector_invocation_id=identity["detector_invocation_id"],
-                                  visibility_grid_16x16=visibility_grid)
+                                  visibility_grid_16x16=visibility_grid,
+                                  rgb_context_crop_96x96_zlib_b64=rgb_context_crop)
             message = String()
             message.data = observation.to_json()
             return message

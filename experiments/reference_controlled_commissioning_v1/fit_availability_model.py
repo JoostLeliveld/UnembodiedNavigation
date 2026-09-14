@@ -48,7 +48,7 @@ GP_IMPLEMENTATION = REPO / "src/reliability/reliability/bernoulli_gp.py"
 PROBABILITY_CLIP = (0.001, 0.999)
 CELL_SIZE_M = 0.20
 LATENT_VARIANCE = 4.0
-DEPLOYMENT_MODEL = "A2_gp_position_ls1.6"
+DEPLOYMENT_MODEL = "A2_gp_position_ls1.0"
 
 
 def sha256(path: Path) -> str:
@@ -164,11 +164,13 @@ def main() -> int:
     CANDIDATES = {
         "A0_camera_constant": None,
         "A1_gp_position_ls0.8": {"length_scale_m": 0.8, "uncertainty_penalty": 0.0},
-        "A2_gp_position_ls1.6": {"length_scale_m": 1.6, "uncertainty_penalty": 0.0},
-        "A3_gp_position_ls3.2": {"length_scale_m": 3.2, "uncertainty_penalty": 0.0},
-        "A4_gp_position_ls0.8_lcb0.5": {"length_scale_m": 0.8, "uncertainty_penalty": 0.5},
-        "A5_gp_position_ls1.6_lcb0.5": {"length_scale_m": 1.6, "uncertainty_penalty": 0.5},
-        "A6_gp_position_ls3.2_lcb0.5": {"length_scale_m": 3.2, "uncertainty_penalty": 0.5},
+        "A2_gp_position_ls1.0": {"length_scale_m": 1.0, "uncertainty_penalty": 0.0},
+        "A3_gp_position_ls1.6": {"length_scale_m": 1.6, "uncertainty_penalty": 0.0},
+        "A4_gp_position_ls3.2": {"length_scale_m": 3.2, "uncertainty_penalty": 0.0},
+        "A5_gp_position_ls0.8_lcb0.5": {"length_scale_m": 0.8, "uncertainty_penalty": 0.5},
+        "A6_gp_position_ls1.0_lcb0.5": {"length_scale_m": 1.0, "uncertainty_penalty": 0.5},
+        "A7_gp_position_ls1.6_lcb0.5": {"length_scale_m": 1.6, "uncertainty_penalty": 0.5},
+        "A8_gp_position_ls3.2_lcb0.5": {"length_scale_m": 3.2, "uncertainty_penalty": 0.5},
     }
     xy = np.asarray([[r["x"], r["y"]] for r in rows], dtype=float)
     model_cache: dict[tuple, dict] = {}
@@ -254,7 +256,7 @@ def main() -> int:
         "selected_model": chosen,
         "selection_basis": {
             "stage": "development",
-            "reason": "wider spatial support with improved development Brier score, log loss, and calibration error relative to the 0.8 m GP",
+            "reason": "1.0 m spatial length scale chosen during development review",
             "audit_opened": False,
         },
         "development_routes_unseen": development,

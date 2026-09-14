@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "kind": "frozen_navigation_route",
+  "task": "thesis09_aisle_to_crossaisle",
+  "route": [[-3.05, -5.2], [-3.05, -6.25], [10.8, -6.25], [10.8, 2.54], [10.6, 2.54]],
+  "note": "Physical driveability route shared unchanged by U1, U2, and U3."
+}

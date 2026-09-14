@@ -118,10 +118,18 @@ def _ff_fb_forward_speed(
 
 
 def _ff_fb_arrival_speed_cap(
-    target_distance_m: float, *, final_segment: bool, v_max: float,
+    target_distance_m: float, *, must_capture: bool, v_max: float,
 ) -> float:
-    """Brake for the mission endpoint, not for densified polyline samples."""
-    if not final_segment:
+    """Brake when the active target is a retained corner or mission endpoint.
+
+    The FF/FB tracker removes collinear densification points before calling
+    this helper.  Its remaining intermediate targets are therefore real route
+    corners, not arbitrary 0.2 m samples.  Entering a sharp corner at the
+    preview limiter's nonzero corner speed left too much distance for a held
+    250 ms command plus drivetrain lag; the belief could switch segments while
+    the physical robot overshot the driveable support boundary.
+    """
+    if not must_capture:
         return float(v_max)
     return float(min(v_max, max(0.08, 1.5 * float(target_distance_m))))
 
@@ -1698,7 +1706,7 @@ class EfeAgentNode(UnicyclePlannerNode):
             )
             arrival_cap = _ff_fb_arrival_speed_cap(
                 target_dist,
-                final_segment=final_segment,
+                must_capture=capture_target,
                 v_max=v_max,
             )
             # For unicycle motion lateral acceleration is v*|w|. This keeps a

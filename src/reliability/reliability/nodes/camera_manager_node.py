@@ -93,18 +93,26 @@ COMMISSIONED_COVARIANCE = "commissioned_sigma_px"
 COMMISSIONED_WORLD_COVARIANCE = "commissioned_world_r"
 COMMISSIONED_REFERENCE_COVARIANCE = "commissioned_reference_r"
 COMMISSIONED_VISIBILITY_COVARIANCE = "commissioned_visibility_r"
+COMMISSIONED_PERCEPTION_COVARIANCE = "commissioned_perception_r"
 SUPPORTED_COVARIANCE_PROFILES = (COMMISSIONED_COVARIANCE, COMMISSIONED_WORLD_COVARIANCE,
                                  COMMISSIONED_REFERENCE_COVARIANCE,
-                                 COMMISSIONED_VISIBILITY_COVARIANCE)
+                                 COMMISSIONED_VISIBILITY_COVARIANCE,
+                                 COMMISSIONED_PERCEPTION_COVARIANCE)
 #: How a detector's box is turned into a statement about where the robot is.
 OBSERVATION_MODEL_RAW_BOX = "raw_box"
 #: The packaged neural box-feature correction, run forward on runtime-only inputs.
 OBSERVATION_MODEL_LEARNED_NN = "learned_nn"
 OBSERVATION_MODEL_VISIBILITY_PATCH = "visibility_patch"
+OBSERVATION_MODEL_HIERARCHICAL_RESIDUAL = "hierarchical_residual"
+OBSERVATION_MODEL_SPATIAL_RESIDUAL = "spatial_residual"
+OBSERVATION_MODEL_JOINT_RGB_GAUSSIAN = "joint_rgb_gaussian"
 SUPPORTED_OBSERVATION_MODELS = (
     OBSERVATION_MODEL_RAW_BOX,
     OBSERVATION_MODEL_LEARNED_NN,
     OBSERVATION_MODEL_VISIBILITY_PATCH,
+    OBSERVATION_MODEL_HIERARCHICAL_RESIDUAL,
+    OBSERVATION_MODEL_SPATIAL_RESIDUAL,
+    OBSERVATION_MODEL_JOINT_RGB_GAUSSIAN,
 )
 
 
@@ -688,6 +696,8 @@ class CameraManagerNode(Node):
         self.declare_parameter("learned_correction_expected_sha256", "")
         self.declare_parameter("visibility_sensor_model_path", "")
         self.declare_parameter("visibility_sensor_model_expected_sha256", "")
+        self.declare_parameter("perception_sensor_model_path", "")
+        self.declare_parameter("perception_sensor_model_expected_sha256", "")
         self.declare_parameter("commissioned_world_covariance_expected_sha256", "")
         self.declare_parameter("min_spatial_trust", defaults.min_spatial_trust)
         self.declare_parameter("min_association_confidence", defaults.min_association_confidence)
@@ -964,7 +974,10 @@ class CameraManagerNode(Node):
             self.get_parameter("commissioned_per_camera_sigma").value)
         stated = float(self.get_parameter("commissioned_sigma_px").value)
         path = str(self.get_parameter("commissioned_calibration_path").value).strip()
-        if self.covariance_profile == COMMISSIONED_VISIBILITY_COVARIANCE:
+        if self.covariance_profile in (
+            COMMISSIONED_VISIBILITY_COVARIANCE,
+            COMMISSIONED_PERCEPTION_COVARIANCE,
+        ):
             # Used only to establish the raw ground intersection. The selected candidate's
             # matched world-plane covariance replaces it before fusion.
             self.commissioned_sigma_px = 1.0
@@ -995,7 +1008,10 @@ class CameraManagerNode(Node):
                     f"per-camera detector noise in use: {listing} px "
                     f"(the pooled {self.commissioned_sigma_px:.4f} px is the fallback "
                     f"for any camera commissioning did not measure)")
-        if self.covariance_profile != COMMISSIONED_VISIBILITY_COVARIANCE:
+        if self.covariance_profile not in (
+            COMMISSIONED_VISIBILITY_COVARIANCE,
+            COMMISSIONED_PERCEPTION_COVARIANCE,
+        ):
             self.get_logger().info(
                 f"covariance_profile={self.covariance_profile}: R_pix = "
                 f"({self.commissioned_sigma_px:.4f} px)^2 I from {source}, pushed through "
@@ -1094,6 +1110,7 @@ class CameraManagerNode(Node):
         #: Set only for the learned models; None means no learned correction is loaded.
         self.learned_correction = None
         self.visibility_sensor_model = None
+        self.perception_sensor_model = None
         self.reference_calibration = None
         self._learned_gate_counts = collections.Counter()
         if self.observation_model == OBSERVATION_MODEL_LEARNED_NN:
@@ -1134,6 +1151,37 @@ class CameraManagerNode(Node):
             self.get_logger().info(
                 "loaded image-residual correction and matched covariance from "
                 f"{artifact}; sha256={self.visibility_sensor_model.sha256}"
+            )
+        perception_models = {
+            OBSERVATION_MODEL_HIERARCHICAL_RESIDUAL,
+            OBSERVATION_MODEL_SPATIAL_RESIDUAL,
+            OBSERVATION_MODEL_JOINT_RGB_GAUSSIAN,
+        }
+        if self.observation_model in perception_models:
+            if self.covariance_profile != COMMISSIONED_PERCEPTION_COVARIANCE:
+                raise ValueError(
+                    f"observation_model={self.observation_model} requires "
+                    "covariance_profile=commissioned_perception_r"
+                )
+            artifact = str(self.get_parameter("perception_sensor_model_path").value or "")
+            if not artifact:
+                raise ValueError(f"observation_model={self.observation_model} needs perception_sensor_model_path")
+            from reliability.commissioned_perception import CommissionedPerceptionSensorModel
+            self.perception_sensor_model = CommissionedPerceptionSensorModel(
+                artifact,
+                expected_sha256=(
+                    str(self.get_parameter("perception_sensor_model_expected_sha256").value)
+                    or None
+                ),
+            )
+            if self.perception_sensor_model.method != self.observation_model:
+                raise ValueError(
+                    f"configured observation model {self.observation_model} does not match "
+                    f"artifact method {self.perception_sensor_model.method}"
+                )
+            self.get_logger().info(
+                f"loaded commissioned perception method {self.observation_model} from "
+                f"{artifact}; sha256={self.perception_sensor_model.sha256}"
             )
         if self.covariance_profile == COMMISSIONED_REFERENCE_COVARIANCE:
             if self.observation_model != OBSERVATION_MODEL_LEARNED_NN:
@@ -1505,7 +1553,30 @@ class CameraManagerNode(Node):
             if prior_pose is None or bootstrap_prior_used:
                 self._bootstrap_camera_ids.add(camera_id)
 
-            if self.visibility_sensor_model is not None:
+            if self.perception_sensor_model is not None:
+                try:
+                    camera_model = self.camera_models[camera_id]
+                    world_xy, covariance_m2 = self.perception_sensor_model.correct_and_covariance(
+                        camera_id,
+                        world_xy,
+                        contract.bbox_xyxy,
+                        float(contract.detector_score),
+                        contract.rgb_context_crop_96x96_zlib_b64,
+                        camera_model.cam_pos,
+                        (camera_model.img_width, camera_model.img_height),
+                    )
+                except (ValueError, TypeError, ArithmeticError) as exc:
+                    self._gate_rejections["perception_model_unavailable"] += 1
+                    self._measurement_model_status_by_camera[camera_id] = (
+                        "refused_perception_model_unavailable"
+                    )
+                    self._camera_mapping_reasons[camera_id] = (
+                        f"perception_model_unavailable:{type(exc).__name__}"
+                    )
+                    continue
+                source = f"{source}:{self.observation_model}"
+                measurement_model_status = f"{self.observation_model}_applied"
+            elif self.visibility_sensor_model is not None:
                 if contract.visibility_grid_16x16 is None or prior_pose is None:
                     reason = (
                         "visibility_grid_unavailable" if contract.visibility_grid_16x16 is None
