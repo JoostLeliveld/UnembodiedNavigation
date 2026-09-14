@@ -1,0 +1,124 @@
+{
+  "schema_version": 7,
+  "status": "frozen_before_route_selection",
+  "supersedes": "experiments/reference_controlled_commissioning_v1/final_route_selection_protocol_v6.json",
+  "amendment_reason": "The accepted single-cell global route exposed a global-to-local handoff bug before Gazebo: the old extractor selected 1 s global states and could therefore emit 1 m gaps despite a declared 0.20 m spacing. It now interpolates at at most 0.20 m, the local controller caps travel at the active waypoint, and local swept-clearance certification enforces the same 0.10 m margin. The sparse-route diagnostic is excluded.",
+  "failed_execution_evidence": "logs/studies/reference_controlled_commissioning_v1/final_navigation_campaign_20260913_v4",
+  "purpose": "Select one hash-bound route for each task and each of the four commissioned planner arms with the launch-resolved CasADi/L-BFGS-B global planner at 1.0 m/s, 5 Hz detection and calibrated 1 Hz fusion.",
+  "evidence_role": "Final route selection for the four-arm thesis navigation campaign after closing the omitted-prop collision geometry. No commissioning audit labels or scientific navigation outcomes are inputs.",
+  "route_selection_config": "experiments/reference_controlled_commissioning_v1/final_route_selection_config_v6.yaml",
+  "route_selection_config_sha256": "de9dd9cca687b1d6a8256dc0db794fd14f999177a1a3972b8236dc60ee9333d4",
+  "tasks_yaml": "experiments/thesis_pipeline_lock/stage09_navigation_tasks.yaml",
+  "tasks_yaml_sha256": "3083cc22b283194c4c1bfac9d8b487ecb32fcaf362aa72fa5fb80ed0125bdf94",
+  "selector_path": "experiments/icra_commissioning/network_route_probe.py",
+  "selector_sha256": "183c197f2e72c19484f9175ea2eb37fd480dc1af0d4f360b65d222f9b925f479",
+  "launch_resolution": {
+    "path": "src/experiments/experiments/core/visibility_launch_common.py",
+    "sha256": "a1ee7a4d1d3bae5d04acb181903d21d366d3892b04be41683b97a5693c43632d"
+  },
+  "world_profile": {
+    "path": "src/experiments/config/world_profiles.yaml",
+    "sha256": "742cb32c69ea9f48ecdf1ce899e9bf8cd45949be863312369b85cb67a79405cd"
+  },
+  "planner_source_tree": {
+    "roots": [
+      "src/planning/planning",
+      "src/unav_common/unav_common"
+    ],
+    "sha256": "8d352f86114180a14a4c80025a00f543f4a993d449a0a7ad909e9d3ff930122c"
+  },
+  "base_selector": {
+    "path": "experiments/thesis_pipeline_lock/select_stage09_routes_v4.py",
+    "sha256": "2a9e91344f183c9d9b8271a6a950b20854203c54bd4179ae1bc6a1a6da57b71c"
+  },
+  "route_probe": {
+    "path": "experiments/icra_commissioning/network_route_probe.py",
+    "sha256": "183c197f2e72c19484f9175ea2eb37fd480dc1af0d4f360b65d222f9b925f479"
+  },
+  "world": {
+    "path": "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+    "sha256": "1c7e913d6478039b4c02bb7e3b680dcc52626c4963b9fcc6bf8f1daff1f7c331"
+  },
+  "planning_fields": {
+    "C00": {
+      "meaning": "constant per-camera availability and constant per-camera covariance",
+      "path": "logs/studies/reference_controlled_commissioning_v1/final_planner_fields_20260913_v1/c00_planner_field.npz",
+      "sha256": "9623f47fcde938ed4cb1b17f1f517136bf73ab366a8367e501e857ef951ceec5"
+    },
+    "C01": {
+      "meaning": "constant per-camera availability and commissioned spatial covariance",
+      "path": "logs/studies/reference_controlled_commissioning_v1/final_planner_fields_20260913_v1/c01_planner_field.npz",
+      "sha256": "3c5dc899b134631c9504a61e4cf4646a6fbad0b2795932fa07b47988b8231fb3"
+    },
+    "C10": {
+      "meaning": "commissioned Bernoulli-GP availability and constant per-camera covariance",
+      "path": "logs/studies/reference_controlled_commissioning_v1/final_planner_fields_20260913_v1/c10_planner_field.npz",
+      "sha256": "c1f1b4a3ee02b56e6b24e5e20a89945192b8fcd7323d8f0cdce0eff36e5509c4"
+    },
+    "C11": {
+      "meaning": "commissioned Bernoulli-GP availability and commissioned spatial covariance",
+      "path": "logs/studies/reference_controlled_commissioning_v1/final_planner_fields_20260913_v1/c11_planner_field.npz",
+      "sha256": "1b1872ba7628c58a631ee82135f5958b42aae0f37767670d6d195b55c4b6f71a"
+    }
+  },
+  "arm_order": [
+    "C00",
+    "C01",
+    "C10",
+    "C11"
+  ],
+  "task_order": [
+    "thesis09_west_to_east_north",
+    "thesis09_east_to_west_south",
+    "thesis09_aisle_to_crossaisle",
+    "thesis09_south_to_north_central"
+  ],
+  "selection_seed": 91440,
+  "nominal_route_prior": {
+    "xy_std_m": 0.05,
+    "yaw_std_deg": 5.0,
+    "rationale": "Fixed route-design prior shared by all arms; not estimated from final audit or runtime outcomes."
+  },
+  "candidate_generation": "Generate one deterministic set per task from lane-graph polylines, vertical traversable-rectangle centrelines, endpoint-lane variants, and combined start-and-goal lane-centre variants.",
+  "common_feasibility": {
+    "definition": "Static swept rectangular-body clearance is checked against both the driveable-lane union and the complete physical collision scene, including separately included props. Bounded-unicycle swept rollout and terminal-goal reachability at 1.0 m/s must also agree across all four arms.",
+    "required_collision_prisms": [
+      "bin_office"
+    ],
+    "centerline_clearance_m": 0.25,
+    "minimum_static_body_clearance_m": 0.1,
+    "robot_length_m": 0.8,
+    "robot_width_m": 0.55,
+    "endpoint_tolerance_m": 0.0,
+    "sample_step_m": 0.04,
+    "shared_setting_keys": [
+      "driveable_geometry_json",
+      "collision_geometry_json",
+      "horizon",
+      "dt",
+      "v_max",
+      "w_max",
+      "optimizer_terminal_goal_tolerance_m",
+      "robot_collision_radius_m",
+      "nogo_mode",
+      "nogo_safe_distance",
+      "use_belief_nogo_cost"
+    ],
+    "optimizer_transition_check": "CasADi state costs sample constant-twist transitions at no more than 0.20 m; release admission independently checks the swept rectangular body at 0.04 m."
+  },
+  "selection_rule": "For each task, establish one common physically feasible candidate subset. Select the minimum exact expected-belief rollout cost separately for each arm, using candidate name only as an exact-cost tie break.",
+  "execution_design": "Hash-bind each selected route. Matched stochastic seeds execute routes at 1.0 m/s with 5 Hz detection and 1 Hz camera-manager fusion, without rerunning the global optimizer.",
+  "final_audit_firewall": "Final-audit labels, residuals, and outcomes do not enter candidate generation, feasibility, route scoring, or route selection. The observed v2 collision is used only to close the missing physical-geometry source.",
+  "runtime_estimator_contract": {
+    "mean_chain": "M3_box_mlp plus gated M4 16x16 visibility residual",
+    "runtime_covariance": "R4_image_conditioned_scale fitted to M4-corrected residuals",
+    "sensor_model_path": "logs/studies/reference_controlled_commissioning_v1/visibility_patch_covariance_20260913_v6_runtime_query/commissioned_visibility_runtime_model.json",
+    "sensor_model_sha256": "f3d976c58cb5679440fd52ba6377572dc72290fe886faef51398679a3ba813f5",
+    "detector_rate_hz": 5.0,
+    "fusion_rate_hz": 1.0
+  },
+  "route_freezer": {
+    "path": "experiments/reference_controlled_commissioning_v1/freeze_single_casadi_route.py",
+    "sha256": "476c89b6736649b163f42011758a51751adbdbd63dabbd8af7de7601f325b5d5"
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "schema": "thesis_stage09_execution_protocol.v7",
+  "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
+  "status": "frozen_before_runtime_preflight_v14",
+  "frozen_at": "2026-09-10",
+  "supersedes": {
+    "path": "experiments/thesis_pipeline_lock/stage09_execution_protocol_v6.json",
+    "sha256": "290d669fd28cc78be1c65c97881663ded40287f130a0396a311c9860e04d01bf"
+  },
+  "unchanged_design": {
+    "source": "experiments/thesis_pipeline_lock/stage09_execution_protocol_v6.json",
+    "route_selection_manifest_path": "logs/thesis_final_pipeline_v1/stage09_navigation/route_selection_v4/manifest.json",
+    "route_selection_manifest_sha256": "8697a14efa3b542db7135795bd528bf9b75e714f45784a6f00fe08a8b8112eae",
+    "selection_digest": "cbc6995b274e438d5f388839303067f3d4a8b2efb84c530819119f070e4b8abc",
+    "paired_tasks": [
+      "thesis09_west_to_east_north",
+      "thesis09_east_to_west_south",
+      "thesis09_aisle_to_crossaisle"
+    ],
+    "matched_seeds": [900, 901, 902, 903, 904],
+    "planned_runs": 30,
+    "detector_checkpoint_sha256": "1e99afb5361a7c2599cb3f2863ebb04fd6f65bc1ee23996b989c9bba8b004f13",
+    "detector_imgsz": 960,
+    "measurement_model_sha256": "249106c706b5e6dd3b10ab75abcfa54604c16b2fa987f38a5c84af58a2da9f4a",
+    "availability_model_sha256": "3dfa83ad0f9d8838bd6b5085e33c20fe89eb8c4334fa17d1d797bad69b1510e7",
+    "heading_update_mode": "camera_xy_only",
+    "state_reanchor_m": 0,
+    "state_max_predict_dt_s": 1.5,
+    "detector_gate_route_controller_noise_and_statistical_design_changed": false
+  },
+  "preflight_v13_diagnostic": {
+    "role": "non-inferential implementation, evidence and safety preflight",
+    "campaign_outcome": "infra_invalid",
+    "physical_outcome": "stuck_without_collision",
+    "campaign_log_path": "logs/thesis_final_pipeline_v1/stage09_navigation/preflight_v13/campaign_log.json",
+    "campaign_log_sha256": "de26c2f3a31a2b1bf30918d1278d4729aa9c757c6df6713ad40cc6c67401666a",
+    "release_report_path": "logs/thesis_final_pipeline_v1/stage09_navigation/preflight_v13/release_report.json",
+    "release_report_sha256": "45d423c761fd2667d4fe6605c4521ab84d01d76fa8ee233e46a95f3cd6bfac49",
+    "measurement_diagnostic": {
+      "belief_median_m": 0.012757485683874076,
+      "belief_p95_m": 0.42595800599154904,
+      "belief_max_m": 0.4259580059916493,
+      "fused_correction_median_m": 0.00807913050225987,
+      "fused_correction_p95_m": 0.023846084198366233,
+      "accepted_fraction": 0.9953488372093023,
+      "longest_accepted_correction_gap_s": 14.354000000000013,
+      "final_goal_distance_m": 11.507131451496617
+    },
+    "failure_chain": "V13 crossed the V12 odometry-gap failure point with a valid belief. During the first rapid corner, the planner/controller used the configured map-frame odometry heading while the canonical belief prediction sent to the manager retained recursively propagated heading. The streams differed by about 0.4 rad. A valid correction at 111.485 s was rejected by the unchanged NIS gate; later correct detector boxes were then refused by the unchanged hull width/height gate because it received the inconsistent heading. The position belief drifted to 0.426 m error, the predicted body clearance became -0.013 m, and the controller safely stopped. This was a cross-node state-definition defect, not permission to relax the detector, hull, NIS, motion-support or clearance gates.",
+    "journal_finding": "The manager appended its last ordinary event but could not append session_stopped after the launch service invalidated the ROS context; its shutdown path still consulted the ROS clock before the journal append.",
+    "inferential_use": "none"
+  },
+  "canonical_heading_publication_amendment": {
+    "rule": "When heading_update_mode is camera_xy_only, the planner input, canonical belief-state envelope and compatibility belief pose all use the same source-time map-frame odometry heading and its declared drift covariance. The adapter changes neither x/y nor motion support and does not use camera data or ground truth to estimate yaw.",
+    "implementation_path": "src/planning/planning/nodes/unicycle_planner_node.py",
+    "implementation_sha256": "4533ca56b2a9a384b11e8eb8d14adb1b79fc135bca1ec61be76373463a9b8363",
+    "primary_test_path": "tests/planning/test_timing_publication_invariants.py",
+    "primary_test_sha256": "d1e203350984cdd8018ab3fa17140b6926768146e97cdd233c408be6c611fdfb",
+    "transaction_fixture_path": "tests/planning/test_runtime_transactions.py",
+    "transaction_fixture_sha256": "c607f9e1906ecc81570c71bc97f5cd5a0ae0e027bb33acdd507ca719069d1c1a",
+    "parameter_change": "none"
+  },
+  "ros_independent_journal_close_amendment": {
+    "rule": "The detector and manager append session_stopped directly to their durable journals using the last observed simulation-clock high-water mark. The terminal append does not query a ROS clock or publish to DDS after shutdown has started.",
+    "manager_implementation_path": "src/reliability/reliability/nodes/camera_manager_node.py",
+    "manager_implementation_sha256": "0c9a20bdf7a8256cf13c80070609cbadcc1aa12286ba3cc91b61a64fc96851da",
+    "detector_implementation_path": "src/perception/perception/nodes/batched_four_camera_yolo_node.py",
+    "detector_implementation_sha256": "da940a42bd15a7ee93fe5d13a92d85312acf7af624bb010d16baefe874f6fd32",
+    "manager_test_path": "tests/planning/test_timing_publication_invariants.py",
+    "manager_test_sha256": "d1e203350984cdd8018ab3fa17140b6926768146e97cdd233c408be6c611fdfb",
+    "detector_test_path": "tests/perception/test_detector_outcome_transport_04.py",
+    "detector_test_sha256": "6cdb8431c35c0e4d0b12060c4370e2c8d1aecd3d5f5509bf0fb648247fcc3117"
+  },
+  "retained_amendments": {
+    "execution_protocol_v6_path": "experiments/thesis_pipeline_lock/stage09_execution_protocol_v6.json",
+    "execution_protocol_v6_sha256": "290d669fd28cc78be1c65c97881663ded40287f130a0396a311c9860e04d01bf",
+    "schema9_logger_path": "src/experiments/experiments/nodes/experiment_logger.py",
+    "schema9_logger_sha256": "900f9b34d5342339910cc959f17965c7902191ef5aba01541de8b273bf2f04f6",
+    "aligned_loader_path": "experiments/fusion_on_fixed_routes/aligned.py",
+    "aligned_loader_sha256": "d3ee8c82f273ad2fe8b1c3bc4497861ad31f1ede4319b2270a741357c1bb0429"
+  },
+  "verification": {
+    "command": "MPLCONFIGDIR=/tmp/thesis_stage09_mpl python3 -m pytest -q tests/planning tests/reliability tests/perception tests/experiments/test_launch_config_semantics.py tests/experiments/test_logger_schema.py tests/experiments/test_logger_time_alignment.py tests/experiments/test_alignment_repairs_11.py tests/sim/test_thesis_pipeline_lock.py",
+    "result": "1281 passed, 4 skipped",
+    "ros_build_command": "colcon build --base-paths src --packages-select unav_common planning reliability perception --symlink-install",
+    "ros_packages_rebuilt": ["unav_common", "planning", "reliability", "perception"],
+    "dry_run": "1 preflight run and 30 final runs resolved; no process launched"
+  },
+  "execution": {
+    "runtime_preflight_config_path": "experiments/thesis_pipeline_lock/stage09_navigation_runtime_preflight_v12.yaml",
+    "runtime_preflight_config_sha256": "a6db89b26e4b625f0cbe9e0675470df99f58cf114b4981b56d273a4adf168cf9",
+    "runtime_preflight_log_root": "logs/thesis_final_pipeline_v1/stage09_navigation/preflight_v14",
+    "final_campaign_config_path": "experiments/thesis_pipeline_lock/stage09_navigation_frozen_routes_v9.yaml",
+    "final_campaign_config_sha256": "3bcad117ea611242403f5835e0761d7a411d9d5b8caef08a8921ff384d71cdfa",
+    "final_campaign_log_root": "logs/thesis_final_pipeline_v1/stage09_navigation/final_campaign_v6"
+  },
+  "preflight_release_gate": {
+    "analysis_interval": "first_cmd_stamp through stop_stamp, inclusive",
+    "reference_alignment": "own-time bounded interpolation of logged ground truth with max_reference_gap_s=0.15; highest explicit anchor revision per belief state timestamp",
+    "quantitative": {
+      "fused_correction_p95_m_max": 0.15,
+      "fused_correction_above_0_25_fraction_max": 0.01,
+      "belief_p95_m_max": 0.25,
+      "belief_max_m_max": 0.5,
+      "accepted_fraction_of_fresh_corrections_min": 0.8,
+      "longest_accepted_correction_gap_s_max": 5.0
+    },
+    "required": [
+      "bootstrap evidence records one admitted camera plus declared start prior",
+      "goal reached without collision, timeout, stuck stop or integrity failure",
+      "ground-truth final goal distance at most 0.35 m",
+      "all quantitative gates pass",
+      "correction assimilation verified",
+      "detector and manager journals end in verified session_stopped",
+      "attempt evidence complete",
+      "manifest records the exact five-camera roster and unchanged runtime method",
+      "schema-9 belief ledger valid",
+      "terminal stop and producer quiescence verified",
+      "no logger finalization exception"
+    ],
+    "failure_policy": "Do not launch the final campaign unless every gate passes. Preserve failure and freeze another amendment before retrying."
+  },
+  "analysis_contract": "docs/localization_metrics.md and docs/localization_metrics_registry.json",
+  "prohibitions": [
+    "Do not use any preflight as navigation comparison evidence.",
+    "Do not lower detector, image-border, hull, NIS or Stage-08 route-support thresholds.",
+    "Do not change the 1.5-s measured-motion support gap.",
+    "Do not re-anchor from a single fused event.",
+    "Do not use ground truth online.",
+    "Do not edit the reused V12 preflight or final V9 campaign configs."
+  ]
+}

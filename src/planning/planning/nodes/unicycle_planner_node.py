@@ -176,6 +176,7 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('camera_network_objective', 'legacy_pixel_chart')
         _declare_if_not('network_goal_std_m', 0.35)
         _declare_if_not('kouw_et1_ambiguity', True)
+        _declare_if_not('network_goal_std_start_m', 5.0)
         _declare_if_not('network_goal_std_start_m', -1.0)
         _declare_if_not('camera_network_updates_per_step', 1)
         # The planner models the robot as a disc, so this is the CIRCUMSCRIBED

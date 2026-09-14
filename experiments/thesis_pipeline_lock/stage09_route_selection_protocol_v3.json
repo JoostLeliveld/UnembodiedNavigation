@@ -1,0 +1,74 @@
+{
+  "schema_version": 3,
+  "status": "frozen_before_navigation_execution",
+  "supersedes": "experiments/thesis_pipeline_lock/stage09_route_selection_protocol_v2.json",
+  "reason_for_version": "The non-inferential v2 runtime preflight exposed a 3.0 m commissioned-availability gap on the central route. Camera corrections ended before the gap, dead reckoning drifted laterally, the belief-relative hull gate could not reacquire the displaced robot, and physical contact followed. V2 also averaged Q1 over heading and allowed its only geometry-feasible candidate to win despite no continuously commissioned observation support. No v2 navigation run is included in the inferential campaign.",
+  "purpose": "Choose deterministic Q0 and Q1 routes before stochastic execution while distinguishing geometric reachability from commissioned camera-network support.",
+  "route_selection_config": "experiments/thesis_pipeline_lock/stage09_navigation_campaign.yaml",
+  "route_selection_config_sha256": "1590cea0fcd527d47023db7eaafd79b7aa496cc48c7d38b0363846da7d0b931b",
+  "tasks_yaml": "experiments/thesis_pipeline_lock/stage09_navigation_tasks.yaml",
+  "tasks_yaml_sha256": "3083cc22b283194c4c1bfac9d8b487ecb32fcaf362aa72fa5fb80ed0125bdf94",
+  "selector_sha256": "9752af6ac72b682b57ada7cad4be92859ad20877baf60c55d25baa2a085f124f",
+  "route_probe": {
+    "path": "experiments/icra_commissioning/network_route_probe.py",
+    "sha256": "183c197f2e72c19484f9175ea2eb37fd480dc1af0d4f360b65d222f9b925f479"
+  },
+  "world": {
+    "path": "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+    "sha256": "1c7e913d6478039b4c02bb7e3b680dcc52626c4963b9fcc6bf8f1daff1f7c331"
+  },
+  "availability_fields": {
+    "P0": {
+      "meaning": "constant future-availability control used by the unchanged expected-belief objective",
+      "path": "logs/thesis_final_pipeline_v1/stage09_navigation/planner_fields/q0_availability.npz",
+      "sha256": "5e9f16e73d6702b8b5aedcfacaa44ff9be3faca0126462b08964c0ca806d25cb"
+    },
+    "P1": {
+      "meaning": "commissioned geometry-dependent future availability used by the unchanged expected-belief objective",
+      "path": "logs/thesis_final_pipeline_v1/stage09_navigation/planner_fields/q1_availability.npz",
+      "sha256": "5bcdd73242153b96ac442cbf9cd91bfe04b7b31946151d8d61378cde8767d539"
+    }
+  },
+  "availability_support_gate": {
+    "applies_to_arm": "P1",
+    "model_path": "logs/thesis_final_pipeline_v1/stage08_availability/run_v2/availability_model.json",
+    "model_sha256": "3dfa83ad0f9d8838bd6b5085e33c20fe89eb8c4334fa17d1d797bad69b1510e7",
+    "master_capture_index": "logs/thesis_final_pipeline_v1/master_capture/capture_index.csv",
+    "master_capture_index_sha256": "9f36617ffd25c8b9ded1160f7bc923baf232caeed0cb6a9f9f395b9bcacabe34",
+    "minimum_single_camera_probability": 0.5,
+    "sample_step_m": 0.1,
+    "heading_step_deg": 5.0,
+    "rule": "At every sampled segment pose and every sampled in-place corner rotation, at least one individual camera must have frozen Stage-08 probability q_c >= 0.5 for supplying an admitted localization measurement. Use max_c q_c directly; do not assume independence across cameras or repeated frames.",
+    "threshold_rationale": "Q1 is a calibrated logistic classifier for the event that one camera supplies an admitted localization measurement. The 0.5 decision boundary is fixed without navigation outcomes and avoids converting temporally correlated low probabilities into a misleading eventual-success claim."
+  },
+  "arm_order": [
+    "P0",
+    "P1"
+  ],
+  "task_order": [
+    "thesis09_west_to_east_north",
+    "thesis09_east_to_west_south",
+    "thesis09_aisle_to_crossaisle",
+    "thesis09_south_to_north_central"
+  ],
+  "selection_seed": 900,
+  "nominal_route_prior": {
+    "xy_std_m": 0.05,
+    "yaw_std_deg": 5.0,
+    "rationale": "A fixed route-design prior shared by both arms; it is not estimated from the final audit or runtime outcomes."
+  },
+  "candidate_generation": "Use all deterministic lane-graph polylines, vertical traversable-rectangle centreline candidates, and geometry-valid variants that shift an endpoint vertical leg to a lane centre so the initial turn is not forced beside a pallet. Candidate generation uses only the registered driveable-region union.",
+  "selection_rule": "Both arms first require at least 0.10 m static clearance for the 0.80 m by 0.55 m rectangular body along segments, the initial turn, and corner rotations. Both then require the runtime bounded-unicycle rollout to keep its swept rectangular footprint valid and end within 0.35 m of the task goal. P1 additionally requires continuous heading-aware Stage-08 support. Among eligible candidates minimize the arm's unchanged metric_expected_belief total cost; use candidate name only as an exact-cost tie break. P0 deliberately remains availability-agnostic and receives no support gate.",
+  "route_gate": {
+    "centerline_clearance_m": 0.25,
+    "minimum_static_body_clearance_m": 0.1,
+    "robot_length_m": 0.8,
+    "robot_width_m": 0.55,
+    "endpoint_tolerance_m": 0.0,
+    "sample_step_m": 0.04,
+    "additional_gate": "The selector also requires the runtime swept rectangular-footprint rollout; centreline and sampled body clearance are necessary but not substitutes for that rollout."
+  },
+  "infeasible_task_policy": "If P1 has no continuously commissioned route, record commissioning_refused and exclude that task from paired stochastic execution. Report the refusal as a camera-network coverage limitation; do not relabel it as navigation success or failure.",
+  "execution_design": "Execute only tasks with selected routes for both arms. Five matched stochastic seeds replay each hash-bound route. No global optimizer runs during a replicate. The central task is retained in route-selection reporting even if P1 refuses it.",
+  "final_audit_firewall": "The final detector/localization audit decides release only. Its labels, residuals, and outcomes do not enter candidate generation, support scoring, route scoring, or route selection."
+}

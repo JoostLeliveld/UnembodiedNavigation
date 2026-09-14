@@ -1,0 +1,52 @@
+tasks:
+  warehouse_v2.world.sdf:
+  - name: thesis09_west_to_east_north
+    description: West dock to east north cross-aisle; long route with camera handovers and occluded alternatives.
+    start:
+      x: -7.6
+      y: -8.5
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 10.6
+      y: 6.5
+  - name: thesis09_east_to_west_south
+    description: Reverse-direction counterpart, preventing a single approach direction from defining the result.
+    start:
+      x: 10.6
+      y: 6.5
+      z: 0.05
+      yaw: -2.45
+    goal:
+      x: -7.6
+      y: -8.5
+  - name: thesis09_aisle_to_crossaisle
+    description: Interior aisle mouth to east cross-aisle; tests a shorter route-choice problem.
+    start:
+      x: -3.05
+      y: -5.2
+      z: 0.05
+      yaw: 1.5708
+    goal:
+      x: 10.6
+      y: 2.54
+  - name: thesis09_south_to_north_central
+    description: Central south-to-north control traverse with comparatively direct geometry.
+    start:
+      x: 0.55
+      y: -7.5
+      z: 0.05
+      yaw: 1.5708
+    goal:
+      x: 0.55
+      y: 8.2
+  - name: thesis09_blind_corridor_west_to_east
+    description: North-west dock to the east cross-aisle. The shortest lane-graph route runs 5.8 m through the lane_08 stretch that no camera observes; a 2.4 m longer alternative stays covered.
+    start:
+      x: -10.7
+      y: 8.55
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 9.6
+      y: -1.4

@@ -87,6 +87,8 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     # (goal_success_radius). At 0.15 the risk term is ~5x stronger and the
     # objective collapses toward shortest path. See docs/PLANNER_LOCK.md.
     'network_goal_std_m': '0.35',
+    # Goal-prior anneal start; see base_planner. -1 disables.
+    'network_goal_std_start_m': '5.0',
     'network_goal_std_start_m': '-1.0',
     'camera_network_updates_per_step': '1',
     'optimizer_control_block_steps': '1',

@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "status": "frozen_before_navigation_execution",
+  "purpose": "Choose one deterministic Q0 and Q1 route per registered task without using final-audit labels or navigation outcomes.",
+  "route_selection_config": "experiments/thesis_pipeline_lock/stage09_navigation_campaign.yaml",
+  "route_selection_config_sha256": "1590cea0fcd527d47023db7eaafd79b7aa496cc48c7d38b0363846da7d0b931b",
+  "tasks_yaml": "experiments/thesis_pipeline_lock/stage09_navigation_tasks.yaml",
+  "tasks_yaml_sha256": "3083cc22b283194c4c1bfac9d8b487ecb32fcaf362aa72fa5fb80ed0125bdf94",
+  "selector_sha256": "3a96e83167a0563e38ad4f1012e99f8383e4ffb7deb0691d6e791174c9b218bb",
+  "world": {
+    "path": "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+    "sha256": "1c7e913d6478039b4c02bb7e3b680dcc52626c4963b9fcc6bf8f1daff1f7c331"
+  },
+  "availability_fields": {
+    "P0": {
+      "meaning": "constant future availability control",
+      "path": "logs/thesis_final_pipeline_v1/stage09_navigation/planner_fields/q0_availability.npz",
+      "sha256": "5e9f16e73d6702b8b5aedcfacaa44ff9be3faca0126462b08964c0ca806d25cb"
+    },
+    "P1": {
+      "meaning": "commissioned geometry-dependent future availability",
+      "path": "logs/thesis_final_pipeline_v1/stage09_navigation/planner_fields/q1_availability.npz",
+      "sha256": "5bcdd73242153b96ac442cbf9cd91bfe04b7b31946151d8d61378cde8767d539"
+    }
+  },
+  "arm_order": ["P0", "P1"],
+  "task_order": [
+    "thesis09_west_to_east_north",
+    "thesis09_east_to_west_south",
+    "thesis09_aisle_to_crossaisle",
+    "thesis09_south_to_north_central"
+  ],
+  "selection_seed": 900,
+  "nominal_route_prior": {
+    "xy_std_m": 0.05,
+    "yaw_std_deg": 5.0,
+    "rationale": "A fixed conservative route-design prior, declared before execution and shared by both arms; it is not estimated from the final audit."
+  },
+  "candidate_generation": "All lane-graph polylines whose Manhattan legs lie in the registered driveable-region union; deterministic and independent of detector, correction, availability and final-audit labels.",
+  "selection_rule": "Convert each geometry-only candidate into the runtime bounded-unicycle seed; fail closed unless the runtime rectangular-footprint rollout is valid and ends within 0.35 m of the task goal; among eligible candidates minimize the unchanged metric_expected_belief total cost; use candidate name only as an exact-cost tie break.",
+  "route_gate": {
+    "centerline_clearance_m": 0.25,
+    "endpoint_tolerance_m": 0.0,
+    "sample_step_m": 0.04,
+    "additional_gate": "The selector also requires the runtime swept rectangular-footprint rollout to pass; the centerline gate alone is not treated as body clearance."
+  },
+  "final_audit_firewall": "The final detector/localization audit decides release only. Its labels, residuals and outcomes do not enter candidate generation, route scoring or route selection.",
+  "execution_design": "After selection, route JSON and source JSON are hash-bound. Five matched stochastic seeds replay each selected arm route. No global optimizer runs during a navigation replicate."
+}

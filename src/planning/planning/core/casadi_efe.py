@@ -298,12 +298,34 @@ def et2_ca(m, S, R_eff, g, dg, d2g):
     return mu, Sigma, Gamma
 
 
-def risk_ca(mu, Sigma, goal_mu, goal_S):
+def risk_ca(mu, Sigma, goal_mu, goal_S, one_sided=True):
     """
     KL-Divergence based instrumental risk cost.
     mu: (2,) Sigma: (2,2) goal_mu: (2,) goal_S: (2,2)
+
+    The KL between the predicted observation and the goal prior is V-shaped in
+    the predicted covariance, with its minimum where the two are equal. Only the
+    right branch expresses a navigation preference: a belief WIDER than the task
+    tolerance is a problem, a belief SHARPER than it is not. Taking the KL
+    unmodified therefore pays the planner to let the belief drift whenever the
+    prediction is sharper than the goal prior, which is the whole operating range
+    here (belief 2-13 cm against a 35 cm tolerance).
+
+    ``one_sided`` clips the covariance ARGUMENT up to the goal prior, so a
+    sharper-than-tolerance prediction is scored as if it sat exactly at
+    tolerance. Certainty is then neither rewarded nor punished, and widening past
+    the tolerance carries the full KL penalty. The mean (goal-distance) part is
+    untouched.
     """
     Sigma_pd = _ensure_symmetric_pd(Sigma)
+    if one_sided:
+        # The goal prior is isotropic here, so clipping the eigenvalues reduces
+        # to clipping the diagonal scale. Blend so the expression stays smooth.
+        goal_scale = _logdet_small_pd(_ensure_symmetric_pd(goal_S))
+        floor = ca.exp(goal_scale / ca.DM(float(goal_mu.size1())))
+        Sigma_pd = _ensure_symmetric_pd(
+            Sigma_pd + ca.fmax(floor - ca.trace(Sigma_pd) / float(goal_mu.size1()), 0.0)
+            * ca.DM.eye(int(Sigma_pd.size1())))
     goal_S_pd = _ensure_symmetric_pd(goal_S)
     diff = goal_mu - mu
     if goal_S_pd.sparsity().is_diag():

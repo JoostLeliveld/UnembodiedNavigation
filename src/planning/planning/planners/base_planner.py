@@ -139,7 +139,15 @@ class UnicyclePlannerBase:
         camera_network_expected_source_hashes=None,
         camera_network_camera_ids=None,
         camera_network_objective='legacy_pixel_chart',
-        network_goal_std_start_m=None,
+        # Goal-prior anneal, broad early -> precise late. Without it the mean
+        # (goal-distance) part of risk charges (d/sigma*)^2 per step from step
+        # zero, which buries the belief terms: measured 1633 vs an ambiguity of
+        # ~4 at 20 m from the goal. Annealing from 5.0 m cuts that first step to
+        # 8.0, so the early rollout - where the corridor is chosen - is shaped by
+        # the belief terms, and the prior still tightens so the route must arrive.
+        # Precedent: Meera, Lanillos & Kouw (arXiv 2608.14466) anneal the
+        # preference variance as their sole exploration control, tau^2 20 -> 0.6.
+        network_goal_std_start_m=5.0,
         # Kouw (IWAI 2024) Lemma 1 ambiguity under the first-order extended
         # transform, evaluated on the availability-weighted commissioned R.
         # This is the thesis method; see docs/PLANNER_LOCK.md.
@@ -390,6 +398,10 @@ class UnicyclePlannerBase:
                 logbarrier_eps=self.nogo_logbarrier_eps,
                 warning_band=self.nogo_warning_band,
                 near_weight=self.nogo_near_weight,
+                # Give the cost the real body so it distinguishes driving
+                # aligned with an aisle from crossing it at an angle.
+                robot_half_length=0.5 * float(self.robot_length_m),
+                robot_half_width=0.5 * float(self.robot_width_m),
                 geometry_json=nogo_geometry,
                 mode=self.nogo_mode,
             )

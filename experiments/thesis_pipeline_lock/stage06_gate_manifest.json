@@ -1,0 +1,106 @@
+{
+  "schema": "thesis_pipeline_stage_lock.v1",
+  "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
+  "stage_id": "06_detector_gate",
+  "lock_id": "THESIS-HULL-ADMISSION-V1",
+  "status": "locked",
+  "locked_at": "2026-09-10",
+  "protocol": {
+    "path": "experiments/thesis_pipeline_lock/stage06_gate_protocol.json",
+    "sha256": "c5b15ef26dfbfe0608a56f3b02b7d022153f03128e1be3507a56ae27270b076e",
+    "timing": "frozen before commissioning inference"
+  },
+  "commissioning_inference": {
+    "manifest": "logs/thesis_final_pipeline_v1/stage06_detector_gate/commissioning_inference/manifest.json",
+    "manifest_sha256": "d14d2415fd012508a96fbcaf6b6afe1de774317eb926742b6a282ac7eee228c7",
+    "authorized_role": "commissioning_fit",
+    "views": 9600,
+    "positions": 240,
+    "spatial_blocks": 24,
+    "detector_returns_at_0_25": 3770,
+    "final_audit_accessed": false
+  },
+  "selection": {
+    "manifest": "logs/thesis_final_pipeline_v1/stage06_detector_gate/gate_selection_v1/manifest.json",
+    "manifest_sha256": "1f82a0042541ad0819192ede20680e2875fc731c131f0e29a4b70ebf81a91130",
+    "report": "logs/thesis_final_pipeline_v1/stage06_detector_gate/gate_selection_v1/gate_selection.json",
+    "report_sha256": "389e082603467b5d927f8e38c37b8d5497e404add3e02b491f74bb1f1e407d5d",
+    "feasible_candidates": 49,
+    "candidate_count": 81,
+    "selected_runtime_rule": {
+      "confidence_min": 0.25,
+      "minimum_box_side_px": 16,
+      "minimum_shape_ratio": 0.85,
+      "maximum_shape_ratio": 1.1764705882352942,
+      "bottom_shortfall_px": "max(6, 0.15 times predicted hull height)",
+      "border_margin_px": 2,
+      "requires_finite_projection_and_equivalent_measurement": true
+    },
+    "commissioning_result": {
+      "reference_positive_opportunities": 3234,
+      "admitted": 2854,
+      "true_admitted": 2844,
+      "ambiguous_admitted": 10,
+      "zero_mask_admitted": 0,
+      "precision": 0.996496,
+      "reference_recall": 0.879406,
+      "minimum_spatial_fold_precision": 0.991105,
+      "minimum_spatial_fold_recall": 0.84104,
+      "silhouette_corrected_error_m": {
+        "median": 0.044755,
+        "rms": 0.078822,
+        "p90": 0.132899,
+        "p95": 0.159411,
+        "maximum": 0.327791
+      },
+      "errors_above_0_25_m": 9
+    },
+    "prior_sensitivity": {
+      "interpretation": "four deterministic perturbations per opportunity; not independent replicates",
+      "precision": 0.996267,
+      "reference_recall": 0.845934,
+      "catastrophic_rate": 0.003369,
+      "advance_pass": true
+    }
+  },
+  "named_camera_D_challenge": {
+    "pose_plan": "experiments/thesis_pipeline_lock/generated/camera_D_sliver_challenge_v1.json",
+    "pose_plan_sha256": "f2d33df70f55d5e2c14b01acd8d7cb6b88308e7f793581b167f8c70f939e356d",
+    "report": "logs/thesis_final_pipeline_v1/stage06_detector_gate/camera_D_sliver_challenge_result/report.json",
+    "report_sha256": "2067cd6f13fff2378b5f07560901faad30c59c8eadabed4dacaf186053387ed3",
+    "annotated_image": "logs/thesis_final_pipeline_v1/stage06_detector_gate/camera_D_sliver_challenge_result/camera_D_sliver_annotated.png",
+    "annotated_image_sha256": "ac4721bd1b8a54fb4c60b97b067d09c2ebf8a97ddeaba8f168543d12955799b9",
+    "semantic_pixels_camera_D": 75,
+    "visible_to_projected_width_ratio_camera_D": 0.411341,
+    "detector_return_above_0_001_camera_D": false,
+    "localization_admitted_camera_D": false,
+    "required_outcome_pass": true,
+    "selection_timing": "post-selection diagnostic; thresholds unchanged"
+  },
+  "runtime_implementation": {
+    "path": "src/reliability/reliability/silhouette_observation.py",
+    "sha256": "0e9df42befe7952fc97b5ff70836dad879ba1eeecdbbaa4dfb66f4eae8ff870b",
+    "test_command": "python3 -m pytest -q tests/reliability/test_silhouette_observation.py tests/reliability/test_camera_manager_node.py",
+    "tests_passed": 46
+  },
+  "implementation": {
+    "inference": "experiments/thesis_pipeline_lock/run_stage06_commissioning_inference.py",
+    "inference_sha256": "7d49ff162bcbdbb24381d20016db896b6a5b8d2aed29b58046b0052dc1e7885b",
+    "selection": "experiments/thesis_pipeline_lock/select_stage06_gate.py",
+    "selection_sha256": "73ac1ab815069d1c6672b0fdbd1b900cf81cead8621bffd5ea4ad4ae4ac480bc",
+    "named_challenge": "experiments/thesis_pipeline_lock/evaluate_stage06_named_challenge.py",
+    "named_challenge_sha256": "d931c894f61740b16040424d43197d62329855d0cb46a14bea1da50b4ad9c5bd"
+  },
+  "excluded_failures": [
+    {
+      "path": "logs/thesis_final_pipeline_v1/stage06_detector_gate/camera_D_sliver_challenge_capture.failed_missing_bridges_v1",
+      "reason": "First named-diagnostic launch did not enable the five RGB and semantic bridges; no camera row was captured."
+    }
+  ],
+  "limitations": [
+    "The commissioning precision and recall are frame-level opportunity statistics; spatial blocks are the resampling unit.",
+    "Ten semantic-ambiguous observations pass and nine admitted exact-prior measurements exceed 0.25 m error.",
+    "Stage 06 establishes admission behavior, not a final correction or covariance model.",
+    "The named Camera-D challenge is a post-selection diagnostic and not an independent accuracy test."
+  ]
+}

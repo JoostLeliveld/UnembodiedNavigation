@@ -1,0 +1,187 @@
+study_title: Thesis final commissioned-route Q0-versus-Q1 navigation campaign
+study_comparison: P0 minimizes the frozen expected-belief objective without a commissioned-support gate. P1 additionally requires at least one camera with Stage-08 q>=0.5 along each sampled route pose and turn. Five matched stochastic seeds execute hash-bound routes with otherwise identical runtime perception, fusion, controller, and noise.
+world: warehouse_v2.world.sdf
+world_profiles: src/experiments/config/world_profiles.yaml
+tasks_yaml: experiments/thesis_pipeline_lock/stage09_navigation_tasks.yaml
+launch_file: warehouse_primary_comparison.launch.py
+conditions:
+  P0:
+    label: availability_agnostic_route_P0
+  P1:
+    label: commissioned_support_route_P1
+tasks:
+  thesis09_west_to_east_north:
+    conditions:
+    - P0
+    - P1
+    seeds:
+    - 900
+    - 901
+    - 902
+    - 903
+    - 904
+    preselected_routes:
+      P0:
+        preselected_route_json: '[[-7.9,-8.7],[-6.95,-8.7],[-6.95,8.55],[0.85,8.55],[0.85,6.5],[10.6,6.5]]'
+        preselected_route_sha256: 5aa91bd4617e799f9f90fdf64d27b1d51d6bd149e27143bb3df59507793517d3
+        preselected_route_source_path: logs/thesis_final_pipeline_v1/stage09_navigation/route_selection_v4/thesis09_west_to_east_north__P0.json
+        preselected_route_source_sha256: 35c927395fbae19c8f1647d64d409a0367cdc1720c3ddeba33b0861c054b3222
+      P1:
+        preselected_route_json: '[[-7.9,-8.7],[-6.949999999999999,-8.7],[-6.949999999999999,-6.25],[10.8,-6.25],[10.8,6.5],[10.6,6.5]]'
+        preselected_route_sha256: b03d2fc4a03a54da91fb8ae065cde29b6eda8eac3002672498afb14325528577
+        preselected_route_source_path: logs/thesis_final_pipeline_v1/stage09_navigation/route_selection_v4/thesis09_west_to_east_north__P1.json
+        preselected_route_source_sha256: 82bb01b7a477873bda902f9f9707d9ae10b377d43abb23a1dfc9f2e63a2e189e
+  thesis09_east_to_west_south:
+    conditions:
+    - P0
+    - P1
+    seeds:
+    - 900
+    - 901
+    - 902
+    - 903
+    - 904
+    preselected_routes:
+      P0:
+        preselected_route_json: '[[10.6,6.5],[0.85,6.5],[0.85,-6.25],[-6.949999999999999,-6.25],[-6.949999999999999,-8.7],[-7.9,-8.7]]'
+        preselected_route_sha256: 32f7108ce99148e63a753f2d6366f98cbc04f5ee179a2e4ea6a61fb4f1312d71
+        preselected_route_source_path: logs/thesis_final_pipeline_v1/stage09_navigation/route_selection_v4/thesis09_east_to_west_south__P0.json
+        preselected_route_source_sha256: e625a877a126dbab48125ac6c16c6783146bb5f13a390ecf3b7c4ead24d9f860
+      P1:
+        preselected_route_json: '[[10.6,6.5],[10.8,6.5],[10.8,-6.25],[-6.949999999999999,-6.25],[-6.949999999999999,-8.7],[-7.9,-8.7]]'
+        preselected_route_sha256: b1a141c1197acbe9c9cee257227616c733e794d00ace78d33914f3ce443aac12
+        preselected_route_source_path: logs/thesis_final_pipeline_v1/stage09_navigation/route_selection_v4/thesis09_east_to_west_south__P1.json
+        preselected_route_source_sha256: 298baac9c1359665edc88c526cce38675f365c07f207d25ed21bacf3cc100d94
+  thesis09_aisle_to_crossaisle:
+    conditions:
+    - P0
+    - P1
+    seeds:
+    - 900
+    - 901
+    - 902
+    - 903
+    - 904
+    preselected_routes:
+      P0:
+        preselected_route_json: '[[-3.05,-5.2],[-3.05,-6.25],[10.8,-6.25],[10.8,2.54],[10.6,2.54]]'
+        preselected_route_sha256: adc1121932ef022ae328c87b3e05e16ee163cc44a968c9b4445a454fe899a992
+        preselected_route_source_path: logs/thesis_final_pipeline_v1/stage09_navigation/route_selection_v4/thesis09_aisle_to_crossaisle__P0.json
+        preselected_route_source_sha256: e50e84cd43d631659e22699ef3ece083d9ff4632b3841397622c56e877ccdf7c
+      P1:
+        preselected_route_json: '[[-3.05,-5.2],[-3.05,-6.25],[10.8,-6.25],[10.8,2.54],[10.6,2.54]]'
+        preselected_route_sha256: adc1121932ef022ae328c87b3e05e16ee163cc44a968c9b4445a454fe899a992
+        preselected_route_source_path: logs/thesis_final_pipeline_v1/stage09_navigation/route_selection_v4/thesis09_aisle_to_crossaisle__P1.json
+        preselected_route_source_sha256: 0dddd5d00bfb4ada0cef42c5fd3ccd26a93b19cb7406676634fcc82ec41e8b90
+perception_backend: yolo
+yolo_model: logs/thesis_final_pipeline_v1/stage05_detector_training/imgsz960/upper_finetune/weights/best.pt
+yolo_device: '0'
+yolo_imgsz: 960
+yolo_conf_threshold: 0.25
+yolo_predict_conf_floor: 0.05
+yolo_iou_threshold: 0.45
+yolo_target_class: robot
+yolo_class_id: 0
+yolo_use_masks: false
+yolo_min_bbox_area_px: 0.0
+yolo_max_batch_stamp_skew_s: 0.05
+yolo_warmup_iters: 3
+multicam_belief: true
+manager_fusion_mode: true
+manager_fusion_rule: independent
+manager_camera_ids: camera_A,camera_B,camera_C,camera_D,camera_E
+manager_covariance_profile: stage07_r2c
+manager_observation_model: hull_ridge
+manager_stage07_measurement_model_path: logs/thesis_final_pipeline_v1/stage07_correction_covariance/run_v3/measurement_model.json
+manager_stage07_measurement_model_expected_sha256: 249106c706b5e6dd3b10ab75abcfa54604c16b2fa987f38a5c84af58a2da9f4a
+manager_availability_model_path: logs/thesis_final_pipeline_v1/stage08_availability/run_v2/availability_model.json
+manager_availability_model_expected_sha256: 3dfa83ad0f9d8838bd6b5085e33c20fe89eb8c4334fa17d1d797bad69b1510e7
+manager_require_gp_artifacts: false
+manager_min_spatial_trust: 0.001
+manager_min_association_confidence: 0.25
+manager_decision_rate_hz: 2.0
+manager_require_source_batch_id: true
+manager_bootstrap_min_cameras: 2
+manager_bootstrap_max_disagreement_m: 0.3
+manager_use_task_start_as_bootstrap_prior: true
+manager_fusion_disagreement_gate_m: 0.6
+manager_fusion_max_timestamp_spread_s: 0.05
+manager_correction_timestamp_compensation: true
+manager_correction_propagation_drift_std: 0.05
+manager_correction_residual_interval_s: 0.05
+manager_admission_gate: true
+manager_max_measurement_age_s: 1.25
+manager_age_decay_s: 1.25
+manager_required_consecutive_better_frames: 1
+manager_max_cross_camera_disagreement_m: 1.0
+manager_require_consistency_when_source_available: false
+state_correction_mode: fused
+state_correction_ekf: true
+heading_update_mode: coupled
+pixel_correction_nis_threshold: 9.21
+state_reanchor_m: 0.0
+state_max_predict_dt_s: 1.5
+state_reject_inflate_m2: 0.0
+stale_belief_inflate_m2_per_s: 0.0
+stale_belief_inflate_cap_m2: 0.0
+require_state_correction_envelope: true
+wait_for_belief_before_first_goal: true
+initial_belief_max_sigma_m: 0.3
+use_hierarchical: true
+global_planner_mode: preselected_route
+camera_network_objective: legacy_pixel_chart
+network_goal_std_m: 0.15
+global_horizon: 200
+global_dt: 1.0
+optimizer_route_seed_mode: lane_graph
+optimizer_initial_routes_json: ''
+global_optimizer_multistart: false
+optimizer_multistart_include_direct: false
+optimizer_maxiter: 80
+optimizer_maxfun: 500
+optimizer_ftol: 1.0e-06
+optimizer_gtol: 1.0e-05
+optimizer_terminal_goal_tolerance_m: 0.35
+local_use_visibility_model: false
+local_use_ambiguity: false
+local_use_obs_risk: false
+use_pixel_correction: false
+use_hit_miss_mixture: false
+v_max: 0.22
+horizon: 20
+dt: 0.25
+goal_success_radius: 0.35
+goal_success_hold_s: 2.0
+run_timeout_after_first_cmd_s: 900
+local_controller_type: turn_then_go
+waypoint_spacing_m: 0.2
+waypoint_arrival_radius_m: 0.1
+robot_collision_radius_m: 0.48541219597369
+use_nogo_cost: true
+nogo_mode: keep_in
+nogo_penalty_type: warning_band
+nogo_safe_distance: 0.55
+local_nogo_safe_distance: 0.55
+nogo_warning_band: 0.05
+nogo_weight: 40.0
+use_belief_nogo_cost: false
+terminate_on_geom_collision: false
+use_diagnostic_odom_localization: false
+use_odom_for_predict: true
+odom_topic: /odom_noisy
+use_command_noise: true
+use_encoder_noise: true
+process_noise_xy: 0.01
+process_noise_theta: 0.02
+r_visible_uv: 1.0
+r_miss_uv: 40.0
+headless: true
+use_rviz: false
+reset_world: false
+debug_runtime: false
+cleanup_mode: isolated
+cleanup_sim_stragglers: false
+ros_domain_id_base: 180
+preselected_route_clearance_m: 0.25
+preselected_route_endpoint_tolerance_m: 0.0
+preselected_route_sample_step_m: 0.04

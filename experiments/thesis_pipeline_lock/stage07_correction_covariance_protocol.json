@@ -1,0 +1,133 @@
+{
+  "schema": "thesis_correction_covariance_protocol.v1",
+  "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
+  "status": "frozen_before_stage07_model_fitting",
+  "frozen_at": "2026-09-10",
+  "design_timing": {
+    "pre_stage06_draft_sha256": "dae036f3816bd41fca9da842abce8a81fa95520fadd6e8dd1faa72e4dfafa209",
+    "amendment": "The candidate ladder was frozen before the Stage-06 selection result was read. Exact optimizer, ridge and shrinkage constants were added after Stage 06 locked and before any Stage-07 model was fitted or compared.",
+    "post_selection_covariance_amendment": "Run v1 selected R2 but its spatially out-of-fold 90/95 percent containments were 0.856/0.894. Before Stage-07 lock, runtime implementation, or final-audit access, R2C was added as a calibration-only derivative of R2. Run v2 showed that in-sample training-fold scale estimation remained optimistic (0.880/0.910). The R2C scale was therefore corrected once, before Stage-07 lock, to use nested spatial out-of-fold residuals inside the outer training partition. Unchanged v1/v2 artifacts are retained as trigger and provenance records; run v3 is the first eligible nested-calibrated run."
+  },
+  "authorized_population": "Stage-06 admitted commissioning_fit observations only",
+  "final_audit_accessed": false,
+  "spatial_resampling": {
+    "outer_folds": 5,
+    "unit": "frozen 3.2 m spatial block",
+    "rule": "Reuse the Stage-06 block-to-fold mapping. All headings and cameras at one position remain together.",
+    "selection_predictions": "out-of-fold only",
+    "deployment_refit": "Refit the selected model on all admitted commissioning_fit observations after selection."
+  },
+  "measurement_contract": {
+    "detector_statistic": "bottom centre of the selected bounding box",
+    "raw_measurement": "calibrated back-projection to z=0",
+    "analytic_measurement": "visual-hull equivalent-position observation evaluated at the timestamp-matched prior pose and yaw",
+    "runtime_truth_forbidden": true,
+    "runtime_prior": "timestamp-matched robot belief"
+  },
+  "correction_candidates": [
+    {
+      "id": "C0_raw",
+      "description": "Uncorrected bottom-centre ground projection."
+    },
+    {
+      "id": "C1_visual_hull",
+      "description": "Parameter-free analytic visual-hull equivalent-position correction."
+    },
+    {
+      "id": "C2_ridge_residual",
+      "description": "Ridge regression of the remaining C1 residual in the camera ray frame."
+    },
+    {
+      "id": "C3_mlp_residual",
+      "description": "Two 64-unit ReLU layers predicting the remaining C1 residual in the camera ray frame; Adam, maximum 200 epochs, block-separated inner early stopping with patience 20."
+    }
+  ],
+  "learned_runtime_features": [
+    "one-hot camera identity",
+    "raw projected range and inverse range",
+    "detected box width, height and aspect ratio",
+    "normalized box-bottom u and v",
+    "detector confidence",
+    "detected-to-predicted hull width and height ratios",
+    "sine and cosine of prior heading relative to the camera bearing"
+  ],
+  "feature_rules": {
+    "continuous_standardization": "Fit on each training fold only.",
+    "reference_pose_as_feature": false,
+    "semantic_mask_as_feature": false,
+    "realized_error_as_feature": false,
+    "missing_feature_policy": "Refuse the learned candidate for that observation; do not impute from ground truth."
+  },
+  "fit_constants": {
+    "outer_test_fold": "each of the five Stage-06 folds once",
+    "inner_validation_fold": "(outer test fold + 1) mod 5; the other three folds train the hyperparameter candidate",
+    "ridge_alpha_grid": [
+      0.01,
+      0.1,
+      1.0,
+      10.0,
+      100.0
+    ],
+    "ridge_alpha_metric": "inner-validation planar p95 error",
+    "mlp_seed": 20260910,
+    "mlp_batch_size": 128,
+    "mlp_learning_rate": 0.001,
+    "mlp_weight_decay": 0.0001,
+    "mlp_max_epochs": 200,
+    "mlp_patience": 20,
+    "mlp_inner_metric": "mean squared two-axis ray-frame residual",
+    "deployment_mlp_epochs": "median best epoch over the five outer folds, then train on all commissioning observations without further selection"
+  },
+  "correction_selection": {
+    "common_bias_calibration": "For every candidate, estimate one 2-D residual mean per camera on the outer training folds and subtract it from the outer test predictions. This common calibration is included in every reported out-of-fold error.",
+    "reported_statistics": [
+      "opportunity and admitted counts",
+      "median, RMS, p90 and p95 planar camera-reading error",
+      "fraction above 0.25 m",
+      "per-camera and per-spatial-block results",
+      "whole-block bootstrap intervals for paired differences"
+    ],
+    "primary": "lowest out-of-fold block-macro p95 error subject to no increase in the >0.25 m fraction",
+    "simplicity_rule": "A learned model advances only if it improves pooled p95 by at least 0.02 m and block-macro median by at least 0.01 m relative to the best simpler candidate, without increasing the catastrophic count. Otherwise retain the simpler candidate.",
+    "mlp_not_mandatory": true
+  },
+  "conditional_covariance": {
+    "residual_source": "Out-of-fold residuals from the selected correction model, with per-camera training-fold mean removed.",
+    "candidate_ladder": [
+      "R0 pooled full 2x2 covariance",
+      "R1 per-camera full 2x2 covariance",
+      "R2 per-camera by detected-box-width tertile full 2x2 covariance with shrinkage toward R1",
+      "R2C R2 multiplied by one conservative scalar estimated without held-out-fold residuals",
+      "R3 per-camera log-linear scale model using the frozen runtime features and an R1 correlation matrix"
+    ],
+    "fit_and_score": "For each outer fold, fit covariance parameters on the other four folds and score the held-out fold.",
+    "metrics": [
+      "mean Gaussian negative log likelihood",
+      "50, 90 and 95 percent ellipse containment",
+      "mean 95 percent ellipse area",
+      "fraction with squared Mahalanobis distance above the 99 percent chi-square threshold"
+    ],
+    "selection": "Advance one rung only when it improves block-macro negative log likelihood and brings 90/95 percent containment closer to nominal without increasing mean 95 percent ellipse area by more than 20 percent.",
+    "positive_definite_floor": "Eigenvalues are clipped to at least 1e-6 m^2; every clipping event is counted.",
+    "R2_shrinkage": "For a width-bin sample count n, use n/(n+20) times the bin covariance plus 20/(n+20) times the per-camera covariance.",
+    "R2C_calibration": "For each outer fold, rotate each of its four training folds through an inner calibration role, fit R2 on the other three spatial folds, and collect squared Mahalanobis distances only on that inner held-out fold. Multiply every outer-held-out R2 covariance by max(1, nested-training q90 / chi-square(2) q90, nested-training q95 / chi-square(2) q95). R2C replaces selected R2 only when the outer out-of-fold sum of absolute 90/95 containment errors decreases; report the ellipse-area increase and tail fraction. The deployment scalar is fitted once to all outer out-of-fold R2 residuals by the same formula.",
+    "R3_scale_fit": "Ridge alpha 1.0 predicts log residual scale from the frozen runtime features. Calibrate one training-fold multiplier so mean squared Mahalanobis distance is two."
+  },
+  "dependence_boundary": {
+    "static_pose_repeats_set_R": false,
+    "cross_camera_covariance": "Estimate only from pairwise-complete simultaneous admitted residuals after the mean and marginal R are frozen.",
+    "temporal_covariance": "The master static capture cannot identify temporal decorrelation. Continuous navigation commissioning must report residual correlation versus time and distance before repeated runtime updates are treated as independent."
+  },
+  "post_selection_runtime_prior_sensitivity": {
+    "timing": "Specified after the out-of-fold correction/covariance run and before Stage-07 lock or runtime deployment.",
+    "population": "Reuse the four deterministic Stage-06 prior perturbations for all 9,600 commissioning opportunities, then recompute the frozen gate, analytic correction and selected correction from runtime-available inputs.",
+    "advance_rule": "The selected correction must not increase p95 error or the count above 0.25 m relative to the analytic hull correction among the same perturbed-prior admitted observations.",
+    "selection_effect": "This diagnostic may invalidate Stage 07 but may not select a new architecture or hyperparameter."
+  },
+  "prohibitions": [
+    "Do not evaluate or select on final_audit.",
+    "Do not estimate R from in-sample neural-network residuals.",
+    "Do not call frame count the sample size; report spatial blocks and positions.",
+    "Do not retain a neural correction solely because it has lower training loss."
+  ]
+}

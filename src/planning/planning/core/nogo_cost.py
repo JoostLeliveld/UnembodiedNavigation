@@ -29,6 +29,17 @@ class NogoCostConfig:
     # fully valid routes (e.g. a narrow vs a wide aisle).
     warning_band: float = 0.05
     near_weight: float = 50.0
+    # Rectangular body half-extents. When both are set the clearance uses the
+    # heading-aware support distance a|cos|+b|sin| instead of the fixed
+    # ``safe_distance`` disc, so the cost distinguishes driving aligned with an
+    # aisle from crossing it at an angle. ``body_margin`` is the keep-clear
+    # margin added on top of the body itself. Leave as None to keep the disc.
+    robot_half_length: float = None
+    robot_half_width: float = None
+    body_margin: float = 0.05
+    # How much steeper contact is than proximity in the single clearance
+    # penalty. Sets the ratio between the two regimes, not an absolute scale.
+    contact_gain: float = 100.0
     geometry_json: str = ''
     # 'keep_out': penalise being inside/near the prisms (obstacle footprints).
     # 'keep_in':  penalise leaving the prism union (driveable region);
@@ -62,6 +73,12 @@ class NogoZoneCostModel:
         self.logbarrier_eps = float(max(cfg.logbarrier_eps, 1e-6))
         self.warning_band = float(max(getattr(cfg, 'warning_band', 0.05), 1e-6))
         self.near_weight = float(max(getattr(cfg, 'near_weight', 50.0), 0.0))
+        _half_l = getattr(cfg, 'robot_half_length', None)
+        _half_w = getattr(cfg, 'robot_half_width', None)
+        self.robot_half_length = None if _half_l is None else float(_half_l)
+        self.robot_half_width = None if _half_w is None else float(_half_w)
+        self.body_margin = float(max(getattr(cfg, 'body_margin', 0.05), 0.0))
+        self.contact_gain = float(max(getattr(cfg, 'contact_gain', 100.0), 0.0))
 
         self.scene = scene_from_json(cfg.geometry_json)
         self.prisms = tuple(self.scene.prisms)
@@ -101,14 +118,37 @@ class NogoZoneCostModel:
             *scene_sig,
         )
 
-    def _clearance_np(self, xy: np.ndarray) -> float:
+    def support_distance(self, yaw) -> float:
+        """Half-extent of the rectangular body along the nearest wall normal.
+
+        The planner cost previously inflated the centre point by a FIXED disc,
+        so it could not distinguish driving aligned with an aisle (which needs
+        the half-width) from crossing it at an angle (which needs up to the
+        circumscribed radius). For a rectangle of half-length a and half-width
+        b at heading ``yaw`` relative to the wall normal, the support distance
+        is ``a|cos yaw| + b|sin yaw|``: 0.275 m aligned, 0.400 m facing the
+        wall, and a maximum of 0.485 m at the diagonal - which is exactly the
+        heading a robot passes through while turning. Lane rectangles are
+        axis-aligned, so the nearest normal is a coordinate axis and the
+        expression needs only the heading.
+        """
+        if self.robot_half_length is None or self.robot_half_width is None:
+            return float(self.safe_distance)
+        a = float(self.robot_half_length); b = float(self.robot_half_width)
+        c = abs(math.cos(float(yaw))); s = abs(math.sin(float(yaw)))
+        # Take the worse of the two axis normals so the cost is conservative
+        # whichever wall is nearest.
+        return max(a * c + b * s, a * s + b * c) + float(self.body_margin)
+
+    def _clearance_np(self, xy: np.ndarray, yaw=None) -> float:
         keep_in_flag = (self.mode == 'keep_in')
         signed_d = float(signed_distance_to_union_xy(self.prisms, np.asarray(xy, dtype=float), keep_in=keep_in_flag)[0])
+        required = self.safe_distance if yaw is None else self.support_distance(yaw)
         if self.mode == 'keep_in':
             # signed_d <= 0 inside the driveable union. Positive clearance
             # means the mean state is safely inside the known driveable floor.
-            return -signed_d - self.safe_distance
-        return signed_d - self.safe_distance
+            return -signed_d - required
+        return signed_d - required
 
     def signed_distance_state_np(self, m) -> float:
         if not self.prisms:
@@ -131,7 +171,8 @@ class NogoZoneCostModel:
         if not self.enabled:
             return float('inf')
         xy = np.array([float(m[0]), float(m[1])], dtype=float)
-        return float(self._clearance_np(xy))
+        yaw = float(m[2]) if len(m) > 2 else None
+        return float(self._clearance_np(xy, yaw))
 
     @staticmethod
     def _sigma_max_xy_np(S) -> float:
@@ -163,21 +204,37 @@ class NogoZoneCostModel:
         if not self.enabled:
             return 0.0
 
-        # Hinged-log warning + quadratic violation. Exactly zero for valid
-        # interior states (clearance >= warning_band), so raising `weight`
-        # crushes violations without biasing the choice between two valid
-        # routes (e.g. narrow vs wide aisle). Keeps a log-like shape inside
-        # the thin warning band near the boundary.
-        band_excess = max(self.warning_band - clearance, 0.0) / self.warning_band
-        warn = self.near_weight * float(np.log1p(band_excess * band_excess))
-        viol = max(-clearance, 0.0) / self.logbarrier_eps
-        return warn + self.weight * float(viol * viol)
+        # ONE continuous penalty in the clearance deficit, measured in units of
+        # the warning band:
+        #
+        #     d = (warning_band - clearance) / warning_band
+        #
+        # d is 0 at the band edge, 1 where the body just touches the boundary,
+        # and grows beyond 1 as it overlaps. The penalty is
+        #
+        #     near_weight * ( d^2  +  contact_gain * max(d - 1, 0)^2 )
+        #
+        # The first part penalises being CLOSE and rises smoothly across the
+        # band. The second adds nothing until contact and then dominates, so an
+        # overlap is categorically worse than proximity rather than merely
+        # larger. Both pieces are quadratic, so the total is continuous and C1
+        # at contact, and is exactly zero for clearance >= warning_band - two
+        # routes that both keep clear are never separated by this term.
+        #
+        # This replaces an earlier hinged-log warning plus a separate quadratic
+        # violation, which overlapped below zero clearance and made the shape
+        # depend on two scales at once.
+        deficit = max(self.warning_band - clearance, 0.0) / self.warning_band
+        overlap = max(deficit - 1.0, 0.0)
+        return float(self.near_weight * (deficit * deficit
+                                         + self.contact_gain * overlap * overlap))
 
     def penalty_state_np(self, m) -> float:
         if not self.enabled:
             return 0.0
         xy = np.array([float(m[0]), float(m[1])], dtype=float)
-        clearance = self._clearance_np(xy)
+        yaw = float(m[2]) if len(m) > 2 else None
+        clearance = self._clearance_np(xy, yaw)
         return self._penalty_from_clearance_np(clearance)
 
     def penalty_belief_np(self, m, S, *, kappa: float = 1.0) -> float:

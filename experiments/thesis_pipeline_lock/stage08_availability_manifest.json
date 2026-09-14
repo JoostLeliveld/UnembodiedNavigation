@@ -1,0 +1,94 @@
+{
+  "schema": "thesis_pipeline_stage_lock.v1",
+  "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
+  "stage_id": "08_availability_model",
+  "lock_id": "THESIS-AVAILABILITY-Q1-V1",
+  "status": "locked",
+  "locked_at": "2026-09-10",
+  "protocol": {
+    "path": "experiments/thesis_pipeline_lock/stage08_availability_protocol.json",
+    "sha256": "dcb164bca85b51e3c5d222c7552984858c8bbad77c1bfb974761097adbae6b16",
+    "timing": "candidate protocol frozen before Stage-06 result; exact fit constants added before Stage-08 fitting; deployment serialization completed before lock and final-audit access"
+  },
+  "eligible_run": {
+    "directory": "logs/thesis_final_pipeline_v1/stage08_availability/run_v2",
+    "manifest": "logs/thesis_final_pipeline_v1/stage08_availability/run_v2/manifest.json",
+    "manifest_sha256": "b2d81508b655fccc821de9b2fbf0fafcadae649dbb18175bdf9868bc1c460d7a",
+    "opportunities": 9600,
+    "usable": 2854,
+    "positions": 240,
+    "spatial_blocks": 24,
+    "final_audit_accessed": false
+  },
+  "selection": {
+    "report": "logs/thesis_final_pipeline_v1/stage08_availability/run_v2/availability_report.json",
+    "report_sha256": "53939af9384bd1a681d281c56b625a4f8e4cd59ba0580bd6bd7fd00c26b5ae9f",
+    "selected": "Q1_geometry_logistic",
+    "selection_rule": "simplest eligible candidate within 0.005 block-macro Brier of the best eligible candidate",
+    "selected_metrics": {
+      "block_macro_brier": 0.05458236613129958,
+      "pooled_brier": 0.058259055902989576,
+      "pooled_log_loss": 0.21206265943820096,
+      "pooled_ece_10": 0.03676815673474624,
+      "pooled_auprc": 0.8304050789454293,
+      "calibration_intercept": -0.0077278876294139135,
+      "calibration_slope": 0.9784117815745282,
+      "worst_fold_brier": 0.06889040032292251,
+      "worst_camera_brier": 0.08505152776472887
+    },
+    "candidate_block_macro_brier": {
+      "Q0_camera_constant": 0.1879795035113984,
+      "Q1_geometry_logistic": 0.05458236613129958,
+      "Q2_rbf_heading_logistic": 0.10368823262164462
+    },
+    "q2_selected_hyperparameters": {
+      "length_scale_m": 1.6,
+      "C": 10.0
+    },
+    "interpretation": "The geometry model generalized substantially better than the spatial RBF field; the more complex field is rejected."
+  },
+  "commissioning_size_curve": {
+    "artifact": "logs/thesis_final_pipeline_v1/stage08_availability/run_v2/commissioning_size_curve.csv",
+    "artifact_sha256": "4090fb2bd8d12c610c3884821bc4b1302041cd3bf52548a802f8fd7e8a0c1f46",
+    "block_macro_brier_by_requested_positions": {
+      "25": 0.06742759503125301,
+      "50": 0.05550077276790586,
+      "100": 0.05389845653044959,
+      "160": 0.0548552311884522,
+      "240": 0.05458236613129958
+    },
+    "interpretation": "Twenty-five positions measurably degrade the score. Fifty to 100 positions capture most of the geometry-model performance; the all-position deployment refit remains primary."
+  },
+  "deployment_artifact": {
+    "path": "logs/thesis_final_pipeline_v1/stage08_availability/run_v2/availability_model.json",
+    "sha256": "3dfa83ad0f9d8838bd6b5085e33c20fe89eb8c4334fa17d1d797bad69b1510e7",
+    "runtime_module": "src/reliability/reliability/commissioned_availability.py",
+    "runtime_module_sha256": "da4d8794f7008dbf3289f498bc8ee5e68102959bc4a1af4aa57c465dd331d53e",
+    "runtime_adapter": "src/reliability/reliability/nodes/camera_manager_node.py",
+    "runtime_adapter_sha256_at_lock": "04e78e49bb222f170f75fd85852edb6eda7921072642c34a389c85df9ecca13c",
+    "verification": "logs/thesis_final_pipeline_v1/stage08_availability/run_v2/runtime_verification.json",
+    "verification_sha256": "8c0297355ada2cd2f60196aafdf544a6717ed40d88536c0c1a2b63b218711b68",
+    "verification_rows": 9600,
+    "maximum_probability_difference": 5.551115123125783e-15,
+    "test_command": "python3 -m pytest -q tests/reliability/test_commissioned_availability.py tests/reliability/test_commissioned_measurement.py tests/reliability/test_silhouette_observation.py tests/reliability/test_camera_manager_node.py",
+    "tests_passed": 50
+  },
+  "implementation": {
+    "fit": "experiments/thesis_pipeline_lock/run_stage08_availability.py",
+    "fit_sha256": "1006491aaa79cd1c4f6646d7e144bc75a2ab364a3edf0946119c6c2a3abdf3a0",
+    "runtime_verification": "experiments/thesis_pipeline_lock/verify_stage08_runtime.py",
+    "runtime_verification_sha256": "17f814b2ebbc9e2421dc001124d3bb780072cde894d5763c17d828a43d4a17a2"
+  },
+  "superseded_diagnostics": [
+    {
+      "directory": "logs/thesis_final_pipeline_v1/stage08_availability/run_v1",
+      "reason": "Selection-valid first run; superseded only because its deployment artifact omitted explicit runtime feature and geometry identities. Scores and selected model are unchanged in run v2."
+    }
+  ],
+  "limitations": [
+    "At an exact pose the renderer and detector chain are deterministic; q summarizes spatial support under pose uncertainty and finite commissioning coverage, not repeated sensor randomness.",
+    "The model is specific to the locked camera and warehouse geometry and must be recommissioned after geometry or camera changes.",
+    "The static commissioning set does not model moving occluders, temporal dropout, or camera health.",
+    "All performance is spatially out-of-fold commissioning evidence; final-audit data remain sealed."
+  ]
+}

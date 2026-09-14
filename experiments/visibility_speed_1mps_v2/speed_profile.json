@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "operating_point": "speed_1mps_spatial_preview_curvature_limited_v2",
+  "max_linear_speed_m_s": 1.0,
+  "actuator_linear_min_m_s": -0.2,
+  "tracker_lookahead_s": 0.2,
+  "tracker_target_gain_per_s": 5.0,
+  "local_goal_preview_s": 0.65,
+  "handoff_forward_window_s": 1.5,
+  "local_horizon": 20,
+  "local_dt_s": 0.25,
+  "global_turn_allowance_s": 65.0,
+  "max_angular_speed_rad_s": 0.4,
+  "curvature_limited_linear_speed": true
+}

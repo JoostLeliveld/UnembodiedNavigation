@@ -1,0 +1,145 @@
+study_title: Final commissioned four-arm route selection V11
+study_comparison: Four planner arms cross constant versus commissioned availability and covariance forecasts; execution shares 1.0 m/s motion, 5 Hz detection, 5 Hz fusion, M3+M4 correction, and R4 runtime covariance.
+world: warehouse_v2.world.sdf
+world_profiles: src/experiments/config/world_profiles.yaml
+tasks_yaml: experiments/thesis_pipeline_lock/stage09_navigation_tasks.yaml
+launch_file: warehouse_primary_comparison.launch.py
+conditions:
+  C00:
+    label: constant_q_constant_r
+    camera_network_artifact_path: logs/studies/reference_controlled_commissioning_v1/final_planner_fields_20260913_v2_5hz/c00_planner_field.npz
+  C01:
+    label: constant_q_spatial_r
+    camera_network_artifact_path: logs/studies/reference_controlled_commissioning_v1/final_planner_fields_20260913_v2_5hz/c01_planner_field.npz
+  C10:
+    label: commissioned_q_constant_r
+    camera_network_artifact_path: logs/studies/reference_controlled_commissioning_v1/final_planner_fields_20260913_v2_5hz/c10_planner_field.npz
+  C11:
+    label: commissioned_q_spatial_r
+    camera_network_artifact_path: logs/studies/reference_controlled_commissioning_v1/final_planner_fields_20260913_v2_5hz/c11_planner_field.npz
+tasks:
+  thesis09_west_to_east_north: &id001
+    conditions:
+    - C00
+    - C01
+    - C10
+    - C11
+    seeds:
+    - 91440
+  thesis09_east_to_west_south: *id001
+  thesis09_aisle_to_crossaisle: *id001
+  thesis09_south_to_north_central: *id001
+perception_backend: yolo
+yolo_model: logs/thesis_final_pipeline_v1/stage05_detector_training/imgsz960/upper_finetune/weights/best.pt
+yolo_device: '0'
+yolo_imgsz: 960
+yolo_conf_threshold: 0.25
+yolo_predict_conf_floor: 0.05
+yolo_iou_threshold: 0.45
+yolo_target_class: robot
+yolo_class_id: 0
+yolo_use_masks: false
+yolo_min_bbox_area_px: 0.0
+yolo_max_batch_stamp_skew_s: 0.05
+yolo_warmup_iters: 3
+multicam_belief: true
+manager_fusion_mode: true
+manager_fusion_rule: independent
+manager_camera_ids: camera_A,camera_B,camera_C,camera_D,camera_E
+manager_covariance_profile: commissioned_visibility_r
+manager_observation_model: visibility_patch
+manager_visibility_sensor_model_path: logs/studies/reference_controlled_commissioning_v1/visibility_patch_covariance_20260913_v6_runtime_query/commissioned_visibility_runtime_model.json
+manager_visibility_sensor_model_expected_sha256: f3d976c58cb5679440fd52ba6377572dc72290fe886faef51398679a3ba813f5
+manager_availability_model_path: logs/studies/reference_controlled_commissioning_v1/availability_gp_20260913_v3_complete/availability_runtime_model.json
+manager_availability_model_expected_sha256: a72ad250d213dd16b9cbb725e6a782633c58ca6f676ff957552583380863ef04
+manager_sensor_gate_config_path: config/commissioning_sensor_gate_v1.yaml
+manager_admission_gate: false
+manager_require_gp_artifacts: false
+manager_min_spatial_trust: 0.001
+manager_min_association_confidence: 0.25
+manager_decision_rate_hz: 5.0
+manager_require_source_batch_id: true
+manager_bootstrap_min_cameras: 2
+manager_bootstrap_max_disagreement_m: 0.3
+manager_use_task_start_as_bootstrap_prior: true
+manager_bootstrap_prior_counts_as_support: true
+manager_fusion_disagreement_gate_m: 0.6
+manager_fusion_max_timestamp_spread_s: 0.05
+manager_correction_timestamp_compensation: true
+manager_correction_propagation_drift_std: 0.05
+manager_correction_residual_interval_s: 0.05
+manager_max_measurement_age_s: 1.25
+manager_age_decay_s: 1.25
+manager_required_consecutive_better_frames: 1
+manager_max_cross_camera_disagreement_m: 1.0
+manager_require_consistency_when_source_available: false
+state_correction_mode: fused
+state_correction_ekf: true
+heading_update_mode: camera_xy_only
+pixel_correction_nis_threshold: 9.21
+state_reanchor_m: 0.0
+state_max_predict_dt_s: 1.5
+state_reject_inflate_m2: 0.0
+stale_belief_inflate_m2_per_s: 0.0
+stale_belief_inflate_cap_m2: 0.0
+require_state_correction_envelope: true
+wait_for_belief_before_first_goal: true
+initial_belief_max_sigma_m: 0.3
+operational_belief_timeout_s: 1.5
+use_hierarchical: true
+global_planner_mode: efe
+camera_network_objective: metric_expected_belief
+network_goal_std_m: 0.15
+global_horizon: 200
+global_dt: 1.0
+optimizer_route_seed_mode: lane_graph
+optimizer_initial_routes_json: ''
+global_optimizer_multistart: true
+optimizer_multistart_include_direct: false
+optimizer_maxiter: 80
+optimizer_maxfun: 500
+optimizer_ftol: 1.0e-06
+optimizer_gtol: 1.0e-05
+optimizer_terminal_goal_tolerance_m: 0.35
+local_use_visibility_model: false
+local_use_ambiguity: false
+local_use_obs_risk: false
+use_pixel_correction: false
+use_hit_miss_mixture: false
+v_max: 1.0
+horizon: 20
+dt: 0.25
+goal_success_radius: 0.35
+goal_success_hold_s: 2.0
+run_timeout_after_first_cmd_s: 300
+local_controller_type: pure_pursuit
+waypoint_spacing_m: 0.2
+waypoint_arrival_radius_m: 0.1
+robot_collision_radius_m: 0.48541219597369
+use_nogo_cost: true
+nogo_mode: keep_in
+nogo_penalty_type: warning_band
+nogo_safe_distance: 0.58541219597369
+local_nogo_safe_distance: 0.58541219597369
+nogo_warning_band: 0.05
+nogo_weight: 40.0
+use_belief_nogo_cost: false
+terminate_on_geom_collision: false
+use_diagnostic_odom_localization: false
+use_odom_for_predict: true
+odom_topic: /odom_noisy
+use_command_noise: true
+use_encoder_noise: true
+process_noise_xy: 0.01
+process_noise_theta: 0.02
+r_visible_uv: 1.0
+r_miss_uv: 40.0
+headless: true
+use_rviz: false
+reset_world: false
+debug_runtime: false
+cleanup_mode: isolated
+cleanup_sim_stragglers: false
+ros_domain_id_base: 197
+camera_network_updates_per_step: 5
+thesis_execution_contract: final_1mps_5hz_m4_v1

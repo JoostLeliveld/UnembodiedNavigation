@@ -190,8 +190,15 @@ def ambiguity(Sigma, Gamma, S):
     return 0.5 * (d * np.log(2 * np.pi * np.e) + logdet)
 
 
-def risk_components(mu, Sigma, goal):
-    """KL(N(mu,Sigma) || N(m*,S*)) split into interpretable pieces."""
+def risk_components(mu, Sigma, goal, one_sided=True):
+    """KL(N(mu,Sigma) || N(m*,S*)) split into interpretable pieces.
+
+    ``one_sided`` clips the covariance argument up to the goal prior before
+    scoring, so a prediction sharper than the task tolerance is treated as if it
+    sat exactly at tolerance. Without it the KL pays the planner to let the
+    belief drift whenever the prediction is sharper than the goal prior. See
+    ``risk_ca`` for the full argument; the two must agree numerically.
+    """
     m_star, S_star = goal
     mu = np.asarray(mu, dtype=float)
     Sigma = np.asarray(Sigma, dtype=float)
@@ -199,6 +206,11 @@ def risk_components(mu, Sigma, goal):
     S_star = np.asarray(S_star, dtype=float)
 
     d = mu.size
+    if one_sided:
+        floor = float(np.exp(np.linalg.slogdet(S_star)[1] / d))
+        deficit = floor - float(np.trace(Sigma)) / d
+        if deficit > 0.0:
+            Sigma = Sigma + deficit * np.eye(Sigma.shape[0])
     diff = (m_star - mu).reshape(-1, 1)
 
     sign_s, logdet_s = np.linalg.slogdet(Sigma)

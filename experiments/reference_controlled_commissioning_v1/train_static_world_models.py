@@ -77,7 +77,13 @@ def context_crop(image_path: Path, box: np.ndarray) -> np.ndarray:
     return np.concatenate((value, mask), axis=0)
 
 
-def load_dataset(inference: Path, gate_path: Path, capture: Path) -> dict[str, np.ndarray]:
+def load_dataset(
+    inference: Path,
+    gate_path: Path,
+    capture: Path,
+    *,
+    authorized_roles: tuple[str, ...] = ("commissioning_fit",),
+) -> dict[str, np.ndarray]:
     inference_manifest_path = inference / "manifest.json"
     records_path = inference / "records.jsonl"
     capture_manifest_path = capture / "capture_manifest.json"
@@ -86,8 +92,14 @@ def load_dataset(inference: Path, gate_path: Path, capture: Path) -> dict[str, n
     capture_manifest = json.loads(capture_manifest_path.read_text(encoding="utf-8"))
     if inference_manifest.get("status") != "complete":
         raise RuntimeError("static detector inference is incomplete")
-    if inference_manifest.get("authorized_role") != "commissioning_fit":
-        raise RuntimeError("inference is not restricted to commissioning_fit")
+    manifest_roles = tuple(
+        inference_manifest.get("authorized_roles")
+        or [inference_manifest.get("authorized_role")]
+    )
+    if set(manifest_roles) != set(authorized_roles):
+        raise RuntimeError(
+            f"inference roles {manifest_roles} do not match requested roles {authorized_roles}"
+        )
     if capture_manifest.get("status") != "complete":
         raise RuntimeError("static capture is incomplete")
     if capture_manifest.get("capture_index_sha256") != sha256(capture_index_path):
@@ -96,10 +108,10 @@ def load_dataset(inference: Path, gate_path: Path, capture: Path) -> dict[str, n
     with capture_index_path.open(newline="", encoding="utf-8") as handle:
         capture_rows = [
             row for row in csv.DictReader(handle)
-            if row.get("dataset_split") == "commissioning_fit"
+            if row.get("dataset_split") in authorized_roles
         ]
-    if len(capture_rows) != 9600:
-        raise RuntimeError(f"expected 9,600 commissioning-fit opportunities, got {len(capture_rows)}")
+    if not capture_rows:
+        raise RuntimeError(f"no capture opportunities found for roles {authorized_roles}")
     authorized = {row["image_sha1"] for row in capture_rows}
 
     gate = yaml.safe_load(gate_path.read_text(encoding="utf-8"))
@@ -171,6 +183,7 @@ def load_dataset(inference: Path, gate_path: Path, capture: Path) -> dict[str, n
                 "block_id": str(source["block_id"]),
                 "heading_id": int(source["heading_id"]),
                 "camera": camera,
+                "role": str(source.get("dataset_split", "")),
                 "image_sha1": str(source["image_sha1"]),
                 "feature": feature,
                 "image": context_crop(image_path, box),
@@ -179,8 +192,10 @@ def load_dataset(inference: Path, gate_path: Path, capture: Path) -> dict[str, n
                 "basis": basis.astype(np.float32),
                 "target": (basis.T @ (truth - raw)).astype(np.float32),
             })
-    if opportunities != 9600:
-        raise RuntimeError(f"expected 9,600 inference opportunities, got {opportunities}")
+    if opportunities != len(capture_rows):
+        raise RuntimeError(
+            f"expected {len(capture_rows):,} inference opportunities, got {opportunities:,}"
+        )
     if not rows:
         raise RuntimeError("sensor gate admitted no observations")
 
@@ -194,6 +209,7 @@ def load_dataset(inference: Path, gate_path: Path, capture: Path) -> dict[str, n
         "basis": np.stack([row["basis"] for row in rows]),
         "target": np.stack([row["target"] for row in rows]),
         "camera": np.asarray([row["camera"] for row in rows]),
+        "role": np.asarray([row["role"] for row in rows]),
         "pose_id": np.asarray([row["pose_id"] for row in rows], dtype=int),
         "position_id": np.asarray([row["position_id"] for row in rows], dtype=int),
         "heading_id": np.asarray([row["heading_id"] for row in rows], dtype=int),

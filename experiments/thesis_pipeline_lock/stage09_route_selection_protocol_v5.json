@@ -1,0 +1,79 @@
+{
+  "schema_version": 5,
+  "status": "frozen_before_navigation_execution",
+  "supersedes": {
+    "path": "experiments/thesis_pipeline_lock/stage09_route_selection_protocol_v4.json",
+    "sha256": "7a29e44ff76358a31eecfd060d1cc1d84176958cc9c2ec6f9e944241f4422bcc"
+  },
+  "reason_for_version": "V4 applied a q >= 0.5 route-support threshold only to P1. V5 removes availability from route eligibility. Every arm receives the same geometry-generated candidates and the same static-body, swept-rollout and terminal-goal feasibility decisions. Forecasts may change objective values only.",
+  "purpose": "Choose deterministic routes before stochastic execution from an identical feasible candidate set in every planner condition.",
+  "evidence_role": "The bound P0/P1 fields exercise the repaired selector only. Final four-arm routes must be regenerated from the selected Bernoulli-GP availability artifact and matched covariance forecasts; this protocol does not authorize the final campaign.",
+  "route_selection_config": "experiments/thesis_pipeline_lock/stage09_navigation_campaign.yaml",
+  "route_selection_config_sha256": "1590cea0fcd527d47023db7eaafd79b7aa496cc48c7d38b0363846da7d0b931b",
+  "tasks_yaml": "experiments/thesis_pipeline_lock/stage09_navigation_tasks.yaml",
+  "tasks_yaml_sha256": "3083cc22b283194c4c1bfac9d8b487ecb32fcaf362aa72fa5fb80ed0125bdf94",
+  "selector_sha256": "0cadc1c4a8384cde3c28c63ab01969f8213b34d0f29aea546f0384befa926e6d",
+  "base_selector": {
+    "path": "experiments/thesis_pipeline_lock/select_stage09_routes_v4.py",
+    "sha256": "2a9e91344f183c9d9b8271a6a950b20854203c54bd4179ae1bc6a1a6da57b71c"
+  },
+  "route_probe": {
+    "path": "experiments/icra_commissioning/network_route_probe.py",
+    "sha256": "183c197f2e72c19484f9175ea2eb37fd480dc1af0d4f360b65d222f9b925f479"
+  },
+  "world": {
+    "path": "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+    "sha256": "1c7e913d6478039b4c02bb7e3b680dcc52626c4963b9fcc6bf8f1daff1f7c331"
+  },
+  "planning_fields": {
+    "P0": {
+      "meaning": "constant future-availability control used in route cost only",
+      "path": "logs/thesis_final_pipeline_v1/stage09_navigation/planner_fields/q0_availability.npz",
+      "sha256": "5e9f16e73d6702b8b5aedcfacaa44ff9be3faca0126462b08964c0ca806d25cb"
+    },
+    "P1": {
+      "meaning": "commissioned future availability used in route cost only",
+      "path": "logs/thesis_final_pipeline_v1/stage09_navigation/planner_fields/q1_availability.npz",
+      "sha256": "5bcdd73242153b96ac442cbf9cd91bfe04b7b31946151d8d61378cde8767d539"
+    }
+  },
+  "arm_order": ["P0", "P1"],
+  "task_order": [
+    "thesis09_west_to_east_north",
+    "thesis09_east_to_west_south",
+    "thesis09_aisle_to_crossaisle",
+    "thesis09_south_to_north_central"
+  ],
+  "selection_seed": 900,
+  "nominal_route_prior": {
+    "xy_std_m": 0.05,
+    "yaw_std_deg": 5.0,
+    "rationale": "Fixed route-design prior shared by all arms; not estimated from final-audit or runtime outcomes."
+  },
+  "candidate_generation": "Generate one deterministic set per task from lane-graph polylines, vertical traversable-rectangle centrelines, endpoint-lane variants, and combined start-and-goal lane-centre variants. Generation reads only the registered driveable-region union.",
+  "common_feasibility": {
+    "definition": "A candidate is feasible only when the static rectangular body clears the map, the runtime bounded-unicycle swept rectangular footprint is valid, and the rollout ends within the common terminal tolerance. The selector fails if any arm assigns a different feasibility result.",
+    "centerline_clearance_m": 0.25,
+    "minimum_static_body_clearance_m": 0.1,
+    "robot_length_m": 0.8,
+    "robot_width_m": 0.55,
+    "endpoint_tolerance_m": 0.0,
+    "sample_step_m": 0.04,
+    "shared_setting_keys": [
+      "driveable_geometry_json",
+      "horizon",
+      "dt",
+      "v_max",
+      "w_max",
+      "optimizer_terminal_goal_tolerance_m",
+      "robot_collision_radius_m",
+      "nogo_mode",
+      "nogo_safe_distance",
+      "use_belief_nogo_cost"
+    ]
+  },
+  "selection_rule": "For each task, generate one candidate set and establish one common feasible subset using geometry, swept-body rollout and terminal-goal reachability only. Evaluate the objective of every common feasible candidate under each arm's future observation model. Select the minimum-cost candidate per arm, using candidate name only as an exact-cost tie break.",
+  "availability_role": "q_sensor changes expected future information and route cost only. No q threshold, support classifier or availability statistic may generate, remove or legalize a route.",
+  "execution_design": "Hash-bind each selected route after selection. Matched stochastic seeds execute the routes without running the global optimizer during a replicate.",
+  "final_audit_firewall": "Final-audit labels, residuals and outcomes do not enter candidate generation, feasibility, route scoring or route selection."
+}

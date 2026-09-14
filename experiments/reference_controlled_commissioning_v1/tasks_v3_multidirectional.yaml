@@ -1,0 +1,488 @@
+tasks:
+  warehouse_v2.world.sdf:
+  - name: commission_settle_lap1_fwd
+    start:
+      x: -10.75
+      y: -6.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -10.75
+      y: -6.25
+  - name: commission_settle_lap1_rev
+    start:
+      x: -10.75
+      y: -6.25
+      z: 0.05
+      yaw: 0.06488003772246291
+    goal:
+      x: -10.75
+      y: -6.25
+  - name: commission_settle_lap2_fwd
+    start:
+      x: -10.75
+      y: -6.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -10.75
+      y: -6.25
+  - name: commission_settle_lap2_rev
+    start:
+      x: -10.75
+      y: -6.25
+      z: 0.05
+      yaw: -0.057939718435533964
+    goal:
+      x: -10.75
+      y: -6.25
+  - name: commission_settle_lap3_fwd
+    start:
+      x: -6.95
+      y: -6.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -6.95
+      y: -6.25
+  - name: commission_settle_lap3_rev
+    start:
+      x: -6.95
+      y: -6.25
+      z: 0.05
+      yaw: 0.06749533563516198
+    goal:
+      x: -6.95
+      y: -6.25
+  - name: commission_settle_lap4_fwd
+    start:
+      x: -3.05
+      y: -6.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -3.05
+      y: -6.25
+  - name: commission_settle_lap4_rev
+    start:
+      x: -3.05
+      y: -6.25
+      z: 0.05
+      yaw: -0.11679454265009885
+    goal:
+      x: -3.05
+      y: -6.25
+  - name: commission_settle_lap5_fwd
+    start:
+      x: -10.75
+      y: -6.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -10.75
+      y: -6.25
+  - name: commission_settle_lap5_rev
+    start:
+      x: -10.75
+      y: -6.25
+      z: 0.05
+      yaw: 0.07640996584222234
+    goal:
+      x: -10.75
+      y: -6.25
+  - name: commission_settle_lap6_fwd
+    start:
+      x: -6.95
+      y: -6.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -6.95
+      y: -6.25
+  - name: commission_settle_lap6_rev
+    start:
+      x: -6.95
+      y: -6.25
+      z: 0.05
+      yaw: 0.05065514225188871
+    goal:
+      x: -6.95
+      y: -6.25
+  - name: commission_fit_south_upper_fwd
+    start:
+      x: -10.0
+      y: -5.4
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 10.8
+      y: -5.4
+  - name: commission_fit_south_upper_rev
+    start:
+      x: 10.8
+      y: -5.4
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: -10.0
+      y: -5.4
+  - name: commission_fit_south_lower_fwd
+    start:
+      x: -8.0
+      y: -7.4
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 10.8
+      y: -7.4
+  - name: commission_fit_south_lower_rev
+    start:
+      x: 10.8
+      y: -7.4
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: -8.0
+      y: -7.4
+  - name: commission_fit_central_lower_fwd
+    start:
+      x: 0.7
+      y: -5.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: 0.7
+      y: -1.55
+  - name: commission_fit_central_lower_rev
+    start:
+      x: 0.7
+      y: -1.55
+      z: 0.05
+      yaw: -1.5707963267948966
+    goal:
+      x: 0.7
+      y: -5.25
+  - name: commission_fit_northeast_return_fwd
+    start:
+      x: 10.65
+      y: 6.35
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: 10.65
+      y: 8.85
+  - name: commission_fit_northeast_return_rev
+    start:
+      x: 10.65
+      y: 8.85
+      z: 0.05
+      yaw: -1.5707963267948966
+    goal:
+      x: 10.65
+      y: 6.35
+  - name: commission_fit_lower_west_fwd
+    start:
+      x: -8.0
+      y: -8.700000000000001
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -5.4
+      y: -8.700000000000001
+  - name: commission_fit_lower_west_rev
+    start:
+      x: -5.4
+      y: -8.700000000000001
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: -8.0
+      y: -8.700000000000001
+  - name: commission_fit_lower_middle_fwd
+    start:
+      x: -1.3
+      y: -8.700000000000001
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 1.7
+      y: -8.700000000000001
+  - name: commission_fit_lower_middle_rev
+    start:
+      x: 1.7
+      y: -8.700000000000001
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: -1.3
+      y: -8.700000000000001
+  - name: commission_fit_lower_east_fwd
+    start:
+      x: 5.8
+      y: -8.700000000000001
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 10.9
+      y: -8.700000000000001
+  - name: commission_fit_lower_east_rev
+    start:
+      x: 10.9
+      y: -8.700000000000001
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: 5.8
+      y: -8.700000000000001
+  - name: commission_dev_south_upper_fwd
+    start:
+      x: -10.0
+      y: -5.25
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 10.8
+      y: -5.25
+  - name: commission_dev_south_upper_rev
+    start:
+      x: 10.8
+      y: -5.25
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: -10.0
+      y: -5.25
+  - name: commission_dev_south_lower_fwd
+    start:
+      x: -8.0
+      y: -7.25
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 10.8
+      y: -7.25
+  - name: commission_dev_south_lower_rev
+    start:
+      x: 10.8
+      y: -7.25
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: -8.0
+      y: -7.25
+  - name: commission_dev_central_lower_fwd
+    start:
+      x: 0.85
+      y: -5.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: 0.85
+      y: -1.55
+  - name: commission_dev_central_lower_rev
+    start:
+      x: 0.85
+      y: -1.55
+      z: 0.05
+      yaw: -1.5707963267948966
+    goal:
+      x: 0.85
+      y: -5.25
+  - name: commission_dev_northeast_return_fwd
+    start:
+      x: 10.8
+      y: 6.35
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: 10.8
+      y: 8.85
+  - name: commission_dev_northeast_return_rev
+    start:
+      x: 10.8
+      y: 8.85
+      z: 0.05
+      yaw: -1.5707963267948966
+    goal:
+      x: 10.8
+      y: 6.35
+  - name: commission_dev_lower_west_fwd
+    start:
+      x: -8.0
+      y: -8.55
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -5.4
+      y: -8.55
+  - name: commission_dev_lower_west_rev
+    start:
+      x: -5.4
+      y: -8.55
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: -8.0
+      y: -8.55
+  - name: commission_dev_lower_middle_fwd
+    start:
+      x: -1.3
+      y: -8.55
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 1.7
+      y: -8.55
+  - name: commission_dev_lower_middle_rev
+    start:
+      x: 1.7
+      y: -8.55
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: -1.3
+      y: -8.55
+  - name: commission_dev_lower_east_fwd
+    start:
+      x: 5.8
+      y: -8.55
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 10.9
+      y: -8.55
+  - name: commission_dev_lower_east_rev
+    start:
+      x: 10.9
+      y: -8.55
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: 5.8
+      y: -8.55
+  - name: commission_audit_south_upper_fwd
+    start:
+      x: -10.0
+      y: -5.1
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 10.8
+      y: -5.1
+  - name: commission_audit_south_upper_rev
+    start:
+      x: 10.8
+      y: -5.1
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: -10.0
+      y: -5.1
+  - name: commission_audit_south_lower_fwd
+    start:
+      x: -8.0
+      y: -7.1
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 10.8
+      y: -7.1
+  - name: commission_audit_south_lower_rev
+    start:
+      x: 10.8
+      y: -7.1
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: -8.0
+      y: -7.1
+  - name: commission_audit_central_lower_fwd
+    start:
+      x: 1.0
+      y: -5.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: 1.0
+      y: -1.55
+  - name: commission_audit_central_lower_rev
+    start:
+      x: 1.0
+      y: -1.55
+      z: 0.05
+      yaw: -1.5707963267948966
+    goal:
+      x: 1.0
+      y: -5.25
+  - name: commission_audit_northeast_return_fwd
+    start:
+      x: 10.950000000000001
+      y: 6.35
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: 10.950000000000001
+      y: 8.85
+  - name: commission_audit_northeast_return_rev
+    start:
+      x: 10.950000000000001
+      y: 8.85
+      z: 0.05
+      yaw: -1.5707963267948966
+    goal:
+      x: 10.950000000000001
+      y: 6.35
+  - name: commission_audit_lower_west_fwd
+    start:
+      x: -8.0
+      y: -8.4
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -5.4
+      y: -8.4
+  - name: commission_audit_lower_west_rev
+    start:
+      x: -5.4
+      y: -8.4
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: -8.0
+      y: -8.4
+  - name: commission_audit_lower_middle_fwd
+    start:
+      x: -1.3
+      y: -8.4
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 1.7
+      y: -8.4
+  - name: commission_audit_lower_middle_rev
+    start:
+      x: 1.7
+      y: -8.4
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: -1.3
+      y: -8.4
+  - name: commission_audit_lower_east_fwd
+    start:
+      x: 5.8
+      y: -8.4
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: 10.9
+      y: -8.4
+  - name: commission_audit_lower_east_rev
+    start:
+      x: 10.9
+      y: -8.4
+      z: 0.05
+      yaw: 3.141592653589793
+    goal:
+      x: 5.8
+      y: -8.4

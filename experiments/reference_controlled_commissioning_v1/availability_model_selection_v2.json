@@ -1,0 +1,52 @@
+{
+  "schema": "reference_controlled_availability_selection.v2",
+  "status": "selected_before_final_navigation_campaign",
+  "selected_model": "Q1_gp_position_ls0.8",
+  "method_family": "per_camera_bernoulli_gaussian_process",
+  "planner_inputs": [
+    "camera identity",
+    "predicted world x",
+    "predicted world y"
+  ],
+  "fit": {
+    "kernel": "isotropic squared exponential",
+    "length_scale_m": 0.8,
+    "latent_variance": 4.0,
+    "likelihood": "Bernoulli",
+    "inference": "Laplace approximation",
+    "spatial_aggregation_cell_m": 0.2,
+    "uncertainty_penalty": 0.0,
+    "all_opportunities_contribute": true,
+    "final_audit_accessed": false
+  },
+  "selection": {
+    "unit": "complete route",
+    "fit_opportunities": 25410,
+    "held_out_fit_equal_route_brier": 0.019534500186898368,
+    "development_opportunities": 22505,
+    "development_equal_route_brier": 0.021403065467396395,
+    "development_equal_route_auc": 0.9940273409613632,
+    "development_ece_10": 0.04228203990856802
+  },
+  "artifacts": {
+    "selection_report": {
+      "path": "logs/studies/reference_controlled_commissioning_v1/availability_gp_20260913_v2/availability_model.json",
+      "sha256": "0e4e5ddd495881803bb5c68e6317bbd5b11c872bc5ad43f605590d4c33d34d8a"
+    },
+    "runtime_model": {
+      "path": "logs/studies/reference_controlled_commissioning_v1/availability_gp_20260913_v2/availability_runtime_model.json",
+      "sha256": "256efea0610524e0f4e1c6ba17b881a0137b4925ee9b35d4b6af218ccb8b4d61"
+    },
+    "runtime_parameters": {
+      "path": "logs/studies/reference_controlled_commissioning_v1/availability_gp_20260913_v2/availability_gp_parameters.npz",
+      "sha256": "b8c13b9e6d286aa44c59e65cab27be32bd03b605b83ba35b056cff16cfc4e992"
+    }
+  },
+  "supersedes": {
+    "role": "model selection",
+    "path": "logs/studies/reference_controlled_commissioning_v1/availability_20260912_v1/availability_model.json",
+    "sha256": "f2cf1b0a81f9acb7a4a7cfcd83e7bb4864f666fb961f38d18f5363227ef114ea",
+    "reason": "The boosted-tree selection did not implement the frozen Gaussian-process methodology."
+  },
+  "campaign_constraint": "Commissioned availability may change route cost only. It must not alter candidate generation or feasibility."
+}

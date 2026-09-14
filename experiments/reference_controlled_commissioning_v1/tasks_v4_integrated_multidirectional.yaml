@@ -1,0 +1,110 @@
+tasks:
+  warehouse_v2.world.sdf:
+  - name: commission_fit_sweep_a_fwd
+    start:
+      x: -10.85
+      y: -6.4
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -10.85
+      y: -6.4
+  - name: commission_fit_sweep_a_rev
+    start:
+      x: -10.85
+      y: -6.4
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -10.85
+      y: -6.4
+  - name: commission_fit_sweep_b_fwd
+    start:
+      x: -10.85
+      y: -6.6
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -10.85
+      y: -6.6
+  - name: commission_fit_sweep_b_rev
+    start:
+      x: -10.85
+      y: -6.6
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -10.85
+      y: -6.6
+  - name: commission_dev_sweep_a_fwd
+    start:
+      x: -10.7
+      y: -6.25
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -10.7
+      y: -6.25
+  - name: commission_dev_sweep_a_rev
+    start:
+      x: -10.7
+      y: -6.25
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -10.7
+      y: -6.25
+  - name: commission_dev_sweep_b_fwd
+    start:
+      x: -10.7
+      y: -6.45
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -10.7
+      y: -6.45
+  - name: commission_dev_sweep_b_rev
+    start:
+      x: -10.7
+      y: -6.45
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -10.7
+      y: -6.45
+  - name: commission_audit_sweep_a_fwd
+    start:
+      x: -10.55
+      y: -6.1
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -10.55
+      y: -6.1
+  - name: commission_audit_sweep_a_rev
+    start:
+      x: -10.55
+      y: -6.1
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -10.55
+      y: -6.1
+  - name: commission_audit_sweep_b_fwd
+    start:
+      x: -10.55
+      y: -6.3
+      z: 0.05
+      yaw: 1.5707963267948966
+    goal:
+      x: -10.55
+      y: -6.3
+  - name: commission_audit_sweep_b_rev
+    start:
+      x: -10.55
+      y: -6.3
+      z: 0.05
+      yaw: 0.0
+    goal:
+      x: -10.55
+      y: -6.3

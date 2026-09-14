@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "operating_point": "speed_1mps_time_scaled_preview_v1",
+  "max_linear_speed_m_s": 1.0,
+  "actuator_linear_min_m_s": -0.2,
+  "tracker_lookahead_s": 1.25,
+  "tracker_target_gain_per_s": 0.8,
+  "local_goal_preview_s": 4.0625,
+  "handoff_forward_window_s": 9.375,
+  "local_horizon": 20,
+  "local_dt_s": 0.25,
+  "global_turn_allowance_s": 65.0,
+  "max_angular_speed_rad_s": 0.4
+}

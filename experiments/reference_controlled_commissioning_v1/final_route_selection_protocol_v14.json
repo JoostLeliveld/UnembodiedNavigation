@@ -1,0 +1,163 @@
+{
+  "schema_version": 14,
+  "status": "frozen_before_sparse_route_selection_and_four_arm_pilots",
+  "supersedes": "experiments/reference_controlled_commissioning_v1/final_route_selection_protocol_v13.json",
+  "amendment_reason": "The V13 preflight correctly refused the one-Hz-certified R4 bundle at 5 Hz. V14 uses the same M3+M4 weights and R4 structure with a conservative fivefold per-frame temporal covariance inflation. The global control grid is sparsified from 200 one-second controls to 100 two-second controls; ten 5 Hz opportunities are evaluated per step, preserving the 200 s physical horizon and requested observation cadence.",
+  "failed_execution_evidence": "logs/studies/reference_controlled_commissioning_v1/final_navigation_pilot_t1_c00_v9",
+  "purpose": "Select one hash-bound route per task and arm using the launch-resolved CasADi/L-BFGS-B expected-belief planner with a sparse two-second control grid, 1.0 m/s bounds, and 5 Hz camera-network opportunities.",
+  "evidence_role": "Final route selection for the four-arm thesis navigation campaign after closing the omitted-prop collision geometry. No commissioning audit labels or scientific navigation outcomes are inputs.",
+  "route_selection_config": "experiments/reference_controlled_commissioning_v1/final_route_selection_config_v12.yaml",
+  "route_selection_config_sha256": "3ed9e1defe1cfa9b6d9ac6af8fb434d1c3930e30ddd02e67bb7e26b9257a0a2b",
+  "tasks_yaml": "experiments/thesis_pipeline_lock/stage09_navigation_tasks.yaml",
+  "tasks_yaml_sha256": "9c294587d22300406f6b40ad98ac86873b7d101d1eb67ee17d8b780a9c69113f",
+  "selector_path": "experiments/icra_commissioning/network_route_probe.py",
+  "selector_sha256": "183c197f2e72c19484f9175ea2eb37fd480dc1af0d4f360b65d222f9b925f479",
+  "launch_resolution": {
+    "path": "src/experiments/experiments/core/visibility_launch_common.py",
+    "sha256": "a1ee7a4d1d3bae5d04acb181903d21d366d3892b04be41683b97a5693c43632d"
+  },
+  "world_profile": {
+    "path": "src/experiments/config/world_profiles.yaml",
+    "sha256": "742cb32c69ea9f48ecdf1ce899e9bf8cd45949be863312369b85cb67a79405cd"
+  },
+  "planner_source_tree": {
+    "roots": [
+      "src/planning/planning",
+      "src/unav_common/unav_common"
+    ],
+    "sha256": "30e32a700d9d8643f40325c99e72ace21a474fa1fbed0871c7e9ea285f65e501"
+  },
+  "base_selector": {
+    "path": "experiments/thesis_pipeline_lock/select_stage09_routes_v4.py",
+    "sha256": "2a9e91344f183c9d9b8271a6a950b20854203c54bd4179ae1bc6a1a6da57b71c"
+  },
+  "route_probe": {
+    "path": "experiments/icra_commissioning/network_route_probe.py",
+    "sha256": "183c197f2e72c19484f9175ea2eb37fd480dc1af0d4f360b65d222f9b925f479"
+  },
+  "world": {
+    "path": "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+    "sha256": "1c7e913d6478039b4c02bb7e3b680dcc52626c4963b9fcc6bf8f1daff1f7c331"
+  },
+  "planning_fields": {
+    "C00": {
+      "meaning": "constant per-camera availability and constant per-camera covariance",
+      "path": "logs/studies/reference_controlled_commissioning_v1/final_planner_fields_20260913_v3_5hz_temporal/c00_planner_field.npz",
+      "sha256": "ac20202a49195e0294c07d776cc43c8b86905c09772701e27bf4b732f0275a6f"
+    },
+    "C01": {
+      "meaning": "constant per-camera availability and commissioned spatial covariance",
+      "path": "logs/studies/reference_controlled_commissioning_v1/final_planner_fields_20260913_v3_5hz_temporal/c01_planner_field.npz",
+      "sha256": "a162256bdb7dc95e24db3d491ad8fdf406d135470b9ee8e531f8e031720d19c8"
+    },
+    "C10": {
+      "meaning": "commissioned Bernoulli-GP availability and constant per-camera covariance",
+      "path": "logs/studies/reference_controlled_commissioning_v1/final_planner_fields_20260913_v3_5hz_temporal/c10_planner_field.npz",
+      "sha256": "cd8f23f7f20ea389473e95bf2de579d8d4bb5fbb056e15b0c7b9d716ee1b325f"
+    },
+    "C11": {
+      "meaning": "commissioned Bernoulli-GP availability and commissioned spatial covariance",
+      "path": "logs/studies/reference_controlled_commissioning_v1/final_planner_fields_20260913_v3_5hz_temporal/c11_planner_field.npz",
+      "sha256": "0f09a6c31b1eaa565f15095b71332f6a9ad051510a4964078b94aec5480b0bb2"
+    }
+  },
+  "arm_order": [
+    "C00",
+    "C01",
+    "C10",
+    "C11"
+  ],
+  "task_order": [
+    "thesis09_west_to_east_north",
+    "thesis09_east_to_west_south",
+    "thesis09_aisle_to_crossaisle",
+    "thesis09_south_to_north_central"
+  ],
+  "selection_seed": 91440,
+  "nominal_route_prior": {
+    "xy_std_m": 0.05,
+    "yaw_std_deg": 5.0,
+    "rationale": "Fixed route-design prior shared by all arms; not estimated from final audit or runtime outcomes."
+  },
+  "candidate_generation": "Generate one deterministic set per task from lane-graph polylines, vertical traversable-rectangle centrelines, endpoint-lane variants, and combined start-and-goal lane-centre variants.",
+  "common_feasibility": {
+    "definition": "Static swept rectangular-body clearance is checked against both the driveable-lane union and the complete physical collision scene, including separately included props. Bounded-unicycle swept rollout and terminal-goal reachability at 1.0 m/s must also agree across all four arms.",
+    "required_collision_prisms": [
+      "bin_office"
+    ],
+    "centerline_clearance_m": 0.25,
+    "minimum_static_body_clearance_m": 0.1,
+    "robot_length_m": 0.8,
+    "robot_width_m": 0.55,
+    "endpoint_tolerance_m": 0.0,
+    "sample_step_m": 0.04,
+    "shared_setting_keys": [
+      "driveable_geometry_json",
+      "collision_geometry_json",
+      "horizon",
+      "dt",
+      "v_max",
+      "w_max",
+      "optimizer_terminal_goal_tolerance_m",
+      "robot_collision_radius_m",
+      "nogo_mode",
+      "nogo_safe_distance",
+      "use_belief_nogo_cost"
+    ],
+    "optimizer_transition_check": "CasADi state costs sample constant-twist transitions at no more than 0.20 m; release admission independently checks the swept rectangular body at 0.04 m."
+  },
+  "selection_rule": "For each task, establish one common physically feasible candidate subset. Select the minimum exact expected-belief rollout cost separately for each arm, using candidate name only as an exact-cost tie break.",
+  "execution_design": "Hash-bind each selected route, then execute matched seeds in Gazebo at 1.0 m/s with the same pure-pursuit controller, M3+M4 correction, temporally inflated R4 covariance, 5 Hz detector batches, and 5 Hz correction attempts.",
+  "final_audit_firewall": "Final-audit labels, residuals, and outcomes do not enter candidate generation, feasibility, route scoring, or route selection. The observed v2 collision is used only to close the missing physical-geometry source.",
+  "runtime_estimator_contract": {
+    "mean_chain": "M3_box_mlp plus gated M4 16x16 visibility residual",
+    "runtime_covariance": "R4_image_conditioned_scale fitted to M4-corrected residuals",
+    "sensor_model_path": "logs/studies/reference_controlled_commissioning_v1/visibility_patch_covariance_20260913_v7_5hz_temporal/commissioned_visibility_runtime_model.json",
+    "sensor_model_sha256": "ee6f546ce9d88d2074eeb0ba7adbf4b95f9cc214f7f9c05d22242e27dae39978",
+    "detector_rate_hz": 5,
+    "fusion_rate_hz": 5,
+    "camera_network_updates_per_global_step": 10,
+    "metric_reanchor_enabled": false,
+    "temporal_covariance_inflation": 5.0
+  },
+  "route_freezer": {
+    "path": "experiments/reference_controlled_commissioning_v1/freeze_single_casadi_route.py",
+    "sha256": "83c4100df64be7500b72ea8bebced416f145fbac7b3908ccd1b2590915fe4cd5"
+  },
+  "controller_pilot_evidence": "logs/studies/reference_controlled_commissioning_v1/controller_pilot_t1_c00_pure_pursuit_v1",
+  "runtime_clearance_policy": {
+    "physical_collision_body_clearance_m": 0.1,
+    "driveable_body_clearance_m": 0.0,
+    "driveable_requirement": "nonpenetration"
+  },
+  "runtime_rate_audit": {
+    "path": "logs/studies/reference_controlled_commissioning_v1/final_navigation_pilot_t1_c00_v9/runtime_rate_audit_v1.json",
+    "camera_and_detector_rate_hz": 5.0,
+    "manager_and_assimilation_attempt_rate_hz": 1.0
+  },
+  "temporal_dependence_limit": {
+    "five_hz_residual_lag1_median_absolute": 0.5505110860407658,
+    "stride_five_residual_lag1_median_absolute": 0.10080566984856379,
+    "interpretation": "The five within-second opportunities are the requested nominal conditional-independence planning approximation; the observed temporal residual dependence must be disclosed when interpreting belief calibration."
+  },
+  "belief_recovery_policy": {
+    "metric_reanchor_enabled": false,
+    "state_reanchor_m": 0.0,
+    "ordinary_nis_gate": 9.21
+  },
+  "sparse_global_parameterization": {
+    "horizon_steps": 100,
+    "step_s": 2.0,
+    "physical_horizon_s": 200.0,
+    "camera_opportunities_per_step": 10,
+    "camera_opportunities_per_second": 5,
+    "maximum_obstacle_cost_sample_spacing_m": 0.2,
+    "independent_frozen_route_sweep_spacing_m": 0.04
+  },
+  "temporal_covariance_policy": {
+    "runtime_model_path": "logs/studies/reference_controlled_commissioning_v1/visibility_patch_covariance_20260913_v7_5hz_temporal/commissioned_visibility_runtime_model.json",
+    "runtime_model_sha256": "ee6f546ce9d88d2074eeb0ba7adbf4b95f9cc214f7f9c05d22242e27dae39978",
+    "per_frame_covariance_multiplier": 5.0,
+    "information_interpretation": "five successive frames contribute no more information than one uninflated commissioned frame"
+  }
+}
