@@ -205,6 +205,31 @@ class UnicyclePlannerBase:
         # silently from a stale config. See docs/PROCESS_NOISE_LOCK.md.
         _LOCKED_PROCESS_NOISE_XY = 0.02
         _LOCKED_PROCESS_NOISE_THETA = 0.08
+        # Every value below was established by measurement on 2026-09-14 and is
+        # recorded with its derivation in docs/PLANNER_LOCK.md. A run that uses
+        # any superseded value silently produces a DIFFERENT planner, which has
+        # already cost one 80-run campaign. Warn loudly rather than let it pass.
+        for _name, _value, _locked in (
+            ('nogo_safe_distance', nogo_safe_distance, 0.325),
+            ('nogo_logbarrier_eps', nogo_logbarrier_eps, 0.05),
+            ('network_goal_std_m', network_goal_std_m, 0.35),
+        ):
+            if abs(float(_value) - _locked) > 1e-9:
+                warnings.warn(
+                    f'{_name}={float(_value)} overrides the locked value {_locked}; '
+                    'see docs/PLANNER_LOCK.md',
+                    RuntimeWarning, stacklevel=2)
+        if not bool(use_belief_nogo_cost):
+            warnings.warn(
+                'use_belief_nogo_cost is off: the clearance term will not see '
+                'predicted belief growth. See docs/PLANNER_LOCK.md',
+                RuntimeWarning, stacklevel=2)
+        if not bool(kouw_et1_ambiguity):
+            warnings.warn(
+                'kouw_et1_ambiguity is off: the ambiguity term falls back to a '
+                'posterior-entropy sum that charges for route length. '
+                'See docs/PLANNER_LOCK.md',
+                RuntimeWarning, stacklevel=2)
         if abs(float(process_noise_xy) - _LOCKED_PROCESS_NOISE_XY) > 1e-9:
             warnings.warn(
                 f'process_noise_xy={float(process_noise_xy)} overrides the locked '
@@ -1037,47 +1062,48 @@ class UnicyclePlannerBase:
         wps = [np.asarray(wp, dtype=float).reshape(2) for wp in waypoints]
         if not wps:
             return controls.reshape(-1)
-        # A map polyline states corners only. With an arrival radius of one
-        # integration step the seed switches target while still a step short of
-        # a corner, so it turns early and the swept body leaves the lane. Insert
-        # intermediate points at half the arrival radius: the seed then reaches
-        # each point before turning, and the route it traces is unchanged.
-        wps = self._densify_waypoints(
-            np.asarray(start_xy_yaw, dtype=float).reshape(-1)[:2], wps,
-            spacing=max(0.18, self.v_max * self.dt) / 2.0,
-        )
-
+        # Drive the polyline EXACTLY: at each step either rotate toward the
+        # next waypoint or advance along the current bearing, never both, and
+        # never overshoot. Two defects made the previous seed unusable at the
+        # global layer, where one step is v_max*dt = 1 m:
+        #   - it switched target once within one step of a corner, so it began
+        #     turning a metre early and the swept body left the lane;
+        #   - it pivoted in place whenever the heading error exceeded a gate,
+        #     and a 0.80x0.55 m body sweeping its circumscribed radius does not
+        #     fit in a 1.10-1.30 m aisle.
+        # Landing on each waypoint removes both: the seed turns only where the
+        # polyline turns, and each rotation happens at a point the map declares
+        # driveable. This is a route-candidate parameterisation for the
+        # optimiser to start from, not the runtime controller.
         m = np.asarray(start_xy_yaw, dtype=float).reshape(-1)[:3].copy()
         S_dummy = np.eye(3, dtype=float) * 1e-6
-        waypoint_idx = 0
-        # The global planner can move farther than the old fixed 0.18 m
-        # threshold in one control interval (e.g. 0.6 * 0.4 = 0.24 m).
-        # Scale arrival to the integration step so a route seed cannot hop over
-        # a corner and oscillate around it forever.
-        arrival_radius = max(0.18, self.v_max * self.dt)
-        for k in range(self.horizon):
-            if waypoint_idx >= len(wps):
-                break
-            target = wps[waypoint_idx]
-            d = target - m[:2]
-            if float(np.linalg.norm(d)) <= arrival_radius:
-                if waypoint_idx >= len(wps) - 1:
-                    # Leave the unused tail at zero. Continuing to chase the
-                    # final point makes a long-horizon seed repeatedly overshoot
-                    # the goal and end far from it.
+        step = 0
+        for target in wps:
+            target = np.asarray(target, dtype=float).reshape(2)
+            while step < self.horizon:
+                delta = target - m[:2]
+                distance = float(np.linalg.norm(delta))
+                if distance <= 1.0e-8:
                     break
-                waypoint_idx += 1
-                target = wps[waypoint_idx]
-                d = target - m[:2]
-            desired_yaw = math.atan2(float(d[1]), float(d[0]))
-            yaw_err = wrap_angle(desired_yaw - float(m[2]))
-            w = float(np.clip(yaw_err / max(self.dt, 1e-6), self.w_min, self.w_max))
-            # Route seeds should enter a leg nearly aligned. The former 0.65-rad
-            # drive gate made the unicycle cut obstacle corners even when the
-            # map polyline itself had sufficient clearance.
-            v = self.v_max if abs(yaw_err) < 0.25 else 0.0
-            controls[k] = [float(np.clip(v, self.v_min, self.v_max)), w]
-            m, _ = self.predict(m, S_dummy, controls[k])
+                yaw_error = wrap_angle(
+                    math.atan2(float(delta[1]), float(delta[0])) - float(m[2]))
+                if abs(yaw_error) > 1.0e-8:
+                    command = np.array([
+                        0.0,
+                        float(np.clip(yaw_error / max(self.dt, 1e-6),
+                                      self.w_min, self.w_max)),
+                    ], dtype=float)
+                else:
+                    command = np.array([
+                        float(np.clip(min(self.v_max, distance / max(self.dt, 1e-6)),
+                                      self.v_min, self.v_max)),
+                        0.0,
+                    ], dtype=float)
+                controls[step] = command
+                m, _ = self.predict(m, S_dummy, command)
+                step += 1
+            if step >= self.horizon:
+                break
         return controls.reshape(-1)
 
     @staticmethod

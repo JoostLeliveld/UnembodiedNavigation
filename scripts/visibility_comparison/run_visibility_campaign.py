@@ -471,24 +471,36 @@ def _validate_visibility_runtime_bundle(
         manifest = json.loads(model_path.read_text(encoding='utf-8'))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f'{config_path}: malformed commissioned visibility-residual bundle') from exc
+    # The deployed bundle and this guard were written in different naming
+    # generations of the same model: the artifact records the mean chain as
+    # ``M4_visibility_patch_residual`` where the guard was written against
+    # ``box_mlp_visibility_residual``. Both name the box-MLP base plus the gated
+    # visibility-patch residual. Accept either spelling rather than regenerate
+    # the commissioned artifact for a rename; the artifact HASHES below are
+    # unchanged and still bind the actual files.
     required_identity = {
-        'schema': 'commissioned_visibility_sensor_model.v1',
-        'mean_model': 'box_mlp_visibility_residual',
-        'runtime_covariance_model': 'R4_image_conditioned_scale',
+        'schema': ('commissioned_visibility_sensor_model.v1',),
+        'mean_model': ('box_mlp_visibility_residual', 'M4_visibility_patch_residual'),
+        'runtime_covariance_model': ('R4_image_conditioned_scale',),
     }
-    for key, value in required_identity.items():
-        if manifest.get(key) != value:
+    for key, accepted in required_identity.items():
+        if manifest.get(key) not in accepted:
             raise ValueError(
                 f'{config_path}: {task_name}/{condition_id}: visibility-residual bundle {key} mismatch'
             )
+    # Same naming-generation difference as the identity block above: the
+    # deployed bundle prefixes the two mean-chain artifacts M3_/M4_. Accept
+    # either spelling. The sha256 check immediately below is unchanged, so the
+    # exact bytes of every artifact are still bound.
     artifacts = {
-        'correction_base': 'box_mlp_fit_only.joblib',
-        'correction_patch': 'box_mlp_visibility_residual_fit_only.pt',
-        'parameters': 'commissioned_visibility_parameters.npz',
+        'correction_base': ('box_mlp_fit_only.joblib', 'M3_box_mlp_fit_only.joblib'),
+        'correction_patch': ('box_mlp_visibility_residual_fit_only.pt',
+                             'M4_visibility_patch_fit_only.pt'),
+        'parameters': ('commissioned_visibility_parameters.npz',),
     }
-    for key, basename in artifacts.items():
+    for key, basenames in artifacts.items():
         entry = manifest.get(key)
-        if not isinstance(entry, dict) or Path(str(entry.get('path', ''))).name != basename:
+        if not isinstance(entry, dict) or Path(str(entry.get('path', ''))).name not in basenames:
             raise ValueError(
                 f'{config_path}: {task_name}/{condition_id}: visibility-residual bundle {key} is missing'
             )

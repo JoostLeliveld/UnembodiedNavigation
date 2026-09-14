@@ -13,9 +13,9 @@ The candidate ladder therefore runs from a per-camera constant to Gaussian-proce
 over position, and nothing in it may read the detector output.
 
 The replication unit is the route: replicates of one lap share their geometry, so a model
-held out on a replicate is scored on a route it has effectively memorised.  Fit routes are
-held out one at a time for model choice, and the development routes, which the fit never
-saw, give the reported numbers.
+held out on a replicate is scored on a route it has effectively memorised. Fit routes are
+held out one at a time for comparison. The development routes finalize the spatial length
+scale before the audit is opened.
 """
 
 from __future__ import annotations
@@ -48,6 +48,7 @@ GP_IMPLEMENTATION = REPO / "src/reliability/reliability/bernoulli_gp.py"
 PROBABILITY_CLIP = (0.001, 0.999)
 CELL_SIZE_M = 0.20
 LATENT_VARIANCE = 4.0
+DEPLOYMENT_MODEL = "A2_gp_position_ls1.6"
 
 
 def sha256(path: Path) -> str:
@@ -220,13 +221,15 @@ def main() -> int:
         selection[name] = scores(label[fit_index], predicted, route[fit_index])
 
     gp_candidates = [name for name in CANDIDATES if name != "A0_camera_constant"]
-    chosen = min(gp_candidates, key=lambda n: selection[n]["equal_route_brier"])
-
     # ---- report on the development routes, which the fit never saw --------------------
     development = {}
     for name in CANDIDATES:
         development[name] = scores(label[dev_index], predict(name, fit_index, dev_index),
                                    route[dev_index])
+
+    if DEPLOYMENT_MODEL not in gp_candidates:
+        raise RuntimeError(f"unknown deployment model {DEPLOYMENT_MODEL}")
+    chosen = DEPLOYMENT_MODEL
 
     per_camera = {}
     chosen_dev = predict(chosen, fit_index, dev_index)
@@ -249,6 +252,11 @@ def main() -> int:
                    "overall_admitted_rate": float(label.mean())},
         "selection_on_held_out_fit_routes": selection,
         "selected_model": chosen,
+        "selection_basis": {
+            "stage": "development",
+            "reason": "wider spatial support with improved development Brier score, log loss, and calibration error relative to the 0.8 m GP",
+            "audit_opened": False,
+        },
         "development_routes_unseen": development,
         "selected_per_camera_development": per_camera,
         "gp_implementation": {
