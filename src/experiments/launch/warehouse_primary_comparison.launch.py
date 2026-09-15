@@ -20,6 +20,12 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('dt', default_value='0.25'),
         DeclareLaunchArgument('v_max', default_value='0.22'),
         DeclareLaunchArgument('discount_gamma', default_value='0.98'),
+        # Corrected global objective (planning.core.localization_cost).
+        DeclareLaunchArgument('localization_cost_mode', default_value='anchored_excess'),
+        DeclareLaunchArgument('risk_uses_reference_R', default_value='true'),
+        DeclareLaunchArgument('route_length_weight', default_value='0.0'),
+        DeclareLaunchArgument('travel_time_weight', default_value='0.0'),
+        DeclareLaunchArgument('r_reference_uv', default_value='-1.0'),
         DeclareLaunchArgument('goal_prior_u_std_start', default_value='80.0'),
         DeclareLaunchArgument('goal_prior_v_std_start', default_value='80.0'),
         DeclareLaunchArgument('goal_prior_u_std_final', default_value='4.0'),

@@ -108,6 +108,22 @@ r_miss_uv: 40.0
 ambiguity_weight: 1.0
 observation_risk_scale: 1.0
 ambiguity_term_scale: 1.0
+# --- corrected global objective (docs/global_planner_objective_correction.md) ---
+# anchored_excess: the observability term is the reference-anchored, non-negative
+# excess conditional entropy, so a constant offset in the ambiguity cannot create a
+# preference between routes of different duration. Set 'raw_ambiguity' (with
+# risk_uses_reference_R: false) only to reproduce a pre-correction run.
+localization_cost_mode: anchored_excess
+# Evaluate the goal/risk term at the reference measurement covariance, so q and R
+# reach the objective through the localization term alone.
+risk_uses_reference_R: true
+# Reference measurement std (px); <= 0 means "use r_visible_uv" (best attainable).
+r_reference_uv: -1.0
+# Explicit travel baseline. 0.0 in the fixed-horizon MPC, where arrival time is
+# already carried by the discounted risk integral; the offline full-route selector
+# uses travel time directly. This is route length/time, NOT actuator effort.
+route_length_weight: 0.0
+travel_time_weight: 0.0
 control_weight: 0.0
 visibility_weight: 0.0
 goal_prior_u_std_start: 50.0

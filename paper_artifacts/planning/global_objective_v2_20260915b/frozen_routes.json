@@ -1,0 +1,416 @@
+{
+  "generated": "2026-09-15T22:37:37",
+  "source_artifact": "paper_artifacts/planning/global_objective_v2_20260915b",
+  "footprint": "deployed_burger",
+  "gate_set": "full",
+  "arms": {
+    "C1_constant_R": {
+      "condition": "q=unity/R=constant_global",
+      "tasks": {
+        "route_apron_to_a3_mid": {
+          "selected_route": "above_connector",
+          "waypoints": [
+            [
+              3.3,
+              1.725
+            ],
+            [
+              1.0,
+              1.725
+            ],
+            [
+              1.0,
+              1.75
+            ]
+          ],
+          "start_xy": [
+            3.3,
+            -1.0
+          ],
+          "goal_xy": [
+            1.0,
+            1.75
+          ],
+          "safety_status": "SAFE",
+          "min_body_clearance_m": 0.26179453975926137,
+          "route_length_m": 5.050000000000001,
+          "travel_time_s": 13.4,
+          "localization_cost": 0.0,
+          "total_cost": 13.4,
+          "optimizer_initial_routes_json": "[{\"name\": \"above_connector\", \"waypoints\": [[3.3, 1.725], [1.0, 1.725], [1.0, 1.75]]}]"
+        },
+        "route_apron_to_a2_mid": {
+          "selected_route": "above_connector",
+          "waypoints": [
+            [
+              3.3,
+              1.725
+            ],
+            [
+              -1.0,
+              1.725
+            ],
+            [
+              -1.0,
+              1.75
+            ]
+          ],
+          "start_xy": [
+            3.3,
+            -1.0
+          ],
+          "goal_xy": [
+            -1.0,
+            1.75
+          ],
+          "safety_status": "SAFE",
+          "min_body_clearance_m": 0.26179453975926137,
+          "route_length_m": 7.050000000000001,
+          "travel_time_s": 16.7,
+          "localization_cost": 0.0,
+          "total_cost": 16.7,
+          "optimizer_initial_routes_json": "[{\"name\": \"above_connector\", \"waypoints\": [[3.3, 1.725], [-1.0, 1.725], [-1.0, 1.75]]}]"
+        },
+        "route_west_to_a1_upper": {
+          "selected_route": "above_cross_aisle",
+          "waypoints": [
+            [
+              -5.25,
+              4.575
+            ],
+            [
+              -3.0,
+              4.575
+            ],
+            [
+              -3.0,
+              3.5
+            ]
+          ],
+          "start_xy": [
+            -5.25,
+            -0.75
+          ],
+          "goal_xy": [
+            -3.0,
+            3.5
+          ],
+          "safety_status": "SAFE",
+          "min_body_clearance_m": 0.21179453975926155,
+          "route_length_m": 8.65,
+          "travel_time_s": 19.3,
+          "localization_cost": 0.0,
+          "total_cost": 19.3,
+          "optimizer_initial_routes_json": "[{\"name\": \"above_cross_aisle\", \"waypoints\": [[-5.25, 4.575], [-3.0, 4.575], [-3.0, 3.5]]}]"
+        },
+        "control_west_to_a1_low": {
+          "selected_route": "below_main_aisle",
+          "waypoints": [
+            [
+              -5.25,
+              -2.44
+            ],
+            [
+              -3.0,
+              -2.44
+            ],
+            [
+              -3.0,
+              -0.75
+            ]
+          ],
+          "start_xy": [
+            -5.25,
+            -0.75
+          ],
+          "goal_xy": [
+            -3.0,
+            -0.75
+          ],
+          "safety_status": "SAFE",
+          "min_body_clearance_m": 0.2867945397592617,
+          "route_length_m": 5.63,
+          "travel_time_s": 14.4,
+          "localization_cost": 0.0,
+          "total_cost": 14.4,
+          "optimizer_initial_routes_json": "[{\"name\": \"below_main_aisle\", \"waypoints\": [[-5.25, -2.44], [-3.0, -2.44], [-3.0, -0.75]]}]"
+        },
+        "sanity_visible_apron_crossing": {
+          "selected_route": "below_main_aisle",
+          "waypoints": [
+            [
+              -4.25,
+              -2.44
+            ],
+            [
+              3.45,
+              -2.44
+            ],
+            [
+              3.45,
+              -3.15
+            ]
+          ],
+          "start_xy": [
+            -4.25,
+            -3.15
+          ],
+          "goal_xy": [
+            3.45,
+            -3.15
+          ],
+          "safety_status": "SAFE",
+          "min_body_clearance_m": 0.18679453975926164,
+          "route_length_m": 9.120000000000001,
+          "travel_time_s": 20.1,
+          "localization_cost": 0.0,
+          "total_cost": 20.1,
+          "optimizer_initial_routes_json": "[{\"name\": \"below_main_aisle\", \"waypoints\": [[-4.25, -2.44], [3.45, -2.44], [3.45, -3.15]]}]"
+        },
+        "occlusion_transit_a4": {
+          "selected_route": "above_connector",
+          "waypoints": [
+            [
+              3.3,
+              1.725
+            ],
+            [
+              3.1,
+              1.725
+            ],
+            [
+              3.1,
+              4.6
+            ]
+          ],
+          "start_xy": [
+            3.3,
+            -2.4
+          ],
+          "goal_xy": [
+            3.1,
+            4.6
+          ],
+          "safety_status": "SAFE",
+          "min_body_clearance_m": 0.23000000000000043,
+          "route_length_m": 7.199999999999999,
+          "travel_time_s": 15.4,
+          "localization_cost": 0.0,
+          "total_cost": 15.4,
+          "optimizer_initial_routes_json": "[{\"name\": \"above_connector\", \"waypoints\": [[3.3, 1.725], [3.1, 1.725], [3.1, 4.6]]}]"
+        }
+      }
+    },
+    "C2_visibility_aware": {
+      "condition": "q=commissioned/R=commissioned",
+      "tasks": {
+        "route_apron_to_a3_mid": {
+          "selected_route": "below_main_aisle",
+          "waypoints": [
+            [
+              3.3,
+              -2.44
+            ],
+            [
+              1.0,
+              -2.44
+            ],
+            [
+              1.0,
+              1.75
+            ]
+          ],
+          "start_xy": [
+            3.3,
+            -1.0
+          ],
+          "goal_xy": [
+            1.0,
+            1.75
+          ],
+          "safety_status": "SAFE",
+          "min_body_clearance_m": 0.26179453975926137,
+          "route_length_m": 7.93,
+          "travel_time_s": 18.1,
+          "localization_cost": 0.8648837126071524,
+          "total_cost": 18.964883712607154,
+          "optimizer_initial_routes_json": "[{\"name\": \"below_main_aisle\", \"waypoints\": [[3.3, -2.44], [1.0, -2.44], [1.0, 1.75]]}]"
+        },
+        "route_apron_to_a2_mid": {
+          "selected_route": "below_main_aisle",
+          "waypoints": [
+            [
+              3.3,
+              -2.44
+            ],
+            [
+              -1.0,
+              -2.44
+            ],
+            [
+              -1.0,
+              1.75
+            ]
+          ],
+          "start_xy": [
+            3.3,
+            -1.0
+          ],
+          "goal_xy": [
+            -1.0,
+            1.75
+          ],
+          "safety_status": "SAFE",
+          "min_body_clearance_m": 0.26179453975926137,
+          "route_length_m": 9.93,
+          "travel_time_s": 21.400000000000002,
+          "localization_cost": 0.8768660323741749,
+          "total_cost": 22.276866032374176,
+          "optimizer_initial_routes_json": "[{\"name\": \"below_main_aisle\", \"waypoints\": [[3.3, -2.44], [-1.0, -2.44], [-1.0, 1.75]]}]"
+        },
+        "route_west_to_a1_upper": {
+          "selected_route": "below_main_aisle",
+          "waypoints": [
+            [
+              -5.25,
+              -2.44
+            ],
+            [
+              -3.0,
+              -2.44
+            ],
+            [
+              -3.0,
+              3.5
+            ]
+          ],
+          "start_xy": [
+            -5.25,
+            -0.75
+          ],
+          "goal_xy": [
+            -3.0,
+            3.5
+          ],
+          "safety_status": "SAFE",
+          "min_body_clearance_m": 0.2867945397592617,
+          "route_length_m": 9.879999999999999,
+          "travel_time_s": 21.400000000000002,
+          "localization_cost": 10.260419806626524,
+          "total_cost": 31.66041980662653,
+          "optimizer_initial_routes_json": "[{\"name\": \"below_main_aisle\", \"waypoints\": [[-5.25, -2.44], [-3.0, -2.44], [-3.0, 3.5]]}]"
+        },
+        "control_west_to_a1_low": {
+          "selected_route": "below_main_aisle",
+          "waypoints": [
+            [
+              -5.25,
+              -2.44
+            ],
+            [
+              -3.0,
+              -2.44
+            ],
+            [
+              -3.0,
+              -0.75
+            ]
+          ],
+          "start_xy": [
+            -5.25,
+            -0.75
+          ],
+          "goal_xy": [
+            -3.0,
+            -0.75
+          ],
+          "safety_status": "SAFE",
+          "min_body_clearance_m": 0.2867945397592617,
+          "route_length_m": 5.63,
+          "travel_time_s": 14.4,
+          "localization_cost": 0.386714103674537,
+          "total_cost": 14.786714103674537,
+          "optimizer_initial_routes_json": "[{\"name\": \"below_main_aisle\", \"waypoints\": [[-5.25, -2.44], [-3.0, -2.44], [-3.0, -0.75]]}]"
+        },
+        "sanity_visible_apron_crossing": {
+          "selected_route": "below_main_aisle",
+          "waypoints": [
+            [
+              -4.25,
+              -2.44
+            ],
+            [
+              3.45,
+              -2.44
+            ],
+            [
+              3.45,
+              -3.15
+            ]
+          ],
+          "start_xy": [
+            -4.25,
+            -3.15
+          ],
+          "goal_xy": [
+            3.45,
+            -3.15
+          ],
+          "safety_status": "SAFE",
+          "min_body_clearance_m": 0.18679453975926164,
+          "route_length_m": 9.120000000000001,
+          "travel_time_s": 20.1,
+          "localization_cost": 0.4995858720819458,
+          "total_cost": 20.599585872081946,
+          "optimizer_initial_routes_json": "[{\"name\": \"below_main_aisle\", \"waypoints\": [[-4.25, -2.44], [3.45, -2.44], [3.45, -3.15]]}]"
+        },
+        "occlusion_transit_a4": {
+          "selected_route": "below_main_aisle",
+          "waypoints": [
+            [
+              3.3,
+              -2.44
+            ],
+            [
+              3.1,
+              -2.44
+            ],
+            [
+              3.1,
+              4.6
+            ]
+          ],
+          "start_xy": [
+            3.3,
+            -2.4
+          ],
+          "goal_xy": [
+            3.1,
+            4.6
+          ],
+          "safety_status": "SAFE",
+          "min_body_clearance_m": 0.23000000000000043,
+          "route_length_m": 7.279999999999999,
+          "travel_time_s": 18.7,
+          "localization_cost": 32.797110347820094,
+          "total_cost": 51.4971103478201,
+          "optimizer_initial_routes_json": "[{\"name\": \"below_main_aisle\", \"waypoints\": [[3.3, -2.44], [3.1, -2.44], [3.1, 4.6]]}]"
+        }
+      }
+    }
+  },
+  "provisional_campaign": {
+    "seeds": [
+      0
+    ],
+    "note": "One-seed provisional campaign. Requires ROS 2 + Gazebo + the YOLO detector weights; it cannot be run from an environment without them.",
+    "command": "python3 scripts/visibility_comparison/run_visibility_campaign.py --config scripts/visibility_comparison/warehouse_visibility_campaign.yaml --seeds 0 --out logs/campaigns/provisional_corrected_objective_<tag>",
+    "planner_overrides": {
+      "localization_cost_mode": "anchored_excess",
+      "risk_uses_reference_R": true,
+      "route_length_weight": 0.0,
+      "travel_time_weight": 0.0,
+      "r_reference_uv": -1.0
+    }
+  }
+}

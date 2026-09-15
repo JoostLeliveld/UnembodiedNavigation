@@ -24,6 +24,8 @@ class PlanResult:
     risk_cost: float
     ambiguity_cost: float
     control_cost: float
+    travel_cost: float = 0.0
+    ambiguity_raw_cost: float = 0.0
     risk_mean: float = 0.0
     risk_cov_trace: float = 0.0
     risk_cov_logdet: float = 0.0
@@ -143,6 +145,11 @@ class UnicyclePlannerBase:
         driveable_geometry_json='',
         robot_collision_radius_m=0.125,
         runtime_debug=False,
+        localization_cost_mode='anchored_excess',
+        risk_uses_reference_R=True,
+        route_length_weight=0.0,
+        travel_time_weight=0.0,
+        r_reference_uv=None,
     ):
         self.horizon = int(horizon)
         self.dt = float(dt)
@@ -243,6 +250,38 @@ class UnicyclePlannerBase:
             self.r_miss_uv ** 2,
         ])
         self.R = self.R_visible.copy()
+
+        # --- corrected objective configuration -------------------------------
+        # `localization_cost_mode`:
+        #   'anchored_excess' (default) -- the observability term is the
+        #       reference-anchored, non-negative excess conditional entropy
+        #       (see planning.core.localization_cost). It is exactly zero when
+        #       the measurement covariance equals the reference, so constant,
+        #       perfect observability contributes NO route-dependent preference,
+        #       and it can never be negative, so no route can be rewarded for
+        #       lasting longer.
+        #   'raw_ambiguity' -- the pre-correction term, kept only so that old
+        #       runs can be reproduced and compared.
+        # `risk_uses_reference_R`: evaluate the goal/risk term at the fixed
+        #   reference measurement covariance, so q and R influence the objective
+        #   through the localization term alone.
+        # `route_length_weight` / `travel_time_weight`: the explicit travel
+        #   baseline (cost per metre of path / per second of travel). This is a
+        #   route-length quantity, NOT actuator effort: `control_weight` still
+        #   means sum-of-squares control effort and is left alone.
+        self.localization_cost_mode = str(localization_cost_mode or 'anchored_excess').strip().lower()
+        if self.localization_cost_mode not in ('anchored_excess', 'raw_ambiguity'):
+            raise ValueError(
+                "localization_cost_mode must be 'anchored_excess' or 'raw_ambiguity'"
+            )
+        self.risk_uses_reference_R = bool(risk_uses_reference_R)
+        self.route_length_weight = float(route_length_weight)
+        self.travel_time_weight = float(travel_time_weight)
+        self.r_reference_uv = float(self.r_visible_uv if r_reference_uv is None else r_reference_uv)
+        self.R_reference = np.diag([
+            self.r_reference_uv ** 2,
+            self.r_reference_uv ** 2,
+        ])
 
         if self.use_visibility_model:
             vis_cfg = GPVisibilityMapConfig(
@@ -688,7 +727,9 @@ class UnicyclePlannerBase:
             'total_cost': float(total_cost),
             'risk_cost': float(metrics.get('risk_cost', math.nan)),
             'ambiguity_cost': float(metrics.get('ambiguity_cost', math.nan)),
+            'ambiguity_raw_cost': float(metrics.get('ambiguity_raw_cost', math.nan)),
             'control_cost': float(metrics.get('control_cost', math.nan)),
+            'travel_cost': float(metrics.get('travel_cost', math.nan)),
             'obstacle_cost': float(metrics.get('obstacle_cost', 0.0)),
             'risk_mean': float(metrics.get('risk_mean', 0.0)),
             'risk_cov_trace': float(metrics.get('risk_cov_trace', 0.0)),
@@ -796,6 +837,7 @@ class UnicyclePlannerBase:
             risk_term
             + ambiguity_term
             + float(metrics.get('control_cost', 0.0))
+            + float(metrics.get('travel_cost', 0.0))
             + float(metrics.get('obstacle_cost', 0.0))
         )
 
@@ -849,6 +891,11 @@ class UnicyclePlannerBase:
             float(self.ambiguity_weight),
             float(self.r_visible_uv),
             float(self.r_miss_uv),
+            float(self.r_reference_uv),
+            str(self.localization_cost_mode),
+            bool(self.risk_uses_reference_R),
+            float(self.route_length_weight),
+            float(self.travel_time_weight),
             float(self.visibility_sigma_kappa),
             float(self.goal_prior_u_std_start),
             float(self.goal_prior_v_std_start),
@@ -918,6 +965,11 @@ class UnicyclePlannerBase:
                 # from process_noise_xy/theta (see unicycle_process_noise_ca).
                 R_visible=np.array(self.R_visible, dtype=float),
                 R_miss=np.array(self.R_miss, dtype=float),
+                R_reference=np.array(self.R_reference, dtype=float),
+                localization_cost_mode=str(self.localization_cost_mode),
+                risk_uses_reference_R=bool(self.risk_uses_reference_R),
+                route_length_weight=float(self.route_length_weight),
+                travel_time_weight=float(self.travel_time_weight),
                 control_weight=float(self.control_weight),
                 risk_scale=float(self.risk_weight_obs * self.observation_risk_scale if use_observation_risk else 0.0),
                 ambiguity_scale=float(self.ambiguity_weight * self.ambiguity_term_scale if use_ambiguity_term else 0.0),
@@ -997,7 +1049,9 @@ class UnicyclePlannerBase:
         total_risk = 0.0
         total_amb = 0.0
         total_control = 0.0
+        total_travel = 0.0
         total_obstacle = 0.0
+        total_ambiguity_raw = 0.0
         total_risk_mean = 0.0
         total_risk_cov_trace = 0.0
         total_risk_cov_logdet = 0.0
@@ -1007,12 +1061,17 @@ class UnicyclePlannerBase:
         use_observation_risk = self.use_obs_risk
         use_ambiguity_term = self.use_ambiguity
         goal_xy = np.asarray(goal_state[:2], dtype=float).reshape(2)
+        # `R_good` is the fixed REFERENCE measurement covariance: the best
+        # attainable observation quality. It anchors both the localization cost
+        # and (when `risk_uses_reference_R`) the goal/risk term, so that q and R
+        # influence the objective through the localization term alone.
         R_good = np.asarray(
             R_baseline_override
             if R_baseline_override is not None
-            else np.diag([float(self.r_visible_uv) ** 2, float(self.r_visible_uv) ** 2]),
+            else self.R_reference,
             dtype=float,
         )
+        anchored = (self.localization_cost_mode == 'anchored_excess')
 
         for t in range(self.horizon):
             u = controls[t]
@@ -1028,44 +1087,65 @@ class UnicyclePlannerBase:
                     method=self.approx_method,
                     R_override=R_plan,
                 )
-            weight_t = self.discount_gamma ** t
-            observation_risk = 0.0
-            baseline_risk = 0.0
-            ambiguity_current = 0.0
-            ambiguity_baseline = 0.0
             Sigma_good = None
             Gamma_good = None
-            if use_observation_risk and mu_y is not None:
-                goal_cov_t = self.goal_obs_cov_for_progress(
-                    (float(progress_index) + float(t)) / max(self.goal_progress_n_steps, 1)
-                )
-                risk_parts = risk_components(mu_y, Sigma_y, (goal_obs, goal_cov_t))
-                risk_scale = self.risk_weight_obs * self.observation_risk_scale
-                observation_risk = risk_scale * risk_parts['total']
-                total_risk_mean += weight_t * risk_scale * risk_parts['mean']
-                total_risk_cov_trace += weight_t * risk_scale * risk_parts['cov_trace']
-                total_risk_cov_logdet += weight_t * risk_scale * risk_parts['cov_logdet']
-                total_risk_const += weight_t * risk_scale * risk_parts['const']
+            mu_good = None
+            if use_observation_risk or use_ambiguity_term:
                 mu_good, Sigma_good, Gamma_good = self.approx_observation(
                     m,
                     S,
                     method=self.approx_method,
                     R_override=R_good,
                 )
+            weight_t = self.discount_gamma ** t
+            observation_risk = 0.0
+            baseline_risk = 0.0
+            ambiguity_current = 0.0
+            ambiguity_baseline = 0.0
+            if use_observation_risk and mu_y is not None:
+                goal_cov_t = self.goal_obs_cov_for_progress(
+                    (float(progress_index) + float(t)) / max(self.goal_progress_n_steps, 1)
+                )
+                risk_scale = self.risk_weight_obs * self.observation_risk_scale
                 baseline_parts = risk_components(mu_good, Sigma_good, (goal_obs, goal_cov_t))
                 baseline_risk = risk_scale * baseline_parts['total']
+                if self.risk_uses_reference_R:
+                    risk_parts = baseline_parts
+                else:
+                    risk_parts = risk_components(mu_y, Sigma_y, (goal_obs, goal_cov_t))
+                observation_risk = risk_scale * risk_parts['total']
+                total_risk_mean += weight_t * risk_scale * risk_parts['mean']
+                total_risk_cov_trace += weight_t * risk_scale * risk_parts['cov_trace']
+                total_risk_cov_logdet += weight_t * risk_scale * risk_parts['cov_logdet']
+                total_risk_const += weight_t * risk_scale * risk_parts['const']
             total_risk += weight_t * observation_risk
             if use_ambiguity_term and Sigma_y is not None:
                 ambiguity_scale = self.ambiguity_weight * self.ambiguity_term_scale
-                ambiguity_current = ambiguity_scale * ambiguity(Sigma_y, Gamma, S)
-                if Sigma_good is None or Gamma_good is None:
-                    _mu_good, Sigma_good, Gamma_good = self.approx_observation(
-                        m,
-                        S,
-                        method=self.approx_method,
-                        R_override=R_good,
-                    )
+                ambiguity_raw = float(ambiguity(Sigma_y, Gamma, S))
                 ambiguity_baseline = ambiguity_scale * ambiguity(Sigma_good, Gamma_good, S)
+                total_ambiguity_raw += weight_t * ambiguity_raw
+                if anchored:
+                    # Reference-anchored, non-negative excess conditional
+                    # entropy, integrated over the step duration. Any additive
+                    # constant in the ambiguity cancels against the reference,
+                    # so the term cannot smuggle in a duration preference.
+                    # The reference is taken through the SAME observation
+                    # transform, so the anchoring is exact for ET2 as well as
+                    # ET1 (under ET1 it equals the closed form
+                    # 0.5*log(det R_plan / det R_ref); see localization_cost).
+                    # Per-step (not dt-weighted) here, exactly like the risk
+                    # term: this objective is a per-step discounted average, and
+                    # at a FIXED horizon the anchored term differs from the raw
+                    # ambiguity by a route-independent constant, so the MPC's
+                    # optimum and gradients are provably unchanged. The
+                    # dt-weighted integral form belongs to the full-route
+                    # selector, whose costs are in absolute seconds.
+                    excess = ambiguity_raw - float(
+                        ambiguity(Sigma_good, Gamma_good, S)
+                    )
+                    ambiguity_current = ambiguity_scale * max(excess, 0.0)
+                else:
+                    ambiguity_current = ambiguity_scale * ambiguity_raw
                 total_amb += weight_t * ambiguity_current
             total_delta_risk_visibility += weight_t * (observation_risk - baseline_risk)
             total_delta_ambiguity_visibility += weight_t * (ambiguity_current - ambiguity_baseline)
@@ -1074,22 +1154,62 @@ class UnicyclePlannerBase:
                 S_nogo = self._expected_state_posterior_covariance(S, Sigma_y, Gamma)
             total_obstacle += weight_t * self.obstacle_penalty(m, S_nogo)
             total_control += weight_t * self.control_weight * float(u[0] ** 2 + u[1] ** 2)
+            # Explicit travel baseline: distance covered and time spent. This is
+            # a route-length/travel-time quantity, not actuator effort.
+            total_travel += weight_t * (
+                self.route_length_weight * abs(float(u[0])) * self.dt
+                + self.travel_time_weight * self.dt
+            )
 
-        total = total_risk + total_amb + total_control + total_obstacle
+        # Normalise by the effective discounted horizon, exactly as the CasADi
+        # objective does, so the NumPy evaluator and the CasADi objective the
+        # optimizer minimises are numerically the same function.
+        inv_H = 1.0 / max(self._effective_horizon(), 1e-8)
+        total_risk *= inv_H
+        total_amb *= inv_H
+        total_control *= inv_H
+        total_travel *= inv_H
+        total_obstacle *= inv_H
+        total_risk_mean *= inv_H
+        total_risk_cov_trace *= inv_H
+        total_risk_cov_logdet *= inv_H
+        total_risk_const *= inv_H
+        total_delta_risk_visibility *= inv_H
+        total_delta_ambiguity_visibility *= inv_H
+        total_ambiguity_raw *= inv_H
+
+        total = total_risk + total_amb + total_control + total_travel + total_obstacle
         if return_metrics:
             return total, {
                 'risk_cost': float(total_risk),
                 'ambiguity_cost': float(total_amb),
+                'localization_cost': float(total_amb),
+                'ambiguity_raw_cost': float(total_ambiguity_raw),
                 'control_cost': float(total_control),
+                'travel_cost': float(total_travel),
                 'obstacle_cost': float(total_obstacle),
                 'risk_mean': float(total_risk_mean),
                 'risk_cov_trace': float(total_risk_cov_trace),
                 'risk_cov_logdet': float(total_risk_cov_logdet),
                 'risk_const': float(total_risk_const),
+                # NOTE: with the corrected objective (`risk_uses_reference_R`)
+                # the risk term is evaluated at the reference covariance, so
+                # `delta_risk_visibility` is identically 0 BY CONSTRUCTION --
+                # that is the point: q and R no longer move the goal term. The
+                # whole observability effect is in the localization term
+                # (`ambiguity_cost`) and in `delta_ambiguity_visibility`.
                 'delta_risk_visibility': float(total_delta_risk_visibility),
                 'delta_ambiguity_visibility': float(total_delta_ambiguity_visibility),
             }
         return total
+
+    def _effective_horizon(self):
+        """Discounted horizon length used to normalise the per-step sums."""
+        gamma = float(self.discount_gamma)
+        H = int(self.horizon)
+        if abs(gamma - 1.0) < 1e-12:
+            return float(H)
+        return float((1.0 - gamma ** H) / (1.0 - gamma))
 
     def plan(self, m0, S0, goal_xy, *, progress_index=0.0):
         t_plan_start = time.perf_counter()
@@ -1375,6 +1495,8 @@ class UnicyclePlannerBase:
             risk_cost=float(metrics.get('risk_cost', 0.0)),
             ambiguity_cost=float(metrics.get('ambiguity_cost', 0.0)),
             control_cost=float(metrics.get('control_cost', 0.0)),
+            travel_cost=float(metrics.get('travel_cost', 0.0)),
+            ambiguity_raw_cost=float(metrics.get('ambiguity_raw_cost', 0.0)),
             obstacle_cost=float(metrics.get('obstacle_cost', 0.0)),
             risk_mean=float(metrics.get('risk_mean', 0.0)),
             risk_cov_trace=float(metrics.get('risk_cov_trace', 0.0)),

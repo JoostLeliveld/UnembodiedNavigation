@@ -1,0 +1,97 @@
+task,condition,footprint,gate_set,n_safe,shortest,most_observable,delta_travel_s,delta_localization_nat_s,break_even_localization_weight,declared_localization_weight,selected_at_declared_weight,note
+control_west_to_a1_low,q=commissioned/R=commissioned,deployed_burger,deployment,2,below_main_aisle,above_cross_aisle,12.000000000000002,-66.6823367532283,inf,1.0,below_main_aisle,the longer route is never more observable; no weight can justify it
+control_west_to_a1_low,q=commissioned/R=commissioned,deployed_burger,full,2,below_main_aisle,above_cross_aisle,12.000000000000002,-66.6823367532283,inf,1.0,below_main_aisle,the longer route is never more observable; no weight can justify it
+control_west_to_a1_low,q=commissioned/R=commissioned,spec_0.80x0.55,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+control_west_to_a1_low,q=commissioned/R=commissioned,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+control_west_to_a1_low,q=commissioned/R=constant_global,deployed_burger,deployment,2,below_main_aisle,above_cross_aisle,12.000000000000002,0.0,inf,1.0,below_main_aisle,the longer route is never more observable; no weight can justify it
+control_west_to_a1_low,q=commissioned/R=constant_global,deployed_burger,full,2,below_main_aisle,above_cross_aisle,12.000000000000002,0.0,inf,1.0,below_main_aisle,the longer route is never more observable; no weight can justify it
+control_west_to_a1_low,q=commissioned/R=constant_global,spec_0.80x0.55,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+control_west_to_a1_low,q=commissioned/R=constant_global,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+control_west_to_a1_low,q=unity/R=commissioned,deployed_burger,deployment,2,below_main_aisle,above_cross_aisle,12.000000000000002,-0.0011953720361157494,inf,1.0,below_main_aisle,the longer route is never more observable; no weight can justify it
+control_west_to_a1_low,q=unity/R=commissioned,deployed_burger,full,2,below_main_aisle,above_cross_aisle,12.000000000000002,-0.0011953720361157494,inf,1.0,below_main_aisle,the longer route is never more observable; no weight can justify it
+control_west_to_a1_low,q=unity/R=commissioned,spec_0.80x0.55,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+control_west_to_a1_low,q=unity/R=commissioned,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+control_west_to_a1_low,q=unity/R=constant_global,deployed_burger,deployment,2,below_main_aisle,above_cross_aisle,12.000000000000002,0.0,inf,1.0,below_main_aisle,the longer route is never more observable; no weight can justify it
+control_west_to_a1_low,q=unity/R=constant_global,deployed_burger,full,2,below_main_aisle,above_cross_aisle,12.000000000000002,0.0,inf,1.0,below_main_aisle,the longer route is never more observable; no weight can justify it
+control_west_to_a1_low,q=unity/R=constant_global,spec_0.80x0.55,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+control_west_to_a1_low,q=unity/R=constant_global,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+occlusion_transit_a4,q=commissioned/R=commissioned,deployed_burger,deployment,2,above_connector,below_main_aisle,3.299999999999999,25.951215058600596,0.12716167595807168,1.0,below_main_aisle,detour justified above this weight
+occlusion_transit_a4,q=commissioned/R=commissioned,deployed_burger,full,2,above_connector,below_main_aisle,3.299999999999999,25.951215058600596,0.12716167595807168,1.0,below_main_aisle,detour justified above this weight
+occlusion_transit_a4,q=commissioned/R=commissioned,spec_0.80x0.55,deployment,0,-,-,,,nan,,-,fewer than two safe candidates
+occlusion_transit_a4,q=commissioned/R=commissioned,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+occlusion_transit_a4,q=commissioned/R=constant_global,deployed_burger,deployment,2,above_connector,below_main_aisle,3.299999999999999,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+occlusion_transit_a4,q=commissioned/R=constant_global,deployed_burger,full,2,above_connector,below_main_aisle,3.299999999999999,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+occlusion_transit_a4,q=commissioned/R=constant_global,spec_0.80x0.55,deployment,0,-,-,,,nan,,-,fewer than two safe candidates
+occlusion_transit_a4,q=commissioned/R=constant_global,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+occlusion_transit_a4,q=unity/R=commissioned,deployed_burger,deployment,2,above_connector,below_main_aisle,3.299999999999999,-0.0003287273099318311,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+occlusion_transit_a4,q=unity/R=commissioned,deployed_burger,full,2,above_connector,below_main_aisle,3.299999999999999,-0.0003287273099318311,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+occlusion_transit_a4,q=unity/R=commissioned,spec_0.80x0.55,deployment,0,-,-,,,nan,,-,fewer than two safe candidates
+occlusion_transit_a4,q=unity/R=commissioned,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+occlusion_transit_a4,q=unity/R=constant_global,deployed_burger,deployment,2,above_connector,below_main_aisle,3.299999999999999,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+occlusion_transit_a4,q=unity/R=constant_global,deployed_burger,full,2,above_connector,below_main_aisle,3.299999999999999,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+occlusion_transit_a4,q=unity/R=constant_global,spec_0.80x0.55,deployment,0,-,-,,,nan,,-,fewer than two safe candidates
+occlusion_transit_a4,q=unity/R=constant_global,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+route_apron_to_a2_mid,q=commissioned/R=commissioned,deployed_burger,deployment,2,above_connector,below_main_aisle,4.700000000000003,39.31608737346636,0.11954394025413471,1.0,below_main_aisle,detour justified above this weight
+route_apron_to_a2_mid,q=commissioned/R=commissioned,deployed_burger,full,2,above_connector,below_main_aisle,4.700000000000003,39.31608737346636,0.11954394025413471,1.0,below_main_aisle,detour justified above this weight
+route_apron_to_a2_mid,q=commissioned/R=commissioned,spec_0.80x0.55,deployment,2,above_connector,below_main_aisle,4.700000000000003,39.31608737346636,0.11954394025413471,1.0,below_main_aisle,detour justified above this weight
+route_apron_to_a2_mid,q=commissioned/R=commissioned,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+route_apron_to_a2_mid,q=commissioned/R=constant_global,deployed_burger,deployment,2,above_connector,below_main_aisle,4.700000000000003,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a2_mid,q=commissioned/R=constant_global,deployed_burger,full,2,above_connector,below_main_aisle,4.700000000000003,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a2_mid,q=commissioned/R=constant_global,spec_0.80x0.55,deployment,2,above_connector,below_main_aisle,4.700000000000003,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a2_mid,q=commissioned/R=constant_global,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+route_apron_to_a2_mid,q=unity/R=commissioned,deployed_burger,deployment,2,above_connector,below_main_aisle,4.700000000000003,-0.00046818738081200184,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a2_mid,q=unity/R=commissioned,deployed_burger,full,2,above_connector,below_main_aisle,4.700000000000003,-0.00046818738081200184,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a2_mid,q=unity/R=commissioned,spec_0.80x0.55,deployment,2,above_connector,below_main_aisle,4.700000000000003,-0.00046818738081200184,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a2_mid,q=unity/R=commissioned,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+route_apron_to_a2_mid,q=unity/R=constant_global,deployed_burger,deployment,2,above_connector,below_main_aisle,4.700000000000003,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a2_mid,q=unity/R=constant_global,deployed_burger,full,2,above_connector,below_main_aisle,4.700000000000003,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a2_mid,q=unity/R=constant_global,spec_0.80x0.55,deployment,2,above_connector,below_main_aisle,4.700000000000003,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a2_mid,q=unity/R=constant_global,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+route_apron_to_a3_mid,q=commissioned/R=commissioned,deployed_burger,deployment,2,above_connector,below_main_aisle,4.700000000000001,36.15540966633551,0.12999437825140164,1.0,below_main_aisle,detour justified above this weight
+route_apron_to_a3_mid,q=commissioned/R=commissioned,deployed_burger,full,2,above_connector,below_main_aisle,4.700000000000001,36.15540966633551,0.12999437825140164,1.0,below_main_aisle,detour justified above this weight
+route_apron_to_a3_mid,q=commissioned/R=commissioned,spec_0.80x0.55,deployment,2,above_connector,below_main_aisle,4.700000000000001,36.15540966633551,0.12999437825140164,1.0,below_main_aisle,detour justified above this weight
+route_apron_to_a3_mid,q=commissioned/R=commissioned,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+route_apron_to_a3_mid,q=commissioned/R=constant_global,deployed_burger,deployment,2,above_connector,below_main_aisle,4.700000000000001,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a3_mid,q=commissioned/R=constant_global,deployed_burger,full,2,above_connector,below_main_aisle,4.700000000000001,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a3_mid,q=commissioned/R=constant_global,spec_0.80x0.55,deployment,2,above_connector,below_main_aisle,4.700000000000001,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a3_mid,q=commissioned/R=constant_global,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+route_apron_to_a3_mid,q=unity/R=commissioned,deployed_burger,deployment,2,above_connector,below_main_aisle,4.700000000000001,-0.00046818738081200184,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a3_mid,q=unity/R=commissioned,deployed_burger,full,2,above_connector,below_main_aisle,4.700000000000001,-0.00046818738081200184,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a3_mid,q=unity/R=commissioned,spec_0.80x0.55,deployment,2,above_connector,below_main_aisle,4.700000000000001,-0.00046818738081200184,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a3_mid,q=unity/R=commissioned,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+route_apron_to_a3_mid,q=unity/R=constant_global,deployed_burger,deployment,2,above_connector,below_main_aisle,4.700000000000001,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a3_mid,q=unity/R=constant_global,deployed_burger,full,2,above_connector,below_main_aisle,4.700000000000001,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a3_mid,q=unity/R=constant_global,spec_0.80x0.55,deployment,2,above_connector,below_main_aisle,4.700000000000001,0.0,inf,1.0,above_connector,the longer route is never more observable; no weight can justify it
+route_apron_to_a3_mid,q=unity/R=constant_global,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+route_west_to_a1_upper,q=commissioned/R=commissioned,deployed_burger,deployment,2,above_cross_aisle,below_main_aisle,2.1000000000000014,45.668496359833945,0.045983559069988994,1.0,below_main_aisle,detour justified above this weight
+route_west_to_a1_upper,q=commissioned/R=commissioned,deployed_burger,full,2,above_cross_aisle,below_main_aisle,2.1000000000000014,45.668496359833945,0.045983559069988994,1.0,below_main_aisle,detour justified above this weight
+route_west_to_a1_upper,q=commissioned/R=commissioned,spec_0.80x0.55,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+route_west_to_a1_upper,q=commissioned/R=commissioned,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+route_west_to_a1_upper,q=commissioned/R=constant_global,deployed_burger,deployment,2,above_cross_aisle,below_main_aisle,2.1000000000000014,0.0,inf,1.0,above_cross_aisle,the longer route is never more observable; no weight can justify it
+route_west_to_a1_upper,q=commissioned/R=constant_global,deployed_burger,full,2,above_cross_aisle,below_main_aisle,2.1000000000000014,0.0,inf,1.0,above_cross_aisle,the longer route is never more observable; no weight can justify it
+route_west_to_a1_upper,q=commissioned/R=constant_global,spec_0.80x0.55,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+route_west_to_a1_upper,q=commissioned/R=constant_global,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+route_west_to_a1_upper,q=unity/R=commissioned,deployed_burger,deployment,2,above_cross_aisle,below_main_aisle,2.1000000000000014,-0.00020919010632025614,inf,1.0,above_cross_aisle,the longer route is never more observable; no weight can justify it
+route_west_to_a1_upper,q=unity/R=commissioned,deployed_burger,full,2,above_cross_aisle,below_main_aisle,2.1000000000000014,-0.00020919010632025614,inf,1.0,above_cross_aisle,the longer route is never more observable; no weight can justify it
+route_west_to_a1_upper,q=unity/R=commissioned,spec_0.80x0.55,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+route_west_to_a1_upper,q=unity/R=commissioned,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+route_west_to_a1_upper,q=unity/R=constant_global,deployed_burger,deployment,2,above_cross_aisle,below_main_aisle,2.1000000000000014,0.0,inf,1.0,above_cross_aisle,the longer route is never more observable; no weight can justify it
+route_west_to_a1_upper,q=unity/R=constant_global,deployed_burger,full,2,above_cross_aisle,below_main_aisle,2.1000000000000014,0.0,inf,1.0,above_cross_aisle,the longer route is never more observable; no weight can justify it
+route_west_to_a1_upper,q=unity/R=constant_global,spec_0.80x0.55,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+route_west_to_a1_upper,q=unity/R=constant_global,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+sanity_visible_apron_crossing,q=commissioned/R=commissioned,deployed_burger,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+sanity_visible_apron_crossing,q=commissioned/R=commissioned,deployed_burger,full,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+sanity_visible_apron_crossing,q=commissioned/R=commissioned,spec_0.80x0.55,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+sanity_visible_apron_crossing,q=commissioned/R=commissioned,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+sanity_visible_apron_crossing,q=commissioned/R=constant_global,deployed_burger,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+sanity_visible_apron_crossing,q=commissioned/R=constant_global,deployed_burger,full,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+sanity_visible_apron_crossing,q=commissioned/R=constant_global,spec_0.80x0.55,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+sanity_visible_apron_crossing,q=commissioned/R=constant_global,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+sanity_visible_apron_crossing,q=unity/R=commissioned,deployed_burger,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+sanity_visible_apron_crossing,q=unity/R=commissioned,deployed_burger,full,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+sanity_visible_apron_crossing,q=unity/R=commissioned,spec_0.80x0.55,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+sanity_visible_apron_crossing,q=unity/R=commissioned,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates
+sanity_visible_apron_crossing,q=unity/R=constant_global,deployed_burger,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+sanity_visible_apron_crossing,q=unity/R=constant_global,deployed_burger,full,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+sanity_visible_apron_crossing,q=unity/R=constant_global,spec_0.80x0.55,deployment,1,below_main_aisle,-,,,nan,,below_main_aisle,fewer than two safe candidates
+sanity_visible_apron_crossing,q=unity/R=constant_global,spec_0.80x0.55,full,0,-,-,,,nan,,-,fewer than two safe candidates

@@ -268,6 +268,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'goal_prior_u_std_final', 'goal_prior_v_std_final',
         'goal_tightening_power', 'nogo_weight', 'nogo_safe_distance',
         'nogo_logbarrier_eps',
+        'route_length_weight', 'travel_time_weight',
         'nogo_belief_kappa',
         'pixel_correction_nis_threshold',
         'robot_collision_radius_m',
@@ -310,6 +311,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'local_replan_on_waypoint_change',
         'latency_compensate_plan_handoff',
         'use_truth_localization',
+        'risk_uses_reference_R',
     )
     for key in bool_keys:
         expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
@@ -325,6 +327,7 @@ def _existing_entry_matches_config(entry: dict, cfg: dict) -> tuple[bool, str]:
         'local_nogo_penalty_type',
         'heading_update_mode',
         'local_controller_type',
+        'localization_cost_mode',
     )
     for key in string_keys:
         expected = task_cfg[key] if key in task_cfg else (cfg[key] if key in cfg else None)
@@ -386,6 +389,11 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'reset_world:={str(cfg.get("reset_world", False)).lower()}',
         f'r_visible_uv:={cfg.get("r_visible_uv", 2.5)}',
         f'r_miss_uv:={cfg.get("r_miss_uv", 120.0)}',
+        f'localization_cost_mode:={cfg.get("localization_cost_mode", "anchored_excess")}',
+        f'risk_uses_reference_R:={str(cfg.get("risk_uses_reference_R", True)).lower()}',
+        f'route_length_weight:={cfg.get("route_length_weight", 0.0)}',
+        f'travel_time_weight:={cfg.get("travel_time_weight", 0.0)}',
+        f'r_reference_uv:={cfg.get("r_reference_uv", -1.0)}',
         f'discount_gamma:={cfg.get("discount_gamma", 0.98)}',
         f'v_max:={cfg.get("v_max", 0.22)}',
         f'process_noise_xy:={cfg.get("process_noise_xy", 0.01)}',

@@ -24,9 +24,20 @@ class CasadiEfeParams:
     # theta, v) — the exact integrated Q_d(theta, v, dt) — so a frozen Q would be unused.
     R_visible: object
     R_miss: object
+    # Fixed REFERENCE measurement covariance. It anchors the localization cost
+    # (so a constant offset in the ambiguity cannot change route ranking) and,
+    # when `risk_uses_reference_R`, the goal/risk term (so q and R influence the
+    # objective through the localization term alone).
+    R_reference: object
     control_weight: float
     risk_scale: float
     ambiguity_scale: float
+    # 'anchored_excess' (corrected) or 'raw_ambiguity' (pre-correction).
+    localization_cost_mode: str
+    risk_uses_reference_R: bool
+    # Explicit travel baseline: cost per metre of path / per second of travel.
+    route_length_weight: float
+    travel_time_weight: float
     discount_gamma: float
     process_noise_xy: float
     process_noise_theta: float
@@ -335,8 +346,11 @@ def visibility_aware_unicycle_efe_ca(
     total_risk = 0
     total_amb = 0
     total_control = 0
+    total_travel = 0
     total_nogo = 0
     denom = float(max(params.goal_progress_n_steps, 1))  # goal-prior anneal schedule length
+    R_ref = ca.DM(np.asarray(params.R_reference, dtype=float))
+    anchored = str(params.localization_cost_mode) == 'anchored_excess'
 
     for t in range(params.time_horizon):
         u_t = ca.vertcat(u_flat[2 * t], u_flat[2 * t + 1])
@@ -364,17 +378,37 @@ def visibility_aware_unicycle_efe_ca(
         R_plan = _blend_observation_covariance_ca(p_vis_eff, params)
         if approx == 'ET1':
             mu, Sigma, Gamma = et1_ca(m, S, R_plan, g, dg)
+            mu_ref, Sigma_ref, Gamma_ref = et1_ca(m, S, R_ref, g, dg)
         elif approx == 'ET2':
             mu, Sigma, Gamma = et2_ca(m, S, R_plan, g, dg, d2g or [])
+            mu_ref, Sigma_ref, Gamma_ref = et2_ca(m, S, R_ref, g, dg, d2g or [])
         else:
             raise RuntimeError(f"Unsupported CasADi approximation: {approx}")
 
         progress = (progress_index0 + float(t)) / denom
         goal_cov_t = goal_obs_cov_ca_for_progress(params, progress)
         weight_t = params.discount_gamma ** t
-        total_risk += weight_t * params.risk_scale * risk_ca(mu, Sigma, goal_obs, goal_cov_t)
-        total_amb += weight_t * params.ambiguity_scale * ambiguity_ca(Sigma, Gamma, S)
+        if params.risk_uses_reference_R:
+            risk_t = risk_ca(mu_ref, Sigma_ref, goal_obs, goal_cov_t)
+        else:
+            risk_t = risk_ca(mu, Sigma, goal_obs, goal_cov_t)
+        total_risk += weight_t * params.risk_scale * risk_t
+        if anchored:
+            # Reference-anchored excess conditional entropy, through the SAME
+            # observation transform as the plan term, clamped at zero.
+            # Per-step, like the risk term (see base_planner._evaluate_controls):
+            # at a fixed horizon this differs from the raw ambiguity by a
+            # route-independent constant, so the optimum is unchanged.
+            excess = (ambiguity_ca(Sigma, Gamma, S)
+                      - ambiguity_ca(Sigma_ref, Gamma_ref, S))
+            total_amb += weight_t * params.ambiguity_scale * ca.fmax(excess, 0.0)
+        else:
+            total_amb += weight_t * params.ambiguity_scale * ambiguity_ca(Sigma, Gamma, S)
         total_control += weight_t * params.control_weight * ca.sumsqr(u_t)
+        total_travel += weight_t * (
+            params.route_length_weight * ca.fabs(u_t[0]) * params.dt
+            + params.travel_time_weight * params.dt
+        )
         if nogo_belief_cost is not None and params.use_belief_nogo_cost:
             S_drive = state_posterior_cov_ca(S, Sigma, Gamma)
             total_nogo += weight_t * nogo_belief_cost(m, S_drive)
@@ -386,7 +420,7 @@ def visibility_aware_unicycle_efe_ca(
     H_eff = sum(params.discount_gamma ** t for t in range(params.time_horizon))
     inv_H = 1.0 / max(H_eff, 1e-8)
     return (total_risk * inv_H + total_amb * inv_H
-            + total_control * inv_H + total_nogo * inv_H)
+            + total_control * inv_H + total_travel * inv_H + total_nogo * inv_H)
 
 
 def _make_valgrad_wrapper(valgrad):

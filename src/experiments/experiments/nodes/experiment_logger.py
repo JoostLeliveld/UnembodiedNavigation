@@ -134,6 +134,11 @@ class ExperimentLogger(Node):
         self.declare_parameter('goal_progress_n_steps', 90)
         self.declare_parameter('observation_risk_scale', 1.25)
         self.declare_parameter('ambiguity_term_scale', 1.00)
+        self.declare_parameter('localization_cost_mode', 'anchored_excess')
+        self.declare_parameter('risk_uses_reference_R', True)
+        self.declare_parameter('route_length_weight', 0.0)
+        self.declare_parameter('travel_time_weight', 0.0)
+        self.declare_parameter('r_reference_uv', -1.0)
         self.declare_parameter('discount_gamma', 0.98)
         self.declare_parameter('visibility_target_height_m', 0.0)
         self.declare_parameter('perception_use_geometry_occlusion', True)
@@ -286,6 +291,11 @@ class ExperimentLogger(Node):
         self.goal_progress_n_steps = int(self.get_parameter('goal_progress_n_steps').value)
         self.observation_risk_scale = float(self.get_parameter('observation_risk_scale').value)
         self.ambiguity_term_scale = float(self.get_parameter('ambiguity_term_scale').value)
+        self.localization_cost_mode = str(self.get_parameter('localization_cost_mode').value)
+        self.risk_uses_reference_R = bool(self.get_parameter('risk_uses_reference_R').value)
+        self.route_length_weight = float(self.get_parameter('route_length_weight').value)
+        self.travel_time_weight = float(self.get_parameter('travel_time_weight').value)
+        self.r_reference_uv = float(self.get_parameter('r_reference_uv').value)
         self.discount_gamma = float(self.get_parameter('discount_gamma').value)
         self.visibility_target_height_m = float(self.get_parameter('visibility_target_height_m').value)
         self.perception_use_geometry_occlusion = bool(
@@ -505,6 +515,11 @@ class ExperimentLogger(Node):
             'goal_progress_n_steps': self.goal_progress_n_steps,
             'observation_risk_scale': self.observation_risk_scale,
             'ambiguity_term_scale': self.ambiguity_term_scale,
+            'localization_cost_mode': self.localization_cost_mode,
+            'risk_uses_reference_R': self.risk_uses_reference_R,
+            'route_length_weight': self.route_length_weight,
+            'travel_time_weight': self.travel_time_weight,
+            'r_reference_uv': self.r_reference_uv,
             'discount_gamma': self.discount_gamma,
             'visibility_target_height_m': self.visibility_target_height_m,
             'visibility_geometry_json': self.visibility_geometry_json,

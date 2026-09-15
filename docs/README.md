@@ -19,6 +19,7 @@ module landing pages:
 | [`runtime_dataflow.md`](runtime_dataflow.md) | Offline artifact flow and online ROS topic flow. |
 | [`perception_details.md`](perception_details.md) | YOLO detector architecture, dataset, inference settings, and training performance. |
 | [`PLANNER_HYPERPARAMETERS.md`](PLANNER_HYPERPARAMETERS.md) | Planner knobs, intended effects, and tuning cautions. |
+| [`global_planner_objective_correction.md`](global_planner_objective_correction.md) | Global route objective: duration-dependent accounting defect, the correction, regression tests, and offline validation. |
 | [`uncertainty_propagation.md`](uncertainty_propagation.md) | Process, command, encoder, and belief-covariance conventions. |
 
 For implementation details, use the package READMEs under `src/`:

@@ -1,0 +1,15 @@
+objective: localization_cost_mode=anchored_excess, risk_uses_reference_R=True, travel weights from campaign config
+task                    condition                         ok   valid   term_gd  seed                          risk      loc  travel        nogo  nit  solve_s
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+occlusion_transit_a4    q=unity/R=constant_global         FalseTrue      0.259  solver:warm_or_cold           6.17    0.000   0.000         0.0   60      7.4
+occlusion_transit_a4    q=commissioned/R=commissioned     FalseTrue      3.668  solver:warm_or_cold          23.88    4.037   0.000         1.8   60      8.2
+route_apron_to_a3_mid   q=unity/R=constant_global         FalseTrue      0.229  solver:route:above_conne      4.33    0.000   0.000         0.0   60      7.7
+route_apron_to_a3_mid   q=commissioned/R=commissioned     FalseTrue      0.377  solver:route:below_main_     10.59    0.195   0.000         0.0   60      8.0
+route_apron_to_a2_mid   q=unity/R=constant_global         FalseTrue      0.176  solver:route:above_conne     10.22    0.000   0.000         0.0   60      7.6
+route_apron_to_a2_mid   q=commissioned/R=commissioned     True True      0.296  solver:route:below_main_     20.43    0.149   0.000         0.0   53      8.8
+route_west_to_a1_upper  q=unity/R=constant_global         True True      0.054  solver:route:above_cross      6.87    0.000   0.000         6.5   52      7.2
+route_west_to_a1_upper  q=commissioned/R=commissioned     FalseTrue      0.366  solver:route:below_main_     19.82    0.424   0.000         0.0   60      8.0
+control_west_to_a1_low  q=unity/R=constant_global         FalseTrue      0.131  solver:route:below_main_      5.04    0.000   0.000         0.0   60      7.1
+control_west_to_a1_low  q=commissioned/R=commissioned     FalseTrue      0.137  solver:route:below_main_      4.99    0.000   0.000         0.0   60      7.7
+
+5 solve(s) did not produce a valid goal-reaching rollout

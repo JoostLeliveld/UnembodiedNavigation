@@ -1,0 +1,88 @@
+Minimal reproduction of the duration-dependent accounting defect.
+
+Setup (deliberately as small as possible)
+-----------------------------------------
+A synthetic two-band corridor, two safe routes with the SAME endpoints, the
+SAME constant q and the SAME constant R, one route strictly longer:
+
+    direct : (0,0) -> (10,0)                       10.0 m
+    detour : (0,0) -> (3,0) -> (3,2) -> (7,2) -> (7,0) -> (10,0)   14.0 m
+
+Both stay inside the driveable region with the complete 0.80 x 0.55 m body, both
+reach the goal, and nothing about observability distinguishes them: q = 1
+everywhere and R is a single constant. A correct planner must pick `direct`.
+
+What the legacy accounting does
+-------------------------------
+The legacy full-route score is the discounted sum of the per-step EFE ambiguity,
+truncated at arrival. Under ET1 the per-step ambiguity is exactly
+
+    A = log(2*pi*e) + 2*log(r)      (for R = r^2 * I_2)
+
+-- a constant that has nothing to do with the route, but that is summed once per
+step. With T_detour > T_direct the constant contributes
+`A * (T_detour - T_direct)`, so the ranking is decided entirely by the SIGN of A,
+and the sign of A is decided by the UNITS the measurement is written in:
+
+    r = 2.5 px                   -> A = +4.67 nats  -> longer route penalised
+    r = 2.5/1280 image widths    -> A = -9.64 nats  -> longer route REWARDED
+
+Same robot, same camera, same physics, same q, same R; the winner flips because
+the pixel coordinate was renormalised. That is the defect: a route-independent
+additive constant becomes a duration term as soon as candidates are compared at
+different arrival times.
+
+The corrected objective anchors the ambiguity to a fixed reference measurement
+quality and adds an explicit travel baseline, so the constant cancels exactly and
+`direct` wins in both unit systems.
+
+Run:
+    python3 scripts/planning_validation/minimal_duration_bias_repro.py
+
+==============================================================================
+Identical constant q (=1) and constant R on BOTH routes; detour is 4 m longer.
+Goal attainment is a hard gate in every case, so no soft goal term is needed
+to make the routes comparable.
+
+### LEGACY accounting, measurement in PIXELS (r = 2.5 px)
+    per-step ambiguity constant A = +4.6705 nats (R = (2.5)^2 I)
+    route    safe     len[m]    T[s]      loc/amb    travel        TOTAL  selected
+    direct   True      10.00    16.7     779.9666      0.00     779.9666  <== True
+    detour   True      14.00    29.9    1396.4671      0.00    1396.4671  False
+    -> selects: direct
+
+### LEGACY accounting, SAME measurement in IMAGE WIDTHS (r = 2.5/1280)
+    per-step ambiguity constant A = -9.6388 nats (R = (0.00195312)^2 I)
+    route    safe     len[m]    T[s]      loc/amb    travel        TOTAL  selected
+    direct   True      10.00    16.7   -1609.6750      0.00   -1609.6750  False
+    detour   True      14.00    29.9   -2881.9929      0.00   -2881.9929  <== True
+    -> selects: detour
+
+### CORRECTED objective, measurement in PIXELS (r = 2.5 px)
+    per-step ambiguity constant A = +4.6705 nats (R = (2.5)^2 I)
+    route    safe     len[m]    T[s]      loc/amb    travel        TOTAL  selected
+    direct   True      10.00    16.7       0.0000     16.70      16.7000  <== True
+    detour   True      14.00    29.9       0.0000     29.90      29.9000  False
+    -> selects: direct
+
+### CORRECTED objective, SAME measurement in IMAGE WIDTHS (r = 2.5/1280)
+    per-step ambiguity constant A = -9.6388 nats (R = (0.00195312)^2 I)
+    route    safe     len[m]    T[s]      loc/amb    travel        TOTAL  selected
+    direct   True      10.00    16.7       0.0000     16.70      16.7000  <== True
+    detour   True      14.00    29.9       0.0000     29.90      29.9000  False
+    -> selects: direct
+
+==============================================================================
+VERDICT
+  legacy    : pixels -> direct     image widths -> detour     RANKING FLIPS WITH UNITS
+  corrected : pixels -> direct     image widths -> direct     stable
+
+  The legacy score contains a route-independent per-step constant A. Once
+  candidates are compared at different arrival times it becomes A * T, i.e. a
+  duration term whose sign is an artefact of the measurement units. With
+  A < 0 the LONGER route wins on identical q and R.
+  The corrected objective measures ambiguity relative to a fixed reference, so
+  A cancels, the localization cost is exactly 0 at constant perfect
+  observability, and the explicit travel baseline picks the shortest route.
+
+  reproduction CONFIRMED

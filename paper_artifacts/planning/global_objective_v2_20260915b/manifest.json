@@ -1,0 +1,95 @@
+{
+  "generated": "2026-09-15T22:37:17",
+  "git_revision": "dc55a30fce24a7134dceb254a97deb79024a6528",
+  "campaign_config": "scripts/visibility_comparison/warehouse_visibility_campaign.yaml",
+  "tasks_yaml": "src/experiments/config/tasks.yaml",
+  "world": "src/sim/gazebo_worlds/worlds/warehouse_aws.world.sdf",
+  "gp_artifact": "paper_artifacts/gp/warehouse_visibility_gp_v1/yolo_score_raw_gp.npz",
+  "gp_artifact_sha256": "ccbc058311f0e6feeac9aacf034f474af202fba712bd2141752cdfc62de192c8",
+  "driveable_geometry_sha256": "53c4ac91c102f6a9d31eadc979d0c7f458ab239bb0b21cc69674965b5125ad7b",
+  "tasks": [
+    "occlusion_transit_a4",
+    "route_apron_to_a3_mid",
+    "route_apron_to_a2_mid",
+    "route_west_to_a1_upper",
+    "control_west_to_a1_low",
+    "sanity_visible_apron_crossing"
+  ],
+  "conditions": [
+    {
+      "q_mode": "unity",
+      "r_mode": "constant_global",
+      "r_visible_scale": 1.0,
+      "label": "q=unity/R=constant_global"
+    },
+    {
+      "q_mode": "unity",
+      "r_mode": "commissioned",
+      "r_visible_scale": 1.0,
+      "label": "q=unity/R=commissioned"
+    },
+    {
+      "q_mode": "commissioned",
+      "r_mode": "constant_global",
+      "r_visible_scale": 1.0,
+      "label": "q=commissioned/R=constant_global"
+    },
+    {
+      "q_mode": "commissioned",
+      "r_mode": "commissioned",
+      "r_visible_scale": 1.0,
+      "label": "q=commissioned/R=commissioned"
+    }
+  ],
+  "footprints": {
+    "spec_0.80x0.55": {
+      "length_m": 0.8,
+      "width_m": 0.55,
+      "circumradius_m": 0.48541219597369
+    },
+    "deployed_burger": {
+      "length_m": 0.14,
+      "width_m": 0.178,
+      "circumradius_m": 0.11322985472038724
+    }
+  },
+  "gate_sets": {
+    "full": {
+      "require_body_inside_driveable": true
+    },
+    "deployment": {
+      "require_body_inside_driveable": false
+    }
+  },
+  "objectives": {
+    "legacy_efe": {
+      "mode": "legacy_efe",
+      "travel_time_weight": 0.0,
+      "route_length_weight": 0.0,
+      "localization_weight": 0.0,
+      "goal_risk_weight": 1.0,
+      "obstacle_weight": 1.0,
+      "discount_gamma": 0.995,
+      "risk_uses_reference_R": false
+    },
+    "corrected_v2": {
+      "mode": "corrected_v2",
+      "travel_time_weight": 1.0,
+      "route_length_weight": 0.0,
+      "localization_weight": 1.0,
+      "goal_risk_weight": 0.0,
+      "obstacle_weight": 0.0,
+      "discount_gamma": 1.0,
+      "risk_uses_reference_R": true
+    }
+  },
+  "localization_weight": 1.0,
+  "r_reference_uv": 2.5,
+  "execution_model": {
+    "dt": 0.1,
+    "v_max": 0.6,
+    "w_max": 1.0
+  },
+  "n_candidate_rows": 352,
+  "numpy": "1.26.4"
+}

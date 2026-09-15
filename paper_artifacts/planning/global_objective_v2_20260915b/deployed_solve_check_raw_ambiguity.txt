@@ -1,0 +1,16 @@
+objective: localization_cost_mode=raw_ambiguity, risk_uses_reference_R=True, travel weights from campaign config
+task                    condition                         ok   valid   term_gd  seed                          risk      loc  travel        nogo  nit  solve_s
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+occlusion_transit_a4    q=unity/R=constant_global         FalseTrue      0.335  solver:warm_or_cold           6.18    4.670   0.000         0.0   60      7.7
+occlusion_transit_a4    q=commissioned/R=commissioned     FalseTrue      2.694  solver:warm_or_cold          14.00    9.321   0.000         1.2   60     11.2
+route_apron_to_a3_mid   q=unity/R=constant_global         FalseTrue      0.232  solver:route:above_conne      4.37    4.670   0.000         0.0   60      9.4
+route_apron_to_a3_mid   q=commissioned/R=commissioned     True True      0.246  solver:route:below_main_     10.15    4.869   0.000         0.1   57      8.9
+route_apron_to_a2_mid   q=unity/R=constant_global         FalseTrue      0.134  solver:route:above_conne     10.31    4.670   0.000         0.0   60      8.0
+route_apron_to_a2_mid   q=commissioned/R=commissioned     True True      0.256  solver:route:below_main_     21.23    4.817   0.000         0.0   47      8.0
+route_west_to_a1_upper  q=unity/R=constant_global         True True      0.054  solver:route:above_cross      6.87    4.670   0.000         6.5   47      6.5
+route_west_to_a1_upper  q=commissioned/R=commissioned     FalseTrue      0.372  solver:route:below_main_     19.82    5.096   0.000         0.0   60      6.5
+control_west_to_a1_low  q=unity/R=constant_global         FalseTrue      0.136  solver:route:below_main_      5.04    4.670   0.000         0.0   60      5.7
+control_west_to_a1_low  q=commissioned/R=commissioned     FalseTrue      0.159  solver:route:below_main_      5.10    4.671   0.000         0.0   60      7.4
+
+4 solve(s) did not produce a valid goal-reaching rollout
+

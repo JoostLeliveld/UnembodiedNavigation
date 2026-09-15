@@ -96,6 +96,19 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('collision_geometry_json', '')
         _declare_if_not('r_visible_uv', 2.5)
         _declare_if_not('r_miss_uv', 120.0)
+        # Corrected global objective (see planning.core.localization_cost):
+        # the observability term is the reference-anchored, non-negative excess
+        # conditional entropy, the goal/risk term is evaluated at the reference
+        # measurement covariance, and the travel baseline is an explicit route
+        # length / travel time. 'raw_ambiguity' + risk_uses_reference_R=false
+        # reproduces the pre-correction objective for old-vs-new comparison.
+        _declare_if_not('localization_cost_mode', 'anchored_excess')
+        _declare_if_not('risk_uses_reference_R', True)
+        _declare_if_not('route_length_weight', 0.0)
+        _declare_if_not('travel_time_weight', 0.0)
+        # Reference measurement std (px). <= 0 means "use r_visible_uv", i.e. the
+        # best attainable observation quality is the anchor.
+        _declare_if_not('r_reference_uv', -1.0)
         _declare_if_not('visibility_sigma_kappa', 1.0)
         _declare_if_not('goal_prior_u_std_start', 80.0)
         _declare_if_not('goal_prior_v_std_start', 80.0)
@@ -250,6 +263,12 @@ class UnicyclePlannerNode(Node):
         self.collision_geometry_json = str(self.get_parameter('collision_geometry_json').value)
         self.r_visible_uv = float(self.get_parameter('r_visible_uv').value)
         self.r_miss_uv = float(self.get_parameter('r_miss_uv').value)
+        self.localization_cost_mode = str(self.get_parameter('localization_cost_mode').value).strip().lower()
+        self.risk_uses_reference_R = _as_bool(self.get_parameter('risk_uses_reference_R').value)
+        self.route_length_weight = float(self.get_parameter('route_length_weight').value)
+        self.travel_time_weight = float(self.get_parameter('travel_time_weight').value)
+        _r_ref = float(self.get_parameter('r_reference_uv').value)
+        self.r_reference_uv = self.r_visible_uv if _r_ref <= 0.0 else _r_ref
         self.visibility_sigma_kappa = float(self.get_parameter('visibility_sigma_kappa').value)
         self.goal_prior_u_std_start = float(self.get_parameter('goal_prior_u_std_start').value)
         self.goal_prior_v_std_start = float(self.get_parameter('goal_prior_v_std_start').value)
@@ -662,6 +681,11 @@ class UnicyclePlannerNode(Node):
             collision_geometry_json=self.collision_geometry_json,
             visibility_artifact_path=self.visibility_artifact_path,
             r_visible_uv=self.r_visible_uv, r_miss_uv=self.r_miss_uv,
+            localization_cost_mode=str(g('localization_cost_mode')),
+            risk_uses_reference_R=_as_bool(g('risk_uses_reference_R')),
+            route_length_weight=float(g('route_length_weight')),
+            travel_time_weight=float(g('travel_time_weight')),
+            r_reference_uv=float(self.r_reference_uv),
             visibility_sigma_kappa=self.visibility_sigma_kappa,
             goal_prior_u_std_start=g('goal_prior_u_std_start'),
             goal_prior_v_std_start=g('goal_prior_v_std_start'),

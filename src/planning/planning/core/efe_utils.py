@@ -210,7 +210,9 @@ def risk_components(mu, Sigma, goal):
         logdet_t = np.log(np.maximum(np.linalg.det(S_star), 1e-12))
 
     term_trace = np.trace(S_inv @ Sigma)
-    term_quad = float(diff.T @ S_inv @ diff)
+    # np.squeeze keeps this a plain scalar conversion: float() on a (1, 1)
+    # array is deprecated in NumPy >= 1.25 and an error in NumPy >= 2.
+    term_quad = float(np.squeeze(diff.T @ S_inv @ diff))
     mean = 0.5 * term_quad
     cov_trace = 0.5 * float(term_trace)
     cov_logdet = 0.5 * float(logdet_t - logdet_s)

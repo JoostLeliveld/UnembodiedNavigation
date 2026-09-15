@@ -5,9 +5,19 @@ the current locked AWS values, and recipes for eliciting specific behaviours.
 
 **The clean-EFE invariant**: do NOT add new cost terms to
 `src/planning/planning/core/casadi_efe.py`. The objective stays
-`risk + ambiguity + control + nogo`. Everything below is
+`risk + localization + travel + control + nogo`. Everything below is
 *tuning* of existing knobs and *meta-strategy* (initialisation, planning resolution,
 optimiser), never new terms.
+
+> **Objective correction (see [`global_planner_objective_correction.md`](global_planner_objective_correction.md)).**
+> The observability term is no longer the raw EFE ambiguity but its
+> *reference-anchored excess*, and the goal/risk term is evaluated at the fixed
+> reference measurement covariance. The travel term is an explicit route
+> length / travel time baseline (not actuator effort) and defaults to 0 in the
+> fixed-horizon MPC, where arrival time is already carried by the discounted risk
+> integral; the full-route selector uses it directly. The raw-ambiguity
+> objective remains reachable via `localization_cost_mode: raw_ambiguity` for
+> reproducing pre-correction runs.
 
 References:
 - Code: `src/planning/planning/planners/base_planner.py` (constructor signature has the
@@ -20,9 +30,18 @@ References:
 ## EFE objective scaling
 
 The CasADi objective is
-`J = (1/H_eff) · Σ_t γ^t [risk_scale·risk_t + amb_scale·amb_t + ctrl_t + nogo_t]`
+`J = (1/H_eff) · Σ_t γ^t [risk_scale·risk_t + amb_scale·loc_t + travel_t + ctrl_t + nogo_t]`
 with `risk_scale = risk_weight_obs · observation_risk_scale` and
-`amb_scale = ambiguity_weight · ambiguity_term_scale`.
+`amb_scale = ambiguity_weight · ambiguity_term_scale`. The NumPy evaluator in
+`base_planner._evaluate_controls` computes exactly the same function (same
+`1/H_eff` normalisation); a regression test asserts they agree.
+
+`loc_t` is the **reference-anchored, non-negative** observability term
+`dt · max(A_t − A_ref, 0)`, where `A_t` is the per-step EFE ambiguity and `A_ref`
+is the ambiguity the same step would have at the reference measurement quality.
+`risk_t` is evaluated at that same reference covariance, so q and R reach the
+objective through `loc_t` alone. `travel_t = route_length_weight·|v_t|·dt +
+travel_time_weight·dt`.
 
 | name | warehouse_campaign | what it does | tune up when | tune down when |
 |---|---:|---|---|---|
@@ -31,6 +50,11 @@ with `risk_scale = risk_weight_obs · observation_risk_scale` and
 | `risk_weight_obs` | 1.0 | base weight on KL-to-goal-observation per step | only if goal-attraction is too weak overall | rarely — usually you want to *widen the goal prior* instead |
 | `observation_risk_scale` | 1.0 | second multiplier on risk; normalized so `risk_scale = risk_weight_obs` | only if you want to amplify goal-pull without touching the goal-prior width | — |
 | `control_weight` | 0.0 | command/effort term | not currently used for the current C1/C2 comparison | if route choice should not contain a direct path-length/effort preference |
+| `localization_cost_mode` | `anchored_excess` | `anchored_excess`: observability term is the reference-anchored excess entropy (corrected). `raw_ambiguity`: the pre-correction term | only to reproduce a pre-correction run | — |
+| `risk_uses_reference_R` | `true` | evaluate the goal/risk term at `R_ref` so q/R only enter the localization term | only to reproduce a pre-correction run | — |
+| `r_reference_uv` | `-1.0` (= `r_visible_uv`) | the reference measurement std that anchors the localization cost; should be the BEST attainable quality so the term stays non-negative | if the nominal best-case camera quality changes | — |
+| `route_length_weight` | 0.0 | explicit cost per metre of path (route-length baseline, NOT actuator effort) | when comparing whole routes at different arrival times | at fixed horizon, where the discounted risk integral already carries arrival time |
+| `travel_time_weight` | 0.0 | explicit cost per second of travel | as above | as above |
 
 **Practical rule**: keep `goal_prior_u_std_final` and `goal_prior_v_std_final` no smaller
 than the shadow covariance scale unless you intentionally want a very aggressive
