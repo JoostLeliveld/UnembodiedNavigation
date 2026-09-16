@@ -371,15 +371,26 @@ passes the hard safety gates**:
 
 Two distinct problems:
 
-* **Real collisions.** On the blind corridor and on the upper cross-aisle the
-  0.80 x 0.55 m body penetrates rack/wall geometry by 8-14 cm. That is a physical
-  infeasibility, not a conservative-lane artefact.
+* **Real collisions, both against the north wall** (not the racks):
+  * blind corridor, both candidates: -0.080 m **at the goal pose itself**
+    (3.10, 4.60) facing north. The task goal is 0.08 m too close to
+    `warehouse_walls/wall_north` for a 0.80 m-long body to stand there. No
+    driveable-map or route change can fix this one -- the task goal would have to
+    move.
+  * `route_west_to_a1_upper` / `control_west_to_a1_low`, `above_cross_aisle`:
+    -0.140 m at (-5.25, 4.58) while turning into the upper cross-aisle.
+
+  These are physical infeasibilities, not conservative-lane artefacts.
 * **In-place turns.** Where there is no collision, the binding constraint is the
-  turn: the body sweeps a 0.485 m radius disc when it rotates on the spot, and
-  the declared driveable lanes are 0.82-1.10 m wide with the corner placed at the
-  start/goal column rather than the lane centre. The straight legs fit; the
-  corners do not (the "turn" column of `candidates.csv` equals the overall
-  minimum for a3/a2/west/control).
+  turn: the body sweeps a 0.485 m radius disc when it rotates on the spot, so it
+  needs a **0.971 m** turning diameter. Of the 13 declared driveable prisms only
+  two are that wide -- `rack_aisle_A4` (1.10 m) and `west_service_lane` (1.05 m).
+  The rest are 0.60-0.95 m: the rack aisles A1-A3 are 0.90, the connectors 0.95,
+  the lower main aisle 0.82, the upper cross-aisle 0.65, the apron 0.60. On top of
+  that, the lane-graph candidates place their corners at the start/goal column
+  rather than at the lane centre, which costs a further 0.10-0.18 m. The straight
+  legs fit; the corners do not (the "turn" column of `candidates.csv` equals the
+  overall minimum for a3/a2/west/control).
 
 With the footprint the Gazebo campaign actually drives (TurtleBot3 burger,
 0.140 x 0.178 m -- consistent with the shipped `robot_collision_radius_m = 0.125`)
