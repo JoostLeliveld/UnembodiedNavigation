@@ -62,6 +62,8 @@ def main() -> int:
     }
     packages = {}
     for method, checkpoint in (
+        ("global_residual", box_checkpoint),
+        ("per_camera_residual", box_checkpoint),
         ("hierarchical_residual", box_checkpoint),
         ("spatial_residual", box_checkpoint),
         ("joint_rgb_gaussian", rgb_checkpoint),

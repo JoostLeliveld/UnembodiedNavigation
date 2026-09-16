@@ -115,9 +115,14 @@ CONDITION_PLANNER = {
     # Existing learned-mean campaigns use the same preselected-route controller.
     'N1': 'geometric_shortest_path',
     # Provisional perception-uncertainty comparison on one shared navigation stack.
+    'U0': 'visibility_aware_efe',
     'U1': 'visibility_aware_efe',
     'U2': 'visibility_aware_efe',
     'U3': 'visibility_aware_efe',
+    'U4': 'visibility_aware_efe',
+    # q=1 counterparts; paired U arms use the commissioned spatial q field.
+    'W0': 'visibility_aware_efe',
+    'W3': 'visibility_aware_efe',
 }
 
 PRESELECTED_ROUTE_KEYS = (
@@ -533,7 +538,8 @@ def _validate_perception_runtime_bundle(
     expected = lambda key: _effective_value(cfg, task_name, condition_id, key)
     observation = str(expected('manager_observation_model') or 'raw_box')
     covariance = str(expected('manager_covariance_profile') or '')
-    methods = {'hierarchical_residual', 'spatial_residual', 'joint_rgb_gaussian'}
+    methods = {'global_residual', 'per_camera_residual', 'hierarchical_residual',
+               'spatial_residual', 'joint_rgb_gaussian'}
     uses_bundle = observation in methods or covariance == 'commissioned_perception_r'
     if not uses_bundle:
         return

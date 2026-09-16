@@ -35,6 +35,13 @@ sys.path[:0] = [str(REPO / "src/reliability"), str(REPO / "src/unav_common")]
 
 import train_static_world_models as models  # noqa: E402
 
+DRIVE_FEATURE_NAMES = (
+    "raw_range_m", "inverse_raw_range", "ray_bearing_sin", "ray_bearing_cos",
+    "bbox_width_fraction", "bbox_height_fraction", "bbox_aspect",
+    "bbox_bottom_u_fraction", "bbox_bottom_v_fraction", "confidence",
+    *(f"is_camera_{letter}" for letter in "ABCDE"),
+)
+
 
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -159,6 +166,10 @@ def load_all_drives(campaign: Path, gate_path: Path) -> tuple[dict[str, np.ndarr
     max_gap_s = float(protocol["capture"]["maximum_reference_interpolation_gap_s"])
     edge = float(gate["min_edge_distance_px"])
 
+    # Import the already-deployed visibility extraction here so the unified
+    # correction comparison cannot drift to a second crop/grid definition.
+    from visibility_patch_rgb import GRID_SIZE, visibility_grid_from_saved_context
+
     rows: list[dict[str, Any]] = []
     drive_reports: list[dict[str, Any]] = []
     input_sources: list[dict[str, Any]] = []
@@ -263,8 +274,8 @@ def load_all_drives(campaign: Path, gate_path: Path) -> tuple[dict[str, np.ndarr
             distance = float(np.linalg.norm(ray))
             bearing = math.atan2(ray[1], ray[0])
             feature = np.asarray([
-                raw[0], raw[1], distance, 1.0 / max(distance, 1e-6),
-                math.cos(bearing), math.sin(bearing),
+                distance, 1.0 / max(distance, 1e-6),
+                math.sin(bearing), math.cos(bearing),
                 box_width / width, box_height / height,
                 box_width / max(box_height, 1e-6),
                 0.5 * (x0 + x1) / width, y1 / height, confidence,
@@ -272,6 +283,11 @@ def load_all_drives(campaign: Path, gate_path: Path) -> tuple[dict[str, np.ndarr
             ], dtype=np.float32)
             truth = np.asarray([reference["reference_x"], reference["reference_y"]], dtype=np.float32)
             image, context_clipped = crop_with_valid_channel(crop_path, source_frame_id, stamp_ns)
+            with np.load(crop_path, allow_pickle=False) as archive:
+                stored_crop = np.asarray(archive["crop"])
+            visibility_grid = visibility_grid_from_saved_context(
+                stored_crop, bbox, image_shape.astype(int), grid_size=GRID_SIZE
+            )
             context_clipped_total += int(context_clipped)
             drive_clipped += int(context_clipped)
             rows.append({
@@ -284,6 +300,7 @@ def load_all_drives(campaign: Path, gate_path: Path) -> tuple[dict[str, np.ndarr
                 "stamp_ns": stamp_ns,
                 "feature": feature,
                 "image": image,
+                "visibility_grid": visibility_grid.astype(np.float32),
                 "raw": raw.astype(np.float32),
                 "truth": truth,
                 "basis": basis.astype(np.float32),
@@ -316,6 +333,7 @@ def load_all_drives(campaign: Path, gate_path: Path) -> tuple[dict[str, np.ndarr
     data = {
         "feature": np.stack([row["feature"] for row in rows]),
         "image": np.stack([row["image"] for row in rows]),
+        "visibility_grid": np.stack([row["visibility_grid"] for row in rows]),
         "raw": np.stack([row["raw"] for row in rows]),
         "truth": np.stack([row["truth"] for row in rows]),
         "basis": np.stack([row["basis"] for row in rows]),
@@ -407,6 +425,7 @@ def main() -> int:
         checkpoint = models.checkpoint_payload(
             kind, model, feature_mean, feature_std, epochs=epochs, seed=seed,
         )
+        checkpoint["feature_names"] = DRIVE_FEATURE_NAMES
         if kind == "rgb_gaussian":
             checkpoint["image_preprocessing"] = {
                 "context": "half one box width/height on each side",
@@ -465,7 +484,7 @@ def main() -> int:
             "evaluation": "independent continuous navigation drives",
         },
         "sensor_gate": "commissioning_sensor_gate_v2",
-        "features": list(models.FEATURE_NAMES),
+        "features": list(DRIVE_FEATURE_NAMES),
         "image_input": {
             "shape": [4, models.IMAGE_SIZE, models.IMAGE_SIZE],
             "channels": ["red", "green", "blue", "valid_pixel_mask"],

@@ -28,7 +28,6 @@ from planning.planners.base_planner import UnicyclePlannerBase
 from planning.core.camera_network import projection_jacobian
 from unav_common.lane_graph_routes import (
     generate_diverse_route_candidates,
-    generate_route_seeds,
 )
 
 
@@ -132,15 +131,12 @@ def run(args):
         goal = np.array([cfg['goal_x'], cfg['goal_y']], dtype=float)
         # Explicit probe prior; live initialization must be recorded separately.
         P = np.diag([.05**2, .05**2, np.deg2rad(5)**2])
-        seeds = (
-            generate_diverse_route_candidates(
-                settings['driveable_geometry_json'], state[:2], goal,
-                max_routes=args.max_route_candidates,
-            )
-            if args.selection_mode == 'lane_graph_expected_belief'
-            else generate_route_seeds(
-                settings['driveable_geometry_json'], state[:2], goal,
-            )
+        # Both selectors must receive the same current thesis candidate set.
+        # The former CasADi branch still called the superseded coarse seeder,
+        # which made a CasADi-vs-enumerator comparison also change geometry.
+        seeds = generate_diverse_route_candidates(
+            settings['driveable_geometry_json'], state[:2], goal,
+            max_routes=args.max_route_candidates,
         )
         settings['optimizer_initial_routes_json'] = json.dumps(seeds)
         planner = RecordedPlanner(**settings)

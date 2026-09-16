@@ -193,6 +193,34 @@ def test_preselected_route_without_global_planner_uses_validated_tolerance_and_l
     assert checked
 
 
+def test_preselected_route_admission_checks_only_live_connector_and_first_leg():
+    n=route_node(); n.global_planner_mode='preselected_route'; n.global_planner=None
+    n._preselected_route_points=[(0.,0.),(.2,0.),(1.,0.),(2.,0.)]
+    n._preselected_route_provenance={
+        'registered_goal_xy':[2.,0.], 'endpoint_tolerance_m':0.,
+    }
+    n.preselected_route_sha256='test'
+    checked=[]
+    n.planner.collision_sweep_clearance_np=lambda start,end: checked.append(end.copy()) or 1.
+    n.planner.driveable_sweep_clearance_np=lambda start,end: checked.append(end.copy()) or 1.
+    n._plan_once()
+    assert n._hier_phase=='LOCAL'
+    assert len(checked)==8
+    assert max(float(end[0]) for end in checked)<=.2
+
+
+def test_preselected_route_admission_rejects_changed_coordinates():
+    n=route_node(); n.global_planner_mode='preselected_route'; n.global_planner=None
+    n._preselected_route_points=[(0.,0.),(.2,0.),(2.,0.)]
+    n._preselected_route_provenance={
+        'registered_goal_xy':[2.,0.], 'endpoint_tolerance_m':0.,
+    }
+    n.preselected_route_sha256='test'
+    safe,reason=n._global_route_candidate_safe(
+        [(0.,0.),(.3,0.),(2.,0.)], np.array([2.,0.]), np.zeros(3))
+    assert not safe and reason=='preselected_route_identity_mismatch'
+
+
 def test_zero_endpoint_tolerance_accepts_json_roundoff_only():
     n=route_node(); n.global_planner_mode='preselected_route'; n.global_planner=None
     n._preselected_route_points=[(0.,0.),(2.+4.e-15,0.)]

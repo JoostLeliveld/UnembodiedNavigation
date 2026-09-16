@@ -897,7 +897,18 @@ class EfeAgentNode(UnicyclePlannerNode):
             terminal_tolerance_m=float(self.global_planner.optimizer_terminal_goal_tolerance_m))
 
     def _global_route_candidate_safe(self, points, goal, current_m, result=None):
-        """Check every segment LOCAL will track, including its fresh entry leg."""
+        """Check a candidate route, including its fresh entry leg.
+
+        A live solver result has not passed the frozen-artifact gate, so every
+        segment remains subject to admission-time swept-body validation.  A
+        preselected route is different: its exact coordinates, source artifact,
+        endpoints and full geometry were hash-bound and revalidated at startup.
+        Repeating hundreds of swept-body checks here used to hold ``_data_lock``
+        long enough to discard depth-one odometry.  For that mode, verify that
+        the candidate is still the startup-validated polyline and validate only
+        the live connector plus the first frozen leg.  Every command is still
+        checked immediately before execution.
+        """
         try:
             points = np.asarray(points, dtype=float)
             if points.ndim != 2 or points.shape[1] != 2 or not len(points) or not np.isfinite(points).all():
@@ -919,8 +930,19 @@ class EfeAgentNode(UnicyclePlannerNode):
             # geometric tolerance still needs a numerical comparison floor.
             if np.linalg.norm(points[-1] - np.asarray(goal)) > tolerance + 1.0e-9:
                 return False, 'incomplete_route'
+            points_to_check = points
+            if self.global_planner_mode == 'preselected_route':
+                validated_points = np.asarray(
+                    getattr(self, '_preselected_route_points', ()), dtype=float
+                )
+                if (validated_points.shape != points.shape
+                        or not np.array_equal(validated_points, points)):
+                    return False, 'preselected_route_identity_mismatch'
+                # point 0 checks the live current-pose connector; point 1 also
+                # checks the actual initial turn and first frozen route leg.
+                points_to_check = points[:2]
             pose = np.asarray(current_m[:3], dtype=float).copy()
-            for point in points:
+            for point in points_to_check:
                 delta = point - pose[:2]
                 yaw = pose[2] if np.linalg.norm(delta) < 1e-12 else math.atan2(delta[1], delta[0])
                 rotated = np.array([pose[0], pose[1], yaw])
@@ -1018,7 +1040,14 @@ class EfeAgentNode(UnicyclePlannerNode):
                 if fresh is None:
                     return self._reject_current_request(request, 'unsupported_global_belief')
                 current_m, _, fresh_meta = fresh
+                validation_started = time.perf_counter()
                 safe, reason = self._global_route_candidate_safe(points, final_goal, current_m, result)
+                validation_ms = (time.perf_counter() - validation_started) * 1000.0
+                self.get_logger().info(
+                    f"[hierarchical] route admission geometry took {validation_ms:.1f} ms "
+                    f"(mode={self.global_planner_mode}, points={len(points)}, "
+                    f"checked={min(len(points), 2) if self.global_planner_mode == 'preselected_route' else len(points)})"
+                )
                 if (not self._plan_request_is_current(request)
                         or not self._execution_belief_is_current(fresh_meta)):
                     return False
@@ -1460,10 +1489,13 @@ class EfeAgentNode(UnicyclePlannerNode):
         self._current_tracking_yaw = float(m_track[2])
         self._current_tracking_yaw_source = float(tracking_yaw_source)
 
+        controller_started = time.perf_counter()
         proposed_controls = self._dispatch_local_controller(m_track, target)
+        controller_ms = (time.perf_counter() - controller_started) * 1000.0
         if trace_first_handoff:
             self.get_logger().info(
-                '[hierarchical] first local controls generated; checking immediate command'
+                f'[hierarchical] first local controls generated in {controller_ms:.3f} ms; '
+                'checking immediate command'
             )
         # Only the command that can execute now needs admission here.  The
         # complete generated tape remains available for scheduling, while each

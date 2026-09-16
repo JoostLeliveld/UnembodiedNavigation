@@ -29,6 +29,7 @@ union (so a corridor that does not actually connect start and goal is rejected).
 """
 from __future__ import annotations
 
+import json
 from typing import List, Tuple, Sequence
 import numpy as np
 
@@ -65,6 +66,43 @@ def _vertical_corridor_centres(prisms) -> List[float]:
         if not out or abs(x - out[-1]) > 0.25:
             out.append(x)
     return out
+
+
+def _route_centres_from_geometry(
+    driveable_geometry_json: str,
+    prisms,
+) -> tuple[List[float], List[float]]:
+    """Return declared routing axes, falling back to rectangle inference.
+
+    A driveable *support* can be an exact rectangular decomposition of free
+    floor with holes around obstacles.  Those decomposition cells are not
+    themselves semantic aisles, so inferring a route centre from every cell
+    would create spurious candidates.  Optional top-level routing axes keep
+    the lane topology separate from the exact keep-in support.  Historical
+    geometry has no such metadata and retains the previous inference exactly.
+    """
+    try:
+        payload = json.loads(driveable_geometry_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        payload = {}
+
+    def declared(key: str) -> List[float] | None:
+        raw = payload.get(key)
+        if raw is None:
+            return None
+        if not isinstance(raw, list) or not raw:
+            raise ValueError(f"{key} must be a non-empty list")
+        values = sorted({round(float(item), 3) for item in raw})
+        if not all(np.isfinite(values)):
+            raise ValueError(f"{key} must contain only finite numbers")
+        return values
+
+    horizontal = declared('route_horizontal_centres')
+    vertical = declared('route_vertical_centres')
+    return (
+        horizontal if horizontal is not None else _horizontal_corridor_centres(prisms),
+        vertical if vertical is not None else _vertical_corridor_centres(prisms),
+    )
 
 
 def _segment_inside_union(prisms, a: XY, b: XY, *, step: float = 0.10, tol: float = 1e-3) -> bool:
@@ -154,8 +192,9 @@ def generate_route_seeds(
     start = (float(start_xy[0]), float(start_xy[1]))
     goal = (float(goal_xy[0]), float(goal_xy[1]))
 
-    centres = _horizontal_corridor_centres(prisms)
-    vertical_centres = _vertical_corridor_centres(prisms)
+    centres, vertical_centres = _route_centres_from_geometry(
+        driveable_geometry_json, prisms,
+    )
     if not centres:
         return []
 
@@ -280,8 +319,9 @@ def generate_diverse_route_candidates(
     prisms = tuple(scene.prisms)
     start = (float(start_xy[0]), float(start_xy[1]))
     goal = (float(goal_xy[0]), float(goal_xy[1]))
-    horizontal = _horizontal_corridor_centres(prisms)
-    vertical = _vertical_corridor_centres(prisms)
+    horizontal, vertical = _route_centres_from_geometry(
+        driveable_geometry_json, prisms,
+    )
 
     by_corridor: List[tuple[float, List[dict]]] = []
     for corridor_y in horizontal:

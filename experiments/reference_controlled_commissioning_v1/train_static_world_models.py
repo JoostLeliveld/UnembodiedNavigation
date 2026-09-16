@@ -296,9 +296,9 @@ def fit_model(
     feature = torch.from_numpy(normalized)
     target = torch.from_numpy(data["target"].astype(np.float32))
     if kind == "box_spatial_mlp":
-        model: nn.Module = BoxSpatialMLP(len(FEATURE_NAMES)).to(device)
+        model: nn.Module = BoxSpatialMLP(data["feature"].shape[1]).to(device)
     elif kind == "rgb_gaussian":
-        model = RGBGaussianNet(len(FEATURE_NAMES)).to(device)
+        model = RGBGaussianNet(data["feature"].shape[1]).to(device)
     else:
         raise ValueError(kind)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)

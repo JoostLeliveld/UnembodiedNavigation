@@ -16,6 +16,10 @@ from torch import nn
 
 GRID_SIZE = 16
 SUPPORTED_SCHEMA = "commissioned_visibility_sensor_model.v1"
+CURRENT_R_MODELS = {
+    "R0_global_full", "R1_per_camera_full", "R2_spatial_residual",
+    "R3_hierarchical_predictive",
+}
 
 
 def _sha256_bytes(data: bytes) -> str:
@@ -70,16 +74,22 @@ class CommissionedVisibilitySensorModel:
         manifest = json.loads(data)
         if manifest.get("schema") != SUPPORTED_SCHEMA:
             raise ValueError("unsupported commissioned visibility schema")
-        if manifest.get("status") != "frozen_before_audit" or manifest.get("audit_accessed") is not False:
-            raise ValueError("commissioned visibility model was not frozen before audit")
+        status = manifest.get("status")
+        if status not in {
+            "frozen_before_audit",
+            "provisional_train12_navigation_evaluation_pending",
+        } or manifest.get("audit_accessed") is not False:
+            raise ValueError("commissioned visibility model has an unsupported evidence status")
         # Two registry spellings name the same model: the covariance fit writes
         # "box_mlp_visibility_residual", the 5 Hz bundle rewrites it as
         # "M4_visibility_patch_residual". Both are the box-MLP base plus the
         # gated patch residual, and the file hashes below pin the identity.
         if manifest.get("mean_model") not in MEAN_MODEL_NAMES:
             raise ValueError("runtime requires the selected visibility-residual mean model")
-        if manifest.get("runtime_covariance_model") != "R4_image_conditioned_scale":
-            raise ValueError("runtime requires the visibility residual's matched covariance")
+        runtime_covariance_model = str(manifest.get("runtime_covariance_model", ""))
+        if runtime_covariance_model not in {"R4_image_conditioned_scale", *CURRENT_R_MODELS}:
+            raise ValueError("runtime requires a supported visibility-residual matched covariance")
+        self.runtime_covariance_model = runtime_covariance_model
         self.manifest = manifest
         self.path = path
         self.camera_order = tuple(str(value) for value in manifest["camera_order"])
@@ -98,7 +108,11 @@ class CommissionedVisibilitySensorModel:
             checkpoint = torch.load(io.BytesIO(patch_data), map_location="cpu", weights_only=True)
         except TypeError:  # older torch without weights_only
             checkpoint = torch.load(io.BytesIO(patch_data), map_location="cpu")
-        if checkpoint.get("schema") != "visibility_patch_residual.v1" or checkpoint.get("grid_size") != GRID_SIZE:
+        checkpoint_schema = checkpoint.get("schema")
+        if checkpoint_schema not in {
+            "visibility_patch_residual.v1", "visibility_residual_15feature_12_6.v1",
+        } or (checkpoint_schema == "visibility_patch_residual.v1"
+              and checkpoint.get("grid_size") != GRID_SIZE):
             raise ValueError("visibility-residual checkpoint feature contract is unsupported")
         self.feature_mean = np.asarray(checkpoint["feature_mean"], dtype=np.float32)
         self.feature_sd = np.asarray(checkpoint["feature_sd"], dtype=np.float32)
@@ -108,6 +122,40 @@ class CommissionedVisibilitySensorModel:
         self.patch_model.load_state_dict(checkpoint["state_dict"], strict=True)
         self.patch_model.eval()
 
+        self.current_r_samples = None
+        self.current_r_covariance_multiplier = 1.0
+        if self.runtime_covariance_model in CURRENT_R_MODELS:
+            _, residual_data = _read_verified(
+                manifest["residual_population"], label="selected-correction residual population"
+            )
+            with np.load(io.BytesIO(residual_data), allow_pickle=False) as archive:
+                xy = np.asarray(archive["raw_world"], dtype=float)
+                residual = np.asarray(archive["residual_ray"], dtype=float)
+                camera = np.asarray(archive["camera"]).astype(str)
+                drive = np.asarray(archive["drive"]).astype(str)
+            self.current_r_samples = {}
+            pooled = np.concatenate([
+                residual[camera == camera_id] for camera_id in self.camera_order
+            ])
+            self.current_r_global = self._scatter(pooled)
+            for camera_id in self.camera_order:
+                use = camera == camera_id
+                if not np.any(use):
+                    raise ValueError(f"residual population has no samples for {camera_id}")
+                self.current_r_samples[camera_id] = {
+                    "xy": xy[use], "residual": residual[use], "drive": drive[use],
+                    "global": self._scatter(residual[use]),
+                }
+            self.current_r_neighbors = int(manifest.get("neighbors", 120))
+            self.current_r_bandwidth_m = float(manifest.get("bandwidth_m", 0.75))
+            self.current_r_covariance_multiplier = float(
+                manifest.get("runtime_covariance_multiplier", 1.0)
+            )
+            if (self.current_r_neighbors < 1 or self.current_r_bandwidth_m <= 0.0
+                    or self.current_r_covariance_multiplier <= 0.0):
+                raise ValueError("invalid current matched-R runtime parameters")
+            return
+
         _, parameter_data = _read_verified(manifest["parameters"], label="covariance parameters")
         with np.load(io.BytesIO(parameter_data), allow_pickle=False) as archive:
             for name in archive.files:
@@ -116,6 +164,80 @@ class CommissionedVisibilitySensorModel:
             raise ValueError("spatial base covariance has the wrong shape")
         self.spatial_spec = manifest["spatial"]
         self.image_spec = manifest["image_scale"]
+
+    @staticmethod
+    def _scatter(values: np.ndarray) -> np.ndarray:
+        covariance = values.T @ values / max(len(values), 1)
+        eig, vec = np.linalg.eigh(0.5 * (covariance + covariance.T))
+        return (vec * np.maximum(eig, 1.0e-6)) @ vec.T
+
+    def _current_neighbors(self, camera_id: str, point: np.ndarray):
+        sample = self.current_r_samples[camera_id]
+        distance2 = np.sum((sample["xy"] - point) ** 2, axis=1)
+        count = min(self.current_r_neighbors, len(distance2))
+        index = np.argpartition(distance2, count - 1)[:count]
+        distance = np.sqrt(distance2[index])
+        weight = np.exp(-0.5 * (distance / self.current_r_bandwidth_m) ** 2)
+        if float(weight.sum()) <= 1.0e-12:
+            weight[np.argmin(distance)] = 1.0
+        return sample, index, weight
+
+    def _current_r_covariance_ray(self, camera_id: str, point: np.ndarray) -> np.ndarray:
+        if self.runtime_covariance_model == "R0_global_full":
+            return self.current_r_global
+        sample = self.current_r_samples[camera_id]
+        if self.runtime_covariance_model == "R1_per_camera_full":
+            return sample["global"]
+        sample, index, weight = self._current_neighbors(camera_id, point)
+        residual = sample["residual"][index]
+        drives = sample["drive"][index]
+        if self.runtime_covariance_model == "R2_spatial_residual":
+            capped = weight.copy()
+            for drive in np.unique(drives):
+                use = drives == drive
+                total = float(capped[use].sum())
+                if total > 0.0:
+                    capped[use] /= total
+            scatter = sum(w * np.outer(value, value) for w, value in zip(capped, residual))
+            return self._scatter_from_matrix(
+                (scatter + 4.0 * sample["global"]) / (float(capped.sum()) + 4.0)
+            )
+
+        means, covariances, drive_weights = [], [], []
+        for drive in np.unique(drives):
+            use = drives == drive
+            local_weight = weight[use]
+            if float(local_weight.sum()) <= 1.0e-12:
+                continue
+            values = residual[use]
+            mean = np.average(values, axis=0, weights=local_weight)
+            covariance = sum(
+                w * np.outer(value - mean, value - mean)
+                for w, value in zip(local_weight, values)
+            ) / float(local_weight.sum())
+            means.append(mean)
+            covariances.append(self._scatter_from_matrix(covariance))
+            drive_weights.append(min(1.0, float(local_weight.sum()) / 5.0))
+        wd = np.asarray(drive_weights, dtype=float)
+        n = float(wd.sum())
+        if n <= 1.0e-12:
+            return sample["global"]
+        means = np.asarray(means, dtype=float)
+        mean = np.average(means, axis=0, weights=wd)
+        within = np.average(np.asarray(covariances), axis=0, weights=wd)
+        between = sum(
+            w * np.outer(value - mean, value - mean) for w, value in zip(wd, means)
+        ) / n
+        kappa, nu = 1.0 + n, 5.0 + n
+        psi = 2.0 * sample["global"] + n * (within + between) + (n / kappa) * np.outer(mean, mean)
+        degrees = max(nu - 1.0, 3.01)
+        scale = self._scatter_from_matrix(((kappa + 1.0) / (kappa * degrees)) * psi)
+        return self._scatter_from_matrix(scale * degrees / (degrees - 2.0))
+
+    @staticmethod
+    def _scatter_from_matrix(covariance: np.ndarray) -> np.ndarray:
+        eig, vec = np.linalg.eigh(0.5 * (covariance + covariance.T))
+        return (vec * np.maximum(eig, 1.0e-6)) @ vec.T
 
     def _features(
         self, camera_id: str, raw_xy: Sequence[float], bbox_xyxy: Sequence[float], confidence: float
@@ -181,6 +303,12 @@ class CommissionedVisibilitySensorModel:
         return 0.5 * (covariance + covariance.T) + np.eye(2) * 1.0e-6
 
     def planner_covariance(self, camera_id: str, x: float, y: float, heading: float) -> np.ndarray:
+        if self.current_r_samples is not None:
+            point = np.asarray([x, y], dtype=float)
+            ray = point - self.camera_xy[camera_id]
+            ray /= np.linalg.norm(ray)
+            basis = np.column_stack((ray, np.asarray([-ray[1], ray[0]])))
+            return basis @ self._current_r_covariance_ray(camera_id, point) @ basis.T
         covariance = self._spatial_covariance(camera_id, x, y, heading)
         covariance *= float(self.spatial_spec["external_calibration_scale"])
         return covariance
@@ -195,6 +323,16 @@ class CommissionedVisibilitySensorModel:
         along = ray / np.linalg.norm(ray)
         basis = np.column_stack((along, np.asarray([-along[1], along[0]])))
         corrected = raw + basis @ correction
+        if self.current_r_samples is not None:
+            covariance_ray = self._current_r_covariance_ray(camera_id, corrected)
+            covariance_world = basis @ covariance_ray @ basis.T
+            covariance_world *= self.current_r_covariance_multiplier
+            covariance_world = 0.5 * (covariance_world + covariance_world.T)
+            return (
+                (float(corrected[0]), float(corrected[1])),
+                ((float(covariance_world[0, 0]), float(covariance_world[0, 1])),
+                 (float(covariance_world[1, 0]), float(covariance_world[1, 1]))),
+            )
         covariance_ray = self._spatial_covariance(camera_id, corrected[0], corrected[1], heading)
         grid = np.asarray(visibility_grid, dtype=float).reshape(1, GRID_SIZE, GRID_SIZE)
         visibility_score = 0.5 * float(grid.mean()) + 0.5 * float(grid[:, 3 * GRID_SIZE // 4 :, :].mean())

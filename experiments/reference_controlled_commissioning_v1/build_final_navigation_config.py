@@ -37,6 +37,13 @@ def main() -> int:
     parser.add_argument("--pilot-task", choices=TASKS)
     parser.add_argument("--pilot-arm", choices=ARMS)
     parser.add_argument("--pilot-seed", type=int, default=91599)
+    parser.add_argument(
+        "--seeds",
+        type=int,
+        nargs="+",
+        default=[91500, 91501, 91502, 91503, 91504],
+        help="Matched execution seeds for a full campaign.",
+    )
     args = parser.parse_args()
     if bool(args.pilot_task) != bool(args.pilot_arm):
         raise ValueError("pilot-task and pilot-arm must be supplied together")
@@ -63,7 +70,9 @@ def main() -> int:
     selected = manifest["selected"]
     active_tasks = (args.pilot_task,) if args.pilot_task else TASKS
     active_arms = (args.pilot_arm,) if args.pilot_arm else ARMS
-    seeds = [args.pilot_seed] if args.pilot_task else [91500, 91501, 91502, 91503, 91504]
+    seeds = [args.pilot_seed] if args.pilot_task else list(args.seeds)
+    if not seeds or len(set(seeds)) != len(seeds):
+        raise ValueError("execution seeds must be non-empty and unique")
 
     config["study_title"] = (
         "Final commissioned runtime route pilot"

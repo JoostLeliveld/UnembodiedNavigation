@@ -671,6 +671,11 @@ class UnicyclePlannerNode(Node):
         self.optimizer_warm_start_shift_steps = warm_start_shift_steps
         self.planner = self._construct_planner()
         self._io_group = ReentrantCallbackGroup()
+        # Odometry is an ordered evidence stream, not a latest-value display
+        # topic.  Keep it separate from the reentrant command/goal callbacks so
+        # concurrent executor threads cannot commit newer stamps before older
+        # ones, and retain enough history to ride out short planner stalls.
+        self._odom_group = MutuallyExclusiveCallbackGroup()
         self._correction_group = MutuallyExclusiveCallbackGroup()
         self._plan_group = MutuallyExclusiveCallbackGroup()
         self._data_lock = threading.RLock()
@@ -683,6 +688,8 @@ class UnicyclePlannerNode(Node):
         # Subscriptions
         state_qos = QoSProfile(depth=1)
         state_qos.durability = DurabilityPolicy.VOLATILE
+        odom_qos = QoSProfile(depth=500)
+        odom_qos.durability = DurabilityPolicy.VOLATILE
         # Pose display topics may legitimately keep only the newest sample, but an
         # evidence-bearing correction envelope is an event stream: every published
         # source_batch_id must reach one terminal assimilation outcome.  A depth-one
@@ -738,8 +745,8 @@ class UnicyclePlannerNode(Node):
             callback_group=self._io_group
         )
         self.odom_sub = self.create_subscription(
-            Odometry, self.odom_topic, self._odom_cb, qos_profile=state_qos,
-            callback_group=self._io_group
+            Odometry, self.odom_topic, self._odom_cb, qos_profile=odom_qos,
+            callback_group=self._odom_group
         )
 
         # DIAGNOSTIC: transformed raw-odometry localization path.
@@ -756,7 +763,7 @@ class UnicyclePlannerNode(Node):
             self._do_transform_pose = do_transform_pose
             self.diagnostic_odom_sub = self.create_subscription(
                 Odometry, self.diagnostic_odom_topic, self._diagnostic_odom_cb,
-                qos_profile=state_qos, callback_group=self._io_group,
+                qos_profile=odom_qos, callback_group=self._odom_group,
             )
             self.get_logger().warn(
                 "*** use_diagnostic_odom_localization=TRUE — planner belief is "

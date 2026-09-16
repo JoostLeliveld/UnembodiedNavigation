@@ -9,6 +9,7 @@ import numpy as np
 
 from unav_common.occlusion_geometry import scene_from_json, signed_distance_to_union_xy, _get_union_boundary_segments
 from unav_common.navigation_parameters import validate_navigation_parameters
+from unav_common.rectangular_footprint import RectangularFootprint
 
 
 VALID_NOGO_PENALTIES = ('warning_band',)
@@ -88,6 +89,14 @@ class NogoZoneCostModel:
         self._ymins = np.asarray([float(p.ymin) for p in self.prisms], dtype=float)
         self._ymaxs = np.asarray([float(p.ymax) for p in self.prisms], dtype=float)
         self.union_boundary_segments = _get_union_boundary_segments(self.prisms)
+        self._body_footprint = None
+        if self.robot_half_length is not None and self.robot_half_width is not None:
+            self._body_footprint = RectangularFootprint(
+                self.prisms,
+                length=2.0 * self.robot_half_length,
+                width=2.0 * self.robot_half_width,
+                keep_in=self.mode == 'keep_in',
+            )
 
     @property
     def enabled(self) -> bool:
@@ -114,6 +123,9 @@ class NogoZoneCostModel:
             round(self.logbarrier_eps, 8),
             round(self.warning_band, 6),
             round(self.near_weight, 6),
+            None if self.robot_half_length is None else round(self.robot_half_length, 6),
+            None if self.robot_half_width is None else round(self.robot_half_width, 6),
+            round(self.body_margin, 6),
             len(self.prisms),
             *scene_sig,
         )
@@ -141,6 +153,17 @@ class NogoZoneCostModel:
         return max(a * c + b * s, a * s + b * c) + float(self.body_margin)
 
     def _clearance_np(self, xy: np.ndarray, yaw=None) -> float:
+        if self._body_footprint is not None and yaw is not None:
+            # Use the actual oriented body against the union geometry.  The old
+            # surrogate took the larger of the x/y support distances without
+            # identifying which boundary was nearest.  In a narrow straight
+            # aisle that charged the longitudinal half-length against a lateral
+            # wall and could label a physically clear, aligned route as an
+            # overlap.  The exact footprint is already the authoritative hard
+            # geometry model, so reuse it for the numerical soft cost and add
+            # only the separately configured keep-clear margin.
+            pose = np.array([float(xy[0]), float(xy[1]), float(yaw)], dtype=float)
+            return float(self._body_footprint.clearance(pose) - self.body_margin)
         keep_in_flag = (self.mode == 'keep_in')
         signed_d = float(signed_distance_to_union_xy(self.prisms, np.asarray(xy, dtype=float), keep_in=keep_in_flag)[0])
         required = self.safe_distance if yaw is None else self.support_distance(yaw)

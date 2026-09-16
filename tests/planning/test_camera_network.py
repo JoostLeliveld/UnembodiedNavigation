@@ -180,6 +180,22 @@ def test_metric_network_objective_is_independent_of_fixed_camera_chart(tmp_path)
     np.testing.assert_allclose(values[0],values[1],rtol=1e-12,atol=1e-12)
 
 
+def test_metric_network_gradient_is_finite_when_route_reaches_exact_goal(tmp_path):
+    pytest.importorskip('casadi')
+    net=write_network(tmp_path/'field.npz',availability=.4,spatial=True)
+    planner=make_planner(
+        net.path, camera_network_objective='metric_expected_belief',
+        network_goal_std_m=.2, optimizer_terminal_goal_tolerance_m=.1,
+    )
+    state=np.array([0.,0.,0.]);P=np.diag([.05,.04,.03]);goal=np.array([0.,0.,0.])
+    goal_obs=planner._goal_obs(goal)
+    evaluate=planner._get_casadi_valgrad(
+        goal,goal_obs,use_observation_risk=True,use_ambiguity_term=True)
+    value,gradient=evaluate(np.zeros(10),state,P,goal_obs,goal[:2],0.)
+    assert np.isfinite(value)
+    assert np.isfinite(gradient).all()
+
+
 def test_sparse_control_blocks_keep_full_rollout_and_exact_gradient(tmp_path):
     pytest.importorskip('casadi')
     net=write_network(tmp_path/'field.npz',availability=.4,spatial=True)

@@ -763,7 +763,14 @@ def make_metric_network_efe_valgrad_fn(
                 ca.power(sigma_t, 2), ca.power(sigma_t, 2)))
         if arrival_radius > 0.:
             # 1 while still driving, decaying to 0 once inside the goal region.
-            reached = ca.norm_2(m[:2] - goal_xy)
+            # ``norm_2`` has an undefined derivative at exactly zero.  Seed
+            # routes deliberately reach the goal and then remain there for the
+            # fixed-horizon tail, so that cusp produced a finite objective with
+            # a NaN gradient and made every goal-reaching CasADi initialization
+            # fall back before optimization.  This smooth norm is numerically
+            # identical at navigation scale and has a finite zero-distance
+            # derivative.
+            reached = ca.sqrt(ca.sumsqr(m[:2] - goal_xy) + 1.0e-12)
             active = active * (1.0 / (1.0 + ca.exp(
                 -(reached - arrival_radius) / arrival_softness)))
         total_risk += active * weight_t * params.risk_scale * risk_ca(

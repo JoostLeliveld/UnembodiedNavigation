@@ -107,7 +107,8 @@ class CommissionedPerceptionSensorModel:
     """Load one of the three provisional uncertainty-method packages."""
 
     SCHEMA = "commissioned_perception_runtime_model.v1"
-    METHODS = {"hierarchical_residual", "spatial_residual", "joint_rgb_gaussian"}
+    METHODS = {"global_residual", "per_camera_residual", "hierarchical_residual",
+               "spatial_residual", "joint_rgb_gaussian"}
 
     def __init__(self, package_path: str, *, expected_sha256: str | None = None):
         self.path = Path(package_path).expanduser().resolve()
@@ -213,6 +214,12 @@ class CommissionedPerceptionSensorModel:
         scatter = sum(w * np.outer(e, e) for w, e in zip(weight, residual))
         return np.zeros(2), _spd((scatter + 4.0 * sample["global"]) / (weight.sum() + 4.0))
 
+    def _constant_covariance(self, camera_id: str):
+        if self.method == "per_camera_residual":
+            return np.zeros(2), self.samples[camera_id]["global"]
+        values = np.concatenate([sample["residual"] for sample in self.samples.values()])
+        return np.zeros(2), _spd(values.T @ values / len(values))
+
     def _hierarchical_predictive(self, camera_id: str, raw: np.ndarray):
         sample, index, weight = self._neighbors(camera_id, raw)
         residual = sample["residual"][index]
@@ -265,7 +272,9 @@ class CommissionedPerceptionSensorModel:
         with torch.no_grad():
             if self.model_kind == "box_spatial_mlp":
                 mean_ray = self.model(feature_tensor).numpy()[0]
-                if self.method == "hierarchical_residual":
+                if self.method in {"global_residual", "per_camera_residual"}:
+                    residual_mean, covariance_ray = self._constant_covariance(camera_id)
+                elif self.method == "hierarchical_residual":
                     residual_mean, covariance_ray = self._hierarchical_predictive(camera_id, raw)
                 else:
                     residual_mean, covariance_ray = self._spatial_covariance(camera_id, raw)
