@@ -203,6 +203,20 @@ def _validate_config(cfg: dict, path: Path) -> None:
     if unknown_top:
         raise ValueError(f'{path}: unknown campaign keys: {sorted(unknown_top)}')
     validate_navigation_parameters(cfg)
+    # A solving planner must be given the objective that reads the per-arm
+    # camera fields. With global_planner_mode: efe and legacy_pixel_chart the
+    # planner never queries a camera field, so every arm produces the same
+    # route and the campaign measures nothing. That combination invalidated an
+    # earlier four-arm campaign, so it is refused rather than warned about.
+    if str(cfg.get('global_planner_mode', '')) == 'efe':
+        objective = str(cfg.get('camera_network_objective', '') or 'legacy_pixel_chart')
+        if objective != 'metric_expected_belief':
+            raise ValueError(
+                f'{path}: global_planner_mode: efe requires '
+                f'camera_network_objective: metric_expected_belief, not {objective!r}. '
+                'Only that objective loads the per-arm planner fields; with any other '
+                'the arms are identical.'
+            )
     execution_contract = cfg.get('thesis_execution_contract')
     if execution_contract in (
         'final_1mps_1hz_m4_v1', 'final_1mps_5hz_m4_v1',

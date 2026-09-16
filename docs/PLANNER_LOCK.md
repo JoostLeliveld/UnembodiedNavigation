@@ -48,6 +48,103 @@ Measured: blind cell -2.42, covered -3.38, main aisle -5.12 nats. The floor
 1/(Q dt) is the motion model, not a chosen constant: an unobserved step is not
 infinitely uncertain, the belief grows by exactly one step of process noise.
 
+### The ambiguity is ANCHORED (2026-09-16)
+
+Those measured values are NEGATIVE, and that is the whole problem. Written out,
+
+    J_amb = 0.5 ( D_y log 2*pi*e + log|R_eff| )
+
+is an ABSOLUTE differential entropy. It carries a large route-independent
+additive constant, and the SIGN of that constant depends only on the units
+R_eff is written in -- here state units, because of the 1/(Q dt) I floor, which
+is what makes it negative.
+
+On a fixed horizon the constant cancels: every candidate accumulates it the same
+number of times. But the smooth arrival gate makes duration a FREE VARIABLE, so
+it instead contributes `constant * T`. With the constant negative, a longer route
+is paid for being longer, on identical q and R. That is a duration term wearing
+the sign of an arbitrary unit choice, and it swamps the q/R differences that are
+supposed to decide the route.
+
+Note the diagnostic in "Two accounting bugs" below PASSES under this defect: a
+constant-R arm does give a constant per-step ambiguity. A constant per-step value
+is exactly what the bug produces. The problem is what that constant multiplies.
+
+The term is now measured against a fixed FLOOR:
+
+    J_amb = 0.5 * max( log( |R_eff(q,R)| / |R_floor| ), 0 )
+
+    R_floor = (1.5 mm)^2 I,  ONE covariance shared by every arm
+
+**R_floor is a threshold, not an estimate.** It enters only as a constant
+subtraction, so ANY value below the tightest reachable R_eff produces identical
+route rankings -- verified: a floor 100x tighter reproduces the same spread and
+the same (zero) clip count. The only thing that matters is that it stays BELOW
+the operating range. A floor inside that range clips real poses to zero and
+deletes the very signal the term carries.
+
+It is chosen inside a two-sided window:
+
+- **upper** the tightest R_eff reachable on any of the seven arms is det
+  2.39e-11 (~2.2 mm sd). Above that, the floor clips real poses.
+- **lower** `casadi_efe._logdet_small_pd` clamps det at 1e-12. At or below that
+  clamp the CasADi log-determinant stops matching the NumPy one (measured
+  8.3e-6 per evaluation, compounding across opportunities) and the two
+  back-ends silently disagree.
+
+1.5 mm sits 5x above the clamp and 4.7x below the tightest reachable pose. The
+window is narrow only because the commissioned cameras are very precise. If a
+future arm is tighter still, widen the clamp rather than lowering the floor, and
+re-check both bounds.
+
+**One floor for ALL arms.** Anchoring each arm to its own commissioned best-R
+was the first attempt and it is WRONG: the per-arm floors span 3.5 nats across
+the current seven arms, so each arm would be shifted by a different constant and
+the arms would no longer be comparable -- the one thing a q/R comparison must
+not do.
+
+Properties, in the order they matter:
+
+- **constant, NOT zero, for a constant-parameter arm.** q = 1 means every camera
+  reports, not that the pose is perfectly localized; the resulting finite R_eff
+  is real residual uncertainty and the objective should still charge for it.
+  What makes such an arm pick the shortest safe route is that the SAME amount is
+  added to every candidate at every step. Measured on W0 (q = 1 and constant R):
+  per-step ambiguity 1.6679-1.6700 nats, spread 2.2e-3.
+- **never negative**, so no route can be rewarded for lasting longer;
+- **dimensionless** -- it is a ratio, which kills the m^2 vs px^2 scale problem
+  flagged in the `expected_posterior_uncertainty_ca` docstring;
+- differs from Kouw Lemma 1 by an ADDITIVE CONSTANT only, so on a fixed horizon
+  it is provably rank-identical to the published objective. The running MPC's
+  optimum is unchanged; only the free-duration global route decision moves.
+
+Both back-ends carry it and must stay numerically equal:
+`casadi_efe._anchored_ambiguity_ca` (the live frozen path under
+`camera_network_objective: metric_expected_belief` with `kouw_et1_ambiguity
+true`) and the NumPy twin in `base_planner._evaluate_controls`.
+
+The MIXTURE path (`expected_posterior_uncertainty_ca`, E[H(P+)]) needed the same
+treatment and is anchored to the IDEAL-AVAILABILITY POSTERIOR reached from the
+same prior -- not to the prior. Anchoring to the prior gives -q I(x;y), which is
+<= 0 and reintroduces the duration reward with the opposite sign. Its NumPy twin
+`CameraNetwork.expected_belief` previously returned the raw absolute entropy
+while its own docstring claimed prior-differencing; both now do the same
+anchored thing.
+
+**Why a constant-parameter arm is not exactly flat.** R_i is stored per heading
+and position, and in the q = 1 arms the per-camera R has constant eigenvalues but
+ROTATING orientation, so fusing five differently oriented precisions gives an
+R_eff whose logdet still varies slightly with pose. Measured on W0: 2.2e-3 nats
+across the whole field. That is a property of the commissioned geometry, not of
+the accounting. Re-measure with `verify_anchored_ambiguity.py`, which reports the
+spread, the clip count (must be 0) and the floor margin.
+
+**q is still necessary.** q is availability (probability a camera returns an
+admitted measurement); R is reliability GIVEN a report. They enter as
+`sum_i q_i R_i^-1`, so q decides whether precision arrives at all. R does inflate
+in low-availability regions -- measured ~1.3x between q < 0.05 and q > 0.5 cells
+-- but q itself swings by 100x, so R alone cannot stand in for it.
+
 ### The clearance cost uses the robot's body
 It previously inflated the belief MEAN by a fixed disc and never saw the extent
 or heading, so it read **exactly zero on every candidate of every task**. It now
@@ -111,6 +208,13 @@ where every earlier attempt hit the iteration cap.
 2. **Summed per-step terms encode route LENGTH.** Always inspect per-step values
    along a route, never only totals. A constant-R arm must give a constant
    per-step ambiguity once discount-normalised.
+3. **An ABSOLUTE entropy is a duration term once duration is free.** (2026-09-16)
+   The arrival gate fixed bug 1 and created this one: with the horizon no longer
+   fixed, the route-independent constant inside `0.5(D_y log 2*pi*e + log|R|)`
+   became `constant * T`, signed by the units R is written in. Diagnostic 2 does
+   NOT catch it -- a constant per-step value is precisely the symptom. Any term
+   summed over a free-duration rollout must be a RATIO or a difference against a
+   fixed reference, never an absolute entropy. See "The ambiguity is ANCHORED".
 
 ## Verification that must pass before trusting any result
 
@@ -193,3 +297,34 @@ The deadline must exceed the worst CONTENDED solve, not the uncontended one: a
 live run shares the machine with Gazebo, five camera streams and YOLO. Re-measure
 before lowering either cap. At the new caps 80 runs take about 4.5 h at the
 typical rate.
+
+## The objective weights are NOT derived (open, 2026-09-16)
+
+`nogo_safe_distance`, `nogo_logbarrier_eps`, `network_goal_std_m` and
+`optimizer_control_block_steps` are locked and enforced. The four weights that
+set the trade-off between the EFE terms are not:
+
+    ambiguity_weight   3.0    no derivation; entered under a commit "Launch updates"
+    risk_weight_obs    1.0    no derivation
+    nogo_weight       40.0    no derivation
+    control_weight     0.0    (term disabled; this one is a decision, not a number)
+
+**This decides every route.** Gates 4-5 on the seven-arm route-selection config,
+2 tasks x 4 arms, anchored against legacy ambiguity:
+
+    w_amb    1.0    2.0    3.0    5.0
+    flips    2/8    5/8    7/8    8/8
+
+Every one of the seven flips at the deployed weight breaks even between
+w_amb 0.91 and 2.85, and four of them within a factor 2 of 3.0. A weight chosen
+anywhere in that band selects different routes.
+
+**Do not fix this by scanning w_amb against the route split.** That is fitting a
+constant to the outcome it is judged by. The defensible options are to derive the
+weight from the units the terms are in (risk and ambiguity are both in nats, so
+the relative weight should be 1 unless there is a stated reason), or to report
+the route choice as a function of w_amb and show over what band the conclusion
+holds.
+
+Re-measure with `score_anchored_route_contrast.py` then
+`analyse_anchored_route_contrast.py --w-amb <W>`.
