@@ -468,7 +468,7 @@
 
     <include><name>external_camera</name><uri>model://external_camera</uri><pose>-11.450 -9.450 5.000 0 0.7679 0.7854</pose></include>
     <include><name>external_camera_b</name><uri>model://external_camera_b</uri><pose>-1.500 -9.720 5.000 0 0.8378 2.0071</pose></include>
-    <include><name>external_camera_c</name><uri>model://external_camera_c</uri><pose>-6.950 9.450 5.000 0 0.7679 -1.0472</pose></include>
+    <include><name>external_camera_c</name><uri>model://external_camera_c</uri><pose>-6.950 9.450 5.000 0 0.8378 -1.0472</pose></include>
     <include><name>external_camera_d</name><uri>model://external_camera_d</uri><pose>11.450 7.200 5.000 0 0.6632 -2.4435</pose></include>
     <include><name>external_camera_e</name><uri>model://external_camera_e</uri><pose>11.450 -9.450 5.000 0 0.7330 2.3038</pose></include>
   </world>
