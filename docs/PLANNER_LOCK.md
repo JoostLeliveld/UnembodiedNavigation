@@ -337,7 +337,41 @@ live run shares the machine with Gazebo, five camera streams and YOLO. Re-measur
 before lowering either cap. At the new caps 80 runs take about 4.5 h at the
 typical rate.
 
-## The objective weights are NOT derived (open, 2026-09-16)
+## The ambiguity weight is now DERIVED (2026-09-18)
+
+`ambiguity_weight` is **1.0**, set in `PAPER_LAUNCH_DEFAULTS`. The derivation is
+the units: risk (Kouw Eq. 27, a Gaussian KL) and ambiguity (Kouw Lemma 1 under
+ET1, now an anchored log-ratio) are BOTH in nats, so their relative weight is 1
+unless there is a stated reason otherwise. There is none.
+
+The previous 3.0 had no derivation, entered under a commit called "Launch
+updates", and route choice is a direct function of it -- an undeclared tuning
+knob deciding the result. It is also NOT set by any campaign config, so the code
+default governs every run; changing it here changes every arm.
+
+**What moves at 1.0 rather than 3.0**, measured on the four thesis tasks x seven
+arms by re-decomposing the scored candidates (`total - 3.0*amb + w*amb`, exact):
+13 of 28 cells select a different route, and the number of TASKS on which the
+seven arms disagree goes 1/4 -> 2/4. Two of the new splits are near-ties (0.27%
+and 0.28% margins) and should not be reported as effects.
+
+**Do not re-tune this against the route split.** That is fitting the constant to
+the outcome it is judged by. If 1.0 is ever changed, the reason must be a stated
+property of the objective, not a better-looking result. Re-measure with
+`score_anchored_route_contrast.py` then `analyse_anchored_route_contrast.py
+--w-amb <W>`.
+
+`nogo_weight` is deliberately NOT reset: the clearance term is not in nats, so
+the units argument does not reach it, and its penalty shape (0 beyond the band,
+50 at contact, 272 one cm past) was derived against the deployed value. Note the
+fallback in `visibility_launch_common.py` is 2000.0 with the comment "At 40 the
+clearance term cannot compete", while every campaign config sets 40.0 -- the
+campaigns govern, and that disagreement is unresolved.
+
+`control_weight` stays 0.0; the term is disabled, which is a decision rather
+than a number.
+
+## The objective weights were NOT derived (historical, 2026-09-16)
 
 `nogo_safe_distance`, `nogo_logbarrier_eps`, `network_goal_std_m` and
 `optimizer_control_block_steps` are locked and enforced. The four weights that

@@ -74,8 +74,13 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     # R' = R + sigma^2 I. Mostly INTER-CAMERA DISAGREEMENT, which the
     # per-camera pixel covariance cannot express. 0 = off (single-camera path).
     'control_weight': '0.0',
+    # Risk and ambiguity are BOTH in nats, so their relative weight is 1 unless
+    # there is a stated reason otherwise. The previous 3.0 had no derivation --
+    # it entered under a commit called "Launch updates" -- and route choice is a
+    # direct function of it, so it was an undeclared tuning knob deciding the
+    # result. Reset 2026-09-18; see docs/PLANNER_LOCK.md.
     'risk_weight_obs': '1.0',
-    'ambiguity_weight': '3.0',
+    'ambiguity_weight': '1.0',
     'goal_sigma_uv': '2.0',
     'use_ambiguity': 'true',
     'use_obs_risk': 'true',
