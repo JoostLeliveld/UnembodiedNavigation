@@ -830,7 +830,7 @@ def build_world(state: str = "A") -> str:
         "         far wall spills sideways by 1.1 m instead of 2.6 m at 19 m. -->\n"
         "    <include><name>plan_view_camera</name><uri>model://plan_view_camera</uri>"
         "<pose>0.00 0.00 42.00 0 1.5708 1.5708</pose></include>\n")
-    fast_note = ("\n       DEVELOPMENT DERIVATIVE (--fast): contact sensors at "
+    fast_note = ("\n       DEVELOPMENT DERIVATIVE (generated with the fast flag): contact sensors at "
                  f"{FAST_PROFILE['contact_update_rate_hz']} Hz instead of 60 Hz. Geometry,"
                  " cameras, lighting and shadows are IDENTICAL to the canonical world, so"
                  " every rendered pixel is the same; only the contact report rate differs."
