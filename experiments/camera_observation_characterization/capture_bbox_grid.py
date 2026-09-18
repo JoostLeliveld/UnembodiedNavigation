@@ -54,6 +54,7 @@ from dataset_split_utils import build_pose_records, evenly_spaced_yaws  # noqa: 
 from experiments.core.world_profiles import load_profile  # noqa: E402
 from perception.core.ros_image import image_msg_to_bgr8  # noqa: E402
 from unav_common.occlusion_geometry import parse_collision_scene_from_world  # noqa: E402
+from unav_common.rectangular_footprint import RectangularFootprint  # noqa: E402
 from unav_common.capture_integrity import (  # noqa: E402
     CaptureIndexWriter, atomic_bytes, atomic_json, capture_lock,
 )
@@ -463,7 +464,21 @@ def _pose_plan(profile: dict, world_path: str, args: argparse.Namespace) -> tupl
         item for item in known
         if str(item.get('type', '')).strip().lower() not in {'traversable', 'site_boundary'}
     ]
-    prisms = parse_collision_scene_from_world(world_path).prisms
+    # The default model_names are the legacy warehouse's; warehouse_v2 names its
+    # models differently, and a name that matches nothing yields an EMPTY prism set,
+    # which silently disables the collision test.  Take the names from the profile.
+    collision_model_names = tuple(profile.get('collision_model_names') or ())
+    prisms = (
+        parse_collision_scene_from_world(
+            world_path, model_names=collision_model_names, robot_z_range=(0.0, 0.55)
+        ).prisms
+        if collision_model_names
+        else parse_collision_scene_from_world(world_path).prisms
+    )
+    if collision_model_names and not prisms:
+        raise RuntimeError(
+            f'collision_model_names {collision_model_names} matched no geometry in {world_path}'
+        )
     def filter_records(records: list[dict]) -> tuple[list[dict], dict[str, int]]:
         return _filter_pose_records(
             records,
@@ -494,19 +509,55 @@ def _pose_plan(profile: dict, world_path: str, args: argparse.Namespace) -> tupl
                 positions[position_key] = len(positions)
             records.append({
                 'x': x, 'y': y, 'yaw': yaw,
-                'x_idx': index, 'y_idx': index, 'yaw_idx': index,
+                'x_idx': index, 'y_idx': index,
+                # A predeclared file carries its own heading index.  Falling back to
+                # the flat entry index keeps older single-heading files working.
+                'yaw_idx': int(item.get('heading_id', index)),
                 'position_id': positions[position_key],
                 'dataset_split': str(item.get('stratum', 'commissioning')),
                 'random_draw_index': '',
             })
-        kept, counts = filter_records(records)
-        if len(kept) != len(records):
-            rejected = sorted(set(range(len(records))) - {int(row['x_idx']) for row in kept})
-            raise RuntimeError(f'pose-file contains collision-invalid entries: {rejected}')
+
+        if args.pose_validity == 'footprint':
+            # The declared known_2d_regions encode the PLANNER's keep-out envelope:
+            # where the robot may drive.  A capture pose only requires that the body
+            # physically fits, so validity here is the oriented footprint against the
+            # collision scene.  The planner's envelope is deliberately not consulted.
+            footprint = RectangularFootprint(
+                tuple(prisms),
+                length=float(args.robot_length_m),
+                width=float(args.robot_width_m),
+            )
+            counts: Counter[str] = Counter()
+            kept = []
+            for record in records:
+                clearance = footprint.clearance(
+                    (float(record['x']), float(record['y']), float(record['yaw']))
+                )
+                if clearance < float(args.body_clearance_m):
+                    counts['body_clearance'] += 1
+                    continue
+                record['body_clearance_m'] = round(float(clearance), 4)
+                counts['kept'] += 1
+                kept.append(record)
+            if not kept:
+                raise RuntimeError('pose-file left no footprint-valid entries')
+            sampling = 'predeclared_pose_file_footprint_validity'
+        else:
+            kept, counts = filter_records(records)
+            if len(kept) != len(records):
+                rejected = sorted(set(range(len(records))) - {int(row['x_idx']) for row in kept})
+                raise RuntimeError(f'pose-file contains collision-invalid entries: {rejected}')
+            sampling = 'predeclared_pose_file'
+
         return kept, {
             'bounds': [xmin, xmax, ymin, ymax],
-            'filter_counts': counts,
-            'sampling': 'predeclared_pose_file',
+            'filter_counts': dict(counts),
+            'sampling': sampling,
+            'pose_validity': str(args.pose_validity),
+            'robot_length_m': float(args.robot_length_m),
+            'robot_width_m': float(args.robot_width_m),
+            'body_clearance_m': float(args.body_clearance_m),
             'pose_file': str(pose_file),
             'pose_file_sha256': _sha256(pose_file),
             'pose_labels': [str(item.get('stratum', f'pose_{index}'))
@@ -633,6 +684,22 @@ def main() -> int:
     parser.add_argument(
         '--with-semantic', action='store_true',
         help='Also wait for semantic-label images. Optional diagnostic; not used by YOLO.',
+    )
+    parser.add_argument(
+        '--pose-validity', choices=('declared_regions', 'footprint'),
+        default='declared_regions',
+        help=(
+            'How a --pose-file entry is judged valid. "declared_regions" (default) '
+            'applies the planner keep-out map from world_profiles.yaml. "footprint" '
+            'instead requires only that the oriented robot body clears the collision '
+            'scene, which is the physical constraint on standing still to be imaged.'
+        ),
+    )
+    parser.add_argument('--robot-length-m', type=float, default=0.80)
+    parser.add_argument('--robot-width-m', type=float, default=0.55)
+    parser.add_argument(
+        '--body-clearance-m', type=float, default=0.05,
+        help='Minimum oriented-body clearance required under --pose-validity footprint.',
     )
     parser.add_argument('--plan-only', action='store_true')
     parser.add_argument(
