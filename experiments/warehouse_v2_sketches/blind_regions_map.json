@@ -1,0 +1,151 @@
+{
+  "schema": "warehouse_v2_blind_regions.v1",
+  "generated_utc": "2026-09-18T11:04:08.770918+00:00",
+  "method": "blind = max_i q_i(cell) < threshold, on the 0.20 m commissioned availability grid, intersected with the redrawn traversable lanes. Cause attributed by ray-casting camera->cell at 0.35 m target height with and without the ten C-block stacks.",
+  "availability_field": "logs/studies/reference_controlled_commissioning_v1/selected_correction_r_planner_fields_20260915_v4/u0_planner_field.npz",
+  "note": "availability is IDENTICAL across arms u0-u4 (only R differs); w0/w3 are q=1 arms with no blind cells by construction.",
+  "driveable_cells": 5437,
+  "grid_cells": 10101,
+  "cell_size_m": 0.2,
+  "thresholds": {
+    "0.05": {
+      "blind_driveable_cells": 74,
+      "pct_of_driveable": 1.36,
+      "regions": [
+        {
+          "cells": 46,
+          "area_m2": 1.84,
+          "xmin": 3.6,
+          "xmax": 5.4,
+          "ymin": -1.8,
+          "ymax": -1.0,
+          "min_q": 0.0279,
+          "cells_caused_by_C_block_stacks": 34,
+          "cells_caused_by_range_or_angle": 12
+        },
+        {
+          "cells": 8,
+          "area_m2": 0.32,
+          "xmin": -7.2,
+          "xmax": -6.6,
+          "ymin": 7.2,
+          "ymax": 7.4,
+          "min_q": 0.0232,
+          "cells_caused_by_C_block_stacks": 0,
+          "cells_caused_by_range_or_angle": 8
+        },
+        {
+          "cells": 20,
+          "area_m2": 0.8,
+          "xmin": -7.2,
+          "xmax": -6.6,
+          "ymin": 7.8,
+          "ymax": 8.8,
+          "min_q": 0.018,
+          "cells_caused_by_C_block_stacks": 0,
+          "cells_caused_by_range_or_angle": 20
+        }
+      ]
+    },
+    "0.1": {
+      "blind_driveable_cells": 133,
+      "pct_of_driveable": 2.45,
+      "regions": [
+        {
+          "cells": 75,
+          "area_m2": 3.0,
+          "xmin": 3.6,
+          "xmax": 5.6,
+          "ymin": -2.0,
+          "ymax": -0.8,
+          "min_q": 0.0279,
+          "cells_caused_by_C_block_stacks": 49,
+          "cells_caused_by_range_or_angle": 26
+        },
+        {
+          "cells": 19,
+          "area_m2": 0.76,
+          "xmin": -7.6,
+          "xmax": -6.4,
+          "ymin": 7.0,
+          "ymax": 7.4,
+          "min_q": 0.0232,
+          "cells_caused_by_C_block_stacks": 0,
+          "cells_caused_by_range_or_angle": 19
+        },
+        {
+          "cells": 39,
+          "area_m2": 1.56,
+          "xmin": -7.4,
+          "xmax": -6.2,
+          "ymin": 7.8,
+          "ymax": 9.0,
+          "min_q": 0.018,
+          "cells_caused_by_C_block_stacks": 0,
+          "cells_caused_by_range_or_angle": 39
+        }
+      ]
+    },
+    "0.2": {
+      "blind_driveable_cells": 226,
+      "pct_of_driveable": 4.16,
+      "regions": [
+        {
+          "cells": 112,
+          "area_m2": 4.48,
+          "xmin": 3.4,
+          "xmax": 5.8,
+          "ymin": -2.0,
+          "ymax": -0.4,
+          "min_q": 0.0279,
+          "cells_caused_by_C_block_stacks": 59,
+          "cells_caused_by_range_or_angle": 53
+        },
+        {
+          "cells": 22,
+          "area_m2": 0.88,
+          "xmin": 7.8,
+          "xmax": 8.2,
+          "ymin": -2.0,
+          "ymax": -0.6,
+          "min_q": 0.1088,
+          "cells_caused_by_C_block_stacks": 18,
+          "cells_caused_by_range_or_angle": 4
+        },
+        {
+          "cells": 6,
+          "area_m2": 0.24,
+          "xmin": 9.0,
+          "xmax": 9.0,
+          "ymin": 6.0,
+          "ymax": 7.0,
+          "min_q": 0.1286,
+          "cells_caused_by_C_block_stacks": 0,
+          "cells_caused_by_range_or_angle": 6
+        },
+        {
+          "cells": 28,
+          "area_m2": 1.12,
+          "xmin": -7.6,
+          "xmax": -6.4,
+          "ymin": 6.8,
+          "ymax": 7.4,
+          "min_q": 0.0232,
+          "cells_caused_by_C_block_stacks": 0,
+          "cells_caused_by_range_or_angle": 28
+        },
+        {
+          "cells": 58,
+          "area_m2": 2.32,
+          "xmin": -7.6,
+          "xmax": -5.8,
+          "ymin": 7.8,
+          "ymax": 9.0,
+          "min_q": 0.018,
+          "cells_caused_by_C_block_stacks": 0,
+          "cells_caused_by_range_or_angle": 58
+        }
+      ]
+    }
+  }
+}
