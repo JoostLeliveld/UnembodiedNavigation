@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SUITES = {
     'performance': ['tests/planning/test_casadi_cache.py', 'tests/planning/test_status_traffic.py',
                     'tests/sim/test_clock_throttle_traffic.py', 'tests/experiments/test_goal_mission_traffic.py',
-                    'tests/experiments/test_low_cpu_world.py', 'tests/visibility_comparison/test_campaign_ledger.py',
+                    'tests/visibility_comparison/test_campaign_ledger.py',
                     'tests/visibility_comparison/test_network_planner_config.py'],
     'perception': ['tests/perception/test_batched_four_camera_yolo.py', 'tests/visibility_comparison/test_yolo_selection.py'],
     'filter': ['tests/planning/test_belief_correction.py', 'tests/planning/test_runtime_transactions.py',

@@ -1,6 +1,6 @@
 # One live-drive diagnostic. The new image-aware world-position NN is evaluated
 # in shadow mode on exact detector crops; the established runtime estimator drives.
-world: warehouse_v2_low_cpu.world.sdf
+world: warehouse_v2.world.sdf
 launch_file: warehouse_primary_comparison.launch.py
 conditions:
   P0:

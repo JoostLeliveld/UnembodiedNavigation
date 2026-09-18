@@ -2,7 +2,7 @@
 # contact world with CUDA detector device 0. The commissioned 960 px checkpoint
 # and all scientific/planner/camera parameters remain unchanged. Keep results in
 # a separate ledger and do not mix them with the registered pilot evidence.
-world: warehouse_v2_low_cpu.world.sdf
+world: warehouse_v2.world.sdf
 launch_file: warehouse_primary_comparison.launch.py
 conditions:
   P0:

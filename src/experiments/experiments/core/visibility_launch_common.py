@@ -232,14 +232,10 @@ _COLLISION_INCLUDE_NAMES_BY_WORLD = {
     for world in (
         'warehouse_v2.world.sdf',
         'warehouse_v2_shipout.world.sdf',
-        'warehouse_v2_low_cpu.world.sdf',
     )
 }
 
-_DETECTOR_CALIBRATION_WORLD_BY_WORLD = {
-    # Performance-only SDF variant uses the same camera geometry/calibration.
-    'warehouse_v2_low_cpu.world.sdf': 'warehouse_v2',
-}
+_DETECTOR_CALIBRATION_WORLD_BY_WORLD = {}
 
 # Command noise shape — paper-locked, not user-overridable.
 # These values were calibrated for the TurtleBot3 in Gazebo and must not change between runs.

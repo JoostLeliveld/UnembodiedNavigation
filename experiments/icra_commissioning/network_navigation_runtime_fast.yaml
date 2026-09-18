@@ -2,7 +2,7 @@
 # registered runtime pilot; the explicit world variant changes simulator rates
 # from 1000 Hz physics / 60 Hz contacts to 200 Hz / 20 Hz. Keep results in a
 # separate ledger and do not mix them with the registered pilot evidence.
-world: warehouse_v2_low_cpu.world.sdf
+world: warehouse_v2.world.sdf
 launch_file: warehouse_primary_comparison.launch.py
 conditions:
   P0:

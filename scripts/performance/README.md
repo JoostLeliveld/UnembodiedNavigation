@@ -4,33 +4,29 @@ The registered localization evidence remains tied to its exact selection and has
 tools provide faster development feedback and prospective runtime measurements; they do not
 create or replace navigation evidence.
 
-## Low CPU simulator profile
+## Low CPU simulator profile (RETIRED 2026-09-18)
 
-`warehouse_v2_low_cpu.world.sdf` retains the `warehouse_v2` geometry, camera models, lighting,
-collision shapes and calibration profile. It changes only:
+`warehouse_v2_low_cpu.world.sdf` was removed. It was a fidelity-reduced derivative
+that claimed, in its own header and in this file, to retain the `warehouse_v2`
+geometry. **It did not.** It was missing the `bin_office` include
+(`aws_robomaker_warehouse_TrashCanC_01` at -8.710, -7.450), so the two worlds had
+genuinely different obstacle geometry while being documented as identical.
 
-- ODE physics: 1000 Hz / 1 ms to 200 Hz / 5 ms.
-- 46 contact sensors: 60 Hz to 20 Hz.
+`tests/experiments/test_low_cpu_world.py` asserted byte equality after
+substituting the documented rates, and it had been FAILING on exactly that
+missing include. The test was removed with the world.
 
-At the configured maximum speed of 0.22 m/s, those periods correspond to 1.1 mm of travel per
-physics step and 1.1 cm between contact samples. The dedicated campaign config is
-`experiments/icra_commissioning/network_navigation_runtime_fast.yaml`; keep its outputs in a
-separate development ledger.
+It also ran coarser physics: ODE 200 Hz / 5 ms against 1000 Hz / 1 ms, and contact
+sensors at 20 Hz against 60 Hz. For a result about lane departure at 1-2 sigma, a
+5x coarser integrator is the wrong basis, which is why the retained world is the
+full-fidelity one rather than the fast one.
 
-After verifying CUDA, use `network_navigation_runtime_fast_gpu.yaml` to combine this simulator
-profile with detector device 0. The CPU version remains available as a fallback.
-
-A 12-second headless A/B probe on 2026-09-07 measured 0.4268 simulated seconds per wall second
-for the registered world and 0.6988 for the low CPU world. This is a 1.64x simulator speedup,
-or about 39% less wall time for the simulator-bound portion. It is not a full navigation run.
-
-Dry-run the launch expansion without starting ROS or Gazebo:
-
-```bash
-python3 scripts/visibility_comparison/run_visibility_campaign.py \
-  --config experiments/icra_commissioning/network_navigation_runtime_fast.yaml \
-  --log-root logs/performance/low_cpu_dry_run --dry-run
-```
+The campaign configs that used it
+(`network_navigation_runtime_fast.yaml`, `network_navigation_runtime_fast_gpu.yaml`,
+`image_nn_drive_demo.yaml`) now point at `warehouse_v2.world.sdf`. They will run
+slower; the previously recorded 1.64x simulator speedup no longer applies. If a
+fast development world is wanted again, derive it from `warehouse_v2.world.sdf`
+with a script rather than a hand-maintained copy, so geometry cannot drift.
 
 ## Focused checks
 
