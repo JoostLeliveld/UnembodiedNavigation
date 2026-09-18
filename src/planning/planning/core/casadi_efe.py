@@ -69,6 +69,24 @@ class CasadiEfeParams:
     # None -> zero. Plumbing for the companion measurement workstream; no value
     # is invented here.
     obs_bias: object = None
+    # Charge risk ONCE on the terminal belief instead of summing it per step.
+    #
+    # Integrated risk is a length proxy. Measured on the route candidates for
+    # thesis09_lane08E_to_lane12W: corr(length, risk) = +0.99 with a 12.6x
+    # spread across candidates, against a 1.7x spread in ambiguity. Risk
+    # therefore out-ranges the visibility signal by about 7x and decides the
+    # route on its own, so the planner took an 18.05 m route with two blind
+    # steps over a fully covered 20.45 m one -- ambiguity preferred the covered
+    # route by 24 nats and integrated risk penalised it by 83.
+    #
+    # Goal arrival is a HARD CONSTRAINT (`_prefer_candidate` ranks terminal
+    # feasibility above cost), so risk no longer has to pull the robot toward
+    # the goal; that job is already done. Charging it on the terminal belief
+    # alone keeps what risk is for -- arriving with a belief that matches the
+    # goal prior -- and removes the per-step accumulation that encoded duration.
+    # Compare "Terminal Matters" (arXiv 2605.09046), where uncertainty enters
+    # only through the terminal cost.
+    terminal_risk_only: bool = False
 
 
 def _require_casadi():
@@ -489,6 +507,31 @@ def _differential_entropy_ca(P):
     return 0.5 * (dim * math.log(2.0 * math.pi * math.e) + _logdet_small_pd(0.5 * (P + P.T)))
 
 
+def _anchored_ambiguity_ca(P, P_ref):
+    """Ambiguity measured against an ideally observed pose.
+
+        J_amb = 0.5 * max( log( |P| / |P_ref| ), 0 )
+
+    The ET1 ambiguity is an ABSOLUTE differential entropy,
+    ``0.5(D_y log 2*pi*e + log|R_eff|)``, so it carries a large
+    route-independent additive constant whose SIGN depends only on the units
+    ``R_eff`` is written in (here state units, because of the ``1/(Q dt) I``
+    floor, which makes it negative). On a fixed horizon every candidate
+    accumulates that constant the same number of times and it cancels. Under the
+    smooth arrival gate duration is a free variable, so it instead contributes
+    ``constant * T``: a duration term carrying the sign of an arbitrary unit
+    choice, which rewards a route for lasting longer.
+
+    Dividing by ``P_ref`` cancels the constant (including ``D_y log 2*pi*e``),
+    leaving a dimensionless quantity. Clipping at zero means no route can be paid
+    for taking longer. The result differs from Kouw Lemma 1 by an additive
+    constant only, so on a fixed horizon it is rank-identical to the published
+    objective.
+    """
+    ratio = _logdet_small_pd(0.5 * (P + P.T)) - _logdet_small_pd(0.5 * (P_ref + P_ref.T))
+    return 0.5 * ca.fmax(ratio, 0.0)
+
+
 def expected_posterior_uncertainty_ca(S, J, R_cond, p_use):
     """Expected posterior uncertainty (differential entropy) over the mixture.
 
@@ -677,6 +720,7 @@ def make_metric_network_efe_valgrad_fn(
     expected_belief_state,
     *,
     effective_covariance=None,
+    reference_covariance=None,
     goal_std_m,
     goal_std_start_m=None,
     arrival_radius_m=0.0,
@@ -697,6 +741,20 @@ def make_metric_network_efe_valgrad_fn(
     goal_std_m = float(goal_std_m)
     if not np.isfinite(goal_std_m) or goal_std_m <= 0.:
         raise ValueError('metric network goal_std_m must be finite and positive')
+    # Anchor for the ambiguity term. Required whenever an ambiguity path is
+    # live: without it the term is an absolute entropy and the arrival gate
+    # turns its constant into a duration reward (see _anchored_ambiguity_ca).
+    if reference_covariance is None:
+        raise ValueError(
+            'metric network objective requires reference_covariance: the '
+            'ambiguity term is anchored to the ideally observed pose')
+    R_ref_np = np.asarray(reference_covariance, dtype=float)
+    if R_ref_np.shape != (2, 2) or not np.isfinite(R_ref_np).all():
+        raise ValueError('reference covariance must be a finite 2x2 matrix')
+    R_ref_np = 0.5 * (R_ref_np + R_ref_np.T)
+    if np.linalg.eigvalsh(R_ref_np).min() <= 0.:
+        raise ValueError('reference covariance must be positive definite')
+    R_ref_dm = ca.DM(R_ref_np)
     # A constant goal prior makes the risk term a squared distance to the goal,
     # so the objective reduces to shortest path and the belief terms cannot
     # affect the route. Annealing the prior from loose to tight reproduces the
@@ -773,9 +831,19 @@ def make_metric_network_efe_valgrad_fn(
             reached = ca.sqrt(ca.sumsqr(m[:2] - goal_xy) + 1.0e-12)
             active = active * (1.0 / (1.0 + ca.exp(
                 -(reached - arrival_radius) / arrival_softness)))
-        total_risk += active * weight_t * params.risk_scale * risk_ca(
-            m[:2], S[:2, :2], goal_xy, goal_cov_t,
-        )
+        if params.terminal_risk_only:
+            # Overwrite rather than accumulate: after the loop this holds the
+            # risk of the FINAL belief only, so the term carries no duration.
+            # It keeps the arrival gate and the discount so a route that is
+            # already parked at the goal is scored at the goal, and it uses the
+            # step's own annealed goal covariance, which is the tightest one.
+            total_risk = active * weight_t * params.risk_scale * risk_ca(
+                m[:2], S[:2, :2], goal_xy, goal_cov_t,
+            )
+        else:
+            total_risk += active * weight_t * params.risk_scale * risk_ca(
+                m[:2], S[:2, :2], goal_xy, goal_cov_t,
+            )
         S_post, expected_entropy = expected_belief_state(m, S)
         if effective_covariance is None:
             total_amb += active * weight_t * params.ambiguity_scale * expected_entropy
@@ -787,8 +855,12 @@ def make_metric_network_efe_valgrad_fn(
             # R is the availability-weighted commissioned field, so the term
             # varies over the workspace and prefers well-observed states.
             R_eff = effective_covariance(m, S)
+            # ANCHORED to the ideally observed pose: see
+            # ``_anchored_ambiguity_ca``. The raw Lemma 1 entropy is absolute,
+            # so under the arrival gate its route-independent constant became a
+            # duration term signed by a unit choice.
             total_amb += (active * weight_t * params.ambiguity_scale
-                          * _differential_entropy_ca(.5 * (R_eff + R_eff.T)))
+                          * _anchored_ambiguity_ca(.5 * (R_eff + R_eff.T), R_ref_dm))
         total_control += active * weight_t * params.control_weight * ca.sumsqr(u_t)
         if nogo_belief_cost is not None and params.use_belief_nogo_cost:
             total_nogo += active * weight_t * nogo_belief_cost(m, S_post)

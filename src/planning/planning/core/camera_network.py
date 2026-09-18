@@ -76,6 +76,15 @@ def projection_jacobian(H, state):
     return (H[:2, :2]*projected[2] - projected[:2, None]*H[2, :2])/projected[2]**2
 
 
+# Shared ambiguity floor: ONE isotropic position covariance, identical for every
+# arm. It enters the ambiguity term only as a constant subtraction, so any value
+# below the tightest reachable R_eff gives identical rankings; the requirement is
+# that it never clips a real pose. Kept here so both the frozen and the mixture
+# ambiguity path anchor to the same place. Mirrors
+# UnicyclePlannerBase.AMBIGUITY_FLOOR_POSITION_SD_M.
+AMBIGUITY_FLOOR_POSITION_SD_M = 1.5e-3
+
+
 class CameraNetworkModel:
     """Frozen per-camera score and availability grids, with full metric quality.
 
@@ -304,14 +313,19 @@ class CameraNetworkModel:
         A miss performs no update. The robust runtime fusion remains a separate
         estimator and must not be inferred from this forecast.
 
-        The returned ambiguity is the expected posterior entropy minus the prior
-        entropy, i.e. the negative expected information gain. Reporting the
-        posterior entropy alone adds ``0.5 d log(2 pi e)`` at every step, a
-        constant that does not depend on what the cameras see, so summing it over
-        a route charges for the number of steps. Differencing against the prior
-        removes it: a step with no expected report contributes exactly zero and a
-        step in a well-observed lane contributes a negative amount. Routes of
-        different length are then comparable, which is what route selection needs.
+        The returned ambiguity is ANCHORED: the expected posterior entropy minus
+        the entropy of the posterior an ideally available step would reach from
+        the same prior. Reporting the posterior entropy alone adds
+        ``0.5 d log(2 pi e)`` plus a unit-dependent constant at every step, so
+        under the arrival gate (which makes duration free) summing it charges
+        ``constant * T`` -- a duration term whose sign is an artifact of units.
+
+        The anchor is the ideal-availability posterior, NOT the prior.
+        Differencing against the prior gives ``-q I(x;y)``, which is <= 0 and so
+        pays a route for lasting longer, the same defect with the opposite sign.
+        Against the ideal posterior the term is >= 0, dimensionless, and exactly
+        zero for a perfectly observed step, so routes of different length are
+        comparable -- which is what route selection needs.
         """
         if (isinstance(opportunities, bool) or int(opportunities) != opportunities
                 or int(opportunities) < 1):
@@ -327,10 +341,15 @@ class CameraNetworkModel:
         masks = _binary_report_masks(len(conditional_R))
         measurement_information = np.zeros((len(conditional_R), 3, 3), dtype=float)
         measurement_information[:, :2, :2] = np.linalg.inv(conditional_R)
+        # One shared floor for every arm; see AMBIGUITY_FLOOR_POSITION_SD_M.
+        floor_information = np.zeros((3, 3), dtype=float)
+        floor_information[:2, :2] = np.linalg.inv(
+            AMBIGUITY_FLOOR_POSITION_SD_M ** 2 * np.eye(2))
         expected_entropy = np.nan
         for _ in range(int(opportunities)):
             # Belief-averaged availability changes as the covariance contracts,
             # so each camera opportunity must query it from the current prior.
+            P_prior = P
             q = np.clip(self.query_belief(state, P, kappa)['availability'], 0., 1.)
             weights = np.prod(
                 np.where(masks != 0.0, q[None, :], 1.0 - q[None, :]), axis=1)
@@ -343,10 +362,27 @@ class CameraNetworkModel:
             signs, logdets = np.linalg.slogdet(posts[:, :2, :2])
             if np.any(signs <= 0):
                 raise ValueError('network posterior position covariance must be positive definite')
+            # Anchor: the posterior an IDEALLY AVAILABLE step reaches from this
+            # same prior (every camera reporting, each with its best
+            # commissioned R). Anchoring to the PRIOR instead would give
+            # -q*I(x;y) <= 0, which under the arrival gate pays a route for
+            # lasting longer. Both entropies carry the same
+            # 0.5*d*log(2*pi*e), so the difference is 0.5*log(|P|/|P_ideal|):
+            # dimensionless, and zero for a perfectly observed step.
+            # Same update formulation as the branch posteriors above
+            # (information form), so each back-end is internally consistent and
+            # the cross-back-end formulation gap cancels in the difference.
+            ideal_post = np.linalg.inv(np.linalg.inv(P_prior) + floor_information)
+            ideal_sign, ideal_logdet = np.linalg.slogdet(
+                0.5 * (ideal_post + ideal_post.T)[:2, :2])
+            if ideal_sign <= 0:
+                raise ValueError('ideal-availability posterior must be positive definite')
             P = np.einsum('b,bij->ij', weights, posts)
             P = (P + P.T) / 2.
-            expected_entropy = float(np.sum(
-                weights * 0.5 * (2.0 * np.log(2.0 * np.pi * np.e) + logdets)
+            expected_entropy = float(max(
+                np.sum(weights * 0.5 * (2.0 * np.log(2.0 * np.pi * np.e) + logdets))
+                - 0.5 * (2.0 * np.log(2.0 * np.pi * np.e) + ideal_logdet),
+                0.0,
             ))
         return P, expected_entropy
 
@@ -397,6 +433,8 @@ class CameraNetworkModel:
             )
             for i, grid in enumerate(self.fields['availability'])
         ]
+        # One shared floor for every arm; see AMBIGUITY_FLOOR_POSITION_SD_M.
+        floor_R = ca.DM(AMBIGUITY_FLOOR_POSITION_SD_M ** 2 * np.eye(2))
         covariance_interpolators = None
         if self.dynamic_R:
             covariance_interpolators = [
@@ -470,6 +508,27 @@ class CameraNetworkModel:
                         post = .5 * (post + post.T)
                     expected += branch_weight * post
                     expected_entropy += branch_weight * _differential_entropy_ca(post[:2, :2])
+                # Anchor: the posterior an IDEALLY AVAILABLE step would reach
+                # from this same prior -- every camera reporting, each with its
+                # best commissioned R. Anchoring to the PRIOR instead would give
+                # -q*I(x;y), which is <= 0 and reintroduces the duration reward
+                # with the opposite sign. See _anchored_ambiguity_ca.
+                # Information form, matching the NumPy twin exactly. The
+                # branch posteriors above use the Joseph form with a 1e-9
+                # jitter; that jitter is negligible against a camera R but NOT
+                # against this floor, which is three orders of magnitude
+                # tighter, so a Joseph-form anchor disagrees with the NumPy
+                # twin by ~4e-6 per opportunity and compounds. The anchor is a
+                # fixed matrix, not a differentiated rollout quantity, so the
+                # exact form costs nothing.
+                floor_information = ca.MX.zeros(3, 3)
+                floor_information[:2, :2] = ca.inv(floor_R)
+                ideal = ca.inv(ca.inv(prior) + floor_information)
+                ideal = .5 * (ideal + ideal.T)
+                # Both terms are already 0.5*(D log 2*pi*e + logdet), so their
+                # difference IS 0.5*log(|P| / |P_ideal|): the constant cancels.
+                expected_entropy = ca.fmax(
+                    expected_entropy - _differential_entropy_ca(ideal[:2, :2]), 0.0)
                 prior = .5 * (expected + expected.T)
             return .5 * (expected + expected.T), expected_entropy
 

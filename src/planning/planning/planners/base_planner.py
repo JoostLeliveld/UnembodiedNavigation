@@ -152,6 +152,12 @@ class UnicyclePlannerBase:
         # transform, evaluated on the availability-weighted commissioned R.
         # This is the thesis method; see docs/PLANNER_LOCK.md.
         kouw_et1_ambiguity=True,
+        # Charge risk once on the terminal belief rather than summing it per
+        # step. Integrated risk is a length proxy and buries the visibility
+        # signal; goal arrival is already a hard constraint, so risk does not
+        # have to pull the robot toward the goal. See CasadiEfeParams and
+        # docs/PLANNER_LOCK.md.
+        terminal_risk_only=False,
         network_goal_std_m=0.35,
         camera_network_updates_per_step=1,
         r_visible_uv=2.5,
@@ -341,6 +347,7 @@ class UnicyclePlannerBase:
             None if network_goal_std_start_m is None
             else float(network_goal_std_start_m))
         self.kouw_et1_ambiguity = bool(kouw_et1_ambiguity)
+        self.terminal_risk_only = bool(terminal_risk_only)
         if self.camera_network_objective not in ('legacy_pixel_chart', 'metric_expected_belief'):
             raise ValueError(
                 'camera_network_objective must be legacy_pixel_chart or metric_expected_belief'
@@ -1266,6 +1273,7 @@ class UnicyclePlannerBase:
             float(self.network_goal_std_start_m)
             if self.network_goal_std_start_m is not None else -1.0,
             bool(self.kouw_et1_ambiguity),
+            bool(self.terminal_risk_only),
             float(self.optimizer_terminal_goal_tolerance_m),
             int(self.camera_network_updates_per_step),
             int(self.optimizer_control_block_steps),
@@ -1389,6 +1397,7 @@ class UnicyclePlannerBase:
                 dt=float(self.dt),
                 Du=2,
                 use_hit_miss_mixture=bool(self.use_hit_miss_mixture),
+                terminal_risk_only=bool(self.terminal_risk_only),
                 # R_cond / obs_bias stay None: no conditional-covariance field or
                 # bias has been measured yet, so casadi_efe falls back to
                 # R_visible and zero bias (documented in _r_cond_expr). Wire the
@@ -1410,6 +1419,7 @@ class UnicyclePlannerBase:
                             self.visibility_sigma_kappa,
                             no_report_var=self.process_noise_xy * self.dt)
                         if self.kouw_et1_ambiguity else None),
+                    reference_covariance=self.reference_observation_covariance(),
                     goal_std_m=self.network_goal_std_m,
                     goal_std_start_m=self.network_goal_std_start_m,
                     nogo_cost=nogo_cost_ca,
@@ -1686,9 +1696,17 @@ class UnicyclePlannerBase:
                 goal_cov = self.goal_obs_cov_for_progress(
                     float(t) / float(max(self.goal_progress_n_steps, 1)))
             parts = risk_components(m[:2], S[:2, :2], (goal_xy, goal_cov))
-            totals['risk_cost'] += weight_t * risk_scale * parts['total']
-            for key in ('mean', 'cov_trace', 'cov_logdet', 'const'):
-                totals[f'risk_{key}'] += weight_t * risk_scale * parts[key]
+            if self.terminal_risk_only:
+                # Overwrite, so after the loop this is the FINAL belief's risk
+                # alone and the term carries no duration. Twin of the CasADi
+                # branch in casadi_efe.make_metric_network_efe_valgrad_fn.
+                totals['risk_cost'] = weight_t * risk_scale * parts['total']
+                for key in ('mean', 'cov_trace', 'cov_logdet', 'const'):
+                    totals[f'risk_{key}'] = weight_t * risk_scale * parts[key]
+            else:
+                totals['risk_cost'] += weight_t * risk_scale * parts['total']
+                for key in ('mean', 'cov_trace', 'cov_logdet', 'const'):
+                    totals[f'risk_{key}'] += weight_t * risk_scale * parts[key]
             S_post, expected_entropy = self.camera_network.expected_belief(
                 m, S, self.visibility_sigma_kappa,
                 opportunities=self.camera_network_updates_per_step,
@@ -1700,7 +1718,14 @@ class UnicyclePlannerBase:
                 sign, logdet = np.linalg.slogdet(0.5 * (R_eff + R_eff.T))
                 if sign <= 0:
                     raise ValueError('effective observation covariance must be positive definite')
-                expected_entropy = 0.5 * (2.0 * math.log(2.0 * math.pi * math.e) + logdet)
+                # ANCHORED to the ideally observed pose. The raw Lemma 1 term is
+                # an absolute differential entropy, so under the arrival gate its
+                # route-independent constant becomes constant*T -- a duration
+                # term whose sign is set by the units R_eff is written in. The
+                # log-ratio is dimensionless and clipped so no route is paid for
+                # lasting longer. See _anchored_ambiguity_ca in casadi_efe.
+                expected_entropy = 0.5 * max(
+                    logdet - self._reference_ambiguity_logdet(), 0.0)
             totals['ambiguity_cost'] += weight_t * ambiguity_scale * expected_entropy
             if self.use_belief_nogo_cost:
                 obstacle = self.obstacle_penalty(m, S_post)
@@ -1718,6 +1743,58 @@ class UnicyclePlannerBase:
         if return_metrics:
             return float(total), {key: float(value) for key, value in totals.items()}
         return float(total)
+
+    # The ambiguity floor: ONE covariance, shared by every arm.
+    #
+    # The floor enters as a constant subtraction, so any value below the
+    # tightest reachable R_eff gives identical rankings; only clipping a real
+    # pose to zero destroys information. It must therefore be the SAME for every
+    # arm being compared. Each arm's own commissioned best-R floor differs
+    # (measured: 3.5 nats between the loosest and tightest of the current seven
+    # arms), so anchoring each arm to itself would shift every arm by a
+    # different constant and make the arms incomparable -- the one thing a q/R
+    # comparison must not do.
+    #
+    # 1.5 mm isotropic position sd, chosen inside a two-sided window:
+    #
+    #   upper bound  the tightest R_eff reachable on any arm is det 2.39e-11
+    #                (~2.2 mm sd). The floor must stay below it or it clips real
+    #                poses and deletes signal.
+    #   lower bound  casadi_efe._logdet_small_pd clamps det at 1e-12. A floor at
+    #                or under that clamp makes the CasADi log-determinant
+    #                disagree with the NumPy one (measured 8.3e-6 per
+    #                evaluation, compounding across opportunities), which breaks
+    #                the 1e-8 agreement the two back-ends must hold.
+    #
+    # 1.5 mm sits 5x above the clamp and 4.7x below the tightest reachable pose.
+    # The window is narrow because the commissioned cameras are very precise;
+    # if a future arm is tighter still, widen the clamp rather than lowering
+    # this, and re-check both bounds. A threshold with stated margins, not a
+    # fitted value: verify_anchored_ambiguity.py reports the clip count (must be
+    # 0) and the twins' agreement.
+    AMBIGUITY_FLOOR_POSITION_SD_M = 1.5e-3
+
+    def reference_observation_covariance(self):
+        """The shared ambiguity floor. See CameraNetwork.reference_observation_covariance.
+
+        A THRESHOLD, not an estimate: it sits below the tightest reachable
+        R_eff of every arm being compared, and anywhere below that the exact
+        value cancels out of the ranking. It is deliberately independent of the
+        arm's own R model so the arms stay comparable.
+        """
+        variance = float(self.AMBIGUITY_FLOOR_POSITION_SD_M) ** 2
+        return variance * np.eye(2)
+
+    def _reference_ambiguity_logdet(self):
+        cached = getattr(self, '_reference_logdet_cache', None)
+        if cached is None:
+            R_ref = self.reference_observation_covariance()
+            sign, logdet = np.linalg.slogdet(0.5 * (R_ref + R_ref.T))
+            if sign <= 0:
+                raise ValueError('reference observation covariance must be positive definite')
+            cached = float(logdet)
+            self._reference_logdet_cache = cached
+        return cached
 
     def plan(self, m0, S0, goal_xy, *, progress_index=0.0):
         t_plan_start = time.perf_counter()

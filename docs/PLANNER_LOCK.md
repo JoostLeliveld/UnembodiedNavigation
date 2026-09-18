@@ -222,6 +222,45 @@ Hand calculation, the NumPy evaluator and the CasADi objective must agree on the
 ambiguity term to ~1e-6 at a fixed pose, and the full-rollout total must
 reproduce by hand to ~1e-3.
 
+## The legacy golden was regenerated for the one-sided risk clip (2026-09-18)
+
+`tests/planning/test_flag_off_is_bit_identical_to_golden` pins the LEGACY
+precision-blend path (`casadi_efe.make_efe_valgrad_fn`) bit-for-bit. It had been
+failing since `85d94a1b`, the commit that made `risk_ca` one-sided. That commit
+changed the frozen path deliberately but did not regenerate the golden, so the
+test was red for a benign reason -- which is the worst state for a regression
+test, because it masks a real break on that path.
+
+**The cause was established before rewriting anything, not assumed.** Forcing
+`one_sided=False` reproduces the OLD golden on all four cases with ZERO
+mismatches, so the old numbers are exactly the pre-clip method and nothing else
+had drifted into them. Every recorded change is a DECREASE (the clip removes the
+reward for letting the belief drift), and evaluation point 1 is unchanged in all
+four cases because there the belief is already wider than the goal prior and the
+clip is inactive -- the signature the clip should have, and a check worth
+repeating if this is ever regenerated again.
+
+    case                  point   old         new         delta
+    et1_vis               0       14.897593   13.315536   -1.582056
+    et1_vis               1      309.257577  309.257577    0.000000
+    et1_vis               2      287.140708  286.293118   -0.847590
+    et1_novis             0       13.291797   11.605726   -1.686071
+
+Regenerated with `experiments/efe_hit_miss_mixture/regenerate_golden.py --write`,
+which had itself been deleted in `66d34f4d` and was restored from
+`66d34f4d^` for this. It imports the harness from the test file, so generator
+and test cannot drift apart. The rewrite touched 144 hex literals and no logic or
+comment, and a second run produced no further change -- the golden is a fixed
+point of the current method.
+
+**This does not affect the live planner.** The campaign runs
+`make_metric_network_efe_valgrad_fn` (`base_planner.py:1410`) under
+`camera_network_objective: metric_expected_belief`; the regenerated golden guards
+`make_efe_valgrad_fn` (`base_planner.py:1431`), the legacy path. The standing
+rule in the generator's docstring still holds: if this test fails, the default
+assumption is that you broke the frozen path -- revert. Regenerate only when the
+change was deliberate and the cause has been demonstrated, as above.
+
 ## Status
 
 - Candidate scoring: the commissioned model changes route choice on **2 of 4**
