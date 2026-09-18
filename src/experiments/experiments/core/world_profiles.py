@@ -309,11 +309,24 @@ def serialize_collision_geometry_from_world(
     world_path: str,
     model_names: Tuple[str, ...] = ("warehouse_walls", "warehouse_rack_occluders"),
     include_names: Tuple[str, ...] = (),
+    profile: Dict[str, Any] | None = None,
 ) -> str:
     scene = parse_collision_scene_from_world(
         world_path, model_names=model_names, include_names=include_names
     )
-    return scene_to_json(scene)
+    payload = json.loads(scene_to_json(scene))
+    # Mark the payload so consumers know these prisms are NON-traversable. Without
+    # it, route seeding would treat them as a keep-in driveable union and emit no
+    # routes at all.
+    payload["model_name"] = "keepout_region"
+    # Route seeding validates segments against this same keep-out geometry, so the
+    # corridor axes must ride along with it.
+    if profile is not None:
+        for key in ("route_horizontal_centres", "route_vertical_centres"):
+            values = profile.get(key)
+            if values:
+                payload[key] = [float(v) for v in values]
+    return json.dumps(payload)
 
 
 def serialize_driveable_geometry_from_profile(profile: Dict[str, Any]) -> str:
@@ -337,7 +350,14 @@ def serialize_driveable_geometry_from_profile(profile: Dict[str, Any]) -> str:
             })
         except (KeyError, TypeError, ValueError):
             continue
-    return json.dumps({"prisms": prisms, "model_name": "driveable_region"})
+    payload = {"prisms": prisms, "model_name": "driveable_region"}
+    # Corridor centre-lines for lane-graph route seeding. They travel with the
+    # geometry because they cannot be inferred from an obstacle (keep-out) map.
+    for key in ("route_horizontal_centres", "route_vertical_centres"):
+        values = profile.get(key)
+        if values:
+            payload[key] = [float(v) for v in values]
+    return json.dumps(payload)
 
 
 def compute_look_at_from_pose(cam_pos: List[float], roll: float, pitch: float, yaw: float) -> List[float]:

@@ -83,3 +83,33 @@ at their own timestamps. Aggregate by complete drive before comparing drives.
   history but must not be revived.
 - Before launching Gazebo or a campaign, run
   `pgrep -af "ros2 launch|ign gazebo|run_visibility_campaign"`. Do not start a second run.
+
+## One version of everything
+
+There is ONE version of every artifact. Producing a new map, config, dataset, figure,
+script or lock means moving or deleting the old one in the SAME step. Never leave two
+live copies, and never leave a `_v2`, `_new`, `_proposal` or `_redraw` beside the thing
+it replaces: parallel versions are how the wrong one gets used.
+
+Everything written to disk is paper-facing. There are no scratch outputs that are allowed
+to be stale or wrong. A proposal file is acceptable only while a decision is pending, and
+is promoted into place or deleted once the decision is made.
+
+A lock or manifest must never be rewritten in the same action as the thing it protects.
+If it is, it certifies the change instead of detecting it.
+
+## Showing plots
+
+When the user asks to see a plot, figure, map or image, OPEN IT ON THEIR SCREEN. Do not
+only write the path and do not rely on a markdown link: relative links resolve against the
+editor's workspace root, which is not necessarily the working directory, so they often do
+not click through.
+
+    env -u LD_LIBRARY_PATH -u LD_PRELOAD -u GTK_PATH -u GIO_MODULE_DIR \
+        DISPLAY=:0 setsid eog <file.png> </dev/null >/dev/null 2>&1 &
+
+Clearing those four variables is required: snap paths leak into `LD_LIBRARY_PATH` and break
+GTK apps with `undefined symbol: __libc_pthread_init`. `setsid` detaches the viewer so it
+survives the tool call. Also send the file so it appears in the conversation, and quote the
+absolute path. Never `pkill -f eog` to close a viewer - that pattern matches this agent's own
+shell; list PIDs with `ps -eo pid,args | grep "[e]og"` and kill by PID.

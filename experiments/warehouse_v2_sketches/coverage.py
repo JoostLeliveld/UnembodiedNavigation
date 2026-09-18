@@ -62,8 +62,14 @@ def zone_mask(layout: Layout, xs, ys, pad=NOGO_MARGIN) -> np.ndarray:
 
 
 SITE = (-11.35, 11.35, -9.35, 9.35)   # operating field; 0.65 m off every wall
-MIN_LANE_W = 0.70                      # thinner than this is not a drivable lane
-LANE_TARGET = 0.985                    # stop once this much of reachable is covered
+# The chassis is 0.55 m wide, so a 0.55 m strip IS drivable; 0.70 m was discarding
+# real floor. Lowered 2026-09-18 together with the target, because the greedy
+# disjoint cover leaves pockets the first few big rectangles cannot reach - those
+# pockets stranded 8 frozen task starts.
+MIN_LANE_W = 0.55                      # thinner than the chassis is not drivable
+LANE_TARGET = 0.995                    # stop once this much of reachable is covered
+MIN_LANE_AREA_M2 = 0.30                # below this a rectangle is not worth a lane
+MIN_PATCH_GAIN_M2 = 0.50               # a patch must declare this much NEW floor
 
 
 def site_mask(xs, ys) -> np.ndarray:
@@ -72,8 +78,50 @@ def site_mask(xs, ys) -> np.ndarray:
 
 
 def free_mask(layout: Layout, xs, ys) -> np.ndarray:
-    """Site field minus every declared zone plus its 0.32 m envelope."""
-    return site_mask(xs, ys) & ~zone_mask(layout, xs, ys)
+    """Where the CHASSIS may be: hall interior minus real geometry, by half-width.
+
+    Redrawn 2026-09-18. The previous definition was the site field minus the
+    declared zones plus their 0.32 m planner envelope, which was wrong three ways:
+
+    - it never looked at the collision geometry, so the five top-level <include>
+      objects (bin_office, forklift_parked, pallet_jack and the two loose pallets)
+      were invisible, and the derived lanes contained three of them;
+    - SITE is hardcoded 0.65 m off every wall, stranding drivable floor;
+    - the 0.32 m envelope is the PLANNER keep-out, not what the body needs.
+
+    The margin is now the chassis half-width. The region says where the body may
+    BE, not where it may spin: the planner checks its own footprint against it.
+    """
+    return _chassis_free_mask(xs, ys)
+
+
+CHASSIS_HALF_WIDTH_M = 0.275
+_COLLISION_INCLUDES = ("forklift_parked", "pallet_jack", "bin_office",
+                       "pallet_loose_1", "pallet_loose_2")
+_FREE_CACHE: dict = {}
+
+
+def _chassis_free_mask(xs, ys) -> np.ndarray:
+    """Cells whose centre clears every collision prism by the chassis half-width."""
+    import sys as _sys
+    from pathlib import Path as _Path
+    key = (float(xs[0]), float(xs[-1]), len(xs), float(ys[0]), float(ys[-1]), len(ys))
+    if key in _FREE_CACHE:
+        return _FREE_CACHE[key]
+    repo = _Path(__file__).resolve().parents[2]
+    _sys.path.insert(0, str(repo / "src/unav_common"))
+    from unav_common.occlusion_geometry import (
+        parse_collision_scene_from_world, signed_distance_to_union_xy)
+    world = repo / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
+    scene = parse_collision_scene_from_world(
+        str(world), model_names=("warehouse_shell", "warehouse_v2_occluders"),
+        include_names=_COLLISION_INCLUDES, robot_z_range=(0.0, 0.55))
+    gx, gy = np.meshgrid(xs, ys)
+    d = signed_distance_to_union_xy(
+        scene.prisms, np.column_stack([gx.ravel(), gy.ravel()]), keep_in=False)
+    M = (d >= CHASSIS_HALF_WIDTH_M).reshape(gx.shape)
+    _FREE_CACHE[key] = M
+    return M
 
 
 def reachable_mask(layout: Layout, xs, ys) -> np.ndarray:
@@ -113,7 +161,7 @@ def _largest_rect(M: np.ndarray):
     return best[1]
 
 
-def auto_lanes(layout: Layout, xs, ys, max_rects: int = 90) -> tuple[list[Lane], np.ndarray]:
+def auto_lanes(layout: Layout, xs, ys, max_rects: int = 200) -> tuple[list[Lane], np.ndarray]:
     """Greedy maximal-rectangle cover of the reachable free space.
 
     The lanes are DERIVED from the rack geometry rather than typed by hand, so a
@@ -133,13 +181,76 @@ def auto_lanes(layout: Layout, xs, ys, max_rects: int = 90) -> tuple[list[Lane],
         remaining[r0:r1 + 1, c0:c1 + 1] = False
         if (r1 - r0 + 1) < minc or (c1 - c0 + 1) < minc:
             continue          # too thin to drive: drop it, keep searching
+        if (xs[c1] - xs[c0]) * (ys[r1] - ys[r0]) < MIN_LANE_AREA_M2:
+            continue          # a sliver, not a lane
+        # Edges at cell CENTRES: a cell is kept because its centre clears the
+        # margin, so extending to the outer edge adds unverified space.
         lanes.append(Lane(f"lane_{k+1:02d}",
-                          float(xs[c0] - CELL / 2), float(xs[c1] + CELL / 2),
-                          float(ys[r0] - CELL / 2), float(ys[r1] + CELL / 2)))
+                          float(xs[c0]), float(xs[c1]),
+                          float(ys[r0]), float(ys[r1])))
         covered[r0:r1 + 1, c0:c1 + 1] = True
         if covered.sum() >= LANE_TARGET * R.sum():
             break
+
+    # Second pass: patch lanes for reachable floor the greedy cover stranded.
+    #
+    # Greedy maximal rectangles leave thin remnants along their own edges - the
+    # leftovers are 0.2-0.5 m strips, all narrower than the chassis, so the first
+    # pass discards them and real floor goes undeclared. That stranded 8 frozen
+    # task starts. Here each uncovered pocket is re-grown into the FULL free mask
+    # (not just the remnant), so a patch may overlap an existing lane; a patch is
+    # kept only when it declares floor no lane already covers.
+    lanes.extend(_patch_lanes(R, covered, xs, ys, len(lanes)))
     return lanes, R
+
+
+def _patch_lanes(reachable, covered, xs, ys, start_index: int) -> list:
+    """Grow drivable rectangles over reachable floor no lane covers yet."""
+    minc = max(1, int(round(MIN_LANE_W / CELL)))
+    out: list = []
+    todo = reachable & ~covered
+    guard = 0
+    while todo.any() and guard < 200:
+        guard += 1
+        # Seed at the uncovered cell, then expand within the reachable mask.
+        r, c = (int(i) for i in np.argwhere(todo)[0])
+        r0 = r1 = r
+        c0 = c1 = c
+        grew = True
+        while grew:
+            grew = False
+            for side in ("up", "down", "left", "right"):
+                nr0, nr1, nc0, nc1 = r0, r1, c0, c1
+                if side == "up" and r0 > 0:
+                    nr0 -= 1
+                elif side == "down" and r1 < reachable.shape[0] - 1:
+                    nr1 += 1
+                elif side == "left" and c0 > 0:
+                    nc0 -= 1
+                elif side == "right" and c1 < reachable.shape[1] - 1:
+                    nc1 += 1
+                else:
+                    continue
+                if reachable[nr0:nr1 + 1, nc0:nc1 + 1].all():
+                    r0, r1, c0, c1 = nr0, nr1, nc0, nc1
+                    grew = True
+        todo[r0:r1 + 1, c0:c1 + 1] = False
+        if (r1 - r0 + 1) < minc or (c1 - c0 + 1) < minc:
+            continue
+        if (xs[c1] - xs[c0]) * (ys[r1] - ys[r0]) < MIN_LANE_AREA_M2:
+            continue
+        # A patch must EARN its place: enough of it must be floor no lane declares
+        # yet. Without this the grower expands freely into covered space and the
+        # map becomes dozens of mutually overlapping rectangles.
+        new_cells = int((reachable[r0:r1 + 1, c0:c1 + 1]
+                         & ~covered[r0:r1 + 1, c0:c1 + 1]).sum())
+        if new_cells * CELL * CELL < MIN_PATCH_GAIN_M2:
+            continue
+        covered[r0:r1 + 1, c0:c1 + 1] = True
+        start_index += 1
+        out.append(Lane(f"lane_{start_index:02d}",
+                        float(xs[c0]), float(xs[c1]), float(ys[r0]), float(ys[r1])))
+    return out
 
 
 def lane_mask(layout: Layout, xs, ys) -> np.ndarray:

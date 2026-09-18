@@ -1132,7 +1132,20 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     collision_geometry_json = str(cfg.get('collision_geometry_json', '') or '')
     driveable_geometry_json = str(cfg.get('driveable_geometry_json', '') or '')
     if not driveable_geometry_json:
-        driveable_geometry_json = serialize_driveable_geometry_from_profile(profile)
+        # The no-go geometry must match nogo_mode. Serializing the traversable
+        # lanes under keep_out would hand the planner the drivable region as if
+        # it were obstacles; serializing obstacles under keep_in would do the
+        # reverse. Pick by mode rather than always emitting lanes.
+        _nogo_mode = str(cfg.get('nogo_mode', VISIBILITY_FALLBACK_DEFAULTS['nogo_mode'])).strip().lower()
+        if _nogo_mode == 'keep_out':
+            driveable_geometry_json = serialize_collision_geometry_from_world(
+                str(world_path),
+                model_names=tuple(profile.get('collision_model_names') or ()),
+                include_names=tuple(profile.get('collision_include_names') or ()),
+                profile=profile,
+            )
+        else:
+            driveable_geometry_json = serialize_driveable_geometry_from_profile(profile)
     raw_use_nogo_cost = str(cfg.get('use_nogo_cost', 'auto')).strip().lower()
     nogo_geometry_needed = (
         raw_use_nogo_cost in ('1', 'true', 't', 'yes', 'y', 'on')

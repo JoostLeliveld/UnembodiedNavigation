@@ -108,10 +108,16 @@ waypoint_spacing_m: 0.2
 waypoint_arrival_radius_m: 0.1
 robot_collision_radius_m: 0.48541219597369
 use_nogo_cost: true
-nogo_mode: keep_in
+# keep_out over the 56 obstacle prisms. keep_in over the traversable-lane union was
+# measured wrong: 100% of points sampled well inside a lane reported below
+# nogo_safe_distance, so the planner was penalised everywhere it could legitimately
+# drive. Under keep_out the same sample gives 0%.
+nogo_mode: keep_out
 nogo_penalty_type: warning_band
-nogo_safe_distance: 0.55
-local_nogo_safe_distance: 0.55
+# 0.325 = chassis half-width 0.275 + 0.05 lane-keeping (docs/PLANNER_LOCK.md).
+# 0.55 was sized for keep_in and leaves the 1.10 m lanes a negative budget.
+nogo_safe_distance: 0.325
+local_nogo_safe_distance: 0.325
 nogo_warning_band: 0.05
 nogo_weight: 40.0
 use_belief_nogo_cost: false

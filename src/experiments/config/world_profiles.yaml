@@ -164,6 +164,10 @@ worlds:
     camera_image_topics: [/external_camera/image_raw, /external_camera_b/image_raw, /external_camera_c/image_raw, /external_camera_d/image_raw, /external_camera_e/image_raw]
     occlusion_model_names: [warehouse_v2_occluders]
     collision_model_names: [warehouse_shell, warehouse_v2_occluders]
+    # REQUIRED: these five are top-level <include> models, not inside the two model
+    # groups above. Omitting them yields 44 prisms instead of 56 and silently drops
+    # the bin, forklift, pallet jack and both loose pallets.
+    collision_include_names: [forklift_parked, pallet_jack, bin_office, pallet_loose_1, pallet_loose_2]
     visibility_defaults:
       visibility_map_min_x: -11.35
       visibility_map_max_x: 11.35
@@ -176,32 +180,70 @@ worlds:
       visibility_prior_occ: 0.005
       visibility_beta: 1.0
       visibility_target_height_m: 0.35
+    # Route-seed corridor centre-lines for optimizer_route_seed_mode: lane_graph.
+    # Declared because corridor centres cannot be inferred from an obstacle map.
+    # Verified against the +0.10 m obstacle map: the main aisles are 100% free; the
+    # cross-aisles pass rack blocks by design and the segment check rejects those spans.
+    route_horizontal_centres: [-8.725, -6.25, -5.75, -1.175, 2.425, 6.35, 8.625]
+    route_vertical_centres: [-10.875, -6.95, -3.05, 0.975, 10.775]
     known_2d_regions:
       - {name: open_floor_inside_site_boundary, type: site_boundary, xmin: -11.35, xmax: 11.35, ymin: -9.35, ymax: 9.35, note: operating field; a planner bound, deliberately NOT painted on the floor}
-      - {name: lane_01, type: traversable, xmin: -8.50, xmax: 11.40, ymin: -7.80, ymax: -4.70, note: derived lane rectangle}
-      - {name: lane_02, type: traversable, xmin: -11.30, xmax: 1.50, ymin: 7.70, ymax: 9.40, note: derived lane rectangle}
-      - {name: lane_03, type: traversable, xmin: 10.20, xmax: 11.40, ymin: -4.70, ymax: 9.40, note: derived lane rectangle}
-      - {name: lane_04, type: traversable, xmin: -11.30, xmax: -10.20, ymin: -7.20, ymax: 7.70, note: derived lane rectangle}
-      - {name: lane_05, type: traversable, xmin: -7.60, xmax: -6.30, ymin: -4.70, ymax: 7.70, note: derived lane rectangle}
-      - {name: lane_06, type: traversable, xmin: -3.70, xmax: -2.40, ymin: -4.70, ymax: 7.70, note: derived lane rectangle}
-      - {name: lane_07, type: traversable, xmin: 0.20, xmax: 1.50, ymin: -4.70, ymax: 7.70, note: derived lane rectangle}
-      - {name: lane_08, type: traversable, xmin: 1.50, xmax: 10.20, ymin: -2.00, ymax: -0.80, note: derived lane rectangle}
-      - {name: lane_09, type: traversable, xmin: 1.50, xmax: 10.20, ymin: 5.90, ymax: 7.10, note: derived lane rectangle}
-      - {name: lane_10, type: traversable, xmin: 1.50, xmax: 10.20, ymin: 2.00, ymax: 3.10, note: derived lane rectangle}
-      - {name: lane_11, type: traversable, xmin: 5.30, xmax: 11.40, ymin: -9.30, ymax: -7.80, note: derived lane rectangle}
-      - {name: lane_12, type: traversable, xmin: -1.90, xmax: 2.30, ymin: -9.30, ymax: -7.80, note: derived lane rectangle}
-      - {name: lane_13, type: traversable, xmin: -8.50, xmax: -4.90, ymin: -9.30, ymax: -7.80, note: derived lane rectangle}
-      - {name: lane_14, type: traversable, xmin: -10.20, xmax: -8.50, ymin: -7.20, ymax: -4.70, note: derived lane rectangle}
-      - {name: A1, type: non_driveable_obstacle, xmin: -10.17, xmax: -7.63, ymin: -4.72, ymax: 7.67, note: storage zone plus its 0.32 m keep-out envelope}
-      - {name: A2, type: non_driveable_obstacle, xmin: -6.27, xmax: -3.73, ymin: -4.72, ymax: 7.67, note: storage zone plus its 0.32 m keep-out envelope}
-      - {name: A3, type: non_driveable_obstacle, xmin: -2.37, xmax: 0.17, ymin: -4.72, ymax: 7.67, note: storage zone plus its 0.32 m keep-out envelope}
-      - {name: B1, type: non_driveable_obstacle, xmin: 1.48, xmax: 9.95, ymin: 7.08, ymax: 9.62, note: storage zone plus its 0.32 m keep-out envelope}
-      - {name: Cs, type: non_driveable_obstacle, xmin: 1.48, xmax: 10.17, ymin: -4.72, ymax: -1.96, note: block_stack zone plus its 0.32 m keep-out envelope}
-      - {name: Cm, type: non_driveable_obstacle, xmin: 1.48, xmax: 10.17, ymin: -0.80, ymax: 1.96, note: block_stack zone plus its 0.32 m keep-out envelope}
-      - {name: Cn, type: non_driveable_obstacle, xmin: 1.48, xmax: 10.17, ymin: 3.12, ymax: 5.88, note: block_stack zone plus its 0.32 m keep-out envelope}
-      - {name: DOCK_OFFICE, type: non_driveable_obstacle, xmin: -11.67, xmax: -8.53, ymin: -9.67, ymax: -7.23, note: structure zone plus its 0.32 m keep-out envelope}
-      - {name: STAGE_MID, type: non_driveable_obstacle, xmin: -4.92, xmax: -1.88, ymin: -9.67, ymax: -7.83, note: staging zone plus its 0.32 m keep-out envelope}
-      - {name: STAGE_E, type: non_driveable_obstacle, xmin: 2.28, xmax: 5.32, ymin: -9.67, ymax: -7.83, note: staging zone plus its 0.32 m keep-out envelope}
+      - {name: warehouse_shell:wall_east, type: non_driveable_obstacle, xmin: 11.800, xmax: 12.200, ymin: -10.100, ymax: 10.100, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_shell:wall_west, type: non_driveable_obstacle, xmin: -12.200, xmax: -11.800, ymin: -10.100, ymax: 10.100, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_shell:wall_north, type: non_driveable_obstacle, xmin: -12.100, xmax: 12.100, ymin: 9.800, ymax: 10.200, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_shell:wall_south_0, type: non_driveable_obstacle, xmin: -12.100, xmax: -10.000, ymin: -10.200, ymax: -9.800, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_shell:wall_south_1, type: non_driveable_obstacle, xmin: -7.000, xmax: -3.000, ymin: -10.200, ymax: -9.800, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_shell:wall_south_2, type: non_driveable_obstacle, xmin: 0.000, xmax: 4.000, ymin: -10.200, ymax: -9.800, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_shell:wall_south_3, type: non_driveable_obstacle, xmin: 7.000, xmax: 12.100, ymin: -10.200, ymax: -9.800, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A1b1w, type: non_driveable_obstacle, xmin: -9.950, xmax: -8.870, ymin: -4.500, ymax: -0.384, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A1b1e, type: non_driveable_obstacle, xmin: -8.930, xmax: -7.850, ymin: -4.500, ymax: -0.384, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A1b2w, type: non_driveable_obstacle, xmin: -9.950, xmax: -8.870, ymin: -0.583, ymax: 3.534, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A1b2e, type: non_driveable_obstacle, xmin: -8.930, xmax: -7.850, ymin: -0.583, ymax: 3.534, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A1b3w, type: non_driveable_obstacle, xmin: -9.950, xmax: -8.870, ymin: 3.334, ymax: 7.451, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A1b3e, type: non_driveable_obstacle, xmin: -8.930, xmax: -7.850, ymin: 3.334, ymax: 7.451, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A2b1w, type: non_driveable_obstacle, xmin: -6.050, xmax: -4.970, ymin: -4.500, ymax: -0.384, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A2b1e, type: non_driveable_obstacle, xmin: -5.030, xmax: -3.950, ymin: -4.500, ymax: -0.384, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A2b2w, type: non_driveable_obstacle, xmin: -6.050, xmax: -4.970, ymin: -0.583, ymax: 3.534, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A2b2e, type: non_driveable_obstacle, xmin: -5.030, xmax: -3.950, ymin: -0.583, ymax: 3.534, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A2b3w, type: non_driveable_obstacle, xmin: -6.050, xmax: -4.970, ymin: 3.334, ymax: 7.451, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A2b3e, type: non_driveable_obstacle, xmin: -5.030, xmax: -3.950, ymin: 3.334, ymax: 7.451, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A3b1w, type: non_driveable_obstacle, xmin: -2.150, xmax: -1.070, ymin: -4.500, ymax: -0.384, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A3b1e, type: non_driveable_obstacle, xmin: -1.130, xmax: -0.050, ymin: -4.500, ymax: -0.384, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A3b2w, type: non_driveable_obstacle, xmin: -2.150, xmax: -1.070, ymin: -0.583, ymax: 3.534, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A3b2e, type: non_driveable_obstacle, xmin: -1.130, xmax: -0.050, ymin: -0.583, ymax: 3.534, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A3b3w, type: non_driveable_obstacle, xmin: -2.150, xmax: -1.070, ymin: 3.334, ymax: 7.451, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_A3b3e, type: non_driveable_obstacle, xmin: -1.130, xmax: -0.050, ymin: 3.334, ymax: 7.451, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_B1b1s, type: non_driveable_obstacle, xmin: 1.700, xmax: 5.816, ymin: 7.300, ymax: 8.380, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_B1b1n, type: non_driveable_obstacle, xmin: 1.700, xmax: 5.816, ymin: 8.320, ymax: 9.400, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_B1b2s, type: non_driveable_obstacle, xmin: 5.617, xmax: 9.733, ymin: 7.300, ymax: 8.380, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_B1b2n, type: non_driveable_obstacle, xmin: 5.617, xmax: 9.733, ymin: 8.320, ymax: 9.400, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_Cs_p0, type: non_driveable_obstacle, xmin: 2.009, xmax: 4.355, ymin: -4.431, ymax: -2.248, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_Cs_p1, type: non_driveable_obstacle, xmin: 4.652, xmax: 6.998, ymin: -4.431, ymax: -2.248, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_Cs_p2, type: non_driveable_obstacle, xmin: 7.295, xmax: 9.641, ymin: -4.431, ymax: -2.248, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_Cm_p0, type: non_driveable_obstacle, xmin: 2.151, xmax: 3.551, ymin: -0.120, ymax: 1.280, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_Cm_p1, type: non_driveable_obstacle, xmin: 4.134, xmax: 5.534, ymin: -0.120, ymax: 1.280, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_Cm_p2, type: non_driveable_obstacle, xmin: 6.116, xmax: 7.516, ymin: -0.120, ymax: 1.280, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_Cm_p3, type: non_driveable_obstacle, xmin: 8.099, xmax: 9.499, ymin: -0.120, ymax: 1.280, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_Cn_p0, type: non_driveable_obstacle, xmin: 2.002, xmax: 4.362, ymin: 3.575, ymax: 5.425, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_Cn_p1, type: non_driveable_obstacle, xmin: 4.645, xmax: 7.005, ymin: 3.575, ymax: 5.425, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_Cn_p2, type: non_driveable_obstacle, xmin: 7.288, xmax: 9.648, ymin: 3.575, ymax: 5.425, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:dock_office, type: non_driveable_obstacle, xmin: -11.420, xmax: -8.780, ymin: -9.420, ymax: -7.480, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_STAGE_MID0, type: non_driveable_obstacle, xmin: -4.475, xmax: -3.325, ymin: -9.350, ymax: -8.150, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_STAGE_MID1, type: non_driveable_obstacle, xmin: -3.425, xmax: -2.275, ymin: -9.350, ymax: -8.150, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_STAGE_E0, type: non_driveable_obstacle, xmin: 2.725, xmax: 3.875, ymin: -9.350, ymax: -8.150, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: warehouse_v2_occluders:obs_STAGE_E1, type: non_driveable_obstacle, xmin: 3.775, xmax: 4.925, ymin: -9.350, ymax: -8.150, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: forklift_parked:body:body_collision, type: non_driveable_obstacle, xmin: 3.000, xmax: 4.800, ymin: -9.340, ymax: -8.160, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: forklift_parked:body:cab_mast_collision, type: non_driveable_obstacle, xmin: 2.910, xmax: 3.250, ymin: -9.300, ymax: -8.200, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: forklift_parked:body:fork_left_collision, type: non_driveable_obstacle, xmin: 1.830, xmax: 3.130, ymin: -8.660, ymax: -8.320, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: forklift_parked:body:fork_right_collision, type: non_driveable_obstacle, xmin: 1.830, xmax: 3.130, ymin: -9.180, ymax: -8.840, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: forklift_parked:body:wheel_front_collision, type: non_driveable_obstacle, xmin: 3.040, xmax: 3.560, ymin: -9.360, ymax: -8.140, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: forklift_parked:body:wheel_rear_collision, type: non_driveable_obstacle, xmin: 4.240, xmax: 4.760, ymin: -9.250, ymax: -8.250, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: pallet_jack:link, type: non_driveable_obstacle, xmin: -9.045, xmax: -8.305, ymin: -9.610, ymax: -8.249, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: bin_office:link, type: non_driveable_obstacle, xmin: -9.447, xmax: -7.973, ymin: -7.908, ymax: -6.992, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: pallet_loose_1:body:base_collision, type: non_driveable_obstacle, xmin: -4.724, xmax: -3.236, ymin: -9.219, ymax: -8.081, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: pallet_loose_1:body:load_collision, type: non_driveable_obstacle, xmin: -4.649, xmax: -3.311, ymin: -9.171, ymax: -8.129, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: pallet_loose_2:body:base_collision, type: non_driveable_obstacle, xmin: 3.682, xmax: 5.218, ymin: -9.241, ymax: -8.019, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+      - {name: pallet_loose_2:body:load_collision, type: non_driveable_obstacle, xmin: 3.759, xmax: 5.141, ymin: -9.188, ymax: -8.072, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
   warehouse_v2_shipout.world.sdf:
     <<: *warehouse_v2_peak_profile
     world_name: warehouse_v2_shipout
