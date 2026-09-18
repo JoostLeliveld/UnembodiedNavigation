@@ -28,6 +28,27 @@ slower; the previously recorded 1.64x simulator speedup no longer applies. If a
 fast development world is wanted again, derive it from `warehouse_v2.world.sdf`
 with a script rather than a hand-maintained copy, so geometry cannot drift.
 
+## The simulator is already on its fastest safe setting
+
+Every cost reduction that does not change a rendered pixel is applied, and it is
+applied to the CANONICAL world, not held back in a variant. There is nothing
+further to enable:
+
+| applied to every world | effect |
+|---|---|
+| depth + segmentation sensors removed | 20 render passes per cycle -> 5 |
+| both figure-capture cameras removed | one fewer 1280x720 and one fewer 1600x1200 pass |
+| `--fast`: contact sensors 60 -> 20 Hz | physics only, no pixels |
+
+The one remaining lever is shadows, and it is deliberately not taken: it is the
+largest single saving, but it changes what the cameras see and this study
+measures where a robot is easy or hard to detect. Physics stays at 1000 Hz / 1 ms
+because lane-departure claims are at the 1-2 sigma level; the retired low-CPU
+world's 5 ms integrator was rejected for exactly that reason.
+
+Measured: none of this separates from run-to-run noise on the camera rate. It is
+removal of dead work. Run `benchmark_camera_rate.py` before claiming a speedup.
+
 ## Camera sensors the runtime does not read (removed 2026-09-18)
 
 Each external camera declared three sensors: RGB, depth and semantic
