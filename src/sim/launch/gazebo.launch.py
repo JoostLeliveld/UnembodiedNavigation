@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import PathJoinSubstitution, LaunchConfiguration, PythonExpression
@@ -120,6 +120,35 @@ def generate_launch_description():
         }.items()
     )
 
+    def check_world_exists(context):
+        """Fail here, with the path, if the world file is not installed.
+
+        `world_path` is a lazy substitution, so a missing or stale world reaches
+        the gz server as a path it cannot open and the run dies several seconds
+        later inside Gazebo's own output. That happened for real: `colcon build
+        --symlink-install` leaves DANGLING symlinks in install/ when a world is
+        deleted from src/, so `ls` showed worlds that no longer existed and a
+        launch could name one. Resolve the path up front and say so plainly.
+        """
+        resolved = world_path.perform(context)
+        if not os.path.exists(resolved):
+            worlds_dir = os.path.dirname(resolved)
+            try:
+                available = sorted(
+                    f for f in os.listdir(worlds_dir)
+                    if f.endswith(".sdf")
+                    and os.path.exists(os.path.join(worlds_dir, f))
+                )
+            except OSError:
+                available = []
+            raise RuntimeError(
+                f"world file does not exist: {resolved}\n"
+                f"available worlds: {', '.join(available) or '(none)'}\n"
+                "If it was deleted from src/, clear stale install symlinks with:\n"
+                "  find install/sim build/sim -xtype l -delete"
+            )
+        return []
+
     return LaunchDescription([
         world_arg,
         headless_arg,
@@ -129,5 +158,6 @@ def generate_launch_description():
         set_prime_offload,
         set_glx_vendor,
         set_egl_vendor,
+        OpaqueFunction(function=check_world_exists),
         gazebo,
     ])

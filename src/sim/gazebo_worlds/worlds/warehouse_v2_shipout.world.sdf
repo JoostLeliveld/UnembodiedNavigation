@@ -410,11 +410,5 @@
     <include><name>external_camera_c</name><uri>model://external_camera_c</uri><pose>-6.950 9.450 5.000 0 0.6632 -1.0472</pose></include>
     <include><name>external_camera_d</name><uri>model://external_camera_d</uri><pose>11.450 7.200 5.000 0 0.6632 -2.4435</pose></include>
     <include><name>external_camera_e</name><uri>model://external_camera_e</uri><pose>11.450 -9.450 5.000 0 0.7330 2.3038</pose></include>
-    <!-- Overview camera: 19.0 m so the 24 x 20 m hall just fills a 1280x720
-         frame at 90 deg, and yawed so north is up and east is right. -->
-    <include><name>presentation_overview_camera</name><uri>model://presentation_overview_camera</uri><pose>0.00 0.00 19.00 0 1.5708 1.5708</pose></include>
-    <!-- Checking aid: 0.90 rad at 42 m spans 40.6 x 30.5 m, so a 5.23 m rack at the
-         far wall spills sideways by 1.1 m instead of 2.6 m at 19 m. -->
-    <include><name>plan_view_camera</name><uri>model://plan_view_camera</uri><pose>0.00 0.00 42.00 0 1.5708 1.5708</pose></include>
   </world>
 </sdf>

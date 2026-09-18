@@ -28,6 +28,40 @@ slower; the previously recorded 1.64x simulator speedup no longer applies. If a
 fast development world is wanted again, derive it from `warehouse_v2.world.sdf`
 with a script rather than a hand-maintained copy, so geometry cannot drift.
 
+## Camera sensors the runtime does not read (removed 2026-09-18)
+
+Each external camera declared three sensors: RGB, depth and semantic
+segmentation. Only RGB is consumed at runtime -- YOLO detects the robot from the
+plain image. The other two were marked `always_on=0`, which does NOT stop them:
+`/external_camera/depth`, `/external_camera/depth/points` and
+`/external_camera/segmentation/labels_map` all published real data every cycle,
+so five cameras were driving twenty render passes to use five.
+
+The two figure-capture cameras (`presentation_overview_camera`, and
+`plan_view_camera` at 1600x1200) were `always_on=1` in the world permanently for
+stills that are captured offline.
+
+Both are now removed from the camera models and the worlds. Nothing about the
+RGB sensor changed -- same resolution, FOV and pose -- so the detector's
+operating point, the projection and r_vis/r_miss are untouched.
+
+**Restoring them when a tool needs them:**
+
+* figure stills: regenerate the world with
+  `python3 experiments/warehouse_v2_sketches/make_world.py --state A --figure-cameras --out <path>`
+  (`scripts/paper_figures/capture_overview_frame.py`,
+  `experiments/deck_figures/make_thesis_setup_figure.py`,
+  `experiments/warehouse_v2_sketches/grab_frames.py`).
+* segmentation-based dataset or occlusion capture
+  (`scripts/perception/capture_yolo_dataset.py`,
+  `experiments/camera_observation_characterization/capture_bbox_grid.py`):
+  these need a camera model carrying the segmentation sensor. Restore it from
+  git history for that capture rather than putting it back in the runtime model.
+
+Measured effect on the camera rate: NOT SEPARATED from run-to-run noise over
+three interleaved repeats, so this is removal of dead work rather than a
+demonstrated speedup. Use `benchmark_camera_rate.py` before claiming otherwise.
+
 ## Focused checks
 
 ```bash
