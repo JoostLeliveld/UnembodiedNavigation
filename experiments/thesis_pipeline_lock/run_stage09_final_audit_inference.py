@@ -40,7 +40,10 @@ def main() -> int:
     if specification["authorized_role"] != "final_audit":
         raise RuntimeError("this runner opens only final_audit")
     pipeline = json.loads((REPO / "experiments/thesis_pipeline_lock/pipeline_lock.json").read_text())
-    for stage_id in ("05_detector_training", "06_detector_gate", "07_correction_and_covariance", "08_availability_model"):
+    for stage_id in (
+        "05_detector_training", "06_detector_gate",
+        "07_correction_and_covariance", "08_planning_information",
+    ):
         stage = next(value for value in pipeline["stages"] if value["id"] == stage_id)
         if stage["status"] != "locked":
             raise RuntimeError(f"{stage_id} is not locked")

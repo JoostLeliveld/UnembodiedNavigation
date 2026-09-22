@@ -1,0 +1,105 @@
+{
+  "schema": "thesis_reference_position_campaign_lock.v1",
+  "lock_id": "THESIS-REFERENCE-POSITION-CAMPAIGN-V5",
+  "status": "locked_for_capture_completion",
+  "method_authority": "docs/THESIS_METHOD_CANONICAL_LOCK.md",
+  "campaign_root": "logs/thesis_final_pipeline_v1/recapture_v5",
+  "environment": {
+    "world": "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
+    "world_sha256": "25fc40d3eb57a415c40320f6de42900eaf9b3d71fac175d4b9ca750f6fb58b37",
+    "camera_profile": "src/experiments/config/world_profiles.yaml",
+    "camera_profile_sha256": "be4b506b0508b180b81194d07cb3543f2127a1b5b8953c0da448e24ab9bc419d",
+    "capture_time_camera_profile_sha256": "5e4f9213018cf01c3118e233681f88e3c712885fbe3f38c7bf56be2157c6bd53",
+    "camera_profile_change_note": "The capture-time and current files differ only in comments describing legacy lane annotations; the locked intrinsics, camera identities and camera poses are unchanged and are independently hashed below.",
+    "image_width_px": 1280,
+    "image_height_px": 720,
+    "horizontal_fov_rad": 1.5708,
+    "camera_model_sha256": {
+      "camera_A": "2d472e910c9db377ff7ced12578a5d65a87c369f80bcabc3c99beee02ff21b4d",
+      "camera_B": "2e43726ed9cf9e04dd04ee7e70500f1479db025135163074a11b58202eddfbcf",
+      "camera_C": "89871b1fa200de1efdfe84565bf1df28b21b43b2571dfd25eb6cc1e17167e527",
+      "camera_D": "7c0620b1736bf6fb104d3f20cb7e084eb4648e4f8009182d197da72fbe0e9e57",
+      "camera_E": "2b804cdcf32b36aa39dbee878a329ea3b91d491c3e16196a0931899bd732c9e9"
+    },
+    "capture_overlay_rule": "The capture-only models may add semantic-label sensors, but their RGB camera definitions must remain byte-identical to the locked source models.",
+    "camera_poses_xyz_rpy_rad": {
+      "camera_A": [-11.45, -9.45, 5.0, 0.0, 0.7679, 0.7854],
+      "camera_B": [-1.5, -9.72, 5.0, 0.0, 0.8378, 2.0071],
+      "camera_C": [-6.95, 9.45, 5.0, 0.0, 0.8378, -1.0472],
+      "camera_D": [11.45, 7.2, 5.0, 0.0, 0.6632, -2.4435],
+      "camera_E": [11.45, -9.45, 5.0, 0.0, 0.733, 2.3038]
+    }
+  },
+  "detector": {
+    "architecture": "YOLO11n",
+    "checkpoint": "logs/thesis_final_pipeline_v1/stage05_detector_training/imgsz960/upper_finetune/weights/best.pt",
+    "checkpoint_sha256": "1e99afb5361a7c2599cb3f2863ebb04fd6f65bc1ee23996b989c9bba8b004f13",
+    "imgsz": 960,
+    "use_during_capture": false,
+    "rule": "Raw RGB and semantic support are captured first; every downstream detector pass uses exactly this frozen checkpoint unless a dated lock amendment is made before any final fitting."
+  },
+  "sampling": {
+    "plan": "logs/thesis_final_pipeline_v1/recapture_v5/capture_plan_v5.json",
+    "plan_sha256": "2ba0d875033764a234eba5525cabeb2d66d820a9b5396401a92422d082b05fb3",
+    "positions": "logs/thesis_final_pipeline_v1/recapture_v5/capture_positions_v5.csv",
+    "positions_sha256": "9077b19a658bf02658f1795f576e5942fd87bd867cfeb34408ee3533e4e941ad",
+    "poses": "logs/thesis_final_pipeline_v1/recapture_v5/capture_poses_v5.json",
+    "poses_sha256": "af6c86151f430e60a315d39ca826f4681243b2cd63228a9cee0618a2fe3ed9a0",
+    "position_count": 2569,
+    "headings_per_position": 4,
+    "heading_spacing_deg": 90.0,
+    "repetitions_per_heading": 1,
+    "camera_count": 5,
+    "expected_pose_batches": 10276,
+    "expected_camera_opportunities": 51380,
+    "opportunity_definition": "one scheduled camera in one static position-heading-repetition batch",
+    "repetition_interpretation": "There is one frame per declared heading; repeated evidence at a position is supplied by four declared headings, not pseudo-replication of an identical frame."
+  },
+  "partition": {
+    "atomic_unit": "complete physical position",
+    "roles": {
+      "D_mu": 1301,
+      "D_R": 689,
+      "D_dev": 429,
+      "final_audit": 150
+    },
+    "rules": [
+      "All headings, repetitions and cameras for one position remain in exactly one role.",
+      "D_mu fits the shared correction; D_R fits R0/R1/R2 only from frozen out-of-sample corrected residuals; D_dev selects frozen hyperparameters; final_audit fits or selects nothing.",
+      "Final-audit image content may be accessed only for integrity checks until detector, gate, correction, covariance and planning-information choices are frozen."
+    ]
+  },
+  "weighting": {
+    "independent_unit": "static reference position",
+    "fit_weight_per_opportunity": "1 / number_of_retained_opportunities_at_that_position",
+    "reporting_rule": "Aggregate within position first, then summarize positions with equal weight; camera-specific summaries use equal position weight within camera.",
+    "spatial_support_rule": "Repeated headings or frames at one position count as one spatial support location."
+  },
+  "opportunity_accounting": {
+    "retain_all_expected": true,
+    "terminal_outcomes": ["detector_miss", "gate_refusal", "admitted"],
+    "planning_target": "inverse(R_run) for an admitted opportunity, otherwise the zero 2x2 information matrix",
+    "planning_support_population": "all expected opportunities",
+    "nis_excluded": true,
+    "separate_availability_model_prohibited": true
+  },
+  "capture_implementation": {
+    "script": "experiments/camera_observation_characterization/capture_bbox_grid.py",
+    "script_sha256": "65bdc72534d2c39df6f090fc2db593e6edda4fb0356dc903efb8bbe4c68ba7aa",
+    "resume_auditor": "experiments/camera_observation_characterization/audit_capture_resume.py",
+    "resume_auditor_sha256": "1c042493531b34f3bdbfa14be47bc703aa9752b48c6f0ed97664fb3bbcea7834",
+    "settle_s": 0.4,
+    "min_new_rgb_frames": 2,
+    "batch_sync_slop_ms": 50.0,
+    "pose_validity": "oriented 0.80 x 0.55 m footprint plus 0.05 m clearance at every sampled heading"
+  },
+  "audit_command": "python3 experiments/thesis_pipeline_lock/audit_reference_position_campaign.py --capture logs/thesis_final_pipeline_v1/recapture_v5/master_capture --require-complete",
+  "prohibitions": [
+    "Do not tune or select using final_audit.",
+    "Do not drop detector misses or deterministic gate refusals from opportunity denominators.",
+    "Do not split frames from one physical position across roles or folds.",
+    "Do not use ground truth, semantic masks, innovations or NIS in the runtime sensor gate.",
+    "Do not fit a separate q_i(p) availability model.",
+    "Do not pool this Track-B campaign with earlier drive-based or v3/v4 development evidence."
+  ]
+}

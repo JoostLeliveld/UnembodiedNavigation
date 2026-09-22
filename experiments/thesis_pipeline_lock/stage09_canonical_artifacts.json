@@ -1,0 +1,14 @@
+{
+  "global": {
+    "runtime_manifest": "logs/thesis_final_pipeline_v1/final_bayesian/runtime_r012/R0_global_full.json",
+    "planning_artifact": "logs/thesis_final_pipeline_v1/planning_precision/m0_planning_precision.npz"
+  },
+  "per_camera": {
+    "runtime_manifest": "logs/thesis_final_pipeline_v1/final_bayesian/runtime_r012/R1_per_camera_full.json",
+    "planning_artifact": "logs/thesis_final_pipeline_v1/planning_precision/m1_planning_precision.npz"
+  },
+  "spatial": {
+    "runtime_manifest": "logs/thesis_final_pipeline_v1/final_bayesian/runtime_r012/R2_spatial_residual.json",
+    "planning_artifact": "logs/thesis_final_pipeline_v1/planning_precision/m2_planning_precision.npz"
+  }
+}

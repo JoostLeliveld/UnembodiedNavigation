@@ -98,6 +98,8 @@ def test_conflicting_copies_do_not_select_by_file_order(tmp_path, field, value):
 def test_reference_support_ties_resets_and_heading():
     with pytest.raises(ValueError, match='conflicting'):
         A.TruthSeries([0,0],[0,1],[0,0],[0,0],'synthetic')
+    rounded=A.TruthSeries([0,0,1],[0,1e-12,1],[0,0,0],[0,1e-12,0],'synthetic')
+    assert rounded.at([0,1])[0] == pytest.approx([0,1])
     with pytest.raises(ValueError, match='clock reset'):
         A.TruthSeries([0,1,0],[0,1,2],[0,0,0],[0,0,0],'synthetic')
     truth=A.TruthSeries([0,0,1,2],[0,0,1,2],[0]*4,[0,0,np.nan,1],'synthetic')

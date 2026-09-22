@@ -1,0 +1,46 @@
+{
+  "schema": "thesis_stage09_final_analysis.v1",
+  "status": "frozen_before_final_campaign_execution",
+  "campaign_config_path": "experiments/thesis_pipeline_lock/stage09_final_five_seed_campaign.yaml",
+  "campaign_config_sha256": "e409708e2fde7709d6a767411fd1cf749ef432ed0ce7c4560310c65d6847957b",
+  "campaign_root": "logs/thesis_final_pipeline_v1/stage09_final_five_seed_campaign",
+  "execution_protocol_path": "docs/THESIS_METHOD_CANONICAL_LOCK.md",
+  "execution_protocol_sha256": "28f9e45d29ed04692243f2e578a1f340ab286b6a2eac0c62537ffbdf90888c76",
+  "analysis_implementation": {
+    "path": "experiments/thesis_pipeline_lock/analyze_stage09_navigation.py",
+    "sha256": "a39bc0960441f691a6e28eff51d5d0e1ea054fae4956a0d7935fdf99243c2684",
+    "aligned_loader_sha256": "eb33e90563b7fec646b45ac4347af5789b13d14fc270ed76590608cf58f1591d"
+  },
+  "design": {
+    "tasks": [
+      "thesis09_parallel_aisles_west",
+      "thesis09_parallel_aisles_central"
+    ],
+    "conditions": [
+      "global_intact",
+      "global_removal",
+      "per_camera_intact",
+      "per_camera_removal",
+      "spatial_intact",
+      "spatial_removal"
+    ],
+    "matched_seeds": [91500, 91501, 91502, 91503, 91504],
+    "expected_cells": 60,
+    "primary_route_choice_tasks": [
+      "thesis09_parallel_aisles_west",
+      "thesis09_parallel_aisles_central"
+    ],
+    "null_route_choice_task": null,
+    "commissioning_refused_task": null
+  },
+  "comparisons": {
+    "primary_pair": {
+      "baseline": "global_intact",
+      "treatment": "global_removal"
+    },
+    "scope": "Matched intact-minus-removal comparisons within each covariance model, followed by comparison across model levels."
+  },
+  "time_and_reference": {
+    "max_reference_gap_s": 0.1
+  }
+}

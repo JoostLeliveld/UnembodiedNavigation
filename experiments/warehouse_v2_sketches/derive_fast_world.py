@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Derive the development timing world from the CANONICAL world.
-
-The fast world exists only to make development runs cheaper. It must therefore
-differ from `warehouse_v2.world.sdf` in exactly one way that cannot reach a
-rendered pixel: contact sensors at 20 Hz instead of 60 Hz. Contact rate touches
-the physics contact report and nothing the cameras see.
+"""Derive the timing world from the CANONICAL world by one rate substitution.
 
 Deriving it rather than generating it independently is the point. `make_world.py
 --fast` builds from the layout description, and that description no longer
@@ -33,16 +28,15 @@ REPO = Path(__file__).resolve().parents[2]
 CANONICAL = REPO / 'src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf'
 DERIVED = REPO / 'src/sim/gazebo_worlds/worlds/warehouse_v2_fast.world.sdf'
 
-CONTACT_FROM = '<update_rate>60</update_rate>'
-CONTACT_TO = '<update_rate>20</update_rate>'
+CONTACT_RATE_RE = re.compile(r'<update_rate>60</update_rate>')
+EXPECTED_STATIC_CONTACT_SENSORS = 47
 
 HEADER = """  <!-- DEVELOPMENT DERIVATIVE of warehouse_v2.world.sdf, for TIMING ONLY.
 
-       Derived from the canonical world by ONE substitution: contact sensors
-       60 Hz to 20 Hz. Nothing else differs, so the geometry, cameras, lighting
-       and shadows match the canonical world by construction rather than by
-       claim. Contact rate touches the physics contact report and never a
-       rendered pixel, so images here are identical to the evidence world.
+       Derived from the canonical world by exactly one substitution on each
+       static contact sensor: update_rate 60 Hz -> 20 Hz. Nothing else differs:
+       geometry, cameras, lighting, shadows and collision channels match the
+       canonical world by construction, and rendered images are identical.
 
        Regenerate with experiments/warehouse_v2_sketches/derive_fast_world.py
        whenever warehouse_v2.world.sdf changes. Do NOT hand-edit, and do NOT
@@ -56,20 +50,18 @@ HEADER = """  <!-- DEVELOPMENT DERIVATIVE of warehouse_v2.world.sdf, for TIMING 
 
 
 def derive(canonical_text: str) -> str:
-    """Canonical world with the contact rate lowered and our header in front."""
-    if CONTACT_FROM not in canonical_text:
-        raise SystemExit(f'canonical world has no {CONTACT_FROM}; the rate may have moved')
-    fast = canonical_text.replace(CONTACT_FROM, CONTACT_TO)
+    """Canonical world with only static contact rates changed 60 -> 20 Hz."""
+    fast, changed = CONTACT_RATE_RE.subn('<update_rate>20</update_rate>', canonical_text)
+    if changed != EXPECTED_STATIC_CONTACT_SENSORS:
+        raise SystemExit(
+            f'expected {EXPECTED_STATIC_CONTACT_SENSORS} static contact sensors, '
+            f'found {changed}; inspect the canonical world before deriving'
+        )
     match = re.search(r'<sdf version="[^"]+">\n', fast)
     if not match:
         raise SystemExit('canonical world has no <sdf> opening tag')
     body = re.sub(r'^\s*<!--.*?-->\n', '', fast[match.end():], count=1, flags=re.S)
     return fast[:match.end()] + HEADER + body
-
-
-def core(text: str) -> str:
-    """Comment-free, rate-normalised body, for comparing the two worlds."""
-    return re.sub(r'<!--.*?-->', '', text, flags=re.S).replace(CONTACT_TO, CONTACT_FROM)
 
 
 def main() -> int:
@@ -87,22 +79,18 @@ def main() -> int:
             print(f'MISSING: {DERIVED}')
             return 1
         actual = DERIVED.read_text()
-        if core(actual) != core(canonical):
-            print('STALE: the fast world no longer matches the canonical geometry.')
+        if actual != expected:
+            print('STALE: the fast world differs from the canonical derivation.')
             print('       Re-run without --check.')
             return 1
-        if actual != expected:
-            print('STALE: the fast world differs from what derivation produces '
-                  '(header drift).')
-            return 1
-        n = actual.count(CONTACT_TO)
-        print(f'current: fast world matches canonical geometry, {n} contact sensors at 20 Hz')
+        print('current: fast world matches canonical bytes except 47 contact rates 60 -> 20')
         return 0
 
     DERIVED.write_text(expected)
     print(f'wrote {DERIVED.relative_to(REPO)}')
-    print(f'  {expected.count(CONTACT_TO)} contact sensors lowered 60 -> 20 Hz')
-    print('  geometry, cameras and lighting identical to the canonical world')
+    print('  47 static contact sensor rates changed 60 -> 20 Hz')
+    print('  every collision channel retained')
+    print('  all other bytes derived from the canonical world')
     return 0
 
 

@@ -2,6 +2,7 @@
 AST extraction executes unchanged methods without importing ROS/model runtimes.
 """
 import ast
+from collections import deque
 import math
 from pathlib import Path
 import sys
@@ -43,7 +44,8 @@ def receiver():
     callback = method(MANAGER, 'CameraManagerNode', '_observation_callback',
                       CameraObservation=CameraObservation, ContractValidationError=ContractValidationError)
     receive = method(MANAGER, 'CameraManagerNode', '_receive_observation',
-                     CameraObservation=CameraObservation, ContractValidationError=ContractValidationError)
+                     CameraObservation=CameraObservation, ContractValidationError=ContractValidationError,
+                     deque=deque)
     s = NS(camera_ids=list(CAMERA_ORDER), _pending_source_batches={}, _latest={},
            _ready_source_batch_stamp_s=-math.inf, _ready_source_batch_id=None,
            _last_decided_source_batch_id=None, require_source_batch_id=True,
@@ -150,6 +152,8 @@ def test_duplicate_delivery_and_fast_ticks_do_not_repeat_active_decision():
     s._decide_fused = lambda *args, **kw: calls.append(kw['source_batch_id'])
     once = method(MANAGER, 'CameraManagerNode', '_decide_once')
     s._decide_once = lambda bid: once(s, bid)
+    next_ready = method(MANAGER, 'CameraManagerNode', '_decide_next_ready_batch')
+    s._decide_next_ready_batch = lambda: next_ready(s)
     tick = method(MANAGER, 'CameraManagerNode', '_decide')
     for _ in range(3):
         for c in CAMERA_ORDER:

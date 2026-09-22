@@ -70,6 +70,20 @@ def test_dense_waypoint_is_advanced_after_belief_crosses_its_plane():
     )
 
 
+def test_first_waypoint_is_advanced_after_belief_crosses_its_outgoing_plane():
+    route = [(0.2, 0.0), (0.4, 0.0), (0.6, 0.0)]
+    assert _waypoint_reached_or_passed(
+        route, 0, np.asarray((0.31, 0.03)), arrival_radius_m=0.1,
+    )
+
+
+def test_first_waypoint_is_not_advanced_before_its_outgoing_plane():
+    route = [(0.2, 0.0), (0.4, 0.0), (0.6, 0.0)]
+    assert not _waypoint_reached_or_passed(
+        route, 0, np.asarray((0.09, 0.03)), arrival_radius_m=0.1,
+    )
+
+
 def test_dense_waypoint_is_not_advanced_before_its_plane():
     route = [(0.0, 0.0), (0.2, 0.0), (0.4, 0.0)]
     assert not _waypoint_reached_or_passed(
@@ -101,10 +115,16 @@ def test_geometric_route_states_include_start_and_corner_headings():
     assert states[1, 2] == pytest.approx(0.0)
 
 
-def test_ff_fb_pivots_in_place_when_badly_misaligned():
+def test_ff_fb_pivots_slowly_for_a_true_reversal():
     assert _ff_fb_forward_speed(
         0.25, 0.30, -1.5, -1.49, v_max=1.0, yaw_gate_rad=0.60
     ) == 0.0
+
+
+def test_ff_fb_uses_crawl_arc_for_moderate_heading_error():
+    assert _ff_fb_forward_speed(
+        0.25, 0.30, -0.5, -0.5, v_max=1.0, yaw_gate_rad=0.30
+    ) == pytest.approx(0.05)
 
 
 def test_ff_fb_keeps_one_metre_per_second_on_aligned_straight():
@@ -128,7 +148,7 @@ def test_ff_fb_does_not_brake_when_target_does_not_require_capture():
 def test_ff_fb_brakes_for_retained_corner_or_final_target():
     assert _ff_fb_arrival_speed_cap(
         0.2, must_capture=True, v_max=1.0,
-    ) == pytest.approx(0.3)
+    ) == pytest.approx(0.16)
 
 
 def test_ff_fb_corner_capture_brakes_before_tight_ninety_degree_turn():
@@ -150,7 +170,7 @@ def test_ff_fb_corner_capture_brakes_before_tight_ninety_degree_turn():
     # At 19 cm from a retained corner the old preview-only rule allowed about
     # 0.66 m/s.  Point-capture braking limits the immediately held command so
     # estimator lag cannot carry the body through the outside of the turn.
-    assert controls[0, 0] <= 0.285 + 1.0e-9
+    assert controls[0, 0] <= 0.152 + 1.0e-9
 
 
 def test_ff_fb_path_guidance_preserves_centreline_speed():

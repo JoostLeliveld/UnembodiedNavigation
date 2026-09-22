@@ -1,0 +1,18 @@
+{
+  "schema": "thesis_stage06_reference_gate_lock.v1",
+  "lock_id": "THESIS-REFERENCE-GATE-RECAPTURE-V5",
+  "status": "locked",
+  "method_authority": "docs/THESIS_METHOD_CANONICAL_LOCK.md",
+  "final_audit_accessed": false,
+  "population": "D_mu + D_R + D_dev only",
+  "artifacts": {
+    "detector_inference_manifest": {
+      "path": "logs/thesis_final_pipeline_v1/recapture_v5/detector_inference/manifest.json",
+      "sha256": "97952ad31eff5a780983cd266ea6994001c013018d8c1a3b1bcc48a93e3b7e6f"
+    },
+    "gate_dataset_manifest": {
+      "path": "logs/thesis_final_pipeline_v1/recapture_v5/gate_dataset/manifest.json",
+      "sha256": "319e8808200b3abb19557ca9c789b53cac9139c2420670d1635dd9556896e7fc"
+    }
+  }
+}

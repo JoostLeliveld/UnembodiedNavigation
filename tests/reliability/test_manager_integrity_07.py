@@ -311,6 +311,8 @@ def manager_node(tmp_path):
     n._batch_clock_high_water_s = None
     n.camera_ids = ["camera_A", "camera_B"]
     n._source_batch_buffer = SourceBatchBuffer(n.camera_ids, on_event=n._publish_batch_outcome)
+    n._completed_source_batches = deque()
+    n._completed_source_batch_capacity = 64
     n.require_source_batch_id = True
     n._latest, n._ready_source_batch_id = {}, None
     n._ready_source_batch_stamp_s, n._last_decided_source_batch_id = -math.inf, None
@@ -342,7 +344,10 @@ def manager_node(tmp_path):
                 for c in contracts]
     for c in contracts:
         n._observation_callback(c.camera_id)(NS(data=c.to_json()))
-    n._map_observations = lambda _: readings
+    n._map_observations = lambda _: [
+        replace(reading, timestamp_s=contract.timestamp_s)
+        for reading, contract in zip(readings, n._decision_snapshot.contracts)
+    ]
     return n, contracts, readings
 
 
@@ -449,6 +454,39 @@ def test_manager_freezes_members_before_new_batch_callback(tmp_path):
         assert event["source_batch_id"] == first_id
         assert {m["source_observation"]["source_batch_id"] for m in event["members"]} == {first_id}
         assert n._ready_source_batch_id == "epoch-1/cycle/3"
+    finally:
+        n._outcome_journal.close()
+
+
+def test_manager_consumes_every_completed_batch_in_fifo_order(tmp_path):
+    """Two detector rounds between timer ticks must not overwrite the first."""
+    n, contracts, readings = manager_node(tmp_path)
+    first_id = contracts[0].source_batch_id
+    second_id = "epoch-1/cycle/3"
+    for c in contracts:
+        newer = replace(
+            c,
+            source_batch_id=second_id,
+            timestamp_s=10.0,
+            capture_stamp_ns=10_000_000_000,
+            source_frame_id=c.source_frame_id + ":new",
+            detector_invocation_id=second_id + "/chunk/0",
+        )
+        n._observation_callback(c.camera_id)(NS(data=newer.to_json()))
+    n._map_observations = lambda _: [
+        replace(reading, timestamp_s=contract.timestamp_s)
+        for reading, contract in zip(readings, n._decision_snapshot.contracts)
+    ]
+    try:
+        n._decide()
+        events = [FusedCorrectionEvent.from_json(m.data).payload
+                  for m in n.fused_correction_pub.messages]
+        assert [event["source_batch_id"] for event in events] == [first_id, second_id]
+        assert n._ready_source_batch_id is None
+        assert not any(
+            json.loads(m.data).get("status") == "superseded_before_decision"
+            for m in n.batch_outcome_pub.messages
+        )
     finally:
         n._outcome_journal.close()
 

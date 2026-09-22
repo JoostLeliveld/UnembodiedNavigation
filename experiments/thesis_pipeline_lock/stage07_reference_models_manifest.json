@@ -1,0 +1,33 @@
+{
+  "schema": "thesis_stage07_reference_models_lock.v1",
+  "lock_id": "THESIS-CORRECTION-R012-RECAPTURE-V5",
+  "status": "locked",
+  "method_authority": "docs/THESIS_METHOD_CANONICAL_LOCK.md",
+  "final_audit_accessed": false,
+  "navigation_covariance_models": [
+    "R0_global_full",
+    "R1_per_camera_full",
+    "R2_spatial_full"
+  ],
+  "replay_evaluation_only_models": [
+    "Rproj_homography_pixel"
+  ],
+  "artifacts": {
+    "correction_manifest": {
+      "path": "logs/thesis_final_pipeline_v1/recapture_v5/correction/manifest.json",
+      "sha256": "3621f53f75c8b81da7594964e54c031a6da51a1900abb5356b9e066aafb1ea55"
+    },
+    "covariance_manifest": {
+      "path": "logs/thesis_final_pipeline_v1/recapture_v5/covariance/manifest.json",
+      "sha256": "b0bd355c257bdc29c9ed73fe208e61ab57240bd64ef62cd8b0a1dd452a8e2c67"
+    },
+    "ddev_evaluation_manifest": {
+      "path": "logs/thesis_final_pipeline_v1/recapture_v5/ddev_evaluation/manifest.json",
+      "sha256": "821cf01c00322e3da5958d4af1be95da3e54ba2edea0f0088381984d6f0f5575"
+    },
+    "runtime_r012_manifest": {
+      "path": "logs/thesis_final_pipeline_v1/recapture_v5/runtime_r012/manifest.json",
+      "sha256": "682776f0e82f471f748872756f14e8a184d93e96f4bc62bde4de97834beee559"
+    }
+  }
+}

@@ -1,21 +1,23 @@
 {
-  "schema": "thesis_contribution_lock.v4",
-  "lock_id": "THESIS-STORY-COMMISSIONED-SENSOR-MODEL-V4",
+  "schema": "thesis_contribution_lock.superseded_history.v1",
+  "lock_id": "THESIS-STORY-COMMISSIONED-SENSOR-MODEL-V5",
   "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
-  "locked_at": "2026-09-13",
+  "locked_at": "2026-09-20",
   "supersedes": {
-    "lock_id": "THESIS-STORY-COMMISSIONED-SENSOR-MODEL-V3",
-    "reason": "The author retained an RGB-aware candidate using a 16x16 runtime-observable robot-visibility matrix and a gated residual to the tabular box MLP."
+    "lock_id": "THESIS-STORY-COMMISSIONED-SENSOR-MODEL-V4",
+    "reason": "The author replaced the separate position-only availability model and q-times-precision planner interface with per-camera expected-information fields fitted directly from all survey opportunities."
   },
-  "status": "locked_except_correction_and_matched_R_selection",
+  "status": "superseded_by_docs/THESIS_METHOD_CANONICAL_LOCK.md_2026-09-20",
+  "authority": false,
+  "do_not_execute_or_infer_current_method": true,
   "paper_fallback": "../papers/Thesis/THESIS_STORY_LOCK.md",
   "contribution": [
     "When the fixed cameras are installed and geometrically calibrated, the same setup period is used to survey the robot at known positions and commission the camera-localization system across the warehouse.",
-    "The drives identify deterministic sensor support, spatial availability, candidate measurement corrections and a covariance model matched to each correction, which are then used by the estimator and the existing belief-aware planner to test whether commissioning improves belief prediction, route choice and navigation reliability."
+    "The drives identify deterministic sensor support, candidate measurement corrections, covariance models matched to each correction and per-camera expected-information fields, which are then used by the estimator and the existing belief-aware planner to test whether camera-network modelling improves belief prediction, route choice and navigation reliability."
   ],
   "causal_claim": [
     "commissioning",
-    "selected correction plus its matched R plus spatial q_i(p)",
+    "selected correction plus its matched runtime R and per-camera expected-information field",
     "belief prediction",
     "route choice",
     "navigation"
@@ -78,15 +80,16 @@
         "selected_context_crop_retained": true
       }
     },
-    "availability": {
-      "quantity": "q_i(p)",
-      "type": "camera-specific spatial field",
-      "target": "fixed detector hit and deterministic sensor-gate pass",
+    "planning_information": {
+      "quantity": "Lambda_i^plan(p)",
+      "type": "camera-specific spatial positive-semidefinite information field",
+      "target": "inverse matched runtime covariance for an admitted opportunity and the zero matrix otherwise",
       "population": "all expected camera opportunities including admitted detections, refusals and misses",
       "query_inputs": ["camera_id", "ground_plane_position"],
-      "heading_treatment": "pool commissioning outcomes over headings sampled at each position",
+      "heading_treatment": "pool information outcomes over headings sampled at each position",
       "includes_nis": false,
-      "runtime_role": "future-observation forecast only; never an acceptance or route-feasibility gate"
+      "support": "effective local count from all opportunities; unsupported estimates shrink towards zero information",
+      "runtime_role": "planner forecast only; never an acceptance or route-feasibility gate"
     },
     "covariance": {
       "quantity": "R_i(p, psi)",
@@ -110,23 +113,20 @@
     "planner": {
       "base": "existing IWAI EFE planner",
       "fixed_components": ["objective structure", "dynamics", "safety terms", "optimizer and tuning"],
-      "condition_change": "future observation model only",
+      "belief_update": "deterministic information-form approximation using the sum of active per-camera expected-information fields",
+      "condition_change": "active per-camera planning-information fields only",
       "shared_route_policy": "identical candidates and geometric/rollout feasibility in every condition",
-      "availability_effect": "expected information and cost only; never route eligibility"
+      "availability_effect": "absorbed into the direct expected-information target because non-admissions contribute zero; never route eligibility"
     },
     "speed_max_mps": 1.0,
     "main_conditions": {
-      "C00": "selected runtime sensor model with constant future q and constant future R forecasts",
-      "C01": "same selected runtime sensor model with constant future q and commissioned planner-queryable R forecast",
-      "C10": "same selected runtime sensor model with commissioned q_i(p) and constant future R forecast",
-      "C11": "same selected runtime sensor model with commissioned q_i(p) and commissioned planner-queryable R forecast"
+      "intact": "all five cameras enabled for runtime localization and all five per-camera planning-information fields",
+      "stale_removal": "one camera disabled from runtime localization while the planner retains all five planning-information fields",
+      "updated_removal": "the same camera disabled from runtime localization and its planning-information field omitted"
     },
     "navigation_analysis": {
-      "primary_comparison": "matched-seed C11 minus C00",
-      "component_ablations": [
-        "matched-seed C10 minus C00",
-        "matched-seed C01 minus C00"
-      ],
+      "primary_comparison": "matched-seed updated_removal minus stale_removal",
+      "reference_condition": "intact",
       "tasks": [
         "thesis09_west_to_east_north",
         "thesis09_east_to_west_south",
@@ -134,18 +134,18 @@
         "thesis09_south_to_north_central"
       ],
       "matched_seeds_per_arm": 5,
-      "planned_runs": 80,
-      "retention": "Retain every run and outcome even if C01 and C10 are later moved to the appendix or omitted from the main text for space."
+      "planned_runs": 60,
+      "retention": "Retain every intact, stale-removal and updated-removal run and outcome."
     },
     "main_results": [
       "single-task route choice",
-      "runtime agreement of commissioned q and R along executed routes",
+      "runtime covariance calibration and planning-information calibration",
       "multi-task matched-seed navigation comparison"
     ],
     "method_figures": [
       "commissioning overview",
       "point-level raw and corrected commissioning residuals",
-      "spatial matched-R and q_i(p) fields over the underlying opportunity points",
+      "spatial matched-R and expected-information fields over the underlying opportunity points",
       "runtime camera-update chain",
       "belief-aware route prediction"
     ],
@@ -154,7 +154,7 @@
       "admission selection",
       "isolated correction-candidate metrics",
       "covariance candidate diagnostics",
-      "availability calibration details",
+      "planning-information support calibration details",
       "hyperparameters and implementation details"
     ]
   },
@@ -163,10 +163,10 @@
     "only_open_method_decision": true,
     "fixed_invariants": [
       "the fixed detector and deterministic belief-independent sensor gate",
-      "q_i(p) predicts detector hit and sensor-gate pass and excludes NIS",
-      "q_i(p) uses position only; R may use position and heading",
+      "non-admitted camera opportunities contribute zero planning information and NIS is excluded",
+      "planning information uses position only; runtime R may use observation features",
       "each R is learned from whole-drive out-of-fold residuals of its paired correction",
-      "an image-conditioned runtime R exposes a planner-queryable spatial marginal",
+      "each planning-information field is constructed from out-of-fold matched runtime-R predictions",
       "navigation evaluation data fit or select neither correction nor R",
       "all navigation conditions share candidates and feasibility",
       "one robot filter consumes each frame once"
@@ -190,7 +190,7 @@
     "pending_rebuild": [
       "06_detector_gate",
       "07_correction_and_covariance",
-      "08_position_only_availability_model",
+      "08_per_camera_expected_information_fields",
       "09_navigation_campaign"
     ]
   },

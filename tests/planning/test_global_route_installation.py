@@ -322,7 +322,7 @@ def test_correction_revalidates_tape_without_extending_its_lifetime():
     assert n._active_plan_started_at==installed
 
 
-def test_local_install_checks_only_immediate_control_and_retains_full_tape():
+def test_local_install_trusts_globally_admitted_route_and_retains_full_tape():
     from planning.core.tracker_guard import ControlSafetyResult,SafetyFailure
     n=prepare_live_tape_node()
     controls=np.array([[.2,0.],[.2,.1],[.1,-.1]])
@@ -332,12 +332,11 @@ def test_local_install_checks_only_immediate_control_and_retains_full_tape():
         return ControlSafetyResult(len(candidate),'safe',SafetyFailure.NONE)
     n._simple_plan_safe_to_execute=safe
     assert n._install_control_tape(controls,original_len=3)=='installed'
-    assert len(checked)==1
-    np.testing.assert_array_equal(checked[0],controls[:1])
+    assert checked == []
     np.testing.assert_array_equal(n._active_controls,controls)
 
 
-def test_command_timer_revalidates_only_immediately_executable_control():
+def test_command_timer_does_not_re_veto_globally_admitted_route():
     from planning.core.tracker_guard import ControlSafetyResult,SafetyFailure
     n=prepare_live_tape_node()
     controls=np.array([[.2,0.],[.2,.1],[.1,-.1]])
@@ -349,21 +348,19 @@ def test_command_timer_revalidates_only_immediately_executable_control():
     n._simple_plan_safe_to_execute=safe
     n._belief_revision+=1
     n._publish_active_plan_command()
-    assert len(checked)==1
-    assert checked[0].shape==(1,2)
-    np.testing.assert_array_equal(checked[0],controls[:1])
+    assert checked == []
     np.testing.assert_array_equal(n._active_controls,controls)
 
 
-def test_unsafe_correction_stops_active_tape():
+def test_belief_shift_does_not_stop_globally_admitted_route():
     from planning.core.tracker_guard import ControlSafetyResult,SafetyFailure
     n=prepare_live_tape_node()
     n._install_control_tape(np.array([[.2,0.]]),original_len=1)
     n._belief_revision+=1
     n._simple_plan_safe_to_execute=lambda *a:ControlSafetyResult(0,'unsafe',SafetyFailure.COLLISION)
     n._publish_active_plan_command()
-    assert n._active_controls is None
-    assert n.cmd_pub.messages[-1].linear.x==0.
+    assert n._active_controls is not None
+    assert n.cmd_pub.messages[-1].linear.x != 0.
 
 
 def test_small_goal_change_revokes_tape_immediately():

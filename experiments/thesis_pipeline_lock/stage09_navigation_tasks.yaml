@@ -1,5 +1,5 @@
 tasks:
-  warehouse_v2.world.sdf:
+  warehouse_v2.world.sdf: &warehouse_v2_tasks
   - name: thesis09_west_to_east_north
     description: West dock to east north cross-aisle; long route with camera handovers and occluded alternatives.
     start:
@@ -41,7 +41,7 @@ tasks:
       x: 0.55
       y: 8.2
   - name: thesis09_blind_corridor_west_to_east
-    description: North-west dock to the east cross-aisle. The shortest lane-graph route runs 5.8 m through the lane_08 stretch that no camera observes; a 2.4 m longer alternative stays covered.
+    description: North-west dock to the east cross-aisle, with feasible routes through the direct connector and the upper cross-aisle. Camera C is the declared removal for this task.
     start:
       x: -10.7
       y: 8.55
@@ -61,7 +61,7 @@ tasks:
       x: 9.6
       y: -1.4
   - name: thesis09_lane08E_to_lane12W
-    description: East end of the unobserved south cross-aisle to the west dock apron. The shortest route drives 3.8 m unobserved; a 2.3 m longer alternative stays covered.
+    description: East end of lane 08 to the west lane-12 apron, with comparable routes through the main aisle and the southern cross-aisle. Camera B is the declared removal for this task.
     start:
       x: 9.6
       y: -1.4
@@ -70,3 +70,25 @@ tasks:
     goal:
       x: -1.3
       y: -8.55
+  - name: thesis09_parallel_aisles_west
+    description: Equal-length choice between the two aisles flanking the west rack; camera B removal should reverse only the spatial model's preference.
+    start: {x: -5.0, y: -6.25, z: 0.05, yaw: 0.0}
+    # Finish inside the camera-C/B overlap.  At y=8.625 camera C is already
+    # edge-clipped, so removing B made the endpoint itself unobservable and
+    # confounded route choice with an unavoidable terminal outage.
+    goal: {x: -5.0, y: 8.1}
+    route_seeds:
+    - name: west_aisle
+      waypoints: [[-6.95, -6.25], [-6.95, 8.1], [-5.0, 8.1]]
+    - name: east_aisle
+      waypoints: [[-3.05, -6.25], [-3.05, 8.1], [-5.0, 8.1]]
+  - name: thesis09_parallel_aisles_central
+    description: Equal-length choice between the two aisles flanking the central-west rack; the spatial model changes aisle after camera B removal.
+    start: {x: -1.0375, y: -5.75, z: 0.05, yaw: 0.0}
+    goal: {x: -1.0375, y: 8.625}
+    route_seeds:
+    - name: west_aisle
+      waypoints: [[-3.05, -5.75], [-3.05, 8.625], [-1.0375, 8.625]]
+    - name: east_aisle
+      waypoints: [[0.975, -5.75], [0.975, 8.625], [-1.0375, 8.625]]
+  warehouse_v2_fast.world.sdf: *warehouse_v2_tasks

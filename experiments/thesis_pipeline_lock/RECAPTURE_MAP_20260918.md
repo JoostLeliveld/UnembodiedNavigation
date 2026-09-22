@@ -1,5 +1,10 @@
 # Recapture map — the 2026-09-18 world edits
 
+> Historical recapture analysis only. The active v5 sampling, partition, detector,
+> world/camera identities, opportunity accounting and leakage controls are frozen in
+> `reference_position_campaign_lock.json`; where this note mentions the old 695-position
+> map or a separate availability model `q`, the canonical lock supersedes it.
+
 What changed in the world, which measurements it invalidates, and what has to be
 re-run. Written before any recapture so the scope is a decision rather than a
 discovery.

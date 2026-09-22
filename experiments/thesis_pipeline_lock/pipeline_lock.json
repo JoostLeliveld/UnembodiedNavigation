@@ -1,17 +1,19 @@
 {
   "artifact_policy": {
+    "method_authority": "docs/THESIS_METHOD_CANONICAL_LOCK.md",
+    "status_note": "Evidence status only. Stages 06-08 were rebuilt from the canonical method on the recapture-v5 working roles. Stage 09 uses the frozen matched-covariance precision artifacts. Legacy unreferenced stage files are non-authoritative history.",
     "current_evidence_rule": "An artifact is current thesis evidence only when an active locked stage manifest references it by path and SHA-256.",
     "historical_rule": "Material not referenced by this lock is outside the working repository and must not be used for the thesis.",
     "planned_current_root": "logs/thesis_final_pipeline_v1",
     "safe_deletion_rule": "Superseded material is retained only in Git history or the dated cold archive, never beside current thesis sources."
   },
-  "contribution_lock": {
-    "lock_id": "THESIS-STORY-COMMISSIONED-SENSOR-MODEL-V4",
+  "superseded_contribution_lock_history": {
+    "lock_id": "THESIS-STORY-COMMISSIONED-SENSOR-MODEL-V5",
     "path": "experiments/thesis_pipeline_lock/thesis_contribution_lock.json",
-    "sha256": "222759ec9efbbec310fd9c2cde35ba7ad925637c7aeee5ec1ff31a6812d052cc",
+    "sha256": "e19f1a5ef6dfecc1b8c7ce944ccf0acdfc8f920fdc0ed23984e766e03886faf0",
     "paper_fallback": "../papers/Thesis/THESIS_STORY_LOCK.md",
     "paper_fallback_sha256": "2dede9db0c2ca24abf02db0ba37ed5b344ab8dd57aad87548bc98d1b5489b009",
-    "status": "locked_four_arm_factorial_except_correction_and_matched_R_selection"
+    "status": "superseded_non_authoritative_history"
   },
   "created_at": "2026-09-09",
   "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
@@ -59,38 +61,43 @@
     {
       "depends_on": ["05_detector_training"],
       "id": "06_detector_gate",
-      "lock_id": null,
-      "manifest": null,
-      "manifest_sha256": null,
-      "status": "pending_raw_box_gate_rebuild"
+      "lock_id": "THESIS-REFERENCE-GATE-RECAPTURE-V5",
+      "manifest": "experiments/thesis_pipeline_lock/stage06_reference_gate_manifest.json",
+      "manifest_sha256": "54c9a31609f1c11b571cca35ddddf0ae07f240d68154a357d22d8a460465c5f2",
+      "status": "locked"
     },
     {
       "depends_on": ["06_detector_gate"],
       "id": "07_correction_and_covariance",
-      "lock_id": null,
-      "manifest": null,
-      "manifest_sha256": null,
-      "status": "pending_raw_box_correction_and_matched_R_selection"
+      "lock_id": "THESIS-CORRECTION-R012-RECAPTURE-V5",
+      "manifest": "experiments/thesis_pipeline_lock/stage07_reference_models_manifest.json",
+      "manifest_sha256": "b9e30ca4bace826cf50d2aa63d63e2f519723f0b6bf6b5777d94fa92d4fd1378",
+      "status": "locked"
     },
     {
       "depends_on": ["06_detector_gate"],
-      "id": "08_availability_model",
-      "lock_id": null,
-      "manifest": null,
-      "manifest_sha256": null,
-      "status": "pending_position_only_q_i_p_fit"
+      "id": "08_planning_precision",
+      "implementation": "experiments/thesis_pipeline_lock/build_reference_planning_information.py",
+      "lock_id": "THESIS-DIRECT-MATCHED-PLANNING-PRECISION-M0-M2-V1",
+      "manifest": "logs/thesis_final_pipeline_v1/planning_precision/manifest.json",
+      "manifest_sha256": "acc7d5c6d6f63bac549bfcf8dda589a0cf09984edb149f32a4c6e5cef6841f7a",
+      "status": "locked"
     },
     {
-      "depends_on": ["07_correction_and_covariance", "08_availability_model"],
+      "depends_on": ["07_correction_and_covariance", "08_planning_precision"],
       "id": "09_navigation_campaign",
+      "campaign_builder": "experiments/thesis_pipeline_lock/build_stage09_camera_removal_campaign.py",
       "lock_id": null,
       "manifest": null,
       "manifest_sha256": null,
+      "blocking_reason": null,
+      "final_audit_accessed": false,
       "status": "pending"
     },
     {
       "depends_on": ["09_navigation_campaign"],
       "id": "10_analysis_results",
+      "implementation": "experiments/thesis_pipeline_lock/analyze_stage09_navigation.py",
       "lock_id": null,
       "manifest": null,
       "manifest_sha256": null,

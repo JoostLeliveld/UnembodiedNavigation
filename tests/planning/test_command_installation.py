@@ -122,6 +122,45 @@ def test_a_request_captured_after_an_ordinary_stop_may_resume():
     assert _nonzero(node.cmd_pub.messages), 'an ordinary stop must not latch'
 
 
+def test_rejected_local_replacement_preserves_the_admitted_active_tape():
+    node = _install_node()
+    node.use_hierarchical = True
+    node._hier_phase = 'LOCAL'
+    active = np.array([[.25, .1], [.25, .0]])
+    node._active_controls = active
+    node._active_plan_started_at = node.get_clock().now()
+    node._active_controls_original_len = len(active)
+    request = node._capture_plan_request()
+    node._active_plan_request = request
+
+    node._reject_current_request(request, 'replacement failed validation')
+
+    assert node._active_controls is active
+    assert node._active_plan_started_at is not None
+    assert not node.cmd_pub.messages
+
+
+def test_hierarchical_local_install_trusts_admitted_global_route_geometry():
+    node = _install_node()
+    node.use_hierarchical = True
+    node._hier_phase = 'LOCAL'
+    node._active_plan_request = node._capture_plan_request()
+    node._fresh_request_belief = lambda _request: (
+        np.zeros(3), np.eye(3), {'belief_valid': True}
+    )
+    node._simple_plan_safe_to_execute = lambda *_args, **_kwargs: pytest.fail(
+        'hierarchical local geometry must not be vetoed after global admission'
+    )
+
+    result = node._install_control_tape(
+        np.array([[.2, .1], [.2, .0]]), original_len=2,
+        started_at=node.get_clock().now(),
+    )
+
+    assert result == 'installed'
+    assert node._active_controls is not None
+
+
 def test_a_fatal_stop_still_latches_across_a_new_request():
     node = _install_node()
     node.use_hierarchical = False
