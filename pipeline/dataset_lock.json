@@ -1,9 +1,9 @@
 {
  "schema": "thesis_reference_position_campaign_lock.v1",
- "lock_id": "THESIS-REFERENCE-POSITION-CAMPAIGN-V8-UNIFORM",
+ "lock_id": "THESIS-REFERENCE-POSITION-DATASET-V8",
  "status": "locked_before_refit",
  "method_authority": "docs/METHOD.md",
- "campaign_root": "logs/thesis_final_pipeline_v1/recapture_v8_uniform",
+ "campaign_root": "logs/thesis",
  "environment": {
   "world": "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf",
   "world_sha256": "25fc40d3eb57a415c40320f6de42900eaf9b3d71fac175d4b9ca750f6fb58b37",
@@ -67,42 +67,68 @@
  },
  "detector": {
   "architecture": "YOLO11n",
-  "checkpoint": "logs/thesis_final_pipeline_v1/stage05_detector_training/imgsz960/upper_finetune/weights/best.pt",
+  "checkpoint": "logs/thesis/detector/training/imgsz960/upper_finetune/weights/best.pt",
   "checkpoint_sha256": "1e99afb5361a7c2599cb3f2863ebb04fd6f65bc1ee23996b989c9bba8b004f13",
   "imgsz": 960,
   "use_during_capture": false,
   "rule": "Raw RGB and semantic support are captured first; every downstream detector pass uses exactly this frozen checkpoint unless a dated lock amendment is made before any final fitting."
  },
  "sampling": {
-  "plan": "logs/thesis_final_pipeline_v1/recapture_v5/capture_plan_v5.json",
-  "plan_sha256": "2ba0d875033764a234eba5525cabeb2d66d820a9b5396401a92422d082b05fb3",
-  "positions": "logs/thesis_final_pipeline_v1/recapture_v8_uniform/capture_positions_v8.csv",
-  "positions_sha256": "5545c2a452966d938557064c5f8f897901491b50c686e21049f0c63cfe2d80fa",
-  "poses": "logs/thesis_final_pipeline_v1/recapture_v5/capture_poses_v5.json",
-  "poses_sha256": "af6c86151f430e60a315d39ca826f4681243b2cd63228a9cee0618a2fe3ed9a0",
-  "position_count": 2631,
-  "headings_per_position": 4,
-  "heading_spacing_deg": 90.0,
-  "repetitions_per_heading": 1,
-  "camera_count": 5,
-  "expected_pose_batches": 10524,
-  "expected_camera_opportunities": 52620,
-  "opportunity_definition": "one scheduled camera in one static position-heading-repetition batch",
-  "repetition_interpretation": "There is one frame per declared heading; repeated evidence at a position is supplied by four declared headings, not pseudo-replication of an identical frame.",
-  "loader": "pipeline/combined_recapture_v8.py",
+  "loader": "pipeline/dataset.py",
+  "loader_sha256": "c6bd2ab1527da2ea35a7593d5973280f47cb16f718fcd6653a921de03de7fd52",
+  "positions": "logs/thesis/captures/v8/capture_positions_v8.csv",
+  "positions_sha256": "931d0bc131f52d58f10ef58e3cb7813d3446bd200e0da3e87a5851961f75e97c",
   "topup_rule": "pipeline/capture/plan_topup.py",
-  "robot_absent_list": "logs/thesis_final_pipeline_v1/recapture_v8_uniform/v5_robot_absent_poses.json",
+  "robot_absent_list": "logs/thesis/captures/v8/v5_robot_absent_poses.json",
   "robot_absent_list_sha256": "54f3ac92949522abe48c29819efb4e36ab271c976d1c95b8494cd7093aa68448",
-  "supplement_capture_index_sha256": "6414673e53dba219735d2ab9676b75641bd1e8621208ede7cf49e9d304df64fc",
-  "topup_capture_index_sha256": "0d655ebdf06fbda354aa6876c6b0fb95ab8a2af40e4ec3be46caae75d7191120",
-  "repair_capture_index_sha256": "a2897dc4f0090c8312c5c7c9f36bd8c002fa01fff8547cbbaf13d8ebafff199c"
+  "capture_passes": {
+   "part1": {
+    "capture_index": "logs/thesis/captures/v5/part1/capture_index.csv",
+    "capture_index_sha256": "a6dd3beafd5adc6afde9f3ea8e166905a905207a6be6d8ba428aaba44267e102",
+    "pose_file": "logs/thesis/captures/v5/capture_poses_v5.json",
+    "pose_file_sha256": "af6c86151f430e60a315d39ca826f4681243b2cd63228a9cee0618a2fe3ed9a0"
+   },
+   "part2": {
+    "capture_index": "logs/thesis/captures/v5/part2/capture_index.csv",
+    "capture_index_sha256": "e951a93f1fef031c699ccc32ecc74c82a28ebffc4a406a3e8cda0ccb645cbd89",
+    "pose_file": "logs/thesis/captures/v5/capture_poses_v5_part2.json",
+    "pose_file_sha256": "ac9fd1f9dbf40b6299b3886b2c3978157f0e48ec24147b71bee2f5b72ad6ac5e"
+   },
+   "supplement": {
+    "capture_index": "logs/thesis/captures/v8/supplement/capture_index.csv",
+    "capture_index_sha256": "6414673e53dba219735d2ab9676b75641bd1e8621208ede7cf49e9d304df64fc",
+    "pose_file": "logs/thesis/captures/v8/capture_poses_supplement.json",
+    "pose_file_sha256": "a233994ca7d23c8279181ba6d7508892300b92406721925eb462934d2fa29329"
+   },
+   "topup": {
+    "capture_index": "logs/thesis/captures/v8/topup/capture_index.csv",
+    "capture_index_sha256": "0d655ebdf06fbda354aa6876c6b0fb95ab8a2af40e4ec3be46caae75d7191120",
+    "pose_file": "logs/thesis/captures/v8/capture_poses_v8_topup.json",
+    "pose_file_sha256": "3d50d4d92246f534ad1c5ed36aba48df9c08a7f8a171bf2ce24fc47107a3e744"
+   },
+   "repair": {
+    "capture_index": "logs/thesis/captures/v8/repair/capture_index.csv",
+    "capture_index_sha256": "a2897dc4f0090c8312c5c7c9f36bd8c002fa01fff8547cbbaf13d8ebafff199c",
+    "pose_file": "logs/thesis/captures/v8/capture_poses_repair.json",
+    "pose_file_sha256": "b3d9bcee8a07a1f24aad293b0c1aef80d8049058056cc5337ca708c849e44584"
+   },
+   "repair2": {
+    "capture_index": "logs/thesis/captures/v8/repair2/capture_index.csv",
+    "capture_index_sha256": "a8050b17a57772918ca0cf6a93600c57e6dc87fbedd534735f6b760cb762c110",
+    "pose_file": "logs/thesis/captures/v8/capture_poses_repair2.json",
+    "pose_file_sha256": "6a3123f85ec76cd60a39d8b089ec8a490ef8051644652f4fa174bade053bdfe0"
+   }
+  },
+  "position_count": 2619,
+  "expected_camera_opportunities": 52380,
+  "expected_pose_batches": 10476
  },
  "partition": {
   "atomic_unit": "complete physical position",
   "roles": {
-   "D_R": 705,
-   "D_dev": 442,
-   "D_mu": 1334,
+   "D_R": 704,
+   "D_dev": 437,
+   "D_mu": 1328,
    "final_audit": 150
   },
   "rules": [
@@ -129,8 +155,8 @@
   "planning_support_population": "all expected opportunities",
   "nis_excluded": true,
   "separate_availability_model_prohibited": true,
-  "expected_working_opportunities": 49620,
-  "expected_working_unique_images": 24787,
+  "expected_working_opportunities": 49380,
+  "expected_working_unique_images": 24682,
   "expected_final_audit_opportunities": 3000
  },
  "capture_implementation": {
@@ -143,7 +169,7 @@
   "batch_sync_slop_ms": 50.0,
   "pose_validity": "oriented 0.80 x 0.55 m footprint plus 0.05 m clearance at every sampled heading"
  },
- "audit_command": "python3 pipeline/audit_v5_dataset_lock.py --capture logs/thesis_final_pipeline_v1/recapture_v5/master_capture --require-complete",
+ "audit_command": "python3 pipeline/audit_dataset.py",
  "prohibitions": [
   "Do not tune or select using final_audit.",
   "Do not drop detector misses or deterministic gate refusals from opportunity denominators.",
@@ -152,9 +178,5 @@
   "Do not fit a separate q_i(p) availability model.",
   "Do not pool this Track-B campaign with earlier drive-based or v3/v4 development evidence."
  ],
- "amendment": "docs/METHOD.md, Amendment 2026-09-23",
- "derived_from": {
-  "lock": "pipeline/v5_dataset_lock.json",
-  "sha256": "7a5ac2814d7755d9415aab2430cdcabc96c2039b2811e0d6a688b50a462bd38c"
- }
+ "amendment": "docs/METHOD.md, Amendment 2026-09-23"
 }
