@@ -4,7 +4,7 @@
 The audit population is the final_audit role of the dataset lock (the v5 audit set). The
 D_dev evaluation manifest is locked too, because it carries the R_proj sigma_px fitted on
 D_R. Writing this file is the last step before final_audit is opened; it refuses to run
-while any locked input is missing and never overwrites an existing protocol.
+while any locked input is missing, and once the audit has been opened.
 
     python3 pipeline/audit_protocol.py
 """
@@ -60,8 +60,10 @@ def main() -> int:
     protocol["amendment"] = "docs/METHOD.md, Amendment 2026-09-23/24"
     protocol["status"] = "frozen_before_final_audit_access"
     out = REPO / "logs/thesis/final_audit_protocol.json"
-    if out.exists():
-        raise FileExistsError(out)
+    audit = REPO / "logs/thesis/final_audit"
+    # The protocol may be rewritten until the audit is opened, never after.
+    if audit.exists() or audit.with_name(audit.name + ".incomplete").exists():
+        raise FileExistsError(f"final audit already opened: {audit}")
     out.write_text(json.dumps(protocol, indent=2) + "\n")
     print(out)
     return 0

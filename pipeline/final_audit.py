@@ -26,7 +26,7 @@ sys.path[:0] = [str(REPO), str(REPO / "src/perception"),
 
 from pipeline.detector.export_dataset import classify  # noqa: E402
 from pipeline.dataset import (  # noqa: E402
-    CAMPAIGN_ROOT, image_path, load_rows,
+    image_path, load_rows,
 )
 from perception.core.yolo_selection import select_best_detection, target_class_ids  # noqa: E402
 from planning.core.camera_network import CameraNetworkModel  # noqa: E402
@@ -43,16 +43,11 @@ from unav_common.visibility_patch import visibility_grid_from_bgr_frame  # noqa:
 
 CAMERAS = tuple(f"camera_{letter}" for letter in "ABCDE")
 MODEL_KEYS = ("R0_global_full", "R1_per_camera_full", "R2_spatial_full")
-RUNTIME_NAMES = {
-    "R0_global_full": "R0_global_full.json",
-    "R1_per_camera_full": "R1_per_camera_full.json",
-    "R2_spatial_full": "R2_spatial_residual.json",
-}
-PLANNING_NAMES = {
-    "R0_global_full": "m0_planning_precision.npz",
-    "R1_per_camera_full": "m1_planning_precision.npz",
-    "R2_spatial_full": "m2_planning_precision.npz",
-}
+# protocol locked-input keys of each model's runtime package and planning field
+RUNTIME_INPUT = {"R0_global_full": "runtime_R0", "R1_per_camera_full": "runtime_R1",
+                 "R2_spatial_full": "runtime_R2"}
+PLANNING_INPUT = {"R0_global_full": "planning_M0", "R1_per_camera_full": "planning_M1",
+                  "R2_spatial_full": "planning_M2"}
 CHI2 = {"50": 1.3862943611, "90": 4.605170186,
         "95": 5.9914645471, "99": 9.210340372}
 
@@ -145,16 +140,15 @@ def main() -> int:
     gate = UsableObservationGateConfig.from_yaml(str(
         REPO / protocol["locked_inputs"]["gate_config"]["path"]))
     gate.assert_belief_independent()
-    runtime_root = CAMPAIGN_ROOT / "runtime_r012"
-    # The matched-covariance precision export of planning_precision.py,
-    # the planning artifact the canonical lock prescribes.
-    planning_root = CAMPAIGN_ROOT / "planning_precision"
+    # The exact files the protocol hashed: the runtime packages and the matched-covariance
+    # planning fields (the planning artifact the canonical lock prescribes).
+    locked = protocol["locked_inputs"]
     runtime = {
-        key: CommissionedVisibilitySensorModel(runtime_root / RUNTIME_NAMES[key])
+        key: CommissionedVisibilitySensorModel(REPO / locked[RUNTIME_INPUT[key]]["path"])
         for key in MODEL_KEYS
     }
     planning = {
-        key: CameraNetworkModel(planning_root / PLANNING_NAMES[key])
+        key: CameraNetworkModel(REPO / locked[PLANNING_INPUT[key]]["path"])
         for key in MODEL_KEYS
     }
     world = REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
