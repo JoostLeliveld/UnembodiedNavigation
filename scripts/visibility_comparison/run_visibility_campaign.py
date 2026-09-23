@@ -66,63 +66,12 @@ KNOWN_ASSIMILATION_STATUSES = frozenset({
 })
 
 CONDITION_PLANNER = {
-    'C0': 'geometric_shortest_path',
-    'C1': 'constant_R_efe',
-    'C2': 'visibility_aware_efe',
-    # Same visibility-aware planner and field as C2; the condition-level
-    # use_hit_miss_mixture override selects the Bernoulli observation model.
-    'C3': 'visibility_aware_efe',
-    # Same IWAI objective/controller, three explicit network score-field artifacts.
-    'P0': 'visibility_aware_efe',
-    'P1': 'visibility_aware_efe',
-    'P2': 'visibility_aware_efe',
-    'C00': 'visibility_aware_efe',
-    'C01': 'visibility_aware_efe',
-    'C10': 'visibility_aware_efe',
-    'C11': 'visibility_aware_efe',
-    # Prospective closed-loop successor: these are route arms, not new planner
-    # objectives. Both execute through the same geometry/local-tracker path.
-    'gp': 'geometric_shortest_path',
-    'mono_depth': 'geometric_shortest_path',
-    # The six-arm fusion comparison. Not planner variants: every arm drives ONE frozen
-    # preselected route through the same geometry/local-tracker path, so the only thing that
-    # differs is how the camera network's readings become one measurement (F1-F4) and what a
-    # detector's box is taken to mean (O1, O2). See
-    # experiments/fusion_on_fixed_routes/README.md.
-    'F1': 'geometric_shortest_path',
-    'F2': 'geometric_shortest_path',
-    'F3': 'geometric_shortest_path',
-    'F4': 'geometric_shortest_path',
-    'O1': 'geometric_shortest_path',
-    'O2': 'geometric_shortest_path',
-    # Measurement-covariance arms: same frozen route and fusion rule, differing only in
-    # how much the per-camera covariance is allowed to say about each camera.
-    # measurement_covariance_ablation_campaign.yaml.
-    'K0': 'geometric_shortest_path',
-    'K1': 'geometric_shortest_path',
-    'K2': 'geometric_shortest_path',
-    # Where the measurement covariance is COMMISSIONED: W0 propagates the detector's pixel
-    # noise through each camera's geometry, W1 states the residual scatter measured directly
-    # on the warehouse floor per camera and detector confidence. Same frozen route, same
-    # fusion rule. commissioned_world_covariance_campaign.yaml.
-    'W0': 'geometric_shortest_path',
-    'W1': 'geometric_shortest_path',
-    # Heading arms: the same frozen route and fusion rule, differing only in whether the
-    # camera update is allowed to move the heading through the position-heading
-    # covariance. heading_update_ablation_campaign.yaml.
-    'H0': 'geometric_shortest_path',
-    'H1': 'geometric_shortest_path',
-    # Existing learned-mean campaigns use the same preselected-route controller.
-    'N1': 'geometric_shortest_path',
-    # Provisional perception-uncertainty comparison on one shared navigation stack.
-    'U0': 'visibility_aware_efe',
-    'U1': 'visibility_aware_efe',
-    'U2': 'visibility_aware_efe',
-    'U3': 'visibility_aware_efe',
-    'U4': 'visibility_aware_efe',
-    # q=1 counterparts; paired U arms use the commissioned spatial q field.
-    'W0': 'visibility_aware_efe',
-    'W3': 'visibility_aware_efe',
+    'global_intact': 'visibility_aware_efe',
+    'global_removal': 'visibility_aware_efe',
+    'per_camera_intact': 'visibility_aware_efe',
+    'per_camera_removal': 'visibility_aware_efe',
+    'spatial_intact': 'visibility_aware_efe',
+    'spatial_removal': 'visibility_aware_efe',
 }
 
 PRESELECTED_ROUTE_KEYS = (
@@ -157,7 +106,8 @@ BOOL_CONFIG_KEYS = frozenset({
     'manager_require_consistency_when_source_available', 'manager_fusion_mode',
     'manager_require_gp_artifacts', 'state_correction_ekf',
     'wait_for_belief_before_first_goal', 'multicam_scheduled',
-    'cleanup_sim_stragglers', 'enable_mission',
+    'cleanup_sim_stragglers', 'enable_mission', 'nvidia_offload',
+    'lockstep',
 })
 
 CAMPAIGN_METADATA_KEYS = frozenset({
@@ -165,6 +115,9 @@ CAMPAIGN_METADATA_KEYS = frozenset({
     'cleanup_sim_stragglers', 'ros_domain_id_base', 'world_profiles',
     'tasks_yaml', 'gp_artifact', 'route_selection_manifest_path',
     'route_selection_manifest_sha256', 'thesis_execution_contract',
+    'removed_camera_id',
+    'camera_network_expected_sha256',
+    'planning_information_method', 'planning_artifact_schema',
 })
 
 
@@ -203,6 +156,11 @@ def _validate_config(cfg: dict, path: Path) -> None:
     if unknown_top:
         raise ValueError(f'{path}: unknown campaign keys: {sorted(unknown_top)}')
     validate_navigation_parameters(cfg)
+    if cfg.get('planning_information_method') is not None:
+        if cfg['planning_information_method'] != 'inverse_of_matched_runtime_covariance':
+            raise ValueError(f'{path}: unsupported planning information method')
+        if cfg.get('planning_artifact_schema') != 'camera_network.matched_covariance_precision.v1':
+            raise ValueError(f'{path}: matched covariance method requires its canonical artifact schema')
     # A solving planner must be given the objective that reads the per-arm
     # camera fields. With global_planner_mode: efe and legacy_pixel_chart the
     # planner never queries a camera field, so every arm produces the same
@@ -316,6 +274,17 @@ def _validate_config(cfg: dict, path: Path) -> None:
                 f'{path}: condition {condition_id!r} has unknown keys: {sorted(unknown)}'
             )
         _validate_explicit_scalar_types(condition_cfg, f'{path}: condition {condition_id}')
+        network_path = condition_cfg.get('camera_network_artifact_path')
+        network_sha = condition_cfg.get('camera_network_expected_sha256')
+        if network_path and network_sha:
+            actual_network_sha = sha256_file(
+                _resolve_repo_path(str(network_path), strict=True)
+            )
+            if str(network_sha) != actual_network_sha:
+                raise ValueError(
+                    f'{path}: condition {condition_id!r} camera-network SHA-256 '
+                    f'mismatch: expected {network_sha}, got {actual_network_sha}'
+                )
     normalized_cells = set()
     for task_name, task_cfg in cfg['tasks'].items():
         if not isinstance(task_name, str) or not re.fullmatch(r'[A-Za-z0-9_.-]+', task_name):
@@ -323,7 +292,7 @@ def _validate_config(cfg: dict, path: Path) -> None:
         if not isinstance(task_cfg, dict):
             raise ValueError(f'{path}: task {task_name!r} must be a mapping')
         unknown = set(task_cfg) - (_known_campaign_keys() | {
-            'conditions', 'seeds', 'preselected_routes',
+            'conditions', 'seeds', 'preselected_routes', 'condition_overrides',
         })
         if unknown:
             raise ValueError(
@@ -362,6 +331,29 @@ def _validate_config(cfg: dict, path: Path) -> None:
                 )
             _validate_explicit_scalar_types(
                 route_cfg, f'{path}: task {task_name}/{route_condition} route'
+            )
+        overrides = task_cfg.get('condition_overrides', {}) or {}
+        if not isinstance(overrides, dict):
+            raise ValueError(f'{path}: task {task_name!r} condition_overrides must be a mapping')
+        for override_condition, override_cfg in overrides.items():
+            if override_condition not in conditions:
+                raise ValueError(
+                    f'{path}: task {task_name!r} overrides inactive condition '
+                    f'{override_condition!r}'
+                )
+            if not isinstance(override_cfg, dict):
+                raise ValueError(
+                    f'{path}: task {task_name!r} condition override '
+                    f'{override_condition!r} must be a mapping'
+                )
+            unknown_override = set(override_cfg) - _known_campaign_keys()
+            if unknown_override:
+                raise ValueError(
+                    f'{path}: task {task_name!r} condition override '
+                    f'{override_condition!r} has unknown keys: {sorted(unknown_override)}'
+                )
+            _validate_explicit_scalar_types(
+                override_cfg, f'{path}: task {task_name}/{override_condition} override'
             )
         _validate_explicit_scalar_types(task_cfg, f'{path}: task {task_name}')
         for condition_id in task_cfg.get('conditions', []):
@@ -496,6 +488,27 @@ def _validate_visibility_runtime_bundle(
         manifest = json.loads(model_path.read_text(encoding='utf-8'))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f'{config_path}: malformed commissioned visibility-residual bundle') from exc
+    if manifest.get('schema') == 'commissioned_visibility_sensor_model.v2':
+        if manifest.get('status') != 'frozen_before_audit' or manifest.get('audit_accessed') is not False:
+            raise ValueError(
+                f'{config_path}: {task_name}/{condition_id}: canonical visibility bundle is not frozen')
+        expected_covariance = {
+            'global_intact': 'R0_global_full', 'global_removal': 'R0_global_full',
+            'per_camera_intact': 'R1_per_camera_full', 'per_camera_removal': 'R1_per_camera_full',
+            'spatial_intact': 'R2_spatial_residual', 'spatial_removal': 'R2_spatial_residual',
+        }[condition_id]
+        if (manifest.get('mean_model') != 'box_mlp_visibility_residual'
+                or manifest.get('runtime_covariance_model') != expected_covariance):
+            raise ValueError(
+                f'{config_path}: {task_name}/{condition_id}: canonical correction/R pairing mismatch')
+        for key in ('correction_base', 'correction_patch', 'covariance_models'):
+            entry = manifest.get(key)
+            artifact = Path(str((entry or {}).get('path', ''))).expanduser()
+            if (not isinstance(entry, dict) or not artifact.is_file()
+                    or sha256_file(artifact) != str(entry.get('sha256', ''))):
+                raise ValueError(
+                    f'{config_path}: {task_name}/{condition_id}: canonical bundle {key} hash mismatch')
+        return
     # The deployed bundle and this guard were written in different naming
     # generations of the same model: the artifact records the mean chain as
     # ``M4_visibility_patch_residual`` where the guard was written against
@@ -942,13 +955,17 @@ def _route_overrides(cfg: dict, task_name: str, condition_id: str) -> dict:
 
 
 def _effective_value(cfg: dict, task_name: str, condition_id: str, key: str):
-    """Resolve route > condition > task > campaign overrides deterministically."""
+    """Resolve route > task-condition > condition > task > campaign overrides."""
 
     task_cfg = cfg.get('tasks', {}).get(task_name, {}) or {}
     condition_cfg = cfg.get('conditions', {}).get(condition_id, {}) or {}
+    task_condition_cfg = (task_cfg.get('condition_overrides', {}) or {}).get(
+        condition_id, {}) or {}
     route_cfg = _route_overrides(cfg, task_name, condition_id)
     if key in route_cfg:
         return route_cfg[key]
+    if key in task_condition_cfg:
+        return task_condition_cfg[key]
     if key in condition_cfg:
         return condition_cfg[key]
     if key in task_cfg:
@@ -960,11 +977,14 @@ def _resolved_cell_config(cfg: dict, task_name: str, condition_id: str) -> dict:
     """Materialize route > condition > task > campaign precedence once."""
     task_cfg = cfg.get('tasks', {}).get(task_name, {}) or {}
     condition_cfg = cfg.get('conditions', {}).get(condition_id, {}) or {}
+    task_condition_cfg = (task_cfg.get('condition_overrides', {}) or {}).get(
+        condition_id, {}) or {}
     route_cfg = _route_overrides(cfg, task_name, condition_id)
     resolved = dict(cfg)
-    for layer in (task_cfg, condition_cfg, route_cfg):
+    for layer in (task_cfg, condition_cfg, task_condition_cfg, route_cfg):
         for key, value in layer.items():
-            if key not in {'conditions', 'seeds', 'preselected_routes', 'label', 'planner'}:
+            if key not in {'conditions', 'seeds', 'preselected_routes',
+                           'condition_overrides', 'label', 'planner'}:
                 resolved[key] = value
     return resolved
 
@@ -1631,11 +1651,18 @@ def _existing_entry_matches_config(
             if (not isinstance(camera_ids, list) or not camera_ids
                     or len(camera_ids) != len(set(camera_ids))):
                 return False, 'camera network roster provenance is missing or malformed'
+            expected_active = [
+                value.strip() for value in str(
+                    expected_value('camera_network_active_camera_ids') or '').split(',')
+                if value.strip()
+            ]
+            if manifest.get('camera_network_active_camera_ids') != expected_active:
+                return False, 'active planning-camera set mismatch'
             expected_objective = str(
                 expected_value('camera_network_objective') or 'legacy_pixel_chart')
             if manifest.get('camera_network_objective') != expected_objective:
                 return False, 'camera network objective mismatch'
-            expected_goal_std = float(expected_value('network_goal_std_m') or 0.15)
+            expected_goal_std = float(expected_value('network_goal_std_m') or 0.10)
             if float(manifest.get('network_goal_std_m', float('nan'))) != expected_goal_std:
                 return False, 'camera network metric goal width mismatch'
             expected_updates = int(expected_value('camera_network_updates_per_step') or 1)
@@ -1705,11 +1732,16 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'run_timeout_after_first_cmd_s:={cfg["run_timeout_after_first_cmd_s"]}',
         f'auto_stop_on_goal:=true',
         f'headless:={str(cfg.get("headless", False)).lower()}',
+        f'nvidia_offload:={str(cfg.get("nvidia_offload", True)).lower()}',
+        f'lockstep:={str(cfg.get("lockstep", False)).lower()}',
+        f'lockstep_control_step_iterations:={cfg.get("lockstep_control_step_iterations", 100)}',
+        f'lockstep_camera_every_control_steps:={cfg.get("lockstep_camera_every_control_steps", 2)}',
+        f'lockstep_max_control_steps:={cfg.get("lockstep_max_control_steps", 0)}',
         f'use_rviz:={str(cfg.get("use_rviz", False)).lower()}',
         f'reset_world:={str(cfg.get("reset_world", False)).lower()}',
         f'r_visible_uv:={cfg.get("r_visible_uv", 2.5)}',
         f'r_miss_uv:={cfg.get("r_miss_uv", 120.0)}',
-        f'discount_gamma:={cfg.get("discount_gamma", 0.98)}',
+        f'discount_gamma:={cfg.get("discount_gamma", 0.995)}',
         f'v_max:={cfg.get("v_max", 0.22)}',
         f'max_predict_speed_mps:={cfg.get("max_predict_speed_mps", 0.0)}',
         f'state_correction_mode:={cfg.get("state_correction_mode", "fused")}',
@@ -1793,6 +1825,12 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         cmd.append(f'visibility_artifact_path:={gp_artifact}')
     if network_artifact:
         cmd.append(f'camera_network_artifact_path:={_resolve_repo_path(str(network_artifact), strict=True)}')
+        active_camera_ids = str(
+            _effective_value(
+                cfg, task_name, condition_id, 'camera_network_active_camera_ids') or '')
+        if not active_camera_ids.strip():
+            raise ValueError('camera-network runs require camera_network_active_camera_ids')
+        cmd.append(f'camera_network_active_camera_ids:={active_camera_ids}')
 
     for key in (
         'observation_risk_scale', 'ambiguity_term_scale',
@@ -1882,6 +1920,8 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'stuck_max_goal_improvement_m', 'stuck_cmd_fraction_min',
         'stuck_idle_cmd_fraction_max',
         'enable_mission', 'simple_tracker_yaw_gate_rad',
+        'ff_fb_turn_rate_limit_rad_s', 'ff_fb_corner_crawl_speed_mps',
+        'ff_fb_pivot_heading_error_rad',
     ):
         val = _effective_value(cfg, task_name, condition_id, key)
         if key == 'preselected_route_json' and val is not None:
@@ -2203,6 +2243,9 @@ def main() -> int:
     parser.add_argument('--only-condition', action='append', default=[],
                         help='Run only the named condition; repeat to select multiple conditions. '
                              'The complete campaign configuration is still validated and frozen.')
+    parser.add_argument('--only-task', action='append', default=[],
+                        help='Run only the named task; repeat to select multiple tasks. '
+                             'The complete campaign configuration is still validated and frozen.')
     args = parser.parse_args()
 
     config_path = _resolve_repo_path(args.config, strict=False)
@@ -2254,6 +2297,14 @@ def main() -> int:
         run_matrix = [
             cell for cell in run_matrix if cell[1] in requested_conditions
         ]
+    if args.only_task:
+        requested_tasks = set(args.only_task)
+        unknown_tasks = requested_tasks.difference(cfg['tasks'])
+        if unknown_tasks:
+            raise ValueError(
+                'unknown --only-task value(s): ' + ', '.join(sorted(unknown_tasks))
+            )
+        run_matrix = [cell for cell in run_matrix if cell[0] in requested_tasks]
     if not args.dry_run and cfg.get('ros_domain_id_base') is None:
         raise RuntimeError(
             'campaign execution requires ros_domain_id_base for scoped cleanup'

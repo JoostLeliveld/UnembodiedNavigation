@@ -91,7 +91,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     # EFE preference precision. Set to the declared arrival tolerance
     # (goal_success_radius). At 0.15 the risk term is ~5x stronger and the
     # objective collapses toward shortest path. See docs/PLANNER_LOCK.md.
-    'network_goal_std_m': '0.35',
+    'network_goal_std_m': '0.10',
     # Goal-prior anneal start; see base_planner. -1 disables.
     'network_goal_std_start_m': '5.0',
     'kouw_et1_ambiguity': 'true',
@@ -106,7 +106,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'goal_progress_n_steps': '90',
     'observation_risk_scale': '1.25',
     'ambiguity_term_scale': '1.00',
-    'discount_gamma': '0.98',
+    'discount_gamma': '0.995',
     'robot_collision_radius_m': '0.48541219597369',
     'robot_length_m': '0.8',
     'robot_width_m': '0.55',
@@ -115,6 +115,10 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'bridge_camera_b': 'false',
     'bridge_camera_c': 'false',
     'bridge_camera_d': 'false',
+    'lockstep': 'false',
+    'lockstep_control_step_iterations': '100',
+    'lockstep_camera_every_control_steps': '2',
+    'lockstep_max_control_steps': '0',
     'use_command_noise': 'true',
     'use_encoder_noise': 'true',
     'use_odom_for_predict': 'true',
@@ -171,10 +175,14 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'local_replan_min_remaining_s': '0.0',
     'local_replan_on_waypoint_change': 'false',
     'latency_compensate_plan_handoff': 'false',
-    'simple_tracker_yaw_gate_rad': '0.6',
+    'simple_tracker_yaw_gate_rad': '0.65',
+    'ff_fb_turn_rate_limit_rad_s': '0.80',
+    'ff_fb_corner_crawl_speed_mps': '0.18',
+    'ff_fb_pivot_heading_error_rad': '2.60',
     'odom_heading_timeout_s': '0.75',
     'heading_update_mode': 'coupled',
-    'local_controller_type': 'turn_then_go',
+    # Canonical thesis follower. Campaigns must still set this explicitly.
+    'local_controller_type': 'ff_fb',
     'debug_runtime': 'false',
     'auto_stop_on_goal': 'true',
     'goal_success_radius': '0.20',
@@ -283,7 +291,7 @@ VISIBILITY_FALLBACK_DEFAULTS: Dict[str, object] = {
     # Robot half-width 0.275 + 0.05 lane-keeping margin. The former 0.55-0.585
     # (circumscribed radius) left the 1.10 m lanes a NEGATIVE lateral budget,
     # i.e. structurally infeasible before any uncertainty existed.
-    'nogo_safe_distance': 0.325,
+    'nogo_safe_distance': 0.0,
     # Equals nogo_warning_band: the already-declared 'close to the edge' scale.
     # At 1e-3 a 1 mm notional violation cost more than the entire risk term.
     'nogo_logbarrier_eps': 0.05,
@@ -327,7 +335,8 @@ def _require_task_field(task, key):
     return task[key]
 
 
-def _camera_network_identity(path: str, expected_camera_ids) -> Dict[str, object]:
+def _camera_network_identity(
+        path: str, expected_camera_ids, active_camera_ids=None) -> Dict[str, object]:
     """Read the exact network bytes and materialize the consumer expectations."""
     artifact_bytes = Path(path).read_bytes()
     digest = hashlib.sha256(artifact_bytes).hexdigest()
@@ -345,12 +354,17 @@ def _camera_network_identity(path: str, expected_camera_ids) -> Dict[str, object
         raise RuntimeError(
             f'camera-network roster {artifact_camera_ids} differs from world profile {roster}'
         )
+    active = tuple(str(value) for value in (active_camera_ids or roster))
+    if not active or len(set(active)) != len(active) or not set(active).issubset(roster):
+        raise RuntimeError(
+            'active planning cameras must be a nonempty subset of the artifact roster')
     return {
         'camera_network_expected_sha256': digest,
         'camera_network_expected_source_hashes_json': json.dumps(
             source_hashes, sort_keys=True, separators=(',', ':')
         ),
         'camera_network_camera_ids': ','.join(roster),
+        'camera_network_active_camera_ids': ','.join(active),
     }
 
 
@@ -395,6 +409,13 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'use_pixel_correction': _as_bool(_launch_value(context, 'use_pixel_correction', PAPER_LAUNCH_DEFAULTS['use_pixel_correction'])),
         # Multi-camera belief front-end (guarded; default off preserves single-cam path).
         'multicam_belief': _as_bool(_launch_value(context, 'multicam_belief', 'false')),
+        'lockstep': _as_bool(_launch_value(context, 'lockstep', 'false')),
+        'lockstep_control_step_iterations': int(_launch_value(
+            context, 'lockstep_control_step_iterations', '100')),
+        'lockstep_camera_every_control_steps': int(_launch_value(
+            context, 'lockstep_camera_every_control_steps', '2')),
+        'lockstep_max_control_steps': int(_launch_value(
+            context, 'lockstep_max_control_steps', '0')),
         'multicam_scheduled': _as_bool(_launch_value(context, 'multicam_scheduled', 'false')),
         'scheduled_coverage_artifact': _launch_value(context, 'scheduled_coverage_artifact', '').strip(),
         'scheduled_report_std_m': float(_launch_value(context, 'scheduled_report_std_m', '0.15')),
@@ -687,6 +708,21 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             'simple_tracker_yaw_gate_rad',
             PAPER_LAUNCH_DEFAULTS['simple_tracker_yaw_gate_rad'],
         )),
+        'ff_fb_turn_rate_limit_rad_s': float(_launch_value(
+            context,
+            'ff_fb_turn_rate_limit_rad_s',
+            PAPER_LAUNCH_DEFAULTS['ff_fb_turn_rate_limit_rad_s'],
+        )),
+        'ff_fb_corner_crawl_speed_mps': float(_launch_value(
+            context,
+            'ff_fb_corner_crawl_speed_mps',
+            PAPER_LAUNCH_DEFAULTS['ff_fb_corner_crawl_speed_mps'],
+        )),
+        'ff_fb_pivot_heading_error_rad': float(_launch_value(
+            context,
+            'ff_fb_pivot_heading_error_rad',
+            PAPER_LAUNCH_DEFAULTS['ff_fb_pivot_heading_error_rad'],
+        )),
         'odom_heading_timeout_s': float(_launch_value(
             context,
             'odom_heading_timeout_s',
@@ -746,6 +782,8 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'driveable_geometry_json': _launch_value(context, 'driveable_geometry_json', ''),
         'visibility_artifact_path': _launch_value(context, 'visibility_artifact_path', ''),
         'camera_network_artifact_path': _launch_value(context, 'camera_network_artifact_path', ''),
+        'camera_network_active_camera_ids': _launch_value(
+            context, 'camera_network_active_camera_ids', ''),
         'camera_network_objective': _launch_value(
             context, 'camera_network_objective',
             PAPER_LAUNCH_DEFAULTS['camera_network_objective'],
@@ -817,6 +855,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         ),
         'odom_topic': _launch_value(context, 'odom_topic', PAPER_LAUNCH_DEFAULTS['odom_topic']).strip(),
         'headless': _as_bool(_launch_value(context, 'headless', 'false')),
+        'nvidia_offload': _as_bool(_launch_value(context, 'nvidia_offload', 'true')),
         'reset_world': _as_bool(_launch_value(context, 'reset_world', PAPER_LAUNCH_DEFAULTS['reset_world'])),
         'command_noise_linear_slip_mean': float(
             _launch_value(context, 'command_noise_linear_slip_mean', _COMMAND_NOISE_LINEAR_SLIP_MEAN)
@@ -937,6 +976,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
 
 def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     """Resolve world profile/task and derive camera/spawn launch parameters."""
+    import json as _json
     from experiments.core.world_profiles import (
         load_profile,
         compute_camera_quaternion_from_rpy,
@@ -956,6 +996,16 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     if not task_name:
         task_name = str(profile.get('recommended_task', '') or '').strip()
     task = select_task(tasks_by_world, cfg['world'], task_name)
+
+    # Evaluation tasks may declare the complete condition-neutral homotopy
+    # set. Passing it unchanged prevents campaign seeds from degenerating into
+    # several perturbations of one aisle.
+    route_seeds = task.get('route_seeds') if isinstance(task, dict) else None
+    if route_seeds:
+        if not isinstance(route_seeds, list) or len(route_seeds) < 2:
+            raise RuntimeError('task route_seeds must contain at least two routes')
+        cfg['optimizer_initial_routes_json'] = _json.dumps(route_seeds)
+        cfg['optimizer_route_seed_mode'] = 'explicit'
 
     start = _require_task_field(task, 'start')
     goal = _require_task_field(task, 'goal')
@@ -980,7 +1030,6 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     # Optional multi-goal tour: task 'waypoints' = ordered list of {x,y}. The goal
     # node drives them in sequence; the FINAL waypoint is the mission goal (used
     # for success/auto-stop), so override goal_x/goal_y to it.
-    import json as _json
     waypoints = task.get('waypoints') if isinstance(task, dict) else None
     waypoints_json = ''
     if waypoints:
@@ -1006,7 +1055,7 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         raise RuntimeError('unknown camera_network_objective')
     if camera_network_objective == 'metric_expected_belief' and not camera_network_artifact_path:
         raise RuntimeError('metric_expected_belief requires camera_network_artifact_path')
-    network_goal_std_m = float(cfg.get('network_goal_std_m', 0.15))
+    network_goal_std_m = float(cfg.get('network_goal_std_m', 0.10))
     if not np.isfinite(network_goal_std_m) or network_goal_std_m <= 0.:
         raise RuntimeError('network_goal_std_m must be finite and positive')
     network_updates = int(cfg.get('camera_network_updates_per_step', 1))
@@ -1098,10 +1147,17 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
         'camera_network_expected_sha256': '',
         'camera_network_expected_source_hashes_json': '',
         'camera_network_camera_ids': '',
+        'camera_network_active_camera_ids': '',
     }
     if camera_network_artifact_path:
+        active_camera_ids = tuple(
+            value.strip() for value in str(
+                cfg.get('camera_network_active_camera_ids', '') or '').split(',')
+            if value.strip()
+        )
         network_identity = _camera_network_identity(
-            camera_network_artifact_path, profile_camera_ids
+            camera_network_artifact_path, profile_camera_ids,
+            active_camera_ids=active_camera_ids or None,
         )
     camera_params = {
         'cam_pos': cam_pos,
@@ -1132,20 +1188,10 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     collision_geometry_json = str(cfg.get('collision_geometry_json', '') or '')
     driveable_geometry_json = str(cfg.get('driveable_geometry_json', '') or '')
     if not driveable_geometry_json:
-        # The no-go geometry must match nogo_mode. Serializing the traversable
-        # lanes under keep_out would hand the planner the drivable region as if
-        # it were obstacles; serializing obstacles under keep_in would do the
-        # reverse. Pick by mode rather than always emitting lanes.
-        _nogo_mode = str(cfg.get('nogo_mode', VISIBILITY_FALLBACK_DEFAULTS['nogo_mode'])).strip().lower()
-        if _nogo_mode == 'keep_out':
-            driveable_geometry_json = serialize_collision_geometry_from_world(
-                str(world_path),
-                model_names=tuple(profile.get('collision_model_names') or ()),
-                include_names=tuple(profile.get('collision_include_names') or ()),
-                profile=profile,
-            )
-        else:
-            driveable_geometry_json = serialize_driveable_geometry_from_profile(profile)
+        # This argument is the hard keep-in authority.  It is always the site
+        # boundary; collision_geometry_json independently supplies keep-out
+        # geometry.  Old lane unions are not a safety boundary.
+        driveable_geometry_json = serialize_driveable_geometry_from_profile(profile)
     raw_use_nogo_cost = str(cfg.get('use_nogo_cost', 'auto')).strip().lower()
     nogo_geometry_needed = (
         raw_use_nogo_cost in ('1', 'true', 't', 'yes', 'y', 'on')
@@ -1310,6 +1356,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'show_pose_markers': 'false',
         'bridge_scan': 'false',
         'headless': 'true' if cfg.get('headless', False) else 'false',
+        'nvidia_offload': 'true' if cfg.get('nvidia_offload', True) else 'false',
         'world': cfg['world'],
         'world_name': cfg['profile']['world_name'],
         'spawn_x': str(cfg['spawn']['x']),
@@ -1600,9 +1647,11 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'camera_network_expected_source_hashes_json': cfg.get(
                     'camera_network_expected_source_hashes_json', ''),
                 'camera_network_camera_ids': cfg.get('camera_network_camera_ids', ''),
+                'camera_network_active_camera_ids': cfg.get(
+                    'camera_network_active_camera_ids', ''),
                 'camera_network_objective': cfg.get(
                     'camera_network_objective', 'legacy_pixel_chart'),
-                'network_goal_std_m': cfg.get('network_goal_std_m', 0.15),
+                'network_goal_std_m': cfg.get('network_goal_std_m', 0.10),
             'network_goal_std_start_m': cfg.get('network_goal_std_start_m', -1.0),
             'kouw_et1_ambiguity': cfg.get('kouw_et1_ambiguity', True),
                 'network_goal_std_start_m': cfg.get('network_goal_std_start_m', -1.0),
@@ -1744,7 +1793,10 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'local_replan_min_remaining_s': cfg.get('local_replan_min_remaining_s', 0.0),
                 'local_replan_on_waypoint_change': cfg.get('local_replan_on_waypoint_change', False),
                 'latency_compensate_plan_handoff': cfg.get('latency_compensate_plan_handoff', False),
-                'simple_tracker_yaw_gate_rad': cfg.get('simple_tracker_yaw_gate_rad', 0.6),
+                'simple_tracker_yaw_gate_rad': cfg.get('simple_tracker_yaw_gate_rad', 0.65),
+                'ff_fb_turn_rate_limit_rad_s': cfg.get('ff_fb_turn_rate_limit_rad_s', 0.80),
+                'ff_fb_corner_crawl_speed_mps': cfg.get('ff_fb_corner_crawl_speed_mps', 0.18),
+                'ff_fb_pivot_heading_error_rad': cfg.get('ff_fb_pivot_heading_error_rad', 2.60),
                 'heading_update_mode': cfg['heading_update_mode'],
                 'local_controller_type': cfg['local_controller_type'],
                 'run_timeout_after_first_cmd_s': cfg['run_timeout_after_first_cmd_s'],
@@ -1811,6 +1863,24 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         parameters=[{'use_sim_time': True}],
     )
 
+    lockstep_scheduler = None
+    if cfg.get('lockstep', False):
+        lockstep_scheduler = Node(
+            package='sim_command_guard',
+            executable='lockstep_scheduler',
+            name='lockstep_scheduler',
+            output='screen',
+            parameters=[{
+                'world_name': cfg['profile']['world_name'],
+                'control_step_iterations': cfg['lockstep_control_step_iterations'],
+                'camera_every_control_steps': cfg['lockstep_camera_every_control_steps'],
+                'max_control_steps': cfg['lockstep_max_control_steps'],
+                # GPU model load and warm-up can exceed 30 s on this laptop. This
+                # timeout also catches genuinely wedged runtime barriers once active.
+                'barrier_timeout_s': 180.0,
+            }],
+        )
+
     return {
         'bringup_sim': bringup_sim,
         'tf_static': tf_static,
@@ -1823,6 +1893,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'goal_marker_node': goal_marker_node,
         'logger_node': logger_node,
         'rviz': rviz,
+        'lockstep_scheduler': lockstep_scheduler,
     }
 
 
@@ -2332,9 +2403,11 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'camera_network_expected_source_hashes_json': cfg.get(
                 'camera_network_expected_source_hashes_json', ''),
             'camera_network_camera_ids': cfg.get('camera_network_camera_ids', ''),
+            'camera_network_active_camera_ids': cfg.get(
+                'camera_network_active_camera_ids', ''),
             'camera_network_objective': cfg.get(
                 'camera_network_objective', 'legacy_pixel_chart'),
-            'network_goal_std_m': cfg.get('network_goal_std_m', 0.15),
+            'network_goal_std_m': cfg.get('network_goal_std_m', 0.10),
             'network_goal_std_start_m': cfg.get('network_goal_std_start_m', -1.0),
             'kouw_et1_ambiguity': cfg.get('kouw_et1_ambiguity', True),
             'camera_network_updates_per_step': cfg.get(
@@ -2399,7 +2472,10 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'local_replan_min_remaining_s': cfg.get('local_replan_min_remaining_s', 0.0),
             'local_replan_on_waypoint_change': cfg.get('local_replan_on_waypoint_change', False),
             'latency_compensate_plan_handoff': cfg.get('latency_compensate_plan_handoff', False),
-            'simple_tracker_yaw_gate_rad': cfg.get('simple_tracker_yaw_gate_rad', 0.6),
+            'simple_tracker_yaw_gate_rad': cfg.get('simple_tracker_yaw_gate_rad', 0.65),
+            'ff_fb_turn_rate_limit_rad_s': cfg.get('ff_fb_turn_rate_limit_rad_s', 0.80),
+            'ff_fb_corner_crawl_speed_mps': cfg.get('ff_fb_corner_crawl_speed_mps', 0.18),
+            'ff_fb_pivot_heading_error_rad': cfg.get('ff_fb_pivot_heading_error_rad', 2.60),
             **cfg['camera_params'],
             **planner_params[planner],
         }],
@@ -2429,6 +2505,8 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
         after_odom.append(shared_nodes['logger_node'])
     if cfg['use_rviz']:
         after_odom.append(shared_nodes['rviz'])
+    if shared_nodes.get('lockstep_scheduler') is not None:
+        after_odom.append(shared_nodes['lockstep_scheduler'])
 
     start_after_odom = RegisterEventHandler(
         OnProcessExit(

@@ -243,10 +243,11 @@ class ExperimentLogger(Node):
         self.declare_parameter('camera_network_expected_sha256', '')
         self.declare_parameter('camera_network_expected_source_hashes_json', '')
         self.declare_parameter('camera_network_camera_ids', '')
+        self.declare_parameter('camera_network_active_camera_ids', '')
         self.declare_parameter('camera_network_objective', 'legacy_pixel_chart')
         self.declare_parameter('camera_network_updates_per_step', 1)
         self.declare_parameter('optimizer_control_block_steps', 1)
-        self.declare_parameter('network_goal_std_m', 0.15)
+        self.declare_parameter('network_goal_std_m', 0.10)
         self.declare_parameter('risk_weight_obs', 1.0)
         self.declare_parameter('ambiguity_weight', 1.0)
         self.declare_parameter('goal_sigma_uv', 2.0)
@@ -268,7 +269,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('goal_progress_n_steps', 90)
         self.declare_parameter('observation_risk_scale', 1.25)
         self.declare_parameter('ambiguity_term_scale', 1.00)
-        self.declare_parameter('discount_gamma', 0.98)
+        self.declare_parameter('discount_gamma', 0.995)
         self.declare_parameter('visibility_target_height_m', 0.0)
         self.declare_parameter('perception_use_geometry_occlusion', True)
         self.declare_parameter('visibility_geometry_json', '')
@@ -354,7 +355,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('use_nogo_cost', False)
         self.declare_parameter('nogo_penalty_type', 'warning_band')
         self.declare_parameter('nogo_weight', 0.0)
-        self.declare_parameter('nogo_safe_distance', 0.35)
+        self.declare_parameter('nogo_safe_distance', 0.0)
         self.declare_parameter('nogo_logbarrier_eps', 1e-3)
         self.declare_parameter('nogo_warning_band', 0.05)
         self.declare_parameter('nogo_near_weight', 50.0)
@@ -390,7 +391,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('v_max', 0.22)
         self.declare_parameter('use_odom_for_predict', True)
         self.declare_parameter('use_diagnostic_odom_localization', False)
-        self.declare_parameter('local_controller_type', 'turn_then_go')
+        self.declare_parameter('local_controller_type', 'ff_fb')
         self.declare_parameter('stuck_window_s', 8.0)
         self.declare_parameter('stuck_max_displacement_m', 0.08)
         self.declare_parameter('stuck_max_goal_improvement_m', 0.05)
@@ -489,6 +490,20 @@ class ExperimentLogger(Node):
             item.strip() for item in camera_ids_text.split(',') if item.strip()]
         if len(self.camera_network_camera_ids) != len(set(self.camera_network_camera_ids)):
             raise RuntimeError('camera_network_camera_ids contains duplicates')
+        active_camera_ids_text = str(
+            self.get_parameter('camera_network_active_camera_ids').value or '').strip()
+        self.camera_network_active_camera_ids = [
+            item.strip() for item in active_camera_ids_text.split(',') if item.strip()]
+        if (self.camera_network_artifact_path
+                and (not self.camera_network_active_camera_ids
+                     or len(self.camera_network_active_camera_ids)
+                     != len(set(self.camera_network_active_camera_ids)))):
+            raise RuntimeError(
+                'camera_network_active_camera_ids must be nonempty and unique')
+        if not set(self.camera_network_active_camera_ids).issubset(
+                self.camera_network_camera_ids):
+            raise RuntimeError(
+                'active planning cameras must be a subset of the artifact roster')
         self.camera_network_objective = str(
             self.get_parameter('camera_network_objective').value or '').strip().lower()
         self.camera_network_updates_per_step = int(
@@ -871,6 +886,8 @@ class ExperimentLogger(Node):
             'use_visibility_model': self.use_visibility_model,
             'visibility_artifact_path': self.visibility_artifact_path,
             'camera_network_artifact_path': self.camera_network_artifact_path,
+            'camera_network_active_camera_ids': list(
+                self.camera_network_active_camera_ids),
             'camera_network_objective': self.camera_network_objective,
             'camera_network_updates_per_step': self.camera_network_updates_per_step,
             'network_goal_std_m': self.network_goal_std_m,
@@ -1051,13 +1068,27 @@ class ExperimentLogger(Node):
         manifest_data['camera_network_source_hashes'] = dict(
             self.camera_network_source_hashes)
         manifest_data['camera_network_camera_ids'] = list(self.camera_network_camera_ids)
+        manifest_data['camera_network_active_camera_ids'] = list(
+            self.camera_network_active_camera_ids)
         if self.camera_network_artifact_path:
             if self.camera_network_objective == 'metric_expected_belief':
-                manifest_data['planner_field_semantics'] = (
-                    'metric expected belief over independent per-camera Bernoulli reports; '
-                    'not the robust runtime fusion posterior')
-                manifest_data['planner_p_vis_semantics'] = (
-                    'mean usable-detection probability across artifact cameras')
+                with np.load(self.camera_network_artifact_path, allow_pickle=False) as archive:
+                    network_metadata = json.loads(str(archive['metadata_json'].item()))
+                if network_metadata.get('schema') in (
+                        'camera_network.thesis_stage09.v3',
+                        'camera_network.final_bayesian_planning.v1',
+                        'camera_network.matched_covariance_precision.v1'):
+                    manifest_data['planner_field_semantics'] = (
+                        'sum of active per-camera precision matrices obtained directly '
+                        'from the matched runtime covariance')
+                    manifest_data['planner_p_vis_semantics'] = (
+                        'not defined; no availability or admission model enters planner precision')
+                else:
+                    manifest_data['planner_field_semantics'] = (
+                        'metric expected belief over independent per-camera Bernoulli reports; '
+                        'not the robust runtime fusion posterior')
+                    manifest_data['planner_p_vis_semantics'] = (
+                        'mean usable-detection probability across artifact cameras')
             else:
                 manifest_data['planner_field_semantics'] = 'IWAI detector-score precision proxy; not a measurement covariance or calibrated posterior'
                 manifest_data['planner_p_vis_semantics'] = 'mean expected detector score across artifact cameras; not probability of a usable observation'

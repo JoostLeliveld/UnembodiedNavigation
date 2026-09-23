@@ -310,11 +310,21 @@ def serialize_collision_geometry_from_world(
     model_names: Tuple[str, ...] = ("warehouse_walls", "warehouse_rack_occluders"),
     include_names: Tuple[str, ...] = (),
     profile: Dict[str, Any] | None = None,
+    safety_margin_m: float = 0.10,
 ) -> str:
     scene = parse_collision_scene_from_world(
         world_path, model_names=model_names, include_names=include_names
     )
     payload = json.loads(scene_to_json(scene))
+    margin = float(safety_margin_m)
+    if not math.isfinite(margin) or margin < 0.0:
+        raise ValueError("safety_margin_m must be finite and non-negative")
+    for prism in payload.get("prisms", []):
+        prism["xmin"] = float(prism["xmin"]) - margin
+        prism["xmax"] = float(prism["xmax"]) + margin
+        prism["ymin"] = float(prism["ymin"]) - margin
+        prism["ymax"] = float(prism["ymax"]) + margin
+    payload["geometric_safety_margin_m"] = margin
     # Mark the payload so consumers know these prisms are NON-traversable. Without
     # it, route seeding would treat them as a keep-in driveable union and emit no
     # routes at all.
@@ -329,28 +339,46 @@ def serialize_collision_geometry_from_world(
     return json.dumps(payload)
 
 
-def serialize_driveable_geometry_from_profile(profile: Dict[str, Any]) -> str:
-    """Serialize a profile's driveable (traversable) 2D lanes to prism JSON.
+def serialize_driveable_geometry_from_profile(
+    profile: Dict[str, Any], safety_margin_m: float = 0.10
+) -> str:
+    """Serialize the physical site boundary used by the hard keep-in gate.
 
-    Used as a planner 'keep-in' region: the robot is penalised for leaving the
-    union of these lanes (obstacles sit outside the lanes, so this also keeps it
-    off them). Regions are planar; z range is nominal.
+    Historical versions returned the union of ``traversable`` lane annotations.
+    Those annotations are route-seeding/visualisation aids, not physical safety
+    authority.  The canonical free space is this site boundary minus the
+    independently serialized collision scene.
     """
+    margin = float(safety_margin_m)
+    if not math.isfinite(margin) or margin < 0.0:
+        raise ValueError("safety_margin_m must be finite and non-negative")
     regions = profile.get("known_2d_regions", []) or []
     prisms = []
     for r in regions:
-        if str(r.get("type", "")).strip().lower() != "traversable":
+        if str(r.get("type", "")).strip().lower() != "site_boundary":
             continue
         try:
             prisms.append({
-                "name": str(r.get("name", "lane")),
-                "xmin": float(r["xmin"]), "xmax": float(r["xmax"]),
-                "ymin": float(r["ymin"]), "ymax": float(r["ymax"]),
+                "name": str(r.get("name", "site_boundary")),
+                "xmin": float(r["xmin"]) + margin,
+                "xmax": float(r["xmax"]) - margin,
+                "ymin": float(r["ymin"]) + margin,
+                "ymax": float(r["ymax"]) - margin,
                 "zmin": 0.0, "zmax": 0.1,
             })
         except (KeyError, TypeError, ValueError):
             continue
-    payload = {"prisms": prisms, "model_name": "driveable_region"}
+    if len(prisms) != 1:
+        raise RuntimeError(
+            "world profile must declare exactly one site_boundary region"
+        )
+    if any(p["xmin"] >= p["xmax"] or p["ymin"] >= p["ymax"] for p in prisms):
+        raise RuntimeError("site_boundary collapses under geometric safety margin")
+    payload = {
+        "prisms": prisms,
+        "model_name": "site_boundary",
+        "geometric_safety_margin_m": margin,
+    }
     # Corridor centre-lines for lane-graph route seeding. They travel with the
     # geometry because they cannot be inferred from an obstacle (keep-out) map.
     for key in ("route_horizontal_centres", "route_vertical_centres"):

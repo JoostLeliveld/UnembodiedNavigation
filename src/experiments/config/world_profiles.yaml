@@ -109,10 +109,10 @@ worlds:
       # routes against, so a floor-wide rectangle would make every route "valid",
       # including ones straight through the rack rows. The lanes below carry the
       # aisle structure the way warehouse_aws does.
-      - {name: open_floor_inside_site_boundary, type: site_boundary, xmin: -11.20, xmax: 11.50, ymin: -8.60, ymax: 8.60, note: physical operating field; blue lines mark its boundary, cyan marks the planner keep-in union, and green marks no-go envelopes}
+      - {name: open_floor_inside_site_boundary, type: site_boundary, xmin: -11.20, xmax: 11.50, ymin: -8.60, ymax: 8.60, note: physical operating field; blue lines mark its boundary and green marks obstacle envelopes}
       # North-south aisles use the exact free gap between 0.32 m rack envelopes.
-      # The planner's 0.25 m keep-in distance then supplies its own interior
-      # trajectory margin without letting the declared lane cross green paint.
+      # Historical lane annotations remain for non-thesis worlds and visualization;
+      # warehouse_v2 planning uses collision-derived keep-out geometry instead.
       - {name: west_service_lane, type: traversable, xmin: -10.95, xmax: -9.42, ymin: -8.35, ymax: 8.35, note: lane between the west wall-backed shelf and rack column W1}
       - {name: rack_aisle_W3, type: traversable, xmin: -8.23, xmax: -7.32, ymin: -8.35, ymax: 8.35, note: aisle between rack columns W1 and W2}
       - {name: rack_aisle_W2, type: traversable, xmin: -6.13, xmax: -5.22, ymin: -8.35, ymax: 8.35, note: continuous west aisle 2; loose mid-aisle box stacks were removed}
@@ -244,6 +244,11 @@ worlds:
       - {name: pallet_loose_1:body:load_collision, type: non_driveable_obstacle, xmin: -4.649, xmax: -3.311, ymin: -9.171, ymax: -8.129, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
       - {name: pallet_loose_2:body:base_collision, type: non_driveable_obstacle, xmin: 3.682, xmax: 5.218, ymin: -9.241, ymax: -8.019, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
       - {name: pallet_loose_2:body:load_collision, type: non_driveable_obstacle, xmin: 3.759, xmax: 5.141, ymin: -9.188, ymax: -8.072, note: obstacle footprint grown by 0.10 m a side; everything else is traversable}
+  warehouse_v2_fast.world.sdf:
+    <<: *warehouse_v2_peak_profile
+    world_name: warehouse_v2
+    evidence_role: canonical_geometry_rate_qualification_and_navigation
+    evidence_status: canonical_bytes_except_static_contact_update_rate_60_to_20
   warehouse_v2_shipout.world.sdf:
     <<: *warehouse_v2_peak_profile
     world_name: warehouse_v2_shipout
