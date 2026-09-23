@@ -16,7 +16,7 @@ import matplotlib.image as mpimg  # noqa: E402
 import matplotlib.patches as patches  # noqa: E402
 import pandas as pd  # noqa: E402
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'scripts' / 'shared'))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from paths import repo_root  # noqa: E402
 
 REPO = repo_root()

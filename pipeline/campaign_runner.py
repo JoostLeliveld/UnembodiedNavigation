@@ -2,7 +2,7 @@
 """Run a visibility-comparison campaign from a locked config file.
 
 Usage:
-    python run_visibility_campaign.py --config scripts/visibility_comparison/warehouse_visibility_campaign.yaml [--dry-run] [--resume]
+    python campaign_runner.py --config scripts/visibility_comparison/warehouse_visibility_campaign.yaml [--dry-run] [--resume]
 
 Each run result is written immediately to campaign_log.json so the campaign
 can be interrupted and resumed with --resume (already-completed runs are skipped).
@@ -32,7 +32,7 @@ from pathlib import Path
 
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 # The directories whose bytes actually execute during a run. Provenance is scoped to
 # these so that editing analysis or figure code elsewhere in the checkout does not
 # abort a multi-hour campaign; it mirrors what the source snapshot below copies.
@@ -2504,7 +2504,7 @@ def main() -> int:
                 cam_out = run_log_dir / 'camera_frames'
                 cam_out.mkdir(parents=True, exist_ok=True)
                 rec_proc = subprocess.Popen(
-                    ['python3', str(REPO_ROOT / 'scripts/paper_figures/record_camera_stream.py'),
+                    ['python3', str(REPO_ROOT / 'pipeline/record_camera_stream.py'),
                      '--out-dir', str(cam_out)],
                     start_new_session=True, env=run_env)
                 recorder_pgid = os.getpgid(rec_proc.pid)

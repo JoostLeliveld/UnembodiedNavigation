@@ -11,7 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
     'configuration_campaign',
-    ROOT / 'scripts/visibility_comparison/run_visibility_campaign.py',
+    ROOT / 'pipeline/campaign_runner.py',
 )
 campaign = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(campaign)

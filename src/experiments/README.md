@@ -21,7 +21,7 @@ GP artifact paths.
 
 The current AWS robustness campaign is configured by
 `scripts/visibility_comparison/warehouse_visibility_campaign.yaml` and run through
-`scripts/visibility_comparison/run_visibility_campaign.py`.
+`pipeline/campaign_runner.py`.
 
 The primary launch enforces the important paper assumptions:
 

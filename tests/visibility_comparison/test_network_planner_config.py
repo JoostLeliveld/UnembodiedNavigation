@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 ROOT=Path(__file__).resolve().parents[2]
-spec=importlib.util.spec_from_file_location('network_campaign',ROOT/'scripts/visibility_comparison/run_visibility_campaign.py')
+spec=importlib.util.spec_from_file_location('network_campaign',ROOT/'pipeline/campaign_runner.py')
 campaign=importlib.util.module_from_spec(spec);spec.loader.exec_module(campaign)
 
 

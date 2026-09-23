@@ -79,7 +79,7 @@ def test_campaign_runner_does_not_enable_encoder_noise_from_false_string(tmp_pat
     root = Path(__file__).resolve().parents[2]
     spec = importlib.util.spec_from_file_location(
         "campaign_config_semantics",
-        root / "scripts/visibility_comparison/run_visibility_campaign.py",
+        root / "pipeline/campaign_runner.py",
     )
     campaign = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(campaign)

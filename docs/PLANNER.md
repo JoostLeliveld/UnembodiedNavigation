@@ -341,7 +341,7 @@ claim the thesis makes. The mechanism was already correct and needed no change
 
 ## Campaign timeouts, sized from measurement (2026-09-15)
 
-`run_visibility_campaign.py` defaults: `--first-cmd-timeout 480`,
+`campaign_runner.py` defaults: `--first-cmd-timeout 480`,
 `--run-timeout 900`. The previous 270/420 pair was sized against a "contended
 tail to ~220 s" that measurement falsifies.
 

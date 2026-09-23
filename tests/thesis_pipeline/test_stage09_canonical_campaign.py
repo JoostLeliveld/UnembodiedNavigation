@@ -91,7 +91,7 @@ def test_analyzer_requires_preselected_route_only_for_legacy_mode(tmp_path):
 
 def test_runner_maps_all_six_conditions_to_visibility_aware_efe():
     runner = load_script(
-        "stage09_runner", "scripts/visibility_comparison/run_visibility_campaign.py"
+        "stage09_runner", "pipeline/campaign_runner.py"
     )
     assert set(runner.CONDITION_PLANNER) == {
         "global_intact", "global_removal",

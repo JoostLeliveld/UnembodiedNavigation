@@ -24,7 +24,7 @@ from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.patches import Patch, Rectangle  # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve()
-sys.path.insert(0, str(HERE.parents[1] / 'scripts' / 'shared'))
+sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE.parents[1] / 'world'))
 from paths import repo_root  # noqa: E402
 import route_tasks as rt  # noqa: E402

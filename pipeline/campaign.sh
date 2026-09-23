@@ -15,7 +15,7 @@ for seed in "${SEEDS[@]}"; do
   cfg="$R/campaign_configs/campaign_seed${seed}.yaml"
   [ -f "$cfg" ] || { log "FAILED: missing $cfg"; exit 1; }
   log "seed $seed started"
-  python3 scripts/visibility_comparison/run_visibility_campaign.py \
+  python3 pipeline/campaign_runner.py \
     --config "$cfg" --log-root "$R/campaign/seed${seed}" --resume \
     >> "$R/campaign_seed${seed}.log" 2>&1
   rc=$?

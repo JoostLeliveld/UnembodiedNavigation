@@ -245,7 +245,7 @@ def test_read_run_summary_actually_reads_the_summary():
     from pathlib import Path as _Path
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]
                             / "scripts" / "visibility_comparison"))
-    import run_visibility_campaign as rvc
+    import campaign_runner as rvc
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -271,7 +271,7 @@ def test_a_reasoned_refusal_does_not_invalidate_a_drive():
     from pathlib import Path as _Path
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]
                             / "scripts" / "visibility_comparison"))
-    import run_visibility_campaign as rvc
+    import campaign_runner as rvc
     import tempfile
 
     def write(run, statuses):

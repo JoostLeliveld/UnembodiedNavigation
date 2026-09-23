@@ -15,7 +15,7 @@ mkdir -p "$(dirname "$LOG")"
 # This repo runs Ignition Fortress ('ign gazebo'), not 'gz sim'.  Match the
 # simulator's own argv and exclude our own processes, or a loose pattern reports
 # a false positive against this script's command line.
-LIVE=$(pgrep -af "ign gazebo -r|gz sim -r|run_visibility_campaign" | grep -v sim_up | grep -v pgrep)
+LIVE=$(pgrep -af "ign gazebo -r|gz sim -r|campaign_runner" | grep -v sim_up | grep -v pgrep)
 if [ -n "$LIVE" ]; then echo "ABORT: simulator already running:"; echo "$LIVE" | cut -c1-140; exit 2; fi
 
 teardown() {

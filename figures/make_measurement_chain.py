@@ -40,7 +40,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve()
-sys.path.insert(0, str(HERE.parents[1] / 'scripts' / 'shared'))
+sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE.parents[1] / 'src' / 'unav_common'))
 from paths import repo_root  # noqa: E402
 from unav_common.camera_model import ObliqueCameraModel  # noqa: E402

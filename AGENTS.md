@@ -105,7 +105,7 @@ complete matched run/task/seed outcome for navigation comparisons.
 - Search current source and active contracts before tests. Old names may survive in Git
   history but must not be revived.
 - Before launching Gazebo or a campaign, run
-  `pgrep -af "ros2 launch|ign gazebo|run_visibility_campaign"`. Do not start a second run.
+  `pgrep -af "ros2 launch|ign gazebo|campaign_runner"`. Do not start a second run.
 
 ## One version of everything
 

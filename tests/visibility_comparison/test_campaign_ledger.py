@@ -5,7 +5,7 @@ import json
 import pytest
 
 ROOT=Path(__file__).resolve().parents[2]
-spec=importlib.util.spec_from_file_location('ledger_campaign',ROOT/'scripts/visibility_comparison/run_visibility_campaign.py')
+spec=importlib.util.spec_from_file_location('ledger_campaign',ROOT/'pipeline/campaign_runner.py')
 campaign=importlib.util.module_from_spec(spec);spec.loader.exec_module(campaign)
 
 def test_failed_replacement_preserves_completed_runs(tmp_path,monkeypatch):

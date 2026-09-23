@@ -8,7 +8,7 @@ It went unnoticed because the path is not a word like TODO or HANDOFF; it looks 
 An absolute path into /tmp, a home directory, or a session scratchpad means the artifact
 is not reproducible from the repository, which is the one property every input to a result
 has to have. Write outputs under `logs/`, read inputs from `logs/` or the repo, and locate
-the root with `scripts/shared/paths.py: repo_root()`.
+the root with `figures/paths.py: repo_root()`.
 """
 from __future__ import annotations
 

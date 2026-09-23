@@ -33,7 +33,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import matplotlib.image as mpimg  # noqa: E402
 import numpy as np  # noqa: E402
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'scripts' / 'shared'))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from paths import repo_root  # noqa: E402
 
 REPO = repo_root()

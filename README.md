@@ -24,7 +24,7 @@ recoverable from Git history and the dated cold archive, but they are not thesis
 - `pipeline/`: current locks and detector/dataset provenance.
 - `world/`: locked warehouse geometry.
 - `figures/`: thesis-facing figures.
-- `scripts/visibility_comparison/run_visibility_campaign.py`: campaign runner.
+- `pipeline/campaign_runner.py`: campaign runner.
 - `tests/`: tests for retained thesis code.
 
 Run tests from the repository root:
@@ -36,6 +36,6 @@ python3 -m pytest -q
 Before starting Gazebo or a campaign, verify that no other run is active:
 
 ```bash
-pgrep -af "ros2 launch|ign gazebo|run_visibility_campaign"
+pgrep -af "ros2 launch|ign gazebo|campaign_runner"
 ```
 
