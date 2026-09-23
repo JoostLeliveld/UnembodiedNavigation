@@ -35,7 +35,8 @@ GATE = "config/sensor_gate.yaml"
 
 def repoint(cfg: dict, detector: str) -> dict:
     cfg["yolo_model"] = detector
-    cfg["manager_sensor_gate_config_path"] = GATE
+    if cfg["manager_sensor_gate_config_path"] != GATE:
+        raise RuntimeError("template does not use the fitted sensor gate")
     for condition in cfg["conditions"].values():
         runtime = Path(condition["manager_visibility_sensor_model_path"])
         if runtime.parent != OLD_RUNTIME:
@@ -72,14 +73,6 @@ def main() -> int:
 
     execution = yaml.safe_load((HERE / "execution_template.yaml").read_text())
     repoint(execution, args.detector)
-    # Collisions end a run through the physical /world_contacts channel only. The stage-10
-    # template still asks for termination on ground-truth geometry, which the experiment
-    # logger now refuses because it leaks ground truth into the experiment.
-    execution["terminate_on_geom_collision"] = False
-    # The runtime gate must be the one the covariance was fitted under (amendment
-    # 2026-09-23: gate v3, no edge or size check).
-    for task in execution["tasks"].values():
-        task.pop("preselected_routes", None)
     for seed in SEEDS:
         per_seed = yaml.safe_load(yaml.safe_dump(execution))
         per_seed["study_title"] = f"v8 five-task camera-dropout campaign, seed {seed}"

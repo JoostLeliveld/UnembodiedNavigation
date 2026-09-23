@@ -72,7 +72,7 @@ manager_fusion_rule: independent
 manager_camera_ids: camera_A,camera_B,camera_C,camera_D,camera_E
 manager_covariance_profile: commissioned_visibility_r
 manager_observation_model: visibility_patch
-manager_sensor_gate_config_path: config/commissioning_sensor_gate_v2.yaml
+manager_sensor_gate_config_path: config/sensor_gate.yaml
 manager_require_gp_artifacts: false
 manager_min_spatial_trust: 0.001
 manager_min_association_confidence: 0.25
@@ -163,7 +163,7 @@ nogo_warning_band: 0.05
 nogo_logbarrier_eps: 0.05
 nogo_weight: 40.0
 use_belief_nogo_cost: true
-terminate_on_geom_collision: true
+terminate_on_geom_collision: false
 use_diagnostic_odom_localization: false
 use_odom_for_predict: true
 odom_topic: /odom_noisy
