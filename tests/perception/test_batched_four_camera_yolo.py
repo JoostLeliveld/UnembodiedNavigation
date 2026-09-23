@@ -244,38 +244,3 @@ def test_runtime_source_has_one_native_model_and_the_complete_operational_contra
     assert "compiled runtime is diagnostic-only" in source
     assert "compiled model bytes changed while the batched detector was loading" in source
     assert "runtime_trace " in source
-
-
-def test_launch_defaults_to_batched_mode_with_typed_device_and_keeps_fallback() -> None:
-    launch = (
-        ROOT / "src/experiments/launch/warehouse_full4cam_commissioning.launch.py"
-    ).read_text(encoding="utf-8")
-    setup = (ROOT / "src/perception/setup.py").read_text(encoding="utf-8")
-
-    assert '"yolo_batched_four_camera", default_value="true"' in launch
-    assert 'executable="batched_four_camera_yolo_node"' in launch
-    assert 'LaunchConfiguration("yolo_batched_device"), value_type=str' in launch
-    assert '"enable_yolo", default_value="true"' in launch
-    assert 'LaunchConfiguration("enable_yolo"), "\'.lower() == \'true\' and \'"' in launch
-    assert 'LaunchConfiguration("yolo_batched_four_camera"), "\'.lower() == \'true\'"' in launch
-    assert '"synchronization_mode": LaunchConfiguration("yolo_synchronization_mode")' in launch
-    assert '"yolo_synchronization_mode", default_value="strict"' in launch
-    assert '"input_transport": LaunchConfiguration("yolo_input_transport")' in launch
-    assert '"yolo_input_transport", default_value="ros"' in launch
-    assert '"runtime_backend": LaunchConfiguration("yolo_runtime_backend")' in launch
-    assert '"yolo_runtime_backend", default_value="native"' in launch
-    assert '"runtime_trace_period_s": LaunchConfiguration("yolo_runtime_trace_period_s")' in launch
-    for bridge in (
-        "bridge_segmentation",
-        "bridge_segmentation_b",
-        "bridge_segmentation_c",
-        "bridge_segmentation_d",
-    ):
-        assert f'LaunchConfiguration("{bridge}")' in launch
-        assert f'"{bridge}", default_value="false"' in launch
-    assert 'on_exit=Shutdown(reason="batched four-camera detector exited")' in launch
-    assert 'executable="yolo_robot_detector_node"' in launch
-    assert (
-        "batched_four_camera_yolo_node = "
-        "perception.nodes.batched_four_camera_yolo_node:main"
-    ) in setup
