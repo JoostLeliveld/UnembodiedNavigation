@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate the sealed recapture-v5 final-audit partition without fitting."""
+"""Evaluate the sealed final-audit partition once, without fitting: correction, R0/R1/R2 and R_proj."""
 from __future__ import annotations
 
 import argparse

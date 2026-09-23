@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Freeze the v8 final-audit protocol after the refit.
+"""Freeze the final-audit protocol after the refit: every locked input by path and hash.
 
-Copies the v5 protocol and replaces every locked input with the v8 uniform artifacts. The
-audit population is the v5 final_audit set, unchanged. The D_dev evaluation manifest is locked too, because it carries the
-R_proj sigma_px fitted on D_R. Writing this file is the last step before final_audit is
-opened, so it refuses to run while any locked input is missing.
+The audit population is the final_audit role of the dataset lock (the v5 audit set). The
+D_dev evaluation manifest is locked too, because it carries the R_proj sigma_px fitted on
+D_R. Writing this file is the last step before final_audit is opened; it refuses to run
+while any locked input is missing and never overwrites an existing protocol.
 
     python3 pipeline/audit_protocol.py
 """
@@ -15,7 +15,6 @@ import json
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-HERE = REPO / "pipeline"
 V8 = "logs/thesis/fits"
 LOCK = "pipeline/dataset_lock.json"
 
@@ -25,7 +24,16 @@ def sha(rel: str) -> str:
 
 
 def main() -> int:
-    protocol = json.loads((HERE / "final_audit_protocol_template.json").read_text())
+    protocol = {
+        "schema": "thesis_reference_final_audit_protocol.v1",
+        "authorized_role": "final_audit",
+        "method_authority": "docs/METHOD.md",
+        "prohibitions": [
+            "No fitting, calibration, threshold selection or model selection uses final_audit.",
+            "Every reported aggregate uses complete physical position as its independent unit.",
+            "The audit is run once against the frozen detector, gate, correction, covariance and planning artifacts.",
+        ],
+    }
     lock = json.loads((REPO / LOCK).read_text())
     expected = lock["opportunity_accounting"]["expected_final_audit_opportunities"]
     protocol["population"] = {
@@ -49,9 +57,9 @@ def main() -> int:
     }
     protocol["locked_inputs"] = {key: {"path": rel, "sha256": sha(rel)}
                                  for key, rel in inputs.items()}
-    protocol["amendment"] = "docs/METHOD.md, Amendment 2026-09-23"
+    protocol["amendment"] = "docs/METHOD.md, Amendment 2026-09-23/24"
     protocol["status"] = "frozen_before_final_audit_access"
-    out = HERE / "reference_final_audit_protocol_v8_uniform.json"
+    out = REPO / "logs/thesis/final_audit_protocol.json"
     if out.exists():
         raise FileExistsError(out)
     out.write_text(json.dumps(protocol, indent=2) + "\n")
