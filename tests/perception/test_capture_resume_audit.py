@@ -12,7 +12,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
-    'resume_audit', ROOT / 'experiments/camera_observation_characterization/audit_capture_resume.py'
+    'resume_audit', ROOT / 'pipeline/capture/audit_capture_resume.py'
 )
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
@@ -24,8 +24,8 @@ def capture(tmp_path, monkeypatch):
     repo = tmp_path / 'repo'
     source_paths = [repo / name for name in (
         'poses.json', 'world.sdf', 'profiles.yaml',
-        'experiments/camera_observation_characterization/capture_bbox_grid.py',
-        'scripts/perception/capture_yolo_dataset.py',
+        'pipeline/capture/capture_positions.py',
+        'pipeline/capture/capture_yolo_dataset.py',
     )]
     for path in source_paths:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -84,7 +84,7 @@ def test_refuses_unsafe_resume(capture, defect):
     elif defect == 'corrupt_image':
         (p / 'image.png').write_bytes(b'broken')
     elif defect == 'changed_code':
-        (repo / 'scripts/perception/capture_yolo_dataset.py').write_text('changed')
+        (repo / 'pipeline/capture/capture_yolo_dataset.py').write_text('changed')
     write_rows(p, rows)
     assert not MODULE.audit(p, repo=repo)['ready']
 

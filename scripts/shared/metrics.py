@@ -15,7 +15,7 @@ RULES
 - Existing finished studies keep their inline copies untouched (their numbers
   are published in VALIDATION/RESULTS docs; do not silently change them).
 - This file is only about scoring. For LOADING a fusion-study run, the one
-  sanctioned reader is experiments/fusion_on_fixed_routes/aligned.py; for
+  sanctioned reader is pipeline/aligned.py; for
   per-timestep column safety on a campaign CSV, scripts/geometry_visibility/
   campaign_metrics.py (diagnostic scope: no time alignment, no deduplication).
 """

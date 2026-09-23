@@ -6,4 +6,4 @@ the box bottom centre; geometric projection and commissioned correction happen d
 
 The detector does not estimate heading and does not construct a robot hull. Detector
 training and dataset provenance live under `scripts/perception/` and the locked Stage-04/05
-manifests under `experiments/thesis_pipeline_lock/`.
+manifests under `pipeline/`.

@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 
 STUDY = (Path(__file__).resolve().parents[2]
-         / "experiments" / "fusion_on_fixed_routes")
+         / "pipeline")
 sys.path.insert(0, str(STUDY))
 import aligned as A  # noqa: E402
 

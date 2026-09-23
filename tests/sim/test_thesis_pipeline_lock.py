@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_current_thesis_pipeline_locked_prefix_is_reproducible():
     result = subprocess.run(
-        [sys.executable, "experiments/thesis_pipeline_lock/verify_pipeline_lock.py"],
+        [sys.executable, "pipeline/verify_pipeline_lock.py"],
         cwd=ROOT,
         text=True,
         capture_output=True,
@@ -20,14 +20,14 @@ def test_current_thesis_pipeline_locked_prefix_is_reproducible():
 
 def test_stage09_v5_uses_one_availability_independent_feasible_set():
     protocol_path = (
-        ROOT / "experiments/thesis_pipeline_lock/stage09_route_selection_protocol_v5.json"
+        ROOT / "pipeline/stage09_route_selection_protocol_v5.json"
     )
     protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
     assert "availability_support_gate" not in protocol
     assert "No q threshold" in protocol["availability_role"]
     assert "one common feasible subset" in protocol["selection_rule"]
 
-    selector_path = ROOT / "experiments/thesis_pipeline_lock/select_stage09_routes_v5.py"
+    selector_path = ROOT / "pipeline/select_stage09_routes_v5.py"
     selector = selector_path.read_bytes()
     assert hashlib.sha256(selector).hexdigest() == protocol["selector_sha256"]
     source = selector.decode("utf-8")

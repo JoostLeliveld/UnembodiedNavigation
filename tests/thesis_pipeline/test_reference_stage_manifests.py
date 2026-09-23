@@ -11,7 +11,7 @@ def digest(path: Path) -> str:
 
 
 def test_locked_reference_stage_manifests_are_hash_complete():
-    pipeline = json.loads((REPO / "experiments/thesis_pipeline_lock/pipeline_lock.json").read_text())
+    pipeline = json.loads((REPO / "pipeline/pipeline_lock.json").read_text())
     for stage_id in ("06_detector_gate", "07_correction_and_covariance", "08_planning_information"):
         stage = next(item for item in pipeline["stages"] if item["id"] == stage_id)
         assert stage["status"] == "locked"
@@ -26,10 +26,10 @@ def test_locked_reference_stage_manifests_are_hash_complete():
 
 def test_rproj_remains_evaluation_only():
     stage07 = json.loads((
-        REPO / "experiments/thesis_pipeline_lock/stage07_reference_models_manifest.json"
+        REPO / "pipeline/stage07_reference_models_manifest.json"
     ).read_text())
     stage08 = json.loads((
-        REPO / "experiments/thesis_pipeline_lock/stage08_reference_planning_manifest.json"
+        REPO / "pipeline/stage08_reference_planning_manifest.json"
     ).read_text())
     evaluation = json.loads((
         REPO / "logs/thesis_final_pipeline_v1/recapture_v5/ddev_evaluation/manifest.json"
@@ -41,7 +41,7 @@ def test_rproj_remains_evaluation_only():
 
 
 def test_stage09_is_pending_on_rate_qualification_and_audit_is_sealed():
-    pipeline = json.loads((REPO / "experiments/thesis_pipeline_lock/pipeline_lock.json").read_text())
+    pipeline = json.loads((REPO / "pipeline/pipeline_lock.json").read_text())
     stage09 = next(item for item in pipeline["stages"] if item["id"] == "09_navigation_campaign")
     assert stage09["status"] == "pending"
     assert "rate qualification failed" in stage09["blocking_reason"]

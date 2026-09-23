@@ -23,7 +23,7 @@ from unav_common.rectangular_footprint import RectangularFootprint, constant_twi
 ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = ROOT / 'src/experiments/config/world_profiles.yaml'
 WORLD_PATH = ROOT / 'src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf'
-TASK_PATH = ROOT / 'experiments/thesis_pipeline_lock/stage09_navigation_tasks.yaml'
+TASK_PATH = ROOT / 'pipeline/tasks.yaml'
 
 
 @pytest.fixture(scope='module')

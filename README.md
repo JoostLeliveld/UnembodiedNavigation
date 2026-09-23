@@ -8,7 +8,7 @@ Start with:
 - `PLAN.md` for the current execution order;
 - `docs/COMMISSIONED_SENSOR_MODEL_CONTRACT.md` for the sensor-model contract;
 - `experiments/reference_controlled_commissioning_v1/PROTOCOL.md` for commissioning;
-- `experiments/thesis_pipeline_lock/pipeline_lock.json` for current evidence status.
+- `pipeline/pipeline_lock.json` for current evidence status.
 
 The current observation starts at the raw YOLO bounding-box bottom centre. Visual-hull
 observations are not part of the thesis. Availability is the position-only field `q_i(p)`.
@@ -21,9 +21,9 @@ recoverable from Git history and the dated cold archive, but they are not thesis
 
 - `src/`: runtime ROS packages.
 - `experiments/reference_controlled_commissioning_v1/`: current commissioning and model selection.
-- `experiments/thesis_pipeline_lock/`: current locks and detector/dataset provenance.
-- `experiments/warehouse_v2_sketches/`: locked warehouse geometry.
-- `experiments/deck_figures/`: thesis-facing figures.
+- `pipeline/`: current locks and detector/dataset provenance.
+- `world/`: locked warehouse geometry.
+- `figures/`: thesis-facing figures.
 - `scripts/visibility_comparison/run_visibility_campaign.py`: campaign runner.
 - `tests/`: tests for retained thesis code.
 

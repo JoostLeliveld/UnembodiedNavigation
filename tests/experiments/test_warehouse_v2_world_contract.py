@@ -10,7 +10,7 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
-HERE = ROOT / "experiments/warehouse_v2_sketches"
+HERE = ROOT / "world"
 WORLD_DIR = ROOT / "src/sim/gazebo_worlds/worlds"
 
 

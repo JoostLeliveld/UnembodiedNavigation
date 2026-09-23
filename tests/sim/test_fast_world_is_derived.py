@@ -18,7 +18,7 @@ WORLDS = ROOT / 'src' / 'sim' / 'gazebo_worlds' / 'worlds'
 CANONICAL = WORLDS / 'warehouse_v2.world.sdf'
 FAST = WORLDS / 'warehouse_v2_fast.world.sdf'
 
-sys.path.insert(0, str(ROOT / 'experiments' / 'warehouse_v2_sketches'))
+sys.path.insert(0, str(ROOT / 'world'))
 
 
 def _core(text: str) -> str:
@@ -33,7 +33,7 @@ def test_fast_world_differs_from_canonical_only_in_contact_rate():
     fast = FAST.read_text(encoding='utf-8')
     assert _core(fast) == _core(canonical), (
         'the fast world has diverged from the canonical geometry; regenerate it '
-        'with experiments/warehouse_v2_sketches/derive_fast_world.py'
+        'with world/derive_fast_world.py'
     )
 
 

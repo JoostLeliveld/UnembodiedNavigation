@@ -13,18 +13,18 @@ import numpy as np
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-# `experiments/warehouse_v2_sketches/coverage.py` collides with the installed `coverage`
+# `world/coverage.py` collides with the installed `coverage`
 # package (pytest's own coverage tool). Site-packages wins on a bare import, so the local
 # directory has to come FIRST on sys.path and any already-imported copy has to be dropped.
 for rel in ('experiments/camera_observation_characterization',
-            'src/unav_common', 'src/experiments', 'experiments/warehouse_v2_sketches'):
+            'src/unav_common', 'src/experiments', 'world'):
     value = str((REPO / rel).resolve())
     while value in sys.path:
         sys.path.remove(value)
     sys.path.insert(0, value)
 sys.modules.pop('coverage', None)
 
-_sketches = str((REPO / 'experiments/warehouse_v2_sketches/coverage.py').resolve())
+_sketches = str((REPO / 'world/coverage.py').resolve())
 if not Path(_sketches).is_file():
     pytest.skip('warehouse_v2_sketches coverage engine not present', allow_module_level=True)
 

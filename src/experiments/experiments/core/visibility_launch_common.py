@@ -78,7 +78,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     # there is a stated reason otherwise. The previous 3.0 had no derivation --
     # it entered under a commit called "Launch updates" -- and route choice is a
     # direct function of it, so it was an undeclared tuning knob deciding the
-    # result. Reset 2026-09-18; see docs/PLANNER_LOCK.md.
+    # result. Reset 2026-09-18; see docs/PLANNER.md.
     'risk_weight_obs': '1.0',
     'ambiguity_weight': '1.0',
     'goal_sigma_uv': '2.0',
@@ -90,7 +90,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'camera_network_objective': 'legacy_pixel_chart',
     # EFE preference precision. Set to the declared arrival tolerance
     # (goal_success_radius). At 0.15 the risk term is ~5x stronger and the
-    # objective collapses toward shortest path. See docs/PLANNER_LOCK.md.
+    # objective collapses toward shortest path. See docs/PLANNER.md.
     'network_goal_std_m': '0.10',
     # Goal-prior anneal start; see base_planner. -1 disables.
     'network_goal_std_start_m': '5.0',
@@ -128,7 +128,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     # encoder-noise specification and not fitted to data. Locked to the values of
     # the camera-ready IWAI paper so the thesis and the prior work grow covariance
     # identically. Do not change without recording the reason in
-    # docs/PROCESS_NOISE_LOCK.md.
+    # docs/PROCESS_NOISE.md.
     'process_noise_xy': '0.02',
     'process_noise_theta': '0.08',
     'obs_noise_uv': '2.0',
@@ -269,7 +269,7 @@ _COMMAND_NOISE_CORRELATION_ALPHA: float = 0.85
 # which sits inside the 0.50-2.30% band published for CALIBRATED wheel odometry
 # on good surfaces. A warehouse AMR on smooth concrete with payload shifts and
 # dust belongs above that band, so these are scaled to target ~4% of distance.
-# See docs/PROCESS_NOISE_LOCK.md for the paired process-noise decision.
+# See docs/PROCESS_NOISE.md for the paired process-noise decision.
 _ENCODER_NOISE_LINEAR_SLIP_MEAN: float = 0.05
 _ENCODER_NOISE_LINEAR_SLIP_STD: float = 0.125
 _ENCODER_NOISE_ANGULAR_SLIP_MEAN: float = 0.00

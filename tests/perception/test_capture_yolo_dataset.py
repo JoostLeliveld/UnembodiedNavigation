@@ -10,7 +10,7 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT_DIR = REPO_ROOT / 'scripts' / 'perception'
+SCRIPT_DIR = REPO_ROOT / 'pipeline' / 'capture'
 SRC_UNAV = REPO_ROOT / 'src' / 'unav_common'
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
@@ -256,7 +256,7 @@ def test_far_range_mask_gate_preserves_small_object_examples_explicitly() -> Non
 
 
 def test_detector_training_route_exclusion_includes_every_lateral_variant() -> None:
-    study = REPO_ROOT / 'experiments/multicamera_commissioning_bigwarehouse/config/study.yaml'
+    study = REPO_ROOT / 'pipeline/capture/multicamera_study.yaml'
     segments = _route_exclusion_segments(
         study,
         route_names=['south_to_north_handover'],
@@ -321,7 +321,7 @@ def test_capture_inventory_fingerprints_world_models_launch_and_robot_assets() -
         world_profiles_path=REPO_ROOT / 'src/experiments/config/world_profiles.yaml',
         route_exclusion_config_path=(
             REPO_ROOT
-            / 'experiments/multicamera_commissioning_bigwarehouse/config/study.yaml'
+            / 'pipeline/capture/multicamera_study.yaml'
         ),
     )
 

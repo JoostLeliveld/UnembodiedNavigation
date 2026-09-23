@@ -13,14 +13,14 @@ or the newest-looking run.
 
 Read these sources in order:
 
-1. `docs/THESIS_METHOD_CANONICAL_LOCK.md` — authoritative method, two-track evidence plan,
+1. `docs/METHOD.md` — authoritative method, two-track evidence plan,
    superseded alternatives, and controlled implementation closures.
 2. The final campaign configuration and its signed/hashed manifest, once created.
-3. `experiments/thesis_pipeline_lock/pipeline_lock.json` — evidence status only; its method
+3. `pipeline/pipeline_lock.json` — evidence status only; its method
    references and old stage files are non-authoritative until rebuilt against the canonical lock.
 4. `docs/localization_metrics.md` and `docs/localization_metrics_registry.json` — admissible results.
 5. `docs/COMMISSIONED_SENSOR_MODEL_CONTRACT.md` and
-   `experiments/thesis_pipeline_lock/thesis_contribution_lock.json` — superseded development
+   `pipeline/thesis_contribution_lock.json` — superseded development
    contracts retained temporarily as history; never use them to override the canonical lock.
 
 If another document conflicts with these sources, it is wrong for the current thesis.

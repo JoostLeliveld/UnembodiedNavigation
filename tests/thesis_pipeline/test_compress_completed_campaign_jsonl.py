@@ -5,7 +5,7 @@ import subprocess
 
 
 REPO = Path(__file__).resolve().parents[2]
-SCRIPT = REPO / "experiments/thesis_pipeline_lock/compress_completed_campaign_jsonl.py"
+SCRIPT = REPO / "pipeline/compress_completed_campaign_jsonl.py"
 
 
 def load_module():

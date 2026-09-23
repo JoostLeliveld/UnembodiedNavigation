@@ -1,0 +1,138 @@
+{
+  "artifact_policy": {
+    "method_authority": "docs/METHOD.md",
+    "status_note": "Evidence status only. Since 2026-09-23 the current dataset and fits are logs/thesis_final_pipeline_v1/recapture_v8_uniform (see its README and the canonical-lock amendment of 2026-09-23). recapture_v5 frames remain live inputs; recapture_v5 fits, final_bayesian, planning_precision and stage10_offline_routes are superseded Track-A history. Legacy unreferenced stage files are non-authoritative history.",
+    "current_evidence_rule": "An artifact is current thesis evidence only when an active locked stage manifest references it by path and SHA-256.",
+    "historical_rule": "Material not referenced by this lock is outside the working repository and must not be used for the thesis.",
+    "planned_current_root": "logs/thesis_final_pipeline_v1",
+    "safe_deletion_rule": "Superseded material is retained only in Git history or the dated cold archive, never beside current thesis sources."
+  },
+  "superseded_contribution_lock_history": {
+    "lock_id": "THESIS-STORY-COMMISSIONED-SENSOR-MODEL-V5",
+    "path": "pipeline/thesis_contribution_lock.json",
+    "sha256": "e19f1a5ef6dfecc1b8c7ce944ccf0acdfc8f920fdc0ed23984e766e03886faf0",
+    "paper_fallback": "../papers/Thesis/THESIS_STORY_LOCK.md",
+    "paper_fallback_sha256": "2dede9db0c2ca24abf02db0ba37ed5b344ab8dd57aad87548bc98d1b5489b009",
+    "status": "superseded_non_authoritative_history"
+  },
+  "created_at": "2026-09-09",
+  "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
+  "schema_version": 1,
+  "stages": [
+    {
+      "id": "01_warehouse",
+      "lock_id": "WHV2-GEOMETRY-V2",
+      "manifest": "world/world_freeze_manifest.json",
+      "manifest_sha256": "dd1c4e9d39ba432cb7150970f4357a25d4433a005be658b87c3743802cf75a7f",
+      "status": "locked"
+    },
+    {
+      "depends_on": [
+        "01_warehouse"
+      ],
+      "id": "02_robot_target",
+      "lock_id": "WAREHOUSE-AMR-BLUE-V1",
+      "manifest": "pipeline/capture/robot_target_manifest.json",
+      "manifest_sha256": "41dd40d8281d912a296c7a0006a1d4b0648b717afae29b5e432b98bfa8e05145",
+      "status": "locked"
+    },
+    {
+      "depends_on": [
+        "01_warehouse",
+        "02_robot_target"
+      ],
+      "id": "03_camera_capture_map",
+      "lock_id": "WHV2-CAMERA-CAPTURE-MAP-V3",
+      "manifest": "pipeline/capture/capture_map_manifest.json",
+      "manifest_sha256": "0e29a87f57bd4e02ca5d0ff8f73f81aa4d4a977243f9f9ff901f876eec9f50bf",
+      "status": "locked"
+    },
+    {
+      "depends_on": [
+        "03_camera_capture_map"
+      ],
+      "id": "04_labels_and_dataset",
+      "lock_id": "THESIS-YOLO-DATASET-V1",
+      "manifest": "pipeline/detector/dataset_manifest.json",
+      "manifest_sha256": "02c372f4509fdf4675c2cd6b29b4603c02ef41d5b049f2bf77879844e94babb2",
+      "status": "locked"
+    },
+    {
+      "depends_on": [
+        "04_labels_and_dataset"
+      ],
+      "id": "05_detector_training",
+      "lock_id": "THESIS-YOLO11N-960-V1",
+      "manifest": "pipeline/detector/detector_manifest.json",
+      "manifest_sha256": "778e11b2e0290add3b011aa531d01ae111bf5ebb91ae575177593edc2bd00c86",
+      "status": "locked"
+    },
+    {
+      "depends_on": [
+        "05_detector_training"
+      ],
+      "id": "06_detector_gate",
+      "lock_id": "THESIS-REFERENCE-GATE-RECAPTURE-V5",
+      "manifest": "pipeline/stage06_reference_gate_manifest.json",
+      "manifest_sha256": "54c9a31609f1c11b571cca35ddddf0ae07f240d68154a357d22d8a460465c5f2",
+      "status": "locked"
+    },
+    {
+      "depends_on": [
+        "06_detector_gate"
+      ],
+      "id": "07_correction_and_covariance",
+      "lock_id": "THESIS-CORRECTION-R012-RECAPTURE-V5",
+      "manifest": "pipeline/stage07_reference_models_manifest.json",
+      "manifest_sha256": "b9e30ca4bace826cf50d2aa63d63e2f519723f0b6bf6b5777d94fa92d4fd1378",
+      "status": "locked"
+    },
+    {
+      "depends_on": [
+        "06_detector_gate"
+      ],
+      "id": "08_planning_precision",
+      "implementation": "pipeline/planning_precision.py",
+      "lock_id": "THESIS-DIRECT-MATCHED-PLANNING-PRECISION-M0-M2-V1",
+      "manifest": "logs/thesis_final_pipeline_v1/planning_precision/manifest.json",
+      "manifest_sha256": "acc7d5c6d6f63bac549bfcf8dda589a0cf09984edb149f32a4c6e5cef6841f7a",
+      "status": "locked"
+    },
+    {
+      "depends_on": [
+        "07_correction_and_covariance",
+        "08_planning_precision"
+      ],
+      "id": "09_navigation_campaign",
+      "campaign_builder": "pipeline/build_stage09_camera_removal_campaign.py",
+      "lock_id": null,
+      "manifest": null,
+      "manifest_sha256": null,
+      "blocking_reason": null,
+      "final_audit_accessed": false,
+      "status": "pending"
+    },
+    {
+      "depends_on": [
+        "09_navigation_campaign"
+      ],
+      "id": "10_analysis_results",
+      "implementation": "pipeline/analyze_campaign.py",
+      "lock_id": null,
+      "manifest": null,
+      "manifest_sha256": null,
+      "status": "pending"
+    },
+    {
+      "depends_on": [
+        "10_analysis_results"
+      ],
+      "id": "11_thesis_outputs",
+      "lock_id": null,
+      "manifest": null,
+      "manifest_sha256": null,
+      "status": "pending"
+    }
+  ],
+  "status": "in_progress"
+}

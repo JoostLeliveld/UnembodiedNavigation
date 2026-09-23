@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location('audit11_aligned', REPO/'experiments/fusion_on_fixed_routes/aligned.py')
+spec = importlib.util.spec_from_file_location('audit11_aligned', REPO/'pipeline/aligned.py')
 A = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(A)
 

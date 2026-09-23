@@ -151,13 +151,13 @@ class UnicyclePlannerBase:
         network_goal_std_start_m=5.0,
         # Kouw (IWAI 2024) Lemma 1 ambiguity under the first-order extended
         # transform, evaluated on the availability-weighted commissioned R.
-        # This is the thesis method; see docs/PLANNER_LOCK.md.
+        # This is the thesis method; see docs/PLANNER.md.
         kouw_et1_ambiguity=True,
         # Charge risk once on the terminal belief rather than summing it per
         # step. Integrated risk is a length proxy and buries the visibility
         # signal; goal arrival is already a hard constraint, so risk does not
         # have to pull the robot toward the goal. See CasadiEfeParams and
-        # docs/PLANNER_LOCK.md.
+        # docs/PLANNER.md.
         terminal_risk_only=False,
         network_goal_std_m=0.10,
         camera_network_updates_per_step=1,
@@ -200,7 +200,7 @@ class UnicyclePlannerBase:
         # hierarchical local tracker passes False: it builds a planner object
         # for no-go geometry and warm-start seeds but never solves it, so the
         # locked constants do not apply to it. Defaults True so a caller that
-        # forgets is still checked. See docs/PLANNER_LOCK.md.
+        # forgets is still checked. See docs/PLANNER.md.
         enforce_planner_lock=True,
     ):
         self.enforce_planner_lock = bool(enforce_planner_lock)
@@ -216,11 +216,11 @@ class UnicyclePlannerBase:
         # unicycle Q_d closed form scales these with speed, heading and dt, so
         # they are the only two free process-noise numbers in the planner. A
         # different value is a method change and must be declared, not inherited
-        # silently from a stale config. See docs/PROCESS_NOISE_LOCK.md.
+        # silently from a stale config. See docs/PROCESS_NOISE.md.
         _LOCKED_PROCESS_NOISE_XY = 0.02
         _LOCKED_PROCESS_NOISE_THETA = 0.08
         # Every value below was established by measurement on 2026-09-14 and is
-        # recorded with its derivation in docs/PLANNER_LOCK.md. A run that uses
+        # recorded with its derivation in docs/PLANNER.md. A run that uses
         # any superseded value silently produces a DIFFERENT planner, which has
         # already cost one 80-run campaign. Warn loudly rather than let it pass.
         # Only the planner that actually SOLVES the locked objective is checked.
@@ -249,33 +249,33 @@ class UnicyclePlannerBase:
             if abs(float(_value) - _locked) > 1e-9:
                 warnings.warn(
                     f'{_name}={float(_value)} overrides the locked value {_locked}; '
-                    'see docs/PLANNER_LOCK.md',
+                    'see docs/PLANNER.md',
                     RuntimeWarning, stacklevel=2)
         if _enforce_lock and not bool(use_belief_nogo_cost):
             warnings.warn(
                 'use_belief_nogo_cost is off: the clearance term will not see '
-                'predicted belief growth. See docs/PLANNER_LOCK.md',
+                'predicted belief growth. See docs/PLANNER.md',
                 RuntimeWarning, stacklevel=2)
         if _enforce_lock and not bool(kouw_et1_ambiguity):
             warnings.warn(
                 'kouw_et1_ambiguity is off: the ambiguity term falls back to a '
                 'posterior-entropy sum that charges for route length. '
-                'See docs/PLANNER_LOCK.md',
+                'See docs/PLANNER.md',
                 RuntimeWarning, stacklevel=2)
         if _enforce_lock and bool(terminal_risk_only):
             warnings.warn(
                 'terminal_risk_only is on: the locked method uses normalized '
-                'running risk. See docs/PLANNER_LOCK.md',
+                'running risk. See docs/PLANNER.md',
                 RuntimeWarning, stacklevel=2)
         if _enforce_lock and abs(float(process_noise_xy) - _LOCKED_PROCESS_NOISE_XY) > 1e-9:
             warnings.warn(
                 f'process_noise_xy={float(process_noise_xy)} overrides the locked '
-                f'value {_LOCKED_PROCESS_NOISE_XY}; see docs/PROCESS_NOISE_LOCK.md',
+                f'value {_LOCKED_PROCESS_NOISE_XY}; see docs/PROCESS_NOISE.md',
                 RuntimeWarning, stacklevel=2)
         if _enforce_lock and abs(float(process_noise_theta) - _LOCKED_PROCESS_NOISE_THETA) > 1e-9:
             warnings.warn(
                 f'process_noise_theta={float(process_noise_theta)} overrides the locked '
-                f'value {_LOCKED_PROCESS_NOISE_THETA}; see docs/PROCESS_NOISE_LOCK.md',
+                f'value {_LOCKED_PROCESS_NOISE_THETA}; see docs/PROCESS_NOISE.md',
                 RuntimeWarning, stacklevel=2)
         self.process_noise_xy = float(process_noise_xy)
         self.process_noise_theta = float(process_noise_theta)

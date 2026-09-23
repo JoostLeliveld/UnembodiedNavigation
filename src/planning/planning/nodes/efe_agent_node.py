@@ -609,7 +609,7 @@ class EfeAgentNode(UnicyclePlannerNode):
                 # Never solved, so the locked objective's constants do not apply
                 # to it. Without this the lock warns on every run about a local
                 # setting that is off by design, which teaches the reader to
-                # ignore the warning that matters. See docs/PLANNER_LOCK.md.
+                # ignore the warning that matters. See docs/PLANNER.md.
                 enforce_planner_lock=False,
             )
             if self.global_planner_mode != 'preselected_route':

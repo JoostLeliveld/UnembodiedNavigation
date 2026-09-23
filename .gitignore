@@ -55,8 +55,8 @@ paper_summary.txt
 figures/_unmapped/filter_notebook/
 figures/_unmapped/all_aisle_coverage/
 figures/EXP-DYN-ORACLE/
-experiments/warehouse_v2_sketches/frames/
-experiments/warehouse_v2_sketches/figures/
+world/frames/
+world/figures/
 experiments/usable_observation/supervisor_comparison/10_monocular_depth_results/*/predictions/
 
 # Third-party Fuel assets: large, redistributable under their own licences,

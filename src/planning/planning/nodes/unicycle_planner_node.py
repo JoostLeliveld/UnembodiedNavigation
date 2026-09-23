@@ -120,7 +120,7 @@ class UnicyclePlannerNode(Node):
 
         # Process/observation noise
         # Locked to the camera-ready IWAI actuation-noise PSDs; see
-        # docs/PROCESS_NOISE_LOCK.md before changing either value.
+        # docs/PROCESS_NOISE.md before changing either value.
         _declare_if_not('process_noise_xy', 0.02)
         _declare_if_not('process_noise_theta', 0.08)
         # Frozen process-model option. Campaign manifests must state its value.

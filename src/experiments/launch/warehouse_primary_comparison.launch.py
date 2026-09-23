@@ -24,7 +24,7 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('camera_network_objective', default_value='legacy_pixel_chart'),
         DeclareLaunchArgument('network_goal_std_m', default_value='0.10'),
         DeclareLaunchArgument('kouw_et1_ambiguity', default_value='true',
-                              description='Kouw ET1 ambiguity on the commissioned R; see docs/PLANNER_LOCK.md'),
+                              description='Kouw ET1 ambiguity on the commissioned R; see docs/PLANNER.md'),
         DeclareLaunchArgument('network_goal_std_start_m', default_value='-1.0',
                               description='Loose goal-prior sigma at rollout start; <=0 keeps the constant prior'),
         DeclareLaunchArgument('camera_network_updates_per_step', default_value='1'),

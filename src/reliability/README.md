@@ -18,7 +18,7 @@ No second planning field, availability model, opportunity outcome, detector miss
 refusal, or NIS result modifies that precision. Weak spatial support affects M2 through its
 broad covariance prior, so unsupported regions contribute little precision. Visual-hull
 observations, hull-derived correction inputs, belief-dependent admission, and process-noise
-selection are outside the thesis method. See `docs/THESIS_METHOD_CANONICAL_LOCK.md` for the
+selection are outside the thesis method. See `docs/METHOD.md` for the
 normative definitions.
 
 Current runtime entry points are `reliability/nodes/camera_manager_node.py`,

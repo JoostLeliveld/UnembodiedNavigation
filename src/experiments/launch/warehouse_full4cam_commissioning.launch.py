@@ -5,7 +5,7 @@ Cameras A–D are the wall-mounted
 ``external_camera``/``_b``/``_c``/``_d`` models; their bridges come from the
 generic simulator launcher (``bridge_camera_b/c/d``), so no study-owned bridge
 is needed. Study routes/spawns are defined in
-``experiments/multicamera_commissioning_bigwarehouse/config/study.yaml`` and
+``pipeline/capture/multicamera_study.yaml`` and
 must be (re)designed for this world's geometry before collection.
 """
 

@@ -2,8 +2,8 @@
   "schema_version": 2,
   "current_as_of": "2026-09-14",
   "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
-  "pipeline_lock": "experiments/thesis_pipeline_lock/pipeline_lock.json",
-  "required_loader": "experiments/fusion_on_fixed_routes/aligned.py",
+  "pipeline_lock": "pipeline/pipeline_lock.json",
+  "required_loader": "pipeline/aligned.py",
   "required_runtime_evidence": [
     "run_manifest.json",
     "run_summary.json",

@@ -7,7 +7,7 @@ import pytest
 
 
 REPO = Path(__file__).resolve().parents[2]
-SCRIPT = REPO / 'experiments/thesis_pipeline_lock/analyze_stage09_navigation.py'
+SCRIPT = REPO / 'pipeline/analyze_campaign.py'
 
 
 def load_analysis_module():

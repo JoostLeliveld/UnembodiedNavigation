@@ -43,7 +43,7 @@ def test_stage08_export_round_trip(tmp_path):
     )
     subprocess.run([
         sys.executable,
-        str(REPO / 'experiments/thesis_pipeline_lock/run_stage08_planning_information.py'),
+        str(REPO / 'pipeline/run_stage08_planning_information.py'),
         '--opportunities', str(source),
         '--output', str(output),
         '--grid-step-m', '0.5',
@@ -62,7 +62,7 @@ def test_stage08_export_round_trip(tmp_path):
 def test_loader_accepts_position_level_cross_fitting_and_rejects_leakage(tmp_path):
     from importlib.util import module_from_spec, spec_from_file_location
 
-    script = REPO / 'experiments/thesis_pipeline_lock/run_stage08_planning_information.py'
+    script = REPO / 'pipeline/run_stage08_planning_information.py'
     spec = spec_from_file_location('stage08_direct_information', script)
     module = module_from_spec(spec)
     assert spec.loader is not None

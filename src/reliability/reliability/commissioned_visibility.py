@@ -11,7 +11,7 @@ from typing import Sequence
 import joblib
 import numpy as np
 import torch
-from torch import nn
+from reliability.visibility_residual_net import VisibilityPatchResidualNet
 
 
 GRID_SIZE = 16
@@ -38,29 +38,6 @@ def _read_verified(entry: dict, *, label: str) -> tuple[Path, bytes]:
     if _sha256_bytes(data) != str(entry.get("sha256", "")):
         raise ValueError(f"{label} hash differs from the commissioned manifest")
     return path, data
-
-
-class _VisibilityPatchResidualNet(nn.Module):
-    def __init__(self, feature_count: int) -> None:
-        super().__init__()
-        self.visibility = nn.Sequential(
-            nn.Conv2d(1, 8, 3, padding=1), nn.ReLU(),
-            nn.Conv2d(8, 16, 3, stride=2, padding=1), nn.ReLU(),
-            nn.Conv2d(16, 24, 3, stride=2, padding=1), nn.ReLU(),
-            nn.AdaptiveAvgPool2d((4, 4)), nn.Flatten(),
-        )
-        self.features = nn.Sequential(nn.Linear(feature_count, 32), nn.ReLU())
-        self.trunk = nn.Sequential(
-            nn.Linear(24 * 4 * 4 + 32, 96), nn.ReLU(), nn.Dropout(0.10),
-            nn.Linear(96, 48), nn.ReLU(),
-        )
-        self.residual = nn.Linear(48, 2)
-        self.gate = nn.Linear(48, 1)
-
-    def forward(self, grid, features, base):
-        encoded = torch.cat((self.visibility(grid), self.features(features)), dim=1)
-        hidden = self.trunk(encoded)
-        return base + torch.sigmoid(self.gate(hidden)) * self.residual(hidden)
 
 
 MEAN_MODEL_NAMES = ("box_mlp_visibility_residual", "M4_visibility_patch_residual")
@@ -137,7 +114,7 @@ class CommissionedVisibilitySensorModel:
         self.feature_sd = np.asarray(checkpoint["feature_sd"], dtype=np.float32)
         if self.feature_mean.shape != self.feature_sd.shape:
             raise ValueError("visibility-residual feature normalization shape mismatch")
-        self.patch_model = _VisibilityPatchResidualNet(len(self.feature_mean))
+        self.patch_model = VisibilityPatchResidualNet(len(self.feature_mean))
         self.patch_model.load_state_dict(checkpoint["state_dict"], strict=True)
         self.patch_model.eval()
 
@@ -387,7 +364,7 @@ class CommissionedVisibilitySensorModel:
                 torch.from_numpy(grid[None]),
                 torch.from_numpy(((features - self.feature_mean) / self.feature_sd)[None]),
                 torch.from_numpy(base[None]),
-            )[0].numpy()
+            )[0][0].numpy()  # (corrected, residual, gate) -> first row of corrected
         if prediction.shape != (2,) or not np.isfinite(prediction).all():
             raise ValueError("visibility-residual model produced an invalid correction")
         return prediction.astype(float)
