@@ -1,4 +1,0 @@
-tasks:
-  fusion_overlap_rich:
-    conditions: [P0]
-    seeds: [999]

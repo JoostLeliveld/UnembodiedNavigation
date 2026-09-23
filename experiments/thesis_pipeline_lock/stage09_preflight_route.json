@@ -1,7 +1,0 @@
-{
-  "schema": "thesis_stage09_preflight_route.v1",
-  "evidence_role": "non-evidence runtime wiring check only",
-  "task": "thesis09_south_to_north_central",
-  "selection": "straight centre-aisle route chosen from frozen driveable geometry, without detector, commissioning, audit, or navigation outcomes",
-  "polyline_canonical_json": "[[0.55,-7.5],[0.55,8.2]]"
-}

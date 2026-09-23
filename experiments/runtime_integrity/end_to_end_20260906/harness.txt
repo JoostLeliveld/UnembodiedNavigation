@@ -1,4 +1,0 @@
-{
-  "harness_errors": {},
-  "source_changes": []
-}

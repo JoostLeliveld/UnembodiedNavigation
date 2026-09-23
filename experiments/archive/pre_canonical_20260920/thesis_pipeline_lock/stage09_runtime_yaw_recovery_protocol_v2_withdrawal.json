@@ -1,9 +1,0 @@
-{
-  "schema": "thesis_protocol_withdrawal.v1",
-  "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
-  "protocol": "experiments/thesis_pipeline_lock/stage09_runtime_yaw_recovery_protocol_v2.json",
-  "status": "withdrawn_before_commissioning_audit_or_runtime",
-  "withdrawn_at": "2026-09-10",
-  "reason": "The majority-support rule failed the exact V11 Camera-E regression: only 14 of 41 hypotheses passed for the real full detector box, below the predeclared half-grid requirement. No V2 commissioning audit was run and no navigation run used V2.",
-  "selection_effect": "None. V2 produced no eligible result."
-}

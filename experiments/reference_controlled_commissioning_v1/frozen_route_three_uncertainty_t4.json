@@ -1,7 +1,0 @@
-{
-  "schema_version": 1,
-  "kind": "frozen_navigation_route",
-  "task": "thesis09_south_to_north_central",
-  "route": [[0.55, -7.5], [0.85, -7.5], [0.85, 8.2], [0.55, 8.2]],
-  "note": "Physical driveability route shared unchanged by U1, U2, and U3."
-}
