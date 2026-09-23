@@ -553,4 +553,3 @@ tasks:
     goal:
       x: 0.55
       y: 8.20
-  warehouse_v2_shipout.world.sdf: *warehouse_v2_tasks

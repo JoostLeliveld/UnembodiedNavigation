@@ -2,7 +2,6 @@ from types import SimpleNamespace
 
 from sim.wait_for_clock import WaitForClock
 from sim.wait_for_odom import WaitForOdom
-from sim.contact_evidence_node import ContactEvidenceNode
 
 
 class _Logger:
@@ -68,21 +67,3 @@ def test_bringup_rejects_in_place_reset_and_wires_native_guard():
     assert '/model/turtlebot3/tf@tf2_msgs/msg/TFMessage' in launch
     assert '/model/turtlebot3/odometry_tf@' not in launch
     assert '"timeout_s": 30.0' in launch
-
-
-def test_contact_heartbeat_never_interprets_silence_as_no_collision():
-    import json
-    node = object.__new__(ContactEvidenceNode)
-    node.source_ids = ('native/sensor/a',)
-    node.epoch = 'epoch'
-    node.sequence = 0
-    node.delivery_count = 0
-    node.contact_count = 0
-    node.last_source_stamp_ns = None
-    node.last_receipt_wall_s = None
-    messages = []
-    node._publisher = SimpleNamespace(publish=messages.append)
-    node._heartbeat()
-    payload = json.loads(messages[-1].data)
-    assert payload['state'] == 'configured_silent_requires_positive_control'
-    assert payload['silence_is_no_contact'] is False

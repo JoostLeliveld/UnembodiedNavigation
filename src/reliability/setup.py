@@ -21,7 +21,6 @@ setup(
     extras_require={"test": ["pytest"]},
     entry_points={
         "console_scripts": [
-            "reliability_tools = reliability.cli:main",
             "camera_manager_node = reliability.nodes.camera_manager_node:main",
         ],
     },

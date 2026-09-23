@@ -243,7 +243,6 @@ _COLLISION_INCLUDE_NAMES_BY_WORLD = {
             'pallet_loose_1', 'pallet_loose_2')
     for world in (
         'warehouse_v2.world.sdf',
-        'warehouse_v2_shipout.world.sdf',
     )
 }
 

@@ -13,7 +13,6 @@ from reliability.contracts import (
     UpdateCovariance,
 )
 from reliability.firewall import validate_config_sources
-from reliability.oracle import OracleCameraFeasibilitySample
 
 
 def test_false_strings_remain_false_across_operational_contracts():
@@ -83,17 +82,6 @@ def test_camera_observation_requires_physical_identity():
 def test_contract_time_cannot_run_before_its_epoch(constructor):
     with pytest.raises(ContractValidationError, match="non-negative"):
         constructor()
-
-
-def test_oracle_boolean_label_is_strict_too():
-    sample = OracleCameraFeasibilitySample(
-        camera_id="camera_B",
-        timestamp_s=0.0,
-        truth_xy_m=(0.0, 0.0),
-        available="false",
-        p_available=0.0,
-    )
-    assert sample.available is False
 
 
 def test_evaluation_and_update_contract_flags_are_strict():
