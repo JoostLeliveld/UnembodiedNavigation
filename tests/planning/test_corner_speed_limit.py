@@ -188,8 +188,9 @@ def test_ff_fb_corner_capture_brakes_before_tight_ninety_degree_turn():
         node, np.asarray((0.81, 0.0, 0.0)),
     )
     # The fillet remains a moving arc, but heading-based reduction prevents the
-    # robot from carrying straight-line speed through the outside of the turn.
-    assert 0.18 < controls[0, 0] < 0.50
+    # robot from carrying straight-line speed through the outside of the turn:
+    # the turn-overshoot cap keeps the swing within the 0.10 m safety margin.
+    assert 0.05 < controls[0, 0] < 0.50
 
 
 def test_ff_fb_path_guidance_preserves_centreline_speed():
@@ -257,3 +258,25 @@ def test_geometric_time_cost_prefers_heading_aligned_route_over_180_pivot():
     assert _geometric_route_time_cost(
         start, wider_aligned_route, v_max=1.0
     ) < _geometric_route_time_cost(start, short_with_uturn, v_max=1.0)
+
+
+def test_turn_overshoot_cap_bounds_lateral_travel_to_the_safety_margin():
+    import math
+    from planning.nodes.efe_agent_node import TURN_OVERSHOOT_BUDGET_M, _ff_fb_turn_overshoot_cap
+    w = 0.8
+    assert _ff_fb_turn_overshoot_cap(0.0, w_limit=w) == math.inf
+    for error in (0.2, 0.6, 1.0, math.pi / 2):
+        v = _ff_fb_turn_overshoot_cap(error, w_limit=w)
+        # radius v / w times (1 - cos e) is exactly the budget
+        assert math.isclose((v / w) * (1 - math.cos(error)), TURN_OVERSHOOT_BUDGET_M)
+    # beyond 90 degrees the cap saturates at the right-angle value
+    assert _ff_fb_turn_overshoot_cap(2.5, w_limit=w) == _ff_fb_turn_overshoot_cap(math.pi / 2, w_limit=w)
+
+
+def test_turn_overshoot_budget_equals_the_world_geometric_safety_margin():
+    import inspect
+    from experiments.core import world_profiles
+    from planning.nodes.efe_agent_node import TURN_OVERSHOOT_BUDGET_M
+    for fn in (world_profiles.serialize_collision_geometry_from_world,
+               world_profiles.serialize_driveable_geometry_from_profile):
+        assert inspect.signature(fn).parameters["safety_margin_m"].default == TURN_OVERSHOOT_BUDGET_M

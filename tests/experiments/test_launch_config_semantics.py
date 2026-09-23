@@ -95,6 +95,10 @@ def test_campaign_runner_does_not_enable_encoder_noise_from_false_string(tmp_pat
         "run_timeout_after_first_cmd_s": 10,
         "odom_topic": "/odom_noisy",
         "use_encoder_noise": "false",
+        "conditions": {"spatial_intact": {
+            "camera_network_artifact_path": str(detector),
+            "camera_network_active_camera_ids": "camera_A,camera_B,camera_C,camera_D,camera_E"}},
+        "camera_network_objective": "metric_expected_belief",
     }
-    command = campaign._build_launch_cmd(cfg, "task", "C0", 1, tmp_path)
+    command = campaign._build_launch_cmd(cfg, "task", "spatial_intact", 1, tmp_path)
     assert "odom_topic:=/odom" in command

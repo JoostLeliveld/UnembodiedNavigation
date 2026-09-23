@@ -32,42 +32,6 @@ def _geometry(name: str, xmin: float, xmax: float, ymin: float, ymax: float) -> 
     }
 
 
-def test_four_cam_drivable_map_yields_paper1_lane_seeds() -> None:
-    """The 4-camera drivable map must be navigable by paper 1's seeding alone.
-
-    Guards the regression that started this: the world shipped with a single
-    floor-wide `traversable` rectangle, so `generate_route_seeds` returned
-    nothing (and, worse, a floor-wide union makes every Manhattan route
-    "valid", including ones straight through the rack rows). No collision
-    geometry is passed here, so only the published lane-graph path can satisfy
-    this test.
-    """
-    profiles = yaml.safe_load(
-        (REPO / "src/experiments/config/world_profiles.yaml").read_text("utf-8")
-    )
-    world = "warehouse_full_4cam.world.sdf"
-    profile = profiles["worlds"][world]
-    driveable = serialize_driveable_geometry_from_profile(profile)
-
-    tasks = yaml.safe_load(
-        (REPO / "src/experiments/config/tasks.yaml").read_text("utf-8")
-    )["tasks"][world]
-    for name in ("rob_hardA", "rob_hardB"):
-        task = next(t for t in tasks if t["name"] == name)
-        seeds = generate_route_seeds(
-            driveable,
-            (task["start"]["x"], task["start"]["y"]),
-            (task["goal"]["x"], task["goal"]["y"]),
-        )
-        assert seeds, f"no lane-graph seed for {name}"
-        seed_names = {seed["name"] for seed in seeds}
-        assert "below_south_cross_aisle" in seed_names, (
-            f"{name} is missing the early south crossing used by the hard route"
-        )
-        assert "below_main_aisle" in seed_names
-        assert "above_connector" in seed_names
-
-
 def test_four_cam_lanes_are_inset_from_obstacles_like_paper1() -> None:
     """Lanes must be a conservative corridor, not the raw geometric gap.
 

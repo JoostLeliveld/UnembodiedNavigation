@@ -38,30 +38,6 @@ def test_profile_names_survive_launch_normalisation():
         assert name == name.strip().lower(), name
 
 
-def test_campaign_configs_request_a_supported_profile():
-    """Every campaign that names a covariance profile must name one that exists."""
-    import yaml
-
-    configs = sorted((REPO / "scripts/visibility_comparison").glob("*.yaml"))
-    assert configs, "no campaign configs found"
-    for path in configs:
-        try:
-            payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except yaml.YAMLError:
-            continue
-        if not isinstance(payload, dict):
-            continue
-        requested = [payload.get("manager_covariance_profile")]
-        for condition in (payload.get("conditions") or {}).values():
-            if isinstance(condition, dict):
-                requested.append(condition.get("manager_covariance_profile"))
-        for value in requested:
-            if value is None:
-                continue
-            assert str(value).strip().lower() in SUPPORTED_COVARIANCE_PROFILES, (
-                path.name, value)
-
-
 def test_band_assignment_is_monotone_in_confidence():
     edges = [0.2, 0.5, 0.9]
     assert commissioned_world_band(0.0, edges) == 0

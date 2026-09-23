@@ -114,7 +114,7 @@ CAMPAIGN_METADATA_KEYS = frozenset({
     'conditions', 'tasks', 'study_title', 'study_comparison', 'cleanup_mode',
     'cleanup_sim_stragglers', 'ros_domain_id_base', 'world_profiles',
     'tasks_yaml', 'gp_artifact', 'route_selection_manifest_path',
-    'route_selection_manifest_sha256', 'thesis_execution_contract',
+    'route_selection_manifest_sha256',
     'removed_camera_id',
     'camera_network_expected_sha256',
     'planning_information_method', 'planning_artifact_schema',
@@ -174,39 +174,6 @@ def _validate_config(cfg: dict, path: Path) -> None:
                 f'camera_network_objective: metric_expected_belief, not {objective!r}. '
                 'Only that objective loads the per-arm planner fields; with any other '
                 'the arms are identical.'
-            )
-    execution_contract = cfg.get('thesis_execution_contract')
-    if execution_contract in (
-        'final_1mps_1hz_m4_v1', 'final_1mps_5hz_m4_v1',
-        'final_1mps_5hz_m4_temporal_v1',
-    ):
-        expected_rate = 1.0 if execution_contract == 'final_1mps_1hz_m4_v1' else 5.0
-        global_dt = float(cfg.get('global_dt', 1.0) or 1.0)
-        effective_planning_rate = (
-            1.0 if execution_contract == 'final_1mps_5hz_m4_temporal_v1'
-            else expected_rate
-        )
-        expected_updates_float = effective_planning_rate * global_dt
-        if (not math.isfinite(expected_updates_float)
-                or abs(expected_updates_float - round(expected_updates_float)) > 1e-9):
-            raise ValueError(
-                f'{path}: {execution_contract} requires an integer number of '
-                'camera opportunities per global planning step'
-            )
-        expected_updates = int(round(expected_updates_float))
-        if float(cfg.get('v_max', float('nan'))) != 1.0:
-            raise ValueError(
-                f'{path}: {execution_contract} requires v_max: 1.0'
-            )
-        if float(cfg.get('manager_decision_rate_hz', float('nan'))) != expected_rate:
-            raise ValueError(
-                f'{path}: {execution_contract} requires '
-                f'manager_decision_rate_hz: {expected_rate:.1f}'
-            )
-        if int(cfg.get('camera_network_updates_per_step', -1)) != expected_updates:
-            raise ValueError(
-                f'{path}: {execution_contract} requires '
-                f'camera_network_updates_per_step: {expected_updates}'
             )
     cleanup_mode = cfg.get('cleanup_mode', 'isolated')
     if cleanup_mode != 'isolated':
@@ -383,19 +350,6 @@ def _validate_config(cfg: dict, path: Path) -> None:
     for task_name, condition_id in active_cells:
         _validate_visibility_runtime_bundle(cfg, path, task_name, condition_id)
         _validate_perception_runtime_bundle(cfg, path, task_name, condition_id)
-    if cfg.get('thesis_execution_contract') in (
-        'final_1mps_1hz_m4_v1', 'final_1mps_5hz_m4_v1',
-        'final_1mps_5hz_m4_temporal_v1',
-    ):
-        execution_contract = cfg['thesis_execution_contract']
-        for task_name, condition_id in active_cells:
-            if str(_effective_value(
-                    cfg, task_name, condition_id, 'manager_observation_model') or '') \
-                    != 'visibility_patch':
-                raise ValueError(
-                    f'{path}: {execution_contract} requires the commissioned '
-                    f'MLP+visibility correction in {task_name}/{condition_id}'
-                )
     for task_name, condition_id in active_cells:
         layers = (cfg, cfg['tasks'][task_name], cfg['conditions'][condition_id] or {},
                   _route_overrides(cfg, task_name, condition_id))

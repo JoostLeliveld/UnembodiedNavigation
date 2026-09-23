@@ -92,75 +92,38 @@ def execute_route(start, goal, waypoints, collision, boundary, *, max_steps=300)
     return False, state, max_steps, minimum_clearance
 
 
-def test_shortest_geometry_candidate_executes_all_locked_tasks(offline_scene):
-    collision_json, collision, boundary, tasks = offline_scene
-    outcomes = []
+
+
+def _declared_routes(task):
+    start = (task['start']['x'], task['start']['y'])
+    for seed in task['route_seeds']:
+        yield seed['name'], [start] + [tuple(point) for point in seed['waypoints']]
+
+
+def test_every_declared_route_candidate_executes_without_touching_geometry(offline_scene):
+    """Each route the solver may choose is followed by ff_fb with the true footprint."""
+    _collision_json, collision, boundary, tasks = offline_scene
+    assert len(tasks) == 5
+    failures = []
     for task in tasks:
-        start, goal = task['start'], task['goal']
-        seeds = generate_route_seeds(
-            collision_json, (start['x'], start['y']), (goal['x'], goal['y']),
-        )
-        assert seeds, task['name']
-        selected = min(
-            seeds,
-            key=lambda seed: route_length((start['x'], start['y']), seed),
-        )
-        waypoints = [(start['x'], start['y'])] + [
-            tuple(point) for point in selected['waypoints']
-        ]
-        arrived, final_state, steps, clearance = execute_route(
-            start, goal, waypoints, collision, boundary,
-        )
-        outcomes.append((task['name'], selected['name'], steps, clearance))
-        assert arrived, (
-            task['name'], selected['name'], final_state.tolist(), clearance,
-        )
-        assert clearance >= 0.0
-    assert len(outcomes) == 7
-
-
-def test_raw_seed_is_not_an_admitted_route_until_hard_replay_passes(offline_scene):
-    collision_json, collision, boundary, tasks = offline_scene
-    task = next(t for t in tasks if t['name'] == 'thesis09_west_to_east_north')
-    seeds = generate_route_seeds(
-        collision_json,
-        (task['start']['x'], task['start']['y']),
-        (task['goal']['x'], task['goal']['y']),
-    )
-    unsafe_seed = next(seed for seed in seeds if seed['name'] == 'above_cross_aisle')
-    waypoints = [(task['start']['x'], task['start']['y'])] + [
-        tuple(point) for point in unsafe_seed['waypoints']
-    ]
-    arrived, _state, _steps, clearance = execute_route(
-        task['start'], task['goal'], waypoints, collision, boundary,
-    )
-    assert not arrived
-    assert clearance < 0.0
+        for name, waypoints in _declared_routes(task):
+            arrived, final_state, _steps, clearance = execute_route(
+                task['start'], task['goal'], waypoints, collision, boundary, max_steps=600)
+            if not arrived or clearance < 0.0:
+                failures.append((task['name'], name, arrived, round(clearance, 3),
+                                 [round(v, 2) for v in final_state.tolist()]))
+    assert not failures, failures
 
 
 @pytest.mark.parametrize('dx,dy', [(0.05, 0.0), (-0.05, 0.0),
                                    (0.0, 0.05), (0.0, -0.05)])
 def test_closed_loop_recovers_from_five_centimetre_handoff_displacement(
         offline_scene, dx, dy):
-    collision_json, collision, boundary, tasks = offline_scene
-    task = next(t for t in tasks if t['name'] == 'thesis09_east_to_west_south')
-    nominal = task['start']
-    displaced = dict(nominal, x=nominal['x'] + dx, y=nominal['y'] + dy)
-    seeds = generate_route_seeds(
-        collision_json,
-        (nominal['x'], nominal['y']),
-        (task['goal']['x'], task['goal']['y']),
-    )
-    selected = min(
-        seeds, key=lambda seed: route_length(
-            (nominal['x'], nominal['y']), seed,
-        ),
-    )
-    waypoints = [(nominal['x'], nominal['y'])] + [
-        tuple(point) for point in selected['waypoints']
-    ]
+    _collision_json, collision, boundary, tasks = offline_scene
+    task = tasks[0]
+    name, waypoints = next(_declared_routes(task))
+    displaced = dict(task['start'], x=task['start']['x'] + dx, y=task['start']['y'] + dy)
     arrived, final_state, _steps, clearance = execute_route(
-        displaced, task['goal'], waypoints, collision, boundary,
-    )
-    assert arrived, (dx, dy, final_state.tolist(), clearance)
+        displaced, task['goal'], waypoints, collision, boundary, max_steps=600)
+    assert arrived, (name, dx, dy, final_state.tolist(), clearance)
     assert clearance >= 0.0

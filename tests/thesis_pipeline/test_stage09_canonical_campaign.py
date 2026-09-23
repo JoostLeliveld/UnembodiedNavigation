@@ -19,40 +19,49 @@ def load_script(name: str, relative: str):
     return module
 
 
-def test_canonical_campaign_is_exact_six_by_two_by_five():
-    campaign = yaml.safe_load((
-        REPO / "pipeline/route_planning_template.yaml"
-    ).read_text())
-    assert campaign["scheduled_rate_hz"] == 4.0
-    assert campaign["pixel_timeout_s"] == campaign["manager_max_measurement_age_s"] == 1.25
-    assert campaign["pixel_timeout_s"] < campaign["state_max_predict_dt_s"]
-    assert campaign["waypoint_spacing_m"] == 0.1
-    assert campaign["manager_decision_rate_hz"] == 4.0
-    assert campaign["manager_correction_timestamp_compensation"] is False
-    conditions = [
-        "global_intact", "global_removal",
-        "per_camera_intact", "per_camera_removal",
-        "spatial_intact", "spatial_removal",
-    ]
-    assert list(campaign["conditions"]) == conditions
-    assert list(campaign["tasks"]) == [
-        "thesis09_parallel_aisles_west",
-        "thesis09_parallel_aisles_central",
-    ]
-    assert sum(
-        len(task["conditions"]) * len(task["seeds"])
-        for task in campaign["tasks"].values()
-    ) == 60
-    for task in campaign["tasks"].values():
-        assert task["conditions"] == conditions
-        assert task["seeds"] == [91500, 91501, 91502, 91503, 91504]
-    for name, condition in campaign["conditions"].items():
-        expected = "camera_A,camera_B,camera_C,camera_D,camera_E"
-        if name.endswith("_removal"):
-            expected = "camera_A,camera_C,camera_D,camera_E"
-        assert condition["manager_camera_ids"] == expected
-        assert condition["camera_network_active_camera_ids"] == expected
-    assert campaign["removed_camera_id"] == "camera_B"
+CONDITIONS = ["global_intact", "global_removal", "per_camera_intact", "per_camera_removal",
+              "spatial_intact", "spatial_removal"]
+DROPPED = {
+    "thesis10_camera_a_western_dock_detour": "camera_A",
+    "thesis10_camera_b_cross_warehouse_detour": "camera_B",
+    "thesis10_camera_c_inner_warehouse_detour": "camera_C",
+    "thesis10_camera_e_eastern_detour": "camera_E",
+    "thesis10_camera_e_long_cross_warehouse_detour": "camera_E",
+}
+ALL_CAMERAS = ["camera_A", "camera_B", "camera_C", "camera_D", "camera_E"]
+
+
+def test_campaign_is_five_tasks_by_six_conditions_by_three_seeds():
+    """The amended campaign: 90 runs, one declared dropped camera per task."""
+    for template in ("route_planning_template.yaml", "execution_template.yaml"):
+        campaign = yaml.safe_load((REPO / "pipeline" / template).read_text())
+        assert campaign["world"] == "warehouse_v2.world.sdf"
+        assert campaign["manager_sensor_gate_config_path"] == "config/sensor_gate.yaml"
+        assert campaign["scheduled_rate_hz"] == campaign["manager_decision_rate_hz"] == 5.0
+        assert list(campaign["conditions"]) == CONDITIONS
+        assert dict.fromkeys(campaign["tasks"]) == dict.fromkeys(DROPPED)
+        runs = 0
+        for name, task in campaign["tasks"].items():
+            assert task["conditions"] == CONDITIONS
+            assert task["seeds"] == [91500, 91501, 91502]
+            runs += len(task["conditions"]) * len(task["seeds"])
+            for condition in CONDITIONS:
+                effective = {**campaign["conditions"][condition],
+                             **task.get("condition_overrides", {}).get(condition, {})}
+                expected = ALL_CAMERAS
+                if condition.endswith("_removal"):
+                    assert effective["removed_camera_id"] == DROPPED[name]
+                    expected = [c for c in ALL_CAMERAS if c != DROPPED[name]]
+                assert effective["manager_camera_ids"] == ",".join(expected)
+                assert effective["camera_network_active_camera_ids"] == ",".join(expected)
+        assert runs == 90
+
+
+def test_execution_runs_in_lockstep():
+    campaign = yaml.safe_load((REPO / "pipeline/execution_template.yaml").read_text())
+    assert campaign["lockstep"] is True
+    assert campaign["lockstep_control_step_iterations"] == 100
+    assert campaign["lockstep_camera_every_control_steps"] == 2
 
 
 def test_runtime_and_planning_artifacts_are_model_matched_and_hash_bound():

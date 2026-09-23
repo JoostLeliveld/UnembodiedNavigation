@@ -23,7 +23,7 @@ from reliability.observation_opportunity import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-GATE_YAML = REPO_ROOT / "config" / "usable_observation_gate.yaml"
+GATE_YAML = REPO_ROOT / "config" / "sensor_gate.yaml"
 
 
 def _cfg(**overrides) -> UsableObservationGateConfig:
@@ -219,7 +219,9 @@ def test_roundtrip_from_dict():
 def test_frozen_yaml_loads_and_hashes():
     cfg = UsableObservationGateConfig.from_yaml(str(GATE_YAML))
     assert cfg.confidence_threshold == 0.25
-    assert cfg.image_width_px == 640 and cfg.image_height_px == 360
+    assert cfg.image_width_px == 1280 and cfg.image_height_px == 720
+    # the fitted gate: confidence and projection only (no edge, size or class check)
+    assert (cfg.check_edge_clip, cfg.check_box_size, cfg.check_class) == (False, False, False)
     assert len(cfg.config_hash()) == 16
     # hash is stable and sensitive to a threshold change
     assert cfg.config_hash() == UsableObservationGateConfig.from_yaml(str(GATE_YAML)).config_hash()
@@ -230,7 +232,8 @@ def test_frozen_yaml_loads_and_hashes():
 def test_every_failure_reason_has_a_producing_case():
     """Guard: the enum and the reachable set stay in sync (except UNKNOWN/edge covered above)."""
     produced = set()
-    cfg = _cfg(check_class=True, expected_class="robot", require_track=True)
+    cfg = _cfg(check_class=True, expected_class="robot", require_track=True,
+               check_box_size=True, min_bbox_width_px=16.0, min_bbox_height_px=16.0)
     cases = [
         {"frame_expected": True, "frame_received": False},
         {"frame_age_ms": 9e9},
@@ -240,7 +243,8 @@ def test_every_failure_reason_has_a_producing_case():
         {"projection_valid": False},
         {"association_valid": False},
         {"tracking_valid": False},
-        {"bbox_xmin": 0.0, "bbox_ymin": 0.0, "bbox_xmax": 2.0, "bbox_ymax": 1.0},
+        {"bbox_xmin": 300.0, "bbox_ymin": 290.0, "bbox_xmax": 340.0, "bbox_ymax": 358.0},  # bottom centre 2 px from the edge
+        {"bbox_xmin": 300.0, "bbox_ymin": 150.0, "bbox_xmax": 302.0, "bbox_ymax": 151.0},  # too small
         {"accepted_by_localizer": False},
         {},  # usable
     ]

@@ -13,8 +13,10 @@ def config(tmp_path):
     artifact=tmp_path/'network.npz';artifact.write_bytes(b'configuration fixture')
     detector=tmp_path/'detector.pt';detector.write_bytes(b'configuration fixture')
     return dict(world='warehouse_v2.world.sdf',launch_file='warehouse_primary_comparison.launch.py',
-        conditions={'P2':dict(camera_network_artifact_path=str(artifact))},
-        tasks={'fusion_network_traverse':dict(conditions=['P2'],seeds=[513])},
+        conditions={'spatial_intact':dict(camera_network_artifact_path=str(artifact),
+            camera_network_active_camera_ids='camera_A,camera_B,camera_C,camera_D,camera_E')},
+        camera_network_objective='metric_expected_belief',
+        tasks={'fusion_network_traverse':dict(conditions=['spatial_intact'],seeds=[513])},
         yolo_model=str(detector),horizon=40,dt=.25,goal_success_radius=.35,
         run_timeout_after_first_cmd_s=30,global_planner_mode='efe')
 
@@ -22,7 +24,7 @@ def config(tmp_path):
 def test_network_configuration_does_not_require_or_send_legacy_gp(tmp_path):
     cfg=config(tmp_path)
     campaign._validate_config(cfg,tmp_path/'config.yaml')
-    cmd=campaign._build_launch_cmd(cfg,'fusion_network_traverse','P2',513,tmp_path/'logs')
+    cmd=campaign._build_launch_cmd(cfg,'fusion_network_traverse','spatial_intact',513,tmp_path/'logs')
     assert any(s.startswith('camera_network_artifact_path:=') for s in cmd)
     assert 'planner:=visibility_aware_efe' in cmd
     assert not any(s.startswith('visibility_artifact_path:=') for s in cmd)
@@ -35,7 +37,7 @@ def test_preselected_route_cannot_masquerade_as_network_planning(tmp_path):
 
 
 def test_absent_field_still_requires_explicit_legacy_artifact(tmp_path):
-    cfg=config(tmp_path);cfg['conditions']['P2']={}
+    cfg=config(tmp_path);cfg['conditions']['spatial_intact']={}
     with pytest.raises(RuntimeError,match='gp_artifact'):
         campaign._validate_config(cfg,tmp_path/'config.yaml')
 
@@ -69,6 +71,6 @@ def test_metric_network_mode_is_explicit_in_launch_command(tmp_path):
     cfg['camera_network_objective']='metric_expected_belief'
     cfg['network_goal_std_m']=.15
     campaign._validate_config(cfg,tmp_path/'config.yaml')
-    cmd=campaign._build_launch_cmd(cfg,'fusion_network_traverse','P2',513,tmp_path/'logs')
+    cmd=campaign._build_launch_cmd(cfg,'fusion_network_traverse','spatial_intact',513,tmp_path/'logs')
     assert 'camera_network_objective:=metric_expected_belief' in cmd
     assert 'network_goal_std_m:=0.15' in cmd

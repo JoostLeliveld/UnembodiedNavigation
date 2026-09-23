@@ -139,6 +139,28 @@ def _ff_fb_forward_speed(
     ))
 
 
+# Lateral overshoot allowed while the follower removes a heading error. It equals the
+# 0.10 m geometric safety margin the world profile keeps between the planner's free
+# space and every collision object and the site boundary
+# (experiments.core.world_profiles, safety_margin_m); a test keeps the two equal.
+TURN_OVERSHOOT_BUDGET_M = 0.10
+
+
+def _ff_fb_turn_overshoot_cap(heading_error: float, *, w_limit: float,
+                              budget_m: float = TURN_OVERSHOOT_BUDGET_M) -> float:
+    """Speed at which removing `heading_error` stays within `budget_m` of lateral travel.
+
+    Turning at the rate limit w on a circle of radius v / w, a heading error e is removed
+    after a lateral displacement of (v / w)(1 - cos e). Bounding it by the budget gives
+    v <= w * budget / (1 - cos e). Without this cap the follower carried 0.5-0.8 m/s into
+    90-degree corners and swung about 0.5 m wide, out of the driveable region.
+    """
+    one_minus_cos = 1.0 - math.cos(min(abs(float(heading_error)), 0.5 * math.pi))
+    if one_minus_cos <= 1.0e-9:
+        return math.inf
+    return abs(float(w_limit)) * float(budget_m) / one_minus_cos
+
+
 def _ff_fb_arrival_speed_cap(
     target_distance_m: float, *, must_capture: bool, v_max: float,
 ) -> float:
@@ -1791,12 +1813,13 @@ class EfeAgentNode(UnicyclePlannerNode):
                         # Do not let the incoming-line cross-track term fight
                         # the deliberate departure onto the corner fillet.
                         ct *= 1.0 - blend
+            w_limit = float(getattr(self, 'ff_fb_turn_rate_limit_rad_s', 0.80))
             he, w, cross_track_cap = _ff_fb_path_guidance(
                 tang,
                 state[2],
                 ct,
                 v_max=v_max,
-                w_limit=float(getattr(self, 'ff_fb_turn_rate_limit_rad_s', 0.80)),
+                w_limit=w_limit,
             )
             # Fast wheel-counterrotation makes Gazebo's wheel odometry finish a
             # pivot before the physical body, which is especially damaging when
@@ -1828,7 +1851,8 @@ class EfeAgentNode(UnicyclePlannerNode):
             # minimum forward speed can create a waypoint-orbit limit cycle.
             v = _ff_fb_forward_speed(
                 nominal_v,
-                min(corner_cap, arrival_cap, cross_track_cap),
+                min(corner_cap, arrival_cap, cross_track_cap,
+                    _ff_fb_turn_overshoot_cap(he, w_limit=w_limit)),
                 w,
                 he,
                 v_max=v_max,

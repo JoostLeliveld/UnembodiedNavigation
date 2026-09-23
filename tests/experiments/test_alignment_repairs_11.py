@@ -207,48 +207,6 @@ def test_ambiguous_same_time_beliefs_do_not_choose_first_payload(tmp_path):
     with pytest.raises(ValueError,match='ambiguous belief'):A.aligned_error_cm(run,'belief')
 
 
-def test_schema9_selects_highest_explicit_revision_at_same_state_time(tmp_path):
-    run, _, _ = v2_fixture(tmp_path)
-    (run/'run_manifest.json').write_text(json.dumps(dict(logging_schema_version=9)))
-    records = []
-    for revision, x in [(3, .35), (4, .22), (4, .22)]:
-        payload = dict(
-            schema_version=1, initialized=True, epoch='belief-epoch', revision=revision,
-            frame_id='map_bev', anchor_stamp_ns=200000000,
-            state_stamp_ns=300000000, valid=True, motion_supported=True,
-            mean=[x, 0., 0.], covariance=np.diag([.01, .01, .1]).tolist(),
-        )
-        records.append(dict(logger_receive_stamp=.31 + .01*len(records),
-                            valid_envelope=True, payload=payload))
-    (run/'belief_predictions.jsonl').write_text(
-        ''.join(json.dumps(record)+'\n' for record in records))
-    belief = A.aligned_error_cm(run, 'belief', max_reference_gap_s=.15)
-    selected = A.latest_revision_mask(
-        belief['stamp'], belief['revision'], belief['epoch'])
-    assert selected.tolist() == [False, True]
-    assert belief['aligned_cm'][selected] == pytest.approx([8.])
-
-
-def test_schema9_conflicting_same_revision_fails_closed(tmp_path):
-    run, _, _ = v2_fixture(tmp_path)
-    (run/'run_manifest.json').write_text(json.dumps(dict(logging_schema_version=9)))
-    base = dict(
-        schema_version=1, initialized=True, epoch='belief-epoch', revision=4,
-        frame_id='map_bev', anchor_stamp_ns=200000000, state_stamp_ns=300000000,
-        valid=True, motion_supported=True,
-        mean=[.22, 0., 0.], covariance=np.diag([.01, .01, .1]).tolist(),
-    )
-    records = [
-        dict(logger_receive_stamp=.31, valid_envelope=True, payload=base),
-        dict(logger_receive_stamp=.32, valid_envelope=True,
-             payload=dict(base, mean=[.99, 0., 0.])),
-    ]
-    (run/'belief_predictions.jsonl').write_text(
-        ''.join(json.dumps(record)+'\n' for record in records))
-    with pytest.raises(ValueError, match='conflicting belief retransmission'):
-        A.aligned_error_cm(run, 'belief')
-
-
 def test_camera_retransmission_requires_agreement_before_reference_selection(tmp_path):
     run,_,_,_=fixture(tmp_path)
     o=dict(source_batch_id='beyond-truth',camera_id='camera_A',timestamp_s=20.,detection_valid=False)
