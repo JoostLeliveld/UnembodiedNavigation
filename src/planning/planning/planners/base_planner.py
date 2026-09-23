@@ -138,6 +138,7 @@ class UnicyclePlannerBase:
         camera_network_expected_sha256='',
         camera_network_expected_source_hashes=None,
         camera_network_camera_ids=None,
+        camera_network_active_camera_ids=None,
         camera_network_objective='legacy_pixel_chart',
         # Goal-prior anneal, broad early -> precise late. Without it the mean
         # (goal-distance) part of risk charges (d/sigma*)^2 per step from step
@@ -158,7 +159,7 @@ class UnicyclePlannerBase:
         # have to pull the robot toward the goal. See CasadiEfeParams and
         # docs/PLANNER_LOCK.md.
         terminal_risk_only=False,
-        network_goal_std_m=0.35,
+        network_goal_std_m=0.10,
         camera_network_updates_per_step=1,
         r_visible_uv=2.5,
         r_miss_uv=120.0,
@@ -167,11 +168,11 @@ class UnicyclePlannerBase:
         goal_prior_v_std_start=80.0,
         goal_prior_u_std_final=18.0,
         goal_prior_v_std_final=18.0,
-        goal_tightening_power=0.45,
+        goal_tightening_power=0.9,
         goal_progress_n_steps=90,
-        observation_risk_scale=1.25,
+        observation_risk_scale=1.0,
         ambiguity_term_scale=1.00,
-        discount_gamma=0.98,
+        discount_gamma=0.995,
         optimizer_maxfun=500,
         optimizer_ftol=1e-6,
         optimizer_control_block_steps=1,
@@ -182,7 +183,7 @@ class UnicyclePlannerBase:
         use_nogo_cost=False,
         nogo_penalty_type='warning_band',
         nogo_weight=0.0,
-        nogo_safe_distance=0.325,
+        nogo_safe_distance=0.0,
         nogo_logbarrier_eps=0.05,
         nogo_warning_band=0.05,
         nogo_near_weight=50.0,
@@ -229,9 +230,15 @@ class UnicyclePlannerBase:
         # the reader to ignore the warning that matters.
         _enforce_lock = bool(enforce_planner_lock)
         for _name, _value, _locked in () if not _enforce_lock else (
-            ('nogo_safe_distance', nogo_safe_distance, 0.325),
+            ('nogo_safe_distance', nogo_safe_distance, 0.0),
             ('nogo_logbarrier_eps', nogo_logbarrier_eps, 0.05),
-            ('network_goal_std_m', network_goal_std_m, 0.35),
+            ('nogo_warning_band', nogo_warning_band, 0.05),
+            ('network_goal_std_m', network_goal_std_m, 0.10),
+            ('goal_tightening_power', goal_tightening_power, 0.9),
+            ('observation_risk_scale', observation_risk_scale, 1.0),
+            ('risk_weight_obs', risk_weight_obs, 1.0),
+            ('ambiguity_weight', ambiguity_weight, 1.0),
+            ('discount_gamma', discount_gamma, 0.995),
             # Above 1, each block of controls is averaged and repeated, which
             # destroys the seeder's alternating turn/drive steps: the best seed
             # then misses the goal by more than the terminal tolerance, no
@@ -254,6 +261,11 @@ class UnicyclePlannerBase:
                 'kouw_et1_ambiguity is off: the ambiguity term falls back to a '
                 'posterior-entropy sum that charges for route length. '
                 'See docs/PLANNER_LOCK.md',
+                RuntimeWarning, stacklevel=2)
+        if _enforce_lock and bool(terminal_risk_only):
+            warnings.warn(
+                'terminal_risk_only is on: the locked method uses normalized '
+                'running risk. See docs/PLANNER_LOCK.md',
                 RuntimeWarning, stacklevel=2)
         if _enforce_lock and abs(float(process_noise_xy) - _LOCKED_PROCESS_NOISE_XY) > 1e-9:
             warnings.warn(
@@ -375,8 +387,14 @@ class UnicyclePlannerBase:
             expected_ids = camera_network_camera_ids
             if isinstance(expected_ids, str):
                 expected_ids = tuple(v.strip() for v in expected_ids.split(',') if v.strip())
+            active_ids = camera_network_active_camera_ids
+            if isinstance(active_ids, str):
+                active_ids = tuple(v.strip() for v in active_ids.split(',') if v.strip())
+            if active_ids is not None and not active_ids:
+                active_ids = None
             self.camera_network = CameraNetworkModel(
-                network_path, expected_sha256=camera_network_expected_sha256 or None,
+                network_path, cameras=active_ids,
+                expected_sha256=camera_network_expected_sha256 or None,
                 expected_source_hashes=expected_sources, expected_camera_ids=expected_ids)
         elif self.camera_network_objective != 'legacy_pixel_chart':
             raise ValueError('metric_expected_belief requires a camera-network artifact')
@@ -453,6 +471,7 @@ class UnicyclePlannerBase:
                 # aligned with an aisle from crossing it at an angle.
                 robot_half_length=0.5 * float(self.robot_length_m),
                 robot_half_width=0.5 * float(self.robot_width_m),
+                body_margin=0.0,
                 geometry_json=nogo_geometry,
                 mode=self.nogo_mode,
             )
@@ -466,10 +485,13 @@ class UnicyclePlannerBase:
             collision_cfg = NogoCostConfig(
                 penalty_type='warning_band',
                 weight=self.nogo_weight,
-                safe_distance=self.robot_collision_radius_m + 0.10,
+                safe_distance=0.0,
                 logbarrier_eps=self.nogo_logbarrier_eps,
                 warning_band=self.nogo_warning_band,
                 near_weight=self.nogo_near_weight,
+                robot_half_length=0.5 * float(self.robot_length_m),
+                robot_half_width=0.5 * float(self.robot_width_m),
+                body_margin=0.0,
                 geometry_json=str(collision_geometry_json or ''),
                 mode='keep_out',
             )
@@ -765,6 +787,24 @@ class UnicyclePlannerBase:
                 posterior, _entropy = self.camera_network.expected_belief(
                     m, S, self.visibility_sigma_kappa,
                 )
+                if self.camera_network.direct_information:
+                    information = np.asarray(query['expected_information'], dtype=float)
+                    support_key = (
+                        'residual_support'
+                        if 'residual_support' in query else 'opportunity_support'
+                    )
+                    return {
+                        'p_vis': math.nan,
+                        'p_vis_eff': math.nan,
+                        'R_plan': np.asarray(posterior[:2, :2], dtype=float),
+                        'r_plan_u_std': float(np.sqrt(posterior[0, 0])),
+                        'r_plan_v_std': float(np.sqrt(posterior[1, 1])),
+                        'expected_information_trace': float(
+                            np.trace(information.sum(axis=0))),
+                        support_key: np.asarray(query[support_key], dtype=float),
+                        'p_vis_semantics': 'not_defined_for_direct_expected_information',
+                        'R_plan_semantics': 'information_approximation_posterior_xy_covariance_m2',
+                    }
                 return {
                     'p_vis': float(np.mean(query['availability'])),
                     'p_vis_eff': float(np.mean(query['availability'])),
@@ -844,6 +884,29 @@ class UnicyclePlannerBase:
         state_xy = np.asarray(state_xy, dtype=float).reshape(2)
         goal_xy = np.asarray(goal_xy, dtype=float).reshape(2)
         return float(np.linalg.norm(state_xy - goal_xy))
+
+    @staticmethod
+    def _trajectory_retraces_lane(states, *, midpoint_tolerance_m=0.15):
+        """Reject non-adjacent segments that traverse one lane in reverse.
+
+        Perpendicular crossings and nearby parallel aisles are allowed. A pair
+        is retracing only when its segment midpoints coincide and its travel
+        directions are nearly opposite.
+        """
+        xy = np.asarray(states, dtype=float)[:, :2]
+        delta = np.diff(xy, axis=0)
+        length = np.linalg.norm(delta, axis=1)
+        moving = np.flatnonzero(length > 0.05)
+        midpoint = 0.5 * (xy[:-1] + xy[1:])
+        direction = np.zeros_like(delta)
+        direction[moving] = delta[moving] / length[moving, None]
+        for offset, first in enumerate(moving):
+            for second in moving[offset + 1:]:
+                if np.linalg.norm(midpoint[first] - midpoint[second]) > midpoint_tolerance_m:
+                    continue
+                if float(direction[first] @ direction[second]) < -0.95:
+                    return True
+        return False
 
     def _trajectory_plan_diagnostics(self, m0, S0, controls, goal_xy):
         m0, S0, goal_xy = validate_planning_inputs(m0, S0, goal_xy)
@@ -947,10 +1010,11 @@ class UnicyclePlannerBase:
         nogo_ok = min_driveable_body_clearance >= 0.0
         states = rollout_unicycle(m0, controls, self.dt)
         geometry_valid, geometry_reason = self.validate_trajectory_geometry(states, controls)
-        rollout_valid = bool(collision_ok and nogo_ok and geometry_valid)
+        retraces_lane = self._trajectory_retraces_lane(states)
+        rollout_valid = bool(collision_ok and nogo_ok and geometry_valid and not retraces_lane)
         invalid_reason = ''
         if not rollout_valid:
-            invalid_reason = geometry_reason or (
+            invalid_reason = ('predicted_route_retracing' if retraces_lane else geometry_reason) or (
                 'predicted_collision_geometry'
                 if not collision_ok
                 else 'predicted_driveable_region_violation'
@@ -1416,8 +1480,7 @@ class UnicyclePlannerBase:
                     arrival_radius_m=float(self.optimizer_terminal_goal_tolerance_m),
                     effective_covariance=(
                         self.camera_network.make_effective_covariance_casadi(
-                            self.visibility_sigma_kappa,
-                            no_report_var=self.process_noise_xy * self.dt)
+                            self.visibility_sigma_kappa)
                         if self.kouw_et1_ambiguity else None),
                     reference_covariance=self.reference_observation_covariance(),
                     goal_std_m=self.network_goal_std_m,
@@ -1681,6 +1744,7 @@ class UnicyclePlannerBase:
         arrival_radius = float(self.optimizer_terminal_goal_tolerance_m)
         arrival_softness = 0.25
         active = 1.0
+        total_active_weight = 0.0
         for t, u in enumerate(controls):
             m_prev = np.asarray(m, dtype=float).copy()
             m, S = self.predict(m, S, u)
@@ -1692,6 +1756,7 @@ class UnicyclePlannerBase:
                 active *= 1.0 / (1.0 + math.exp(
                     -(reached - arrival_radius) / arrival_softness))
             weight_t *= active
+            total_active_weight += weight_t
             if anneal_goal_prior:
                 goal_cov = self.goal_obs_cov_for_progress(
                     float(t) / float(max(self.goal_progress_n_steps, 1)))
@@ -1713,8 +1778,7 @@ class UnicyclePlannerBase:
             )
             if self.kouw_et1_ambiguity:
                 R_eff = self.camera_network.effective_observation_covariance(
-                    m, S, self.visibility_sigma_kappa,
-                    no_report_var=self.process_noise_xy * self.dt)
+                    m, S, self.visibility_sigma_kappa)
                 sign, logdet = np.linalg.slogdet(0.5 * (R_eff + R_eff.T))
                 if sign <= 0:
                     raise ValueError('effective observation covariance must be positive definite')
@@ -1738,6 +1802,9 @@ class UnicyclePlannerBase:
             totals['obstacle_cost'] += weight_t * obstacle
             totals['control_cost'] += weight_t * self.control_weight * float(u @ u)
             S = S_post
+        normalizer = max(float(total_active_weight), 1e-8)
+        for key in totals:
+            totals[key] /= normalizer
         total = sum(totals[key] for key in (
             'risk_cost', 'ambiguity_cost', 'control_cost', 'obstacle_cost'))
         if return_metrics:
@@ -1752,7 +1819,7 @@ class UnicyclePlannerBase:
     # arm being compared. Each arm's own commissioned best-R floor differs
     # (measured: 3.5 nats between the loosest and tightest of the current seven
     # arms), so anchoring each arm to itself would shift every arm by a
-    # different constant and make the arms incomparable -- the one thing a q/R
+    # different constant and make the conditions incomparable -- the key thing an information-field
     # comparison must not do.
     #
     # 1.5 mm isotropic position sd, chosen inside a two-sided window:

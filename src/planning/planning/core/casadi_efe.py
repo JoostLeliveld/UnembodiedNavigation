@@ -515,12 +515,11 @@ def _anchored_ambiguity_ca(P, P_ref):
     The ET1 ambiguity is an ABSOLUTE differential entropy,
     ``0.5(D_y log 2*pi*e + log|R_eff|)``, so it carries a large
     route-independent additive constant whose SIGN depends only on the units
-    ``R_eff`` is written in (here state units, because of the ``1/(Q dt) I``
-    floor, which makes it negative). On a fixed horizon every candidate
-    accumulates that constant the same number of times and it cancels. Under the
-    smooth arrival gate duration is a free variable, so it instead contributes
-    ``constant * T``: a duration term carrying the sign of an arbitrary unit
-    choice, which rewards a route for lasting longer.
+    ``R_eff`` is written in. On a fixed horizon every candidate accumulates that
+    constant the same number of times and it cancels. Under the smooth arrival
+    gate duration is a free variable, so it instead contributes ``constant *
+    T``: a duration term carrying the sign of an arbitrary unit choice, which
+    can reward a route for lasting longer.
 
     Dividing by ``P_ref`` cancels the constant (including ``D_y log 2*pi*e``),
     leaving a dimensionless quantity. Clipping at zero means no route can be paid
@@ -798,6 +797,7 @@ def make_metric_network_efe_valgrad_fn(
     total_amb = 0.
     total_control = 0.
     total_nogo = 0.
+    total_active_weight = 0.
     for t in range(params.time_horizon):
         block = t // control_block_steps
         u_t = ca.vertcat(u_flat[2*block], u_flat[2*block+1])
@@ -831,6 +831,7 @@ def make_metric_network_efe_valgrad_fn(
             reached = ca.sqrt(ca.sumsqr(m[:2] - goal_xy) + 1.0e-12)
             active = active * (1.0 / (1.0 + ca.exp(
                 -(reached - arrival_radius) / arrival_softness)))
+        total_active_weight += active * weight_t
         if params.terminal_risk_only:
             # Overwrite rather than accumulate: after the loop this holds the
             # risk of the FINAL belief only, so the term carries no duration.
@@ -876,8 +877,11 @@ def make_metric_network_efe_valgrad_fn(
             total_nogo += active * weight_t * transition_cost / obstacle_substeps
         S = S_post
 
-    H_eff = sum(params.discount_gamma ** t for t in range(params.time_horizon))
-    objective = (total_risk + total_amb + total_control + total_nogo) / max(H_eff, 1e-8)
+    # IWAI-like fixed-horizon accounting for variable-duration global routes:
+    # compare their mean active discounted stage cost. A spatially constant
+    # ambiguity can no longer become an accidental route-length term.
+    objective = ((total_risk + total_amb + total_control + total_nogo)
+                 / ca.fmax(total_active_weight, 1e-8))
     gradient = ca.gradient(objective, u_flat)
     # Keep the common six-input interface so cache loading and the optimizer do
     # not need a second calling convention. goal_obs and progress are deliberate

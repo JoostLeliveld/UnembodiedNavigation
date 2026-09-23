@@ -147,15 +147,18 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('goal_prior_v_std_start', 80.0)
         _declare_if_not('goal_prior_u_std_final', 18.0)
         _declare_if_not('goal_prior_v_std_final', 18.0)
-        _declare_if_not('goal_tightening_power', 0.45)
+        _declare_if_not('goal_tightening_power', 0.9)
         _declare_if_not('goal_progress_n_steps', 90)
-        _declare_if_not('observation_risk_scale', 1.25)
+        _declare_if_not('observation_risk_scale', 1.0)
         _declare_if_not('ambiguity_term_scale', 1.00)
-        _declare_if_not('discount_gamma', 0.98)
+        _declare_if_not('discount_gamma', 0.995)
         _declare_if_not('use_nogo_cost', False)
         _declare_if_not('nogo_penalty_type', 'warning_band')
         _declare_if_not('nogo_weight', 0.0)
-        _declare_if_not('nogo_safe_distance', 0.35)
+        # Legacy centre-point radius. Exact rectangular-footprint runs use the
+        # body dimensions and explicit map inflation, so no implicit radius is
+        # added here.
+        _declare_if_not('nogo_safe_distance', 0.0)
         _declare_if_not('nogo_logbarrier_eps', 1e-3)
         _declare_if_not('nogo_warning_band', 0.05)
         _declare_if_not('nogo_near_weight', 50.0)
@@ -173,8 +176,9 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('camera_network_expected_sha256', '')
         _declare_if_not('camera_network_expected_source_hashes_json', '')
         _declare_if_not('camera_network_camera_ids', '')
+        _declare_if_not('camera_network_active_camera_ids', '')
         _declare_if_not('camera_network_objective', 'legacy_pixel_chart')
-        _declare_if_not('network_goal_std_m', 0.35)
+        _declare_if_not('network_goal_std_m', 0.10)
         _declare_if_not('kouw_et1_ambiguity', True)
         _declare_if_not('network_goal_std_start_m', 5.0)
         _declare_if_not('network_goal_std_start_m', -1.0)
@@ -239,14 +243,17 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('local_replan_min_remaining_s', 0.0)
         _declare_if_not('local_replan_on_waypoint_change', False)
         _declare_if_not('latency_compensate_plan_handoff', False)
-        _declare_if_not('simple_tracker_yaw_gate_rad', 0.6)
+        _declare_if_not('simple_tracker_yaw_gate_rad', 0.65)
+        _declare_if_not('ff_fb_turn_rate_limit_rad_s', 0.80)
+        _declare_if_not('ff_fb_corner_crawl_speed_mps', 0.18)
+        _declare_if_not('ff_fb_pivot_heading_error_rad', 2.60)
         # Which waypoint-tracking law the simple local controller uses. All are
         # "execution plumbing" (track the global plan, no local EFE); they differ
         # only in HOW they track, to avoid the turn-then-go limit-cycle on sharp
         # turns. 'turn_then_go' = legacy. 'hyst_damp' = +hysteresis/damped-w/creep.
         # 'pure_pursuit' = lookahead. 'ff_fb' = path tangent/curvature feedforward
         # + cross-track feedback on belief.
-        _declare_if_not('local_controller_type', 'turn_then_go')
+        _declare_if_not('local_controller_type', 'ff_fb')
 
         # Pixel correction params
         _declare_if_not('use_pixel_correction', False)
@@ -441,6 +448,9 @@ class UnicyclePlannerNode(Node):
         self.camera_network_camera_ids = str(
             self.get_parameter('camera_network_camera_ids').value
         ).strip()
+        self.camera_network_active_camera_ids = str(
+            self.get_parameter('camera_network_active_camera_ids').value
+        ).strip()
         self.camera_network_objective = str(
             self.get_parameter('camera_network_objective').value
         ).strip().lower()
@@ -531,6 +541,21 @@ class UnicyclePlannerNode(Node):
         self.simple_tracker_yaw_gate_rad = max(
             0.0, float(self.get_parameter('simple_tracker_yaw_gate_rad').value)
         )
+        self.ff_fb_turn_rate_limit_rad_s = float(np.clip(
+            self.get_parameter('ff_fb_turn_rate_limit_rad_s').value,
+            0.01,
+            max(abs(float(self.w_min)), abs(float(self.w_max))),
+        ))
+        self.ff_fb_corner_crawl_speed_mps = float(np.clip(
+            self.get_parameter('ff_fb_corner_crawl_speed_mps').value,
+            0.0,
+            float(self.v_max),
+        ))
+        self.ff_fb_pivot_heading_error_rad = float(np.clip(
+            self.get_parameter('ff_fb_pivot_heading_error_rad').value,
+            self.simple_tracker_yaw_gate_rad,
+            math.pi,
+        ))
         try:
             self.local_controller_type = local_controller_type(
                 self.get_parameter('local_controller_type').value
@@ -1335,6 +1360,10 @@ class UnicyclePlannerNode(Node):
                 'camera_network_camera_ids',
                 getattr(self, 'camera_network_camera_ids', ''),
             ),
+            camera_network_active_camera_ids=g_default(
+                'camera_network_active_camera_ids',
+                getattr(self, 'camera_network_active_camera_ids', ''),
+            ),
             camera_network_objective=(
                 g_default(
                     'camera_network_objective',
@@ -1347,7 +1376,7 @@ class UnicyclePlannerNode(Node):
                 'kouw_et1_ambiguity', getattr(self, 'kouw_et1_ambiguity', True))),
             network_goal_std_m=float(g_default(
                 'network_goal_std_m',
-                getattr(self, 'network_goal_std_m', 0.15),
+                getattr(self, 'network_goal_std_m', 0.10),
             )),
             camera_network_updates_per_step=int(g_default(
                 'camera_network_updates_per_step',

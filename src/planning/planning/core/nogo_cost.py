@@ -34,10 +34,12 @@ class NogoCostConfig:
     # heading-aware support distance a|cos|+b|sin| instead of the fixed
     # ``safe_distance`` disc, so the cost distinguishes driving aligned with an
     # aisle from crossing it at an angle. ``body_margin`` is the keep-clear
-    # margin added on top of the body itself. Leave as None to keep the disc.
+    # margin added on top of the body itself. The warning band is separate: a
+    # zero body margin with warning_band=0.05 means the cost starts exactly
+    # when the oriented body comes within 5 cm of geometry.
     robot_half_length: float = None
     robot_half_width: float = None
-    body_margin: float = 0.05
+    body_margin: float = 0.0
     # How much steeper contact is than proximity in the single clearance
     # penalty. Sets the ratio between the two regimes, not an absolute scale.
     contact_gain: float = 100.0
@@ -78,7 +80,7 @@ class NogoZoneCostModel:
         _half_w = getattr(cfg, 'robot_half_width', None)
         self.robot_half_length = None if _half_l is None else float(_half_l)
         self.robot_half_width = None if _half_w is None else float(_half_w)
-        self.body_margin = float(max(getattr(cfg, 'body_margin', 0.05), 0.0))
+        self.body_margin = float(max(getattr(cfg, 'body_margin', 0.0), 0.0))
         self.contact_gain = float(max(getattr(cfg, 'contact_gain', 100.0), 0.0))
 
         self.scene = scene_from_json(cfg.geometry_json)
@@ -305,61 +307,48 @@ class NogoZoneCostModel:
                 return 0.0
             return zero_penalty
 
-        xmins = ca.DM(self._xmins)
-        xmaxs = ca.DM(self._xmaxs)
-        ymins = ca.DM(self._ymins)
-        ymaxs = ca.DM(self._ymaxs)
-        weight = float(self.weight)
-        safe_distance = float(self.safe_distance)
-        logbarrier_eps = float(self.logbarrier_eps)
+        xmins, xmaxs = ca.DM(self._xmins), ca.DM(self._xmaxs)
+        ymins, ymaxs = ca.DM(self._ymins), ca.DM(self._ymaxs)
         warning_band = float(self.warning_band)
         near_weight = float(self.near_weight)
-        mode = self.mode
+        contact_gain = float(self.contact_gain)
 
-        def signed_distance_xy(x, y):
-            if mode == 'keep_in' and self.union_boundary_segments:
-                q = ca.vertcat(x, y)
-                dists = []
-                for p1, p2 in self.union_boundary_segments:
-                    p1_dm = ca.DM(p1)
-                    p2_dm = ca.DM(p2)
-                    v = p2_dm - p1_dm
-                    w = q - p1_dm
-                    v_len_sq = ca.sumsqr(v)
-                    t = ca.if_else(v_len_sq < 1e-9, 0.0, ca.fmin(ca.fmax(ca.dot(w, v) / v_len_sq, 0.0), 1.0))
-                    closest = p1_dm + t * v
-                    dists.append(ca.norm_2(q - closest))
-                min_dist = ca.mmin(ca.vertcat(*dists))
-
-                is_inside = False
-                for p in self.prisms:
-                    dx = ca.fmax(ca.fmax(p.xmin - x, 0.0), x - p.xmax)
-                    dy = ca.fmax(ca.fmax(p.ymin - y, 0.0), y - p.ymax)
-                    is_inside = ca.logic_or(is_inside, ca.logic_and(dx <= 0.0, dy <= 0.0))
-                return ca.if_else(is_inside, -min_dist, min_dist)
-            else:
-                dx = ca.fmax(ca.fmax(xmins - x, 0.0), x - xmaxs)
-                dy = ca.fmax(ca.fmax(ymins - y, 0.0), y - ymaxs)
+        def body_clearance(m):
+            if self.robot_half_length is None or self.robot_half_width is None:
+                # Compatibility path for point/disc callers.
+                dx = ca.fmax(ca.fmax(xmins - m[0], 0.0), m[0] - xmaxs)
+                dy = ca.fmax(ca.fmax(ymins - m[1], 0.0), m[1] - ymaxs)
                 outside = ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
-
-                inside_x = ca.fmin(x - xmins, xmaxs - x)
-                inside_y = ca.fmin(y - ymins, ymaxs - y)
-                inside_depth = ca.fmin(inside_x, inside_y)
-                inside = ca.logic_and(dx <= 0.0, dy <= 0.0)
-                signed = ca.if_else(inside, -inside_depth, outside)
-                return ca.mmin(signed)
+                inside_depth = ca.fmin(ca.fmin(m[0] - xmins, xmaxs - m[0]),
+                                       ca.fmin(m[1] - ymins, ymaxs - m[1]))
+                signed = ca.mmin(ca.if_else(
+                    ca.logic_and(dx <= 0.0, dy <= 0.0), -inside_depth, outside))
+                return (-signed if self.mode == 'keep_in' else signed) - self.safe_distance
+            c, s = ca.fabs(ca.cos(m[2])), ca.fabs(ca.sin(m[2]))
+            sx = self.robot_half_length * c + self.robot_half_width * s
+            sy = self.robot_half_length * s + self.robot_half_width * c
+            if self.mode == 'keep_in':
+                if len(self.prisms) != 1:
+                    raise ValueError('shape-aware keep-in cost requires one site-boundary prism')
+                p = self.prisms[0]
+                return ca.mmin(ca.vertcat(
+                    m[0] - p.xmin - sx, p.xmax - m[0] - sx,
+                    m[1] - p.ymin - sy, p.ymax - m[1] - sy,
+                )) - self.body_margin
+            dx = ca.fmax(ca.fmax(xmins - sx - m[0], 0.0), m[0] - xmaxs - sx)
+            dy = ca.fmax(ca.fmax(ymins - sy - m[1], 0.0), m[1] - ymaxs - sy)
+            outside = ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
+            inside_depth = ca.fmin(
+                ca.fmin(m[0] - (xmins - sx), (xmaxs + sx) - m[0]),
+                ca.fmin(m[1] - (ymins - sy), (ymaxs + sy) - m[1]))
+            signed = ca.mmin(ca.if_else(
+                ca.logic_and(dx <= 0.0, dy <= 0.0), -inside_depth, outside))
+            return signed - self.body_margin
 
         def penalty_state_casadi(m):
-            signed_d = signed_distance_xy(m[0], m[1])
-            if mode == 'keep_in':
-                clearance = -signed_d - safe_distance
-            else:
-                clearance = signed_d - safe_distance
-
-            band_excess = ca.fmax(warning_band - clearance, 0.0) / warning_band
-            warn = near_weight * ca.log(1.0 + ca.power(band_excess, 2))
-            viol = ca.fmax(-clearance, 0.0) / logbarrier_eps
-            return warn + weight * ca.power(viol, 2)
+            deficit = ca.fmax(warning_band - body_clearance(m), 0.0) / warning_band
+            overlap = ca.fmax(deficit - 1.0, 0.0)
+            return near_weight * (deficit**2 + contact_gain * overlap**2)
 
         return penalty_state_casadi
 
@@ -374,17 +363,15 @@ class NogoZoneCostModel:
                 return 0.0
             return zero_penalty
 
-        xmins = ca.DM(self._xmins)
-        xmaxs = ca.DM(self._xmaxs)
-        ymins = ca.DM(self._ymins)
-        ymaxs = ca.DM(self._ymaxs)
-        weight = float(self.weight)
-        safe_distance = float(self.safe_distance)
-        logbarrier_eps = float(self.logbarrier_eps)
+        # Build the same shape-aware state penalty as the free-solve path. For
+        # keep-out geometry evaluate it at sigma points; for the rectangular
+        # site boundary conservatively subtract the largest belief-axis sigma
+        # from the exact oriented-body clearance.
+        state_penalty = self.make_penalty_state_casadi()
         warning_band = float(self.warning_band)
         near_weight = float(self.near_weight)
+        contact_gain = float(self.contact_gain)
         kappa = max(float(kappa), 1e-6)
-        mode = self.mode
 
         def chol_2x2(M, eps=1e-9):
             M = 0.5 * (M + M.T)
@@ -398,65 +385,25 @@ class NogoZoneCostModel:
                 ca.horzcat(l21, l22),
             )
 
-        def signed_distance_xy(x, y):
-            if mode == 'keep_in' and self.union_boundary_segments:
-                q = ca.vertcat(x, y)
-                dists = []
-                for p1, p2 in self.union_boundary_segments:
-                    p1_dm = ca.DM(p1)
-                    p2_dm = ca.DM(p2)
-                    v = p2_dm - p1_dm
-                    w = q - p1_dm
-                    v_len_sq = ca.sumsqr(v)
-                    t = ca.if_else(v_len_sq < 1e-9, 0.0, ca.fmin(ca.fmax(ca.dot(w, v) / v_len_sq, 0.0), 1.0))
-                    closest = p1_dm + t * v
-                    dists.append(ca.norm_2(q - closest))
-                min_dist = ca.mmin(ca.vertcat(*dists))
-                
-                is_inside = False
-                for p in self.prisms:
-                    dx = ca.fmax(ca.fmax(p.xmin - x, 0.0), x - p.xmax)
-                    dy = ca.fmax(ca.fmax(p.ymin - y, 0.0), y - p.ymax)
-                    is_inside = ca.logic_or(is_inside, ca.logic_and(dx <= 0.0, dy <= 0.0))
-                return ca.if_else(is_inside, -min_dist, min_dist)
-            else:
-                dx = ca.fmax(ca.fmax(xmins - x, 0.0), x - xmaxs)
-                dy = ca.fmax(ca.fmax(ymins - y, 0.0), y - ymaxs)
-                outside = ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
-
-                inside_x = ca.fmin(x - xmins, xmaxs - x)
-                inside_y = ca.fmin(y - ymins, ymaxs - y)
-                inside_depth = ca.fmin(inside_x, inside_y)
-                inside = ca.logic_and(dx <= 0.0, dy <= 0.0)
-                signed = ca.if_else(inside, -inside_depth, outside)
-                return ca.mmin(signed)
-
-        def penalty_xy(x, y):
-            signed_d = signed_distance_xy(x, y)
-            if mode == 'keep_in':
-                clearance = -signed_d - safe_distance
-            else:
-                clearance = signed_d - safe_distance
-
-            band_excess = ca.fmax(warning_band - clearance, 0.0) / warning_band
-            warn = near_weight * ca.log(1.0 + ca.power(band_excess, 2))
-            viol = ca.fmax(-clearance, 0.0) / logbarrier_eps
-            return warn + weight * ca.power(viol, 2)
-
         def penalty_belief_casadi(m, S):
-            if mode == 'keep_in':
-                signed_d = signed_distance_xy(m[0], m[1])
+            if self.mode == 'keep_in' and self.robot_half_length is not None:
+                p = self.prisms[0]
+                c, s = ca.fabs(ca.cos(m[2])), ca.fabs(ca.sin(m[2]))
+                sx = self.robot_half_length * c + self.robot_half_width * s
+                sy = self.robot_half_length * s + self.robot_half_width * c
+                clearance = ca.mmin(ca.vertcat(
+                    m[0] - p.xmin - sx, p.xmax - m[0] - sx,
+                    m[1] - p.ymin - sy, p.ymax - m[1] - sy,
+                )) - self.body_margin
                 cov_xy = 0.5 * (S[:2, :2] + S[:2, :2].T)
                 trace = cov_xy[0, 0] + cov_xy[1, 1]
                 det = cov_xy[0, 0] * cov_xy[1, 1] - cov_xy[0, 1] * cov_xy[1, 0]
                 disc = ca.sqrt(ca.fmax(ca.power(trace, 2) - 4.0 * det, 0.0))
                 lambda_max = ca.fmax(0.5 * (trace + disc), 0.0)
                 sigma_margin = kappa * ca.sqrt(lambda_max + 1e-9)
-                clearance = -signed_d - safe_distance - sigma_margin
-                band_excess = ca.fmax(warning_band - clearance, 0.0) / warning_band
-                warn = near_weight * ca.log(1.0 + ca.power(band_excess, 2))
-                viol = ca.fmax(-clearance, 0.0) / logbarrier_eps
-                return warn + weight * ca.power(viol, 2)
+                deficit = ca.fmax(warning_band - (clearance - sigma_margin), 0.0) / warning_band
+                overlap = ca.fmax(deficit - 1.0, 0.0)
+                return near_weight * (deficit**2 + contact_gain * overlap**2)
 
             mean_xy = ca.reshape(m[:2], 2, 1)
             cov_xy = 0.5 * (S[:2, :2] + S[:2, :2].T)
@@ -477,7 +424,8 @@ class NogoZoneCostModel:
             )
             total = 0
             for sigma_xy, sigma_weight in zip(sigma_points, weights):
-                total += float(sigma_weight) * penalty_xy(sigma_xy[0], sigma_xy[1])
+                total += float(sigma_weight) * state_penalty(
+                    ca.vertcat(sigma_xy[0], sigma_xy[1], m[2]))
             return total
 
         return penalty_belief_casadi

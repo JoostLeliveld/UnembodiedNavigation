@@ -1,11 +1,8 @@
-"""Camera-network models for legacy and metric planning objectives.
+"""Camera-network fields used by the legacy and metric planning objectives.
 
-The planner proxy blends precisions using an expected detector SCORE. That proxy
-is not measurement noise, detection probability, or an exact expected posterior.
-Actual camera measurements remain metric reference-XY observations. The legacy
-objective maps a metric score proxy through one fixed camera chart. The metric
-objective instead enumerates usable-detection events and updates the predicted
-ground-plane belief directly.
+The current metric interface stores the precision supplied by the covariance
+model matched to each experimental arm. Older expected-information, score and
+Bernoulli-report schemas remain readable only for historical reproducibility.
 """
 from __future__ import annotations
 
@@ -61,6 +58,18 @@ def _spd(value, name):
     return value
 
 
+def _psd(value, name):
+    value = np.asarray(value, dtype=float)
+    if value.shape[-2:] != (2, 2) or not np.isfinite(value).all():
+        raise ValueError(f'{name} must contain finite 2x2 matrices')
+    if not np.allclose(value, value.swapaxes(-1, -2), atol=1e-12, rtol=1e-10):
+        raise ValueError(f'{name} must be symmetric')
+    scale = np.maximum(1.0, np.max(np.abs(value), axis=(-2, -1)))
+    if np.any(np.linalg.eigvalsh(value)[..., 0] < -1e-12 * scale):
+        raise ValueError(f'{name} must be positive semidefinite')
+    return value
+
+
 def projection_jacobian(H, state):
     """Original-image pixels per metre for the fixed cost chart, not a detector."""
     H = np.asarray(H, dtype=float)
@@ -77,20 +86,34 @@ def projection_jacobian(H, state):
 
 
 # Shared ambiguity floor: ONE isotropic position covariance, identical for every
-# arm. It enters the ambiguity term only as a constant subtraction, so any value
+# condition. It enters the ambiguity term only as a constant subtraction, so any value
 # below the tightest reachable R_eff gives identical rankings; the requirement is
-# that it never clips a real pose. Kept here so both the frozen and the mixture
+# that it never clips a real pose. Kept here so both the direct and historical
 # ambiguity path anchor to the same place. Mirrors
 # UnicyclePlannerBase.AMBIGUITY_FLOOR_POSITION_SD_M.
 AMBIGUITY_FLOOR_POSITION_SD_M = 1.5e-3
 
+# Fixed information regularizer for the ambiguity-only equivalent covariance.
+# Units are m^-2. At zero expected camera information this gives a declared
+# 1 m isotropic standard deviation. It is shared by every arm, independent of
+# process noise, and never enters belief propagation.
+AMBIGUITY_INFORMATION_REGULARIZER_M2_INV = 1.0
+
+DIRECT_INFORMATION_SCHEMAS = (
+    'camera_network.thesis_stage09.v3',
+    'camera_network.final_bayesian_planning.v1',
+    'camera_network.matched_covariance_precision.v1',
+)
+
 
 class CameraNetworkModel:
-    """Frozen per-camera score and availability grids, with full metric quality.
+    """Frozen per-camera planning fields.
 
-    NPZ array layout: fields [camera,y,x], covariances [camera,2,2]. Bilinear
-    interpolation matches the CasADi path. Outside the commissioned grid the
-    score and usable-detection probability are zero. No image or GT is queried.
+    Historical schemas contain availability and conditional covariance. The
+    current schema contains expected information with layout
+    ``[camera,y,x,2,2]`` and opportunity support ``[camera,y,x]``. Bilinear
+    interpolation matches the CasADi path. Outside the commissioned grid all
+    fields are zero. No image or ground truth is queried.
     """
     def __setattr__(self, name, value):
         if getattr(self, '_loaded', False) and not name.startswith('_'):
@@ -115,18 +138,27 @@ class CameraNetworkModel:
                 raise ValueError('camera-network source provenance differs from expected manifest')
             schema = self.metadata.get('schema')
             if schema not in ('camera_network.iwai.v1', 'camera_network.thesis_stage09.v1',
-                              'camera_network.thesis_stage09.v2'):
+                              'camera_network.thesis_stage09.v2',
+                              *DIRECT_INFORMATION_SCHEMAS):
                 raise ValueError('unsupported camera-network artifact schema')
             if self.metadata.get('reference') != 'robot_ground_reference_xy':
                 raise ValueError('network must measure the declared ground reference')
-            if self.metadata.get('frame') != 'map_bev' or self.metadata.get('covariance_units') != 'm2':
-                raise ValueError('network covariance must be map_bev square metres')
+            if self.metadata.get('frame') != 'map_bev':
+                raise ValueError('network field must use the map_bev frame')
+            self.direct_information = schema in DIRECT_INFORMATION_SCHEMAS
+            if not self.direct_information and self.metadata.get('covariance_units') != 'm2':
+                raise ValueError('network covariance must be square metres')
+            if schema == 'camera_network.final_bayesian_planning.v1':
+                if self.metadata.get('fit_role') != 'D_R':
+                    raise ValueError('final Bayesian planning fields must be fitted on D_R')
+                if self.metadata.get('D_eval_accessed') is not False:
+                    raise ValueError('final Bayesian planning fields must not access D_eval')
             if schema == 'camera_network.iwai.v1':
                 if self.metadata.get('score_target') != 'detector_score_with_miss_zero':
                     raise ValueError('the IWAI proxy requires an explicitly labelled detector-score field')
                 if self.metadata.get('availability_target') != 'valid_detection_finite_ground_projection':
                     raise ValueError('availability must describe the declared pre-gate detection event')
-            else:
+            elif not self.direct_information:
                 if self.metadata.get('score_target') != 'unused_in_metric_expected_belief':
                     raise ValueError('Stage-09 score must be explicitly marked unused')
                 if self.metadata.get('availability_target') != 'stage06_admitted_localization_measurement':
@@ -152,22 +184,48 @@ class CameraNetworkModel:
                 if axis.ndim != 1 or len(axis)<2 or not np.isfinite(axis).all() or not (np.diff(axis)>0).all():
                     raise ValueError('network axes must be finite and strictly increasing')
             self.fields = {}
-            for key in ('score', 'availability'):
-                grid = np.asarray(data[key], float)
-                if grid.shape != (len(ids), len(self.ys), len(self.xs)):
-                    raise ValueError(f'{key} camera/y/x dimensions differ')
-                if not np.isfinite(grid).all() or np.any((grid<0)|(grid>1)):
-                    raise ValueError(f'{key} must be in [0,1]')
-                self.fields[key] = immutable_array(grid[indices])
-            full_R = _spd(data['R_cond_m2'], 'conditional R')
-            full_miss = _spd(data['R_miss_proxy_m2'], 'miss proxy R')
-            if full_R.shape != (len(ids), 2, 2) or full_miss.shape != full_R.shape:
-                raise ValueError('one covariance per artifact camera is required before masking')
-            self.R = immutable_array(full_R[indices])
-            self.R_miss = immutable_array(full_miss[indices])
-            if np.linalg.eigvalsh(self.R_miss-self.R).min() < -1e-12:
-                raise ValueError('miss proxy cannot be more precise than conditional R')
-            self.dynamic_R = schema == 'camera_network.thesis_stage09.v2'
+            self.dynamic_R = False
+            if self.direct_information:
+                matched_covariance = schema == 'camera_network.matched_covariance_precision.v1'
+                expected_target = (
+                    'inverse_of_matched_runtime_covariance'
+                    if matched_covariance else 'admitted_runtime_precision_else_zero')
+                if self.metadata.get('planning_target') != expected_target:
+                    raise ValueError('direct-information fields must declare the planning target')
+                information_key = (
+                    'matched_precision_m2_inv'
+                    if matched_covariance else 'expected_information_m2_inv')
+                full_information = _psd(data[information_key], 'camera information')
+                expected = (len(ids), len(self.ys), len(self.xs), 2, 2)
+                if full_information.shape != expected:
+                    raise ValueError(
+                        f'expected information shape differs: {full_information.shape} != {expected}')
+                support_key = 'residual_support' if matched_covariance else 'opportunity_support'
+                support = np.asarray(data[support_key], dtype=float)
+                if (support.shape != expected[:3] or not np.isfinite(support).all()
+                        or np.any(support < 0.0)):
+                    raise ValueError('field support must be finite and nonnegative [camera,y,x]')
+                self.expected_information = immutable_array(full_information[indices])
+                self.fields[
+                    'residual_support' if matched_covariance else 'opportunity_support'
+                ] = immutable_array(support[indices])
+            else:
+                for key in ('score', 'availability'):
+                    grid = np.asarray(data[key], float)
+                    if grid.shape != (len(ids), len(self.ys), len(self.xs)):
+                        raise ValueError(f'{key} camera/y/x dimensions differ')
+                    if not np.isfinite(grid).all() or np.any((grid<0)|(grid>1)):
+                        raise ValueError(f'{key} must be in [0,1]')
+                    self.fields[key] = immutable_array(grid[indices])
+                full_R = _spd(data['R_cond_m2'], 'conditional R')
+                full_miss = _spd(data['R_miss_proxy_m2'], 'miss proxy R')
+                if full_R.shape != (len(ids), 2, 2) or full_miss.shape != full_R.shape:
+                    raise ValueError('one covariance per artifact camera is required before masking')
+                self.R = immutable_array(full_R[indices])
+                self.R_miss = immutable_array(full_miss[indices])
+                if np.linalg.eigvalsh(self.R_miss-self.R).min() < -1e-12:
+                    raise ValueError('miss proxy cannot be more precise than conditional R')
+                self.dynamic_R = schema == 'camera_network.thesis_stage09.v2'
             if self.dynamic_R:
                 self.headings = np.asarray(data['headings'], dtype=float)
                 if (self.headings.ndim != 1 or len(self.headings) < 3
@@ -184,11 +242,26 @@ class CameraNetworkModel:
         self.xs, self.ys = immutable_array(self.xs), immutable_array(self.ys)
         self.fields = MappingProxyType(self.fields)
         self.metadata = _freeze(self.metadata)
-        self.precision = immutable_array(np.linalg.solve(self.R, np.broadcast_to(np.eye(2), self.R.shape)))
-        self.miss_precision = immutable_array(np.linalg.solve(self.R_miss, np.broadcast_to(np.eye(2), self.R.shape)))
+        if not self.direct_information:
+            self.precision = immutable_array(np.linalg.solve(
+                self.R, np.broadcast_to(np.eye(2), self.R.shape)))
+            self.miss_precision = immutable_array(np.linalg.solve(
+                self.R_miss, np.broadcast_to(np.eye(2), self.R.shape)))
         self.interpolators = {key: [RegularGridInterpolator((self.ys,self.xs), grid,
             bounds_error=False, fill_value=0.) for grid in maps] for key,maps in self.fields.items()}
         self.interpolators = MappingProxyType({key: tuple(value) for key,value in self.interpolators.items()})
+        if self.direct_information:
+            self.information_interpolators = tuple(
+                tuple(tuple(
+                    RegularGridInterpolator(
+                        (self.ys, self.xs), field[..., row, column],
+                        bounds_error=False, fill_value=0.0,
+                    )
+                    for column in range(2)) for row in range(2))
+                for field in self.expected_information
+            )
+        else:
+            self.information_interpolators = ()
         if self.dynamic_R:
             self.R_interpolators = tuple(
                 tuple(tuple(
@@ -213,6 +286,17 @@ class CameraNetworkModel:
             raise ValueError('network query requires finite predicted [x,y,yaw]')
         out = {key:np.array([float(f([state[1],state[0]]).item()) for f in fs])
                for key,fs in self.interpolators.items()}
+        if self.direct_information:
+            matrices = []
+            for camera in self.information_interpolators:
+                matrix = np.asarray([
+                    [float(camera[row][column]([state[1], state[0]]).item())
+                     for column in range(2)] for row in range(2)
+                ])
+                matrices.append((matrix + matrix.T) / 2.0)
+            out['expected_information'] = _psd(
+                np.stack(matrices), 'interpolated expected information')
+            return out
         if self.dynamic_R:
             yaw = float(state[2] % (2.0 * np.pi))
             matrices = []
@@ -253,10 +337,22 @@ class CameraNetworkModel:
             ], dtype=float)
             for key, interpolators in self.interpolators.items()
         }
+        if self.direct_information:
+            matrices = []
+            for camera in self.information_interpolators:
+                matrix = np.asarray([
+                    [float(np.dot(weights, camera[row][column](points_yx)))
+                     for column in range(2)] for row in range(2)
+                ])
+                matrices.append((matrix + matrix.T) / 2.0)
+            out['expected_information'] = _psd(
+                np.stack(matrices), 'belief-averaged expected information')
         return out
 
     def proxy_ground_covariance(self, score):
         """Designed IWAI precision blend; finite at a miss, never a runtime R."""
+        if self.direct_information:
+            raise RuntimeError('direct-information artifacts do not expose the legacy score proxy')
         score = np.asarray(score,float)
         if score.shape != (len(self.camera_ids),) or not np.isfinite(score).all() or np.any((score<0)|(score>1)):
             raise ValueError('one score in [0,1] per camera is required')
@@ -264,6 +360,26 @@ class CameraNetworkModel:
         return np.linalg.solve(info,np.eye(2))
 
     def planning_diagnostics(self, state, P, H, kappa=1.):
+        if self.direct_information:
+            posterior, _ = self.expected_belief(state, P, kappa)
+            queried = self.query_belief(state, P, kappa)
+            support_key = (
+                'residual_support'
+                if 'residual_support' in queried else 'opportunity_support')
+            support = queried[support_key]
+            result = dict(
+                p_vis=float('nan'), p_vis_eff=float('nan'),
+                R_plan=np.asarray(posterior[:2, :2], dtype=float),
+                r_plan_u_std=float(np.sqrt(posterior[0, 0])),
+                r_plan_v_std=float(np.sqrt(posterior[1, 1])),
+                network_artifact_sha256=self.sha256,
+                p_vis_semantics='not_defined_for_camera_information_field',
+            )
+            result[
+                'network_residual_support'
+                if support_key == 'residual_support' else 'network_opportunity_support'
+            ] = support
+            return result
         query = self.query_belief(state,P,kappa)
         ground = self.proxy_ground_covariance(query['score'])
         J = projection_jacobian(H,state)
@@ -283,6 +399,15 @@ class CameraNetworkModel:
         and the approximation to the actual robust runtime fusion are unvalidated.
         """
         query = self.query(state)
+        if self.direct_information:
+            if mode not in ('information', 'direct_information'):
+                raise ValueError(
+                    'direct-information artifacts support only the information approximation')
+            P = validate_covariance(P, positive_definite=True, name='forecast prior')
+            information = np.linalg.inv(P)
+            information[:2, :2] += query['expected_information'].sum(axis=0)
+            posterior = np.linalg.inv(information)
+            return (posterior + posterior.T) / 2.0
         q = query['availability']
         conditional_R = query['conditional_covariance']
         P = validate_covariance(P, positive_definite=(mode == 'information'), name='forecast prior')
@@ -331,6 +456,27 @@ class CameraNetworkModel:
                 or int(opportunities) < 1):
             raise ValueError('opportunities must be a positive integer')
         P = validate_covariance(P, positive_definite=True, name='network forecast prior')
+        if self.direct_information:
+            floor_information = np.zeros((3, 3), dtype=float)
+            floor_information[:2, :2] = np.linalg.inv(
+                AMBIGUITY_FLOOR_POSITION_SD_M ** 2 * np.eye(2))
+            ambiguity = np.nan
+            for _ in range(int(opportunities)):
+                prior = P
+                camera_information = self.query_belief(
+                    state, prior, kappa)['expected_information']
+                total = np.zeros((3, 3), dtype=float)
+                total[:2, :2] = camera_information.sum(axis=0)
+                P = np.linalg.inv(np.linalg.inv(prior) + total)
+                P = (P + P.T) / 2.0
+                ideal = np.linalg.inv(np.linalg.inv(prior) + floor_information)
+                ideal = (ideal + ideal.T) / 2.0
+                sign, logdet = np.linalg.slogdet(P[:2, :2])
+                ideal_sign, ideal_logdet = np.linalg.slogdet(ideal[:2, :2])
+                if sign <= 0 or ideal_sign <= 0:
+                    raise ValueError('network posterior position covariance must be positive definite')
+                ambiguity = float(max(0.5 * (logdet - ideal_logdet), 0.0))
+            return P, ambiguity
         conditional_R = self.query(state)['conditional_covariance']
         if len(conditional_R) > 5:
             raise ValueError('exact expected-belief forecast is bounded to at most five cameras')
@@ -386,33 +532,28 @@ class CameraNetworkModel:
             ))
         return P, expected_entropy
 
-    def effective_observation_covariance(self, state, P, kappa=1., *, no_report_var=0.):
-        """Availability-weighted observation covariance at the predicted pose.
+    def effective_observation_covariance(self, state, P, kappa=1.):
+        """Effective covariance obtained from the summed planning information.
 
-        Kouw (IWAI 2024, Thm 1) shows that under a first-order extended
-        transform the ambiguity term reduces to ``0.5 log|R|``: the state
-        covariance cancels, so with a single fixed sensor the term is constant
-        over states and induces no preference. Here ``R`` is not fixed. Each
-        camera contributes its commissioned ``R_i(p, psi)`` weighted by the
-        probability ``q_i(p)`` that it returns a usable measurement, so the
-        effective precision is ``sum_i q_i R_i^-1``. A camera that is not
-        expected to report adds no precision. The result is a spatial field, so
-        the first-order ambiguity term does vary over the workspace.
+        Current artifacts supply ``Lambda_i^plan`` directly. Historical
+        artifacts reconstruct the same first-moment precision as
+        ``q_i R_i^-1``. Only active cameras are present in either sum. This
+        helper supports the ambiguity diagnostic; the belief rollout itself
+        updates the prior covariance in information form.
         """
-        conditional_R = self.query(state)['conditional_covariance']
-        availability = np.clip(
-            self.query_belief(state, P, kappa)['availability'], 0., 1.)
-        precision = np.zeros((2, 2), dtype=float)
-        for weight, R in zip(availability, conditional_R):
-            precision += float(weight) * np.linalg.inv(R)
-        # Floor the precision so a fully unobserved position stays finite.
-        # A step with no reading is not infinitely uncertain: the belief grows
-        # by exactly one step of process noise. Treat it as a reading of that
-        # quality, so the floor is the motion model rather than a chosen
-        # constant. ``process_noise_step_var`` is set by the planner.
-        floor_var = float(no_report_var)
-        if floor_var > 0.:
-            precision += (1.0 / floor_var) * np.eye(2)
+        if self.direct_information:
+            precision = self.query_belief(
+                state, P, kappa)['expected_information'].sum(axis=0)
+        else:
+            conditional_R = self.query(state)['conditional_covariance']
+            availability = np.clip(
+                self.query_belief(state, P, kappa)['availability'], 0., 1.)
+            precision = np.zeros((2, 2), dtype=float)
+            for weight, R in zip(availability, conditional_R):
+                precision += float(weight) * np.linalg.inv(R)
+        # Fixed ambiguity-only regularization. This keeps the inverse finite at
+        # zero camera information without coupling the sensor term to Q.
+        precision += AMBIGUITY_INFORMATION_REGULARIZER_M2_INV * np.eye(2)
         return np.linalg.inv(precision)
 
     def make_expected_belief_casadi(self, kappa=1., opportunities=1):
@@ -424,6 +565,10 @@ class CameraNetworkModel:
         if (isinstance(opportunities, bool) or int(opportunities) != opportunities
                 or int(opportunities) < 1):
             raise ValueError('opportunities must be a positive integer')
+        if self.direct_information:
+            return self._make_direct_information_belief_casadi(
+                ca, _differential_entropy_ca, _xy_visibility_sigma_points_ca,
+                kappa, int(opportunities))
         if len(self.camera_ids) > 5:
             raise ValueError('exact expected-belief forecast is bounded to at most five cameras')
         interpolators = [
@@ -534,10 +679,13 @@ class CameraNetworkModel:
 
         return evaluate
 
-    def make_effective_covariance_casadi(self, kappa=1., *, no_report_var=0.):
+    def make_effective_covariance_casadi(self, kappa=1.):
         """Differentiable counterpart of :meth:`effective_observation_covariance`."""
         import casadi as ca
         from planning.core.casadi_efe import _xy_visibility_sigma_points_ca
+        if self.direct_information:
+            return self._make_direct_effective_covariance_casadi(
+                ca, _xy_visibility_sigma_points_ca, kappa)
         availability_interpolators = [
             ca.interpolant(
                 f'network_reff_q_{self.sha256[:10]}_{i}', 'linear',
@@ -559,8 +707,6 @@ class CameraNetworkModel:
                     for column in range(2)] for row in range(2)]
                 for camera in range(len(self.camera_ids))
             ]
-        floor_var = float(no_report_var)
-
         def evaluate(m, P):
             if covariance_interpolators is None:
                 conditional_R = [ca.DM(value) for value in self.R]
@@ -580,7 +726,8 @@ class CameraNetworkModel:
                     )
                     conditional_R.append(.5 * (matrix + matrix.T))
             points, weights = _xy_visibility_sigma_points_ca(m[:2], P[:2, :2], kappa)
-            precision = ((1.0 / floor_var) if floor_var > 0. else 0.) * ca.DM.eye(2)
+            precision = (
+                AMBIGUITY_INFORMATION_REGULARIZER_M2_INV * ca.DM.eye(2))
             for interp, R_ca in zip(availability_interpolators, conditional_R):
                 total = 0.
                 for xy, weight in zip(points, weights):
@@ -599,7 +746,89 @@ class CameraNetworkModel:
 
         return evaluate
 
+    def _direct_information_interpolators_casadi(self, ca, prefix):
+        return [
+            [[
+                ca.interpolant(
+                    f'{prefix}_{self.sha256[:10]}_{camera}_{row}_{column}',
+                    'linear', [self.xs.tolist(), self.ys.tolist()],
+                    field[..., row, column].T.ravel(order='F').tolist(),
+                )
+                for column in range(2)] for row in range(2)]
+            for camera, field in enumerate(self.expected_information)
+        ]
+
+    def _belief_averaged_information_casadi(
+            self, ca, sigma_points, interpolators, m, P, kappa):
+        points, weights = sigma_points(m[:2], P[:2, :2], kappa)
+        total = ca.MX.zeros(2, 2)
+        for camera in interpolators:
+            matrix = ca.MX.zeros(2, 2)
+            for row in range(2):
+                for column in range(2):
+                    value = 0.0
+                    for xy, weight in zip(points, weights):
+                        inside = ca.logic_and(
+                            ca.logic_and(xy[0] >= self.xs[0], xy[0] <= self.xs[-1]),
+                            ca.logic_and(xy[1] >= self.ys[0], xy[1] <= self.ys[-1]),
+                        )
+                        bounded = ca.vertcat(
+                            ca.fmin(ca.fmax(xy[0], self.xs[0]), self.xs[-1]),
+                            ca.fmin(ca.fmax(xy[1], self.ys[0]), self.ys[-1]),
+                        )
+                        value += float(weight) * ca.if_else(
+                            inside, camera[row][column](bounded), 0.0)
+                    matrix[row, column] = value
+            total += 0.5 * (matrix + matrix.T)
+        return total
+
+    def _make_direct_information_belief_casadi(
+            self, ca, differential_entropy, sigma_points, kappa, opportunities):
+        interpolators = self._direct_information_interpolators_casadi(
+            ca, 'network_direct_info')
+        floor_information = ca.DM.zeros(3, 3)
+        floor_information[:2, :2] = (
+            1.0 / AMBIGUITY_FLOOR_POSITION_SD_M ** 2) * ca.DM.eye(2)
+
+        def evaluate(m, P):
+            prior = 0.5 * (P + P.T)
+            ambiguity = 0.0
+            for _ in range(opportunities):
+                measurement = self._belief_averaged_information_casadi(
+                    ca, sigma_points, interpolators, m, prior, kappa)
+                state_information = ca.MX.zeros(3, 3)
+                state_information[:2, :2] = measurement
+                posterior = ca.inv(ca.inv(prior) + state_information)
+                posterior = 0.5 * (posterior + posterior.T)
+                ideal = ca.inv(ca.inv(prior) + floor_information)
+                ideal = 0.5 * (ideal + ideal.T)
+                ambiguity = ca.fmax(
+                    differential_entropy(posterior[:2, :2])
+                    - differential_entropy(ideal[:2, :2]),
+                    0.0,
+                )
+                prior = posterior
+            return prior, ambiguity
+
+        return evaluate
+
+    def _make_direct_effective_covariance_casadi(
+            self, ca, sigma_points, kappa):
+        interpolators = self._direct_information_interpolators_casadi(
+            ca, 'network_direct_effective')
+        def evaluate(m, P):
+            precision = self._belief_averaged_information_casadi(
+                ca, sigma_points, interpolators, m, P, kappa)
+            precision += (
+                AMBIGUITY_INFORMATION_REGULARIZER_M2_INV * ca.DM.eye(2))
+            return ca.inv(precision)
+
+        return evaluate
+
     def make_proxy_covariance_casadi(self, H, kappa=1.):
+        if self.direct_information:
+            raise RuntimeError(
+                'direct-information artifacts do not expose the legacy score proxy')
         import casadi as ca
         from planning.core.casadi_efe import _xy_visibility_sigma_points_ca
         interpolators=[]

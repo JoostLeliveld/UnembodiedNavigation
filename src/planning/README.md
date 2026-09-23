@@ -2,7 +2,7 @@
 
 This package contains the existing IWAI expected-free-energy planner and its belief rollout.
 The thesis keeps this planner fixed. Commissioning changes only the future camera model
-supplied to the rollout: availability `q_i(p)` and the matched measurement covariance
+supplied to the rollout as the inverse of the matched runtime covariance
 `R_i(p, psi)` of the selected correction.
 
 Process covariance `Q` is a frozen configuration input. It is not estimated, compared, or

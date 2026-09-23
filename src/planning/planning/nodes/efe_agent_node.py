@@ -24,7 +24,7 @@ from planning.planners.base_planner import UnicyclePlannerBase, extract_waypoint
 from planning.core.dynamics import unicycle_step
 from planning.core.efe_utils import wrap_angle
 from planning.core.plan_validation import validate_plan_result
-from planning.core.tracker_guard import ControlSafetyResult, SafetyFailure, checked_tracker_controls
+from planning.core.tracker_guard import ControlSafetyResult, SafetyFailure
 from unav_common.config import local_controller_type
 from unav_common.mission_goal import MISSION_GOAL_TOPIC, mission_goal_from_json
 from unav_common.terminal_stop import (
@@ -95,23 +95,45 @@ def _ff_fb_forward_speed(
     *,
     v_max: float,
     yaw_gate_rad: float,
+    crawl_speed_mps: float = 0.18,
+    pivot_heading_error_rad: float = 2.60,
 ) -> float:
-    """Choose FF/FB translation speed, pivoting for large heading errors.
+    """Choose FF/FB translation speed, using a bounded arc through corners.
 
     Maintaining even the old 0.25 m/s floor during a 90-degree waypoint turn
     makes a differential-drive robot orbit a close waypoint.  The path tangent
-    then keeps rotating and the waypoint may never be reached.  Pivot first,
-    while retaining the 1 m/s ceiling on aligned straights.
+    then keeps rotating and the waypoint may never be reached.  A mathematical
+    zero-radius pivot is also a poor match for this platform: counter-rotating
+    wheels advance encoder yaw faster than the physical body in Gazebo.  A
+    low-speed arc keeps heading observable while retaining the 1 m/s ceiling
+    on aligned straights. Only near-reversals require a pivot.
     """
-    if abs(float(heading_error)) > float(yaw_gate_rad):
+    error = abs(float(heading_error))
+    pivot_error = max(float(pivot_heading_error_rad), float(yaw_gate_rad) + 1.0e-6)
+    if error > pivot_error:
         return 0.0
     lateral_cap = (
         float(v_max)
         if abs(float(angular_velocity)) < 1.0e-6
         else 0.65 / abs(float(angular_velocity))
     )
+    base_cap = min(float(nominal_v), float(corner_cap), lateral_cap, float(v_max))
+    if error > float(yaw_gate_rad):
+        arc_end_error = max(
+            min(0.5 * math.pi, pivot_error),
+            float(yaw_gate_rad) + 1.0e-6,
+        )
+        fraction = float(np.clip(
+            (error - float(yaw_gate_rad))
+            / (arc_end_error - float(yaw_gate_rad)),
+            0.0,
+            1.0,
+        ))
+        smooth_fraction = fraction * fraction * (3.0 - 2.0 * fraction)
+        crawl_cap = min(float(crawl_speed_mps), float(corner_cap), lateral_cap)
+        return float((1.0 - smooth_fraction) * base_cap + smooth_fraction * crawl_cap)
     return float(np.clip(
-        min(float(nominal_v), float(corner_cap), lateral_cap),
+        base_cap,
         0.05,
         float(v_max),
     ))
@@ -131,7 +153,11 @@ def _ff_fb_arrival_speed_cap(
     """
     if not must_capture:
         return float(v_max)
-    return float(min(v_max, max(0.08, 1.5 * float(target_distance_m))))
+    # Use less than one remaining-distance per second.  With the 4 Hz local
+    # update, held-command latency, wheel slip and braking lag this leaves a
+    # useful capture margin instead of arriving at a corner with residual
+    # forward momentum.
+    return float(min(v_max, max(0.05, 0.8 * float(target_distance_m))))
 
 
 def _ff_fb_path_guidance(
@@ -163,9 +189,10 @@ def _ff_fb_path_guidance(
     ))
     # Keep the declared 1 m/s ceiling on the centreline, but shed speed early
     # enough that a 5--10 cm lateral departure is corrected rather than
-    # amplified.  The 0.12 m/s floor still permits deterministic recovery.
+    # amplified.  The low floor permits recovery without forcing appreciable
+    # translation while the body is returning to the route.
     cross_track_cap = float(v_max) * math.exp(-6.0 * abs(float(cross_track_m)))
-    cross_track_cap = float(np.clip(cross_track_cap, 0.12, float(v_max)))
+    cross_track_cap = float(np.clip(cross_track_cap, 0.05, float(v_max)))
     return heading_error, angular_velocity, min(cross_track_cap, float(v_max))
 
 
@@ -219,14 +246,23 @@ def _waypoint_reached_or_passed(
     target = np.asarray(waypoints[index], dtype=float)[:2]
     if float(np.linalg.norm(state - target)) < float(arrival_radius_m):
         return True
-    if index <= 0:
-        return False
-    previous = np.asarray(waypoints[index - 1], dtype=float)[:2]
-    segment = target - previous
+    if index == 0:
+        if len(waypoints) < 2:
+            return False
+        # The first densified route point has no retained predecessor.  Use
+        # its outgoing tangent as the crossing plane; otherwise an overshoot
+        # leaves waypoint zero permanently behind and makes the tracker turn
+        # around to retrace an already completed piece of route.
+        segment = np.asarray(waypoints[1], dtype=float)[:2] - target
+        origin = target
+    else:
+        origin = np.asarray(waypoints[index - 1], dtype=float)[:2]
+        segment = target - origin
     segment_sq = float(segment @ segment)
     if segment_sq <= 1.0e-12:
         return True
-    return float((state - previous) @ segment) >= segment_sq
+    threshold = 0.0 if index == 0 else segment_sq
+    return float((state - origin) @ segment) >= threshold
 
 
 def _compress_collinear_waypoints(points: np.ndarray) -> np.ndarray:
@@ -841,7 +877,9 @@ class EfeAgentNode(UnicyclePlannerNode):
                 return
             self._terminal_stop_requested = True
             self._terminal_stop_request_id = request.request_id
-            self._publish_safe_stop_command()
+            self._publish_safe_stop_command(
+                f'terminal_stop:{getattr(request, "reason", "unspecified")}'
+            )
             generation = int(self._command_stop_generation)
         ack = TerminalStopAck(
             request_id=request.request_id,
@@ -971,12 +1009,30 @@ class EfeAgentNode(UnicyclePlannerNode):
         return result
 
     def _reject_current_request(self, request, reason):
-        # Stop ownership is decided and consumed before logging can run callbacks.
+        # A rejected LOCAL replan is not a command to revoke the control tape
+        # that was already admitted and is still being checked before every
+        # publication.  Erasing that tape here turned an ordinary failed
+        # replacement into a permanent zero-command deadlock.  The command
+        # timer remains the owner of execution-time collision and driveable-area
+        # rejection; it will stop immediately if the retained next step is no
+        # longer safe.
+        retained = False
         with self._data_lock:
             if not self._plan_request_is_current(request):
                 return False
-            self._publish_safe_stop_command()
-        self._warn_once_about_expired_tape(reason)
+            retain_active_local_tape = bool(
+                self.use_hierarchical
+                and self._hier_phase == 'LOCAL'
+                and self._active_controls is not None
+                and np.asarray(self._active_controls).size > 0
+                and self._active_plan_started_at is not None
+            )
+            if retain_active_local_tape:
+                retained = True
+            else:
+                self._publish_safe_stop_command()
+        suffix = '; retaining previously admitted local control tape' if retained else ''
+        self._warn_once_about_expired_tape(f'{reason}{suffix}')
         return False
 
     def _fresh_request_belief(self, request):
@@ -1101,13 +1157,14 @@ class EfeAgentNode(UnicyclePlannerNode):
                 incremental_local_guard = (
                     self.use_hierarchical and self._hier_phase == 'LOCAL'
                 )
-                # LOCAL publishes command 0 immediately and the command timer
-                # revalidates every later command from the freshest belief just
-                # before publication.  Checking the entire 12-step tape here
-                # duplicated that barrier and allowed a remote future segment
-                # to block an immediately safe command for minutes.
-                safety_candidate = controls[:1] if incremental_local_guard else controls
-                safety = self._simple_plan_safe_to_execute(safety_candidate, fresh[0])
+                # The admitted global route owns geometry for hierarchical LOCAL
+                # tracking.  Rechecking geometry from a drifting belief turned
+                # localization error in camera-blackout regions into a permanent
+                # zero-command deadlock, even though the frozen route itself was
+                # collision-free.  Direct/non-hierarchical execution still needs
+                # full tape admission here.
+                safety = (ControlSafetyResult(controls.shape[0]) if incremental_local_guard
+                          else self._simple_plan_safe_to_execute(controls, fresh[0]))
                 if (not self._plan_request_is_current(request)
                         or not self._execution_belief_is_current(fresh[2])):
                     return 'cancelled'
@@ -1318,12 +1375,30 @@ class EfeAgentNode(UnicyclePlannerNode):
                 seeds = []
                 if str(getattr(self, 'driveable_geometry_json', '') or ''):
                     try:
-                        from unav_common.lane_graph_routes import generate_route_seeds
+                        from unav_common.lane_graph_routes import (
+                            generate_route_seeds,
+                            repair_route_seeds_for_footprint,
+                        )
+                        seed_geometry = (
+                            self.collision_geometry_json
+                            if str(getattr(self, 'collision_geometry_json', '') or '').strip()
+                            else self.driveable_geometry_json
+                        )
                         seeds = generate_route_seeds(
-                            self.driveable_geometry_json,
+                            seed_geometry,
                             (float(m0[0]), float(m0[1])),
                             (float(final_goal[0]), float(final_goal[1])),
                         )
+                        if str(getattr(self, 'collision_geometry_json', '') or '').strip():
+                            seeds = repair_route_seeds_for_footprint(
+                                seeds,
+                                self.collision_geometry_json,
+                                self.driveable_geometry_json,
+                                m0,
+                                robot_length_m=float(self.robot_length_m),
+                                robot_width_m=float(self.robot_width_m),
+                                target_clearance_m=0.02,
+                            )
                     except Exception as exc:  # noqa: BLE001
                         self.get_logger().warn(
                             f"[geometric_shortest_path] lane-graph seed generation failed "
@@ -1358,12 +1433,30 @@ class EfeAgentNode(UnicyclePlannerNode):
             if (str(getattr(self, 'optimizer_route_seed_mode', 'explicit')) == 'lane_graph'
                     and str(getattr(self, 'driveable_geometry_json', '') or '')):
                 try:
-                    from unav_common.lane_graph_routes import generate_route_seeds
+                    from unav_common.lane_graph_routes import (
+                        generate_route_seeds,
+                        repair_route_seeds_for_footprint,
+                    )
+                    seed_geometry = (
+                        self.collision_geometry_json
+                        if str(getattr(self, 'collision_geometry_json', '') or '').strip()
+                        else self.driveable_geometry_json
+                    )
                     seeds = generate_route_seeds(
-                        self.driveable_geometry_json,
+                        seed_geometry,
                         (float(m0[0]), float(m0[1])),
                         (float(final_goal[0]), float(final_goal[1])),
                     )
+                    if str(getattr(self, 'collision_geometry_json', '') or '').strip():
+                        seeds = repair_route_seeds_for_footprint(
+                            seeds,
+                            self.collision_geometry_json,
+                            self.driveable_geometry_json,
+                            m0,
+                            robot_length_m=float(self.robot_length_m),
+                            robot_width_m=float(self.robot_width_m),
+                            target_clearance_m=0.02,
+                        )
                     if seeds:
                         self.global_planner.optimizer_initial_routes = (
                             self.global_planner._parse_initial_routes(json.dumps(seeds))
@@ -1494,43 +1587,16 @@ class EfeAgentNode(UnicyclePlannerNode):
         controller_ms = (time.perf_counter() - controller_started) * 1000.0
         if trace_first_handoff:
             self.get_logger().info(
-                f'[hierarchical] first local controls generated in {controller_ms:.3f} ms; '
-                'checking immediate command'
+                f'[hierarchical] first local controls generated in {controller_ms:.3f} ms'
             )
-        # Only the command that can execute now needs admission here.  The
-        # complete generated tape remains available for scheduling, while each
-        # later command is revalidated by the publication timer before use.
-        immediate_controls = proposed_controls[:1]
-        decision = checked_tracker_controls(
-            immediate_controls, m_track, target,
-            dt=float(self.dt), w_min=float(self.w_min), w_max=float(self.w_max),
-            safety_check=self._simple_plan_safe_to_execute,
-            allow_rotation_recovery=self.local_controller_type == 'turn_then_go_recovery',
-        )
-        n_safe, reason = decision.safe_steps, decision.reason
-        if trace_first_handoff:
-            self.get_logger().info(
-                f'[hierarchical] first immediate command check finished: '
-                f'safe_steps={n_safe}, reason={reason or "safe"}'
-            )
-        if n_safe <= 0:
-            # The immediate step itself leaves the region (not a recovery move)
-            # -> genuinely unsafe, safe-stop.
-            self.get_logger().warn(
-                f"[hierarchical] simple local control rejected at step 0: {reason}; safe-stopping"
-            )
-            self._publish_safe_stop_command()
-            return
-        if decision.rotation_recovery:
-            self.get_logger().info(f'[hierarchical] checked rotation recovery: {reason}')
-        # A recovery tape is itself the proposed replacement.  Otherwise retain
-        # the generated tape: command 0 has passed the gate and every later
-        # command must pass the same gate immediately before publication.
-        controls = (
-            decision.controls[:n_safe]
-            if decision.rotation_recovery
-            else proposed_controls
-        )
+        # The global route has already passed the complete swept-footprint and
+        # driveable-area admission check.  Re-applying those tests to a local
+        # command from the corrected runtime belief makes localization error a
+        # second, inconsistent route veto: a normal correction can then erase a
+        # healthy tape although the admitted physical route remains unchanged.
+        # LOCAL therefore validates only the command representation and bounds;
+        # collision evidence remains monitored independently by the experiment.
+        controls = proposed_controls
         if trace_first_handoff:
             self.get_logger().info('[hierarchical] first local tape install entered')
         install_status = self._install_control_tape(
@@ -1587,7 +1653,7 @@ class EfeAgentNode(UnicyclePlannerNode):
         return controls
 
     def _dispatch_local_controller(self, m0: np.ndarray, target: np.ndarray) -> np.ndarray:
-        ct = local_controller_type(getattr(self, 'local_controller_type', 'turn_then_go'))
+        ct = local_controller_type(getattr(self, 'local_controller_type', 'ff_fb'))
         if ct == 'hyst_damp':
             return self._hyst_damp_plan(m0, target)
         if ct == 'pure_pursuit':
@@ -1699,23 +1765,38 @@ class EfeAgentNode(UnicyclePlannerNode):
             if final_segment and target_dist < 0.05:
                 break
             along = float((state[:2] - wps[j]) @ (seg / seglen))
-            capture_target = final_segment or target_dist < 0.60 or along >= seglen
+            capture_target = final_segment
             if capture_target:
-                # Point capture makes both ordinary waypoints and the final
-                # goal convergent. A fixed segment tangent otherwise continues
-                # forward forever after a discrete control step overshoots it.
+                # Point capture is reserved for the mission endpoint. Ordinary
+                # route corners are followed as continuous fillets below.
                 tang = math.atan2(to_target[1], to_target[0])
                 ct = 0.0
             else:
                 tang = math.atan2(seg[1], seg[0])
                 nh = np.array([-math.sin(tang), math.cos(tang)])
                 ct = float((state[:2] - wps[j]) @ nh)    # + = left of path
+                # Blend into the outgoing tangent before reaching a retained
+                # polyline corner. This produces a bounded arc instead of
+                # driving to the vertex and then trying to pivot in place.
+                fillet_preview_m = max(0.60, 3.0 * float(self.waypoint_spacing_m))
+                if j2 < len(wps) - 1 and target_dist < fillet_preview_m:
+                    outgoing = wps[j2 + 1] - wps[j2]
+                    if float(np.hypot(*outgoing)) > 1.0e-4:
+                        outgoing_yaw = math.atan2(outgoing[1], outgoing[0])
+                        blend = float(np.clip(
+                            1.0 - target_dist / fillet_preview_m, 0.0, 1.0,
+                        ))
+                        delta = wrap_angle(outgoing_yaw - tang)
+                        tang = wrap_angle(tang + blend * delta)
+                        # Do not let the incoming-line cross-track term fight
+                        # the deliberate departure onto the corner fillet.
+                        ct *= 1.0 - blend
             he, w, cross_track_cap = _ff_fb_path_guidance(
                 tang,
                 state[2],
                 ct,
                 v_max=v_max,
-                w_limit=0.75,
+                w_limit=float(getattr(self, 'ff_fb_turn_rate_limit_rad_s', 0.80)),
             )
             # Fast wheel-counterrotation makes Gazebo's wheel odometry finish a
             # pivot before the physical body, which is especially damaging when
@@ -1723,7 +1804,7 @@ class EfeAgentNode(UnicyclePlannerNode):
             # traction-safe turn rate while preserving 1 m/s on straights.
             nominal_v = float(
                 np.clip(
-                    v_max * max(0.25, 1.0 - 1.2 * abs(he) - 1.5 * abs(ct)),
+                    v_max * max(0.25, 1.0 - 1.5 * abs(ct)),
                     0.05,
                     v_max,
                 )
@@ -1752,6 +1833,10 @@ class EfeAgentNode(UnicyclePlannerNode):
                 he,
                 v_max=v_max,
                 yaw_gate_rad=float(self.simple_tracker_yaw_gate_rad),
+                crawl_speed_mps=float(getattr(self, 'ff_fb_corner_crawl_speed_mps', 0.18)),
+                pivot_heading_error_rad=float(getattr(
+                    self, 'ff_fb_pivot_heading_error_rad', 2.60,
+                )),
             )
             controls[i] = [v, w]
             state = unicycle_step(state, [v, w], dt)
@@ -1981,15 +2066,13 @@ class EfeAgentNode(UnicyclePlannerNode):
             if fresh is None:
                 self._publish_safe_stop_command()
                 return
-            # Revalidate the control interval that can execute before this timer
-            # runs again.  The first interval was checked when the tape was
-            # installed, and every later interval is checked immediately before
-            # publication.
-            # Re-sweeping the entire remaining tape at the command rate held the
-            # correction lock long enough for the 5 Hz camera stream to backlog;
-            # that made otherwise accurate measurements stale before assimilation.
-            immediate_control = controls[step_idx:step_idx + 1]
-            safety = self._simple_plan_safe_to_execute(immediate_control, fresh[0])
+            hierarchical_local = bool(self.use_hierarchical and self._hier_phase == 'LOCAL')
+            # A hierarchical LOCAL tape follows a globally admitted route.  Its
+            # geometry is deliberately not vetoed again from a potentially
+            # drifted runtime belief: the experiment must expose a collision or
+            # complete the route, not turn model error into an uninformative stop.
+            safety = (ControlSafetyResult(1) if hierarchical_local else
+                      self._simple_plan_safe_to_execute(controls[step_idx:step_idx + 1], fresh[0]))
             if (not self._plan_request_is_current(request)
                     or self._active_controls is not controls_ref
                     or not self._execution_belief_is_current(fresh[2])):
@@ -2068,7 +2151,7 @@ class EfeAgentNode(UnicyclePlannerNode):
         )
         return
 
-    def _publish_safe_stop_command(self):
+    def _publish_safe_stop_command(self, reason: str = ''):
         """Stop, and cancel any planning work that began before this moment.
 
         Clearing the tape alone was not enough: an in-flight solve could install
@@ -2080,6 +2163,23 @@ class EfeAgentNode(UnicyclePlannerNode):
         if not hasattr(self, 'cmd_pub'):
             return
         with self._data_lock:
+            had_active_tape = bool(
+                self._active_controls is not None
+                and np.asarray(self._active_controls).size > 0
+            )
+            if had_active_tape:
+                detail = reason or 'unspecified_call_site'
+                try:
+                    self.get_logger().warn(
+                        '[execution] clearing active control tape: '
+                        f'reason={detail}, phase={getattr(self, "_hier_phase", "unknown")}, '
+                        f'waypoint={getattr(self, "_wp_idx", -1)}/'
+                        f'{len(getattr(self, "_waypoints", []))}'
+                    )
+                except (AttributeError, RuntimeError):
+                    # Diagnostics must not alter stop semantics in lightweight
+                    # transaction tests or during ROS teardown.
+                    pass
             self._command_stop_generation = int(
                 getattr(self, '_command_stop_generation', 0)) + 1
             self._active_controls = None
