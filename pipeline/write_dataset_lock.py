@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """(Re)write the v8 campaign lock from the v8 index: roles, counts and source hashes.
 
-The index itself (combined_recapture_v8.load_rows) refuses any robot-absent run, so a
+The index itself (dataset.load_rows) refuses any robot-absent run, so a
 lock is only written for a dataset that passed the presence check.
 
-    THESIS_REFERENCE_DATASET=v8_uniform python3 pipeline/write_dataset_lock.py
+    python3 pipeline/write_dataset_lock.py
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
-from pipeline import combined_recapture_v8 as v8  # noqa: E402
+from pipeline import dataset as v8  # noqa: E402
 
 HERE = REPO / "pipeline"
 R = "logs/thesis_final_pipeline_v1/recapture_v8_uniform"
@@ -54,7 +54,7 @@ def main() -> int:
         "derived_from": {"lock": base, "sha256": sha(base)},
     })
     lock["sampling"].update({
-        "loader": "pipeline/combined_recapture_v8.py",
+        "loader": "pipeline/dataset.py",
         "positions": f"{R}/capture_positions_v8.csv", "positions_sha256": sha(f"{R}/capture_positions_v8.csv"),
         "topup_rule": "pipeline/capture/plan_topup.py",
         "robot_absent_list": f"{R}/v5_robot_absent_poses.json",

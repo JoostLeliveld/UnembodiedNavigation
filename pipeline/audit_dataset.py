@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Hard integrity audit of the v8 dataset. Exits non-zero on any failure.
 
-Checks, each on the rows `combined_recapture_v8.load_rows()` returns:
+Checks, each on the rows `dataset.load_rows()` returns:
 1. no robot-absent run remains (the loader raises otherwise);
 2. every (capture source, pose) has exactly five camera rows, and every plan pose is used
    by exactly one source;
@@ -13,7 +13,7 @@ Checks, each on the rows `combined_recapture_v8.load_rows()` returns:
 5. every referenced image exists, and a seeded random sample of 3000 decodes;
 6. no row with capture_status other than ok is present.
 
-    THESIS_REFERENCE_DATASET=v8_uniform python3 pipeline/audit_dataset.py
+    python3 pipeline/audit_dataset.py
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
-from pipeline import combined_recapture_v8 as v8  # noqa: E402
+from pipeline import dataset as v8  # noqa: E402
 
 MAX_DEFICIT = 0.10
 MIN_ROWS = 100

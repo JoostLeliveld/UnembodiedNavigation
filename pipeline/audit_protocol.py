@@ -31,7 +31,7 @@ def main() -> int:
     protocol["population"] = {
         "positions": lock["partition"]["roles"]["final_audit"],
         "opportunities": expected,
-        "merge_loader": "pipeline/combined_recapture_v8.py",
+        "merge_loader": "pipeline/dataset.py",
     }
     inputs = {
         "campaign_lock": LOCK,
