@@ -67,14 +67,14 @@ class AvailabilityModelSpec:
         if not self.model_id:
             raise ContractValidationError("availability model needs a non-empty id")
         if self.target != Q_SENSOR_TARGET:
-            raise ContractValidationError("q_i(p) must predict detector hit and sensor-gate pass")
+            raise ContractValidationError("legacy availability must predict detector hit and sensor-gate pass")
         if self.role != Q_SENSOR_ROLE:
-            raise ContractValidationError("q_i(p) is a forecast, never a runtime acceptance gate")
+            raise ContractValidationError("legacy availability is a forecast, never a runtime acceptance gate")
         if self.includes_nis:
-            raise ContractValidationError("NIS is downstream of q_i(p) and cannot enter its target")
+            raise ContractValidationError("NIS is downstream of legacy availability and cannot enter its target")
         if self.query_inputs != ("camera_id", "position"):
             raise ContractValidationError(
-                "q_i(p) query inputs are exactly camera_id and 2-D position; heading is pooled"
+                "legacy availability inputs are exactly camera_id and 2-D position; heading is pooled"
             )
 
 

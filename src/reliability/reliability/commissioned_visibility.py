@@ -15,11 +15,15 @@ from torch import nn
 
 
 GRID_SIZE = 16
-SUPPORTED_SCHEMA = "commissioned_visibility_sensor_model.v1"
+SUPPORTED_SCHEMAS = {
+    "commissioned_visibility_sensor_model.v1",  # archived ray-frame packages
+    "commissioned_visibility_sensor_model.v2",  # canonical ray-frame R0--R2
+}
 CURRENT_R_MODELS = {
     "R0_global_full", "R1_per_camera_full", "R2_spatial_residual",
     "R3_hierarchical_predictive",
 }
+PROJECTION_R_MODEL = "Rproj_homography_pixel"
 
 
 def _sha256_bytes(data: bytes) -> str:
@@ -65,6 +69,20 @@ MEAN_MODEL_NAMES = ("box_mlp_visibility_residual", "M4_visibility_patch_residual
 class CommissionedVisibilitySensorModel:
     """Hash-bound visibility-residual correction and its matched covariance."""
 
+    @property
+    def requires_capture_heading(self) -> bool:
+        """Whether the selected covariance model is conditioned on robot yaw.
+
+        The canonical R0--R2 models are expressed in the camera-to-observation
+        ray frame and therefore do not consume an estimator heading.  Only the
+        archived spatial covariance model is heading-conditioned.
+        """
+        return (
+            getattr(self, "projection_sigma_px", None) is None
+            and getattr(self, "ray_r_samples", None) is None
+            and getattr(self, "current_r_samples", None) is None
+        )
+
     def __init__(self, manifest_path: str | Path, *, expected_sha256: str | None = None) -> None:
         path = Path(manifest_path).expanduser()
         data = path.read_bytes()
@@ -72,7 +90,7 @@ class CommissionedVisibilitySensorModel:
         if expected_sha256 and self.sha256 != expected_sha256:
             raise ValueError("commissioned visibility manifest hash differs from expected identity")
         manifest = json.loads(data)
-        if manifest.get("schema") != SUPPORTED_SCHEMA:
+        if manifest.get("schema") not in SUPPORTED_SCHEMAS:
             raise ValueError("unsupported commissioned visibility schema")
         status = manifest.get("status")
         if status not in {
@@ -87,7 +105,8 @@ class CommissionedVisibilitySensorModel:
         if manifest.get("mean_model") not in MEAN_MODEL_NAMES:
             raise ValueError("runtime requires the selected visibility-residual mean model")
         runtime_covariance_model = str(manifest.get("runtime_covariance_model", ""))
-        if runtime_covariance_model not in {"R4_image_conditioned_scale", *CURRENT_R_MODELS}:
+        if runtime_covariance_model not in {
+                "R4_image_conditioned_scale", PROJECTION_R_MODEL, *CURRENT_R_MODELS}:
             raise ValueError("runtime requires a supported visibility-residual matched covariance")
         self.runtime_covariance_model = runtime_covariance_model
         self.manifest = manifest
@@ -123,7 +142,71 @@ class CommissionedVisibilitySensorModel:
         self.patch_model.eval()
 
         self.current_r_samples = None
+        self.ray_r_samples = None
+        self.ray_r_prior_covariance = None
         self.current_r_covariance_multiplier = 1.0
+        self.projection_sigma_px = None
+        if (self.runtime_covariance_model == PROJECTION_R_MODEL
+                and manifest.get("schema") == "commissioned_visibility_sensor_model.v2"):
+            _, model_data = _read_verified(
+                manifest["covariance_models"], label="projection-baseline parameters")
+            with np.load(io.BytesIO(model_data), allow_pickle=False) as archive:
+                self.projection_sigma_px = float(np.asarray(
+                    archive["homography_baseline_sigma_px"]).reshape(-1)[0])
+            if not math.isfinite(self.projection_sigma_px) or self.projection_sigma_px <= 0.0:
+                raise ValueError("projection baseline requires a positive pixel-noise scale")
+            return
+        if (self.runtime_covariance_model in CURRENT_R_MODELS
+                and manifest.get("schema") == "commissioned_visibility_sensor_model.v2"):
+            if self.runtime_covariance_model == "R3_hierarchical_predictive":
+                raise ValueError("v2 supports only the canonical R0--R2 ladder")
+            _, model_data = _read_verified(
+                manifest["covariance_models"], label="ray-frame covariance models"
+            )
+            with np.load(io.BytesIO(model_data), allow_pickle=False) as archive:
+                order = tuple(np.asarray(archive["camera_order"]).astype(str))
+                if order != self.camera_order:
+                    raise ValueError("covariance-model camera order differs from manifest")
+                self.ray_r_global = self._scatter_from_matrix(
+                    np.asarray(archive["global_covariance_ray_m2"], dtype=float))
+                per_camera = np.asarray(archive["per_camera_covariance_ray_m2"], dtype=float)
+                position = np.asarray(archive["spatial_reference_xy_m"], dtype=float)
+                moment = np.asarray(archive["spatial_second_moment_ray_m2"], dtype=float)
+                camera = np.asarray(archive["spatial_camera"]).astype(str)
+                if (per_camera.shape != (len(order), 2, 2)
+                        or position.shape != (len(moment), 2)
+                        or moment.shape[1:] != (2, 2)
+                        or camera.shape != (len(moment),)):
+                    raise ValueError("ray-frame covariance artifact has incompatible arrays")
+                self.ray_r_per_camera = {
+                    camera_id: self._scatter_from_matrix(per_camera[index])
+                    for index, camera_id in enumerate(order)
+                }
+                self.ray_r_samples = {
+                    camera_id: {
+                        "xy": position[camera == camera_id],
+                        "moment": moment[camera == camera_id],
+                    }
+                    for camera_id in order
+                }
+                self.current_r_neighbors = int(np.asarray(archive["k_neighbors"]).reshape(-1)[0])
+                self.current_r_bandwidth_m = float(
+                    np.asarray(archive["length_scale_m"]).reshape(-1)[0])
+                if "prior_strength" in archive.files:
+                    self.current_r_shrinkage = float(
+                        np.asarray(archive["prior_strength"]).reshape(-1)[0])
+                    self.ray_r_prior_covariance = self._scatter_from_matrix(
+                        np.asarray(archive["prior_covariance_ray_m2"], dtype=float))
+                else:
+                    self.current_r_shrinkage = float(
+                        np.asarray(archive["shrinkage"]).reshape(-1)[0])
+            if any(len(value["xy"]) == 0 for value in self.ray_r_samples.values()):
+                raise ValueError("ray-frame covariance artifact lacks a camera population")
+            if (self.current_r_neighbors < 1 or self.current_r_bandwidth_m <= 0.0
+                    or self.current_r_shrinkage < 0.0):
+                raise ValueError("invalid ray-frame spatial covariance parameters")
+            return
+
         if self.runtime_covariance_model in CURRENT_R_MODELS:
             _, residual_data = _read_verified(
                 manifest["residual_population"], label="selected-correction residual population"
@@ -234,6 +317,30 @@ class CommissionedVisibilitySensorModel:
         scale = self._scatter_from_matrix(((kappa + 1.0) / (kappa * degrees)) * psi)
         return self._scatter_from_matrix(scale * degrees / (degrees - 2.0))
 
+    def _ray_r_covariance(self, camera_id: str, point: np.ndarray) -> np.ndarray:
+        """Canonical R0--R2 covariance in the camera-to-query ray frame."""
+        if self.runtime_covariance_model == "R0_global_full":
+            return self.ray_r_global
+        if self.runtime_covariance_model == "R1_per_camera_full":
+            return self.ray_r_per_camera[camera_id]
+        sample = self.ray_r_samples[camera_id]
+        distance2 = np.sum((sample["xy"] - point) ** 2, axis=1)
+        count = min(self.current_r_neighbors, len(distance2))
+        index = np.argpartition(distance2, count - 1)[:count]
+        weight = np.exp(-0.5 * distance2[index] / self.current_r_bandwidth_m ** 2)
+        numerator = np.einsum("n,nij->ij", weight, sample["moment"][index])
+        denominator = float(weight.sum())
+        prior = self.current_r_shrinkage
+        prior_covariance = (
+            self.ray_r_per_camera[camera_id]
+            if self.ray_r_prior_covariance is None
+            else self.ray_r_prior_covariance
+        )
+        return self._scatter_from_matrix(
+            (numerator + prior * prior_covariance)
+            / (denominator + prior)
+        )
+
     @staticmethod
     def _scatter_from_matrix(covariance: np.ndarray) -> np.ndarray:
         eig, vec = np.linalg.eigh(0.5 * (covariance + covariance.T))
@@ -302,20 +409,35 @@ class CommissionedVisibilitySensorModel:
         covariance = (numerator + prior * self.spatial_base[camera_index]) / (local.sum() + prior)
         return 0.5 * (covariance + covariance.T) + np.eye(2) * 1.0e-6
 
-    def planner_covariance(self, camera_id: str, x: float, y: float, heading: float) -> np.ndarray:
+    def planner_covariance(
+        self, camera_id: str, x: float, y: float, heading: float | None = None
+    ) -> np.ndarray:
+        if getattr(self, "projection_sigma_px", None) is not None:
+            raise ValueError("projection baseline is replay-only and has no planning field")
+        if self.ray_r_samples is not None:
+            point = np.asarray([x, y], dtype=float)
+            ray = point - self.camera_xy[camera_id]
+            ray /= np.linalg.norm(ray)
+            basis = np.column_stack((ray, np.asarray([-ray[1], ray[0]])))
+            covariance_ray = self._ray_r_covariance(camera_id, point)
+            return basis @ covariance_ray @ basis.T
         if self.current_r_samples is not None:
             point = np.asarray([x, y], dtype=float)
             ray = point - self.camera_xy[camera_id]
             ray /= np.linalg.norm(ray)
             basis = np.column_stack((ray, np.asarray([-ray[1], ray[0]])))
             return basis @ self._current_r_covariance_ray(camera_id, point) @ basis.T
+        if heading is None:
+            raise ValueError("legacy spatial covariance requires robot heading")
         covariance = self._spatial_covariance(camera_id, x, y, heading)
         covariance *= float(self.spatial_spec["external_calibration_scale"])
         return covariance
 
     def correct_and_covariance(
         self, camera_id: str, raw_xy: Sequence[float], bbox_xyxy: Sequence[float],
-        confidence: float, visibility_grid: Sequence[float] | np.ndarray, heading: float,
+        confidence: float, visibility_grid: Sequence[float] | np.ndarray,
+        heading: float | None = None,
+        projection_covariance_world: Sequence[Sequence[float]] | None = None,
     ) -> tuple[tuple[float, float], tuple[tuple[float, float], tuple[float, float]]]:
         correction = self.correction_ray(camera_id, raw_xy, bbox_xyxy, confidence, visibility_grid)
         raw = np.asarray(raw_xy, dtype=float)
@@ -323,6 +445,31 @@ class CommissionedVisibilitySensorModel:
         along = ray / np.linalg.norm(ray)
         basis = np.column_stack((along, np.asarray([-along[1], along[0]])))
         corrected = raw + basis @ correction
+        if getattr(self, "projection_sigma_px", None) is not None:
+            if projection_covariance_world is None:
+                raise ValueError("projection baseline requires unit-pixel projected covariance")
+            covariance_world = self._scatter_from_matrix(
+                np.asarray(projection_covariance_world, dtype=float)
+                * self.projection_sigma_px ** 2)
+            return (
+                (float(corrected[0]), float(corrected[1])),
+                ((float(covariance_world[0, 0]), float(covariance_world[0, 1])),
+                 (float(covariance_world[1, 0]), float(covariance_world[1, 1]))),
+            )
+        if self.ray_r_samples is not None:
+            covariance_along = corrected - self.camera_xy[camera_id]
+            covariance_along /= np.linalg.norm(covariance_along)
+            covariance_basis = np.column_stack((
+                covariance_along,
+                np.asarray([-covariance_along[1], covariance_along[0]]),
+            ))
+            covariance_ray = self._ray_r_covariance(camera_id, corrected)
+            covariance_world = covariance_basis @ covariance_ray @ covariance_basis.T
+            return (
+                (float(corrected[0]), float(corrected[1])),
+                ((float(covariance_world[0, 0]), float(covariance_world[0, 1])),
+                 (float(covariance_world[1, 0]), float(covariance_world[1, 1]))),
+            )
         if self.current_r_samples is not None:
             covariance_ray = self._current_r_covariance_ray(camera_id, corrected)
             covariance_world = basis @ covariance_ray @ basis.T
@@ -333,6 +480,8 @@ class CommissionedVisibilitySensorModel:
                 ((float(covariance_world[0, 0]), float(covariance_world[0, 1])),
                  (float(covariance_world[1, 0]), float(covariance_world[1, 1]))),
             )
+        if heading is None:
+            raise ValueError("legacy spatial covariance requires capture-time robot heading")
         covariance_ray = self._spatial_covariance(camera_id, corrected[0], corrected[1], heading)
         grid = np.asarray(visibility_grid, dtype=float).reshape(1, GRID_SIZE, GRID_SIZE)
         visibility_score = 0.5 * float(grid.mean()) + 0.5 * float(grid[:, 3 * GRID_SIZE // 4 :, :].mean())

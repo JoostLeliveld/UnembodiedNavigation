@@ -1,4 +1,8 @@
-"""Runtime query for the commissioned position-only availability field q_i(p)."""
+"""Legacy compatibility reader for superseded availability artifacts.
+
+The canonical thesis method does not instantiate this model. New campaigns use
+``reliability.planning_information`` and direct per-camera expected information.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -91,7 +95,7 @@ class CommissionedAvailabilityModel:
         self.model_id = model_id
 
     def probability(self, camera_id: str, x: float, y: float) -> float:
-        """Return q_i(p); heading and camera geometry are intentionally absent."""
+        """Query the legacy availability field; absent from canonical campaigns."""
         if camera_id not in self.camera_ids:
             raise ValueError(f"unknown commissioned camera {camera_id!r}")
         position = np.asarray([[float(x), float(y)]], dtype=float)

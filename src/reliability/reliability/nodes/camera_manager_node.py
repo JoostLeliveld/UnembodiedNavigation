@@ -873,6 +873,16 @@ class CameraManagerNode(Node):
             capacity=int(self.get_parameter("source_batch_capacity").value),
             on_event=self._publish_batch_outcome,
         )
+        # Completed detector transactions are events, not sampled state.  A single
+        # ``latest`` slot loses a physical camera round whenever detector completion
+        # happens twice between manager timer callbacks.  Retain every completed
+        # transaction until one decision consumes it.  Capacity exhaustion is an
+        # integrity failure (reported and raised), never permission to drop the oldest
+        # camera measurement silently.
+        self._completed_source_batches = deque()
+        self._completed_source_batch_capacity = int(
+            self.get_parameter("source_batch_capacity").value
+        )
         self._batch_clock_high_water_s = None
         self._ready_source_batch_id: str | None = None
         self._ready_source_batch_stamp_s = -math.inf
@@ -884,7 +894,6 @@ class CameraManagerNode(Node):
         self._unidentified_observation_generation = 0
         #: Cameras whose reading had no prior pose to gate against this round.
         #: Rebuilt by _map_observations; declared here so the attribute always exists.
-        self._bootstrap_camera_ids: set[str] = set()
         self._belief_query_history = deque(maxlen=400)
         self._belief_prediction_history = deque(maxlen=400)
         self._admission_beliefs = AdmissionBeliefHistory(self.frame_id)
@@ -1312,13 +1321,28 @@ class CameraManagerNode(Node):
                 epochs = {o.producer_epoch for o in complete.values()}
                 if len(epochs) != 1 or any(o.source_batch_id != source_batch_id for o in complete.values()):
                     raise ContractValidationError("detector batch mixes source epochs or cycle identities")
-                previous = self._ready_source_batch_id
-                if previous is not None and previous != self._last_decided_source_batch_id:
-                    self._publish_batch_outcome(dict(source_batch_id=previous,
-                                                     status="superseded_before_decision"))
-                self._latest = complete
-                self._ready_source_batch_id = source_batch_id
-                self._ready_source_batch_stamp_s = max(o.timestamp_s for o in complete.values())
+                queue = getattr(self, "_completed_source_batches", None)
+                if queue is None:
+                    queue = self._completed_source_batches = deque()
+                capacity = getattr(
+                    self, "_completed_source_batch_capacity", self._source_batch_buffer.capacity
+                )
+                if len(queue) >= capacity:
+                    self._publish_batch_outcome(dict(
+                        source_batch_id=source_batch_id,
+                        status="completed_queue_overflow",
+                        pending_completed_batches=len(queue),
+                    ))
+                    raise RuntimeError(
+                        "completed camera-batch queue overflow; refusing to skip a physical frame"
+                    )
+                queue.append((source_batch_id, dict(complete)))
+                if len(queue) == 1:
+                    self._latest = dict(complete)
+                    self._ready_source_batch_id = source_batch_id
+                    self._ready_source_batch_stamp_s = max(
+                        o.timestamp_s for o in complete.values()
+                    )
             return
         self._latest[expected_camera_id] = observation
         self._unidentified_observation_generation += 1
@@ -1444,7 +1468,6 @@ class CameraManagerNode(Node):
 
     def _map_observations(self, now_s: float) -> list[MapObservation]:
         observations: list[MapObservation] = []
-        self._bootstrap_camera_ids = set()
         self._detection_extras_by_camera = {}
         self._measurement_model_status_by_camera = {}
         self._reliability_query_source_by_camera = {}
@@ -1556,9 +1579,6 @@ class CameraManagerNode(Node):
                     and self.bootstrap_prior_pose is not None):
                 prior_pose = self.bootstrap_prior_pose
                 bootstrap_prior_used = True
-            if prior_pose is None or bootstrap_prior_used:
-                self._bootstrap_camera_ids.add(camera_id)
-
             if self.perception_sensor_model is not None:
                 try:
                     camera_model = self.camera_models[camera_id]
@@ -1583,7 +1603,9 @@ class CameraManagerNode(Node):
                 source = f"{source}:{self.observation_model}"
                 measurement_model_status = f"{self.observation_model}_applied"
             elif self.visibility_sensor_model is not None:
-                if contract.visibility_grid_16x16 is None or prior_pose is None:
+                heading_required = self.visibility_sensor_model.requires_capture_heading
+                if (contract.visibility_grid_16x16 is None
+                        or (heading_required and prior_pose is None)):
                     reason = (
                         "visibility_grid_unavailable" if contract.visibility_grid_16x16 is None
                         else "capture_heading_unavailable"
@@ -1599,7 +1621,8 @@ class CameraManagerNode(Node):
                         contract.bbox_xyxy,
                         float(contract.detector_score),
                         contract.visibility_grid_16x16,
-                        float(prior_pose[2]),
+                        None if prior_pose is None else float(prior_pose[2]),
+                        projection_covariance_world=covariance_m2,
                     )
                 except (ValueError, TypeError, ArithmeticError) as exc:
                     self._gate_rejections["visibility_model_unavailable"] += 1
@@ -1678,7 +1701,7 @@ class CameraManagerNode(Node):
                     source_model="commissioned_q_i_p",
                 )
                 # Availability controls selection/planning quality, never the conditional
-                # R of a measurement that was actually supplied.  Keep the Stage-07 R2C.
+                # R of a measurement that was actually supplied. Keep the matched runtime R.
                 provider = replace(base, quality=quality)
             observations.append(replace(base, quality=provider.quality))
         return observations
@@ -1687,14 +1710,64 @@ class CameraManagerNode(Node):
         if getattr(self, "_terminal_stopped", False):
             return
         with self._decision_lock:
+            # Drain exactly the transactions that were ready at entry. A transaction
+            # arriving re-entrantly during publication remains queued for the next
+            # callback, while a short detector burst cannot overwrite an earlier one.
+            queued = getattr(self, "_completed_source_batches", None)
+            if queued is None:
+                # Compatibility for library/test harnesses constructed without the
+                # ROS-node initializer. Production nodes always use the FIFO above.
+                source_batch_id = None
+                try:
+                    with self._input_lock:
+                        source_batch_id = self._ready_source_batch_id
+                        if (source_batch_id is None
+                                or source_batch_id == self._last_decided_source_batch_id):
+                            return
+                        self._last_decided_source_batch_id = source_batch_id
+                        self._decision_snapshot = self._snapshot_inputs(source_batch_id)
+                    self._decide_once(source_batch_id)
+                except Exception as exc:
+                    self._publish_batch_outcome(dict(
+                        source_batch_id=source_batch_id,
+                        status="decision_error", reason=str(exc)))
+                    raise
+                finally:
+                    self._decision_snapshot = None
+                self._publish_batch_outcome(dict(
+                    source_batch_id=source_batch_id, status="decision_completed"))
+                return
+            ready_count = len(queued) if queued is not None else 1
+            for _ in range(ready_count):
+                self._decide_next_ready_batch()
+
+    def _decide_next_ready_batch(self) -> None:
+        """Consume one immutable completed detector transaction at most once."""
+        source_batch_id = None
+        try:
+            with self._input_lock:
+                queued = getattr(self, "_completed_source_batches", None)
+                if queued is not None:
+                    if not queued:
+                        self._ready_source_batch_id = None
+                        return
+                    source_batch_id, contracts = queued.popleft()
+                    self._latest = dict(contracts)
+                    self._ready_source_batch_id = source_batch_id
+                    self._ready_source_batch_stamp_s = max(
+                        o.timestamp_s for o in contracts.values()
+                    )
+                else:
+                    source_batch_id = self._ready_source_batch_id
+                if source_batch_id is None or source_batch_id == self._last_decided_source_batch_id:
+                    return
+                # Claim before any publication. A partial publication failure may not
+                # cause the same physical frames to be assimilated a second time.
+                self._last_decided_source_batch_id = source_batch_id
+                self._decision_snapshot = self._snapshot_inputs(source_batch_id)
             source_batch_id = None
             try:
-                with self._input_lock:
-                    source_batch_id = self._ready_source_batch_id
-                    if source_batch_id is None or source_batch_id == self._last_decided_source_batch_id:
-                        return
-                    self._last_decided_source_batch_id = source_batch_id
-                    self._decision_snapshot = self._snapshot_inputs(source_batch_id)
+                source_batch_id = self._decision_snapshot.source_batch_id
                 self._decide_once(source_batch_id)
             except Exception as exc:
                 self._publish_batch_outcome(dict(source_batch_id=source_batch_id,
@@ -1704,6 +1777,19 @@ class CameraManagerNode(Node):
                 self._decision_snapshot = None
             self._publish_batch_outcome(dict(source_batch_id=source_batch_id,
                                              status="decision_completed"))
+        finally:
+            queued = getattr(self, "_completed_source_batches", None)
+            if queued is not None:
+                with self._input_lock:
+                    if queued:
+                        next_id, next_contracts = queued[0]
+                        self._latest = dict(next_contracts)
+                        self._ready_source_batch_id = next_id
+                        self._ready_source_batch_stamp_s = max(
+                            o.timestamp_s for o in next_contracts.values()
+                        )
+                    else:
+                        self._ready_source_batch_id = None
 
     def _decide_once(self, source_batch_id: str) -> None:
         self._decision_now_ns = self.get_clock().now().nanoseconds
@@ -1865,14 +1951,7 @@ class CameraManagerNode(Node):
                 "common_time_propagation_unavailable",
             )
         bootstrap_evidence = None
-        if inputs.has_anchor:
-            # A belief exists, so a camera lacking a timestamp-matched prior
-            # cannot bypass the deterministic sensor gate.
-            fresh = [
-                observation for observation in fresh
-                if observation.camera_id not in self._bootstrap_camera_ids
-            ]
-        elif fresh:
+        if not inputs.has_anchor and fresh:
             # Prior-free initialisation is allowed only when several independent cameras
             # agree.  A separately declared, surveyed task start may instead count as one
             # support source, but only when at least one admitted camera also agrees with it.
