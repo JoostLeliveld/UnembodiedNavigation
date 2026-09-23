@@ -21,9 +21,9 @@ REPO="$(pwd)"
 # Every path below can be overridden from the environment; the defaults are the v5 part-2
 # capture. The v7 camera-C supplement sets CAPTURE_OUT, CAPTURE_POSES, CAPTURE_LOGDIR,
 # CAPTURE_TARGET_ROWS, CAPTURE_AUDIT=0 and its own transport partition.
-OUT="${CAPTURE_OUT:-${1:-logs/thesis_final_pipeline_v1/recapture_v5/master_capture_part2}}"
-POSES="${CAPTURE_POSES:-logs/thesis_final_pipeline_v1/recapture_v5/capture_poses_v5_part2.json}"
-V5DIR="${REPO}/logs/thesis_final_pipeline_v1/recapture_v5"
+OUT="${CAPTURE_OUT:-${1:-logs/thesis/captures/v5/part2}}"
+POSES="${CAPTURE_POSES:-logs/thesis/captures/v5/capture_poses_v5_part2.json}"
+V5DIR="${REPO}/logs/thesis/captures/v5"
 LOGDIR="${CAPTURE_LOGDIR:-${V5DIR}}"
 mkdir -p "$LOGDIR"
 SIMLOG="${LOGDIR}/sim.log"

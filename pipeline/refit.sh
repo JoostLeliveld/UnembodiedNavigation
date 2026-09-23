@@ -6,8 +6,8 @@
 #   bash pipeline/refit.sh
 cd "$(dirname "$0")/.."
 # REFIT_ROOT redirects every output, for a dry run that must not touch the campaign root.
-R="${REFIT_ROOT:-logs/thesis_final_pipeline_v1/recapture_v8_uniform}"
-S=logs/thesis_final_pipeline_v1/recapture_v8_uniform/pipeline.log
+R="${REFIT_ROOT:-logs/thesis/fits}"
+S=logs/thesis/pipeline.log
 mkdir -p "$R"
 GATE="$R/gate_dataset"
 # GATE_CONFIG and INFERENCE_DIR let the gate-variant test reuse one inference pass.

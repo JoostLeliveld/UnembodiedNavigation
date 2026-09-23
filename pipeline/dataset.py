@@ -42,29 +42,29 @@ from typing import Callable
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[1]
-L = REPO / "logs/thesis_final_pipeline_v1"
-V5 = L / "recapture_v5"
-V8 = L / "recapture_v8_uniform"
+CAPTURES = REPO / "logs/thesis/captures"
+V5 = CAPTURES / "v5"
+V8 = CAPTURES / "v8"
 
 V5_PLAN = V5 / "capture_poses_v5.json"
 V5_POSITIONS = V5 / "capture_positions_v5.csv"
 V5_PLAN_POSES = 10276
 # (name, capture dir, the pose file that capture was launched with)
 V5_PASSES = (
-    ("part1", V5 / "master_capture", V5 / "capture_poses_v5.json"),
-    ("part2", V5 / "master_capture_part2", V5 / "capture_poses_v5_part2.json"),
+    ("part1", V5 / "part1", V5 / "capture_poses_v5.json"),
+    ("part2", V5 / "part2", V5 / "capture_poses_v5_part2.json"),
 )
 # (name, capture dir, pose file, plan_pose_index offset)
 EXTENSIONS = (
-    ("supplement", V8 / "master_capture_supplement", V8 / "capture_poses_supplement.json",
+    ("supplement", V8 / "supplement", V8 / "capture_poses_supplement.json",
      V5_PLAN_POSES),
-    ("topup", V8 / "master_capture_topup", V8 / "capture_poses_v8_topup.json",
+    ("topup", V8 / "topup", V8 / "capture_poses_v8_topup.json",
      V5_PLAN_POSES + 48),
 )
 # repair passes in order; a later pass overrides an earlier one for the plan poses it holds
 REPAIRS = (
-    ("repair", V8 / "master_capture_repair", V8 / "capture_poses_repair.json"),
-    ("repair2", V8 / "master_capture_repair2", V8 / "capture_poses_repair2.json"),
+    ("repair", V8 / "repair", V8 / "capture_poses_repair.json"),
+    ("repair2", V8 / "repair2", V8 / "capture_poses_repair2.json"),
 )
 ABSENT_LIST = V8 / "v5_robot_absent_poses.json"
 WORLD = REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"

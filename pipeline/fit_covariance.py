@@ -2,7 +2,7 @@
 """Fit and validate the Bayesian R0, R1 and R2 models (inverse-Wishart posterior mean).
 
 Promoted on 2026-09-23 from 2026-09-21/i-ah/work/fit_final_bayesian_r012.py, which fitted
-logs/thesis_final_pipeline_v1/final_bayesian. The method is unchanged. Only the input and
+logs/track_a_draft/final_bayesian. The method is unchanged. Only the input and
 output paths became arguments.
 
     python3 pipeline/fit_covariance.py \

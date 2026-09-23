@@ -16,7 +16,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 HERE = REPO / "pipeline"
-V8 = "logs/thesis_final_pipeline_v1/recapture_v8_uniform"
+V8 = "logs/thesis/fits"
 LOCK = "pipeline/dataset_lock.json"
 
 

@@ -42,10 +42,10 @@ sys.path.insert(0, str(REPO / "src" / "unav_common"))
 from unav_common.occlusion_geometry import profile_collision_scene  # noqa: E402
 from unav_common.rectangular_footprint import RectangularFootprint  # noqa: E402
 
-L = REPO / "logs/thesis_final_pipeline_v1"
-V5_POSITIONS = L / "recapture_v5/capture_positions_v5.csv"
-SUPPLEMENT_POSES = L / "recapture_v8_uniform/capture_poses_supplement.json"
-OUT = L / "recapture_v8_uniform"
+L = REPO / "logs/thesis/captures"
+V5_POSITIONS = L / "v5/capture_positions_v5.csv"
+SUPPLEMENT_POSES = L / "v8/capture_poses_supplement.json"
+OUT = L / "v8"
 WORLD = REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
 K, ELL = 16, 0.4
 CAP = K / (math.pi * (2 * ELL) ** 2)

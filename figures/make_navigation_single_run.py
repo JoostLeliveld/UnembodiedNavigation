@@ -29,11 +29,11 @@ from style import CAM_COLOUR, draw_warehouse, layout  # noqa: E402
 
 PAPER_FIGURES = ROOT.parent / "papers" / "Thesis" / "figures"
 CAMPAIGN = ROOT / (
-    "logs/thesis_final_pipeline_v1/stage09_final_five_seed_campaign/"
+    "logs/track_a_draft/stage09_final_five_seed_campaign/"
     "thesis09_parallel_aisles_west"
 )
 PRECISION = ROOT / (
-    "logs/thesis_final_pipeline_v1/planning_precision/m2_planning_precision.npz"
+    "logs/track_a_draft/planning_precision/m2_planning_precision.npz"
 )
 RAW = "#9b9a94"
 CORRECTED = "#1d2530"

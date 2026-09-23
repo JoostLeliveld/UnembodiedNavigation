@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT / "figures"))
 from style import draw_warehouse, layout  # noqa: E402
 
 FIGURES = ROOT.parent / "papers" / "Thesis" / "figures"
-PLANNING_DIR = ROOT / "logs/thesis_final_pipeline_v1/planning_precision"
+PLANNING_DIR = ROOT / "logs/track_a_draft/planning_precision"
 
 MODELS = (
     ("m0_planning_precision.npz", r"global $R_0$"),

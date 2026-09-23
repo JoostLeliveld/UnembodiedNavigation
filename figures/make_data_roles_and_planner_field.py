@@ -19,8 +19,8 @@ sys.path[:0] = [str(ROOT / "src/planning"), str(ROOT / "src/unav_common")]
 from planning.core.camera_network import CameraNetworkModel  # noqa: E402
 from style import layout  # noqa: E402
 PAPER_FIGURES = ROOT.parent / "papers" / "Thesis" / "figures"
-POSES = ROOT / "logs/thesis_final_pipeline_v1/recapture_v5/capture_poses_v5.json"
-PLANNING_DIR = ROOT / "logs/thesis_final_pipeline_v1/planning_precision"
+POSES = ROOT / "logs/thesis/captures/v5/capture_poses_v5.json"
+PLANNING_DIR = ROOT / "logs/track_a_draft/planning_precision"
 PLANNING_ARTIFACT = PLANNING_DIR / "m2_planning_precision.npz"
 PLANNING_MODELS = (
     ("m0_planning_precision.npz", r"(a) global $R_0$"),

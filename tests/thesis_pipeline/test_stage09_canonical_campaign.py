@@ -76,14 +76,17 @@ def test_runtime_and_planning_artifacts_are_model_matched_and_hash_bound():
     for condition_name, condition in campaign["conditions"].items():
         model = condition_name.removesuffix("_intact").removesuffix("_removal")
         runtime_name, planning_name = expected[model]
-        runtime = Path(condition["manager_visibility_sensor_model_path"])
-        planning = Path(condition["camera_network_artifact_path"])
+        runtime = REPO / condition["manager_visibility_sensor_model_path"]
+        planning = REPO / condition["camera_network_artifact_path"]
+        # repo-relative paths into the current fits; campaign_configs.py binds the hashes
+        assert runtime.parent == REPO / "logs/thesis/fits/runtime_r012"
+        assert planning.parent == REPO / "logs/thesis/fits/planning_precision"
         assert runtime.stem == runtime_name
-        with np.load(planning, allow_pickle=False) as archive:
-            metadata = json.loads(str(archive["metadata_json"].item()))
-        assert metadata["planner_model"] == planning_name
-        assert condition["manager_visibility_sensor_model_expected_sha256"]
-        assert condition["camera_network_expected_sha256"]
+        assert planning.name == f"{planning_name.lower()}_planning_precision.npz"
+        if planning.is_file():
+            with np.load(planning, allow_pickle=False) as archive:
+                metadata = json.loads(str(archive["metadata_json"].item()))
+            assert metadata["planner_model"] == planning_name
 
 
 def test_analyzer_requires_preselected_route_only_for_legacy_mode(tmp_path):

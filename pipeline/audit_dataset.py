@@ -34,7 +34,7 @@ from pipeline import dataset as v8  # noqa: E402
 MAX_DEFICIT = 0.10
 MIN_ROWS = 100
 SAMPLE = 3000
-OUT = REPO / "logs/thesis_final_pipeline_v1/recapture_v8_uniform/dataset_audit.json"
+OUT = REPO / "logs/thesis/evidence/dataset_audit.json"
 
 
 def main() -> int:

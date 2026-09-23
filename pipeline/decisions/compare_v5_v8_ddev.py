@@ -22,8 +22,8 @@ from pathlib import Path
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
-L = REPO / "logs/thesis_final_pipeline_v1"
-RUNS = {"v5": L / "recapture_v5", "v8": L / "recapture_v8_uniform"}
+L = REPO / "logs"
+RUNS = {"v5": L / "track_a_draft/recapture_v5_fits", "v8": L / "thesis/fits"}
 CAP = 16 / (math.pi * 0.8 ** 2)
 
 
@@ -33,7 +33,7 @@ def per_position(root: Path) -> dict[str, dict]:
 
 
 def main() -> int:
-    all_v5 = list(csv.DictReader((L / "recapture_v5/capture_positions_v5.csv").open()))
+    all_v5 = list(csv.DictReader((L / "thesis/captures/v5/capture_positions_v5.csv").open()))
     v5_positions = {r["position_id"]: (float(r["x"]), float(r["y"])) for r in all_v5
                     if r["role"] == "D_dev"}
     tables = {name: per_position(root) for name, root in RUNS.items()}
@@ -59,7 +59,7 @@ def main() -> int:
         cam = manifest["D_dev_correction_metrics"]["structured_plus_visibility"]["by_camera"]["camera_C"]
         report.setdefault("camera_C_pooled_all_D_dev", {})[name] = {
             "rmse_m": cam["rmse_m"], "median_m": cam["median_m"], "n": cam["n"]}
-    out = L / "recapture_v8_uniform/ddev_comparison_v5_v8.json"
+    out = L / "thesis/evidence/ddev_comparison_v5_v8.json"
     out.write_text(json.dumps(report, indent=2) + "\n")
     print(f"{'metric':38}{'v5 pos':>9}{'v8 pos':>9}{'v5 dens':>9}{'v8 dens':>9}")
     for metric, row in report["metrics"].items():

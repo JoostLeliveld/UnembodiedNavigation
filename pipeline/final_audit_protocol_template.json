@@ -27,31 +27,31 @@
       "sha256": "8b9dcf3b631382583529096dcb52b899d4d8eaadb69f364967ae3963b0bca941"
     },
     "detector": {
-      "path": "logs/thesis_final_pipeline_v1/stage05_detector_training/imgsz960/upper_finetune/weights/best.pt",
+      "path": "logs/thesis/detector/training/imgsz960/upper_finetune/weights/best.pt",
       "sha256": "1e99afb5361a7c2599cb3f2863ebb04fd6f65bc1ee23996b989c9bba8b004f13"
     },
     "runtime_R0": {
-      "path": "logs/thesis_final_pipeline_v1/recapture_v5/runtime_r012/R0_global_full.json",
+      "path": "logs/track_a_draft/recapture_v5_fits/runtime_r012/R0_global_full.json",
       "sha256": "1f90c770275224d9c1f5189db3511fae94c1c3e58e8145a83151617ef6f76ca5"
     },
     "runtime_R1": {
-      "path": "logs/thesis_final_pipeline_v1/recapture_v5/runtime_r012/R1_per_camera_full.json",
+      "path": "logs/track_a_draft/recapture_v5_fits/runtime_r012/R1_per_camera_full.json",
       "sha256": "53b077271e2877a4d2ea44ec617734d79c6d6a3021abb90cb100a564dab2dfca"
     },
     "runtime_R2": {
-      "path": "logs/thesis_final_pipeline_v1/recapture_v5/runtime_r012/R2_spatial_residual.json",
+      "path": "logs/track_a_draft/recapture_v5_fits/runtime_r012/R2_spatial_residual.json",
       "sha256": "1e53b38d40a8cfb5af9035fb0541f32f32cc70706687f603d4a01815c613de95"
     },
     "planning_M0": {
-      "path": "logs/thesis_final_pipeline_v1/recapture_v5/planning_information/m0_planning_information.npz",
+      "path": "logs/track_a_draft/recapture_v5_fits/planning_information/m0_planning_information.npz",
       "sha256": "d4834dd2613e319646bde2d472bc71d60f91e29e1bef25d6e894b96a3f48d802"
     },
     "planning_M1": {
-      "path": "logs/thesis_final_pipeline_v1/recapture_v5/planning_information/m1_planning_information.npz",
+      "path": "logs/track_a_draft/recapture_v5_fits/planning_information/m1_planning_information.npz",
       "sha256": "1014784c59c7e44faaf87f375166bcd0d3d768f383ed7d47dd9c545bc9121fc2"
     },
     "planning_M2": {
-      "path": "logs/thesis_final_pipeline_v1/recapture_v5/planning_information/m2_planning_information.npz",
+      "path": "logs/track_a_draft/recapture_v5_fits/planning_information/m2_planning_information.npz",
       "sha256": "d81b8d060cfebba8a56a254fa8534bef95b638559cfb283c18ac4a8fc040a863"
     },
     "implementation": {

@@ -27,8 +27,8 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src/unav_common"))
 from unav_common.occlusion_geometry import profile_collision_scene  # noqa: E402
 
-V8 = REPO / "logs/thesis_final_pipeline_v1/recapture_v8_uniform"
-ROUTES = V8 / "offline_routes"
+V8 = REPO / "logs/thesis"
+ROUTES = V8 / "routes"
 MODELS = (("global", "m0", "R$_0$ global"), ("per_camera", "m1", "R$_1$ per-camera"),
           ("spatial", "m2", "R$_2$ spatial"))
 CAMS = {"camera_A": (-11.45, -9.45), "camera_B": (-1.5, -9.72), "camera_C": (-6.95, 9.45),
@@ -99,9 +99,9 @@ def main() -> int:
                 ax.legend(loc="lower right", fontsize=8)
     fig.suptitle("v8 offline routes: intact (solid) vs camera dropout (dashed), over the dropout-network "
                  "information of each model", fontsize=13)
-    out = V8 / "offline_routes_overview.png"
+    out = V8 / "routes_overview.png"
     fig.savefig(out, dpi=110)
-    (V8 / "offline_routes_summary.json").write_text(json.dumps(rows, indent=1))
+    (V8 / "routes_summary.json").write_text(json.dumps(rows, indent=1))
     print(f"{'task':34}{'model':11}{'state':8}{'route':22}{'len':>7}{'cost':>8}{'risk':>7}{'amb':>7}{'nogo':>7}{'clear':>7} changed")
     for r in rows:
         print(f"{r['task']:34}{r['model']:11}{r['state']:8}{r['route']:22}{r['length_m']:7.2f}{r['total_cost']:8.3f}"

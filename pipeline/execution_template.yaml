@@ -68,7 +68,7 @@ tasks:
       per_camera_removal: *id006
       spatial_removal: *id006
 perception_backend: yolo
-yolo_model: logs/thesis_final_pipeline_v1/stage05_detector_training/imgsz960/upper_finetune/weights/best.pt
+yolo_model: logs/thesis/detector/training/imgsz960/upper_finetune/weights/best.pt
 yolo_device: '0'
 yolo_imgsz: 960
 yolo_conf_threshold: 0.25
@@ -198,37 +198,37 @@ ros_domain_id_base: 100
 conditions:
   global_intact:
     label: global_intact
-    manager_visibility_sensor_model_path: /home/joostleliveld/Thesis/UnembodiedNavigation/logs/thesis_final_pipeline_v1/final_bayesian/runtime_r012/R0_global_full.json
+    manager_visibility_sensor_model_path: logs/thesis/fits/runtime_r012/R0_global_full.json
     manager_visibility_sensor_model_expected_sha256: 636d39f9e56a835eed515593f20705a52752549669ecbbc9af30419c3852a54f
     manager_camera_ids: camera_A,camera_B,camera_C,camera_D,camera_E
     camera_network_active_camera_ids: camera_A,camera_B,camera_C,camera_D,camera_E
   global_removal:
     label: global_removal
-    manager_visibility_sensor_model_path: /home/joostleliveld/Thesis/UnembodiedNavigation/logs/thesis_final_pipeline_v1/final_bayesian/runtime_r012/R0_global_full.json
+    manager_visibility_sensor_model_path: logs/thesis/fits/runtime_r012/R0_global_full.json
     manager_visibility_sensor_model_expected_sha256: 636d39f9e56a835eed515593f20705a52752549669ecbbc9af30419c3852a54f
     manager_camera_ids: camera_A,camera_C,camera_D,camera_E
     camera_network_active_camera_ids: camera_A,camera_C,camera_D,camera_E
   per_camera_intact:
     label: per_camera_intact
-    manager_visibility_sensor_model_path: /home/joostleliveld/Thesis/UnembodiedNavigation/logs/thesis_final_pipeline_v1/final_bayesian/runtime_r012/R1_per_camera_full.json
+    manager_visibility_sensor_model_path: logs/thesis/fits/runtime_r012/R1_per_camera_full.json
     manager_visibility_sensor_model_expected_sha256: d470b6096d78c62fb94343a4b7207dbc3a08c8766418defb1a272f9256384be1
     manager_camera_ids: camera_A,camera_B,camera_C,camera_D,camera_E
     camera_network_active_camera_ids: camera_A,camera_B,camera_C,camera_D,camera_E
   per_camera_removal:
     label: per_camera_removal
-    manager_visibility_sensor_model_path: /home/joostleliveld/Thesis/UnembodiedNavigation/logs/thesis_final_pipeline_v1/final_bayesian/runtime_r012/R1_per_camera_full.json
+    manager_visibility_sensor_model_path: logs/thesis/fits/runtime_r012/R1_per_camera_full.json
     manager_visibility_sensor_model_expected_sha256: d470b6096d78c62fb94343a4b7207dbc3a08c8766418defb1a272f9256384be1
     manager_camera_ids: camera_A,camera_C,camera_D,camera_E
     camera_network_active_camera_ids: camera_A,camera_C,camera_D,camera_E
   spatial_intact:
     label: spatial_intact
-    manager_visibility_sensor_model_path: /home/joostleliveld/Thesis/UnembodiedNavigation/logs/thesis_final_pipeline_v1/final_bayesian/runtime_r012/R2_spatial_residual.json
+    manager_visibility_sensor_model_path: logs/thesis/fits/runtime_r012/R2_spatial_residual.json
     manager_visibility_sensor_model_expected_sha256: 1b8f67e633e7046a3d3d9ae148c79b9bc52b307f7fc16097c367487b575c53ca
     manager_camera_ids: camera_A,camera_B,camera_C,camera_D,camera_E
     camera_network_active_camera_ids: camera_A,camera_B,camera_C,camera_D,camera_E
   spatial_removal:
     label: spatial_removal
-    manager_visibility_sensor_model_path: /home/joostleliveld/Thesis/UnembodiedNavigation/logs/thesis_final_pipeline_v1/final_bayesian/runtime_r012/R2_spatial_residual.json
+    manager_visibility_sensor_model_path: logs/thesis/fits/runtime_r012/R2_spatial_residual.json
     manager_visibility_sensor_model_expected_sha256: 1b8f67e633e7046a3d3d9ae148c79b9bc52b307f7fc16097c367487b575c53ca
     manager_camera_ids: camera_A,camera_C,camera_D,camera_E
     camera_network_active_camera_ids: camera_A,camera_C,camera_D,camera_E

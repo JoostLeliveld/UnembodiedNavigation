@@ -11,8 +11,8 @@
 # It exits by itself once the capture is finished, so the laptop can sleep again
 # without anyone remembering to clean up.
 TARGET_ROWS="${1:-51380}"
-INDEX=logs/thesis_final_pipeline_v1/recapture_v5/master_capture/capture_index.csv
-LOG=logs/thesis_final_pipeline_v1/recapture_v5/capture.log
+INDEX=logs/thesis/captures/v5/part1/capture_index.csv
+LOG=logs/thesis/captures/v5/capture.log
 
 echo "[$(date +%H:%M:%S)] lid-suspend inhibited until ${TARGET_ROWS} rows" | tee -a "$LOG"
 systemd-inhibit \

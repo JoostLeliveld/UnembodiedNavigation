@@ -5,8 +5,8 @@
 #
 #   bash pipeline/campaign.sh [SEED ...]
 cd "$(dirname "$0")/.."
-R=logs/thesis_final_pipeline_v1/recapture_v8_uniform
-S=logs/thesis_final_pipeline_v1/recapture_v8_uniform/pipeline.log
+R=logs/thesis
+S=logs/thesis/pipeline.log
 source /opt/ros/humble/setup.bash >/dev/null 2>&1
 source install/setup.bash >/dev/null 2>&1
 log() { echo "- $(date '+%F %T') campaign: $*" >> "$S"; echo "$*"; }

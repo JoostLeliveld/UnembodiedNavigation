@@ -18,9 +18,9 @@
 
 cd "$(dirname "$0")/../.."
 REPO="$(pwd)"
-OUT="${1:-logs/thesis_final_pipeline_v1/recapture_v5/master_capture}"
-POSES="logs/thesis_final_pipeline_v1/recapture_v5/capture_poses_v5.json"
-LOGDIR="${REPO}/logs/thesis_final_pipeline_v1/recapture_v5"
+OUT="${1:-logs/thesis/captures/v5/part1}"
+POSES="logs/thesis/captures/v5/capture_poses_v5.json"
+LOGDIR="${REPO}/logs/thesis/captures/v5"
 mkdir -p "$LOGDIR"
 SIMLOG="${LOGDIR}/sim.log"
 CAPLOG="${LOGDIR}/capture.log"

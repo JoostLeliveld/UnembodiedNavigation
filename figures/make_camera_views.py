@@ -22,7 +22,7 @@ from paths import repo_root  # noqa: E402
 REPO = repo_root()
 # The 20260831 characterization capture predates the current world and has been
 # deleted.  The v5 recapture is the current-world capture behind the thesis.
-CAPTURE = REPO / 'logs/thesis_final_pipeline_v1/recapture_v5/master_capture'
+CAPTURE = REPO / 'logs/thesis/captures/v5/part1'
 OUT = REPO / 'logs/studies/thesis_setup_figure_20260908'
 ROBOT, INK = '#c23d36', '#1d2530'
 

@@ -26,11 +26,11 @@ COLOUR = {"global": "#0072B2", "per_camera": "#E69F00", "spatial": "#009E73"}
 WIDTH = {"global": 4.8, "per_camera": 3.1, "spatial": 1.7}
 STATES = ("intact", "removal")
 SPATIAL_ARTIFACT = ROOT / (
-    "logs/thesis_final_pipeline_v1/planning_precision/"
+    "logs/track_a_draft/planning_precision/"
     "m2_planning_precision.npz"
 )
 DIAGNOSTIC = ROOT / (
-    "logs/thesis_final_pipeline_v1/stage09_navigation/"
+    "logs/track_a_draft/stage09_navigation/"
     "task_camera_pair_diagnostic.json"
 )
 

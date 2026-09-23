@@ -46,10 +46,10 @@ from paths import repo_root  # noqa: E402
 from unav_common.camera_model import ObliqueCameraModel  # noqa: E402
 
 REPO = repo_root()
-PIPELINE = REPO / 'logs/thesis_final_pipeline_v1'
+PIPELINE = REPO / 'logs/track_a_draft'
 # The 09-09 master_capture predates the 09-18 world change (camera C tilt);
 # recapture_v5 is the current-world capture the thesis is fitted on.
-CAPTURE = PIPELINE / 'recapture_v5/master_capture'
+CAPTURE = REPO / 'logs/thesis/captures/v5/part1'
 GATE = PIPELINE / 'stage06_detector_gate/gate_selection_v1/admission_records.csv'
 OUT = REPO / 'logs/studies/thesis_measurement_chain_figure'
 POSE = 602            # the capture's pose id for the drawn detection

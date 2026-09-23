@@ -13,7 +13,7 @@
 # The capture is resumable and the runner passes --resume automatically, so a
 # restart never loses committed rows.
 LIMIT_GB="${1:-5.5}"
-LOG=logs/thesis_final_pipeline_v1/recapture_v5/capture.log
+LOG=logs/thesis/captures/v5/capture.log
 while true; do
   pid=$(ps -eo pid,args | grep "[c]apture_bbox_grid" | awk '{print $1}' | head -1)
   if [ -n "$pid" ]; then

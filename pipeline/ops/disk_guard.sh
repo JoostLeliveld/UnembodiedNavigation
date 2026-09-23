@@ -7,7 +7,7 @@
 # that passes the 29-check preflight. So this watches and stops rather than
 # hoping.
 FLOOR_GB="${1:-3}"
-LOG=logs/thesis_final_pipeline_v1/recapture_v5/capture.log
+LOG=logs/thesis/captures/v5/capture.log
 while true; do
   free_gb=$(df -BG --output=avail . | tail -1 | tr -dc '0-9')
   if [ "${free_gb:-99}" -lt "$FLOOR_GB" ]; then

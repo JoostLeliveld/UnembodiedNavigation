@@ -12,7 +12,7 @@ import numpy as np  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT = ROOT / (
-    "logs/thesis_final_pipeline_v1/final_bayesian/"
+    "logs/track_a_draft/final_bayesian/"
     "final_audit_fusion_v2/report.json"
 )
 OUT = ROOT.parent / "papers/Thesis/figures"

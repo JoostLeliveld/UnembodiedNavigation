@@ -24,7 +24,7 @@ from pathlib import Path
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
-V = REPO / "logs/thesis_final_pipeline_v1/recapture_v8_uniform/gate_variants"
+V = REPO / "logs/thesis/evidence/gate_variants"
 ORDER = ("G0", "G1", "G2", "G3")
 RULE = ("most permissive variant with (1) corrected D_dev RMSE on G0-admitted observations "
         "within +0.1 cm of G0 and (2) extra observations' corrected p95 no worse than G0's")
