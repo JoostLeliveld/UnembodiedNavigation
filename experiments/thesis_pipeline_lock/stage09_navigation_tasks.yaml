@@ -1,94 +1,68 @@
 tasks:
   warehouse_v2.world.sdf: &warehouse_v2_tasks
-  - name: thesis09_west_to_east_north
-    description: West dock to east north cross-aisle; long route with camera handovers and occluded alternatives.
-    start:
-      x: -7.6
-      y: -8.5
-      z: 0.05
-      yaw: 0.0
-    goal:
-      x: 10.6
-      y: 6.5
-  - name: thesis09_east_to_west_south
-    description: Reverse-direction counterpart, preventing a single approach direction from defining the result.
-    start:
-      x: 10.6
-      y: 6.5
-      z: 0.05
-      yaw: -2.45
-    goal:
-      x: -7.6
-      y: -8.5
-  - name: thesis09_aisle_to_crossaisle
-    description: Interior aisle mouth to east cross-aisle; tests a shorter route-choice problem.
-    start:
-      x: -3.05
-      y: -5.2
-      z: 0.05
-      yaw: 1.5708
-    goal:
-      x: 10.6
-      y: 2.54
-  - name: thesis09_south_to_north_central
-    description: Central south-to-north control traverse with comparatively direct geometry.
-    start:
-      x: 0.55
-      y: -7.5
-      z: 0.05
-      yaw: 1.5708
-    goal:
-      x: 0.55
-      y: 8.2
-  - name: thesis09_blind_corridor_west_to_east
-    description: North-west dock to the east cross-aisle, with feasible routes through the direct connector and the upper cross-aisle. Camera C is the declared removal for this task.
-    start:
-      x: -10.7
-      y: 8.55
-      z: 0.05
-      yaw: 0.0
-    goal:
-      x: 9.6
-      y: -1.4
-  - name: thesis09_lane05N_to_lane08E
-    description: North end of the west picking aisle to the east end of the south cross-aisle. The shortest lane-graph route drives 6.5 m through the lane_08 stretch that no camera observes; a 9.2 m longer alternative stays covered.
-    start:
-      x: -6.95
-      y: 7.1
-      z: 0.05
-      yaw: 0.0
-    goal:
-      x: 9.6
-      y: -1.4
-  - name: thesis09_lane08E_to_lane12W
-    description: East end of lane 08 to the west lane-12 apron, with comparable routes through the main aisle and the southern cross-aisle. Camera B is the declared removal for this task.
-    start:
-      x: 9.6
-      y: -1.4
-      z: 0.05
-      yaw: 3.1416
-    goal:
-      x: -1.3
-      y: -8.55
-  - name: thesis09_parallel_aisles_west
-    description: Equal-length choice between the two aisles flanking the west rack; camera B removal should reverse only the spatial model's preference.
-    start: {x: -5.0, y: -6.25, z: 0.05, yaw: 0.0}
-    # Finish inside the camera-C/B overlap.  At y=8.625 camera C is already
-    # edge-clipped, so removing B made the endpoint itself unobservable and
-    # confounded route choice with an unavoidable terminal outage.
-    goal: {x: -5.0, y: 8.1}
+  - name: thesis10_camera_a_western_dock_detour
+    description: Five-route western dock traverse testing the detour induced by removing camera A.
+    start: {x: -10.7, y: 8.55, z: 0.05, yaw: 0.0}
+    goal: {x: -7.6, y: -8.5}
     route_seeds:
-    - name: west_aisle
-      waypoints: [[-6.95, -6.25], [-6.95, 8.1], [-5.0, 8.1]]
-    - name: east_aisle
-      waypoints: [[-3.05, -6.25], [-3.05, 8.1], [-5.0, 8.1]]
-  - name: thesis09_parallel_aisles_central
-    description: Equal-length choice between the two aisles flanking the central-west rack; the spatial model changes aisle after camera B removal.
-    start: {x: -1.0375, y: -5.75, z: 0.05, yaw: 0.0}
-    goal: {x: -1.0375, y: 8.625}
+    - name: west_south_crossing
+      waypoints: [[-10.7, -6.25], [-7.6, -6.25], [-7.6, -8.5]]
+    - name: west_lower_crossing
+      waypoints: [[-10.7, -5.75], [-7.6, -5.75], [-7.6, -8.5]]
+    - name: west_main_aisle
+      waypoints: [[-6.95, 8.55], [-6.95, -1.175], [-7.6, -1.175], [-7.6, -8.5]]
+    - name: west_middle_connector
+      waypoints: [[-6.95, 8.55], [-6.95, 2.425], [-7.275, 2.425], [-7.275, -8.5], [-7.6, -8.5]]
+    - name: west_upper_crossing
+      waypoints: [[-6.95, 8.55], [-6.95, 6.35], [-7.275, 6.35], [-7.275, -8.5], [-7.6, -8.5]]
+  - name: thesis10_camera_b_cross_warehouse_detour
+    description: Six equal-length cross-warehouse routes testing the detour induced by removing camera B.
+    start: {x: -7.6, y: -8.5, z: 0.05, yaw: 0.0}
+    goal: {x: 0.975, y: 8.625}
     route_seeds:
-    - name: west_aisle
-      waypoints: [[-3.05, -5.75], [-3.05, 8.625], [-1.0375, 8.625]]
-    - name: east_aisle
-      waypoints: [[0.975, -5.75], [0.975, 8.625], [-1.0375, 8.625]]
+    - name: south_crossing
+      waypoints: [[-7.6, -6.25], [0.975, -6.25], [0.975, 8.625]]
+    - name: lower_crossing
+      waypoints: [[-7.6, -5.75], [0.975, -5.75], [0.975, 8.625]]
+    - name: main_aisle_crossing
+      waypoints: [[-7.6, -1.175], [-6.95, -1.175], [-6.95, 8.625], [0.975, 8.625]]
+    - name: middle_connector
+      waypoints: [[-7.275, -8.5], [-7.275, 2.425], [-6.95, 2.425], [-6.95, 8.625], [0.975, 8.625]]
+    - name: upper_crossing
+      waypoints: [[-7.275, -8.5], [-7.275, 6.35], [-6.95, 6.35], [-6.95, 8.625], [0.975, 8.625]]
+    - name: west_vertical
+      waypoints: [[-7.45, -8.5], [-7.45, 8.625], [0.975, 8.625]]
+  - name: thesis10_camera_c_inner_warehouse_detour
+    description: Three equal-length interior routes testing the detour induced by removing camera C.
+    start: {x: -6.95, y: -6.25, z: 0.05, yaw: 1.5708}
+    goal: {x: -3.05, y: 8.625}
+    route_seeds:
+    - name: immediate_east_crossing
+      waypoints: [[-3.05, -6.25], [-3.05, 8.625]]
+    - name: lower_connector
+      waypoints: [[-6.95, -5.75], [-3.05, -5.75], [-3.05, 8.625]]
+    - name: northern_crossing
+      waypoints: [[-6.95, 8.625], [-3.05, 8.625]]
+  - name: thesis10_camera_e_eastern_detour
+    description: Three equal-length eastern routes testing the local detour induced by removing camera E.
+    start: {x: 10.6, y: -1.175, z: 0.05, yaw: 3.1416}
+    goal: {x: 0.975, y: 8.625}
+    route_seeds:
+    - name: main_aisle
+      waypoints: [[0.975, -1.175], [0.975, 8.625]]
+    - name: middle_connector
+      waypoints: [[10.6, 2.425], [0.975, 2.425], [0.975, 8.625]]
+    - name: upper_crossing
+      waypoints: [[10.6, 6.35], [0.975, 6.35], [0.975, 8.625]]
+  - name: thesis10_camera_e_long_cross_warehouse_detour
+    description: Three long cross-warehouse routes testing the detour induced by removing camera E.
+    start: {x: -10.7, y: 8.55, z: 0.05, yaw: 0.0}
+    goal: {x: 9.6, y: -1.4}
+    route_seeds:
+    - name: main_aisle
+      waypoints: [[0.975, 8.55], [0.975, -1.175], [9.6, -1.175], [9.6, -1.4]]
+    - name: middle_connector
+      waypoints: [[0.975, 8.55], [0.975, 2.425], [9.925, 2.425], [9.925, -1.4], [9.6, -1.4]]
+    - name: upper_crossing
+      waypoints: [[0.975, 8.55], [0.975, 6.35], [10.675, 6.35], [10.675, -1.4], [9.6, -1.4]]
   warehouse_v2_fast.world.sdf: *warehouse_v2_tasks

@@ -65,7 +65,13 @@ TASK_LABELS = {
     "thesis09_west_to_east_north": "West to east",
     "thesis09_east_to_west_south": "East to west",
     "thesis09_aisle_to_crossaisle": "Aisle to cross-aisle (null route)",
+    "thesis10_camera_a_western_dock_detour": "Camera A western dock detour",
+    "thesis10_camera_b_cross_warehouse_detour": "Camera B cross-warehouse detour",
+    "thesis10_camera_c_inner_warehouse_detour": "Camera C inner-warehouse detour",
+    "thesis10_camera_e_eastern_detour": "Camera E eastern detour",
+    "thesis10_camera_e_long_cross_warehouse_detour": "Camera E long cross-warehouse detour",
 }
+STRICT_GOAL_DISTANCE_M = 0.30
 
 
 def sha256(path: Path) -> str:
@@ -409,7 +415,7 @@ def analyze_run(
         and summary.get("completed") is True
         and not summary.get("collision_any")
         and summary.get("final_goal_distance_reference") == "ground_truth"
-        and float(summary.get("final_goal_distance", math.inf)) <= 0.35
+        and float(summary.get("final_goal_distance", math.inf)) <= STRICT_GOAL_DISTANCE_M
         and summary.get("terminal_stop_verified") is True
         and summary.get("producer_quiescence_acknowledged") is True
     )

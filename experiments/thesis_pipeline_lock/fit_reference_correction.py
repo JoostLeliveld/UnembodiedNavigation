@@ -88,7 +88,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gate-dataset", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     args = parser.parse_args()
     source, output = args.gate_dataset.resolve(), args.output.resolve()
     staging = output.with_name(output.name + ".incomplete")
@@ -123,12 +122,12 @@ def main() -> int:
         raise RuntimeError("admitted positions cross canonical role boundaries")
     sample_weight = position_weights(position, train)
 
+    # CPU only: seeded CUDA training is not deterministic (two runs on identical inputs
+    # gave different visibility weights and flipped the R2 neighbour count), while two
+    # CPU runs are byte-identical.
     random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED)
-    device = torch.device(args.device)
-    if device.type == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("CUDA unavailable")
-    if device.type == "cuda":
-        torch.cuda.manual_seed_all(SEED)
+    torch.use_deterministic_algorithms(True)
+    device = torch.device("cpu")
     base = make_pipeline(
         StandardScaler(),
         MLPRegressor(

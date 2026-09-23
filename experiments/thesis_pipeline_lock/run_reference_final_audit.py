@@ -25,8 +25,8 @@ sys.path[:0] = [str(REPO), str(REPO / "src/perception"),
                 str(REPO / "src/unav_common")]
 
 from experiments.thesis_pipeline_lock.export_detector_dataset import classify  # noqa: E402
-from experiments.warehouse_v2_sketches.combined_recapture_v5 import (  # noqa: E402
-    image_path, load_rows,
+from experiments.warehouse_v2_sketches.reference_dataset import (  # noqa: E402
+    CAMPAIGN_ROOT, image_path, load_rows,
 )
 from perception.core.yolo_selection import select_best_detection, target_class_ids  # noqa: E402
 from planning.core.camera_network import CameraNetworkModel  # noqa: E402
@@ -34,7 +34,10 @@ from reliability.commissioned_visibility import CommissionedVisibilitySensorMode
 from reliability.observation_gates import (  # noqa: E402
     UsableObservationGateConfig, evaluate_sensor_gate,
 )
-from reliability.projection import camera_model_from_world  # noqa: E402
+from reliability.contracts import CameraObservation  # noqa: E402
+from reliability.projection import (  # noqa: E402
+    camera_model_from_world, project_observation_to_world_with_covariance,
+)
 from unav_common.capture_integrity import checked_image  # noqa: E402
 from unav_common.visibility_patch import visibility_grid_from_bgr_frame  # noqa: E402
 
@@ -46,9 +49,9 @@ RUNTIME_NAMES = {
     "R2_spatial_full": "R2_spatial_residual.json",
 }
 PLANNING_NAMES = {
-    "R0_global_full": "m0_planning_information.npz",
-    "R1_per_camera_full": "m1_planning_information.npz",
-    "R2_spatial_full": "m2_planning_information.npz",
+    "R0_global_full": "m0_planning_precision.npz",
+    "R1_per_camera_full": "m1_planning_precision.npz",
+    "R2_spatial_full": "m2_planning_precision.npz",
 }
 CHI2 = {"50": 1.3862943611, "90": 4.605170186,
         "95": 5.9914645471, "99": 9.210340372}
@@ -129,7 +132,9 @@ def main() -> int:
             raise RuntimeError(f"locked input drift: {path}")
 
     rows = [row for row in load_rows() if row["stratum"] == "final_audit"]
-    if len(rows) != 3000 or len({row["position_key"] for row in rows}) != 150:
+    expected = protocol["population"]
+    if (len(rows) != int(expected["opportunities"])
+            or len({row["position_key"] for row in rows}) != int(expected["positions"])):
         raise RuntimeError("final-audit population differs from the campaign lock")
     if any(row["capture_status"] != "ok" for row in rows):
         raise RuntimeError("final-audit population contains a failed capture")
@@ -140,8 +145,10 @@ def main() -> int:
     gate = UsableObservationGateConfig.from_yaml(str(
         REPO / protocol["locked_inputs"]["gate_config"]["path"]))
     gate.assert_belief_independent()
-    runtime_root = REPO / "logs/thesis_final_pipeline_v1/recapture_v5/runtime_r012"
-    planning_root = REPO / "logs/thesis_final_pipeline_v1/recapture_v5/planning_information"
+    runtime_root = CAMPAIGN_ROOT / "runtime_r012"
+    # The matched-covariance precision export of build_reference_planning_information.py,
+    # the planning artifact the canonical lock prescribes.
+    planning_root = CAMPAIGN_ROOT / "planning_precision"
     runtime = {
         key: CommissionedVisibilitySensorModel(runtime_root / RUNTIME_NAMES[key])
         for key in MODEL_KEYS
@@ -154,6 +161,15 @@ def main() -> int:
     cameras = {camera: camera_model_from_world(world, include_name=next(
         row["camera_model"] for row in rows if row["camera_id"] == camera))
         for camera in CAMERAS}
+    # R_proj, the external baseline: sigma_px^2 I2 propagated through the pixel-to-ground
+    # Jacobian at the raw box bottom centre, scored on the same corrected observations.
+    # sigma_px is the value fitted on D_R by evaluate_reference_ddev.py. It is optional so
+    # the v5 protocol, which predates it, still runs unchanged.
+    rproj_sigma_px = None
+    if "ddev_evaluation" in protocol["locked_inputs"]:
+        ddev = json.loads((REPO / protocol["locked_inputs"]["ddev_evaluation"]["path"])
+                          .read_text(encoding="utf-8"))
+        rproj_sigma_px = float(ddev["Rproj"]["sigma_px"])
     label_path = REPO / protocol["locked_inputs"]["label_protocol"]["path"]
     label_contract = json.loads(label_path.read_text(encoding="utf-8"))[
         "detector_label_contract"]["positive_requires_all"]
@@ -247,6 +263,20 @@ def main() -> int:
                 if corrected is None:
                     corrected = np.asarray(estimate)
             result["corrected_error_m"] = float(np.linalg.norm(corrected - truth))
+            if rproj_sigma_px is not None:
+                bottom = (0.5 * (float(box[0]) + float(box[2])), float(box[3]))
+                projected = project_observation_to_world_with_covariance(CameraObservation(
+                    camera_id=row["camera_id"], timestamp_s=0.0, pixel_uv=bottom,
+                    detection_valid=True, detector_score=1.0,
+                    conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)),
+                ), cameras[row["camera_id"]])
+                if projected is None:
+                    raise RuntimeError("Rproj projection failed at an admitted observation")
+                matrix = rproj_sigma_px ** 2 * np.asarray(projected[1], dtype=float)
+                residual = corrected - truth
+                result["mahalanobis_d2"]["Rproj"] = float(
+                    residual @ np.linalg.solve(matrix, residual))
+                result["logdet_covariance"]["Rproj"] = float(np.linalg.slogdet(matrix)[1])
         else:
             for key in MODEL_KEYS:
                 predicted = planning[key].query(
@@ -267,7 +297,8 @@ def main() -> int:
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "final_audit_accessed": True, "selection_or_fitting_performed": False,
         "sample_unit": "complete physical position",
-        "population": {"positions": 150, "opportunities": 3000,
+        "population": {"positions": int(expected["positions"]),
+                       "opportunities": int(expected["opportunities"]),
                        "unique_images": len(unique)},
         "reference_class_counts": dict(sorted(label_counts.items())),
         "opportunity_outcomes": dict(sorted(outcome_counts.items())),
@@ -278,7 +309,9 @@ def main() -> int:
                       / max(len(admitted), 1)},
         "raw_error": position_summary(admitted, "raw_error_m"),
         "corrected_error": position_summary(admitted, "corrected_error_m"),
-        "covariance": {key: covariance_summary(admitted, key) for key in MODEL_KEYS},
+        "covariance": {key: covariance_summary(admitted, key) for key in MODEL_KEYS
+                       + (("Rproj",) if rproj_sigma_px is not None else ())},
+        "rproj_sigma_px": rproj_sigma_px,
         "planning_information": {
             key: position_summary(evaluated, f"planning_error_fro.{key}") for key in ()
         },

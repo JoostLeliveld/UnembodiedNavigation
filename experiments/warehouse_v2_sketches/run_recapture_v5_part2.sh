@@ -18,9 +18,13 @@
 
 cd "$(dirname "$0")/../.."
 REPO="$(pwd)"
-OUT="${1:-logs/thesis_final_pipeline_v1/recapture_v5/master_capture_part2}"
-POSES="logs/thesis_final_pipeline_v1/recapture_v5/capture_poses_v5_part2.json"
-LOGDIR="${REPO}/logs/thesis_final_pipeline_v1/recapture_v5"
+# Every path below can be overridden from the environment; the defaults are the v5 part-2
+# capture. The v7 camera-C supplement sets CAPTURE_OUT, CAPTURE_POSES, CAPTURE_LOGDIR,
+# CAPTURE_TARGET_ROWS, CAPTURE_AUDIT=0 and its own transport partition.
+OUT="${CAPTURE_OUT:-${1:-logs/thesis_final_pipeline_v1/recapture_v5/master_capture_part2}}"
+POSES="${CAPTURE_POSES:-logs/thesis_final_pipeline_v1/recapture_v5/capture_poses_v5_part2.json}"
+V5DIR="${REPO}/logs/thesis_final_pipeline_v1/recapture_v5"
+LOGDIR="${CAPTURE_LOGDIR:-${V5DIR}}"
 mkdir -p "$LOGDIR"
 SIMLOG="${LOGDIR}/sim.log"
 CAPLOG="${LOGDIR}/capture.log"
@@ -28,8 +32,8 @@ CAPLOG="${LOGDIR}/capture.log"
 export ROS_LOCALHOST_ONLY=1
 export IGN_IP=127.0.0.1
 export GZ_IP=127.0.0.1
-export ROS_DOMAIN_ID=77
-export IGN_PARTITION=recapture_v5
+export ROS_DOMAIN_ID="${CAPTURE_ROS_DOMAIN_ID:-77}"
+export IGN_PARTITION="${CAPTURE_IGN_PARTITION:-recapture_v5}"
 export OMP_NUM_THREADS=2
 
 source /opt/ros/humble/setup.bash >/dev/null 2>&1
@@ -39,11 +43,13 @@ export PYTHONPATH="${REPO}/src/perception:${PYTHONPATH:-}"
 # Refuse to continue a long capture if any locked world, camera, detector,
 # sampling-plan or implementation identity has drifted.  The audit is read-only
 # and accepts a valid incomplete prefix.
-if [ -f "${OUT}/capture_manifest.json" ]; then
-  python3 experiments/thesis_pipeline_lock/audit_reference_position_campaign.py \
-    --capture "${OUT}" || exit 2
-else
-  python3 experiments/thesis_pipeline_lock/audit_reference_position_campaign.py || exit 2
+if [ "${CAPTURE_AUDIT:-1}" = "1" ]; then
+  if [ -f "${OUT}/capture_manifest.json" ]; then
+    python3 experiments/thesis_pipeline_lock/audit_reference_position_campaign.py \
+      --capture "${OUT}" || exit 2
+  else
+    python3 experiments/thesis_pipeline_lock/audit_reference_position_campaign.py || exit 2
+  fi
 fi
 
 # CAPTURE-ONLY camera models: identical to the installed ones plus a 1 Hz
@@ -56,7 +62,7 @@ fi
 # The overlay lives under logs/, NOT src/ or install/, and is prepended to the
 # resource path ONLY by this script. No navigation or campaign launch can load
 # it, and nothing tracked by git changes.
-CAPTURE_MODELS="${LOGDIR}/capture_models"
+CAPTURE_MODELS="${V5DIR}/capture_models"
 INSTALLED_MODELS="${REPO}/install/sim/share/sim/models"
 if [ ! -d "$CAPTURE_MODELS" ]; then
   echo "ABORT: ${CAPTURE_MODELS} missing; rebuild the capture-only model overlay" >&2
@@ -68,7 +74,7 @@ fi
 # gitignored build output regenerated from src/ by colcon. The originals are
 # saved and restored on exit, so a later navigation run gets the fast
 # no-segmentation models back even if this script is killed.
-CAPTURE_BACKUP="${LOGDIR}/installed_models_backup"
+CAPTURE_BACKUP="${V5DIR}/installed_models_backup"
 restore_models() {
   if [ -d "$CAPTURE_BACKUP" ]; then
     for m in "$CAPTURE_BACKUP"/*/; do
@@ -162,7 +168,7 @@ rows_done() {
 }
 
 install_capture_models
-TARGET_ROWS=11995
+TARGET_ROWS="${CAPTURE_TARGET_ROWS:-11995}"
 # 60 attempts, not 12: the memory guard restarts the capture roughly every 20
 # minutes (RSS grows ~0.03 GB/min from the in-memory dedup hash set), so a full
 # run needs many more resumes than a failure-only retry budget would allow.
@@ -185,11 +191,12 @@ for attempt in $(seq 1 60); do
   # than by editing audit_capture_resume.py, whose hash the capture verifies.
   env ROS_LOCALHOST_ONLY=1 IGN_IP=127.0.0.1 GZ_IP=127.0.0.1 \
       ROS_DOMAIN_ID="$ROS_DOMAIN_ID" IGN_PARTITION="$IGN_PARTITION" \
-      PYTHONPATH="${LOGDIR}/shim:${PYTHONPATH}" \
+      PYTHONPATH="${V5DIR}/shim:${PYTHONPATH}" \
   python3 experiments/camera_observation_characterization/capture_bbox_grid.py \
     --world warehouse_v2.world.sdf \
     --pose-file "$POSES" \
     --pose-validity footprint \
+    ${CAPTURE_EXTRA_ARGS:-} \
     --with-semantic \
     --settle-s 0.40 \
     --min-new-rgb-frames 2 \

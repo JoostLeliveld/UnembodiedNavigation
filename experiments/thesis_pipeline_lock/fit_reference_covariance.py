@@ -16,7 +16,7 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO / "src/reliability"), str(REPO / "src/unav_common"), str(REPO)]
-from experiments.warehouse_v2_sketches.combined_recapture_v5 import load_rows  # noqa: E402
+from experiments.warehouse_v2_sketches.reference_dataset import load_rows  # noqa: E402
 from reliability.projection import camera_model_from_world  # noqa: E402
 
 CAMERAS = tuple(f"camera_{letter}" for letter in "ABCDE")

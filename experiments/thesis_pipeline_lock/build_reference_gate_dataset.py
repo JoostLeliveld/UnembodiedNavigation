@@ -19,7 +19,9 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO), str(REPO / "src/reliability"), str(REPO / "src/unav_common")]
 
 from experiments.thesis_pipeline_lock.export_detector_dataset import classify  # noqa: E402
-from experiments.warehouse_v2_sketches.combined_recapture_v5 import image_path, load_rows  # noqa: E402
+from experiments.warehouse_v2_sketches.reference_dataset import (  # noqa: E402
+    EXPECTED_WORKING_OPPORTUNITIES, image_path, load_rows,
+)
 from reliability.observation_gates import UsableObservationGateConfig, evaluate_sensor_gate  # noqa: E402
 from reliability.projection import camera_model_from_world  # noqa: E402
 from unav_common.visibility_patch import visibility_grid_from_bgr_frame  # noqa: E402
@@ -78,8 +80,9 @@ def main() -> int:
         (r["capture_source"], int(r["plan_pose_index"]), r["camera_id"]): r
         for r in source_rows if r["stratum"] in ROLES
     }
-    if len(row_by_key) != 48_380:
-        raise RuntimeError("canonical working population is not 48380 opportunities")
+    if len(row_by_key) != EXPECTED_WORKING_OPPORTUNITIES:
+        raise RuntimeError(
+            f"canonical working population is not {EXPECTED_WORKING_OPPORTUNITIES} opportunities")
     world = REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
     models = {
         camera: camera_model_from_world(
@@ -138,7 +141,7 @@ def main() -> int:
             sink.write(json.dumps(out, separators=(",", ":"), allow_nan=False) + "\n")
             if opportunity_index % 2500 == 0:
                 print(
-                    f"gate/features {opportunity_index}/48380 opportunities; "
+                    f"gate/features {opportunity_index}/{EXPECTED_WORKING_OPPORTUNITIES} opportunities; "
                     f"{len(admitted)} admitted",
                     flush=True,
                 )

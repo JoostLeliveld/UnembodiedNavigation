@@ -22,7 +22,10 @@ for rel in ("src/perception", "src/unav_common"):
 from perception.core.yolo_selection import select_best_detection, target_class_ids  # noqa: E402
 from ultralytics import YOLO  # noqa: E402
 from unav_common.capture_integrity import checked_image, digest  # noqa: E402
-from experiments.warehouse_v2_sketches.combined_recapture_v5 import (  # noqa: E402
+from experiments.warehouse_v2_sketches.reference_dataset import (  # noqa: E402
+    EXPECTED_WORKING_OPPORTUNITIES,
+    EXPECTED_WORKING_UNIQUE_IMAGES,
+    LOCK_PATH,
     SOURCES,
     image_path,
     load_rows,
@@ -52,7 +55,7 @@ def main() -> int:
     if output.exists() or staging.exists():
         raise FileExistsError(output if output.exists() else staging)
 
-    lock_path = REPO / "experiments/thesis_pipeline_lock/reference_position_campaign_lock.json"
+    lock_path = LOCK_PATH
     lock_bytes = lock_path.read_bytes()
     lock = json.loads(lock_bytes)
     weights = (REPO / lock["detector"]["checkpoint"]).resolve()
@@ -61,8 +64,9 @@ def main() -> int:
 
     all_rows = load_rows()
     rows = [row for row in all_rows if row["stratum"] in WORKING_ROLES]
-    if len(rows) != 48_380:
-        raise RuntimeError(f"expected 48380 working opportunities, found {len(rows)}")
+    if len(rows) != EXPECTED_WORKING_OPPORTUNITIES:
+        raise RuntimeError(
+            f"expected {EXPECTED_WORKING_OPPORTUNITIES} working opportunities, found {len(rows)}")
     if any(row["stratum"] == "final_audit" for row in rows):
         raise RuntimeError("final_audit entered the working population")
 
@@ -85,8 +89,9 @@ def main() -> int:
     unique = {}
     for row in rows:
         unique.setdefault(row["image_sha1"], row)
-    if len(unique) != 14_570:
-        raise RuntimeError(f"expected 14570 unique working images, found {len(unique)}")
+    if len(unique) != EXPECTED_WORKING_UNIQUE_IMAGES:
+        raise RuntimeError(
+            f"expected {EXPECTED_WORKING_UNIQUE_IMAGES} unique working images, found {len(unique)}")
 
     items = sorted(unique.items())
     selections = {}

@@ -20,10 +20,14 @@ sys.path[:0] = [str(REPO / "experiments/warehouse_v2_sketches"),
                 str(REPO), str(REPO / "src/reliability"),
                 str(REPO / "src/unav_common")]
 
-from combined_recapture_v5 import (  # noqa: E402
+from reference_dataset import (  # noqa: E402
     image_path, load_rows,
 )
 from reliability.commissioned_visibility import CommissionedVisibilitySensorModel  # noqa: E402
+from reliability.contracts import CameraObservation  # noqa: E402
+from reliability.projection import (  # noqa: E402
+    camera_model_from_world, project_observation_to_world_with_covariance,
+)
 from unav_common.visibility_patch import visibility_grid_from_bgr_frame  # noqa: E402
 
 
@@ -55,7 +59,8 @@ def fuse(items: list[dict], model: str) -> tuple[np.ndarray, np.ndarray]:
     return covariance @ weighted, covariance
 
 
-def summary(errors: list[float], nis: list[float] | None = None) -> dict:
+def summary(errors: list[float], nis: list[float] | None = None,
+            areas: list[float] | None = None) -> dict:
     values = np.asarray(errors, dtype=float)
     result = {
         "batches": int(len(values)),
@@ -70,6 +75,8 @@ def summary(errors: list[float], nis: list[float] | None = None) -> dict:
             "mean_nis": float(np.mean(scores)),
             "coverage_95": float(np.mean(scores <= CHI2_95)),
         })
+    if areas is not None:
+        result["mean_fused_ellipse_area_95_cm2"] = float(np.mean(areas))
     return result
 
 
@@ -105,6 +112,10 @@ def main() -> int:
     parser.add_argument("--audit", type=Path, required=True)
     parser.add_argument("--runtime-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--rproj-ddev", type=Path, default=None,
+        help="D_dev evaluation manifest holding the Rproj sigma_px fitted on D_R; adds the "
+             "geometric baseline as a fusion rule")
     args = parser.parse_args()
     audit = args.audit.resolve()
     runtime_root = args.runtime_root.resolve()
@@ -137,6 +148,18 @@ def main() -> int:
     source = [json.loads(line) for line in records_path.read_text(
         encoding="utf-8").splitlines()]
     admitted = [row for row in source if row["outcome"] == "admitted"]
+    rproj_sigma_px = None
+    fused_rules = tuple(MODEL_PATHS)
+    if args.rproj_ddev is not None:
+        rproj_sigma_px = float(json.loads(args.rproj_ddev.read_text(encoding="utf-8"))[
+            "Rproj"]["sigma_px"])
+        world = REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
+        cameras = {}
+        for row in by_hash.values():
+            if row["camera_id"] not in cameras:
+                cameras[row["camera_id"]] = camera_model_from_world(
+                    world, include_name=row["camera_model"])
+        fused_rules = fused_rules + ("rproj",)
 
     evaluated = []
     for index, record in enumerate(admitted, start=1):
@@ -166,6 +189,17 @@ def main() -> int:
             elif not np.allclose(estimate, item["corrected_xy_m"], rtol=0.0, atol=1e-12):
                 raise RuntimeError("mean correction differs between covariance models")
             item["covariance_m2"][name] = np.asarray(covariance, dtype=float).tolist()
+        if rproj_sigma_px is not None:
+            projected = project_observation_to_world_with_covariance(CameraObservation(
+                camera_id=record["camera_id"], timestamp_s=0.0,
+                pixel_uv=(0.5 * (box[0] + box[2]), box[3]),
+                detection_valid=True, detector_score=1.0,
+                conditional_cov_uv=((1.0, 0.0), (0.0, 1.0)),
+            ), cameras[record["camera_id"]])
+            if projected is None:
+                raise RuntimeError("Rproj projection failed at an admitted observation")
+            item["covariance_m2"]["rproj"] = (
+                rproj_sigma_px ** 2 * np.asarray(projected[1], dtype=float)).tolist()
         evaluated.append(item)
         if index % 100 == 0:
             print(f"final-audit fusion preparation {index}/{len(admitted)}", flush=True)
@@ -179,6 +213,7 @@ def main() -> int:
 
     errors: dict[str, list[float]] = collections.defaultdict(list)
     nis: dict[str, list[float]] = collections.defaultdict(list)
+    areas: dict[str, list[float]] = collections.defaultdict(list)
     by_count: dict[str, dict[int, list[float]]] = collections.defaultdict(
         lambda: collections.defaultdict(list))
     spatial_wins = 0
@@ -196,19 +231,20 @@ def main() -> int:
         errors["best_spatial_single"].append(best_error)
         by_count["best_spatial_single"][count].append(best_error)
 
-        for name in MODEL_PATHS:
+        for name in fused_rules:
             estimate, covariance = fuse(items, name)
             residual = estimate - truth
             value = float(np.linalg.norm(residual))
             errors[name].append(value)
             nis[name].append(float(residual @ np.linalg.solve(covariance, residual)))
+            areas[name].append(math.pi * CHI2_95 * math.sqrt(np.linalg.det(covariance)) * 1e4)
             by_count[name][count].append(value)
         spatial_wins += errors["spatial"][-1] < best_error
 
     metrics = {
         "best_spatial_single": summary(errors["best_spatial_single"]),
         "equal": summary(errors["equal"]),
-        **{name: summary(errors[name], nis[name]) for name in MODEL_PATHS},
+        **{name: summary(errors[name], nis[name], areas[name]) for name in fused_rules},
     }
     metrics["spatial"]["wins_against_best_spatial_single"] = spatial_wins
     metrics["spatial"]["win_fraction_against_best_spatial_single"] = (
@@ -241,8 +277,9 @@ def main() -> int:
         "by_camera_count": count_metrics,
         "single_observation": {
             name: single_observation_summary(evaluated, name)
-            for name in MODEL_PATHS
+            for name in fused_rules
         },
+        "rproj_sigma_px": rproj_sigma_px,
         "source_hashes": {
             "audit_report": sha256(audit_report_path),
             "audit_records": sha256(records_path),
