@@ -1,0 +1,72 @@
+{
+  "schema": "thesis_stage09_execution_protocol.v10",
+  "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
+  "status": "frozen_before_runtime_preflight_v17",
+  "frozen_at": "2026-09-10",
+  "supersedes": {
+    "path": "experiments/thesis_pipeline_lock/stage09_execution_protocol_v9.json",
+    "sha256": "88c85a5f6f0c46e51f04bf2cbe0f122d7b041f80f58c975ed9688e896cdcf93e"
+  },
+  "unchanged_scientific_design": {
+    "route_selection_manifest_path": "logs/thesis_final_pipeline_v1/stage09_navigation/route_selection_v4/manifest.json",
+    "route_selection_manifest_sha256": "8697a14efa3b542db7135795bd528bf9b75e714f45784a6f00fe08a8b8112eae",
+    "selection_digest": "cbc6995b274e438d5f388839303067f3d4a8b2efb84c530819119f070e4b8abc",
+    "tasks": [
+      "thesis09_west_to_east_north",
+      "thesis09_east_to_west_south",
+      "thesis09_aisle_to_crossaisle"
+    ],
+    "arms": ["P0", "P1"],
+    "matched_seeds": [900, 901, 902, 903, 904],
+    "planned_runs": 30,
+    "detector_checkpoint_sha256": "1e99afb5361a7c2599cb3f2863ebb04fd6f65bc1ee23996b989c9bba8b004f13",
+    "detector_imgsz": 960,
+    "measurement_model_sha256": "249106c706b5e6dd3b10ab75abcfa54604c16b2fa987f38a5c84af58a2da9f4a",
+    "availability_model_sha256": "3dfa83ad0f9d8838bd6b5085e33c20fe89eb8c4334fa17d1d797bad69b1510e7",
+    "heading_update_mode": "camera_xy_only",
+    "state_reanchor_m": 0,
+    "state_max_predict_dt_s": 1.5,
+    "detector_gate_route_controller_noise_or_statistical_design_changed": false
+  },
+  "final_campaign_v7_diagnostic": {
+    "role": "non-inferential infrastructure diagnostic",
+    "campaign_log_path": "logs/thesis_final_pipeline_v1/stage09_navigation/final_campaign_v7/campaign_log.json",
+    "completed_cells": 2,
+    "completed_outcomes": ["goal_reached", "goal_reached"],
+    "failure": "The full-checkout provenance guard correctly stopped before later cells when unrelated reporting work and then the provenance implementation changed. Because the executable identity was not constant for the intended 30-cell campaign, all V7 outcomes are excluded and the complete matrix is restarted in V8.",
+    "inferential_use": "none"
+  },
+  "provenance_scope_amendment": {
+    "scope": "campaign infrastructure only; no detector, measurement, planner, controller, route, noise, threshold, task, seed or analysis estimand changed",
+    "rule": "Freeze and compare the tracked diff plus untracked content only for src/ and scripts/visibility_comparison/, exactly matching the directories copied into source_snapshot. Any change in that executable scope still aborts before the next cell; analysis and reporting edits elsewhere do not.",
+    "source_hashes": {
+      "src/unav_common/unav_common/manifest.py": "091008b55b868592de5f5c0a8ed6457aaf36b9afbc5785f9f70e81092024e0df",
+      "scripts/visibility_comparison/run_visibility_campaign.py": "c098ab1ab40b9ef84232b3650763ad1c2b8f7d49946a1263d4f70db18fb5ef9f"
+    },
+    "verification": {
+      "command": "python3 -m pytest -q tests/visibility_comparison/test_configuration_provenance_integrity.py",
+      "result": "13 passed",
+      "syntax": "python3 -m py_compile passed for both amended sources"
+    }
+  },
+  "execution": {
+    "runtime_preflight_config_path": "experiments/thesis_pipeline_lock/stage09_navigation_runtime_preflight_v12.yaml",
+    "runtime_preflight_config_sha256": "a6db89b26e4b625f0cbe9e0675470df99f58cf114b4981b56d273a4adf168cf9",
+    "runtime_preflight_log_root": "logs/thesis_final_pipeline_v1/stage09_navigation/preflight_v17",
+    "final_campaign_config_path": "experiments/thesis_pipeline_lock/stage09_navigation_frozen_routes_v9.yaml",
+    "final_campaign_config_sha256": "3bcad117ea611242403f5835e0761d7a411d9d5b8caef08a8921ff384d71cdfa",
+    "final_campaign_log_root": "logs/thesis_final_pipeline_v1/stage09_navigation/final_campaign_v8"
+  },
+  "preflight_release_gate": {
+    "inherits": "experiments/thesis_pipeline_lock/stage09_execution_protocol_v9.json#/preflight_release_gate",
+    "failure_policy": "Do not launch final_campaign_v8 unless every inherited gate passes. Preserve V17 if it fails and freeze another amendment before retrying."
+  },
+  "analysis_contract": "docs/localization_metrics.md and docs/localization_metrics_registry.json",
+  "prohibitions": [
+    "Do not use preflight_v17 or final_campaign_v7 as navigation-comparison evidence.",
+    "Do not lower detector, image-border, hull, NIS, motion-support, route-support or clearance gates.",
+    "Do not use ground truth online.",
+    "Do not edit the reused V12 preflight or V9 final campaign configurations.",
+    "Do not change any file under src/ or scripts/visibility_comparison/ during final_campaign_v8."
+  ]
+}

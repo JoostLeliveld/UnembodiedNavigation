@@ -1,0 +1,66 @@
+schema: commissioned_field_requirements.v1
+date: '2026-09-05'
+objective: Predict usable camera evidence and its accumulated localization value, with the existing mean correction and fixed robot Q.
+scope:
+  installation: warehouse_v2
+  mean: logs/perception_models/box_feature_bias_correction_20260831/models.joblib
+  uncertainty: logs/studies/icra_commissioning_20260905/models.joblib
+  static_split: logs/studies/icra_commissioning_20260905/manifest.json
+  static_evidence: previously_inspected_grouped_development
+  fresh_drives: field_pilot_cpu.yaml
+  final_navigation_benefit: requires_matched_closed_loop_comparison
+requirements:
+  F01:
+    statement: Every usable reading measures robot-reference XY in map_bev, metres, at its capture time.
+    checks: [geometry_roundtrip, frozen_mean_equivalence, corrected_residual_covariance]
+  F02:
+    statement: The observation opportunity and acceptance population are explicit, including misses and manager refusals.
+    checks: [complete_camera_batches, unique_camera_capture_identity, raw_contract_log, terminal_fusion_accounting]
+    target: detection_valid_and_finite_ground_projection_before_innovation_gating
+  F03:
+    statement: Future queries accept predicted pose and surveyed camera geometry; no future image, score or reference pose.
+    checks: [query_interface_firewall, supported_query_domain, unknown_image_feature_marginalization]
+  F04:
+    statement: Availability q, conditional R, persistent error, GP map uncertainty and robot covariance P remain distinct.
+    checks: [covariance_spd, bias_separate_from_scatter, no_gp_variance_as_R, shared_map_uncertainty_not_resampled_per_frame]
+  F05:
+    statement: Fit, selection and evaluation are grouped before learning; residuals come from a frozen mean on unseen mean-training examples.
+    checks: [input_hashes, group_disjointness, frozen_selection, independent_run_aggregation]
+  F06:
+    statement: Compare constant, geometry, empirical local and GP availability on identical opportunities and fixed quality.
+    checks: [brier_and_calibration, support_fraction, per_camera_scores, heldout_route_application]
+    gp_keep_rule: Retain only for useful held-out predictive benefit over simpler alternatives; no GP win is presumed.
+  F07:
+    statement: Camera fusion and repeated measurements must not create unjustified independent information.
+    checks: [joint_vs_independent_camera_outcomes, within_run_temporal_residuals, camera_complementarity, common_rate_ablation]
+  F08:
+    statement: Forecast posterior covariance by possible outcomes with the same Q, cadence and dependence assumptions as runtime.
+    checks: [branch_average_reference, expected_information_optimism, exact_odometry_event_propagation, no_future_outcomes_in_query]
+  F09:
+    statement: Validate future availability and uncertainty on independently collected fixed routes before claiming navigation utility.
+    checks: [forecast_magnitude, forecast_route_ordering, availability_vs_quality_error_separation, per_run_uncertainty]
+  F10:
+    statement: Navigation improvement requires matched closed-loop runs with estimator and planner effects separated.
+    checks: [estimator_planner_factorial, identical_objective_controller, success_failures_cost_latency, all_runs_retained]
+  F11:
+    statement: Static deterministic scenes provide variation across configurations, not independent repeated sensor noise.
+    checks: [declared_nuisance_distribution, exact_repeat_hash_check, spatial_vs_temporal_dependence]
+  F12:
+    statement: A null or mixed result must identify the simplest sufficient representation and its operational limits.
+    checks: [mean_covariance_availability_ablation, budget_including_mean_training, explicit_claim_evidence_table]
+predeclared_comparison:
+  availability_methods: [constant, geometry_xy, geometry_heading, local_xy, local_heading, gp_xy, gp_integrated]
+  geometry_logistic_C: [0.1, 1.0, 10.0]
+  local_neighbors: [8, 24, 64]
+  heading_embedding_m: 1.0
+  gp_length_scale_m: [0.5, 1.0, 2.0, 4.0]
+  gp_noise_variance: [0.05, 0.5, 2.0]
+  gp_resolution_m: 0.5
+  selection_metric: equal_tile_mean_brier_across_all_five_cameras
+  quality_model: frozen_confidence_covariance_with_same_per_camera_mean_offset
+  quality_field_neighbors: 24
+  unsupported_query: nearest_training_position_farther_than_2m_implies_no_camera_update
+  forecast_horizons_s: [1.0, 3.0, 5.0]
+  forecast_rate_policy: 1Hz_common_processed_opportunities_for_replay_and_forecast
+  pilot_roles: all_six_new_runs_are_frozen_model_application_no_driving_parameter_fitting
+  reporting: per_run_first_no_frame_pseudoreplication

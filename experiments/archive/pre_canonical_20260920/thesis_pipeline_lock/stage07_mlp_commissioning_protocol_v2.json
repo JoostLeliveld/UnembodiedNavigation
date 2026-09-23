@@ -1,0 +1,50 @@
+{
+  "schema": "thesis_stage07_mlp_commissioning_protocol.v2",
+  "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
+  "status": "frozen_before_stage07_model_fitting",
+  "purpose": "Reset the commissioned measurement model around the thesis contribution before the new navigation pilot.",
+  "population": "Stage-06 admitted observations from the 240 commissioning-fit positions only",
+  "spatial_validation": {
+    "outer_folds": 5,
+    "unit": "whole 3.2 m spatial block",
+    "rule": "Every camera and heading from one block remains in one fold."
+  },
+  "deployed_correction_model": "C3_mlp_residual",
+  "deployed_correction_reason": "The two-layer MLP residual correction is the proposed commissioned mean model. Raw, analytic-hull and ridge predictions remain spatially out-of-fold baselines; they do not decide whether the thesis contribution is deployed.",
+  "correction_model": {
+    "base": "analytic visual-hull equivalent position",
+    "target": "two-dimensional residual in the camera ray frame",
+    "hidden_layers": [64, 64],
+    "activation": "ReLU",
+    "optimizer": "Adam",
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "batch_size": 128,
+    "maximum_epochs": 200,
+    "early_stopping_patience": 20,
+    "epoch_choice": "inner spatial validation; deployment uses the median selected epoch",
+    "runtime_inputs_only": true
+  },
+  "deployed_covariance_model": "R2C",
+  "deployed_covariance_reason": "Use one transparent conditional covariance family: full covariance per camera and detected-width tertile, shrunk toward the camera covariance, followed by a scalar estimated in nested spatial folds to protect 90/95 percent tail coverage.",
+  "covariance_model": {
+    "residual_source": "spatially out-of-fold C3 MLP residuals only",
+    "width_bins_per_camera": 3,
+    "shrinkage_pseudocount": 20,
+    "calibration": "nested spatial-fold scalar using the larger of the 90 and 95 percent chi-square quantile ratios",
+    "reported_diagnostics": [
+      "Gaussian negative log likelihood",
+      "50/90/95/99 percent ellipse containment",
+      "95 percent ellipse area",
+      "fraction beyond the 99 percent chi-square boundary"
+    ]
+  },
+  "fit_constants": {
+    "ridge_alpha_grid": [0.01, 0.1, 1.0, 10.0, 100.0]
+  },
+  "audit_firewall": {
+    "final_audit_accessed": false,
+    "navigation_data_used_for_fit": false
+  },
+  "interpretation": "MLP learns the conditional mean error. R is fitted only after that mean is fixed and describes residual scatter conditional on an admitted measurement. Availability is learned separately from all admitted and unavailable opportunities."
+}

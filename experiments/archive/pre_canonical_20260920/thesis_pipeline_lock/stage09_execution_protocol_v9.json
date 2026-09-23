@@ -1,0 +1,110 @@
+{
+  "schema": "thesis_stage09_execution_protocol.v9",
+  "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
+  "status": "frozen_before_runtime_preflight_v16",
+  "frozen_at": "2026-09-10",
+  "supersedes": {
+    "path": "experiments/thesis_pipeline_lock/stage09_execution_protocol_v8.json",
+    "sha256": "de6bddc323f3aa2093c3589a8438d284d352dc7c037d30fb214adee7e0cf7cae"
+  },
+  "unchanged_scientific_design": {
+    "source": "experiments/thesis_pipeline_lock/stage09_execution_protocol_v8.json",
+    "route_selection_manifest_path": "logs/thesis_final_pipeline_v1/stage09_navigation/route_selection_v4/manifest.json",
+    "route_selection_manifest_sha256": "8697a14efa3b542db7135795bd528bf9b75e714f45784a6f00fe08a8b8112eae",
+    "selection_digest": "cbc6995b274e438d5f388839303067f3d4a8b2efb84c530819119f070e4b8abc",
+    "paired_tasks": [
+      "thesis09_west_to_east_north",
+      "thesis09_east_to_west_south",
+      "thesis09_aisle_to_crossaisle"
+    ],
+    "matched_seeds": [900, 901, 902, 903, 904],
+    "arms": ["P0", "P1"],
+    "planned_runs": 30,
+    "detector_checkpoint_sha256": "1e99afb5361a7c2599cb3f2863ebb04fd6f65bc1ee23996b989c9bba8b004f13",
+    "detector_imgsz": 960,
+    "measurement_model_sha256": "249106c706b5e6dd3b10ab75abcfa54604c16b2fa987f38a5c84af58a2da9f4a",
+    "availability_model_sha256": "3dfa83ad0f9d8838bd6b5085e33c20fe89eb8c4334fa17d1d797bad69b1510e7",
+    "heading_update_mode": "camera_xy_only",
+    "state_reanchor_m": 0,
+    "state_max_predict_dt_s": 1.5,
+    "detector_gate_route_controller_noise_and_statistical_design_changed": false
+  },
+  "preflight_v15_diagnostic": {
+    "role": "non-inferential implementation and evidence preflight",
+    "campaign_outcome": "infra_invalid",
+    "physical_outcome": "goal_reached_without_collision",
+    "campaign_log_path": "logs/thesis_final_pipeline_v1/stage09_navigation/preflight_v15/campaign_log.json",
+    "campaign_log_sha256": "3fc57d0c0a40479e9cd8c249577afebfaa2e9cdaafa02e5b00ceafafbf469bce",
+    "release_report_path": "logs/thesis_final_pipeline_v1/stage09_navigation/preflight_v15/release_report.json",
+    "release_report_sha256": "bad46a47c329395bfeab5fef4c78c54e1a3b31e23a5bebbb6f7205bcec7e3b26",
+    "run_summary_sha256": "9fa677b028b6537cfc88cfbc3c78e1a4a56de70ac53ae2fa589ff193c5b8b27d",
+    "failure": "The forwarded-zero actuation outcome preceded delivery of the corresponding zero on the cached /cmd_vel subscription. One stale nonzero motion-history sample after the authoritative zero timestamp remained in every later all-since-zero window, so terminal_stop_verified stayed false even though the subsequent operational trajectory was stationary.",
+    "observed_post_zero_evidence": {
+      "stationary_samples_after_last_active_command": 12,
+      "stationary_duration_s": 1.699,
+      "maximum_operational_displacement_m": 0.00011194936491823403,
+      "terminal_rest_requirement_s": 0.25,
+      "terminal_max_displacement_requirement_m": 0.01
+    },
+    "inferential_use": "none"
+  },
+  "terminal_rest_window_amendment": {
+    "scope": "evidence lifecycle only; no detector, measurement, planner, controller, route, noise, threshold or statistical-design value changed",
+    "rule": "After an authoritative forwarded-zero outcome, the stationary evidence window begins after the last subsequently observed active /cmd_vel sample. A stale asynchronous sample therefore delays the window but cannot permanently poison all later stationary samples. The unchanged 0.25-s duration and 0.01-m maximum operational displacement requirements still apply.",
+    "source_hashes": {
+      "src/experiments/experiments/nodes/experiment_logger.py": "6eff54740bf91724bf9e10ae8d91c3a66d43ccd1528d7816694446c11b404eeb",
+      "experiments/thesis_pipeline_lock/evaluate_stage09_preflight.py": "96efd5ae68a6e02544e4741956272dd7fe38a48d0e0eb7620ba9da2b34881fd5"
+    },
+    "test_hashes": {
+      "tests/experiments/test_logger_event_accounting_repair.py": "611087ffb515b0caef3118abbeccd0b02dfb28faad68daebe6e7d2fa4514dde2"
+    }
+  },
+  "verification": {
+    "focused_result": "113 passed",
+    "full_command": "MPLCONFIGDIR=/tmp/thesis_stage09_mpl python3 -m pytest -q",
+    "full_result": "1850 passed, 4 skipped",
+    "pipeline_lock": "PASS THESIS-FINAL-PIPELINE-V1; stages 01-08 locked",
+    "ros_build_command": "colcon build --symlink-install --base-paths src --packages-select experiments",
+    "ros_build_result": "1 package finished"
+  },
+  "execution": {
+    "runtime_preflight_config_path": "experiments/thesis_pipeline_lock/stage09_navigation_runtime_preflight_v12.yaml",
+    "runtime_preflight_config_sha256": "a6db89b26e4b625f0cbe9e0675470df99f58cf114b4981b56d273a4adf168cf9",
+    "runtime_preflight_log_root": "logs/thesis_final_pipeline_v1/stage09_navigation/preflight_v16",
+    "final_campaign_config_path": "experiments/thesis_pipeline_lock/stage09_navigation_frozen_routes_v9.yaml",
+    "final_campaign_config_sha256": "3bcad117ea611242403f5835e0761d7a411d9d5b8caef08a8921ff384d71cdfa",
+    "final_campaign_log_root": "logs/thesis_final_pipeline_v1/stage09_navigation/final_campaign_v7"
+  },
+  "preflight_release_gate": {
+    "analysis_interval": "first_cmd_stamp through stop_stamp, inclusive",
+    "reference_alignment": "own-time bounded interpolation of logged ground truth with max_reference_gap_s=0.15; highest explicit anchor revision per belief state timestamp",
+    "quantitative": {
+      "fused_correction_p95_m_max": 0.15,
+      "fused_correction_above_0_25_fraction_max": 0.01,
+      "belief_p95_m_max": 0.25,
+      "belief_max_m_max": 0.5,
+      "accepted_fraction_of_fresh_corrections_min": 0.8,
+      "longest_accepted_correction_gap_s_max": 5.0
+    },
+    "required": [
+      "bootstrap evidence records one admitted camera plus declared start prior",
+      "goal reached without collision, timeout, stuck stop or integrity failure",
+      "ground-truth final goal distance at most 0.35 m",
+      "all quantitative gates pass",
+      "correction assimilation and schema-9 belief ledgers are valid",
+      "detector and manager journals end in session_stopped bound to the summary request ID",
+      "the exact planner, camera-manager and detector acknowledgement statuses are present",
+      "attempt and summary evidence are complete",
+      "manifest records the unchanged five-camera runtime method",
+      "terminal zero, operational rest and producer quiescence are verified"
+    ],
+    "failure_policy": "Do not launch the final campaign unless every gate passes. Preserve failure and freeze another amendment before retrying."
+  },
+  "analysis_contract": "docs/localization_metrics.md and docs/localization_metrics_registry.json",
+  "prohibitions": [
+    "Do not use any preflight as navigation comparison evidence.",
+    "Do not lower detector, image-border, hull, NIS, motion-support, route-support or clearance gates.",
+    "Do not use ground truth online.",
+    "Do not edit the reused V12 preflight or V9 final campaign configurations."
+  ]
+}

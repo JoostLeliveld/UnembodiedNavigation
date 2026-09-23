@@ -1,0 +1,113 @@
+# Corrected runtime pilot: same camera models, Q, field arms and 0.2/0.1 m waypoint settings.
+# Protocol freezes state/command transaction fixes, motion replay and actuator watchdog.
+world: warehouse_v2.world.sdf
+launch_file: warehouse_primary_comparison.launch.py
+conditions:
+  P0:
+    label: network_uniform_score
+    camera_network_artifact_path: logs/studies/icra_commissioning_20260905/network_planner/uniform.npz
+  P1:
+    label: network_geometry_score
+    camera_network_artifact_path: logs/studies/icra_commissioning_20260905/network_planner/geometry.npz
+  P2:
+    label: network_gp_score
+    camera_network_artifact_path: logs/studies/icra_commissioning_20260905/network_planner/gp.npz
+tasks:
+  fusion_network_traverse:
+    conditions:
+    - P0
+    - P1
+    - P2
+    seeds:
+    - 210
+perception_backend: yolo
+yolo_model: logs/perception_models/warehouse_v2_yolo_detect_halfopen_20260825_r1/model.pt
+yolo_device: cpu
+yolo_imgsz: 960
+yolo_conf_threshold: 0.25
+yolo_iou_threshold: 0.45
+yolo_target_class: robot
+yolo_class_id: 0
+yolo_use_masks: false
+yolo_min_bbox_area_px: 0.0
+yolo_max_batch_stamp_skew_s: 0.05
+r_visible_uv: 0.7642679454946852
+r_miss_uv: 40.0
+multicam_belief: true
+manager_fusion_mode: true
+manager_covariance_profile: commissioned_reference_r
+manager_commissioned_calibration_path: logs/studies/measurement_commissioning/calibration.json
+manager_require_gp_artifacts: false
+manager_decision_rate_hz: 5.0
+manager_require_source_batch_id: true
+manager_bootstrap_min_cameras: 2
+manager_bootstrap_max_disagreement_m: 0.91
+manager_fusion_disagreement_gate_m: 0.6
+manager_fusion_max_timestamp_spread_s: 0.05
+state_correction_mode: fused
+state_correction_ekf: true
+heading_update_mode: coupled
+pixel_correction_nis_threshold: 9.21
+state_reanchor_m: 0.0
+state_max_predict_dt_s: 1.5
+state_reject_inflate_m2: 0.05
+stale_belief_inflate_m2_per_s: 0.0
+stale_belief_inflate_cap_m2: 0.0
+require_state_correction_envelope: true
+use_hierarchical: true
+global_planner_mode: efe
+use_diagnostic_odom_localization: false
+v_max: 0.22
+horizon: 20
+dt: 0.25
+goal_success_radius: 0.35
+goal_success_hold_s: 2.0
+run_timeout_after_first_cmd_s: 600
+local_controller_type: turn_then_go
+robot_collision_radius_m: 0.48541219597369
+use_nogo_cost: true
+nogo_penalty_type: warning_band
+nogo_safe_distance: 0.55
+local_nogo_safe_distance: 0.55
+nogo_warning_band: 0.05
+nogo_weight: 40.0
+use_belief_nogo_cost: false
+terminate_on_geom_collision: false
+use_odom_for_predict: true
+odom_topic: /odom_noisy
+use_command_noise: true
+use_encoder_noise: true
+process_noise_xy: 0.01
+process_noise_theta: 0.02
+headless: true
+use_rviz: false
+reset_world: false
+debug_runtime: false
+cleanup_sim_stragglers: false
+ros_domain_id_base: 211
+manager_fusion_rule: joint_network
+manager_observation_model: learned_nn
+manager_learned_correction_path: logs/perception_models/box_feature_bias_correction_20260831/models.joblib
+manager_fixed_offset_m: 0.0
+manager_camera_ids: camera_A,camera_B,camera_C,camera_D,camera_E
+global_horizon: 200
+global_dt: 1.0
+optimizer_route_seed_mode: lane_graph
+optimizer_initial_routes_json: ''
+global_optimizer_multistart: true
+optimizer_multistart_include_direct: false
+optimizer_maxiter: 80
+optimizer_maxfun: 500
+optimizer_ftol: 1.0e-06
+optimizer_gtol: 1.0e-05
+optimizer_terminal_goal_tolerance_m: 0.35
+local_use_visibility_model: false
+local_use_ambiguity: false
+local_use_obs_risk: false
+use_pixel_correction: false
+use_hit_miss_mixture: false
+nogo_mode: keep_in
+cleanup_mode: isolated
+manager_commissioned_world_covariance_path: logs/studies/icra_commissioning_20260905/network_planner/reference_calibration.json
+waypoint_spacing_m: 0.2
+waypoint_arrival_radius_m: 0.1

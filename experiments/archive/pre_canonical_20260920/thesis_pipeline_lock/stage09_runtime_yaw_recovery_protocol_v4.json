@@ -1,0 +1,98 @@
+{
+  "schema": "thesis_stage09_runtime_yaw_recovery_protocol.v4",
+  "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
+  "status": "frozen_before_v4_commissioning_robustness_audit",
+  "frozen_at": "2026-09-10",
+  "history": {
+    "v1_failed_audit": "logs/thesis_final_pipeline_v1/stage09_navigation/runtime_yaw_recovery_audit_v1/report.json",
+    "v2_withdrawal": "experiments/thesis_pipeline_lock/stage09_runtime_yaw_recovery_protocol_v2_withdrawal.json",
+    "v3_failed_audit": "logs/thesis_final_pipeline_v1/stage09_navigation/runtime_yaw_recovery_audit_v3/report.json",
+    "v3_verdict": "All predeclared rules passed except the V11-stress added-false-admission limit: 23/19,200 versus a maximum of 19/19,200.",
+    "v4_amendment": "Reject a recovery when the minimum shape-mismatch candidate is either endpoint of the yaw interval. A constrained boundary optimum requests a yaw outside the belief's declared support."
+  },
+  "data_boundary": {
+    "authorized_population": "All 9,600 Stage-06 commissioning_fit camera opportunities, including detector misses and non-positive references.",
+    "final_audit_previously_accessed": true,
+    "independence_statement": "The already-opened final audit is not independent validation of this adapter and is prohibited from selection.",
+    "audit_role": "Commissioning-only deterministic robustness diagnostic; perturbation draws are not independent replicates."
+  },
+  "adapter": {
+    "name": "interior shape-only nuisance-yaw hull admission",
+    "point_estimate_first": true,
+    "fallback_trigger": "Only when every point-yaw refusal reason is width_mismatch or height_mismatch.",
+    "unrecoverable_reasons": ["too_small", "too_short", "bottom_edge_occluded", "touches_border", "no_prediction", "degenerate_prediction"],
+    "yaw_interval": "two-sided 90% marginal normal interval",
+    "yaw_interval_z": 1.6448536269514722,
+    "yaw_samples": 41,
+    "minimum_passing_fraction": 0.0,
+    "sample_rule": "Uniform deterministic odd grid including mean and endpoints.",
+    "candidate_rule": "At least one grid candidate must pass every unchanged Stage-06 criterion.",
+    "selection_rule": "Choose passing candidate minimizing squared log width-ratio plus squared log height-ratio; tie-break by absolute yaw displacement.",
+    "boundary_rule": "Refuse if that optimum is the lower or upper interval endpoint.",
+    "position_rule": "Do not search x/y; retain timestamp-matched belief x/y.",
+    "measurement_rule": "Use nuisance yaw only for analytic equivalent-position correction and frozen Stage-07 features.",
+    "heading_update": "Position only; never update or publish heading.",
+    "unchanged_gates": {
+      "detector_confidence_min": 0.25,
+      "minimum_box_side_px": 16,
+      "minimum_shape_ratio": 0.85,
+      "maximum_shape_ratio": 1.1764705882352942,
+      "maximum_bottom_shortfall": "max(6 px, 0.15 predicted height)",
+      "border_margin_px": 2
+    }
+  },
+  "perturbations": {
+    "draws_per_regime_per_opportunity": 2,
+    "seed_namespace": "thesis-stage09-yaw-recovery-v1",
+    "regimes": [
+      {
+        "id": "commissioned_moderate",
+        "xy_error_sigma_m": 0.1,
+        "xy_error_clip_m_per_axis": 0.2,
+        "yaw_error_sigma_deg": 5.0,
+        "yaw_error_clip_deg": 10.0,
+        "declared_xy_sigma_m": 0.1,
+        "declared_yaw_sigma_deg": 5.0
+      },
+      {
+        "id": "v11_stress",
+        "xy_error_sigma_m": 0.25,
+        "xy_error_clip_m_per_axis": 0.5,
+        "yaw_error_sigma_deg": 15.0,
+        "yaw_error_clip_deg": 25.0,
+        "declared_xy_sigma_m": 0.25,
+        "declared_yaw_sigma_deg": 13.0
+      }
+    ]
+  },
+  "comparators": ["point_yaw", "interior_shape_only_nuisance_yaw"],
+  "covariance_scoring": {
+    "R2C": "Score Stage-07 measurement minus ground truth with R2C.",
+    "Pxy_plus_R2C": "Score Stage-07 measurement minus perturbed prior with Pxy+R2C."
+  },
+  "reporting": [
+    "Complete counts by regime, camera and spatial block.",
+    "Precision, reference-positive recall, added false admissions and Stage-07 error summaries.",
+    "R2C residual and Pxy+R2C innovation containment.",
+    "Immutable per-opportunity ledger and named Camera-D sliver verdict."
+  ],
+  "advance_rules": {
+    "each_regime_precision_min": 0.97,
+    "each_regime_catastrophic_fraction_max": 0.02,
+    "each_regime_added_false_admission_fraction_of_all_opportunities_max": 0.001,
+    "commissioned_moderate_stage07_p95_m_max": 0.15,
+    "v11_stress_stage07_p95_m_max": 0.2,
+    "each_regime_operational_95_containment_min": 0.9,
+    "each_regime_operational_95_containment_max": 0.99,
+    "each_regime_operational_above_99_fraction_max": 0.03,
+    "named_camera_d_sliver_must_remain_refused": true,
+    "all_rules_required": true
+  },
+  "prohibitions": [
+    "Do not change detector confidence or Stage-06 hull thresholds.",
+    "Do not fit/refit Stage-07 correction or covariance.",
+    "Do not use final-audit data for selection.",
+    "Do not call perturbation rows independent samples or replicates.",
+    "Do not launch final campaign unless V4 audit and a fresh end-to-end preflight pass."
+  ]
+}

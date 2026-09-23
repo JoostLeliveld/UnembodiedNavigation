@@ -1,0 +1,106 @@
+{
+  "schema": "thesis_pipeline_stage_lock.v1",
+  "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
+  "stage_id": "07_correction_and_covariance",
+  "lock_id": "THESIS-RIDGE-R2C-V1",
+  "status": "locked",
+  "locked_at": "2026-09-10",
+  "protocol": {
+    "path": "experiments/thesis_pipeline_lock/stage07_correction_covariance_protocol.json",
+    "sha256": "030d5f0e03bf50ec9ab561062ca7efe0eb3fefb7d79fb479c6854df34e5874e1",
+    "timing": "candidate ladder frozen before Stage-07 fitting; two covariance-calibration amendments made before Stage-07 lock and before final-audit access, with v1/v2 retained"
+  },
+  "eligible_run": {
+    "directory": "logs/thesis_final_pipeline_v1/stage07_correction_covariance/run_v3",
+    "manifest": "logs/thesis_final_pipeline_v1/stage07_correction_covariance/run_v3/manifest.json",
+    "manifest_sha256": "daff53dc14144b5e3242c16e3a8a71cb8f04e0d667f735dd720d90a3d0ad10bd",
+    "observations": 2854,
+    "positions": 200,
+    "spatial_blocks": 23,
+    "final_audit_accessed": false
+  },
+  "correction_selection": {
+    "report": "logs/thesis_final_pipeline_v1/stage07_correction_covariance/run_v3/correction_report.json",
+    "report_sha256": "a04dcf9f167c72b1b630bed1de09ab946b84144fdf9c21a625f7d81301cdd295",
+    "selected": "C2_ridge_residual",
+    "out_of_fold_error_m": {
+      "median": 0.019068470225775222,
+      "rms": 0.039385123191470896,
+      "p90": 0.06233728821312499,
+      "p95": 0.08173261533710145,
+      "maximum": 0.2542867931080001,
+      "above_0_25_m": 1
+    },
+    "analytic_hull_p95_m": 0.12672804520818828,
+    "ridge_p95_improvement_over_hull_m": 0.04499542987108683,
+    "mlp_rejected": true,
+    "mlp_rejection_reason": "The MLP improved pooled p95 by only 0.00529 m and block-macro median by only 0.00034 m, below the frozen 0.02 m and 0.01 m simplicity thresholds."
+  },
+  "covariance_selection": {
+    "report": "logs/thesis_final_pipeline_v1/stage07_correction_covariance/run_v3/covariance_report.json",
+    "report_sha256": "f4c213a25cc9bcdde1cc39232db6be20861a28587254de497007cc4ffa5534a6",
+    "selected": "R2C",
+    "description": "Per-camera, detected-width-tertile full covariance with n/(n+20) shrinkage and nested spatial out-of-fold upper-tail scale calibration.",
+    "deployment_scale": 2.0428450395562447,
+    "out_of_fold_containment": {
+      "50": 0.8255080588647512,
+      "90": 0.9446391030133147,
+      "95": 0.9597056762438683,
+      "99": 0.9786264891380518
+    },
+    "mean_95_ellipse_area_m2": 0.032541453572777934,
+    "mahalanobis_above_99_fraction": 0.021373510861948143,
+    "interpretation": "Upper-tail calibrated and conservative at 90/95 percent; the 50 percent over-coverage shows that a single Gaussian does not match every residual quantile."
+  },
+  "runtime_prior_sensitivity": {
+    "report": "logs/thesis_final_pipeline_v1/stage07_correction_covariance/run_v3/prior_sensitivity.json",
+    "report_sha256": "13845f42b89df52b9d8de21189486a4e514b0ca0cb57b3ab7fc730ab2ef0c331",
+    "opportunities": 38400,
+    "admitted": 10984,
+    "interpretation": "four deterministic perturbations per opportunity; not independent replicates",
+    "analytic_p95_m": 0.1199409781979423,
+    "ridge_p95_m": 0.08010785780724472,
+    "analytic_above_0_25_m": 28,
+    "ridge_above_0_25_m": 3,
+    "advance_pass": true
+  },
+  "deployment_artifact": {
+    "path": "logs/thesis_final_pipeline_v1/stage07_correction_covariance/run_v3/measurement_model.json",
+    "sha256": "249106c706b5e6dd3b10ab75abcfa54604c16b2fa987f38a5c84af58a2da9f4a",
+    "runtime_module": "src/reliability/reliability/commissioned_measurement.py",
+    "runtime_module_sha256": "647ab96b86846b59d7f0db62f701822d6805ca60be21d158d90e03c359ed6ba7",
+    "runtime_adapter": "src/reliability/reliability/nodes/camera_manager_node.py",
+    "runtime_adapter_sha256_at_lock": "a85cb025fd180f272c5163d642a6ba2243f0b0ab9cc2399d2f6d9a718a204c2c",
+    "verification": "logs/thesis_final_pipeline_v1/stage07_correction_covariance/run_v3/runtime_verification.json",
+    "verification_sha256": "f2e7d0d3841e3b98a26585dc8a4a0e930d73674edc9f1c3410686c5820c69af6",
+    "verification_rows": 2854,
+    "maximum_xy_difference_m": 1.7763568394002505e-15,
+    "maximum_covariance_difference_m2": 0.0,
+    "test_command": "python3 -m pytest -q tests/reliability/test_commissioned_measurement.py tests/reliability/test_silhouette_observation.py tests/reliability/test_camera_manager_node.py",
+    "tests_passed": 48
+  },
+  "implementation": {
+    "fit": "experiments/thesis_pipeline_lock/run_stage07_correction_covariance.py",
+    "fit_sha256": "7c0a4424860fba459689120e209b7214b9ccac6ff77ce6ab697b2fda4209fd2e",
+    "prior_sensitivity": "experiments/thesis_pipeline_lock/evaluate_stage07_prior_sensitivity.py",
+    "prior_sensitivity_sha256": "8f3aabb7f31246075a40659d3f65096786441b367b10df9f200902a617eb383b",
+    "runtime_verification": "experiments/thesis_pipeline_lock/verify_stage07_runtime.py",
+    "runtime_verification_sha256": "48ab83bd11f68635c248eac57873614f54e28cd12e60a843890d77797d5eeb44"
+  },
+  "superseded_diagnostics": [
+    {
+      "directory": "logs/thesis_final_pipeline_v1/stage07_correction_covariance/run_v1",
+      "reason": "Uncalibrated selected R2 under-covered the nominal 90/95 percent ellipses."
+    },
+    {
+      "directory": "logs/thesis_final_pipeline_v1/stage07_correction_covariance/run_v2",
+      "reason": "In-sample scale calibration remained optimistic; replaced once by nested spatial out-of-fold calibration."
+    }
+  ],
+  "limitations": [
+    "Correction accuracy is spatially out-of-fold commissioning evidence, not final-audit performance.",
+    "The MLP has marginally lower error but was rejected by the frozen simplicity rule.",
+    "R2C is deliberately calibrated for upper-tail coverage and over-covers the central 50 percent region.",
+    "Static poses cannot identify temporal or cross-camera dependence; those remain Stage-09 campaign quantities."
+  ]
+}

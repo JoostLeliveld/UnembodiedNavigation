@@ -1,0 +1,66 @@
+{
+  "schema": "thesis_stage09_release_protocol.v1",
+  "pipeline_id": "THESIS-FINAL-PIPELINE-V1",
+  "status": "frozen_before_final_audit_access",
+  "frozen_at": "2026-09-10",
+  "final_audit": {
+    "master_capture": "logs/thesis_final_pipeline_v1/master_capture",
+    "authorized_role": "final_audit",
+    "positions": 40,
+    "headings_per_position": 8,
+    "cameras": 5,
+    "views": 1600,
+    "detector_imgsz": 960,
+    "detector_prediction_floor": 0.001,
+    "detector_operating_confidence": 0.25,
+    "detector_iou": 0.45,
+    "ambiguous_policy": "Exclude semantic-ambiguous views from detector precision/recall; treat them as non-positive for localization-admission precision, matching Stage 06.",
+    "selection_use": "Pass/fail release evidence only. No detector, gate, correction, covariance, availability architecture, threshold, or hyperparameter may be changed from final-audit outcomes."
+  },
+  "locked_inputs": {
+    "stage05_detector_manifest_sha256": "778e11b2e0290add3b011aa531d01ae111bf5ebb91ae575177593edc2bd00c86",
+    "detector_checkpoint": "logs/thesis_final_pipeline_v1/stage05_detector_training/imgsz960/upper_finetune/weights/best.pt",
+    "detector_checkpoint_sha256": "1e99afb5361a7c2599cb3f2863ebb04fd6f65bc1ee23996b989c9bba8b004f13",
+    "stage06_gate_manifest_sha256": "833bceb3f0d4a26ab29472be37b318c782bcf9459aa41cb79c3a3fd77fad1615",
+    "gate_report": "logs/thesis_final_pipeline_v1/stage06_detector_gate/gate_selection_v1/gate_selection.json",
+    "gate_report_sha256": "389e082603467b5d927f8e38c37b8d5497e404add3e02b491f74bb1f1e407d5d",
+    "stage07_manifest_sha256": "86eb72102abe349f08d7e3e01c96d16c03db53b3e364cd03722fd874c5130ea4",
+    "measurement_model": "logs/thesis_final_pipeline_v1/stage07_correction_covariance/run_v3/measurement_model.json",
+    "measurement_model_sha256": "249106c706b5e6dd3b10ab75abcfa54604c16b2fa987f38a5c84af58a2da9f4a",
+    "stage08_manifest_sha256": "29c72efa2596146284e91f21a69df4596aeb23b26e85be55a92db1635e3f7bb8",
+    "availability_model": "logs/thesis_final_pipeline_v1/stage08_availability/run_v2/availability_model.json",
+    "availability_model_sha256": "3dfa83ad0f9d8838bd6b5085e33c20fe89eb8c4334fa17d1d797bad69b1510e7",
+    "label_protocol": "experiments/thesis_pipeline_lock/label_dataset_protocol.json",
+    "label_protocol_sha256": "8b9dcf3b631382583529096dcb52b899d4d8eaadb69f364967ae3963b0bca941"
+  },
+  "release_gates": {
+    "detector_precision_positive_vs_negative_min": 0.98,
+    "detector_recall_positive_vs_negative_min": 0.90,
+    "localization_admission_precision_min": 0.98,
+    "localization_admission_reference_recall_min": 0.70,
+    "corrected_planar_p95_m_max": 0.15,
+    "corrected_above_0_25_fraction_max": 0.01,
+    "covariance_95_containment_min": 0.90,
+    "covariance_95_containment_max": 0.99,
+    "mahalanobis_above_99_fraction_max": 0.05,
+    "availability_brier_max": 0.10,
+    "availability_ece_10_max": 0.10
+  },
+  "navigation_campaign_after_release": {
+    "speed_m_per_s": 0.22,
+    "headless": true,
+    "runtime_sensor_chain": "One frozen 960 detector, Stage-06 gate, Stage-07 hull+ridge mean and R2C covariance, Stage-08 Q1 availability; no model ensembles.",
+    "primary_comparison": "Matched planner arms differ only in future availability: Q0 per-camera constant versus commissioned Q1 geometry. Runtime camera measurements and fusion are identical.",
+    "secondary_aggregation_comparison": "On shared captured observation streams, compare best-single, conditionally independent fusion, and a dependence-aware network rule after simultaneous residual dependence is estimated from commissioning data.",
+    "replication_unit": "complete navigation run; pair seeds across arms and retain timeouts, collisions, detector misses, gate refusals and integrity failures",
+    "minimum_initial_campaign": "four predeclared routes times five paired seeds times two primary planner arms",
+    "analysis_contract": "docs/localization_metrics.md and docs/localization_metrics_registry.json"
+  },
+  "prohibitions": [
+    "Do not tune on final_audit.",
+    "Do not drop misses, refusals, timeouts, collisions or integrity failures.",
+    "Do not compare belief and reference values at different timestamps.",
+    "Do not attribute a planner-arm difference when any runtime sensor or controller setting differs.",
+    "Do not call deterministic exact-state availability repeated Bernoulli noise."
+  ]
+}
