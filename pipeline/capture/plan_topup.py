@@ -32,13 +32,14 @@ import sys
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
+import numpy as np
+import yaml  # noqa: E402
 from matplotlib.patches import Rectangle  # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve()
 REPO = HERE.parents[2]
 sys.path.insert(0, str(REPO / "src" / "unav_common"))
-from unav_common.occlusion_geometry import parse_collision_scene_from_world  # noqa: E402
+from unav_common.occlusion_geometry import profile_collision_scene  # noqa: E402
 from unav_common.rectangular_footprint import RectangularFootprint  # noqa: E402
 
 L = REPO / "logs/thesis_final_pipeline_v1"
@@ -60,8 +61,7 @@ ROLE_COLOUR = {"D_mu": "#2f8f5b", "D_R": "#1b6ca8", "D_dev": "#e8a33d", "final_a
 
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
-    scene = parse_collision_scene_from_world(
-        str(WORLD), model_names=("warehouse_shell", "warehouse_v2_occluders"), robot_z_range=(0.0, 0.55))
+    scene = profile_collision_scene(str(WORLD), yaml.safe_load((REPO / "src/experiments/config/world_profiles.yaml").read_text())["worlds"]["warehouse_v2.world.sdf"])
     footprint = RectangularFootprint(tuple(scene.prisms), length=0.80, width=0.55)
 
     def fits(x, y):

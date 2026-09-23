@@ -12,6 +12,7 @@ Checks, each on the rows `dataset.load_rows()` returns:
    broken frames were ~70 points below their neighbours);
 5. every referenced image exists, and a seeded random sample of 3000 decodes;
 6. no row with capture_status other than ok is present.
+7. no pose puts the robot footprint inside a collision object of the world.
 
     python3 pipeline/audit_dataset.py
 """
@@ -102,6 +103,13 @@ def main() -> int:
     report["non_ok_rows"] = not_ok
     if not_ok:
         failures.append("row status")
+
+    # every pose's robot footprint clears every collision object of the world (model
+    # groups and the top-level included forklift, pallets, bin and pallet jack)
+    inside = v8.positions_inside_objects(rows)
+    report["positions_inside_objects"] = sorted(inside)
+    if inside:
+        failures.append("robot inside an object")
 
     report["passed"] = not failures
     report["failures"] = failures

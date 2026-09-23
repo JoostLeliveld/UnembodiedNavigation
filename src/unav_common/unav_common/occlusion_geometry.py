@@ -477,6 +477,31 @@ def parse_collision_scene_from_world(
     )
 
 
+def profile_collision_scene(
+    world_path: str,
+    profile: dict,
+    *,
+    robot_z_range: tuple[float, float] | None = (0.0, 0.55),
+) -> OcclusionScene:
+    """The complete collision scene of a world, named by its world profile.
+
+    Takes both the model groups (`collision_model_names`) and the top-level included
+    objects (`collision_include_names`); omitting the latter silently drops loose objects
+    such as a parked forklift. Raises if the scene is empty, which is what a name that
+    matches nothing would otherwise produce.
+    """
+    names = tuple(profile.get("collision_model_names") or ())
+    if not names:
+        raise ValueError(f"world profile for {world_path} declares no collision_model_names")
+    scene = parse_collision_scene_from_world(
+        world_path, model_names=names,
+        include_names=tuple(profile.get("collision_include_names") or ()),
+        robot_z_range=robot_z_range)
+    if not scene.prisms:
+        raise ValueError(f"collision_model_names {names} matched no geometry in {world_path}")
+    return scene
+
+
 def scene_from_json(text: str | None) -> OcclusionScene:
     return OcclusionScene.from_json(text)
 

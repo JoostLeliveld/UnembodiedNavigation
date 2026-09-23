@@ -58,7 +58,7 @@ from experiments.core.world_profiles import compute_look_at_from_pose, load_prof
 from perception.core.ros_image import image_msg_to_bgr8
 from unav_common.camera_model import ObliqueCameraModel
 from unav_common.occlusion_geometry import (
-    parse_collision_scene_from_world,
+    profile_collision_scene,
     signed_distance_to_union_xy,
 )
 
@@ -1939,7 +1939,7 @@ def main() -> int:
     ]
     collision_prisms = ()
     if not args.skip_collision_filter:
-        collision_prisms = parse_collision_scene_from_world(world_path).prisms
+        collision_prisms = profile_collision_scene(str(world_path), profile).prisms
     route_config_path = args.route_exclusion_config.expanduser().resolve()
     exclusion_segments = _route_exclusion_segments(
         route_config_path,

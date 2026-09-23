@@ -52,7 +52,7 @@ from capture_yolo_dataset import (  # noqa: E402
 from dataset_split_utils import build_pose_records, evenly_spaced_yaws  # noqa: E402
 from experiments.core.world_profiles import load_profile  # noqa: E402
 from perception.core.ros_image import image_msg_to_bgr8  # noqa: E402
-from unav_common.occlusion_geometry import parse_collision_scene_from_world  # noqa: E402
+from unav_common.occlusion_geometry import profile_collision_scene  # noqa: E402
 from unav_common.rectangular_footprint import RectangularFootprint  # noqa: E402
 from unav_common.capture_integrity import (  # noqa: E402
     CaptureIndexWriter, atomic_bytes, atomic_json, capture_lock,
@@ -463,21 +463,10 @@ def _pose_plan(profile: dict, world_path: str, args: argparse.Namespace) -> tupl
         item for item in known
         if str(item.get('type', '')).strip().lower() not in {'traversable', 'site_boundary'}
     ]
-    # The default model_names are the legacy warehouse's; warehouse_v2 names its
-    # models differently, and a name that matches nothing yields an EMPTY prism set,
-    # which silently disables the collision test.  Take the names from the profile.
-    collision_model_names = tuple(profile.get('collision_model_names') or ())
-    prisms = (
-        parse_collision_scene_from_world(
-            world_path, model_names=collision_model_names, robot_z_range=(0.0, 0.55)
-        ).prisms
-        if collision_model_names
-        else parse_collision_scene_from_world(world_path).prisms
-    )
-    if collision_model_names and not prisms:
-        raise RuntimeError(
-            f'collision_model_names {collision_model_names} matched no geometry in {world_path}'
-        )
+    # Every collision object the world profile names: the model groups AND the
+    # top-level included objects (forklift, pallets, bin, pallet jack). Missing the
+    # latter let 46 top-up poses put the robot inside an object.
+    prisms = profile_collision_scene(world_path, profile).prisms
     def filter_records(records: list[dict]) -> tuple[list[dict], dict[str, int]]:
         return _filter_pose_records(
             records,

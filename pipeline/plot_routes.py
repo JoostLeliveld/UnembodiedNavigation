@@ -25,7 +25,7 @@ from matplotlib.patches import Rectangle  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src/unav_common"))
-from unav_common.occlusion_geometry import parse_collision_scene_from_world  # noqa: E402
+from unav_common.occlusion_geometry import profile_collision_scene  # noqa: E402
 
 V8 = REPO / "logs/thesis_final_pipeline_v1/recapture_v8_uniform"
 ROUTES = V8 / "offline_routes"
@@ -46,9 +46,8 @@ def network_information(model_key: str, active: list[str]):
 def main() -> int:
     campaign = yaml.safe_load((V8 / "campaign_configs/route_planning_campaign.yaml").read_text())
     tasks = list(campaign["tasks"])
-    scene = parse_collision_scene_from_world(
-        str(REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"),
-        model_names=("warehouse_shell", "warehouse_v2_occluders"), robot_z_range=(0.0, 0.55))
+    scene = profile_collision_scene(
+        str(REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"), yaml.safe_load((REPO / "src/experiments/config/world_profiles.yaml").read_text())["worlds"]["warehouse_v2.world.sdf"])
     fig, axes = plt.subplots(len(tasks), 3, figsize=(15, 4.1 * len(tasks)), constrained_layout=True)
     rows = []
     for t, task in enumerate(tasks):

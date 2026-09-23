@@ -17,6 +17,12 @@ v8 is an INDEX over the capture passes, not a copy. Its rows are
   their place under the same plan pose index, position key and role. The repair ran in two
   passes; a later pass overrides an earlier one for every plan pose it contains.
 
+Positions inside objects: a position is dropped when the robot footprint at any of its
+poses overlaps an object of the world's full collision scene (the model groups and the
+top-level included forklift, pallets, bin and pallet jack). This removes the 12 top-up
+positions whose 46 poses were planned without those five objects; no v5, repair or
+supplement pose overlaps an object.
+
 Every added position takes the role of its nearest v5 position (none borders final_audit,
 so the sealed audit set is the v5 one) and sits after the v5 plan in `plan_pose_index`.
 
@@ -61,6 +67,9 @@ REPAIRS = (
     ("repair2", V8 / "master_capture_repair2", V8 / "capture_poses_repair2.json"),
 )
 ABSENT_LIST = V8 / "v5_robot_absent_poses.json"
+WORLD = REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
+WORLD_PROFILES = REPO / "src/experiments/config/world_profiles.yaml"
+ROBOT_TARGET = REPO / "pipeline/capture/robot_target_manifest.json"
 SOURCES = V5_PASSES + tuple((n, d, p) for n, d, p, _ in EXTENSIONS) + REPAIRS
 
 LOCK_PATH = REPO / "pipeline/dataset_lock.json"
@@ -196,6 +205,24 @@ def _presence_rejects(rows: list[dict], run_positions: int = 3, min_in_frame: in
     return rejected
 
 
+def positions_inside_objects(rows: list[dict]) -> set[str]:
+    """Position keys with at least one pose whose footprint overlaps a collision object."""
+    import sys
+    import yaml
+    sys.path.insert(0, str(REPO / "src/unav_common"))
+    from unav_common.occlusion_geometry import profile_collision_scene
+    from unav_common.rectangular_footprint import RectangularFootprint
+    profile = yaml.safe_load(WORLD_PROFILES.read_text(encoding="utf-8"))["worlds"][WORLD.name]
+    body = _load_json(ROBOT_TARGET)["physical_contract"]
+    footprint = RectangularFootprint(profile_collision_scene(str(WORLD), profile).prisms,
+                                     length=float(body["body_length_m"]),
+                                     width=float(body["body_width_m"]))
+    poses = {(r["capture_source"], int(r["plan_pose_index"])):
+             (r["position_key"], float(r["robot_x"]), float(r["robot_y"]), float(r["robot_yaw"]))
+             for r in rows}
+    return {key for key, x, y, yaw in poses.values() if footprint.clearance((x, y, yaw)) < 0.0}
+
+
 def _check_unique(rows: list[dict]) -> None:
     seen: dict[tuple[int, str], str] = {}
     for r in rows:
@@ -213,6 +240,8 @@ def load_rows(*, only_ok: bool = True) -> list[dict]:
     rows = [r for r in _v5_rows(only_ok)
             if not (r["capture_source"] == "part1" and int(r["plan_pose_index"]) in absent)]
     rows += _extension_rows(only_ok) + _repair_rows(only_ok)
+    inside = positions_inside_objects(rows)
+    rows = [r for r in rows if r["position_key"] not in inside]
     rejected = _presence_rejects(rows)
     if rejected:
         raise RuntimeError(f"{len(rejected)} poses lie in robot-absent runs; re-capture them "
