@@ -13,15 +13,24 @@ or the newest-looking run.
 
 Read these sources in order:
 
-1. `docs/METHOD.md` — authoritative method, two-track evidence plan,
-   superseded alternatives, and controlled implementation closures.
-2. The final campaign configuration and its signed/hashed manifest, once created.
-3. `pipeline/pipeline_lock.json` — evidence status only; its method
-   references and old stage files are non-authoritative until rebuilt against the canonical lock.
+1. `docs/METHOD.md` — authoritative method, including its latest amendment.
+2. `docs/STATE.md` — where the data and results are, current state, open items, history.
+3. `pipeline/dataset_lock.json` and, once created, the campaign manifest — the exact inputs
+   by path and hash.
 4. `docs/localization_metrics.md` and `docs/localization_metrics_registry.json` — admissible results.
-5. `docs/COMMISSIONED_SENSOR_MODEL_CONTRACT.md` and
-   `pipeline/thesis_contribution_lock.json` — superseded development
-   contracts retained temporarily as history; never use them to override the canonical lock.
+
+## Where things live
+
+- `pipeline/` — the one pipeline: `dataset.py` (the only loader), `refit.sh`, final audit,
+  `routes.sh`, `campaign.sh`, `score_collisions.py`, `analyze_campaign.py`, the campaign
+  templates and `tasks.yaml`; `capture/`, `detector/`, `decisions/`, `ops/`.
+- `world/` — the warehouse description (zones, cameras); the world itself is
+  `src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf`.
+- `figures/` — one generator per manuscript figure.
+- `src/` — the ROS runtime. `config/sensor_gate.yaml` — the sensor gate.
+- `logs/thesis/` — captures, frozen detector, fits, evidence, routes, campaign.
+  `logs/track_a_draft/` — only what today's draft figures still read; deleted once the
+  figures are rebuilt from `logs/thesis/`.
 
 If another document conflicts with these sources, it is wrong for the current thesis.
 
@@ -77,6 +86,14 @@ fixed YOLO11n detector
   the stale `turn_then_go` launch default.
 - One robot filter consumes each physical camera frame once. Cascading a camera-filter
   posterior into another filter as a fresh independent measurement is prohibited.
+- R2 uses 16 neighbouring positions and a 0.4 m length scale, fixed; they are never
+  selected on data (the candidate grid is a sensitivity table only).
+- Collision is the robot footprint at its true pose leaving the driveable region (site
+  boundary, collision objects, zero margin), scored offline by `pipeline/score_collisions.py`
+  from `ground_truth_pose.csv`. There is no contact sensing, and ground truth never stops a
+  run.
+- Campaign and check runs execute in lockstep (1 ms physics, 10 Hz control, 5 Hz cameras).
+  Every route must pass the offline `ff_fb` replay inside the driveable region first.
 
 ## Evidence boundary
 

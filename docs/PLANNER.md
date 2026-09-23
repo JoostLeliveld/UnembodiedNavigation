@@ -265,7 +265,9 @@ repeating if this is ever regenerated again.
     et1_vis               2      287.140708  286.293118   -0.847590
     et1_novis             0       13.291797   11.605726   -1.686071
 
-Regenerated with `experiments/efe_hit_miss_mixture/regenerate_golden.py --write`,
+Regenerated with `experiments/efe_hit_miss_mixture/regenerate_golden.py --write` (removed in
+the 2026-09-24 lean-up with the legacy Bernoulli-mixture path; recoverable at tag
+`pre-lean-20260924`),
 which had itself been deleted in `66d34f4d` and was restored from
 `66d34f4d^` for this. It imports the harness from the test file, so generator
 and test cannot drift apart. The rewrite touched 144 hex literals and no logic or
@@ -379,9 +381,9 @@ and 0.28% margins) and should not be reported as effects.
 
 **Do not re-tune this against the route split.** That is fitting the constant to
 the outcome it is judged by. If 1.0 is ever changed, the reason must be a stated
-property of the objective, not a better-looking result. Re-measure with
-`score_anchored_route_contrast.py` then `analyse_anchored_route_contrast.py
---w-amb <W>`.
+property of the objective, not a better-looking result. (The route-contrast diagnostics
+`score_anchored_route_contrast.py` and `analyse_anchored_route_contrast.py` were removed in
+the 2026-09-24 lean-up; recoverable at tag `pre-lean-20260924`.)
 
 `nogo_weight` is deliberately NOT reset: the clearance term is not in nats, so
 the units argument does not reach it, and its penalty shape (0 beyond the band,
@@ -421,5 +423,5 @@ the relative weight should be 1 unless there is a stated reason), or to report
 the route choice as a function of w_amb and show over what band the conclusion
 holds.
 
-Re-measure with `score_anchored_route_contrast.py` then
-`analyse_anchored_route_contrast.py --w-amb <W>`.
+(The route-contrast diagnostics that measured this are recoverable at tag
+`pre-lean-20260924`.)

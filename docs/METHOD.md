@@ -385,47 +385,117 @@ the scientific reason, affected artifacts, and required reruns. Completing a con
 implementation closure does not require reopening the method, but the decision and evidence
 must be recorded before the final campaign.
 
-## Amendment 2026-09-23: uniform reference-position top-up and five-task campaign
+## Amendment 2026-09-23/24: final dataset, gate, fits, execution and campaign
 
-Author decision, 2026-09-23. Scientific reason: the reference positions should be a uniform
-sample of the operating domain, so that position-averaged results describe the workspace.
-The v5 capture is close to uniform except for the dense southern open strip, and it left a
-few cells of the operating domain below the density the spatial model needs.
+Author decisions of 2026-09-23 and 2026-09-24. Where this amendment and an earlier section
+differ, this amendment holds. It amends §1 (data), §2 (gate), §4 (R2 constants), §9
+(execution and safety), §10 (campaign) and §11 (collision outcome). Every number below is
+read from the named evidence file; the paper quotes the regenerated artifacts, not this text.
 
-- **Dataset (v8, `recapture_v8_uniform`).** All v5 positions are kept. Target density,
-  derived from R2: K/(pi (2 l_R)^2) = 8 positions per m^2 (K=16, l_R=0.4 m), per 1 m cell
-  scaled by the fraction of the cell where the 0.80 x 0.55 m footprint fits inside the site
-  boundary and clear of collision geometry at every heading. Every cell below target is
-  topped up (50 positions), plus 12 camera-C positions captured earlier the same night.
-  Each added position takes the role of its nearest v5 position; none borders final_audit,
-  so the audit set is the v5 one. Source: `pipeline/capture/plan_topup.py`.
-- **Density weighting in reporting.** Cells above the cap are not thinned. Reported
-  metrics are given both position-balanced and with each cell capped at 8 positions/m^2 of
-  weight. Both are reported whatever their direction.
-- **Detector.** The v5 YOLO11n checkpoint stays frozen. Correction and R0/R1/R2 are refitted
-  on v8.
-- **Repair of v5 part 1.** In v5 capture session 71daa8ab the robot vanished from the
-  simulator at pose 4214; the 4,182 later poses were empty background frames marked ok.
-  They were re-captured (`master_capture_repair`, `master_capture_repair2`) and the loader
-  refuses any robot-absent run. A dataset audit (`audit_dataset.py`) is a hard gate
-  before any fit. On the clean data the robot is in no camera image at 0.08% of poses.
-- **Sensor gate v3 (author decision).** The edge and size checks are removed
-  (`config/sensor_gate.yaml`): a box is admitted when its confidence is
-  at least 0.25 and its bottom-centre projects to the ground. Four gates were refitted on
-  identical inference. Positions no camera admits fall from 4.4% (v2) to 1.5% (v3), and
-  corrected D_dev RMSE on the boxes v2 admits falls from 5.33 to 5.14 cm. The rule
-  pre-declared for the gate test preferred v2, because the extra boxes (bottom-cut or
-  small) carry a heavier error tail (p95 17 cm); R2 contains 91% of them in its 95%
-  ellipse instead of 95%. The author chose coverage; both facts are reported. Evidence:
-  `recapture_v8_uniform/gate_variants/`. Runtime navigation uses the same gate.
-- **Baseline.** R_proj is evaluated on final_audit for covariance and fusion. It is not a
-  navigation condition.
-- **Campaign.** Section 10 is amended to the five stage-10 tasks (dropped cameras A, B, C,
-  E, E), three covariance models, intact and dropout, three matched seeds: 90 runs,
-  executed seed by seed. Every run has exactly one outcome.
-- **Rejected alternative.** Thinning dense cells and retraining the detector on the thinned
-  set was tried the same night and rejected: it raised D_dev correction error on identical
-  positions. Evidence: `logs/thesis_final_pipeline_v1/archive_rejected_20260923/README.md`.
-- **Reruns required.** Detector inference, gate, correction, R0/R1/R2, planning precision,
-  final audit, offline routes, campaign, and every paper number, table and figure that
-  depends on them.
+### A. Reference dataset (v8)
+
+- **Composition.** All v5 reference positions, plus 12 camera-C supplement positions and a
+  uniform top-up of every 1 m cell of the operating domain below the target density
+  K / (pi (2 l)^2) = 8 positions per m^2 (K = 16, l = 0.4 m, scaled by the fraction of the cell
+  where the 0.80 x 0.55 m footprint fits at every heading). Each added position takes the
+  role of its nearest v5 position; none borders final_audit, so the audit set is the v5 one.
+  Rule: `pipeline/capture/plan_topup.py`.
+- **Repair.** In v5 capture session 71daa8ab the robot vanished from the simulator at pose
+  4214; the 4,182 later poses were empty frames marked ok. They were re-captured in two
+  passes (`captures/v8/repair`, `repair2`); the loader drops the broken rows and refuses any
+  robot-absent run.
+- **Positions inside objects.** The top-up planner and the capture pose check read the
+  collision scene without the world's five included loose objects (forklift, two pallets,
+  bin, pallet jack), so 46 poses at 12 top-up positions put the robot inside an object.
+  Those 12 positions are dropped (author decision; not re-captured). The loader derives the
+  drop from the world geometry and the frozen footprint, and the dataset audit fails if any
+  pose is inside an object. Collision scenes are built only through
+  `unav_common.occlusion_geometry.profile_collision_scene`.
+- **Result.** 2,619 positions (D_mu 1,328, D_R 704, D_dev 437, final_audit 150) and 52,380
+  camera opportunities, read only through `pipeline/dataset.py`, locked in
+  `pipeline/dataset_lock.json` (every capture pass hashed) and audited by
+  `pipeline/audit_dataset.py` (evidence: `logs/thesis/evidence/dataset_audit.json`).
+- **Density weighting in reporting.** Dense cells are not thinned. Metrics are reported
+  position-balanced and with each cell capped at 8 positions per m^2 of weight, whatever
+  their direction.
+
+### B. Detector and sensor gate
+
+- The frozen YOLO11n checkpoint stays (`logs/thesis/detector`); it is not retrained.
+- **Gate (author decision).** `config/sensor_gate.yaml` admits a box when its confidence is
+  at least 0.25 and its bottom centre projects to the ground; there is no edge or size
+  check. Four gates were refitted on identical inference. The rule pre-declared for that
+  test preferred the gate with edge and size checks, because the extra boxes it refuses
+  (bottom-cut or small) carry a heavier error tail (corrected p95 17 cm against 12 cm).
+  The author chose coverage: poses seen by at least two cameras rise from 64.5% to 70.9%,
+  and corrected D_dev RMSE on the commonly admitted boxes falls from 5.33 to 5.14 cm. Both
+  facts are reported (evidence: `logs/thesis/evidence/gate_variants/`, measured on
+  2026-09-23 before the 12-position drop). Runtime navigation uses the same gate.
+
+### C. Correction and covariance (amends §4)
+
+- **Deterministic fits.** The visibility-residual correction trains on CPU with deterministic
+  algorithms; seeded GPU training was not reproducible and changed downstream selections.
+  The network has one definition for training and runtime
+  (`reliability.visibility_residual_net`).
+- **One covariance family.** R0/R1/R2 are the inverse-Wishart posterior-mean covariances of
+  §4, fitted on D_R by `pipeline/fit_covariance.py`. No second family is fitted; D_dev scores
+  describe exactly the models the runtime fuses with and the planner inverts.
+- **R2 constants are fixed, not selected:** 16 neighbouring positions and a 0.4 m Gaussian
+  length scale. This replaces the sentence of §4 that R2 hyperparameters are chosen on
+  fitting/development positions. The candidate grid is reported on D_dev as a sensitivity
+  table only.
+- `R_proj` is evaluated on final_audit for covariance and fusion. It is not a navigation arm.
+
+### D. Simulation, collision and stopping (amends §9 and §11)
+
+- **World.** `src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf` is the world; the former
+  generator no longer reproduced it and is retired. `world/warehouse_v2.py` describes its
+  zones and cameras for planning and figures, and a test requires every collision box to lie
+  inside a declared zone.
+- **No contact sensing.** The world's static contact sensors and the robot's contact sensor
+  are removed. Nothing that renders changes: images are identical to the capture world
+  (capture world sha256 25fc40d3eb57...).
+- **Collision** is the robot footprint (0.80 x 0.55 m) at its true pose leaving the driveable
+  region: outside the world profile's site boundary, or overlapping any collision object, at
+  zero margin. It is scored offline by `pipeline/score_collisions.py` from the per-run
+  `ground_truth_pose.csv` (every true-pose sample; consecutive samples are checked with a
+  certified sweep). Ground truth never stops a run: a run ends at the goal or at its
+  simulated-time limit.
+- **Local execution** follows an admitted global route without re-vetoing its geometry from
+  the drifting belief (the last bullet of §9 no longer holds): a re-veto turned localisation
+  error into zero-command deadlocks, and the experiment must expose a collision rather than
+  hide it.
+
+### E. Execution (amends §9)
+
+- **Lockstep.** Campaign and check runs step Gazebo in fixed blocks: 1 ms physics, 100
+  iterations per 0.1 s control step, a camera frame every second control step (5 Hz), and
+  every frame consumed before the next step. Real-time runs are not used.
+- **Follower corner speed.** `ff_fb` limits speed while removing a heading error e to
+  v <= w_max * 0.10 m / (1 - cos e), so the lateral swing stays within the 0.10 m geometric
+  safety margin. Without it the follower swung about 0.5 m wide at 90-degree corners.
+- **Executable routes only.** Every declared route candidate and every solved route is
+  replayed through `ff_fb` offline with the campaign settings and must keep the footprint
+  inside the driveable region before the campaign. Two candidates no follower can take
+  (a 90-degree turn 0.35 m from a rack face) were removed from `pipeline/tasks.yaml`.
+
+### F. Campaign (replaces the task paragraph of §10)
+
+Five tasks, each with one declared dropped camera: A, B, C, E and E
+(`pipeline/tasks.yaml`); the three covariance models, intact and removal; three matched seeds
+(91500, 91501, 91502). That is 90 runs, executed seed by seed, each with exactly one outcome.
+The design is locked by test.
+
+### G. Rejected alternatives
+
+- Thinning dense cells and retraining the detector on the thinned set: it raised D_dev
+  correction error on identical positions (evidence:
+  `logs/thesis/evidence/archive_rejected_20260923/README.md`).
+- The pre-declared gate rule's choice (edge and size checks): see B.
+- Contact-based collision outcomes and real-time campaign execution: see D and E.
+
+### H. Reruns required
+
+Detector inference, gate, correction, R0/R1/R2, planning precision, final audit, route
+solving, the campaign, and every paper number, table and figure that depends on them.
