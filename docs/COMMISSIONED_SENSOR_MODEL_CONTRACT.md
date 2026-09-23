@@ -1,8 +1,18 @@
-# Commissioned sensor-model implementation contract
+# Commissioned sensor-model implementation contract — superseded history
 
-This document is the code-facing version of the current paper plan. It preserves the
-scientific choices that are already settled while leaving the correction and covariance
-winner open for the planned comparison.
+> **Superseded 2026-09-20.** Retained only as development history. It is not an
+> active contract and must not configure or justify the final campaign. The sole
+> method authority is `docs/THESIS_METHOD_CANONICAL_LOCK.md`.
+
+The text below records the former code-facing paper plan. Any conflict with the canonical
+lock is intentionally historical.
+
+## Evidence status
+
+The final reference-controlled drives still have to be collected under this contract, and
+the correction, matched runtime covariance and planning-information field must be trained
+again from that final dataset. Older fitted models and the former availability-factorial
+campaign are method-development history, not evidence for the current contribution.
 
 ## Commissioning data unit
 
@@ -15,7 +25,7 @@ Ground truth is used offline to construct correction targets and residuals. It i
 passed to the sensor gate, correction model, covariance query, fusion algorithm, estimator,
 or planner.
 
-## Deterministic sensor gate and availability
+## Deterministic sensor gate
 
 The analysis and deployment gate is `config/commissioning_sensor_gate_v2.yaml`. It applies
 four checks to the fixed detector return: confidence of at least 0.25, finite box width and
@@ -29,18 +39,9 @@ The completed reference-controlled drives retain their original
 detector and projection fields and writes new derived outcomes. It does not overwrite the
 collected tables.
 
-The target learned as `q_i(p)` is exactly:
-
-```text
-fixed detector hit AND deterministic sensor-gate pass
-```
-
-`q_i(p)` is a future-observation forecast. It is not a second runtime gate. NIS remains a
+No separate spatial availability probability is fitted. The gate outcome remains recorded
+for every camera opportunity and enters the planning target defined below. NIS remains a
 separate estimator-consistency decision after the measurement and covariance exist.
-
-The fitted field is `q_i(p)`: camera identity and two-dimensional ground-plane position are
-its only query inputs. Outcomes are pooled over the headings sampled at each position. Heading
-is not an availability-model input.
 
 ## Candidate correction and matched R
 
@@ -75,10 +76,35 @@ once. Persistent per-camera or shared error is represented with an augmented joi
 the commissioned drives justify it. A first-stage posterior is never reused by a second
 filter as an independent measurement.
 
-Both navigation conditions receive the same detector, selected correction, matched `R`,
-runtime estimator, candidate routes and geometric/rollout feasibility tests. The comparison
-changes only the future observation model used in belief prediction. In particular,
-`q_i(p)` may change expected information and route cost but not route eligibility.
+For an admitted opportunity, the planning target is the precision of the matched runtime
+covariance. A miss or gate refusal contributes the zero matrix:
+
+```text
+Y_i,n = inverse(R_i,n^run)  if admitted
+Y_i,n = 0                   otherwise
+```
+
+The per-camera field `Lambda_i^plan(p) = E[Y_i | p]` is fitted from all survey
+opportunities. Its support is computed from all opportunities, not only admitted residuals.
+Many non-admissions therefore produce a supported estimate near zero. A location with few
+opportunities is conservatively shrunk towards zero information.
+
+The planner uses the deterministic information-form approximation
+`inverse(P+) = inverse(P-) + sum_i H' Lambda_i^plan(p) H`. It does not enumerate
+measurement-arrival branches and does not claim to reproduce the Bernoulli expected
+posterior. Per-camera fields are stored separately and summed only over the active camera
+set.
+
+The runtime covariance remains conditional on an admitted measurement. Support for a
+spatial runtime covariance is computed from admitted out-of-fold residuals and is separate
+from support for the planning-information field.
+
+The intact, stale-removal and configuration-aware-removal navigation conditions share the
+detector, selected correction, matched runtime `R`, estimator, candidate routes and
+geometric/rollout feasibility tests. Removal is implemented by excluding the selected camera
+from the runtime localization roster; its measurements cannot reach fusion or the robot
+filter. The stale planner nevertheless retains that camera's planning-information field.
+The configuration-aware planner omits it.
 
 Process-noise covariance `Q_k` is frozen in the estimator and planner configuration. It is not
 estimated or selected by this commissioning study.

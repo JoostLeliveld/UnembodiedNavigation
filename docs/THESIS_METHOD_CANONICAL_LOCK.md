@@ -384,3 +384,48 @@ Changing a locked method requires an explicit author decision and a dated amendm
 the scientific reason, affected artifacts, and required reruns. Completing a controlled
 implementation closure does not require reopening the method, but the decision and evidence
 must be recorded before the final campaign.
+
+## Amendment 2026-09-23: uniform reference-position top-up and five-task campaign
+
+Author decision, 2026-09-23. Scientific reason: the reference positions should be a uniform
+sample of the operating domain, so that position-averaged results describe the workspace.
+The v5 capture is close to uniform except for the dense southern open strip, and it left a
+few cells of the operating domain below the density the spatial model needs.
+
+- **Dataset (v8, `recapture_v8_uniform`).** All v5 positions are kept. Target density,
+  derived from R2: K/(pi (2 l_R)^2) = 8 positions per m^2 (K=16, l_R=0.4 m), per 1 m cell
+  scaled by the fraction of the cell where the 0.80 x 0.55 m footprint fits inside the site
+  boundary and clear of collision geometry at every heading. Every cell below target is
+  topped up (50 positions), plus 12 camera-C positions captured earlier the same night.
+  Each added position takes the role of its nearest v5 position; none borders final_audit,
+  so the audit set is the v5 one. Source: `experiments/warehouse_v2_sketches/plan_uniform_topup.py`.
+- **Density weighting in reporting.** Cells above the cap are not thinned. Reported
+  metrics are given both position-balanced and with each cell capped at 8 positions/m^2 of
+  weight. Both are reported whatever their direction.
+- **Detector.** The v5 YOLO11n checkpoint stays frozen. Correction and R0/R1/R2 are refitted
+  on v8.
+- **Repair of v5 part 1.** In v5 capture session 71daa8ab the robot vanished from the
+  simulator at pose 4214; the 4,182 later poses were empty background frames marked ok.
+  They were re-captured (`master_capture_repair`, `master_capture_repair2`) and the loader
+  refuses any robot-absent run. A dataset audit (`audit_v8_dataset.py`) is a hard gate
+  before any fit. On the clean data the robot is in no camera image at 0.08% of poses.
+- **Sensor gate v3 (author decision).** The edge and size checks are removed
+  (`config/commissioning_sensor_gate_v3.yaml`): a box is admitted when its confidence is
+  at least 0.25 and its bottom-centre projects to the ground. Four gates were refitted on
+  identical inference. Positions no camera admits fall from 4.4% (v2) to 1.5% (v3), and
+  corrected D_dev RMSE on the boxes v2 admits falls from 5.33 to 5.14 cm. The rule
+  pre-declared for the gate test preferred v2, because the extra boxes (bottom-cut or
+  small) carry a heavier error tail (p95 17 cm); R2 contains 91% of them in its 95%
+  ellipse instead of 95%. The author chose coverage; both facts are reported. Evidence:
+  `recapture_v8_uniform/gate_variants/`. Runtime navigation uses the same gate.
+- **Baseline.** R_proj is evaluated on final_audit for covariance and fusion. It is not a
+  navigation condition.
+- **Campaign.** Section 10 is amended to the five stage-10 tasks (dropped cameras A, B, C,
+  E, E), three covariance models, intact and dropout, three matched seeds: 90 runs,
+  executed seed by seed. Every run has exactly one outcome.
+- **Rejected alternative.** Thinning dense cells and retraining the detector on the thinned
+  set was tried the same night and rejected: it raised D_dev correction error on identical
+  positions. Evidence: `logs/thesis_final_pipeline_v1/archive_rejected_20260923/README.md`.
+- **Reruns required.** Detector inference, gate, correction, R0/R1/R2, planning precision,
+  final audit, offline routes, campaign, and every paper number, table and figure that
+  depends on them.

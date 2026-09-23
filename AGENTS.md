@@ -13,10 +13,15 @@ or the newest-looking run.
 
 Read these sources in order:
 
-1. `docs/COMMISSIONED_SENSOR_MODEL_CONTRACT.md` — human-readable method contract.
-2. `experiments/thesis_pipeline_lock/thesis_contribution_lock.json` — machine-readable thesis lock.
-3. `experiments/thesis_pipeline_lock/pipeline_lock.json` — current evidence status.
+1. `docs/THESIS_METHOD_CANONICAL_LOCK.md` — authoritative method, two-track evidence plan,
+   superseded alternatives, and controlled implementation closures.
+2. The final campaign configuration and its signed/hashed manifest, once created.
+3. `experiments/thesis_pipeline_lock/pipeline_lock.json` — evidence status only; its method
+   references and old stage files are non-authoritative until rebuilt against the canonical lock.
 4. `docs/localization_metrics.md` and `docs/localization_metrics_registry.json` — admissible results.
+5. `docs/COMMISSIONED_SENSOR_MODEL_CONTRACT.md` and
+   `experiments/thesis_pipeline_lock/thesis_contribution_lock.json` — superseded development
+   contracts retained temporarily as history; never use them to override the canonical lock.
 
 If another document conflicts with these sources, it is wrong for the current thesis.
 
@@ -28,36 +33,48 @@ The runtime chain is:
 fixed YOLO11n detector
   -> deterministic belief-independent sensor gate
   -> raw bounding-box bottom-centre projected to the ground plane
-  -> selected correction
-  -> covariance fitted to that correction's residuals
-  -> correlation-aware camera fusion
+  -> shared visibility-informed correction
+  -> R0/R1/R2 covariance fitted to out-of-sample corrected residuals
+  -> independent information-form camera fusion
   -> estimator NIS gate
   -> one robot-belief update
 ```
 
-- `q_i(p)` is the probability that camera `i` returns a detector box that passes the fixed
-  sensor gate at ground-plane position `p`. It depends on camera identity and two-dimensional
-  position only. Commissioning outcomes are pooled over the headings sampled at each position.
-  Heading is not an input to `q`.
-- `q_i(p)` uses every expected camera opportunity, including detector misses and gate
-  refusals. It excludes NIS and is never a runtime gate or route-feasibility gate.
+- The active method does not fit a separate `q_i(p)` or any other planner-information model.
+  Planning uses the inverse of the matched runtime covariance at the same camera and position.
+  Detector opportunities, misses, gate refusals and NIS outcomes do not enter the planning
+  artifact. They affect runtime only when a camera frame is processed.
+- Each planner arm is a direct export of the covariance used by runtime fusion in that arm.
+  M0 uses the inverse of global R0, M1 uses the inverse of camera-specific R1, and M2 uses
+  the inverse of spatial R2. The ray-frame matrix is rotated at the planning query position.
 - The raw camera observation is always the projected bottom centre of the frozen YOLO box.
   No current correction candidate starts from, contains, or depends on a visual hull,
   hull-equivalent position, belief-projected box, CAD silhouette, or ground-truth geometry.
-- Learned correction candidates predict the offset from the raw projection to the known
-  reference position. Runtime inputs may include camera identity, camera-relative geometry,
-  raw-box geometry, detector confidence, and the declared 16x16 image-visibility matrix.
-- The image candidate is a zero-initialized gated residual added to the raw-box MLP. If its
-  predeclared development-drive gates fail, retain the raw-box MLP.
-- Every correction candidate receives a fresh covariance model fitted from that candidate's
-  whole-drive out-of-fold residuals. Never reuse one candidate's `R` for another.
-- `R_i(p, psi)` may depend on position and heading because it describes the corrected
-  measurement residual. This does not make heading an input to `q_i(p)`.
+- The deployed correction predicts the offset from the raw projection to the known reference
+  position. Its runtime inputs are the locked structured camera/box features, camera identity,
+  and the declared 16x16 image-visibility matrix.
+- The visibility-informed shared correction is the deployed correction. Raw and structured-
+  only models are diagnostic ablations, not open deployment candidates.
+- The active covariance comparison is exactly global-full R0, per-camera-full R1, and
+  per-camera-spatial-full R2. All use the same broad inverse-Wishart covariance prior and
+  out-of-sample residuals from the frozen deployed correction. The prior covariance is
+  `100 I m2` with strength `2.5e-6`. Spatial R2 uses 16 neighbours and a 0.4 m Gaussian
+  length scale, and approaches the 10 m standard-deviation prior as local support vanishes.
+- `R_i^run` describes the corrected residual conditional on an admitted measurement. Spatial
+  residual support enters R2 itself through the broad prior. There is no second support model
+  in planning.
 - Process-noise covariance `Q_k` is a fixed estimator/planner input frozen in the experiment
   configuration. Estimating, tuning, or rediscovering `Q` is not part of the thesis method.
-- The planner is the existing IWAI EFE planner. Conditions change only the future `q` and `R`
-  forecasts. They share dynamics, process noise, objective, optimizer, route candidates,
-  feasibility rules, controller, estimator, tasks, and seeds.
+- The planner is the existing IWAI EFE planner with a deterministic information-form belief
+  approximation. The primary navigation matrix crosses R0/global, R1/per-camera and
+  R2/spatial models with intact and camera-removal states. Each arm uses its corresponding
+  runtime covariance and planner-information representation. All six arms share dynamics,
+  process noise, objective, optimizer, route candidates, feasibility rules, controller,
+  estimator structure, tasks, and seeds.
+- The shared execution controller is `ff_fb`, the current-belief segment-feedback waypoint
+  follower with route-tangent feedforward, bounded heading/cross-track feedback, corner
+  preview and final-segment braking. Campaigns must set it explicitly and must not inherit
+  the stale `turn_then_go` launch default.
 - One robot filter consumes each physical camera frame once. Cascading a camera-filter
   posterior into another filter as a fresh independent measurement is prohibited.
 
@@ -70,13 +87,19 @@ an arbitrary `RESULTS.md`, a glob of run directories, or a value remembered from
 For camera accuracy, localization error, belief error, RMSE, bias, NEES, coverage, or run
 comparisons, also follow `docs/localization_metrics.md` and its registry. State the layer,
 statistic, reference, run set, and sample unit. Score readings, fused corrections, and beliefs
-at their own timestamps. Aggregate by complete drive before comparing drives.
+at their own timestamps. Use the declared independent unit: complete drive for older drive-
+based development evidence, complete static position for the final reference survey, and
+complete matched run/task/seed outcome for navigation comparisons.
 
 ## Working rules
 
 - Ground truth is offline fitting/evaluation data only. It never enters the sensor gate,
   runtime correction, covariance query, fusion, estimator, planner, or stopping rule.
-- Fit, development, and sealed-audit partitions contain complete drives.
+- The final reference campaign is partitioned by complete static reference position. All
+  repetitions, headings, and cameras for one physical position remain in one partition.
+- Older drive-based development artifacts may populate the complete draft for feedback, but
+  final numerical claims are replaced rather than pooled with the final reference-position
+  campaign. Follow the two-track boundary in the canonical lock.
 - Preserve all expected opportunities and distinguish misses, refusals, admitted raw
   measurements, and corrected residuals.
 - Search current source and active contracts before tests. Old names may survive in Git

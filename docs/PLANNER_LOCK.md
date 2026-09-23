@@ -1,21 +1,36 @@
-# Planner lock — 2026-09-14
+# Planner lock — amended 2026-09-20
 
-Every value here was established by measurement on 2026-09-14 and is enforced in
-code: `UnicyclePlannerBase.__init__` emits a `RuntimeWarning` naming this file if
+The objective form and locked constants are enforced in code:
+`UnicyclePlannerBase.__init__` emits a `RuntimeWarning` naming this file if
 any of them is overridden. **A warning means a stale config is in play. Fix the
 config, do not silence the warning.**
 
+Numerical route contrasts from the superseded availability/covariance factorial
+are historical diagnostics, not current thesis evidence. The final Stage-09
+design is exactly six matched conditions: M0/R0, M1/R1 and M2/R2, each under an
+intact five-camera roster and a task-relevant declared camera removal. The
+blind-corridor task removes camera C; the lane-08-to-lane-12 task removes camera
+B. Planning and runtime fusion must use the matched
+member of each pair; no separate availability model or stale/updated-removal arm
+exists in the canonical design.
+
 ## The objective
 
-    J(U) = sum_j gamma^(j-1) [ w_risk J_risk + w_amb J_amb + J_nogo ]
+    W(U) = sum_j gamma^(j-1) g_j
 
-gamma = 0.98, horizon 75, dt = 1.0 s, with a smooth arrival gate that zeroes
-every term once the predicted mean enters the goal region.
+    J(U) = sum_j gamma^(j-1) g_j
+           [ J_risk + J_amb + J_control + J_nogo ] / W(U)
+
+gamma = 0.995, horizon 75, dt = 1.0 s, with a smooth arrival gate `g_j` that
+zeroes every term once the predicted mean enters the goal region. The same
+active discounted weight normalizes every running component. This is the locked
+IWAI-like fixed-horizon comparison: a spatially constant per-step term is equal
+between routes instead of becoming an accidental duration penalty.
 
 | term | what it is |
 |---|---|
 | risk | Kouw (IWAI 2024) Eq. 27, Gaussian KL to the goal prior, **clipped on one side** |
-| ambiguity | Kouw Lemma 1 under ET1 (Thm 1) on the availability-weighted commissioned covariance |
+| ambiguity | anchored ET1 term on direct matched-covariance precision |
 | no-go | single continuous clearance penalty on the **rectangular body**, heading-aware |
 
 ### Risk is clipped on one side
@@ -27,26 +42,39 @@ d(risk)/d(sigma) about -1.0 across 2-20 cm). Clipping the covariance argument up
 to the prior leaves certainty neither rewarded nor punished; widening past the
 tolerance carries the full penalty.
 
+Risk is a running term and is normalized by `W(U)` with the other stage costs.
+`terminal_risk_only` is forbidden in the locked method. The effective risk
+multiplier is exactly `risk_weight_obs * observation_risk_scale = 1 * 1`.
+
 ### The goal prior is annealed
 Held fixed, the mean term charges (distance/sigma*)^2 per step from step zero:
 measured **1633** against an ambiguity of **4** at 20 m from the goal, i.e. the
-belief terms decided 0.2% of the step cost. Annealing 5.0 m -> 0.35 m cuts that
-first step to **8.0**. Meera, Lanillos & Kouw (arXiv 2608.14466) anneal the
+belief terms decided 0.2% of the step cost. Annealing the mean-preference width
+from 5.0 m to 0.10 m prevents the distant-goal term from dominating early steps
+while ending at the locked localization preference. Meera, Lanillos & Kouw
+(arXiv 2608.14466) anneal the
 preference variance the same way as their sole exploration control, tau^2
 20 -> 0.6.
 
-### Ambiguity is Kouw's ET1 term on a commissioned sensor
-Under ET1 the state covariance cancels EXACTLY (verified numerically, residual
-~1e-15), so ambiguity reduces to 0.5(Dy log 2*pi*e + log|R_eff|). Kouw's Theorem 1
-makes this constant over states for a FIXED sensor — the Koudahl/Kouw/de Vries
-(Entropy 2021) collapse. It varies here only because commissioning makes R and q
-spatial fields:
+The locked tightening power is **0.9**.
 
-    R_eff(p, psi) = ( sum_i q_i(p) R_i(p,psi)^-1  +  1/(Q dt) I )^-1
+### Ambiguity is Kouw's ET1 term on the camera network
+Under ET1 the observation term can be represented through the total predicted
+camera information. The current method exports one matched-covariance precision
+grid per camera. The diagnostic effective covariance is
 
-Measured: blind cell -2.42, covered -3.38, main aisle -5.12 nats. The floor
-1/(Q dt) is the motion model, not a chosen constant: an unobserved step is not
-infinitely uncertain, the belief grows by exactly one step of process noise.
+    R_eff(p) = ( sum_i Lambda_i^plan(p) + epsilon_amb I )^-1
+
+    epsilon_amb = 1.0 m^-2
+
+where the sum contains only active planning cameras. Each field is the direct inverse of
+the matched runtime covariance queried for that camera and position, then rotated into the
+world frame. No second model is fitted and opportunity outcomes do not enter the export.
+The actual belief rollout uses the predicted prior covariance and adds the summed
+field in information form. `epsilon_amb` is a fixed, shared information
+regularizer that keeps the ambiguity-only inverse finite when camera information
+is zero. It gives `R_eff = 1.0 m^2 I` in that limit. It is not learned, does not
+depend on process noise, and never enters belief propagation.
 
 ### The ambiguity is ANCHORED (2026-09-16)
 
@@ -55,26 +83,25 @@ Those measured values are NEGATIVE, and that is the whole problem. Written out,
     J_amb = 0.5 ( D_y log 2*pi*e + log|R_eff| )
 
 is an ABSOLUTE differential entropy. It carries a large route-independent
-additive constant, and the SIGN of that constant depends only on the units
-R_eff is written in -- here state units, because of the 1/(Q dt) I floor, which
-is what makes it negative.
+additive constant, and the SIGN of that constant depends only on the units in
+which R_eff is written.
 
 On a fixed horizon the constant cancels: every candidate accumulates it the same
 number of times. But the smooth arrival gate makes duration a FREE VARIABLE, so
 it instead contributes `constant * T`. With the constant negative, a longer route
-is paid for being longer, on identical q and R. That is a duration term wearing
-the sign of an arbitrary unit choice, and it swamps the q/R differences that are
+is paid for being longer, on identical information fields. That is a duration term wearing
+the sign of an arbitrary unit choice, and it swamps the field differences that are
 supposed to decide the route.
 
-Note the diagnostic in "Two accounting bugs" below PASSES under this defect: a
-constant-R arm does give a constant per-step ambiguity. A constant per-step value
-is exactly what the bug produces. The problem is what that constant multiplies.
+The fixed information regularizer above solves only the singular inverse at zero
+camera information. It does not remove this unit-dependent entropy constant;
+anchoring is therefore still required.
 
 The term is now measured against a fixed FLOOR:
 
-    J_amb = 0.5 * max( log( |R_eff(q,R)| / |R_floor| ), 0 )
+    J_amb = 0.5 * max( log( |R_eff(Lambda)| / |R_floor| ), 0 )
 
-    R_floor = (1.5 mm)^2 I,  ONE covariance shared by every arm
+    R_floor = (1.5 mm)^2 I,  ONE covariance shared by every condition
 
 **R_floor is a threshold, not an estimate.** It enters only as a constant
 subtraction, so ANY value below the tightest reachable R_eff produces identical
@@ -97,20 +124,16 @@ window is narrow only because the commissioned cameras are very precise. If a
 future arm is tighter still, widen the clamp rather than lowering the floor, and
 re-check both bounds.
 
-**One floor for ALL arms.** Anchoring each arm to its own commissioned best-R
-was the first attempt and it is WRONG: the per-arm floors span 3.5 nats across
-the current seven arms, so each arm would be shifted by a different constant and
-the arms would no longer be comparable -- the one thing a q/R comparison must
-not do.
+**One floor for ALL conditions.** Anchoring each condition to its own best
+effective covariance shifts the conditions by different constants and makes them
+incomparable.
 
 Properties, in the order they matter:
 
-- **constant, NOT zero, for a constant-parameter arm.** q = 1 means every camera
-  reports, not that the pose is perfectly localized; the resulting finite R_eff
-  is real residual uncertainty and the objective should still charge for it.
-  What makes such an arm pick the shortest safe route is that the SAME amount is
-  added to every candidate at every step. Measured on W0 (q = 1 and constant R):
-  per-step ambiguity 1.6679-1.6700 nats, spread 2.2e-3.
+- **constant, not zero, for a spatially constant finite-information field.** A
+  camera report is not perfect localization; finite expected information leaves
+  finite posterior uncertainty. A constant field contributes the same amount at
+  equal priors.
 - **never negative**, so no route can be rewarded for lasting longer;
 - **dimensionless** -- it is a ratio, which kills the m^2 vs px^2 scale problem
   flagged in the `expected_posterior_uncertainty_ca` docstring;
@@ -123,27 +146,14 @@ Both back-ends carry it and must stay numerically equal:
 `camera_network_objective: metric_expected_belief` with `kouw_et1_ambiguity
 true`) and the NumPy twin in `base_planner._evaluate_controls`.
 
-The MIXTURE path (`expected_posterior_uncertainty_ca`, E[H(P+)]) needed the same
-treatment and is anchored to the IDEAL-AVAILABILITY POSTERIOR reached from the
-same prior -- not to the prior. Anchoring to the prior gives -q I(x;y), which is
-<= 0 and reintroduces the duration reward with the opposite sign. Its NumPy twin
-`CameraNetwork.expected_belief` previously returned the raw absolute entropy
-while its own docstring claimed prior-differencing; both now do the same
-anchored thing.
+The direct-information NumPy and CasADi paths must remain numerically equal. The
+historical Bernoulli-mixture path is compatibility code and is not part of the
+active method.
 
-**Why a constant-parameter arm is not exactly flat.** R_i is stored per heading
-and position, and in the q = 1 arms the per-camera R has constant eigenvalues but
-ROTATING orientation, so fusing five differently oriented precisions gives an
-R_eff whose logdet still varies slightly with pose. Measured on W0: 2.2e-3 nats
-across the whole field. That is a property of the commissioned geometry, not of
-the accounting. Re-measure with `verify_anchored_ambiguity.py`, which reports the
-spread, the clip count (must be 0) and the floor margin.
-
-**q is still necessary.** q is availability (probability a camera returns an
-admitted measurement); R is reliability GIVEN a report. They enter as
-`sum_i q_i R_i^-1`, so q decides whether precision arrives at all. R does inflate
-in low-availability regions -- measured ~1.3x between q < 0.05 and q > 0.5 cells
--- but q itself swings by 100x, so R alone cannot stand in for it.
+**No separate q field is active.** Detector opportunities, misses, admission refusals and
+NIS outcomes do not alter planner precision. Weak residual support lowers M2 precision
+through the broad covariance prior. Runtime admission still decides whether a realized
+measurement is available to the estimator.
 
 ### The clearance cost uses the robot's body
 It previously inflated the belief MEAN by a fixed disc and never saw the extent
@@ -151,15 +161,18 @@ or heading, so it read **exactly zero on every candidate of every task**. It now
 uses the heading-aware support distance of the rectangle against the nearest
 lane normal:
 
-    h(theta) = a|cos theta| + b|sin theta| + body_margin
+    h(theta) = a|cos theta| + b|sin theta|
 
-0.450 m driving aligned, **0.535 m through the diagonal** — the heading a robot
-holds while turning. Lane rectangles are axis-aligned, so the nearest normal is a
+For the 0.80 x 0.55 m body this is 0.275 m against a lateral wall when driving
+aligned, 0.400 m when facing the wall, and at most 0.485 m through a diagonal
+turn. Lane rectangles are axis-aligned, so the nearest face normal is a
 coordinate axis and the expression stays differentiable.
 
-The penalty is ONE continuous function of the clearance deficit in warning-band
-units, replacing a hinged-log warning plus a separate quadratic violation that
-overlapped below zero clearance and mixed two unrelated scales:
+The penalty is ONE continuous function of the **oriented rectangular body's**
+clearance deficit in warning-band units, replacing a hinged-log warning plus a
+separate quadratic violation that overlapped below zero clearance and mixed two
+unrelated scales. There is no additional body margin: the cost is exactly zero
+at body-to-region clearance >= 0.05 m and starts inside that distance:
 
     d = (warning_band - clearance) / warning_band
     penalty = near_weight * ( d^2 + contact_gain * max(d - 1, 0)^2 )
@@ -171,19 +184,19 @@ quadratic, so it is continuous and C1 at contact.
 
 | parameter | was | now | why |
 |---|---|---|---|
-| `nogo_safe_distance` | 0.55-0.585 | **0.325** | half-width 0.275 + 0.05 lane-keeping. The old value left the 1.10 m lanes a NEGATIVE budget, infeasible before any uncertainty. |
+| `nogo_safe_distance` | 0.55-0.585 | **0.0 for the thesis pipeline** | Shape-aware paths use the oriented 0.80 x 0.55 m body and the map's explicit 0.10 m geometric inset. Adding a centre-distance radius would count clearance twice. |
+| `nogo_warning_band` | 0.05 | **0.05 m from the body** | zero at >=5 cm body clearance; rises only inside the band. |
 | `nogo_logbarrier_eps` | 1e-3 | **0.05** | = `warning_band`. At 1e-3 a 1 mm violation cost 2,036, more than the entire risk term. |
 | `use_belief_nogo_cost` | false | **true** | the covariance -> clearance channel. |
-| `network_goal_std_m` | 0.15 | **0.35** | the declared `goal_success_radius`. At 0.15 risk is ~5x stronger and the objective collapses to shortest path. |
+| `network_goal_std_m` | 0.35 | **0.10** | preferred position standard deviation used by EFE risk. This is deliberately separate from the 0.35 m terminal arrival tolerance. |
 | `network_goal_std_start_m` | none | **5.0** | anneal start; see above. |
 | `kouw_et1_ambiguity` | false | **true** | the thesis method. |
 | `process_noise_xy` / `_theta` | 0.01 / 0.02 | **0.02 / 0.08** | conservatively bounds the simulated drift; see PROCESS_NOISE_LOCK.md. |
 
 `camera_network_objective: metric_expected_belief` must be set PER CAMPAIGN — it
-is the only objective that loads the per-arm planner fields. With
-`global_planner_mode: preselected_route` the planner does no solve and never
-queries a camera field, which is why the paused campaign's four arms were
-identical.
+is the objective that loads the per-camera planner fields. Canonical Stage-09 uses
+`global_planner_mode: efe`; `preselected_route` is retained only for replaying
+superseded sealed campaigns and is not a current navigation arm.
 
 ## Route seeds land on their waypoints
 
@@ -194,20 +207,26 @@ cannot do in a 1.10-1.30 m aisle). Every lane-graph seed was rejected, the solve
 fell back to a nominal control vector, and it converged 22.6 m from the goal.
 
 The seed now rotates OR advances, never both, never overshooting, landing on each
-waypoint exactly. Seed feasibility on the blind-corridor task: **0/6 -> 6/6**,
-each reaching the goal to machine precision. The free CasADi solve then CONVERGES
-(`optimizer_success: true`, goal distance 1.8e-15) in 131-159 s per condition,
-where every earlier attempt hit the iteration cap.
+waypoint exactly. Before optimization, seeds are repaired against the same
+oriented 0.80 x 0.55 m footprint used by the no-go test. Candidate routes that
+reverse over a collinear segment are rejected. When a feasible cross-aisle lies
+between the start and goal ordinates, cross-aisles beyond both endpoints are not
+offered as away-from-goal detours. The final two-task offline matrix reaches the
+goal to numerical precision in all six conditions per task and every retained
+rollout passes the geometric validity checks. `optimizer_success` is diagnostic:
+a valid seed remains admissible when L-BFGS-B reaches its iteration limit or
+reports a line-search failure without improving it.
 
 ## Two accounting bugs — do not reintroduce
 
 1. **Fixed-horizon tail.** The objective summed a fixed 75 steps regardless of
    route duration, so a short route banked its remaining steps parked at the goal
-   and accumulated that cell's ambiguity. Symptom: a constant-parameter arm gave
+   and accumulated that cell's ambiguity. Symptom: a constant field gave
    an IDENTICAL total on every route. Fixed by the arrival gate.
 2. **Summed per-step terms encode route LENGTH.** Always inspect per-step values
-   along a route, never only totals. A constant-R arm must give a constant
-   per-step ambiguity once discount-normalised.
+   along a route, never only totals. The locked objective divides every running
+   term by the same active discounted weight. A constant information field
+   therefore gives the same ambiguity contribution on every route.
 3. **An ABSOLUTE entropy is a duration term once duration is free.** (2026-09-16)
    The arrival gate fixed bug 1 and created this one: with the horizon no longer
    fixed, the route-independent constant inside `0.5(D_y log 2*pi*e + log|R|)`
@@ -263,16 +282,18 @@ change was deliberate and the cause has been demonstrated, as above.
 
 ## Status
 
-- Candidate scoring: the commissioned model changes route choice on **2 of 4**
-  contrast tasks, paying 2.3 m and 9.2 m to avoid unobserved driving. The flips
-  are carried by the clearance term, NOT by ambiguity — state it that way.
-- The rejection is independently verified: at the rejected routes' worst poses
-  the real rectangular body leaves the DRIVEABLE LANE at 1-2 sigma, checked by
-  the footprint validator. Declared collision prisms are NOT intersected, so the
-  mechanism is lane departure, not a proven rack strike. Do not overstate it.
-- Free solve on the blind-corridor task: converges, both conditions select the
-  same route. Free solves of the two flipping tasks are pending.
-- No closed-loop Gazebo evidence for any repaired configuration.
+- Canonical seven-task development screening evaluated every individual camera
+  removal with the spatial planner. The final campaign retains two distinct
+  single-camera interventions that change the spatial route: camera C on the
+  blind-corridor task and camera B on the lane-08-to-lane-12 task.
+- On the blind-corridor task, M2 changes from `above_connector` when intact to
+  `above_cross_aisle` after removing C. On the lane task, M2 changes from
+  `below_main_aisle` to `below_south_cross_aisle` after removing B. M0 and M1
+  retain `below_main_aisle` across the B-removal lane comparison.
+- These route choices are development selection evidence, not closed-loop
+  navigation performance. Routes must be regenerated under the final campaign
+  hash before Gazebo execution.
+- No canonical six-condition closed-loop Gazebo evidence exists yet.
 
 ## optimizer_control_block_steps = 1 (LOCKED 2026-09-15)
 
@@ -299,14 +320,15 @@ the whole run. This is what happened in the first Gazebo pilot.
 
 **This was never a free parameter.** `block_steps = 2` came from a solve-time
 experiment and was never derived or recorded here. It is not a speed/quality
-trade-off: at 1 the same four tasks solve in 46-122 s, FASTER than the broken
+trade-off: at 1 the evaluated tasks solve in 46-122 s, FASTER than the broken
 setting, because the solver starts from a seed that already satisfies the gate.
 
-**Status after the fix.** All 4 of 4 tasks reach the goal (0.000, 0.000, 0.000,
-1.9e-15 m). Three report `optimizer_success: false`: the L-BFGS-B polish does not
-converge, but the SELECTED plan is a seed route that reaches the goal and passes
-the hard terminal gate. Do not read that flag as a failed plan; read the selected
-source and the terminal distance.
+**Status after the fix.** Every condition in the final two-task offline matrix
+reaches the goal to numerical precision. Some report `optimizer_success: false`:
+the L-BFGS-B polish can reach its iteration limit or stop its line search, but the
+selected plan remains a valid seed or solver rollout that reaches the goal and
+passes the hard terminal gate. Do not read that flag as a failed plan; read the
+selected source, `rollout_valid`, and terminal distance together.
 
 ## Goal arrival is a HARD CONSTRAINT, not a cost term
 

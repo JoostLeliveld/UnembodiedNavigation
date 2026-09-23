@@ -105,7 +105,7 @@ not define the correction-fit population or the primary commissioned observation
 The completed drives preserve `config/commissioning_sensor_gate_v1.yaml` as collection
 provenance. `config/commissioning_sensor_gate_v2.yaml` is the analysis and deployment rule;
 replay it from the recorded detector and projection fields before fitting correction,
-availability and covariance models. Its validator fails if association, tracking or
+matched covariance and planning-information fields. Its validator fails if association, tracking or
 localizer acceptance is enabled. Freeze the complete sensor model before opening the held-out
 commissioning audit.
 
@@ -148,7 +148,8 @@ Use the fit drives to:
 - select the simplest adequate correction configuration using only declared development
   folds;
 - produce whole-drive out-of-fold residuals and fit one matched covariance per correction;
-- estimate camera support frequency for later availability modelling.
+- retain all camera opportunities for the direct expected-information target; misses and
+  refusals contribute zero information rather than being discarded.
 
 Train the correction only on detector outputs positively associated with the robot and
 admitted by the fixed support rule. Detector false positives have no valid correction target.
@@ -287,10 +288,11 @@ timestamps. Use the manifest and loader required by `localization_metrics.md` an
 correction gap beside belief accuracy.
 
 All navigation conditions use identical route candidates and identical geometric and
-rollout feasibility. `q_i(p)` changes the future information forecast and route cost; it
-does not remove candidates. The primary estimator is one robot filter that consumes each
-camera frame once. If commissioned residuals justify persistent camera-error states, use an
-augmented joint filter rather than cascading two filters over the same evidence.
+rollout feasibility. The planner sums the expected-information fields of its configured
+active cameras. These fields change belief prediction and route cost but do not remove
+candidates. The primary estimator is one robot filter that consumes each camera frame once.
+If commissioned residuals justify persistent camera-error states, use an augmented joint
+filter rather than cascading two filters over the same evidence.
 
 ## Minimal ablations
 
