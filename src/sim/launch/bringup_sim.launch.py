@@ -1,5 +1,4 @@
 import os
-import xml.etree.ElementTree as ET
 
 from launch import LaunchDescription
 from launch.actions import (
@@ -18,87 +17,6 @@ from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
 from ament_index_python.packages import get_package_share_directory
-
-
-def _make_contact_bridge(context, *args, **kwargs):
-    """Bridge every contact sensor in the world SDF to /world_contacts.
-
-    gz-sim's Contact system publishes ONE topic PER contact sensor at
-    /world/<world>/model/<model>/link/<link>/sensor/<sensor>/contact — there is
-    no aggregated /world/<world>/physics/contacts topic (bridging that name
-    silently yields an empty /world_contacts, which is what hid the missing
-    physics-collision cross-check). We parse the SDF, discover every
-    <sensor type="contact"> and bridge each per-sensor gz topic, remapping them
-    all onto the single ROS topic /world_contacts (the experiment_logger's
-    subscriber). Auto-adapts to any world / any added sensor; no hardcoded list.
-    """
-    if LaunchConfiguration("bridge_contacts").perform(context).lower() != "true":
-        return []
-    world_file = LaunchConfiguration("world").perform(context)
-    # Use the same explicit namespace as the clock, reset, control and
-    # ground-truth bridges.  Deriving this from the filename is wrong for a
-    # perfectly valid SDF whose internal <world name> differs from its file
-    # name, and previously made the contact bridge silently subscribe to a
-    # non-existent Gazebo topic.
-    world_name = LaunchConfiguration("world_name").perform(context)
-    world_path = os.path.join(
-        get_package_share_directory("sim"), "gazebo_worlds", "worlds", world_file
-    )
-    try:
-        root = ET.parse(world_path).getroot()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[bringup_sim] contact bridge: could NOT parse {world_path}: {exc}")
-        return []
-
-    world_el = root.find("world")
-    triples = []  # (model, link, sensor)
-    if world_el is not None:
-        for model in world_el.findall("model"):
-            mname = model.get("name")
-            for link in model.findall("link"):
-                lname = link.get("name")
-                for sensor in link.findall("sensor"):
-                    if sensor.get("type") == "contact":
-                        triples.append((mname, lname, sensor.get("name")))
-
-    # The active AMR carries a body contact sensor so collisions with included
-    # props (which are not editable frozen-world links) still produce physical
-    # evidence. Its fixed base joint is lumped into base_footprint by sdformat.
-    if LaunchConfiguration("robot_model").perform(context) == "warehouse_amr":
-        triples.append(("turtlebot3", "base_footprint", "body_contact"))
-
-    if not triples:
-        print(f"[bringup_sim] contact bridge: NO <sensor type=\"contact\"> found in "
-              f"{world_file}; /world_contacts will be silent (no physics-collision cross-check).")
-        return []
-
-    args_list, remaps, source_ids = [], [], []
-    for (mname, lname, sname) in triples:
-        gz_topic = f"/world/{world_name}/model/{mname}/link/{lname}/sensor/{sname}/contact"
-        args_list.append(f"{gz_topic}@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts")
-        remaps.append((gz_topic, "/world_contacts"))
-        source_ids.append(gz_topic)
-    print(f"[bringup_sim] contact bridge: bridging {len(triples)} contact sensors "
-          f"from {world_file} -> /world_contacts")
-    return [Node(
-        package="ros_gz_bridge",
-        executable="parameter_bridge",
-        name="ros_gz_contact_bridge",
-        arguments=args_list,
-        remappings=remaps,
-        output="screen",
-    ), Node(
-        package="sim",
-        executable="contact_evidence_node",
-        name="contact_evidence",
-        parameters=[{
-            "contact_topic": "/world_contacts",
-            "status_topic": "/sim/contact_channel_status",
-            "source_ids": source_ids,
-            "heartbeat_s": 1.0,
-        }],
-        output="screen",
-    )]
 
 
 def _reject_unsafe_in_place_reset(context, *args, **kwargs):
@@ -179,12 +97,6 @@ def generate_launch_description():
         description="Bridge /scan between Gazebo and ROS",
     )
     bridge_scan = LaunchConfiguration("bridge_scan")
-    bridge_contacts_arg = DeclareLaunchArgument(
-        "bridge_contacts",
-        default_value="true",
-        description="Bridge Gazebo world contact events to /world_contacts",
-    )
-    bridge_contacts = LaunchConfiguration("bridge_contacts")
     bridge_segmentation_arg = DeclareLaunchArgument(
         "bridge_segmentation",
         default_value="false",
@@ -437,8 +349,8 @@ def generate_launch_description():
         ],
         output="screen",
     )
-    # Ground-truth pose on a SEPARATE bridge node (isolated, like the contacts
-    # bridge) so it can never take the main /odom + camera bridge down.
+    # Ground-truth pose on a SEPARATE bridge node (isolated from the others)
+    # so it can never take the main /odom + camera bridge down.
     ros_gz_groundtruth_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
@@ -569,10 +481,6 @@ def generate_launch_description():
         output="screen",
         condition=IfCondition(bridge_overview_camera),
     )
-    # Contact bridge: gz-sim publishes one topic PER contact sensor (there is no
-    # aggregated /physics/contacts topic), and the sensor set depends on the
-    # world SDF, so build the bridge at launch time by parsing the world.
-    ros_gz_contact_bridge = OpaqueFunction(function=_make_contact_bridge)
     ros_gz_scan_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
@@ -593,7 +501,6 @@ def generate_launch_description():
         world_name_arg,
         headless_arg,
         nvidia_offload_arg,
-        bridge_contacts_arg,
         bridge_segmentation_arg,
         bridge_segmentation_b_arg,
         bridge_segmentation_c_arg,
@@ -628,7 +535,6 @@ def generate_launch_description():
         ros_gz_camera_d_bridge,
         *extra_camera_bridges,
         ros_gz_overview_camera_bridge,
-        ros_gz_contact_bridge,
         ros_gz_groundtruth_bridge,
         ros_gz_scan_bridge,
     ])

@@ -65,4 +65,3 @@ tasks:
       waypoints: [[0.975, 8.55], [0.975, 2.425], [9.925, 2.425], [9.925, -1.4], [9.6, -1.4]]
     - name: upper_crossing
       waypoints: [[0.975, 8.55], [0.975, 6.35], [10.675, 6.35], [10.675, -1.4], [9.6, -1.4]]
-  warehouse_v2_fast.world.sdf: *warehouse_v2_tasks

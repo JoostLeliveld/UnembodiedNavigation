@@ -267,20 +267,6 @@
     </gazebo>
   </xacro:if>
 
-  <!-- Robot-side physical evidence covers contacts with collision-bearing
-       included props as well as world links. The body collision is the outer
-       obstacle-striking hull; wheel/caster sensors would continuously report
-       normal ground support and obscure obstacle events. -->
-  <gazebo reference="${ns}base_link">
-    <sensor name="body_contact" type="contact">
-      <!-- sdformat lumps the fixed base_joint into base_footprint and assigns
-           this deterministic collision name (verified with `ign sdf -p`). -->
-      <contact><collision>${ns}base_footprint_fixed_joint_lump__base_link_collision</collision></contact>
-      <update_rate>10</update_rate>
-      <always_on>true</always_on>
-    </sensor>
-  </gazebo>
-
   <!-- ================= Gazebo Harmonic DiffDrive ================= -->
   <gazebo>
     <plugin

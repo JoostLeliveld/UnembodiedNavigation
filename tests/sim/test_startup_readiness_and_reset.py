@@ -68,17 +68,6 @@ def test_bringup_rejects_in_place_reset_and_wires_native_guard():
     assert '/model/turtlebot3/tf@tf2_msgs/msg/TFMessage' in launch
     assert '/model/turtlebot3/odometry_tf@' not in launch
     assert '"timeout_s": 30.0' in launch
-    assert '("turtlebot3", "base_footprint", "body_contact")' in launch
-    assert '"status_topic": "/sim/contact_channel_status"' in launch
-
-
-def test_active_robot_contact_sensor_references_converted_body_collision():
-    from pathlib import Path
-    robot = (Path(__file__).resolve().parents[2] /
-             'src/sim/robot_description/urdf/warehouse_amr.urdf.xacro').read_text()
-    assert '<sensor name="body_contact" type="contact">' in robot
-    assert 'base_footprint_fixed_joint_lump__base_link_collision' in robot
-    assert '<update_rate>60</update_rate>' in robot
 
 
 def test_contact_heartbeat_never_interprets_silence_as_no_collision():

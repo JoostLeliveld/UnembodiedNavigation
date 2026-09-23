@@ -3,7 +3,7 @@ study_comparison: Global, per-camera and spatial camera-network models, each use
   consistently by runtime fusion and planning, across five matched dropout-detour tasks.
 planning_information_method: inverse_of_matched_runtime_covariance
 planning_artifact_schema: camera_network.matched_covariance_precision.v1
-world: warehouse_v2_fast.world.sdf
+world: warehouse_v2.world.sdf
 world_profiles: src/experiments/config/world_profiles.yaml
 tasks_yaml: pipeline/tasks.yaml
 launch_file: warehouse_primary_comparison.launch.py

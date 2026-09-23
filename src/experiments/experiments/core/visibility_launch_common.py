@@ -110,7 +110,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'robot_collision_radius_m': '0.48541219597369',
     'robot_length_m': '0.8',
     'robot_width_m': '0.55',
-    'bridge_contacts': 'true',
     'bridge_camera_a': 'true',
     'bridge_camera_b': 'false',
     'bridge_camera_c': 'false',
@@ -829,9 +828,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'terminate_on_geom_collision': _as_bool(
             _launch_value(context, 'terminate_on_geom_collision', 'false')
         ),
-        'bridge_contacts': _as_bool(
-            _launch_value(context, 'bridge_contacts', PAPER_LAUNCH_DEFAULTS['bridge_contacts'])
-        ),
         'bridge_camera_a': _as_bool(
             _launch_value(context, 'bridge_camera_a', PAPER_LAUNCH_DEFAULTS['bridge_camera_a'])
         ),
@@ -1364,7 +1360,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'spawn_z': str(cfg['spawn']['z']),
         'spawn_yaw': str(cfg['spawn']['yaw']),
         'reset_world': 'true' if cfg.get('reset_world', False) else 'false',
-        'bridge_contacts': 'true' if cfg.get('bridge_contacts', True) else 'false',
         'bridge_camera_a': 'true' if cfg.get('bridge_camera_a', True) else 'false',
         'bridge_camera_b': 'true' if cfg.get('bridge_camera_b', False) else 'false',
         'bridge_camera_c': 'true' if cfg.get('bridge_camera_c', False) else 'false',

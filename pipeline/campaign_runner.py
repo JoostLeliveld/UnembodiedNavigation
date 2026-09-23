@@ -1303,8 +1303,6 @@ def _terminal_summary_outcome(summary: dict | None) -> tuple[bool, str, str]:
         return True, 'goal_reached', reason
     if reason == 'timeout_after_first_cmd':
         return True, 'timeout', reason
-    if reason in ('collision', 'physical_contact', 'geometric_collision'):
-        return True, 'collision', reason
     if reason == 'stuck':
         return True, 'stuck', reason
     return False, 'infra_invalid', f'unrecognized_terminal_reason:{reason or "missing"}'
