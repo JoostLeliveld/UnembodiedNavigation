@@ -276,7 +276,7 @@
       <!-- sdformat lumps the fixed base_joint into base_footprint and assigns
            this deterministic collision name (verified with `ign sdf -p`). -->
       <contact><collision>${ns}base_footprint_fixed_joint_lump__base_link_collision</collision></contact>
-      <update_rate>60</update_rate>
+      <update_rate>10</update_rate>
       <always_on>true</always_on>
     </sensor>
   </gazebo>

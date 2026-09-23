@@ -2,11 +2,10 @@
 <sdf version="1.8">
   <!-- DEVELOPMENT DERIVATIVE of warehouse_v2.world.sdf, for TIMING ONLY.
 
-       Derived from the canonical world by ONE substitution: contact sensors
-       60 Hz to 20 Hz. Nothing else differs, so the geometry, cameras, lighting
-       and shadows match the canonical world by construction rather than by
-       claim. Contact rate touches the physics contact report and never a
-       rendered pixel, so images here are identical to the evidence world.
+       Derived from the canonical world by exactly one substitution on each
+       static contact sensor: update_rate 60 Hz -> 20 Hz. Nothing else differs:
+       geometry, cameras, lighting, shadows and collision channels match the
+       canonical world by construction, and rendered images are identical.
 
        Regenerate with experiments/warehouse_v2_sketches/derive_fast_world.py
        whenever warehouse_v2.world.sdf changes. Do NOT hand-edit, and do NOT
@@ -24,14 +23,14 @@
     <plugin name="gz::sim::systems::Contact" filename="gz-sim-contact-system"/>
     <plugin name="gz::sim::systems::Sensors" filename="gz-sim-sensors-system"><render_engine>ogre2</render_engine></plugin>
     <gravity>0 0 -9.81</gravity><magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field><atmosphere type="adiabatic"/>
-    <scene><ambient>0.20 0.20 0.21 1</ambient><background>0.74 0.78 0.82 1</background><shadows>true</shadows></scene>
+    <scene><ambient>0.20 0.20 0.21 1</ambient><background>0.74 0.78 0.82 1</background><shadows>false</shadows></scene>
 
     <!-- One directional light so the racking has form instead of reading as flat
          clay, plus hung fixtures over the aisles.  Lamp_01's geometry sits at
          z in [12.50, 14.02] inside its own DAE, so the include pose has to be
          NEGATIVE to hang it in this building: -5.30 puts the fixture at 7.20 m. -->
     <light type="directional" name="sun">
-      <pose>0 0 12 0 0 0</pose><cast_shadows>true</cast_shadows>
+      <pose>0 0 12 0 0 0</pose><cast_shadows>false</cast_shadows>
       <diffuse>0.42 0.41 0.40 1</diffuse><specular>0.12 0.12 0.12 1</specular>
       <direction>-0.35 0.55 -0.80</direction>
       <attenuation><range>60</range><constant>0.9</constant><linear>0.01</linear><quadratic>0.001</quadratic></attenuation>

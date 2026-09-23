@@ -5,6 +5,10 @@ find_package(ament_cmake REQUIRED)
 find_package(ignition-gazebo6 REQUIRED)
 find_package(ignition-msgs8 REQUIRED)
 find_package(ignition-transport11 REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 add_library(sim_command_guard SHARED src/command_guard_system.cc)
 target_compile_features(sim_command_guard PUBLIC cxx_std_17)
@@ -16,7 +20,16 @@ target_link_libraries(sim_command_guard
   ignition-msgs8::core
   ignition-transport11::core)
 
-install(TARGETS sim_command_guard DESTINATION lib)
+add_executable(lockstep_scheduler src/lockstep_scheduler.cc)
+target_compile_features(lockstep_scheduler PUBLIC cxx_std_17)
+ament_target_dependencies(lockstep_scheduler rclcpp std_msgs nav_msgs geometry_msgs)
+target_link_libraries(lockstep_scheduler
+  ignition-msgs8::core
+  ignition-transport11::core)
+
+install(TARGETS sim_command_guard lockstep_scheduler
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 ament_environment_hooks(env-hooks/sim_command_guard.dsv.in)
 

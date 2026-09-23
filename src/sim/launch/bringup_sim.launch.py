@@ -261,6 +261,12 @@ def generate_launch_description():
         description="Run Gazebo server-only if true",
     )
     headless = LaunchConfiguration("headless")
+    nvidia_offload_arg = DeclareLaunchArgument(
+        "nvidia_offload",
+        default_value="true",
+        description="Route headless camera rendering through NVIDIA PRIME/EGL",
+    )
+    nvidia_offload = LaunchConfiguration("nvidia_offload")
     reset_world_arg = DeclareLaunchArgument(
         "reset_world",
         default_value="false",
@@ -302,6 +308,7 @@ def generate_launch_description():
         launch_arguments={
             "world": world,
             "headless": headless,
+            "nvidia_offload": nvidia_offload,
         }.items(),
     )
 
@@ -585,6 +592,7 @@ def generate_launch_description():
         world_arg,
         world_name_arg,
         headless_arg,
+        nvidia_offload_arg,
         bridge_contacts_arg,
         bridge_segmentation_arg,
         bridge_segmentation_b_arg,
