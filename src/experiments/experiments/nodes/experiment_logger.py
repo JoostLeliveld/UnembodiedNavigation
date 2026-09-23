@@ -17,7 +17,6 @@ import yaml
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from tf2_msgs.msg import TFMessage
 from nav_msgs.msg import Odometry, Path
-from ros_gz_interfaces.msg import Contacts
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
 from std_msgs.msg import Float64MultiArray, String
@@ -34,7 +33,7 @@ from reliability.fusion_event import FusedCorrectionEvent
 from unav_common.config import parse_bev_affine_calibration
 from unav_common.correction_ledger import validate_correction_ledger
 from unav_common.mission_goal import MISSION_GOAL_TOPIC, mission_goal_from_json
-from unav_common.occlusion_geometry import scene_from_json, signed_distance_to_union_xy
+from unav_common.occlusion_geometry import scene_from_json
 from unav_common.terminal_stop import (
     TERMINAL_COMPONENTS,
     TERMINAL_STOP_ACK_TOPIC,
@@ -157,28 +156,6 @@ def _split_prisms_by_prefix(prisms, prefix: str):
     return tuple(prism for prism in tuple(prisms or ()) if str(prism.name).startswith(token))
 
 
-def _partition_collision_prisms(prisms):
-    """Partition every physical prism into enclosure or obstacle geometry.
-
-    The logger historically matched the old ``warehouse_walls`` and
-    ``warehouse_rack_occluders`` model names.  The commissioned world uses
-    ``warehouse_shell`` and ``warehouse_v2_occluders`` instead.  Prefix-only
-    selection therefore produced two empty sets and silently disabled the
-    ground-truth geometry audit.  Treat the known enclosure models as walls and
-    put *every remaining physical prism* in the obstacle set, so a renamed or
-    newly added obstacle cannot disappear from collision evidence.
-    """
-    all_prisms = tuple(prisms or ())
-    wall_prefixes = ("warehouse_walls/", "warehouse_shell/")
-    walls = tuple(
-        prism for prism in all_prisms
-        if str(prism.name).startswith(wall_prefixes)
-    )
-    wall_ids = {id(prism) for prism in walls}
-    obstacles = tuple(prism for prism in all_prisms if id(prism) not in wall_ids)
-    return walls, obstacles
-
-
 #: Every terminal outcome a correction may have. The planner publishes exactly one of
 #: these per detector batch; anything else means a correction went unaccounted, which is
 #: what invalidates a run. `accepted_bootstrap` seeds the belief, `reanchored` recovers a
@@ -274,14 +251,8 @@ class ExperimentLogger(Node):
         self.declare_parameter('perception_use_geometry_occlusion', True)
         self.declare_parameter('visibility_geometry_json', '')
         self.declare_parameter('collision_geometry_json', '')
-        self.declare_parameter('robot_collision_radius_m', 0.125)
         self.declare_parameter('robot_length_m', 0.8)
         self.declare_parameter('robot_width_m', 0.55)
-        # When False, a geometric wall/obstacle penetration is still logged but does
-        # NOT terminate the run (only physical contact does). Lets a run continue past
-        # a boundary graze so its natural outcome (goal / stuck / timeout) and full GT
-        # trajectory are observed. Default True preserves the original behaviour.
-        self.declare_parameter('terminate_on_geom_collision', False)
         self.declare_parameter('use_command_noise', True)
         self.declare_parameter('use_encoder_noise', True)
         self.declare_parameter('command_noise_linear_slip_mean', 0.03)
@@ -545,15 +516,8 @@ class ExperimentLogger(Node):
         )
         self.visibility_geometry_json = str(self.get_parameter('visibility_geometry_json').value)
         self.collision_geometry_json = str(self.get_parameter('collision_geometry_json').value)
-        self.robot_collision_radius_m = float(self.get_parameter('robot_collision_radius_m').value)
         self.robot_length_m = float(self.get_parameter('robot_length_m').value)
         self.robot_width_m = float(self.get_parameter('robot_width_m').value)
-        self.terminate_on_geom_collision = bool(self.get_parameter('terminate_on_geom_collision').value)
-        if self.terminate_on_geom_collision:
-            raise RuntimeError(
-                'terminate_on_geom_collision=true leaks ground truth into experimental '
-                'termination; use the physical /world_contacts channel instead'
-            )
         self.use_command_noise = bool(self.get_parameter('use_command_noise').value)
         self.use_encoder_noise = bool(self.get_parameter('use_encoder_noise').value)
         self.command_noise_linear_slip_mean = float(self.get_parameter('command_noise_linear_slip_mean').value)
@@ -780,13 +744,6 @@ class ExperimentLogger(Node):
 
         collision_scene = scene_from_json(self.collision_geometry_json)
         self._collision_prisms = tuple(collision_scene.prisms)
-        self._wall_prisms, self._obstacle_prisms = _partition_collision_prisms(
-            self._collision_prisms
-        )
-        if self._collision_prisms and not (
-            self._wall_prisms or self._obstacle_prisms
-        ):
-            raise RuntimeError("collision geometry was present but could not be classified")
         try:
             manager_settings = json.loads(self.manager_settings_json or '{}')
             if not isinstance(manager_settings, dict):
@@ -811,8 +768,7 @@ class ExperimentLogger(Node):
             #       obs_repeat / obs_seq / gt_*_at_obs / fused_stamp.
             #   3 = detector batches are first-class identities; camera observations
             #       record both capture-time and common-time values; experiment
-            #       termination uses the operational belief (never ground truth), and
-            #       contact-channel liveness is recorded explicitly.
+            #       termination uses the operational belief (never ground truth).
             #   4 = every published fused correction carries source_batch_id through
             #       the filter and produces one terminal assimilation record.
             #   5 = fusion_observations.csv carries pred_h_px / pred_w_px, the box
@@ -845,6 +801,7 @@ class ExperimentLogger(Node):
             'detector_outcome_journal_path': self.outcome_journal_path,
             'manager_outcome_journal_path': self.manager_outcome_journal_path,
             'correction_publication_ledger': 'correction_publications.csv',
+            'ground_truth_pose_ledger': 'ground_truth_pose.csv',
             'correction_publication_schema': 'correction_publications.v2',
             'correction_assimilation_schema': '1_or_2_passthrough',
             'committed_posterior_capability': (
@@ -911,7 +868,6 @@ class ExperimentLogger(Node):
             'visibility_geometry_sha256': _sha256_text(self.visibility_geometry_json),
             'collision_geometry_json': self.collision_geometry_json,
             'collision_geometry_sha256': _sha256_text(self.collision_geometry_json),
-            'robot_collision_radius_m': self.robot_collision_radius_m,
             'robot_length_m': self.robot_length_m, 'robot_width_m': self.robot_width_m,
             'planner_collision_model': 'oriented_rectangle_swept_v1',
             'legacy_geometry_diagnostic_model': 'circle',
@@ -1033,7 +989,6 @@ class ExperimentLogger(Node):
             'auto_stop_on_goal': self.auto_stop_on_goal,
             'goal_termination_reference': 'planner_belief',
             'geometry_collision_termination': False,
-            'terminate_on_geom_collision': self.terminate_on_geom_collision,
             'goal_success_radius': self.goal_success_radius,
             'goal_success_hold_s': self.goal_success_hold_s,
             'goal_stable_radius': self.goal_stable_radius,
@@ -1205,8 +1160,6 @@ class ExperimentLogger(Node):
         self._terminal_stop_acks = {}
         self._mission_goal_state = None
         self._active_mission_goal_id = ''
-        self._contact_channel_status = None
-        self._contact_delivery_seq = 0
         self._last_tf_warn_wall = 0.0
         self._frame_sanity_logged = False
         self._frame_sanity = {
@@ -1237,17 +1190,6 @@ class ExperimentLogger(Node):
         self._cumulative_path_length = 0.0
         self._last_path_pose = None
         self._min_goal_distance = float('inf')
-        self._contact_collision_seen = False
-        self._contact_messages_seen = 0
-        self._geom_collision_seen = False
-        self._collision_reason = ''
-        self._first_crash_stamp = math.nan
-        self._min_wall_distance = float('inf')
-        self._min_obstacle_distance = float('inf')
-        self._max_wall_penetration = 0.0
-        self._max_obstacle_penetration = 0.0
-        self._off_map_seen = False
-        self._inside_no_go_seen = False
         self._valid_run = True
         self._invalid_reason = ''
         #: reason -> count, for the refusal rate reported beside the accuracy
@@ -1369,8 +1311,7 @@ class ExperimentLogger(Node):
         # compatible if a producer is upgraded to transient-local later, whereas a
         # transient-local request silently disconnects from the current bridge/manager.
         for topic in ('/reliability/camera_manager/batch_outcome',
-                      '/sim/actuation_outcome', '/sim/contact_outcome',
-                      '/sim/contact_channel_status'):
+                      '/sim/actuation_outcome'):
             self.create_subscription(
                 String, topic,
                 lambda msg, name=topic: self._runtime_outcome_cb(name, msg),
@@ -1412,7 +1353,6 @@ class ExperimentLogger(Node):
         )
         self.create_subscription(String, '/planner/diagnostics_text', self._planner_diag_text_cb, 10)
         self.create_subscription(Float64MultiArray, '/efe/metrics', self._efe_cb, 10)
-        self.create_subscription(Contacts, '/world_contacts', self._contacts_cb, 10)
 
         self.file = open(self.log_path, 'w', newline='')
         self.writer = csv.writer(self.file)
@@ -1493,11 +1433,7 @@ class ExperimentLogger(Node):
             'exec_wp_idx', 'exec_wp_count', 'exec_wp_target_x', 'exec_wp_target_y',
             'exec_wp_dist_m', 'exec_desired_yaw', 'exec_yaw_error',
             'exec_tracking_yaw', 'exec_tracking_yaw_source',
-            'collision_any', 'collision_contact', 'collision_geom', 'collision_reason', 'first_crash_stamp',
-            'contact_topic_publishers', 'contact_messages_seen',
-            'min_wall_distance_m', 'min_obstacle_distance_m',
-            'wall_penetration_m', 'obstacle_penetration_m',
-            'off_map', 'inside_no_go', 'valid_run', 'invalid_reason',
+            'valid_run', 'invalid_reason',
             'heading_update_mode',
             'pixel_corr_K_theta_u', 'pixel_corr_K_theta_v',
             # Shared single-cam/multicam correction chain (2026-07-29): innov and
@@ -1599,6 +1535,13 @@ class ExperimentLogger(Node):
 
         # One terminal filter outcome per detector batch. This is the causal
         # join used by scoring and run-validity checks.
+        # Every true robot pose sample, in arrival order, for the offline collision score
+        # (footprint vs driveable region). Offline evaluation only: nothing reads it at runtime.
+        self.ground_truth_pose_path = os.path.join(self.run_dir, 'ground_truth_pose.csv')
+        self.ground_truth_pose_file = open(self.ground_truth_pose_path, 'w', newline='')
+        self.ground_truth_pose_writer = csv.writer(self.ground_truth_pose_file)
+        self.ground_truth_pose_writer.writerow(['stamp_s', 'stamp_source', 'x', 'y', 'yaw'])
+
         self.assimilation_path = os.path.join(
             self.run_dir, 'correction_assimilations.csv')
         self.assimilation_file = open(self.assimilation_path, 'w', newline='')
@@ -2128,6 +2071,9 @@ class ExperimentLogger(Node):
                 self._gt_xy = (x, y)
                 self._gt_yaw = yaw
                 self._gt_stamp = stamp
+                writer = getattr(self, 'ground_truth_pose_writer', None)
+                if writer is not None:
+                    writer.writerow([repr(stamp), self._gt_stamp_source, repr(x), repr(y), repr(yaw)])
                 if math.isfinite(stamp) and (
                     not self._gt_buf or stamp > self._gt_buf[-1][0]
                 ):
@@ -2231,28 +2177,6 @@ class ExperimentLogger(Node):
                     self._record_invalid('nonzero_command_after_terminal_zero')
             except (TypeError, ValueError):
                 self._record_invalid('malformed_actuation_outcome')
-        elif topic == '/sim/contact_channel_status':
-            try:
-                if type(payload.get('schema_version')) is not int or payload['schema_version'] != 1:
-                    raise ValueError('unsupported contact status schema')
-                if not str(payload.get('producer_epoch', '') or '').strip():
-                    raise ValueError('missing contact status epoch')
-                if not str(payload.get('event_id', '') or '').strip():
-                    raise ValueError('missing contact status event ID')
-                if (isinstance(payload.get('sequence'), bool)
-                        or not isinstance(payload.get('sequence'), int)
-                        or payload['sequence'] < 0):
-                    raise ValueError('invalid contact status sequence')
-                if payload.get('state') not in (
-                        'missing_configuration',
-                        'configured_silent_requires_positive_control',
-                        'contact_deliveries_observed'):
-                    raise ValueError('invalid contact observation state')
-                if payload.get('silence_is_no_contact') is not False:
-                    raise ValueError('invalid contact silence semantics')
-                self._contact_channel_status = dict(payload)
-            except (KeyError, TypeError, ValueError):
-                self._record_invalid('malformed_contact_channel_status')
 
     def _terminal_stop_ack_cb(self, message: String) -> None:
         topic = TERMINAL_STOP_ACK_TOPIC
@@ -2843,97 +2767,6 @@ class ExperimentLogger(Node):
             return
         if reason not in self._invalid_reason.split('|'):
             self._invalid_reason = f'{self._invalid_reason}|{reason}' if self._invalid_reason else reason
-
-    def _record_collision_event(self, *, stamp: float, reason: str, contact: bool, geom: bool) -> None:
-        if contact:
-            self._contact_collision_seen = True
-        if geom:
-            self._geom_collision_seen = True
-        if math.isfinite(float(stamp)) and not math.isfinite(self._first_crash_stamp):
-            self._first_crash_stamp = float(stamp)
-        if str(reason or '').strip():
-            self._collision_reason = str(reason).strip()
-
-    def _contacts_cb(self, msg: Contacts):
-        try:
-            stamp = self._stamp_to_float(msg.header.stamp)
-            source_stamp_ns = (
-                int(msg.header.stamp.sec) * 1_000_000_000
-                + int(msg.header.stamp.nanosec))
-        except AttributeError:
-            stamp = float(self.get_clock().now().nanoseconds) * 1e-9
-            source_stamp_ns = None
-        contacts = []
-        for contact in list(msg.contacts or []):
-            contacts.append({
-                'collision1': str(
-                    getattr(getattr(contact, 'collision1', None), 'name', '') or ''),
-                'collision2': str(
-                    getattr(getattr(contact, 'collision2', None), 'name', '') or ''),
-            })
-        delivery_seq = self._contact_delivery_seq + 1
-        delivery_payload = json.dumps({
-            'schema_version': 1,
-            'event_id': f'logger:{self.run_id}:world_contacts:{delivery_seq}',
-            'source_stamp_ns': source_stamp_ns,
-            'contact_count': len(contacts),
-            'contacts': contacts,
-        }, allow_nan=False, sort_keys=True, separators=(',', ':'))
-        if self._record_runtime_delivery('/world_contacts', delivery_payload) is None:
-            return
-        self._contact_delivery_seq = delivery_seq
-        self._contact_messages_seen += 1
-        for names in contacts:
-            name_1 = names['collision1']
-            name_2 = names['collision2']
-            pair = (name_1, name_2)
-            if not any('turtlebot3' in name for name in pair):
-                continue
-            if all('turtlebot3' in name for name in pair):
-                continue
-            other = name_2 if 'turtlebot3' in name_1 else name_1
-            if 'ground_plane' in other:
-                continue
-            self._record_collision_event(
-                stamp=stamp,
-                reason=f'contact:{other or "unknown"}',
-                contact=True,
-                geom=False,
-            )
-            self._finish_run("collision", stamp)
-            break
-
-    def _signed_distance_from_prisms(self, prisms, x: float, y: float) -> float:
-        if not prisms:
-            return float('inf')
-        return float(signed_distance_to_union_xy(prisms, np.array([float(x), float(y)], dtype=float))[0])
-
-    def _geometry_safety_at_truth(self, odom_map_x: float, odom_map_y: float):
-        wall_signed = self._signed_distance_from_prisms(self._wall_prisms, odom_map_x, odom_map_y)
-        obstacle_signed = self._signed_distance_from_prisms(self._obstacle_prisms, odom_map_x, odom_map_y)
-        wall_clearance = wall_signed - self.robot_collision_radius_m if math.isfinite(wall_signed) else math.inf
-        obstacle_clearance = obstacle_signed - self.robot_collision_radius_m if math.isfinite(obstacle_signed) else math.inf
-        wall_penetration = max(-wall_clearance, 0.0) if math.isfinite(wall_clearance) else 0.0
-        obstacle_penetration = max(-obstacle_clearance, 0.0) if math.isfinite(obstacle_clearance) else 0.0
-
-        bounds = dict(self.world_bounds or {})
-        off_map = False
-        if all(math.isfinite(float(bounds.get(key, math.nan))) for key in ('xmin', 'xmax', 'ymin', 'ymax')):
-            off_map = bool(
-                float(odom_map_x) < float(bounds['xmin'])
-                or float(odom_map_x) > float(bounds['xmax'])
-                or float(odom_map_y) < float(bounds['ymin'])
-                or float(odom_map_y) > float(bounds['ymax'])
-            )
-        inside_no_go = bool(obstacle_penetration > 0.0)
-        return {
-            'min_wall_distance_m': float(wall_clearance),
-            'min_obstacle_distance_m': float(obstacle_clearance),
-            'wall_penetration_m': float(wall_penetration),
-            'obstacle_penetration_m': float(obstacle_penetration),
-            'off_map': off_map,
-            'inside_no_go': inside_no_go,
-        }
 
     def _camera_relative_bearing_deg(self, odom_map_x: float, odom_map_y: float, odom_map_yaw: float) -> float:
         vec = np.asarray(self.camera_pos_xy, dtype=float) - np.array([float(odom_map_x), float(odom_map_y)], dtype=float)
@@ -3862,58 +3695,6 @@ class ExperimentLogger(Node):
                 efe_delta_risk_visibility = float(self.efe_metrics.data[21])
                 efe_delta_ambiguity_visibility = float(self.efe_metrics.data[22])
 
-        min_wall_distance_m = self._min_wall_distance if math.isfinite(self._min_wall_distance) else math.inf
-        min_obstacle_distance_m = self._min_obstacle_distance if math.isfinite(self._min_obstacle_distance) else math.inf
-        wall_penetration_m = 0.0
-        obstacle_penetration_m = 0.0
-        off_map = 0.0
-        inside_no_go = 0.0
-        # Collision / clearance from the TRUE Gazebo pose ONLY. The /odom 'truth' is
-        # wheel odometry and drifts (esp. in turns), which produced FALSE geometry-
-        # collisions (odom penetrates a rack while the true robot is clear). NO odom
-        # fallback: if ground truth is unavailable, these stay NaN (explicit), never
-        # silently computed against odom. If gt is never available the run has no
-        # geometry-collision metric at all -- that is obvious, not confusing.
-        _gt = self._gt_xy
-        if _gt is not None:
-            safety = self._geometry_safety_at_truth(_gt[0], _gt[1])
-            min_wall_distance_m = float(safety['min_wall_distance_m'])
-            min_obstacle_distance_m = float(safety['min_obstacle_distance_m'])
-            wall_penetration_m = float(safety['wall_penetration_m'])
-            obstacle_penetration_m = float(safety['obstacle_penetration_m'])
-            off_map = 1.0 if safety['off_map'] else 0.0
-            inside_no_go = 1.0 if safety['inside_no_go'] else 0.0
-
-            if math.isfinite(min_wall_distance_m):
-                self._min_wall_distance = min(self._min_wall_distance, min_wall_distance_m)
-            if math.isfinite(min_obstacle_distance_m):
-                self._min_obstacle_distance = min(self._min_obstacle_distance, min_obstacle_distance_m)
-            self._max_wall_penetration = max(self._max_wall_penetration, wall_penetration_m)
-            self._max_obstacle_penetration = max(self._max_obstacle_penetration, obstacle_penetration_m)
-            self._off_map_seen = self._off_map_seen or bool(off_map >= 0.5)
-            self._inside_no_go_seen = self._inside_no_go_seen or bool(inside_no_go >= 0.5)
-
-            geom_reason = []
-            if wall_penetration_m > 0.0:
-                geom_reason.append('geometry:wall_penetration')
-            if obstacle_penetration_m > 0.0:
-                geom_reason.append('geometry:obstacle_penetration')
-            if geom_reason:
-                self._record_collision_event(
-                    stamp=odom_map_stamp if math.isfinite(odom_map_stamp) else now_stamp,
-                    reason='|'.join(geom_reason),
-                    contact=False,
-                    geom=True,
-                )
-
-        collision_contact = 1.0 if self._contact_collision_seen else 0.0
-        collision_geom = 1.0 if self._geom_collision_seen else 0.0
-        collision_any = 1.0 if (collision_contact >= 0.5 or collision_geom >= 0.5) else 0.0
-        collision_reason = self._collision_reason
-        try:
-            contact_topic_publishers = int(self.count_publishers('/world_contacts'))
-        except Exception:
-            contact_topic_publishers = -1
         valid_run = 1.0 if self._valid_run else 0.0
         invalid_reason = self._invalid_reason
 
@@ -4083,11 +3864,7 @@ class ExperimentLogger(Node):
             exec_wp_idx, exec_wp_count, exec_wp_target_x, exec_wp_target_y,
             exec_wp_dist_m, exec_desired_yaw, exec_yaw_error,
             exec_tracking_yaw, exec_tracking_yaw_source,
-            collision_any, collision_contact, collision_geom, collision_reason, self._first_crash_stamp,
-            contact_topic_publishers, self._contact_messages_seen,
-            min_wall_distance_m, min_obstacle_distance_m,
-            wall_penetration_m, obstacle_penetration_m,
-            off_map, inside_no_go, valid_run, invalid_reason,
+            valid_run, invalid_reason,
             self.heading_update_mode,
             pixel_corr_K_theta_u, pixel_corr_K_theta_v,
             pixel_corr_measurement_space, pixel_corr_predict_clipped_m,
@@ -4112,19 +3889,9 @@ class ExperimentLogger(Node):
         ])
         self.file.flush()
 
-        if not self._stop_requested and (
-            self._contact_collision_seen
-        ):
-            self._finish_run("collision", now_stamp)
-            return
-
         if not self._stop_requested:
             if self._first_cmd_stamp is None:
                 if self._command_active(cmd_v, cmd_w):
-                    if contact_topic_publishers <= 0:
-                        self._record_invalid('contact_channel_no_publisher_at_first_command')
-                        self._finish_run('infra_invalid_contact_channel', now_stamp)
-                        return
                     self._first_cmd_stamp = now_stamp
                     self.get_logger().info(f"First command detected. Starting {self.run_timeout_after_first_cmd_s:.1f}s timeout.")
             else:
@@ -4189,7 +3956,7 @@ class ExperimentLogger(Node):
         errors = []
         names = (
             'file', 'plan_file', 'perception_file', 'fusion_obs_file',
-            'assimilation_file', 'correction_publication_file',
+            'assimilation_file', 'correction_publication_file', 'ground_truth_pose_file',
             'camera_opportunity_file', 'runtime_event_file',
             'belief_prediction_file',
         )
@@ -4390,23 +4157,15 @@ class ExperimentLogger(Node):
                 final_goal_distance_odom = math.hypot(
                     goal_x - odom_pose_x, goal_y - odom_pose_y)
 
-        crashed = bool(self._contact_collision_seen or self._geom_collision_seen)
-        min_wall_distance_m = self._min_wall_distance if math.isfinite(self._min_wall_distance) else math.inf
-        min_obstacle_distance_m = self._min_obstacle_distance if math.isfinite(self._min_obstacle_distance) else math.inf
-        goal_region_success = bool(
-            self._goal_region_reached()
-            and not crashed
-            and self._valid_run
-        )
-        try:
-            contact_topic_publishers = int(self.count_publishers('/world_contacts'))
-        except Exception:
-            contact_topic_publishers = -1
+        # Collision is not decided here: it is scored offline from ground_truth_pose.csv
+        # as the robot footprint leaving the driveable region.
+        goal_region_success = bool(self._goal_region_reached() and self._valid_run)
 
         summary = {
             'completed': True,
             'completion_reason': reason,
-            'termination_reference': 'planner_belief_or_physical_contact_or_timeout',
+            'termination_reference': 'planner_belief_or_timeout',
+            'collision_scoring': 'offline_footprint_vs_driveable_region_from_ground_truth_pose_csv',
             'first_cmd_stamp': self._first_cmd_stamp if self._first_cmd_stamp is not None else math.nan,
             'stop_stamp': stamp,
             'elapsed_after_first_cmd_s': elapsed_after_first_cmd_s,
@@ -4472,26 +4231,6 @@ class ExperimentLogger(Node):
             'mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad': mean_abs_odom_map_vs_odom_yaw_error_after_first_cmd_rad,
             'mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad': mean_abs_odom_map_vs_state_yaw_error_after_first_cmd_rad,
             'mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad': mean_abs_odom_map_vs_belief_yaw_error_after_first_cmd_rad,
-            'crashed': crashed,
-            'collision_any': crashed,
-            'collision_contact': bool(self._contact_collision_seen),
-            'collision_geom': bool(self._geom_collision_seen),
-            'contact_topic_publishers': contact_topic_publishers,
-            'contact_messages_seen': int(self._contact_messages_seen),
-            'contact_observation_state': (
-                'collision_recorded' if self._contact_collision_seen
-                else ('contact_messages_without_robot_collision'
-                      if self._contact_messages_seen else 'no_recorded_contact')),
-            'contact_silence_is_no_collision': False,
-            'contact_channel_status': self._contact_channel_status,
-            'collision_reason': self._collision_reason,
-            'first_crash_stamp': self._first_crash_stamp,
-            'min_wall_distance_m': min_wall_distance_m,
-            'min_obstacle_distance_m': min_obstacle_distance_m,
-            'max_wall_penetration_m': float(self._max_wall_penetration),
-            'max_obstacle_penetration_m': float(self._max_obstacle_penetration),
-            'off_map': bool(self._off_map_seen),
-            'inside_no_go': bool(self._inside_no_go_seen),
             'valid_run': bool(self._valid_run),
             'invalid_reason': self._invalid_reason,
             'correction_assimilation_count': int(self._assimilation_count),

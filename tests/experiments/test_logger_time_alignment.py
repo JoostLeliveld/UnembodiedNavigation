@@ -166,13 +166,12 @@ def test_manifest_declares_its_logging_schema():
     assert "'belief_prediction_ledger': 'belief_predictions.jsonl'" in _source()
 
 
-def test_schema_3_records_batch_identity_contact_liveness_and_belief_stopping():
-    """What schema 3 added over 2, each locking a defect from the 2026-08-28 audit."""
+def test_schema_3_records_batch_identity_and_ground_truth_never_terminates():
+    """Batch identity (2026-08-28 audit) and offline-only collision scoring."""
     source = _source()
     # a detector batch is one identity, so one round cannot be assimilated four times
     assert "'source_batch_id'" in source
-    # silence on the contact channel is distinguishable from "no collisions"
-    for column in ("'contact_topic_publishers'", "'contact_messages_seen'"):
-        assert column in source, column
-    # ground truth never terminates a run
-    assert "use the physical /world_contacts channel instead" in source
+    # ground truth never terminates a run: collision is scored offline from the pose log
+    assert "'termination_reference': 'planner_belief_or_timeout'" in source
+    assert "'ground_truth_pose.csv'" in source
+    assert "terminate_on_geom_collision" not in source

@@ -136,26 +136,3 @@ def test_reject_reason_decoder_covers_every_shared_chain_code():
         f"reject codes {sorted(missing)} are emitted by the correction chain but "
         f"decode as 'unknown' in the CSV"
     )
-
-
-def test_current_world_collision_names_cannot_disappear_from_geometry_audit():
-    """Every current-world prism is classified; new objects default to obstacles."""
-    import sys
-
-    sys.path.insert(0, str(LOGGER_PATH.parents[3]))
-    from experiments.nodes.experiment_logger import _partition_collision_prisms
-
-    prisms = (
-        SimpleNamespace(name="warehouse_shell/wall_east:collision"),
-        SimpleNamespace(name="warehouse_v2_occluders/obs_A1:collision"),
-        SimpleNamespace(name="pallet_loose_2/body:base_collision"),
-    )
-    walls, obstacles = _partition_collision_prisms(prisms)
-    assert [item.name for item in walls] == [
-        "warehouse_shell/wall_east:collision"
-    ]
-    assert [item.name for item in obstacles] == [
-        "warehouse_v2_occluders/obs_A1:collision",
-        "pallet_loose_2/body:base_collision",
-    ]
-    assert set(map(id, walls + obstacles)) == set(map(id, prisms))

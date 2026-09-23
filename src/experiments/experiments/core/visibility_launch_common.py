@@ -825,9 +825,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
                 PAPER_LAUNCH_DEFAULTS['robot_collision_radius_m'],
             )
         ),
-        'terminate_on_geom_collision': _as_bool(
-            _launch_value(context, 'terminate_on_geom_collision', 'false')
-        ),
         'bridge_camera_a': _as_bool(
             _launch_value(context, 'bridge_camera_a', PAPER_LAUNCH_DEFAULTS['bridge_camera_a'])
         ),
@@ -1802,10 +1799,8 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'stuck_max_goal_improvement_m': cfg['stuck_max_goal_improvement_m'],
                 'stuck_cmd_fraction_min': cfg['stuck_cmd_fraction_min'],
                 'stuck_idle_cmd_fraction_max': cfg['stuck_idle_cmd_fraction_max'],
-                'robot_collision_radius_m': cfg['robot_collision_radius_m'],
                 'robot_length_m': cfg.get('robot_length_m', 0.8),
                 'robot_width_m': cfg.get('robot_width_m', 0.55),
-                'terminate_on_geom_collision': cfg['terminate_on_geom_collision'],
                 'use_command_noise': cfg['use_command_noise'],
                 'use_encoder_noise': cfg['use_encoder_noise'],
                 'use_odom_for_predict': cfg['use_odom_for_predict'],

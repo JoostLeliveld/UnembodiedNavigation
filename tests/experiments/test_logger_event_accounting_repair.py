@@ -384,19 +384,6 @@ def test_terminal_stop_verification_starts_rest_after_last_nonzero_sample(tmp_pa
     assert value._terminal_stop_verified
 
 
-def test_contact_silence_remains_an_explicit_unknown_state(tmp_path):
-    value = node(tmp_path)
-    payload = dict(schema_version=1, producer_epoch='contact:1', event_id='contact:1:1',
-                   sequence=1, state='configured_silent_requires_positive_control',
-                   source_ids=['bumper'], configured_source_count=1, delivery_count=0,
-                   contact_count=0, last_source_stamp_ns=None, last_receipt_wall_s=None,
-                   silence_is_no_contact=False)
-    value._runtime_outcome_cb('/sim/contact_channel_status',
-                              String(data=json.dumps(payload)))
-    assert value._valid_run
-    assert value._contact_channel_status['state'].endswith('positive_control')
-
-
 def test_stop_request_defers_completion_and_finalization(monkeypatch, tmp_path):
     value = node(tmp_path)
     value._completed = False

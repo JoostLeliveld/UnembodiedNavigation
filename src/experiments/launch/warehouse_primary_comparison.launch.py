@@ -51,8 +51,6 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('robot_length_m', default_value='0.8'),
         DeclareLaunchArgument('robot_width_m', default_value='0.55'),
         DeclareLaunchArgument('robot_collision_radius_m', default_value='0.48541219597369'),
-        DeclareLaunchArgument('terminate_on_geom_collision', default_value='false',
-                              description='Must remain false for experiments: geometry uses ground truth. Physical contacts still terminate.'),
         DeclareLaunchArgument('odom_heading_timeout_s', default_value='0.75',
                               description='Maximum odometry age used by the pixel-to-BEV state projection orientation field.'),
         DeclareLaunchArgument('heading_update_mode', default_value='coupled'),

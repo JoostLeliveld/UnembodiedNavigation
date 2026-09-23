@@ -178,7 +178,6 @@ nogo_warning_band: 0.05
 nogo_logbarrier_eps: 0.05
 nogo_weight: 40.0
 use_belief_nogo_cost: true
-terminate_on_geom_collision: false
 use_diagnostic_odom_localization: false
 use_odom_for_predict: true
 odom_topic: /odom_noisy
